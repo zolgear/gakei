@@ -4,12 +4,73 @@
   gap: 6px;
 }
 
+/* 見出しと、選択中グループの名前・「⋯」メニュー。横スクロールしない(finding 1, 2)。 */
+.groupsHeader {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.groupsHeadingText {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.activeGroupControls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.activeGroupName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+  font-size: 11px;
+  color: var(--color-text);
+}
+
+/* 横スクロールする帯の外枠。右端フェード(finding 3)をここに乗せる。 */
+.stripWrapper {
+  position: relative;
+}
+
+.stripWrapper::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  background: linear-gradient(to right, transparent, var(--color-bg-raised));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.stripWrapper[data-overflow='true']::after {
+  opacity: 1;
+}
+
 .row {
   display: flex;
   align-items: center;
   gap: 6px;
   overflow-x: auto;
   padding-bottom: 2px;
+  /* 最後のチップの員数バッジが右端で切れないよう終端に余白を持たせ、スクロール
+     終端でもその余白ごと止まるようにする(finding 4)。 */
+  padding-inline-end: 12px;
+  scroll-padding-inline-end: 12px;
 }
 
 .chip {
@@ -42,25 +103,18 @@
   padding: 0 6px;
 }
 
-.chipWrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
+/* 常に 44×44px の当たり判定を持つ(視覚上のアイコンは小さいまま)。 */
 .menuTrigger {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  margin-left: 2px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .menuTrigger:hover {
@@ -69,12 +123,13 @@
 
 .menu {
   position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  top: calc(100% + 4px);
+  right: 0;
   z-index: 150;
   display: flex;
   flex-direction: column;
   min-width: 140px;
+  max-width: min(220px, calc(100vw - 32px));
   padding: 6px;
   background: var(--color-bg-raised);
   border: 1px solid var(--color-border-strong);
@@ -147,11 +202,6 @@
   }
 
   .addChip {
-    width: 44px;
-    height: 44px;
-  }
-
-  .menuTrigger {
     width: 44px;
     height: 44px;
   }

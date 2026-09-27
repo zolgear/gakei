@@ -1,10 +1,11 @@
 /**
- * ストックパネルのグループ絞り込み行(ADR-0022 4章)。「すべて」+ 各グループのチップ
- * (横スクロール)+ 新規作成の「+」。選択中のグループには名前の横に「⋯」を出し、
- * 名前の変更・削除のメニューを開く(`UserMenu` と同じ、外側クリック/Esc で閉じるポップオーバー)。
- * 削除は既存の Asset 削除と同じ `ConfirmDialog` を通す。
+ * ストックパネルのグループ絞り込み行(ADR-0022 4章)。見出し「グループ」+ 選択中グループの
+ * 名前と「⋯」メニューは横スクロールしないヘッダー行に置き(パネル幅を超えてメニューが
+ * 見えなくなるのを防ぐ)、「すべて」+ 各グループのチップ(横スクロール)+ 新規作成の「+」だけを
+ * その下の帯に置く。「⋯」から名前の変更・削除のメニューを開く(`UserMenu` と同じ、外側クリック/
+ * Esc で閉じるポップオーバー)。削除は既存の Asset 削除と同じ `ConfirmDialog` を通す。
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError, createAssetGroup, deleteAssetGroup, updateAssetGroup } from '../../../api/client'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
@@ -32,6 +33,10 @@ export function GroupChips({ activeGroupId, onSelectGroup }: GroupChipsProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  // 横スクロールする帯(チップ)の外側ラッパー。右端フェードの表示・非表示を
+  // React の state ではなく DOM の data 属性で持つ(見た目だけの情報なので再レンダー不要)。
+  const stripWrapperRef = useRef<HTMLDivElement | null>(null)
+  const stripRef = useRef<HTMLDivElement | null>(null)
 
   // 選択中のグループが変わったら、開きっぱなしのメニュー・改名の途中状態を畳む
   // (レンダー中に前回値と比較して更新する。React 公式が勧める「prop の変化に応じて
@@ -59,6 +64,26 @@ export function GroupChips({ activeGroupId, onSelectGroup }: GroupChipsProps) {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [menuOpen])
+
+  // 帯がパネル幅より広い(=横スクロールできる)間だけ右端にフェードを出す(finding 3)。
+  // ResizeObserver は DOM 側の実測値を扱う外部システムなので、ここは effect が適切。
+  // 属性は ref 経由で直接書き換え、state は使わない(不要な再レンダーを避ける)。
+  useLayoutEffect(() => {
+    const strip = stripRef.current
+    const wrapper = stripWrapperRef.current
+    if (!strip || !wrapper) return
+
+    function updateOverflow() {
+      if (!strip || !wrapper) return
+      wrapper.dataset.overflow = strip.scrollWidth > strip.clientWidth + 1 ? 'true' : 'false'
+    }
+
+    updateOverflow()
+    const observer = new ResizeObserver(updateOverflow)
+    observer.observe(strip)
+    observer.observe(wrapper)
+    return () => observer.disconnect()
+  }, [groups.length, creating])
 
   const createMutation = useMutation({
     mutationFn: (name: string) => createAssetGroup(name),
@@ -108,46 +133,32 @@ export function GroupChips({ activeGroupId, onSelectGroup }: GroupChipsProps) {
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.row} role="group" aria-label={t.stock.groups.heading}>
-        <button
-          type="button"
-          className={styles.chip}
-          data-active={activeGroupId === null}
-          onClick={() => onSelectGroup(null)}
-        >
-          {t.stock.groups.all}
-        </button>
-
-        {groups.map((group) => (
-          <div key={group.id} className={styles.chipWrap}>
+      {/* 見出しと、選択中グループの名前・「⋯」メニューは横スクロール帯の外に置く
+          (finding 1, 2)。メニューはここを起点に開くので、帯の overflow-x に切り取られない。 */}
+      <div className={styles.groupsHeader}>
+        <span className={styles.groupsHeadingText} id="stock-groups-heading">
+          {t.stock.groups.heading}
+        </span>
+        {activeGroup && (
+          <div className={styles.activeGroupControls}>
+            <span className={styles.activeGroupName}>{activeGroup.name}</span>
             <button
               type="button"
-              className={styles.chip}
-              data-active={activeGroupId === group.id}
-              onClick={() => onSelectGroup(group.id)}
+              className={styles.menuTrigger}
+              aria-label={t.stock.groups.menu}
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
             >
-              {group.name}
-              <span className={styles.countBadge}>{group.member_count}</span>
+              ⋯
             </button>
-            {activeGroupId === group.id && (
-              <button
-                type="button"
-                className={styles.menuTrigger}
-                aria-label={t.stock.groups.menu}
-                aria-haspopup="true"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((v) => !v)}
-              >
-                ⋯
-              </button>
-            )}
-            {activeGroupId === group.id && menuOpen && (
+            {menuOpen && (
               <div className={styles.menu} role="menu" ref={menuRef}>
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setRenameDraft(group.name)
+                    setRenameDraft(activeGroup.name)
                     setRenaming(true)
                     setMenuOpen(false)
                   }}
@@ -168,34 +179,60 @@ export function GroupChips({ activeGroupId, onSelectGroup }: GroupChipsProps) {
               </div>
             )}
           </div>
-        ))}
+        )}
+      </div>
 
-        {creating ? (
-          <input
-            autoFocus
-            className={styles.nameInput}
-            value={draftName}
-            placeholder={t.stock.groups.newPlaceholder}
-            onChange={(e) => setDraftName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') submitCreate()
-              if (e.key === 'Escape') {
-                setCreating(false)
-                setDraftName('')
-                setFormError(null)
-              }
-            }}
-          />
-        ) : (
+      <div className={styles.stripWrapper} ref={stripWrapperRef}>
+        <div className={styles.row} role="group" aria-labelledby="stock-groups-heading" ref={stripRef}>
           <button
             type="button"
-            className={styles.addChip}
-            aria-label={t.stock.groups.new}
-            onClick={() => setCreating(true)}
+            className={styles.chip}
+            data-active={activeGroupId === null}
+            onClick={() => onSelectGroup(null)}
           >
-            +
+            {t.stock.groups.all}
           </button>
-        )}
+
+          {groups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              className={styles.chip}
+              data-active={activeGroupId === group.id}
+              onClick={() => onSelectGroup(group.id)}
+            >
+              {group.name}
+              <span className={styles.countBadge}>{group.member_count}</span>
+            </button>
+          ))}
+
+          {creating ? (
+            <input
+              autoFocus
+              className={styles.nameInput}
+              value={draftName}
+              placeholder={t.stock.groups.newPlaceholder}
+              onChange={(e) => setDraftName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitCreate()
+                if (e.key === 'Escape') {
+                  setCreating(false)
+                  setDraftName('')
+                  setFormError(null)
+                }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className={styles.addChip}
+              aria-label={t.stock.groups.new}
+              onClick={() => setCreating(true)}
+            >
+              +
+            </button>
+          )}
+        </div>
       </div>
 
       {renaming && activeGroup && (

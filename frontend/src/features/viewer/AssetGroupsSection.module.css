@@ -27,7 +27,7 @@
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .chip {
@@ -43,7 +43,11 @@
   font-size: 12px;
 }
 
+/* 見た目は小さいまま、当たり判定だけ 44×44px に広げる(チップ自体は 44px まで
+   大きくしない)。::before はレイアウトに影響しない絶対配置なので、チップの高さは
+   変わらない。 */
 .removeButton {
+  position: relative;
   width: 18px;
   height: 18px;
   display: flex;
@@ -54,6 +58,12 @@
   border-radius: 50%;
   color: var(--color-text-muted);
   font-size: 12px;
+}
+
+.removeButton::before {
+  content: '';
+  position: absolute;
+  inset: -13px;
 }
 
 .removeButton:hover:not(:disabled) {
@@ -80,11 +90,6 @@
 }
 
 @media (max-width: 767px) {
-  .removeButton {
-    width: 30px;
-    height: 30px;
-  }
-
   .addButton {
     min-height: 44px;
   }

@@ -981,7 +981,8 @@
         "one": "{count} item selected",
         "other": "{count} items selected"
       },
-      "clear": "Clear selection"
+      "clear": "Clear selection",
+      "toggleTile": "Toggle selection"
     }
   },
   "comfyui": {

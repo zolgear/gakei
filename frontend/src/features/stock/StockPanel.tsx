@@ -396,7 +396,7 @@ export function StockPanel() {
                   className={styles.tileImageButton}
                   aria-label={
                     selectionMode
-                      ? undefined
+                      ? t.stock.selection.toggleTile
                       : inStudio
                         ? t.stock.showInResultArea
                         : t.stock.openInViewer

@@ -981,7 +981,8 @@
         "one": "{count} 枚を選択中",
         "other": "{count} 枚を選択中"
       },
-      "clear": "選択を解除"
+      "clear": "選択を解除",
+      "toggleTile": "選択を切り替える"
     }
   },
   "comfyui": {
