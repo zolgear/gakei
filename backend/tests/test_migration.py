@@ -288,3 +288,45 @@ def test_migration_upgrades_from_0011_to_0012_adds_asset_group_tables(tmp_path) 
     assert "asset_group" not in tables_after_downgrade
     assert "asset_group_member" not in tables_after_downgrade
     engine.dispose()
+
+
+def test_migration_upgrades_from_0012_to_0013_adds_run_asset_group_id(tmp_path) -> None:  # noqa: ANN001
+    """既存の0012適用済みDBでも、起動時のupgrade headで0013(run.asset_group_id)
+    が当たること(ADR-0022)。"""
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0012")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns_after_0012 = {c["name"] for c in sa_inspect(engine).get_columns("run")}
+    assert "asset_group_id" not in columns_after_0012
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    columns_after_head = {c["name"] for c in inspector.get_columns("run")}
+    assert "asset_group_id" in columns_after_head
+    assert "ix_run_asset_group_id" in {i["name"] for i in inspector.get_indexes("run")}
+    fks = {fk["name"]: fk for fk in inspector.get_foreign_keys("run")}
+    assert fks["fk_run_asset_group_id_asset_group"]["referred_table"] == "asset_group"
+    engine.dispose()
+
+    command.downgrade(cfg, "0012")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    columns_after_downgrade = {c["name"] for c in inspector.get_columns("run")}
+    assert "asset_group_id" not in columns_after_downgrade
+    assert "ix_run_asset_group_id" not in {i["name"] for i in inspector.get_indexes("run")}
+    engine.dispose()

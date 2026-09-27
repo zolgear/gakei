@@ -216,6 +216,13 @@ class Run(Base):
         Uuid, ForeignKey("app_user.id"), nullable=True, index=True
     )
 
+    # 生成時に指定したグループ(ADR-0022 2章)。Run の作成時に一度だけ書き、UPDATE しない
+    # (ADR-0003 の追記のみの規則に反しない)。成功時に worker が出力 Asset をこのグループに
+    # 入れる。グループが実行までに削除されていたら入れずに成功させる。
+    asset_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("asset_group.id"), nullable=True, index=True
+    )
+
     queued_at: Mapped[datetime] = mapped_column(
         UtcDateTime(), nullable=False, default=_utcnow, index=True
     )

@@ -142,7 +142,7 @@ class AssetGroupMembersRequest(BaseModel):
 
 
 class AssetGroupRef(BaseModel):
-    """`AssetDetail.groups` の1件。"""
+    """`AssetDetail.groups` と `RunSummary.asset_group` の1件。"""
 
     id: uuid.UUID
     name: str
@@ -257,6 +257,8 @@ class RunCreateRequest(BaseModel):
     provider: str | None = None
     params: dict[str, Any] = Field(default_factory=dict)
     inputs: list[RunInputCreate] = Field(default_factory=list)
+    # 出力を入れるグループ(ADR-0022)。存在しない・削除済みなら 404。
+    asset_group_id: uuid.UUID | None = None
 
 
 class RunCreateResponse(BaseModel):
@@ -309,6 +311,9 @@ class RunSummary(BaseModel):
     cost_usd: float | None = None
     # 実行したユーザー(ADR-0019)。`none` モードは常に null。
     created_by: CreatedBy | None = None
+    # 生成時に指定したグループ(ADR-0022)。指定なし・削除済みのグループなら null。
+    # 再実行でフォームに戻すためと、履歴・Run 詳細の表示に使う。
+    asset_group: AssetGroupRef | None = None
 
 
 class RunDetail(RunSummary):

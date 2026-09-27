@@ -799,7 +799,7 @@ export interface components {
         };
         /**
          * AssetGroupRef
-         * @description `AssetDetail.groups` の1件。
+         * @description `AssetDetail.groups` と `RunSummary.asset_group` の1件。
          */
         AssetGroupRef: {
             /**
@@ -1992,6 +1992,8 @@ export interface components {
             };
             /** Inputs */
             inputs?: components["schemas"]["RunInputCreate"][];
+            /** Asset Group Id */
+            asset_group_id?: string | null;
         };
         /** RunCreateResponse */
         RunCreateResponse: {
@@ -2071,6 +2073,7 @@ export interface components {
             /** Cost Usd */
             cost_usd?: number | null;
             created_by?: components["schemas"]["CreatedBy"] | null;
+            asset_group?: components["schemas"]["AssetGroupRef"] | null;
             /** Deployment */
             deployment?: string | null;
             /** Provider Request Id */
@@ -2227,6 +2230,7 @@ export interface components {
             /** Cost Usd */
             cost_usd?: number | null;
             created_by?: components["schemas"]["CreatedBy"] | null;
+            asset_group?: components["schemas"]["AssetGroupRef"] | null;
         };
         /**
          * SearchAssetHit
@@ -2373,6 +2377,7 @@ export interface components {
             /** Cost Usd */
             cost_usd?: number | null;
             created_by?: components["schemas"]["CreatedBy"] | null;
+            asset_group?: components["schemas"]["AssetGroupRef"] | null;
             /** Snippet */
             snippet: string;
         };

@@ -23,6 +23,7 @@ from pathlib import Path
 from sqlalchemy import select, update
 from sqlalchemy.orm import sessionmaker
 
+from app.domain import asset_groups as asset_groups_domain
 from app.domain import assets as assets_domain
 from app.domain.models import Asset, AssetKind, Run, RunInput, RunInputRole, RunStatus
 from app.domain.storage import AssetStore
@@ -175,6 +176,14 @@ def _finish_run_succeeded(
                 created_by_user_id=run.created_by_user_id,
             )
             output_ids.append(asset.id)
+
+        # ADR-0022: 生成時にグループが指定されていれば、取り込んだ出力を同じトランザクションで
+        # そのグループに入れる(既に入っているものは無視)。実行までにグループが削除されて
+        # いたら何もせず、Run は成功のままにする。
+        if run.asset_group_id is not None and output_ids:
+            group = asset_groups_domain.get_active_group_or_none(session, run.asset_group_id)
+            if group is not None:
+                asset_groups_domain.add_members(session, group, output_ids)
 
         run.status = RunStatus.SUCCEEDED
         run.finished_at = _utcnow()
