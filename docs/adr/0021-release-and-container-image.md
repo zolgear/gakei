@@ -17,7 +17,8 @@
 - **バージョンは SemVer。** ローカルMVPの間は `0.y.z` で、`0.y` を上げるのは利用者に見える機能の追加や互換性のない変更(設定名や DB の意味が変わるとき)、`z` は修正と小さな改善。`1.0.0` にするのは本線(Azure)に着手したときではなく、「ローカルMVPとして完成」とユーザーが判断したとき。
 - **バージョンの正は `backend/pyproject.toml` の `version` の1か所。** `frontend/package.json` の `version` は使わない(`"private": true` で npm に公開しないパッケージなので `0.0.0` のまま)。サーバーは起動時に `pyproject.toml` を読み、画面と API に出す(3章)。
 - **タグは `vX.Y.Z`**(先頭に `v`)。プレリリースは `vX.Y.Z-rc.N`。タグは main のコミットにだけ打つ。
-- **リリースの手順:** (1) `pyproject.toml` のバージョンを上げる PR を作り、マージする。(2) main で `git tag vX.Y.Z && git push origin vX.Y.Z`。(3) 以降は自動(2章)。手順は `docs/release.md` に書く。
+- **ブランチは `dev` と `main` の2本**(2026-09-27 追記)。開発は `dev`(既定ブランチ)に PR で集め、リリースのときだけ `dev` → `main` の PR を入れる。`main` は常にリリース済みの状態を指す。両方とも PR 経由のみ・CI 必須・force push 禁止をルールセットで強制し、`v*` タグは削除と上書きを禁止する。
+- **リリースの手順:** (1) `dev` で `pyproject.toml` のバージョンを上げる PR を作り、マージする。(2) `dev` → `main` の PR をマージする。(3) main で `git tag vX.Y.Z && git push origin vX.Y.Z`。(4) 以降は自動(2章)。手順は `docs/release.md` に書く。
 - **リリースノートは GitHub の自動生成**(マージされた PR の一覧)を使い、手で書かない。書きたいことがあれば、GitHub Release の本文を後から編集する。
 - CHANGELOG ファイルは作らない。変更の経緯は ADR と GitHub Release で追う。
 

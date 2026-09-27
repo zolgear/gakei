@@ -9,12 +9,25 @@ GAKEI のバージョン付けとリリースの自動化は ADR-0021 で決め�
   - `y` を上げる: 利用者に見える機能の追加、互換性のない変更(設定名や DB の意味が変わるときなど)。
   - `z` を上げる: 修正、小さな改善。
   - `1.0.0` にするのは、本線(Azure)に着手したときではなく「ローカルMVPとして完成」と判断したとき。
-- タグは `vX.Y.Z`(先頭に `v`)。main のコミットにだけ打つ。プレリリースは `vX.Y.Z-rc.N`(これから出す `X.Y.Z` の候補。`pyproject.toml` は `X.Y.Z` のまま、タグの `-` の前だけが比べられる)。
+- タグは `vX.Y.Z`(先頭に `v`)。main のコミットにだけ打つ(main はリリース済みの状態だけを指す。開発は dev で行う。下の「ブランチ」)。プレリリースは `vX.Y.Z-rc.N`(これから出す `X.Y.Z` の候補。`pyproject.toml` は `X.Y.Z` のまま、タグの `-` の前だけが比べられる)。
+
+## ブランチ
+
+- **`dev`(既定ブランチ):** 開発の集約先。機能や修正は Issue に積み、`dev` から切った作業ブランチで作って PR を `dev` に出す。
+- **`main`:** リリース済みの状態だけを指す。`dev` からの PR でしか更新しない。タグは main にだけ打つ。
+- `main` と `dev` はルールセットで守られている: PR 経由のみ(承認数は 0)、CI(`test (ubuntu-latest)` と `docker build & smoke test`)の成功が必須、force push と削除は禁止。`v*` のタグは削除・上書きが禁止(管理者はバイパス可)。
+- CI は PR と、`main` / `dev` への push で走る。Windows のテストは push のときだけ。
 
 ## リリース手順
 
-1. `backend/pyproject.toml` の `version` を上げる PR を作り、マージする。
-2. main を最新にしてタグを打ち、push する。
+1. `dev` で `backend/pyproject.toml` の `version` を上げる PR を作り、マージする。
+2. `dev` → `main` の PR を作り、マージする(タイトルは `Release vX.Y.Z` など。本文は空でよい。GitHub Release のノートは PR の一覧から自動で作られる)。
+
+   ```bash
+   gh pr create --base main --head dev --title "Release vX.Y.Z" --body ""
+   ```
+
+3. main を最新にしてタグを打ち、push する。
 
    ```bash
    git switch main && git pull
@@ -22,8 +35,8 @@ GAKEI のバージョン付けとリリースの自動化は ADR-0021 で決め�
    git push origin vX.Y.Z
    ```
 
-3. GitHub の Actions で `Release` ワークフローが動く(タグの push がトリガー)。完了まで 10 分程度(`linux/amd64` と `linux/arm64` のマルチアーキテクチャビルドを含む)。Actions のログを見て、途中で失敗していないか確認する。
-4. 完了したら次の2つを確認する。
+4. GitHub の Actions で `Release` ワークフローが動く(タグの push がトリガー)。完了まで 10 分程度(`linux/amd64` と `linux/arm64` のマルチアーキテクチャビルドを含む)。Actions のログを見て、途中で失敗していないか確認する。
+5. 完了したら次の2つを確認する。
    - GitHub の Releases に `vX.Y.Z` が並び、`THIRD_PARTY_NOTICES.txt` が添付されていること。
    - `ghcr.io/zolgear/gakei` に `X.Y.Z`、`X.Y`、`latest` のタグが並んでいること(プレリリースは `X.Y.Z-rc.N` だけ)。
 
