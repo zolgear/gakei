@@ -1,0 +1,460 @@
+/**
+ * ストックパネルの節 1 つ(ADR-0022 4章)。グループは絞り込みではなく「入れもの」で、
+ * パネルは各グループの節と、最後の「グループなし」の節に分かれる。
+ *
+ * - 見出し行: 開閉の印、名前、件数、右端に「⋯」(名前を変更 / 削除。グループの節だけ)。
+ *   行を押すと開閉する。タイルをこの行(または空のグループの枠)へドラッグ&ドロップすると
+ *   そのグループに入る(元の節からは消さない。1 つの Asset は複数のグループに入れる)。
+ * - 本体(開いているときだけ取得・表示): 既存の 2 列のタイル。グループは最初の 30 件と
+ *   「さらに表示」、「グループなし」は末尾の番兵で自動的に続きを読む(既存の無限スクロール)。
+ */
+import { useEffect, useId, useRef, useState, type DragEvent, type RefObject } from 'react'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  ApiError,
+  addAssetsToGroup,
+  deleteAssetGroup,
+  listAssets,
+  removeAssetsFromGroup,
+  updateAssetGroup,
+  type AssetGroupRow,
+  type AssetSummary,
+} from '../../api/client'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { fmt, useI18n } from '../../i18n'
+import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
+import { ASSET_GROUPS_QUERY_KEY, invalidateAssetGroupQueries } from './groups/assetGroupQueries'
+import { shouldAutoFetchNextPage } from './sentinel'
+import { StockTile } from './StockTile'
+import { UNGROUPED_SECTION_KEY, selectionEntry } from './stockSelection'
+import { stockAssetsQueryKey, type StockKindFilter, type StockSectionScope } from './stockQueryKey'
+import styles from './GroupSection.module.css'
+
+const PAGE_SIZE = 30
+
+// jsdom 等、IntersectionObserver を持たない環境向けのフォールバック判定。この場合は番兵の
+// 自動監視をやめ、クリックで読み込む「さらに読み込む」ボタンを出す。
+const supportsIntersectionObserver = typeof IntersectionObserver !== 'undefined'
+
+// 番兵がこの余白だけ手前(下方向)に来た時点で先読みを始める。
+const SENTINEL_ROOT_MARGIN = '0px 0px 300px 0px'
+
+/** タイルに渡す操作。節をまたいで共通なので `StockPanel` から 1 つにまとめて渡す。 */
+export interface StockTileActions {
+  inStudio: boolean
+  selectionMode: boolean
+  selected: ReadonlySet<string>
+  onToggleSelect: (sectionKey: string, asset: AssetSummary) => void
+  onOpen: (asset: AssetSummary) => void
+  onUseAsInput: (asset: AssetSummary) => void
+  onDelete: (asset: AssetSummary) => void
+}
+
+interface GroupSectionProps {
+  /** グループの節ならその行。「グループなし」の節は null。 */
+  group: AssetGroupRow | null
+  kind: StockKindFilter
+  open: boolean
+  onToggleOpen: () => void
+  /** 番兵の IntersectionObserver の root(スクロールするパネル)。 */
+  scrollRootRef: RefObject<HTMLDivElement | null>
+  tileActions: StockTileActions
+  /** 「グループなし」の節が空のとき、グループが 1 つも無いか(案内の文言を変える)。 */
+  noGroupsExist?: boolean
+  /** 失敗の文言をパネル上部のメッセージ欄に出す。 */
+  onError: (message: string) => void
+  /** グループを削除したとき(呼び出し側がその節の選択を外す)。 */
+  onGroupDeleted?: (groupId: string) => void
+}
+
+function hasAssetData(e: DragEvent<HTMLElement>): boolean {
+  return Array.from(e.dataTransfer.types).includes(GAKEI_ASSET_ID_DATA_TYPE)
+}
+
+/**
+ * アプリ内のタイルのドラッグ(`GAKEI_ASSET_ID_DATA_TYPE`)を受ける領域。`enabled` が偽なら
+ * 何も受けない。ファイルのドロップはパネル全体の受け口(アップロード)に任せるため、ここでは
+ * 伝播を止めない(パネル側はアプリ内の Asset のドロップを無視する)。
+ */
+function useAssetDropZone(enabled: boolean, onDropAsset: (assetId: string) => void) {
+  const [dropping, setDropping] = useState(false)
+  if (!enabled) return { dropping: false, handlers: {} }
+  return {
+    dropping,
+    handlers: {
+      onDragOver: (e: DragEvent<HTMLElement>) => {
+        if (!hasAssetData(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        if (!dropping) setDropping(true)
+      },
+      onDragLeave: (e: DragEvent<HTMLElement>) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+        setDropping(false)
+      },
+      onDrop: (e: DragEvent<HTMLElement>) => {
+        setDropping(false)
+        const assetId = e.dataTransfer.getData(GAKEI_ASSET_ID_DATA_TYPE)
+        if (!assetId) return
+        e.preventDefault()
+        onDropAsset(assetId)
+      },
+    },
+  }
+}
+
+export function GroupSection({
+  group,
+  kind,
+  open,
+  onToggleOpen,
+  scrollRootRef,
+  tileActions,
+  noGroupsExist = false,
+  onError,
+  onGroupDeleted,
+}: GroupSectionProps) {
+  const { t } = useI18n()
+  const queryClient = useQueryClient()
+  const bodyId = useId()
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function handlePointerDown(e: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [menuOpen])
+
+  const addMutation = useMutation({
+    mutationFn: ({ groupId, assetId }: { groupId: string; assetId: string }) => addAssetsToGroup(groupId, [assetId]),
+    onSuccess: (_data, { assetId }) => invalidateAssetGroupQueries(queryClient, [assetId]),
+    onError: (err: unknown) => onError(err instanceof ApiError ? err.message : t.stock.groups.addFailed),
+  })
+
+  const renameMutation = useMutation({
+    mutationFn: ({ groupId, name }: { groupId: string; name: string }) => updateAssetGroup(groupId, name),
+    onSuccess: () => {
+      setRenaming(false)
+      invalidateAssetGroupQueries(queryClient)
+    },
+    onError: (err: unknown) => onError(err instanceof ApiError ? err.message : t.stock.groups.renameFailed),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (groupId: string) => deleteAssetGroup(groupId),
+    onSuccess: (_data, groupId) => {
+      setDeleteConfirmOpen(false)
+      invalidateAssetGroupQueries(queryClient)
+      onGroupDeleted?.(groupId)
+    },
+    onError: (err: unknown) => {
+      setDeleteConfirmOpen(false)
+      onError(err instanceof ApiError ? err.message : t.stock.groups.deleteFailed)
+    },
+  })
+
+  function dropAsset(assetId: string) {
+    if (group) addMutation.mutate({ groupId: group.id, assetId })
+  }
+  const headerDrop = useAssetDropZone(group !== null, dropAsset)
+
+  function submitRename() {
+    const name = renameDraft.trim()
+    if (!group || !name) return
+    renameMutation.mutate({ groupId: group.id, name })
+  }
+
+  const name = group ? group.name : t.stock.groups.ungrouped
+
+  return (
+    <section className={styles.section}>
+      <div className={styles.headerRow} data-dropping={headerDrop.dropping} {...headerDrop.handlers}>
+        {renaming && group ? (
+          <input
+            autoFocus
+            className={styles.nameInput}
+            value={renameDraft}
+            aria-label={t.stock.groups.rename}
+            disabled={renameMutation.isPending}
+            onChange={(e) => setRenameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submitRename()
+              if (e.key === 'Escape') setRenaming(false)
+            }}
+            onBlur={() => {
+              if (!renameMutation.isPending) setRenaming(false)
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className={styles.disclosure}
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={onToggleOpen}
+          >
+            <span className={styles.chevron} aria-hidden="true">
+              {open ? '▾' : '▸'}
+            </span>
+            <span className={styles.name}>{name}</span>
+            {group && (
+              <span className={styles.count} title={fmt(t.stock.groups.memberCount, { count: group.member_count })}>
+                {group.member_count}
+              </span>
+            )}
+          </button>
+        )}
+
+        {group && (
+          <div className={styles.menuAnchor} ref={menuRef}>
+            <button
+              type="button"
+              className={styles.menuTrigger}
+              aria-label={fmt(t.stock.groups.menu, { name: group.name })}
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              ⋯
+            </button>
+            {menuOpen && (
+              <div className={styles.menu} role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setRenameDraft(group.name)
+                    setRenaming(true)
+                    setMenuOpen(false)
+                  }}
+                >
+                  {t.stock.groups.rename}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.dangerItem}
+                  onClick={() => {
+                    setDeleteConfirmOpen(true)
+                    setMenuOpen(false)
+                  }}
+                >
+                  {t.stock.groups.delete}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {open && (
+        <div id={bodyId} className={styles.body}>
+          <SectionAssets
+            scope={group ? { groupId: group.id } : { ungrouped: true }}
+            kind={kind}
+            scrollRootRef={scrollRootRef}
+            tileActions={tileActions}
+            noGroupsExist={noGroupsExist}
+            onDropAsset={dropAsset}
+            onError={onError}
+          />
+        </div>
+      )}
+
+      {group && (
+        <ConfirmDialog
+          open={deleteConfirmOpen}
+          message={fmt(t.stock.groups.deleteConfirm, { name: group.name })}
+          confirmLabel={t.stock.groups.delete}
+          onConfirm={() => deleteMutation.mutate(group.id)}
+          onCancel={() => setDeleteConfirmOpen(false)}
+        />
+      )}
+    </section>
+  )
+}
+
+interface SectionAssetsProps {
+  scope: StockSectionScope
+  kind: StockKindFilter
+  scrollRootRef: RefObject<HTMLDivElement | null>
+  tileActions: StockTileActions
+  noGroupsExist: boolean
+  onDropAsset: (assetId: string) => void
+  onError: (message: string) => void
+}
+
+/** 節の本体。開いている間だけマウントされるので、畳んだ節は取得しない。 */
+function SectionAssets({
+  scope,
+  kind,
+  scrollRootRef,
+  tileActions,
+  noGroupsExist,
+  onDropAsset,
+  onError,
+}: SectionAssetsProps) {
+  const { t } = useI18n()
+  const queryClient = useQueryClient()
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const groupId = 'groupId' in scope ? scope.groupId : null
+  const sectionKey = groupId ?? UNGROUPED_SECTION_KEY
+
+  const assetsQuery = useInfiniteQuery({
+    queryKey: stockAssetsQueryKey(kind, scope),
+    queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
+      try {
+        return await listAssets({
+          limit: PAGE_SIZE,
+          cursor: pageParam,
+          kind: kind === 'all' ? undefined : kind,
+          ...(groupId ? { group_id: groupId } : { ungrouped: true }),
+        })
+      } catch (err) {
+        // グループが(他のタブ等で)削除済みなら 404。グループ一覧を取り直して節ごと消す。
+        if (groupId && err instanceof ApiError && err.status === 404) {
+          queryClient.invalidateQueries({ queryKey: ASSET_GROUPS_QUERY_KEY })
+          return { items: [], next_cursor: null }
+        }
+        throw err
+      }
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  })
+  const assets = assetsQuery.data?.pages.flatMap((page) => page.items) ?? []
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = assetsQuery
+  const autoLoad = groupId === null
+
+  const removeMutation = useMutation({
+    mutationFn: (assetId: string) => removeAssetsFromGroup(groupId as string, [assetId]),
+    onSuccess: (_data, assetId) => invalidateAssetGroupQueries(queryClient, [assetId]),
+    onError: (err: unknown) => onError(err instanceof ApiError ? err.message : t.stock.groups.removeFailed),
+  })
+
+  const emptyDrop = useAssetDropZone(groupId !== null, onDropAsset)
+
+  // 「グループなし」の節だけ、番兵がパネル内に見えている間は次ページを継ぎ足す。
+  // isFetchingNextPage を依存に入れて observer を張り直すことで、フェッチ直後にまだ番兵が
+  // 見えていれば続けて次ページを取りに行く。失敗時は自動再試行せず、ボタンに委ねる。
+  useEffect(() => {
+    if (!autoLoad || !supportsIntersectionObserver) return
+    if (!hasNextPage || isFetchingNextPage || isFetchNextPageError) return
+    const sentinel = sentinelRef.current
+    const root = scrollRootRef.current
+    if (!sentinel || !root) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (
+          shouldAutoFetchNextPage({
+            isIntersecting: entry?.isIntersecting ?? false,
+            hasNextPage,
+            isFetchingNextPage,
+            isFetchNextPageError,
+          })
+        ) {
+          fetchNextPage()
+        }
+      },
+      { root, rootMargin: SENTINEL_ROOT_MARGIN },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [autoLoad, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage, scrollRootRef])
+
+  if (assetsQuery.isLoading) {
+    return <p className={styles.status}>{t.stock.loadingMore}</p>
+  }
+
+  if (assetsQuery.isError && assets.length === 0) {
+    return (
+      <div className={styles.status}>
+        <button type="button" className={styles.moreButton} onClick={() => assetsQuery.refetch()}>
+          {t.stock.retryLoadMore}
+        </button>
+      </div>
+    )
+  }
+
+  if (assets.length === 0) {
+    if (groupId) {
+      return (
+        <div className={styles.dropBox} data-dropping={emptyDrop.dropping} {...emptyDrop.handlers}>
+          {t.stock.groups.dropHere}
+        </div>
+      )
+    }
+    return <p className={styles.status}>{noGroupsExist ? t.stock.emptyState : t.stock.groups.ungroupedEmpty}</p>
+  }
+
+  return (
+    <>
+      <div className={styles.grid}>
+        {assets.map((asset) => (
+          <StockTile
+            key={asset.id}
+            asset={asset}
+            inStudio={tileActions.inStudio}
+            selectionMode={tileActions.selectionMode}
+            isSelected={tileActions.selected.has(selectionEntry(sectionKey, asset.id))}
+            onOpen={tileActions.onOpen}
+            onToggleSelect={(a) => tileActions.onToggleSelect(sectionKey, a)}
+            onUseAsInput={tileActions.onUseAsInput}
+            onDelete={tileActions.onDelete}
+            onRemoveFromGroup={groupId ? (a) => removeMutation.mutate(a.id) : undefined}
+          />
+        ))}
+      </div>
+
+      {hasNextPage &&
+        (autoLoad ? (
+          <div ref={sentinelRef} className={styles.sentinel}>
+            {!supportsIntersectionObserver ? (
+              <button
+                type="button"
+                className={styles.moreButton}
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? t.stock.loadingMore : t.stock.loadMore}
+              </button>
+            ) : isFetchNextPageError ? (
+              <button type="button" className={styles.moreButton} onClick={() => fetchNextPage()}>
+                {t.stock.retryLoadMore}
+              </button>
+            ) : isFetchingNextPage ? (
+              <span className={styles.statusText}>{t.stock.loadingMore}</span>
+            ) : null}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={styles.moreButton}
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage
+              ? t.stock.loadingMore
+              : isFetchNextPageError
+                ? t.stock.retryLoadMore
+                : t.stock.groups.showMore}
+          </button>
+        ))}
+    </>
+  )
+}

@@ -923,11 +923,6 @@
   },
   "stock": {
     "heading": "Stock",
-    "countLoading": "...",
-    "countLabel": {
-      "one": "{count} item",
-      "other": "{count} items"
-    },
     "kindHeading": "Type",
     "kindAll": "All",
     "kindGenerated": "Generated",
@@ -953,20 +948,24 @@
     "undo": "Undo",
     "maxInputImages": "You've reached the input image limit ({max}).",
     "groups": {
-      "heading": "Groups",
-      "all": "All",
       "new": "New group…",
+      "newButton": "New group",
       "newPlaceholder": "Group name",
       "rename": "Rename",
       "delete": "Delete",
       "deleteConfirm": "This deletes the group \"{name}\". The images themselves are not deleted.",
-      "menu": "Group actions",
+      "menu": "Actions for \"{name}\"",
       "memberCount": {
         "one": "{count} item",
         "other": "{count} items"
       },
       "addTo": "Add to a group",
       "removeFromThis": "Remove from this group",
+      "removeFromGroups": "Remove from groups",
+      "ungrouped": "Ungrouped",
+      "ungroupedEmpty": "Every image is in a group.",
+      "dropHere": "Drop images here",
+      "showMore": "Show more",
       "noGroups": "No groups yet.",
       "createFailed": "Failed to create the group.",
       "renameFailed": "Failed to rename the group.",

@@ -1,11 +1,15 @@
 /**
- * ストック一覧の React Query キー。kind に加えてグループ絞り込み(ADR-0022)を含める。
- * 既存の `['assets', kind]`(`StockPickerGrid` など)という形とプレフィックスを揃えつつ、
- * 絞り込みが無いときは 'all' を要素にする(配列の要素に `undefined`/`null` を混ぜると
- * React Query のキー比較・ログで扱いにくいため)。
+ * ストック一覧の React Query キー。kind に加えて、節(各グループか「グループなし」。ADR-0022)
+ * を含める。既存の `['assets', kind]`(`StockPickerGrid` など)とプレフィックスを揃え、
+ * `invalidateQueries({ queryKey: ['assets'] })` で全節がまとめて作り直されるようにする。
  */
 export type StockKindFilter = 'all' | 'generated' | 'upload' | 'sketch' | 'mask'
 
-export function stockAssetsQueryKey(kind: StockKindFilter, groupId: string | null) {
-  return ['assets', kind, groupId ?? 'all'] as const
+/** ストックパネルの節が何を一覧するか。 */
+export type StockSectionScope = { groupId: string } | { ungrouped: true }
+
+export function stockAssetsQueryKey(kind: StockKindFilter, scope: StockSectionScope) {
+  return 'groupId' in scope
+    ? (['assets', kind, 'group', scope.groupId] as const)
+    : (['assets', kind, 'ungrouped'] as const)
 }

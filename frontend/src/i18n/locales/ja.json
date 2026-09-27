@@ -923,11 +923,6 @@
   },
   "stock": {
     "heading": "ストック",
-    "countLoading": "...",
-    "countLabel": {
-      "one": "{count} 件",
-      "other": "{count} 件"
-    },
     "kindHeading": "種類",
     "kindAll": "すべて",
     "kindGenerated": "生成",
@@ -953,20 +948,24 @@
     "undo": "元に戻す",
     "maxInputImages": "入力画像の上限({max}枚)に達しています",
     "groups": {
-      "heading": "グループ",
-      "all": "すべて",
       "new": "新しいグループ…",
+      "newButton": "新しいグループ",
       "newPlaceholder": "グループ名",
       "rename": "名前を変更",
       "delete": "削除",
       "deleteConfirm": "グループ「{name}」を削除します。画像自体は削除されません。",
-      "menu": "グループの操作",
+      "menu": "「{name}」の操作",
       "memberCount": {
         "one": "{count} 枚",
         "other": "{count} 枚"
       },
       "addTo": "グループに追加",
       "removeFromThis": "このグループから外す",
+      "removeFromGroups": "グループから外す",
+      "ungrouped": "グループなし",
+      "ungroupedEmpty": "グループに入っていない画像はありません",
+      "dropHere": "ここに画像をドロップ",
+      "showMore": "さらに表示",
       "noGroups": "グループがありません",
       "createFailed": "グループの作成に失敗しました",
       "renameFailed": "名前の変更に失敗しました",

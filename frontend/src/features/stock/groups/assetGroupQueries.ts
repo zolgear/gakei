@@ -1,6 +1,6 @@
 /**
  * グループ(ADR-0022)の一覧クエリと、メンバー変更後に無効化すべきクエリキーをまとめる。
- * `GroupList`(ストックパネルの絞り込み)、`AddToGroupPopover`(ストックパネル・ビューア
+ * `GroupSection`(ストックパネルの節)、`AddToGroupPopover`(ストックパネル・ビューア
  * 共用の追加ポップオーバー)、`AssetGroupsSection`(ビューアの節)が共有する。
  */
 import { useQuery, type QueryClient } from '@tanstack/react-query'

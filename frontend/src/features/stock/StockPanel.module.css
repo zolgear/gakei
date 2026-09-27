@@ -33,7 +33,26 @@
 .headerRowRight {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+}
+
+/* 「+ 新しいグループ」を押すと出る名前の入力。Enter で作成、Escape で取り消し。 */
+.createGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nameInput {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
 }
 
 .heading {
@@ -44,15 +63,11 @@
   color: var(--color-text-muted);
 }
 
-.count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.selectionToggle {
+/* ヘッダーの「+ 新しいグループ」と「選択」。 */
+.headerButton {
   height: 28px;
   padding: 0 10px;
+  white-space: nowrap;
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
@@ -60,26 +75,18 @@
   font-size: 12px;
 }
 
-.selectionToggle[data-active='true'] {
+.headerButton[data-active='true'] {
   background: var(--color-header-band);
   border-color: var(--color-border-strong);
   color: var(--color-text);
 }
 
+/* 「種類」の見出しはチップ行の上に左寄せで置く(チップの横に縦中央で並べない)。 */
 .kindFilter {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* 絞り込みの見出し(「種類」)。GroupList の「グループ」の見出しと同じ見た目。 */
-.filterHeading {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-  white-space: nowrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .chips {
@@ -116,108 +123,6 @@
   color: var(--color-success, #4ade80);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: var(--color-bg);
-}
-
-.tile[data-selected='true'] {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
-}
-
-.checkBadge {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--color-bg);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.tileImageButton {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  display: block;
-  width: 100%;
-}
-
-.tileImage {
-  width: 100%;
-  height: 96px;
-  object-fit: cover;
-  display: block;
-}
-
-.addButton {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(23, 24, 27, 0.85);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 50%;
-  color: var(--color-text);
-  font-size: 14px;
-  line-height: 1;
-}
-
-.addButton:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-.deleteButton {
-  position: absolute;
-  bottom: 27px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(23, 24, 27, 0.85);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 50%;
-  color: var(--color-text-muted);
-}
-
-.deleteButton:hover {
-  color: var(--color-danger);
-  border-color: var(--color-danger);
-}
-
-.caption {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--color-text-muted);
-  padding: 5px 7px;
-  text-align: left;
-}
-
 /* 細い破線のアップロードバー。パネル上部の sticky ヘッダーに常時表示する(D&D の受け口は
    .panel 全体に広げているので、このバー自体はクリックでのファイル選択が主な役目)。 */
 .uploadBar {
@@ -245,44 +150,6 @@
 
 .hiddenFileInput {
   display: none;
-}
-
-.emptyState {
-  margin: 0;
-  padding: 28px 12px;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
-  text-align: center;
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-/* 自動読み込みの番兵。通常は見えない(IntersectionObserver が交差を検知した時点で次ページを
-   取りに行く)。取得中・失敗時・observer 非対応環境でだけ中身を表示する。 */
-.sentinel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 4px 0;
-}
-
-.sentinelLoading {
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.sentinelButton {
-  padding: 8px 16px;
-  background: var(--color-header-band);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius);
-  font-size: 12px;
-  color: var(--color-text);
-}
-
-.sentinelButton:hover:not(:disabled) {
-  border-color: var(--color-accent);
 }
 
 /* 選択モードの下部の操作バー(ADR-0022 4章)。パネルのスクロール下端に固定し、
@@ -326,32 +193,18 @@
 }
 
 @media (max-width: 767px) {
-  .addButton {
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
-  }
-
-  .deleteButton {
-    width: 40px;
-    height: 40px;
-    bottom: 46px;
-  }
-
-  .tileImageButton {
-    min-height: 44px;
-  }
-
   .uploadBar {
     height: 44px;
     font-size: 13px;
   }
 
-  .selectionToggle {
+  .headerButton,
+  .chip,
+  .selectionButton {
     min-height: 44px;
   }
 
-  .selectionButton {
-    min-height: 44px;
+  .nameInput {
+    height: 44px;
   }
 }

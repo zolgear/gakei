@@ -154,10 +154,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
-function toQuery(params: Record<string, string | number | undefined | null>): string {
+function toQuery(params: Record<string, string | number | boolean | undefined | null>): string {
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === null || value === '') continue
+    // 真偽値のフラグ(`ungrouped` など)は true のときだけ送る(false は既定と同じなので省く)。
+    if (value === undefined || value === null || value === '' || value === false) continue
     qs.set(key, String(value))
   }
   const s = qs.toString()
