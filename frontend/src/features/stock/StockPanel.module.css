@@ -30,31 +30,6 @@
   justify-content: space-between;
 }
 
-.headerRowRight {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* 「+ 新しいグループ」を押すと出る名前の入力。Enter で作成、Escape で取り消し。 */
-.createGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.nameInput {
-  width: 100%;
-  min-width: 0;
-  height: 32px;
-  padding: 0 8px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius);
-  color: var(--color-text);
-  font-size: 12px;
-}
-
 .heading {
   margin: 0;
   font-size: 12px;
@@ -63,7 +38,7 @@
   color: var(--color-text-muted);
 }
 
-/* ヘッダーの「+ 新しいグループ」と「選択」。 */
+/* ヘッダーの「選択」。 */
 .headerButton {
   height: 28px;
   padding: 0 10px;
@@ -202,9 +177,5 @@
   .chip,
   .selectionButton {
     min-height: 44px;
-  }
-
-  .nameInput {
-    height: 44px;
   }
 }

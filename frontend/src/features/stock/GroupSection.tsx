@@ -1,8 +1,10 @@
 /**
  * ストックパネルの節 1 つ(ADR-0022 4章)。グループは絞り込みではなく「入れもの」で、
- * パネルは各グループの節と、最後の「グループなし」の節に分かれる。
+ * パネルは先頭の「グループなし」の節と、続く各グループの節に分かれる。
  *
  * - 見出し行: 開閉の印、名前、件数、右端に「⋯」(名前を変更 / 削除。グループの節だけ)。
+ *   「グループなし」の節は同じ位置に「+」(新しいグループ)を置き、押すと見出し行の下に
+ *   名前の入力を出す(作ったグループの節は「グループなし」の直後に現れる)。
  *   行を押すと開閉する。タイルをこの行(または空のグループの枠)へドラッグ&ドロップすると
  *   そのグループに入る(元の節からは消さない。1 つの Asset は複数のグループに入れる)。
  * - 本体(開いているときだけ取得・表示): 既存の 2 列のタイル。グループは最初の 30 件と
@@ -13,6 +15,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import {
   ApiError,
   addAssetsToGroup,
+  createAssetGroup,
   deleteAssetGroup,
   listAssets,
   removeAssetsFromGroup,
@@ -122,6 +125,10 @@ export function GroupSection({
   const [renaming, setRenaming] = useState(false)
   const [renameDraft, setRenameDraft] = useState('')
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  // 「グループなし」の節の「+」で出す、新しいグループの名前の入力。
+  const [creating, setCreating] = useState(false)
+  const [createDraft, setCreateDraft] = useState('')
+  const [createError, setCreateError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!menuOpen) return
@@ -166,6 +173,27 @@ export function GroupSection({
       onError(err instanceof ApiError ? err.message : t.stock.groups.deleteFailed)
     },
   })
+
+  const createMutation = useMutation({
+    mutationFn: (name: string) => createAssetGroup(name),
+    onSuccess: () => {
+      cancelCreate()
+      invalidateAssetGroupQueries(queryClient)
+    },
+    onError: (err: unknown) => setCreateError(err instanceof ApiError ? err.message : t.stock.groups.createFailed),
+  })
+
+  function cancelCreate() {
+    setCreating(false)
+    setCreateDraft('')
+    setCreateError(null)
+  }
+
+  function submitCreate() {
+    const draft = createDraft.trim()
+    if (!draft || createMutation.isPending) return
+    createMutation.mutate(draft)
+  }
 
   function dropAsset(assetId: string) {
     if (group) addMutation.mutate({ groupId: group.id, assetId })
@@ -259,7 +287,53 @@ export function GroupSection({
             )}
           </div>
         )}
+
+        {/* 開閉ボタンとは別のボタンなので、押しても節は開閉しない。 */}
+        {!group && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            aria-label={t.stock.groups.newButton}
+            title={t.stock.groups.newButton}
+            aria-expanded={creating}
+            onClick={() => (creating ? cancelCreate() : setCreating(true))}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
       </div>
+
+      {creating && !group && (
+        <div className={styles.createGroup}>
+          <input
+            autoFocus
+            className={styles.nameInput}
+            value={createDraft}
+            maxLength={100}
+            placeholder={t.stock.groups.newPlaceholder}
+            aria-label={t.stock.groups.newPlaceholder}
+            disabled={createMutation.isPending}
+            onChange={(e) => {
+              setCreateDraft(e.target.value)
+              setCreateError(null)
+            }}
+            onKeyDown={(e) => {
+              // IME の変換確定の Enter では作成しない。
+              if (e.nativeEvent.isComposing) return
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                submitCreate()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                cancelCreate()
+              }
+            }}
+          />
+          {createError && <p className={styles.error}>{createError}</p>}
+        </div>
+      )}
 
       {open && (
         <div id={bodyId} className={styles.body}>

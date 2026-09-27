@@ -1,8 +1,9 @@
 /**
  * サイドバーの「ストック」パネル。ADR-0022 4章により、グループは絞り込みではなく「入れもの」
- * として見せる: パネルは各グループの節(`updated_at DESC`)と、最後の「グループなし」の節に
+ * として見せる: パネルは先頭の「グループなし」の節と、続く各グループの節(`updated_at DESC`)に
  * 分かれ、各節が既存の 2 列のタイルを持つ(`GroupSection`)。kind のチップは全節に共通の
- * 絞り込みとして残す。
+ * 絞り込みとして残す。新しいグループは「グループなし」の見出し行の「+」から作る(グループの
+ * 並びの起点に置く。パネルのヘッダーには置かない)。
  *
  * タイルクリックでビューアへ、タイル上の「+」で入力に追加する(常に追加のみ。置き換えの
  * 確認はビューア/履歴カードの「入力に使う」だけで行う。マスクは追加不可)。タイルを節の
@@ -16,7 +17,6 @@ import { useLocation, useNavigate } from 'react-router'
 import {
   ApiError,
   createAsset,
-  createAssetGroup,
   deleteAsset,
   getCapabilities,
   removeAssetsFromGroup,
@@ -85,9 +85,6 @@ export function StockPanel() {
   // 選択モード(ADR-0022 4章)。選択は「節のキー:Asset id」の集合(`stockSelection.ts`)。
   const [selectionMode, setSelectionMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [creatingGroup, setCreatingGroup] = useState(false)
-  const [groupDraftName, setGroupDraftName] = useState('')
-  const [createError, setCreateError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   // アップロードが既存 Asset に一致したとき(ADR-0014)の案内。エラーとは別枠で出す。
   const [notice, setNotice] = useState<string | null>(null)
@@ -123,27 +120,6 @@ export function StockPanel() {
     const next = withSectionOpen(openMap, sectionKey, !isSectionOpen(openMap, sectionKey))
     setOpenMap(next)
     saveGroupOpenMap(next)
-  }
-
-  const createGroupMutation = useMutation({
-    mutationFn: (name: string) => createAssetGroup(name),
-    onSuccess: () => {
-      cancelCreateGroup()
-      invalidateAssetGroupQueries(queryClient)
-    },
-    onError: (err: unknown) => setCreateError(err instanceof ApiError ? err.message : t.stock.groups.createFailed),
-  })
-
-  function cancelCreateGroup() {
-    setCreatingGroup(false)
-    setGroupDraftName('')
-    setCreateError(null)
-  }
-
-  function submitCreateGroup() {
-    const name = groupDraftName.trim()
-    if (!name || createGroupMutation.isPending) return
-    createGroupMutation.mutate(name)
   }
 
   // 選んだタイルを、それぞれ選んだ節のグループから外す(「グループなし」の節の選択には効かない)。
@@ -301,44 +277,15 @@ export function StockPanel() {
       <div className={styles.header}>
         <div className={styles.headerRow}>
           <h2 className={styles.heading}>{t.stock.heading}</h2>
-          <div className={styles.headerRowRight}>
-            <button
-              type="button"
-              className={styles.headerButton}
-              aria-expanded={creatingGroup}
-              onClick={() => (creatingGroup ? cancelCreateGroup() : setCreatingGroup(true))}
-            >
-              <span aria-hidden="true">+</span> {t.stock.groups.newButton}
-            </button>
-            <button
-              type="button"
-              className={styles.headerButton}
-              data-active={selectionMode}
-              onClick={handleToggleSelectionMode}
-            >
-              {selectionMode ? t.stock.selection.done : t.stock.selection.enter}
-            </button>
-          </div>
+          <button
+            type="button"
+            className={styles.headerButton}
+            data-active={selectionMode}
+            onClick={handleToggleSelectionMode}
+          >
+            {selectionMode ? t.stock.selection.done : t.stock.selection.enter}
+          </button>
         </div>
-
-        {creatingGroup && (
-          <div className={styles.createGroup}>
-            <input
-              autoFocus
-              className={styles.nameInput}
-              value={groupDraftName}
-              placeholder={t.stock.groups.newPlaceholder}
-              aria-label={t.stock.groups.newPlaceholder}
-              disabled={createGroupMutation.isPending}
-              onChange={(e) => setGroupDraftName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submitCreateGroup()
-                if (e.key === 'Escape') cancelCreateGroup()
-              }}
-            />
-            {createError && <p className={styles.message}>{createError}</p>}
-          </div>
-        )}
 
         {/* グループの節の見出しと見分けがつくよう、kind のチップ行の上に見出しを付ける(ADR-0022 4章)。 */}
         <div className={styles.kindFilter} role="group" aria-labelledby={kindHeadingId}>
@@ -392,6 +339,17 @@ export function StockPanel() {
         />
       </div>
 
+      {/* 「グループなし」を先頭に置き、その見出し行の「+」で作ったグループが直後に並ぶ。 */}
+      <GroupSection
+        group={null}
+        kind={kind}
+        open={isSectionOpen(openMap, UNGROUPED_SECTION_KEY)}
+        onToggleOpen={() => toggleSectionOpen(UNGROUPED_SECTION_KEY)}
+        scrollRootRef={panelRef}
+        tileActions={tileActions}
+        noGroupsExist={groupsQuery.isSuccess && groups.length === 0}
+        onError={setMessage}
+      />
       {groups.map((group) => (
         <GroupSection
           key={group.id}
@@ -405,16 +363,6 @@ export function StockPanel() {
           onGroupDeleted={(groupId) => setSelected((prev) => withoutSection(prev, groupId))}
         />
       ))}
-      <GroupSection
-        group={null}
-        kind={kind}
-        open={isSectionOpen(openMap, UNGROUPED_SECTION_KEY)}
-        onToggleOpen={() => toggleSectionOpen(UNGROUPED_SECTION_KEY)}
-        scrollRootRef={panelRef}
-        tileActions={tileActions}
-        noGroupsExist={groupsQuery.isSuccess && groups.length === 0}
-        onError={setMessage}
-      />
 
       {selectionMode && (
         <div className={styles.selectionFooter}>

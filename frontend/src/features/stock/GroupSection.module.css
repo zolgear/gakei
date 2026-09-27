@@ -73,8 +73,11 @@
   align-items: center;
 }
 
-/* 当たり判定は 44px 幅を持たせる(見出し行の高さを越えないよう縦は行に合わせる)。 */
-.menuTrigger {
+/* 当たり判定は 44px 幅を持たせる(見出し行の高さを越えないよう縦は行に合わせる)。
+   「⋯」と、「グループなし」の節の「+」で共通。 */
+.menuTrigger,
+.iconButton {
+  flex-shrink: 0;
   width: 44px;
   height: 100%;
   display: flex;
@@ -88,7 +91,9 @@
   font-size: 16px;
 }
 
-.menuTrigger:hover {
+.menuTrigger:hover,
+.iconButton:hover,
+.iconButton[aria-expanded='true'] {
   color: var(--color-text);
 }
 
@@ -137,6 +142,25 @@
   border-radius: var(--radius);
   color: var(--color-text);
   font-size: 12px;
+}
+
+/* 「+」で見出し行の下に出す新しいグループの名前の入力と、失敗時の文言。 */
+.createGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.createGroup .nameInput {
+  flex: none;
+  width: 100%;
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
 }
 
 .body {
