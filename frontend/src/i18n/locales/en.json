@@ -101,7 +101,6 @@
       "rerunFailed": "Failed to prepare re-run.",
       "deleteFailed": "Failed to delete.",
       "by": "By {name}",
-      "group": "Group: {name}",
       "deleteConfirm": {
         "message": {
           "one": "Delete this run and {count} output image. This cannot be undone.",
@@ -143,7 +142,6 @@
     "comfyuiPromptSummary": "Graph sent to ComfyUI (JSON)",
     "timingHeading": "Timing & status",
     "createdBy": "Run by",
-    "group": "Group",
     "duration": "Duration",
     "usageHeading": "usage",
     "estimatedCost": "Estimated cost {amount}",

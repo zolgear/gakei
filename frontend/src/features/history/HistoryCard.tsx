@@ -310,7 +310,6 @@ export function HistoryCard({ run }: HistoryCardProps) {
               {fmt(t.history.card.by, { name: run.created_by.name ?? run.created_by.email ?? '-' })}
             </span>
           )}
-          {run.asset_group && ` · ${fmt(t.history.card.group, { name: run.asset_group.name })}`}
         </div>
 
         {paramChips.length > 0 && (

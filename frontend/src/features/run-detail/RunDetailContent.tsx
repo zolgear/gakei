@@ -286,12 +286,6 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
               </dd>
             </>
           )}
-          {run.asset_group && (
-            <>
-              <dt>{t.runDetail.group}</dt>
-              <dd>{run.asset_group.name}</dd>
-            </>
-          )}
           <dt>API</dt>
           <dd className={styles.mono}>{run.operation}</dd>
           <dt>queued_at</dt>

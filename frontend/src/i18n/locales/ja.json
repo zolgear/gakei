@@ -101,7 +101,6 @@
       "rerunFailed": "再実行の準備に失敗しました",
       "deleteFailed": "削除に失敗しました",
       "by": "実行者: {name}",
-      "group": "グループ: {name}",
       "deleteConfirm": {
         "message": {
           "one": "この Generated と出力画像 {count} 枚を削除します。元に戻せません。",
@@ -143,7 +142,6 @@
     "comfyuiPromptSummary": "ComfyUI に送ったグラフ(JSON)",
     "timingHeading": "時刻・実行状況",
     "createdBy": "実行者",
-    "group": "グループ",
     "duration": "所要時間",
     "usageHeading": "usage",
     "estimatedCost": "費用(参考) {amount}",
