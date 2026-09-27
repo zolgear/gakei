@@ -808,10 +808,11 @@
     "actualSize": "Actual size (100%)",
     "imageAlt": "Generated result",
     "groups": {
-      "heading": "Groups",
-      "add": "Add",
+      "heading": "Group",
+      "change": "Change",
+      "assign": "Add to a group",
       "remove": "Remove from \"{name}\"",
-      "empty": "Not in any group."
+      "empty": "Not in a group."
     }
   },
   "compare": {
@@ -963,9 +964,9 @@
         "one": "{count} item",
         "other": "{count} items"
       },
-      "addTo": "Add to a group",
+      "moveTo": "Move to a group",
       "removeFromThis": "Remove from this group",
-      "removeFromGroups": "Remove from groups",
+      "removeFromGroups": "Remove from group",
       "ungrouped": "Ungrouped",
       "ungroupedEmpty": "Every image is in a group.",
       "dropHere": "Drop images here",
@@ -974,7 +975,7 @@
       "createFailed": "Failed to create the group.",
       "renameFailed": "Failed to rename the group.",
       "deleteFailed": "Failed to delete the group.",
-      "addFailed": "Failed to add to the group.",
+      "moveFailed": "Failed to move to the group.",
       "removeFailed": "Failed to remove from the group.",
       "moveUp": "Move up",
       "moveDown": "Move down",

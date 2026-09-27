@@ -1,5 +1,6 @@
 /**
- * `AddToGroupPopover`(ADR-0022)で、対象の Asset が既に入っているグループを選べなくする判定。
+ * `AddToGroupPopover`(ADR-0022)で、対象の Asset が今入っているグループ(移す先にならない)を
+ * 選べなくする判定。
  * ビューア(単体の Asset)から開いたときだけ意味を持つ(ストックパネルの複数選択では
  * `disabledGroupIds` を渡さない)。
  */

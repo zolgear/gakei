@@ -349,7 +349,7 @@ export function deleteAssetGroup(groupId: string): Promise<void> {
   return request(`/api/asset-groups/${groupId}`, { method: 'DELETE' })
 }
 
-/** 既に入っているものは無視される。1〜200件。 */
+/** そのグループへ移す(別のグループに入っていれば外してから入れる。ADR-0022)。既に入っているものは無視される。1〜200件。 */
 export function addAssetsToGroup(groupId: string, assetIds: string[]): Promise<AssetGroupRow> {
   return request(`/api/asset-groups/${groupId}/assets`, {
     method: 'POST',

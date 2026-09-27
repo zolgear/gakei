@@ -1,9 +1,10 @@
 /**
- * グループへの追加ポップオーバー(ADR-0022 4章)。ストックパネルの選択モードの下部
+ * グループへ移すポップオーバー(ADR-0022 4章)。ストックパネルの選択モードの下部
  * (`placement="up"`)と、ビューアの「グループ」節(`placement="down"`)の両方から使う。
- * グループ一覧をクリックすると即座に追加して閉じる。「新しいグループ…」はインライン入力を
- * 出し、Enter で作成してからそのグループに追加する。外側クリックと Esc で閉じる
- * (`UserMenu` と同じ)。
+ * 1 つの Asset が属するグループは 1 つだけで、`POST /api/asset-groups/{id}/assets` は
+ * 元のグループから外してから入れる(=移す)。グループ一覧をクリックすると即座に移して閉じる。
+ * 「新しいグループ…」はインライン入力を出し、Enter で作成してからそのグループへ移す。
+ * 外側クリックと Esc で閉じる(`UserMenu` と同じ)。
  */
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -14,17 +15,17 @@ import { invalidateAssetGroupQueries, useAssetGroups } from './assetGroupQueries
 import styles from './AddToGroupPopover.module.css'
 
 interface AddToGroupPopoverProps {
-  /** 追加対象の Asset id(1件でも複数件でも良い)。 */
+  /** 移す Asset id(1件でも複数件でも良い)。 */
   assetIds: string[]
-  /** すでにこの Asset が入っているグループ(ビューアの単体操作でだけ渡す)。 */
+  /** この Asset が今入っているグループ(ビューアの単体操作でだけ渡す。選べなくする)。 */
   disabledGroupIds?: ReadonlySet<string>
   triggerLabel: string
   triggerClassName?: string
   disabled?: boolean
   /** ポップオーバーを開く向き。フッターなど下端に近いトリガーは 'up' を渡す。 */
   placement?: 'up' | 'down'
-  /** 追加(作成 + 追加を含む)に成功したときに呼ぶ(呼び出し側の選択解除などに使う)。 */
-  onAdded?: () => void
+  /** 移動(作成 + 移動を含む)に成功したときに呼ぶ(呼び出し側の選択解除などに使う)。 */
+  onMoved?: () => void
 }
 
 export function AddToGroupPopover({
@@ -34,7 +35,7 @@ export function AddToGroupPopover({
   triggerClassName,
   disabled = false,
   placement = 'down',
-  onAdded,
+  onMoved,
 }: AddToGroupPopoverProps) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
@@ -73,17 +74,17 @@ export function AddToGroupPopover({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const addMutation = useMutation({
+  const moveMutation = useMutation({
     mutationFn: (groupId: string) => addAssetsToGroup(groupId, assetIds),
     onSuccess: () => {
       invalidateAssetGroupQueries(queryClient, assetIds)
       close()
-      onAdded?.()
+      onMoved?.()
     },
-    onError: (err: unknown) => setError(err instanceof ApiError ? err.message : t.stock.groups.addFailed),
+    onError: (err: unknown) => setError(err instanceof ApiError ? err.message : t.stock.groups.moveFailed),
   })
 
-  const createAndAddMutation = useMutation({
+  const createAndMoveMutation = useMutation({
     mutationFn: async (name: string) => {
       const group = await createAssetGroup(name)
       return addAssetsToGroup(group.id, assetIds)
@@ -91,7 +92,7 @@ export function AddToGroupPopover({
     onSuccess: () => {
       invalidateAssetGroupQueries(queryClient, assetIds)
       close()
-      onAdded?.()
+      onMoved?.()
     },
     onError: (err: unknown) => setError(err instanceof ApiError ? err.message : t.stock.groups.createFailed),
   })
@@ -99,7 +100,7 @@ export function AddToGroupPopover({
   function submitCreate() {
     const name = draftName.trim()
     if (!name) return
-    createAndAddMutation.mutate(name)
+    createAndMoveMutation.mutate(name)
   }
 
   return (
@@ -129,8 +130,8 @@ export function AddToGroupPopover({
                       type="button"
                       role="menuitem"
                       className={styles.groupItem}
-                      disabled={isDisabled || addMutation.isPending}
-                      onClick={() => addMutation.mutate(group.id)}
+                      disabled={isDisabled || moveMutation.isPending}
+                      onClick={() => moveMutation.mutate(group.id)}
                     >
                       {group.name}
                     </button>

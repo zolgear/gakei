@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { groupIdsToRemove } from './ungroupDrop'
+import { groupIdToRemove } from './ungroupDrop'
 
-describe('groupIdsToRemove', () => {
-  it('入っているすべてのグループの id を返す', () => {
-    expect(
-      groupIdsToRemove([
-        { id: 'g1', name: 'A' },
-        { id: 'g2', name: 'B' },
-      ] as { id: string; name: string }[]),
-    ).toEqual(['g1', 'g2'])
+describe('groupIdToRemove', () => {
+  it('所属しているグループの id を返す', () => {
+    expect(groupIdToRemove({ id: 'g1', name: 'A' } as { id: string; name: string })).toBe('g1')
   })
 
-  it('どのグループにも入っていなければ空', () => {
-    expect(groupIdsToRemove([])).toEqual([])
-    expect(groupIdsToRemove(undefined)).toEqual([])
+  it('どのグループにも入っていなければ null', () => {
+    expect(groupIdToRemove(null)).toBeNull()
+    expect(groupIdToRemove(undefined)).toBeNull()
   })
 })

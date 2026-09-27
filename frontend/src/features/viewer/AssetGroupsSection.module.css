@@ -24,9 +24,11 @@
   color: var(--color-text-muted);
 }
 
-.chips {
+/* チップ(または未所属の案内)と「変更」/「グループに入れる」を 1 行に並べる。 */
+.row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 

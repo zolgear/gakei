@@ -1,45 +1,30 @@
 /**
  * ストックパネルの選択モード(ADR-0022 4章)の選択状態を扱う純粋関数。
- * 同じ Asset が複数の節(グループ)に出るので、選択は「節のキー:Asset id」の集合で持つ。
- * 節のキーはグループ id か、「グループなし」の節の `UNGROUPED_SECTION_KEY`。
- * `Set<string>` をイミュータブルに更新する(呼び出し側はコピーを state に入れる)。
+ * 1 つの Asset が属するグループは 1 つだけなので、Asset はちょうど 1 つの節に出る。選択は
+ * 「Asset id → 選んだ節のキー」の Map で持つ(節のキーは「グループから外す」で、どの
+ * グループから外すかを決めるためだけに使う)。節のキーはグループ id か、「グループなし」の
+ * 節の `UNGROUPED_SECTION_KEY`。
+ * `Map` をイミュータブルに更新する(呼び出し側はコピーを state に入れる)。
  */
 export const UNGROUPED_SECTION_KEY = 'ungrouped'
 
-export function selectionEntry(sectionKey: string, assetId: string): string {
-  return `${sectionKey}:${assetId}`
-}
+export type StockSelection = ReadonlyMap<string, string>
 
-function parseEntry(entry: string): { sectionKey: string; assetId: string } {
-  // グループ id・Asset id は UUID で ':' を含まないので、最初の ':' で分ければよい。
-  const index = entry.indexOf(':')
-  return { sectionKey: entry.slice(0, index), assetId: entry.slice(index + 1) }
-}
-
-/** 指定の節のタイルの選択を切り替える。 */
-export function toggleSelection(selected: ReadonlySet<string>, sectionKey: string, assetId: string): Set<string> {
-  const entry = selectionEntry(sectionKey, assetId)
-  const next = new Set(selected)
-  if (next.has(entry)) {
-    next.delete(entry)
+/** タイルの選択を切り替える。`sectionKey` はそのタイルが出ている節。 */
+export function toggleSelection(selected: StockSelection, sectionKey: string, assetId: string): Map<string, string> {
+  const next = new Map(selected)
+  if (next.has(assetId)) {
+    next.delete(assetId)
   } else {
-    next.add(entry)
+    next.set(assetId, sectionKey)
   }
   return next
 }
 
-/** 選択中の Asset id(重複なし、選んだ順)。 */
-export function selectedAssetIds(selected: ReadonlySet<string>): string[] {
-  const ids = new Set<string>()
-  for (const entry of selected) ids.add(parseEntry(entry).assetId)
-  return [...ids]
-}
-
 /** グループの節ごとに、そこで選んだ Asset id をまとめる(「グループなし」の節は含めない)。 */
-export function selectedByGroup(selected: ReadonlySet<string>): Map<string, string[]> {
+export function selectedByGroup(selected: StockSelection): Map<string, string[]> {
   const result = new Map<string, string[]>()
-  for (const entry of selected) {
-    const { sectionKey, assetId } = parseEntry(entry)
+  for (const [assetId, sectionKey] of selected) {
     if (sectionKey === UNGROUPED_SECTION_KEY) continue
     const list = result.get(sectionKey)
     if (list) {
@@ -52,10 +37,10 @@ export function selectedByGroup(selected: ReadonlySet<string>): Map<string, stri
 }
 
 /** 指定の節で選んだものを外す(グループが削除されたときなど)。 */
-export function withoutSection(selected: ReadonlySet<string>, sectionKey: string): Set<string> {
-  const next = new Set<string>()
-  for (const entry of selected) {
-    if (parseEntry(entry).sectionKey !== sectionKey) next.add(entry)
+export function withoutSection(selected: StockSelection, sectionKey: string): Map<string, string> {
+  const next = new Map<string, string>()
+  for (const [assetId, key] of selected) {
+    if (key !== sectionKey) next.set(assetId, key)
   }
   return next
 }

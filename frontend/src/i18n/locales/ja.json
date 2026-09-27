@@ -809,7 +809,8 @@
     "imageAlt": "生成結果",
     "groups": {
       "heading": "グループ",
-      "add": "追加",
+      "change": "変更",
+      "assign": "グループに入れる",
       "remove": "「{name}」から外す",
       "empty": "グループに入っていません"
     }
@@ -963,7 +964,7 @@
         "one": "{count} 枚",
         "other": "{count} 枚"
       },
-      "addTo": "グループに追加",
+      "moveTo": "グループに移す",
       "removeFromThis": "このグループから外す",
       "removeFromGroups": "グループから外す",
       "ungrouped": "グループなし",
@@ -974,7 +975,7 @@
       "createFailed": "グループの作成に失敗しました",
       "renameFailed": "名前の変更に失敗しました",
       "deleteFailed": "グループの削除に失敗しました",
-      "addFailed": "グループへの追加に失敗しました",
+      "moveFailed": "グループへの移動に失敗しました",
       "removeFailed": "グループから外すのに失敗しました",
       "moveUp": "上へ移動",
       "moveDown": "下へ移動",

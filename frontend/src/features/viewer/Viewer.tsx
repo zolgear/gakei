@@ -307,7 +307,7 @@ export function Viewer({ assetId }: ViewerProps) {
 
             {asset.origin && <OriginRecipeSection origin={asset.origin} />}
             {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
-            <AssetGroupsSection assetId={asset.id} groups={asset.groups ?? []} />
+            <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
 
             <div className={styles.actions}>
               <a

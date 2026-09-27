@@ -6,9 +6,10 @@
  *   「グループなし」の節は同じ位置に「+」(新しいグループ)を置き、押すと見出し行の下に
  *   名前の入力を出す(作ったグループの節は「グループなし」の直後に現れる)。
  *   行を押すと開閉する。タイルをこの行(または空のグループの枠)へドラッグ&ドロップすると
- *   そのグループに入る(元の節からは消さない。1 つの Asset は複数のグループに入れる)。
- *   「グループなし」の節の見出し行(または空の枠)に落とすと、入っているすべてのグループから
- *   外れる(ドラッグ元の節は分からないため。確認なし)。
+ *   そのグループへ移る(1 つの Asset が属するグループは 1 つだけ。サーバーが元のグループから
+ *   外すので、全節の一覧を作り直せば元の節からは消える)。「グループなし」の節の見出し行
+ *   (または空の枠)に落とすと、今のグループから外れる(ドラッグ元の節は分からないので、
+ *   所属を取り直して外す。確認なし)。
  * - 並べ替え: グループの節の見出し行はドラッグでき、別のグループの見出しの上半分に落とすと
  *   その前、下半分なら後ろへ移る(`useGroupReorder`)。画像のドラッグとは `DataTransfer` の
  *   型で分け、見出し行はどちらか一方にだけ反応する。「グループなし」は先頭に固定で、掴めず
@@ -37,10 +38,10 @@ import { GAKEI_GROUP_ID_DATA_TYPE, dropPositionFor } from './groups/groupOrder'
 import { NewGroupButton, NewGroupNameInput } from './groups/NewGroupInline'
 import { useNewGroupInline } from './groups/useNewGroupInline'
 import type { GroupReorderControls } from './groups/useGroupReorder'
-import { groupIdsToRemove } from './groups/ungroupDrop'
+import { groupIdToRemove } from './groups/ungroupDrop'
 import { shouldAutoFetchNextPage } from './sentinel'
 import { StockTile } from './StockTile'
-import { UNGROUPED_SECTION_KEY, selectionEntry } from './stockSelection'
+import { UNGROUPED_SECTION_KEY } from './stockSelection'
 import { stockAssetsQueryKey, type StockKindFilter, type StockSectionScope } from './stockQueryKey'
 import styles from './GroupSection.module.css'
 
@@ -57,7 +58,8 @@ const SENTINEL_ROOT_MARGIN = '0px 0px 300px 0px'
 export interface StockTileActions {
   inStudio: boolean
   selectionMode: boolean
-  selected: ReadonlySet<string>
+  /** 選択中の Asset id → 選んだ節のキー(`stockSelection.ts`)。 */
+  selected: ReadonlyMap<string, string>
   onToggleSelect: (sectionKey: string, asset: AssetSummary) => void
   onOpen: (asset: AssetSummary) => void
   onUseAsInput: (asset: AssetSummary) => void
@@ -105,6 +107,7 @@ function useAssetDropZone(enabled: boolean, onDropAsset: (assetId: string) => vo
       onDragOver: (e: DragEvent<HTMLElement>) => {
         if (!hasAssetData(e)) return
         e.preventDefault()
+        // 操作は「移す」だが、タイルの effectAllowed が 'copy'(入力欄へのドロップと共用)なので合わせる。
         e.dataTransfer.dropEffect = 'copy'
         if (!dropping) setDropping(true)
       },
@@ -162,19 +165,21 @@ export function GroupSection({
     }
   }, [menuOpen])
 
-  const addMutation = useMutation({
+  // グループの節へのドロップ: そのグループへ移す。`invalidateAssetGroupQueries` が
+  // `['assets']` 全体を作り直すので、元の節(別のグループか「グループなし」)からも消える。
+  const moveMutation = useMutation({
     mutationFn: ({ groupId, assetId }: { groupId: string; assetId: string }) => addAssetsToGroup(groupId, [assetId]),
     onSuccess: (_data, { assetId }) => invalidateAssetGroupQueries(queryClient, [assetId]),
-    onError: (err: unknown) => onError(err instanceof ApiError ? err.message : t.stock.groups.addFailed),
+    onError: (err: unknown) => onError(err instanceof ApiError ? err.message : t.stock.groups.moveFailed),
   })
 
-  // 「グループなし」へのドロップ: 現在の所属を取り直し、すべてのグループから外す。
+  // 「グループなし」へのドロップ: 現在の所属を取り直し、そのグループから外す。
   const ungroupMutation = useMutation({
     mutationFn: async (assetId: string) => {
       const detail = await getAsset(assetId)
-      const groupIds = groupIdsToRemove(detail.groups)
-      if (groupIds.length === 0) return false
-      await Promise.all(groupIds.map((groupId) => removeAssetsFromGroup(groupId, [assetId])))
+      const groupId = groupIdToRemove(detail.group)
+      if (groupId === null) return false
+      await removeAssetsFromGroup(groupId, [assetId])
       return true
     },
     onSuccess: (changed, assetId) => {
@@ -206,7 +211,7 @@ export function GroupSection({
   })
 
   function dropAsset(assetId: string) {
-    if (group) addMutation.mutate({ groupId: group.id, assetId })
+    if (group) moveMutation.mutate({ groupId: group.id, assetId })
     else ungroupMutation.mutate(assetId)
   }
   const headerDrop = useAssetDropZone(true, dropAsset)
@@ -551,7 +556,7 @@ function SectionAssets({
             asset={asset}
             inStudio={tileActions.inStudio}
             selectionMode={tileActions.selectionMode}
-            isSelected={tileActions.selected.has(selectionEntry(sectionKey, asset.id))}
+            isSelected={tileActions.selected.has(asset.id)}
             onOpen={tileActions.onOpen}
             onToggleSelect={(a) => tileActions.onToggleSelect(sectionKey, a)}
             onUseAsInput={tileActions.onUseAsInput}

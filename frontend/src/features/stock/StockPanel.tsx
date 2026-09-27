@@ -8,7 +8,7 @@
  *
  * タイルクリックでビューアへ、タイル上の「+」で入力に追加する(常に追加のみ。置き換えの
  * 確認はビューア/履歴カードの「入力に使う」だけで行う。マスクは追加不可)。タイルを節の
- * 見出しへドラッグするとそのグループに入る。タッチ環境と一括操作向けに選択モードも持つ。
+ * 見出しへドラッグするとそのグループへ移る(所属は 1 つだけ)。タッチ環境と一括操作向けに選択モードも持つ。
  * 「画像を追加」と種別チップはパネル上部の sticky ヘッダーに常時表示する(生成を続けても
  * グリッドに押し流されないように)。
  */
@@ -47,13 +47,7 @@ import {
   type GroupOpenMap,
 } from './groups/groupOpenStorage'
 import { GroupSection, type StockTileActions } from './GroupSection'
-import {
-  UNGROUPED_SECTION_KEY,
-  selectedAssetIds,
-  selectedByGroup,
-  toggleSelection,
-  withoutSection,
-} from './stockSelection'
+import { UNGROUPED_SECTION_KEY, selectedByGroup, toggleSelection, withoutSection } from './stockSelection'
 import type { StockKindFilter } from './stockQueryKey'
 import styles from './StockPanel.module.css'
 
@@ -85,9 +79,9 @@ export function StockPanel() {
   const kindHeadingId = useId()
   // 節ごとの開閉。初期値は localStorage から一度だけ読む(effect で読み直さない)。
   const [openMap, setOpenMap] = useState<GroupOpenMap>(loadGroupOpenMap)
-  // 選択モード(ADR-0022 4章)。選択は「節のキー:Asset id」の集合(`stockSelection.ts`)。
+  // 選択モード(ADR-0022 4章)。選択は「Asset id → 選んだ節のキー」の Map(`stockSelection.ts`)。
   const [selectionMode, setSelectionMode] = useState(false)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Map<string, string>>(new Map())
   const [message, setMessage] = useState<string | null>(null)
   // アップロードが既存 Asset に一致したとき(ADR-0014)の案内。エラーとは別枠で出す。
   const [notice, setNotice] = useState<string | null>(null)
@@ -109,15 +103,15 @@ export function StockPanel() {
   const [selectionKind, setSelectionKind] = useState(kind)
   if (selectionKind !== kind) {
     setSelectionKind(kind)
-    setSelected(new Set())
+    setSelected(new Map())
   }
 
-  const uniqueSelectedIds = selectedAssetIds(selected)
+  const selectedIds = [...selected.keys()]
   const selectedGroups = selectedByGroup(selected)
 
   function handleToggleSelectionMode() {
     setSelectionMode((prev) => !prev)
-    setSelected(new Set())
+    setSelected(new Map())
   }
 
   function toggleSectionOpen(sectionKey: string) {
@@ -127,12 +121,13 @@ export function StockPanel() {
   }
 
   // 選んだタイルを、それぞれ選んだ節のグループから外す(「グループなし」の節の選択には効かない)。
+  // 選んだ後に別のグループへ移っていても、サーバーは入っていないものを無視するので害はない。
   const removeFromGroupsMutation = useMutation({
     mutationFn: (byGroup: Map<string, string[]>) =>
       Promise.all([...byGroup].map(([groupId, assetIds]) => removeAssetsFromGroup(groupId, assetIds))),
     onSuccess: (_data, byGroup) => {
-      invalidateAssetGroupQueries(queryClient, [...new Set([...byGroup.values()].flat())])
-      setSelected(new Set())
+      invalidateAssetGroupQueries(queryClient, [...byGroup.values()].flat())
+      setSelected(new Map())
     },
     onError: (err: unknown) => {
       // 一部だけ成功している可能性があるので、失敗しても一覧は作り直す。
@@ -374,16 +369,16 @@ export function StockPanel() {
       {selectionMode && (
         <div className={styles.selectionFooter}>
           <span className={styles.selectionCount}>
-            {fmt(t.stock.selection.count, { count: uniqueSelectedIds.length })}
+            {fmt(t.stock.selection.count, { count: selectedIds.length })}
           </span>
           <div className={styles.selectionActions}>
             <AddToGroupPopover
-              assetIds={uniqueSelectedIds}
-              triggerLabel={t.stock.groups.addTo}
+              assetIds={selectedIds}
+              triggerLabel={t.stock.groups.moveTo}
               triggerClassName={styles.selectionButton}
-              disabled={uniqueSelectedIds.length === 0}
+              disabled={selectedIds.length === 0}
               placement="up"
-              onAdded={() => setSelected(new Set())}
+              onMoved={() => setSelected(new Map())}
             />
             <button
               type="button"
@@ -397,7 +392,7 @@ export function StockPanel() {
               type="button"
               className={styles.selectionButton}
               disabled={selected.size === 0}
-              onClick={() => setSelected(new Set())}
+              onClick={() => setSelected(new Map())}
             >
               {t.stock.selection.clear}
             </button>
