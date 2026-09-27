@@ -357,6 +357,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/asset-groups/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Reorder Asset Groups */
+        put: operations["reorder_asset_groups"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/asset-groups/{group_id}": {
         parameters: {
             query?: never;
@@ -798,6 +815,15 @@ export interface components {
             asset_ids: string[];
         };
         /**
+         * AssetGroupOrderRequest
+         * @description `PUT /api/asset-groups/order` の本文。削除済みでない全グループの id を望む順に並べたもの
+         *     (過不足・重複があれば 422)。
+         */
+        AssetGroupOrderRequest: {
+            /** Group Ids */
+            group_ids: string[];
+        };
+        /**
          * AssetGroupRef
          * @description `AssetDetail.groups` と `RunSummary.asset_group` の1件。
          */
@@ -814,6 +840,7 @@ export interface components {
          * AssetGroupRow
          * @description `GET /api/asset-groups` の1件。`member_count` / `cover_asset_id` は
          *     削除済みでない Asset だけを数える(cover は `added_at` が最新のメンバー)。
+         *     `position` は利用者が決める並び順(小さいほど上)。
          */
         AssetGroupRow: {
             /**
@@ -823,6 +850,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Position */
+            position: number;
             /** Member Count */
             member_count: number;
             /** Cover Asset Id */
@@ -3308,6 +3337,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetGroupRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_asset_groups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetGroupOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetGroupListResponse"];
                 };
             };
             /** @description Validation Error */

@@ -330,3 +330,62 @@ def test_migration_upgrades_from_0012_to_0013_adds_run_asset_group_id(tmp_path) 
     assert "asset_group_id" not in columns_after_downgrade
     assert "ix_run_asset_group_id" not in {i["name"] for i in inspector.get_indexes("run")}
     engine.dispose()
+
+
+def test_migration_upgrades_from_0013_to_0014_adds_asset_group_position(tmp_path) -> None:  # noqa: ANN001
+    """既存の0013適用済みDBでも、起動時のupgrade headで0014(asset_group.position)が当たり、
+    既存行はそれまでの表示順(updated_at DESC)が 0..n-1 になるよう埋まること(ADR-0022)。"""
+    import uuid
+
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0013")
+
+    from sqlalchemy import Uuid, bindparam, create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns_after_0013 = {c["name"] for c in sa_inspect(engine).get_columns("asset_group")}
+    assert "position" not in columns_after_0013
+
+    # updated_at が古い順に old / middle / new を入れる(挿入順とは変えておく)。
+    ids = {name: uuid.uuid4() for name in ("old", "middle", "new")}
+    seeds = [
+        ("middle", "2026-09-02 00:00:00.000000"),
+        ("new", "2026-09-03 00:00:00.000000"),
+        ("old", "2026-09-01 00:00:00.000000"),
+    ]
+    insert = text(
+        "INSERT INTO asset_group (id, name, created_at, updated_at) VALUES (:id, :name, :ts, :ts)"
+    ).bindparams(bindparam("id", type_=Uuid()))
+    with engine.begin() as conn:
+        for name, ts in seeds:
+            conn.execute(insert, {"id": ids[name], "name": name, "ts": ts})
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns = {c["name"]: c for c in sa_inspect(engine).get_columns("asset_group")}
+    assert "position" in columns
+    assert columns["position"]["nullable"] is False
+    assert columns["position"]["default"] is None  # 埋めた後は DB 側の既定値を外す
+    with engine.connect() as conn:
+        positions = dict(conn.execute(text("SELECT name, position FROM asset_group")).all())
+    assert positions == {"new": 0, "middle": 1, "old": 2}
+    engine.dispose()
+
+    command.downgrade(cfg, "0013")
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns_after_downgrade = {c["name"] for c in sa_inspect(engine).get_columns("asset_group")}
+    assert "position" not in columns_after_downgrade
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM asset_group")).scalar_one() == 3
+    engine.dispose()

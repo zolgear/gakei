@@ -314,7 +314,8 @@ class PromptSetItem(Base):
 class AssetGroup(Base):
     """グループ(ストックの手動整理。ADR-0022)。証跡ではないので更新・論理削除ができる。
 
-    メンバーはフラットな多対多(`AssetGroupMember`)。階層・入れ子・並べ替えは持たない。
+    メンバーはフラットな多対多(`AssetGroupMember`)。階層・入れ子は持たない。
+    並び順は利用者が決める(`position`。2026-09-28 追加)。
     表紙画像は列に持たず、一覧の応答でメンバーの `added_at` が最新のものから都度求める。
     """
 
@@ -322,6 +323,9 @@ class AssetGroup(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 利用者が決める並び順(小さいほど上。ADR-0022 2章)。一覧は `position ASC, created_at DESC`。
+    # 新しいグループは既存の最小値 − 1 で先頭に入り、並べ替えで 0 から振り直す。
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # 作成したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
     # (INSERT 時に設定し、UPDATE しない)。
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(

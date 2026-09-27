@@ -14,6 +14,7 @@ from app.auth.identity import CurrentUser
 from app.deps import get_session
 from app.domain.asset_groups import (
     AssetGroupAssetsMissingError,
+    AssetGroupOrderMismatchError,
     add_members,
     create_group,
     delete_group,
@@ -21,12 +22,14 @@ from app.domain.asset_groups import (
     list_groups,
     remove_members,
     rename_group,
+    reorder_groups,
 )
 from app.domain.models import AssetGroup
 from app.domain.schemas import (
     AssetGroupCreate,
     AssetGroupListResponse,
     AssetGroupMembersRequest,
+    AssetGroupOrderRequest,
     AssetGroupRow,
     AssetGroupUpdate,
 )
@@ -56,6 +59,20 @@ def create_asset_group(
     row = create_group(db, body.name, created_by_user_id=user.id)
     db.commit()
     return row
+
+
+# `/{group_id}` より先に宣言する(`order` が group_id のパスに吸われないように)。
+@router.put("/order", response_model=AssetGroupListResponse, operation_id="reorder_asset_groups")
+def reorder_asset_groups(
+    body: AssetGroupOrderRequest, db: Session = Depends(get_session)
+) -> AssetGroupListResponse:
+    try:
+        items = reorder_groups(db, body.group_ids)
+    except AssetGroupOrderMismatchError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=t("assetGroups.orderMismatch")) from e
+    db.commit()
+    return AssetGroupListResponse(items=items)
 
 
 @router.patch("/{group_id}", response_model=AssetGroupRow, operation_id="update_asset_group")

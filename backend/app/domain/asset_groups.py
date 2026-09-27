@@ -1,7 +1,8 @@
 """グループ(ストックの手動整理。ADR-0022)。証跡ではないので更新・論理削除ができる。
 
-メンバーの追加・削除・名前変更のたびに `updated_at` を進め、一覧(`list_groups`)は
-それの降順で返す。`member_count` / `cover_asset_id` は削除済みでない Asset だけを数える
+メンバーの追加・削除・名前変更のたびに `updated_at` を進める。一覧(`list_groups`)は
+利用者が決めた並び順(`position ASC, created_at DESC`)で返し、`updated_at` は並びに
+影響しない(2026-09-28 に変更)。`member_count` / `cover_asset_id` は削除済みでない Asset だけを数える
 (cover は `added_at` が最新のメンバー)。グループ数・メンバー数がどちらも少数な前提
 (ADR-0022 のトレードオフ分析)で、都度 Python 側で集計する。
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.domain.models import Asset, AssetGroup, AssetGroupMember
@@ -30,6 +31,12 @@ class AssetGroupAssetsMissingError(ValueError):
     def __init__(self, missing_ids: list[uuid.UUID]) -> None:
         self.missing_ids = missing_ids
         super().__init__(f"asset ids not found or deleted: {missing_ids}")
+
+
+class AssetGroupOrderMismatchError(ValueError):
+    """並べ替えの id の一覧が、削除済みでない全グループの id と過不足なく一致しない
+    (重複を含む)。ルーター側で 422 に変換する(ADR-0022 3章)。
+    """
 
 
 def get_active_group_or_none(db: Session, group_id: uuid.UUID) -> AssetGroup | None:
@@ -71,6 +78,7 @@ def _to_row(
     return AssetGroupRow(
         id=group.id,
         name=group.name,
+        position=group.position,
         member_count=member_count,
         cover_asset_id=cover_asset_id,
         created_at=group.created_at,
@@ -83,24 +91,41 @@ def _row_for_group(db: Session, group: AssetGroup) -> AssetGroupRow:
     return _to_row(group, count, cover)
 
 
-def list_groups(db: Session) -> list[AssetGroupRow]:
-    groups = (
+def _active_groups_in_order(db: Session) -> list[AssetGroup]:
+    return list(
         db.execute(
             select(AssetGroup)
             .where(AssetGroup.deleted_at.is_(None))
-            .order_by(AssetGroup.updated_at.desc(), AssetGroup.id.desc())
+            .order_by(AssetGroup.position.asc(), AssetGroup.created_at.desc(), AssetGroup.id.desc())
         )
         .scalars()
         .all()
     )
+
+
+def _rows_for_groups(db: Session, groups: list[AssetGroup]) -> list[AssetGroupRow]:
     stats = _member_stats(db, [g.id for g in groups])
     return [_to_row(g, *stats.get(g.id, (0, None))) for g in groups]
 
 
+def list_groups(db: Session) -> list[AssetGroupRow]:
+    return _rows_for_groups(db, _active_groups_in_order(db))
+
+
 def create_group(db: Session, name: str, created_by_user_id: uuid.UUID | None) -> AssetGroupRow:
+    """新しいグループは先頭に入れる(削除済みでないグループの最小の `position` − 1。
+    1件も無ければ 0)。"""
     now = _utcnow()
+    min_position = db.execute(
+        select(func.min(AssetGroup.position)).where(AssetGroup.deleted_at.is_(None))
+    ).scalar_one_or_none()
+    position = 0 if min_position is None else min_position - 1
     group = AssetGroup(
-        name=name, created_by_user_id=created_by_user_id, created_at=now, updated_at=now
+        name=name,
+        position=position,
+        created_by_user_id=created_by_user_id,
+        created_at=now,
+        updated_at=now,
     )
     db.add(group)
     db.flush()
@@ -112,6 +137,25 @@ def rename_group(db: Session, group: AssetGroup, name: str) -> AssetGroupRow:
     group.updated_at = _utcnow()
     db.flush()
     return _row_for_group(db, group)
+
+
+def reorder_groups(db: Session, group_ids: list[uuid.UUID]) -> list[AssetGroupRow]:
+    """削除済みでない全グループを `group_ids` の順に並べ、`position` を 0 から振り直す。
+    `group_ids` が削除済みでない全グループの id と過不足なく一致しない(重複を含む)ときは
+    `AssetGroupOrderMismatchError` を送出し、何も変えない。`updated_at` は進めない
+    (並び順はグループの中身の変更ではない)。
+    """
+    groups = _active_groups_in_order(db)
+    by_id = {g.id: g for g in groups}
+    if len(group_ids) != len(set(group_ids)) or set(group_ids) != set(by_id):
+        raise AssetGroupOrderMismatchError(
+            f"group ids do not match active groups: {[str(i) for i in group_ids]}"
+        )
+    ordered = [by_id[group_id] for group_id in group_ids]
+    for position, group in enumerate(ordered):
+        group.position = position
+    db.flush()
+    return _rows_for_groups(db, ordered)
 
 
 def delete_group(db: Session, group: AssetGroup) -> None:

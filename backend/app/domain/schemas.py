@@ -121,10 +121,12 @@ class AssetGroupUpdate(BaseModel):
 
 class AssetGroupRow(BaseModel):
     """`GET /api/asset-groups` の1件。`member_count` / `cover_asset_id` は
-    削除済みでない Asset だけを数える(cover は `added_at` が最新のメンバー)。"""
+    削除済みでない Asset だけを数える(cover は `added_at` が最新のメンバー)。
+    `position` は利用者が決める並び順(小さいほど上)。"""
 
     id: uuid.UUID
     name: str
+    position: int
     member_count: int
     cover_asset_id: uuid.UUID | None = None
     created_at: datetime
@@ -133,6 +135,13 @@ class AssetGroupRow(BaseModel):
 
 class AssetGroupListResponse(BaseModel):
     items: list[AssetGroupRow] = Field(default_factory=list)
+
+
+class AssetGroupOrderRequest(BaseModel):
+    """`PUT /api/asset-groups/order` の本文。削除済みでない全グループの id を望む順に並べたもの
+    (過不足・重複があれば 422)。"""
+
+    group_ids: list[uuid.UUID]
 
 
 class AssetGroupMembersRequest(BaseModel):

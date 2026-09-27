@@ -35,18 +35,125 @@ def test_create_and_list(client: TestClient) -> None:
     assert created["id"] in ids
 
 
-def test_list_is_ordered_by_updated_at_desc(client: TestClient) -> None:
+def _list(client: TestClient) -> list[dict]:
+    response = client.get("/api/asset-groups")
+    assert response.status_code == 200, response.text
+    return response.json()["items"]
+
+
+def _ids(client: TestClient) -> list[str]:
+    return [g["id"] for g in _list(client)]
+
+
+def test_list_puts_newest_group_first(client: TestClient) -> None:
+    first = _create_group(client, name="1番目")
+    second = _create_group(client, name="2番目")
+    third = _create_group(client, name="3番目")
+
+    listed = _list(client)
+    assert [g["id"] for g in listed] == [third["id"], second["id"], first["id"]]
+    positions = [g["position"] for g in listed]
+    assert positions == sorted(positions)
+    assert len(set(positions)) == 3
+    assert third["position"] < second["position"] < first["position"]
+
+
+def test_reorder_follows_given_order_and_renumbers_from_zero(client: TestClient) -> None:
+    groups = [_create_group(client, name=f"G{i}") for i in range(3)]
+    reversed_ids = list(reversed(_ids(client)))
+
+    response = client.put("/api/asset-groups/order", json={"group_ids": reversed_ids})
+    assert response.status_code == 200, response.text
+    body = response.json()["items"]
+    assert [g["id"] for g in body] == reversed_ids
+    assert [g["position"] for g in body] == [0, 1, 2]
+
+    listed = _list(client)
+    assert [g["id"] for g in listed] == reversed_ids
+    assert [g["position"] for g in listed] == [0, 1, 2]
+    assert reversed_ids == [g["id"] for g in groups]
+
+
+def test_reorder_does_not_bump_updated_at(client: TestClient) -> None:
+    _create_group(client, name="A")
+    _create_group(client, name="B")
+    before = {g["id"]: g["updated_at"] for g in _list(client)}
+
+    response = client.put("/api/asset-groups/order", json={"group_ids": list(reversed(before))})
+    assert response.status_code == 200
+    after = {g["id"]: g["updated_at"] for g in _list(client)}
+    assert after == before
+
+
+def test_reorder_with_mismatched_ids_returns_422_and_keeps_order(client: TestClient) -> None:
+    for i in range(3):
+        _create_group(client, name=f"G{i}")
+    original = _list(client)
+    ids = [g["id"] for g in original]
+    unknown = "00000000-0000-0000-0000-000000000000"
+
+    for bad in (
+        ids[:2],  # 不足
+        [*ids, unknown],  # 未知の id が余分
+        [ids[0], ids[0], ids[1], ids[2]],  # 重複
+        [ids[0], ids[1], ids[1]],  # 重複で1件不足(件数は同じ)
+        [],
+    ):
+        response = client.put("/api/asset-groups/order", json={"group_ids": bad})
+        assert response.status_code == 422, bad
+        assert response.json()["detail"] == "並べ替えの一覧が現在のグループと一致しません"
+
+    assert _list(client) == original
+
+
+def test_reorder_excludes_deleted_groups(client: TestClient) -> None:
+    first = _create_group(client, name="残す1")
+    doomed = _create_group(client, name="消す")
+    third = _create_group(client, name="残す2")
+    assert client.delete(f"/api/asset-groups/{doomed['id']}").status_code == 204
+
+    # 削除済みを含めると 422。
+    response = client.put(
+        "/api/asset-groups/order",
+        json={"group_ids": [first["id"], doomed["id"], third["id"]]},
+    )
+    assert response.status_code == 422
+
+    response = client.put("/api/asset-groups/order", json={"group_ids": [first["id"], third["id"]]})
+    assert response.status_code == 200, response.text
+    assert _ids(client) == [first["id"], third["id"]]
+
+
+def test_new_group_goes_first_after_reorder(client: TestClient) -> None:
+    a = _create_group(client, name="A")
+    b = _create_group(client, name="B")
+    client.put("/api/asset-groups/order", json={"group_ids": [a["id"], b["id"]]})
+
+    c = _create_group(client, name="C")
+    assert c["position"] == -1
+    assert _ids(client) == [c["id"], a["id"], b["id"]]
+
+
+def test_membership_and_rename_do_not_change_order(client: TestClient) -> None:
     first = _create_group(client, name="先に作った")
     second = _create_group(client, name="後で作った")
+    before = _ids(client)
+    assert before == [second["id"], first["id"]]
 
-    listed = client.get("/api/asset-groups").json()["items"]
-    ids_in_order = [g["id"] for g in listed]
-    assert ids_in_order.index(second["id"]) < ids_in_order.index(first["id"])
-
+    asset_id = _upload(client)
+    client.post(f"/api/asset-groups/{first['id']}/assets", json={"asset_ids": [asset_id]})
+    assert _ids(client) == before
+    client.post(f"/api/asset-groups/{first['id']}/assets/remove", json={"asset_ids": [asset_id]})
+    assert _ids(client) == before
     client.patch(f"/api/asset-groups/{first['id']}", json={"name": "更新した"})
-    listed_after = client.get("/api/asset-groups").json()["items"]
-    ids_after = [g["id"] for g in listed_after]
-    assert ids_after.index(first["id"]) < ids_after.index(second["id"])
+    assert _ids(client) == before
+
+
+def test_order_path_is_not_parsed_as_group_id(client: TestClient) -> None:
+    # `order` は PUT だけの固定パス。他のメソッドは `/{group_id}` に当たり UUID として不正(422)。
+    assert client.put("/api/asset-groups/order", json={"group_ids": []}).status_code == 200
+    assert client.patch("/api/asset-groups/order", json={"name": "x"}).status_code == 422
+    assert client.delete("/api/asset-groups/order").status_code == 422
 
 
 def test_rename_group(client: TestClient) -> None:
