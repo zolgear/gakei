@@ -442,7 +442,12 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   )
 
   const groupField = (
-    <AssetGroupField value={form.assetGroupId} groups={form.assetGroups} onChange={form.setAssetGroupId} />
+    <AssetGroupField
+      value={form.assetGroupId}
+      groups={form.assetGroups}
+      onChange={form.setAssetGroupId}
+      className={styles.spanTwo}
+    />
   )
 
   const otherParams = (

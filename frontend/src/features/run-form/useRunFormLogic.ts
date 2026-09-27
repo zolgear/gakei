@@ -61,6 +61,7 @@ import { computePromptInsertion, type PromptInsertMode } from './promptInsertion
 import { applyMention } from '../prompt-sets/mentionQuery'
 import { useAssetGroups } from '../stock/groups/assetGroupQueries'
 import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
+import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import type { RunInputItem } from './types'
 
 export interface RunFormLogic {
@@ -361,8 +362,9 @@ export function useRunFormLogic(
   // fillSeedDefaults を直接呼んで記憶している seed モードを反映する。
   function resetForm() {
     setPrompt('')
-    // グループも他のパラメーターと同じく初期値(なし)に戻す。
-    setAssetGroupId(null)
+    // グループは初期値(なし)ではなく、最後に選んだグループに戻す(ADR-0022。削除済みなら
+    // resolveAssetGroupId が「なし」にする)。
+    setAssetGroupId(loadLastAssetGroupId())
     setSubmitError(null)
     setDroppedParamsNotice(null)
     if (!caps) return

@@ -1,0 +1,32 @@
+/* 「+」で出す新しいグループの名前の入力と、失敗時の文言(ストックの見出しと生成フォームで共通)。 */
+.createGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nameInput {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  .nameInput {
+    height: 40px;
+  }
+}

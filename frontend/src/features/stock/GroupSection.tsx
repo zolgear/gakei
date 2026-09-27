@@ -15,7 +15,6 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import {
   ApiError,
   addAssetsToGroup,
-  createAssetGroup,
   deleteAssetGroup,
   listAssets,
   removeAssetsFromGroup,
@@ -27,6 +26,8 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { fmt, useI18n } from '../../i18n'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { ASSET_GROUPS_QUERY_KEY, invalidateAssetGroupQueries } from './groups/assetGroupQueries'
+import { NewGroupButton, NewGroupNameInput } from './groups/NewGroupInline'
+import { useNewGroupInline } from './groups/useNewGroupInline'
 import { shouldAutoFetchNextPage } from './sentinel'
 import { StockTile } from './StockTile'
 import { UNGROUPED_SECTION_KEY, selectionEntry } from './stockSelection'
@@ -126,9 +127,7 @@ export function GroupSection({
   const [renameDraft, setRenameDraft] = useState('')
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   // 「グループなし」の節の「+」で出す、新しいグループの名前の入力。
-  const [creating, setCreating] = useState(false)
-  const [createDraft, setCreateDraft] = useState('')
-  const [createError, setCreateError] = useState<string | null>(null)
+  const newGroup = useNewGroupInline()
 
   useEffect(() => {
     if (!menuOpen) return
@@ -173,27 +172,6 @@ export function GroupSection({
       onError(err instanceof ApiError ? err.message : t.stock.groups.deleteFailed)
     },
   })
-
-  const createMutation = useMutation({
-    mutationFn: (name: string) => createAssetGroup(name),
-    onSuccess: () => {
-      cancelCreate()
-      invalidateAssetGroupQueries(queryClient)
-    },
-    onError: (err: unknown) => setCreateError(err instanceof ApiError ? err.message : t.stock.groups.createFailed),
-  })
-
-  function cancelCreate() {
-    setCreating(false)
-    setCreateDraft('')
-    setCreateError(null)
-  }
-
-  function submitCreate() {
-    const draft = createDraft.trim()
-    if (!draft || createMutation.isPending) return
-    createMutation.mutate(draft)
-  }
 
   function dropAsset(assetId: string) {
     if (group) addMutation.mutate({ groupId: group.id, assetId })
@@ -290,51 +268,10 @@ export function GroupSection({
         )}
 
         {/* 開閉ボタンとは別のボタンなので、押しても節は開閉しない。 */}
-        {!group && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            aria-label={t.stock.groups.newButton}
-            title={t.stock.groups.newButton}
-            aria-expanded={creating}
-            onClick={() => (creating ? cancelCreate() : setCreating(true))}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        )}
+        {!group && <NewGroupButton state={newGroup} className={styles.iconButton} />}
       </div>
 
-      {creating && !group && (
-        <div className={styles.createGroup}>
-          <input
-            autoFocus
-            className={styles.nameInput}
-            value={createDraft}
-            maxLength={100}
-            placeholder={t.stock.groups.newPlaceholder}
-            aria-label={t.stock.groups.newPlaceholder}
-            disabled={createMutation.isPending}
-            onChange={(e) => {
-              setCreateDraft(e.target.value)
-              setCreateError(null)
-            }}
-            onKeyDown={(e) => {
-              // IME の変換確定の Enter では作成しない。
-              if (e.nativeEvent.isComposing) return
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                submitCreate()
-              } else if (e.key === 'Escape') {
-                e.preventDefault()
-                cancelCreate()
-              }
-            }}
-          />
-          {createError && <p className={styles.error}>{createError}</p>}
-        </div>
-      )}
+      {!group && <NewGroupNameInput state={newGroup} />}
 
       {open && (
         <div id={bodyId} className={styles.body}>

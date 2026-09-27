@@ -270,4 +270,9 @@ describe('buildOriginFormState', () => {
     const state = buildOriginFormState({ provider: null, model: null, prompt: null, params: {} })
     expect(state).toEqual({ provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null })
   })
+
+  it('渡したグループ(最後に選んだグループ)をそのまま使う', () => {
+    const state = buildOriginFormState({ provider: 'fake', model: 'm', prompt: 'x', params: {} }, 'g1')
+    expect(state.assetGroupId).toBe('g1')
+  })
 })

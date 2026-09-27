@@ -132,6 +132,11 @@ describe('clearFormContent', () => {
     expect(clearFormContent(undefined)).toEqual(createEmptyFormState())
   })
 
+  it('渡した「最後に選んだグループ」を既定のグループにする(caps の有無によらない)', () => {
+    expect(clearFormContent(caps(), 'g1').assetGroupId).toBe('g1')
+    expect(clearFormContent(undefined, 'g1')).toEqual({ ...createEmptyFormState(), assetGroupId: 'g1' })
+  })
+
   it('default_model が models に無ければ先頭モデルにフォールバックする', () => {
     const result = clearFormContent(
       caps({ providers: [provider({ provider: 'fake', default_model: 'not-found' })] }),

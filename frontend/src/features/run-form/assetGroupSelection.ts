@@ -3,9 +3,6 @@
  * 選んだグループの存在確認と、`POST /api/runs` の body への `asset_group_id` の付け足しを持つ。
  */
 
-/** `<select>` で「新しいグループ…」を表す特別な値(グループ id は UUID なので衝突しない)。 */
-export const NEW_ASSET_GROUP_OPTION = '__new_asset_group__'
-
 /**
  * フォームが覚えているグループ id を、今のグループ一覧に照らして解決する。
  * - null ならそのまま null(グループなし)。

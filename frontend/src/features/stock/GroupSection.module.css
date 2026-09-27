@@ -147,25 +147,6 @@
   font-size: 12px;
 }
 
-/* 「+」で見出し行の下に出す新しいグループの名前の入力と、失敗時の文言。 */
-.createGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.createGroup .nameInput {
-  flex: none;
-  width: 100%;
-}
-
-.error {
-  margin: 0;
-  font-size: 11px;
-  color: var(--color-danger);
-}
-
 .body {
   display: flex;
   flex-direction: column;

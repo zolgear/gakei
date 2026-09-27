@@ -1,15 +1,17 @@
 /**
- * 生成フォームの「グループ」(ADR-0022 4章「生成時の指定」)。選択肢は「なし」、各グループ
- * (一覧の並び=`updated_at` の新しい順)、「新しいグループ…」。「新しいグループ…」を選ぶと
- * 下に名前の入力欄を出し、Enter で作成してそのグループを選ぶ。Esc で取りやめて元の選択に戻す
- * (`AddToGroupPopover` のインライン作成と同じ流れ)。値そのものは `useRunFormLogic` が持つ。
+ * 生成フォームの「グループ」(ADR-0022 4章「生成時の指定」)。モデルの直下に置く。
+ * 選択肢は「なし」と各グループ(一覧の並び=`updated_at` の新しい順)。新規作成は選択肢にせず、
+ * 選択欄の右の「+」で行う(ストックの「グループなし」の見出しの「+」と同じ部品
+ * `NewGroupInline`)。押すと下に名前の入力を出し、Enter で作成してそのグループを選ぶ。
+ * Escape か「+」をもう一度押すと取り消す。値そのものは `useRunFormLogic` が持つ。
  */
-import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ApiError, createAssetGroup, type AssetGroupListResponse, type AssetGroupRow } from '../../api/client'
+import { useQueryClient } from '@tanstack/react-query'
+import type { AssetGroupListResponse, AssetGroupRow } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { ASSET_GROUPS_QUERY_KEY } from '../stock/groups/assetGroupQueries'
-import { NEW_ASSET_GROUP_OPTION, prependAssetGroup } from './assetGroupSelection'
+import { NewGroupButton, NewGroupNameInput } from '../stock/groups/NewGroupInline'
+import { useNewGroupInline } from '../stock/groups/useNewGroupInline'
+import { prependAssetGroup } from './assetGroupSelection'
 import fieldStyles from './ParamField.module.css'
 import styles from './AssetGroupField.module.css'
 
@@ -18,93 +20,44 @@ interface AssetGroupFieldProps {
   value: string | null
   groups: AssetGroupRow[]
   onChange: (id: string | null) => void
+  /** 配置側のグリッドでの幅(下段配置ではモデルと同じく 2 列にまたがる)。 */
+  className?: string
 }
 
-export function AssetGroupField({ value, groups, onChange }: AssetGroupFieldProps) {
+export function AssetGroupField({ value, groups, onChange, className }: AssetGroupFieldProps) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
-  const [creating, setCreating] = useState(false)
-  const [draftName, setDraftName] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  function cancelCreate() {
-    setCreating(false)
-    setDraftName('')
-    setError(null)
-  }
-
-  const createMutation = useMutation({
-    mutationFn: (name: string) => createAssetGroup(name),
-    onSuccess: (group) => {
-      // 再取得を待たずに選択を解決できるよう、一覧のキャッシュへ先に差し込んでから作り直す。
-      queryClient.setQueryData<AssetGroupListResponse>(ASSET_GROUPS_QUERY_KEY, (old) =>
-        old ? { ...old, items: prependAssetGroup(old.items ?? [], group) } : old,
-      )
-      queryClient.invalidateQueries({ queryKey: ASSET_GROUPS_QUERY_KEY })
-      onChange(group.id)
-      cancelCreate()
-    },
-    onError: (err: unknown) => setError(err instanceof ApiError ? err.message : t.stock.groups.createFailed),
+  const newGroup = useNewGroupInline((group) => {
+    // 再取得を待たずに選択を解決できるよう、一覧のキャッシュへ先に差し込む(作り直しは共通部品が行う)。
+    queryClient.setQueryData<AssetGroupListResponse>(ASSET_GROUPS_QUERY_KEY, (old) =>
+      old ? { ...old, items: prependAssetGroup(old.items ?? [], group) } : old,
+    )
+    onChange(group.id)
   })
 
-  function submitCreate() {
-    const name = draftName.trim()
-    if (!name || createMutation.isPending) return
-    createMutation.mutate(name)
-  }
-
   return (
-    <div className={`${fieldStyles.field} ${styles.root}`}>
-      <label htmlFor="asset-group">{t.runForm.group.label}</label>
-      <select
-        id="asset-group"
-        className={styles.select}
-        value={creating ? NEW_ASSET_GROUP_OPTION : (value ?? '')}
-        onChange={(e) => {
-          const next = e.target.value
-          if (next === NEW_ASSET_GROUP_OPTION) {
-            setCreating(true)
-            return
-          }
-          cancelCreate()
-          onChange(next === '' ? null : next)
-        }}
-      >
-        <option value="">{t.runForm.group.none}</option>
-        {groups.map((group) => (
-          <option key={group.id} value={group.id}>
-            {group.name}
-          </option>
-        ))}
-        <option value={NEW_ASSET_GROUP_OPTION}>{t.stock.groups.new}</option>
-      </select>
-      {creating && (
-        <input
-          autoFocus
-          className={styles.nameInput}
-          value={draftName}
-          maxLength={100}
-          placeholder={t.stock.groups.newPlaceholder}
-          aria-label={t.stock.groups.newPlaceholder}
-          disabled={createMutation.isPending}
-          onChange={(e) => setDraftName(e.target.value)}
-          onKeyDown={(e) => {
-            // IME の変換確定の Enter では作成しない。
-            if (e.nativeEvent.isComposing) return
-            if (e.key === 'Enter') {
-              // 下段全体のキー操作(Ctrl+Enter の送信など)に渡さない。
-              e.preventDefault()
-              e.stopPropagation()
-              submitCreate()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              e.stopPropagation()
-              cancelCreate()
-            }
-          }}
-        />
-      )}
-      {error && <p className={styles.error}>{error}</p>}
+    <div className={className ? `${styles.root} ${className}` : styles.root}>
+      <div className={fieldStyles.field}>
+        <label htmlFor="asset-group">{t.runForm.group.label}</label>
+        <div className={styles.row}>
+          <select
+            id="asset-group"
+            className={styles.select}
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+          >
+            <option value="">{t.runForm.group.none}</option>
+            {groups.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </select>
+          <NewGroupButton state={newGroup} className={styles.addButton} />
+        </div>
+      </div>
+      {/* `.field input` の見た目を受けないよう、名前の入力は `.field` の外に置く(ストックと同じ見た目)。 */}
+      <NewGroupNameInput state={newGroup} inputClassName={styles.nameInput} stopKeyPropagation />
     </div>
   )
 }

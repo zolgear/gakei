@@ -129,7 +129,7 @@ export function originRecipeDisabledReason(
  * サーバーがクライアント入力として受け付けないため、`paramsForRerun` で取り除く
  * (`comfyui_seed` があれば `seed` として残す。「同じ設定で新規作成」と同じ扱い)。
  */
-export function buildOriginFormState(info: OriginRunInfo): RunFormState {
+export function buildOriginFormState(info: OriginRunInfo, assetGroupId: string | null = null): RunFormState {
   return {
     provider: info.provider ?? '',
     model: info.model ?? '',
@@ -137,7 +137,8 @@ export function buildOriginFormState(info: OriginRunInfo): RunFormState {
     params: paramsForRerun(info.params) as Record<string, string | number | boolean>,
     inputs: [],
     // 埋め込みの生成メタ情報にグループは含めていない(グループはインスタンス内の整理であり、
-    // 画像と一緒に持ち出す来歴ではないため)。
-    assetGroupId: null,
+    // 画像と一緒に持ち出す来歴ではないため)。呼び出し側が「最後に選んだグループ」を渡す
+    // (ADR-0022。渡さなければなし)。
+    assetGroupId,
   }
 }
