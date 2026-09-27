@@ -188,6 +188,14 @@
   color: var(--color-text-muted);
 }
 
+/* 「グループなし」の節が空のときの案内。タイルのドロップを受ける(ADR-0022 4章)。 */
+.status[data-dropping='true'] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  background: rgba(227, 179, 65, 0.08);
+  color: var(--color-text);
+}
+
 .statusText {
   font-size: 11px;
   color: var(--color-text-muted);

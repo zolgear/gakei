@@ -7,6 +7,8 @@
  *   名前の入力を出す(作ったグループの節は「グループなし」の直後に現れる)。
  *   行を押すと開閉する。タイルをこの行(または空のグループの枠)へドラッグ&ドロップすると
  *   そのグループに入る(元の節からは消さない。1 つの Asset は複数のグループに入れる)。
+ *   「グループなし」の節の見出し行(または空の枠)に落とすと、入っているすべてのグループから
+ *   外れる(ドラッグ元の節は分からないため。確認なし)。
  * - 本体(開いているときだけ取得・表示): 既存の 2 列のタイル。グループは最初の 30 件と
  *   「さらに表示」、「グループなし」は末尾の番兵で自動的に続きを読む(既存の無限スクロール)。
  */
@@ -16,6 +18,7 @@ import {
   ApiError,
   addAssetsToGroup,
   deleteAssetGroup,
+  getAsset,
   listAssets,
   removeAssetsFromGroup,
   updateAssetGroup,
@@ -28,6 +31,7 @@ import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { ASSET_GROUPS_QUERY_KEY, invalidateAssetGroupQueries } from './groups/assetGroupQueries'
 import { NewGroupButton, NewGroupNameInput } from './groups/NewGroupInline'
 import { useNewGroupInline } from './groups/useNewGroupInline'
+import { groupIdsToRemove } from './groups/ungroupDrop'
 import { shouldAutoFetchNextPage } from './sentinel'
 import { StockTile } from './StockTile'
 import { UNGROUPED_SECTION_KEY, selectionEntry } from './stockSelection'
@@ -151,6 +155,21 @@ export function GroupSection({
     onError: (err: unknown) => onError(err instanceof ApiError ? err.message : t.stock.groups.addFailed),
   })
 
+  // 「グループなし」へのドロップ: 現在の所属を取り直し、すべてのグループから外す。
+  const ungroupMutation = useMutation({
+    mutationFn: async (assetId: string) => {
+      const detail = await getAsset(assetId)
+      const groupIds = groupIdsToRemove(detail.groups)
+      if (groupIds.length === 0) return false
+      await Promise.all(groupIds.map((groupId) => removeAssetsFromGroup(groupId, [assetId])))
+      return true
+    },
+    onSuccess: (changed, assetId) => {
+      if (changed) invalidateAssetGroupQueries(queryClient, [assetId])
+    },
+    onError: (err: unknown) => onError(err instanceof ApiError ? err.message : t.stock.groups.removeFailed),
+  })
+
   const renameMutation = useMutation({
     mutationFn: ({ groupId, name }: { groupId: string; name: string }) => updateAssetGroup(groupId, name),
     onSuccess: () => {
@@ -175,8 +194,9 @@ export function GroupSection({
 
   function dropAsset(assetId: string) {
     if (group) addMutation.mutate({ groupId: group.id, assetId })
+    else ungroupMutation.mutate(assetId)
   }
-  const headerDrop = useAssetDropZone(group !== null, dropAsset)
+  const headerDrop = useAssetDropZone(true, dropAsset)
 
   function submitRename() {
     const name = renameDraft.trim()
@@ -357,7 +377,7 @@ function SectionAssets({
     onError: (err: unknown) => onError(err instanceof ApiError ? err.message : t.stock.groups.removeFailed),
   })
 
-  const emptyDrop = useAssetDropZone(groupId !== null, onDropAsset)
+  const emptyDrop = useAssetDropZone(true, onDropAsset)
 
   // 「グループなし」の節だけ、番兵がパネル内に見えている間は次ページを継ぎ足す。
   // isFetchingNextPage を依存に入れて observer を張り直すことで、フェッチ直後にまだ番兵が
@@ -410,7 +430,11 @@ function SectionAssets({
         </div>
       )
     }
-    return <p className={styles.status}>{noGroupsExist ? t.stock.emptyState : t.stock.groups.ungroupedEmpty}</p>
+    return (
+      <p className={styles.status} data-dropping={emptyDrop.dropping} {...emptyDrop.handlers}>
+        {noGroupsExist ? t.stock.emptyState : t.stock.groups.ungroupedEmpty}
+      </p>
+    )
   }
 
   return (
