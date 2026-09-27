@@ -6,6 +6,12 @@
 export type Operation = 'generate' | 'edit'
 
 export interface RunInputItem {
+  /**
+   * 入力1件ごとのクライアント側の一意キー(issue #12・#13)。同じ Asset を複数回入力に
+   * 入れられる(ADR-0003 の run_input は同じ Asset の複数回を許す)ため、削除・並べ替え・
+   * React の key は assetId ではなくこれで行う。API には送らない(送信時は assetId だけを使う)。
+   */
+  inputId: string
   assetId: string
   role: 'image' | 'mask' | 'reference'
   position: number

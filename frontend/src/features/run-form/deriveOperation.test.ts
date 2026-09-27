@@ -2,8 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { countImageInputs, deriveOperation } from './deriveOperation'
 import type { RunInputItem } from './types'
 
-const img = (assetId: string, position: number): RunInputItem => ({ assetId, role: 'image', position })
-const mask = (assetId: string): RunInputItem => ({ assetId, role: 'mask', position: 0 })
+const img = (assetId: string, position: number): RunInputItem => ({
+  inputId: `in-${assetId}-${position}`,
+  assetId,
+  role: 'image',
+  position,
+})
+const mask = (assetId: string): RunInputItem => ({
+  inputId: `in-${assetId}-mask`,
+  assetId,
+  role: 'mask',
+  position: 0,
+})
 
 describe('deriveOperation', () => {
   it('画像入力が0枚なら generate', () => {

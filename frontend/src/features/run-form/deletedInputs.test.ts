@@ -20,7 +20,12 @@ function asset(id: string, deletedAt: string | null): AssetDetail {
   }
 }
 
-const img = (assetId: string, position: number): RunInputItem => ({ assetId, role: 'image', position })
+const img = (assetId: string, position: number): RunInputItem => ({
+  inputId: `in-${assetId}-${position}`,
+  assetId,
+  role: 'image',
+  position,
+})
 
 describe('findDeletedInputAssetIds', () => {
   it('削除済みの Asset の id だけを返す', () => {
@@ -45,7 +50,7 @@ describe('findDeletedInputAssetIds', () => {
   })
 
   it('マスクなど画像以外の role でも同様に検出する', () => {
-    const inputs: RunInputItem[] = [{ assetId: 'm', role: 'mask', position: 0 }]
+    const inputs: RunInputItem[] = [{ inputId: 'in-m', assetId: 'm', role: 'mask', position: 0 }]
     const details = new Map([['m', asset('m', '2026-01-02T00:00:00Z')]])
     expect(findDeletedInputAssetIds(inputs, details)).toEqual(['m'])
   })

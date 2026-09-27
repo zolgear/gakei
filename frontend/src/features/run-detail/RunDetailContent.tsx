@@ -18,6 +18,7 @@ import { describeError } from '../run-status/errorMessages'
 import { SaveToPromptSetButton } from '../prompt-sets/SaveToPromptSetButton'
 import { buildParamLabelMap } from '../run-form/paramLabels'
 import { omitComfyUiParams, paramsForRerun } from '../run-form/paramsBuilder'
+import { inputsFromRunInputs } from '../run-form/editInputs'
 import {
   comfyuiPromptDownloadFilename,
   extractComfyUiPrompt,
@@ -134,7 +135,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
       model: run.model,
       prompt: run.prompt,
       params: paramsForRerun(rawParams) as Record<string, string | number | boolean>,
-      inputs: inputs.map((i) => ({ assetId: i.asset_id, role: i.role, position: i.position })),
+      inputs: inputsFromRunInputs(inputs),
       // 削除済みのグループなら null(=「なし」)で返ってくる。
       assetGroupId: run.asset_group?.id ?? null,
     })

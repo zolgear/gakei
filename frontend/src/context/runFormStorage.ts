@@ -8,6 +8,7 @@
  * このモジュールはあくまで「保存されていた値をそのまま返す/そのまま書く」だけで、
  * 検証は capabilities を知っている RunForm.tsx 側(sanitizeRawValues 等)が行う。
  */
+import { ensureInputIds } from '../features/run-form/editInputs'
 import type { RunFormState, RunInputItem } from '../features/run-form/types'
 
 const STORAGE_KEY = 'gakei.runForm.v1'
@@ -32,10 +33,14 @@ interface StoredRunFormPayloadV1 {
   assetGroupId?: string | null
 }
 
-function isRunInputItem(value: unknown): value is RunInputItem {
+/** 保存値の入力1件。inputId は issue #12・#13 の修正で追加したため、旧形式の保存値には無い。 */
+type StoredRunInputItem = Omit<RunInputItem, 'inputId'> & { inputId?: string }
+
+function isStoredRunInputItem(value: unknown): value is StoredRunInputItem {
   if (typeof value !== 'object' || value === null) return false
   const v = value as Record<string, unknown>
   return (
+    (v.inputId === undefined || typeof v.inputId === 'string') &&
     typeof v.assetId === 'string' &&
     (v.role === 'image' || v.role === 'mask' || v.role === 'reference') &&
     typeof v.position === 'number'
@@ -74,7 +79,7 @@ export function parseStoredRunFormState(raw: string | null): RunFormState | null
   if (typeof payload.model !== 'string') return null
   if (typeof payload.prompt !== 'string') return null
   if (!isParamsRecord(payload.params)) return null
-  if (!Array.isArray(payload.inputs) || !payload.inputs.every(isRunInputItem)) return null
+  if (!Array.isArray(payload.inputs) || !payload.inputs.every(isStoredRunInputItem)) return null
 
   return {
     // 旧バージョンの保存値には provider が無い。空文字にしておき、capabilities 読み込み後に
@@ -83,7 +88,9 @@ export function parseStoredRunFormState(raw: string | null): RunFormState | null
     model: payload.model,
     prompt: payload.prompt,
     params: payload.params,
-    inputs: payload.inputs,
+    // 旧形式(inputId なし)や重複した inputId は、読み込み時に新しい inputId を振り直す。
+    // バージョンは上げない(provider と同じく、他の値まで巻き添えで破棄したくないため)。
+    inputs: ensureInputIds(payload.inputs),
     assetGroupId: typeof payload.assetGroupId === 'string' ? payload.assetGroupId : null,
   }
 }
