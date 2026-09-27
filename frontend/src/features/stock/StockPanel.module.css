@@ -66,6 +66,22 @@
   color: var(--color-text);
 }
 
+.kindFilter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 絞り込みの見出し(「種類」)。GroupList の「グループ」の見出しと同じ見た目。 */
+.filterHeading {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .chips {
   display: flex;
   gap: 6px;

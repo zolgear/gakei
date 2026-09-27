@@ -9,7 +9,7 @@
  * 種別チップと一緒にパネル上部の sticky ヘッダーに常時表示する(生成を続けてもグリッドに
  * 押し流されないように)。
  */
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router'
 import {
@@ -34,7 +34,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ToastHost, useToast } from '../../components/Toast'
 import { fmt, useI18n, type Messages } from '../../i18n'
 import { AddToGroupPopover } from './groups/AddToGroupPopover'
-import { GroupChips } from './groups/GroupChips'
+import { GroupList } from './groups/GroupList'
 import { invalidateAssetGroupQueries } from './groups/assetGroupQueries'
 import { shouldAutoFetchNextPage } from './sentinel'
 import { toggleAssetSelection } from './stockSelection'
@@ -92,6 +92,7 @@ export function StockPanel() {
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   const [kind, setKind] = useState<KindFilter>('all')
+  const kindHeadingId = useId()
   const [groupId, setGroupId] = useState<string | null>(null)
   // 選択モード(ADR-0022 4章): タイルをチェックして「グループに追加」等をまとめて行う。
   const [selectionMode, setSelectionMode] = useState(false)
@@ -335,20 +336,26 @@ export function StockPanel() {
           </div>
         </div>
 
-        <GroupChips activeGroupId={groupId} onSelectGroup={setGroupId} />
+        <GroupList activeGroupId={groupId} onSelectGroup={setGroupId} />
 
-        <div className={styles.chips}>
-          {kindLabels(t).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={styles.chip}
-              data-active={kind === item.id}
-              onClick={() => setKind(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
+        {/* グループの節と見分けがつくよう、kind のチップ行にも小さな見出しを付ける(ADR-0022 4章)。 */}
+        <div className={styles.kindFilter} role="group" aria-labelledby={kindHeadingId}>
+          <span className={styles.filterHeading} id={kindHeadingId}>
+            {t.stock.kindHeading}
+          </span>
+          <div className={styles.chips}>
+            {kindLabels(t).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={styles.chip}
+                data-active={kind === item.id}
+                onClick={() => setKind(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {message && <p className={styles.message}>{message}</p>}

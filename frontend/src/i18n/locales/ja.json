@@ -928,6 +928,7 @@
       "one": "{count} 件",
       "other": "{count} 件"
     },
+    "kindHeading": "種類",
     "kindAll": "すべて",
     "kindGenerated": "生成",
     "kindUpload": "アップロード",
@@ -956,7 +957,6 @@
       "all": "すべて",
       "new": "新しいグループ…",
       "newPlaceholder": "グループ名",
-      "create": "作成",
       "rename": "名前を変更",
       "delete": "削除",
       "deleteConfirm": "グループ「{name}」を削除します。画像自体は削除されません。",

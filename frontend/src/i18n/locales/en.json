@@ -928,6 +928,7 @@
       "one": "{count} item",
       "other": "{count} items"
     },
+    "kindHeading": "Type",
     "kindAll": "All",
     "kindGenerated": "Generated",
     "kindUpload": "Upload",
@@ -956,7 +957,6 @@
       "all": "All",
       "new": "New group…",
       "newPlaceholder": "Group name",
-      "create": "Create",
       "rename": "Rename",
       "delete": "Delete",
       "deleteConfirm": "This deletes the group \"{name}\". The images themselves are not deleted.",
