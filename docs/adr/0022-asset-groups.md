@@ -121,8 +121,8 @@ UNIQUE INDEX ux_asset_group_member_asset_id (asset_id)   -- 1 つの Asset は 1
 
 ## Action Items
 
-- [ ] AI-1: マイグレーション、モデル、ドメイン、ルーター、テスト(backend)
-- [ ] AI-2: ストックパネルのグループ行、選択モード、ポップオーバー、ビューアの節、i18n、テスト(frontend)
-- [ ] AI-3: ADR-0001 の追記、ADR README の行、CLAUDE.md の構成の更新
-- [ ] AI-5: 並べ替え(`position`、`PUT /api/asset-groups/order`、見出しのドラッグと「上へ / 下へ」)
-- [ ] AI-4: 生成時のグループ指定(`run.asset_group_id`、worker での追加、フォームの選択、履歴・Run 詳細の表示)
+- [x] AI-1: マイグレーション、モデル、ドメイン、ルーター、テスト(backend)
+- [x] AI-2: ストックパネルのグループ行、選択モード、ポップオーバー、ビューアの節、i18n、テスト(frontend)
+- [x] AI-3: ADR-0001 の追記、ADR README の行、CLAUDE.md の構成の更新
+- [x] AI-5: 並べ替え(`position`、`PUT /api/asset-groups/order`、見出しのドラッグと「上へ / 下へ」)
+- [x] AI-4: 生成時のグループ指定(`run.asset_group_id`、worker での追加、フォームの選択、履歴・Run 詳細の表示)
