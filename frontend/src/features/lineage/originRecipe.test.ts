@@ -234,7 +234,7 @@ describe('originRecipeDisabledReason', () => {
 })
 
 describe('buildOriginFormState', () => {
-  it('provider/model/prompt/params をそのままフォーム状態にし、inputs は常に空', () => {
+  it('provider/model/prompt/params をそのままフォーム状態にし、inputs は常に空・グループはなし', () => {
     const state = buildOriginFormState({
       provider: 'openai',
       model: 'gpt-image-2.5',
@@ -247,6 +247,7 @@ describe('buildOriginFormState', () => {
       prompt: '山の風景',
       params: { quality: 'high' },
       inputs: [],
+      assetGroupId: null,
     })
   })
 
@@ -267,6 +268,6 @@ describe('buildOriginFormState', () => {
 
   it('provider/model が null(未検証・欠落)でも例外を出さず空文字になる', () => {
     const state = buildOriginFormState({ provider: null, model: null, prompt: null, params: {} })
-    expect(state).toEqual({ provider: '', model: '', prompt: '', params: {}, inputs: [] })
+    expect(state).toEqual({ provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null })
   })
 })

@@ -116,7 +116,7 @@ describe('hasFormContent', () => {
 })
 
 describe('clearFormContent', () => {
-  it('prompt・inputs を空にし、provider/model/params は capabilities の初期値に戻す', () => {
+  it('prompt・inputs を空にし、provider/model/params は capabilities の初期値に戻す(グループはなし)', () => {
     const result = clearFormContent(caps())
     expect(result).toEqual({
       provider: 'fake',
@@ -124,6 +124,7 @@ describe('clearFormContent', () => {
       prompt: '',
       params: { quality: 'low', n: 1, size: '1024x1024' },
       inputs: [],
+      assetGroupId: null,
     })
   })
 

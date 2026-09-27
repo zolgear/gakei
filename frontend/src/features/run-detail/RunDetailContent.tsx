@@ -135,6 +135,8 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
       prompt: run.prompt,
       params: paramsForRerun(rawParams) as Record<string, string | number | boolean>,
       inputs: inputs.map((i) => ({ assetId: i.asset_id, role: i.role, position: i.position })),
+      // 削除済みのグループなら null(=「なし」)で返ってくる。
+      assetGroupId: run.asset_group?.id ?? null,
     })
     navigate('/studio')
   }
@@ -282,6 +284,12 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
                 )}
                 <span>{run.created_by.name ?? run.created_by.email}</span>
               </dd>
+            </>
+          )}
+          {run.asset_group && (
+            <>
+              <dt>{t.runDetail.group}</dt>
+              <dd>{run.asset_group.name}</dd>
             </>
           )}
           <dt>API</dt>

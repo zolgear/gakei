@@ -1,7 +1,7 @@
 /**
  * サイドバー配置(左列。ADR-0009 1章・2026-09-26 追記)の並べ方。`InputPane` が組み立てた
  * スロット(`InputPaneSlots`、`InputPaneBottomLayout` と共有)を受け、モデル → 入力画像 →
- * プロンプト → サイズ・主なパラメーター → その他(畳む)の順に縦へ並べ、参考価格と生成ボタン
+ * プロンプト → サイズ・主なパラメーター・グループ → その他(畳む)の順に縦へ並べ、参考価格と生成ボタン
  * (`submitControls`)は列の下端(`.footer`)に固定する。列自体が縦にスクロールし
  * (`.scroll`)、`InputPane.module.css` 側で `.pane[data-layout='sidebar']` の
  * padding/gap を 0 にして代わりにこの列が余白を持つ。状態・ハンドラは持たない。
@@ -17,6 +17,7 @@ export function InputPaneSidebarLayout({
   notices,
   modelField,
   paramFields,
+  groupField,
   otherParams,
 }: InputPaneSlots) {
   return (
@@ -28,7 +29,10 @@ export function InputPaneSidebarLayout({
           {promptEditor}
           <div className={styles.promptTools}>{promptTools}</div>
         </div>
-        <div className={`${styles.section} ${styles.params}`}>{paramFields}</div>
+        <div className={`${styles.section} ${styles.params}`}>
+          {paramFields}
+          {groupField}
+        </div>
         {otherParams}
       </div>
 

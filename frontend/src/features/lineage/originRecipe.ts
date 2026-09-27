@@ -136,5 +136,8 @@ export function buildOriginFormState(info: OriginRunInfo): RunFormState {
     prompt: info.prompt ?? '',
     params: paramsForRerun(info.params) as Record<string, string | number | boolean>,
     inputs: [],
+    // 埋め込みの生成メタ情報にグループは含めていない(グループはインスタンス内の整理であり、
+    // 画像と一緒に持ち出す来歴ではないため)。
+    assetGroupId: null,
   }
 }

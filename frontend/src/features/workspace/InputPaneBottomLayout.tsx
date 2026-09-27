@@ -16,6 +16,8 @@ export interface InputPaneSlots {
   notices: ReactNode
   modelField: ReactNode
   paramFields: ReactNode
+  /** 出力を入れるグループ(ADR-0022)。主なパラメーターの後、「その他」の前に置く。 */
+  groupField: ReactNode
   otherParams: ReactNode
 }
 
@@ -27,6 +29,7 @@ export function InputPaneBottomLayout({
   notices,
   modelField,
   paramFields,
+  groupField,
   otherParams,
 }: InputPaneSlots) {
   return (
@@ -48,6 +51,7 @@ export function InputPaneBottomLayout({
           <div className={styles.settingsGrid}>
             {modelField}
             {paramFields}
+            {groupField}
             {otherParams}
           </div>
         </div>

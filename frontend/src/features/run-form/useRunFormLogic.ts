@@ -19,6 +19,7 @@ import {
   type CapabilitiesResponse,
   type ModelCapabilities,
   type OperationCapabilities,
+  type AssetGroupRow,
   type ProviderEntry,
 } from '../../api/client'
 import { useRunFormContext } from '../../context/useRunFormContext'
@@ -58,6 +59,8 @@ import {
 import { useDeletedInputAssetIds } from './useDeletedInputAssetIds'
 import { computePromptInsertion, type PromptInsertMode } from './promptInsertion'
 import { applyMention } from '../prompt-sets/mentionQuery'
+import { useAssetGroups } from '../stock/groups/assetGroupQueries'
+import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
 import type { RunInputItem } from './types'
 
 export interface RunFormLogic {
@@ -108,6 +111,15 @@ export interface RunFormLogic {
 
   sizeState: SizeState
   setSizeState: (state: SizeState) => void
+
+  /**
+   * ADR-0022: 出力を入れるグループ。覚えている id をグループ一覧に照らして解決した値
+   * (`resolveAssetGroupId`。削除済みなら null=「なし」)で、送信にもこの値を使う。
+   */
+  assetGroupId: string | null
+  setAssetGroupId: (id: string | null) => void
+  /** グループ一覧(`updated_at` の新しい順。未取得の間は空)。 */
+  assetGroups: AssetGroupRow[]
 
   droppedParamsNotice: string | null
   incompatibleErrors: string[]
@@ -174,6 +186,14 @@ export function useRunFormLogic(
   const [sizeState, setSizeState] = useState<SizeState>(() =>
     paramToSizeState(initialRef.current.params.size),
   )
+  // ADR-0022: 覚えているグループ id(削除済みかもしれない)。表示・送信には一覧で解決した
+  // resolvedAssetGroupId を使い、ここは書き換えない(effect で掃除すると setState-in-effect になる)。
+  const [assetGroupId, setAssetGroupId] = useState<string | null>(initialRef.current.assetGroupId ?? null)
+  const assetGroupsQuery = useAssetGroups()
+  // 一覧が未取得の間は undefined のままにする(resolveAssetGroupId が「確かめられない」と扱う)。
+  const loadedAssetGroups = assetGroupsQuery.data ? (assetGroupsQuery.data.items ?? []) : undefined
+  const assetGroups = loadedAssetGroups ?? []
+  const resolvedAssetGroupId = resolveAssetGroupId(assetGroupId, loadedAssetGroups)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [droppedParamsNotice, setDroppedParamsNotice] = useState<string | null>(null)
   const didInitParamsRef = useRef(false)
@@ -278,10 +298,10 @@ export function useRunFormLogic(
   // このフックでは触らず、setInputs 経由で呼び出し側が直接 context に書き込む。
   useEffect(() => {
     const params = withSizeParam(buildParams(defs, rawParams), sizeToParam(sizeState))
-    setFormState({ provider, model, prompt, params, inputs: formState.inputs })
+    setFormState({ provider, model, prompt, params, inputs: formState.inputs, assetGroupId })
     // formState.inputs はここでは変更しないので依存に含めない(無限ループ回避)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, model, prompt, rawParams, sizeState, defs])
+  }, [provider, model, prompt, rawParams, sizeState, defs, assetGroupId])
 
   const incompatibleErrors = providerEntry
     ? findIncompatibleViolations(defs, rawParams, providerEntry.incompatible_pairs ?? [])
@@ -341,6 +361,8 @@ export function useRunFormLogic(
   // fillSeedDefaults を直接呼んで記憶している seed モードを反映する。
   function resetForm() {
     setPrompt('')
+    // グループも他のパラメーターと同じく初期値(なし)に戻す。
+    setAssetGroupId(null)
     setSubmitError(null)
     setDroppedParamsNotice(null)
     if (!caps) return
@@ -427,7 +449,7 @@ export function useRunFormLogic(
       operation === 'edit'
         ? formState.inputs.map((i) => ({ asset_id: i.assetId, role: i.role, position: i.position }))
         : []
-    mutation.mutate({ operation, model, prompt, provider, params, inputs })
+    mutation.mutate(withAssetGroupId({ operation, model, prompt, provider, params, inputs }, resolvedAssetGroupId))
   }
 
   return {
@@ -455,6 +477,9 @@ export function useRunFormLogic(
       isFieldEnabled(defs, rawParams, providerEntry?.conditional_params ?? [], name),
     sizeState,
     setSizeState,
+    assetGroupId: resolvedAssetGroupId,
+    setAssetGroupId,
+    assetGroups,
     droppedParamsNotice,
     incompatibleErrors,
     sizeValid: sizeValidation.valid,

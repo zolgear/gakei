@@ -20,5 +20,5 @@ export function hasFormContent(formState: RunFormState): boolean {
 export function clearFormContent(caps: CapabilitiesResponse | undefined): RunFormState {
   if (!caps) return createEmptyFormState()
   const initial = computeInitialFormValues(caps)
-  return { provider: initial.provider, model: initial.model, prompt: '', params: initial.params, inputs: [] }
+  return { provider: initial.provider, model: initial.model, prompt: '', params: initial.params, inputs: [], assetGroupId: null }
 }

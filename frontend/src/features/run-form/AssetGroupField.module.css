@@ -1,0 +1,25 @@
+/* 生成フォームの「グループ」(ADR-0022)。見た目は ParamField の `.field` に揃え、ここでは
+ * インラインの名前入力とエラー、狭い幅でのタップ対象(44px)だけを足す。 */
+.root {
+  min-width: 0;
+}
+
+.nameInput {
+  margin-top: 4px;
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  /* `.field select` / `.field input`(34px)より詳細度を上げて 44px にする。16px は iOS の
+   * フォーカス時の拡大を防ぐため(ParamField と同じ)。 */
+  .root .select,
+  .root .nameInput {
+    height: 44px;
+    font-size: 16px;
+  }
+}

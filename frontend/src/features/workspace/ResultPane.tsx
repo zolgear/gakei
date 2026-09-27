@@ -59,6 +59,7 @@ import { addAsInput, isUsedAsInput } from './useAsInputToggle'
 import { addImageInputs } from '../run-form/editInputs'
 import { resolveResultOrigin } from './resultOrigin'
 import { buildStudioPath } from './assetQueryParam'
+import { invalidateAssetGroupQueries } from '../stock/groups/assetGroupQueries'
 import styles from './ResultPane.module.css'
 
 const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'canceled'])
@@ -217,7 +218,9 @@ export function ResultPane({
       return
     }
     if (shouldInvalidateAssetsOnStatusChange(prevPendingStatusRef.current, pendingStatus)) {
-      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      // ['assets'] に加えて、生成時にグループを指定していれば出力がそのグループに入る
+      // (ADR-0022)ので、グループ一覧(枚数・表紙)も取り直す。
+      invalidateAssetGroupQueries(queryClient)
       queryClient.invalidateQueries({ queryKey: ['run', pendingRunId] })
       // 出力 Asset が系列に増えるので、サイドバー・系列モードのグラフも取り直す。
       queryClient.invalidateQueries({ queryKey: ['lineage'] })

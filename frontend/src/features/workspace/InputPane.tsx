@@ -47,6 +47,7 @@ import { InputChipsRow, type InputImagesProps } from './InputChipsRow'
 import { InputImageTiles } from './InputImageTiles'
 import { ModelSelect } from './ModelSelect'
 import { OtherParamsDetails, PrimaryParamFields } from './ParamFields'
+import { AssetGroupField } from '../run-form/AssetGroupField'
 import { PromptToolsRow } from './PromptToolsRow'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
@@ -440,6 +441,10 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     />
   )
 
+  const groupField = (
+    <AssetGroupField value={form.assetGroupId} groups={form.assetGroups} onChange={form.setAssetGroupId} />
+  )
+
   const otherParams = (
     <OtherParamsDetails
       other={other}
@@ -458,6 +463,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     notices,
     modelField,
     paramFields,
+    groupField,
     otherParams,
   }
 
