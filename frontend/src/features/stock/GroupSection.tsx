@@ -235,10 +235,11 @@ export function GroupSection({
             aria-controls={bodyId}
             onClick={onToggleOpen}
           >
+            {/* 名前を左端に置き、開閉の印は名前の後ろ(「種類」の見出しやタイルと左端をそろえる)。 */}
+            <span className={styles.name}>{name}</span>
             <span className={styles.chevron} aria-hidden="true">
               {open ? '▾' : '▸'}
             </span>
-            <span className={styles.name}>{name}</span>
             {group && (
               <span className={styles.count} title={fmt(t.stock.groups.memberCount, { count: group.member_count })}>
                 {group.member_count}

@@ -43,8 +43,8 @@
 .chevron {
   flex-shrink: 0;
   width: 12px;
-  font-size: 11px;
-  color: var(--color-text-muted);
+  font-size: 10px;
+  color: var(--color-text-faint);
 }
 
 .name {
