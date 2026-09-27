@@ -281,9 +281,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   function handleSketchSave(
     asset: AssetDetail,
     options: SketchSaveOptions,
-    replaceAssetId?: string,
+    replaceInputId?: string,
   ) {
-    editLogic.saveSketch(asset, replaceAssetId)
+    editLogic.saveSketch(asset, replaceInputId)
     if (options.insertRecommendedPrompt) {
       form.insertPrompt(recommendedSketchPrompt(), 'insert', readPromptCursorPos())
     }
@@ -532,7 +532,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       {sketchEditorState?.mode === 'over' && editLogic.sketchOverAsset && (
         <SketchEditor
           base={{ kind: 'asset', asset: editLogic.sketchOverAsset }}
-          onSave={(asset, options) => handleSketchSave(asset, options, sketchEditorState.assetId)}
+          onSave={(asset, options) => handleSketchSave(asset, options, sketchEditorState.inputId)}
           onCancel={editLogic.closeSketchEditor}
         />
       )}

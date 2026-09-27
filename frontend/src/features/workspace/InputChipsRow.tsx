@@ -96,7 +96,7 @@ export function InputChipsRow({
               const isDeleted = deletedAssetIds.has(item.assetId)
               return (
                 <div
-                  key={item.assetId}
+                  key={item.inputId}
                   className={styles.chip}
                   data-primary={isPrimary}
                   data-not-found={isNotFound}
@@ -128,7 +128,7 @@ export function InputChipsRow({
                     <div className={styles.reorderButtons}>
                       <button
                         type="button"
-                        onClick={() => logic.handleMove(item.assetId, 'up')}
+                        onClick={() => logic.handleMove(item.inputId, 'up')}
                         disabled={index === 0}
                         aria-label={c.moveUp}
                       >
@@ -136,7 +136,7 @@ export function InputChipsRow({
                       </button>
                       <button
                         type="button"
-                        onClick={() => logic.handleMove(item.assetId, 'down')}
+                        onClick={() => logic.handleMove(item.inputId, 'down')}
                         disabled={index === images.length - 1}
                         aria-label={c.moveDown}
                       >
@@ -197,7 +197,9 @@ export function InputChipsRow({
                     className={styles.iconButton}
                     aria-label={c.drawOver}
                     title={c.drawOver}
-                    onClick={() => logic.openSketchEditor({ mode: 'over', assetId: item.assetId })}
+                    onClick={() =>
+                      logic.openSketchEditor({ mode: 'over', inputId: item.inputId, assetId: item.assetId })
+                    }
                   >
                     <PencilIcon />
                   </button>
@@ -207,7 +209,7 @@ export function InputChipsRow({
                     className={styles.iconButton}
                     aria-label={c.removeInput}
                     title={c.removeInput}
-                    onClick={() => logic.handleRemove(item.assetId)}
+                    onClick={() => logic.handleRemove(item.inputId)}
                   >
                     <RemoveIcon />
                   </button>

@@ -24,8 +24,12 @@ import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData } from './dragDropAssets
 import { pickPastedImageFiles } from './clipboardImages'
 import type { RunInputItem } from './types'
 
-/** スケッチエディタをどう開いたか。白紙(末尾に追加)か、既存の入力画像への上描き(差し替え)。 */
-export type SketchEditorTarget = { mode: 'blank' } | { mode: 'over'; assetId: string }
+/**
+ * スケッチエディタをどう開いたか。白紙(末尾に追加)か、既存の入力画像への上描き(差し替え)。
+ * 上描きは差し替える入力を inputId で指す(同じ画像が複数回入っていても1件だけ差し替える)。
+ * assetId は下絵にする Asset の取得に使う。
+ */
+export type SketchEditorTarget = { mode: 'blank' } | { mode: 'over'; inputId: string; assetId: string }
 
 export interface EditInputsLogic {
   images: RunInputItem[]
@@ -45,8 +49,10 @@ export interface EditInputsLogic {
   addAssets: (assetIds: string[]) => void
   /** 貼り付けに画像があればアップロードして入力に追加する(その場合だけ既定動作を止める)。 */
   handlePaste: (e: ClipboardEvent<HTMLElement>) => void
-  handleMove: (assetId: string, direction: 'up' | 'down') => void
-  handleRemove: (assetId: string) => void
+  /** 入力1件を inputId で指して並べ替える。 */
+  handleMove: (inputId: string, direction: 'up' | 'down') => void
+  /** 入力1件を inputId で指して取り除く(同じ画像の他の入力は残る)。 */
+  handleRemove: (inputId: string) => void
   handleRemoveMask: () => void
   maskEditorOpen: boolean
   setMaskEditorOpen: (open: boolean) => void
@@ -61,8 +67,8 @@ export interface EditInputsLogic {
    */
   sketchOverAsset: AssetDetail | null
   sketchOverAssetLoading: boolean
-  /** replaceAssetId を指定すると上描き(同じ position を差し替え)、省略すると白紙(末尾に追加)。 */
-  saveSketch: (asset: AssetDetail, replaceAssetId?: string) => void
+  /** replaceInputId を指定すると上描き(その入力を同じ position で差し替え)、省略すると白紙(末尾に追加)。 */
+  saveSketch: (asset: AssetDetail, replaceInputId?: string) => void
 }
 
 export function useEditInputsLogic(
@@ -82,7 +88,8 @@ export function useEditInputsLogic(
   const images = inputs.filter((i) => i.role === 'image').sort((a, b) => a.position - b.position)
   const maskInput = inputs.find((i) => i.role === 'mask')
 
-  const assetIds = [...images.map((i) => i.assetId), ...(maskInput ? [maskInput.assetId] : [])]
+  // 同じ画像が複数回入っていても取得は1回にする。
+  const assetIds = [...new Set([...images.map((i) => i.assetId), ...(maskInput ? [maskInput.assetId] : [])])]
   const assetQueries = useQueries({
     queries: assetIds.map((id) => ({
       queryKey: ['asset', id],
@@ -222,13 +229,13 @@ export function useEditInputsLogic(
     setUploadNotice(null)
   }
 
-  function handleMove(assetId: string, direction: 'up' | 'down') {
-    const result = moveImageInput(inputs, assetId, direction)
+  function handleMove(inputId: string, direction: 'up' | 'down') {
+    const result = moveImageInput(inputs, inputId, direction)
     onChange(result.inputs)
   }
 
-  function handleRemove(assetId: string) {
-    const result = removeImageInput(inputs, assetId)
+  function handleRemove(inputId: string) {
+    const result = removeImageInput(inputs, inputId)
     onChange(result.inputs)
   }
 
@@ -274,15 +281,16 @@ export function useEditInputsLogic(
     setSketchOverAssetLoading(false)
   }
 
-  function saveSketch(asset: AssetDetail, replaceAssetId?: string) {
+  function saveSketch(asset: AssetDetail, replaceInputId?: string) {
     queryClient.setQueryData(['asset', asset.id], asset)
     // ストック一覧からも見えるようにする。
     queryClient.invalidateQueries({ queryKey: ['assets'] })
-    if (replaceAssetId) {
+    if (replaceInputId) {
       // 置き換え元(ADR-0010、2026-09-25 追記で未使用スケッチなら削除済みになる)を取り直す。
-      queryClient.invalidateQueries({ queryKey: ['asset', replaceAssetId] })
+      const replacedAssetId = inputs.find((i) => i.inputId === replaceInputId)?.assetId
+      if (replacedAssetId) queryClient.invalidateQueries({ queryKey: ['asset', replacedAssetId] })
       queryClient.invalidateQueries({ queryKey: ['lineage'] })
-      onChange(replaceImageInput(inputs, replaceAssetId, asset.id))
+      onChange(replaceImageInput(inputs, replaceInputId, asset.id))
     } else {
       const result = addImageInputs(inputs, [asset.id], maxInputImages)
       onChange(result.inputs)

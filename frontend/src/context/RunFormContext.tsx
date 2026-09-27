@@ -14,6 +14,7 @@
  * 初期化では、この値を既定のグループにする。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ensureInputIds } from '../features/run-form/editInputs'
 import { createEmptyFormState, type RunFormState } from '../features/run-form/types'
 import { loadLastAssetGroupId, saveLastAssetGroupId } from './lastAssetGroupStorage'
 import { loadRunFormState, saveRunFormState } from './runFormStorage'
@@ -43,7 +44,11 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
     saveRunFormState(formStateRef.current)
   }
 
-  const setFormState = useCallback((next: RunFormState) => {
+  const setFormState = useCallback((nextRaw: RunFormState) => {
+    // 入力の inputId が欠けた・重複した状態を保存しないための保険(issue #12・#13)。
+    // 揃っていれば同じオブジェクトのまま通す。
+    const inputs = ensureInputIds(nextRaw.inputs)
+    const next = inputs === nextRaw.inputs ? nextRaw : { ...nextRaw, inputs }
     if (next.assetGroupId !== formStateRef.current.assetGroupId) saveLastAssetGroupId(next.assetGroupId)
     formStateRef.current = next
     setFormStateRaw(next)

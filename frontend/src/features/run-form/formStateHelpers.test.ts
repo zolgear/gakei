@@ -109,7 +109,7 @@ describe('hasFormContent', () => {
     expect(
       hasFormContent({
         ...createEmptyFormState(),
-        inputs: [{ assetId: 'a', role: 'image', position: 0 }],
+        inputs: [{ inputId: 'in-a', assetId: 'a', role: 'image', position: 0 }],
       }),
     ).toBe(true)
   })

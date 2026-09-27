@@ -16,6 +16,7 @@ import { useAddToInputs } from '../run-form/useAddToInputs'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { paramsForRerun } from '../run-form/paramsBuilder'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
+import { inputsFromRunInputs } from '../run-form/editInputs'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { removeItemFromPagedData, type InfiniteQueryData } from '../../lib/queryCache'
 import {
@@ -152,11 +153,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
           string,
           string | number | boolean
         >,
-        inputs: (detail.inputs ?? []).map((i) => ({
-          assetId: i.asset_id,
-          role: i.role,
-          position: i.position,
-        })),
+        inputs: inputsFromRunInputs(detail.inputs ?? []),
         // 削除済みのグループなら null(=「なし」)で返ってくる。
         assetGroupId: detail.asset_group?.id ?? null,
       })

@@ -102,7 +102,7 @@ export function InputImageTiles({
 
           return (
             <div
-              key={item.assetId}
+              key={item.inputId}
               className={styles.tile}
               data-primary={isPrimary}
               data-not-found={isNotFound}
@@ -148,7 +148,7 @@ export function InputImageTiles({
                     <button
                       type="button"
                       className={styles.actionButton}
-                      onClick={() => logic.handleMove(item.assetId, 'up')}
+                      onClick={() => logic.handleMove(item.inputId, 'up')}
                       disabled={index === 0}
                       aria-label={it.movePrev}
                       title={it.movePrev}
@@ -158,7 +158,7 @@ export function InputImageTiles({
                     <button
                       type="button"
                       className={styles.actionButton}
-                      onClick={() => logic.handleMove(item.assetId, 'down')}
+                      onClick={() => logic.handleMove(item.inputId, 'down')}
                       disabled={index === images.length - 1}
                       aria-label={it.moveNext}
                       title={it.moveNext}
@@ -197,7 +197,9 @@ export function InputImageTiles({
                   className={styles.actionButton}
                   aria-label={c.drawOver}
                   title={c.drawOver}
-                  onClick={() => logic.openSketchEditor({ mode: 'over', assetId: item.assetId })}
+                  onClick={() =>
+                    logic.openSketchEditor({ mode: 'over', inputId: item.inputId, assetId: item.assetId })
+                  }
                 >
                   <PencilIcon />
                 </button>
@@ -207,7 +209,7 @@ export function InputImageTiles({
                   className={styles.actionButton}
                   aria-label={c.removeInput}
                   title={c.removeInput}
-                  onClick={() => logic.handleRemove(item.assetId)}
+                  onClick={() => logic.handleRemove(item.inputId)}
                 >
                   <RemoveIcon />
                 </button>

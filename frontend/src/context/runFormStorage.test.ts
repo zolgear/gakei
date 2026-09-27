@@ -8,8 +8,8 @@ const sampleState: RunFormState = {
   prompt: 'a cat on a chair',
   params: { size: '1024x1024', quality: 'low', n: 2, transparent: true },
   inputs: [
-    { assetId: '11111111-1111-1111-1111-111111111111', role: 'image', position: 0 },
-    { assetId: '22222222-2222-2222-2222-222222222222', role: 'mask', position: 0 },
+    { inputId: 'in-1', assetId: '11111111-1111-1111-1111-111111111111', role: 'image', position: 0 },
+    { inputId: 'in-2', assetId: '22222222-2222-2222-2222-222222222222', role: 'mask', position: 0 },
   ],
   assetGroupId: '33333333-3333-3333-3333-333333333333',
 }
@@ -76,11 +76,48 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
       model: 'm',
       prompt: '',
       params: {},
-      inputs: [{ assetId: 'maybe-deleted-or-missing', role: 'image', position: 0 }],
+      inputs: [{ inputId: 'in-x', assetId: 'maybe-deleted-or-missing', role: 'image', position: 0 }],
       assetGroupId: null,
     }
     const raw = serializeRunFormState(state)
     expect(parseStoredRunFormState(raw)).toEqual(state)
+  })
+
+  it('inputId の無い旧形式の inputs は、読み込み時に別々の inputId を振って復元する(#12・#13)', () => {
+    // 修正前の保存値。同じ画像を2回入れた状態も含む。
+    const legacy = {
+      version: 1,
+      provider: 'openai',
+      model: 'm',
+      prompt: '',
+      params: {},
+      inputs: [
+        { assetId: 'A', role: 'image', position: 0 },
+        { assetId: 'A', role: 'image', position: 1 },
+        { assetId: 'B', role: 'image', position: 2 },
+      ],
+    }
+    const state = parseStoredRunFormState(JSON.stringify(legacy))
+    expect(state).not.toBeNull()
+    const inputs = state!.inputs
+    expect(inputs.map((i) => [i.assetId, i.role, i.position])).toEqual([
+      ['A', 'image', 0],
+      ['A', 'image', 1],
+      ['B', 'image', 2],
+    ])
+    expect(inputs.every((i) => typeof i.inputId === 'string' && i.inputId !== '')).toBe(true)
+    expect(new Set(inputs.map((i) => i.inputId)).size).toBe(3)
+  })
+
+  it('inputId が文字列でなければ壊れた値として null', () => {
+    const broken = {
+      version: 1,
+      model: 'm',
+      prompt: '',
+      params: {},
+      inputs: [{ inputId: 42, assetId: 'A', role: 'image', position: 0 }],
+    }
+    expect(parseStoredRunFormState(JSON.stringify(broken))).toBeNull()
   })
 
   it('空の inputs/params でも往復できる', () => {

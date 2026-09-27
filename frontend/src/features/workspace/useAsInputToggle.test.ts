@@ -7,7 +7,7 @@ const ASSET_B = 'bbbbbbbb-0000-0000-0000-000000000000'
 
 describe('isUsedAsInput', () => {
   it('image role で assetId が一致すれば true', () => {
-    const inputs: RunInputItem[] = [{ assetId: ASSET_A, role: 'image', position: 0 }]
+    const inputs: RunInputItem[] = [{ inputId: 'in-a', assetId: ASSET_A, role: 'image', position: 0 }]
     expect(isUsedAsInput(inputs, ASSET_A)).toBe(true)
   })
 
@@ -16,7 +16,7 @@ describe('isUsedAsInput', () => {
   })
 
   it('mask role には反応しない', () => {
-    const inputs: RunInputItem[] = [{ assetId: ASSET_A, role: 'mask', position: 0 }]
+    const inputs: RunInputItem[] = [{ inputId: 'in-a', assetId: ASSET_A, role: 'mask', position: 0 }]
     expect(isUsedAsInput(inputs, ASSET_A)).toBe(false)
   })
 })
@@ -26,21 +26,21 @@ describe('addAsInput', () => {
     const result = addAsInput([], ASSET_A, 16)
     expect(result.added).toBe(true)
     expect(result.rejected).toBe(false)
-    expect(result.inputs).toEqual([{ assetId: ASSET_A, role: 'image', position: 0 }])
+    expect(result.inputs).toEqual([{ inputId: expect.any(String), assetId: ASSET_A, role: 'image', position: 0 }])
   })
 
   it('既に入力がある場合は末尾に追加し、主(position 0)は維持する', () => {
-    const existing: RunInputItem[] = [{ assetId: ASSET_A, role: 'image', position: 0 }]
+    const existing: RunInputItem[] = [{ inputId: 'in-a', assetId: ASSET_A, role: 'image', position: 0 }]
     const result = addAsInput(existing, ASSET_B, 16)
     expect(result.added).toBe(true)
     expect(result.inputs).toEqual([
-      { assetId: ASSET_A, role: 'image', position: 0 },
-      { assetId: ASSET_B, role: 'image', position: 1 },
+      { inputId: 'in-a', assetId: ASSET_A, role: 'image', position: 0 },
+      { inputId: expect.any(String), assetId: ASSET_B, role: 'image', position: 1 },
     ])
   })
 
   it('既に使用中なら外さず、そのまま返す', () => {
-    const existing: RunInputItem[] = [{ assetId: ASSET_A, role: 'image', position: 0 }]
+    const existing: RunInputItem[] = [{ inputId: 'in-a', assetId: ASSET_A, role: 'image', position: 0 }]
     const result = addAsInput(existing, ASSET_A, 16)
     expect(result.added).toBe(false)
     expect(result.rejected).toBe(false)
@@ -48,7 +48,7 @@ describe('addAsInput', () => {
   })
 
   it('上限に達していれば追加されず rejected になる', () => {
-    const existing: RunInputItem[] = [{ assetId: ASSET_A, role: 'image', position: 0 }]
+    const existing: RunInputItem[] = [{ inputId: 'in-a', assetId: ASSET_A, role: 'image', position: 0 }]
     const result = addAsInput(existing, ASSET_B, 1)
     expect(result.added).toBe(false)
     expect(result.rejected).toBe(true)
