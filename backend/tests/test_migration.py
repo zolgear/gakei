@@ -15,6 +15,8 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "run_input",
         "prompt_set",
         "prompt_set_item",
+        "asset_group",
+        "asset_group_member",
         "comfy_workflow",
         "app_user",
         "auth_session",
@@ -247,4 +249,42 @@ def test_migration_upgrades_from_0010_to_0011_adds_avatar_column(tmp_path) -> No
     engine = create_engine(f"sqlite:///{db_path}")
     columns_after_downgrade = {c["name"] for c in sa_inspect(engine).get_columns("app_user")}
     assert "avatar_sha256" not in columns_after_downgrade
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0011_to_0012_adds_asset_group_tables(tmp_path) -> None:  # noqa: ANN001
+    """既存の0011適用済みDBでも、起動時のupgrade headで0012(asset_group、
+    asset_group_member)が当たること(ADR-0022)。"""
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0011")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables_after_0011 = set(sa_inspect(engine).get_table_names())
+    assert "asset_group" not in tables_after_0011
+    assert "asset_group_member" not in tables_after_0011
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables_after_head = set(sa_inspect(engine).get_table_names())
+    assert {"asset_group", "asset_group_member"} <= tables_after_head
+    engine.dispose()
+
+    command.downgrade(cfg, "0011")
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables_after_downgrade = set(sa_inspect(engine).get_table_names())
+    assert "asset_group" not in tables_after_downgrade
+    assert "asset_group_member" not in tables_after_downgrade
     engine.dispose()

@@ -17,12 +17,13 @@ from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.deps import get_session, get_store
+from app.domain.asset_groups import get_active_group_or_none, groups_for_asset
 from app.domain.assets import IngestError, asset_is_used_as_input, is_restorable
 from app.domain.assets import ingest_upload as ingest_asset
 from app.domain.avatars import avatar_url
 from app.domain.embedded_meta import build_lineage_meta, embed_gakei_chunk, get_instance_id
 from app.domain.lineage import DEFAULT_UP, MAX_DEPTH, LineageNotFoundError, build_asset_lineage
-from app.domain.models import AppUser, Asset, AssetKind, Run
+from app.domain.models import AppUser, Asset, AssetGroupMember, AssetKind, Run
 from app.domain.schemas import (
     AssetDetail,
     AssetLineageResponse,
@@ -127,6 +128,7 @@ def _to_detail(db: Session, asset: Asset, produced_by_run: Run | None) -> AssetD
         embedded_meta=_to_embedded_meta(asset),
         used_as_input=asset_is_used_as_input(db, asset.id),
         created_by=_to_created_by(db, asset.created_by_user_id),
+        groups=groups_for_asset(db, asset.id),
     )
 
 
@@ -172,13 +174,27 @@ def create_asset(
 @router.get("", response_model=AssetListResponse, operation_id="list_assets")
 def list_assets(
     kind: Literal["upload", "generated", "mask", "sketch"] | None = Query(default=None),
+    group_id: uuid.UUID | None = Query(
+        default=None, description="指定すると、そのグループのメンバーだけに絞る(ADR-0022)。"
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
     db: Session = Depends(get_session),
 ) -> AssetListResponse:
+    if group_id is not None and get_active_group_or_none(db, group_id) is None:
+        raise HTTPException(status_code=404, detail=t("assetGroups.notFound"))
+
     query = select(Asset).where(Asset.deleted_at.is_(None))
     if kind is not None:
         query = query.where(Asset.kind == kind)
+    if group_id is not None:
+        query = query.join(
+            AssetGroupMember,
+            and_(
+                AssetGroupMember.asset_id == Asset.id,
+                AssetGroupMember.asset_group_id == group_id,
+            ),
+        )
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)

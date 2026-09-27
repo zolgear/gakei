@@ -1,0 +1,259 @@
+"""グループ(ストックの手動整理。ADR-0022)。"""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from tests.conftest import make_png_bytes
+
+
+def _upload(client: TestClient) -> str:
+    data = make_png_bytes(width=64, height=64)
+    response = client.post(
+        "/api/assets",
+        files={"file": ("f.png", data, "image/png")},
+        data={"kind": "upload"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def _create_group(client: TestClient, name: str = "案件A") -> dict:
+    response = client.post("/api/asset-groups", json={"name": name})
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_create_and_list(client: TestClient) -> None:
+    created = _create_group(client, name="風景")
+    assert created["name"] == "風景"
+    assert created["member_count"] == 0
+    assert created["cover_asset_id"] is None
+
+    listed = client.get("/api/asset-groups").json()["items"]
+    ids = [g["id"] for g in listed]
+    assert created["id"] in ids
+
+
+def test_list_is_ordered_by_updated_at_desc(client: TestClient) -> None:
+    first = _create_group(client, name="先に作った")
+    second = _create_group(client, name="後で作った")
+
+    listed = client.get("/api/asset-groups").json()["items"]
+    ids_in_order = [g["id"] for g in listed]
+    assert ids_in_order.index(second["id"]) < ids_in_order.index(first["id"])
+
+    client.patch(f"/api/asset-groups/{first['id']}", json={"name": "更新した"})
+    listed_after = client.get("/api/asset-groups").json()["items"]
+    ids_after = [g["id"] for g in listed_after]
+    assert ids_after.index(first["id"]) < ids_after.index(second["id"])
+
+
+def test_rename_group(client: TestClient) -> None:
+    created = _create_group(client, name="旧名")
+    response = client.patch(f"/api/asset-groups/{created['id']}", json={"name": "新名"})
+    assert response.status_code == 200
+    assert response.json()["name"] == "新名"
+
+
+def test_delete_group_removes_from_list_and_404s_afterward(client: TestClient) -> None:
+    created = _create_group(client, name="消す予定")
+    response = client.delete(f"/api/asset-groups/{created['id']}")
+    assert response.status_code == 204
+
+    listed = client.get("/api/asset-groups").json()["items"]
+    assert created["id"] not in [g["id"] for g in listed]
+
+    assert client.patch(f"/api/asset-groups/{created['id']}", json={"name": "x"}).status_code == 404
+    assert (
+        client.post(
+            f"/api/asset-groups/{created['id']}/assets", json={"asset_ids": [_upload(client)]}
+        ).status_code
+        == 404
+    )
+
+
+def test_add_members_is_idempotent_and_tracks_cover(client: TestClient) -> None:
+    group = _create_group(client)
+    asset_1 = _upload(client)
+    asset_2 = _upload(client)
+
+    response = client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_1]})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["member_count"] == 1
+    assert body["cover_asset_id"] == asset_1
+
+    # 同じ asset_id をもう一度追加しても無視され、新しい asset_2 が最新のカバーになる。
+    response = client.post(
+        f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_1, asset_2]}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["member_count"] == 2
+    assert body["cover_asset_id"] == asset_2
+
+
+def test_add_members_excludes_deleted_asset_from_count(client: TestClient) -> None:
+    group = _create_group(client)
+    asset_1 = _upload(client)
+    asset_2 = _upload(client)
+    client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_1, asset_2]})
+
+    assert client.delete(f"/api/assets/{asset_2}").status_code == 204
+
+    listed = client.get("/api/asset-groups").json()["items"]
+    matched = next(g for g in listed if g["id"] == group["id"])
+    assert matched["member_count"] == 1
+    assert matched["cover_asset_id"] == asset_1
+
+
+def test_add_members_with_unknown_id_returns_404_and_adds_nothing(client: TestClient) -> None:
+    group = _create_group(client)
+    asset_1 = _upload(client)
+    fake_id = "00000000-0000-0000-0000-000000000000"
+
+    response = client.post(
+        f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_1, fake_id]}
+    )
+    assert response.status_code == 404
+    assert fake_id in response.json()["detail"]
+
+    listed = client.get("/api/asset-groups").json()["items"]
+    matched = next(g for g in listed if g["id"] == group["id"])
+    assert matched["member_count"] == 0
+
+
+def test_add_members_with_deleted_asset_returns_404(client: TestClient) -> None:
+    group = _create_group(client)
+    asset_1 = _upload(client)
+    assert client.delete(f"/api/assets/{asset_1}").status_code == 204
+
+    response = client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_1]})
+    assert response.status_code == 404
+
+
+def test_remove_members_ignores_absent(client: TestClient) -> None:
+    group = _create_group(client)
+    asset_1 = _upload(client)
+    asset_2 = _upload(client)
+    client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_1]})
+
+    # asset_2 は入っていないが、無視されてエラーにならない。
+    response = client.post(
+        f"/api/asset-groups/{group['id']}/assets/remove",
+        json={"asset_ids": [asset_1, asset_2]},
+    )
+    assert response.status_code == 200
+    assert response.json()["member_count"] == 0
+
+
+def test_list_assets_filtered_by_group_id(client: TestClient) -> None:
+    group = _create_group(client)
+    asset_1 = _upload(client)
+    asset_2 = _upload(client)
+    client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_1]})
+
+    response = client.get("/api/assets", params={"group_id": group["id"]})
+    assert response.status_code == 200
+    ids = [a["id"] for a in response.json()["items"]]
+    assert ids == [asset_1]
+    assert asset_2 not in ids
+
+
+def test_list_assets_combines_group_id_and_kind(client: TestClient) -> None:
+    group = _create_group(client)
+    upload_asset = _upload(client)
+    client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [upload_asset]})
+
+    response = client.get("/api/assets", params={"group_id": group["id"], "kind": "generated"})
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+
+
+def test_list_assets_with_deleted_group_id_returns_404(client: TestClient) -> None:
+    group = _create_group(client)
+    assert client.delete(f"/api/asset-groups/{group['id']}").status_code == 204
+
+    response = client.get("/api/assets", params={"group_id": group["id"]})
+    assert response.status_code == 404
+
+
+def test_list_assets_with_unknown_group_id_returns_404(client: TestClient) -> None:
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    response = client.get("/api/assets", params={"group_id": fake_id})
+    assert response.status_code == 404
+
+
+def test_asset_detail_groups_sorted_by_name_and_excludes_deleted(client: TestClient) -> None:
+    asset_id = _upload(client)
+    group_b = _create_group(client, name="B")
+    group_a = _create_group(client, name="A")
+    group_c = _create_group(client, name="C")
+    for group in (group_b, group_a, group_c):
+        client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_id]})
+
+    assert client.delete(f"/api/asset-groups/{group_c['id']}").status_code == 204
+
+    detail = client.get(f"/api/assets/{asset_id}").json()
+    assert [g["name"] for g in detail["groups"]] == ["A", "B"]
+
+
+def test_name_validation(client: TestClient) -> None:
+    assert client.post("/api/asset-groups", json={"name": ""}).status_code == 422
+    assert client.post("/api/asset-groups", json={"name": "   "}).status_code == 422
+    assert client.post("/api/asset-groups", json={"name": "a" * 101}).status_code == 422
+
+    group = _create_group(client)
+    assert client.patch(f"/api/asset-groups/{group['id']}", json={"name": ""}).status_code == 422
+
+
+def test_asset_ids_count_validation(client: TestClient) -> None:
+    group = _create_group(client)
+    assert (
+        client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": []}).status_code
+        == 422
+    )
+    fake_ids = [f"00000000-0000-0000-0000-{i:012d}" for i in range(201)]
+    assert (
+        client.post(
+            f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": fake_ids}
+        ).status_code
+        == 422
+    )
+
+
+def test_operations_on_unknown_group_return_404(client: TestClient) -> None:
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    assert client.get("/api/asset-groups").status_code == 200
+    assert client.patch(f"/api/asset-groups/{fake_id}", json={"name": "x"}).status_code == 404
+    assert client.delete(f"/api/asset-groups/{fake_id}").status_code == 404
+    assert (
+        client.post(
+            f"/api/asset-groups/{fake_id}/assets", json={"asset_ids": [_upload(client)]}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/api/asset-groups/{fake_id}/assets/remove", json={"asset_ids": [_upload(client)]}
+        ).status_code
+        == 404
+    )
+
+
+def test_created_by_user_id_is_null_in_none_mode(client: TestClient) -> None:
+    import uuid
+
+    from sqlalchemy import select
+
+    from app.domain.models import AssetGroup
+
+    group = _create_group(client)
+
+    session_factory = client.app.state.session_factory
+    with session_factory() as db:
+        row = db.execute(
+            select(AssetGroup).where(AssetGroup.id == uuid.UUID(group["id"]))
+        ).scalar_one()
+        assert row.created_by_user_id is None

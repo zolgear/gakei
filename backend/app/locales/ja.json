@@ -223,6 +223,10 @@
     "notFound": "プロンプトセットが見つかりません",
     "itemNotFound": "プロンプトセットの項目が見つかりません"
   },
+  "assetGroups": {
+    "notFound": "グループが見つかりません",
+    "assetNotFound": "対象の画像が見つかりません: {ids}"
+  },
   "worker": {
     "interruptedByRestart": "サーバー再起動により中断されました",
     "providerNotRegistered": "provider={provider} は登録されていません"

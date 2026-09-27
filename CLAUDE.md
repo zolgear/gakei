@@ -61,8 +61,8 @@ docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:
 
 ## 構成
 
-- `backend/app/api/`: ルーター(capabilities、assets と lineage、runs、events(SSE)、prompt_sets、search、pricing、settings、comfyui、auth、users、about)。`/api/auth/*` 以外の全ルーターに `require_user` が掛かり、管理者設定の更新系だけ `require_admin`。
-- `backend/app/domain/`: モデル、スキーマ、サイズ検証、`AssetStore`(ローカル FS)、派生画像、`ingest`、Run の検証、系列グラフの探索、`embedded_meta.py`(ダウンロード PNG への系列情報の埋め込み。ADR-0014)、`generation_meta.py`(他ツールが埋め込んだ生成メタ情報の読み取り。ADR-0018)、`avatars.py`(ADR-0020)、`third_party.py`(ADR-0021)。
+- `backend/app/api/`: ルーター(capabilities、assets と lineage、runs、events(SSE)、prompt_sets、asset_groups(グループ。ADR-0022)、search、pricing、settings、comfyui、auth、users、about)。`/api/auth/*` 以外の全ルーターに `require_user` が掛かり、管理者設定の更新系だけ `require_admin`。
+- `backend/app/domain/`: モデル、スキーマ、サイズ検証、`AssetStore`(ローカル FS)、派生画像、`ingest`、Run の検証、系列グラフの探索、`embedded_meta.py`(ダウンロード PNG への系列情報の埋め込み。ADR-0014)、`generation_meta.py`(他ツールが埋め込んだ生成メタ情報の読み取り。ADR-0018)、`avatars.py`(ADR-0020)、`third_party.py`(ADR-0021)、`asset_groups.py`(グループ。証跡ではないので更新・論理削除できる。ADR-0022)。
 - `backend/app/providers/`: `ImageProvider`、`registry.py`(登録簿)、`openai_images.py`、`fake.py`、`comfyui/`(ローカル ComfyUI。ADR-0013。利用者向けには実験的)。パラメーターの定義は `openai_spec.py` に集約し、フォームはここから組み立てる。主プロバイダーは常に `openai`(`FAKE_PROVIDER=1` のときだけ `fake`。利用者向けの設定一覧には載せない)。接続先は `OPENAI_BASE_URL` または設定画面で変えられる(ADR-0017)。
 - `backend/app/worker/`: api プロセス内で動く runner(`run` 行がキュー)と、SSE 用のプロセス内 pub/sub。
 - `backend/app/auth/`(ADR-0019): `identity.py`(`CurrentUser`。none モードは暗黙の管理者)、`sessions.py`(`app_user` / `auth_session`)、`oidc.py`(Authlib のラッパー。テストは `get_oidc_client` を差し替える)、`deps.py`(`require_user` / `require_admin`)。Run と Asset に `created_by_user_id` を記録する。
@@ -73,7 +73,7 @@ docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:
 
 ## 設計の要点(詳細は各 ADR)
 
-- **データモデル(ADR-0003):** 画像の `asset` と 1 回の API 実行の `run` の二部グラフ(`asset → run_input → run → asset`)。Edit は複数入力なので DAG。`run`、`run_input`、`asset` の来歴列は追記のみで、更新してよいのは `run.status` などの状態遷移だけ。再実行は必ず新しい Run。削除は `deleted_at` の論理削除。`run.params` には API に送った値をそのまま保存する。系列の表示は `position = 0` の主たる親だけを辿る。
+- **データモデル(ADR-0003):** 画像の `asset` と 1 回の API 実行の `run` の二部グラフ(`asset → run_input → run → asset`)。Edit は複数入力なので DAG。`run`、`run_input`、`asset` の来歴列は追記のみで、更新してよいのは `run.status` などの状態遷移だけ。再実行は必ず新しい Run。削除は `deleted_at` の論理削除。`run.params` には API に送った値をそのまま保存する。系列の表示は `position = 0` の主たる親だけを辿る。 グループ(`asset_group`、ADR-0022)は利用者の分類で証跡ではないので、名前もメンバーも自由に変えられる。
 - **ジョブ(ADR-0005):** キューは `run` テーブルそのもの。`queued → running → succeeded | failed | canceled`。失敗も証跡として残す。進捗は SSE。途中経過画像は Asset にしない。
 - **プロバイダー(ADR-0005、0013):** `ImageProvider`(`capabilities()` と `execute()`)だけを共通にし、パラメーターは共通化せず UI は `capabilities()` からフォームを組み立てる。
 - **画像(ADR-0004):** base64 をブラウザにも DB にも渡さない。原本は sha256 で保存して不変、派生(thumb 512px / preview 2048px の WebP)を作り、配信は API 経由(`GET /api/assets/{id}/content?variant=`)。ビューアは `<img>` + パン/ズーム。

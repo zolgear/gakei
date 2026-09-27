@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
 from app.providers.base import ProviderCapabilities
@@ -89,6 +89,65 @@ class CreatedBy(BaseModel):
     avatar_url: str | None = None
 
 
+# -- Asset groups (ADR-0022) -----------------------------------------------
+# ストックの手動整理。証跡ではないので更新・論理削除ができる。名前は前後の空白を
+# 除いて1〜100文字(同名は禁止しない)。
+
+
+def _normalize_group_name(value: str) -> str:
+    stripped = value.strip()
+    if not (1 <= len(stripped) <= 100):
+        raise ValueError("name must be 1-100 characters after stripping whitespace")
+    return stripped
+
+
+class AssetGroupCreate(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        return _normalize_group_name(value)
+
+
+class AssetGroupUpdate(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        return _normalize_group_name(value)
+
+
+class AssetGroupRow(BaseModel):
+    """`GET /api/asset-groups` の1件。`member_count` / `cover_asset_id` は
+    削除済みでない Asset だけを数える(cover は `added_at` が最新のメンバー)。"""
+
+    id: uuid.UUID
+    name: str
+    member_count: int
+    cover_asset_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssetGroupListResponse(BaseModel):
+    items: list[AssetGroupRow] = Field(default_factory=list)
+
+
+class AssetGroupMembersRequest(BaseModel):
+    """`.../assets` と `.../assets/remove` の共通の本文。1〜200件。"""
+
+    asset_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class AssetGroupRef(BaseModel):
+    """`AssetDetail.groups` の1件。"""
+
+    id: uuid.UUID
+    name: str
+
+
 # -- Asset ---------------------------------------------------------------
 
 
@@ -165,6 +224,9 @@ class AssetDetail(AssetSummary):
     # ユーザー(ADR-0019。runner が `run.created_by_user_id` をそのまま引き継ぐ)。
     # `none` モードは常に null。
     created_by: CreatedBy | None = None
+    # 所属しているグループ(ADR-0022)。名前の昇順、削除済みグループは含めない。
+    # `AssetSummary` には足さない(一覧が重くなるため)。
+    groups: list[AssetGroupRef] = Field(default_factory=list)
 
 
 class AssetUploadResponse(AssetDetail):

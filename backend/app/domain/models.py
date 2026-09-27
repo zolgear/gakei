@@ -304,6 +304,43 @@ class PromptSetItem(Base):
     prompt_set: Mapped[PromptSet] = relationship("PromptSet", back_populates="items")
 
 
+class AssetGroup(Base):
+    """グループ(ストックの手動整理。ADR-0022)。証跡ではないので更新・論理削除ができる。
+
+    メンバーはフラットな多対多(`AssetGroupMember`)。階層・入れ子・並べ替えは持たない。
+    表紙画像は列に持たず、一覧の応答でメンバーの `added_at` が最新のものから都度求める。
+    """
+
+    __tablename__ = "asset_group"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 作成したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
+    # (INSERT 時に設定し、UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class AssetGroupMember(Base):
+    """グループのメンバー(多対多)。証跡ではないので、外すときは物理削除する
+    (いつ誰が外したかは残らない。ADR-0022)。
+    """
+
+    __tablename__ = "asset_group_member"
+
+    asset_group_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("asset_group.id"), primary_key=True
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("asset.id"), primary_key=True, index=True
+    )
+    added_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
 class AppSetting(Base):
     """`DATA_DIR` ごとの画面設定(キーと値)。証跡ではないので更新してよい(ADR-0013 7章)。
 

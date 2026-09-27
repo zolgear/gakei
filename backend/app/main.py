@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import about as about_api
+from app.api import asset_groups as asset_groups_api
 from app.api import assets as assets_api
 from app.api import auth as auth_api
 from app.api import capabilities as capabilities_api
@@ -247,6 +248,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(capabilities_api.router, dependencies=auth_dep)
     app.include_router(comfyui_api.router, dependencies=auth_dep)
     app.include_router(assets_api.router, dependencies=auth_dep)
+    app.include_router(asset_groups_api.router, dependencies=auth_dep)
     app.include_router(runs_api.router, dependencies=auth_dep)
     app.include_router(events_api.router, dependencies=auth_dep)
     app.include_router(prompt_sets_api.router, dependencies=auth_dep)
