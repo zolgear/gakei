@@ -43,8 +43,8 @@
 .chevron {
   flex-shrink: 0;
   width: 12px;
-  font-size: 10px;
-  color: var(--color-text-faint);
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
 .name {
@@ -152,6 +152,8 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  /* 節の中身は開閉の印(12px)と隙間(6px)の分だけ字下げし、見出しの名前と左端をそろえる。 */
+  padding-left: 18px;
 }
 
 .grid {
