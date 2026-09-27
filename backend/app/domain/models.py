@@ -216,6 +216,13 @@ class Run(Base):
         Uuid, ForeignKey("app_user.id"), nullable=True, index=True
     )
 
+    # 生成時に指定したグループ(ADR-0022 2章)。Run の作成時に一度だけ書き、UPDATE しない
+    # (ADR-0003 の追記のみの規則に反しない)。成功時に worker が出力 Asset をこのグループに
+    # 入れる。グループが実行までに削除されていたら入れずに成功させる。
+    asset_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("asset_group.id"), nullable=True, index=True
+    )
+
     queued_at: Mapped[datetime] = mapped_column(
         UtcDateTime(), nullable=False, default=_utcnow, index=True
     )
@@ -302,6 +309,53 @@ class PromptSetItem(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
     prompt_set: Mapped[PromptSet] = relationship("PromptSet", back_populates="items")
+
+
+class AssetGroup(Base):
+    """グループ(ストックの手動整理。ADR-0022)。証跡ではないので更新・論理削除ができる。
+
+    メンバーは `AssetGroupMember`。1 つの Asset が属するグループは 1 つだけ
+    (2026-09-28 に多対多から変更)。階層・入れ子は持たない。
+    並び順は利用者が決める(`position`。2026-09-28 追加)。
+    表紙画像は列に持たず、一覧の応答でメンバーの `added_at` が最新のものから都度求める。
+    """
+
+    __tablename__ = "asset_group"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 利用者が決める並び順(小さいほど上。ADR-0022 2章)。一覧は `position ASC, created_at DESC`。
+    # 新しいグループは既存の最小値 − 1 で先頭に入り、並べ替えで 0 から振り直す。
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 作成したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
+    # (INSERT 時に設定し、UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class AssetGroupMember(Base):
+    """グループのメンバー。証跡ではないので、外すときは物理削除する
+    (いつ誰が外したかは残らない。ADR-0022)。
+
+    1 つの Asset が属するグループは 1 つだけ(2026-09-28 に多対多から変更)。
+    グループに入れる操作は常に「移す」で、既存の行を消してから入れる
+    (削除済みグループに残った行も含む。`app/domain/asset_groups.add_members`)。
+    """
+
+    __tablename__ = "asset_group_member"
+    # 1 つの Asset は 1 つのグループにだけ入る(ADR-0022 2章。マイグレーション 0015)。
+    # 主キー (asset_group_id, asset_id) は残し、asset_id 単独の一意索引で所属を 1 行に限る。
+    __table_args__ = (Index("ux_asset_group_member_asset_id", "asset_id", unique=True),)
+
+    asset_group_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("asset_group.id"), primary_key=True
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    added_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class AppSetting(Base):

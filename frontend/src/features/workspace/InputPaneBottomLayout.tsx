@@ -16,6 +16,8 @@ export interface InputPaneSlots {
   notices: ReactNode
   modelField: ReactNode
   paramFields: ReactNode
+  /** 出力を入れるグループ(ADR-0022)。モデルの直下に同じ幅で置く。 */
+  groupField: ReactNode
   otherParams: ReactNode
 }
 
@@ -27,6 +29,7 @@ export function InputPaneBottomLayout({
   notices,
   modelField,
   paramFields,
+  groupField,
   otherParams,
 }: InputPaneSlots) {
   return (
@@ -47,6 +50,7 @@ export function InputPaneBottomLayout({
         <div className={styles.settingsColumn}>
           <div className={styles.settingsGrid}>
             {modelField}
+            {groupField}
             {paramFields}
             {otherParams}
           </div>

@@ -25,6 +25,11 @@ interface StoredRunFormPayloadV1 {
   prompt: string
   params: Record<string, string | number | boolean>
   inputs: RunInputItem[]
+  /**
+   * ADR-0022 で追加。provider と同じ理由でバージョンは上げず optional にする(無い・文字列で
+   * なければ null=グループなし。存在確認は呼び出し側(useRunFormLogic)がグループ一覧で行う)。
+   */
+  assetGroupId?: string | null
 }
 
 function isRunInputItem(value: unknown): value is RunInputItem {
@@ -79,6 +84,7 @@ export function parseStoredRunFormState(raw: string | null): RunFormState | null
     prompt: payload.prompt,
     params: payload.params,
     inputs: payload.inputs,
+    assetGroupId: typeof payload.assetGroupId === 'string' ? payload.assetGroupId : null,
   }
 }
 
@@ -91,6 +97,7 @@ export function serializeRunFormState(state: RunFormState): string {
     prompt: state.prompt,
     params: state.params,
     inputs: state.inputs,
+    assetGroupId: state.assetGroupId,
   }
   return JSON.stringify(payload)
 }

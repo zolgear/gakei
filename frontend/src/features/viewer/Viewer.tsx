@@ -24,6 +24,7 @@ import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/
 import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from '../lineage/EmbeddedMetaSection'
 import { OriginRecipeSection } from '../lineage/OriginRecipeSection'
+import { AssetGroupsSection } from './AssetGroupsSection'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
 import styles from './Viewer.module.css'
@@ -306,6 +307,7 @@ export function Viewer({ assetId }: ViewerProps) {
 
             {asset.origin && <OriginRecipeSection origin={asset.origin} />}
             {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
+            <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
 
             <div className={styles.actions}>
               <a

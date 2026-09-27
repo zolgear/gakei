@@ -17,9 +17,11 @@ from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_progress_bus, get_registry, get_runner, get_session, get_settings
 from app.domain import api_key as api_key_domain
+from app.domain.asset_groups import get_active_group_or_none
 from app.domain.models import Asset, Run, RunInput, RunInputRole, RunStatus
 from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
 from app.domain.run_views import (
+    bulk_asset_groups,
     bulk_descendant_run_counts,
     bulk_input_summary,
     bulk_output_refs,
@@ -53,9 +55,16 @@ def _to_summary(db: Session, run: Run) -> RunSummary:
     input_count, primary_parent_asset_id = bulk_input_summary(db, [run.id])[run.id]
     descendant_run_count = bulk_descendant_run_counts(db, [run.id])[run.id]
     created_by = bulk_users(db, [run.created_by_user_id]).get(run.created_by_user_id)
+    asset_group = bulk_asset_groups(db, [run.asset_group_id]).get(run.asset_group_id)
     return RunSummary(
         **run_summary_fields(
-            run, outputs, input_count, primary_parent_asset_id, descendant_run_count, created_by
+            run,
+            outputs,
+            input_count,
+            primary_parent_asset_id,
+            descendant_run_count,
+            created_by,
+            asset_group,
         )
     )
 
@@ -73,9 +82,16 @@ def _to_detail(db: Session, run: Run) -> RunDetail:
     )
     descendant_run_count = bulk_descendant_run_counts(db, [run.id])[run.id]
     created_by = bulk_users(db, [run.created_by_user_id]).get(run.created_by_user_id)
+    asset_group = bulk_asset_groups(db, [run.asset_group_id]).get(run.asset_group_id)
     return RunDetail(
         **run_summary_fields(
-            run, outputs, input_count, primary_parent_asset_id, descendant_run_count, created_by
+            run,
+            outputs,
+            input_count,
+            primary_parent_asset_id,
+            descendant_run_count,
+            created_by,
+            asset_group,
         ),
         deployment=run.deployment,
         provider_request_id=run.provider_request_id,
@@ -118,6 +134,13 @@ def create_run(
             status_code=409,
             detail=unavailable_reason or t("runs.providerUnavailable", label=provider.label),
         )
+
+    # ADR-0022: 出力を入れるグループ。存在しない・削除済みなら Run を作らずに 404。
+    if (
+        body.asset_group_id is not None
+        and get_active_group_or_none(db, body.asset_group_id) is None
+    ):
+        raise HTTPException(status_code=404, detail=t("assetGroups.notFound"))
 
     caps = provider.capabilities()
 
@@ -173,6 +196,7 @@ def create_run(
         params=params,
         status=RunStatus.QUEUED,
         created_by_user_id=user.id,
+        asset_group_id=body.asset_group_id,
     )
     db.add(run)
     db.flush()
@@ -218,6 +242,7 @@ def list_runs(
     inputs_map = bulk_input_summary(db, run_ids)
     descendant_map = bulk_descendant_run_counts(db, run_ids)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
+    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows])
     items = [
         RunSummary(
             **run_summary_fields(
@@ -226,6 +251,7 @@ def list_runs(
                 *inputs_map[r.id],
                 descendant_map[r.id],
                 users_map.get(r.created_by_user_id),
+                groups_map.get(r.asset_group_id),
             )
         )
         for r in rows

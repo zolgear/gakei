@@ -1,23 +1,26 @@
 /**
- * サイドバーの「ストック」パネル。`GET /api/assets` を kind で絞り込んで2列グリッド表示する。
- * タイルクリックでビューアへ、タイル上の「+」で入力に追加する(常に追加のみ。置き換えの
- * 確認はビューア/履歴カードの「入力に使う」だけで行う。マスクは追加不可)。
- * 検索・ドラッグ連携は ADR-0009 により作らない。
+ * サイドバーの「ストック」パネル。ADR-0022 4章により、グループは絞り込みではなく「入れもの」
+ * として見せる: パネルは先頭の「グループなし」の節と、続く各グループの節(利用者が決めた順。
+ * 見出しのドラッグか「⋯」の「上へ / 下へ」で並べ替える)に分かれ、各節が既存の 2 列のタイルを
+ * 持つ(`GroupSection`)。kind のチップは全節に共通の
+ * 絞り込みとして残す。新しいグループは「グループなし」の見出し行の「+」から作る(グループの
+ * 並びの起点に置く。パネルのヘッダーには置かない)。
  *
- * 追加読み込みは末尾の番兵要素を IntersectionObserver で監視し、見えたら自動で次ページを
- * 取りに行く(手動の「さらに読み込む」ボタンは無い)。「画像を追加」はグリッド末尾ではなく、
- * 種別チップと一緒にパネル上部の sticky ヘッダーに常時表示する(生成を続けてもグリッドに
- * 押し流されないように)。
+ * タイルクリックでビューアへ、タイル上の「+」で入力に追加する(常に追加のみ。置き換えの
+ * 確認はビューア/履歴カードの「入力に使う」だけで行う。マスクは追加不可)。タイルを節の
+ * 見出しへドラッグするとそのグループへ移る(所属は 1 つだけ)。タッチ環境と一括操作向けに選択モードも持つ。
+ * 「画像を追加」と種別チップはパネル上部の sticky ヘッダーに常時表示する(生成を続けても
+ * グリッドに押し流されないように)。
  */
-import { useEffect, useRef, useState, type DragEvent } from 'react'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useId, useRef, useState, type DragEvent } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router'
 import {
   ApiError,
   createAsset,
   deleteAsset,
   getCapabilities,
-  listAssets,
+  removeAssetsFromGroup,
   restoreAsset,
   type AssetSummary,
   type AssetUploadResponse,
@@ -32,31 +35,23 @@ import { isStudioPath, nodeTargetPath } from '../lineage/nodeTargetPath'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ToastHost, useToast } from '../../components/Toast'
 import { fmt, useI18n, type Messages } from '../../i18n'
-import { shouldAutoFetchNextPage } from './sentinel'
+import { AddToGroupPopover } from './groups/AddToGroupPopover'
+import { invalidateAssetGroupQueries, useAssetGroups } from './groups/assetGroupQueries'
+import { GAKEI_GROUP_ID_DATA_TYPE } from './groups/groupOrder'
+import { useGroupReorder } from './groups/useGroupReorder'
+import {
+  isSectionOpen,
+  loadGroupOpenMap,
+  saveGroupOpenMap,
+  withSectionOpen,
+  type GroupOpenMap,
+} from './groups/groupOpenStorage'
+import { GroupSection, type StockTileActions } from './GroupSection'
+import { UNGROUPED_SECTION_KEY, selectedByGroup, toggleSelection, withoutSection } from './stockSelection'
+import type { StockKindFilter } from './stockQueryKey'
 import styles from './StockPanel.module.css'
 
-// jsdom 等、IntersectionObserver を持たない環境向けのフォールバック判定。この場合は番兵の
-// 自動監視をやめ、従来通りクリックで読み込む「さらに読み込む」ボタンを出す。
-const supportsIntersectionObserver = typeof IntersectionObserver !== 'undefined'
-
-// 番兵がこの余白だけ手前(下方向)に来た時点で先読みを始める。
-const SENTINEL_ROOT_MARGIN = '0px 0px 300px 0px'
-
-function TrashIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M3 4.5h10M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M4.5 4.5v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-8M6.5 7.5v3.5M9.5 7.5v3.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-type KindFilter = 'all' | 'generated' | 'upload' | 'sketch' | 'mask'
+type KindFilter = StockKindFilter
 
 function kindLabels(t: Messages): { id: KindFilter; label: string }[] {
   return [
@@ -68,10 +63,6 @@ function kindLabels(t: Messages): { id: KindFilter; label: string }[] {
   ]
 }
 
-function extFromMime(mime: string): string {
-  return mime.split('/')[1] ?? mime
-}
-
 export function StockPanel() {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -81,11 +72,16 @@ export function StockPanel() {
   const queryClient = useQueryClient()
   const { formState, setFormState } = useRunFormContext()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  // observer の root(スクロールコンテナ)。パネル自身が overflow-y: auto。
+  // 「グループなし」の番兵の observer の root(スクロールコンテナ)。パネル自身が overflow-y: auto。
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   const [kind, setKind] = useState<KindFilter>('all')
+  const kindHeadingId = useId()
+  // 節ごとの開閉。初期値は localStorage から一度だけ読む(effect で読み直さない)。
+  const [openMap, setOpenMap] = useState<GroupOpenMap>(loadGroupOpenMap)
+  // 選択モード(ADR-0022 4章)。選択は「Asset id → 選んだ節のキー」の Map(`stockSelection.ts`)。
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selected, setSelected] = useState<Map<string, string>>(new Map())
   const [message, setMessage] = useState<string | null>(null)
   // アップロードが既存 Asset に一致したとき(ADR-0014)の案内。エラーとは別枠で出す。
   const [notice, setNotice] = useState<string | null>(null)
@@ -98,45 +94,47 @@ export function StockPanel() {
   const maxInputImageBytes =
     findProvider(capsQuery.data, formState.provider)?.max_input_image_bytes ?? 50 * 1024 * 1024
 
-  const assetsQuery = useInfiniteQuery({
-    queryKey: ['assets', kind],
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      listAssets({ limit: 30, cursor: pageParam, kind: kind === 'all' ? undefined : kind }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  const groupsQuery = useAssetGroups()
+  const groups = groupsQuery.data?.items ?? []
+  const groupReorder = useGroupReorder(groups, setMessage)
+
+  // 種別の絞り込みが変わったら選択をリセットする(レンダー中に前回値と比較する。React 公式の
+  // 「prop の変化に応じて state をリセットする」パターンで、useEffect を使わない)。
+  const [selectionKind, setSelectionKind] = useState(kind)
+  if (selectionKind !== kind) {
+    setSelectionKind(kind)
+    setSelected(new Map())
+  }
+
+  const selectedIds = [...selected.keys()]
+  const selectedGroups = selectedByGroup(selected)
+
+  function handleToggleSelectionMode() {
+    setSelectionMode((prev) => !prev)
+    setSelected(new Map())
+  }
+
+  function toggleSectionOpen(sectionKey: string) {
+    const next = withSectionOpen(openMap, sectionKey, !isSectionOpen(openMap, sectionKey))
+    setOpenMap(next)
+    saveGroupOpenMap(next)
+  }
+
+  // 選んだタイルを、それぞれ選んだ節のグループから外す(「グループなし」の節の選択には効かない)。
+  // 選んだ後に別のグループへ移っていても、サーバーは入っていないものを無視するので害はない。
+  const removeFromGroupsMutation = useMutation({
+    mutationFn: (byGroup: Map<string, string[]>) =>
+      Promise.all([...byGroup].map(([groupId, assetIds]) => removeAssetsFromGroup(groupId, assetIds))),
+    onSuccess: (_data, byGroup) => {
+      invalidateAssetGroupQueries(queryClient, [...byGroup.values()].flat())
+      setSelected(new Map())
+    },
+    onError: (err: unknown) => {
+      // 一部だけ成功している可能性があるので、失敗しても一覧は作り直す。
+      invalidateAssetGroupQueries(queryClient)
+      setMessage(err instanceof ApiError ? err.message : t.stock.groups.removeFailed)
+    },
   })
-  const assets = assetsQuery.data?.pages.flatMap((page) => page.items) ?? []
-  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = assetsQuery
-
-  // 番兵がパネル内に見えている間、次ページを継ぎ足す。isFetchingNextPage を依存に入れて
-  // observer を張り直すことで、フェッチが終わった直後にまだ番兵が見えていれば(1ページ目が
-  // パネルを埋めない場合など)続けて次ページを取りに行く。取得が失敗しているときは、ここでは
-  // 監視を止めて自動再試行を繰り返さない(再読み込みはボタンから明示的に行う)。
-  useEffect(() => {
-    if (!supportsIntersectionObserver) return
-    if (!hasNextPage || isFetchingNextPage || isFetchNextPageError) return
-    const sentinel = sentinelRef.current
-    const root = panelRef.current
-    if (!sentinel || !root) return
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (
-          shouldAutoFetchNextPage({
-            isIntersecting: entry?.isIntersecting ?? false,
-            hasNextPage,
-            isFetchingNextPage,
-            isFetchNextPageError,
-          })
-        ) {
-          fetchNextPage()
-        }
-      },
-      { root, rootMargin: SENTINEL_ROOT_MARGIN },
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage])
 
   const uploadMutation = useMutation({
     mutationFn: async (files: File[]) => {
@@ -184,7 +182,8 @@ export function StockPanel() {
       setDeleteTarget(null)
       setMessage(null)
       setNotice(null)
-      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      // グループの件数も変わるので、グループ一覧ごと作り直す。
+      invalidateAssetGroupQueries(queryClient, [assetId])
       toast.show({
         message: t.stock.deletedToast,
         actionLabel: t.stock.undo,
@@ -199,8 +198,8 @@ export function StockPanel() {
 
   const restoreMutation = useMutation({
     mutationFn: (assetId: string) => restoreAsset(assetId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assets'] })
+    onSuccess: (_data, assetId) => {
+      invalidateAssetGroupQueries(queryClient, [assetId])
     },
     onError: (err: unknown) => {
       setMessage(err instanceof ApiError ? err.message : t.stock.restoreFailed)
@@ -213,6 +212,8 @@ export function StockPanel() {
   }
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    // グループの節の並べ替えはアップロードの受け口にしない(見出し行が自分で受ける)。
+    if (Array.from(e.dataTransfer.types).includes(GAKEI_GROUP_ID_DATA_TYPE)) return
     e.preventDefault()
     setIsDragOver(true)
   }
@@ -256,6 +257,16 @@ export function StockPanel() {
     navigate('/studio')
   }
 
+  const tileActions: StockTileActions = {
+    inStudio,
+    selectionMode,
+    selected,
+    onToggleSelect: (sectionKey, asset) => setSelected((prev) => toggleSelection(prev, sectionKey, asset.id)),
+    onOpen: (asset) => navigate(nodeTargetPath({ id: asset.id, type: 'asset' }, location.pathname)),
+    onUseAsInput: handleUseAsInput,
+    onDelete: setDeleteTarget,
+  }
+
   return (
     <div
       className={styles.panel}
@@ -267,23 +278,34 @@ export function StockPanel() {
       <div className={styles.header}>
         <div className={styles.headerRow}>
           <h2 className={styles.heading}>{t.stock.heading}</h2>
-          <div className={styles.count}>
-            {assetsQuery.isLoading ? t.stock.countLoading : fmt(t.stock.countLabel, { count: assets.length })}
-          </div>
+          <button
+            type="button"
+            className={styles.headerButton}
+            data-active={selectionMode}
+            onClick={handleToggleSelectionMode}
+          >
+            {selectionMode ? t.stock.selection.done : t.stock.selection.enter}
+          </button>
         </div>
 
-        <div className={styles.chips}>
-          {kindLabels(t).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={styles.chip}
-              data-active={kind === item.id}
-              onClick={() => setKind(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
+        {/* グループの節の見出しと見分けがつくよう、kind のチップ行の上に見出しを付ける(ADR-0022 4章)。 */}
+        <div className={styles.kindFilter} role="group" aria-labelledby={kindHeadingId}>
+          <span className={styles.heading} id={kindHeadingId}>
+            {t.stock.kindHeading}
+          </span>
+          <div className={styles.chips}>
+            {kindLabels(t).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={styles.chip}
+                data-active={kind === item.id}
+                onClick={() => setKind(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {message && <p className={styles.message}>{message}</p>}
@@ -318,80 +340,63 @@ export function StockPanel() {
         />
       </div>
 
-      {assets.length === 0 && !assetsQuery.isLoading ? (
-        <p className={styles.emptyState}>{t.stock.emptyState}</p>
-      ) : (
-        <div className={styles.grid}>
-          {assets.map((asset) => (
-            <div key={asset.id} className={styles.tile}>
-              <button
-                type="button"
-                className={styles.tileImageButton}
-                aria-label={inStudio ? t.stock.showInResultArea : t.stock.openInViewer}
-                onClick={() => navigate(nodeTargetPath({ id: asset.id, type: 'asset' }, location.pathname))}
-              >
-                <img
-                  className={`${styles.tileImage} checkerboard`}
-                  src={assetUrl(asset.id, 'thumb')}
-                  alt=""
-                  // mask は入力画像として追加できないので、ドラッグ元にもしない
-                  // (「+」ボタンを出していないのと同じ条件)。
-                  draggable={asset.kind !== 'mask'}
-                  onDragStart={
-                    asset.kind !== 'mask'
-                      ? (e) => {
-                          e.dataTransfer.setData(GAKEI_ASSET_ID_DATA_TYPE, asset.id)
-                          e.dataTransfer.effectAllowed = 'copy'
-                        }
-                      : undefined
-                  }
-                />
-              </button>
-              {asset.kind !== 'mask' && (
-                <button
-                  type="button"
-                  className={styles.addButton}
-                  aria-label={t.stock.useAsInput}
-                  onClick={() => handleUseAsInput(asset)}
-                >
-                  +
-                </button>
-              )}
-              <button
-                type="button"
-                className={styles.deleteButton}
-                aria-label={t.stock.delete}
-                onClick={() => setDeleteTarget(asset)}
-              >
-                <TrashIcon />
-              </button>
-              <span className={styles.caption}>
-                {asset.width}×{asset.height} · {extFromMime(asset.mime)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* 「グループなし」を先頭に置き、その見出し行の「+」で作ったグループが直後に並ぶ。 */}
+      <GroupSection
+        group={null}
+        kind={kind}
+        open={isSectionOpen(openMap, UNGROUPED_SECTION_KEY)}
+        onToggleOpen={() => toggleSectionOpen(UNGROUPED_SECTION_KEY)}
+        scrollRootRef={panelRef}
+        tileActions={tileActions}
+        noGroupsExist={groupsQuery.isSuccess && groups.length === 0}
+        onError={setMessage}
+      />
+      {groups.map((group) => (
+        <GroupSection
+          key={group.id}
+          group={group}
+          kind={kind}
+          open={isSectionOpen(openMap, group.id)}
+          onToggleOpen={() => toggleSectionOpen(group.id)}
+          scrollRootRef={panelRef}
+          tileActions={tileActions}
+          onError={setMessage}
+          onGroupDeleted={(groupId) => setSelected((prev) => withoutSection(prev, groupId))}
+          reorder={groupReorder}
+        />
+      ))}
 
-      {hasNextPage && (
-        <div ref={sentinelRef} className={styles.sentinel}>
-          {!supportsIntersectionObserver ? (
-            // IntersectionObserver が無い環境向けのフォールバック(従来のボタン)。
+      {selectionMode && (
+        <div className={styles.selectionFooter}>
+          <span className={styles.selectionCount}>
+            {fmt(t.stock.selection.count, { count: selectedIds.length })}
+          </span>
+          <div className={styles.selectionActions}>
+            <AddToGroupPopover
+              assetIds={selectedIds}
+              triggerLabel={t.stock.groups.moveTo}
+              triggerClassName={styles.selectionButton}
+              disabled={selectedIds.length === 0}
+              placement="up"
+              onMoved={() => setSelected(new Map())}
+            />
             <button
               type="button"
-              className={styles.sentinelButton}
-              onClick={() => fetchNextPage()}
-              disabled={isFetchingNextPage}
+              className={styles.selectionButton}
+              disabled={selectedGroups.size === 0 || removeFromGroupsMutation.isPending}
+              onClick={() => removeFromGroupsMutation.mutate(selectedGroups)}
             >
-              {isFetchingNextPage ? t.stock.loadingMore : t.stock.loadMore}
+              {t.stock.groups.removeFromGroups}
             </button>
-          ) : isFetchNextPageError ? (
-            <button type="button" className={styles.sentinelButton} onClick={() => fetchNextPage()}>
-              {t.stock.retryLoadMore}
+            <button
+              type="button"
+              className={styles.selectionButton}
+              disabled={selected.size === 0}
+              onClick={() => setSelected(new Map())}
+            >
+              {t.stock.selection.clear}
             </button>
-          ) : isFetchingNextPage ? (
-            <span className={styles.sentinelLoading}>{t.stock.loadingMore}</span>
-          ) : null}
+          </div>
         </div>
       )}
 

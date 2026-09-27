@@ -157,6 +157,8 @@ export function HistoryCard({ run }: HistoryCardProps) {
           role: i.role,
           position: i.position,
         })),
+        // 削除済みのグループなら null(=「なし」)で返ってくる。
+        assetGroupId: detail.asset_group?.id ?? null,
       })
       navigate('/studio')
     },

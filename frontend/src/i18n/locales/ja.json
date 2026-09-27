@@ -701,6 +701,10 @@
       "droppedParamsInputs": "{names} は現在の入力では使えないため未指定に戻しました",
       "submitFailedDefault": "実行の開始に失敗しました",
       "listSeparator": "、"
+    },
+    "group": {
+      "label": "グループ",
+      "none": "なし"
     }
   },
   "sketch": {
@@ -802,7 +806,14 @@
     "zoomInTitle": "拡大(10%)",
     "fitToScreen": "画面に合わせる",
     "actualSize": "等倍(100%)",
-    "imageAlt": "生成結果"
+    "imageAlt": "生成結果",
+    "groups": {
+      "heading": "グループ",
+      "change": "変更",
+      "assign": "グループに入れる",
+      "remove": "「{name}」から外す",
+      "empty": "グループに入っていません"
+    }
   },
   "compare": {
     "back": "← 戻る",
@@ -917,11 +928,7 @@
   },
   "stock": {
     "heading": "ストック",
-    "countLoading": "...",
-    "countLabel": {
-      "one": "{count} 件",
-      "other": "{count} 件"
-    },
+    "kindHeading": "種類",
     "kindAll": "すべて",
     "kindGenerated": "生成",
     "kindUpload": "アップロード",
@@ -944,7 +951,47 @@
     "restoreFailed": "復元に失敗しました",
     "deletedToast": "画像を削除しました",
     "undo": "元に戻す",
-    "maxInputImages": "入力画像の上限({max}枚)に達しています"
+    "maxInputImages": "入力画像の上限({max}枚)に達しています",
+    "groups": {
+      "new": "新しいグループ…",
+      "newButton": "新しいグループ",
+      "newPlaceholder": "グループ名",
+      "rename": "名前を変更",
+      "delete": "削除",
+      "deleteConfirm": "グループ「{name}」を削除します。画像自体は削除されません。",
+      "menu": "「{name}」の操作",
+      "memberCount": {
+        "one": "{count} 枚",
+        "other": "{count} 枚"
+      },
+      "moveTo": "グループに移す",
+      "removeFromThis": "このグループから外す",
+      "removeFromGroups": "グループから外す",
+      "ungrouped": "グループなし",
+      "ungroupedEmpty": "グループに入っていない画像はありません",
+      "dropHere": "ここに画像をドロップ",
+      "showMore": "さらに表示",
+      "noGroups": "グループがありません",
+      "createFailed": "グループの作成に失敗しました",
+      "renameFailed": "名前の変更に失敗しました",
+      "deleteFailed": "グループの削除に失敗しました",
+      "moveFailed": "グループへの移動に失敗しました",
+      "removeFailed": "グループから外すのに失敗しました",
+      "moveUp": "上へ移動",
+      "moveDown": "下へ移動",
+      "dragToReorder": "ドラッグで並べ替え",
+      "reorderFailed": "並べ替えに失敗しました"
+    },
+    "selection": {
+      "enter": "選択",
+      "done": "完了",
+      "count": {
+        "one": "{count} 枚を選択中",
+        "other": "{count} 枚を選択中"
+      },
+      "clear": "選択を解除",
+      "toggleTile": "選択を切り替える"
+    }
   },
   "comfyui": {
     "experimentalBadge": "実験的",

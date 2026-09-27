@@ -25,6 +25,13 @@
   min-width: 0;
 }
 
+/* モデルとその直下のグループは節の間隔(14px)より詰めて、設定グリッドの行間(8px)に揃える。 */
+.modelGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .prompt {
   display: flex;
   flex-direction: column;

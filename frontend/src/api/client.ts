@@ -49,6 +49,12 @@ export type LineageEdge = components['schemas']['LineageEdge']
 export type LineageAssetInfo = components['schemas']['LineageAssetInfo']
 export type LineageRunInfo = components['schemas']['LineageRunInfo']
 
+// -- グループ(ADR-0022) ------------------------------------------------------
+
+export type AssetGroupRow = components['schemas']['AssetGroupRow']
+export type AssetGroupRef = components['schemas']['AssetGroupRef']
+export type AssetGroupListResponse = components['schemas']['AssetGroupListResponse']
+
 export type PromptSetResponse = components['schemas']['PromptSetResponse']
 export type PromptSetItemResponse = components['schemas']['PromptSetItemResponse']
 export type PromptSetListResponse = components['schemas']['PromptSetListResponse']
@@ -148,10 +154,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
-function toQuery(params: Record<string, string | number | undefined | null>): string {
+function toQuery(params: Record<string, string | number | boolean | undefined | null>): string {
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === null || value === '') continue
+    // 真偽値のフラグ(`ungrouped` など)は true のときだけ送る(false は既定と同じなので省く)。
+    if (value === undefined || value === null || value === '' || value === false) continue
     qs.set(key, String(value))
   }
   const s = qs.toString()
@@ -258,6 +265,7 @@ export function restoreAsset(assetId: string): Promise<AssetDetail> {
   return request(`/api/assets/${assetId}/restore`, { method: 'POST' })
 }
 
+/** `params.group_id` を渡すと、そのグループのメンバーだけに絞る(ADR-0022)。`kind` と併用できる。 */
 export function listAssets(
   params: operations['list_assets']['parameters']['query'] = {},
 ): Promise<components['schemas']['AssetListResponse']> {
@@ -298,6 +306,65 @@ export function getAssetLineage(
   params: operations['get_asset_lineage']['parameters']['query'] = {},
 ): Promise<AssetLineageResponse> {
   return request(`/api/assets/${assetId}/lineage${toQuery(params)}`)
+}
+
+// -- グループ(ADR-0022) ------------------------------------------------------
+// 階層なしのフラットなグループ。証跡ではないので更新・削除は自由(ADR-0003 の対象外)。
+
+/** 削除済みでないグループを利用者が決めた順(`position` 昇順)で全件。ページングなし(prompt-sets と同じ)。 */
+export function listAssetGroups(): Promise<AssetGroupListResponse> {
+  return request('/api/asset-groups')
+}
+
+export function createAssetGroup(name: string): Promise<AssetGroupRow> {
+  return request('/api/asset-groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function updateAssetGroup(groupId: string, name: string): Promise<AssetGroupRow> {
+  return request(`/api/asset-groups/${groupId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+/**
+ * 並べ替え。削除済みでない全グループの id を望む順に渡す(過不足・重複があれば 422)。
+ * 並べ替え後の一覧を返す。
+ */
+export function reorderAssetGroups(groupIds: string[]): Promise<AssetGroupListResponse> {
+  return request('/api/asset-groups/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ group_ids: groupIds }),
+  })
+}
+
+/** 論理削除。メンバー行は残るが、一覧・絞り込みからは消える。 */
+export function deleteAssetGroup(groupId: string): Promise<void> {
+  return request(`/api/asset-groups/${groupId}`, { method: 'DELETE' })
+}
+
+/** そのグループへ移す(別のグループに入っていれば外してから入れる。ADR-0022)。既に入っているものは無視される。1〜200件。 */
+export function addAssetsToGroup(groupId: string, assetIds: string[]): Promise<AssetGroupRow> {
+  return request(`/api/asset-groups/${groupId}/assets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ asset_ids: assetIds }),
+  })
+}
+
+/** 入っていないものは無視される。 */
+export function removeAssetsFromGroup(groupId: string, assetIds: string[]): Promise<AssetGroupRow> {
+  return request(`/api/asset-groups/${groupId}/assets/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ asset_ids: assetIds }),
+  })
 }
 
 // -- プロンプトセット -------------------------------------------------------

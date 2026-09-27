@@ -14,9 +14,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.avatars import avatar_url
-from app.domain.models import AppUser, Asset, Run, RunInput, RunInputRole
+from app.domain.models import AppUser, Asset, AssetGroup, Run, RunInput, RunInputRole
 from app.domain.pricing import cost_from_usage
-from app.domain.schemas import CreatedBy, RunOutputRef
+from app.domain.schemas import AssetGroupRef, CreatedBy, RunOutputRef
 
 
 def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[RunOutputRef]]:
@@ -99,6 +99,24 @@ def bulk_users(db: Session, user_ids: list[uuid.UUID | None]) -> dict[uuid.UUID,
     }
 
 
+def bulk_asset_groups(
+    db: Session, group_ids: list[uuid.UUID | None]
+) -> dict[uuid.UUID, AssetGroupRef]:
+    """`run.asset_group_id` ごとの `AssetGroupRef` を1つの IN 句でまとめて取る(ADR-0022、
+    N+1 回避)。削除済みのグループは含めない(呼び出し側では null になる)。
+    グループ指定のある Run がページに無ければクエリを発行しない。
+    """
+    ids = {gid for gid in group_ids if gid is not None}
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(AssetGroup.id, AssetGroup.name).where(
+            AssetGroup.id.in_(ids), AssetGroup.deleted_at.is_(None)
+        )
+    ).all()
+    return {gid: AssetGroupRef(id=gid, name=name) for gid, name in rows}
+
+
 def model_label_from_params(params: dict[str, Any] | None) -> str | None:
     """`run.params["comfyui_workflow"]["name"]` があればそれ、無ければ None(ADR-0013)。
     ComfyUI の Run は `model` がワークフローの id なので、画面にはこの名前を出す。
@@ -120,9 +138,11 @@ def run_summary_fields(
     primary_parent_asset_id: uuid.UUID | None,
     descendant_run_count: int = 0,
     created_by: CreatedBy | None = None,
+    asset_group: AssetGroupRef | None = None,
 ) -> dict[str, Any]:
     """`RunSummary(**...)` にそのまま渡せる辞書を作る。`created_by` は呼び出し側が
-    `bulk_users()` で引いた値を渡す(ここでは DB を引かない。ADR-0019)。
+    `bulk_users()` で、`asset_group` は `bulk_asset_groups()` で引いた値を渡す
+    (ここでは DB を引かない。ADR-0019、ADR-0022)。
     """
     return {
         "id": run.id,
@@ -147,4 +167,5 @@ def run_summary_fields(
         # 実コスト(参考)。ADR-0009「参考価格」節。usage 無し・単価不明なら None。
         "cost_usd": cost_from_usage(run.model, run.usage),
         "created_by": created_by,
+        "asset_group": asset_group,
     }

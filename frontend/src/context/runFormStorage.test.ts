@@ -11,6 +11,7 @@ const sampleState: RunFormState = {
     { assetId: '11111111-1111-1111-1111-111111111111', role: 'image', position: 0 },
     { assetId: '22222222-2222-2222-2222-222222222222', role: 'mask', position: 0 },
   ],
+  assetGroupId: '33333333-3333-3333-3333-333333333333',
 }
 
 describe('serializeRunFormState / parseStoredRunFormState', () => {
@@ -76,13 +77,14 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
       prompt: '',
       params: {},
       inputs: [{ assetId: 'maybe-deleted-or-missing', role: 'image', position: 0 }],
+      assetGroupId: null,
     }
     const raw = serializeRunFormState(state)
     expect(parseStoredRunFormState(raw)).toEqual(state)
   })
 
   it('空の inputs/params でも往復できる', () => {
-    const state: RunFormState = { provider: '', model: '', prompt: '', params: {}, inputs: [] }
+    const state: RunFormState = { provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null }
     expect(parseStoredRunFormState(serializeRunFormState(state))).toEqual(state)
   })
 
@@ -94,11 +96,19 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
       prompt: 'x',
       params: {},
       inputs: [],
+      assetGroupId: null,
     })
   })
 
   it('provider が文字列でなければ null', () => {
     const broken = { version: 1, provider: 42, model: 'm', prompt: '', params: {}, inputs: [] }
     expect(parseStoredRunFormState(JSON.stringify(broken))).toBeNull()
+  })
+
+  it('assetGroupId が無い・文字列でなければ null(グループなし)として読める', () => {
+    const base = { version: 1, provider: 'openai', model: 'm', prompt: '', params: {}, inputs: [] }
+    expect(parseStoredRunFormState(JSON.stringify(base))?.assetGroupId).toBeNull()
+    expect(parseStoredRunFormState(JSON.stringify({ ...base, assetGroupId: 42 }))?.assetGroupId).toBeNull()
+    expect(parseStoredRunFormState(JSON.stringify({ ...base, assetGroupId: 'g1' }))?.assetGroupId).toBe('g1')
   })
 })

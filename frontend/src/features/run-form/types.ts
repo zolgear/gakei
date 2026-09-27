@@ -18,6 +18,12 @@ export interface RunFormState {
   prompt: string
   params: Record<string, string | number | boolean>
   inputs: RunInputItem[]
+  /**
+   * ADR-0022: 生成時に出力を入れるグループ(null はグループなし)。他のパラメーターと同じく
+   * フォームの状態として持ち、localStorage にも保存する。params には入れない
+   * (run.params は API に送った値そのもので、グループはプロバイダーに送る値ではないため)。
+   */
+  assetGroupId: string | null
 }
 
 export function createEmptyFormState(): RunFormState {
@@ -27,5 +33,6 @@ export function createEmptyFormState(): RunFormState {
     prompt: '',
     params: {},
     inputs: [],
+    assetGroupId: null,
   }
 }

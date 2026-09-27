@@ -1,0 +1,302 @@
+/* 節は枠を持たない平らな箱。見出し行とタイルのグリッドは左端をそろえる。 */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 並べ替えで掴んでいる節は薄くする。 */
+.section[data-dragging='true'] {
+  opacity: 0.45;
+}
+
+/* 見出し行。開閉ボタンが伸び、グループの節は右端に「⋯」。ドロップ中は枠を光らせる。 */
+.headerRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 36px;
+  border-radius: var(--radius);
+}
+
+.headerRow[data-dropping='true'] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  background: rgba(227, 179, 65, 0.08);
+}
+
+/* 並べ替えの挿入位置の線。節の間(パネルの gap 12px の中央)に 2px のアクセント色で出す。 */
+.headerRow[data-drop-position]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  pointer-events: none;
+}
+
+.headerRow[data-drop-position='before']::after {
+  top: -7px;
+}
+
+.headerRow[data-drop-position='after']::after {
+  bottom: -7px;
+}
+
+/* ドラッグで並べ替えできることを示すつまみ。行全体を掴めるが、目印は hover 中だけ出す。 */
+.dragHandle {
+  flex-shrink: 0;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--color-text-faint);
+  cursor: grab;
+  opacity: 0;
+}
+
+.headerRow:hover .dragHandle,
+.headerRow:focus-within .dragHandle {
+  opacity: 1;
+}
+
+.disclosure {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  text-align: left;
+}
+
+.disclosure:hover .name {
+  color: var(--color-text);
+}
+
+.chevron {
+  flex-shrink: 0;
+  width: 12px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.count {
+  flex-shrink: 0;
+  /* 名前から離して見出し行の右端(⋯ / + の手前)に寄せる。 */
+  margin-left: auto;
+  padding-right: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+}
+
+.menuAnchor {
+  position: relative;
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+/* 当たり判定は 44px 幅を持たせる(見出し行の高さを越えないよう縦は行に合わせる)。
+   「⋯」と、「グループなし」の節の「+」で共通。 */
+.menuTrigger,
+.iconButton {
+  flex-shrink: 0;
+  width: 44px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 2px 0 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 16px;
+}
+
+.menuTrigger:hover,
+.iconButton:hover,
+.iconButton[aria-expanded='true'] {
+  color: var(--color-text);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  max-width: min(220px, calc(100vw - 32px));
+  padding: 6px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.menu button {
+  text-align: left;
+  min-height: 36px;
+  padding: 0 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.menu button:hover:not(:disabled) {
+  background: var(--color-header-band);
+}
+
+.menu button:disabled {
+  color: var(--color-text-faint);
+  cursor: default;
+}
+
+.dangerItem:hover {
+  color: var(--color-danger);
+}
+
+.nameInput {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  /* 節の中身は開閉の印(12px)と隙間(6px)の分だけ字下げし、見出しの名前と左端をそろえる。 */
+  padding-left: 18px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* 空のグループのドロップ先。パネルの中で破線の枠を持つのはこれだけ。 */
+.dropBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 12px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.dropBox[data-dropping='true'] {
+  border-color: var(--color-accent);
+  background: rgba(227, 179, 65, 0.08);
+  color: var(--color-text);
+}
+
+.status {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* 「グループなし」の節が空のときの案内。タイルのドロップを受ける(ADR-0022 4章)。 */
+.status[data-dropping='true'] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  background: rgba(227, 179, 65, 0.08);
+  color: var(--color-text);
+}
+
+.statusText {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* 「グループなし」の自動読み込みの番兵。通常は見えない。取得中・失敗時・observer 非対応
+   環境でだけ中身を出す。 */
+.sentinel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+}
+
+.moreButton {
+  align-self: center;
+  height: 32px;
+  padding: 0 16px;
+  background: var(--color-header-band);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.moreButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.moreButton:disabled {
+  opacity: 0.7;
+}
+
+@media (max-width: 767px) {
+  .headerRow {
+    height: 44px;
+  }
+
+  /* タッチでは「⋯」の「上へ移動」「下へ移動」で並べ替える。 */
+  .dragHandle {
+    display: none;
+  }
+
+  .menu button {
+    min-height: 44px;
+  }
+
+  .nameInput {
+    height: 40px;
+  }
+
+  .moreButton {
+    height: 44px;
+  }
+}

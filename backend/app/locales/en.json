@@ -223,6 +223,12 @@
     "notFound": "Prompt set not found",
     "itemNotFound": "Prompt set item not found"
   },
+  "assetGroups": {
+    "notFound": "Group not found",
+    "assetNotFound": "Asset not found: {ids}",
+    "groupIdAndUngrouped": "group_id and ungrouped cannot be combined",
+    "orderMismatch": "The order list does not match the current groups"
+  },
   "worker": {
     "interruptedByRestart": "Interrupted by a server restart",
     "providerNotRegistered": "provider={provider} is not registered"

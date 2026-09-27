@@ -16,9 +16,14 @@ export function hasFormContent(formState: RunFormState): boolean {
  * 「新規生成」用。プロンプト・入力(マスク含む)・プロバイダー・モデル・パラメーターをすべて
  * 初期値に戻す。caps が未取得(読み込み中に押された場合)なら空のフォーム(model: '')にしておき、
  * 後段(`useRunFormLogic` の「provider/model 未選択なら初期値を適用する」既存 effect)に委ねる。
+ * グループだけは初期値(なし)ではなく、呼び出し側が渡す「最後に選んだグループ」
+ * (`loadLastAssetGroupId`。ADR-0022)にする。
  */
-export function clearFormContent(caps: CapabilitiesResponse | undefined): RunFormState {
-  if (!caps) return createEmptyFormState()
+export function clearFormContent(
+  caps: CapabilitiesResponse | undefined,
+  assetGroupId: string | null = null,
+): RunFormState {
+  if (!caps) return { ...createEmptyFormState(), assetGroupId }
   const initial = computeInitialFormValues(caps)
-  return { provider: initial.provider, model: initial.model, prompt: '', params: initial.params, inputs: [] }
+  return { provider: initial.provider, model: initial.model, prompt: '', params: initial.params, inputs: [], assetGroupId }
 }

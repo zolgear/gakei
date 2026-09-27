@@ -115,14 +115,21 @@ def test_list_runs_query_count_does_not_grow_with_page_size(client: TestClient) 
         wait_for_run_terminal(client, run_id)
         run_ids.append(run_id)
 
+    import threading
+    from collections import Counter
+
     from sqlalchemy import event
 
     engine = client.app.state.engine
-    select_statements: list[str] = []
+    # スレッドごとに SELECT 回数を数える。同じエンジンを runner のポーリング
+    # (`_pick_and_start_run`。別スレッド)も使うので、全体を数えると計測中にたまたま
+    # 走った 1 回で境界を越えて不安定になる(2026-09-27 に CI で再現)。
+    # 1 リクエストの処理は 1 スレッドで完結するので、最多のスレッドの回数がリクエスト分。
+    select_counts: Counter[int] = Counter()
 
     def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany) -> None:  # noqa: ANN001
         if statement.strip().upper().startswith("SELECT"):
-            select_statements.append(statement)
+            select_counts[threading.get_ident()] += 1
 
     event.listen(engine, "before_cursor_execute", _before_cursor_execute)
     try:
@@ -136,4 +143,4 @@ def test_list_runs_query_count_does_not_grow_with_page_size(client: TestClient) 
 
     # 一覧本体 + outputs一括 + inputs一括 でおおむね定数回のはず。
     # Run 件数(5件)より十分少ない回数に収まっていることだけ確認する(N+1になっていない)。
-    assert len(select_statements) < len(run_ids)
+    assert max(select_counts.values()) < len(run_ids)

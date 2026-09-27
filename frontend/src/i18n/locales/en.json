@@ -701,6 +701,10 @@
       "droppedParamsInputs": "{names} are not usable with the current inputs and were reset to unspecified",
       "submitFailedDefault": "Failed to start the run",
       "listSeparator": ", "
+    },
+    "group": {
+      "label": "Group",
+      "none": "None"
     }
   },
   "sketch": {
@@ -802,7 +806,14 @@
     "zoomInTitle": "Zoom in (10%)",
     "fitToScreen": "Fit to screen",
     "actualSize": "Actual size (100%)",
-    "imageAlt": "Generated result"
+    "imageAlt": "Generated result",
+    "groups": {
+      "heading": "Group",
+      "change": "Change",
+      "assign": "Add to a group",
+      "remove": "Remove from \"{name}\"",
+      "empty": "Not in a group."
+    }
   },
   "compare": {
     "back": "← Back",
@@ -917,11 +928,7 @@
   },
   "stock": {
     "heading": "Stock",
-    "countLoading": "...",
-    "countLabel": {
-      "one": "{count} item",
-      "other": "{count} items"
-    },
+    "kindHeading": "Type",
     "kindAll": "All",
     "kindGenerated": "Generated",
     "kindUpload": "Upload",
@@ -944,7 +951,47 @@
     "restoreFailed": "Failed to restore.",
     "deletedToast": "Image deleted.",
     "undo": "Undo",
-    "maxInputImages": "You've reached the input image limit ({max})."
+    "maxInputImages": "You've reached the input image limit ({max}).",
+    "groups": {
+      "new": "New group…",
+      "newButton": "New group",
+      "newPlaceholder": "Group name",
+      "rename": "Rename",
+      "delete": "Delete",
+      "deleteConfirm": "This deletes the group \"{name}\". The images themselves are not deleted.",
+      "menu": "Actions for \"{name}\"",
+      "memberCount": {
+        "one": "{count} item",
+        "other": "{count} items"
+      },
+      "moveTo": "Move to a group",
+      "removeFromThis": "Remove from this group",
+      "removeFromGroups": "Remove from group",
+      "ungrouped": "Ungrouped",
+      "ungroupedEmpty": "Every image is in a group.",
+      "dropHere": "Drop images here",
+      "showMore": "Show more",
+      "noGroups": "No groups yet.",
+      "createFailed": "Failed to create the group.",
+      "renameFailed": "Failed to rename the group.",
+      "deleteFailed": "Failed to delete the group.",
+      "moveFailed": "Failed to move to the group.",
+      "removeFailed": "Failed to remove from the group.",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "dragToReorder": "Drag to reorder",
+      "reorderFailed": "Failed to reorder the groups."
+    },
+    "selection": {
+      "enter": "Select",
+      "done": "Done",
+      "count": {
+        "one": "{count} item selected",
+        "other": "{count} items selected"
+      },
+      "clear": "Clear selection",
+      "toggleTile": "Toggle selection"
+    }
   },
   "comfyui": {
     "experimentalBadge": "Experimental",
