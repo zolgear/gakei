@@ -110,8 +110,38 @@
     font-size: 20px;
   }
 
+  /* 削除は画像の上から外し、キャプション行(「1024×1024 · png」)の右端に 44px のアイコン
+     ボタンとして置く(issue #10)。390px 幅での寸法:
+     - サイドバー(ドロワー)幅 = min(288, 92vw 358.8 - レール 52) = 288px。パネルの左右 padding
+       14px ずつで 260px、節の字下げ 18px で 242px。2 列・gap 8px → タイル幅 117px(内側 115px)。
+     - 画像は高さ 96px 固定(object-fit: cover)なので縦横比によらない。キャプション行は
+       min-height 44px → タイルの内側の高さ 96 + 44 = 140px。
+     - 当たり判定(タイル内側の座標、縦): × と「+」は 4〜44、削除は 96〜140。削除と「+」の間は
+       52px 空く。横: × は 4〜44、「+」は 71〜111 で 27px 空く。削除は 71〜115(キャプション行
+       の中なので × とも画像とも重ならない)。
+     以前は削除を bottom: 46px で画像に重ねていたため、キャプション 25px のタイル(内側 121px)
+     では削除が 35〜75 になり、「+」(4〜44)と 9px 重なっていた。 */
+  .caption {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    /* 右端の削除ボタン(44px)の分を空ける。 */
+    padding-right: 48px;
+  }
+
   .deleteButton {
-    bottom: 46px;
+    bottom: 0;
+    right: 0;
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    border-color: transparent;
+    border-radius: var(--radius);
+  }
+
+  .deleteButton svg {
+    width: 16px;
+    height: 16px;
   }
 
   .tileImageButton {
