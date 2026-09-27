@@ -315,18 +315,139 @@ def test_list_assets_with_unknown_group_id_returns_404(client: TestClient) -> No
     assert response.status_code == 404
 
 
-def test_asset_detail_groups_sorted_by_name_and_excludes_deleted(client: TestClient) -> None:
+def _add(client: TestClient, group_id: str, asset_ids: list[str]) -> dict:
+    response = client.post(f"/api/asset-groups/{group_id}/assets", json={"asset_ids": asset_ids})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _group_row(client: TestClient, group_id: str) -> dict:
+    return next(g for g in _list(client) if g["id"] == group_id)
+
+
+def _asset_ids_in(client: TestClient, **params: str) -> set[str]:
+    response = client.get("/api/assets", params=params)
+    assert response.status_code == 200, response.text
+    return {a["id"] for a in response.json()["items"]}
+
+
+def _member_rows(client: TestClient, asset_id: str) -> list[tuple]:
+    import uuid
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from app.domain.models import AssetGroupMember
+
+    with Session(client.app.state.engine) as session:
+        return list(
+            session.execute(
+                select(AssetGroupMember.asset_group_id, AssetGroupMember.added_at).where(
+                    AssetGroupMember.asset_id == uuid.UUID(asset_id)
+                )
+            ).all()
+        )
+
+
+def test_asset_detail_group_is_single_and_null_when_ungrouped(client: TestClient) -> None:
     asset_id = _upload(client)
-    group_b = _create_group(client, name="B")
-    group_a = _create_group(client, name="A")
-    group_c = _create_group(client, name="C")
-    for group in (group_b, group_a, group_c):
-        client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [asset_id]})
+    assert client.get(f"/api/assets/{asset_id}").json()["group"] is None
 
-    assert client.delete(f"/api/asset-groups/{group_c['id']}").status_code == 204
-
+    group = _create_group(client, name="A")
+    _add(client, group["id"], [asset_id])
     detail = client.get(f"/api/assets/{asset_id}").json()
-    assert [g["name"] for g in detail["groups"]] == ["A", "B"]
+    assert detail["group"] == {"id": group["id"], "name": "A"}
+    assert "groups" not in detail
+
+    # 削除済みグループにだけ残っている Asset は未所属として null。
+    assert client.delete(f"/api/asset-groups/{group['id']}").status_code == 204
+    assert client.get(f"/api/assets/{asset_id}").json()["group"] is None
+
+
+def test_add_members_moves_asset_from_other_group(client: TestClient) -> None:
+    group_a = _create_group(client, name="A")
+    group_b = _create_group(client, name="B")
+    asset_1 = _upload(client)
+    asset_2 = _upload(client)
+    _add(client, group_a["id"], [asset_1, asset_2])
+    a_before = _group_row(client, group_a["id"])
+    assert a_before["member_count"] == 2
+
+    body = _add(client, group_b["id"], [asset_1])
+    assert body["member_count"] == 1
+    assert body["cover_asset_id"] == asset_1
+
+    a_after = _group_row(client, group_a["id"])
+    assert a_after["member_count"] == 1
+    assert a_after["cover_asset_id"] == asset_2
+    # 元のグループも中身が変わったので updated_at が進む。
+    assert a_after["updated_at"] > a_before["updated_at"]
+
+    assert _asset_ids_in(client, group_id=group_a["id"]) == {asset_2}
+    assert _asset_ids_in(client, group_id=group_b["id"]) == {asset_1}
+    detail = client.get(f"/api/assets/{asset_1}").json()
+    assert detail["group"] == {"id": group_b["id"], "name": "B"}
+    assert len(_member_rows(client, asset_1)) == 1
+
+
+def test_add_members_to_same_group_keeps_added_at(client: TestClient) -> None:
+    group = _create_group(client)
+    asset_1 = _upload(client)
+    asset_2 = _upload(client)
+    _add(client, group["id"], [asset_1])
+    _add(client, group["id"], [asset_2])
+    [(_, added_at_before)] = _member_rows(client, asset_1)
+
+    body = _add(client, group["id"], [asset_1])
+    assert body["member_count"] == 2
+    # asset_1 の added_at が進まないので、表紙は後から入れた asset_2 のまま。
+    assert body["cover_asset_id"] == asset_2
+    [(group_id, added_at_after)] = _member_rows(client, asset_1)
+    assert str(group_id) == group["id"]
+    assert added_at_after == added_at_before
+
+
+def test_ungrouped_excludes_asset_while_in_group_and_includes_after_remove(
+    client: TestClient,
+) -> None:
+    group_a = _create_group(client, name="A")
+    group_b = _create_group(client, name="B")
+    asset_id = _upload(client)
+    assert asset_id in _asset_ids_in(client, ungrouped="true")
+
+    _add(client, group_a["id"], [asset_id])
+    assert asset_id not in _asset_ids_in(client, ungrouped="true")
+    _add(client, group_b["id"], [asset_id])
+    assert asset_id not in _asset_ids_in(client, ungrouped="true")
+
+    response = client.post(
+        f"/api/asset-groups/{group_b['id']}/assets/remove", json={"asset_ids": [asset_id]}
+    )
+    assert response.status_code == 200
+    assert asset_id in _asset_ids_in(client, ungrouped="true")
+    assert client.get(f"/api/assets/{asset_id}").json()["group"] is None
+    assert _member_rows(client, asset_id) == []
+
+
+def test_asset_left_in_deleted_group_is_ungrouped_and_can_move(client: TestClient) -> None:
+    deleted_group = _create_group(client, name="消すグループ")
+    live_group = _create_group(client, name="残るグループ")
+    asset_id = _upload(client)
+    _add(client, deleted_group["id"], [asset_id])
+    assert client.delete(f"/api/asset-groups/{deleted_group['id']}").status_code == 204
+
+    assert asset_id in _asset_ids_in(client, ungrouped="true")
+
+    body = _add(client, live_group["id"], [asset_id])
+    assert body["member_count"] == 1
+    assert asset_id not in _asset_ids_in(client, ungrouped="true")
+    assert client.get(f"/api/assets/{asset_id}").json()["group"] == {
+        "id": live_group["id"],
+        "name": "残るグループ",
+    }
+    # 削除済みグループの行は移り、所属は 1 行だけになる。
+    rows = _member_rows(client, asset_id)
+    assert [str(group_id) for group_id, _ in rows] == [live_group["id"]]
 
 
 def test_name_validation(client: TestClient) -> None:

@@ -1,5 +1,7 @@
 """グループ(ストックの手動整理。ADR-0022)。証跡ではないので更新・論理削除ができる。
 
+1 つの Asset が属するグループは 1 つだけ(2026-09-28 に多対多から変更)。グループに
+入れる操作(`add_members`)は常に「移す」で、元のグループからは外れる。
 メンバーの追加・削除・名前変更のたびに `updated_at` を進める。一覧(`list_groups`)は
 利用者が決めた並び順(`position ASC, created_at DESC`)で返し、`updated_at` は並びに
 影響しない(2026-09-28 に変更)。`member_count` / `cover_asset_id` は削除済みでない Asset だけを数える
@@ -164,8 +166,12 @@ def delete_group(db: Session, group: AssetGroup) -> None:
 
 
 def add_members(db: Session, group: AssetGroup, asset_ids: list[uuid.UUID]) -> AssetGroupRow:
-    """既に入っているものは無視する。存在しない・削除済みの Asset が1件でもあれば、
-    全体を拒み `AssetGroupAssetsMissingError` を送出する(何も追加しない)。
+    """Asset をこのグループへ移す(ADR-0022 3章)。
+
+    別のグループ(削除済みグループを含む)に入っている Asset は、その行を消してから入れる
+    (所属は常に 1 行)。既にこのグループに入っているものはそのまま(`added_at` も変えない)。
+    存在しない・削除済みの Asset が1件でもあれば、全体を拒み `AssetGroupAssetsMissingError`
+    を送出する(何も変えない)。このグループと、Asset が外れた元のグループの `updated_at` を進める。
     """
     unique_ids = list(dict.fromkeys(asset_ids))
     found_ids = set(
@@ -177,19 +183,34 @@ def add_members(db: Session, group: AssetGroup, asset_ids: list[uuid.UUID]) -> A
     if missing:
         raise AssetGroupAssetsMissingError(missing)
 
-    existing_member_ids = set(
+    current = db.execute(
+        select(AssetGroupMember.asset_id, AssetGroupMember.asset_group_id).where(
+            AssetGroupMember.asset_id.in_(unique_ids)
+        )
+    ).all()
+    already_here = {asset_id for asset_id, group_id in current if group_id == group.id}
+    moving = [(asset_id, group_id) for asset_id, group_id in current if group_id != group.id]
+    now = _utcnow()
+
+    if moving:
         db.execute(
-            select(AssetGroupMember.asset_id).where(
-                AssetGroupMember.asset_group_id == group.id,
-                AssetGroupMember.asset_id.in_(unique_ids),
+            delete(AssetGroupMember).where(
+                AssetGroupMember.asset_id.in_([asset_id for asset_id, _ in moving]),
+                AssetGroupMember.asset_group_id != group.id,
             )
         )
-        .scalars()
-        .all()
-    )
-    now = _utcnow()
+        # 一意索引に当たらないよう、元の行の削除を挿入より先に DB へ送る。
+        db.flush()
+        source_group_ids = {group_id for _, group_id in moving}
+        for source in (
+            db.execute(select(AssetGroup).where(AssetGroup.id.in_(source_group_ids)))
+            .scalars()
+            .all()
+        ):
+            source.updated_at = now
+
     for asset_id in unique_ids:
-        if asset_id in existing_member_ids:
+        if asset_id in already_here:
             continue
         db.add(AssetGroupMember(asset_group_id=group.id, asset_id=asset_id, added_at=now))
 
@@ -212,17 +233,14 @@ def remove_members(db: Session, group: AssetGroup, asset_ids: list[uuid.UUID]) -
     return _row_for_group(db, group)
 
 
-def groups_for_asset(db: Session, asset_id: uuid.UUID) -> list[AssetGroupRef]:
-    """その Asset が属している、削除済みでないグループを名前の昇順で返す
-    (`AssetDetail.groups` に使う)。"""
-    groups = (
-        db.execute(
-            select(AssetGroup)
-            .join(AssetGroupMember, AssetGroupMember.asset_group_id == AssetGroup.id)
-            .where(AssetGroupMember.asset_id == asset_id, AssetGroup.deleted_at.is_(None))
-            .order_by(AssetGroup.name, AssetGroup.id)
-        )
-        .scalars()
-        .all()
-    )
-    return [AssetGroupRef(id=g.id, name=g.name) for g in groups]
+def group_for_asset(db: Session, asset_id: uuid.UUID) -> AssetGroupRef | None:
+    """その Asset が属しているグループ(`AssetDetail.group` に使う)。所属は 1 つだけ。
+    どこにも入っていない、または削除済みグループにだけ残っているときは None。"""
+    group = db.execute(
+        select(AssetGroup)
+        .join(AssetGroupMember, AssetGroupMember.asset_group_id == AssetGroup.id)
+        .where(AssetGroupMember.asset_id == asset_id, AssetGroup.deleted_at.is_(None))
+    ).scalar_one_or_none()
+    if group is None:
+        return None
+    return AssetGroupRef(id=group.id, name=group.name)

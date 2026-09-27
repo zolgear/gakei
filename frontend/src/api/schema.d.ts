@@ -401,7 +401,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Add Asset Group Assets */
+        /**
+         * Add Asset Group Assets
+         * @description Asset をこのグループへ移す。別のグループに入っていれば外してから入れ、既に入っている
+         *     ものは無視する。削除済みや存在しない Asset が1件でもあれば 404 で全体を拒む。
+         */
         post: operations["add_asset_group_assets"];
         delete?: never;
         options?: never;
@@ -793,8 +797,7 @@ export interface components {
              */
             used_as_input: boolean;
             created_by?: components["schemas"]["CreatedBy"] | null;
-            /** Groups */
-            groups?: components["schemas"]["AssetGroupRef"][];
+            group?: components["schemas"]["AssetGroupRef"] | null;
         };
         /** AssetGroupCreate */
         AssetGroupCreate: {
@@ -825,7 +828,7 @@ export interface components {
         };
         /**
          * AssetGroupRef
-         * @description `AssetDetail.groups` と `RunSummary.asset_group` の1件。
+         * @description `AssetDetail.group` と `RunSummary.asset_group` の1件。
          */
         AssetGroupRef: {
             /**
@@ -993,8 +996,7 @@ export interface components {
              */
             used_as_input: boolean;
             created_by?: components["schemas"]["CreatedBy"] | null;
-            /** Groups */
-            groups?: components["schemas"]["AssetGroupRef"][];
+            group?: components["schemas"]["AssetGroupRef"] | null;
             /**
              * Ingest Outcome
              * @enum {string}

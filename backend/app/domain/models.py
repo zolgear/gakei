@@ -314,7 +314,8 @@ class PromptSetItem(Base):
 class AssetGroup(Base):
     """グループ(ストックの手動整理。ADR-0022)。証跡ではないので更新・論理削除ができる。
 
-    メンバーはフラットな多対多(`AssetGroupMember`)。階層・入れ子は持たない。
+    メンバーは `AssetGroupMember`。1 つの Asset が属するグループは 1 つだけ
+    (2026-09-28 に多対多から変更)。階層・入れ子は持たない。
     並び順は利用者が決める(`position`。2026-09-28 追加)。
     表紙画像は列に持たず、一覧の応答でメンバーの `added_at` が最新のものから都度求める。
     """
@@ -337,18 +338,23 @@ class AssetGroup(Base):
 
 
 class AssetGroupMember(Base):
-    """グループのメンバー(多対多)。証跡ではないので、外すときは物理削除する
+    """グループのメンバー。証跡ではないので、外すときは物理削除する
     (いつ誰が外したかは残らない。ADR-0022)。
+
+    1 つの Asset が属するグループは 1 つだけ(2026-09-28 に多対多から変更)。
+    グループに入れる操作は常に「移す」で、既存の行を消してから入れる
+    (削除済みグループに残った行も含む。`app/domain/asset_groups.add_members`)。
     """
 
     __tablename__ = "asset_group_member"
+    # 1 つの Asset は 1 つのグループにだけ入る(ADR-0022 2章。マイグレーション 0015)。
+    # 主キー (asset_group_id, asset_id) は残し、asset_id 単独の一意索引で所属を 1 行に限る。
+    __table_args__ = (Index("ux_asset_group_member_asset_id", "asset_id", unique=True),)
 
     asset_group_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("asset_group.id"), primary_key=True
     )
-    asset_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("asset.id"), primary_key=True, index=True
-    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
     added_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 

@@ -54,7 +54,7 @@ def test_outputs_are_added_to_specified_group(client: TestClient) -> None:
 
     for asset_id in output_ids:
         asset_detail = client.get(f"/api/assets/{asset_id}").json()
-        assert {"id": group["id"], "name": "生成先"} in asset_detail["groups"]
+        assert asset_detail["group"] == {"id": group["id"], "name": "生成先"}
 
     groups = {g["id"]: g for g in client.get("/api/asset-groups").json()["items"]}
     assert groups[group["id"]]["member_count"] == 2
@@ -134,7 +134,7 @@ def test_group_deleted_before_completion_run_still_succeeds(
     with state.session_factory() as session:
         members = session.query(AssetGroupMember).filter_by(asset_id=output_ids[0]).all()
         assert members == []
-    assert client.get(f"/api/assets/{output_ids[0]}").json()["groups"] == []
+    assert client.get(f"/api/assets/{output_ids[0]}").json()["group"] is None
 
 
 def test_finish_adds_member_once_and_readding_is_ignored(client_no_runner: TestClient) -> None:

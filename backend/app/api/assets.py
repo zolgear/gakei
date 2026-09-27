@@ -17,7 +17,7 @@ from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.deps import get_session, get_store
-from app.domain.asset_groups import get_active_group_or_none, groups_for_asset
+from app.domain.asset_groups import get_active_group_or_none, group_for_asset
 from app.domain.assets import IngestError, asset_is_used_as_input, is_restorable
 from app.domain.assets import ingest_upload as ingest_asset
 from app.domain.avatars import avatar_url
@@ -128,7 +128,7 @@ def _to_detail(db: Session, asset: Asset, produced_by_run: Run | None) -> AssetD
         embedded_meta=_to_embedded_meta(asset),
         used_as_input=asset_is_used_as_input(db, asset.id),
         created_by=_to_created_by(db, asset.created_by_user_id),
-        groups=groups_for_asset(db, asset.id),
+        group=group_for_asset(db, asset.id),
     )
 
 

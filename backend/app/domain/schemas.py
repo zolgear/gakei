@@ -151,7 +151,7 @@ class AssetGroupMembersRequest(BaseModel):
 
 
 class AssetGroupRef(BaseModel):
-    """`AssetDetail.groups` と `RunSummary.asset_group` の1件。"""
+    """`AssetDetail.group` と `RunSummary.asset_group` の1件。"""
 
     id: uuid.UUID
     name: str
@@ -233,9 +233,10 @@ class AssetDetail(AssetSummary):
     # ユーザー(ADR-0019。runner が `run.created_by_user_id` をそのまま引き継ぐ)。
     # `none` モードは常に null。
     created_by: CreatedBy | None = None
-    # 所属しているグループ(ADR-0022)。名前の昇順、削除済みグループは含めない。
-    # `AssetSummary` には足さない(一覧が重くなるため)。
-    groups: list[AssetGroupRef] = Field(default_factory=list)
+    # 所属しているグループ(ADR-0022)。1 つの Asset が属するグループは 1 つだけ
+    # (2026-09-28 に `groups: []` から変更)。未所属、または削除済みグループにだけ残っている
+    # ときは null。`AssetSummary` には足さない(一覧が重くなるため)。
+    group: AssetGroupRef | None = None
 
 
 class AssetUploadResponse(AssetDetail):

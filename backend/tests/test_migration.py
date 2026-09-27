@@ -389,3 +389,101 @@ def test_migration_upgrades_from_0013_to_0014_adds_asset_group_position(tmp_path
     with engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM asset_group")).scalar_one() == 3
     engine.dispose()
+
+
+def test_migration_upgrades_from_0014_to_0015_makes_member_asset_id_unique(tmp_path) -> None:  # noqa: ANN001
+    """既存の0014適用済みDBでも、起動時のupgrade headで0015が当たり、複数のグループに
+    入っていた Asset の行が 1 行に減り(削除済みでないグループを優先し、その中で added_at が
+    最新の行を残す)、asset_id の一意索引ができること(ADR-0022、2026-09-28)。"""
+    import uuid
+
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0014")
+
+    from sqlalchemy import Uuid, bindparam, create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    groups = {name: uuid.uuid4() for name in ("g1", "g2", "deleted")}
+    assets = {name: uuid.uuid4() for name in ("two_live", "live_and_deleted", "only_deleted")}
+    insert_group = text(
+        "INSERT INTO asset_group (id, name, position, created_at, updated_at, deleted_at) "
+        "VALUES (:id, :name, 0, :ts, :ts, :deleted_at)"
+    ).bindparams(bindparam("id", type_=Uuid()))
+    insert_asset = text(
+        "INSERT INTO asset (id, kind, sha256, blob_key, mime, width, height, bytes, created_at) "
+        "VALUES (:id, 'upload', :sha, :key, 'image/png', 1, 1, 1, '2026-09-01 00:00:00.000000')"
+    ).bindparams(bindparam("id", type_=Uuid()))
+    insert_member = text(
+        "INSERT INTO asset_group_member (asset_group_id, asset_id, added_at) "
+        "VALUES (:group_id, :asset_id, :added_at)"
+    ).bindparams(bindparam("group_id", type_=Uuid()), bindparam("asset_id", type_=Uuid()))
+    ts = "2026-09-01 00:00:00.000000"
+    with engine.begin() as conn:
+        for name, group_id in groups.items():
+            deleted_at = ts if name == "deleted" else None
+            conn.execute(
+                insert_group, {"id": group_id, "name": name, "ts": ts, "deleted_at": deleted_at}
+            )
+        for name, asset_id in assets.items():
+            conn.execute(insert_asset, {"id": asset_id, "sha": name, "key": name})
+        seeds = [
+            # 削除済みでないグループ 2 つ → added_at が新しい g2 を残す。
+            ("g1", "two_live", "2026-09-01 00:00:00.000000"),
+            ("g2", "two_live", "2026-09-03 00:00:00.000000"),
+            # 削除済みグループの方が新しくても、削除済みでない g1 を残す。
+            ("g1", "live_and_deleted", "2026-09-01 00:00:00.000000"),
+            ("deleted", "live_and_deleted", "2026-09-05 00:00:00.000000"),
+            # 削除済みグループにだけ入っている行はそのまま残す。
+            ("deleted", "only_deleted", "2026-09-02 00:00:00.000000"),
+        ]
+        for group_name, asset_name, added_at in seeds:
+            conn.execute(
+                insert_member,
+                {
+                    "group_id": groups[group_name],
+                    "asset_id": assets[asset_name],
+                    "added_at": added_at,
+                },
+            )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    indexes = {i["name"]: i for i in sa_inspect(engine).get_indexes("asset_group_member")}
+    assert "ix_asset_group_member_asset_id" not in indexes
+    assert indexes["ux_asset_group_member_asset_id"]["unique"]
+    assert indexes["ux_asset_group_member_asset_id"]["column_names"] == ["asset_id"]
+    group_names = {group_id.hex: name for name, group_id in groups.items()}
+    asset_names = {asset_id.hex: name for name, asset_id in assets.items()}
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT asset_id, asset_group_id, added_at FROM asset_group_member")
+        ).all()
+    remaining = {
+        asset_names[uuid.UUID(str(a)).hex]: (group_names[uuid.UUID(str(g)).hex], added)
+        for a, g, added in rows
+    }
+    assert len(rows) == 3
+    assert remaining == {
+        "two_live": ("g2", "2026-09-03 00:00:00.000000"),
+        "live_and_deleted": ("g1", "2026-09-01 00:00:00.000000"),
+        "only_deleted": ("deleted", "2026-09-02 00:00:00.000000"),
+    }
+    engine.dispose()
+
+    command.downgrade(cfg, "0014")
+    engine = create_engine(f"sqlite:///{db_path}")
+    indexes = {i["name"]: i for i in sa_inspect(engine).get_indexes("asset_group_member")}
+    assert "ux_asset_group_member_asset_id" not in indexes
+    assert not indexes["ix_asset_group_member_asset_id"]["unique"]
+    engine.dispose()

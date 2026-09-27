@@ -1,5 +1,7 @@
 """グループ(ストックの手動整理。ADR-0022)。証跡ではないので更新・論理削除ができる。
 件数が少ない前提でページングしない(prompt-sets と同じ)。
+1 つの Asset が属するグループは 1 つだけで、`POST /{id}/assets` は「移す」
+(2026-09-28 に多対多から変更)。
 """
 
 from __future__ import annotations
@@ -100,6 +102,8 @@ def delete_asset_group(group_id: uuid.UUID, db: Session = Depends(get_session)) 
 def add_asset_group_assets(
     group_id: uuid.UUID, body: AssetGroupMembersRequest, db: Session = Depends(get_session)
 ) -> AssetGroupRow:
+    """Asset をこのグループへ移す。別のグループに入っていれば外してから入れ、既に入っている
+    ものは無視する。削除済みや存在しない Asset が1件でもあれば 404 で全体を拒む。"""
     group = _get_active_group(db, group_id)
     try:
         row = add_members(db, group, body.asset_ids)
