@@ -1,7 +1,8 @@
 /**
  * サイドバーの「ストック」パネル。ADR-0022 4章により、グループは絞り込みではなく「入れもの」
- * として見せる: パネルは先頭の「グループなし」の節と、続く各グループの節(`updated_at DESC`)に
- * 分かれ、各節が既存の 2 列のタイルを持つ(`GroupSection`)。kind のチップは全節に共通の
+ * として見せる: パネルは先頭の「グループなし」の節と、続く各グループの節(利用者が決めた順。
+ * 見出しのドラッグか「⋯」の「上へ / 下へ」で並べ替える)に分かれ、各節が既存の 2 列のタイルを
+ * 持つ(`GroupSection`)。kind のチップは全節に共通の
  * 絞り込みとして残す。新しいグループは「グループなし」の見出し行の「+」から作る(グループの
  * 並びの起点に置く。パネルのヘッダーには置かない)。
  *
@@ -36,6 +37,8 @@ import { ToastHost, useToast } from '../../components/Toast'
 import { fmt, useI18n, type Messages } from '../../i18n'
 import { AddToGroupPopover } from './groups/AddToGroupPopover'
 import { invalidateAssetGroupQueries, useAssetGroups } from './groups/assetGroupQueries'
+import { GAKEI_GROUP_ID_DATA_TYPE } from './groups/groupOrder'
+import { useGroupReorder } from './groups/useGroupReorder'
 import {
   isSectionOpen,
   loadGroupOpenMap,
@@ -99,6 +102,7 @@ export function StockPanel() {
 
   const groupsQuery = useAssetGroups()
   const groups = groupsQuery.data?.items ?? []
+  const groupReorder = useGroupReorder(groups, setMessage)
 
   // 種別の絞り込みが変わったら選択をリセットする(レンダー中に前回値と比較する。React 公式の
   // 「prop の変化に応じて state をリセットする」パターンで、useEffect を使わない)。
@@ -213,6 +217,8 @@ export function StockPanel() {
   }
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    // グループの節の並べ替えはアップロードの受け口にしない(見出し行が自分で受ける)。
+    if (Array.from(e.dataTransfer.types).includes(GAKEI_GROUP_ID_DATA_TYPE)) return
     e.preventDefault()
     setIsDragOver(true)
   }
@@ -361,6 +367,7 @@ export function StockPanel() {
           tileActions={tileActions}
           onError={setMessage}
           onGroupDeleted={(groupId) => setSelected((prev) => withoutSection(prev, groupId))}
+          reorder={groupReorder}
         />
       ))}
 

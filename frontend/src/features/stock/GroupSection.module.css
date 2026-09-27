@@ -6,8 +6,14 @@
   min-width: 0;
 }
 
+/* 並べ替えで掴んでいる節は薄くする。 */
+.section[data-dragging='true'] {
+  opacity: 0.45;
+}
+
 /* 見出し行。開閉ボタンが伸び、グループの節は右端に「⋯」。ドロップ中は枠を光らせる。 */
 .headerRow {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -20,6 +26,44 @@
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
   background: rgba(227, 179, 65, 0.08);
+}
+
+/* 並べ替えの挿入位置の線。節の間(パネルの gap 12px の中央)に 2px のアクセント色で出す。 */
+.headerRow[data-drop-position]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  pointer-events: none;
+}
+
+.headerRow[data-drop-position='before']::after {
+  top: -7px;
+}
+
+.headerRow[data-drop-position='after']::after {
+  bottom: -7px;
+}
+
+/* ドラッグで並べ替えできることを示すつまみ。行全体を掴めるが、目印は hover 中だけ出す。 */
+.dragHandle {
+  flex-shrink: 0;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--color-text-faint);
+  cursor: grab;
+  opacity: 0;
+}
+
+.headerRow:hover .dragHandle,
+.headerRow:focus-within .dragHandle {
+  opacity: 1;
 }
 
 .disclosure {
@@ -127,8 +171,13 @@
   font-size: 12px;
 }
 
-.menu button:hover {
+.menu button:hover:not(:disabled) {
   background: var(--color-header-band);
+}
+
+.menu button:disabled {
+  color: var(--color-text-faint);
+  cursor: default;
 }
 
 .dangerItem:hover {
@@ -232,6 +281,11 @@
 @media (max-width: 767px) {
   .headerRow {
     height: 44px;
+  }
+
+  /* タッチでは「⋯」の「上へ移動」「下へ移動」で並べ替える。 */
+  .dragHandle {
+    display: none;
   }
 
   .menu button {

@@ -977,7 +977,11 @@
       "renameFailed": "Failed to rename the group.",
       "deleteFailed": "Failed to delete the group.",
       "addFailed": "Failed to add to the group.",
-      "removeFailed": "Failed to remove from the group."
+      "removeFailed": "Failed to remove from the group.",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "dragToReorder": "Drag to reorder",
+      "reorderFailed": "Failed to reorder the groups."
     },
     "selection": {
       "enter": "Select",

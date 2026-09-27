@@ -9,6 +9,10 @@
  *   そのグループに入る(元の節からは消さない。1 つの Asset は複数のグループに入れる)。
  *   「グループなし」の節の見出し行(または空の枠)に落とすと、入っているすべてのグループから
  *   外れる(ドラッグ元の節は分からないため。確認なし)。
+ * - 並べ替え: グループの節の見出し行はドラッグでき、別のグループの見出しの上半分に落とすと
+ *   その前、下半分なら後ろへ移る(`useGroupReorder`)。画像のドラッグとは `DataTransfer` の
+ *   型で分け、見出し行はどちらか一方にだけ反応する。「グループなし」は先頭に固定で、掴めず
+ *   落とし先にもならない。ドラッグできない環境向けに「⋯」に「上へ移動」「下へ移動」を置く。
  * - 本体(開いているときだけ取得・表示): 既存の 2 列のタイル。グループは最初の 30 件と
  *   「さらに表示」、「グループなし」は末尾の番兵で自動的に続きを読む(既存の無限スクロール)。
  */
@@ -29,8 +33,10 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { fmt, useI18n } from '../../i18n'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { ASSET_GROUPS_QUERY_KEY, invalidateAssetGroupQueries } from './groups/assetGroupQueries'
+import { GAKEI_GROUP_ID_DATA_TYPE, dropPositionFor } from './groups/groupOrder'
 import { NewGroupButton, NewGroupNameInput } from './groups/NewGroupInline'
 import { useNewGroupInline } from './groups/useNewGroupInline'
+import type { GroupReorderControls } from './groups/useGroupReorder'
 import { groupIdsToRemove } from './groups/ungroupDrop'
 import { shouldAutoFetchNextPage } from './sentinel'
 import { StockTile } from './StockTile'
@@ -73,10 +79,16 @@ interface GroupSectionProps {
   onError: (message: string) => void
   /** グループを削除したとき(呼び出し側がその節の選択を外す)。 */
   onGroupDeleted?: (groupId: string) => void
+  /** グループの節の並べ替え(パネルに 1 つ)。「グループなし」の節には渡さない。 */
+  reorder?: GroupReorderControls
 }
 
 function hasAssetData(e: DragEvent<HTMLElement>): boolean {
   return Array.from(e.dataTransfer.types).includes(GAKEI_ASSET_ID_DATA_TYPE)
+}
+
+function hasGroupData(e: DragEvent<HTMLElement>): boolean {
+  return Array.from(e.dataTransfer.types).includes(GAKEI_GROUP_ID_DATA_TYPE)
 }
 
 /**
@@ -121,6 +133,7 @@ export function GroupSection({
   noGroupsExist = false,
   onError,
   onGroupDeleted,
+  reorder,
 }: GroupSectionProps) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
@@ -206,9 +219,64 @@ export function GroupSection({
 
   const name = group ? group.name : t.stock.groups.ungrouped
 
+  // 並べ替え。名前の入力中と選択モードの間は掴めない(落とし先としては受ける)。
+  const canDrag = !!group && !!reorder && !renaming && !tileActions.selectionMode
+  const dragging = !!group && reorder?.draggingId === group.id
+  const dropPosition = group && reorder ? reorder.dropPositionFor(group.id) : null
+  const orderIndex = group && reorder ? reorder.groupIds.indexOf(group.id) : -1
+  const orderCount = reorder?.groupIds.length ?? 0
+
+  // 見出し行のドラッグの受け口。画像のドラッグは `headerDrop`(既存)に、グループの節の
+  // ドラッグはここで受ける。どちらも自分の型でなければ何もしないので、両方を順に呼ぶ。
+  const headerHandlers = {
+    onDragOver: (e: DragEvent<HTMLDivElement>) => {
+      if (group && reorder && hasGroupData(e)) {
+        const rect = e.currentTarget.getBoundingClientRect()
+        if (reorder.dragOver(group.id, dropPositionFor(e.clientY, rect.top, rect.height))) {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+        }
+        return
+      }
+      headerDrop.handlers.onDragOver?.(e)
+    },
+    onDragLeave: (e: DragEvent<HTMLDivElement>) => {
+      if (group && reorder && !e.currentTarget.contains(e.relatedTarget as Node | null)) reorder.leave(group.id)
+      headerDrop.handlers.onDragLeave?.(e)
+    },
+    onDrop: (e: DragEvent<HTMLDivElement>) => {
+      if (group && reorder && hasGroupData(e)) {
+        e.preventDefault()
+        reorder.drop(group.id)
+        return
+      }
+      headerDrop.handlers.onDrop?.(e)
+    },
+  }
+  const dragSourceHandlers =
+    canDrag && group && reorder
+      ? {
+          draggable: true,
+          onDragStart: (e: DragEvent<HTMLDivElement>) => {
+            // 画像の型は載せない(見出し行やフォームの入力欄が画像のドロップとして扱わないように)。
+            e.dataTransfer.setData(GAKEI_GROUP_ID_DATA_TYPE, group.id)
+            e.dataTransfer.effectAllowed = 'move'
+            setMenuOpen(false)
+            reorder.startDrag(group.id)
+          },
+          onDragEnd: () => reorder.endDrag(),
+        }
+      : {}
+
   return (
-    <section className={styles.section}>
-      <div className={styles.headerRow} data-dropping={headerDrop.dropping} {...headerDrop.handlers}>
+    <section className={styles.section} data-dragging={dragging || undefined}>
+      <div
+        className={styles.headerRow}
+        data-dropping={headerDrop.dropping}
+        data-drop-position={dropPosition ?? undefined}
+        {...headerHandlers}
+        {...dragSourceHandlers}
+      >
         {renaming && group ? (
           <input
             autoFocus
@@ -245,6 +313,17 @@ export function GroupSection({
           </button>
         )}
 
+        {canDrag && (
+          <span
+            className={styles.dragHandle}
+            role="img"
+            aria-label={t.stock.groups.dragToReorder}
+            title={t.stock.groups.dragToReorder}
+          >
+            ⠿
+          </span>
+        )}
+
         {group && (
           <div className={styles.menuAnchor} ref={menuRef}>
             <button
@@ -259,6 +338,32 @@ export function GroupSection({
             </button>
             {menuOpen && (
               <div className={styles.menu} role="menu">
+                {reorder && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={orderIndex <= 0}
+                      onClick={() => {
+                        reorder.move(group.id, -1)
+                        setMenuOpen(false)
+                      }}
+                    >
+                      {t.stock.groups.moveUp}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={orderIndex < 0 || orderIndex >= orderCount - 1}
+                      onClick={() => {
+                        reorder.move(group.id, 1)
+                        setMenuOpen(false)
+                      }}
+                    >
+                      {t.stock.groups.moveDown}
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   role="menuitem"

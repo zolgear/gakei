@@ -311,7 +311,7 @@ export function getAssetLineage(
 // -- グループ(ADR-0022) ------------------------------------------------------
 // 階層なしのフラットなグループ。証跡ではないので更新・削除は自由(ADR-0003 の対象外)。
 
-/** 削除済みでないグループを updated_at 降順で全件。ページングなし(prompt-sets と同じ)。 */
+/** 削除済みでないグループを利用者が決めた順(`position` 昇順)で全件。ページングなし(prompt-sets と同じ)。 */
 export function listAssetGroups(): Promise<AssetGroupListResponse> {
   return request('/api/asset-groups')
 }
@@ -329,6 +329,18 @@ export function updateAssetGroup(groupId: string, name: string): Promise<AssetGr
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
+  })
+}
+
+/**
+ * 並べ替え。削除済みでない全グループの id を望む順に渡す(過不足・重複があれば 422)。
+ * 並べ替え後の一覧を返す。
+ */
+export function reorderAssetGroups(groupIds: string[]): Promise<AssetGroupListResponse> {
+  return request('/api/asset-groups/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ group_ids: groupIds }),
   })
 }
 

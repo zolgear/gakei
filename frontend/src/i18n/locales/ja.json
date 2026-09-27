@@ -977,7 +977,11 @@
       "renameFailed": "名前の変更に失敗しました",
       "deleteFailed": "グループの削除に失敗しました",
       "addFailed": "グループへの追加に失敗しました",
-      "removeFailed": "グループから外すのに失敗しました"
+      "removeFailed": "グループから外すのに失敗しました",
+      "moveUp": "上へ移動",
+      "moveDown": "下へ移動",
+      "dragToReorder": "ドラッグで並べ替え",
+      "reorderFailed": "並べ替えに失敗しました"
     },
     "selection": {
       "enter": "選択",
