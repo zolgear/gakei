@@ -1,0 +1,144 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.backButton {
+  height: 32px;
+  padding: 0 10px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.modeSwitch {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.modeButton {
+  width: 30px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+}
+
+.modeButton[data-active='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+}
+
+.modeButton:hover {
+  color: var(--color-text);
+}
+
+.placeholder {
+  color: var(--color-text-faint);
+  font-size: 13px;
+  margin: 0;
+}
+
+.pickerRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pickerLabel {
+  font-size: 11px;
+  color: var(--color-text-faint);
+  letter-spacing: 0.06em;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--color-bg-raised);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.chip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.chip[data-active='true'] {
+  border-color: var(--color-accent);
+}
+
+.canvasArea {
+  position: relative;
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 10px;
+  }
+
+  .backButton {
+    min-height: 44px;
+  }
+
+  .chip {
+    width: 44px;
+    height: 44px;
+  }
+}

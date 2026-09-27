@@ -1,0 +1,280 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.content[data-compact='true'] {
+  gap: 10px;
+}
+
+.deletedBanner {
+  padding: 10px 12px;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  font-size: 13px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.statusBadge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+}
+
+.statusBadge[data-status='succeeded'] {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.statusBadge[data-status='failed'] {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.modelTag {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.rerunButton {
+  margin-left: auto;
+  padding: 8px 12px;
+  background: var(--color-accent);
+  color: #0c1116;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius);
+}
+
+.rerunButton:hover {
+  background: var(--color-accent-hover);
+}
+
+.lineageLink {
+  font-size: 12px;
+}
+
+.section {
+  padding: 14px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.content[data-compact='true'] .section {
+  padding: 10px;
+}
+
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.sectionHeaderRow .heading {
+  margin: 0;
+}
+
+.heading {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.content[data-compact='true'] .heading {
+  font-size: 13px;
+}
+
+.subheading {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.prompt {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.paramsAnnotated {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.paramsAnnotated li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.paramLabel {
+  color: var(--color-text);
+  min-width: 6em;
+}
+
+.paramName {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-faint);
+}
+
+.paramValue {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.costLine {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.paramsBlock {
+  margin: 0;
+  padding: 10px;
+  background: var(--color-bg-sunken);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+.comfyuiInfo {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.comfyuiDetails {
+  margin-top: 4px;
+}
+
+.comfyuiDetails summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.comfyuiDownloadLink {
+  margin-left: 8px;
+  font-size: 11px;
+}
+
+.metaList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.metaList dt {
+  color: var(--color-text-faint);
+}
+
+.metaList dd {
+  margin: 0;
+}
+
+/* 実行者名の横の小さなアバター(ADR-0020)。 */
+.createdByValue {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.errorBox {
+  padding: 10px;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  font-size: 13px;
+}
+
+.thumbGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.content[data-compact='true'] .thumbGrid {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.thumbCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  text-decoration: none;
+  color: var(--color-text-muted);
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+.thumbLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.primaryBadge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: #0c1116;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.deletedTag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+@media (max-width: 767px) {
+  .rerunButton {
+    min-height: 44px;
+  }
+}

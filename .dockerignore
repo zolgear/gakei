@@ -1,0 +1,36 @@
+# ADR-0016: イメージに含めないもの。.gitignore と重なる部分が多い。
+.git
+.github
+.claude
+
+.env
+.env.*
+!.env.example
+!.env.example.ja
+
+data/
+temp/
+HANDOFF.md
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+backend/.venv/
+.pytest_cache/
+.ruff_cache/
+# テストはビルドに不要(イメージに含めない)。
+backend/tests/
+
+# Node / frontend(dist は multi-stage の1段目でビルドし直す)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# ドキュメント類(ビルドに不要)
+docs/
+*.md

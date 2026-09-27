@@ -1,0 +1,94 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trigger {
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.trigger:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.savedMessage {
+  font-size: 11px;
+  color: var(--color-success);
+}
+
+/* Modal の中身。モーダル自体の幅は min(720px, 92vw) だが、この欄はそこまで要らない。 */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.modeRow {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.modeRow label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.select,
+.input {
+  height: 34px;
+  padding: 0 8px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.fieldLabel {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+.actions button {
+  padding: 6px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+@media (max-width: 767px) {
+  .select,
+  .input {
+    font-size: 16px;
+  }
+
+  .trigger,
+  .actions button {
+    min-height: 44px;
+  }
+}

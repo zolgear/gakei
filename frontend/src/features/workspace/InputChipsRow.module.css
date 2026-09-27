@@ -1,0 +1,214 @@
+.row {
+  /* InputPane の .pane(flex column)内で、下段が縮んでもこの行の高さは潰れない
+     (テキストエリアだけが伸縮する)。 */
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.label {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  letter-spacing: 0.06em;
+}
+
+/* ちょうどの枚数が必要なモデル(ADR-0013 の画像の枠)の「入力画像 k / N 枚」表示。 */
+.requirement {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 3px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.chip[data-primary='true'] {
+  border-color: var(--color-edit);
+}
+
+.chip[data-not-found='true'],
+.chip[data-deleted='true'] {
+  border-color: var(--color-danger);
+}
+
+.thumbButton {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.thumbButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.thumb {
+  width: 30px;
+  height: 30px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.maskThumb {
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-strong);
+}
+
+/* チップの番号(1 から)。1 = 主たる親なので強調色にする。 */
+.indexTag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.chip[data-primary='true'] .indexTag {
+  color: var(--color-edit);
+}
+
+/* 行末の枚数(n/最大)。 */
+.count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.dims {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.statusTag {
+  font-size: 10px;
+  color: var(--color-danger);
+  white-space: nowrap;
+}
+
+.iconButton {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: var(--color-text-muted);
+}
+
+.iconButton:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-header-band);
+}
+
+.reorderButtons {
+  display: flex;
+  flex-direction: column;
+}
+
+.reorderButtons button {
+  width: 16px;
+  height: 11px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-faint);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.reorderButtons button:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.addButton {
+  flex-shrink: 0;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.addButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.addButton[data-drag-over='true'] {
+  border-color: var(--color-accent);
+  background: rgba(227, 179, 65, 0.08);
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.errorList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 11px;
+  color: var(--color-danger);
+  width: 100%;
+}
+
+.uploadNotice {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-success, #4ade80);
+  width: 100%;
+}
+
+@media (max-width: 767px) {
+  .iconButton {
+    width: 30px;
+    height: 30px;
+  }
+
+  .addButton {
+    min-height: 44px;
+  }
+}

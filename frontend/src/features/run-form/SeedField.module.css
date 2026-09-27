@@ -1,0 +1,70 @@
+/*
+ * seed 専用入力欄(ADR-0013 フォローアップ)。ParamField と同じ `.field` ラッパーを使い、
+ * 中身だけをこのファイルで足す。「最低限のモバイル対応」として、入力欄は 16px 以上、
+ * タップ対象(ラジオのラベル・サイコロボタン)は常に 44px 角以上にする(ブレークポイントで
+ * 出し分けない)。
+ */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.modeLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.modeLabel input[type='radio'] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.numberInput {
+  height: 44px;
+  min-width: 0;
+  flex: 1 1 140px;
+  box-sizing: border-box;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0 10px;
+  color: var(--color-text);
+  font-size: 16px;
+}
+
+.numberInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.diceButton {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.diceButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.diceButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

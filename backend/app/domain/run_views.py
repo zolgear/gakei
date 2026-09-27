@@ -1,0 +1,150 @@
+"""Run を一覧・検索で見せるときに共通で使う集計クエリ。
+
+`RunSummary` の `outputs` / `primary_parent_asset_id` / `input_count` は
+一覧(app/api/runs.py)とグローバル検索(app/domain/search.py)の両方で必要になるため、
+ここに1か所にまとめる。複数 run_id をまとめて引く前提(N+1 を避ける)。
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.domain.avatars import avatar_url
+from app.domain.models import AppUser, Asset, Run, RunInput, RunInputRole
+from app.domain.pricing import cost_from_usage
+from app.domain.schemas import CreatedBy, RunOutputRef
+
+
+def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[RunOutputRef]]:
+    """run_id ごとの出力 Asset 参照。複数 run_id を1つの IN 句でまとめて取る。"""
+    result: dict[uuid.UUID, list[RunOutputRef]] = {rid: [] for rid in run_ids}
+    if not run_ids:
+        return result
+    rows = db.execute(
+        select(Asset.produced_by_run_id, Asset.id, Asset.output_index)
+        .where(Asset.produced_by_run_id.in_(run_ids))
+        .order_by(Asset.output_index)
+    ).all()
+    for produced_by_run_id, asset_id, output_index in rows:
+        result[produced_by_run_id].append(
+            RunOutputRef(asset_id=asset_id, output_index=output_index)
+        )
+    return result
+
+
+def bulk_input_summary(
+    db: Session, run_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[int, uuid.UUID | None]]:
+    """run_id ごとの (role=image の入力枚数, 主たる親 asset_id) を1つの IN 句でまとめて取る。"""
+    counts: dict[uuid.UUID, int] = dict.fromkeys(run_ids, 0)
+    primary: dict[uuid.UUID, uuid.UUID | None] = dict.fromkeys(run_ids)
+    if not run_ids:
+        return {rid: (0, None) for rid in run_ids}
+    rows = db.execute(
+        select(RunInput.run_id, RunInput.asset_id, RunInput.position).where(
+            RunInput.run_id.in_(run_ids), RunInput.role == RunInputRole.IMAGE
+        )
+    ).all()
+    for run_id, asset_id, position in rows:
+        counts[run_id] += 1
+        if position == 0:
+            primary[run_id] = asset_id
+    return {rid: (counts[rid], primary[rid]) for rid in run_ids}
+
+
+def bulk_descendant_run_counts(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """run_id ごとの「子孫 Run 数」: この Run の出力 Asset を入力に使っている、削除されていない
+    Run の数(distinct run_id、自分自身は除く)。削除確認ダイアログの警告に使う。
+    """
+    result: dict[uuid.UUID, int] = dict.fromkeys(run_ids, 0)
+    if not run_ids:
+        return result
+    descendants: dict[uuid.UUID, set[uuid.UUID]] = {rid: set() for rid in run_ids}
+    rows = db.execute(
+        select(Asset.produced_by_run_id, RunInput.run_id)
+        .select_from(RunInput)
+        .join(Asset, Asset.id == RunInput.asset_id)
+        .join(Run, Run.id == RunInput.run_id)
+        .where(Asset.produced_by_run_id.in_(run_ids), Run.deleted_at.is_(None))
+        .distinct()
+    ).all()
+    for produced_by_run_id, descendant_run_id in rows:
+        if descendant_run_id != produced_by_run_id:
+            descendants[produced_by_run_id].add(descendant_run_id)
+    return {rid: len(descendants[rid]) for rid in run_ids}
+
+
+def bulk_users(db: Session, user_ids: list[uuid.UUID | None]) -> dict[uuid.UUID, CreatedBy]:
+    """`created_by_user_id` ごとの `CreatedBy` を1つの IN 句でまとめて取る(ADR-0019、N+1 回避)。
+
+    None(none モード、または生成出力以外で実行者を記録しない箇所)は呼び出し側で弾く前提
+    だが、渡ってきても無視するだけで安全。
+    """
+    ids = {uid for uid in user_ids if uid is not None}
+    if not ids:
+        return {}
+    rows = db.execute(select(AppUser).where(AppUser.id.in_(ids))).scalars().all()
+    return {
+        row.id: CreatedBy(
+            id=row.id,
+            name=row.name,
+            email=row.email,
+            avatar_url=avatar_url(row.id, row.avatar_sha256),
+        )
+        for row in rows
+    }
+
+
+def model_label_from_params(params: dict[str, Any] | None) -> str | None:
+    """`run.params["comfyui_workflow"]["name"]` があればそれ、無ければ None(ADR-0013)。
+    ComfyUI の Run は `model` がワークフローの id なので、画面にはこの名前を出す。
+    """
+    if not params:
+        return None
+    workflow = params.get("comfyui_workflow")
+    if isinstance(workflow, dict):
+        name = workflow.get("name")
+        if isinstance(name, str):
+            return name
+    return None
+
+
+def run_summary_fields(
+    run: Run,
+    outputs: list[RunOutputRef],
+    input_count: int,
+    primary_parent_asset_id: uuid.UUID | None,
+    descendant_run_count: int = 0,
+    created_by: CreatedBy | None = None,
+) -> dict[str, Any]:
+    """`RunSummary(**...)` にそのまま渡せる辞書を作る。`created_by` は呼び出し側が
+    `bulk_users()` で引いた値を渡す(ここでは DB を引かない。ADR-0019)。
+    """
+    return {
+        "id": run.id,
+        "provider": run.provider,
+        "operation": run.operation,
+        "model": run.model,
+        "model_label": model_label_from_params(run.params),
+        "status": run.status,
+        "prompt": run.prompt,
+        "params": run.params or {},
+        "usage": run.usage,
+        "error_code": run.error_code,
+        "error_message": run.error_message,
+        "queued_at": run.queued_at,
+        "started_at": run.started_at,
+        "finished_at": run.finished_at,
+        "outputs": outputs,
+        "primary_parent_asset_id": primary_parent_asset_id,
+        "input_count": input_count,
+        "descendant_run_count": descendant_run_count,
+        "deleted_at": run.deleted_at,
+        # 実コスト(参考)。ADR-0009「参考価格」節。usage 無し・単価不明なら None。
+        "cost_usd": cost_from_usage(run.model, run.usage),
+        "created_by": created_by,
+    }

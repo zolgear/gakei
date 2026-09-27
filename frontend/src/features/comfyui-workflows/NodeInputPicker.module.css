@@ -1,0 +1,45 @@
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.select {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 8px;
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.select:disabled {
+  opacity: 0.5;
+}
+
+@media (max-width: 767px) {
+  .row {
+    flex-direction: column;
+  }
+
+  .select {
+    width: 100%;
+    min-height: 40px;
+    font-size: 16px;
+  }
+}

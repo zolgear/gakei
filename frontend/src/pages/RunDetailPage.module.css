@@ -1,0 +1,34 @@
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.backLink {
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.backLink:hover {
+  color: var(--color-text);
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 14px;
+  }
+
+  .backLink {
+    min-height: 44px;
+  }
+}

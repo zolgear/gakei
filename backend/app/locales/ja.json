@@ -1,0 +1,260 @@
+{
+  "app": {
+    "frontendNotBuilt": "フロントエンドが未ビルドです。frontend/ で npm run build を実行してください。",
+    "legacyProviderIgnored": "環境変数 PROVIDER=openai は無視します(この設定はもう使いません)。",
+    "legacyProviderAborted": "環境変数 PROVIDER={value} が設定されていますが、この設定は廃止されました。ダミー画像で確認したい場合は FAKE_PROVIDER=1 を使ってください。実 API に接続する場合は PROVIDER を削除してください。",
+    "authConfigMissing": "AUTH_MODE=oidc ですが、必須の環境変数が設定されていません: {missing}",
+    "authUrlInvalid": "{name} の形式が不正です(http または https で、ホストを含む URL である必要があります): {value}",
+    "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。"
+  },
+  "auth": {
+    "required": "ログインが必要です。",
+    "adminRequired": "この操作には管理者権限が必要です。",
+    "disabled": "個人モード(AUTH_MODE=none)ではログイン機能を使えません。",
+    "idpUnavailable": "認証サーバー(IdP)に接続できません。OIDC_ISSUER の設定と IdP の状態を確認してください。",
+    "callbackFailed": "ログインの処理に失敗しました。もう一度お試しください。"
+  },
+  "provider": {
+    "unknown": "未知のプロバイダーです: {name}"
+  },
+  "pagination": {
+    "invalidCursor": "cursor が不正です"
+  },
+  "search": {
+    "emptyQuery": "q は空にできません",
+    "unknownTypes": "types に未知の値があります: {types}(有効な値: {validTypes})"
+  },
+  "comfyui": {
+    "connection": {
+      "invalidUrl": "URL は http:// または https:// で、ホストを含む形式で指定してください。",
+      "nonLoopback": "ループバック(127.0.0.1 など)以外のアドレスです。認証のない ComfyUI に入力画像とプロンプトを送信することになるため、確認のうえチェックを入れて保存してください。"
+    },
+    "api": {
+      "workflowNotFound": "ワークフローが見つかりません",
+      "connectionUrlMissing": "接続先の URL が指定されていません。",
+      "lockedChangeConnection": "ComfyUI の Run が実行中または待機中のため、接続設定を変更できません。",
+      "lockedDetach": "ComfyUI の Run が実行中または待機中のため、切り離せません。"
+    },
+    "workflow": {
+      "uiFormatMessage": "UI 形式(nodes/links を含む)のファイルです。ComfyUI の「Export (API)」で書き出した API 形式の JSON を登録してください。",
+      "notApiFormatMessage": "API 形式のワークフローとして認識できませんでした。",
+      "maskBindingRequiresNodeInput": "load_image_mask には node と input が必要です",
+      "invalidExposedParamName": "公開パラメータ名の形式が不正です(小文字英字で始まる英数字とアンダースコアのみ): {name}",
+      "exposedParamReservedPrefix": "公開パラメータ名は comfyui_ で始められません: {name}",
+      "exposedParamReservedWord": "公開パラメータ名に予約語は使えません: {name}",
+      "bindingNodeMissing": "{label}: ノード {node} が存在しません",
+      "bindingInputMissing": "{label}: ノード {node} に入力 {input} がありません",
+      "bindingDuplicate": "差し込み先が重複しています: ノード {node} の入力 {input}",
+      "outputNodeMissing": "出力ノード {node} が存在しません",
+      "editRequiresImage": "edit には image の差し込み先が必要です",
+      "generateCannotHaveImageOrMask": "generate には image と mask の差し込み先を指定できません(edit として登録してください)",
+      "exposedParamDuplicate": "公開パラメータ名が重複しています: {name}",
+      "exposedParamLabel": "公開パラメータ {name}",
+      "negativePromptLabel": "ネガティブプロンプト",
+      "seedLabel": "シード",
+      "widthLabel": "幅",
+      "heightLabel": "高さ",
+      "countLabel": "枚数",
+      "listSeparator": "、",
+      "previewImageNotSupported": "PreviewImage の出力は GAKEI に取り込めません。ComfyUI で SaveImage を追加して書き出し直してください。",
+      "outputNodeNotFoundWithCandidates": "出力ノード(SaveImage)が見つかりませんでした。候補: ",
+      "outputNodeNotFound": "出力ノードが見つかりませんでした。手動で選択してください。",
+      "promptBindingNotFound": "プロンプトの差し込み先を特定できませんでした。手動で選択してください。",
+      "promptBindingCandidates": "プロンプトの差し込み先を特定できませんでした。次の候補から手動で選択してください: {candidates}",
+      "moreCandidatesSuffix": "、ほか {count} 件",
+      "imageBindingNotFound": "入力画像(LoadImage)の差し込み先が見つかりませんでした。",
+      "maskMethodUnsupported": "このワークフローのマスクは GAKEI から渡せない方式です。"
+    },
+    "client": {
+      "genericError": "エラー",
+      "nodeInputError": "ノード {node}({classType})の入力「{inputName}」: {message}",
+      "nodeError": "ノード {node}({classType}): {message}",
+      "rejectedNoDetails": "ComfyUI がワークフローを拒否しました(詳細不明)。",
+      "connectTimeout": "ComfyUI への接続がタイムアウトしました。",
+      "connectFailed": "ComfyUI に接続できません({error})。",
+      "unexpectedResponse": "ComfyUI から予期しない応答がありました(status={status})。",
+      "parseFailed": "ComfyUI の応答を解釈できませんでした。",
+      "uploadFailed": "画像のアップロードに失敗しました(status={status})。",
+      "missingPromptId": "ComfyUI の応答に prompt_id が含まれていません。",
+      "fetchOutputFailed": "出力画像を取得できませんでした(status={status})。",
+      "wsConnectFailed": "ComfyUI の WebSocket に接続できません({error})。",
+      "wsLost": "ComfyUI との WebSocket 接続が切れました({error})。",
+      "timedOutWhile": "{hint}がタイムアウトしました。",
+      "hintUpload": "画像のアップロード",
+      "hintSubmit": "ワークフローの投入",
+      "hintFetchOutput": "出力画像の取得",
+      "hintContact": "ComfyUI への問い合わせ"
+    },
+    "provider": {
+      "unknownWorkflow": "未知のワークフローです: {model}",
+      "workflowOperationMismatch": "ワークフロー「{name}」は operation={operation} に対応していません",
+      "missingPromptInternal": "run.params に comfyui_prompt がありません(内部エラー)。",
+      "noOutputImages": "出力ノードに画像がありませんでした。",
+      "timeoutExecuting": "ComfyUI の実行がタイムアウトしました。",
+      "executionInterrupted": "ComfyUI 側で実行が中断されました。",
+      "wsEnded": "ComfyUI の WebSocket 接続が終了しました。",
+      "roleInputNotFound": "role={role} の入力が見つかりません",
+      "roleImageInputNotFound": "role={role} の入力画像が見つかりません(内部エラー)。",
+      "noDetails": "詳細不明",
+      "nodeExecutionFailed": "ノード {node} の実行に失敗しました({detail})。",
+      "historyErrorNoDetails": "ComfyUI の実行がエラーで終了しました(詳細不明)。"
+    }
+  },
+  "openaiSpec": {
+    "editingStrong": "編集に強い",
+    "fast": "高速",
+    "qualityAuto": "自動",
+    "qualityLow": "低",
+    "qualityMedium": "中",
+    "qualityHigh": "高",
+    "qualityXhigh": "最高",
+    "qualityMax": "最大",
+    "backgroundAuto": "自動",
+    "backgroundOpaque": "不透明",
+    "backgroundTransparent": "透明",
+    "qualityLabel": "画質",
+    "qualityDescription": "低いほど速く安価。xhigh/max は 2.5 系のみ",
+    "fileFormatLabel": "ファイル形式",
+    "fileFormatDescription": "出力するファイル形式",
+    "compressionLabel": "圧縮率",
+    "compressionDescription": "JPEG / WebP のときのみ。0〜100、高いほど高画質",
+    "backgroundLabel": "背景",
+    "backgroundDescription": "透明は PNG / WebP のときのみ",
+    "countLabel": "枚数",
+    "countDescription": "1回の実行で生成する枚数。枚数分の料金がかかる",
+    "previewLabel": "途中経過の表示",
+    "previewDescription": "生成途中の画像を表示する回数(0 で表示しない)"
+  },
+  "fake": {
+    "forcedFailureMarker": "テスト用の強制失敗マーカーを検出しました: {code}",
+    "editRequiresBaseImage": "edit には position=0 の image 入力が必要です"
+  },
+  "openai": {
+    "editRequiresImageInput": "edit には role=image の入力が少なくとも1枚必要です",
+    "missingApiKey": "OpenAI の API キーが設定されていません。設定画面でキーを登録してください。",
+    "missingImageData": "レスポンスに画像データ(b64_json)が含まれていません",
+    "noImagesReturned": "OpenAI から画像が1枚も返されませんでした。",
+    "rateLimited": "OpenAI のレート制限に達しました(SDK 側の再試行も尽きました)。しばらく待って再実行してください。",
+    "authFailed": "OpenAI の認証に失敗しました。OPENAI_API_KEY を確認してください。",
+    "connectionFailed": "OpenAI への接続に失敗しました(タイムアウトまたは接続エラー)。",
+    "contentFilterRejected": "コンテンツポリシーにより拒否されました。",
+    "apiError": "OpenAI API エラー({label}): {detail}",
+    "keyInvalid": "キーが無効です",
+    "keyVerifyFailed": "OpenAI への確認に失敗しました: {detail}",
+    "envKeyLocked": "環境変数(.env)の OPENAI_API_KEY が優先されるため、画面からは変更・削除できません。.env の値を変更してください。",
+    "keyEmpty": "APIキーを入力してください",
+    "baseUrl": {
+      "invalid": "接続先(Base URL)の形式が不正です。http または https のみで、ユーザー情報・クエリー・フラグメントは指定できません。",
+      "empty": "接続先(Base URL)を入力してください",
+      "envLocked": "環境変数(.env)の OPENAI_BASE_URL が優先されるため、画面からは変更・削除できません。.env の値を変更してください。"
+    }
+  },
+  "settings": {
+    "general": {
+      "invalidModeration": "moderation は auto または low である必要があります",
+      "invalidTimeoutSeconds": "ComfyUI のタイムアウトは{min}〜{max}秒の整数である必要があります"
+    }
+  },
+  "runValidation": {
+    "enumInvalid": "{name} は次のいずれかである必要があります: {choices}",
+    "intRequired": "{name} は整数である必要があります",
+    "minRequired": "{name} は{minimum}以上である必要があります",
+    "maxRequired": "{name} は{maximum}以下である必要があります",
+    "floatRequired": "{name} は数値である必要があります",
+    "boolRequired": "{name} は真偽値である必要があります",
+    "textRequired": "{name} は文字列である必要があります",
+    "maxLength": "{name} は{maxLength}文字以内である必要があります",
+    "promptLength": "prompt は1〜{max}文字である必要があります",
+    "unknownModel": "未知のモデルです: {model}",
+    "operationNotSupported": "{model} は operation={operation} に対応していません",
+    "unknownParamSize": "未知のパラメータです: size",
+    "unknownParam": "未知のパラメータです: {key}",
+    "incompatiblePair": "{fieldA}={valueA} と {fieldB}={valueB} は同時に指定できません",
+    "conditionalParam": "{field} は {dependsOnField} が {dependsOnValues} のいずれかのときのみ有効です",
+    "generateNoInputImages": "generate は入力画像を取れません",
+    "exactImageCount": {
+      "one": "このワークフローには入力画像がちょうど{count}枚必要です(現在{current}枚)",
+      "other": "このワークフローには入力画像がちょうど{count}枚必要です(現在{current}枚)"
+    },
+    "imageCountRange": "edit の image 入力は{min}〜{max}枚である必要があります",
+    "maskAtMostOne": "mask は最大1つです",
+    "maskNotSupported": "選んだモデルはマスクに対応していません",
+    "maskRequired": "mask が必要です",
+    "maskRequiresPosition0": "mask を使う場合は position=0 の image 入力が必要です",
+    "maskSizeMismatch": "mask は position=0 の画像と同寸である必要があります"
+  },
+  "sizes": {
+    "positiveIntegersRequired": "width と height は正の整数である必要があります",
+    "multipleOfRequired": "width と height は{multipleOf}の倍数である必要があります",
+    "longEdgeMax": "長辺は{maxLongEdge}px以下である必要があります",
+    "totalPixelsRange": "総画素数は{min}〜{max}である必要があります",
+    "aspectRatioRange": "縦横比は 1:3 〜 3:1 の範囲である必要があります",
+    "sizeFormat": "size は \"auto\" または \"WIDTHxHEIGHT\" の形式である必要があります"
+  },
+  "assets": {
+    "sourceAssetOnlyForSketch": "source_asset_id はスケッチ(kind=sketch)にのみ指定できます",
+    "baseAssetNotFound": "下地の Asset が見つかりません",
+    "replacesAssetOnlyForSketchOrMask": "replaces_asset_id はスケッチ(kind=sketch)かマスク(kind=mask)にのみ指定できます",
+    "cannotCombineSourceAndReplaces": "source_asset_id と replaces_asset_id は同時に指定できません",
+    "replaceTargetNotFound": "置き換え元の Asset が見つかりません",
+    "replaceTargetKindMismatch": "置き換え元の Asset は同じ種類(kind)である必要があります",
+    "uploadTooLarge": "アップロード画像は50MB未満である必要があります",
+    "maskTooLarge": "マスクは4MB未満である必要があります",
+    "cannotReadImage": "画像として読み込めませんでした",
+    "unsupportedFormat": "対応していない画像形式です: {format}",
+    "maskMustBePng": "マスクはPNG形式である必要があります",
+    "sketchMustBePng": "スケッチはPNG形式である必要があります",
+    "notFound": "asset が見つかりません",
+    "contentNotFound": "content が見つかりません",
+    "notDeleted": "削除されていません",
+    "cannotRestoreDeletedRunOutput": "削除された実行の出力は復元できません。"
+  },
+  "runs": {
+    "unknownProvider": "未知の provider です: {provider}",
+    "providerUnavailable": "{label} は現在使用できません",
+    "assetNotFound": "asset が見つかりません: {id}",
+    "notFound": "run が見つかりません",
+    "cannotDeleteRunning": "実行中または待機中のため、先にキャンセルしてください",
+    "cannotCancelStatus": "status={status} のため cancel できません",
+    "cannotCancelAlreadyRunning": "すでに実行が開始されているため cancel できません",
+    "partialNotFound": "途中経過が見つかりません"
+  },
+  "promptSets": {
+    "notFound": "プロンプトセットが見つかりません",
+    "itemNotFound": "プロンプトセットの項目が見つかりません"
+  },
+  "worker": {
+    "interruptedByRestart": "サーバー再起動により中断されました",
+    "providerNotRegistered": "provider={provider} は登録されていません"
+  },
+  "launcher": {
+    "nodeMissing": "Node.js が見つからないか、バージョンが古すぎます(22.12 以上が必要、24 系を推奨)。\nhttps://nodejs.org/ からインストールしてください。",
+    "commandFailed": "コマンドが失敗しました(終了コード {code}): {cmd}",
+    "frontendUpToDate": "フロントは最新です。ビルドを省略します。",
+    "warningPrefix": "警告: ",
+    "staleDistNotice": "\nビルド済みの frontend/dist をそのまま使って起動します(最新の変更が反映されていない可能性があります)。",
+    "npmCi": "依存関係を取得しています(npm ci)...",
+    "building": "フロントをビルドしています(npm run build)...",
+    "buildComplete": "フロントのビルドが完了しました。",
+    "launcherDescription": "フロントのビルド確認とサーバー起動をまとめて行う。--host/--port/--data-dir/--open-browser など、`python -m app` のオプションもそのまま渡せる。",
+    "noBrowserHelp": "起動時にブラウザを自動で開かない(既定では開く)",
+    "startupAborted": "起動を中止しました: {error}",
+    "serverDescription": "GAKEI ローカルMVP のサーバーを起動する。",
+    "hostHelp": "待ち受けホスト(既定: 環境変数/.env の HOST、なければ 127.0.0.1)",
+    "portHelp": "待ち受けポート(既定: 環境変数/.env の PORT、なければ 8000)",
+    "dataDirHelp": "データディレクトリ(既定: 環境変数/.env の DATA_DIR、なければ data/)",
+    "openBrowserHelp": "サーバーが接続を受け付け次第、既定のブラウザを自動で開く",
+    "portInUse": "ポート {port} はすでに使われています。GAKEI がすでに起動していないか確認するか、別のポートを指定してください(例: --port {nextPort}、または .env に PORT={nextPort})。",
+    "startingAt": "GAKEI: {url} で起動します"
+  },
+  "users": {
+    "avatar": {
+      "tooLarge": "アバター画像は20MB以下である必要があります",
+      "cannotReadImage": "画像として読み込めませんでした",
+      "assetNotFound": "元になる画像が見つかりません",
+      "notFound": "アバターが見つかりません",
+      "invalidCrop": "切り出す範囲の指定が壊れています",
+      "cropOutOfBounds": "切り出す範囲が画像の外にはみ出しています"
+    }
+  }
+}

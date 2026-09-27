@@ -1,0 +1,305 @@
+.page {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  padding: 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+@media (max-width: 767px) {
+  .page {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+  }
+
+  .viewerArea {
+    height: 60vh;
+    min-height: 280px;
+    flex-shrink: 0;
+  }
+
+  .sidebar {
+    flex-shrink: 0;
+  }
+
+  .restoreButton {
+    min-height: 44px;
+  }
+
+  .outputNavButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .outputThumb {
+    width: 56px;
+    height: 56px;
+  }
+
+  .backButton {
+    min-height: 44px;
+  }
+}
+
+.viewerArea {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* 通常は AssetCanvas のツールバー行(toolbarLeading)の先頭に横並びで入る。
+   読み込み中など AssetCanvas が無いときだけ .backButtonFloating で左上に重ねる。 */
+.backButton {
+  height: 30px;
+  padding: 0 10px;
+  background: rgba(23, 24, 27, 0.86);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.backButton:hover {
+  border-color: var(--color-accent);
+}
+
+.backButtonFloating {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 5;
+}
+
+.placeholder {
+  color: var(--color-text-faint);
+  font-size: 13px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow-y: auto;
+}
+
+.heading {
+  margin: 0;
+  font-size: 15px;
+}
+
+.subheading {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+/* 同じ Generated(Run)の他の出力への切り替え(出力が2つ以上のときだけ表示)。 */
+.outputNav {
+  margin: 8px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.outputNavHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.outputNavLabel {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.outputNavButtons {
+  display: flex;
+  gap: 4px;
+}
+
+.outputNavButton {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.outputNavButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.outputNavButton:disabled {
+  opacity: 0.4;
+}
+
+.outputThumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.outputThumb {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  background: var(--color-bg-sunken);
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.outputThumb:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+.outputThumbActive {
+  border-color: var(--color-accent);
+  cursor: default;
+}
+
+.outputThumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.metaList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.metaList dt {
+  color: var(--color-text-faint);
+}
+
+.metaList dd {
+  margin: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.runPrompt {
+  margin: 0;
+  font-size: 12px;
+}
+
+.runMeta {
+  margin: 4px 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.runLink {
+  font-size: 12px;
+}
+
+.actions {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.actionButton {
+  display: block;
+  text-align: center;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.actionButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+}
+
+.deleteButton {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.deleteButton:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger);
+}
+
+.deletedBanner {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.deletedBannerText {
+  margin: 0;
+  color: var(--color-danger);
+}
+
+.restoreButton {
+  align-self: flex-start;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.restoreButton:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.notRestorableNote {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.deleteErrorText {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}

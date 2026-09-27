@@ -1,0 +1,78 @@
+.canvasArea {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--color-bg-sunken);
+}
+
+.wrapper {
+  /* 実際に効くのは AssetCanvas.tsx の wrapperStyle(理由はそちらのコメント)。 */
+  width: 100%;
+  height: 100%;
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 左上に重ねる行。親から渡された要素(ビューアの「← 戻る」)とズームツールバーを横に並べる。 */
+.toolbarRow {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(20, 22, 26, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+}
+
+/* 文字ラベルは置かず、アイコン + title(ツールチップ)で説明する。 */
+.iconButton {
+  width: 28px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.iconButton:hover {
+  border-color: var(--color-accent);
+}
+
+.scaleLabel {
+  min-width: 40px;
+  text-align: center;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 767px) {
+  .iconButton {
+    width: 40px;
+    height: 40px;
+  }
+}

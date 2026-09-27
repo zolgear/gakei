@@ -1,0 +1,302 @@
+"""FastAPI アプリ本体。lifespan で DB マイグレーションと worker(Runner)を起動する。"""
+
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
+from urllib.parse import urlparse
+
+from alembic import command
+from alembic.config import Config
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from app.api import about as about_api
+from app.api import assets as assets_api
+from app.api import auth as auth_api
+from app.api import capabilities as capabilities_api
+from app.api import comfyui as comfyui_api
+from app.api import events as events_api
+from app.api import pricing as pricing_api
+from app.api import prompt_sets as prompt_sets_api
+from app.api import runs as runs_api
+from app.api import search as search_api
+from app.api import settings as settings_api
+from app.api import users as users_api
+from app.auth.deps import require_user
+from app.auth.oidc import AuthlibOidcClient
+from app.auth.secret import load_or_create_auth_secret
+from app.config import Settings, get_settings
+from app.db import make_engine, make_session_factory
+from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
+from app.domain.storage import LocalFsStore
+from app.i18n import console_t, parse_accept_language, set_locale, t
+from app.providers.registry import _is_loopback_url, build_registry
+from app.worker.progress import ProgressBus
+from app.worker.runner import Runner
+
+_BACKEND_DIR = Path(__file__).resolve().parents[1]
+_MIGRATIONS_DIR = _BACKEND_DIR / "migrations"
+_FRONTEND_DIST = _BACKEND_DIR.parent / "frontend" / "dist"
+
+# I-1(2026-09-27 追記): oidc モードで無効にした3つのパス(`spa_fallback` 側の扱いに使う)。
+_DISABLED_DOCS_PATHS = {"docs", "redoc", "openapi.json"}
+
+logger = logging.getLogger(__name__)
+
+
+class LegacyProviderAbortedError(RuntimeError):
+    """ADR-0017 移行の安全策。`PROVIDER` に `openai` 以外の値(`fake` など)が設定されたまま
+    起動しようとしたときに送出する。`FAKE_PROVIDER=1` を使うよう案内する。
+    """
+
+
+def check_legacy_provider_env(settings: Settings) -> None:
+    """`PROVIDER` はもう使わない。設定されたまま起動した場合の移行安全策(ADR-0017)。
+
+    - `PROVIDER=openai`: 従来と同じ動作なので、無視して警告するだけ。
+    - それ以外(`fake` など): `PROVIDER=fake` のつもりで実 API に課金される事故を防ぐため、
+      黙って OpenAI で起動せず、起動を中止する。
+    """
+    if settings.legacy_provider is None:
+        return
+    if settings.legacy_provider == "openai":
+        logger.warning(console_t("app.legacyProviderIgnored"))
+        return
+    raise LegacyProviderAbortedError(
+        console_t("app.legacyProviderAborted", value=settings.legacy_provider)
+    )
+
+
+class AuthConfigError(RuntimeError):
+    """ADR-0019: `AUTH_MODE=oidc` なのに必須の環境変数が欠けている場合。"""
+
+
+def check_auth_env(settings: Settings) -> None:
+    """oidc モードに必要な環境変数が揃っているか起動時に検査する。
+
+    `none`(既定)モードは何も要らないので常に通る。IdP が実際に落ちていても discovery は
+    初回ログイン時まで行わないため、ここでは値の有無だけを見る。
+    """
+    if settings.auth_mode != "oidc":
+        return
+
+    missing = [
+        name
+        for name, value in (
+            ("OIDC_ISSUER", settings.oidc_issuer),
+            ("OIDC_CLIENT_ID", settings.oidc_client_id),
+            ("PUBLIC_BASE_URL", settings.public_base_url),
+        )
+        if not value
+    ]
+    if missing:
+        raise AuthConfigError(console_t("app.authConfigMissing", missing=", ".join(missing)))
+
+    # L-4(2026-09-27 追記): 両方とも値はあるので、形式(スキームとホスト)を検査する。
+    # スキームが http/https でない、あるいはホストが無いものは起動を中止する
+    # (redirect_uri の組み立てや Cookie の Secure 判定が壊れた値のまま起動しないため)。
+    # ループバック以外への http は、動作はするが平文になるため警告に留める。
+    for name, value in (
+        ("PUBLIC_BASE_URL", settings.public_base_url),
+        ("OIDC_ISSUER", settings.oidc_issuer),
+    ):
+        assert value is not None  # 上の missing チェックを通過済み
+        parsed = urlparse(value)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise AuthConfigError(console_t("app.authUrlInvalid", name=name, value=value))
+        if parsed.scheme == "http" and not _is_loopback_url(value):
+            logger.warning(console_t("app.authUrlInsecure", name=name, value=value))
+
+
+def run_migrations(db_path: Path) -> None:
+    """Alembic の `upgrade head` を実行する。起動時のほか、`app.tools.backfill_embedded_meta`
+    のようにサーバーを立てずに DB だけ用意したいツールからも呼べるよう公開する。
+    """
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    command.upgrade(cfg, "head")
+
+
+def _build_lifespan(settings: Settings):
+    """`create_app` で解決済みの `settings` を受け取る(ミドルウェアの構築時にも同じ値が
+    要るため、`create_app` の中で1回だけ `get_settings()` する。ADR-0019)。
+    """
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        check_legacy_provider_env(settings)
+        check_auth_env(settings)
+
+        settings.data_dir.mkdir(parents=True, exist_ok=True)
+        run_migrations(settings.db_path)
+
+        # ADR-0017 2章: ループバック以外への http の接続先は、保存時だけでなく起動時にも警告する。
+        base_url, _source = resolve_base_url(settings)
+        if base_url:
+            warn_if_insecure_base_url(base_url)
+
+        engine = make_engine(settings.db_path)
+        session_factory = make_session_factory(engine)
+        store = LocalFsStore(settings.data_dir)
+        registry = build_registry(settings, session_factory)
+        progress_bus = ProgressBus()
+        runner = Runner(session_factory, store, registry, progress_bus, settings.data_dir)
+
+        app.state.settings = settings
+        app.state.engine = engine
+        app.state.session_factory = session_factory
+        app.state.store = store
+        app.state.registry = registry
+        app.state.progress_bus = progress_bus
+        app.state.runner = runner
+        if settings.auth_mode == "oidc":
+            app.state.oidc_client = AuthlibOidcClient(settings)
+
+        await runner.start()
+        try:
+            yield
+        finally:
+            await runner.stop()
+            engine.dispose()
+
+    return lifespan
+
+
+class LocaleMiddleware:
+    """`Accept-Language` からリクエストの言語(ja/en)を選び、`app.i18n` の ContextVar に
+    設定する純粋な ASGI ミドルウェア(ADR-0015)。
+
+    `BaseHTTPMiddleware` は使わない。SSE(`text/event-stream`)のストリーミングを内部で
+    バッファしてしまい、進捗配信が遅れる/途切れる原因になるため(ADR-0004 の配信方針とも
+    衝突する)。ContextVar は `contextvars.Context` を通じて例外ハンドラや
+    `anyio.to_thread.run_sync`(同期エンドポイント)にも引き継がれる。
+    """
+
+    def __init__(self, app) -> None:  # noqa: ANN001
+        self._app = app
+
+    async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+
+        header_value: str | None = None
+        for raw_name, raw_value in scope.get("headers", ()):
+            if raw_name.decode("latin-1").lower() == "accept-language":
+                header_value = raw_value.decode("latin-1")
+                break
+
+        set_locale(parse_accept_language(header_value))
+        await self._app(scope, receive, send)
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """`settings` を渡すと、環境変数を経由せずその設定でアプリを組み立てる(ADR-0017)。
+
+    ミドルウェア(`SessionMiddleware`)の構築時にも `settings` が要るため、ここで1回だけ
+    `get_settings()` を解決して lifespan にも同じ値を渡す(ADR-0019)。
+    """
+    resolved_settings = settings or get_settings()
+    # I-1(2026-09-27 追記): oidc モードでは /docs・/redoc・/openapi.json も未ログインで
+    # 読めてしまうため無効にする(API の形はレスポンス自体からも推測できるが、わざわざ
+    # 一覧を公開しない)。none モードはこれまでどおり(`app.tools.export_openapi` は
+    # none モードのまま `app.openapi()` を直接呼ぶので、ここでは影響しない)。
+    docs_kwargs: dict[str, str | None] = (
+        {"docs_url": None, "redoc_url": None, "openapi_url": None}
+        if resolved_settings.auth_mode == "oidc"
+        else {}
+    )
+    app = FastAPI(
+        title="GAKEI ローカルMVP", lifespan=_build_lifespan(resolved_settings), **docs_kwargs
+    )
+
+    app.add_middleware(LocaleMiddleware)
+
+    # JS / CSS / JSON を圧縮する。画像、フォント、SSE(text/event-stream)は
+    # ミドルウェアの既定で対象外なので、進捗の配信が遅れることはない。
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+    if resolved_settings.auth_mode == "oidc":
+        # state/nonce/PKCE の一時保存用(ADR-0019)。ログイン済みセッションの Cookie
+        # (`gakei_session`)とは別物で、oidc モードのときだけ追加する。
+        from starlette.middleware.sessions import SessionMiddleware
+
+        app.add_middleware(
+            SessionMiddleware,
+            secret_key=load_or_create_auth_secret(resolved_settings),
+            session_cookie="gakei_oidc",
+            max_age=600,
+            same_site="lax",
+            https_only=resolved_settings.public_base_is_https,
+        )
+
+    # `/api/auth` だけは認可を付けない(未ログインでも /me・/login・/callback は呼べる必要が
+    # あるため)。他のルーターは `require_user` を通す(ADR-0019。`none` モードは常に
+    # `LOCAL_ADMIN` を返すので実質無効化される)。`users`(ADR-0020)は oidc モード専用だが、
+    # `none` モードでの 404 化はルーター内で行うので、ここでの扱いは他と同じでよい。
+    # `about`(ADR-0021)もログインが要る他の API と同じ扱いにする。
+    app.include_router(auth_api.router)
+
+    auth_dep = [Depends(require_user)]
+    app.include_router(about_api.router, dependencies=auth_dep)
+    app.include_router(capabilities_api.router, dependencies=auth_dep)
+    app.include_router(comfyui_api.router, dependencies=auth_dep)
+    app.include_router(assets_api.router, dependencies=auth_dep)
+    app.include_router(runs_api.router, dependencies=auth_dep)
+    app.include_router(events_api.router, dependencies=auth_dep)
+    app.include_router(prompt_sets_api.router, dependencies=auth_dep)
+    app.include_router(search_api.router, dependencies=auth_dep)
+    app.include_router(pricing_api.router, dependencies=auth_dep)
+    app.include_router(settings_api.router, dependencies=auth_dep)
+    app.include_router(users_api.router, dependencies=auth_dep)
+
+    # フロントの配信は、dist の有無を起動時ではなくリクエスト時に見る。
+    # `npm run build` は dist を一度空にするので、サーバー起動中の再ビルドや、
+    # 起動後の初回ビルドでもそのまま配信できるようにするため。
+    #
+    # Vite の出力先は `static/`(frontend/vite.config.ts の build.assetsDir)。
+    # 既定の `assets/` だと SPA のビューア `/assets/:id` と URL が衝突する。
+    dist_root = _FRONTEND_DIST.resolve()
+    # `app/api/about.py`(第三者ライセンス表記)も同じ dist を読む。ここから import すると
+    # 循環する(about → main → about)ので、`app.state` 経由で渡す(`app/deps.py` 参照)。
+    # `tests/conftest.py` の `_isolate_from_frontend_dist` が `_FRONTEND_DIST` を差し替える
+    # のは `create_app()` 呼び出しより前なので、そのままここに反映される。
+    app.state.frontend_dist = dist_root
+    app.mount(
+        "/static",
+        StaticFiles(directory=str(dist_root / "static"), check_dir=False),
+        name="frontend-static",
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str) -> FileResponse:
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(status_code=404)
+        # I-1: oidc モードで `docs_url` 等を None にして無効化した3つのパスは、この
+        # catch-all が拾って index.html を返してしまわないよう明示的に 404 にする
+        # (none モードでは FastAPI 自身のルートが先に処理するのでここには来ない)。
+        if full_path in _DISABLED_DOCS_PATHS:
+            raise HTTPException(status_code=404)
+        candidate = (dist_root / full_path).resolve()
+        # `..` を含むパスで dist の外のファイルを返さない。
+        if full_path and candidate.is_relative_to(dist_root) and candidate.is_file():
+            return FileResponse(candidate)
+        index_html = dist_root / "index.html"
+        if not index_html.is_file():
+            raise HTTPException(
+                status_code=503,
+                detail=t("app.frontendNotBuilt"),
+            )
+        # index.html は毎回検証させる(再ビルド後に古い版が残らないように)。
+        # ハッシュ付きの /static/* は内容が変われば URL も変わるのでキャッシュしてよい。
+        return FileResponse(index_html, headers={"Cache-Control": "no-cache"})
+
+    return app
+
+
+app = create_app()

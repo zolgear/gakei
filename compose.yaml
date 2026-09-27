@@ -1,0 +1,38 @@
+# ADR-0016: サーバーに置いて常駐させたい人向け。個人の PC ではこれまでどおり run.sh /
+# run.bat(ADR-0012)を使う。サービスは1つだけで、DB や逆プロキシ、ComfyUI は同梱しない。
+#
+# ADR-0021: このファイルは clone してソースからビルドする人向け。GHCR に公開している
+# イメージ(ghcr.io/zolgear/gakei)を使う場合は、このファイルではなく README の例を使う。
+#
+# 既定では認証がないので、ホストの 127.0.0.1 にしか公開しない。LAN やインターネットに
+# 出す場合は、.env で AUTH_MODE=oidc にして認証を有効にする(docs/auth.md)か、認証付きの
+# リバースプロキシを前段に置いたうえで GAKEI_BIND=0.0.0.0 にする(README 参照)。
+#
+# レプリカは常に1つだけにする。ローカルMVPはジョブの実行を api プロセス内で行い、
+# DB は SQLite なので、同じボリュームを複数のコンテナで共有してはいけない。
+services:
+  gakei:
+    build: .
+    image: gakei:local
+    restart: unless-stopped
+    ports:
+      - "${GAKEI_BIND:-127.0.0.1}:${GAKEI_PORT:-8000}:8000"
+    volumes:
+      # SQLite、画像、画面で保存した API キー(secrets.json)がここに入る。
+      - gakei-data:/data
+    env_file:
+      # リポジトリ直下の .env(あれば読む。手元起動用の .env をそのまま使い回せる)。
+      - path: .env
+        required: false
+    environment:
+      # コンテナ用の値で上書きする(env_file より後ろにあるものが優先される)。
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      DATA_DIR: "/data"
+    extra_hosts:
+      # ホストで動く ComfyUI に接続できるようにする(設定画面で
+      # http://host.docker.internal:8188 を指定する)。
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  gakei-data:

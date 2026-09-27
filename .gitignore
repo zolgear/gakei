@@ -1,0 +1,26 @@
+HANDOFF.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+
+# ローカルMVPのデータ(SQLite、画像、派生、一時ファイル)
+/data/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# ローカルの作業用(ハンドオフの受け渡しなど)
+/temp/

@@ -1,0 +1,47 @@
+/* 画像に埋め込まれた生成情報(ADR-0018)。見出し・プロンプト・注記は OriginRecipeSection.module.css
+   を共有し、ここでは設定の表と元データの <pre> だけを持つ(EmbeddedNodeInspector.module.css の
+   .paramsList/.paramName/.paramValue と同じ定義)。 */
+.paramsList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.paramsList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.paramName {
+  color: var(--color-text-muted);
+}
+
+.paramValue {
+  color: var(--color-text);
+  word-break: break-all;
+  text-align: right;
+}
+
+.subheading {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.rawPre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow: auto;
+}

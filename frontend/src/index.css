@@ -1,0 +1,145 @@
+/*
+ * デザイントークン。/tmp/.../design/project/Main.dc.html(ComfyUI寄りのダークグラファイト)を
+ * 基準に、既存コンポーネント(Viewer/RunForm/MaskEditor 等)が使っていた変数名は保ったまま
+ * 値だけ新しい配色に合わせている。
+ */
+:root {
+  color-scheme: dark;
+
+  /* 地・パネル・境界 */
+  --color-bg: #17181b;
+  --color-bg-raised: #1f2125; /* パネル */
+  --color-bg-sunken: #1b1c20; /* アイコンレールなど、地よりわずかに沈める面 */
+  --color-header-band: #2b2f36; /* カードのヘッダー帯、選択中のチップなど */
+  --color-border: #32363d;
+  --color-border-strong: #454a53;
+
+  /* 文字 */
+  --color-text: #e6e7ea;
+  --color-text-muted: #9aa0aa;
+  --color-text-faint: #6b7178;
+
+  /* アクセント・状態色 */
+  --color-accent: #e3b341;
+  --color-accent-hover: #f0c865;
+  --color-edit: #56c2d6; /* Edit操作を表す色。GENERATEはアクセント色を使う */
+  --color-success: #6fcf8e;
+  --color-danger: #f0776c;
+  --color-danger-bg: rgba(240, 119, 108, 0.12);
+  --color-warning: #e3b341;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 14px;
+
+  --font-sans:
+    'IBM Plex Sans JP', -apple-system, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans',
+    'Noto Sans JP', Meiryo, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace;
+
+  /* シェルの寸法(第1段のレイアウトで共有する) */
+  --shell-appbar-h: 48px;
+  --shell-rail-w: 52px;
+  --shell-sidebar-w: 288px;
+}
+
+/* モバイルのブレークポイントはここに集約(CSS変数化できないため値をコメントで明示)。 */
+/* breakpoint: 768px 未満をモバイル扱いにする。各 CSS ファイルで @media (max-width: 767px) を使う。 */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+#root {
+  /* iOS の URL バーで下端が切れないよう dvh を使う。 */
+  height: 100dvh;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  overscroll-behavior-y: none;
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--color-accent);
+}
+
+a:hover {
+  color: var(--color-accent-hover);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* iOS は input/select/textarea の font-size が 16px 未満だと自動ズームする。 */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* 透過画像の背景に使う市松模様。 */
+.checkerboard {
+  background-image:
+    linear-gradient(45deg, #2a2d32 25%, transparent 25%),
+    linear-gradient(-45deg, #2a2d32 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #2a2d32 75%),
+    linear-gradient(-45deg, transparent 75%, #2a2d32 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-color: #1a1c20;
+}
+
+/* メイン領域の地に敷くドットグリッド(デザインの雰囲気の核)。 */
+.dot-grid {
+  background-color: var(--color-bg);
+  background-image: radial-gradient(circle, #2c3037 1px, transparent 1.2px);
+  background-size: 20px 20px;
+}
+
+@keyframes gk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes gk-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}

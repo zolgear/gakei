@@ -1,0 +1,118 @@
+.row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 4px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  text-align: left;
+  color: var(--color-text);
+}
+
+.row:hover {
+  background: var(--color-header-band);
+}
+
+.thumbWrap {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 出力がまだ無い(実行中/待機中)・失敗・キャンセルの行は、サムネイルの代わりに
+   状態を色で示す小さなプレースホルダを出す。 */
+.statusPlaceholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-sunken);
+}
+
+.statusPlaceholder[data-status='running'] {
+  background: rgba(227, 179, 65, 0.18);
+  animation: gk-run-list-pulse 1.6s ease-in-out infinite;
+}
+
+.statusPlaceholder[data-status='queued'] {
+  background: var(--color-bg-sunken);
+}
+
+.statusPlaceholder[data-status='failed'] {
+  background: var(--color-danger-bg);
+}
+
+.statusPlaceholder[data-status='canceled'] {
+  background: var(--color-bg-sunken);
+}
+
+@keyframes gk-run-list-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.body {
+  min-width: 0;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prompt {
+  font-size: 12px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+/* 状態と日時は欠けさせず、モデル名だけが残り幅で省略される。 */
+.metaStatus,
+.metaDate {
+  flex-shrink: 0;
+}
+
+.metaStatus[data-status='failed'] {
+  color: var(--color-danger);
+}
+
+.metaStatus[data-status='running'],
+.metaStatus[data-status='queued'] {
+  color: var(--color-accent);
+}
+
+.metaModel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -1,0 +1,211 @@
+.bar {
+  height: var(--shell-appbar-h);
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px 0 14px;
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+  background: var(--color-bg-raised);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawerToggle {
+  display: none;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  /* シンボルの枠線は currentColor(暗背景用の Line に近い文字色)を継承する */
+  color: var(--color-text);
+}
+
+.brandName {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: var(--shell-appbar-h);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  height: var(--shell-appbar-h);
+  min-width: 56px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 400;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tabActive {
+  color: var(--color-text);
+  font-weight: 600;
+  border-bottom-color: var(--color-accent);
+}
+
+.spacer {
+  flex-grow: 1;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.queueBadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--color-header-band);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.queueDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+
+.queueDot[data-active='true'] {
+  background: var(--color-accent);
+  animation: gk-pulse 1.6s ease-in-out infinite;
+}
+
+.queueMuted {
+  color: var(--color-text-muted);
+}
+
+
+.settingsButton {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+}
+
+.settingsButton:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.newRunButton {
+  height: 36px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.newRunButton:hover {
+  background: var(--color-accent-hover);
+}
+
+@media (max-width: 767px) {
+  .bar {
+    gap: 6px;
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+
+  .drawerToggle {
+    display: flex;
+  }
+
+  .brand {
+    gap: 0;
+  }
+
+  .brandName {
+    display: none;
+  }
+
+  .tab {
+    min-width: 44px;
+    padding: 0 10px;
+  }
+
+  /* 「実行中 n」の文字は省く。パルスする点だけ残す(タイトル属性で意味を補う)。 */
+  .queueBadge {
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+  }
+
+  .queueBadge span:not(.queueDot) {
+    display: none;
+  }
+
+
+  .newRunLabel {
+    display: none;
+  }
+
+  .settingsButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .newRunButton {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 10px;
+  }
+}

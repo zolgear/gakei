@@ -1,0 +1,188 @@
+.filterRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1 1 200px;
+  max-width: 360px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+/* 一覧と「さらに読み込む」だけがスクロールする(呼び出し側のモーダルが large なので残りの高さを埋める)。 */
+.scrollArea {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-gutter: stable;
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  height: 26px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.chip[data-active='true'] {
+  background: var(--color-header-band);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.emptyState {
+  margin: 0;
+  padding: 24px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-bg);
+  text-align: left;
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.tile[data-selected='true'] {
+  border-color: var(--color-accent);
+}
+
+.tile:disabled {
+  opacity: 0.45;
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+
+.checkBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent);
+  color: #17181b;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.alreadyBadge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 2px 6px;
+  background: rgba(23, 24, 27, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+/* 画像に埋め込まれた生成情報(未検証)経由の一致であることを示す小さな印(ADR-0018)。
+   alreadyBadge と同じ左上の位置に出るので、両方を同時には出さない(呼び出し側で制御)。 */
+.embeddedBadge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  background: rgba(23, 24, 27, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.caption {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  padding: 5px 6px;
+}
+
+.loadMoreRow {
+  display: flex;
+  justify-content: center;
+}
+
+.loadMoreButton {
+  padding: 8px 16px;
+  background: var(--color-header-band);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.loadMoreButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.loadMoreButton:disabled {
+  opacity: 0.6;
+}
+
+@media (max-width: 767px) {
+  .searchInput {
+    font-size: 16px;
+    height: 40px;
+    max-width: none;
+  }
+}

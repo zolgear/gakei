@@ -1,0 +1,222 @@
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.backLink {
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.backLink:hover {
+  color: var(--color-text);
+}
+
+.searchForm {
+  display: flex;
+  gap: 8px;
+}
+
+.searchInput {
+  flex: 1;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.searchButton {
+  height: 40px;
+  padding: 0 16px;
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.placeholder {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sectionHeading {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sectionCount {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+  font-weight: 400;
+}
+
+.truncatedNote {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.runGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.assetGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.assetTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--color-text);
+}
+
+.thumbWrap {
+  position: relative;
+}
+
+.assetThumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+/* 画像に埋め込まれた生成情報(未検証)経由の一致であることを示す小さな印(ADR-0018)。 */
+.embeddedBadge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  background: rgba(23, 24, 27, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.assetSnippet {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assetSnippet mark,
+.runSnippet mark,
+.itemSnippet mark {
+  background: rgba(227, 179, 65, 0.28);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.promptSetList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.promptSetCard {
+  padding: 10px 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.promptSetName {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.itemRow {
+  display: block;
+  width: 100%;
+  padding: 6px 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  text-align: left;
+  color: var(--color-text);
+}
+
+.itemLabel {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.itemSnippet {
+  font-size: 12px;
+}
+
+.itemRow:hover .itemSnippet,
+.assetTile:hover .assetSnippet {
+  color: var(--color-accent);
+}
+
+.resolveError {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 14px;
+  }
+
+  .runGrid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+
+  .searchInput {
+    font-size: 16px;
+  }
+
+  .backLink {
+    min-height: 44px;
+  }
+}

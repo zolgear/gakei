@@ -1,0 +1,176 @@
+.backdrop {
+  display: none;
+}
+
+.dragHandle {
+  display: none;
+}
+
+.panel {
+  width: 420px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+}
+
+.detailLink {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.closeButton {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.closeButton:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.body {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* ResultPane(スタジオ上段)から明示的に指定される配置。`resolveInspectorPlacement` が
+   上段の実高さ・画面幅から選ぶため、ここではビューポート幅に関わらずそのまま適用する。 */
+.panel[data-placement='right-overlay'] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 50%);
+  z-index: 10;
+  box-shadow: -6px 0 20px rgba(0, 0, 0, 0.4);
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-right: none;
+}
+
+.panel[data-placement='main-right'] {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 50%);
+  z-index: 30;
+  box-shadow: -6px 0 20px rgba(0, 0, 0, 0.4);
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-right: none;
+}
+
+.panel[data-placement='sheet'] {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  width: auto;
+  height: 70vh;
+  border-radius: 12px 12px 0 0;
+  border-bottom: none;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.panel[data-placement='sheet'] .dragHandle {
+  display: block;
+  flex-shrink: 0;
+  width: 36px;
+  height: 4px;
+  margin: 8px auto 0;
+  border-radius: 999px;
+  background: var(--color-border-strong);
+}
+
+.panel[data-placement='sheet'] .closeButton {
+  width: 44px;
+  height: 44px;
+}
+
+.backdrop[data-placement='sheet'] {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  padding: 0;
+}
+
+@media (max-width: 767px) {
+  .backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    padding: 0;
+  }
+
+  .panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 21;
+    width: auto;
+    height: 70vh;
+    border-radius: 12px 12px 0 0;
+    border-bottom: none;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .dragHandle {
+    display: block;
+    flex-shrink: 0;
+    width: 36px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 999px;
+    background: var(--color-border-strong);
+  }
+
+  .closeButton {
+    width: 44px;
+    height: 44px;
+  }
+}

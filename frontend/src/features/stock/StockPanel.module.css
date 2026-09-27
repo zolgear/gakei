@@ -1,0 +1,250 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* 上端の padding は .header 側で持つ(sticky の基準がこの箱の padding edge になるので、
+     ここに top padding を残すと固定された瞬間に見出しが数px 飛ぶ)。 */
+  padding: 0 14px 16px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* 見出し・種別チップ・メッセージ・アップロードバーをまとめてスクロール上端に固定する。
+   生成を続けてグリッドの行数が増えても、この一式は常にすぐ触れる位置にある。 */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 0 8px;
+  /* 下の余白は、固定中にスクロールしてきたタイルがバーの縁に張り付かないため。 */
+  margin-bottom: -8px;
+  background: var(--color-bg-raised);
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.heading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.chip[data-active='true'] {
+  background: var(--color-header-band);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.message {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+.notice {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-success, #4ade80);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.tileImageButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: block;
+  width: 100%;
+}
+
+.tileImage {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  display: block;
+}
+
+.addButton {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 24, 27, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.addButton:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.deleteButton {
+  position: absolute;
+  bottom: 27px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 24, 27, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+}
+
+.deleteButton:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.caption {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  padding: 5px 7px;
+  text-align: left;
+}
+
+/* 細い破線のアップロードバー。パネル上部の sticky ヘッダーに常時表示する(D&D の受け口は
+   .panel 全体に広げているので、このバー自体はクリックでのファイル選択が主な役目)。 */
+.uploadBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.uploadBar[data-drag-over='true'] {
+  border-color: var(--color-accent);
+  background: rgba(227, 179, 65, 0.08);
+  color: var(--color-text);
+}
+
+.uploadBar:disabled {
+  opacity: 0.7;
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.emptyState {
+  margin: 0;
+  padding: 28px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* 自動読み込みの番兵。通常は見えない(IntersectionObserver が交差を検知した時点で次ページを
+   取りに行く)。取得中・失敗時・observer 非対応環境でだけ中身を表示する。 */
+.sentinel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 0;
+}
+
+.sentinelLoading {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.sentinelButton {
+  padding: 8px 16px;
+  background: var(--color-header-band);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.sentinelButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+@media (max-width: 767px) {
+  .addButton {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .deleteButton {
+    width: 40px;
+    height: 40px;
+    bottom: 46px;
+  }
+
+  .tileImageButton {
+    min-height: 44px;
+  }
+
+  .uploadBar {
+    height: 44px;
+    font-size: 13px;
+  }
+}

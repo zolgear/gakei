@@ -1,0 +1,277 @@
+.pane {
+  flex-grow: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  /* 下段はスクロールしない(二重スクロール回避)。溢れるのは .settingsColumn だけで、
+     プロンプト列は下段の最小高さ(splitRatio.ts の MIN_BOTTOM_PX、上段比率の上限で保証)に
+     必ず収まる大きさにしてある。 */
+  overflow: hidden;
+}
+
+/* サイドバー配置(ADR-0009 1章・2026-09-26 追記)では `InputPaneSidebarLayout` の `.column` が
+   自前で padding とスクロールを持つ(列全体がスクロールし、生成ボタンだけ下端に固定する)ため、
+   ここでは余白を 0 にして中身に譲る。textarea もスクロール列に収まるので、下段用の
+   flex-grow ベースの高さ指定(.textareaWrap / .promptTextarea)をここで打ち消し、
+   固定の初期高さ + 縦方向のリサイズに切り替える。 */
+.pane[data-layout='sidebar'] {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.pane[data-layout='sidebar'] .textareaWrap {
+  flex: none;
+  min-height: 0;
+}
+
+.pane[data-layout='sidebar'] .promptTextarea {
+  height: 160px;
+  min-height: 96px;
+  max-height: 60vh;
+  resize: vertical;
+}
+
+.grid {
+  flex-grow: 1;
+  min-height: 0;
+  display: grid;
+  /* 右列は「372px 固定」ではなく上限 372px の可変にする。固定だと、スクロールバーの出現などで
+     利用可能幅が 372px を切ったときに中身(数値欄など、幅0まで縮められない要素)が右端から
+     はみ出す。minmax(0, 372px) なら列自体が必要に応じて縮み、はみ出さない。 */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 372px);
+  /* 行を「auto」のまま(コンテンツ丈)にすると、右列(設定)側が伸び縮みせずコンテナの
+     高さを超えて溢れ、.pane 側の overflow-y:auto が(不要な場合も含めて)常時スクロール
+     バーを出してしまう。1つだけの行を利用可能な高さぴったりに収め、右列の
+     overflow-y:auto は「本当にあふれるときだけ」効くようにする。 */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.promptColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.textareaWrap {
+  position: relative;
+  flex-grow: 1;
+  min-height: 72px;
+}
+
+.promptTextarea {
+  width: 100%;
+  height: 100%;
+  min-height: 72px;
+  box-sizing: border-box;
+  resize: none;
+  padding: 12px 14px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: inherit;
+}
+
+.promptTextarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.promptActionsRow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.charCount {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.actionsSpacer {
+  flex-grow: 1;
+}
+
+.submitButton {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.submitButton:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.submitButton:disabled {
+  opacity: 0.5;
+}
+
+/* サイドバー配置(`SubmitControls` の variant="stacked")。参考価格を右寄せの独立行にし、
+   ボタン自体は列の幅いっぱいに広げる。 */
+.priceLine {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.submitButton[data-variant='stacked'] {
+  width: 100%;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.shortcutBadge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  background: rgba(23, 24, 27, 0.18);
+  border-radius: 4px;
+}
+
+.submittedNotice {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-success, #4ade80);
+}
+
+.blockReason {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+.blockReason a {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.settingsColumn {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* このカラム自身が縦スクロールを持つことがあるため、ここにも stable を効かせる
+     (出現前後で内容幅が変わって右端が数px欠けるのを防ぐ)。 */
+  scrollbar-gutter: stable;
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+  align-content: start;
+  min-width: 0;
+}
+
+.spanTwo {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+.otherDetails {
+  grid-column: span 2;
+  min-width: 0;
+  border-top: 1px solid var(--color-border);
+  padding-top: 6px;
+}
+
+.otherSummary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.otherSummary::-webkit-details-marker {
+  display: none;
+}
+
+.otherBody {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+  margin-top: 8px;
+}
+
+.comfyWorkflowLink {
+  align-self: flex-start;
+  font-size: 10.5px;
+  color: var(--color-text-faint);
+}
+
+.comfyWorkflowLink:hover {
+  color: var(--color-accent);
+}
+
+.capsError {
+  padding: 20px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 767px) {
+  .pane {
+    /* モバイルは StudioWorkspace 側の .bottom が flex: 0 0 auto(自然高さ)で、ワークスペース
+       全体が縦スクロールする。.pane 自身が内容を切り詰めないことを明示しておく。 */
+    overflow: visible;
+  }
+
+  .grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .textareaWrap,
+  .promptTextarea {
+    min-height: 140px;
+  }
+
+  .settingsGrid,
+  .otherBody {
+    grid-template-columns: 1fr;
+  }
+
+  .spanTwo,
+  .otherDetails {
+    grid-column: span 1;
+  }
+
+  .submitButton {
+    width: 100%;
+    min-height: 44px;
+  }
+}

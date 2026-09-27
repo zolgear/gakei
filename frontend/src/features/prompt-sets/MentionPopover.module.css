@@ -1,0 +1,81 @@
+.popover {
+  /* 位置(top/left/width/max-height)は useMentionPlacement が計算し、インラインスタイルで
+     渡す。ここでは見た目だけを持つ。 */
+  position: fixed;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 150;
+}
+
+/* 上向き(caret 行のすぐ上)のときは、`top` を「行の上端」として渡してもらい、要素自身の
+   実際の高さぶん上へずらす。中身の高さを事前計算しなくても下端がぴったり貼り付く。 */
+.popover[data-direction='up'] {
+  transform: translateY(-100%);
+}
+
+.empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+.option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  min-height: 24px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.option:hover,
+.option[data-active='true'] {
+  background: var(--color-bg-sunken);
+}
+
+.optionMeta {
+  flex: 0 1 auto;
+  max-width: 45%;
+  font-size: 12px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.optionPreview {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 選択中の項目だけ本文を2行まで表示する(1行では切れて分かりにくいことがあるため)。 */
+.option[data-active='true'] .optionPreview {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .option {
+    min-height: 32px;
+  }
+}

@@ -1,0 +1,592 @@
+.pane {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(23, 24, 27, 0.72);
+}
+
+.header {
+  height: 40px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-header-band);
+  overflow: hidden;
+}
+
+.modeGroup {
+  display: flex;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.modeButton {
+  height: 28px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.modeButton + .modeButton {
+  border-left: 1px solid var(--color-border);
+}
+
+.modeButton[aria-pressed='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+}
+
+.metaLine {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.statusLine {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.statusDot[data-status='succeeded'] {
+  background: var(--color-success);
+}
+
+.statusDot[data-status='failed'] {
+  background: var(--color-danger);
+}
+
+.statusDot[data-status='running'] {
+  background: var(--color-accent);
+  animation: gk-pulse 1.6s ease-in-out infinite;
+}
+
+.statusDot[data-status='queued'],
+.statusDot[data-status='canceled'] {
+  background: var(--color-text-faint);
+}
+
+.deletedBadge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-pill);
+  color: var(--color-danger);
+  font-size: 10.5px;
+}
+
+.restoreButton {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.restoreButton:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+.notRestorableNote {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--color-text-faint);
+}
+
+.headerSpacer {
+  flex-grow: 1;
+}
+
+.headerButton {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.headerButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.headerIconButton {
+  flex-shrink: 0;
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.headerIconButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.headerIconButtonDanger:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* 入力欄の配置切り替え(ADR-0009 1章・2026-09-26 追記)。見た目は headerIconButton のまま。 */
+.layoutToggle {
+  margin-left: 2px;
+}
+
+.body {
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.canvasWrap {
+  flex-grow: 1;
+  min-width: 0;
+  position: relative;
+}
+
+/* 完了済みの Run を選んだときの Run 詳細(RunDetailContent compact)。結果エリアの中で
+   縦にスクロールし、読みやすい幅に収める。 */
+.runDetailScroll {
+  flex-grow: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.runDetailScroll > * {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+/* プレビュー画像の右下(ズームツールバーの反対側=左上)に重ねる小さな操作バー。 */
+.canvasActionBar {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(20, 22, 26, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+}
+
+.canvasUseAsInputButton {
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-edit);
+  border-radius: var(--radius);
+  color: var(--color-edit);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.canvasUseAsInputButton[data-active='true'] {
+  background: rgba(86, 194, 214, 0.16);
+}
+
+.canvasIconButton {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.canvasIconButton:hover {
+  border-color: var(--color-accent);
+}
+
+.graphCanvasWrap {
+  flex-grow: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+
+/* 見出し(固定)/ サムネイル(この領域だけスクロール)/ フッター(「入力に使う」、固定)の
+   3段構成。狭い幅(モバイル)では `.thumbsScroll`/`.thumbsFooter` を `display: contents` にして
+   1行の横スクロールへ戻す(以前の構造と同じ見た目に)。 */
+.sidebarThumbs {
+  width: 148px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 12px 12px 0;
+  min-height: 0;
+}
+
+.thumbsHeading {
+  margin: 0 0 8px;
+  flex-shrink: 0;
+  padding-left: 12px;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  letter-spacing: 0.06em;
+}
+
+.thumbsScroll {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thumbsFooter {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+}
+
+.thumbTile {
+  position: relative;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.thumbButton {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-bg-sunken);
+  position: relative;
+}
+
+.thumbButton[aria-pressed='true'] {
+  border: 2px solid var(--color-accent);
+}
+
+.thumbImage {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbCurrentBadge {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  background: rgba(23, 24, 27, 0.86);
+  border-radius: 3px;
+  color: var(--color-text);
+}
+
+/* ストックのタイルと同じ見た目・動作(常に追加のみ)。デスクトップはホバーで表示、
+   タッチ端末はホバーが無いので常時表示(指示により、あえて小さいまま)。 */
+.thumbAddButton {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 24, 27, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.thumbTile:hover .thumbAddButton,
+.thumbAddButton:focus-visible {
+  opacity: 1;
+}
+
+.thumbAddButton:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.useAsInputButton {
+  margin-left: 12px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-edit);
+  border-radius: var(--radius);
+  color: var(--color-edit);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.useAsInputButton[data-active='true'] {
+  background: rgba(86, 194, 214, 0.16);
+}
+
+.useAsInputButton:disabled {
+  opacity: 0.5;
+}
+
+/* 使用中は押せない(外すのは入力欄のチップから)が、状態表示なので薄くしない。 */
+.canvasUseAsInputButton[data-active='true']:disabled,
+.useAsInputButton[data-active='true']:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.addedNotice {
+  margin: 0 0 0 12px;
+  font-size: 10.5px;
+  color: var(--color-edit);
+}
+
+.toggleError {
+  margin: 0 0 0 12px;
+  font-size: 10.5px;
+  color: var(--color-danger);
+}
+
+.emptyState {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-faint);
+  font-size: 13px;
+}
+
+.pendingArea {
+  flex-grow: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 16px 16px 20px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: repeating-linear-gradient(135deg, #1b1c20 0 10px, #202227 10px 20px);
+}
+
+.pendingText {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.progressTrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--color-header-band);
+  overflow: hidden;
+}
+
+.progressBar {
+  width: 30%;
+  height: 3px;
+  background: var(--color-accent);
+  animation: gk-slide 1.8s linear infinite;
+}
+
+/* ステップ進捗(value/max)を送ってくるプロバイダー(ComfyUI 等)向け。不定のスライド
+   アニメーションを止め、実際の割合を width で示す(JS 側が inline style で幅を指定する)。 */
+.progressBar[data-determinate='true'] {
+  animation: none;
+  transition: width 0.2s ease;
+}
+
+.cancelButton {
+  padding: 8px 14px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.cancelButton:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+/* 途中経過は出力ごとに1枚。結果エリアの残りの高さに収め、はみ出さない。 */
+.partialGrid {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.partialThumb {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  object-fit: contain;
+}
+
+.errorArea {
+  flex-grow: 1;
+  box-sizing: border-box;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.errorText {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 14px;
+}
+
+.errorCode {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.deleteError {
+  margin: 0 16px 8px;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  .body {
+    flex-direction: column;
+  }
+
+  .canvasWrap {
+    height: 50vh;
+    min-height: 220px;
+    flex-shrink: 0;
+  }
+
+  .sidebarThumbs {
+    width: 100%;
+    flex-direction: row;
+    padding: 10px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .thumbsHeading {
+    display: none;
+  }
+
+  /* ラッパーの箱を消して、中身(タイル/フッターの中身)を直接 .sidebarThumbs の横並びの
+     一員にする(縦スクロール用の3段構成をやめ、以前どおり1行の横スクロールに戻す)。 */
+  .thumbsScroll,
+  .thumbsFooter {
+    display: contents;
+  }
+
+  .thumbTile {
+    margin-left: 0;
+    width: 96px;
+    flex-shrink: 0;
+  }
+
+  .thumbButton {
+    width: 100%;
+  }
+
+  /* タッチ端末はホバーが無いので常時表示する(指示により、あえて小さいまま)。 */
+  .thumbAddButton {
+    opacity: 1;
+  }
+
+  .useAsInputButton {
+    margin-left: 8px;
+    width: 96px;
+    flex-shrink: 0;
+  }
+
+  .canvasActionBar {
+    bottom: 8px;
+    right: 8px;
+  }
+
+  .headerButton,
+  .headerIconButton,
+  .cancelButton {
+    min-height: 44px;
+  }
+
+  /* 狭い幅では設定に関わらず縦積みになるので、切り替えボタンを出す意味がない。 */
+  .layoutToggle {
+    display: none;
+  }
+}

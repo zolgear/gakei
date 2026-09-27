@@ -1,0 +1,75 @@
+.sizeField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sizeField > label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--color-text-faint);
+}
+
+.sizeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/*
+ * ParamField.module.css の `.field select { width: 100% }` に幅を奪われないよう(セレクトが
+ * 潰れ、数値欄がはみ出す不具合の原因だった)、この行専用の select/input はここで独立に幅を
+ * 決める。`.sizeRow` を祖先に含めた2クラスのセレクタにして、そちら側の指定より詳細度を
+ * 確実に上げている。
+ */
+.sizeRow .presetSelect {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.sizeRow .dimensionInput {
+  /* 4桁(最大 3840)が欠けずに入る幅。5桁は想定しない。 */
+  width: 64px;
+  min-width: 0;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 6px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: center;
+}
+
+.dimensionInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.times {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.errors {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+@media (max-width: 767px) {
+  .sizeRow .dimensionInput {
+    font-size: 16px;
+  }
+}

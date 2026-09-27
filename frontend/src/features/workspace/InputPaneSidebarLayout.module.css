@@ -1,0 +1,57 @@
+.column {
+  /* 親の .pane(flex column)の高さを埋める。height: 100% だけだと親の高さが
+     flex 由来のときに解決されない場合があるので flex でも伸ばす。 */
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* スクロールするのはこの列だけ(`.footer` は常に見えている)。 */
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.section {
+  min-width: 0;
+}
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.promptTools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* PrimaryParamFields は SizeInput を .spanTwo(grid-column: span 2、InputPane.module.css)で
+   包んで返すため、ここも2列グリッドにしておく必要がある。 */
+.params {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border);
+  padding: 10px 14px;
+  background: var(--color-bg-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

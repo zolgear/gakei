@@ -1,0 +1,89 @@
+.container {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.hiddenProbe {
+  display: none;
+}
+
+.stage {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+.frame {
+  position: absolute;
+  border: 2px solid #fff;
+  /* 枠の外側全体を暗くする(stage が overflow:hidden なので、枠の外は自然にこの範囲に収まる)。 */
+  box-shadow:
+    0 0 0 9999px rgba(8, 9, 11, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+  touch-action: none;
+  cursor: move;
+}
+
+.frame:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  touch-action: none;
+}
+
+.handle[data-handle='nw'] {
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  cursor: nwse-resize;
+}
+
+.handle[data-handle='ne'] {
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
+  cursor: nesw-resize;
+}
+
+.handle[data-handle='sw'] {
+  bottom: 0;
+  left: 0;
+  transform: translate(-50%, 50%);
+  cursor: nesw-resize;
+}
+
+.handle[data-handle='se'] {
+  bottom: 0;
+  right: 0;
+  transform: translate(50%, 50%);
+  cursor: nwse-resize;
+}
+
+@media (max-width: 767px) {
+  .handle {
+    width: 26px;
+    height: 26px;
+  }
+}

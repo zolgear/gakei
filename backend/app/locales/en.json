@@ -1,0 +1,260 @@
+{
+  "app": {
+    "frontendNotBuilt": "The frontend has not been built. Run npm run build in frontend/.",
+    "legacyProviderIgnored": "Ignoring PROVIDER=openai (this setting is no longer used).",
+    "legacyProviderAborted": "PROVIDER={value} is set, but this setting has been removed. Use FAKE_PROVIDER=1 to try it with dummy images, or remove PROVIDER to connect to the real API.",
+    "authConfigMissing": "AUTH_MODE=oidc but required environment variable(s) are missing: {missing}",
+    "authUrlInvalid": "{name} is not a valid URL (it must be http or https and include a host): {value}",
+    "authUrlInsecure": "{name} points to http (not https) on a non-loopback address ({value}). Authentication traffic would be sent in plain text."
+  },
+  "auth": {
+    "required": "Login required.",
+    "adminRequired": "This action requires administrator privileges.",
+    "disabled": "Login is not available in personal mode (AUTH_MODE=none).",
+    "idpUnavailable": "Cannot reach the identity provider. Check OIDC_ISSUER and the IdP's status.",
+    "callbackFailed": "Login could not be completed. Please try again."
+  },
+  "provider": {
+    "unknown": "Unknown provider: {name}"
+  },
+  "pagination": {
+    "invalidCursor": "cursor is invalid"
+  },
+  "search": {
+    "emptyQuery": "q cannot be empty",
+    "unknownTypes": "Unknown value(s) in types: {types} (valid values: {validTypes})"
+  },
+  "comfyui": {
+    "connection": {
+      "invalidUrl": "The URL must start with http:// or https:// and include a host.",
+      "nonLoopback": "This address is not loopback (e.g. 127.0.0.1). Input images and prompts would be sent to a ComfyUI instance with no authentication. Check the confirmation box to save it anyway."
+    },
+    "api": {
+      "workflowNotFound": "Workflow not found",
+      "connectionUrlMissing": "No connection URL was given.",
+      "lockedChangeConnection": "Cannot change the connection settings while a ComfyUI run is in progress or queued.",
+      "lockedDetach": "Cannot detach while a ComfyUI run is in progress or queued."
+    },
+    "workflow": {
+      "uiFormatMessage": "This file is in UI format (it contains nodes/links). Export it from ComfyUI with \"Export (API)\" and register the resulting API-format JSON instead.",
+      "notApiFormatMessage": "This could not be recognized as an API-format workflow.",
+      "maskBindingRequiresNodeInput": "load_image_mask requires node and input",
+      "invalidExposedParamName": "Invalid exposed parameter name (must start with a lowercase letter, then letters/digits/underscore): {name}",
+      "exposedParamReservedPrefix": "Exposed parameter name cannot start with comfyui_: {name}",
+      "exposedParamReservedWord": "Exposed parameter name cannot be a reserved word: {name}",
+      "bindingNodeMissing": "{label}: node {node} does not exist",
+      "bindingInputMissing": "{label}: node {node} has no input {input}",
+      "bindingDuplicate": "Duplicate binding: node {node} input {input}",
+      "outputNodeMissing": "Output node {node} does not exist",
+      "editRequiresImage": "edit requires an image binding",
+      "generateCannotHaveImageOrMask": "generate cannot have image or mask bindings (register it as edit instead)",
+      "exposedParamDuplicate": "Duplicate exposed parameter name: {name}",
+      "exposedParamLabel": "exposed parameter {name}",
+      "negativePromptLabel": "Negative prompt",
+      "seedLabel": "Seed",
+      "widthLabel": "Width",
+      "heightLabel": "Height",
+      "countLabel": "Count",
+      "listSeparator": ", ",
+      "previewImageNotSupported": "GAKEI cannot import a PreviewImage output. Add a SaveImage node in ComfyUI and export again.",
+      "outputNodeNotFoundWithCandidates": "No output node (SaveImage) was found. Candidates: ",
+      "outputNodeNotFound": "No output node was found. Choose one manually.",
+      "promptBindingNotFound": "Could not determine the prompt binding. Choose one manually.",
+      "promptBindingCandidates": "Could not determine the prompt binding. Choose one of these candidates manually: {candidates}",
+      "moreCandidatesSuffix": ", and {count} more",
+      "imageBindingNotFound": "Could not find an input image (LoadImage) binding.",
+      "maskMethodUnsupported": "This workflow's mask method cannot be passed from GAKEI."
+    },
+    "client": {
+      "genericError": "Error",
+      "nodeInputError": "Node {node} ({classType}) input \"{inputName}\": {message}",
+      "nodeError": "Node {node} ({classType}): {message}",
+      "rejectedNoDetails": "ComfyUI rejected the workflow (no details available).",
+      "connectTimeout": "Connecting to ComfyUI timed out.",
+      "connectFailed": "Could not connect to ComfyUI ({error}).",
+      "unexpectedResponse": "Unexpected response from ComfyUI (status={status}).",
+      "parseFailed": "Could not parse the response from ComfyUI.",
+      "uploadFailed": "The image upload failed (status={status}).",
+      "missingPromptId": "The response from ComfyUI did not include a prompt_id.",
+      "fetchOutputFailed": "Could not fetch the output image (status={status}).",
+      "wsConnectFailed": "Could not connect to ComfyUI over WebSocket ({error}).",
+      "wsLost": "The WebSocket connection to ComfyUI was lost ({error}).",
+      "timedOutWhile": "Timed out while {hint}.",
+      "hintUpload": "the image upload",
+      "hintSubmit": "submitting the workflow",
+      "hintFetchOutput": "fetching the output image",
+      "hintContact": "contacting ComfyUI"
+    },
+    "provider": {
+      "unknownWorkflow": "Unknown workflow: {model}",
+      "workflowOperationMismatch": "Workflow \"{name}\" does not support operation={operation}",
+      "missingPromptInternal": "run.params is missing comfyui_prompt (internal error).",
+      "noOutputImages": "The output node had no images.",
+      "timeoutExecuting": "Executing on ComfyUI timed out.",
+      "executionInterrupted": "Execution was interrupted on the ComfyUI side.",
+      "wsEnded": "The WebSocket connection to ComfyUI ended.",
+      "roleInputNotFound": "No input found for role={role}",
+      "roleImageInputNotFound": "No input image found for role={role} (internal error).",
+      "noDetails": "no details",
+      "nodeExecutionFailed": "Node {node} failed to execute ({detail}).",
+      "historyErrorNoDetails": "Execution on ComfyUI ended with an error (no details available)."
+    }
+  },
+  "openaiSpec": {
+    "editingStrong": "Strong at editing",
+    "fast": "Fast",
+    "qualityAuto": "Auto",
+    "qualityLow": "Low",
+    "qualityMedium": "Medium",
+    "qualityHigh": "High",
+    "qualityXhigh": "X-high",
+    "qualityMax": "Max",
+    "backgroundAuto": "Auto",
+    "backgroundOpaque": "Opaque",
+    "backgroundTransparent": "Transparent",
+    "qualityLabel": "Quality",
+    "qualityDescription": "Lower is faster and cheaper. xhigh/max are 2.5-series only",
+    "fileFormatLabel": "File format",
+    "fileFormatDescription": "Output file format",
+    "compressionLabel": "Compression",
+    "compressionDescription": "JPEG / WebP only. 0-100, higher is higher quality",
+    "backgroundLabel": "Background",
+    "backgroundDescription": "Transparent is only available for PNG / WebP",
+    "countLabel": "Count",
+    "countDescription": "Number of images generated per run. Billed per image",
+    "previewLabel": "Show progress previews",
+    "previewDescription": "Number of in-progress previews to show (0 to disable)"
+  },
+  "fake": {
+    "forcedFailureMarker": "Detected the test forced-failure marker: {code}",
+    "editRequiresBaseImage": "edit requires an image input at position=0"
+  },
+  "openai": {
+    "editRequiresImageInput": "edit requires at least one role=image input",
+    "missingApiKey": "No OpenAI API key is set. Add one in the settings screen.",
+    "missingImageData": "The response did not include image data (b64_json)",
+    "noImagesReturned": "OpenAI did not return any images.",
+    "rateLimited": "Hit the OpenAI rate limit (the SDK's own retries were exhausted). Wait a bit and try again.",
+    "authFailed": "OpenAI authentication failed. Check OPENAI_API_KEY.",
+    "connectionFailed": "Could not connect to OpenAI (timeout or connection error).",
+    "contentFilterRejected": "Rejected by the content policy.",
+    "apiError": "OpenAI API error ({label}): {detail}",
+    "keyInvalid": "The key is invalid",
+    "keyVerifyFailed": "Could not verify the key with OpenAI: {detail}",
+    "envKeyLocked": "The OPENAI_API_KEY environment variable (.env) takes priority, so it cannot be changed or removed from the app. Edit .env instead.",
+    "keyEmpty": "Enter an API key",
+    "baseUrl": {
+      "invalid": "The base URL is not valid. Only http or https URLs are accepted, without userinfo, a query string, or a fragment.",
+      "empty": "Enter a base URL",
+      "envLocked": "The OPENAI_BASE_URL environment variable (.env) takes priority, so it can't be changed or removed from the screen. Edit the value in .env instead."
+    }
+  },
+  "settings": {
+    "general": {
+      "invalidModeration": "moderation must be auto or low",
+      "invalidTimeoutSeconds": "The ComfyUI timeout must be an integer between {min} and {max} seconds"
+    }
+  },
+  "runValidation": {
+    "enumInvalid": "{name} must be one of: {choices}",
+    "intRequired": "{name} must be an integer",
+    "minRequired": "{name} must be at least {minimum}",
+    "maxRequired": "{name} must be at most {maximum}",
+    "floatRequired": "{name} must be a number",
+    "boolRequired": "{name} must be a boolean",
+    "textRequired": "{name} must be a string",
+    "maxLength": "{name} must be at most {maxLength} characters",
+    "promptLength": "prompt must be 1-{max} characters",
+    "unknownModel": "Unknown model: {model}",
+    "operationNotSupported": "{model} does not support operation={operation}",
+    "unknownParamSize": "Unknown parameter: size",
+    "unknownParam": "Unknown parameter: {key}",
+    "incompatiblePair": "{fieldA}={valueA} and {fieldB}={valueB} cannot be set together",
+    "conditionalParam": "{field} is only valid when {dependsOnField} is one of {dependsOnValues}",
+    "generateNoInputImages": "generate cannot take input images",
+    "exactImageCount": {
+      "one": "This workflow requires exactly {count} input image (got {current})",
+      "other": "This workflow requires exactly {count} input images (got {current})"
+    },
+    "imageCountRange": "edit requires {min}-{max} image input(s)",
+    "maskAtMostOne": "mask can be at most one",
+    "maskNotSupported": "The selected model does not support masks",
+    "maskRequired": "mask is required",
+    "maskRequiresPosition0": "Using mask requires an image input at position=0",
+    "maskSizeMismatch": "mask must be the same size as the image at position=0"
+  },
+  "sizes": {
+    "positiveIntegersRequired": "width and height must be positive integers",
+    "multipleOfRequired": "width and height must be a multiple of {multipleOf}",
+    "longEdgeMax": "The long edge must be at most {maxLongEdge}px",
+    "totalPixelsRange": "Total pixel count must be {min}-{max}",
+    "aspectRatioRange": "Aspect ratio must be between 1:3 and 3:1",
+    "sizeFormat": "size must be \"auto\" or \"WIDTHxHEIGHT\""
+  },
+  "assets": {
+    "sourceAssetOnlyForSketch": "source_asset_id can only be set for a sketch (kind=sketch)",
+    "baseAssetNotFound": "The base asset was not found",
+    "replacesAssetOnlyForSketchOrMask": "replaces_asset_id can only be set for a sketch (kind=sketch) or a mask (kind=mask)",
+    "cannotCombineSourceAndReplaces": "source_asset_id and replaces_asset_id cannot be set together",
+    "replaceTargetNotFound": "The asset to replace was not found",
+    "replaceTargetKindMismatch": "The asset to replace must be the same kind",
+    "uploadTooLarge": "Uploaded images must be under 50MB",
+    "maskTooLarge": "Masks must be under 4MB",
+    "cannotReadImage": "Could not read this as an image",
+    "unsupportedFormat": "Unsupported image format: {format}",
+    "maskMustBePng": "Masks must be in PNG format",
+    "sketchMustBePng": "Sketches must be in PNG format",
+    "notFound": "Asset not found",
+    "contentNotFound": "Content not found",
+    "notDeleted": "Not deleted",
+    "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run."
+  },
+  "runs": {
+    "unknownProvider": "Unknown provider: {provider}",
+    "providerUnavailable": "{label} is unavailable",
+    "assetNotFound": "Asset not found: {id}",
+    "notFound": "Run not found",
+    "cannotDeleteRunning": "Still running or queued; cancel it first",
+    "cannotCancelStatus": "Cannot cancel: status={status}",
+    "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
+    "partialNotFound": "Partial image not found"
+  },
+  "promptSets": {
+    "notFound": "Prompt set not found",
+    "itemNotFound": "Prompt set item not found"
+  },
+  "worker": {
+    "interruptedByRestart": "Interrupted by a server restart",
+    "providerNotRegistered": "provider={provider} is not registered"
+  },
+  "launcher": {
+    "nodeMissing": "Node.js was not found, or the version is too old (22.12+ required, 24.x recommended).\nInstall it from https://nodejs.org/.",
+    "commandFailed": "Command failed (exit code {code}): {cmd}",
+    "frontendUpToDate": "Frontend is up to date. Skipping build.",
+    "warningPrefix": "Warning: ",
+    "staleDistNotice": "\nStarting with the existing frontend/dist as-is (it may not reflect the latest changes).",
+    "npmCi": "Fetching dependencies (npm ci)...",
+    "building": "Building the frontend (npm run build)...",
+    "buildComplete": "Frontend build complete.",
+    "launcherDescription": "Checks whether the frontend needs building and starts the server. Options such as --host/--port/--data-dir/--open-browser from `python -m app` are also accepted.",
+    "noBrowserHelp": "Do not automatically open a browser on start (open by default)",
+    "startupAborted": "Startup aborted: {error}",
+    "serverDescription": "Start the GAKEI local MVP server.",
+    "hostHelp": "Host to listen on (default: HOST from env/.env, else 127.0.0.1)",
+    "portHelp": "Port to listen on (default: PORT from env/.env, else 8000)",
+    "dataDirHelp": "Data directory (default: DATA_DIR from env/.env, else data/)",
+    "openBrowserHelp": "Automatically open the default browser once the server accepts connections",
+    "portInUse": "Port {port} is already in use. Check whether GAKEI is already running, or specify a different port (e.g. --port {nextPort}, or PORT={nextPort} in .env).",
+    "startingAt": "GAKEI: starting at {url}"
+  },
+  "users": {
+    "avatar": {
+      "tooLarge": "Avatar images must be 20MB or smaller",
+      "cannotReadImage": "Could not read this as an image",
+      "assetNotFound": "The source image was not found",
+      "notFound": "Avatar not found",
+      "invalidCrop": "The crop rectangle is malformed",
+      "cropOutOfBounds": "The crop rectangle is outside the image"
+    }
+  }
+}

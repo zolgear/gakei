@@ -1,0 +1,257 @@
+"""ComfyUI プロバイダーを使った `POST /api/runs` の通しテスト(ADR-0013)。
+
+`TestClient` を使い、ワークフロー登録 → capabilities への反映 → Run の作成・実行 →
+ワークフローを編集・削除しても Run の記録(`params`)が変わらないこと、を確認する。
+
+実物の ComfyUI には一切接続しない。`app.providers.comfyui.provider.check_available` を
+monkeypatch し、実行はレジストリの `comfyui` プロバイダーを `tests/comfyui_fake.py` の
+偽サーバーを使うものに差し替える(`app.worker.runner.Runner` は実行のたびに
+`registry.get(name)` で引くため、差し替え後の Run にも反映される)。
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.providers.comfyui.client import ComfyUIClient
+from app.providers.comfyui.provider import ComfyUIProvider
+from tests.comfyui_fake import FakeComfyUI, unavailable_ws_connect
+from tests.comfyui_graphs import T2I_GRAPH, clone
+from tests.conftest import make_png_bytes, wait_for_run_terminal
+
+
+@pytest.fixture
+def client_with_comfyui(monkeypatch: pytest.MonkeyPatch, data_dir: Path) -> Iterator[TestClient]:
+    """`COMFYUI_URL` を設定した状態でアプリを起動する(設定は起動時に固定されるため)。"""
+    monkeypatch.setenv("DATA_DIR", str(data_dir))
+    monkeypatch.setenv("FAKE_PROVIDER", "1")
+    monkeypatch.setenv("COMFYUI_URL", "http://127.0.0.1:8188")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    from app.main import create_app
+
+    app = create_app()
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def _mark_available(monkeypatch: pytest.MonkeyPatch, *, available: bool = True) -> None:
+    monkeypatch.setattr(
+        "app.providers.comfyui.provider.check_available",
+        lambda base_url, timeout=1.0: (available, None if available else "使用できません", {}),
+    )
+
+
+def _install_fake_comfyui(
+    client: TestClient, fake: FakeComfyUI, *, ws_connect=None
+) -> ComfyUIProvider:
+    """レジストリの `comfyui` プロバイダーを、偽サーバーに接続するものへ差し替える。"""
+    settings = client.app.state.settings
+    session_factory = client.app.state.session_factory
+
+    def client_factory() -> ComfyUIClient:
+        return ComfyUIClient(
+            settings.comfyui_url,
+            http=fake.make_async_client(),
+            ws_connect=ws_connect or unavailable_ws_connect(),
+        )
+
+    provider = ComfyUIProvider(
+        settings.comfyui_url,
+        session_factory,
+        settings.comfyui_timeout_seconds,
+        client_factory=client_factory,
+    )
+    client.app.state.registry.providers["comfyui"] = provider
+    return provider
+
+
+def _t2i_bindings_body() -> dict:
+    return {
+        "prompt": {"node": "6", "input": "text"},
+        "negative_prompt": {"node": "7", "input": "text"},
+        "seed": [{"node": "3", "input": "seed"}],
+        "width": {"node": "5", "input": "width"},
+        "height": {"node": "5", "input": "height"},
+        "batch_size": {"node": "5", "input": "batch_size"},
+        "outputs": ["9"],
+    }
+
+
+def _create_t2i_workflow(client: TestClient, name: str = "t2i サンプル") -> dict:
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": name,
+            "operation": "generate",
+            "template": clone(T2I_GRAPH),
+            "bindings": _t2i_bindings_body(),
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _configure_success(fake: FakeComfyUI) -> None:
+    fake.set_history(
+        "prompt-1",
+        {
+            "outputs": {
+                "9": {"images": [{"filename": "out.png", "subfolder": "", "type": "output"}]}
+            },
+            "status": {"status_str": "success", "completed": True},
+        },
+    )
+    fake.add_output_file("out.png", "", "output", make_png_bytes())
+
+
+def test_comfyui_workflow_appears_in_capabilities(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    workflow = _create_t2i_workflow(client_with_comfyui)
+
+    response = client_with_comfyui.get("/api/capabilities")
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    comfyui_entry = next(p for p in body["providers"] if p["provider"] == "comfyui")
+    assert comfyui_entry["available"] is True
+    model = next(m for m in comfyui_entry["models"] if m["model"] == workflow["id"])
+    assert model["label"] == workflow["name"]
+
+
+def test_run_with_comfyui_provider_succeeds_and_creates_output_asset(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    workflow = _create_t2i_workflow(client_with_comfyui)
+    fake = FakeComfyUI()
+    _configure_success(fake)
+    _install_fake_comfyui(client_with_comfyui, fake)
+
+    response = client_with_comfyui.post(
+        "/api/runs",
+        json={
+            "operation": "generate",
+            "model": workflow["id"],
+            "prompt": "a cat",
+            "provider": "comfyui",
+            "params": {},
+        },
+    )
+    assert response.status_code == 202, response.text
+    run_id = response.json()["id"]
+
+    detail = wait_for_run_terminal(client_with_comfyui, run_id)
+    assert detail["status"] == "succeeded", detail
+    assert len(detail["outputs"]) == 1
+    assert detail["model_label"] == workflow["name"]
+
+
+def test_editing_or_deleting_workflow_does_not_change_past_run_params(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    workflow = _create_t2i_workflow(client_with_comfyui, name="編集前")
+    fake = FakeComfyUI()
+    _configure_success(fake)
+    _install_fake_comfyui(client_with_comfyui, fake)
+
+    response = client_with_comfyui.post(
+        "/api/runs",
+        json={
+            "operation": "generate",
+            "model": workflow["id"],
+            "prompt": "a cat",
+            "provider": "comfyui",
+            "params": {},
+        },
+    )
+    assert response.status_code == 202, response.text
+    run_id = response.json()["id"]
+    detail_before = wait_for_run_terminal(client_with_comfyui, run_id)
+    assert detail_before["status"] == "succeeded"
+    params_before = detail_before["params"]
+    assert params_before["comfyui_workflow"]["name"] == "編集前"
+    assert isinstance(params_before["comfyui_prompt"], dict)
+
+    patch_response = client_with_comfyui.patch(
+        f"/api/comfyui/workflows/{workflow['id']}", json={"name": "編集後"}
+    )
+    assert patch_response.status_code == 200, patch_response.text
+    delete_response = client_with_comfyui.delete(f"/api/comfyui/workflows/{workflow['id']}")
+    assert delete_response.status_code == 204
+
+    detail_after = client_with_comfyui.get(f"/api/runs/{run_id}").json()
+    assert detail_after["params"] == params_before
+    assert detail_after["model_label"] == "編集前"
+
+
+def test_run_with_deleted_workflow_returns_422(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    workflow = _create_t2i_workflow(client_with_comfyui)
+    delete_response = client_with_comfyui.delete(f"/api/comfyui/workflows/{workflow['id']}")
+    assert delete_response.status_code == 204
+
+    response = client_with_comfyui.post(
+        "/api/runs",
+        json={
+            "operation": "generate",
+            "model": workflow["id"],
+            "prompt": "a cat",
+            "provider": "comfyui",
+            "params": {},
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_run_returns_409_when_comfyui_unavailable_and_creates_no_run(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch, available=False)
+    workflow = _create_t2i_workflow(client_with_comfyui)
+
+    before = client_with_comfyui.get("/api/runs").json()["items"]
+
+    response = client_with_comfyui.post(
+        "/api/runs",
+        json={
+            "operation": "generate",
+            "model": workflow["id"],
+            "prompt": "a cat",
+            "provider": "comfyui",
+            "params": {},
+        },
+    )
+    assert response.status_code == 409
+
+    after = client_with_comfyui.get("/api/runs").json()["items"]
+    assert len(after) == len(before)
+
+
+def test_run_rejects_client_supplied_comfyui_prompt_param(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    workflow = _create_t2i_workflow(client_with_comfyui)
+
+    response = client_with_comfyui.post(
+        "/api/runs",
+        json={
+            "operation": "generate",
+            "model": workflow["id"],
+            "prompt": "a cat",
+            "provider": "comfyui",
+            "params": {"comfyui_prompt": {"1": {"class_type": "X", "inputs": {}}}},
+        },
+    )
+    assert response.status_code == 422

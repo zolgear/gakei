@@ -1,0 +1,174 @@
+.canvasArea {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.toolbarRow {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(20, 22, 26, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+}
+
+.iconButton {
+  width: 28px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.iconButton:hover {
+  border-color: var(--color-accent);
+}
+
+.scaleLabel {
+  min-width: 40px;
+  text-align: center;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.sliderStage {
+  position: relative;
+  flex-grow: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-bg-sunken);
+  touch-action: none;
+}
+
+.layerWrapper {
+  position: absolute;
+  inset: 0;
+}
+
+.layerContent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 分割バー。ヒット領域は幅24pxで持たせ、見た目の線はグリップだけ細く見せる。 */
+.splitHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 4;
+  width: 24px;
+  margin-left: -12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.splitHandle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--color-accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.splitHandleGrip {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 32px;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.splitHandleGrip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 8px;
+  height: 8px;
+  border-left: 1.5px solid #0c1116;
+  border-right: 1.5px solid #0c1116;
+}
+
+.sideBySideStage {
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.pane {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--color-bg-sunken);
+}
+
+.pane:first-child {
+  border-right: 1px solid var(--color-border-strong);
+}
+
+.sideTag {
+  position: absolute;
+  top: 10px;
+  z-index: 3;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(20, 22, 26, 0.85);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.sideTag[data-side='left'] {
+  left: 10px;
+}
+
+.sideTag[data-side='right'] {
+  right: 10px;
+}
+
+@media (max-width: 767px) {
+  .iconButton {
+    width: 40px;
+    height: 40px;
+  }
+
+  .splitHandle {
+    width: 36px;
+    margin-left: -18px;
+  }
+}

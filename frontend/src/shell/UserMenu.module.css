@@ -1,0 +1,105 @@
+.root {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.trigger {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  padding: 0;
+}
+
+.trigger:hover {
+  color: var(--color-text);
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 150;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.identityText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: break-word;
+}
+
+.email {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow-wrap: break-word;
+}
+
+.roleBadge {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  background: var(--color-header-band);
+  color: var(--color-text-muted);
+}
+
+.roleBadge[data-role='admin'] {
+  color: var(--color-accent);
+}
+
+.logoutButton {
+  height: 32px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.logoutButton:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  .trigger {
+    width: 44px;
+    height: 44px;
+  }
+
+  .logoutButton {
+    min-height: 44px;
+  }
+}

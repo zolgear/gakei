@@ -1,0 +1,81 @@
+/* 埋め込まれた系列情報(ADR-0014)。署名の無い自己申告なので、系列グラフの origin 辺と
+   同じ破線で囲み、「未検証」であることを視覚的にも示す。ホスト(Viewer/インスペクター)の
+   `.actionButton`/`.runLink` と同じ見た目に揃えてある。 */
+.section {
+  margin: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.model {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text);
+}
+
+.prompt {
+  margin: 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.promptDetails summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.link {
+  font-size: 12px;
+}
+
+.button {
+  display: block;
+  text-align: center;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.button:disabled {
+  opacity: 0.5;
+}
+
+.note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 767px) {
+  .button {
+    min-height: 44px;
+  }
+}

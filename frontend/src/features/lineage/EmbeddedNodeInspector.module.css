@@ -1,0 +1,134 @@
+/* 埋め込み(未検証)ノードのインスペクター(ADR-0014 6章)。OriginRecipeSection・
+   LineageAssetInspectorContent と見た目を揃える(破線=未検証、同じサイズのボタン等)。 */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.banner {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.placeholder {
+  margin: 0;
+  padding: 24px 10px;
+  text-align: center;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text-faint);
+  font-size: 12px;
+}
+
+.preview {
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+.metaList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.metaList dt {
+  color: var(--color-text-faint);
+}
+
+.metaList dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.subheading {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.prompt {
+  margin: 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.promptDetails summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.paramsList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.paramsList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.paramName {
+  color: var(--color-text-muted);
+}
+
+.paramValue {
+  color: var(--color-text);
+  word-break: break-all;
+  text-align: right;
+}
+
+.actionButton {
+  display: block;
+  text-align: center;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.actionButton:hover {
+  border-color: var(--color-accent);
+}
+
+.note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 767px) {
+  .actionButton {
+    min-height: 44px;
+  }
+}

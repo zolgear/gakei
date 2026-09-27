@@ -1,0 +1,1138 @@
+{
+  "auth": {
+    "login": {
+      "title": "Please log in",
+      "intro": "You need to log in to use GAKEI.",
+      "button": "Log in",
+      "retry": "Retry",
+      "loadFailed": "Could not check your login status.",
+      "errors": {
+        "callback_failed": "Login could not be completed. Please try again.",
+        "email_missing": "The account you signed in with has no email address.",
+        "email_not_allowed": "This email address is not allowed to sign in to GAKEI (its domain is not permitted).",
+        "email_unverified": "The email address of the account you signed in with has not been verified. Verify it with your identity provider, then try logging in again."
+      }
+    },
+    "menu": {
+      "open": "Open user menu",
+      "logout": "Log out",
+      "roleAdmin": "Admin",
+      "roleUser": "User"
+    }
+  },
+  "common": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete",
+    "save": "Save",
+    "retry": "Retry",
+    "back": "← Back",
+    "statusLabels": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "canceled": "Canceled"
+    },
+    "durationSeconds": "{seconds}s",
+    "elapsedSeconds": "{seconds}s elapsed",
+    "assetKindLabels": {
+      "upload": "Upload",
+      "generated": "Generated",
+      "mask": "Mask",
+      "sketch": "Sketch"
+    },
+    "lineagePage": {
+      "title": "Lineage graph",
+      "viewRootInViewer": "View root in viewer"
+    }
+  },
+  "shell": {
+    "appBar": {
+      "toggleMenu": "Toggle menu",
+      "workspaceNav": "Workspace",
+      "historyTab": "History",
+      "studioTab": "Studio",
+      "queueStatus": "Running {running}, queued {queued}",
+      "running": "Running {count}",
+      "queued": "Queued {count}",
+      "settings": "Settings",
+      "newRun": "New",
+      "newRunTitle": "New (Alt+N)",
+      "newRunConfirm": {
+        "message": "This discards the current input and starts a new generation. The model and parameters reset to their defaults.",
+        "confirmLabel": "Start new"
+      }
+    },
+    "drawer": {
+      "closeMenu": "Close menu"
+    },
+    "iconRail": {
+      "resourceNav": "Resources",
+      "stock": "Stock",
+      "prompts": "Prompt sets",
+      "graph": "Lineage graph",
+      "history": "History",
+      "search": "Search"
+    },
+    "sidebar": {
+      "resourcePanel": "Resource panel",
+      "widthHandle": "Sidebar width"
+    }
+  },
+  "history": {
+    "card": {
+      "inputBadge": "Inputs {count}",
+      "outputCount": "{count}",
+      "showImage": "Show image",
+      "watchProgress": "View progress in Studio",
+      "viewDetail": "View run detail",
+      "running": "Running",
+      "queued": "Queued",
+      "canceled": "Canceled",
+      "parent": "Parent",
+      "parentWithExtra": "Parent +{extra}",
+      "noPrompt": "(no prompt)",
+      "cancel": "Cancel",
+      "showLineage": "View lineage",
+      "rerun": "Re-run with same settings",
+      "useAsInput": "Use as input",
+      "delete": "Delete",
+      "rerunFailed": "Failed to prepare re-run.",
+      "deleteFailed": "Failed to delete.",
+      "by": "By {name}",
+      "deleteConfirm": {
+        "message": {
+          "one": "Delete this run and {count} output image. This cannot be undone.",
+          "other": "Delete this run and {count} output images. This cannot be undone."
+        }
+      },
+      "deleteWarning": {
+        "one": "This run's output is a parent input for {count} other run. Deleting it will mark this image as deleted in that lineage.",
+        "other": "This run's output is a parent input for {count} other runs. Deleting it will mark this image as deleted in that lineage."
+      }
+    },
+    "page": {
+      "title": "History",
+      "filterByStatus": "Filter by status",
+      "filterAll": "All",
+      "filterSucceeded": "Succeeded",
+      "filterFailed": "Failed",
+      "loading": "Loading...",
+      "loadError": "Failed to load history.",
+      "noMatch": "No matching runs.",
+      "loadMore": "Load more"
+    }
+  },
+  "runDetail": {
+    "loading": "Loading...",
+    "loadFailed": "Failed to load this run.",
+    "deletedBanner": "This run was deleted ({deletedAt})",
+    "rerun": "Re-run with same settings",
+    "watchProgress": "View progress in Studio",
+    "viewLineageGraph": "View lineage graph",
+    "openDetailPage": "Open detail page",
+    "promptHeading": "Prompt",
+    "outputsHeading": "Outputs",
+    "compareWithOriginal": "Compare with original",
+    "deletedTag": "Deleted",
+    "detailSettingsHeading": "Details",
+    "workflowLine": "Workflow: {name} ({sha})",
+    "downloadJson": "Download JSON",
+    "comfyuiPromptSummary": "Graph sent to ComfyUI (JSON)",
+    "timingHeading": "Timing & status",
+    "createdBy": "Run by",
+    "duration": "Duration",
+    "usageHeading": "usage",
+    "estimatedCost": "Estimated cost {amount}",
+    "errorHeading": "Error",
+    "errorCodeLine": "error_code: {code}",
+    "inputsHeading": "Input images",
+    "primaryParent": "Primary parent",
+    "seed": {
+      "tooltip": "Running with the same seed and count produces images in the same order.",
+      "single": "seed {seed}",
+      "batch": "seed {seed} · {outputCount} generated in one batch",
+      "indexed": "seed {seed} · {outputIndex} of {outputCount}"
+    }
+  },
+  "runStatus": {
+    "errorFallback": "An unknown error occurred.",
+    "errorCodes": {
+      "contentFilter": "Rejected by the content filter.",
+      "rateLimited": "Failed due to rate limiting. Please try again later.",
+      "interrupted": "Interrupted by a server restart.",
+      "missingApiKey": "No API key is configured.",
+      "authError": "Authentication failed.",
+      "connectionError": "Failed to connect to the provider.",
+      "providerError": "The provider returned an error.",
+      "providerUnavailable": "The provider is unavailable.",
+      "comfyuiUnavailable": "Could not connect to ComfyUI.",
+      "comfyuiValidation": "ComfyUI could not validate the workflow.",
+      "internalError": "An internal error occurred."
+    }
+  },
+  "historyPanel": {
+    "heading": "History",
+    "empty": "No runs yet",
+    "loadMore": "Load more",
+    "loadFailed": "Failed to load",
+    "openRun": "Show this run"
+  },
+  "searchPanel": {
+    "heading": "Search",
+    "hint": "Search across runs, images and prompt sets",
+    "openRun": "Show this run",
+    "showImage": "Show image",
+    "loadPrompt": "Load into the prompt"
+  },
+  "search": {
+    "ariaLabel": "Search",
+    "clear": "Clear search",
+    "placeholder": "Search prompts",
+    "searching": "Searching...",
+    "noResults": "No results. Uploaded images without embedded generation info are not searchable",
+    "noResultsPeriod": "No results. Uploaded images without embedded generation info are not searchable.",
+    "embeddedBadge": "Unverified",
+    "embeddedTitle": "Matched the unverified prompt embedded in the image",
+    "groupRuns": "Generated",
+    "groupAssets": "Images",
+    "groupPromptSets": "Prompt sets",
+    "viewAll": "View all results",
+    "itemNotFound": "This item was not found. It may have been deleted.",
+    "replacePromptConfirm": {
+      "message": "This replaces the prompt you are currently editing.",
+      "confirmLabel": "Replace",
+      "cancelLabel": "Don't add"
+    },
+    "page": {
+      "submit": "Search",
+      "enterQuery": "Enter a search term.",
+      "countSuffix": "{count}",
+      "truncatedNote": "Showing the top {limit} results"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "userHeading": "User settings",
+    "adminHeading": "Admin settings",
+    "adminOnly": "Only an admin can change this.",
+    "profile": {
+      "heading": "Profile",
+      "avatarLabel": "Avatar",
+      "upload": "Upload image",
+      "chooseFromStock": "Choose from stock",
+      "delete": "Remove",
+      "deleteConfirm": {
+        "message": "This removes your avatar. It goes back to showing your initial.",
+        "confirmLabel": "Remove"
+      },
+      "savedToast": "Avatar updated",
+      "deletedToast": "Avatar removed",
+      "pickerTitle": "Choose from stock",
+      "pickerConfirm": "Use this image",
+      "communicationFailed": "Communication failed",
+      "help": "You can use your own generated or uploaded images as your avatar (PNG/JPEG/WebP, up to 20MB). You can choose the area to crop."
+    },
+    "display": {
+      "heading": "Display",
+      "faviconProgress": {
+        "label": "Show progress in the tab icon",
+        "help": "Shows the run status in the browser tab icon while a run is queued or running. Turning this off does not change the animated logo in the app bar."
+      },
+      "studioLayout": {
+        "label": "Studio layout",
+        "optionBottom": "Input pane at the bottom (default)",
+        "optionSidebar": "Input pane on the left (sidebar)",
+        "help": "On narrow screens (under 768px) the input pane always sits below the result. You can also switch from the button at the top right of the result area."
+      }
+    },
+    "apiKey": {
+      "heading": "OpenAI API key",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the key status. If the server was just updated, try restarting it.",
+      "retry": "Retry",
+      "envLocked": "The environment variable (.env) value takes priority, so it cannot be changed here.",
+      "notRequired": "The current provider does not use an API key (it returns a dummy image for testing). You can still add or remove a key here.",
+      "inputPlaceholder": "sk-...",
+      "verifying": "Verifying...",
+      "save": "Save",
+      "delete": "Delete",
+      "communicationFailed": "Communication failed.",
+      "helpTextBefore": "A key you save here is stored in this PC's data directory (secrets.json). You can get one from",
+      "helpTextLink": "OpenAI's dashboard",
+      "helpTextAfter": ".",
+      "savedToast": "API key saved.",
+      "deletedToast": "API key deleted.",
+      "deleteConfirm": {
+        "message": "This deletes the saved API key.",
+        "confirmLabel": "Delete"
+      },
+      "status": {
+        "missing": "Not set",
+        "configured": "Configured",
+        "sourceEnv": "Environment variable (.env)",
+        "sourceFile": "Saved in app (secrets.json)"
+      },
+      "baseUrl": {
+        "heading": "Base URL",
+        "loading": "Loading...",
+        "loadFailed": "Could not load the base URL status. If the server was just updated, try restarting it.",
+        "retry": "Retry",
+        "envLocked": "The environment variable (.env) value takes priority, so it cannot be changed here.",
+        "inputPlaceholder": "Leave empty to use OpenAI directly (https://api.openai.com/v1)",
+        "helpText": "Set this to use an OpenAI-compatible proxy such as LiteLLM. GAKEI sends its model names as-is, so the proxy must offer the same model names. Prices shown are still OpenAI's list prices.",
+        "verifying": "Verifying...",
+        "save": "Save",
+        "clear": "Reset to default",
+        "communicationFailed": "Communication failed.",
+        "savedToast": "Base URL saved.",
+        "clearedToast": "Base URL reset to the default (OpenAI directly).",
+        "clearConfirm": {
+          "message": "This deletes the saved base URL and resets it to OpenAI directly.",
+          "confirmLabel": "Reset"
+        },
+        "status": {
+          "default": "OpenAI directly",
+          "sourceEnv": "Environment variable (.env)",
+          "sourceFile": "Saved in app (secrets.json)"
+        }
+      }
+    },
+    "general": {
+      "heading": "Generation",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the settings.",
+      "retry": "Retry",
+      "saveFailed": "Save failed",
+      "envNote": "Using the environment variable (.env) value. Saving here makes the screen setting take priority from now on.",
+      "moderation": {
+        "label": "moderation",
+        "optionLow": "low",
+        "optionAuto": "auto",
+        "help": "Applies only to generation without input images (Generate API); it has no effect on editing (Edit). low is less restrictive than auto, and auto is OpenAI's standard filtering.",
+        "savedToast": "moderation saved.",
+        "resetToDefault": "Reset to default ({default})"
+      }
+    },
+    "comfyui": {
+      "heading": "ComfyUI",
+      "intro": "Connecting to ComfyUI running on the same PC lets you pick registered workflows as a model (experimental).",
+      "manageWorkflows": "Manage workflows",
+      "notConnectedHint": "You can register workflows without connecting, but running them requires a connection.",
+      "timeout": {
+        "label": "Timeout (minutes)",
+        "help": "The upper limit on waiting for one ComfyUI run. It applies from the next run that starts (running or queued Generated items are unaffected).",
+        "save": "Save",
+        "savedToast": "Timeout saved.",
+        "invalid": "Enter an integer between 1 and 180",
+        "resetToDefault": "Reset to default ({default} min)"
+      }
+    },
+    "about": {
+      "heading": "About GAKEI",
+      "versionLabel": "Version",
+      "licenseLabel": "License",
+      "repositoryLink": "GitHub repository",
+      "thirdPartyLink": "Third-party licenses"
+    },
+    "banner": {
+      "missingKey": "No OpenAI API key is set.",
+      "openSettings": "Open settings",
+      "missingKeyContactAdmin": "No OpenAI API key is set. Please contact an admin."
+    }
+  },
+  "promptSets": {
+    "panel": {
+      "heading": "Prompt sets",
+      "add": "Add",
+      "setNameLabel": "Set name",
+      "setNamePlaceholder": "e.g. Product photos, framed",
+      "firstPromptLabel": "First prompt (optional)",
+      "firstPromptPlaceholder": "Prompt text (you can add and edit more later)",
+      "create": "Create",
+      "cancel": "Cancel",
+      "loading": "Loading...",
+      "loadFailed": "Failed to load prompt sets.",
+      "empty": "No prompt sets yet.",
+      "hint": "Selecting an item appends it to the end of the prompt. You can also type @ in the prompt field.",
+      "createFailed": "Failed to create set."
+    },
+    "card": {
+      "renameFailed": "Failed to rename.",
+      "deleteFailed": "Failed to delete.",
+      "addItemFailed": "Failed to add item.",
+      "updateFailed": "Failed to update.",
+      "labelField": "Label (optional)",
+      "labelPlaceholder": "Label (optional)",
+      "textField": "Prompt text",
+      "textPlaceholder": "Prompt",
+      "save": "Save",
+      "add": "Add",
+      "cancel": "Cancel",
+      "expandToEdit": "Expand to edit",
+      "rename": "Rename",
+      "delete": "Delete",
+      "appendToEnd": "Append to end",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "edit": "Edit",
+      "addItem": "+ Add item",
+      "editItemTitle": "Edit item",
+      "addItemTitle": "Add item",
+      "deleteSetConfirm": "Delete set \"{name}\". This cannot be undone.",
+      "deleteItemConfirm": "Delete this item. This cannot be undone."
+    },
+    "save": {
+      "trigger": "Save prompt to a set",
+      "savedMessage": "Saved",
+      "fieldLabel": "Prompt to save",
+      "existingSet": "Existing set",
+      "newSet": "New set",
+      "selectPlaceholder": "Select one",
+      "newSetNamePlaceholder": "New set name",
+      "labelPlaceholder": "Label (optional)",
+      "save": "Save",
+      "close": "Close",
+      "emptyPromptError": "The prompt is empty.",
+      "nameRequiredError": "Enter a name.",
+      "targetRequiredError": "Select a set to save to.",
+      "saveFailed": "Failed to save."
+    },
+    "mention": {
+      "ariaLabel": "Prompt set suggestions",
+      "noMatch": "No matching sets.",
+      "untitled": "(untitled)"
+    },
+    "validation": {
+      "nameRequired": "Enter a name.",
+      "nameTooLong": "Name must be {max} characters or fewer.",
+      "textRequired": "Enter a prompt.",
+      "textTooLong": "Prompt must be {max} characters or fewer.",
+      "labelTooLong": "Label must be {max} characters or fewer."
+    }
+  },
+  "workspace": {
+    "addInputsDialog": {
+      "title": "Add input images",
+      "chooseFile": "Choose files",
+      "dropHint": "You can also drop files onto the input pane or paste with Ctrl+V",
+      "fromStock": "Pick from stock",
+      "selectedCount": "{count} selected",
+      "remaining": "{count} more can be added",
+      "addSelected": "Add",
+      "alreadyInInputs": "Already added",
+      "empty": "No images in stock",
+      "loadMore": "Load more",
+      "loadFailed": "Failed to load"
+    },
+    "inputTiles": {
+      "heading": "Input images",
+      "movePrev": "Move earlier",
+      "moveNext": "Move later"
+    },
+    "inputChips": {
+      "label": "Input",
+      "requirement": "Input images {count} / {total}",
+      "emptyHint": "None. Use a result above as input, or drag from stock",
+      "primaryTitle": "Primary input (image 1)",
+      "notFound": "Not found",
+      "deleted": "Deleted",
+      "dimsLoading": "...",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "maskAlt": "Mask",
+      "drawMask": "Draw mask",
+      "maskNotSupportedTag": "Unsupported",
+      "maskNotSupportedTitle": "The selected model does not support masks.",
+      "removeMask": "Remove mask",
+      "showInPreview": "Show in preview",
+      "drawOver": "Draw on this image",
+      "removeInput": "Remove from input",
+      "countTitle": "Number of input images (max {max})",
+      "addAria": "Add image",
+      "addTitle": "Add image (max {max})",
+      "uploading": "Uploading...",
+      "add": "Add",
+      "sketch": "Sketch",
+      "sketchTitle": "Draw on a blank canvas ({width}×{height}) to make an input image"
+    },
+    "inputPane": {
+      "capsLoading": "Loading capabilities...",
+      "capsError": "Failed to load capabilities",
+      "promptLabel": "Prompt",
+      "promptPlaceholder": "Describe the image to generate. Ctrl+Enter to run. @ to call up a prompt set",
+      "submitting": "Starting run...",
+      "generate": "Generate",
+      "submittedNotice": "Generation started. Progress appears in the result area above",
+      "openSettings": "Open settings",
+      "modelLabel": "Model",
+      "providerUnavailableSuffix": " (unavailable)",
+      "noWorkflowRegistered": "No workflow registered",
+      "registerComfyWorkflow": "Register a ComfyUI workflow",
+      "otherParams": "Other",
+      "promptRequired": "Enter a prompt",
+      "deletedInputsPresent": "This includes a deleted input image. Remove it to continue",
+      "maxInputImagesExceeded": "Input images are limited to {max}",
+      "operationUnsupported": "The selected model does not support this operation (generate/edit)",
+      "maskRequired": "This model requires a mask to run",
+      "maskUnsupported": "The selected model does not support masks. Remove the mask or choose a model that supports masks."
+    },
+    "resultPane": {
+      "viewModeGroup": "View",
+      "preview": "Preview",
+      "lineage": "Lineage",
+      "deletedBadge": "Deleted",
+      "restore": "Restore",
+      "notRestorable": "Cannot be restored",
+      "generatedDetail": "Run details",
+      "downloadOriginal": "Download original",
+      "deleteCurrentAsset": "Delete this image",
+      "lineageEmptyState": "Show an image first to view its lineage.",
+      "outputsRecent": "Outputs · Recent",
+      "thisRun": "This run",
+      "addToInputAria": "Add as input",
+      "outputIndexAria": "Show output {index}",
+      "showThisOutputAria": "Show this output",
+      "inUse": "In use",
+      "useAsInput": "Use as input",
+      "inUseAsInput": "Used as input",
+      "inUseHint": "To remove it from the inputs, use the × on the image in the input row",
+      "added": "Added",
+      "inputLimitReached": "Input image limit reached ({max})",
+      "connecting": "Connecting...",
+      "generatingWithProgress": "Generating... ({value} / {max})",
+      "generating": "Generating...",
+      "queued": "Queued...",
+      "cancel": "Cancel",
+      "partialAlt": "Partial result {index}",
+      "errorCodePrefix": "error_code: ",
+      "canceledMessage": "This run was canceled.",
+      "assetLoadFailed": "Failed to load the asset",
+      "loading": "Loading...",
+      "emptyState": "Results appear here once you generate.",
+      "deleteConfirmMessage": "This removes the image from stock. It stays in the run record and lineage.",
+      "deleteFailedDefault": "Delete failed",
+      "restoreFailedDefault": "Restore failed",
+      "deletedToast": "Image deleted",
+      "undoAction": "Undo",
+      "inputPrefix": "Input · {width} × {height}"
+    },
+    "runPromptActions": {
+      "insertIntoPrompt": "Insert into prompt",
+      "replacePrompt": "Replace prompt",
+      "confirmReplace": "Replace?",
+      "yes": "Yes",
+      "cancel": "Cancel"
+    },
+    "studioWorkspace": {
+      "dividerAriaLabel": "Boundary between result and input",
+      "inputWidthHandle": "Input pane width",
+      "layoutToggle": {
+        "toSidebar": "Move the input pane to the left",
+        "toBottom": "Move the input pane to the bottom"
+      }
+    },
+    "priceEstimate": {
+      "noReference": "No estimate",
+      "outputLine": {
+        "one": "Output {tokens} tok × {count} image (official formula)",
+        "other": "Output {tokens} tok × {count} images (official formula)"
+      },
+      "inputImageLine": {
+        "one": "Input image {count} {tokens} tok ({breakdown})",
+        "other": "Input images {count} {tokens} tok ({breakdown})"
+      },
+      "inputImageDimTokens": "{width}×{height}: {tokens}",
+      "textLine": "Text ≈ {tokens} tok",
+      "unitPricesLine": "Unit price (per 1M tok) output ${output} / input image ${input} / text ${text} (checked {checkedAt})",
+      "footerNote": "Excludes partial images and masks. Estimated cost, not a bill.",
+      "reasonQualityAuto": "Cannot calculate while quality is \"auto\" (set a quality to see it)",
+      "reasonSizeAuto": "Cannot calculate while size is \"auto\"",
+      "reasonSizeInvalid": "Size is out of range",
+      "reasonUnknownModel": "No unit price registered for this model"
+    }
+  },
+  "runForm": {
+    "addToInputsDialog": {
+      "message": "You already have input images. How do you want to use this one?",
+      "add": "Add (append to the end)",
+      "replace": "Replace (remove existing inputs, use this one)",
+      "cancel": "Cancel"
+    },
+    "paramField": {
+      "disabledTitle": "Not available with the current settings",
+      "disabledNote": "Unavailable"
+    },
+    "seedField": {
+      "random": "Random",
+      "fixed": "Fixed",
+      "reroll": "Reroll"
+    },
+    "sizeInput": {
+      "label": "Size",
+      "widthAria": "Width",
+      "heightAria": "Height",
+      "fieldWidth": "width",
+      "fieldHeight": "height",
+      "roundedNote": "Rounded to a multiple of {multipleOf}: {field} {from} → {to}",
+      "experimentalNote": "Sizes above 2560 × 1440 are experimental and may give unstable results",
+      "customLabel": "Custom width × height",
+      "presets": [
+        {
+          "value": {
+            "mode": "unspecified"
+          },
+          "label": "Unspecified (auto)"
+        },
+        {
+          "value": {
+            "mode": "auto"
+          },
+          "label": "Auto"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 1024,
+            "height": 1024
+          },
+          "label": "1024 × 1024 (square)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 1536,
+            "height": 1024
+          },
+          "label": "1536 × 1024 (HD landscape)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 1024,
+            "height": 1536
+          },
+          "label": "1024 × 1536 (HD portrait)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 2048,
+            "height": 2048
+          },
+          "label": "2048 × 2048 (2K square)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 2560,
+            "height": 1440
+          },
+          "label": "2560 × 1440 (2K landscape, recommended max)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 1440,
+            "height": 2560
+          },
+          "label": "1440 × 2560 (2K portrait, recommended max)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 3840,
+            "height": 2160
+          },
+          "label": "3840 × 2160 (4K landscape, experimental)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 2160,
+            "height": 3840
+          },
+          "label": "2160 × 3840 (4K portrait, experimental)"
+        }
+      ]
+    },
+    "sizeValidation": {
+      "positiveInteger": "width and height must be positive integers",
+      "multipleOf": "width and height must be a multiple of {n}",
+      "maxLongEdge": "The long edge must be {n}px or less",
+      "totalPixelsRange": "Total pixels must be between {min} and {max}",
+      "aspectRatio": "The aspect ratio must be between 1:3 and 3:1"
+    },
+    "submitChecks": {
+      "operationUnsupportedReason": "The selected model does not support this operation (generate/edit)",
+      "maskRequiredReason": "This model requires a mask to run",
+      "inputCountRequirement": "{min} input images required (currently {current})",
+      "providerUnavailableDefault": "Cannot connect to this provider"
+    },
+    "unspecifiedLabel": {
+      "unspecified": "Unspecified",
+      "unspecifiedAuto": "Unspecified (auto)",
+      "defaultValue": "Default ({formatted})"
+    },
+    "paramLabels": {
+      "moderation": "Content moderation"
+    },
+    "inputValidation": {
+      "unsupportedFormat": "{name}: unsupported format (PNG/JPEG/WebP only)",
+      "sizeExceeds": "{name}: size exceeds the limit ({maxMb}MB)"
+    },
+    "editInputsLogic": {
+      "uploadFailedDefault": "Upload failed",
+      "exceedsLimitRejectedCount": {
+        "one": "Input image limit ({max}) reached; {count} file were not added",
+        "other": "Input image limit ({max}) reached; {count} files were not added"
+      },
+      "uploadErrorGeneric": "An error occurred during upload",
+      "matchedExistingNotice": "Matched an existing GAKEI image and reused it.",
+      "atLimitNotAdded": "Input image limit ({max}) reached; not added",
+      "exceedsLimitNotAdded": "Input image limit ({max}) exceeded; not added"
+    },
+    "dependencies": {
+      "incompatiblePair": "{fieldA}={valueA} and {fieldB}={valueB} cannot be set at the same time"
+    },
+    "runFormLogic": {
+      "droppedParamsSettings": "{names} are not usable with the current settings and were reset to unspecified",
+      "droppedParamsInputs": "{names} are not usable with the current inputs and were reset to unspecified",
+      "submitFailedDefault": "Failed to start the run",
+      "listSeparator": ", "
+    }
+  },
+  "sketch": {
+    "title": "Draw a sketch",
+    "close": "Close",
+    "colors": {
+      "black": "Black",
+      "white": "White",
+      "red": "Red",
+      "blue": "Blue",
+      "green": "Green",
+      "yellow": "Yellow"
+    },
+    "colorAria": "Pen color: {label}",
+    "sizes": {
+      "thin": "Thin",
+      "medium": "Medium",
+      "thick": "Thick"
+    },
+    "sizeAria": "Brush size: {label}",
+    "erase": "Eraser",
+    "undo": "Undo",
+    "clearAll": "Clear all",
+    "hideLines": "Hide lines (compare with the base)",
+    "showLines": "Show lines",
+    "loading": "Loading...",
+    "loadError": "Failed to load the base image",
+    "insertRecommendedPrompt": "Insert recommended prompt",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "save": "Save",
+    "saveFailedDefault": "Failed to save the sketch",
+    "canvasInitError": "Failed to initialize the canvas",
+    "exportCanvasInitError": "Failed to initialize the export canvas",
+    "pngExportError": "Failed to export the PNG",
+    "recommendedPrompt": "Turn this drawing into a photorealistic image. Preserve the exact layout, proportions, and perspective. Choose realistic materials and lighting consistent with the sketch intent. Do not add new elements or text."
+  },
+  "mask": {
+    "title": "Draw a mask",
+    "brush": "Brush",
+    "eraser": "Eraser",
+    "brushRadius": "Brush size",
+    "undo": "Undo",
+    "invert": "Invert",
+    "clearAll": "Clear all",
+    "loading": "Loading...",
+    "existingMaskLoadError": "Failed to load the existing mask; drawing on a blank canvas instead.",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "save": "Save",
+    "saveFailedDefault": "Failed to save the mask",
+    "canvasInitError": "Failed to initialize the canvas",
+    "exportCanvasInitError": "Failed to initialize the export canvas",
+    "pngExportError": "Failed to export the PNG",
+    "noPaintError": "Nothing is painted. Draw a mask before saving.",
+    "maxSizeExceeded": "The mask size exceeds the limit ({maxMb}MB). Paint a smaller area with the brush.",
+    "imageLoadError": "Failed to load the image"
+  },
+  "crop": {
+    "title": "Choose the area to crop",
+    "hint": "Drag the frame to move it, or drag a corner handle to resize it. With the frame focused, arrow keys move it too (Shift for 10px).",
+    "frameLabel": "Crop area",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "viewer": {
+    "back": "← Back",
+    "loading": "Loading...",
+    "assetLoadError": "Failed to load the asset.",
+    "deletedAt": "Deleted ({date})",
+    "restoreToStock": "Restore to stock",
+    "notRestorableNote": "Cannot restore: this is output from a deleted Generated run.",
+    "outputPosition": "Output {position} / {total}",
+    "previousOutput": "Previous output",
+    "nextOutput": "Next output",
+    "outputThumbLabelActive": "Output {index} (current)",
+    "outputThumbLabelInactive": "Output {index}, switch to",
+    "dimensions": "Dimensions",
+    "format": "Format",
+    "size": "Size",
+    "created": "Created",
+    "promptHeading": "Prompt",
+    "viewRunDetail": "View Generated details",
+    "sourceImage": "Source image:",
+    "view": "View",
+    "compareWithOriginal": "Compare with original",
+    "downloadOriginal": "Download original size",
+    "useAsInput": "Use as input",
+    "viewLineageGraph": "View lineage graph",
+    "delete": "Delete",
+    "deleteConfirmMessage": "This removes the image from stock. It stays in the Generated record and lineage.",
+    "deleteFailed": "Failed to delete.",
+    "restoreFailed": "Failed to restore.",
+    "deletedToast": "Image deleted.",
+    "undo": "Undo",
+    "zoomOut": "Zoom out",
+    "zoomOutTitle": "Zoom out (10%)",
+    "zoomIn": "Zoom in",
+    "zoomInTitle": "Zoom in (10%)",
+    "fitToScreen": "Fit to screen",
+    "actualSize": "Actual size (100%)",
+    "imageAlt": "Generated result"
+  },
+  "compare": {
+    "back": "← Back",
+    "title": "Compare with original",
+    "modeGroupLabel": "View mode",
+    "sideBySide": "Side by side",
+    "sideBySideTitle": "Side by side (left / right)",
+    "slider": "Compare with slider",
+    "sliderTitle": "Compare with slider (overlay split)",
+    "runLoadError": "Failed to load Generated.",
+    "noInputs": "This Generated run has no image to compare (it is a Generate output).",
+    "noOutputs": "This Generated run has no output.",
+    "inputLabel": "Input",
+    "outputLabel": "Output",
+    "loading": "Loading...",
+    "imageLoadError": "Failed to load image.",
+    "before": "Before",
+    "after": "After",
+    "zoomOut": "Zoom out",
+    "zoomOutTitle": "Zoom out (10%)",
+    "zoomIn": "Zoom in",
+    "zoomInTitle": "Zoom in (10%)",
+    "fitToScreen": "Fit to screen",
+    "actualSize": "Actual size (100%)",
+    "splitHandleLabel": "Split position"
+  },
+  "lineage": {
+    "heading": "Lineage",
+    "pinnedTitle": "Origin pinned (the graph stays put as you navigate)",
+    "unpinnedTitle": "Origin not pinned",
+    "pinnedLabel": "Pinned",
+    "pinLabel": "Pin",
+    "resyncButton": "Change origin: match what you are viewing",
+    "emptyPlaceholder": "Pick an image from a history card or the viewer to show it here.",
+    "hint": "Select a node to go there (solid = primary parent, dashed = reference / failed Generated). While pinned, the origin stays put and only the current position is highlighted.",
+    "loading": "Loading...",
+    "lineageLoadError": "Failed to load lineage.",
+    "viewAll": "Fit to view",
+    "expand": "Expand",
+    "previewNode": "Preview node",
+    "truncated": "Showing a partial view",
+    "originEdgeLabel": "Origin (unverified)",
+    "originRecipe": {
+      "heading": "Embedded lineage info (unverified)",
+      "sourcePrefix": "Source:",
+      "sourceSameInstance": "this GAKEI",
+      "sourceOtherInstance": "another GAKEI",
+      "viewOriginInLineage": "View the origin Asset in the lineage graph",
+      "loadIntoForm": "Load these settings into the form",
+      "inputsNotRestored": "Input images are not restored.",
+      "missingRecipe": "The embedded settings have no generation info.",
+      "capabilitiesLoading": "Loading capabilities...",
+      "modelUnavailable": "This model is not available in the current environment."
+    },
+    "embeddedMeta": {
+      "heading": "Generation info embedded in the image (unverified)",
+      "modelLabel": "Model",
+      "promptHeading": "Prompt",
+      "negativePromptHeading": "Negative prompt",
+      "paramsHeading": "Settings",
+      "rawSummary": "Show original data",
+      "truncatedNote": "Some data was omitted due to a size limit.",
+      "c2paUnknown": "A C2PA manifest is present, but its contents could not be read.",
+      "unverifiedNote": "This is self-reported information written into the image. GAKEI does not verify it, and it cannot be loaded into the form.",
+      "tools": {
+        "a1111": "Stable Diffusion WebUI (AUTOMATIC1111 / Forge)",
+        "comfyui": "ComfyUI",
+        "novelai": "NovelAI",
+        "invokeai": "InvokeAI",
+        "swarmui": "SwarmUI",
+        "c2pa": "C2PA (Content Credentials)",
+        "generic": "Other (EXIF / XMP)"
+      }
+    },
+    "assetMask": "Mask",
+    "assetSketch": "Sketch",
+    "deletedTag": "Deleted",
+    "assetLoadError": "Failed to load the asset.",
+    "deletedAt": "Deleted ({date})",
+    "restoreToStock": "Restore to stock",
+    "notRestorableNote": "Cannot restore: this is output from a deleted Generated run.",
+    "restoreFailed": "Failed to restore.",
+    "dimensions": "Dimensions",
+    "format": "Format",
+    "size": "Size",
+    "created": "Created",
+    "promptHeading": "Prompt",
+    "viewRunDetail": "View Generated details",
+    "useAsInput": "Use as input",
+    "openInViewer": "Open in viewer",
+    "download": "Download",
+    "closePanel": "Close panel",
+    "nodeDetailLabel": "Node details",
+    "runDetailTitle": "Generated details",
+    "openDetailPage": "Open detail page",
+    "close": "Close",
+    "embeddedBadge": "Embedded",
+    "embeddedNodeTitle": "Embedded (unverified)",
+    "embeddedNodeTitleWithInstance": "Embedded (unverified) · Source instance: {instance}…",
+    "noEmbeddedImage": "No image",
+    "runDetailTitleEmbedded": "Generated (embedded)",
+    "assetDetailTitleEmbedded": "Asset (embedded)",
+    "embeddedNodeTypeLabel": "Node type",
+    "embeddedInstanceLabel": "Source instance",
+    "unknownValue": "Unknown",
+    "notIngestedPlaceholder": "Not ingested into this environment, so no image is available.",
+    "kindLabel": "Kind",
+    "openIngestedAsset": "Open the ingested image",
+    "statusLabel": "Status",
+    "finishedAtLabel": "Finished",
+    "paramsHeading": "Parameters"
+  },
+  "stock": {
+    "heading": "Stock",
+    "countLoading": "...",
+    "countLabel": {
+      "one": "{count} item",
+      "other": "{count} items"
+    },
+    "kindAll": "All",
+    "kindGenerated": "Generated",
+    "kindUpload": "Upload",
+    "kindSketch": "Sketch",
+    "kindMask": "Mask",
+    "openInViewer": "Open in viewer",
+    "showInResultArea": "Show in the result area",
+    "useAsInput": "Use as input",
+    "delete": "Delete",
+    "uploading": "Uploading...",
+    "addImage": "Add image / drop",
+    "loadMore": "Load more",
+    "loadingMore": "Loading...",
+    "retryLoadMore": "Retry",
+    "emptyState": "No images yet. Drop one here to add it.",
+    "deleteConfirmMessage": "This removes the image from stock. It stays in the Generated record and lineage.",
+    "uploadFailedGeneric": "{fileName}: failed",
+    "matchedExistingNotice": "Matched an existing GAKEI image and reused it.",
+    "deleteFailed": "Failed to delete.",
+    "restoreFailed": "Failed to restore.",
+    "deletedToast": "Image deleted.",
+    "undo": "Undo",
+    "maxInputImages": "You've reached the input image limit ({max})."
+  },
+  "comfyui": {
+    "experimentalBadge": "Experimental",
+    "connection": {
+      "checking": "Checking connection...",
+      "loadError": "Could not get the connection status.",
+      "settingsLink": "Connection settings",
+      "testFailed": "Connection test failed.",
+      "saveFailed": "Failed to save.",
+      "connected": "Connected.",
+      "detached": "Disconnected.",
+      "detachFailed": "Failed to disconnect.",
+      "disabledHeadline": "ComfyUI is disabled",
+      "availableHeadline": "Can connect",
+      "unavailableHeadline": "Cannot connect",
+      "urlLabel": "URL",
+      "reasonLabel": "Reason",
+      "versionLabel": "Version",
+      "deviceLabel": "Device",
+      "connectionLabel": "Connection",
+      "nonLoopbackValue": "Non-loopback (LAN, etc.)",
+      "testing": "Checking...",
+      "testConnection": "Test connection",
+      "changeUrl": "Change URL",
+      "detach": "Disconnect",
+      "urlIntroPrefix": "Enter the connection URL and save to start using ComfyUI. The default for the ComfyUI portable build is",
+      "urlIntroSuffix": ".",
+      "nonLoopbackWarning": "This address is not a loopback (this machine itself). Input images and prompts will be sent to a ComfyUI instance with no authentication.",
+      "confirmNonLoopback": "I have reviewed this and want to save anyway",
+      "connecting": "Connecting...",
+      "save": "Save",
+      "saveAndConnect": "Save and connect",
+      "cancel": "Cancel",
+      "detachConfirmMessage": "This disconnects ComfyUI.",
+      "detachConfirmWarning": "ComfyUI will disappear from the model choices. Registered workflows and past Runs stay as they are, and reconnecting brings them back. This choice is saved, so even if the COMFYUI_URL environment variable is set, restarting will not bring it back automatically.",
+      "detachConfirmLabel": "Disconnect",
+      "testResultHeadlineAvailable": "Connection test: can connect",
+      "testResultHeadlineUnavailable": "Connection test: cannot connect",
+      "disconnectedLabel": "Not connected",
+      "connectedLabel": "Connected: {url}",
+      "unavailableLabel": "Cannot connect",
+      "envNote": "This connection is the default from the COMFYUI_URL environment variable. Saving or disconnecting here makes this screen’s setting take priority from now on, even after a restart.",
+      "lockedSave": "A ComfyUI Run is running or queued, so connection settings cannot be changed right now. Try again once it finishes.",
+      "lockedDetach": "A ComfyUI Run is running or queued, so you cannot disconnect right now. Try again once it finishes.",
+      "testSuccessSaveNotice": "Connection test succeeded. Not saved yet. Press \"Save\" to switch to this URL.",
+      "testSuccessSaveAndConnectNotice": "Connection test succeeded. Not saved yet. Press \"Save and connect\" to add ComfyUI to the model choices.",
+      "testSuccessNonLoopbackSuffix": " This is a non-loopback address, so you must also check the confirmation box to save.",
+      "disconnectedNotice": "ComfyUI is not connected, so registered workflows do not appear in the model choices. Save a connection on the settings screen.",
+      "disconnectedNoticeFormSuffix": " While disconnected, choices and range autofill (/object_info) do not work."
+    },
+    "operationLabels": {
+      "generate": "Generate",
+      "edit": "Edit"
+    },
+    "form": {
+      "back": "← Back",
+      "editTitle": "Edit ComfyUI workflow",
+      "newTitle": "Register ComfyUI workflow",
+      "workflowLoadError": "Could not get the workflow.",
+      "templateParseFailed": "Failed to analyze the template.",
+      "jsonParseFailed": "Could not read this as JSON.",
+      "clearedFieldsNotice": "Cleared bindings that no longer exist in the new file: {cleared}",
+      "listSeparator": ", ",
+      "analyzeFailed": "Failed to analyze.",
+      "fileReadFailed": "Could not read the file.",
+      "updated": "Updated.",
+      "created": "Registered.",
+      "saveFailedGeneric": "Failed to save.",
+      "loading": "Loading...",
+      "fileSectionHeading": "File",
+      "dropZoneText": "Drop the JSON exported from ComfyUI’s \"Export (API)\" here, or choose a file.",
+      "chooseFile": "Choose file",
+      "templateLoaded": "Template loaded (nodes: {nodeCount})",
+      "basicInfoHeading": "Basic info",
+      "nameLabel": "Name",
+      "operationLabel": "Operation",
+      "operationTitle": "Generate (no input image) / Edit (1 input image + optional mask)",
+      "generateOption": "Generate (generate)",
+      "editOption": "Edit (edit)",
+      "bindingsHeading": "Bindings",
+      "promptLabel": "Prompt (required)",
+      "negativePromptLabel": "Negative prompt",
+      "widthLabel": "Width",
+      "heightLabel": "Height",
+      "batchSizeLabel": "Count (batch_size)",
+      "imageSlotsLabel": "Image slots (ordered, required)",
+      "imageSlotsHelp": "The nth GAKEI input image goes into the nth slot. A Run needs exactly as many images as there are slots. The mask applies to the first image.",
+      "imageSlotLabel": "Image {index}",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "remove": "Remove",
+      "addImageSlot": "+ Add slot",
+      "seedsLabel": "Seeds (multiple allowed)",
+      "seedLabel": "Seed {index}",
+      "addSeed": "+ Add seed",
+      "maskLabel": "Mask",
+      "maskModeNone": "None",
+      "maskModeLoadImageMask": "LoadImageMask node",
+      "maskModeImageAlpha": "Input image transparency",
+      "maskRefLabel": "Mask node / input",
+      "outputsLabel": "Output nodes (required, multiple allowed)",
+      "exposedParamsHeading": "Exposed parameters",
+      "saving": "Saving...",
+      "update": "Update",
+      "register": "Register"
+    },
+    "list": {
+      "title": "ComfyUI workflows",
+      "newButton": "+ New workflow",
+      "disconnectedSettingsLink": "Go to settings",
+      "loading": "Loading...",
+      "loadError": "Failed to load the list.",
+      "empty": "No workflows registered yet.",
+      "updated": "Updated: {date}",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleted": "Deleted.",
+      "deleteFailed": "Failed to delete.",
+      "deleteConfirmMessage": "This deletes the workflow \"{name}\".",
+      "deleteConfirmWarning": "Past Runs made with this workflow are unchanged (the graph used at run time is stored as-is).",
+      "deleteConfirmLabel": "Delete",
+      "cancel": "Cancel"
+    },
+    "exposedParamsTable": {
+      "typeLabels": {
+        "text": "Text",
+        "int": "Integer",
+        "float": "Decimal",
+        "bool": "Boolean",
+        "enum": "Choices"
+      },
+      "empty": "No parameters available to expose.",
+      "enable": "Expose",
+      "sourceRefTitle": "Node {node} / input {input}",
+      "nameLabel": "Name",
+      "displayLabelLabel": "Display label",
+      "typeLabel": "Type",
+      "defaultLabel": "Default",
+      "defaultPlaceholder": "Use template value",
+      "minimumLabel": "Minimum",
+      "maximumLabel": "Maximum",
+      "stepLabel": "Step",
+      "choicesLabel": "Choices (comma-separated)",
+      "maxLengthLabel": "Max length"
+    },
+    "nodePicker": {
+      "nodeAriaLabel": "{label}: node",
+      "inputAriaLabel": "{label}: input",
+      "none": "None",
+      "wired": "{name} (wired)",
+      "noNodes": "No nodes"
+    },
+    "bindingsValidation": {
+      "promptRequired": "Please choose a binding for the prompt.",
+      "outputsRequired": "Please choose at least one output node.",
+      "seedUnset": "A seed row has no binding selected. Choose one or remove it.",
+      "imageSlotUnset": "An image slot has no binding selected. Choose one or remove it.",
+      "imageSlotDuplicate": "Image slots have a duplicate binding. Choose separate bindings.",
+      "maskConflictsWithImage": "The mask binding must be different from the image slots.",
+      "editRequiresImageSlot": "Edit requires at least one image slot.",
+      "generateCannotHaveImages": "Generate cannot have image slots.",
+      "generateCannotHaveMask": "Generate cannot have a mask binding.",
+      "maskRefRequired": "Please choose a node and input for the mask.",
+      "imageAlphaRequiresImageSlot": "Using input image transparency as a mask requires at least one image slot.",
+      "clearedLabels": {
+        "seed": "Seed",
+        "imageSlot": "Image slot",
+        "output": "Output node",
+        "mask": "Mask",
+        "prompt": "Prompt",
+        "negativePrompt": "Negative prompt",
+        "width": "Width",
+        "height": "Height",
+        "batchSize": "Count"
+      }
+    },
+    "exposedParamValidation": {
+      "nameFormatInvalid": "Invalid name format (lowercase letters, numbers and underscores, starting with a letter).",
+      "nameReservedPrefix": "Names cannot start with comfyui_.",
+      "nameReservedWord": "This name is reserved and cannot be used.",
+      "nameDuplicate": "Duplicate exposed parameter name: {name}"
+    },
+    "formValidation": {
+      "duplicateSourceLabel": "Binding",
+      "duplicateExposedParamLabel": "Exposed parameter \"{label}\"",
+      "duplicateRef": "Duplicate binding (node {node}, input {input}): {prior} and {next}",
+      "nameRequired": "Please enter a name.",
+      "templateRequired": "Please choose the workflow JSON file."
+    }
+  }
+}

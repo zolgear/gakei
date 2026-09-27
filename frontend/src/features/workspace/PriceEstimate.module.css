@@ -1,0 +1,7 @@
+.price {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  cursor: help;
+}

@@ -1,0 +1,256 @@
+# ADR-0012: Windows / Linux の両方で、lint・テスト・ビルドに加えて起動スクリプト
+# (run.sh / run.bat)自体が動くことまで確認する。
+# ADR-0016: 加えて Docker イメージのビルドと起動も確認する(docker ジョブ)。
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**.md"]
+  pull_request:
+    paths-ignore: ["docs/**", "**.md"]
+
+# PR に push を重ねたとき、走りかけの古い実行を打ち切る(main への push は打ち切らない)。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows は pytest が Linux の5倍以上遅い(I/O とプロセス起動が遅い)ので、
+        # PR は Linux だけで速く回し、Windows は main へのマージ後にだけ確認する。
+        # Windows 固有の面(run.bat、ランチャー)が壊れてもマージ後に気づけば直せる。
+        os: ${{ github.event_name == 'push' && fromJSON('["ubuntu-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Node.js のセットアップ
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # setup-uv は v8 以降、動く major タグ(v8/v9/v10)を発行しなくなったため、
+      # フルバージョンで固定する。
+      - name: uv のセットアップ
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: backend ruff check
+        working-directory: backend
+        run: uv run --frozen ruff check .
+
+      - name: backend ruff format --check
+        working-directory: backend
+        run: uv run --frozen ruff format --check .
+
+      - name: backend pytest
+        working-directory: backend
+        # -n auto(pytest-xdist): テストは tmp_path ごとに独立しているので並列で走らせる。
+        # 特に Windows ランナーで効く。
+        run: uv run --frozen pytest -q -n auto
+
+      - name: frontend npm ci
+        working-directory: frontend
+        run: npm ci
+
+      - name: frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: frontend test
+        working-directory: frontend
+        run: npm test
+
+      - name: frontend build
+        working-directory: frontend
+        run: npm run build
+
+      # ここから起動スクリプト自体の確認。ビルド済みの dist をあえて消し、
+      # run.sh / run.bat がフロントのビルドからサーバー起動まで面倒を見ることを確かめる。
+      - name: ランチャーの起動確認(Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf frontend/dist
+
+          export FAKE_PROVIDER=1
+          export DATA_DIR="${RUNNER_TEMP}/gakei-data"
+          export PORT=8799
+
+          ./run.sh --no-browser >launcher.log 2>&1 &
+          echo $! >launcher.pid
+
+          ok=0
+          for _ in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8799/api/capabilities >/dev/null 2>&1; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "サーバーが時間内に起動しませんでした" >&2
+            exit 1
+          fi
+
+          body="$(curl -sf http://127.0.0.1:8799/)"
+          if ! printf '%s' "$body" | grep -qF '<title>GAKEI</title>'; then
+            echo "/ のレスポンスに <title>GAKEI</title> が含まれていません" >&2
+            exit 1
+          fi
+
+          # 初回起動の履歴画面が使う API(空の DB で 200 を返すこと)。
+          curl -sf "http://127.0.0.1:8799/api/runs?limit=30" >/dev/null
+
+          # 同じポートでもう1つ起動すると、分かるメッセージを出して終了コード 1 で止まること。
+          # 案内の言語は OS のロケールで決まる(ADR-0015)ので、日本語と英語の両方を確かめる。
+          check_port_in_use() {
+            local lc="$1" expected="$2"
+            set +e
+            LC_ALL="$lc" ./run.sh --no-browser >second.log 2>&1
+            local rc=$?
+            set -e
+            if [ "$rc" -ne 1 ] || ! grep -qF "$expected" second.log; then
+              echo "ポート使用中の終了が期待どおりではありません(LC_ALL=$lc, rc=$rc)" >&2
+              cat second.log >&2
+              exit 1
+            fi
+          }
+          check_port_in_use ja_JP.UTF-8 "ポート 8799 はすでに使われています"
+          check_port_in_use C.UTF-8 "Port 8799 is already in use"
+
+          kill "$(cat launcher.pid)" || true
+
+      - name: ランチャーのログ(Linux, 失敗時)
+        if: runner.os == 'Linux' && failure()
+        shell: bash
+        run: cat launcher.log || true
+
+      - name: ランチャーの起動確認(Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force frontend\dist -ErrorAction SilentlyContinue
+
+          $env:FAKE_PROVIDER = "1"
+          $env:DATA_DIR = Join-Path $env:RUNNER_TEMP "gakei-data"
+          $env:PORT = "8799"
+          # 失敗時に pause で止まらないようにする(ダブルクリック起動向けの待機)。
+          $env:GAKEI_NO_PAUSE = "1"
+
+          $proc = Start-Process -FilePath cmd -ArgumentList "/c", "run.bat", "--no-browser" `
+            -PassThru -NoNewWindow `
+            -RedirectStandardOutput launcher-stdout.log `
+            -RedirectStandardError launcher-stderr.log
+
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8799/api/capabilities" -UseBasicParsing -TimeoutSec 3
+              if ($resp.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) {
+            Write-Error "サーバーが時間内に起動しませんでした"
+            exit 1
+          }
+
+          $root = Invoke-WebRequest -Uri "http://127.0.0.1:8799/" -UseBasicParsing
+          if ($root.Content -notmatch [regex]::Escape("<title>GAKEI</title>")) {
+            Write-Error "/ のレスポンスに <title>GAKEI</title> が含まれていません"
+            exit 1
+          }
+
+          # 初回起動の履歴画面が使う API(空の DB で 200 を返すこと)。
+          $runs = Invoke-WebRequest -Uri "http://127.0.0.1:8799/api/runs?limit=30" -UseBasicParsing
+          if ($runs.StatusCode -ne 200) {
+            Write-Error "/api/runs が 200 を返しません: $($runs.StatusCode)"
+            exit 1
+          }
+
+          # 同じポートでもう1つ起動すると、分かるメッセージを出して終了コード 1 で止まること。
+          # Python は UTF-8 で書き出すので、PowerShell 側の読み取りも UTF-8 にそろえる。
+          # 案内の言語は OS のロケールで決まる(ADR-0015)ので、LC_ALL で明示して両方を確かめる。
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          foreach ($case in @(@("ja_JP.UTF-8", "ポート 8799 はすでに使われています"), @("en_US.UTF-8", "Port 8799 is already in use"))) {
+            $env:LC_ALL = $case[0]
+            $secondOut = & cmd /c run.bat --no-browser 2>&1 | Out-String
+            $secondCode = $LASTEXITCODE
+            if ($secondCode -ne 1 -or $secondOut -notmatch [regex]::Escape($case[1])) {
+              Write-Error "ポート使用中の終了が期待どおりではありません(LC_ALL=$($case[0]), exit=$secondCode)"
+              Write-Output $secondOut
+              exit 1
+            }
+          }
+          Remove-Item Env:LC_ALL
+
+          # run.bat -> uv -> python と子プロセスへ連なるため、ツリーごと止める。
+          taskkill /PID $proc.Id /T /F 2>$null
+
+      - name: ランチャーのログ(Windows, 失敗時)
+        if: runner.os == 'Windows' && failure()
+        shell: pwsh
+        run: |
+          Get-Content launcher-stdout.log -ErrorAction SilentlyContinue
+          Get-Content launcher-stderr.log -ErrorAction SilentlyContinue
+
+  # ADR-0016: Docker イメージのビルドと起動確認。run.sh/run.bat とは別の配布経路なので、
+  # 上の test ジョブとは独立に実行する。
+  docker:
+    name: docker build & smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: イメージのビルド
+        run: docker build -t gakei:ci .
+
+      - name: FAKE_PROVIDER=1 で起動
+        run: |
+          docker run -d --name gakei-ci -e FAKE_PROVIDER=1 -p 127.0.0.1:8798:8000 gakei:ci
+
+      - name: /api/capabilities が応答するまで待つ
+        run: |
+          set -euo pipefail
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8798/api/capabilities >/dev/null 2>&1; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "コンテナが時間内に起動しませんでした" >&2
+            exit 1
+          fi
+
+      - name: / が SPA の index.html を返すことを確認
+        run: |
+          set -euo pipefail
+          body="$(curl -sf http://127.0.0.1:8798/)"
+          if ! printf '%s' "$body" | grep -qF '<title>GAKEI</title>'; then
+            echo "/ のレスポンスに <title>GAKEI</title> が含まれていません" >&2
+            exit 1
+          fi
+
+      - name: コンテナのログ(失敗時)
+        if: failure()
+        run: docker logs gakei-ci || true
+
+      - name: 後片付け
+        if: always()
+        run: docker rm -f gakei-ci || true

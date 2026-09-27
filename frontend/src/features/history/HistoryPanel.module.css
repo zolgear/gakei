@@ -1,0 +1,65 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 10px 16px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 14px 0 8px;
+  background: var(--color-bg-raised);
+}
+
+.heading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.placeholder {
+  margin: 0;
+  padding: 28px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.sentinel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 0;
+}
+
+.sentinelLoading {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.sentinelButton {
+  padding: 8px 16px;
+  background: var(--color-header-band);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.sentinelButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}

@@ -1,0 +1,317 @@
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.backLink {
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.backLink:hover {
+  color: var(--color-text);
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.experimentalBadge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 10.5px;
+  font-weight: 600;
+  background: var(--color-header-band);
+  color: var(--color-text-muted);
+}
+
+.placeholder {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.sectionHeading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dropZone {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+}
+
+.dropZoneText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.fileButton {
+  height: 32px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.fileButton:hover {
+  border-color: var(--color-accent);
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.templateStatus {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-success);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.warningList,
+.errorList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--color-warning);
+}
+
+.errorList {
+  color: var(--color-danger);
+}
+
+.noticeText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.basicGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field label {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.field input,
+.field select {
+  height: 34px;
+  box-sizing: border-box;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.bindingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.subField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.subFieldLabel {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.seedList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seedRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.helpText {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.reorderButtons {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.reorderButtons button {
+  width: 22px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.reorderButtons button:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+.reorderButtons button:disabled {
+  opacity: 0.4;
+}
+
+.smallRemoveButton {
+  height: 32px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-danger);
+  font-size: 11px;
+}
+
+.addButton {
+  align-self: flex-start;
+  height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.addButton:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.maskModeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+}
+
+.maskModeRow label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.saveButton {
+  height: 38px;
+  padding: 0 20px;
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.saveButton:disabled {
+  opacity: 0.5;
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 14px;
+  }
+
+  .basicGrid,
+  .bindingsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .field input,
+  .field select {
+    min-height: 40px;
+    font-size: 16px;
+  }
+
+  .seedRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fileButton,
+  .smallRemoveButton,
+  .addButton,
+  .saveButton,
+  .backLink {
+    min-height: 44px;
+  }
+
+  .saveButton {
+    width: 100%;
+  }
+}

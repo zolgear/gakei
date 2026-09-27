@@ -1,0 +1,139 @@
+.body {
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chooseRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.chooseFileButton {
+  height: 36px;
+  padding: 0 16px;
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chooseFileButton:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.chooseFileButton:disabled {
+  opacity: 0.5;
+}
+
+.dropHint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+/* サムネイル一覧そのもの(kind チップ・検索・無限スクロール)は `StockPickerGrid` に
+   切り出した(ADR-0020)。ここでは見出し・残り枚数と、この div の flex/gap で
+   `StockPickerGrid` が返す要素(フラグメント。DOM 上はこの div 直下の子になる)を並べる。 */
+.stockSection {
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stockHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.stockHeading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.remaining {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.selectedCount {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.footerButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.closeButton {
+  height: 34px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.closeButton:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.addSelectedButton {
+  height: 34px;
+  padding: 0 16px;
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.addSelectedButton:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.addSelectedButton:disabled {
+  opacity: 0.5;
+}
+
+@media (max-width: 767px) {
+  .chooseFileButton,
+  .closeButton,
+  .addSelectedButton {
+    height: 44px;
+  }
+}

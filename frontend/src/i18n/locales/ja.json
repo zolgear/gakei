@@ -1,0 +1,1138 @@
+{
+  "auth": {
+    "login": {
+      "title": "ログインしてください",
+      "intro": "GAKEI を使うにはログインが必要です。",
+      "button": "ログイン",
+      "retry": "再試行",
+      "loadFailed": "ログイン状態を確認できませんでした。",
+      "errors": {
+        "callback_failed": "ログインの処理に失敗しました。もう一度お試しください。",
+        "email_missing": "ログインに使ったアカウントにメールアドレスが設定されていません。",
+        "email_not_allowed": "このメールアドレスでは GAKEI にログインできません(許可されたドメインではありません)。",
+        "email_unverified": "ログインに使ったアカウントのメールアドレスが確認(verify)されていません。IdP側でメールアドレスを確認してから、もう一度ログインしてください。"
+      }
+    },
+    "menu": {
+      "open": "ユーザーメニューを開く",
+      "logout": "ログアウト",
+      "roleAdmin": "管理者",
+      "roleUser": "利用者"
+    }
+  },
+  "common": {
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "delete": "削除する",
+    "save": "保存",
+    "retry": "再読み込み",
+    "back": "← 戻る",
+    "statusLabels": {
+      "queued": "待機中",
+      "running": "実行中",
+      "succeeded": "成功",
+      "failed": "失敗",
+      "canceled": "キャンセル"
+    },
+    "durationSeconds": "{seconds}秒",
+    "elapsedSeconds": "{seconds}s 経過",
+    "assetKindLabels": {
+      "upload": "アップロード",
+      "generated": "生成",
+      "mask": "マスク",
+      "sketch": "スケッチ"
+    },
+    "lineagePage": {
+      "title": "系列グラフ",
+      "viewRootInViewer": "起点をビューアで見る"
+    }
+  },
+  "shell": {
+    "appBar": {
+      "toggleMenu": "メニューを開閉",
+      "workspaceNav": "ワークスペース",
+      "historyTab": "履歴",
+      "studioTab": "生成",
+      "queueStatus": "実行中 {running}、待機 {queued}",
+      "running": "実行中 {count}",
+      "queued": "待機 {count}",
+      "settings": "設定",
+      "newRun": "新規生成",
+      "newRunTitle": "新規生成 (Alt+N)",
+      "newRunConfirm": {
+        "message": "入力中の内容を破棄して新規生成します。モデルとパラメーターも初期値に戻ります。",
+        "confirmLabel": "新規生成する"
+      }
+    },
+    "drawer": {
+      "closeMenu": "メニューを閉じる"
+    },
+    "iconRail": {
+      "resourceNav": "リソース",
+      "stock": "ストック",
+      "prompts": "プロンプトセット",
+      "graph": "系列グラフ",
+      "history": "履歴",
+      "search": "検索"
+    },
+    "sidebar": {
+      "resourcePanel": "リソースパネル",
+      "widthHandle": "サイドバーの幅"
+    }
+  },
+  "history": {
+    "card": {
+      "inputBadge": "入力 {count}",
+      "outputCount": "{count}枚",
+      "showImage": "画像を表示",
+      "watchProgress": "生成画面で進捗を見る",
+      "viewDetail": "Generated 詳細を見る",
+      "running": "実行中",
+      "queued": "待機中",
+      "canceled": "キャンセル済み",
+      "parent": "親",
+      "parentWithExtra": "親 +{extra}",
+      "noPrompt": "(プロンプトなし)",
+      "cancel": "中止",
+      "showLineage": "系列を見る",
+      "rerun": "同じ設定で新規作成",
+      "useAsInput": "入力に使う",
+      "delete": "削除",
+      "rerunFailed": "再実行の準備に失敗しました",
+      "deleteFailed": "削除に失敗しました",
+      "by": "実行者: {name}",
+      "deleteConfirm": {
+        "message": {
+          "one": "この Generated と出力画像 {count} 枚を削除します。元に戻せません。",
+          "other": "この Generated と出力画像 {count} 枚を削除します。元に戻せません。"
+        }
+      },
+      "deleteWarning": {
+        "one": "この Generated の出力は、他の Generated {count} 件の元画像になっています。削除すると、その系列ではこの画像が「削除済み」になります。",
+        "other": "この Generated の出力は、他の Generated {count} 件の元画像になっています。削除すると、その系列ではこの画像が「削除済み」になります。"
+      }
+    },
+    "page": {
+      "title": "履歴",
+      "filterByStatus": "状態で絞り込み",
+      "filterAll": "すべて",
+      "filterSucceeded": "成功",
+      "filterFailed": "失敗",
+      "loading": "読み込み中...",
+      "loadError": "履歴の取得に失敗しました",
+      "noMatch": "該当する Generated がありません。",
+      "loadMore": "さらに読み込む"
+    }
+  },
+  "runDetail": {
+    "loading": "読み込み中...",
+    "loadFailed": "Generated の取得に失敗しました",
+    "deletedBanner": "この Generated は削除済みです({deletedAt})",
+    "rerun": "同じ設定で新規作成",
+    "watchProgress": "生成画面で進捗を見る",
+    "viewLineageGraph": "系列グラフを見る",
+    "openDetailPage": "詳細ページで開く",
+    "promptHeading": "プロンプト",
+    "outputsHeading": "出力",
+    "compareWithOriginal": "編集前と比較する",
+    "deletedTag": "削除済み",
+    "detailSettingsHeading": "詳細設定",
+    "workflowLine": "ワークフロー: {name} ({sha})",
+    "downloadJson": "JSON をダウンロード",
+    "comfyuiPromptSummary": "ComfyUI に送ったグラフ(JSON)",
+    "timingHeading": "時刻・実行状況",
+    "createdBy": "実行者",
+    "duration": "所要時間",
+    "usageHeading": "usage",
+    "estimatedCost": "費用(参考) {amount}",
+    "errorHeading": "エラー",
+    "errorCodeLine": "error_code: {code}",
+    "inputsHeading": "入力画像",
+    "primaryParent": "主たる親",
+    "seed": {
+      "tooltip": "同じ seed と枚数で実行すると、同じ並びの画像が生成されます",
+      "single": "seed {seed}",
+      "batch": "seed {seed} ・ {outputCount} 枚を1回で生成",
+      "indexed": "seed {seed} ・ {outputCount} 枚中 {outputIndex} 枚目"
+    }
+  },
+  "runStatus": {
+    "errorFallback": "不明なエラーが発生しました",
+    "errorCodes": {
+      "contentFilter": "コンテンツフィルターにより拒否されました",
+      "rateLimited": "レート制限により失敗しました(しばらくしてから再実行してください)",
+      "interrupted": "サーバーの再起動により中断されました",
+      "missingApiKey": "APIキーが設定されていません",
+      "authError": "認証に失敗しました",
+      "connectionError": "プロバイダーへの接続に失敗しました",
+      "providerError": "プロバイダーがエラーを返しました",
+      "providerUnavailable": "プロバイダーが利用できません",
+      "comfyuiUnavailable": "ComfyUI に接続できません",
+      "comfyuiValidation": "ComfyUI がワークフローを検証できませんでした",
+      "internalError": "内部エラーが発生しました"
+    }
+  },
+  "historyPanel": {
+    "heading": "履歴",
+    "empty": "まだ実行がありません",
+    "loadMore": "さらに読み込む",
+    "loadFailed": "読み込みに失敗しました",
+    "openRun": "この Run を表示"
+  },
+  "searchPanel": {
+    "heading": "検索",
+    "hint": "実行・画像・プロンプトセットを横断して検索します",
+    "openRun": "この Run を表示",
+    "showImage": "画像を表示",
+    "loadPrompt": "プロンプト欄に読み込む"
+  },
+  "search": {
+    "ariaLabel": "検索",
+    "clear": "検索語を消す",
+    "placeholder": "プロンプトを検索",
+    "searching": "検索中...",
+    "noResults": "見つかりません。埋め込まれた生成情報の無いアップロード画像は検索対象外です",
+    "noResultsPeriod": "見つかりません。埋め込まれた生成情報の無いアップロード画像は検索対象外です。",
+    "embeddedBadge": "未検証",
+    "embeddedTitle": "画像に埋め込まれた生成情報(未検証)のプロンプトに一致しました",
+    "groupRuns": "Generated",
+    "groupAssets": "画像",
+    "groupPromptSets": "プロンプトセット",
+    "viewAll": "すべての結果を見る",
+    "itemNotFound": "この項目は見つかりませんでした(削除された可能性があります)",
+    "replacePromptConfirm": {
+      "message": "現在入力中のプロンプトを置き換えます。",
+      "confirmLabel": "置き換える",
+      "cancelLabel": "追加しない"
+    },
+    "page": {
+      "submit": "検索",
+      "enterQuery": "検索語を入力してください。",
+      "countSuffix": "{count} 件",
+      "truncatedNote": "上位 {limit} 件のみ表示しています"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "userHeading": "ユーザー設定",
+    "adminHeading": "管理者設定",
+    "adminOnly": "管理者だけが変更できます。",
+    "profile": {
+      "heading": "プロフィール",
+      "avatarLabel": "アバター",
+      "upload": "画像をアップロード",
+      "chooseFromStock": "ストックから選ぶ",
+      "delete": "削除",
+      "deleteConfirm": {
+        "message": "アバターを削除します。頭文字の表示に戻ります。",
+        "confirmLabel": "削除する"
+      },
+      "savedToast": "アバターを更新しました",
+      "deletedToast": "アバターを削除しました",
+      "pickerTitle": "ストックから選ぶ",
+      "pickerConfirm": "この画像にする",
+      "communicationFailed": "通信に失敗しました",
+      "help": "自分の生成画像やアップロードした画像をアバターに使えます(PNG/JPEG/WebP、20MB以下)。切り出す範囲を選べます。"
+    },
+    "display": {
+      "heading": "表示",
+      "faviconProgress": {
+        "label": "タブのアイコンで進捗を示す",
+        "help": "生成の待機中・実行中に、ブラウザのタブのアイコンで状態を示します。オフにしてもアプリ内のロゴの動きは変わりません。"
+      },
+      "studioLayout": {
+        "label": "生成画面のレイアウト",
+        "optionBottom": "下段に入力欄 (既定)",
+        "optionSidebar": "左に入力欄 (サイドバー)",
+        "help": "狭い幅(768px 未満)では、どちらを選んでも結果の下に入力欄が並びます。生成画面の結果エリア右上のボタンでも切り替えられます。"
+      }
+    },
+    "apiKey": {
+      "heading": "OpenAI API キー",
+      "loading": "読み込み中...",
+      "loadFailed": "キーの状態を取得できませんでした。サーバーを更新した直後なら、サーバーを起動し直してください。",
+      "retry": "再読み込み",
+      "envLocked": "環境変数(.env)の値が優先されるため、ここでは変更できません。",
+      "notRequired": "現在のプロバイダーは API キーを使いません(確認用のダミー画像を返します)。ただし、キーの登録・削除はここから行えます。",
+      "inputPlaceholder": "sk-...",
+      "verifying": "確認中...",
+      "save": "保存",
+      "delete": "削除",
+      "communicationFailed": "通信に失敗しました",
+      "helpTextBefore": "画面から登録したキーは、この PC のデータディレクトリ(secrets.json)に保存されます。キーは",
+      "helpTextLink": "OpenAI の管理画面",
+      "helpTextAfter": "から取得できます。",
+      "savedToast": "APIキーを保存しました",
+      "deletedToast": "APIキーを削除しました",
+      "deleteConfirm": {
+        "message": "保存した API キーを削除します。",
+        "confirmLabel": "削除する"
+      },
+      "status": {
+        "missing": "未設定",
+        "configured": "設定済み",
+        "sourceEnv": "環境変数(.env)",
+        "sourceFile": "画面で保存(secrets.json)"
+      },
+      "baseUrl": {
+        "heading": "接続先(Base URL)",
+        "loading": "読み込み中...",
+        "loadFailed": "接続先の状態を取得できませんでした。サーバーを更新した直後なら、サーバーを起動し直してください。",
+        "retry": "再読み込み",
+        "envLocked": "環境変数(.env)の値が優先されるため、ここでは変更できません。",
+        "inputPlaceholder": "空欄なら OpenAI 本体(https://api.openai.com/v1)を使います",
+        "helpText": "LiteLLM などの OpenAI 互換プロキシを使うときに指定します。モデル名はそのまま送るため、プロキシ側で GAKEI と同じモデル名を用意してください。表示される価格の目安は OpenAI の価格のままです。",
+        "verifying": "確認中...",
+        "save": "保存",
+        "clear": "既定に戻す",
+        "communicationFailed": "通信に失敗しました",
+        "savedToast": "接続先を保存しました",
+        "clearedToast": "接続先を既定(OpenAI 本体)に戻しました",
+        "clearConfirm": {
+          "message": "保存した接続先を削除し、OpenAI 本体に戻します。",
+          "confirmLabel": "既定に戻す"
+        },
+        "status": {
+          "default": "OpenAI 本体",
+          "sourceEnv": "環境変数(.env)",
+          "sourceFile": "画面で保存(secrets.json)"
+        }
+      }
+    },
+    "general": {
+      "heading": "生成",
+      "loading": "読み込み中...",
+      "loadFailed": "設定を取得できませんでした。",
+      "retry": "再読み込み",
+      "saveFailed": "保存に失敗しました",
+      "envNote": "環境変数(.env)の値を使用中です。ここで保存すると、以降は画面の設定が優先されます。",
+      "moderation": {
+        "label": "moderation",
+        "optionLow": "low",
+        "optionAuto": "auto",
+        "help": "入力画像を使わない生成(Generate API)にだけ適用されます。編集(Edit)には影響しません。low は auto より制限が緩く、auto は OpenAI の標準のフィルタリングです。",
+        "savedToast": "moderation を保存しました",
+        "resetToDefault": "既定値({default})に戻す"
+      }
+    },
+    "comfyui": {
+      "heading": "ComfyUI",
+      "intro": "同じ PC で動く ComfyUI に接続すると、登録したワークフローをモデルとして選べます(実験的機能)。",
+      "manageWorkflows": "ワークフローを管理する",
+      "notConnectedHint": "接続していなくてもワークフローの登録はできますが、実行するには接続が必要です。",
+      "timeout": {
+        "label": "タイムアウト(分)",
+        "help": "1回の ComfyUI 実行を待つ上限です。次に始まる実行から反映されます(実行中・待機中の Generated には影響しません)。",
+        "save": "保存",
+        "savedToast": "タイムアウトを保存しました",
+        "invalid": "1〜180の整数を入力してください",
+        "resetToDefault": "既定値({default}分)に戻す"
+      }
+    },
+    "about": {
+      "heading": "GAKEI について",
+      "versionLabel": "バージョン",
+      "licenseLabel": "ライセンス",
+      "repositoryLink": "GitHub リポジトリ",
+      "thirdPartyLink": "同梱しているライブラリのライセンス"
+    },
+    "banner": {
+      "missingKey": "OpenAI の API キーが未設定です。",
+      "openSettings": "設定を開く",
+      "missingKeyContactAdmin": "OpenAI の API キーが未設定です。管理者に連絡してください。"
+    }
+  },
+  "promptSets": {
+    "panel": {
+      "heading": "プロンプトセット",
+      "add": "追加",
+      "setNameLabel": "セット名",
+      "setNamePlaceholder": "例: 商品写真・額縁",
+      "firstPromptLabel": "最初のプロンプト(任意)",
+      "firstPromptPlaceholder": "プロンプト本文(後から追加・編集できます)",
+      "create": "作成",
+      "cancel": "取消",
+      "loading": "読み込み中...",
+      "loadFailed": "プロンプトセットの取得に失敗しました",
+      "empty": "まだプロンプトセットがありません。",
+      "hint": "項目を選ぶと、プロンプトの末尾に追加します。プロンプト欄で @ と打っても呼び出せます。",
+      "createFailed": "セットの作成に失敗しました"
+    },
+    "card": {
+      "renameFailed": "名前の変更に失敗しました",
+      "deleteFailed": "削除に失敗しました",
+      "addItemFailed": "項目の追加に失敗しました",
+      "updateFailed": "更新に失敗しました",
+      "labelField": "ラベル(任意)",
+      "labelPlaceholder": "ラベル(任意)",
+      "textField": "プロンプト本文",
+      "textPlaceholder": "プロンプト",
+      "save": "保存",
+      "add": "追加",
+      "cancel": "取消",
+      "expandToEdit": "大きく編集",
+      "rename": "名前変更",
+      "delete": "削除",
+      "appendToEnd": "末尾に追加",
+      "moveUp": "上へ",
+      "moveDown": "下へ",
+      "edit": "編集",
+      "addItem": "+ 項目を追加",
+      "editItemTitle": "項目を編集",
+      "addItemTitle": "項目を追加",
+      "deleteSetConfirm": "セット「{name}」を削除します。元に戻せません。",
+      "deleteItemConfirm": "この項目を削除します。元に戻せません。"
+    },
+    "save": {
+      "trigger": "プロンプトをセットに保存",
+      "savedMessage": "保存しました",
+      "fieldLabel": "保存するプロンプト",
+      "existingSet": "既存のセット",
+      "newSet": "新規セット",
+      "selectPlaceholder": "選択してください",
+      "newSetNamePlaceholder": "新しいセット名",
+      "labelPlaceholder": "ラベル(任意)",
+      "save": "保存",
+      "close": "閉じる",
+      "emptyPromptError": "プロンプトが空です",
+      "nameRequiredError": "名前を入力してください",
+      "targetRequiredError": "保存先のセットを選んでください",
+      "saveFailed": "保存に失敗しました"
+    },
+    "mention": {
+      "ariaLabel": "プロンプトセットの候補",
+      "noMatch": "一致するセットがありません",
+      "untitled": "(無題)"
+    },
+    "validation": {
+      "nameRequired": "名前を入力してください",
+      "nameTooLong": "名前は{max}文字までです",
+      "textRequired": "プロンプトを入力してください",
+      "textTooLong": "プロンプトは{max}文字までです",
+      "labelTooLong": "ラベルは{max}文字までです"
+    }
+  },
+  "workspace": {
+    "addInputsDialog": {
+      "title": "入力画像を追加",
+      "chooseFile": "ファイルを選ぶ",
+      "dropHint": "入力欄へのドロップや Ctrl+V の貼り付けでも追加できます",
+      "fromStock": "ストックから選ぶ",
+      "selectedCount": "{count} 枚を選択中",
+      "remaining": "あと {count} 枚まで追加できます",
+      "addSelected": "追加",
+      "alreadyInInputs": "入力済み",
+      "empty": "ストックに画像がありません",
+      "loadMore": "さらに読み込む",
+      "loadFailed": "読み込みに失敗しました"
+    },
+    "inputTiles": {
+      "heading": "入力画像",
+      "movePrev": "前へ",
+      "moveNext": "後ろへ"
+    },
+    "inputChips": {
+      "label": "入力",
+      "requirement": "入力画像 {count} / {total} 枚",
+      "emptyHint": "なし。上の結果を「入力に使う」か、ストックからドラッグ",
+      "primaryTitle": "主たる入力(1枚目)",
+      "notFound": "見つかりません",
+      "deleted": "削除済み",
+      "dimsLoading": "...",
+      "moveUp": "上へ",
+      "moveDown": "下へ",
+      "maskAlt": "マスク",
+      "drawMask": "マスクを描く",
+      "maskNotSupportedTag": "非対応",
+      "maskNotSupportedTitle": "選んだモデルはマスクに対応していません",
+      "removeMask": "マスクを外す",
+      "showInPreview": "プレビューに表示",
+      "drawOver": "この画像の上に描く",
+      "removeInput": "入力から外す",
+      "countTitle": "入力画像の枚数(最大{max}枚)",
+      "addAria": "画像を追加",
+      "addTitle": "画像を追加(最大{max}枚)",
+      "uploading": "アップロード中...",
+      "add": "追加",
+      "sketch": "スケッチ",
+      "sketchTitle": "白紙({width}×{height})に描いて入力画像にする"
+    },
+    "inputPane": {
+      "capsLoading": "capabilities を読み込み中...",
+      "capsError": "capabilities の取得に失敗しました",
+      "promptLabel": "プロンプト",
+      "promptPlaceholder": "生成したい画像。Ctrl+Enter で実行。@ でプロンプトセットを呼び出せます",
+      "submitting": "実行を開始しています...",
+      "generate": "生成",
+      "submittedNotice": "生成を開始しました。進み具合は上の結果エリアに出ます",
+      "openSettings": "設定を開く",
+      "modelLabel": "モデル",
+      "providerUnavailableSuffix": "(接続できません)",
+      "noWorkflowRegistered": "ワークフロー未登録",
+      "registerComfyWorkflow": "ComfyUI ワークフローを登録する",
+      "otherParams": "その他",
+      "promptRequired": "プロンプトを入力してください",
+      "deletedInputsPresent": "削除済みの入力画像があります。取り除いてください",
+      "maxInputImagesExceeded": "入力画像は最大{max}枚までです",
+      "operationUnsupported": "選んだモデルは、この操作(生成/編集)に対応していません",
+      "maskRequired": "このモデルの実行にはマスクが必要です",
+      "maskUnsupported": "選んだモデルはマスクに対応していません。マスクを外すか、マスク対応のモデルを選んでください"
+    },
+    "resultPane": {
+      "viewModeGroup": "表示",
+      "preview": "プレビュー",
+      "lineage": "系列",
+      "deletedBadge": "削除済み",
+      "restore": "復元",
+      "notRestorable": "復元できません",
+      "generatedDetail": "Generated 詳細",
+      "downloadOriginal": "原寸をダウンロード",
+      "deleteCurrentAsset": "表示中の画像を削除",
+      "lineageEmptyState": "系列を表示するには、まず画像を表示してください。",
+      "outputsRecent": "出力 · 直近",
+      "thisRun": "今回",
+      "addToInputAria": "入力に追加",
+      "outputIndexAria": "出力 {index} を表示",
+      "showThisOutputAria": "この出力を表示",
+      "inUse": "使用中",
+      "useAsInput": "入力に使う",
+      "inUseAsInput": "入力に使用中",
+      "inUseHint": "入力から外すときは、入力欄の画像の × を使います",
+      "added": "追加しました",
+      "inputLimitReached": "入力画像の上限({max}枚)に達しています",
+      "connecting": "接続中...",
+      "generatingWithProgress": "生成中... ({value} / {max})",
+      "generating": "生成中...",
+      "queued": "待機中...",
+      "cancel": "キャンセル",
+      "partialAlt": "途中経過 {index}",
+      "errorCodePrefix": "error_code: ",
+      "canceledMessage": "この Generated はキャンセルされました。",
+      "assetLoadFailed": "Asset の取得に失敗しました",
+      "loading": "読み込み中...",
+      "emptyState": "生成するとここに結果が表示されます。",
+      "deleteConfirmMessage": "この画像をストックから削除します。Generated の記録と系列には残ります。",
+      "deleteFailedDefault": "削除に失敗しました",
+      "restoreFailedDefault": "復元に失敗しました",
+      "deletedToast": "画像を削除しました",
+      "undoAction": "元に戻す",
+      "inputPrefix": "入力 · {width} × {height}"
+    },
+    "runPromptActions": {
+      "insertIntoPrompt": "プロンプトに挿入",
+      "replacePrompt": "プロンプトを置き換え",
+      "confirmReplace": "置き換える?",
+      "yes": "はい",
+      "cancel": "やめる"
+    },
+    "studioWorkspace": {
+      "dividerAriaLabel": "結果と入力の境界",
+      "inputWidthHandle": "入力欄の幅",
+      "layoutToggle": {
+        "toSidebar": "入力欄を左に移す",
+        "toBottom": "入力欄を下に移す"
+      }
+    },
+    "priceEstimate": {
+      "noReference": "参考なし",
+      "outputLine": {
+        "one": "出力 {tokens} tok × {count} 枚(公式の計算式)",
+        "other": "出力 {tokens} tok × {count} 枚(公式の計算式)"
+      },
+      "inputImageLine": {
+        "one": "入力画像 {count} 枚 {tokens} tok({breakdown})",
+        "other": "入力画像 {count} 枚 {tokens} tok({breakdown})"
+      },
+      "inputImageDimTokens": "{width}×{height}: {tokens}",
+      "textLine": "テキスト ≈ {tokens} tok",
+      "unitPricesLine": "単価(1M tok あたり) 出力 ${output} / 入力画像 ${input} / テキスト ${text}({checkedAt} 確認)",
+      "footerNote": "途中経過(partial_images)とマスクは含まない。見積もりであって請求額ではない",
+      "reasonQualityAuto": "画質が「自動」のため計算できません(画質を指定すると出ます)",
+      "reasonSizeAuto": "サイズが「自動」のため計算できません",
+      "reasonSizeInvalid": "サイズが条件外です",
+      "reasonUnknownModel": "このモデルの単価が未登録です"
+    }
+  },
+  "runForm": {
+    "addToInputsDialog": {
+      "message": "すでに入力画像があります。この画像をどう使いますか?",
+      "add": "追加する(末尾に足す)",
+      "replace": "置き換える(既存の入力を外してこの1枚にする)",
+      "cancel": "キャンセル"
+    },
+    "paramField": {
+      "disabledTitle": "現在の設定では使えません",
+      "disabledNote": "使用不可"
+    },
+    "seedField": {
+      "random": "ランダム",
+      "fixed": "固定",
+      "reroll": "乱数を振り直す"
+    },
+    "sizeInput": {
+      "label": "サイズ",
+      "widthAria": "幅",
+      "heightAria": "高さ",
+      "fieldWidth": "幅",
+      "fieldHeight": "高さ",
+      "roundedNote": "{multipleOf}の倍数に丸めました: {field} {from} → {to}",
+      "experimentalNote": "2560 × 1440 を超えるサイズは実験的で、結果が不安定になることがあります",
+      "customLabel": "任意の幅 × 高さ",
+      "presets": [
+        {
+          "value": {
+            "mode": "unspecified"
+          },
+          "label": "未指定(自動)"
+        },
+        {
+          "value": {
+            "mode": "auto"
+          },
+          "label": "自動(auto)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 1024,
+            "height": 1024
+          },
+          "label": "1024 × 1024(正方形)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 1536,
+            "height": 1024
+          },
+          "label": "1536 × 1024(HD 横)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 1024,
+            "height": 1536
+          },
+          "label": "1024 × 1536(HD 縦)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 2048,
+            "height": 2048
+          },
+          "label": "2048 × 2048(2K 正方形)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 2560,
+            "height": 1440
+          },
+          "label": "2560 × 1440(2K 横・推奨上限)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 1440,
+            "height": 2560
+          },
+          "label": "1440 × 2560(2K 縦・推奨上限)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 3840,
+            "height": 2160
+          },
+          "label": "3840 × 2160(4K 横・実験的)"
+        },
+        {
+          "value": {
+            "mode": "custom",
+            "width": 2160,
+            "height": 3840
+          },
+          "label": "2160 × 3840(4K 縦・実験的)"
+        }
+      ]
+    },
+    "sizeValidation": {
+      "positiveInteger": "width と height は正の整数である必要があります",
+      "multipleOf": "width と height は{n}の倍数である必要があります",
+      "maxLongEdge": "長辺は{n}px以下である必要があります",
+      "totalPixelsRange": "総画素数は{min}〜{max}である必要があります",
+      "aspectRatio": "縦横比は 1:3 〜 3:1 の範囲である必要があります"
+    },
+    "submitChecks": {
+      "operationUnsupportedReason": "選んだモデルは、この操作(生成/編集)に対応していません",
+      "maskRequiredReason": "このモデルの実行にはマスクが必要です",
+      "inputCountRequirement": "入力画像が{min}枚必要です(現在{current}枚)",
+      "providerUnavailableDefault": "このプロバイダーには接続できません"
+    },
+    "unspecifiedLabel": {
+      "unspecified": "未指定",
+      "unspecifiedAuto": "未指定(自動)",
+      "defaultValue": "既定値 ({formatted})"
+    },
+    "paramLabels": {
+      "moderation": "表現の制限"
+    },
+    "inputValidation": {
+      "unsupportedFormat": "{name}: 対応していない形式です(PNG/JPEG/WebP のみ)",
+      "sizeExceeds": "{name}: サイズが上限({maxMb}MB)を超えています"
+    },
+    "editInputsLogic": {
+      "uploadFailedDefault": "アップロードに失敗しました",
+      "exceedsLimitRejectedCount": {
+        "one": "入力画像の上限({max}枚)を超えるため {count} 件は追加しませんでした",
+        "other": "入力画像の上限({max}枚)を超えるため {count} 件は追加しませんでした"
+      },
+      "uploadErrorGeneric": "アップロード処理中にエラーが発生しました",
+      "matchedExistingNotice": "GAKEI の既存画像として取り込みました",
+      "atLimitNotAdded": "入力画像の上限({max}枚)に達しているため追加しませんでした",
+      "exceedsLimitNotAdded": "入力画像の上限({max}枚)を超えるため追加しませんでした"
+    },
+    "dependencies": {
+      "incompatiblePair": "{fieldA}={valueA} と {fieldB}={valueB} は同時に指定できません"
+    },
+    "runFormLogic": {
+      "droppedParamsSettings": "{names} は現在の設定では使えないため未指定に戻しました",
+      "droppedParamsInputs": "{names} は現在の入力では使えないため未指定に戻しました",
+      "submitFailedDefault": "実行の開始に失敗しました",
+      "listSeparator": "、"
+    }
+  },
+  "sketch": {
+    "title": "スケッチを描く",
+    "close": "閉じる",
+    "colors": {
+      "black": "黒",
+      "white": "白",
+      "red": "赤",
+      "blue": "青",
+      "green": "緑",
+      "yellow": "黄"
+    },
+    "colorAria": "ペン色: {label}",
+    "sizes": {
+      "thin": "細い",
+      "medium": "普通",
+      "thick": "太い"
+    },
+    "sizeAria": "太さ: {label}",
+    "erase": "消しゴム",
+    "undo": "元に戻す",
+    "clearAll": "全消去",
+    "hideLines": "線を隠す(下地と見比べる)",
+    "showLines": "線を表示する",
+    "loading": "読み込み中...",
+    "loadError": "下地の読み込みに失敗しました",
+    "insertRecommendedPrompt": "推奨プロンプトを挿入",
+    "cancel": "キャンセル",
+    "saving": "保存しています...",
+    "save": "保存",
+    "saveFailedDefault": "スケッチの保存に失敗しました",
+    "canvasInitError": "Canvas の初期化に失敗しました",
+    "exportCanvasInitError": "書き出し用 Canvas の初期化に失敗しました",
+    "pngExportError": "PNG の書き出しに失敗しました",
+    "recommendedPrompt": "この下描きを写実的な画像にしてください。レイアウト、比率、パースは正確に保ってください。下描きの意図に合う現実的な素材と光を選んでください。新しい要素や文字は加えないでください。"
+  },
+  "mask": {
+    "title": "マスクを描く",
+    "brush": "ブラシ",
+    "eraser": "消しゴム",
+    "brushRadius": "ブラシ径",
+    "undo": "元に戻す",
+    "invert": "反転",
+    "clearAll": "全消去",
+    "loading": "読み込み中...",
+    "existingMaskLoadError": "既存マスクの取得に失敗したため、白紙から描いています。",
+    "cancel": "キャンセル",
+    "saving": "保存しています...",
+    "save": "保存",
+    "saveFailedDefault": "マスクの保存に失敗しました",
+    "canvasInitError": "Canvas の初期化に失敗しました",
+    "exportCanvasInitError": "書き出し用 Canvas の初期化に失敗しました",
+    "pngExportError": "PNG の書き出しに失敗しました",
+    "noPaintError": "何も塗られていません。保存する前にマスクを描いてください。",
+    "maxSizeExceeded": "マスクのサイズが上限({maxMb}MB)を超えています。ブラシで塗る範囲を減らしてください。",
+    "imageLoadError": "画像の読み込みに失敗しました"
+  },
+  "crop": {
+    "title": "切り出す範囲を選ぶ",
+    "hint": "枠をドラッグして移動、四隅のハンドルをドラッグして大きさを変えられます。枠を選んだ状態なら矢印キー(Shift で 10px)でも動かせます。",
+    "frameLabel": "トリミング範囲",
+    "confirm": "決定",
+    "cancel": "キャンセル"
+  },
+  "viewer": {
+    "back": "← 戻る",
+    "loading": "読み込み中...",
+    "assetLoadError": "Asset の取得に失敗しました",
+    "deletedAt": "削除済みです({date})",
+    "restoreToStock": "ストックへ復元",
+    "notRestorableNote": "削除された Generated の出力のため復元できません",
+    "outputPosition": "出力 {position} / {total}",
+    "previousOutput": "前の出力",
+    "nextOutput": "次の出力",
+    "outputThumbLabelActive": "出力 {index}(表示中)",
+    "outputThumbLabelInactive": "出力 {index}に切り替え",
+    "dimensions": "寸法",
+    "format": "形式",
+    "size": "サイズ",
+    "created": "作成",
+    "promptHeading": "プロンプト",
+    "viewRunDetail": "Generated 詳細を見る",
+    "sourceImage": "元になった画像:",
+    "view": "表示する",
+    "compareWithOriginal": "編集前と比較する",
+    "downloadOriginal": "原寸をダウンロード",
+    "useAsInput": "入力に使う",
+    "viewLineageGraph": "系列グラフを見る",
+    "delete": "削除",
+    "deleteConfirmMessage": "この画像をストックから削除します。Generated の記録と系列には残ります。",
+    "deleteFailed": "削除に失敗しました",
+    "restoreFailed": "復元に失敗しました",
+    "deletedToast": "画像を削除しました",
+    "undo": "元に戻す",
+    "zoomOut": "縮小",
+    "zoomOutTitle": "縮小(10%)",
+    "zoomIn": "拡大",
+    "zoomInTitle": "拡大(10%)",
+    "fitToScreen": "画面に合わせる",
+    "actualSize": "等倍(100%)",
+    "imageAlt": "生成結果"
+  },
+  "compare": {
+    "back": "← 戻る",
+    "title": "編集前と比較",
+    "modeGroupLabel": "表示モード",
+    "sideBySide": "並べて表示",
+    "sideBySideTitle": "並べて表示(左右)",
+    "slider": "スライダーで比較",
+    "sliderTitle": "スライダーで比較(重ねて分割)",
+    "runLoadError": "Generated の取得に失敗しました",
+    "noInputs": "この Generated には編集前の画像がありません(Generate の出力)。",
+    "noOutputs": "この Generated には出力がありません。",
+    "inputLabel": "入力",
+    "outputLabel": "出力",
+    "loading": "読み込み中...",
+    "imageLoadError": "画像の取得に失敗しました",
+    "before": "編集前",
+    "after": "編集後",
+    "zoomOut": "縮小",
+    "zoomOutTitle": "縮小(10%)",
+    "zoomIn": "拡大",
+    "zoomInTitle": "拡大(10%)",
+    "fitToScreen": "画面に合わせる",
+    "actualSize": "等倍(100%)",
+    "splitHandleLabel": "比較の分割位置"
+  },
+  "lineage": {
+    "heading": "系列",
+    "pinnedTitle": "起点を固定中(ページを移動してもグラフは動きません)",
+    "unpinnedTitle": "起点を固定していません",
+    "pinnedLabel": "固定中",
+    "pinLabel": "固定",
+    "resyncButton": "起点を変更: 表示中に合わせる",
+    "emptyPlaceholder": "履歴のカードかビューアから画像を選ぶと表示します。",
+    "hint": "ノードを選ぶとそこへ移動します(実線は主たる親、破線は参照/失敗した Generated)。固定中は起点を動かさず、現在地だけを強調します。",
+    "loading": "読み込み中...",
+    "lineageLoadError": "系列の取得に失敗しました",
+    "viewAll": "全体を表示",
+    "expand": "広げる",
+    "previewNode": "ノードをプレビュー",
+    "truncated": "一部のみ表示しています",
+    "originEdgeLabel": "由来(未検証)",
+    "originRecipe": {
+      "heading": "埋め込まれた系列情報(未検証)",
+      "sourcePrefix": "生成元:",
+      "sourceSameInstance": "この GAKEI",
+      "sourceOtherInstance": "他の GAKEI",
+      "viewOriginInLineage": "由来の Asset を系列グラフで見る",
+      "loadIntoForm": "この設定をフォームに読み込む",
+      "inputsNotRestored": "入力画像は復元されません",
+      "missingRecipe": "埋め込まれた設定に生成情報がありません",
+      "capabilitiesLoading": "capabilities を読み込み中です",
+      "modelUnavailable": "このモデルは今の環境では使えません"
+    },
+    "embeddedMeta": {
+      "heading": "画像に埋め込まれた生成情報(未検証)",
+      "modelLabel": "モデル",
+      "promptHeading": "プロンプト",
+      "negativePromptHeading": "ネガティブプロンプト",
+      "paramsHeading": "設定",
+      "rawSummary": "元のデータを表示",
+      "truncatedNote": "サイズの上限により一部を省略しています",
+      "c2paUnknown": "C2PA のマニフェストがありますが、内容は読み取れませんでした",
+      "unverifiedNote": "画像に書かれていた自己申告の情報で、GAKEI では検証していません。フォームには読み込めません。",
+      "tools": {
+        "a1111": "Stable Diffusion WebUI(AUTOMATIC1111 / Forge)",
+        "comfyui": "ComfyUI",
+        "novelai": "NovelAI",
+        "invokeai": "InvokeAI",
+        "swarmui": "SwarmUI",
+        "c2pa": "C2PA(Content Credentials)",
+        "generic": "その他(EXIF / XMP)"
+      }
+    },
+    "assetMask": "マスク",
+    "assetSketch": "スケッチ",
+    "deletedTag": "削除済み",
+    "assetLoadError": "Asset の取得に失敗しました",
+    "deletedAt": "削除済みです({date})",
+    "restoreToStock": "ストックへ復元",
+    "notRestorableNote": "削除された Generated の出力のため復元できません",
+    "restoreFailed": "復元に失敗しました",
+    "dimensions": "寸法",
+    "format": "形式",
+    "size": "サイズ",
+    "created": "作成",
+    "promptHeading": "プロンプト",
+    "viewRunDetail": "Generated 詳細を見る",
+    "useAsInput": "入力に使う",
+    "openInViewer": "ビューアで開く",
+    "download": "ダウンロード",
+    "closePanel": "パネルを閉じる",
+    "nodeDetailLabel": "ノードの詳細",
+    "runDetailTitle": "Generated 詳細",
+    "openDetailPage": "詳細ページで開く",
+    "close": "閉じる",
+    "embeddedBadge": "埋め込み",
+    "embeddedNodeTitle": "埋め込み(未検証)",
+    "embeddedNodeTitleWithInstance": "埋め込み(未検証) · 生成元インスタンス: {instance}…",
+    "noEmbeddedImage": "画像なし",
+    "runDetailTitleEmbedded": "Generated(埋め込み)",
+    "assetDetailTitleEmbedded": "Asset(埋め込み)",
+    "embeddedNodeTypeLabel": "ノード種別",
+    "embeddedInstanceLabel": "生成元インスタンス",
+    "unknownValue": "不明",
+    "notIngestedPlaceholder": "この環境に取り込まれていないため、画像はありません",
+    "kindLabel": "種類",
+    "openIngestedAsset": "取り込み済みの画像を開く",
+    "statusLabel": "状態",
+    "finishedAtLabel": "完了",
+    "paramsHeading": "パラメーター"
+  },
+  "stock": {
+    "heading": "ストック",
+    "countLoading": "...",
+    "countLabel": {
+      "one": "{count} 件",
+      "other": "{count} 件"
+    },
+    "kindAll": "すべて",
+    "kindGenerated": "生成",
+    "kindUpload": "アップロード",
+    "kindSketch": "スケッチ",
+    "kindMask": "マスク",
+    "openInViewer": "ビューアで開く",
+    "showInResultArea": "結果エリアに表示",
+    "useAsInput": "入力に使う",
+    "delete": "削除",
+    "uploading": "アップロード中...",
+    "addImage": "画像を追加 / ドロップ",
+    "loadMore": "さらに読み込む",
+    "loadingMore": "読み込み中...",
+    "retryLoadMore": "再読み込み",
+    "emptyState": "画像がありません。ここへドロップして追加できます",
+    "deleteConfirmMessage": "この画像をストックから削除します。Generated の記録と系列には残ります。",
+    "uploadFailedGeneric": "{fileName}: 失敗しました",
+    "matchedExistingNotice": "GAKEI の既存画像として取り込みました",
+    "deleteFailed": "削除に失敗しました",
+    "restoreFailed": "復元に失敗しました",
+    "deletedToast": "画像を削除しました",
+    "undo": "元に戻す",
+    "maxInputImages": "入力画像の上限({max}枚)に達しています"
+  },
+  "comfyui": {
+    "experimentalBadge": "実験的",
+    "connection": {
+      "checking": "接続状態を確認中...",
+      "loadError": "接続状態を取得できませんでした。",
+      "settingsLink": "接続の設定",
+      "testFailed": "接続テストに失敗しました",
+      "saveFailed": "保存に失敗しました",
+      "connected": "接続しました",
+      "detached": "切り離しました",
+      "detachFailed": "切り離しに失敗しました",
+      "disabledHeadline": "ComfyUI は無効です",
+      "availableHeadline": "接続できます",
+      "unavailableHeadline": "接続できません",
+      "urlLabel": "URL",
+      "reasonLabel": "理由",
+      "versionLabel": "バージョン",
+      "deviceLabel": "デバイス",
+      "connectionLabel": "接続",
+      "nonLoopbackValue": "ループバック以外(LAN 等)",
+      "testing": "確認中...",
+      "testConnection": "接続テスト",
+      "changeUrl": "URL を変更",
+      "detach": "切り離す",
+      "urlIntroPrefix": "接続先の URL を入力して保存すると、ComfyUI が使えるようになります。ComfyUI のポータブル版の既定は",
+      "urlIntroSuffix": "です。",
+      "nonLoopbackWarning": "ループバック(このPC自身)以外のアドレスです。認証のない ComfyUI に入力画像とプロンプトを送信することになります。",
+      "confirmNonLoopback": "内容を確認したうえで保存します",
+      "connecting": "接続中...",
+      "save": "保存",
+      "saveAndConnect": "保存して接続",
+      "cancel": "キャンセル",
+      "detachConfirmMessage": "ComfyUI を切り離します。",
+      "detachConfirmWarning": "モデルの選択肢から ComfyUI が消えます。登録済みのワークフローと過去の Run は消えず、再び接続すればそのまま使えます。この選択は設定として保存されるため、環境変数 COMFYUI_URL が指定されていても、再起動で自動的には戻りません。",
+      "detachConfirmLabel": "切り離す",
+      "testResultHeadlineAvailable": "接続テスト: 接続できます",
+      "testResultHeadlineUnavailable": "接続テスト: 接続できません",
+      "disconnectedLabel": "未接続",
+      "connectedLabel": "接続済み: {url}",
+      "unavailableLabel": "接続できません",
+      "envNote": "この接続は環境変数 COMFYUI_URL の既定値です。ここで保存または切り離すと、再起動しても以降はこの画面の設定が優先されます。",
+      "lockedSave": "ComfyUI の Run が実行中または待機中のため、今は接続設定を変更できません。実行が終わってから試してください。",
+      "lockedDetach": "ComfyUI の Run が実行中または待機中のため、今は切り離せません。実行が終わってから試してください。",
+      "testSuccessSaveNotice": "接続テストに成功しました。まだ保存されていません。「保存」を押すと、この URL に切り替わります。",
+      "testSuccessSaveAndConnectNotice": "接続テストに成功しました。まだ保存されていません。「保存して接続」を押すと、ComfyUI がモデルの選択肢に加わります。",
+      "testSuccessNonLoopbackSuffix": " ループバック以外のアドレスのため、保存するには確認チェックにもチェックが必要です。",
+      "disconnectedNotice": "ComfyUI が未接続のため、登録したワークフローはモデルの選択肢に出ません。設定画面で接続先を保存してください。",
+      "disconnectedNoticeFormSuffix": " 未接続の間は、選択肢や範囲の補完(/object_info)が効きません。"
+    },
+    "operationLabels": {
+      "generate": "生成",
+      "edit": "編集"
+    },
+    "form": {
+      "back": "← 戻る",
+      "editTitle": "ComfyUI ワークフローの編集",
+      "newTitle": "ComfyUI ワークフローの登録",
+      "workflowLoadError": "ワークフローを取得できませんでした。",
+      "templateParseFailed": "テンプレートの解析に失敗しました",
+      "jsonParseFailed": "JSON として読み込めませんでした。",
+      "clearedFieldsNotice": "新しいファイルに存在しない差し込み先を未設定に戻しました: {cleared}",
+      "listSeparator": "、",
+      "analyzeFailed": "解析に失敗しました。",
+      "fileReadFailed": "ファイルを読み込めませんでした。",
+      "updated": "更新しました",
+      "created": "登録しました",
+      "saveFailedGeneric": "保存に失敗しました。",
+      "loading": "読み込み中...",
+      "fileSectionHeading": "ファイル",
+      "dropZoneText": "ComfyUI の「Export (API)」で書き出した JSON をここにドロップ、または選択してください。",
+      "chooseFile": "ファイルを選択",
+      "templateLoaded": "テンプレートを読み込み済み(ノード数: {nodeCount})",
+      "basicInfoHeading": "基本情報",
+      "nameLabel": "名前",
+      "operationLabel": "操作",
+      "operationTitle": "生成(入力画像なし) / 編集(入力画像1枚+任意のマスク)",
+      "generateOption": "生成(generate)",
+      "editOption": "編集(edit)",
+      "bindingsHeading": "差し込み先",
+      "promptLabel": "プロンプト(必須)",
+      "negativePromptLabel": "ネガティブプロンプト",
+      "widthLabel": "幅",
+      "heightLabel": "高さ",
+      "batchSizeLabel": "枚数(batch_size)",
+      "imageSlotsLabel": "画像の枠(順序付き、必須)",
+      "imageSlotsHelp": "GAKEI の入力画像の n 枚目が n 番目の枠に入ります。実行時は枠の数ちょうどの枚数が必要です。マスクは1枚目の画像に対するものです。",
+      "imageSlotLabel": "{index}枚目",
+      "moveUp": "上へ",
+      "moveDown": "下へ",
+      "remove": "削除",
+      "addImageSlot": "+ 枠を追加",
+      "seedsLabel": "シード(複数可)",
+      "seedLabel": "シード {index}",
+      "addSeed": "+ シードを追加",
+      "maskLabel": "マスク",
+      "maskModeNone": "なし",
+      "maskModeLoadImageMask": "LoadImageMask のノード",
+      "maskModeImageAlpha": "入力画像の透明度",
+      "maskRefLabel": "マスクのノード・入力",
+      "outputsLabel": "出力ノード(必須、複数可)",
+      "exposedParamsHeading": "公開パラメーター",
+      "saving": "保存中...",
+      "update": "更新する",
+      "register": "登録する"
+    },
+    "list": {
+      "title": "ComfyUI ワークフロー",
+      "newButton": "+ 新規登録",
+      "disconnectedSettingsLink": "設定画面へ",
+      "loading": "読み込み中...",
+      "loadError": "一覧の取得に失敗しました。",
+      "empty": "まだワークフローが登録されていません。",
+      "updated": "更新: {date}",
+      "edit": "編集",
+      "delete": "削除",
+      "deleted": "削除しました",
+      "deleteFailed": "削除に失敗しました",
+      "deleteConfirmMessage": "ワークフロー「{name}」を削除します。",
+      "deleteConfirmWarning": "過去にこのワークフローで実行した Run の記録は変わりません(実行時のグラフをそのまま保存しているため)。",
+      "deleteConfirmLabel": "削除する",
+      "cancel": "キャンセル"
+    },
+    "exposedParamsTable": {
+      "typeLabels": {
+        "text": "テキスト",
+        "int": "整数",
+        "float": "小数",
+        "bool": "真偽値",
+        "enum": "選択肢"
+      },
+      "empty": "公開できるパラメーターの候補がありません。",
+      "enable": "公開する",
+      "sourceRefTitle": "ノード {node} / 入力 {input}",
+      "nameLabel": "名前",
+      "displayLabelLabel": "表示ラベル",
+      "typeLabel": "型",
+      "defaultLabel": "既定値",
+      "defaultPlaceholder": "テンプレートの値のまま",
+      "minimumLabel": "最小",
+      "maximumLabel": "最大",
+      "stepLabel": "刻み(step)",
+      "choicesLabel": "選択肢(カンマ区切り)",
+      "maxLengthLabel": "最大文字数"
+    },
+    "nodePicker": {
+      "nodeAriaLabel": "{label}: ノード",
+      "inputAriaLabel": "{label}: 入力",
+      "none": "なし",
+      "wired": "{name}(配線)",
+      "noNodes": "ノードがありません"
+    },
+    "bindingsValidation": {
+      "promptRequired": "プロンプトの差し込み先を指定してください",
+      "outputsRequired": "出力ノードを1つ以上指定してください",
+      "seedUnset": "シードの差し込み先が未選択の行があります。選択するか削除してください",
+      "imageSlotUnset": "画像の枠が未選択の行があります。選択するか削除してください",
+      "imageSlotDuplicate": "画像の枠が重複しています。別々の差し込み先を指定してください",
+      "maskConflictsWithImage": "マスクの差し込み先は、画像の枠とは別にしてください",
+      "editRequiresImageSlot": "編集(edit)には画像の枠が1つ以上必要です",
+      "generateCannotHaveImages": "生成(generate)には画像の枠を指定できません",
+      "generateCannotHaveMask": "生成(generate)にはマスクの差し込み先を指定できません",
+      "maskRefRequired": "マスクのノードと入力を指定してください",
+      "imageAlphaRequiresImageSlot": "入力画像の透明度をマスクにするには、画像の枠が1つ以上必要です",
+      "clearedLabels": {
+        "seed": "シード",
+        "imageSlot": "画像の枠",
+        "output": "出力ノード",
+        "mask": "マスク",
+        "prompt": "プロンプト",
+        "negativePrompt": "ネガティブプロンプト",
+        "width": "幅",
+        "height": "高さ",
+        "batchSize": "枚数"
+      }
+    },
+    "exposedParamValidation": {
+      "nameFormatInvalid": "名前の形式が不正です(小文字英字で始まる英数字とアンダースコアのみ)",
+      "nameReservedPrefix": "名前は comfyui_ で始められません",
+      "nameReservedWord": "名前に予約語は使えません",
+      "nameDuplicate": "公開パラメータ名が重複しています: {name}"
+    },
+    "formValidation": {
+      "duplicateSourceLabel": "差し込み先",
+      "duplicateExposedParamLabel": "公開パラメータ「{label}」",
+      "duplicateRef": "差し込み先が重複しています(ノード {node} の入力 {input}): {prior} と {next}",
+      "nameRequired": "名前を入力してください",
+      "templateRequired": "ワークフローの JSON ファイルを選択してください"
+    }
+  }
+}
