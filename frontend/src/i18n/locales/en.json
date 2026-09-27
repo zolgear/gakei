@@ -802,7 +802,13 @@
     "zoomInTitle": "Zoom in (10%)",
     "fitToScreen": "Fit to screen",
     "actualSize": "Actual size (100%)",
-    "imageAlt": "Generated result"
+    "imageAlt": "Generated result",
+    "groups": {
+      "heading": "Groups",
+      "add": "Add",
+      "remove": "Remove from \"{name}\"",
+      "empty": "Not in any group."
+    }
   },
   "compare": {
     "back": "← Back",
@@ -944,7 +950,39 @@
     "restoreFailed": "Failed to restore.",
     "deletedToast": "Image deleted.",
     "undo": "Undo",
-    "maxInputImages": "You've reached the input image limit ({max})."
+    "maxInputImages": "You've reached the input image limit ({max}).",
+    "groups": {
+      "heading": "Groups",
+      "all": "All",
+      "new": "New group…",
+      "newPlaceholder": "Group name",
+      "create": "Create",
+      "rename": "Rename",
+      "delete": "Delete",
+      "deleteConfirm": "This deletes the group \"{name}\". The images themselves are not deleted.",
+      "menu": "Group actions",
+      "memberCount": {
+        "one": "{count} item",
+        "other": "{count} items"
+      },
+      "addTo": "Add to a group",
+      "removeFromThis": "Remove from this group",
+      "noGroups": "No groups yet.",
+      "createFailed": "Failed to create the group.",
+      "renameFailed": "Failed to rename the group.",
+      "deleteFailed": "Failed to delete the group.",
+      "addFailed": "Failed to add to the group.",
+      "removeFailed": "Failed to remove from the group."
+    },
+    "selection": {
+      "enter": "Select",
+      "done": "Done",
+      "count": {
+        "one": "{count} item selected",
+        "other": "{count} items selected"
+      },
+      "clear": "Clear selection"
+    }
   },
   "comfyui": {
     "experimentalBadge": "Experimental",

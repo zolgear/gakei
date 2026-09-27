@@ -802,7 +802,13 @@
     "zoomInTitle": "拡大(10%)",
     "fitToScreen": "画面に合わせる",
     "actualSize": "等倍(100%)",
-    "imageAlt": "生成結果"
+    "imageAlt": "生成結果",
+    "groups": {
+      "heading": "グループ",
+      "add": "追加",
+      "remove": "「{name}」から外す",
+      "empty": "グループに入っていません"
+    }
   },
   "compare": {
     "back": "← 戻る",
@@ -944,7 +950,39 @@
     "restoreFailed": "復元に失敗しました",
     "deletedToast": "画像を削除しました",
     "undo": "元に戻す",
-    "maxInputImages": "入力画像の上限({max}枚)に達しています"
+    "maxInputImages": "入力画像の上限({max}枚)に達しています",
+    "groups": {
+      "heading": "グループ",
+      "all": "すべて",
+      "new": "新しいグループ…",
+      "newPlaceholder": "グループ名",
+      "create": "作成",
+      "rename": "名前を変更",
+      "delete": "削除",
+      "deleteConfirm": "グループ「{name}」を削除します。画像自体は削除されません。",
+      "menu": "グループの操作",
+      "memberCount": {
+        "one": "{count} 枚",
+        "other": "{count} 枚"
+      },
+      "addTo": "グループに追加",
+      "removeFromThis": "このグループから外す",
+      "noGroups": "グループがありません",
+      "createFailed": "グループの作成に失敗しました",
+      "renameFailed": "名前の変更に失敗しました",
+      "deleteFailed": "グループの削除に失敗しました",
+      "addFailed": "グループへの追加に失敗しました",
+      "removeFailed": "グループから外すのに失敗しました"
+    },
+    "selection": {
+      "enter": "選択",
+      "done": "完了",
+      "count": {
+        "one": "{count} 枚を選択中",
+        "other": "{count} 枚を選択中"
+      },
+      "clear": "選択を解除"
+    }
   },
   "comfyui": {
     "experimentalBadge": "実験的",

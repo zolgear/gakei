@@ -18,6 +18,7 @@ import {
   deleteAsset,
   getCapabilities,
   listAssets,
+  removeAssetsFromGroup,
   restoreAsset,
   type AssetSummary,
   type AssetUploadResponse,
@@ -32,7 +33,12 @@ import { isStudioPath, nodeTargetPath } from '../lineage/nodeTargetPath'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ToastHost, useToast } from '../../components/Toast'
 import { fmt, useI18n, type Messages } from '../../i18n'
+import { AddToGroupPopover } from './groups/AddToGroupPopover'
+import { GroupChips } from './groups/GroupChips'
+import { invalidateAssetGroupQueries } from './groups/assetGroupQueries'
 import { shouldAutoFetchNextPage } from './sentinel'
+import { toggleAssetSelection } from './stockSelection'
+import { stockAssetsQueryKey, type StockKindFilter } from './stockQueryKey'
 import styles from './StockPanel.module.css'
 
 // jsdom 等、IntersectionObserver を持たない環境向けのフォールバック判定。この場合は番兵の
@@ -56,7 +62,7 @@ function TrashIcon() {
   )
 }
 
-type KindFilter = 'all' | 'generated' | 'upload' | 'sketch' | 'mask'
+type KindFilter = StockKindFilter
 
 function kindLabels(t: Messages): { id: KindFilter; label: string }[] {
   return [
@@ -86,6 +92,10 @@ export function StockPanel() {
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   const [kind, setKind] = useState<KindFilter>('all')
+  const [groupId, setGroupId] = useState<string | null>(null)
+  // 選択モード(ADR-0022 4章): タイルをチェックして「グループに追加」等をまとめて行う。
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState<string | null>(null)
   // アップロードが既存 Asset に一致したとき(ADR-0014)の案内。エラーとは別枠で出す。
   const [notice, setNotice] = useState<string | null>(null)
@@ -99,14 +109,57 @@ export function StockPanel() {
     findProvider(capsQuery.data, formState.provider)?.max_input_image_bytes ?? 50 * 1024 * 1024
 
   const assetsQuery = useInfiniteQuery({
-    queryKey: ['assets', kind],
+    queryKey: stockAssetsQueryKey(kind, groupId),
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      listAssets({ limit: 30, cursor: pageParam, kind: kind === 'all' ? undefined : kind }),
+      listAssets({
+        limit: 30,
+        cursor: pageParam,
+        kind: kind === 'all' ? undefined : kind,
+        group_id: groupId ?? undefined,
+      }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
   const assets = assetsQuery.data?.pages.flatMap((page) => page.items) ?? []
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = assetsQuery
+
+  // 絞り込み中のグループが(他のタブ等で)削除済みになっていたら 404 が返る。すべてに戻す。
+  // レンダー中に前回の判定結果と比較して更新する(useEffect を使わない。無限ループにならない
+  // よう、「直前に自分でリセットした groupId」を覚えておいて同じ id では二度と発火させない)。
+  const [resetFor404, setResetFor404] = useState<string | null>(null)
+  const errored404GroupId =
+    groupId && assetsQuery.error instanceof ApiError && assetsQuery.error.status === 404 ? groupId : null
+  if (errored404GroupId && errored404GroupId !== resetFor404) {
+    setResetFor404(errored404GroupId)
+    setGroupId(null)
+  }
+
+  // 種別・グループの絞り込みが変わったら、選択状態(選んだ Asset の集合)をリセットする
+  // (同じくレンダー中に前回値と比較する。React 公式の「prop の変化に応じて state を
+  // リセットする」パターン)。
+  const [selectionResetKey, setSelectionResetKey] = useState(`${kind}:${groupId}`)
+  const currentSelectionResetKey = `${kind}:${groupId}`
+  if (currentSelectionResetKey !== selectionResetKey) {
+    setSelectionResetKey(currentSelectionResetKey)
+    setSelectedIds(new Set())
+  }
+
+  function handleToggleSelectionMode() {
+    setSelectionMode((prev) => {
+      const next = !prev
+      if (!next) setSelectedIds(new Set())
+      return next
+    })
+  }
+
+  const removeFromGroupMutation = useMutation({
+    mutationFn: (assetIds: string[]) => removeAssetsFromGroup(groupId as string, assetIds),
+    onSuccess: (_data, assetIds) => {
+      invalidateAssetGroupQueries(queryClient, assetIds)
+      setSelectedIds(new Set())
+    },
+    onError: (err: unknown) => setMessage(err instanceof ApiError ? err.message : t.stock.groups.removeFailed),
+  })
 
   // 番兵がパネル内に見えている間、次ページを継ぎ足す。isFetchingNextPage を依存に入れて
   // observer を張り直すことで、フェッチが終わった直後にまだ番兵が見えていれば(1ページ目が
@@ -267,10 +320,22 @@ export function StockPanel() {
       <div className={styles.header}>
         <div className={styles.headerRow}>
           <h2 className={styles.heading}>{t.stock.heading}</h2>
-          <div className={styles.count}>
-            {assetsQuery.isLoading ? t.stock.countLoading : fmt(t.stock.countLabel, { count: assets.length })}
+          <div className={styles.headerRowRight}>
+            <button
+              type="button"
+              className={styles.selectionToggle}
+              data-active={selectionMode}
+              onClick={handleToggleSelectionMode}
+            >
+              {selectionMode ? t.stock.selection.done : t.stock.selection.enter}
+            </button>
+            <div className={styles.count}>
+              {assetsQuery.isLoading ? t.stock.countLoading : fmt(t.stock.countLabel, { count: assets.length })}
+            </div>
           </div>
         </div>
+
+        <GroupChips activeGroupId={groupId} onSelectGroup={setGroupId} />
 
         <div className={styles.chips}>
           {kindLabels(t).map((item) => (
@@ -322,54 +387,73 @@ export function StockPanel() {
         <p className={styles.emptyState}>{t.stock.emptyState}</p>
       ) : (
         <div className={styles.grid}>
-          {assets.map((asset) => (
-            <div key={asset.id} className={styles.tile}>
-              <button
-                type="button"
-                className={styles.tileImageButton}
-                aria-label={inStudio ? t.stock.showInResultArea : t.stock.openInViewer}
-                onClick={() => navigate(nodeTargetPath({ id: asset.id, type: 'asset' }, location.pathname))}
-              >
-                <img
-                  className={`${styles.tileImage} checkerboard`}
-                  src={assetUrl(asset.id, 'thumb')}
-                  alt=""
-                  // mask は入力画像として追加できないので、ドラッグ元にもしない
-                  // (「+」ボタンを出していないのと同じ条件)。
-                  draggable={asset.kind !== 'mask'}
-                  onDragStart={
-                    asset.kind !== 'mask'
-                      ? (e) => {
-                          e.dataTransfer.setData(GAKEI_ASSET_ID_DATA_TYPE, asset.id)
-                          e.dataTransfer.effectAllowed = 'copy'
-                        }
-                      : undefined
-                  }
-                />
-              </button>
-              {asset.kind !== 'mask' && (
+          {assets.map((asset) => {
+            const isSelected = selectedIds.has(asset.id)
+            return (
+              <div key={asset.id} className={styles.tile} data-selected={selectionMode && isSelected}>
                 <button
                   type="button"
-                  className={styles.addButton}
-                  aria-label={t.stock.useAsInput}
-                  onClick={() => handleUseAsInput(asset)}
+                  className={styles.tileImageButton}
+                  aria-label={
+                    selectionMode
+                      ? undefined
+                      : inStudio
+                        ? t.stock.showInResultArea
+                        : t.stock.openInViewer
+                  }
+                  aria-pressed={selectionMode ? isSelected : undefined}
+                  onClick={() => {
+                    if (selectionMode) {
+                      setSelectedIds((prev) => toggleAssetSelection(prev, asset.id))
+                      return
+                    }
+                    navigate(nodeTargetPath({ id: asset.id, type: 'asset' }, location.pathname))
+                  }}
                 >
-                  +
+                  <img
+                    className={`${styles.tileImage} checkerboard`}
+                    src={assetUrl(asset.id, 'thumb')}
+                    alt=""
+                    // mask は入力画像として追加できないので、ドラッグ元にもしない
+                    // (「+」ボタンを出していないのと同じ条件)。選択モード中もドラッグしない。
+                    draggable={!selectionMode && asset.kind !== 'mask'}
+                    onDragStart={
+                      !selectionMode && asset.kind !== 'mask'
+                        ? (e) => {
+                            e.dataTransfer.setData(GAKEI_ASSET_ID_DATA_TYPE, asset.id)
+                            e.dataTransfer.effectAllowed = 'copy'
+                          }
+                        : undefined
+                    }
+                  />
+                  {selectionMode && isSelected && <span className={styles.checkBadge}>✓</span>}
                 </button>
-              )}
-              <button
-                type="button"
-                className={styles.deleteButton}
-                aria-label={t.stock.delete}
-                onClick={() => setDeleteTarget(asset)}
-              >
-                <TrashIcon />
-              </button>
-              <span className={styles.caption}>
-                {asset.width}×{asset.height} · {extFromMime(asset.mime)}
-              </span>
-            </div>
-          ))}
+                {!selectionMode && asset.kind !== 'mask' && (
+                  <button
+                    type="button"
+                    className={styles.addButton}
+                    aria-label={t.stock.useAsInput}
+                    onClick={() => handleUseAsInput(asset)}
+                  >
+                    +
+                  </button>
+                )}
+                {!selectionMode && (
+                  <button
+                    type="button"
+                    className={styles.deleteButton}
+                    aria-label={t.stock.delete}
+                    onClick={() => setDeleteTarget(asset)}
+                  >
+                    <TrashIcon />
+                  </button>
+                )}
+                <span className={styles.caption}>
+                  {asset.width}×{asset.height} · {extFromMime(asset.mime)}
+                </span>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -392,6 +476,40 @@ export function StockPanel() {
           ) : isFetchingNextPage ? (
             <span className={styles.sentinelLoading}>{t.stock.loadingMore}</span>
           ) : null}
+        </div>
+      )}
+
+      {selectionMode && (
+        <div className={styles.selectionFooter}>
+          <span className={styles.selectionCount}>{fmt(t.stock.selection.count, { count: selectedIds.size })}</span>
+          <div className={styles.selectionActions}>
+            <AddToGroupPopover
+              assetIds={[...selectedIds]}
+              triggerLabel={t.stock.groups.addTo}
+              triggerClassName={styles.selectionButton}
+              disabled={selectedIds.size === 0}
+              placement="up"
+              onAdded={() => setSelectedIds(new Set())}
+            />
+            {groupId && (
+              <button
+                type="button"
+                className={styles.selectionButton}
+                disabled={selectedIds.size === 0 || removeFromGroupMutation.isPending}
+                onClick={() => removeFromGroupMutation.mutate([...selectedIds])}
+              >
+                {t.stock.groups.removeFromThis}
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.selectionButton}
+              disabled={selectedIds.size === 0}
+              onClick={() => setSelectedIds(new Set())}
+            >
+              {t.stock.selection.clear}
+            </button>
+          </div>
         </div>
       )}
 

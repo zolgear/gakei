@@ -1,0 +1,158 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.chip {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chip[data-active='true'] {
+  background: var(--color-header-band);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.countBadge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  background: var(--color-bg-sunken);
+  border-radius: var(--radius-pill);
+  padding: 0 6px;
+}
+
+.chipWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.menuTrigger {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.menuTrigger:hover {
+  color: var(--color-text);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 6px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.menu button {
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.menu button:hover {
+  background: var(--color-header-band);
+}
+
+.dangerItem:hover {
+  color: var(--color-danger);
+}
+
+.addChip {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.addChip:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.nameInput {
+  flex-shrink: 0;
+  height: 28px;
+  width: 140px;
+  padding: 0 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.renameRow {
+  display: flex;
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  .chip {
+    min-height: 44px;
+  }
+
+  .addChip {
+    width: 44px;
+    height: 44px;
+  }
+
+  .menuTrigger {
+    width: 44px;
+    height: 44px;
+  }
+}

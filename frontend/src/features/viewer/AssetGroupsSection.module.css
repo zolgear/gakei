@@ -1,0 +1,91 @@
+/* OriginRecipeSection と同じ大きさ感で揃える(ビューアの詳細パネルの節)。 */
+.section {
+  margin: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px 0 10px;
+  background: var(--color-header-band);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.removeButton {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.removeButton:hover:not(:disabled) {
+  color: var(--color-danger);
+}
+
+.addButton {
+  padding: 6px 12px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.addButton:hover {
+  border-color: var(--color-accent);
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  .removeButton {
+    width: 30px;
+    height: 30px;
+  }
+
+  .addButton {
+    min-height: 44px;
+  }
+}
