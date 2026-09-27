@@ -3,12 +3,12 @@
 # ADR-0016: 加えて Docker イメージのビルドと起動も確認する(docker ジョブ)。
 name: CI
 
+# 文書だけの変更でも CI を走らせる。main / dev のルールセットが CI の成功を必須にしており、
+# paths-ignore で CI が走らない PR は「チェック待ち」のままマージできなくなるため(ADR-0021)。
 on:
   push:
     branches: [main, dev]
-    paths-ignore: ["docs/**", "**.md"]
   pull_request:
-    paths-ignore: ["docs/**", "**.md"]
 
 # PR に push を重ねたとき、走りかけの古い実行を打ち切る(main への push は打ち切らない)。
 concurrency:
