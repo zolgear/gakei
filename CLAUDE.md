@@ -8,11 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 作業を始める前に `docs/adr/README.md`(ADR の一覧)を読み、作業に関連する ADR を読む。
 
-### ADR の置き場所
-
-- ADR は `docs/adr/` にあり、一覧は `docs/adr/README.md`。ファイル名の番号と中身の `# ADR-000N` は一致している(2026-09-27 に修正)。
-- ADR-0007(ホスティング)は Azure と決めたこと以外の本文が未作成。
-
 ## コマンド
 
 利用者向けの起動(リポジトリ直下。ADR-0012):
