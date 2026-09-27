@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ローカルMVP(ADR-0008、ADR-0009、ADR-0010)が `backend/` と `frontend/` にある。OpenAI API のキーだけで動き、画像はローカルFS(`data/`)、メタデータは SQLite に保存する。本線(Azure OpenAI、Entra ID、Blob、PostgreSQL、別プロセス worker)は未着手で、下の「アーキテクチャ」は本線の設計を指す。ローカルMVPが本線と違う点は ADR-0008 の対比表にまとめてある。
 
-作業を始める前に ADR を全部読む。ユーザーへの回答は日本語で行う。
+作業を始める前に `docs/adr/README.md`(ADR の一覧)を読み、作業に関連する ADR を読む。
 
 ### ADR の置き場所
 
