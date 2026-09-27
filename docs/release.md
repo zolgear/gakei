@@ -46,15 +46,11 @@ GAKEI のバージョン付けとリリースの自動化は ADR-0021 で決め�
 - **起動確認(`linux/amd64` のビルドと `/api/capabilities` の確認)で失敗:** GHCR への push より前なので、この時点でも何も公開されていない。原因を直す PR をマージしてから、同じ手順でタグを打ち直す。
 - **GHCR への push は終わったが、その後に問題が見つかった:** 一度公開したタグは上書きしない(`latest` や `X.Y` を含め、動かしたタグを消したり差し替えたりしない)。修正して次のパッチ版(`vX.Y.(Z+1)`)を出す。
 
-## GHCR のパッケージを public にする(初回だけ)
+## GHCR のパッケージの公開範囲
 
-GHCR のパッケージは最初の push では private になる。公開リポジトリでの最初のリリースの後、GitHub の設定画面で1回だけ手で public にする。
+public リポジトリの Actions から最初に push されたパッケージは、リポジトリに紐づいて自動で public になる(2026-09-27 の `v0.1.0` で確認。手作業は要らなかった)。パッケージのページは `https://github.com/users/zolgear/packages/container/package/gakei`。
 
-1. リポジトリの Packages(または `https://github.com/users/zolgear/packages/container/package/gakei`)を開く。
-2. `gakei` パッケージを開き、Package settings。
-3. Danger Zone の Change visibility で Public にする。
-
-以降のリリースでは何もしなくてよい。
+private リポジトリから push した場合だけ private になる。その場合に public にしたければ、パッケージのページ → Package settings → Danger Zone の Change visibility で切り替える。
 
 ## 公開前の予行演習
 
@@ -65,7 +61,7 @@ GHCR のパッケージは最初の push では private になる。公開リポ
 3. 確認が終わったら、次の3つを削除する。
    - GitHub Release(`vX.Y.Z-rc.N`)
    - タグ自体(上記の「タグとバージョンが一致していない」の削除コマンドと同じ)
-   - GHCR のパッケージ、またはそのバージョンだけ(Package settings → Manage versions)
+   - GHCR のパッケージ(`gh auth refresh -s read:packages,delete:packages` のあと `gh api -X DELETE /user/packages/container/gakei`。Web なら Package settings → Delete this package)
 
    理由: `ghcr.io/zolgear/gakei` という名前は公開リポジトリでも同じになる。旧(private)リポジトリに紐づいたパッケージやリリースを残すと、公開後にどちらが正式なものか混乱する。
 

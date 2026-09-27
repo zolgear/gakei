@@ -38,7 +38,7 @@
 その他:
 
 - ワークフローの権限は `contents: write`(Release の作成)と `packages: write`(GHCR)だけ。`GITHUB_TOKEN` で足り、個人のトークンや secret は要らない。
-- GHCR のパッケージは最初の push では private になる。**public にするのは GitHub の設定画面で1回だけ手で行う**(`docs/release.md` に書く)。
+- GHCR のパッケージの公開範囲はリポジトリに従う。public リポジトリの Actions から push すれば自動で public になる(2026-09-27 の `v0.1.0` で確認。当初は手で切り替える想定だったが不要だった)。private リポジトリから push した場合だけ、設定画面で手で public にする(`docs/release.md`)。
 - private リポジトリのうちに `v0.1.0-rc.1` のようなプレリリースのタグで一度動かして確かめる。その際に作られたパッケージと Release は、公開リポジトリでの最初のリリースより前に削除する(名前が同じ `ghcr.io/zolgear/gakei` になり、旧リポジトリに紐づいたパッケージが残ると混乱する)。
 - CI(`ci.yml`)の docker ジョブは変えない(単一アーキテクチャのビルドと起動確認のまま)。マルチアーキテクチャのビルドは時間がかかるので、リリース時だけ行う。
 
@@ -98,8 +98,8 @@
 
 ## Action Items
 
-1. [ ] `GET /api/about`、`GET /api/about/third-party-notices`、`app/version.py`、`app/domain/third_party.py`、`app.tools.third_party_notices`
-2. [ ] `frontend/scripts/third-party-notices.mjs` と `npm run build` への組み込み、「GAKEI について」にバージョンと表記へのリンク
-3. [ ] `Dockerfile`(`$BUILDPLATFORM`、`GAKEI_COMMIT`、LICENSE / NOTICE のコピー、OCI ラベル)、`.github/workflows/release.yml`
-4. [ ] `docs/release.md`、README(日英)の Docker の節、`docs/configuration.md`(`GAKEI_COMMIT` は利用者が設定するものではないので載せない)、CLAUDE.md、ADR-0016 / ADR-0011 への追記
-5. [ ] private リポジトリで `v0.1.0-rc.1` を打ってワークフローを一度動かし、パッケージと Release を消す
+1. [x] `GET /api/about`、`GET /api/about/third-party-notices`、`app/version.py`、`app/domain/third_party.py`、`app.tools.third_party_notices`
+2. [x] `frontend/scripts/third-party-notices.mjs` と `npm run build` への組み込み、「GAKEI について」にバージョンと表記へのリンク
+3. [x] `Dockerfile`(`$BUILDPLATFORM`、`GAKEI_COMMIT`、LICENSE / NOTICE のコピー、OCI ラベル)、`.github/workflows/release.yml`
+4. [x] `docs/release.md`、README(日英)の Docker の節、`docs/configuration.md`(`GAKEI_COMMIT` は利用者が設定するものではないので載せない)、CLAUDE.md、ADR-0016 / ADR-0011 への追記
+5. [x] private リポジトリで `v0.1.0-rc.1` を打ってワークフローを一度動かし、パッケージと Release を消す(2026-09-27。同日に public で `v0.1.0` をリリース)
