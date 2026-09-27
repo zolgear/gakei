@@ -225,7 +225,8 @@
   },
   "assetGroups": {
     "notFound": "グループが見つかりません",
-    "assetNotFound": "対象の画像が見つかりません: {ids}"
+    "assetNotFound": "対象の画像が見つかりません: {ids}",
+    "groupIdAndUngrouped": "group_id と ungrouped は同時に指定できません"
   },
   "worker": {
     "interruptedByRestart": "サーバー再起動により中断されました",

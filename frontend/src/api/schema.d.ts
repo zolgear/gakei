@@ -3011,6 +3011,8 @@ export interface operations {
                 kind?: ("upload" | "generated" | "mask" | "sketch") | null;
                 /** @description 指定すると、そのグループのメンバーだけに絞る(ADR-0022)。 */
                 group_id?: string | null;
+                /** @description true なら、削除済みでないどのグループにも入っていない Asset だけに絞る(ストックの「グループなし」の節。ADR-0022)。`group_id` と同時には指定できない。 */
+                ungrouped?: boolean;
                 limit?: number;
                 cursor?: string | null;
             };

@@ -171,6 +171,29 @@ def test_list_assets_combines_group_id_and_kind(client: TestClient) -> None:
     assert response.json()["items"] == []
 
 
+def test_list_assets_ungrouped_excludes_members_of_active_groups(client: TestClient) -> None:
+    group = _create_group(client)
+    deleted_group = _create_group(client, "消すグループ")
+    in_group = _upload(client)
+    only_in_deleted = _upload(client)
+    free = _upload(client)
+    client.post(f"/api/asset-groups/{group['id']}/assets", json={"asset_ids": [in_group]})
+    client.post(
+        f"/api/asset-groups/{deleted_group['id']}/assets", json={"asset_ids": [only_in_deleted]}
+    )
+    client.delete(f"/api/asset-groups/{deleted_group['id']}")
+
+    response = client.get("/api/assets", params={"ungrouped": "true"})
+    assert response.status_code == 200
+    ids = {a["id"] for a in response.json()["items"]}
+    assert free in ids
+    assert only_in_deleted in ids  # 削除済みグループにだけ入っていたものは「グループなし」
+    assert in_group not in ids
+
+    both = client.get("/api/assets", params={"ungrouped": "true", "group_id": group["id"]})
+    assert both.status_code == 422
+
+
 def test_list_assets_with_deleted_group_id_returns_404(client: TestClient) -> None:
     group = _create_group(client)
     assert client.delete(f"/api/asset-groups/{group['id']}").status_code == 204

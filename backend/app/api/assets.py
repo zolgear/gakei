@@ -10,7 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
@@ -23,7 +23,7 @@ from app.domain.assets import ingest_upload as ingest_asset
 from app.domain.avatars import avatar_url
 from app.domain.embedded_meta import build_lineage_meta, embed_gakei_chunk, get_instance_id
 from app.domain.lineage import DEFAULT_UP, MAX_DEPTH, LineageNotFoundError, build_asset_lineage
-from app.domain.models import AppUser, Asset, AssetGroupMember, AssetKind, Run
+from app.domain.models import AppUser, Asset, AssetGroup, AssetGroupMember, AssetKind, Run
 from app.domain.schemas import (
     AssetDetail,
     AssetLineageResponse,
@@ -177,10 +177,17 @@ def list_assets(
     group_id: uuid.UUID | None = Query(
         default=None, description="指定すると、そのグループのメンバーだけに絞る(ADR-0022)。"
     ),
+    ungrouped: bool = Query(
+        default=False,
+        description="true なら、削除済みでないどのグループにも入っていない Asset だけに絞る"
+        "(ストックの「グループなし」の節。ADR-0022)。`group_id` と同時には指定できない。",
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
     db: Session = Depends(get_session),
 ) -> AssetListResponse:
+    if group_id is not None and ungrouped:
+        raise HTTPException(status_code=422, detail=t("assetGroups.groupIdAndUngrouped"))
     if group_id is not None and get_active_group_or_none(db, group_id) is None:
         raise HTTPException(status_code=404, detail=t("assetGroups.notFound"))
 
@@ -195,6 +202,14 @@ def list_assets(
                 AssetGroupMember.asset_group_id == group_id,
             ),
         )
+    if ungrouped:
+        # 削除済みのグループにだけ入っている Asset は「グループなし」に含める。
+        active_group_ids = select(AssetGroup.id).where(AssetGroup.deleted_at.is_(None))
+        in_active_group = exists().where(
+            AssetGroupMember.asset_id == Asset.id,
+            AssetGroupMember.asset_group_id.in_(active_group_ids),
+        )
+        query = query.where(~in_active_group)
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)
