@@ -196,11 +196,17 @@ def world(client_oidc: TestClient) -> World:
     w.a_prompt_set = prompt_set.json()["id"]
     w.a_prompt_item = prompt_set.json()["items"][0]["id"]
     w.a_token_id = c.get("/api/users/me/api-tokens").json()["items"][0]["id"]
+    # タイトルとタグ(ADR-0024)。タグ名 alicetag は A の Asset にだけ付ける。
+    assert (
+        c.patch(f"/api/assets/{w.a_output}/title", json={"title": "alice title"})
+    ).status_code == 200
+    assert (c.post(f"/api/assets/{w.a_output}/tags", json={"name": "alicetag"})).status_code == 200
 
     c = w.as_("B")
     w.b_upload = _upload(c, data=make_png_bytes(32, 32, (1, 2, 3)))["id"]
     group = c.post("/api/asset-groups", json={"name": "bob group"})
     w.b_group = group.json()["id"]
+    assert (c.post(f"/api/assets/{w.b_upload}/tags", json={"name": "bobtag"})).status_code == 200
 
     w.legacy = _insert_legacy(client, w.a_upload)
     return w
@@ -219,10 +225,17 @@ _PARAM_SOURCES = {
     "token_id": "a_token_id",
     "user_id": "user:A",
     "index": "literal:0",
+    # タグ名(ADR-0024)。A の Asset に付けたタグ(`world` で付ける)。
+    "name": "literal:alicetag",
 }
 
 # 利用者のデータではないので対象外のルート(ADR-0025 5章: 管理者設定は利用者のデータと別)。
-_EXCLUDED_PREFIXES = ("/api/auth/", "/api/uploads/", "/api/comfyui/")
+_EXCLUDED_PREFIXES = (
+    "/api/auth/",
+    "/api/uploads/",
+    "/api/comfyui/",
+    "/api/settings/annotation/onnx/",
+)
 
 
 def _bodies(w: World) -> dict[tuple[str, str], Any]:
@@ -234,6 +247,8 @@ def _bodies(w: World) -> dict[tuple[str, str], Any]:
         ("patch", "/api/prompt-sets/{prompt_set_id}"): {"name": "hijack"},
         ("post", "/api/prompt-sets/{prompt_set_id}/items"): {"text": "hijack"},
         ("patch", "/api/prompt-sets/{prompt_set_id}/items/{item_id}"): {"text": "hijack"},
+        ("patch", "/api/assets/{asset_id}/title"): {"title": "hijack"},
+        ("post", "/api/assets/{asset_id}/tags"): {"name": "hijack"},
     }
 
 
@@ -283,7 +298,11 @@ def test_every_id_route_returns_404_for_others(world: World) -> None:
     # 他人の操作で A のデータは何も変わっていない。
     c = w.as_("A")
     assert c.get(f"/api/runs/{w.a_run}").json()["deleted_at"] is None
-    assert c.get(f"/api/assets/{w.a_output}").json()["deleted_at"] is None
+    a_output = c.get(f"/api/assets/{w.a_output}").json()
+    assert a_output["deleted_at"] is None
+    # タイトルとタグ(ADR-0024)も他人には変えられない。
+    assert a_output["title"] == "alice title"
+    assert [t["name"] for t in a_output["tags"]] == ["alicetag"]
     groups = {g["id"]: g for g in c.get("/api/asset-groups").json()["items"]}
     assert groups[w.a_group]["name"] == "alice group"
     assert groups[w.a_group]["member_count"] == 1
@@ -696,3 +715,51 @@ def test_none_mode_still_sees_everything(client: TestClient) -> None:
     assert set_id in {p["id"] for p in client.get("/api/prompt-sets").json()["items"]}
     found = client.get("/api/search", params={"q": "zebra"}).json()
     assert {detail["id"], run_id} <= {r["id"] for r in found["runs"]}
+
+
+def test_tags_and_titles_are_only_for_own_assets(world: World) -> None:
+    """ADR-0024 × ADR-0025: タグの一覧・件数、タグの絞り込み、検索、MCP のタイトルとタグは、
+    本人に見える Asset だけで決まる。他人のタグ名は漏れない。"""
+    w = world
+
+    def _tag_names(who: str, q: str | None = None) -> dict[str, int]:
+        params = {"q": q} if q else {}
+        response = w.as_(who).get("/api/tags", params=params)
+        assert response.status_code == 200, response.text
+        return {item["name"]: item["count"] for item in response.json()["items"]}
+
+    assert _tag_names("A") == {"alicetag": 1}
+    assert _tag_names("B") == {"bobtag": 1}
+    assert _tag_names("C") == {}  # 管理者にも他人のタグは見えない
+    assert _tag_names("B", "alice") == {}
+
+    # 同じタグ名を B も付けると、件数はそれぞれ自分の分だけ。
+    c = w.as_("B")
+    assert (c.post(f"/api/assets/{w.b_upload}/tags", json={"name": "alicetag"})).status_code == 200
+    assert _tag_names("B") == {"bobtag": 1, "alicetag": 1}
+    assert _tag_names("A") == {"alicetag": 1}
+
+    # ?tag= の絞り込みも本人の Asset だけ。
+    listed = w.as_("B").get("/api/assets", params={"tag": "alicetag"}).json()["items"]
+    assert [a["id"] for a in listed] == [w.b_upload]
+    listed = w.as_("A").get("/api/assets", params={"tag": "alicetag"}).json()["items"]
+    assert [a["id"] for a in listed] == [w.a_output]
+
+    # 検索(タイトル・タグ名も対象)に他人の Asset は出ない。
+    found = w.as_("B").get("/api/search", params={"q": "alice", "types": "asset"}).json()
+    assert w.a_output not in [hit["id"] for hit in found["assets"]]
+    found = w.as_("A").get("/api/search", params={"q": "alice title", "types": "asset"}).json()
+    assert [hit["id"] for hit in found["assets"]] == [w.a_output]
+
+    # MCP: search_assets の tag と、get_asset のタイトル・タグ。
+    items = _ok(_call(w.client, "search_assets", {"tag": "alicetag"}, w.bearer("B")))["items"]
+    assert [i["asset_id"] for i in items] == [w.b_upload]
+    items = _ok(_call(w.client, "search_assets", {"tag": "alicetag"}, w.bearer("A")))["items"]
+    assert [i["asset_id"] for i in items] == [w.a_output]
+    assert items[0]["title"] == "alice title"
+    got = _ok(_call(w.client, "get_asset", {"asset_id": w.a_output}, w.bearer("A")))
+    assert got["title"] == "alice title"
+    assert [t["name"] for t in got["tags"]] == ["alicetag"]
+    assert "not found" in _error_text(
+        _call(w.client, "get_asset", {"asset_id": w.a_output}, w.bearer("B"))
+    )

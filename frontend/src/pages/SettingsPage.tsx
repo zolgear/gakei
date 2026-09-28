@@ -58,6 +58,7 @@ import { ProfileSection } from '../features/settings/ProfileSection'
 import { GenerationSettingsSection } from '../features/settings/GenerationSettingsSection'
 import { ComfyUITimeoutField } from '../features/settings/ComfyUITimeoutField'
 import { McpSettingsSection } from '../features/settings/McpSettingsSection'
+import { AnnotationSettingsSection } from '../features/settings/AnnotationSettingsSection'
 import { ApiTokensSection } from '../features/settings/ApiTokensSection'
 import { visibleSections } from '../features/settings/settingsSections'
 import { isAdmin, useAuth } from '../features/auth/authState'
@@ -394,6 +395,8 @@ export function SettingsPage() {
       )}
 
       {sections.includes('generation') && <GenerationSettingsSection toast={toast} />}
+
+      {sections.includes('annotation') && <AnnotationSettingsSection toast={toast} />}
 
       {sections.includes('comfyui') && (
       <section id="comfyui" className={styles.section}>

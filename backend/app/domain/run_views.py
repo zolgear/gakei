@@ -18,7 +18,15 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain.avatars import avatar_url
-from app.domain.models import AppUser, Asset, AssetGroup, Run, RunInput, RunInputRole
+from app.domain.models import (
+    AppUser,
+    Asset,
+    AssetAnnotation,
+    AssetGroup,
+    Run,
+    RunInput,
+    RunInputRole,
+)
 from app.domain.pricing import cost_from_usage
 from app.domain.schemas import AssetGroupRef, CreatedBy, RunOutputRef
 from app.domain.visibility import asset_visible, group_visible, run_visible
@@ -30,13 +38,14 @@ def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, l
     if not run_ids:
         return result
     rows = db.execute(
-        select(Asset.produced_by_run_id, Asset.id, Asset.output_index)
+        select(Asset.produced_by_run_id, Asset.id, Asset.output_index, AssetAnnotation.title)
+        .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         .where(Asset.produced_by_run_id.in_(run_ids))
         .order_by(Asset.output_index)
     ).all()
-    for produced_by_run_id, asset_id, output_index in rows:
+    for produced_by_run_id, asset_id, output_index, title in rows:
         result[produced_by_run_id].append(
-            RunOutputRef(asset_id=asset_id, output_index=output_index)
+            RunOutputRef(asset_id=asset_id, output_index=output_index, title=title)
         )
     return result
 

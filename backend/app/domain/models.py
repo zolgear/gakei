@@ -11,7 +11,18 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
@@ -454,3 +465,59 @@ class ComfyWorkflow(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class AssetAnnotation(Base):
+    """Asset のタイトルと自動推定の状態(ADR-0024 2章)。証跡ではないので更新してよい。
+
+    `auto_status` が推定の待ち行列を兼ねる(`queued` の行を `app/worker/annotator.py` が
+    1件ずつ処理する。ADR-0024 4章)。NULL は未実行。
+    """
+
+    __tablename__ = "asset_annotation"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # auto | user。user になったタイトルは再推定で上書きしない。
+    title_source: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # queued | running | succeeded | failed(NULL は未実行)
+    auto_status: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    # 実行したエンジン(例 `llm+vlm+onnx`)
+    auto_engines: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    auto_models: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    auto_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    auto_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    auto_finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class Tag(Base):
+    """タグの表記(ADR-0024 2章)。`name` は `app/domain/annotations.normalize_tag_name` で
+    正規化した値(NFKC、前後の空白除去、小文字化、空白の連続を1つに)。"""
+
+    __tablename__ = "tag"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class AssetTag(Base):
+    """Asset に付いたタグ(ADR-0024 2章)。証跡ではないので更新してよい。
+
+    人が消したタグは行を残して `removed = True`・`source = user` にする(再推定で付け直さない
+    ため)。画面・API には出さない。
+    """
+
+    __tablename__ = "asset_tag"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    tag_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tag.id"), primary_key=True, index=True
+    )
+    # auto | user
+    source: Mapped[str] = mapped_column(String(8), nullable=False)
+    # ONNX タガーの確信度(VLM と人は NULL)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    removed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)

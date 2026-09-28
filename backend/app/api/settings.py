@@ -19,19 +19,33 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
+from app.annotation.wd_models import WD_MODELS, WdModelDownloader, is_downloaded
 from app.auth.deps import require_admin, require_user
 from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_provider, get_session, get_settings
+from app.deps import (
+    get_annotator,
+    get_provider,
+    get_session,
+    get_settings,
+    get_wd_downloader,
+)
+from app.domain import annotation_settings, general_settings, mcp_settings
+from app.domain import annotations as annotations_domain
 from app.domain import api_key as api_key_domain
-from app.domain import general_settings, mcp_settings
 from app.domain.schemas import (
+    AnnotationApiKeyUpdateRequest,
+    AnnotationBackfillResponse,
+    AnnotationSettingsResponse,
+    AnnotationSettingsUpdateRequest,
     ComfyUITimeoutSetting,
     GeneralSettingsResponse,
     GeneralSettingsUpdateRequest,
     McpSettingsResponse,
     McpSettingsUpdateRequest,
     ModerationSetting,
+    OnnxDownloadRequest,
+    OnnxModelStatus,
     OpenAIBaseUrlStatusResponse,
     OpenAIBaseUrlUpdateRequest,
     OpenAIKeyStatusResponse,
@@ -39,6 +53,7 @@ from app.domain.schemas import (
 )
 from app.i18n import t
 from app.providers.base import ImageProvider
+from app.worker.annotator import Annotator
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -340,3 +355,186 @@ def update_mcp_settings(
         assert body.hourly_run_limit is not None
         mcp_settings.save_hourly_run_limit(db, body.hourly_run_limit)
     return _mcp_settings_response(db, settings, request)
+
+
+# -- 自動タイトル・タグ(ADR-0024) ------------------------------------------------
+# GET は全ログイン者(画面の表示用)、更新・推定専用キー・モデルのダウンロード・一括実行は
+# 管理者だけ。
+
+
+def _onnx_model_statuses(
+    settings: Settings, downloader: WdModelDownloader
+) -> list[OnnxModelStatus]:
+    statuses: list[OnnxModelStatus] = []
+    for name, model in WD_MODELS.items():
+        state = downloader.state(name)
+        statuses.append(
+            OnnxModelStatus(
+                name=name,  # type: ignore[arg-type]
+                size_bytes=model.size_bytes,
+                downloaded=is_downloaded(settings.data_dir, name),
+                download_status=state.status,  # type: ignore[arg-type]
+                download_progress=state.progress,
+                download_error=state.error if state.status == "failed" else None,
+            )
+        )
+    return statuses
+
+
+def _annotation_settings_response(
+    db: Session, settings: Settings, annotator: Annotator, downloader: WdModelDownloader
+) -> AnnotationSettingsResponse:
+    config = annotation_settings.load(db)
+    return AnnotationSettingsResponse(
+        **config.__dict__,
+        api_key_set=annotation_settings.read_api_key(settings.data_dir) is not None,
+        onnx_models=_onnx_model_statuses(settings, downloader),
+        pending_count=annotations_domain.pending_count(db),
+        queued_count=annotations_domain.queued_count(db),
+        calls_last_hour=annotator.calls_last_hour(),
+        usable_engines=annotations_domain.usable_engines(config, settings),  # type: ignore[arg-type]
+    )
+
+
+@router.get(
+    "/annotation",
+    response_model=AnnotationSettingsResponse,
+    operation_id="get_annotation_settings",
+)
+def get_annotation_settings(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+) -> AnnotationSettingsResponse:
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+@router.patch(
+    "/annotation",
+    response_model=AnnotationSettingsResponse,
+    operation_id="update_annotation_settings",
+)
+def update_annotation_settings(
+    body: AnnotationSettingsUpdateRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationSettingsResponse:
+    updates = {name: getattr(body, name) for name in body.model_fields_set}
+    # base_url 以外は null を「変更しない」ではなく不正な値として扱う(検証で 422)。
+    try:
+        annotation_settings.save(db, updates)
+    except annotation_settings.AnnotationSettingsValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    annotator.notify()
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+@router.put(
+    "/annotation/api-key",
+    response_model=AnnotationSettingsResponse,
+    operation_id="set_annotation_api_key",
+)
+def set_annotation_api_key(
+    body: AnnotationApiKeyUpdateRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationSettingsResponse:
+    """推定専用の API キーを保存する(`secrets.json`。値は返さない)。手元のサーバー向けに
+    任意の文字列を受け付けるため、有効性の確認はしない。"""
+    value = body.api_key.strip()
+    if not value:
+        raise HTTPException(status_code=400, detail=t("openai.keyEmpty"))
+    annotation_settings.write_api_key(settings.data_dir, value)
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+@router.delete(
+    "/annotation/api-key",
+    response_model=AnnotationSettingsResponse,
+    operation_id="delete_annotation_api_key",
+)
+def delete_annotation_api_key(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationSettingsResponse:
+    annotation_settings.delete_api_key(settings.data_dir)
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+def _known_onnx_model(name: str) -> str:
+    if name not in WD_MODELS:
+        raise HTTPException(status_code=404, detail=t("settings.annotation.unknownOnnxModel"))
+    return name
+
+
+@router.post(
+    "/annotation/onnx/download",
+    response_model=AnnotationSettingsResponse,
+    status_code=202,
+    operation_id="download_onnx_model",
+)
+async def download_onnx_model(
+    body: OnnxDownloadRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationSettingsResponse:
+    """モデルを Hugging Face からバックグラウンドで取得する。進み具合は GET の `onnx_models`
+    で見る。既にダウンロード中なら何もしない。"""
+    name = _known_onnx_model(body.model)
+    downloader.start(name)
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+@router.delete(
+    "/annotation/onnx/{model}",
+    response_model=AnnotationSettingsResponse,
+    operation_id="delete_onnx_model",
+)
+def delete_onnx_model(
+    model: str,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationSettingsResponse:
+    name = _known_onnx_model(model)
+    if downloader.is_downloading(name):
+        raise HTTPException(status_code=409, detail=t("settings.annotation.onnxDownloading"))
+    downloader.delete(name)
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+@router.post(
+    "/annotation/backfill",
+    response_model=AnnotationBackfillResponse,
+    operation_id="backfill_annotations",
+)
+def backfill_annotations(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationBackfillResponse:
+    """一度も推定していない Asset(削除済み・マスクを除く)をまとめて待ち行列に入れる。
+    使えるエンジンが無ければ 409。"""
+    config = annotation_settings.load(db)
+    if not annotations_domain.usable_engines(config, settings):
+        raise HTTPException(status_code=409, detail=t("annotations.noEngine"))
+    count = annotations_domain.backfill(db)
+    db.commit()
+    annotator.notify()
+    return AnnotationBackfillResponse(queued=count)

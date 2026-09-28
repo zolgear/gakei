@@ -191,10 +191,10 @@
   "search": {
     "ariaLabel": "Search",
     "clear": "Clear search",
-    "placeholder": "Search prompts",
+    "placeholder": "Search prompts, titles, and tags",
     "searching": "Searching...",
-    "noResults": "No results. Uploaded images without embedded generation info are not searchable",
-    "noResultsPeriod": "No results. Uploaded images without embedded generation info are not searchable.",
+    "noResults": "No results. Uploaded images without a title, tags, or embedded generation info are not searchable",
+    "noResultsPeriod": "No results. Uploaded images without a title, tags, or embedded generation info are not searchable.",
     "embeddedBadge": "Unverified",
     "embeddedTitle": "Matched the unverified prompt embedded in the image",
     "groupRuns": "Generated",
@@ -345,6 +345,118 @@
         "help": "Applies only to generation without input images (Generate API); it has no effect on editing (Edit). low is less restrictive than auto, and auto is OpenAI's standard filtering.",
         "savedToast": "moderation saved.",
         "resetToDefault": "Reset to default ({default})"
+      }
+    },
+    "annotation": {
+      "heading": "Automatic titles and tags",
+      "intro": "Adds titles and tags to images automatically. Titles are inferred from the prompt with an LLM, and tags from the image with a VLM or the ONNX tagger. Titles and tags set by people are never overwritten. All engines are disabled by default.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the automatic title and tag settings.",
+      "retry": "Reload",
+      "saveFailed": "Could not save",
+      "savedToast": "Settings saved",
+      "save": "Save",
+      "unsavedChanges": "You have unsaved changes",
+      "autoOnIngestLabel": "Infer automatically when images are added",
+      "autoOnIngestHelp": "Queues inference for every generated output, upload, and sketch.",
+      "usableEnginesLabel": "Available engines",
+      "usableEnginesNone": "None (enable an engine below)",
+      "engineNames": {
+        "llm": "LLM (titles)",
+        "vlm": "VLM (tags)",
+        "onnx": "ONNX tagger (tags)"
+      },
+      "api": {
+        "heading": "LLM and VLM (external API)",
+        "externalNotice": "When enabled, prompts (LLM, VLM) and images downscaled to 1024px or less (VLM) are sent to the API endpoint below. With OpenAI, each call is billed.",
+        "llmEnabledLabel": "Infer titles from prompts (LLM)",
+        "llmModelLabel": "LLM model",
+        "vlmEnabledLabel": "Infer tags from images (VLM)",
+        "vlmHelp": "For images without a prompt, the title is also inferred from the image.",
+        "vlmModelLabel": "VLM model",
+        "modelInvalid": "Enter 1 to {max} characters",
+        "baseUrlLabel": "Endpoint (Base URL)",
+        "baseUrlPlaceholder": "Leave empty to use the OpenAI settings",
+        "baseUrlHelp": "Set this to use a local OpenAI-compatible server such as Ollama or LM Studio. When empty, the OpenAI settings (key and endpoint) are used. Shared by the LLM and VLM.",
+        "apiStyleLabel": "API style",
+        "apiStyleResponses": "Responses API",
+        "apiStyleChat": "Chat Completions",
+        "apiStyleHelp": "Choose Chat Completions if your local server does not support the Responses API.",
+        "languageLabel": "Language of titles and tags",
+        "languageJa": "Japanese",
+        "languageEn": "English",
+        "tagLanguageLabel": "Tag language",
+        "tagLanguageLocalized": "Match the language of titles and tags",
+        "tagLanguageNative": "Leave it to each engine",
+        "tagLanguageHelp": "When matching, the VLM writes tags in the language above and translations are added for the ONNX tagger's English tags (not when the language is English). Translations come from the same VLM call when the VLM is on, otherwise from the LLM. When left to each engine, every engine tags in its own language and nothing is translated.",
+        "apiKeyLabel": "API key for inference",
+        "apiKeySet": "Set",
+        "apiKeyNotSet": "Not set (uses the OpenAI key)",
+        "apiKeyPlaceholder": "Enter a key",
+        "apiKeySave": "Set",
+        "apiKeyDelete": "Delete",
+        "apiKeySavedToast": "API key for inference set",
+        "apiKeyDeletedToast": "API key for inference deleted",
+        "apiKeyDeleteConfirm": {
+          "message": "Deletes the API key for inference. The OpenAI key will be used instead.",
+          "confirmLabel": "Delete"
+        },
+        "hourlyLimitLabel": "Hourly limit",
+        "hourlyLimitHelp": "Number of LLM and VLM calls ({min} to {max}). When the limit is reached, inference waits for the next slot instead of failing.",
+        "hourlyLimitInvalid": "Enter a whole number from {min} to {max}",
+        "callsLastHourLabel": "Calls in the last hour",
+        "callsLastHourValue": "{count} / {limit}"
+      },
+      "onnx": {
+        "heading": "ONNX tagger (runs on this server)",
+        "notice": "Adds tags with WD Tagger v3 (Apache-2.0). It is made for illustrations and does not suit photos. Tags are in English. Images are not sent anywhere. Models are downloaded from Hugging Face.",
+        "enabledLabel": "Add tags with the ONNX tagger",
+        "modelLabel": "Model",
+        "modelNotDownloaded": "The selected model cannot be used until it is downloaded.",
+        "downloaded": "Downloaded",
+        "notDownloaded": "Not downloaded",
+        "downloading": "Downloading…",
+        "downloadingPercent": "Downloading… {percent}%",
+        "downloadFailed": "Download failed: {error}",
+        "downloadFailedNoReason": "Download failed",
+        "download": "Download",
+        "delete": "Delete",
+        "downloadStartedToast": "Download started",
+        "deletedToast": "Model deleted",
+        "deleteConfirm": {
+          "message": "Deletes the model \"{name}\". You will need to download it again to use it.",
+          "confirmLabel": "Delete"
+        },
+        "thresholdLabel": "Threshold",
+        "thresholdHelp": "Only tags with a confidence at or above this value are added ({min} to {max}; default 0.35).",
+        "thresholdInvalid": "Enter a number from {min} to {max}"
+      },
+      "backfill": {
+        "heading": "Images not yet inferred",
+        "pendingLabel": "Images never inferred",
+        "pendingValue": {
+          "one": "{count} image",
+          "other": "{count} images"
+        },
+        "queuedLabel": "Queue",
+        "queuedValue": {
+          "one": "{count} item",
+          "other": "{count} items"
+        },
+        "run": "Infer all",
+        "noEngines": "Cannot run because no engine is available.",
+        "confirm": {
+          "message": {
+            "one": "Queues inference for {count} image that has never been inferred.",
+            "other": "Queues inference for {count} images that have never been inferred."
+          },
+          "warning": "If the LLM or VLM uses OpenAI, you are billed per image.",
+          "confirmLabel": "Queue"
+        },
+        "queuedToast": {
+          "one": "Queued {count} item",
+          "other": "Queued {count} items"
+        }
       }
     },
     "comfyui": {
@@ -875,6 +987,38 @@
       "assign": "Add to a group",
       "remove": "Remove from \"{name}\"",
       "empty": "Not in a group."
+    },
+    "annotation": {
+      "heading": "Title and tags",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Enter a title",
+      "noTitle": "No title",
+      "editTitle": "Edit title",
+      "save": "Save",
+      "cancel": "Cancel",
+      "clearTitle": "Remove title",
+      "titleTooLong": "Titles can be up to {max} characters",
+      "tagsLabel": "Tags",
+      "noTags": "No tags",
+      "addTagPlaceholder": "Add a tag",
+      "addTag": "Add",
+      "suggestions": "Tag suggestions",
+      "removeTag": "Remove tag \"{name}\"",
+      "filterByTag": "Filter the stock by tag \"{name}\"",
+      "tagEmpty": "Enter a tag name",
+      "tagTooLong": "Tags can be up to {max} characters",
+      "tagDuplicate": "This tag is already added",
+      "statusQueued": "Waiting to infer…",
+      "statusRunning": "Inferring the title and tags…",
+      "statusFailed": "Inference failed: {error}",
+      "statusFailedNoReason": "Inference failed",
+      "statusSucceeded": "Last inferred: {date}",
+      "statusSucceededNoDate": "Inferred",
+      "annotate": "Infer",
+      "reannotate": "Infer again",
+      "reannotateTooltip": "Infers the title and tags again. Titles and tags set by people, and tags people removed, are kept.",
+      "saveFailed": "Could not save",
+      "annotateFailed": "Could not start inference"
     }
   },
   "compare": {
@@ -997,6 +1141,13 @@
     "kindUpload": "Upload",
     "kindSketch": "Sketch",
     "kindMask": "Mask",
+    "tagFilter": {
+      "heading": "Tag",
+      "placeholder": "Filter by tag",
+      "suggestions": "Tag suggestions",
+      "clear": "Clear the filter for tag \"{name}\"",
+      "emptyInSection": "No images with this tag"
+    },
     "openInViewer": "Open in viewer",
     "showInResultArea": "Show in the result area",
     "useAsInput": "Use as input",

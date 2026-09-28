@@ -19,6 +19,7 @@ import shutil
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import sessionmaker
@@ -38,6 +39,9 @@ from app.providers.base import (
 )
 from app.providers.registry import ProviderRegistry
 from app.worker.progress import ProgressBus
+
+if TYPE_CHECKING:
+    from app.worker.annotator import Annotator
 
 logger = logging.getLogger(__name__)
 
@@ -158,8 +162,17 @@ def _cleanup_partial_dir(partial_dir: Path) -> None:
 
 
 def _finish_run_succeeded(
-    session_factory: sessionmaker, store: AssetStore, run_id: uuid.UUID, result
+    session_factory: sessionmaker,
+    store: AssetStore,
+    run_id: uuid.UUID,
+    result,
+    annotator: Annotator | None = None,
 ) -> list[uuid.UUID]:
+    """出力を取り込んで Run を成功にする。`annotator` があれば、取り込み時の自動推定
+    (ADR-0024 4章。設定がオンのときだけ)を同じトランザクションで待ち行列に入れる。"""
+    from app.domain import annotations as annotations_domain
+
+    annotation_queued = False
     with session_factory() as session:
         run = session.get(Run, run_id)
         assert run is not None
@@ -176,6 +189,11 @@ def _finish_run_succeeded(
                 created_by_user_id=run.created_by_user_id,
             )
             output_ids.append(asset.id)
+            if annotator is not None:
+                annotation_queued = (
+                    annotations_domain.enqueue_on_ingest(session, asset, annotator.settings)
+                    or annotation_queued
+                )
 
         # ADR-0022: 生成時にグループが指定されていれば、取り込んだ出力を同じトランザクションで
         # そのグループに入れる(既に入っているものは無視)。実行までにグループが削除されて
@@ -191,7 +209,9 @@ def _finish_run_succeeded(
         run.usage = result.usage
         run.provider_request_id = result.provider_request_id
         session.commit()
-        return output_ids
+    if annotation_queued and annotator is not None:
+        annotator.notify()
+    return output_ids
 
 
 def _finish_run_failed(
@@ -223,8 +243,11 @@ class Runner:
         registry: ProviderRegistry,
         progress_bus: ProgressBus,
         data_dir: Path,
+        *,
+        annotator: Annotator | None = None,
     ) -> None:
         self.session_factory = session_factory
+        self.annotator = annotator
         self.store = store
         self.registry = registry
         self.progress_bus = progress_bus
@@ -360,7 +383,12 @@ class Runner:
             )
             result = await provider.execute(request, on_progress)
             output_ids = await asyncio.to_thread(
-                _finish_run_succeeded, self.session_factory, self.store, run.id, result
+                _finish_run_succeeded,
+                self.session_factory,
+                self.store,
+                run.id,
+                result,
+                self.annotator,
             )
         except ProviderError as e:
             await self._mark_failed(run.id, e.code, e.message, e.request_id)

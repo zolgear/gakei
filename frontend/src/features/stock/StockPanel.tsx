@@ -10,7 +10,8 @@
  * 確認はビューア/履歴カードの「入力に使う」だけで行う。マスクは追加不可)。タイルを節の
  * 見出しへドラッグするとそのグループへ移る(所属は 1 つだけ)。タッチ環境と一括操作向けに選択モードも持つ。
  * 「画像を追加」と種別チップはパネル上部の sticky ヘッダーに常時表示する(生成を続けても
- * グリッドに押し流されないように)。
+ * グリッドに押し流されないように)。種別の下に「タグで絞り込む」(ADR-0024 5章)を置き、選んだ
+ * タグは種別と同じく全節に共通の絞り込みになる。
  */
 import { useId, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -49,6 +50,8 @@ import {
 import { GroupSection, type StockTileActions } from './GroupSection'
 import { UNGROUPED_SECTION_KEY, selectedByGroup, toggleSelection, withoutSection } from './stockSelection'
 import type { StockKindFilter } from './stockQueryKey'
+import { StockTagFilter } from './StockTagFilter'
+import { useStockTagFilter } from './stockTagFilterStore'
 import styles from './StockPanel.module.css'
 
 type KindFilter = StockKindFilter
@@ -76,6 +79,8 @@ export function StockPanel() {
   const panelRef = useRef<HTMLDivElement | null>(null)
 
   const [kind, setKind] = useState<KindFilter>('all')
+  // タグの絞り込み(ADR-0024 5章)。ビューアのタグのチップからも設定されるので外部ストアに置く。
+  const tag = useStockTagFilter()
   const kindHeadingId = useId()
   // 節ごとの開閉。初期値は localStorage から一度だけ読む(effect で読み直さない)。
   const [openMap, setOpenMap] = useState<GroupOpenMap>(loadGroupOpenMap)
@@ -101,8 +106,10 @@ export function StockPanel() {
   // 種別の絞り込みが変わったら選択をリセットする(レンダー中に前回値と比較する。React 公式の
   // 「prop の変化に応じて state をリセットする」パターンで、useEffect を使わない)。
   const [selectionKind, setSelectionKind] = useState(kind)
-  if (selectionKind !== kind) {
+  const [selectionTag, setSelectionTag] = useState(tag)
+  if (selectionKind !== kind || selectionTag !== tag) {
     setSelectionKind(kind)
+    setSelectionTag(tag)
     setSelected(new Map())
   }
 
@@ -308,6 +315,8 @@ export function StockPanel() {
           </div>
         </div>
 
+        <StockTagFilter headingClassName={styles.heading} />
+
         {message && <p className={styles.message}>{message}</p>}
         {notice && <p className={styles.notice}>{notice}</p>}
 
@@ -344,6 +353,7 @@ export function StockPanel() {
       <GroupSection
         group={null}
         kind={kind}
+        tag={tag}
         open={isSectionOpen(openMap, UNGROUPED_SECTION_KEY)}
         onToggleOpen={() => toggleSectionOpen(UNGROUPED_SECTION_KEY)}
         scrollRootRef={panelRef}
@@ -356,6 +366,7 @@ export function StockPanel() {
           key={group.id}
           group={group}
           kind={kind}
+          tag={tag}
           open={isSectionOpen(openMap, group.id)}
           onToggleOpen={() => toggleSectionOpen(group.id)}
           scrollRootRef={panelRef}

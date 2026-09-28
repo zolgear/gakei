@@ -8,10 +8,12 @@ from pathlib import Path
 from fastapi import Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.annotation.wd_models import WdModelDownloader
 from app.config import Settings
 from app.domain.storage import AssetStore
 from app.providers.base import ImageProvider
 from app.providers.registry import ProviderRegistry
+from app.worker.annotator import Annotator
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
 
@@ -68,3 +70,13 @@ def get_frontend_dist(request: Request) -> Path:
     `tests/conftest.py` の差し替えもここに反映される)。
     """
     return request.app.state.frontend_dist
+
+
+def get_annotator(request: Request) -> Annotator:
+    """ADR-0024: 自動タイトル・タグの推定の worker。"""
+    return request.app.state.annotator
+
+
+def get_wd_downloader(request: Request) -> WdModelDownloader:
+    """ADR-0024: ONNX タガーのモデルのダウンロード。"""
+    return request.app.state.wd_downloader

@@ -71,8 +71,10 @@
   border-color: var(--color-accent);
 }
 
+/* 画像(高さ 96px)の右下に置く。キャプションの高さはタイトルの有無で変わるので、下端ではなく
+   上端から測る(96 - 24 - 4 = 68)。 */
 .deleteButton {
-  bottom: 27px;
+  top: 68px;
   right: 4px;
 }
 
@@ -93,11 +95,30 @@
 }
 
 .caption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 5px 7px;
+  text-align: left;
+}
+
+.captionTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--color-text);
+}
+
+.captionMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--color-text-muted);
-  padding: 5px 7px;
-  text-align: left;
 }
 
 @media (max-width: 767px) {
@@ -123,13 +144,14 @@
      では削除が 35〜75 になり、「+」(4〜44)と 9px 重なっていた。 */
   .caption {
     min-height: 44px;
-    display: flex;
-    align-items: center;
+    box-sizing: border-box;
+    justify-content: center;
     /* 右端の削除ボタン(44px)の分を空ける。 */
     padding-right: 48px;
   }
 
   .deleteButton {
+    top: auto;
     bottom: 0;
     right: 0;
     width: 44px;

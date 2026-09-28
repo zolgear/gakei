@@ -22,3 +22,28 @@ describe('stockAssetsQueryKey', () => {
     expect(key[1]).toBe('upload')
   })
 })
+
+describe('stockAssetsQueryKey(タグの絞り込み)', () => {
+  it('タグで絞ると末尾に tag を足す', () => {
+    expect(stockAssetsQueryKey('all', { ungrouped: true }, 'cat')).toEqual(['assets', 'all', 'ungrouped', 'tag', 'cat'])
+    expect(stockAssetsQueryKey('generated', { groupId: 'g1' }, 'cat')).toEqual([
+      'assets',
+      'generated',
+      'group',
+      'g1',
+      'tag',
+      'cat',
+    ])
+  })
+
+  it('null や空文字は絞り込みなしと同じキー', () => {
+    expect(stockAssetsQueryKey('all', { ungrouped: true }, null)).toEqual(['assets', 'all', 'ungrouped'])
+    expect(stockAssetsQueryKey('all', { ungrouped: true }, '')).toEqual(['assets', 'all', 'ungrouped'])
+  })
+
+  it('タグが違えば別のキー', () => {
+    expect(stockAssetsQueryKey('all', { groupId: 'g1' }, 'cat')).not.toEqual(
+      stockAssetsQueryKey('all', { groupId: 'g1' }, 'dog'),
+    )
+  })
+})

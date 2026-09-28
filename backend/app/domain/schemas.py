@@ -168,6 +168,55 @@ class AssetSummary(BaseModel):
     height: int
     bytes: int
     created_at: datetime
+    # タイトル(ADR-0024)。人が付けたものか自動のものかは `AssetDetail.title_source` を見る。
+    title: str | None = None
+
+
+class AssetTagRef(BaseModel):
+    """Asset に付いたタグ(ADR-0024 2章)。人が消したもの(removed)は含めない。"""
+
+    name: str
+    source: Literal["auto", "user"]
+
+
+class AnnotationStatusView(BaseModel):
+    """自動推定の状態(ADR-0024 4章)。一度も推定していなければ `AssetDetail.annotation` は null。"""
+
+    status: Literal["queued", "running", "succeeded", "failed"]
+    error: str | None = None
+    requested_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class AssetAnnotationResponse(BaseModel):
+    """タイトル・タグの編集と再推定の応答(更新後の注釈)。"""
+
+    asset_id: uuid.UUID
+    title: str | None = None
+    title_source: Literal["auto", "user"] | None = None
+    tags: list[AssetTagRef] = Field(default_factory=list)
+    annotation: AnnotationStatusView | None = None
+
+
+class AssetTitleUpdateRequest(BaseModel):
+    """`PATCH /api/assets/{id}/title`。null・空文字はタイトルを消す(以後も自動で付けない)。"""
+
+    title: str | None = None
+
+
+class AssetTagAddRequest(BaseModel):
+    """`POST /api/assets/{id}/tags`。名前は正規化して保存する(NFKC、小文字化など)。"""
+
+    name: str
+
+
+class TagCount(BaseModel):
+    name: str
+    count: int
+
+
+class TagListResponse(BaseModel):
+    items: list[TagCount] = Field(default_factory=list)
 
 
 class ProducedByRunSummary(BaseModel):
@@ -241,6 +290,10 @@ class AssetDetail(AssetSummary):
     # (2026-09-28 に `groups: []` から変更)。未所属、または削除済みグループにだけ残っている
     # ときは null。`AssetSummary` には足さない(一覧が重くなるため)。
     group: AssetGroupRef | None = None
+    # ADR-0024: タイトルの出所、タグ(removed を除く)、自動推定の状態。
+    title_source: Literal["auto", "user"] | None = None
+    tags: list[AssetTagRef] = Field(default_factory=list)
+    annotation: AnnotationStatusView | None = None
 
 
 class AssetUploadResponse(AssetDetail):
@@ -289,6 +342,8 @@ class RunInputRef(BaseModel):
 class RunOutputRef(BaseModel):
     asset_id: uuid.UUID
     output_index: int | None
+    # 出力 Asset のタイトル(ADR-0024。履歴のカード用)。
+    title: str | None = None
 
 
 class RunSummary(BaseModel):
@@ -524,7 +579,7 @@ class SearchAssetHit(AssetSummary):
     # Run 由来の一致でなければ null(embedded 由来、または produced_by_run_id を持たない Asset)。
     produced_by_run_id: uuid.UUID | None
     # 一致が Run の prompt 由来("run")か、埋め込まれた生成情報由来("embedded"、未検証)か。
-    prompt_source: Literal["run", "embedded"]
+    prompt_source: Literal["run", "embedded", "title", "tag"]
     prompt_snippet: str
 
 
@@ -788,3 +843,83 @@ class ApiTokenCreateRequest(BaseModel):
 class ApiTokenCreateResponse(ApiTokenRow):
     # 発行したトークンの値。この応答でだけ返し、以後は取り出せない。
     token: str
+
+
+# -- 自動タイトル・タグ(ADR-0024) ----------------------------------------------
+
+
+class OnnxModelStatus(BaseModel):
+    """ONNX タガーのモデル1つの状態。"""
+
+    name: Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
+    # 取得するファイル(model.onnx と selected_tags.csv)の合計の大きさ。
+    size_bytes: int
+    downloaded: bool
+    download_status: Literal["idle", "downloading", "failed"]
+    # 0〜1。ダウンロード中だけ値が入る。
+    download_progress: float | None = None
+    download_error: str | None = None
+
+
+class AnnotationSettingsResponse(BaseModel):
+    """`GET /api/settings/annotation`。"""
+
+    auto_on_ingest: bool
+    llm_enabled: bool
+    llm_model: str
+    vlm_enabled: bool
+    vlm_model: str
+    # 推定専用の接続先。null なら OpenAI の設定(キー、Base URL)を流用する。
+    base_url: str | None = None
+    api_style: Literal["responses", "chat"]
+    language: Literal["ja", "en"]
+    # タグの言語(ADR-0024 6章)。native はエンジン任せ、localized は `language` に合わせる。
+    tag_language: Literal["native", "localized"]
+    hourly_limit: int
+    onnx_enabled: bool
+    onnx_model: Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
+    onnx_threshold: float
+    # 推定専用の API キーを保存しているか(値は返さない)。
+    api_key_set: bool
+    onnx_models: list[OnnxModelStatus] = Field(default_factory=list)
+    # 一度も推定していない Asset(削除済み・マスクを除く)の件数。一括実行の対象。
+    pending_count: int
+    # 待ち行列にある件数(queued と running)。
+    queued_count: int
+    # 直近1時間の LLM・VLM の呼び出し回数(プロセス内で数える。再起動で 0 に戻る)。
+    calls_last_hour: int
+    # いま使えるエンジン(有効かつ、ONNX はモデルをダウンロード済み)。空なら推定できない。
+    usable_engines: list[Literal["llm", "vlm", "onnx"]] = Field(default_factory=list)
+
+
+class AnnotationSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/annotation`。省略した項目は変更しない。`base_url` は null か空文字で
+    「OpenAI の設定を流用」に戻す。値の妥当性は `app/domain/annotation_settings.py` が検証する。
+    """
+
+    auto_on_ingest: bool | None = None
+    llm_enabled: bool | None = None
+    llm_model: str | None = None
+    vlm_enabled: bool | None = None
+    vlm_model: str | None = None
+    base_url: str | None = None
+    api_style: str | None = None
+    language: str | None = None
+    tag_language: str | None = None
+    hourly_limit: int | None = None
+    onnx_enabled: bool | None = None
+    onnx_model: str | None = None
+    onnx_threshold: float | None = None
+
+
+class AnnotationApiKeyUpdateRequest(BaseModel):
+    api_key: str
+
+
+class OnnxDownloadRequest(BaseModel):
+    model: str
+
+
+class AnnotationBackfillResponse(BaseModel):
+    # 待ち行列に入れた件数。
+    queued: int

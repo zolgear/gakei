@@ -119,6 +119,15 @@ def write_secret_field(data_dir: Path, key: str, value: str) -> None:
     _write_payload_atomic(data_dir, payload)
 
 
+def delete_secret_field(data_dir: Path, key: str) -> None:
+    """`secrets.json` の任意フィールドを削除する。他に残るものが無ければファイル自体を消す。"""
+    payload = _read_payload(data_dir)
+    if key not in payload:
+        return
+    del payload[key]
+    _write_payload_atomic(data_dir, payload)
+
+
 def resolve_key(settings: Settings) -> tuple[str | None, Source | None]:
     """有効なキーとその出所を返す。環境変数 / `.env` が常に優先。"""
     if settings.openai_api_key:

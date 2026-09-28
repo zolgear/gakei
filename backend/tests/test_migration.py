@@ -21,6 +21,9 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "app_user",
         "auth_session",
         "api_token",
+        "asset_annotation",
+        "tag",
+        "asset_tag",
         "upload_ticket",
         "alembic_version",
     } <= tables
@@ -660,4 +663,39 @@ def test_migration_upgrades_from_0017_to_0018_adds_prompt_set_created_by(tmp_pat
     assert "created_by_user_id" not in columns_after_downgrade
     with engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM prompt_set")).scalar_one() == 1
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0018_to_0019_adds_annotation_tables(tmp_path) -> None:  # noqa: ANN001
+    """既存の0018適用済みDBでも、起動時のupgrade headで0019(asset_annotation、tag、asset_tag)
+    が当たること。downgrade でテーブルが消えること(ADR-0024)。
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    new_tables = {"asset_annotation", "tag", "asset_tag"}
+
+    command.upgrade(cfg, "0018")
+    engine = create_engine(f"sqlite:///{db_path}")
+    assert not new_tables & set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    assert new_tables <= set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.downgrade(cfg, "0018")
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables = set(sa_inspect(engine).get_table_names())
+    assert not new_tables & tables
+    assert "upload_ticket" in tables
     engine.dispose()
