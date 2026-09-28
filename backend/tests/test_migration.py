@@ -21,6 +21,9 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "app_user",
         "auth_session",
         "api_token",
+        "asset_annotation",
+        "tag",
+        "asset_tag",
         "alembic_version",
     } <= tables
 

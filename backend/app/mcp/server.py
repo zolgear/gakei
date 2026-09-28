@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.api.capabilities import get_capabilities_endpoint
 from app.api.prompt_sets import list_prompt_sets as list_prompt_sets_rest
+from app.domain import annotations as annotations_domain
 from app.domain import mcp_settings
 from app.domain import run_create as run_create_domain
 from app.domain.asset_groups import (
@@ -412,21 +413,39 @@ async def search_assets(
         Field(description="Only return assets of this kind."),
     ] = None,
     group_id: Annotated[uuid.UUID | None, Field(description="Only assets in this group.")] = None,
+    tag: Annotated[
+        str | None,
+        Field(description="Only assets with this tag (case-insensitive, exact tag name)."),
+    ] = None,
     limit: Annotated[int, Field(ge=1, le=SEARCH_LIMIT_MAX)] = 20,
     include_thumbnails: Annotated[
         bool, Field(description="Attach 512px WebP thumbnails of the results.")
     ] = False,
 ) -> CallToolResult:
-    """Search or list images in the GAKEI stock (newest first). Deleted assets are excluded."""
+    """Search or list images in the GAKEI stock (newest first). Deleted assets are excluded.
+
+    The query matches the generating prompt, prompts embedded in uploaded images, titles and
+    tag names. Results include each image's title and tags (`source` is "user" for tags a
+    person added, "auto" for automatically estimated ones, which may be wrong).
+    """
     mc = get_mcp_context(ctx)
+    tag_value = tag.strip() if tag and tag.strip() else None
 
     def _search() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
             if group_id is not None and get_active_group_or_none(db, group_id) is None:
                 raise ToolError(f"Group {group_id} not found.")
+            tag_clause = None
+            if tag_value is not None:
+                try:
+                    tag_clause = annotations_domain.tag_filter(tag_value)
+                except annotations_domain.TagNameError as e:
+                    raise ToolError(str(e)) from e
             if query and query.strip():
                 try:
-                    hits = search(db, query, limit=SEARCH_LIMIT_MAX, types={"asset"}).assets
+                    hits = search(
+                        db, query, limit=SEARCH_LIMIT_MAX, types={"asset"}, tag=tag_value
+                    ).assets
                 except InvalidSearchQueryError as e:
                     raise ToolError(str(e)) from e
                 snippets = {h.id: h.prompt_snippet for h in hits}
@@ -441,6 +460,8 @@ async def search_assets(
                 q = select(Asset).where(Asset.deleted_at.is_(None))
                 if kind is not None:
                     q = q.where(Asset.kind == kind)
+                if tag_clause is not None:
+                    q = q.where(tag_clause)
                 if group_id is not None:
                     q = q.join(
                         AssetGroupMember,
@@ -469,9 +490,14 @@ async def search_assets(
 
             truncated = len(assets) > limit
             assets = assets[:limit]
+            asset_ids = [a.id for a in assets]
+            titles = annotations_domain.bulk_titles(db, asset_ids)
+            tags_map = annotations_domain.bulk_tags(db, asset_ids)
             items = []
             for asset in assets:
                 item = _asset_brief(mc, asset)
+                item["title"] = titles.get(asset.id)
+                item["tags"] = [ref.model_dump(mode="json") for ref in tags_map.get(asset.id, [])]
                 group = group_for_asset(db, asset.id)
                 item["group"] = group.model_dump(mode="json") if group else None
                 if asset.id in snippets:
@@ -494,8 +520,11 @@ async def get_asset(
     asset_id: Annotated[uuid.UUID, Field(description="Asset ID.")],
     include_thumbnail: Annotated[bool, Field(description="Attach a 512px WebP thumbnail.")] = True,
 ) -> CallToolResult:
-    """Get an image's metadata: kind, size, group, the run that produced it (prompt, model,
-    parameters), and its primary parent image."""
+    """Get an image's metadata: kind, size, title, tags, group, the run that produced it
+    (prompt, model, parameters), and its primary parent image.
+
+    `title_source` and each tag's `source` are "user" when a person set them and "auto" when
+    they were estimated automatically (which may be wrong)."""
     mc = get_mcp_context(ctx)
 
     def _get() -> tuple[dict[str, Any], list[ImageContent]]:
@@ -504,6 +533,10 @@ async def get_asset(
             if asset is None:
                 raise ToolError(f"Asset {asset_id} not found.")
             payload = _asset_brief(mc, asset)
+            fields = annotations_domain.annotation_fields(db, asset.id)
+            payload["title"] = fields["title"]
+            payload["title_source"] = fields["title_source"]
+            payload["tags"] = [ref.model_dump(mode="json") for ref in fields["tags"]]
             group = group_for_asset(db, asset.id)
             payload["group"] = group.model_dump(mode="json") if group else None
             payload["produced_by_run"] = None
@@ -586,7 +619,13 @@ async def upload_image(
             except IngestError as e:
                 db.rollback()
                 raise ToolError(str(e)) from e
+            # ADR-0024 4章: 取り込み時の自動推定(設定がオンで、新しく作ったときだけ)。
+            queued = result.outcome == "created" and annotations_domain.enqueue_on_ingest(
+                db, result.asset, mc.state.settings
+            )
             db.commit()
+            if queued:
+                mc.state.annotator.notify()
             return _asset_brief(mc, result.asset), result.outcome
 
     payload, outcome = await _in_thread(_ingest)

@@ -157,6 +157,17 @@
     "mcp": {
       "invalidEnabled": "enabled は true か false である必要があります",
       "invalidHourlyRunLimit": "1時間あたりの上限は{min}〜{max}の整数である必要があります"
+    },
+    "annotation": {
+      "invalidBool": "{name} は true か false である必要があります",
+      "invalidModel": "モデル名は1〜{max}文字で指定してください",
+      "invalidApiStyle": "API 形式は responses か chat である必要があります",
+      "invalidLanguage": "言語は ja か en である必要があります",
+      "invalidHourlyLimit": "1時間あたりの上限は{min}〜{max}の整数である必要があります",
+      "invalidOnnxModel": "ONNX タガーのモデルは wd-vit-tagger-v3、wd-swinv2-tagger-v3、wd-eva02-large-tagger-v3 のいずれかです",
+      "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",
+      "unknownOnnxModel": "未知の ONNX タガーのモデルです",
+      "onnxDownloading": "ダウンロード中のモデルは削除できません"
     }
   },
   "runValidation": {
@@ -277,5 +288,22 @@
     "tokenRequired": "アクセストークンが必要です(Authorization: Bearer <token>)。",
     "tokenInvalid": "アクセストークンが無効か、失効しています。",
     "originForbidden": "この Origin からの MCP の呼び出しは許可されていません。"
+  },
+  "annotations": {
+    "tagEmpty": "タグ名を入力してください",
+    "tagTooLong": "タグ名は{max}文字以内にしてください",
+    "titleTooLong": "タイトルは{max}文字以内にしてください",
+    "maskNotSupported": "マスクにはタイトルやタグを付けられません",
+    "assetDeleted": "削除された画像にはタイトルやタグを付けられません",
+    "noEngine": "使える推定エンジンがありません。管理者設定の「自動タイトル・タグ」で LLM、VLM、ONNX タガーのいずれかを有効にしてください(ONNX タガーはモデルのダウンロードも必要です)",
+    "tagNotFound": "このタグは付いていません",
+    "invalidVlmResponse": "VLM の応答を JSON として読めませんでした",
+    "apiKeyMissing": "推定に使う API キーがありません。OpenAI の API キーか、推定専用のキーを設定してください",
+    "emptyTitle": "LLM がタイトルを返しませんでした",
+    "onnxModelMissing": "ONNX タガーのモデルが見つかりません。管理者設定からダウンロードしてください",
+    "download": {
+      "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
+      "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
+    }
   }
 }

@@ -14,6 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.annotation.wd_models import WdModelDownloader
 from app.api import about as about_api
 from app.api import api_tokens as api_tokens_api
 from app.api import asset_groups as asset_groups_api
@@ -27,6 +28,7 @@ from app.api import prompt_sets as prompt_sets_api
 from app.api import runs as runs_api
 from app.api import search as search_api
 from app.api import settings as settings_api
+from app.api import tags as tags_api
 from app.api import users as users_api
 from app.auth.deps import require_user
 from app.auth.oidc import AuthlibOidcClient
@@ -39,6 +41,7 @@ from app.i18n import console_t, parse_accept_language, set_locale, t
 from app.mcp.endpoint import McpEndpoint
 from app.mcp.server import build_mcp_server, build_session_manager
 from app.providers.registry import _is_loopback_url, build_registry
+from app.worker.annotator import Annotator
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
 
@@ -149,7 +152,12 @@ def _build_lifespan(settings: Settings):
         store = LocalFsStore(settings.data_dir)
         registry = build_registry(settings, session_factory)
         progress_bus = ProgressBus()
-        runner = Runner(session_factory, store, registry, progress_bus, settings.data_dir)
+        # ADR-0024: 自動タイトル・タグの推定の worker と、ONNX タガーのモデルのダウンロード。
+        annotator = Annotator(session_factory, store, settings)
+        wd_downloader = WdModelDownloader(settings.data_dir, fake=settings.fake_provider)
+        runner = Runner(
+            session_factory, store, registry, progress_bus, settings.data_dir, annotator=annotator
+        )
 
         app.state.settings = settings
         app.state.engine = engine
@@ -158,6 +166,8 @@ def _build_lifespan(settings: Settings):
         app.state.registry = registry
         app.state.progress_bus = progress_bus
         app.state.runner = runner
+        app.state.annotator = annotator
+        app.state.wd_downloader = wd_downloader
         if settings.auth_mode == "oidc":
             app.state.oidc_client = AuthlibOidcClient(settings)
 
@@ -167,11 +177,14 @@ def _build_lifespan(settings: Settings):
         app.state.mcp_session_manager = mcp_session_manager
 
         await runner.start()
+        await annotator.start()
         try:
             async with mcp_session_manager.run():
                 yield
         finally:
             await runner.stop()
+            await annotator.stop()
+            await wd_downloader.stop()
             engine.dispose()
 
     return lifespan
@@ -262,6 +275,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(events_api.router, dependencies=auth_dep)
     app.include_router(prompt_sets_api.router, dependencies=auth_dep)
     app.include_router(search_api.router, dependencies=auth_dep)
+    app.include_router(tags_api.router, dependencies=auth_dep)
     app.include_router(pricing_api.router, dependencies=auth_dep)
     app.include_router(settings_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)

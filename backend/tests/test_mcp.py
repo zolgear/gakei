@@ -550,3 +550,56 @@ def test_upload_image_larger_than_sdk_default_body_limit(client: TestClient) -> 
     encoded = base64.b64encode(data).decode("ascii")
     uploaded = _ok(_call(client, "upload_image", {"data_base64": encoded}))
     assert uploaded["bytes"] == len(data)
+
+
+# -- タイトルとタグ(ADR-0024) ---------------------------------------------------------
+
+
+def _upload_rest(client: TestClient, color: tuple[int, int, int]) -> str:
+    response = client.post(
+        "/api/assets",
+        files={"file": ("a.png", make_png_bytes(32, 32, color), "image/png")},
+        data={"kind": "upload"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def test_search_assets_filters_by_tag_and_returns_title_and_tags(client: TestClient) -> None:
+    _enable(client)
+    a = _upload_rest(client, (1, 2, 3))
+    b = _upload_rest(client, (4, 5, 6))
+    client.patch(f"/api/assets/{a}/title", json={"title": "夜の港"})
+    client.post(f"/api/assets/{a}/tags", json={"name": "harbor"})
+    client.post(f"/api/assets/{b}/tags", json={"name": "forest"})
+
+    payload = _ok(_call(client, "search_assets", {"tag": "Harbor"}))
+    assert [item["asset_id"] for item in payload["items"]] == [a]
+    item = payload["items"][0]
+    assert item["title"] == "夜の港"
+    assert item["tags"] == [{"name": "harbor", "source": "user"}]
+
+    # キーワードはタイトルにも当たる。tag と組み合わせられる。
+    payload = _ok(_call(client, "search_assets", {"query": "夜の港"}))
+    assert [item["asset_id"] for item in payload["items"]] == [a]
+    payload = _ok(_call(client, "search_assets", {"query": "夜の港", "tag": "forest"}))
+    assert payload["items"] == []
+
+
+def test_get_asset_returns_title_and_tags_with_source(client: TestClient) -> None:
+    from app.domain import annotations as ann
+
+    _enable(client)
+    asset_id = _upload_rest(client, (7, 8, 9))
+    client.post(f"/api/assets/{asset_id}/tags", json={"name": "cat"})
+    with client.app.state.session_factory() as db:
+        ann.apply_auto_result(db, uuid.UUID(asset_id), title="自動の題", tags=[("sky", 0.8)])
+        db.commit()
+
+    payload = _ok(_call(client, "get_asset", {"asset_id": asset_id, "include_thumbnail": False}))
+    assert payload["title"] == "自動の題"
+    assert payload["title_source"] == "auto"
+    assert payload["tags"] == [
+        {"name": "cat", "source": "user"},
+        {"name": "sky", "source": "auto"},
+    ]
