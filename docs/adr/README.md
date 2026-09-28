@@ -26,5 +26,6 @@
 | ADR-0020 | [0020-user-avatar.md](0020-user-avatar.md) | ユーザーのアバター画像(アップロードと生成画像からの選択) | Proposed |
 | ADR-0021 | [0021-release-and-container-image.md](0021-release-and-container-image.md) | リリース(バージョンとタグ)とコンテナイメージの公開 | Proposed |
 | ADR-0022 | [0022-asset-groups.md](0022-asset-groups.md) | グループ(ストックの手動整理) | Proposed |
+| ADR-0023 | [0023-mcp-server.md](0023-mcp-server.md) | MCP サーバー(外部の AI エージェントから GAKEI を操作する) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。
