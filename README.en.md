@@ -53,6 +53,7 @@ The first run takes a few minutes to fetch dependencies and build the UI. Once s
 - **Updating:** run `git pull`, then `./run.sh` (`run.bat`) again. The UI is rebuilt automatically if its source has changed.
 - **Startup options:** `--port 8001`, `--data-dir <absolute path>`, `--no-browser` (don't open a browser), `--host`.
 - **Data:** generated images, SQLite, and the API key saved from Settings (`secrets.json`) live under `data/`. Back up or delete that directory as a whole.
+- **Using it from AI agents:** register GAKEI as an MCP server in an AI agent such as Claude Code to generate images and search your stock from the agent. Enable it in Settings first. See [docs/mcp.md](docs/mcp.md) (Japanese).
 - **Using a proxy such as LiteLLM:** change the connection through Settings (or the `OPENAI_BASE_URL` environment variable). The proxy must offer the same model names GAKEI sends (GAKEI does not remap model names). Prices shown in the UI are still OpenAI's list prices and may not match the actual bill through a proxy.
 
 Configuration through environment variables (API key, base URL, data directory, timeouts, and so on) is described in [docs/configuration.md](docs/configuration.md) (Japanese). It is not usually needed.
