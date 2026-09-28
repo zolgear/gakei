@@ -153,6 +153,31 @@ class ApiToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
 
+class UploadTicket(Base):
+    """MCP の `create_upload_url` が発行する、1回限りのアップロード URL(ADR-0023 7章 2)。
+
+    URL に含むトークンは保存せず、SHA-256 のハッシュだけを持つ。有効期限は発行から10分。
+    使ったら `used_at` と取り込んだ `asset_id` を書く(証跡ではないが、行は消さない)。
+    `user_id` は発行者(個人モードは null)で、取り込んだ Asset の `created_by_user_id` になる。
+    `api_token_id` は認証モードで発行に使ったトークン(失効していたら URL も無効にする)。
+    """
+
+    __tablename__ = "upload_ticket"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    api_token_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("api_token.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("asset.id"), nullable=True)
+
+
 class Asset(Base):
     """画像そのものを表すノード。バイナリは不変で、blob_key は内容のハッシュから決まる。"""
 
@@ -321,6 +346,11 @@ class PromptSet(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 作成したユーザー(ADR-0025。マイグレーション 0018)。`none` モードと、0018 より前の行は
+    # null(認証モードでは管理者だけに見える)。追記のみ(INSERT 時に設定し、UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)

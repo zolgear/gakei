@@ -14,9 +14,12 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.deps import require_user
+from app.auth.identity import CurrentUser
 from app.deps import get_data_dir, get_progress_bus, get_session
 from app.domain.models import Asset, Run, RunStatus
 from app.domain.schemas import RunEvent
+from app.domain.visibility import get_visible_run, sees_everything
 from app.i18n import t
 from app.worker.progress import ProgressBus
 
@@ -68,8 +71,11 @@ async def stream_run_events(
     request: Request,
     db: Session = Depends(get_session),
     bus: ProgressBus = Depends(get_progress_bus),
+    user: CurrentUser = Depends(require_user),
 ) -> StreamingResponse:
-    run = db.get(Run, run_id)
+    # ADR-0025: 他人の Run は存在しないものと同じ 404(購読もさせない)。進捗は Run ごとの
+    # 購読なので、見える Run のイベントだけが流れる。
+    run = get_visible_run(db, user, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=t("runs.notFound"))
 
@@ -110,8 +116,15 @@ async def stream_run_events(
 
 @router.get("/{run_id}/partials/{index}", operation_id="get_run_partial")
 def get_run_partial(
-    run_id: uuid.UUID, index: int, data_dir: Path = Depends(get_data_dir)
+    run_id: uuid.UUID,
+    index: int,
+    data_dir: Path = Depends(get_data_dir),
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> FileResponse:
+    # ADR-0025: 途中経過画像も、見える Run のものだけ(個人モードは従来どおり Run を引かない)。
+    if not sees_everything(user) and get_visible_run(db, user, run_id) is None:
+        raise HTTPException(status_code=404, detail=t("runs.partialNotFound"))
     path = data_dir / "tmp" / "partial" / str(run_id) / f"{index}.png"
     if not path.exists():
         raise HTTPException(status_code=404, detail=t("runs.partialNotFound"))

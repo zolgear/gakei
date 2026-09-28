@@ -29,6 +29,7 @@ from app.api import runs as runs_api
 from app.api import search as search_api
 from app.api import settings as settings_api
 from app.api import tags as tags_api
+from app.api import uploads as uploads_api
 from app.api import users as users_api
 from app.auth.deps import require_user
 from app.auth.oidc import AuthlibOidcClient
@@ -280,6 +281,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(settings_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
+
+    # ADR-0023 7章: 画像の本体の配信(Cookie かアクセストークン。ルーター自身が認可を掛ける)と、
+    # 1回限りのアップロード URL の受け口(URL のトークン自体が認可)。どちらも `require_user`
+    # の括りに入れない。
+    app.include_router(assets_api.content_router)
+    app.include_router(uploads_api.router)
 
     # ADR-0023: MCP サーバー(Streamable HTTP、stateless)。認証は Cookie ではなく
     # アクセストークンなので `require_user` は掛けず、`McpEndpoint` の中で行う。

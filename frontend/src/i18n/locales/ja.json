@@ -1064,6 +1064,7 @@
       "sourceSameInstance": "この GAKEI",
       "sourceOtherInstance": "他の GAKEI",
       "viewOriginInLineage": "由来の Asset を系列グラフで見る",
+      "originHidden": "このインスタンスの別の Asset(表示できません)",
       "loadIntoForm": "この設定をフォームに読み込む",
       "inputsNotRestored": "入力画像は復元されません",
       "missingRecipe": "埋め込まれた設定に生成情報がありません",

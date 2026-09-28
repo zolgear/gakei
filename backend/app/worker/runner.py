@@ -201,7 +201,8 @@ def _finish_run_succeeded(
         if run.asset_group_id is not None and output_ids:
             group = asset_groups_domain.get_active_group_or_none(session, run.asset_group_id)
             if group is not None:
-                asset_groups_domain.add_members(session, group, output_ids)
+                # 実行者に見えるグループであることは Run の作成時に確かめ済み(ADR-0025)。
+                asset_groups_domain.add_members(session, group, output_ids, viewer=None)
 
         run.status = RunStatus.SUCCEEDED
         run.finished_at = _utcnow()

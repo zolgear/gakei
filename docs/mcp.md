@@ -37,7 +37,7 @@ claude mcp add --transport http gakei https://gakei.example.com/mcp \
 
 - トークンは発行した人として動き、そのトークンで作った Run の実行者もその人になる。
 - 漏れた、または使わなくなったトークンは、同じ画面で失効させる。
-- トークンは `/mcp` でしか使えない。REST API には使えない。
+- トークンが使えるのは `/mcp` と、画像の本体を取る `GET /api/assets/{id}/content` だけ。他の REST API には使えない(「4. 画像の受け渡し」)。
 
 ### その他のエージェント
 
@@ -59,21 +59,81 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 | ツール | 内容 |
 |---|---|
 | `get_capabilities` | 使えるプロバイダー、モデル、パラメーター、サイズ |
-| `generate_image` | Generate / Edit を実行する(**課金を伴う**)。入力画像とマスクは Asset ID で渡す。既定では完了まで待ち、出力を返す |
-| `get_run` | Run の状態と出力。完了まで待つこともできる |
+| `estimate_cost` | 生成する前に料金の目安(USD)を出す。Run は作らない |
+| `generate_image` | Generate / Edit を実行する(**課金を伴う**)。入力画像とマスクは Asset ID で渡す。Run を登録したらすぐ `run_id` を返す |
+| `get_run` | Run の状態、出力、料金の目安、1 時間の上限の残り。完了まで待つこともできる(1 回最大 25 秒) |
+| `list_runs` | 自分の最近の Run の一覧(実行元、作成時刻、状態で絞り込み) |
 | `cancel_run` | 待機中の Run を取り消す |
 | `search_assets` | ストックを検索する(キーワード、種類、グループ) |
 | `get_asset` | Asset の情報、主たる親、生成した Run |
-| `upload_image` | 画像(base64)を取り込み、Edit の入力にできるようにする |
+| `create_upload_url` | 手元の画像ファイルを送るための、10 分間・1 回限りのアップロード URL を発行する |
+| `upload_image` | 画像(base64)を取り込む。小さい画像向け。大きい画像は `create_upload_url` を使う |
 | `list_prompt_sets` | プロンプトセットの一覧 |
 | `list_groups` / `create_group` / `move_to_group` | グループの一覧、作成、Asset の移動 |
 
 削除と設定の変更は提供していない。画面で行う。
 
-- 出力は Asset ID、原本の URL、画面で開く URL で返る。本文に載る画像はサムネイル(512px)だけで、4K の原本は URL から取得する。認証モードでは、URL を開くのにブラウザのログインが要る。
+**閲覧範囲:** 認証モードでは、どのツールもトークンの持ち主が作ったものだけを扱う(画面と同じ。ADR-0025)。他人の Run・画像・グループ・プロンプトセットは検索にも一覧にも出ず、id を指定しても「見つからない」エラーになる。入力画像や出力先のグループにも自分のものだけを指定できる。画像の本体(`GET /api/assets/{id}/content`)をトークンで取るときも同じ。管理者のトークンでも他人のものは見えない(個人モードの頃のデータだけは管理者に見える)。
+
+- 出力は Asset ID、原本の URL、画面で開く URL で返る。本文に載る画像はサムネイル(512px)だけで、4K の原本は URL から取得する(「4. 画像の受け渡し」)。
+- `get_asset` は、原本から数えた透過の情報を返す。`has_alpha`(アルファチャンネルがあるか)と `transparent_ratio`(alpha < 255 のピクセルの割合。0〜1)。サムネイルでは透過かどうか分かりにくいので、背景を透過にしたかの確認に使う。
 - MCP 経由で作った Run は、Run の詳細に「実行元: MCP」と出る。
 
-## 4. 注意
+### 生成の流れ
+
+`generate_image` は完了を待たず、Run を登録したらすぐ `run_id` と状態(`queued` など)を返す。完了は `get_run` の `wait_seconds` で待つ。1 回の待ちは最大 25 秒で、終わっていなければ現在の状態が返るので、`succeeded`・`failed`・`canceled` になるまで繰り返す。MCP クライアントのタイムアウトで応答を受け取れず、`run_id` が分からなくなるのを避けるため。
+
+```text
+generate_image(prompt="a lighthouse at dusk", params={"size": "1024x1024", "quality": "low"})
+  → {"run_id": "…", "status": "queued", "quota": {"remaining": 29, …}, "cost": {…}}
+get_run(run_id="…", wait_seconds=25)
+  → {"status": "succeeded", "outputs": [{"asset_id": "…", "url": "…"}], …}
+```
+
+- `run_id` を見失ったときは `list_runs` で探せる。例: `list_runs(origin="mcp", since="2026-09-28T10:00:00Z")`。自分(トークンの持ち主)が作った Run だけを返す。個人モードでは全部の Run が自分の Run になる。
+- `wait=true` を付けると `generate_image` 自身も最大 25 秒待つ。打ち切っても `run_id` は返る。
+- **サイズは `params.size` に入れる**(`"1024x1024"` のような `幅x高さ`、または `"auto"`)。指定できる範囲は `get_capabilities` の `providers[].size` にある。画質などの他のパラメーターも `params` に入れる。`get_capabilities` の結果の `example_generate_image` がそのまま使える呼び出しの例になっている。
+
+### 料金の目安と上限の残り
+
+- `estimate_cost(provider, model, params, n)` は、画面の見積もりと同じ計算で料金の目安(USD)を返す。`params.quality` と `params.size` を指定しないと(`auto` のままでは)見積もれず、`total_usd` が `null` になって `unavailable_reason` に理由が入る。入力画像(`input_asset_ids`)とプロンプトも渡すと、その分のトークンも数える。ComfyUI のように料金表の無いプロバイダーは見積もれない。
+- Run の結果(`generate_image`・`get_run`・`list_runs`)の `cost` には、分かる場合だけ料金の目安が入る。完了した Run は実際の使用量(usage)から、実行前・実行中の Run はパラメーターからの見積もり(`basis` で区別)。どちらも請求額ではない。
+- 同じく `quota` に 1 時間の上限(`hourly_run_limit`)、直近 1 時間の件数(`runs_last_hour`)、残り(`remaining`)が入る。
+
+## 4. 画像の受け渡し
+
+### 手元の画像を送る(アップロード URL)
+
+`upload_image` は画像を base64 でツールの引数に書くので、数 MB の画像ではエージェントのトークンを大量に使う。手元のファイルは、`create_upload_url` で URL を発行し、curl などで本文をそのまま送る。
+
+```bash
+# create_upload_url の結果の upload_url に送る(10 分間・1 回限り有効)
+curl --fail-with-body -X PUT --data-binary @image.png \
+  'http://127.0.0.1:8000/api/uploads/<token>'
+# multipart でもよい
+curl --fail-with-body -F file=@image.png 'http://127.0.0.1:8000/api/uploads/<token>'
+```
+
+- 応答は JSON で、`asset_id` が入る。これを `generate_image` の `input_asset_ids` に渡す。
+- URL 自体が認可になっているので、`Authorization` ヘッダーは要らない。取り込んだ画像の作成者は、URL を発行した利用者になる。
+- 使用済みの URL・期限切れの URL は 410、存在しない URL は 404 になる。画像でない、大きすぎる(上限は画面のアップロードと同じ)などで断られた場合は、期限内ならもう一度使える。
+- 発行に使ったアクセストークンを失効させると、そのトークンで発行した未使用の URL も使えなくなる。MCP を無効にしている間は 404。
+- サーバーが指定の URL を取りに行く機能(`upload_from_url`)は無い。LAN 内の任意の URL に届く穴になるため。
+
+### 原寸の画像を取る
+
+結果の `url`(`/api/assets/{id}/content?variant=original`)で原本を取れる。個人モードでは認証は要らない。認証モードでは、`/mcp` と同じアクセストークンを付ければ取れる。
+
+```bash
+curl --fail -H "Authorization: Bearer gakei_..." -o output.png \
+  'https://gakei.example.com/api/assets/<asset_id>/content?variant=original'
+```
+
+- トークンを受け付けるのは、この画像の本体を取る GET だけ。他の REST API には使えない。
+- 失効したトークンは 401 になる。MCP を無効にしている間も、トークンでは取れない。
+- 期限つきの署名付き URL は発行しない。URL が漏れると誰でも開けるため。トークンなら失効で止められる。
+
+## 5. 注意
 
 - **公開範囲:** 個人モードの `/mcp` には認証がない。既定の `127.0.0.1` での待ち受けのまま使う。LAN やインターネットに出す場合は認証モードにする([auth.md](auth.md))。
 - **ブラウザからの呼び出し:** DNS リバインディング対策として、`Origin` ヘッダーの付いた呼び出しは、GAKEI 自身の origin でなければ拒否する。ホスト名で公開していて、ブラウザで動く MCP クライアントを使う場合は `PUBLIC_BASE_URL` を設定する([configuration.md](configuration.md))。

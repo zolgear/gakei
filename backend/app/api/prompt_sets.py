@@ -1,5 +1,8 @@
 """プロンプトセット(ADR-0009)。名前を付けたプロンプトの集まり。証跡ではないので
 更新・論理削除ができる。`run` との外部キーは張らない。件数が少ない前提でページングしない。
+
+ADR-0025: 認証モードでは本人が作ったもの(作成者が記録されていない以前のものは管理者)だけを
+扱う。他人のセットは存在しないものと同じ 404。
 """
 
 from __future__ import annotations
@@ -11,6 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.auth.deps import require_user
+from app.auth.identity import CurrentUser
 from app.deps import get_session
 from app.domain.models import PromptSet, PromptSetItem
 from app.domain.schemas import (
@@ -22,6 +27,7 @@ from app.domain.schemas import (
     PromptSetResponse,
     PromptSetUpdateRequest,
 )
+from app.domain.visibility import get_visible_prompt_set, prompt_set_visible
 from app.i18n import t
 
 router = APIRouter(prefix="/api/prompt-sets", tags=["prompt-sets"])
@@ -52,9 +58,9 @@ def _to_set_response(prompt_set: PromptSet, items: list[PromptSetItem]) -> Promp
     )
 
 
-def _get_active_set(db: Session, prompt_set_id: uuid.UUID) -> PromptSet:
-    prompt_set = db.get(PromptSet, prompt_set_id)
-    if prompt_set is None or prompt_set.deleted_at is not None:
+def _get_active_set(db: Session, prompt_set_id: uuid.UUID, user: CurrentUser) -> PromptSet:
+    prompt_set = get_visible_prompt_set(db, user, prompt_set_id)
+    if prompt_set is None:
         raise HTTPException(
             status_code=404,
             detail=t("promptSets.notFound"),
@@ -99,11 +105,13 @@ def _touch_set(db: Session, prompt_set_id: uuid.UUID, now: datetime) -> None:
 
 
 @router.get("", response_model=PromptSetListResponse, operation_id="list_prompt_sets")
-def list_prompt_sets(db: Session = Depends(get_session)) -> PromptSetListResponse:
+def list_prompt_sets(
+    db: Session = Depends(get_session), user: CurrentUser = Depends(require_user)
+) -> PromptSetListResponse:
     prompt_sets = (
         db.execute(
             select(PromptSet)
-            .where(PromptSet.deleted_at.is_(None))
+            .where(PromptSet.deleted_at.is_(None), prompt_set_visible(user))
             .order_by(PromptSet.updated_at.desc(), PromptSet.id.desc())
         )
         .scalars()
@@ -117,10 +125,14 @@ def list_prompt_sets(db: Session = Depends(get_session)) -> PromptSetListRespons
     "", response_model=PromptSetResponse, status_code=201, operation_id="create_prompt_set"
 )
 def create_prompt_set(
-    body: PromptSetCreateRequest, db: Session = Depends(get_session)
+    body: PromptSetCreateRequest,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> PromptSetResponse:
     now = _utcnow()
-    prompt_set = PromptSet(name=body.name, created_at=now, updated_at=now)
+    prompt_set = PromptSet(
+        name=body.name, created_by_user_id=user.id, created_at=now, updated_at=now
+    )
     db.add(prompt_set)
     db.flush()
 
@@ -145,9 +157,12 @@ def create_prompt_set(
     "/{prompt_set_id}", response_model=PromptSetResponse, operation_id="update_prompt_set"
 )
 def update_prompt_set(
-    prompt_set_id: uuid.UUID, body: PromptSetUpdateRequest, db: Session = Depends(get_session)
+    prompt_set_id: uuid.UUID,
+    body: PromptSetUpdateRequest,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> PromptSetResponse:
-    prompt_set = _get_active_set(db, prompt_set_id)
+    prompt_set = _get_active_set(db, prompt_set_id, user)
     prompt_set.name = body.name
     prompt_set.updated_at = _utcnow()
     db.commit()
@@ -155,8 +170,12 @@ def update_prompt_set(
 
 
 @router.delete("/{prompt_set_id}", status_code=204, operation_id="delete_prompt_set")
-def delete_prompt_set(prompt_set_id: uuid.UUID, db: Session = Depends(get_session)) -> None:
-    prompt_set = _get_active_set(db, prompt_set_id)
+def delete_prompt_set(
+    prompt_set_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> None:
+    prompt_set = _get_active_set(db, prompt_set_id, user)
     prompt_set.deleted_at = _utcnow()
     db.commit()
 
@@ -171,8 +190,9 @@ def add_prompt_set_item(
     prompt_set_id: uuid.UUID,
     body: PromptSetItemAppendRequest,
     db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> PromptSetItemResponse:
-    _get_active_set(db, prompt_set_id)
+    _get_active_set(db, prompt_set_id, user)
     existing = _get_active_items(db, prompt_set_id)
     now = _utcnow()
     item = PromptSetItem(
@@ -199,8 +219,9 @@ def update_prompt_set_item(
     item_id: uuid.UUID,
     body: PromptSetItemUpdateRequest,
     db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> PromptSetItemResponse:
-    _get_active_set(db, prompt_set_id)
+    _get_active_set(db, prompt_set_id, user)
     item = _get_active_item(db, prompt_set_id, item_id)
     now = _utcnow()
     fields_set = body.model_fields_set
@@ -228,9 +249,12 @@ def update_prompt_set_item(
     operation_id="delete_prompt_set_item",
 )
 def delete_prompt_set_item(
-    prompt_set_id: uuid.UUID, item_id: uuid.UUID, db: Session = Depends(get_session)
+    prompt_set_id: uuid.UUID,
+    item_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> None:
-    _get_active_set(db, prompt_set_id)
+    _get_active_set(db, prompt_set_id, user)
     item = _get_active_item(db, prompt_set_id, item_id)
     now = _utcnow()
     item.deleted_at = now

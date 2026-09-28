@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.auth.deps import require_user
+from app.auth.identity import CurrentUser
 from app.deps import get_session
 from app.domain import annotations as annotations_domain
 from app.domain.schemas import TagCount, TagListResponse
@@ -19,7 +21,9 @@ def list_tags(
     ),
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> TagListResponse:
-    """人が消したものと削除済みの Asset を除いて数える。件数の多い順、同数は名前順。"""
-    rows = annotations_domain.list_tags(db, q, limit)
+    """人が消したものと削除済みの Asset を除き、本人に見える Asset だけで数える(ADR-0025)。
+    件数の多い順、同数は名前順。"""
+    rows = annotations_domain.list_tags(db, user, q, limit)
     return TagListResponse(items=[TagCount(name=name, count=count) for name, count in rows])

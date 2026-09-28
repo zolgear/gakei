@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.auth.identity import LOCAL_ADMIN
 from app.domain import annotations as ann
 from app.domain.assets import ingest
 from app.domain.models import AssetAnnotation, AssetKind, AssetTag, Tag
@@ -184,18 +185,18 @@ def test_get_target_asset_rejects_mask_and_deleted(
     with db_session_factory() as db:
         mask = _asset(db, local_store, AssetKind.MASK)
         with pytest.raises(ann.AnnotationTargetError) as exc:
-            ann.get_target_asset(db, mask.id)
+            ann.get_target_asset(db, LOCAL_ADMIN, mask.id)
         assert exc.value.kind == "mask"
 
         deleted = _asset(db, local_store, color=(9, 9, 9))
         deleted.deleted_at = datetime.now(UTC)
         db.commit()
         with pytest.raises(ann.AnnotationTargetError) as exc:
-            ann.get_target_asset(db, deleted.id)
+            ann.get_target_asset(db, LOCAL_ADMIN, deleted.id)
         assert exc.value.kind == "deleted"
 
         with pytest.raises(ann.AnnotationTargetError) as exc:
-            ann.get_target_asset(db, uuid.uuid4())
+            ann.get_target_asset(db, LOCAL_ADMIN, uuid.uuid4())
         assert exc.value.kind == "not_found"
 
 
@@ -243,6 +244,6 @@ def test_list_tags_counts_exclude_removed_and_deleted(
         c.deleted_at = datetime.now(UTC)
         db.commit()
 
-        assert ann.list_tags(db, None, 50) == [("cat", 1), ("catalog", 1), ("dog", 1)]
-        assert ann.list_tags(db, "CAT", 50) == [("cat", 1), ("catalog", 1)]
-        assert ann.list_tags(db, "%", 50) == []
+        assert ann.list_tags(db, LOCAL_ADMIN, None, 50) == [("cat", 1), ("catalog", 1), ("dog", 1)]
+        assert ann.list_tags(db, LOCAL_ADMIN, "CAT", 50) == [("cat", 1), ("catalog", 1)]
+        assert ann.list_tags(db, LOCAL_ADMIN, "%", 50) == []

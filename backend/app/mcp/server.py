@@ -3,6 +3,9 @@
 ツールは REST を HTTP で呼ばず、REST と同じドメイン関数を直接呼ぶ。削除と設定の変更は
 提供しない。画像は Asset ID と URL で返し、本文に載せるのはサムネイル(512px WebP)だけ
 (ADR-0004)。
+
+ADR-0025: どのツールも、トークンの持ち主(`mc.user`)に見えるものだけを扱う
+(`app/domain/visibility.py`)。他人のものは「見つからない」と同じエラーにする。
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ import math
 import time
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import anyio.to_thread
@@ -33,10 +36,11 @@ from app.api.prompt_sets import list_prompt_sets as list_prompt_sets_rest
 from app.domain import annotations as annotations_domain
 from app.domain import mcp_settings
 from app.domain import run_create as run_create_domain
+from app.domain import upload_tickets as upload_tickets_domain
+from app.domain.alpha_stats import alpha_stats
 from app.domain.asset_groups import (
     AssetGroupAssetsMissingError,
     add_members,
-    get_active_group_or_none,
     group_for_asset,
 )
 from app.domain.asset_groups import create_group as create_group_domain
@@ -51,20 +55,33 @@ from app.domain.models import (
     RunInputRole,
     RunStatus,
 )
+from app.domain.pricing import EstimateResult, cost_from_usage
+from app.domain.pricing import estimate_cost as estimate_cost_domain
 from app.domain.schemas import AssetGroupCreate, RunCreateRequest, RunInputCreate
 from app.domain.search import MAX_LIMIT as SEARCH_MAX_LIMIT
 from app.domain.search import InvalidSearchQueryError, search
 from app.domain.storage import AssetStore
+from app.domain.visibility import (
+    asset_visible,
+    get_visible_asset,
+    get_visible_group,
+    get_visible_run,
+    run_visible,
+    visible_asset_ids,
+)
 from app.mcp.context import McpRequestContext, get_mcp_context
+from app.providers.openai_pricing import PRICING_CHECKED_AT, PRICING_SOURCE_URL
 from app.version import get_version
 
-# `generate_image` が完了を待つ上限(秒)。これを過ぎたら run_id と status を返し、
-# `get_run` の `wait_seconds` で続きを待ってもらう。
-WAIT_MAX_SECONDS = 240
+# 1回のツール呼び出しで Run の完了を待つ上限(秒。ADR-0023 7章 1)。一般的な MCP クライアントの
+# タイムアウトより短くし、応答が返らずに run_id が分からなくなる事態を避ける。これを過ぎたら
+# run_id と現在の状態を返し、`get_run` の `wait_seconds` で続きを待ってもらう。
+WAIT_MAX_SECONDS = 25
 _POLL_INTERVAL_SECONDS = 0.25
 
 # 1回の検索・一覧で返す件数の上限。
 SEARCH_LIMIT_MAX = SEARCH_MAX_LIMIT
+LIST_RUNS_LIMIT_MAX = 50
 
 # `upload_image` の本文の上限。REST のアップロードと同じ `MAX_UPLOAD_BYTES` を base64 に
 # した大きさに、JSON-RPC の包みの分の余裕を足す。
@@ -74,10 +91,22 @@ _TERMINAL = {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED}
 
 _INSTRUCTIONS = (
     "GAKEI is a self-hosted image generation workspace. Use get_capabilities to see models "
-    "and parameters, generate_image to create or edit images (this is billed to the GAKEI "
-    "operator), search_assets / get_asset to find existing images, and groups to organize "
-    "them. Images are referenced by asset ID; results include the original image URL and a "
-    "small thumbnail. Deleting and changing settings are only possible in the GAKEI web UI."
+    'and parameters (put the image size in params.size, e.g. {"size": "1024x1024"}), '
+    "estimate_cost to see a reference price, and generate_image to create or edit images "
+    "(this is billed to the GAKEI operator). generate_image returns a run_id right away; call "
+    "get_run with wait_seconds (up to 25 s per call, repeat as needed) until the status is "
+    "succeeded, failed or canceled. If you lose a run_id, list_runs shows your recent runs. "
+    "To use a local image as an edit input, call create_upload_url and send the file with "
+    "curl (upload_image with base64 is only for small images). search_assets / get_asset find "
+    "existing images, and groups organize them. Images are referenced by asset ID; results "
+    "include the original image URL (fetch it with the same Authorization header as /mcp when "
+    "GAKEI requires login) and a small thumbnail. Deleting and changing settings are only "
+    "possible in the GAKEI web UI."
+)
+
+_SIZE_HINT = (
+    'Put the image size in params.size as "WIDTHxHEIGHT" (e.g. {"size": "1024x1024"}) or '
+    '"auto"; the allowed range is in providers[].size of get_capabilities.'
 )
 
 
@@ -141,9 +170,11 @@ def _run_payload(
         .scalars()
         .all()
     )
+    # 見えない入力(以前のデータで他人の Asset を入力にしていた場合)は id も返さない(ADR-0025)。
+    visible_inputs = visible_asset_ids(db, mc.user, [i.asset_id for i in inputs])
     group = None
     if run.asset_group_id is not None:
-        g = get_active_group_or_none(db, run.asset_group_id)
+        g = get_visible_group(db, mc.user, run.asset_group_id)
         if g is not None:
             group = {"id": str(g.id), "name": g.name}
     payload: dict[str, Any] = {
@@ -164,12 +195,16 @@ def _run_payload(
         "inputs": [
             {"asset_id": str(i.asset_id), "role": str(i.role), "position": i.position}
             for i in inputs
+            if i.asset_id in visible_inputs
         ],
         "outputs": [_asset_brief(mc, a) for a in outputs],
     }
+    payload["cost"] = _run_cost(mc, db, run, inputs)
     if run.status not in _TERMINAL:
         payload["note"] = (
-            "The run has not finished yet. Call get_run with wait_seconds to wait for it."
+            "The run has not finished yet. Call get_run with this run_id and wait_seconds "
+            f"(up to {WAIT_MAX_SECONDS}) to wait for it; repeat until the status is succeeded, "
+            "failed or canceled."
         )
     images: list[ImageContent] = []
     if include_thumbnails:
@@ -185,7 +220,7 @@ def _load_run_result(
     mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool
 ) -> tuple[dict[str, Any], list[ImageContent]] | None:
     with _session(mc) as db:
-        run = db.get(Run, run_id)
+        run = get_visible_run(db, mc.user, run_id)
         if run is None or run.deleted_at is not None:
             return None
         return _run_payload(mc, db, run, include_thumbnails)
@@ -193,7 +228,7 @@ def _load_run_result(
 
 def _run_status(mc: McpRequestContext, run_id: uuid.UUID) -> RunStatus | None:
     with _session(mc) as db:
-        run = db.get(Run, run_id)
+        run = get_visible_run(db, mc.user, run_id)
         return None if run is None else RunStatus(run.status)
 
 
@@ -209,13 +244,108 @@ async def _wait_for_terminal(mc: McpRequestContext, run_id: uuid.UUID, seconds: 
 
 
 async def _run_result(
-    mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool
+    mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool, *, with_quota: bool
 ) -> CallToolResult:
     loaded = await _in_thread(lambda: _load_run_result(mc, run_id, include_thumbnails))
     if loaded is None:
         raise ToolError(f"Run {run_id} not found.")
     payload, images = loaded
+    if with_quota:
+        payload["quota"] = await _in_thread(lambda: _load_quota(mc))
     return _result(payload, images)
+
+
+def _quota(db: Session) -> dict[str, int]:
+    """MCP 経由の生成の、1時間の上限と残り(ADR-0023 7章 6)。"""
+    limit = mcp_settings.hourly_run_limit(db)
+    used = mcp_settings.count_recent_mcp_runs(db)
+    return {
+        "hourly_run_limit": limit,
+        "runs_last_hour": used,
+        "remaining": max(0, limit - used),
+    }
+
+
+def _load_quota(mc: McpRequestContext) -> dict[str, int]:
+    with _session(mc) as db:
+        return _quota(db)
+
+
+def _supports_pricing(mc: McpRequestContext, provider_name: str) -> bool:
+    provider = mc.state.registry.get(provider_name)
+    return bool(provider is not None and getattr(provider, "supports_pricing", False))
+
+
+def _input_sizes(
+    mc: McpRequestContext, db: Session, asset_ids: list[uuid.UUID]
+) -> list[tuple[uuid.UUID, int, int]]:
+    """見積もりに使う入力画像の大きさ(削除済み・大きさ不明・見えない(ADR-0025)ものは
+    数えない。REST と同じ)。"""
+    if not asset_ids:
+        return []
+    rows = db.execute(
+        select(Asset).where(
+            Asset.id.in_(asset_ids), Asset.deleted_at.is_(None), asset_visible(mc.user)
+        )
+    ).scalars()
+    by_id = {a.id: a for a in rows}
+    sizes: list[tuple[uuid.UUID, int, int]] = []
+    for asset_id in asset_ids:
+        asset = by_id.get(asset_id)
+        if asset is not None and asset.width and asset.height:
+            sizes.append((asset.id, asset.width, asset.height))
+    return sizes
+
+
+def _estimate(
+    mc: McpRequestContext,
+    db: Session,
+    model: str,
+    params: dict[str, Any],
+    n: int,
+    prompt_length: int,
+    input_asset_ids: list[uuid.UUID],
+) -> EstimateResult:
+    """画面の見積もり(`GET /api/pricing/estimate`)と同じ計算。quality・size を省いた場合は
+    API の既定(auto)として扱うので、見積もれない。"""
+    return estimate_cost_domain(
+        model=model,
+        quality=str(params.get("quality") or "auto"),
+        size=str(params.get("size") or "auto"),
+        n=n,
+        prompt_length=prompt_length,
+        input_images=_input_sizes(mc, db, input_asset_ids),
+    )
+
+
+def _params_n(params: dict[str, Any]) -> int:
+    value = params.get("n", 1)
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 1
+
+
+_COST_NOTE = "Reference price in USD computed by GAKEI, not an invoice."
+
+
+def _run_cost(
+    mc: McpRequestContext, db: Session, run: Run, inputs: list[RunInput]
+) -> dict[str, Any] | None:
+    """Run の料金の目安(分かる場合だけ)。成功した Run は実際の usage × 単価、それ以外の
+    実行前・実行中の Run はパラメーターからの見積もり。失敗・取り消しは null。"""
+    if not _supports_pricing(mc, run.provider):
+        return None
+    if run.usage:
+        usd = cost_from_usage(run.model, run.usage)
+        if usd is not None:
+            return {"usd": usd, "basis": "usage", "note": _COST_NOTE}
+        return None
+    if run.status in (RunStatus.FAILED, RunStatus.CANCELED):
+        return None
+    params = run.params or {}
+    image_ids = [i.asset_id for i in inputs if i.role == RunInputRole.IMAGE]
+    result = _estimate(mc, db, run.model, params, _params_n(params), len(run.prompt), image_ids)
+    if result.total_usd is None:
+        return None
+    return {"usd": round(result.total_usd, 6), "basis": "estimate", "note": _COST_NOTE}
 
 
 # -- ツール本体 --------------------------------------------------------------
@@ -225,11 +355,36 @@ async def get_capabilities(ctx: Context) -> CallToolResult:
     """List the image providers, models, parameters and size constraints GAKEI accepts.
 
     Use the returned `default_provider`, each provider's `default_model`, and the per-model
-    parameter definitions to build a `generate_image` call.
+    parameter definitions to build a `generate_image` call. The size is not in the per-model
+    parameter list: put it in params.size as "WIDTHxHEIGHT" (e.g. {"size": "1024x1024"}) within
+    the limits in providers[].size. `usage_notes` and `example_generate_image` show how.
     """
     mc = get_mcp_context(ctx)
     caps = await _in_thread(lambda: get_capabilities_endpoint(mc.state.registry))
-    return _result(caps.model_dump(mode="json"))
+    payload = caps.model_dump(mode="json")
+    default = next((p for p in caps.providers if p.provider == caps.default_provider), None)
+    example_params: dict[str, Any] = {}
+    if default is not None and default.size is not None:
+        example_params["size"] = default.default_size or "1024x1024"
+    if default is not None:
+        model_caps = next((m for m in default.models if m.model == default.default_model), None)
+        if model_caps is not None and "low" in model_caps.quality_choices:
+            example_params["quality"] = "low"
+    payload["usage_notes"] = [
+        _SIZE_HINT,
+        "Other parameters listed under models[].operations[].params also go in params "
+        "(e.g. quality, background, output_format, n).",
+        "generate_image returns right away with a run_id; wait with get_run(wait_seconds).",
+        "estimate_cost gives a reference price before running (set quality and size to get "
+        "a number; 'auto' cannot be estimated).",
+    ]
+    payload["example_generate_image"] = {
+        "prompt": "a lighthouse at dusk",
+        "operation": "generate",
+        **({"model": default.default_model} if default is not None else {}),
+        "params": example_params,
+    }
+    return _result(payload)
 
 
 def _create_mcp_run(mc: McpRequestContext, body: RunCreateRequest) -> uuid.UUID:
@@ -254,7 +409,7 @@ def _create_mcp_run(mc: McpRequestContext, body: RunCreateRequest) -> uuid.UUID:
                 mc.state.runner,
                 mc.state.settings,
                 body,
-                created_by_user_id=mc.user.id,
+                viewer=mc.user,
                 origin=run_create_domain.RunOrigin(
                     origin=mcp_settings.ORIGIN_MCP, api_token_id=mc.api_token_id
                 ),
@@ -282,7 +437,11 @@ async def generate_image(
     params: Annotated[
         dict[str, Any] | None,
         Field(
-            description="Model parameters (e.g. size, quality, n) as listed by get_capabilities."
+            description=(
+                "Model parameters as listed by get_capabilities, e.g. "
+                '{"size": "1024x1024", "quality": "low", "n": 1}. The size goes here as '
+                'params.size ("WIDTHxHEIGHT" or "auto"), not as a separate argument.'
+            )
         ),
     ] = None,
     input_asset_ids: Annotated[
@@ -303,11 +462,12 @@ async def generate_image(
         bool,
         Field(
             description=(
-                f"Wait up to {WAIT_MAX_SECONDS} seconds for the run to finish. If it has not "
-                "finished by then, the run_id and current status are returned."
+                f"If true, wait up to {WAIT_MAX_SECONDS} seconds for the run to finish before "
+                "returning. Either way the run_id is always returned; by default the call "
+                "returns right away and you wait with get_run(wait_seconds)."
             )
         ),
-    ] = True,
+    ] = False,
     include_thumbnails: Annotated[
         bool, Field(description="Attach 512px WebP thumbnails of the outputs.")
     ] = True,
@@ -315,9 +475,13 @@ async def generate_image(
     """Generate or edit images with GAKEI. Each call creates a new run that is BILLED to the
     GAKEI operator's image API account, and is recorded with its lineage.
 
-    The number of runs created through MCP per hour is limited by the administrator; when the
-    limit is reached, no run is created and an error is returned. Outputs are returned as
-    asset IDs with the original image URL (and optional thumbnails).
+    Returns right away with the run_id and status (queued/running); then call get_run with
+    wait_seconds (up to 25 s per call, repeat as needed) until it has finished. Put the size in
+    params.size, e.g. {"size": "1024x1024", "quality": "low"}. Use estimate_cost first to see
+    a reference price. The number of runs created through MCP per hour is limited by the
+    administrator; the result includes the remaining quota, and when the limit is reached no
+    run is created and an error is returned. Outputs are returned as asset IDs with the
+    original image URL (and optional thumbnails).
     """
     mc = get_mcp_context(ctx)
 
@@ -346,9 +510,22 @@ async def generate_image(
         asset_group_id=group_id,
     )
     run_id = await _in_thread(lambda: _create_mcp_run(mc, body))
-    if wait:
-        await _wait_for_terminal(mc, run_id, WAIT_MAX_SECONDS)
-    return await _run_result(mc, run_id, include_thumbnails)
+    # ここから先は Run ができている。何が起きても run_id を失わないよう、エラーにせず返す。
+    try:
+        if wait:
+            await _wait_for_terminal(mc, run_id, WAIT_MAX_SECONDS)
+        return await _run_result(mc, run_id, include_thumbnails, with_quota=True)
+    except Exception:  # noqa: BLE001
+        return _result(
+            {
+                "run_id": str(run_id),
+                "status": "unknown",
+                "note": (
+                    "The run was created, but its details could not be loaded. Call get_run "
+                    "with this run_id to check it."
+                ),
+            }
+        )
 
 
 async def get_run(
@@ -358,19 +535,23 @@ async def get_run(
         float,
         Field(
             ge=0,
-            le=WAIT_MAX_SECONDS,
-            description="Wait up to this many seconds for the run to finish (0 = do not wait).",
+            description=(
+                "Wait up to this many seconds for the run to finish (0 = do not wait). Values "
+                f"above {WAIT_MAX_SECONDS} are treated as {WAIT_MAX_SECONDS}; call again if it "
+                "is still queued or running."
+            ),
         ),
     ] = 0,
     include_thumbnails: Annotated[
         bool, Field(description="Attach 512px WebP thumbnails of the outputs.")
     ] = True,
 ) -> CallToolResult:
-    """Get a run's status, parameters and outputs. Optionally wait for it to finish."""
+    """Get a run's status, parameters, outputs, reference cost and the remaining hourly quota.
+    Optionally wait (up to 25 s per call) for it to finish."""
     mc = get_mcp_context(ctx)
     if wait_seconds > 0:
         await _wait_for_terminal(mc, run_id, wait_seconds)
-    return await _run_result(mc, run_id, include_thumbnails)
+    return await _run_result(mc, run_id, include_thumbnails, with_quota=True)
 
 
 async def cancel_run(
@@ -383,7 +564,7 @@ async def cancel_run(
 
     def _cancel() -> None:
         with _session(mc) as db:
-            run = db.get(Run, run_id)
+            run = get_visible_run(db, mc.user, run_id)
             if run is None or run.deleted_at is not None:
                 raise ToolError(f"Run {run_id} not found.")
             if run.status != RunStatus.QUEUED:
@@ -433,7 +614,7 @@ async def search_assets(
 
     def _search() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
-            if group_id is not None and get_active_group_or_none(db, group_id) is None:
+            if group_id is not None and get_visible_group(db, mc.user, group_id) is None:
                 raise ToolError(f"Group {group_id} not found.")
             tag_clause = None
             if tag_value is not None:
@@ -444,7 +625,12 @@ async def search_assets(
             if query and query.strip():
                 try:
                     hits = search(
-                        db, query, limit=SEARCH_LIMIT_MAX, types={"asset"}, tag=tag_value
+                        db,
+                        query,
+                        viewer=mc.user,
+                        limit=SEARCH_LIMIT_MAX,
+                        types={"asset"},
+                        tag=tag_value,
                     ).assets
                 except InvalidSearchQueryError as e:
                     raise ToolError(str(e)) from e
@@ -452,12 +638,16 @@ async def search_assets(
                 ids = [h.id for h in hits]
                 assets_by_id = {
                     a.id: a
-                    for a in db.execute(select(Asset).where(Asset.id.in_(ids))).scalars().all()
+                    for a in db.execute(
+                        select(Asset).where(Asset.id.in_(ids), asset_visible(mc.user))
+                    )
+                    .scalars()
+                    .all()
                 }
                 assets = [assets_by_id[i] for i in ids if i in assets_by_id]
             else:
                 snippets = {}
-                q = select(Asset).where(Asset.deleted_at.is_(None))
+                q = select(Asset).where(Asset.deleted_at.is_(None), asset_visible(mc.user))
                 if kind is not None:
                     q = q.where(Asset.kind == kind)
                 if tag_clause is not None:
@@ -498,7 +688,7 @@ async def search_assets(
                 item = _asset_brief(mc, asset)
                 item["title"] = titles.get(asset.id)
                 item["tags"] = [ref.model_dump(mode="json") for ref in tags_map.get(asset.id, [])]
-                group = group_for_asset(db, asset.id)
+                group = group_for_asset(db, asset.id, mc.user)
                 item["group"] = group.model_dump(mode="json") if group else None
                 if asset.id in snippets:
                     item["prompt_snippet"] = snippets[asset.id]
@@ -520,7 +710,8 @@ async def get_asset(
     asset_id: Annotated[uuid.UUID, Field(description="Asset ID.")],
     include_thumbnail: Annotated[bool, Field(description="Attach a 512px WebP thumbnail.")] = True,
 ) -> CallToolResult:
-    """Get an image's metadata: kind, size, title, tags, group, the run that produced it
+    """Get an image's metadata: kind, size, title, tags, transparency (has_alpha and
+    transparent_ratio, counted on the original image), group, the run that produced it
     (prompt, model, parameters), and its primary parent image.
 
     `title_source` and each tag's `source` are "user" when a person set them and "auto" when
@@ -529,15 +720,16 @@ async def get_asset(
 
     def _get() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
-            asset = db.get(Asset, asset_id)
+            asset = get_visible_asset(db, mc.user, asset_id)
             if asset is None:
                 raise ToolError(f"Asset {asset_id} not found.")
             payload = _asset_brief(mc, asset)
+            payload.update(_transparency(mc.state.store, asset))
             fields = annotations_domain.annotation_fields(db, asset.id)
             payload["title"] = fields["title"]
             payload["title_source"] = fields["title_source"]
             payload["tags"] = [ref.model_dump(mode="json") for ref in fields["tags"]]
-            group = group_for_asset(db, asset.id)
+            group = group_for_asset(db, asset.id, mc.user)
             payload["group"] = group.model_dump(mode="json") if group else None
             payload["produced_by_run"] = None
             payload["primary_parent_asset_id"] = None
@@ -561,6 +753,8 @@ async def get_asset(
                             RunInput.position == 0,
                         )
                     ).scalar_one_or_none()
+                    if parent is not None and not visible_asset_ids(db, mc.user, [parent]):
+                        parent = None
                     payload["primary_parent_asset_id"] = str(parent) if parent else None
             images: list[ImageContent] = []
             if include_thumbnail:
@@ -571,6 +765,16 @@ async def get_asset(
 
     payload, images = await _in_thread(_get)
     return _result(payload, images)
+
+
+def _transparency(store: AssetStore, asset: Asset) -> dict[str, Any]:
+    """原本から数えた透過の情報(ADR-0023 7章 4)。原本が読めなければ null。"""
+    path = store.content_path(asset.blob_key, asset.sha256, "original")
+    try:
+        stats = alpha_stats(asset.sha256, path)
+    except (OSError, ValueError):
+        return {"has_alpha": None, "transparent_ratio": None}
+    return {"has_alpha": stats.has_alpha, "transparent_ratio": stats.transparent_ratio}
 
 
 def _decode_image(data_base64: str) -> bytes:
@@ -599,8 +803,9 @@ async def upload_image(
         ),
     ],
 ) -> CallToolResult:
-    """Import an image into the GAKEI stock so it can be used as an input of generate_image
-    (operation 'edit'). Returns the new asset ID."""
+    """Import a small image (sent inline as base64) into the GAKEI stock so it can be used as
+    an input of generate_image (operation 'edit'). Returns the new asset ID. For anything
+    larger than a few hundred KB, use create_upload_url and send the file with curl instead."""
     mc = get_mcp_context(ctx)
     data = _decode_image(data_base64)
     if len(data) >= MAX_UPLOAD_BYTES:
@@ -614,7 +819,7 @@ async def upload_image(
                     mc.state.store,
                     data,
                     AssetKind.UPLOAD,
-                    created_by_user_id=mc.user.id,
+                    viewer=mc.user,
                 )
             except IngestError as e:
                 db.rollback()
@@ -639,7 +844,7 @@ async def list_prompt_sets(ctx: Context) -> CallToolResult:
 
     def _list() -> dict[str, Any]:
         with _session(mc) as db:
-            return list_prompt_sets_rest(db).model_dump(mode="json")
+            return list_prompt_sets_rest(db, mc.user).model_dump(mode="json")
 
     return _result(await _in_thread(_list))
 
@@ -650,7 +855,7 @@ async def list_groups(ctx: Context) -> CallToolResult:
 
     def _list() -> dict[str, Any]:
         with _session(mc) as db:
-            return {"items": [g.model_dump(mode="json") for g in list_groups_domain(db)]}
+            return {"items": [g.model_dump(mode="json") for g in list_groups_domain(db, mc.user)]}
 
     return _result(await _in_thread(_list))
 
@@ -668,7 +873,7 @@ async def create_group(
 
     def _create() -> dict[str, Any]:
         with _session(mc) as db:
-            row = create_group_domain(db, normalized, created_by_user_id=mc.user.id)
+            row = create_group_domain(db, normalized, mc.user)
             db.commit()
             return row.model_dump(mode="json")
 
@@ -688,11 +893,11 @@ async def move_to_group(
 
     def _move() -> dict[str, Any]:
         with _session(mc) as db:
-            group = get_active_group_or_none(db, group_id)
+            group = get_visible_group(db, mc.user, group_id)
             if group is None:
                 raise ToolError(f"Group {group_id} not found.")
             try:
-                row = add_members(db, group, asset_ids)
+                row = add_members(db, group, asset_ids, viewer=mc.user)
             except AssetGroupAssetsMissingError as e:
                 db.rollback()
                 ids = ", ".join(str(i) for i in e.missing_ids)
@@ -701,6 +906,211 @@ async def move_to_group(
             return row.model_dump(mode="json")
 
     return _result(await _in_thread(_move))
+
+
+async def list_runs(
+    ctx: Context,
+    origin: Annotated[
+        Literal["mcp", "web", "any"],
+        Field(description="'mcp' = created through MCP, 'web' = created in the web UI."),
+    ] = "any",
+    since: Annotated[
+        datetime | None,
+        Field(
+            description=(
+                "Only runs queued at or after this time (ISO 8601, e.g. 2026-09-28T10:00:00Z; "
+                "a time without an offset is UTC)."
+            )
+        ),
+    ] = None,
+    status: Annotated[
+        list[Literal["queued", "running", "succeeded", "failed", "canceled"]] | None,
+        Field(description="Only runs in one of these states."),
+    ] = None,
+    limit: Annotated[int, Field(ge=1, le=LIST_RUNS_LIMIT_MAX)] = 10,
+    include_thumbnails: Annotated[
+        bool, Field(description="Attach 512px WebP thumbnails of the outputs.")
+    ] = False,
+) -> CallToolResult:
+    """List your recent runs (newest first) with their status, outputs and reference cost, plus
+    the remaining hourly quota. Only runs created by you (the owner of the access token) are
+    listed; in personal mode (no login) every run is yours. Use it to find a run whose run_id
+    you lost, e.g. list_runs(origin="mcp", since="2026-09-28T10:00:00Z"). Deleted runs are
+    excluded."""
+    mc = get_mcp_context(ctx)
+
+    def _list() -> tuple[dict[str, Any], list[ImageContent]]:
+        with _session(mc) as db:
+            # ADR-0025: 常に本人の Run だけ(個人モードは全件が本人のもの)。
+            q = select(Run).where(Run.deleted_at.is_(None), run_visible(mc.user))
+            if origin == "mcp":
+                q = q.where(Run.origin == mcp_settings.ORIGIN_MCP)
+            elif origin == "web":
+                q = q.where(Run.origin.is_(None))
+            if since is not None:
+                moment = since if since.tzinfo is not None else since.replace(tzinfo=UTC)
+                q = q.where(Run.queued_at >= moment.astimezone(UTC))
+            if status:
+                q = q.where(Run.status.in_(status))
+            q = q.order_by(Run.queued_at.desc(), Run.id.desc()).limit(limit + 1)
+            runs = list(db.execute(q).scalars().all())
+            truncated = len(runs) > limit
+            items: list[dict[str, Any]] = []
+            images: list[ImageContent] = []
+            for run in runs[:limit]:
+                payload, thumbs = _run_payload(mc, db, run, include_thumbnails)
+                payload.pop("note", None)
+                items.append(payload)
+                images.extend(thumbs)
+            return {"items": items, "truncated": truncated, "quota": _quota(db)}, images
+
+    payload, images = await _in_thread(_list)
+    return _result(payload, images)
+
+
+async def create_upload_url(ctx: Context) -> CallToolResult:
+    """Get a one-time URL for uploading a local image file (valid for 10 minutes, one upload).
+
+    Send the file bytes with an HTTP PUT, e.g. `curl --fail-with-body -X PUT --data-binary
+    @image.png <upload_url>` (a multipart POST with `curl -F file=@image.png <upload_url>` also
+    works). No Authorization header is needed: the URL itself grants the upload. The response
+    is JSON with the new asset_id, which you can pass to generate_image as an edit input.
+    Prefer this over upload_image for anything but tiny images."""
+    mc = get_mcp_context(ctx)
+
+    def _issue() -> tuple[str, datetime]:
+        with _session(mc) as db:
+            row, raw = upload_tickets_domain.issue_ticket(
+                db, user_id=mc.user.id, api_token_id=mc.api_token_id
+            )
+            db.commit()
+            return raw, row.expires_at
+
+    raw, expires_at = await _in_thread(_issue)
+    url = f"{mc.base_url}/api/uploads/{raw}"
+    ttl = int(upload_tickets_domain.TICKET_TTL / timedelta(seconds=1))
+    return _result(
+        {
+            "upload_url": url,
+            "method": "PUT",
+            "expires_at": expires_at.isoformat(),
+            "expires_in_seconds": ttl,
+            "max_bytes": MAX_UPLOAD_BYTES - 1,
+            "accepted_formats": ["image/png", "image/jpeg", "image/webp"],
+            "curl_example": f"curl --fail-with-body -X PUT --data-binary @image.png '{url}'",
+            "curl_multipart_example": f"curl --fail-with-body -F file=@image.png '{url}'",
+            "note": (
+                "The URL works once and expires in 10 minutes. No Authorization header is "
+                "needed. The JSON response contains asset_id. If the upload is rejected "
+                "(not an image, too large), the URL can be used again until it expires."
+            ),
+        }
+    )
+
+
+_UNAVAILABLE_MESSAGES = {
+    "quality_auto": "quality is 'auto' (or not set); set params.quality (e.g. 'low').",
+    "size_auto": "size is 'auto' (or not set); set params.size (e.g. '1024x1024').",
+    "size_invalid": "params.size is not a valid size for this model.",
+    "unknown_model": "No price table for this model.",
+    "provider_not_supported": "This provider has no reference prices (e.g. a local ComfyUI).",
+}
+
+
+async def estimate_cost(
+    ctx: Context,
+    provider: Annotated[
+        str | None,
+        Field(description="Provider name from get_capabilities. Defaults to the primary one."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        Field(description="Model ID from get_capabilities. Defaults to the provider default."),
+    ] = None,
+    params: Annotated[
+        dict[str, Any] | None,
+        Field(
+            description=(
+                "The same params you would pass to generate_image, e.g. "
+                '{"size": "1024x1024", "quality": "low"}. quality and size are required for a '
+                "number ('auto' cannot be estimated)."
+            )
+        ),
+    ] = None,
+    n: Annotated[
+        int | None,
+        Field(ge=1, le=10, description="Number of images. Defaults to params.n or 1."),
+    ] = None,
+    prompt: Annotated[
+        str | None, Field(description="Optional prompt, to count its text tokens.")
+    ] = None,
+    input_asset_ids: Annotated[
+        list[uuid.UUID] | None,
+        Field(description="Optional edit input images, to count their tokens.", max_length=16),
+    ] = None,
+) -> CallToolResult:
+    """Estimate the reference price (USD) of a generate_image call without running it. This is
+    the same estimate the GAKEI web UI shows; it is not an invoice. When it cannot be
+    estimated, total_usd is null and unavailable_reason explains why."""
+    mc = get_mcp_context(ctx)
+    values = dict(params or {})
+
+    def _run() -> dict[str, Any]:
+        registry = mc.state.registry
+        name = provider or registry.primary
+        p = registry.get(name)
+        if p is None:
+            raise ToolError(f"Unknown provider: {name}")
+        resolved_model = model or p.capabilities().default_model
+        count = n if n is not None else _params_n(values)
+        base: dict[str, Any] = {
+            "provider": name,
+            "model": resolved_model,
+            "n": count,
+            "currency": "USD",
+            "note": _COST_NOTE,
+        }
+        if not getattr(p, "supports_pricing", False):
+            return {
+                **base,
+                "total_usd": None,
+                "unavailable_reason": "provider_not_supported",
+                "unavailable_message": _UNAVAILABLE_MESSAGES["provider_not_supported"],
+            }
+        with _session(mc) as db:
+            result = _estimate(
+                mc,
+                db,
+                resolved_model,
+                values,
+                count,
+                len(prompt or ""),
+                list(input_asset_ids or []),
+            )
+        reason = result.unavailable_reason
+        prices = result.unit_prices
+        return {
+            **base,
+            "total_usd": round(result.total_usd, 6) if result.total_usd is not None else None,
+            "unavailable_reason": reason,
+            "unavailable_message": _UNAVAILABLE_MESSAGES.get(reason) if reason else None,
+            "output_tokens_per_image": result.output_tokens_per_image,
+            "input_image_tokens": result.input_image_tokens,
+            "text_tokens": result.text_tokens,
+            "unit_prices_per_1m": (
+                {
+                    "text_input": prices.text_input,
+                    "image_input": prices.image_input,
+                    "image_output": prices.image_output,
+                }
+                if prices is not None
+                else None
+            ),
+            "pricing_source": PRICING_SOURCE_URL,
+            "pricing_checked_at": PRICING_CHECKED_AT,
+        }
+
+    return _result(await _in_thread(_run))
 
 
 # -- 組み立て ------------------------------------------------------------------
@@ -723,6 +1133,8 @@ def build_mcp_server() -> MCPServer:
         ),
     )
     server.add_tool(get_run, title="Get run", annotations=_READ_ONLY)
+    server.add_tool(list_runs, title="List runs", annotations=_READ_ONLY)
+    server.add_tool(estimate_cost, title="Estimate cost", annotations=_READ_ONLY)
     server.add_tool(
         cancel_run,
         title="Cancel run",
@@ -735,6 +1147,13 @@ def build_mcp_server() -> MCPServer:
     server.add_tool(
         upload_image,
         title="Upload image",
+        annotations=ToolAnnotations(
+            read_only_hint=False, destructive_hint=False, idempotent_hint=False
+        ),
+    )
+    server.add_tool(
+        create_upload_url,
+        title="Create upload URL",
         annotations=ToolAnnotations(
             read_only_hint=False, destructive_hint=False, idempotent_hint=False
         ),

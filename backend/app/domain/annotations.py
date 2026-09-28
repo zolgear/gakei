@@ -32,9 +32,11 @@ from sqlalchemy.orm import Session
 from app.domain import annotation_settings
 from app.domain.models import Asset, AssetAnnotation, AssetKind, AssetTag, Tag
 from app.domain.schemas import AnnotationStatusView, AssetAnnotationResponse, AssetTagRef
+from app.domain.visibility import asset_visible, get_visible_asset
 from app.i18n import t
 
 if TYPE_CHECKING:
+    from app.auth.identity import CurrentUser
     from app.config import Settings
 
 TAG_NAME_MAX = 100
@@ -110,9 +112,12 @@ def normalize_title(raw: str | None) -> str | None:
 # -- 対象の検査と行の取得 --------------------------------------------------------
 
 
-def get_target_asset(db: Session, asset_id: uuid.UUID) -> Asset:
-    """編集・推定の対象にできる Asset を返す(マスク・削除済みは不可)。"""
-    asset = db.get(Asset, asset_id)
+def get_target_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
+    """編集・推定の対象にできる Asset を返す(マスク・削除済みは不可)。
+
+    `user` に見えない Asset は存在しないのと同じ扱いにする(ADR-0025。404)。
+    """
+    asset = get_visible_asset(db, user, asset_id)
     if asset is None:
         raise AnnotationTargetError("not_found", t("assets.notFound"))
     if asset.kind == AssetKind.MASK:
@@ -479,17 +484,18 @@ def tag_name_matches(pattern: str) -> Any:
     )
 
 
-def list_tags(db: Session, q: str | None, limit: int) -> list[tuple[str, int]]:
+def list_tags(db: Session, user: CurrentUser, q: str | None, limit: int) -> list[tuple[str, int]]:
     """タグ名と件数(removed と削除済み Asset を除く)。件数の多い順、同数は名前順。
 
-    `q` は正規化してから部分一致で絞る(オートコンプリート用)。
+    `user` に見える Asset だけで数える(ADR-0025。他人の Asset にしか付いていないタグ名は
+    出さない)。`q` は正規化してから部分一致で絞る(オートコンプリート用)。
     """
     count = func.count(AssetTag.asset_id)
     query = (
         select(Tag.name, count)
         .join(AssetTag, AssetTag.tag_id == Tag.id)
         .join(Asset, Asset.id == AssetTag.asset_id)
-        .where(AssetTag.removed.is_(False), Asset.deleted_at.is_(None))
+        .where(AssetTag.removed.is_(False), Asset.deleted_at.is_(None), asset_visible(user))
         .group_by(Tag.id, Tag.name)
         .order_by(count.desc(), Tag.name.asc())
         .limit(limit)

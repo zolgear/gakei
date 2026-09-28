@@ -7,6 +7,8 @@
 
 将来 embedding 検索を足すときは、このモジュール(`search()` の中身)だけを差し替えれば
 よいように、API 層(app/api/search.py)からはここの関数を呼ぶだけにしている。
+
+ADR-0025: 見る人(`viewer`)に見えるものだけを検索する(`app/domain/visibility.py`)。
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from typing import Any, Literal
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
 from app.domain.models import Asset, AssetAnnotation, AssetKind, PromptSet, PromptSetItem, Run
 from app.domain.run_views import (
@@ -35,6 +38,7 @@ from app.domain.schemas import (
     SearchRunHit,
     SearchTruncated,
 )
+from app.domain.visibility import asset_visible, prompt_set_visible, run_visible
 from app.i18n import t
 
 VALID_TYPES = frozenset({"run", "asset", "prompt_set"})
@@ -108,13 +112,15 @@ def build_snippet(text: str, terms: list[str], context: int = SNIPPET_CONTEXT) -
     return f"{prefix}{text[start:end]}{suffix}"
 
 
-def _search_runs(db: Session, terms: list[str], limit: int) -> tuple[list[SearchRunHit], bool]:
+def _search_runs(
+    db: Session, terms: list[str], limit: int, viewer: CurrentUser
+) -> tuple[list[SearchRunHit], bool]:
     conditions = [
         func.lower(Run.prompt).like(_like_pattern(term), escape=_LIKE_ESCAPE_CHAR) for term in terms
     ]
     query = (
         select(Run)
-        .where(Run.deleted_at.is_(None), *conditions)
+        .where(Run.deleted_at.is_(None), run_visible(viewer), *conditions)
         .order_by(Run.queued_at.desc(), Run.id.desc())
         .limit(limit + 1)
     )
@@ -124,10 +130,10 @@ def _search_runs(db: Session, terms: list[str], limit: int) -> tuple[list[Search
 
     run_ids = [r.id for r in rows]
     outputs_map = bulk_output_refs(db, run_ids)
-    inputs_map = bulk_input_summary(db, run_ids)
-    descendant_map = bulk_descendant_run_counts(db, run_ids)
+    inputs_map = bulk_input_summary(db, run_ids, viewer)
+    descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
-    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows])
+    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], viewer)
 
     hits = [
         SearchRunHit(
@@ -160,7 +166,7 @@ def _embedded_prompt_text_expr() -> Any:
 
 
 def _search_assets(
-    db: Session, terms: list[str], limit: int, tag: str | None = None
+    db: Session, terms: list[str], limit: int, viewer: CurrentUser, tag: str | None = None
 ) -> tuple[list[SearchAssetHit], bool]:
     lowered_terms = [term.lower() for term in terms]
     embedded_text = _embedded_prompt_text_expr()
@@ -187,7 +193,11 @@ def _search_assets(
         select(Asset, Run.prompt, Run.deleted_at, AssetAnnotation.title)
         .outerjoin(Run, Asset.produced_by_run_id == Run.id)
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
-        .where(Asset.deleted_at.is_(None), *[term_condition(term) for term in terms])
+        .where(
+            Asset.deleted_at.is_(None),
+            asset_visible(viewer),
+            *[term_condition(term) for term in terms],
+        )
     )
     if tag is not None and tag.strip():
         query = query.where(annotations_domain.tag_filter(tag))
@@ -250,12 +260,12 @@ def _search_assets(
 
 
 def _search_prompt_sets(
-    db: Session, terms: list[str], limit: int
+    db: Session, terms: list[str], limit: int, viewer: CurrentUser
 ) -> tuple[list[SearchPromptSetHit], bool]:
     prompt_sets = (
         db.execute(
             select(PromptSet)
-            .where(PromptSet.deleted_at.is_(None))
+            .where(PromptSet.deleted_at.is_(None), prompt_set_visible(viewer))
             .order_by(PromptSet.updated_at.desc(), PromptSet.id.desc())
         )
         .scalars()
@@ -325,6 +335,7 @@ def search(
     db: Session,
     q: str,
     *,
+    viewer: CurrentUser,
     limit: int = DEFAULT_LIMIT,
     types: set[str] | None = None,
     tag: str | None = None,
@@ -348,11 +359,13 @@ def search(
     truncated_kwargs: dict[str, Any] = {}
 
     if "run" in selected_types:
-        run_hits, truncated_kwargs["runs"] = _search_runs(db, terms, limit)
+        run_hits, truncated_kwargs["runs"] = _search_runs(db, terms, limit, viewer)
     if "asset" in selected_types:
-        asset_hits, truncated_kwargs["assets"] = _search_assets(db, terms, limit, tag)
+        asset_hits, truncated_kwargs["assets"] = _search_assets(db, terms, limit, viewer, tag)
     if "prompt_set" in selected_types:
-        prompt_set_hits, truncated_kwargs["prompt_sets"] = _search_prompt_sets(db, terms, limit)
+        prompt_set_hits, truncated_kwargs["prompt_sets"] = _search_prompt_sets(
+            db, terms, limit, viewer
+        )
 
     return SearchResponse(
         query=q.strip(),
