@@ -1,5 +1,5 @@
 """ADR-0019: 2026-09-27 のセキュリティ監査で見つかった項目のテスト
-(M-1、L-1〜L-5、I-1、I-3〜I-11。L-6 を除く)。
+(M-1、L-1〜L-5、I-1、I-3〜I-11。L-6 を除く。I-3 は 2026-09-28 に複数端末のログインへ改めた)。
 
 `test_auth_api.py` / `test_auth_admin_enforcement.py` / `test_auth_created_by.py` /
 `test_auth_oidc_client.py` / `test_auth_authz_matrix.py` と役割を分け、こちらは監査の
@@ -282,29 +282,54 @@ def test_session_becomes_unauthenticated_when_email_leaves_allowed_domains(
     client_oidc.app.state.settings.auth_allowed_email_domains = ""
 
 
-# -- I-3: 再ログインで古いセッションが無効になる -----------------------------------
+# -- 複数端末のログイン(2026-09-28 改訂。I-3 の 1ユーザー1セッションを改めた) ---------
 
 
-def test_relogin_invalidates_previous_session_token(client_oidc: TestClient) -> None:
+def test_relogin_keeps_other_sessions(client_oidc: TestClient) -> None:
     login_as(client_oidc, "relogin@example.com", "Relogin One")
     old_token = client_oidc.cookies.get("gakei_session")
-    assert client_oidc.get("/api/capabilities").status_code == 200
 
     login_as(client_oidc, "relogin@example.com", "Relogin Two")
     new_token = client_oidc.cookies.get("gakei_session")
     assert new_token != old_token
 
-    # 古いトークンはもう有効ではない。
+    # 別の端末のログイン(古いトークン)も有効なまま。
     client_oidc.cookies.set("gakei_session", old_token)
-    assert client_oidc.get("/api/capabilities").status_code == 401
-
-    # 新しいトークンは有効。
+    assert client_oidc.get("/api/capabilities").status_code == 200
     client_oidc.cookies.set("gakei_session", new_token)
     assert client_oidc.get("/api/capabilities").status_code == 200
 
+
+def test_sessions_per_user_are_capped_oldest_first(client_oidc: TestClient) -> None:
+    from app.auth.sessions import MAX_SESSIONS_PER_USER
+
+    tokens = []
+    for i in range(MAX_SESSIONS_PER_USER + 2):
+        login_as(client_oidc, "many@example.com", f"Many {i}")
+        tokens.append(client_oidc.cookies.get("gakei_session"))
+
     with client_oidc.app.state.session_factory() as db:
-        sessions = db.execute(select(AuthSession)).scalars().all()
-        assert len(sessions) == 1
+        assert len(db.execute(select(AuthSession)).scalars().all()) == MAX_SESSIONS_PER_USER
+
+    # 最も古い2件は消え、残りは有効。
+    for token in tokens[:2]:
+        client_oidc.cookies.set("gakei_session", token)
+        assert client_oidc.get("/api/capabilities").status_code == 401
+    for token in tokens[2:]:
+        client_oidc.cookies.set("gakei_session", token)
+        assert client_oidc.get("/api/capabilities").status_code == 200
+
+
+def test_session_cap_is_per_user(client_oidc: TestClient) -> None:
+    from app.auth.sessions import MAX_SESSIONS_PER_USER
+
+    login_as(client_oidc, "other@example.com", "Other")
+    other_token = client_oidc.cookies.get("gakei_session")
+    for i in range(MAX_SESSIONS_PER_USER + 1):
+        login_as(client_oidc, "busy@example.com", f"Busy {i}")
+
+    client_oidc.cookies.set("gakei_session", other_token)
+    assert client_oidc.get("/api/capabilities").status_code == 200
 
 
 # -- I-9: logout の delete_cookie 属性 ----------------------------------------------

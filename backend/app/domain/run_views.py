@@ -3,6 +3,9 @@
 `RunSummary` の `outputs` / `primary_parent_asset_id` / `input_count` は
 一覧(app/api/runs.py)とグローバル検索(app/domain/search.py)の両方で必要になるため、
 ここに1か所にまとめる。複数 run_id をまとめて引く前提(N+1 を避ける)。
+
+ADR-0025: 見る人(`viewer`)に見えない Asset・Run・グループは、集計や参照に含めない
+(`app/domain/visibility.py`)。見える Run の出力は同じ実行者のものなので絞らない。
 """
 
 from __future__ import annotations
@@ -13,10 +16,20 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.identity import CurrentUser
 from app.domain.avatars import avatar_url
-from app.domain.models import AppUser, Asset, AssetGroup, Run, RunInput, RunInputRole
+from app.domain.models import (
+    AppUser,
+    Asset,
+    AssetAnnotation,
+    AssetGroup,
+    Run,
+    RunInput,
+    RunInputRole,
+)
 from app.domain.pricing import cost_from_usage
 from app.domain.schemas import AssetGroupRef, CreatedBy, RunOutputRef
+from app.domain.visibility import asset_visible, group_visible, run_visible
 
 
 def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[RunOutputRef]]:
@@ -25,21 +38,26 @@ def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, l
     if not run_ids:
         return result
     rows = db.execute(
-        select(Asset.produced_by_run_id, Asset.id, Asset.output_index)
+        select(Asset.produced_by_run_id, Asset.id, Asset.output_index, AssetAnnotation.title)
+        .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         .where(Asset.produced_by_run_id.in_(run_ids))
         .order_by(Asset.output_index)
     ).all()
-    for produced_by_run_id, asset_id, output_index in rows:
+    for produced_by_run_id, asset_id, output_index, title in rows:
         result[produced_by_run_id].append(
-            RunOutputRef(asset_id=asset_id, output_index=output_index)
+            RunOutputRef(asset_id=asset_id, output_index=output_index, title=title)
         )
     return result
 
 
 def bulk_input_summary(
-    db: Session, run_ids: list[uuid.UUID]
+    db: Session, run_ids: list[uuid.UUID], viewer: CurrentUser
 ) -> dict[uuid.UUID, tuple[int, uuid.UUID | None]]:
-    """run_id ごとの (role=image の入力枚数, 主たる親 asset_id) を1つの IN 句でまとめて取る。"""
+    """run_id ごとの (role=image の入力枚数, 主たる親 asset_id) を1つの IN 句でまとめて取る。
+
+    主たる親が `viewer` に見えない Asset なら null にする(ADR-0025。認証モードでの以前の
+    データのように、他人の Asset を入力にしていた Run のため)。枚数は Run 自身の情報なので数える。
+    """
     counts: dict[uuid.UUID, int] = dict.fromkeys(run_ids, 0)
     primary: dict[uuid.UUID, uuid.UUID | None] = dict.fromkeys(run_ids)
     if not run_ids:
@@ -53,12 +71,25 @@ def bulk_input_summary(
         counts[run_id] += 1
         if position == 0:
             primary[run_id] = asset_id
+    parent_ids = [aid for aid in primary.values() if aid is not None]
+    if parent_ids:
+        visible = set(
+            db.execute(select(Asset.id).where(Asset.id.in_(parent_ids), asset_visible(viewer)))
+            .scalars()
+            .all()
+        )
+        for run_id, asset_id in primary.items():
+            if asset_id is not None and asset_id not in visible:
+                primary[run_id] = None
     return {rid: (counts[rid], primary[rid]) for rid in run_ids}
 
 
-def bulk_descendant_run_counts(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+def bulk_descendant_run_counts(
+    db: Session, run_ids: list[uuid.UUID], viewer: CurrentUser
+) -> dict[uuid.UUID, int]:
     """run_id ごとの「子孫 Run 数」: この Run の出力 Asset を入力に使っている、削除されていない
     Run の数(distinct run_id、自分自身は除く)。削除確認ダイアログの警告に使う。
+    `viewer` に見える Run だけを数える(ADR-0025)。
     """
     result: dict[uuid.UUID, int] = dict.fromkeys(run_ids, 0)
     if not run_ids:
@@ -69,7 +100,11 @@ def bulk_descendant_run_counts(db: Session, run_ids: list[uuid.UUID]) -> dict[uu
         .select_from(RunInput)
         .join(Asset, Asset.id == RunInput.asset_id)
         .join(Run, Run.id == RunInput.run_id)
-        .where(Asset.produced_by_run_id.in_(run_ids), Run.deleted_at.is_(None))
+        .where(
+            Asset.produced_by_run_id.in_(run_ids),
+            Run.deleted_at.is_(None),
+            run_visible(viewer),
+        )
         .distinct()
     ).all()
     for produced_by_run_id, descendant_run_id in rows:
@@ -100,10 +135,11 @@ def bulk_users(db: Session, user_ids: list[uuid.UUID | None]) -> dict[uuid.UUID,
 
 
 def bulk_asset_groups(
-    db: Session, group_ids: list[uuid.UUID | None]
+    db: Session, group_ids: list[uuid.UUID | None], viewer: CurrentUser
 ) -> dict[uuid.UUID, AssetGroupRef]:
     """`run.asset_group_id` ごとの `AssetGroupRef` を1つの IN 句でまとめて取る(ADR-0022、
-    N+1 回避)。削除済みのグループは含めない(呼び出し側では null になる)。
+    N+1 回避)。削除済みのグループと、`viewer` に見えないグループは含めない(呼び出し側では
+    null になる。ADR-0025)。
     グループ指定のある Run がページに無ければクエリを発行しない。
     """
     ids = {gid for gid in group_ids if gid is not None}
@@ -111,7 +147,7 @@ def bulk_asset_groups(
         return {}
     rows = db.execute(
         select(AssetGroup.id, AssetGroup.name).where(
-            AssetGroup.id.in_(ids), AssetGroup.deleted_at.is_(None)
+            AssetGroup.id.in_(ids), AssetGroup.deleted_at.is_(None), group_visible(viewer)
         )
     ).all()
     return {gid: AssetGroupRef(id=gid, name=name) for gid, name in rows}

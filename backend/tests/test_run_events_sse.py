@@ -14,6 +14,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from app.api.events import stream_run_events
+from app.auth.identity import LOCAL_ADMIN
 from app.domain.models import Run, RunStatus
 from tests.conftest import wait_for_run_terminal
 
@@ -111,7 +112,9 @@ def test_sse_replays_latest_progress_and_partial_when_connecting_mid_run(
         await bus.publish(run_id, {"type": "partial", "index": 0, "output_index": 0})
 
         with session_factory() as session:
-            streaming = await stream_run_events(run_id, _NeverDisconnectedRequest(), session, bus)
+            streaming = await stream_run_events(
+                run_id, _NeverDisconnectedRequest(), session, bus, LOCAL_ADMIN
+            )
             events: list[dict] = []
             iterator = streaming.body_iterator.__aiter__()
             try:

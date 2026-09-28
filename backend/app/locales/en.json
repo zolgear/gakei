@@ -157,6 +157,18 @@
     "mcp": {
       "invalidEnabled": "enabled must be true or false",
       "invalidHourlyRunLimit": "The hourly limit must be an integer from {min} to {max}"
+    },
+    "annotation": {
+      "invalidBool": "{name} must be true or false",
+      "invalidModel": "The model name must be 1 to {max} characters",
+      "invalidApiStyle": "The API style must be responses or chat",
+      "invalidLanguage": "The language must be ja or en",
+      "invalidTagLanguage": "The tag language must be native or localized",
+      "invalidHourlyLimit": "The hourly limit must be an integer from {min} to {max}",
+      "invalidOnnxModel": "The ONNX tagger model must be wd-vit-tagger-v3, wd-swinv2-tagger-v3 or wd-eva02-large-tagger-v3",
+      "invalidThreshold": "The threshold must be a number from {min} to {max}",
+      "unknownOnnxModel": "Unknown ONNX tagger model",
+      "onnxDownloading": "A model cannot be deleted while it is downloading"
     }
   },
   "runValidation": {
@@ -277,5 +289,29 @@
     "tokenRequired": "An access token is required (Authorization: Bearer <token>).",
     "tokenInvalid": "The access token is invalid or has been revoked.",
     "originForbidden": "MCP requests from this Origin are not allowed."
+  },
+  "annotations": {
+    "tagEmpty": "Enter a tag name",
+    "tagTooLong": "Tag names must be {max} characters or fewer",
+    "titleTooLong": "Titles must be {max} characters or fewer",
+    "maskNotSupported": "Masks cannot have a title or tags",
+    "assetDeleted": "Deleted images cannot have a title or tags",
+    "noEngine": "No estimation engine is available. Enable the LLM, the VLM or the ONNX tagger in Admin settings > Auto titles and tags (the ONNX tagger also needs its model downloaded)",
+    "tagNotFound": "This tag is not on the image",
+    "invalidVlmResponse": "Could not read the VLM response as JSON",
+    "apiKeyMissing": "No API key for estimation. Set the OpenAI API key or a dedicated key for estimation",
+    "emptyTitle": "The LLM did not return a title",
+    "onnxModelMissing": "The ONNX tagger model was not found. Download it from Admin settings",
+    "download": {
+      "httpError": "Failed to download {file} (HTTP {status})",
+      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
+    }
+  },
+  "uploads": {
+    "notFound": "This upload URL does not exist.",
+    "gone": "This upload URL has already been used or has expired. Issue a new one with the MCP tool create_upload_url.",
+    "tooLarge": "Uploaded images must be under {mb}MB",
+    "empty": "The request body is empty. Send the image file bytes as the body.",
+    "noFile": "The multipart body does not contain an image file."
   }
 }

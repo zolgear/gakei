@@ -18,11 +18,12 @@ from app.auth.deps import get_current_user, get_oidc_client
 from app.auth.identity import CurrentUser
 from app.auth.oidc import OidcClient
 from app.auth.sessions import (
+    MAX_SESSIONS_PER_USER,
     create_session,
     is_email_allowed,
+    prune_oldest_sessions,
     purge_expired,
     revoke,
-    revoke_all_for_user,
     upsert_user,
 )
 from app.config import Settings
@@ -118,9 +119,9 @@ async def callback(
 
     user = upsert_user(db, identity, settings.admin_email_set())
     purge_expired(db)
-    # I-3(2026-09-27 追記): 1ユーザー1セッションにする。再ログインで古いセッション
-    # (別のブラウザ・端末で残っているものを含む)を無効化してから新しいセッションを作る。
-    revoke_all_for_user(db, user.id)
+    # 複数の端末で同時にログインできる(2026-09-28 改訂。ADR-0019 2章)。他の端末の
+    # セッションは消さず、1ユーザーあたり MAX_SESSIONS_PER_USER 件を超える古いものだけ消す。
+    prune_oldest_sessions(db, user.id, keep=MAX_SESSIONS_PER_USER - 1)
     raw_token = create_session(db, user, settings.auth_session_hours)
     db.commit()
 

@@ -8,6 +8,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.auth.deps import require_user
+from app.auth.identity import CurrentUser
 from app.deps import get_session
 from app.domain.schemas import SearchResponse
 from app.domain.search import (
@@ -28,10 +30,16 @@ def search_endpoint(
     types: str | None = Query(
         default=None, description="カンマ区切り。省略時は run,asset,prompt_set 全部"
     ),
+    tag: str | None = Query(
+        default=None,
+        description="Asset の結果をこのタグが付いたものに絞る(ADR-0024)。Run とプロンプト"
+        "セットの結果には影響しない",
+    ),
     db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> SearchResponse:
     try:
         selected_types = parse_types(types)
-        return search(db, q, limit=limit, types=selected_types)
+        return search(db, q, viewer=user, limit=limit, types=selected_types, tag=tag)
     except InvalidSearchQueryError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e

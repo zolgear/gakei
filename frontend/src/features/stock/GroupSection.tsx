@@ -70,6 +70,8 @@ interface GroupSectionProps {
   /** グループの節ならその行。「グループなし」の節は null。 */
   group: AssetGroupRow | null
   kind: StockKindFilter
+  /** タグの絞り込み(ADR-0024 5章)。絞っていなければ null。 */
+  tag: string | null
   open: boolean
   onToggleOpen: () => void
   /** 番兵の IntersectionObserver の root(スクロールするパネル)。 */
@@ -129,6 +131,7 @@ function useAssetDropZone(enabled: boolean, onDropAsset: (assetId: string) => vo
 export function GroupSection({
   group,
   kind,
+  tag,
   open,
   onToggleOpen,
   scrollRootRef,
@@ -407,6 +410,7 @@ export function GroupSection({
           <SectionAssets
             scope={group ? { groupId: group.id } : { ungrouped: true }}
             kind={kind}
+            tag={tag}
             scrollRootRef={scrollRootRef}
             tileActions={tileActions}
             noGroupsExist={noGroupsExist}
@@ -432,6 +436,7 @@ export function GroupSection({
 interface SectionAssetsProps {
   scope: StockSectionScope
   kind: StockKindFilter
+  tag: string | null
   scrollRootRef: RefObject<HTMLDivElement | null>
   tileActions: StockTileActions
   noGroupsExist: boolean
@@ -443,6 +448,7 @@ interface SectionAssetsProps {
 function SectionAssets({
   scope,
   kind,
+  tag,
   scrollRootRef,
   tileActions,
   noGroupsExist,
@@ -456,13 +462,14 @@ function SectionAssets({
   const sectionKey = groupId ?? UNGROUPED_SECTION_KEY
 
   const assetsQuery = useInfiniteQuery({
-    queryKey: stockAssetsQueryKey(kind, scope),
+    queryKey: stockAssetsQueryKey(kind, scope, tag),
     queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
       try {
         return await listAssets({
           limit: PAGE_SIZE,
           cursor: pageParam,
           kind: kind === 'all' ? undefined : kind,
+          tag: tag ?? undefined,
           ...(groupId ? { group_id: groupId } : { ungrouped: true }),
         })
       } catch (err) {
@@ -536,13 +543,13 @@ function SectionAssets({
     if (groupId) {
       return (
         <div className={styles.dropBox} data-dropping={emptyDrop.dropping} {...emptyDrop.handlers}>
-          {t.stock.groups.dropHere}
+          {tag ? t.stock.tagFilter.emptyInSection : t.stock.groups.dropHere}
         </div>
       )
     }
     return (
       <p className={styles.status} data-dropping={emptyDrop.dropping} {...emptyDrop.handlers}>
-        {noGroupsExist ? t.stock.emptyState : t.stock.groups.ungroupedEmpty}
+        {tag ? t.stock.tagFilter.emptyInSection : noGroupsExist ? t.stock.emptyState : t.stock.groups.ungroupedEmpty}
       </p>
     )
   }

@@ -305,23 +305,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/assets/{asset_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Asset Content */
-        get: operations["get_asset_content"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/assets/{asset_id}/lineage": {
         parameters: {
             query?: never;
@@ -333,6 +316,88 @@ export interface paths {
         get: operations["get_asset_lineage"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/title": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Asset Title
+         * @description タイトルを人が決める(以後の再推定で上書きしない)。null・空文字はタイトルを消し、
+         *     その状態も人の決定として保つ。
+         */
+        patch: operations["update_asset_title"];
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Asset Tag
+         * @description タグを足す(人のタグになる。自動のタグや、消したタグを付け直すのもこれ)。
+         */
+        post: operations["add_asset_tag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/tags/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Asset Tag
+         * @description タグを外す。消したことを記録し、同じタグを再推定で付け直さない。付いていなければ 404。
+         */
+        delete: operations["remove_asset_tag"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/annotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Annotate Asset
+         * @description この Asset の(再)推定を待ち行列に入れる。人が決めたタイトルとタグは保つ。
+         *     使えるエンジンが無ければ 409。既に待ち行列にあれば何もしない。
+         */
+        post: operations["annotate_asset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -404,7 +469,8 @@ export interface paths {
         /**
          * Add Asset Group Assets
          * @description Asset をこのグループへ移す。別のグループに入っていれば外してから入れ、既に入っている
-         *     ものは無視する。削除済みや存在しない Asset が1件でもあれば 404 で全体を拒む。
+         *     ものは無視する。削除済みや存在しない(他人のものを含む)Asset が1件でもあれば 404 で
+         *     全体を拒む。
          */
         post: operations["add_asset_group_assets"];
         delete?: never;
@@ -465,6 +531,7 @@ export interface paths {
          *
          *     出力 Asset(`produced_by_run_id = run_id` で未削除のもの)も同一トランザクションで
          *     論理削除する(ADR-0008「削除」追加分)。`run`/`run_input` の他の列は変更しない。
+         *     他人の Run は存在しないものと同じ 404(ADR-0025)。
          */
         delete: operations["delete_run"];
         options?: never;
@@ -611,6 +678,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tags
+         * @description 人が消したものと削除済みの Asset を除き、本人に見える Asset だけで数える(ADR-0025)。
+         *     件数の多い順、同数は名前順。
+         */
+        get: operations["list_tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/pricing/estimate": {
         parameters: {
             query?: never;
@@ -700,6 +788,105 @@ export interface paths {
         head?: never;
         /** Update Mcp Settings */
         patch: operations["update_mcp_settings"];
+        trace?: never;
+    };
+    "/api/settings/annotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Annotation Settings */
+        get: operations["get_annotation_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Annotation Settings */
+        patch: operations["update_annotation_settings"];
+        trace?: never;
+    };
+    "/api/settings/annotation/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Annotation Api Key
+         * @description 推定専用の API キーを保存する(`secrets.json`。値は返さない)。手元のサーバー向けに
+         *     任意の文字列を受け付けるため、有効性の確認はしない。
+         */
+        put: operations["set_annotation_api_key"];
+        post?: never;
+        /** Delete Annotation Api Key */
+        delete: operations["delete_annotation_api_key"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/annotation/onnx/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download Onnx Model
+         * @description モデルを Hugging Face からバックグラウンドで取得する。進み具合は GET の `onnx_models`
+         *     で見る。既にダウンロード中なら何もしない。
+         */
+        post: operations["download_onnx_model"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/annotation/onnx/{model}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Onnx Model */
+        delete: operations["delete_onnx_model"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/annotation/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backfill Annotations
+         * @description 一度も推定していない Asset(削除済み・マスクを除く)をまとめて待ち行列に入れる。
+         *     使えるエンジンが無ければ 409。
+         */
+        post: operations["backfill_annotations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/users/me/avatar": {
@@ -792,6 +979,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Asset Content */
+        get: operations["get_asset_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload By Url
+         * @description MCP の `create_upload_url` で発行した URL に画像を送り、ストックに取り込む。
+         *     URL は10分間・1回限り有効。不明な URL は 404、使用済み・期限切れは 410。
+         */
+        put: operations["upload_by_url"];
+        /**
+         * Upload By Url Post
+         * @description `PUT` と同じ(PUT を送りにくいクライアント向け。`curl -F file=@image.png` など)。
+         */
+        post: operations["upload_by_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -805,6 +1034,122 @@ export interface components {
             version: string;
             /** Commit */
             commit?: string | null;
+        };
+        /** AnnotationApiKeyUpdateRequest */
+        AnnotationApiKeyUpdateRequest: {
+            /** Api Key */
+            api_key: string;
+        };
+        /** AnnotationBackfillResponse */
+        AnnotationBackfillResponse: {
+            /** Queued */
+            queued: number;
+        };
+        /**
+         * AnnotationSettingsResponse
+         * @description `GET /api/settings/annotation`。
+         */
+        AnnotationSettingsResponse: {
+            /** Auto On Ingest */
+            auto_on_ingest: boolean;
+            /** Llm Enabled */
+            llm_enabled: boolean;
+            /** Llm Model */
+            llm_model: string;
+            /** Vlm Enabled */
+            vlm_enabled: boolean;
+            /** Vlm Model */
+            vlm_model: string;
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Api Style
+             * @enum {string}
+             */
+            api_style: "responses" | "chat";
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "ja" | "en";
+            /**
+             * Tag Language
+             * @enum {string}
+             */
+            tag_language: "native" | "localized";
+            /** Hourly Limit */
+            hourly_limit: number;
+            /** Onnx Enabled */
+            onnx_enabled: boolean;
+            /**
+             * Onnx Model
+             * @enum {string}
+             */
+            onnx_model: "wd-vit-tagger-v3" | "wd-swinv2-tagger-v3" | "wd-eva02-large-tagger-v3";
+            /** Onnx Threshold */
+            onnx_threshold: number;
+            /** Api Key Set */
+            api_key_set: boolean;
+            /** Onnx Models */
+            onnx_models?: components["schemas"]["OnnxModelStatus"][];
+            /** Pending Count */
+            pending_count: number;
+            /** Queued Count */
+            queued_count: number;
+            /** Calls Last Hour */
+            calls_last_hour: number;
+            /** Usable Engines */
+            usable_engines?: ("llm" | "vlm" | "onnx")[];
+        };
+        /**
+         * AnnotationSettingsUpdateRequest
+         * @description `PATCH /api/settings/annotation`。省略した項目は変更しない。`base_url` は null か空文字で
+         *     「OpenAI の設定を流用」に戻す。値の妥当性は `app/domain/annotation_settings.py` が検証する。
+         */
+        AnnotationSettingsUpdateRequest: {
+            /** Auto On Ingest */
+            auto_on_ingest?: boolean | null;
+            /** Llm Enabled */
+            llm_enabled?: boolean | null;
+            /** Llm Model */
+            llm_model?: string | null;
+            /** Vlm Enabled */
+            vlm_enabled?: boolean | null;
+            /** Vlm Model */
+            vlm_model?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Api Style */
+            api_style?: string | null;
+            /** Language */
+            language?: string | null;
+            /** Tag Language */
+            tag_language?: string | null;
+            /** Hourly Limit */
+            hourly_limit?: number | null;
+            /** Onnx Enabled */
+            onnx_enabled?: boolean | null;
+            /** Onnx Model */
+            onnx_model?: string | null;
+            /** Onnx Threshold */
+            onnx_threshold?: number | null;
+        };
+        /**
+         * AnnotationStatusView
+         * @description 自動推定の状態(ADR-0024 4章)。一度も推定していなければ `AssetDetail.annotation` は null。
+         */
+        AnnotationStatusView: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /** Error */
+            error?: string | null;
+            /** Requested At */
+            requested_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
         };
         /**
          * ApiTokenCreateRequest
@@ -858,6 +1203,24 @@ export interface components {
             /** Last Used At */
             last_used_at?: string | null;
         };
+        /**
+         * AssetAnnotationResponse
+         * @description タイトル・タグの編集と再推定の応答(更新後の注釈)。
+         */
+        AssetAnnotationResponse: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Title */
+            title?: string | null;
+            /** Title Source */
+            title_source?: ("auto" | "user") | null;
+            /** Tags */
+            tags?: components["schemas"]["AssetTagRef"][];
+            annotation?: components["schemas"]["AnnotationStatusView"] | null;
+        };
         /** AssetDetail */
         AssetDetail: {
             /**
@@ -883,6 +1246,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Title */
+            title?: string | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -906,6 +1271,11 @@ export interface components {
             used_as_input: boolean;
             created_by?: components["schemas"]["CreatedBy"] | null;
             group?: components["schemas"]["AssetGroupRef"] | null;
+            /** Title Source */
+            title_source?: ("auto" | "user") | null;
+            /** Tags */
+            tags?: components["schemas"]["AssetTagRef"][];
+            annotation?: components["schemas"]["AnnotationStatusView"] | null;
         };
         /** AssetGroupCreate */
         AssetGroupCreate: {
@@ -1015,6 +1385,11 @@ export interface components {
         AssetOrigin: {
             /** Asset Id */
             asset_id?: string | null;
+            /**
+             * Asset Hidden
+             * @default false
+             */
+            asset_hidden: boolean;
             /** Same Instance */
             same_instance: boolean;
             /** Meta */
@@ -1053,6 +1428,37 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * AssetTagAddRequest
+         * @description `POST /api/assets/{id}/tags`。名前は正規化して保存する(NFKC、小文字化など)。
+         */
+        AssetTagAddRequest: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * AssetTagRef
+         * @description Asset に付いたタグ(ADR-0024 2章)。人が消したもの(removed)は含めない。
+         */
+        AssetTagRef: {
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "auto" | "user";
+        };
+        /**
+         * AssetTitleUpdateRequest
+         * @description `PATCH /api/assets/{id}/title`。null・空文字はタイトルを消す(以後も自動で付けない)。
+         */
+        AssetTitleUpdateRequest: {
+            /** Title */
+            title?: string | null;
         };
         /**
          * AssetUploadResponse
@@ -1082,6 +1488,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Title */
+            title?: string | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -1105,6 +1513,11 @@ export interface components {
             used_as_input: boolean;
             created_by?: components["schemas"]["CreatedBy"] | null;
             group?: components["schemas"]["AssetGroupRef"] | null;
+            /** Title Source */
+            title_source?: ("auto" | "user") | null;
+            /** Tags */
+            tags?: components["schemas"]["AssetTagRef"][];
+            annotation?: components["schemas"]["AnnotationStatusView"] | null;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -1699,6 +2112,11 @@ export interface components {
             instance?: string | null;
             /** Resolved Asset Id */
             resolved_asset_id?: string | null;
+            /**
+             * Local Hidden
+             * @default false
+             */
+            local_hidden: boolean;
             /** Embedded Detail */
             embedded_detail?: {
                 [key: string]: unknown;
@@ -1811,6 +2229,35 @@ export interface components {
              * @enum {string}
              */
             default: "auto" | "low";
+        };
+        /** OnnxDownloadRequest */
+        OnnxDownloadRequest: {
+            /** Model */
+            model: string;
+        };
+        /**
+         * OnnxModelStatus
+         * @description ONNX タガーのモデル1つの状態。
+         */
+        OnnxModelStatus: {
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "wd-vit-tagger-v3" | "wd-swinv2-tagger-v3" | "wd-eva02-large-tagger-v3";
+            /** Size Bytes */
+            size_bytes: number;
+            /** Downloaded */
+            downloaded: boolean;
+            /**
+             * Download Status
+             * @enum {string}
+             */
+            download_status: "idle" | "downloading" | "failed";
+            /** Download Progress */
+            download_progress?: number | null;
+            /** Download Error */
+            download_error?: string | null;
         };
         /** OpenAIBaseUrlStatusResponse */
         OpenAIBaseUrlStatusResponse: {
@@ -2332,6 +2779,8 @@ export interface components {
             asset_id: string;
             /** Output Index */
             output_index: number | null;
+            /** Title */
+            title?: string | null;
         };
         /**
          * RunSummary
@@ -2436,13 +2885,15 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Title */
+            title?: string | null;
             /** Produced By Run Id */
             produced_by_run_id: string | null;
             /**
              * Prompt Source
              * @enum {string}
              */
-            prompt_source: "run" | "embedded";
+            prompt_source: "run" | "embedded" | "title" | "tag";
             /** Prompt Snippet */
             prompt_snippet: string;
         };
@@ -2614,6 +3065,18 @@ export interface components {
             /** Outputs */
             outputs?: string[];
         };
+        /** TagCount */
+        TagCount: {
+            /** Name */
+            name: string;
+            /** Count */
+            count: number;
+        };
+        /** TagListResponse */
+        TagListResponse: {
+            /** Items */
+            items?: components["schemas"]["TagCount"][];
+        };
         /** UnitPricesPer1M */
         UnitPricesPer1M: {
             /** Text Input */
@@ -2622,6 +3085,29 @@ export interface components {
             image_input: number;
             /** Image Output */
             image_output: number;
+        };
+        /** UploadByUrlResponse */
+        UploadByUrlResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /** Kind */
+            kind: string;
+            /** Mime */
+            mime: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Bytes */
+            bytes: number;
+            /** Sha256 */
+            sha256: string;
+            /** Ingest Outcome */
+            ingest_outcome: string;
+            /** Url */
+            url: string;
+            /** Viewer Url */
+            viewer_url: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -3193,6 +3679,8 @@ export interface operations {
                 group_id?: string | null;
                 /** @description true なら、削除済みでないどのグループにも入っていない Asset だけに絞る(ストックの「グループなし」の節。ADR-0022)。`group_id` と同時には指定できない。 */
                 ungrouped?: boolean;
+                /** @description 指定すると、そのタグ(人が消したものを除く)が付いた Asset だけに絞る(ADR-0024)。名前は保存時と同じく正規化して比べる。 */
+                tag?: string | null;
                 limit?: number;
                 cursor?: string | null;
             };
@@ -3356,42 +3844,6 @@ export interface operations {
             };
         };
     };
-    get_asset_content: {
-        parameters: {
-            query?: {
-                variant?: "thumb" | "preview" | "original";
-                download?: number;
-            };
-            header?: never;
-            path: {
-                asset_id: string;
-            };
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_asset_lineage: {
         parameters: {
             query?: {
@@ -3417,6 +3869,147 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetLineageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_asset_title: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetTitleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetAnnotationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_asset_tag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetTagAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetAnnotationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_asset_tag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+                name: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetAnnotationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    annotate_asset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetAnnotationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4157,6 +4750,8 @@ export interface operations {
                 limit?: number;
                 /** @description カンマ区切り。省略時は run,asset,prompt_set 全部 */
                 types?: string | null;
+                /** @description Asset の結果をこのタグが付いたものに絞る(ADR-0024)。Run とプロンプトセットの結果には影響しない */
+                tag?: string | null;
             };
             header?: never;
             path?: never;
@@ -4173,6 +4768,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tags: {
+        parameters: {
+            query?: {
+                /** @description 部分一致で絞る(正規化してから比べる)。省略時は全件 */
+                q?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4551,6 +5181,237 @@ export interface operations {
             };
         };
     };
+    get_annotation_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_annotation_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_annotation_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationApiKeyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_annotation_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_onnx_model: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnnxDownloadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_onnx_model: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backfill_annotations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationBackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_avatar: {
         parameters: {
             query?: never;
@@ -4770,6 +5631,116 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_asset_content: {
+        parameters: {
+            query?: {
+                variant?: "thumb" | "preview" | "original";
+                download?: number;
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_by_url: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        /** @description 画像ファイル(PNG / JPEG / WebP)のバイト列そのもの。multipart/form-data も可。 */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+                "image/png": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadByUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_by_url_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        /** @description 画像ファイル(PNG / JPEG / WebP)のバイト列そのもの。multipart/form-data も可。 */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+                "image/png": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadByUrlResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

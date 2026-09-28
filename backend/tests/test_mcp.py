@@ -73,6 +73,23 @@ def _run_count(client: TestClient) -> int:
         return db.execute(select(func.count()).select_from(Run)).scalar_one()
 
 
+def _wait_run(
+    client: TestClient, run_id: str, headers: dict[str, str] | None = None, **extra: Any
+) -> dict[str, Any]:
+    """`get_run` で完了を待つ(生の結果を返す)。FAKE なので数秒で終わる。"""
+    return _call(client, "get_run", {"run_id": run_id, "wait_seconds": 10, **extra}, headers)
+
+
+def _generate(
+    client: TestClient, arguments: dict[str, Any], headers: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """`generate_image`(すぐ返る)→ `get_run` で完了を待ち、完了後の payload を返す。"""
+    created = _ok(_call(client, "generate_image", arguments, headers))
+    payload = _ok(_wait_run(client, created["run_id"], headers))
+    assert payload["status"] == "succeeded", payload
+    return payload
+
+
 def _upload_b64(color: tuple[int, int, int] = (10, 120, 200)) -> str:
     return base64.b64encode(make_png_bytes(64, 64, color)).decode("ascii")
 
@@ -95,10 +112,13 @@ def test_tools_list_when_enabled(client: TestClient) -> None:
         "get_capabilities",
         "generate_image",
         "get_run",
+        "list_runs",
+        "estimate_cost",
         "cancel_run",
         "search_assets",
         "get_asset",
         "upload_image",
+        "create_upload_url",
         "list_prompt_sets",
         "list_groups",
         "create_group",
@@ -112,6 +132,16 @@ def test_tools_list_when_enabled(client: TestClient) -> None:
     assert generate["annotations"]["destructiveHint"] is False
     assert tools["get_capabilities"]["annotations"]["readOnlyHint"] is True
     assert tools["search_assets"]["annotations"]["readOnlyHint"] is True
+    assert tools["list_runs"]["annotations"]["readOnlyHint"] is True
+    assert tools["estimate_cost"]["annotations"]["readOnlyHint"] is True
+    upload_url = tools["create_upload_url"]["annotations"]
+    assert upload_url["readOnlyHint"] is False
+    assert upload_url["destructiveHint"] is False
+    # size は params.size に入れる旨をツールの説明に書く(ADR-0023 7章 5)。
+    assert "params.size" in generate["description"]
+    assert "params.size" in tools["get_capabilities"]["description"]
+    # 待つかどうかの既定は「待たない」(ADR-0023 7章 1)。
+    assert generate["inputSchema"]["properties"]["wait"]["default"] is False
 
 
 def test_modern_protocol_version_header_is_served(client: TestClient) -> None:
@@ -152,7 +182,9 @@ def test_get_capabilities_tool(client: TestClient) -> None:
 
 def test_generate_image_returns_outputs_and_thumbnail(client: TestClient) -> None:
     _enable(client)
-    result = _call(client, "generate_image", {"prompt": "a lighthouse at dusk"})
+    created = _ok(_call(client, "generate_image", {"prompt": "a lighthouse at dusk"}))
+    assert created["run_id"]
+    result = _wait_run(client, created["run_id"])
     payload = _ok(result)
     assert payload["status"] == "succeeded"
     assert payload["origin"] == "mcp"
@@ -180,8 +212,9 @@ def test_generate_image_returns_outputs_and_thumbnail(client: TestClient) -> Non
 
 def test_generate_image_without_thumbnails(client: TestClient) -> None:
     _enable(client)
-    result = _call(client, "generate_image", {"prompt": "no thumbs", "include_thumbnails": False})
-    _ok(result)
+    created = _ok(_call(client, "generate_image", {"prompt": "no thumbs"}))
+    result = _wait_run(client, created["run_id"], include_thumbnails=False)
+    assert _ok(result)["status"] == "succeeded"
     assert [c["type"] for c in result["content"]] == ["text"]
 
 
@@ -260,19 +293,15 @@ def test_upload_image_then_edit(client: TestClient) -> None:
     assert uploaded["ingest_outcome"] == "created"
     asset_id = uploaded["asset_id"]
 
-    payload = _ok(
-        _call(
-            client,
-            "generate_image",
-            {
-                "prompt": "make it sunset",
-                "operation": "edit",
-                "model": "gpt-image-2.5-sunburst",
-                "input_asset_ids": [asset_id],
-            },
-        )
+    payload = _generate(
+        client,
+        {
+            "prompt": "make it sunset",
+            "operation": "edit",
+            "model": "gpt-image-2.5-sunburst",
+            "input_asset_ids": [asset_id],
+        },
     )
-    assert payload["status"] == "succeeded"
     assert payload["inputs"] == [{"asset_id": asset_id, "role": "image", "position": 0}]
 
     output_id = payload["outputs"][0]["asset_id"]
@@ -293,7 +322,7 @@ def test_upload_image_accepts_data_url_and_rejects_bad_base64(client: TestClient
 
 def test_groups_search_and_prompt_sets(client: TestClient) -> None:
     _enable(client)
-    generated = _ok(_call(client, "generate_image", {"prompt": "zebra crossing at noon"}))
+    generated = _generate(client, {"prompt": "zebra crossing at noon"})
     asset_id = generated["outputs"][0]["asset_id"]
     uploaded = _ok(_call(client, "upload_image", {"data_base64": _upload_b64()}))
 
@@ -410,7 +439,7 @@ def test_oidc_mcp_with_token_records_user_and_token(client_oidc: TestClient) -> 
     auth = {"Authorization": f"Bearer {token}"}
     me = client_oidc.get("/api/auth/me").json()
 
-    payload = _ok(_call(client_oidc, "generate_image", {"prompt": "with token"}, headers=auth))
+    payload = _generate(client_oidc, {"prompt": "with token"}, headers=auth)
     uploaded = _ok(_call(client_oidc, "upload_image", {"data_base64": _upload_b64()}, headers=auth))
 
     detail = client_oidc.get(f"/api/runs/{payload['run_id']}").json()
@@ -550,3 +579,56 @@ def test_upload_image_larger_than_sdk_default_body_limit(client: TestClient) -> 
     encoded = base64.b64encode(data).decode("ascii")
     uploaded = _ok(_call(client, "upload_image", {"data_base64": encoded}))
     assert uploaded["bytes"] == len(data)
+
+
+# -- タイトルとタグ(ADR-0024) ---------------------------------------------------------
+
+
+def _upload_rest(client: TestClient, color: tuple[int, int, int]) -> str:
+    response = client.post(
+        "/api/assets",
+        files={"file": ("a.png", make_png_bytes(32, 32, color), "image/png")},
+        data={"kind": "upload"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def test_search_assets_filters_by_tag_and_returns_title_and_tags(client: TestClient) -> None:
+    _enable(client)
+    a = _upload_rest(client, (1, 2, 3))
+    b = _upload_rest(client, (4, 5, 6))
+    client.patch(f"/api/assets/{a}/title", json={"title": "夜の港"})
+    client.post(f"/api/assets/{a}/tags", json={"name": "harbor"})
+    client.post(f"/api/assets/{b}/tags", json={"name": "forest"})
+
+    payload = _ok(_call(client, "search_assets", {"tag": "Harbor"}))
+    assert [item["asset_id"] for item in payload["items"]] == [a]
+    item = payload["items"][0]
+    assert item["title"] == "夜の港"
+    assert item["tags"] == [{"name": "harbor", "source": "user"}]
+
+    # キーワードはタイトルにも当たる。tag と組み合わせられる。
+    payload = _ok(_call(client, "search_assets", {"query": "夜の港"}))
+    assert [item["asset_id"] for item in payload["items"]] == [a]
+    payload = _ok(_call(client, "search_assets", {"query": "夜の港", "tag": "forest"}))
+    assert payload["items"] == []
+
+
+def test_get_asset_returns_title_and_tags_with_source(client: TestClient) -> None:
+    from app.domain import annotations as ann
+
+    _enable(client)
+    asset_id = _upload_rest(client, (7, 8, 9))
+    client.post(f"/api/assets/{asset_id}/tags", json={"name": "cat"})
+    with client.app.state.session_factory() as db:
+        ann.apply_auto_result(db, uuid.UUID(asset_id), title="自動の題", tags=[("sky", 0.8)])
+        db.commit()
+
+    payload = _ok(_call(client, "get_asset", {"asset_id": asset_id, "include_thumbnail": False}))
+    assert payload["title"] == "自動の題"
+    assert payload["title_source"] == "auto"
+    assert payload["tags"] == [
+        {"name": "cat", "source": "user"},
+        {"name": "sky", "source": "auto"},
+    ]

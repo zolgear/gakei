@@ -141,14 +141,29 @@ def revoke(db: Session, raw: str) -> None:
     db.flush()
 
 
-def revoke_all_for_user(db: Session, user_id: uuid.UUID) -> None:
-    """指定ユーザーの既存セッションを全て消す(I-3、2026-09-27 追記)。
+MAX_SESSIONS_PER_USER = 10
 
-    1ユーザー1セッションにするため、`create_session` の直前に呼ぶ(再ログインしても
-    古いブラウザ・端末のセッションが残り続けることを防ぐ)。
+
+def prune_oldest_sessions(db: Session, user_id: uuid.UUID, keep: int) -> None:
+    """指定ユーザーのセッションを新しい順に `keep` 件だけ残し、それより古いものを消す。
+
+    同じ利用者が複数の端末で同時にログインできるようにしつつ(2026-09-28 改訂。以前は
+    1ユーザー1セッションだった。ADR-0019 2章)、使われなくなった端末のセッションが
+    際限なく増えないよう、`create_session` の直前に `keep=MAX_SESSIONS_PER_USER - 1` で呼ぶ。
     """
-    db.execute(delete(AuthSession).where(AuthSession.user_id == user_id))
-    db.flush()
+    stale_ids = (
+        db.execute(
+            select(AuthSession.id)
+            .where(AuthSession.user_id == user_id)
+            .order_by(AuthSession.created_at.desc(), AuthSession.id.desc())
+            .offset(keep)
+        )
+        .scalars()
+        .all()
+    )
+    if stale_ids:
+        db.execute(delete(AuthSession).where(AuthSession.id.in_(stale_ids)))
+        db.flush()
 
 
 def purge_expired(db: Session) -> None:

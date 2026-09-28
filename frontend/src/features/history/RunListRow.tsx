@@ -45,6 +45,8 @@ export function RunListRow({ run, ariaLabel }: RunListRowProps) {
         )}
       </span>
       <span className={styles.body}>
+        {/* 先頭出力のタイトル(ADR-0024)があれば、プロンプトの上に 1 行で出す。 */}
+        {firstOutput?.title && <span className={styles.title}>{firstOutput.title}</span>}
         <span className={styles.prompt}>{run.prompt || t.history.card.noPrompt}</span>
         {/* 狭い幅では末尾から欠けるので、重要な順(状態 → 日時 → モデル)に並べる。モデルは
             履歴カードと同じく model_label(ComfyUI ならワークフロー名)を優先する。 */}

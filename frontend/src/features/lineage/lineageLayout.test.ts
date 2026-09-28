@@ -9,6 +9,7 @@ function assetNode(id: string, depth: number): LineageNode {
     depth,
     deleted: false,
     embedded: false,
+    local_hidden: false,
     asset: { kind: 'generated', width: 1024, height: 1024, mime: 'image/png', restorable: false },
   }
 }
@@ -20,6 +21,7 @@ function runNode(id: string, depth: number): LineageNode {
     depth,
     deleted: false,
     embedded: false,
+    local_hidden: false,
     run: { operation: 'edit', model: 'gpt-image-2.5-sunburst', status: 'succeeded', prompt: 'p', queued_at: '2026-01-01T00:00:00Z' },
   }
 }

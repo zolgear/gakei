@@ -137,8 +137,22 @@ export function SearchPanel() {
                       </span>
                     )}
                   </div>
-                  <span className={styles.assetSnippet}>
+                  {/* タイトル(ADR-0024)。一致したのがタイトルそのものなら、下の抜粋がタイトルなので重ねない。 */}
+
+                  {hit.title && hit.prompt_source !== 'title' && (
+
+                    <span className={styles.assetTitle} title={hit.title}>
+
+                      {hit.title}
+
+                    </span>
+
+                  )}
+
+                  <span className={styles.assetSnippet} data-source={hit.prompt_source}>
+
                     <HighlightedText text={hit.prompt_snippet} query={debouncedQuery} />
+
                   </span>
                 </button>
               ))}

@@ -191,10 +191,10 @@
   "search": {
     "ariaLabel": "検索",
     "clear": "検索語を消す",
-    "placeholder": "プロンプトを検索",
+    "placeholder": "プロンプト・タイトル・タグを検索",
     "searching": "検索中...",
-    "noResults": "見つかりません。埋め込まれた生成情報の無いアップロード画像は検索対象外です",
-    "noResultsPeriod": "見つかりません。埋め込まれた生成情報の無いアップロード画像は検索対象外です。",
+    "noResults": "見つかりません。タイトルもタグも生成情報も無いアップロード画像は検索対象外です",
+    "noResultsPeriod": "見つかりません。タイトルもタグも生成情報も無いアップロード画像は検索対象外です。",
     "embeddedBadge": "未検証",
     "embeddedTitle": "画像に埋め込まれた生成情報(未検証)のプロンプトに一致しました",
     "groupRuns": "Generated",
@@ -345,6 +345,118 @@
         "help": "入力画像を使わない生成(Generate API)にだけ適用されます。編集(Edit)には影響しません。low は auto より制限が緩く、auto は OpenAI の標準のフィルタリングです。",
         "savedToast": "moderation を保存しました",
         "resetToDefault": "既定値({default})に戻す"
+      }
+    },
+    "annotation": {
+      "heading": "自動タイトル・タグ",
+      "intro": "画像にタイトルとタグを自動で付けます。タイトルはプロンプトから LLM で推測し、タグは画像から VLM や ONNX タガーで推定します。人が付けたタイトルとタグは上書きしません。どのエンジンも既定では無効です。",
+      "loading": "読み込み中...",
+      "loadFailed": "自動タイトル・タグの設定を取得できませんでした。",
+      "retry": "再読み込み",
+      "saveFailed": "保存に失敗しました",
+      "savedToast": "設定を保存しました",
+      "save": "保存",
+      "unsavedChanges": "保存していない変更があります",
+      "autoOnIngestLabel": "取り込み時に自動で推定する",
+      "autoOnIngestHelp": "生成の出力、アップロード、スケッチを取り込むたびに推定の待ち行列に入れます。",
+      "usableEnginesLabel": "使えるエンジン",
+      "usableEnginesNone": "なし(下でエンジンを有効にしてください)",
+      "engineNames": {
+        "llm": "LLM(タイトル)",
+        "vlm": "VLM(タグ)",
+        "onnx": "ONNX タガー(タグ)"
+      },
+      "api": {
+        "heading": "LLM・VLM(外部の API)",
+        "externalNotice": "有効にすると、プロンプト(LLM、VLM)と 1024px 以内に縮めた画像(VLM)が下の接続先の API に送られます。OpenAI を使う場合は呼び出しごとに課金されます。",
+        "llmEnabledLabel": "プロンプトからタイトルを推測する(LLM)",
+        "llmModelLabel": "LLM のモデル",
+        "vlmEnabledLabel": "画像からタグを推定する(VLM)",
+        "vlmHelp": "プロンプトが無い画像には、タイトルも画像から付けます。",
+        "vlmModelLabel": "VLM のモデル",
+        "modelInvalid": "1〜{max} 文字で入力してください",
+        "baseUrlLabel": "接続先(Base URL)",
+        "baseUrlPlaceholder": "空なら OpenAI の設定を使う",
+        "baseUrlHelp": "Ollama や LM Studio など、手元の OpenAI 互換サーバーを使うときに指定します。空にすると OpenAI の設定(キーと接続先)を使います。LLM と VLM で共通です。",
+        "apiStyleLabel": "API の形式",
+        "apiStyleResponses": "Responses API",
+        "apiStyleChat": "Chat Completions",
+        "apiStyleHelp": "手元のサーバーが Responses API に対応していなければ Chat Completions を選びます。",
+        "languageLabel": "タイトルとタグの言語",
+        "languageJa": "日本語",
+        "languageEn": "英語",
+        "tagLanguageLabel": "タグの言語",
+        "tagLanguageLocalized": "タイトルとタグの言語に合わせる",
+        "tagLanguageNative": "エンジン任せ",
+        "tagLanguageHelp": "「合わせる」では、VLM のタグを上の言語で付け、ONNX タガーの英語のタグには訳を足します(英語のときは訳しません)。訳は VLM が有効なら同じ呼び出しで、無効なら LLM で作ります。「エンジン任せ」では、各エンジンがそれぞれの言語でタグを付け、訳しません。",
+        "apiKeyLabel": "推定専用の API キー",
+        "apiKeySet": "設定済み",
+        "apiKeyNotSet": "未設定(OpenAI のキーを使う)",
+        "apiKeyPlaceholder": "キーを入力",
+        "apiKeySave": "設定",
+        "apiKeyDelete": "削除",
+        "apiKeySavedToast": "推定専用のキーを設定しました",
+        "apiKeyDeletedToast": "推定専用のキーを削除しました",
+        "apiKeyDeleteConfirm": {
+          "message": "推定専用の API キーを削除します。以後は OpenAI のキーを使います。",
+          "confirmLabel": "削除する"
+        },
+        "hourlyLimitLabel": "1 時間あたりの上限",
+        "hourlyLimitHelp": "LLM と VLM の呼び出しの数です({min}〜{max})。上限に達すると失敗にはせず、次の枠まで待ちます。",
+        "hourlyLimitInvalid": "{min}〜{max} の整数を入力してください",
+        "callsLastHourLabel": "直近 1 時間の呼び出し",
+        "callsLastHourValue": "{count} / {limit}"
+      },
+      "onnx": {
+        "heading": "ONNX タガー(このサーバー内で実行)",
+        "notice": "WD Tagger v3(Apache-2.0)でタグを付けます。イラスト向けで、写真には向きません。タグは英語です。画像は外部に送りません。モデルは Hugging Face からダウンロードします。",
+        "enabledLabel": "ONNX タガーでタグを付ける",
+        "modelLabel": "モデル",
+        "modelNotDownloaded": "選んだモデルをダウンロードするまで使えません。",
+        "downloaded": "ダウンロード済み",
+        "notDownloaded": "未ダウンロード",
+        "downloading": "ダウンロード中…",
+        "downloadingPercent": "ダウンロード中… {percent}%",
+        "downloadFailed": "ダウンロードに失敗しました: {error}",
+        "downloadFailedNoReason": "ダウンロードに失敗しました",
+        "download": "ダウンロード",
+        "delete": "削除",
+        "downloadStartedToast": "ダウンロードを始めました",
+        "deletedToast": "モデルを削除しました",
+        "deleteConfirm": {
+          "message": "モデル「{name}」を削除します。使うにはもう一度ダウンロードが要ります。",
+          "confirmLabel": "削除する"
+        },
+        "thresholdLabel": "しきい値",
+        "thresholdHelp": "確信度がこの値以上のタグだけを付けます({min}〜{max}。既定は 0.35)。",
+        "thresholdInvalid": "{min}〜{max} の数を入力してください"
+      },
+      "backfill": {
+        "heading": "未実行の画像",
+        "pendingLabel": "推定をまだ実行していない画像",
+        "pendingValue": {
+          "one": "{count} 枚",
+          "other": "{count} 枚"
+        },
+        "queuedLabel": "待ち行列",
+        "queuedValue": {
+          "one": "{count} 件",
+          "other": "{count} 件"
+        },
+        "run": "まとめて推定する",
+        "noEngines": "使えるエンジンがないため実行できません。",
+        "confirm": {
+          "message": {
+            "one": "推定をまだ実行していない {count} 枚の画像を、推定の待ち行列に入れます。",
+            "other": "推定をまだ実行していない {count} 枚の画像を、推定の待ち行列に入れます。"
+          },
+          "warning": "LLM・VLM を OpenAI で使う場合は、枚数に応じて課金されます。",
+          "confirmLabel": "待ち行列に入れる"
+        },
+        "queuedToast": {
+          "one": "{count} 件を待ち行列に入れました",
+          "other": "{count} 件を待ち行列に入れました"
+        }
       }
     },
     "comfyui": {
@@ -875,6 +987,38 @@
       "assign": "グループに入れる",
       "remove": "「{name}」から外す",
       "empty": "グループに入っていません"
+    },
+    "annotation": {
+      "heading": "タイトルとタグ",
+      "titleLabel": "タイトル",
+      "titlePlaceholder": "タイトルを入力",
+      "noTitle": "タイトルはありません",
+      "editTitle": "タイトルを編集",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "clearTitle": "タイトルを消す",
+      "titleTooLong": "タイトルは {max} 文字までです",
+      "tagsLabel": "タグ",
+      "noTags": "タグはありません",
+      "addTagPlaceholder": "タグを追加",
+      "addTag": "追加",
+      "suggestions": "タグの候補",
+      "removeTag": "タグ「{name}」を外す",
+      "filterByTag": "タグ「{name}」でストックを絞り込む",
+      "tagEmpty": "タグ名を入力してください",
+      "tagTooLong": "タグは {max} 文字までです",
+      "tagDuplicate": "このタグはもう付いています",
+      "statusQueued": "推定の順番を待っています…",
+      "statusRunning": "タイトルとタグを推定しています…",
+      "statusFailed": "推定に失敗しました: {error}",
+      "statusFailedNoReason": "推定に失敗しました",
+      "statusSucceeded": "最後の推定: {date}",
+      "statusSucceededNoDate": "推定済み",
+      "annotate": "推定する",
+      "reannotate": "再推定",
+      "reannotateTooltip": "タイトルとタグを推定し直します。人が付けたタイトルとタグ、人が外したタグはそのまま保ちます。",
+      "saveFailed": "保存に失敗しました",
+      "annotateFailed": "推定を始められませんでした"
     }
   },
   "compare": {
@@ -924,6 +1068,7 @@
       "sourceSameInstance": "この GAKEI",
       "sourceOtherInstance": "他の GAKEI",
       "viewOriginInLineage": "由来の Asset を系列グラフで見る",
+      "originHidden": "このインスタンスの別の Asset(表示できません)",
       "loadIntoForm": "この設定をフォームに読み込む",
       "inputsNotRestored": "入力画像は復元されません",
       "missingRecipe": "埋め込まれた設定に生成情報がありません",
@@ -996,6 +1141,13 @@
     "kindUpload": "アップロード",
     "kindSketch": "スケッチ",
     "kindMask": "マスク",
+    "tagFilter": {
+      "heading": "タグ",
+      "placeholder": "タグで絞り込む",
+      "suggestions": "タグの候補",
+      "clear": "タグ「{name}」の絞り込みを解除",
+      "emptyInSection": "このタグの画像はありません"
+    },
     "openInViewer": "ビューアで開く",
     "showInResultArea": "結果エリアに表示",
     "useAsInput": "入力に使う",

@@ -2,10 +2,13 @@
 
 対象は Run の `prompt`、Asset は「それを生んだ Run の prompt」(kind=generated)に加えて
 「画像に埋め込まれた生成情報の prompt / negative_prompt」(`asset.embedded_meta`、kind を
-問わない。ADR-0018、2026-09-27 追記)、プロンプトセットは名前と項目本文。削除済みは除外する。
+問わない。ADR-0018、2026-09-27 追記)とタイトル・タグ名(ADR-0024)、プロンプトセットは
+名前と項目本文。削除済みは除外する。
 
 将来 embedding 検索を足すときは、このモジュール(`search()` の中身)だけを差し替えれば
 よいように、API 層(app/api/search.py)からはここの関数を呼ぶだけにしている。
+
+ADR-0025: 見る人(`viewer`)に見えるものだけを検索する(`app/domain/visibility.py`)。
 """
 
 from __future__ import annotations
@@ -16,7 +19,9 @@ from typing import Any, Literal
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.domain.models import Asset, AssetKind, PromptSet, PromptSetItem, Run
+from app.auth.identity import CurrentUser
+from app.domain import annotations as annotations_domain
+from app.domain.models import Asset, AssetAnnotation, AssetKind, PromptSet, PromptSetItem, Run
 from app.domain.run_views import (
     bulk_asset_groups,
     bulk_descendant_run_counts,
@@ -33,6 +38,7 @@ from app.domain.schemas import (
     SearchRunHit,
     SearchTruncated,
 )
+from app.domain.visibility import asset_visible, prompt_set_visible, run_visible
 from app.i18n import t
 
 VALID_TYPES = frozenset({"run", "asset", "prompt_set"})
@@ -106,13 +112,15 @@ def build_snippet(text: str, terms: list[str], context: int = SNIPPET_CONTEXT) -
     return f"{prefix}{text[start:end]}{suffix}"
 
 
-def _search_runs(db: Session, terms: list[str], limit: int) -> tuple[list[SearchRunHit], bool]:
+def _search_runs(
+    db: Session, terms: list[str], limit: int, viewer: CurrentUser
+) -> tuple[list[SearchRunHit], bool]:
     conditions = [
         func.lower(Run.prompt).like(_like_pattern(term), escape=_LIKE_ESCAPE_CHAR) for term in terms
     ]
     query = (
         select(Run)
-        .where(Run.deleted_at.is_(None), *conditions)
+        .where(Run.deleted_at.is_(None), run_visible(viewer), *conditions)
         .order_by(Run.queued_at.desc(), Run.id.desc())
         .limit(limit + 1)
     )
@@ -122,10 +130,10 @@ def _search_runs(db: Session, terms: list[str], limit: int) -> tuple[list[Search
 
     run_ids = [r.id for r in rows]
     outputs_map = bulk_output_refs(db, run_ids)
-    inputs_map = bulk_input_summary(db, run_ids)
-    descendant_map = bulk_descendant_run_counts(db, run_ids)
+    inputs_map = bulk_input_summary(db, run_ids, viewer)
+    descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
-    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows])
+    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], viewer)
 
     hits = [
         SearchRunHit(
@@ -157,56 +165,82 @@ def _embedded_prompt_text_expr() -> Any:
     return func.lower(prompt.op("||")(" ").op("||")(negative_prompt))
 
 
-def _search_assets(db: Session, terms: list[str], limit: int) -> tuple[list[SearchAssetHit], bool]:
+def _search_assets(
+    db: Session, terms: list[str], limit: int, viewer: CurrentUser, tag: str | None = None
+) -> tuple[list[SearchAssetHit], bool]:
     lowered_terms = [term.lower() for term in terms]
-    run_prompt_conditions = [
-        func.lower(Run.prompt).like(_like_pattern(term), escape=_LIKE_ESCAPE_CHAR) for term in terms
-    ]
     embedded_text = _embedded_prompt_text_expr()
-    embedded_conditions = [
-        embedded_text.like(_like_pattern(term), escape=_LIKE_ESCAPE_CHAR) for term in terms
-    ]
-    # それを生んだ Run の prompt が一致(kind=generated、Run 未削除)、または画像に
-    # 埋め込まれた生成情報が一致(kind を問わない。ADR-0018)のどちらか。
+    title_text = func.lower(func.coalesce(AssetAnnotation.title, ""))
+
+    # 語ごとに、次のどれかに含まれていればよい(複数語は AND。語ごとに別の場所でもよい)。
+    # - それを生んだ Run の prompt(kind=generated、Run 未削除)
+    # - 画像に埋め込まれた生成情報(kind を問わない。ADR-0018)
+    # - タイトル、タグ名(ADR-0024)
+    def term_condition(term: str) -> Any:
+        pattern = _like_pattern(term)
+        return or_(
+            and_(
+                Asset.kind == AssetKind.GENERATED,
+                Run.deleted_at.is_(None),
+                func.lower(Run.prompt).like(pattern, escape=_LIKE_ESCAPE_CHAR),
+            ),
+            embedded_text.like(pattern, escape=_LIKE_ESCAPE_CHAR),
+            title_text.like(pattern, escape=_LIKE_ESCAPE_CHAR),
+            annotations_domain.tag_name_matches(pattern),
+        )
+
     query = (
-        select(Asset, Run.prompt)
+        select(Asset, Run.prompt, Run.deleted_at, AssetAnnotation.title)
         .outerjoin(Run, Asset.produced_by_run_id == Run.id)
+        .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         .where(
             Asset.deleted_at.is_(None),
-            or_(
-                and_(
-                    Asset.kind == AssetKind.GENERATED,
-                    Run.deleted_at.is_(None),
-                    *run_prompt_conditions,
-                ),
-                and_(*embedded_conditions),
-            ),
+            asset_visible(viewer),
+            *[term_condition(term) for term in terms],
         )
-        .order_by(Asset.created_at.desc(), Asset.id.desc())
-        .limit(limit + 1)
     )
+    if tag is not None and tag.strip():
+        query = query.where(annotations_domain.tag_filter(tag))
+    query = query.order_by(Asset.created_at.desc(), Asset.id.desc()).limit(limit + 1)
     rows = db.execute(query).all()
     truncated = len(rows) > limit
     rows = rows[:limit]
+    tags_map = annotations_domain.bulk_tags(db, [asset.id for asset, *_ in rows])
+
+    def contains_all(text: str | None) -> bool:
+        return bool(text) and all(term in text.lower() for term in lowered_terms)
 
     hits: list[SearchAssetHit] = []
-    for asset, run_prompt in rows:
-        run_matched = run_prompt is not None and all(
-            term in run_prompt.lower() for term in lowered_terms
+    for asset, run_prompt, run_deleted_at, title in rows:
+        embedded_meta = asset.embedded_meta if isinstance(asset.embedded_meta, dict) else {}
+        embedded_prompt = embedded_meta.get("prompt") or ""
+        embedded_negative = embedded_meta.get("negative_prompt") or ""
+        run_prompt_usable = (
+            asset.kind == AssetKind.GENERATED and run_prompt is not None and run_deleted_at is None
         )
-        prompt_source: Literal["run", "embedded"]
-        if run_matched:
-            prompt_source = "run"
-            snippet_text = run_prompt
+        tag_names = [ref.name for ref in tags_map.get(asset.id, [])]
+
+        prompt_source: Literal["run", "embedded", "title", "tag"]
+        if run_prompt_usable and contains_all(run_prompt):
+            prompt_source, snippet_text = "run", run_prompt
+        elif contains_all(embedded_prompt):
+            prompt_source, snippet_text = "embedded", embedded_prompt
+        elif contains_all(embedded_negative):
+            prompt_source, snippet_text = "embedded", embedded_negative
+        elif contains_all(title):
+            prompt_source, snippet_text = "title", title
         else:
-            prompt_source = "embedded"
-            embedded_meta = asset.embedded_meta or {}
-            embedded_prompt = embedded_meta.get("prompt") or ""
-            embedded_negative = embedded_meta.get("negative_prompt") or ""
-            if all(term in embedded_prompt.lower() for term in lowered_terms):
-                snippet_text = embedded_prompt
+            # 語が場所をまたいで一致した場合を含む。どこに当たったかの目安を返す。
+            matched_tags = [n for n in tag_names if any(term in n for term in lowered_terms)]
+            if matched_tags:
+                prompt_source, snippet_text = "tag", ", ".join(matched_tags)
+            elif title and any(term in title.lower() for term in lowered_terms):
+                prompt_source, snippet_text = "title", title
+            elif run_prompt_usable:
+                prompt_source, snippet_text = "run", run_prompt
             else:
-                snippet_text = embedded_negative or embedded_prompt
+                prompt_source = "embedded"
+                snippet_text = embedded_prompt or embedded_negative
         hits.append(
             SearchAssetHit(
                 id=asset.id,
@@ -216,21 +250,22 @@ def _search_assets(db: Session, terms: list[str], limit: int) -> tuple[list[Sear
                 height=asset.height,
                 bytes=asset.bytes,
                 created_at=asset.created_at,
+                title=title,
                 produced_by_run_id=asset.produced_by_run_id,
                 prompt_source=prompt_source,
-                prompt_snippet=build_snippet(snippet_text, terms),
+                prompt_snippet=build_snippet(snippet_text or "", terms),
             )
         )
     return hits, truncated
 
 
 def _search_prompt_sets(
-    db: Session, terms: list[str], limit: int
+    db: Session, terms: list[str], limit: int, viewer: CurrentUser
 ) -> tuple[list[SearchPromptSetHit], bool]:
     prompt_sets = (
         db.execute(
             select(PromptSet)
-            .where(PromptSet.deleted_at.is_(None))
+            .where(PromptSet.deleted_at.is_(None), prompt_set_visible(viewer))
             .order_by(PromptSet.updated_at.desc(), PromptSet.id.desc())
         )
         .scalars()
@@ -300,10 +335,21 @@ def search(
     db: Session,
     q: str,
     *,
+    viewer: CurrentUser,
     limit: int = DEFAULT_LIMIT,
     types: set[str] | None = None,
+    tag: str | None = None,
 ) -> SearchResponse:
-    """テキストの部分一致でRun/Asset/プロンプトセットを横断検索する。"""
+    """テキストの部分一致でRun/Asset/プロンプトセットを横断検索する。
+
+    `tag` を指定すると、Asset の結果だけをそのタグが付いたものに絞る(ADR-0024。Run と
+    プロンプトセットの結果には影響しない)。
+    """
+    if tag is not None and tag.strip():
+        try:
+            annotations_domain.normalize_tag_name(tag)
+        except annotations_domain.TagNameError as e:
+            raise InvalidSearchQueryError(str(e)) from e
     terms = parse_query_terms(q)
     selected_types: set[str] = types if types is not None else set(VALID_TYPES)
 
@@ -313,11 +359,13 @@ def search(
     truncated_kwargs: dict[str, Any] = {}
 
     if "run" in selected_types:
-        run_hits, truncated_kwargs["runs"] = _search_runs(db, terms, limit)
+        run_hits, truncated_kwargs["runs"] = _search_runs(db, terms, limit, viewer)
     if "asset" in selected_types:
-        asset_hits, truncated_kwargs["assets"] = _search_assets(db, terms, limit)
+        asset_hits, truncated_kwargs["assets"] = _search_assets(db, terms, limit, viewer, tag)
     if "prompt_set" in selected_types:
-        prompt_set_hits, truncated_kwargs["prompt_sets"] = _search_prompt_sets(db, terms, limit)
+        prompt_set_hits, truncated_kwargs["prompt_sets"] = _search_prompt_sets(
+            db, terms, limit, viewer
+        )
 
     return SearchResponse(
         query=q.strip(),

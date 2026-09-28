@@ -1,0 +1,479 @@
+"""自動タイトル・タグの推定の worker(ADR-0024 4章)。
+
+待ち行列は `asset_annotation.auto_status = 'queued'` の行そのもの。Run の runner と同じく
+api プロセス内の asyncio タスクが1件ずつ(古い依頼から)処理する。起動時に `running` の行を
+`queued` に戻す(推定は来歴に加わらず、途中で止まっても害が無いため再開してよい)。
+
+- 1 回の Run の出力には同じタイトルを付ける。LLM は Run につき1回だけ呼び、同じ Run の他の
+  出力に auto タイトルが既にあればそれを写す(worker は直列なので、2枚目以降は必ず写せる)。
+- LLM と VLM の呼び出しは直近1時間の回数を数え、上限(設定 `hourly_limit`)に達したら失敗に
+  せず、行を `queued` に戻して次の枠まで待つ。回数はプロセス内で数える(再起動で 0 に戻る)。
+- 推定に失敗したら `failed` と理由を記録し、自動では再試行しない。
+
+実行順(ADR-0024 6章): LLM(タイトル)は API の応答待ちなので ONNX と並行して動かす。ONNX
+(`asyncio.to_thread`)を先に終え、そのタグを VLM に渡す(同じ意味のタグを付け直さない。
+localized ならその訳も同じ呼び出しで返させる)。VLM が無効で LLM が有効なら、ONNX の後に
+LLM で訳す。どれか1つが失敗したら、動いている他の処理を取り消して全体を `failed` にする。
+LLM・VLM の呼び出しは、始める前に要る回数だけ1時間の枠が空いているかを確かめる。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import io
+import logging
+import time
+import uuid
+from collections import deque
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from PIL import Image
+from sqlalchemy import select, update
+from sqlalchemy.orm import sessionmaker
+
+from app.annotation.engines import (
+    AnnotationEngineError,
+    AnnotationEngines,
+    EngineContext,
+    FakeEngines,
+    OpenAIEngines,
+    image_to_jpeg,
+    wants_translation,
+)
+from app.annotation.wd_tagger import WdTagger
+from app.domain import annotation_settings
+from app.domain import annotations as annotations_domain
+from app.domain.models import Asset, AssetAnnotation, AssetKind, Run
+from app.domain.storage import AssetStore
+from app.i18n import t
+
+if TYPE_CHECKING:
+    from app.config import Settings
+
+logger = logging.getLogger(__name__)
+
+_POLL_INTERVAL_SECONDS = 1.0
+_WINDOW_SECONDS = 3600.0
+_ERROR_MAX = 500
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+class _RateLimitedError(Exception):
+    """LLM・VLM の1時間の上限に達した(失敗にせず queued に戻す)。"""
+
+
+def reset_running_annotations(session_factory: sessionmaker) -> int:
+    """起動時に呼ぶ。`running` のままの行を `queued` に戻す。"""
+    with session_factory() as session:
+        result = session.execute(
+            update(AssetAnnotation)
+            .where(AssetAnnotation.auto_status == annotations_domain.STATUS_RUNNING)
+            .values(auto_status=annotations_domain.STATUS_QUEUED)
+        )
+        session.commit()
+        return result.rowcount or 0
+
+
+def _pick(session_factory: sessionmaker) -> uuid.UUID | None:
+    with session_factory() as session:
+        candidate = session.execute(
+            select(AssetAnnotation.asset_id)
+            .where(AssetAnnotation.auto_status == annotations_domain.STATUS_QUEUED)
+            .order_by(AssetAnnotation.auto_requested_at.asc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if candidate is None:
+            return None
+        result = session.execute(
+            update(AssetAnnotation)
+            .where(
+                AssetAnnotation.asset_id == candidate,
+                AssetAnnotation.auto_status == annotations_domain.STATUS_QUEUED,
+            )
+            .values(auto_status=annotations_domain.STATUS_RUNNING, updated_at=_utcnow())
+        )
+        session.commit()
+        if (result.rowcount or 0) == 0:
+            return None
+        return candidate
+
+
+@dataclass
+class _Job:
+    asset_id: uuid.UUID
+    config: annotation_settings.AnnotationConfig
+    connection: annotation_settings.Connection
+    engines: list[str]
+    prompt: str | None
+    title_locked: bool
+    sibling_title: str | None
+    image_bytes: bytes | None
+
+
+class Annotator:
+    """lifespan で起動する推定の worker。"""
+
+    def __init__(
+        self,
+        session_factory: sessionmaker,
+        store: AssetStore,
+        settings: Settings,
+        engines: AnnotationEngines | None = None,
+    ) -> None:
+        self.session_factory = session_factory
+        self.store = store
+        self.settings = settings
+        # テストでは差し替えてよい(呼び出し回数を数えるなど)。
+        self.engines: AnnotationEngines = engines or (
+            FakeEngines() if settings.fake_provider else OpenAIEngines(WdTagger(settings.data_dir))
+        )
+        self._calls: deque[float] = deque()
+        self._wake = asyncio.Event()
+        self._stop = asyncio.Event()
+        self._task: asyncio.Task | None = None
+        self._event_loop: asyncio.AbstractEventLoop | None = None
+
+    # -- 公開 API --------------------------------------------------------------
+
+    def notify(self) -> None:
+        """待ち行列に入れたあとに呼ぶ。同期エンドポイント(スレッド)からも呼べる。"""
+        loop = self._event_loop
+        if loop is None or loop.is_closed():
+            return
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        if current is loop:
+            self._wake.set()
+        else:
+            loop.call_soon_threadsafe(self._wake.set)
+
+    def calls_last_hour(self) -> int:
+        self._trim_calls(time.monotonic())
+        return len(self._calls)
+
+    async def start(self) -> int:
+        self._event_loop = asyncio.get_running_loop()
+        count = await asyncio.to_thread(reset_running_annotations, self.session_factory)
+        self._task = asyncio.create_task(self._loop(), name="gakei-annotator")
+        return count
+
+    async def stop(self) -> None:
+        self._stop.set()
+        self._wake.set()
+        if self._task is not None:
+            await self._task
+
+    # -- 上限 ------------------------------------------------------------------
+
+    def _trim_calls(self, now: float) -> None:
+        while self._calls and now - self._calls[0] >= _WINDOW_SECONDS:
+            self._calls.popleft()
+
+    def _ensure_capacity(self, needed: int, limit: int) -> None:
+        """この1件で要る呼び出し回数が枠に収まるかを先に確かめる(途中で上限に当たって、
+        一部の呼び出しだけが無駄になるのを避ける)。枠が空なら、上限より多く要っても進める
+        (上限が小さすぎて永久に待つのを避ける)。"""
+        now = time.monotonic()
+        self._trim_calls(now)
+        if self._calls and len(self._calls) + needed > limit:
+            raise _RateLimitedError
+
+    def _record_call(self) -> None:
+        self._calls.append(time.monotonic())
+
+    def _limit_reached(self, limit: int) -> bool:
+        return self.calls_last_hour() >= limit
+
+    # -- ループ ----------------------------------------------------------------
+
+    async def _sleep(self) -> None:
+        self._wake.clear()
+        try:
+            await asyncio.wait_for(self._wake.wait(), timeout=_POLL_INTERVAL_SECONDS)
+        except TimeoutError:
+            pass
+
+    async def _loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                await asyncio.to_thread(self.engines.release_idle)
+                config = await asyncio.to_thread(self._load_config)
+                if config.api_engines_enabled and self._limit_reached(config.hourly_limit):
+                    await self._sleep()
+                    continue
+                picked = await asyncio.to_thread(_pick, self.session_factory)
+            except Exception:
+                logger.exception("推定の待ち行列の取得に失敗しました")
+                await self._sleep()
+                continue
+
+            if picked is None:
+                await self._sleep()
+                continue
+
+            try:
+                await self._process(picked)
+            except Exception:
+                logger.exception("asset %s の推定で想定外の例外が発生しました", picked)
+
+    def _load_config(self) -> annotation_settings.AnnotationConfig:
+        with self.session_factory() as session:
+            return annotation_settings.load(session)
+
+    # -- 1件の処理 --------------------------------------------------------------
+
+    def _load_job(self, asset_id: uuid.UUID) -> _Job | str:
+        """処理に要るものを集める。処理できなければ失敗の理由(文字列)を返す。"""
+        with self.session_factory() as session:
+            asset = session.get(Asset, asset_id)
+            if asset is None or asset.deleted_at is not None:
+                return t("annotations.assetDeleted")
+            if asset.kind == AssetKind.MASK:
+                return t("annotations.maskNotSupported")
+            config = annotation_settings.load(session)
+            engines = annotations_domain.usable_engines(config, self.settings)
+            if not engines:
+                return t("annotations.noEngine")
+
+            prompt: str | None = None
+            if asset.kind == AssetKind.GENERATED and asset.produced_by_run_id is not None:
+                run = session.get(Run, asset.produced_by_run_id)
+                prompt = run.prompt if run is not None else None
+            elif isinstance(asset.embedded_meta, dict):
+                value = asset.embedded_meta.get("prompt")
+                prompt = value if isinstance(value, str) else None
+            prompt = prompt.strip() if prompt and prompt.strip() else None
+
+            row = session.get(AssetAnnotation, asset_id)
+            title_locked = row is not None and row.title_source == annotations_domain.SOURCE_USER
+            sibling_title = annotations_domain.copy_auto_title_from_sibling(session, asset)
+
+            image_bytes = None
+            if (
+                annotations_domain.ENGINE_VLM in engines
+                or annotations_domain.ENGINE_ONNX in engines
+            ):
+                preview = self.store.content_path(asset.blob_key, asset.sha256, "preview")
+                image_bytes = (
+                    preview.read_bytes() if preview.is_file() else self.store.read(asset.blob_key)
+                )
+
+            return _Job(
+                asset_id=asset_id,
+                config=config,
+                connection=annotation_settings.resolve_connection(config, self.settings),
+                engines=engines,
+                prompt=prompt,
+                title_locked=title_locked,
+                sibling_title=sibling_title,
+                image_bytes=image_bytes,
+            )
+
+    async def _process(self, asset_id: uuid.UUID) -> None:
+        try:
+            job = await asyncio.to_thread(self._load_job, asset_id)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("asset %s の推定の準備に失敗しました", asset_id)
+            await asyncio.to_thread(self._finish_failed, asset_id, f"internalError: {e}")
+            return
+        if isinstance(job, str):
+            await asyncio.to_thread(self._finish_failed, asset_id, job)
+            return
+
+        ctx = EngineContext(config=job.config, connection=job.connection)
+        try:
+            outcome = await self._run_engines(job, ctx)
+        except _RateLimitedError:
+            await asyncio.to_thread(self._requeue, asset_id)
+            return
+        except AnnotationEngineError as e:
+            await asyncio.to_thread(self._finish_failed, asset_id, str(e))
+            return
+        except Exception as e:  # noqa: BLE001 - どの段階の失敗も記録する
+            logger.exception("asset %s の推定中に予期しない例外が発生しました", asset_id)
+            await asyncio.to_thread(self._finish_failed, asset_id, f"internalError: {e}")
+            return
+
+        title, tags, ran, models = outcome
+        await asyncio.to_thread(self._finish_succeeded, asset_id, title, tags, ran, models)
+
+    async def _run_engines(
+        self, job: _Job, ctx: EngineContext
+    ) -> tuple[str | None, list[tuple[str, float | None]] | None, list[str], dict[str, str]]:
+        """エンジンを動かして (タイトル, タグ, 動かしたエンジン, モデル名) を返す。順序は
+        モジュールの docstring のとおり。"""
+        config = job.config
+        engines = job.engines
+        # 画像のデコードと縮小も CPU を使うので、イベントループの外で行う。
+        image: Image.Image | None = None
+        if job.image_bytes is not None:
+            image = await asyncio.to_thread(_decode_image, job.image_bytes)
+
+        use_llm_title = (
+            not job.title_locked and job.prompt and annotations_domain.ENGINE_LLM in engines
+        )
+        call_llm_title = bool(use_llm_title and not job.sibling_title)
+        use_onnx = annotations_domain.ENGINE_ONNX in engines and image is not None
+        use_vlm = annotations_domain.ENGINE_VLM in engines and image is not None
+        # VLM が無効で LLM が有効なら、ONNX のタグを LLM で訳す(localized で英語以外のとき)。
+        translate_by_llm = (
+            use_onnx
+            and not use_vlm
+            and annotations_domain.ENGINE_LLM in engines
+            and wants_translation(config)
+        )
+        needed = int(call_llm_title) + int(use_vlm) + int(translate_by_llm)
+        if needed:
+            self._ensure_capacity(needed, config.hourly_limit)
+
+        title: str | None = None
+        ran: list[str] = []
+        models: dict[str, str] = {}
+
+        title_task: asyncio.Task[str] | None = None
+        if call_llm_title:
+            assert job.prompt is not None
+            self._record_call()
+            title_task = asyncio.create_task(self.engines.title_from_prompt(job.prompt, ctx))
+        elif use_llm_title:
+            title = job.sibling_title
+
+        try:
+            onnx_tags: list[tuple[str, float | None]] | None = None
+            if use_onnx:
+                onnx_tags = list(await asyncio.to_thread(self.engines.onnx_tags, image, ctx))
+            onnx_names = [name for name, _ in onnx_tags or []]
+
+            # タイトルの LLM が既に失敗していれば、VLM を呼ぶ前にここで止める(無駄な課金を
+            # 避ける)。
+            if title_task is not None and title_task.done():
+                title_task.result()
+
+            vlm_tags: list[tuple[str, float | None]] | None = None
+            translations: dict[str, str] = {}
+            if use_vlm:
+                assert image is not None
+                want_title = not job.title_locked and not job.prompt
+                self._record_call()
+                image_jpeg = await asyncio.to_thread(image_to_jpeg, image)
+                result = await self.engines.describe_image(
+                    image_jpeg, job.prompt, want_title, ctx, onnx_names or None
+                )
+                if want_title and result.title:
+                    title = result.title
+                vlm_tags = [(name, None) for name in result.tags]
+                translations = result.translations
+            elif translate_by_llm and onnx_names:
+                self._record_call()
+                translations = await self.engines.translate_tags(onnx_names, ctx)
+
+            if title_task is not None:
+                title = await title_task
+        except BaseException:
+            if title_task is not None and not title_task.done():
+                title_task.cancel()
+                try:
+                    await title_task
+                except BaseException:  # noqa: BLE001 - 取り消しの後始末
+                    pass
+            raise
+
+        if use_llm_title:
+            ran.append(annotations_domain.ENGINE_LLM)
+            models[annotations_domain.ENGINE_LLM] = config.llm_model
+        elif translate_by_llm and onnx_names:
+            ran.append(annotations_domain.ENGINE_LLM)
+            models[annotations_domain.ENGINE_LLM] = config.llm_model
+
+        tags: list[tuple[str, float | None]] | None = None
+        if onnx_tags is not None:
+            ran.append(annotations_domain.ENGINE_ONNX)
+            models[annotations_domain.ENGINE_ONNX] = config.onnx_model
+        if vlm_tags is not None:
+            ran.append(annotations_domain.ENGINE_VLM)
+            models[annotations_domain.ENGINE_VLM] = config.vlm_model
+        if onnx_tags is not None or vlm_tags is not None:
+            # ONNX(英語)→ その訳 → VLM の順に並べる(同じ名前なら先のもの、つまり確信度の
+            # 付いた方を残す)。訳は元のタグの確信度を引き継ぐ。
+            translated = translated_tags(onnx_tags or [], translations)
+            tags = (onnx_tags or []) + translated + (vlm_tags or [])
+        return title, tags, ran, models
+
+    def _requeue(self, asset_id: uuid.UUID) -> None:
+        with self.session_factory() as session:
+            row = session.get(AssetAnnotation, asset_id)
+            if row is not None and row.auto_status == annotations_domain.STATUS_RUNNING:
+                row.auto_status = annotations_domain.STATUS_QUEUED
+                row.updated_at = _utcnow()
+                session.commit()
+
+    def _finish_failed(self, asset_id: uuid.UUID, message: str) -> None:
+        with self.session_factory() as session:
+            row = session.get(AssetAnnotation, asset_id)
+            if row is None:
+                return
+            now = _utcnow()
+            row.auto_status = annotations_domain.STATUS_FAILED
+            row.auto_error = message[:_ERROR_MAX]
+            row.auto_finished_at = now
+            row.updated_at = now
+            session.commit()
+
+    def _finish_succeeded(
+        self,
+        asset_id: uuid.UUID,
+        title: str | None,
+        tags: list[tuple[str, float | None]] | None,
+        ran: list[str],
+        models: dict[str, str],
+    ) -> None:
+        with self.session_factory() as session:
+            annotations_domain.apply_auto_result(session, asset_id, title=title, tags=tags)
+            row = session.get(AssetAnnotation, asset_id)
+            assert row is not None
+            now = _utcnow()
+            row.auto_status = annotations_domain.STATUS_SUCCEEDED
+            row.auto_error = None
+            order = [
+                annotations_domain.ENGINE_LLM,
+                annotations_domain.ENGINE_VLM,
+                annotations_domain.ENGINE_ONNX,
+            ]
+            row.auto_engines = "+".join(e for e in order if e in ran) or None
+            row.auto_models = models or None
+            row.auto_finished_at = now
+            row.updated_at = now
+            session.commit()
+
+
+def _decode_image(data: bytes) -> Image.Image:
+    image = Image.open(io.BytesIO(data))
+    image.load()
+    return image
+
+
+def translated_tags(
+    onnx_tags: list[tuple[str, float | None]], translations: dict[str, str]
+) -> list[tuple[str, float | None]]:
+    """ONNX のタグの訳をタグにする(元のタグの確信度を引き継ぐ)。訳の無いもの・元と同じ
+    表記のものは足さない。キーの照合は大文字・小文字と `_` / 空白の違いを無視する。"""
+    if not translations:
+        return []
+
+    def key(name: str) -> str:
+        return " ".join(name.replace("_", " ").lower().split())
+
+    by_key = {key(original): translated for original, translated in translations.items()}
+    result: list[tuple[str, float | None]] = []
+    for name, score in onnx_tags:
+        translated = by_key.get(key(name))
+        if translated and key(translated) != key(name):
+            result.append((translated, score))
+    return result

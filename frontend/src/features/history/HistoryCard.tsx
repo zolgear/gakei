@@ -287,7 +287,18 @@ export function HistoryCard({ run }: HistoryCardProps) {
               : t.history.card.viewDetail
           }
         >
-          <p className={styles.prompt}>{run.prompt || t.history.card.noPrompt}</p>
+          {/* 先頭出力のタイトル(ADR-0024)。あればプロンプトを 1 行に縮め、2 行分の高さに収める
+              (カードの高さを揃えたまま)。 */}
+          {firstOutput?.title ? (
+            <div className={styles.titledPrompt}>
+              <p className={styles.title} title={firstOutput.title}>
+                {firstOutput.title}
+              </p>
+              <p className={styles.promptOneLine}>{run.prompt || t.history.card.noPrompt}</p>
+            </div>
+          ) : (
+            <p className={styles.prompt}>{run.prompt || t.history.card.noPrompt}</p>
+          )}
         </Link>
         <div className={styles.meta}>
           {formatDateTime(run.queued_at)}

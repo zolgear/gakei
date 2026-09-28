@@ -1,0 +1,253 @@
+/* AssetGroupsSection と同じ大きさ感で揃える(ビューアの詳細パネルの節)。 */
+.section {
+  margin: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.subLabel {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* 人のタイトル: 本文色で太め。自動のタイトル: 控えめな色 + 点線の下線(タグの点線の枠と揃える)。 */
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding-top: 4px;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.title[data-source='user'] {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.title[data-source='auto'] {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  text-decoration: underline dashed var(--color-text-faint);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.titleRow .empty {
+  flex: 1;
+  padding-top: 5px;
+}
+
+.iconButton {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+}
+
+.iconButton:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.titleEdit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.titleInput {
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.titleInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.titleInput[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.button,
+.primaryButton {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.button {
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.primaryButton {
+  background: var(--color-accent);
+  border: 0;
+  color: #17181b;
+  font-weight: 600;
+}
+
+.button:disabled,
+.primaryButton:disabled {
+  opacity: 0.5;
+}
+
+.dangerButton {
+  margin-left: auto;
+  color: var(--color-danger);
+}
+
+.dangerButton:hover:not(:disabled) {
+  border-color: var(--color-danger);
+}
+
+.tagsBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tagList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tagItem {
+  display: flex;
+  max-width: 100%;
+}
+
+.statusRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.status {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+
+.status[data-status='queued'],
+.status[data-status='running'] {
+  color: var(--color-text-muted);
+}
+
+.status[data-status='failed'] {
+  color: var(--color-danger);
+}
+
+.spinner {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--color-border-strong);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  .iconButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .titleInput {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .button,
+  .primaryButton {
+    min-height: 44px;
+  }
+
+  .tagList {
+    gap: 8px;
+  }
+}

@@ -3,6 +3,7 @@
  * 画像ボタン(クリックでビューア/結果エリア、選択モードでは選択の切り替え)、ホバーで出る
  * 「+」(入力に追加。マスクは不可)と削除、グループの節でだけ出す「このグループから外す」(×)。
  * 768px 未満では削除だけ画像から外してキャプション行の右端に置く(「+」と重ならないように。issue #10)。
+ * タイトル(ADR-0024)があればキャプションの上の行に 1 行で出す(長いものは省略)。
  * 画像はドラッグ元になり、入力欄やグループの節の見出しに落とせる(マスクと選択モード中は除く)。
  */
 import { assetUrl } from '../../api/assetUrl'
@@ -126,7 +127,15 @@ export function StockTile({
         </button>
       )}
       <span className={styles.caption}>
-        {asset.width}×{asset.height} · {extFromMime(asset.mime)}
+        {/* タイトル(ADR-0024)。一覧の応答には自動か人かの区別が無いので、見た目は分けない。 */}
+        {asset.title && (
+          <span className={styles.captionTitle} title={asset.title}>
+            {asset.title}
+          </span>
+        )}
+        <span className={styles.captionMeta}>
+          {asset.width}×{asset.height} · {extFromMime(asset.mime)}
+        </span>
       </span>
     </div>
   )

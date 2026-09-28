@@ -19,3 +19,9 @@ export const MCP_SETTINGS_QUERY_KEY = ['mcp-settings'] as const
 
 /** `GET /api/users/me/api-tokens`(ADR-0023)。ユーザー設定の「アクセストークン」だけが読む。 */
 export const API_TOKENS_QUERY_KEY = ['api-tokens'] as const
+
+/**
+ * `GET /api/settings/annotation`(ADR-0024)。管理者設定の「自動タイトル・タグ」と、ビューアの
+ * 「再推定」(使えるエンジンがあるか)が読む。
+ */
+export const ANNOTATION_SETTINGS_QUERY_KEY = ['annotation-settings'] as const

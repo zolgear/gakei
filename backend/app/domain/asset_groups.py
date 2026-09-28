@@ -7,6 +7,10 @@
 影響しない(2026-09-28 に変更)。`member_count` / `cover_asset_id` は削除済みでない Asset だけを数える
 (cover は `added_at` が最新のメンバー)。グループ数・メンバー数がどちらも少数な前提
 (ADR-0022 のトレードオフ分析)で、都度 Python 側で集計する。
+
+ADR-0025: グループと、その中の Asset は見る人(`viewer`)に見えるものだけを扱う
+(`app/domain/visibility.py`)。`viewer=None` は worker(runner)の内部処理だけが使う
+(Run の作成時に、実行者に見えるグループであることを確かめ済み)。
 """
 
 from __future__ import annotations
@@ -14,11 +18,13 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import ColumnElement, delete, func, select, true
 from sqlalchemy.orm import Session
 
+from app.auth.identity import CurrentUser
 from app.domain.models import Asset, AssetGroup, AssetGroupMember
 from app.domain.schemas import AssetGroupRef, AssetGroupRow
+from app.domain.visibility import asset_visible, group_visible
 
 
 def _utcnow() -> datetime:
@@ -41,7 +47,12 @@ class AssetGroupOrderMismatchError(ValueError):
     """
 
 
+def _asset_cond(viewer: CurrentUser | None) -> ColumnElement[bool]:
+    return true() if viewer is None else asset_visible(viewer)
+
+
 def get_active_group_or_none(db: Session, group_id: uuid.UUID) -> AssetGroup | None:
+    """可視性を見ずに引く(worker 専用)。API・MCP は `visibility.get_visible_group` を使う。"""
     group = db.get(AssetGroup, group_id)
     if group is None or group.deleted_at is not None:
         return None
@@ -49,10 +60,10 @@ def get_active_group_or_none(db: Session, group_id: uuid.UUID) -> AssetGroup | N
 
 
 def _member_stats(
-    db: Session, group_ids: list[uuid.UUID]
+    db: Session, group_ids: list[uuid.UUID], viewer: CurrentUser | None
 ) -> dict[uuid.UUID, tuple[int, uuid.UUID | None]]:
     """各グループの (member_count, cover_asset_id) をまとめて求める
-    (削除済みでない Asset だけを対象にする)。"""
+    (削除済みでなく、`viewer` に見える Asset だけを対象にする)。"""
     counts: dict[uuid.UUID, int] = dict.fromkeys(group_ids, 0)
     cover: dict[uuid.UUID, uuid.UUID | None] = dict.fromkeys(group_ids, None)
     if not group_ids:
@@ -64,7 +75,11 @@ def _member_stats(
             AssetGroupMember.asset_group_id, AssetGroupMember.asset_id, AssetGroupMember.added_at
         )
         .join(Asset, Asset.id == AssetGroupMember.asset_id)
-        .where(AssetGroupMember.asset_group_id.in_(group_ids), Asset.deleted_at.is_(None))
+        .where(
+            AssetGroupMember.asset_group_id.in_(group_ids),
+            Asset.deleted_at.is_(None),
+            _asset_cond(viewer),
+        )
     ).all()
     for group_id, asset_id, added_at in rows:
         counts[group_id] += 1
@@ -88,16 +103,16 @@ def _to_row(
     )
 
 
-def _row_for_group(db: Session, group: AssetGroup) -> AssetGroupRow:
-    count, cover = _member_stats(db, [group.id]).get(group.id, (0, None))
+def _row_for_group(db: Session, group: AssetGroup, viewer: CurrentUser | None) -> AssetGroupRow:
+    count, cover = _member_stats(db, [group.id], viewer).get(group.id, (0, None))
     return _to_row(group, count, cover)
 
 
-def _active_groups_in_order(db: Session) -> list[AssetGroup]:
+def _active_groups_in_order(db: Session, viewer: CurrentUser) -> list[AssetGroup]:
     return list(
         db.execute(
             select(AssetGroup)
-            .where(AssetGroup.deleted_at.is_(None))
+            .where(AssetGroup.deleted_at.is_(None), group_visible(viewer))
             .order_by(AssetGroup.position.asc(), AssetGroup.created_at.desc(), AssetGroup.id.desc())
         )
         .scalars()
@@ -105,27 +120,32 @@ def _active_groups_in_order(db: Session) -> list[AssetGroup]:
     )
 
 
-def _rows_for_groups(db: Session, groups: list[AssetGroup]) -> list[AssetGroupRow]:
-    stats = _member_stats(db, [g.id for g in groups])
+def _rows_for_groups(
+    db: Session, groups: list[AssetGroup], viewer: CurrentUser
+) -> list[AssetGroupRow]:
+    stats = _member_stats(db, [g.id for g in groups], viewer)
     return [_to_row(g, *stats.get(g.id, (0, None))) for g in groups]
 
 
-def list_groups(db: Session) -> list[AssetGroupRow]:
-    return _rows_for_groups(db, _active_groups_in_order(db))
+def list_groups(db: Session, viewer: CurrentUser) -> list[AssetGroupRow]:
+    """`viewer` に見える、削除されていないグループ(ADR-0025)。"""
+    return _rows_for_groups(db, _active_groups_in_order(db, viewer), viewer)
 
 
-def create_group(db: Session, name: str, created_by_user_id: uuid.UUID | None) -> AssetGroupRow:
-    """新しいグループは先頭に入れる(削除済みでないグループの最小の `position` − 1。
-    1件も無ければ 0)。"""
+def create_group(db: Session, name: str, viewer: CurrentUser) -> AssetGroupRow:
+    """新しいグループは先頭に入れる(`viewer` に見える、削除済みでないグループの最小の
+    `position` − 1。1件も無ければ 0)。作成者は `viewer`(個人モードは null)。"""
     now = _utcnow()
     min_position = db.execute(
-        select(func.min(AssetGroup.position)).where(AssetGroup.deleted_at.is_(None))
+        select(func.min(AssetGroup.position)).where(
+            AssetGroup.deleted_at.is_(None), group_visible(viewer)
+        )
     ).scalar_one_or_none()
     position = 0 if min_position is None else min_position - 1
     group = AssetGroup(
         name=name,
         position=position,
-        created_by_user_id=created_by_user_id,
+        created_by_user_id=viewer.id,
         created_at=now,
         updated_at=now,
     )
@@ -134,20 +154,23 @@ def create_group(db: Session, name: str, created_by_user_id: uuid.UUID | None) -
     return _to_row(group, 0, None)
 
 
-def rename_group(db: Session, group: AssetGroup, name: str) -> AssetGroupRow:
+def rename_group(db: Session, group: AssetGroup, name: str, viewer: CurrentUser) -> AssetGroupRow:
     group.name = name
     group.updated_at = _utcnow()
     db.flush()
-    return _row_for_group(db, group)
+    return _row_for_group(db, group, viewer)
 
 
-def reorder_groups(db: Session, group_ids: list[uuid.UUID]) -> list[AssetGroupRow]:
-    """削除済みでない全グループを `group_ids` の順に並べ、`position` を 0 から振り直す。
-    `group_ids` が削除済みでない全グループの id と過不足なく一致しない(重複を含む)ときは
+def reorder_groups(
+    db: Session, group_ids: list[uuid.UUID], viewer: CurrentUser
+) -> list[AssetGroupRow]:
+    """`viewer` に見える、削除済みでない全グループを `group_ids` の順に並べ、`position` を
+    0 から振り直す(他人のグループは対象にも照合にも含めない。ADR-0025)。
+    `group_ids` がそれらの id と過不足なく一致しない(重複を含む)ときは
     `AssetGroupOrderMismatchError` を送出し、何も変えない。`updated_at` は進めない
     (並び順はグループの中身の変更ではない)。
     """
-    groups = _active_groups_in_order(db)
+    groups = _active_groups_in_order(db, viewer)
     by_id = {g.id: g for g in groups}
     if len(group_ids) != len(set(group_ids)) or set(group_ids) != set(by_id):
         raise AssetGroupOrderMismatchError(
@@ -157,7 +180,7 @@ def reorder_groups(db: Session, group_ids: list[uuid.UUID]) -> list[AssetGroupRo
     for position, group in enumerate(ordered):
         group.position = position
     db.flush()
-    return _rows_for_groups(db, ordered)
+    return _rows_for_groups(db, ordered, viewer)
 
 
 def delete_group(db: Session, group: AssetGroup) -> None:
@@ -165,8 +188,17 @@ def delete_group(db: Session, group: AssetGroup) -> None:
     group.deleted_at = _utcnow()
 
 
-def add_members(db: Session, group: AssetGroup, asset_ids: list[uuid.UUID]) -> AssetGroupRow:
+def add_members(
+    db: Session,
+    group: AssetGroup,
+    asset_ids: list[uuid.UUID],
+    *,
+    viewer: CurrentUser | None,
+) -> AssetGroupRow:
     """Asset をこのグループへ移す(ADR-0022 3章)。
+
+    `viewer` に見えない Asset は、存在しない Asset と同じに扱う(ADR-0025)。`viewer=None` は
+    worker が生成物を入れるときだけ。
 
     別のグループ(削除済みグループを含む)に入っている Asset は、その行を消してから入れる
     (所属は常に 1 行)。既にこのグループに入っているものはそのまま(`added_at` も変えない)。
@@ -175,7 +207,11 @@ def add_members(db: Session, group: AssetGroup, asset_ids: list[uuid.UUID]) -> A
     """
     unique_ids = list(dict.fromkeys(asset_ids))
     found_ids = set(
-        db.execute(select(Asset.id).where(Asset.id.in_(unique_ids), Asset.deleted_at.is_(None)))
+        db.execute(
+            select(Asset.id).where(
+                Asset.id.in_(unique_ids), Asset.deleted_at.is_(None), _asset_cond(viewer)
+            )
+        )
         .scalars()
         .all()
     )
@@ -216,10 +252,12 @@ def add_members(db: Session, group: AssetGroup, asset_ids: list[uuid.UUID]) -> A
 
     group.updated_at = now
     db.flush()
-    return _row_for_group(db, group)
+    return _row_for_group(db, group, viewer)
 
 
-def remove_members(db: Session, group: AssetGroup, asset_ids: list[uuid.UUID]) -> AssetGroupRow:
+def remove_members(
+    db: Session, group: AssetGroup, asset_ids: list[uuid.UUID], viewer: CurrentUser
+) -> AssetGroupRow:
     """入っていないものは無視する(エラーにしない)。"""
     unique_ids = list(dict.fromkeys(asset_ids))
     db.execute(
@@ -230,16 +268,21 @@ def remove_members(db: Session, group: AssetGroup, asset_ids: list[uuid.UUID]) -
     )
     group.updated_at = _utcnow()
     db.flush()
-    return _row_for_group(db, group)
+    return _row_for_group(db, group, viewer)
 
 
-def group_for_asset(db: Session, asset_id: uuid.UUID) -> AssetGroupRef | None:
+def group_for_asset(db: Session, asset_id: uuid.UUID, viewer: CurrentUser) -> AssetGroupRef | None:
     """その Asset が属しているグループ(`AssetDetail.group` に使う)。所属は 1 つだけ。
-    どこにも入っていない、または削除済みグループにだけ残っているときは None。"""
+    どこにも入っていない、削除済みグループにだけ残っている、または `viewer` に見えない
+    グループ(ADR-0025)のときは None。"""
     group = db.execute(
         select(AssetGroup)
         .join(AssetGroupMember, AssetGroupMember.asset_group_id == AssetGroup.id)
-        .where(AssetGroupMember.asset_id == asset_id, AssetGroup.deleted_at.is_(None))
+        .where(
+            AssetGroupMember.asset_id == asset_id,
+            AssetGroup.deleted_at.is_(None),
+            group_visible(viewer),
+        )
     ).scalar_one_or_none()
     if group is None:
         return None

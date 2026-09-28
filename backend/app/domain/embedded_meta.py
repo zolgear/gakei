@@ -27,7 +27,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.identity import CurrentUser
 from app.domain.models import AppSetting, Asset, Run, RunInput, RunStatus
+from app.domain.visibility import VisibilityChecker
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 GAKEI_KEYWORD = b"gakei"
@@ -304,7 +306,7 @@ def _direct_edge(source_id: str, target_id: str, kind: str) -> dict[str, Any]:
     return {"source": source_id, "target": target_id, "kind": kind}
 
 
-def build_lineage_meta(session: Session, asset: Asset) -> dict[str, Any]:
+def build_lineage_meta(session: Session, asset: Asset, *, viewer: CurrentUser) -> dict[str, Any]:
     """`gakei.lineage/2` の内容を組み立てる(ADR-0014 6章)。起点から祖先方向だけを辿り
     (Run の全入力、上描きの下地、`origin`)、兄弟の出力と子孫は含めない。追記のみの列だけ
     から作るので、同じ Asset からは常に同じ内容(ダウンロード日時などは入れない)ができる。
@@ -312,7 +314,12 @@ def build_lineage_meta(session: Session, asset: Asset) -> dict[str, Any]:
     祖先に `origin_meta` を持つ Asset(取り込んだ画像)があり、その由来がこのインスタンスで
     解決できない(`origin_asset_id` が null)場合は、`origin_meta` に埋め込まれていたグラフ
     も(そのノードの `instance` を保ったまま)つなげて埋め込む。
+
+    ADR-0025: ダウンロードする人(`viewer`)に見える Asset・Run だけを埋め込む。見えない祖先は
+    入れず、その先へも辿らない。由来(`origin_asset_id`)が見えない Asset のときは、由来を
+    解決できない場合と同じく `origin_meta` のグラフ(元のファイルに書かれていた内容)をつなげる。
     """
+    checker = VisibilityChecker(session, viewer)
     instance_id = get_instance_id(session)
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -341,7 +348,7 @@ def build_lineage_meta(session: Session, asset: Asset) -> dict[str, Any]:
             continue
         visited_assets.add(current_id)
         current = session.get(Asset, current_id)
-        if current is None:
+        if current is None or not checker.asset(current):
             continue
         current_key = str(current_id)
         if current_key not in nodes and not add_node(
@@ -355,7 +362,7 @@ def build_lineage_meta(session: Session, asset: Asset) -> dict[str, Any]:
             and current.produced_by_run_id not in visited_runs
         ):
             run = session.get(Run, current.produced_by_run_id)
-            if run is not None:
+            if run is not None and checker.run(run):
                 run_key = str(run.id)
                 if run_key in nodes or add_node(run_key, _local_run_node(instance_id, run)):
                     visited_runs.add(run.id)
@@ -371,7 +378,7 @@ def build_lineage_meta(session: Session, asset: Asset) -> dict[str, Any]:
                     )
                     for run_input in run_inputs:
                         input_asset = session.get(Asset, run_input.asset_id)
-                        if input_asset is None:
+                        if input_asset is None or not checker.asset(input_asset):
                             continue
                         input_key = str(run_input.asset_id)
                         if input_key in nodes or add_node(
@@ -388,7 +395,7 @@ def build_lineage_meta(session: Session, asset: Asset) -> dict[str, Any]:
         # 2) 上描きスケッチの下地(ADR-0010)。
         if current.source_asset_id is not None:
             source_asset = session.get(Asset, current.source_asset_id)
-            if source_asset is not None:
+            if source_asset is not None and checker.asset(source_asset):
                 source_key = str(current.source_asset_id)
                 if source_key in nodes or add_node(
                     source_key, _local_asset_node(instance_id, source_asset)
@@ -398,16 +405,21 @@ def build_lineage_meta(session: Session, asset: Asset) -> dict[str, Any]:
                         queue.append(current.source_asset_id)
 
         # 3) 由来(ADR-0014)。同じインスタンスで解決できていれば、その Asset をそのまま辿る。
-        if current.origin_asset_id is not None:
-            origin_asset = session.get(Asset, current.origin_asset_id)
-            if origin_asset is not None:
-                origin_key = str(current.origin_asset_id)
-                if origin_key in nodes or add_node(
-                    origin_key, _local_asset_node(instance_id, origin_asset)
-                ):
-                    edges.append(_direct_edge(origin_key, current_key, "origin"))
-                    if current.origin_asset_id not in visited_assets:
-                        queue.append(current.origin_asset_id)
+        origin_asset = (
+            session.get(Asset, current.origin_asset_id)
+            if current.origin_asset_id is not None
+            else None
+        )
+        if origin_asset is not None and not checker.asset(origin_asset):
+            origin_asset = None
+        if origin_asset is not None:
+            origin_key = str(current.origin_asset_id)
+            if origin_key in nodes or add_node(
+                origin_key, _local_asset_node(instance_id, origin_asset)
+            ):
+                edges.append(_direct_edge(origin_key, current_key, "origin"))
+                if current.origin_asset_id not in visited_assets:
+                    queue.append(current.origin_asset_id)
         elif current.origin_meta is not None:
             # 解決できない由来(他のインスタンス、または既存 Asset が見つからない): その
             # `origin_meta` に埋め込まれていたグラフをつなげる(6章)。ノードごとの `instance`

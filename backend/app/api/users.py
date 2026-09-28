@@ -26,9 +26,10 @@ from app.domain.avatars import (
     make_avatar_webp,
     save_avatar,
 )
-from app.domain.models import AppUser, Asset
+from app.domain.models import AppUser
 from app.domain.schemas import AuthUser, AvatarFromAssetRequest, CropRect
 from app.domain.storage import AssetStore
+from app.domain.visibility import get_visible_asset
 from app.i18n import t
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -111,7 +112,8 @@ def set_avatar_from_asset(
     user: CurrentUser = Depends(require_user),
 ) -> AuthUser:
     _require_oidc_mode(settings)
-    asset = db.get(Asset, body.asset_id)
+    # 他人の Asset は存在しないものと同じ扱い(ADR-0025)。
+    asset = get_visible_asset(db, user, body.asset_id)
     if asset is None or asset.deleted_at is not None:
         raise HTTPException(status_code=422, detail=t("users.avatar.assetNotFound"))
     data = store.read(asset.blob_key)
@@ -139,8 +141,13 @@ def get_avatar(
     request: Request,
     settings: Settings = Depends(get_settings),
     db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> Response:
     _require_oidc_mode(settings)
+    # ADR-0025: 他人の Run や Asset は見えないので、他人の実行者表示(アバター)を出す画面も
+    # 無い。本人のアバターだけを返し、他人の id は存在しないものと同じ 404 にする。
+    if user.id != user_id:
+        raise HTTPException(status_code=404, detail=t("users.avatar.notFound"))
     app_user = db.get(AppUser, user_id)
     if app_user is None or app_user.avatar_sha256 is None:
         raise HTTPException(status_code=404, detail=t("users.avatar.notFound"))

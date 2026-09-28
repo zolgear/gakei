@@ -19,6 +19,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import Receive, Scope, Send
 
+from app.auth.deps import bearer_token
 from app.auth.identity import LOCAL_ADMIN
 from app.config import Settings
 from app.domain import api_tokens as api_tokens_domain
@@ -70,16 +71,6 @@ def origin_allowed(
     return False
 
 
-def _bearer_token(request: Request) -> str | None:
-    header = request.headers.get("authorization")
-    if not header:
-        return None
-    scheme, _, value = header.partition(" ")
-    if scheme.lower() != "bearer" or not value.strip():
-        return None
-    return value.strip()
-
-
 class McpEndpoint:
     """`/mcp` の ASGI アプリ。セッションマネージャーは lifespan が `app.state` に置く。"""
 
@@ -111,7 +102,7 @@ class McpEndpoint:
             user = LOCAL_ADMIN
             token_id = None
         else:
-            raw = _bearer_token(request)
+            raw = bearer_token(request)
             if raw is None:
                 await self._unauthorized(scope, receive, send, t("mcp.tokenRequired"))
                 return
