@@ -277,5 +277,12 @@
     "tokenRequired": "An access token is required (Authorization: Bearer <token>).",
     "tokenInvalid": "The access token is invalid or has been revoked.",
     "originForbidden": "MCP requests from this Origin are not allowed."
+  },
+  "uploads": {
+    "notFound": "This upload URL does not exist.",
+    "gone": "This upload URL has already been used or has expired. Issue a new one with the MCP tool create_upload_url.",
+    "tooLarge": "Uploaded images must be under {mb}MB",
+    "empty": "The request body is empty. Send the image file bytes as the body.",
+    "noFile": "The multipart body does not contain an image file."
   }
 }

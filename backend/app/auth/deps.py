@@ -12,6 +12,8 @@ from app.auth.oidc import OidcClient
 from app.auth.sessions import find_user_for_token
 from app.config import Settings
 from app.deps import get_session, get_settings
+from app.domain import api_tokens as api_tokens_domain
+from app.domain import mcp_settings
 from app.i18n import t
 
 
@@ -53,3 +55,45 @@ def require_admin(user: CurrentUser = Depends(require_user)) -> CurrentUser:
     if not user.is_admin:
         raise HTTPException(status_code=403, detail=t("auth.adminRequired"))
     return user
+
+
+def bearer_token(request: Request) -> str | None:
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, value = header.partition(" ")
+    if scheme.lower() != "bearer" or not value.strip():
+        return None
+    return value.strip()
+
+
+def require_user_or_api_token(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    db: Session = Depends(get_session),
+    user: CurrentUser | None = Depends(get_current_user),
+) -> CurrentUser:
+    """Cookie のログインに加えて、MCP 用のアクセストークン(`Authorization: Bearer`)も受ける。
+
+    ADR-0023 7章 3: 使うのは画像の本体を取る `GET /api/assets/{id}/content` だけ。他の REST
+    API には広げない(そちらは `require_user` のまま)。トークンは MCP のためのものなので、
+    MCP が無効のときは受け付けない。失効済み・不明なトークンは 401。
+    """
+    if user is not None:
+        return user
+    raw = bearer_token(request)
+    if raw is None or not mcp_settings.is_enabled(db):
+        raise HTTPException(status_code=401, detail=t("auth.required"))
+    principal = api_tokens_domain.authenticate(
+        db, raw, settings.admin_email_set(), settings.allowed_email_domain_set()
+    )
+    if principal is None:
+        db.rollback()
+        raise HTTPException(
+            status_code=401,
+            detail=t("mcp.tokenInvalid"),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # `last_used_at` の更新を確定する。
+    db.commit()
+    return principal.user

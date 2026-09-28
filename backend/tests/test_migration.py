@@ -21,6 +21,7 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "app_user",
         "auth_session",
         "api_token",
+        "upload_ticket",
         "alembic_version",
     } <= tables
 
@@ -554,4 +555,56 @@ def test_migration_upgrades_from_0015_to_0016_adds_api_token_and_run_origin(tmp_
     run_columns = {c["name"] for c in inspector.get_columns("run")}
     assert "origin" not in run_columns
     assert "api_token_id" not in run_columns
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0016_to_0017_adds_upload_ticket(tmp_path) -> None:  # noqa: ANN001
+    """既存の0016適用済みDBでも、起動時のupgrade headで0017(upload_ticket)が当たること。
+    downgrade も通ること(ADR-0023 7章 2)。
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0016")
+    engine = create_engine(f"sqlite:///{db_path}")
+    assert "upload_ticket" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    assert "upload_ticket" in set(inspector.get_table_names())
+    columns = {c["name"] for c in inspector.get_columns("upload_ticket")}
+    assert columns == {
+        "id",
+        "token_hash",
+        "user_id",
+        "api_token_id",
+        "created_at",
+        "expires_at",
+        "used_at",
+        "asset_id",
+    }
+    fks = {fk["name"]: fk["referred_table"] for fk in inspector.get_foreign_keys("upload_ticket")}
+    assert fks == {
+        "fk_upload_ticket_user_id_app_user": "app_user",
+        "fk_upload_ticket_api_token_id_api_token": "api_token",
+        "fk_upload_ticket_asset_id_asset": "asset",
+    }
+    uniques = inspector.get_unique_constraints("upload_ticket")
+    assert any(u["column_names"] == ["token_hash"] for u in uniques)
+    engine.dispose()
+
+    command.downgrade(cfg, "0016")
+    engine = create_engine(f"sqlite:///{db_path}")
+    assert "upload_ticket" not in set(sa_inspect(engine).get_table_names())
     engine.dispose()

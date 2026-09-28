@@ -14,7 +14,7 @@ from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
-from app.auth.deps import require_user
+from app.auth.deps import require_user, require_user_or_api_token
 from app.auth.identity import CurrentUser
 from app.deps import get_session, get_store
 from app.domain.asset_groups import get_active_group_or_none, group_for_asset
@@ -41,6 +41,11 @@ from app.i18n import t
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
+# 画像の本体の配信だけは、Cookie に加えて MCP のアクセストークンも受ける(ADR-0023 7章 3)。
+# `main.py` で `require_user` の括りに入れず、このルーター自身に認可を掛ける。
+content_router = APIRouter(
+    prefix="/api/assets", tags=["assets"], dependencies=[Depends(require_user_or_api_token)]
+)
 
 _DERIVED_MEDIA_TYPE = "image/webp"
 
@@ -278,7 +283,7 @@ def restore_asset(asset_id: uuid.UUID, db: Session = Depends(get_session)) -> As
     return _to_detail(db, asset, produced_by_run)
 
 
-@router.get("/{asset_id}/content", operation_id="get_asset_content")
+@content_router.get("/{asset_id}/content", operation_id="get_asset_content")
 def get_asset_content(
     asset_id: uuid.UUID,
     request: Request,
