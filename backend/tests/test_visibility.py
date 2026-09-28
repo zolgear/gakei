@@ -230,7 +230,12 @@ _PARAM_SOURCES = {
 }
 
 # 利用者のデータではないので対象外のルート(ADR-0025 5章: 管理者設定は利用者のデータと別)。
-_EXCLUDED_PREFIXES = ("/api/auth/", "/api/uploads/", "/api/comfyui/", "/api/settings/")
+_EXCLUDED_PREFIXES = (
+    "/api/auth/",
+    "/api/uploads/",
+    "/api/comfyui/",
+    "/api/settings/annotation/onnx/",
+)
 
 
 def _bodies(w: World) -> dict[tuple[str, str], Any]:
