@@ -20,6 +20,7 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "comfy_workflow",
         "app_user",
         "auth_session",
+        "api_token",
         "alembic_version",
     } <= tables
 
@@ -486,4 +487,71 @@ def test_migration_upgrades_from_0014_to_0015_makes_member_asset_id_unique(tmp_p
     indexes = {i["name"]: i for i in sa_inspect(engine).get_indexes("asset_group_member")}
     assert "ux_asset_group_member_asset_id" not in indexes
     assert not indexes["ix_asset_group_member_asset_id"]["unique"]
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0015_to_0016_adds_api_token_and_run_origin(tmp_path) -> None:  # noqa: ANN001
+    """既存の0015適用済みDBでも、起動時のupgrade headで0016(api_token、run.origin、
+    run.api_token_id)が当たり、既存の Run は null(= 画面)のままであること。downgrade も
+    できること(ADR-0023)。"""
+    import uuid
+
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0015")
+
+    from sqlalchemy import Uuid, bindparam, create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    run_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO run (id, provider, model, operation, prompt, params, status, "
+                "queued_at) VALUES (:id, 'fake', 'm', 'generate', 'p', '{}', 'succeeded', "
+                "'2026-09-01 00:00:00.000000')"
+            ).bindparams(bindparam("id", type_=Uuid())),
+            {"id": run_id},
+        )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    assert "api_token" in set(inspector.get_table_names())
+    token_columns = {c["name"] for c in inspector.get_columns("api_token")}
+    assert token_columns == {
+        "id",
+        "user_id",
+        "name",
+        "token_hash",
+        "created_at",
+        "last_used_at",
+        "revoked_at",
+    }
+    run_columns = {c["name"] for c in inspector.get_columns("run")}
+    assert {"origin", "api_token_id"} <= run_columns
+    fks = {fk["name"]: fk for fk in inspector.get_foreign_keys("run")}
+    assert fks["fk_run_api_token_id_api_token"]["referred_table"] == "api_token"
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT origin, api_token_id FROM run")).one()
+    assert tuple(row) == (None, None)
+    engine.dispose()
+
+    command.downgrade(cfg, "0015")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    assert "api_token" not in set(inspector.get_table_names())
+    run_columns = {c["name"] for c in inspector.get_columns("run")}
+    assert "origin" not in run_columns
+    assert "api_token_id" not in run_columns
     engine.dispose()

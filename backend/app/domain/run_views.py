@@ -168,4 +168,5 @@ def run_summary_fields(
         "cost_usd": cost_from_usage(run.model, run.usage),
         "created_by": created_by,
         "asset_group": asset_group,
+        "origin": run.origin,
     }

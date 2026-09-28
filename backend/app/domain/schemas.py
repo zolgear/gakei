@@ -324,6 +324,8 @@ class RunSummary(BaseModel):
     # 生成時に指定したグループ(ADR-0022)。指定なし・削除済みのグループなら null。
     # 再実行でフォームに戻すためと、履歴・Run 詳細の表示に使う。
     asset_group: AssetGroupRef | None = None
+    # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツールから作った Run。
+    origin: str | None = None
 
 
 class RunDetail(RunSummary):
