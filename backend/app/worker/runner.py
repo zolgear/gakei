@@ -22,11 +22,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain import asset_groups as asset_groups_domain
 from app.domain import assets as assets_domain
-from app.domain.models import Asset, AssetKind, Run, RunInput, RunInputRole, RunStatus
+from app.domain.models import (
+    Asset,
+    AssetKind,
+    ComfyWorkflow,
+    Run,
+    RunInput,
+    RunInputRole,
+    RunStatus,
+)
 from app.domain.storage import AssetStore
 from app.i18n import t
 from app.providers.base import (
@@ -161,6 +169,27 @@ def _cleanup_partial_dir(partial_dir: Path) -> None:
         shutil.rmtree(partial_dir, ignore_errors=True)
 
 
+def _storage_model_label(session: Session, run: Run) -> str:
+    """原本の保存先フォルダに使うモデル名(ADR-0026 1章)。
+
+    ComfyUI の Run の `model` はワークフローの id なので、保存する時点のワークフロー名を
+    `comfy_workflow` から引く(論理削除済みでも名前は残っている)。行が無ければ Run の
+    params に記録した名前、それも無ければ id をそのまま使う。
+    """
+    if run.provider != "comfyui":
+        return run.model
+    try:
+        workflow = session.get(ComfyWorkflow, uuid.UUID(run.model))
+    except ValueError:
+        workflow = None
+    if workflow is not None:
+        return workflow.name
+    recorded = (run.params or {}).get("comfyui_workflow")
+    if isinstance(recorded, dict) and isinstance(recorded.get("name"), str):
+        return recorded["name"]
+    return run.model
+
+
 def _finish_run_succeeded(
     session_factory: sessionmaker,
     store: AssetStore,
@@ -178,6 +207,7 @@ def _finish_run_succeeded(
         assert run is not None
 
         output_ids: list[uuid.UUID] = []
+        storage_model = _storage_model_label(session, run)
         for index, output in enumerate(result.outputs):
             asset = assets_domain.ingest(
                 session,
@@ -187,6 +217,8 @@ def _finish_run_succeeded(
                 produced_by_run_id=run_id,
                 output_index=index,
                 created_by_user_id=run.created_by_user_id,
+                provider=run.provider,
+                model=storage_model,
             )
             output_ids.append(asset.id)
             if annotator is not None:

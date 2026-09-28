@@ -179,7 +179,10 @@ class UploadTicket(Base):
 
 
 class Asset(Base):
-    """画像そのものを表すノード。バイナリは不変で、blob_key は内容のハッシュから決まる。"""
+    """画像そのものを表すノード。バイナリは不変。
+
+    blob_key の決め方は ADR-0026(それより前に保存した行は ADR-0004 のキーのまま)。
+    """
 
     __tablename__ = "asset"
 
