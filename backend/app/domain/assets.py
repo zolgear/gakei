@@ -19,6 +19,7 @@ from PIL import UnidentifiedImageError as PillowUnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.identity import CurrentUser
 from app.domain import derivatives
 from app.domain.embedded_meta import (
     get_instance_id,
@@ -29,6 +30,7 @@ from app.domain.embedded_meta import (
 from app.domain.generation_meta import extract_generation_meta
 from app.domain.models import Asset, AssetKind, Run, RunInput
 from app.domain.storage import AssetStore
+from app.domain.visibility import get_visible_asset
 from app.i18n import t
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -167,7 +169,7 @@ def _ingest_replacement(
     kind: AssetKind,
     replaces_asset_id: uuid.UUID,
     *,
-    created_by_user_id: uuid.UUID | None = None,
+    viewer: CurrentUser,
 ) -> IngestResult:
     """未使用スケッチ・未使用マスクの再編集(ADR-0010、2026-09-25 追記)。`kind` は
     `sketch` か `mask`。置き換え元は同じ `kind` である必要がある。
@@ -178,8 +180,11 @@ def _ingest_replacement(
     `deleted_at` だけ)。置き換え元が使用済みなら証跡として残す。スケッチは従来どおり
     `source_asset_id` を置き換え元にして連鎖させるが、マスクは `source_asset_id` を
     持たないので新しいマスクを作るだけにする。
+
+    置き換え元が `viewer` に見えなければ、存在しない場合と同じエラーにする(ADR-0025)。
     """
-    target = session.get(Asset, replaces_asset_id)
+    created_by_user_id = viewer.id
+    target = get_visible_asset(session, viewer, replaces_asset_id)
     if target is None or target.deleted_at is not None:
         raise IngestError(t("assets.replaceTargetNotFound"))
     if target.kind != kind:
@@ -219,7 +224,7 @@ def ingest_upload(
     *,
     source_asset_id: uuid.UUID | None = None,
     replaces_asset_id: uuid.UUID | None = None,
-    created_by_user_id: uuid.UUID | None = None,
+    viewer: CurrentUser,
 ) -> IngestResult:
     """`POST /api/assets` から呼ぶ ingest(ADR-0014 4章・6章、ADR-0010 2026-09-25 追記)。
 
@@ -243,15 +248,23 @@ def ingest_upload(
     他のツールや C2PA が埋め込んだ生成メタ情報も読み、追記のみの列 `asset.embedded_meta`
     に保存する(ADR-0018)。読み取りは純粋関数(`domain/generation_meta.py`)で行い、
     何も見つからなければ null のままにする。
+
+    ADR-0025: 作成者は `viewer`(個人モードは null)。上描きの下地・置き換え元は `viewer` に
+    見える Asset だけを指定でき、見えなければ存在しない場合と同じエラーにする。既存の Asset を
+    返す重複判定(`matched_existing`)は、その Asset が `viewer` に見えるときだけ行い、見えなければ
+    新しい Asset として取り込む(ファイルを持っているだけで他人の画像の存在が分からないように。
+    同じ内容のファイル自体は保存領域の中で共有する)。見えない既存 Asset を指していた場合も、
+    `origin_asset_id` にはこれまでどおり記録する(API はその id を返さない。`api/assets.py`)。
     """
+    created_by_user_id = viewer.id
+    if source_asset_id is not None and get_visible_asset(session, viewer, source_asset_id) is None:
+        raise IngestError(t("assets.baseAssetNotFound"))
     if replaces_asset_id is not None:
         if kind not in (AssetKind.SKETCH, AssetKind.MASK):
             raise IngestError(t("assets.replacesAssetOnlyForSketchOrMask"))
         if source_asset_id is not None:
             raise IngestError(t("assets.cannotCombineSourceAndReplaces"))
-        return _ingest_replacement(
-            session, store, data, kind, replaces_asset_id, created_by_user_id=created_by_user_id
-        )
+        return _ingest_replacement(session, store, data, kind, replaces_asset_id, viewer=viewer)
 
     if kind != AssetKind.UPLOAD:
         asset = ingest(
@@ -279,9 +292,13 @@ def ingest_upload(
             except ValueError:
                 existing = None
 
+        existing_visible = existing is not None and (
+            get_visible_asset(session, viewer, existing.id) is not None
+        )
         if (
             same_instance
             and existing is not None
+            and existing_visible
             and existing.deleted_at is None
             and _content_matches_existing(store, existing, data)
         ):

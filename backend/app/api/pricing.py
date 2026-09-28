@@ -13,9 +13,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.deps import require_user
+from app.auth.identity import CurrentUser
 from app.deps import get_session
 from app.domain.models import Asset
 from app.domain.pricing import estimate_cost
+from app.domain.visibility import asset_visible
 from app.providers.openai_pricing import PRICING_CHECKED_AT, PRICING_SOURCE_URL
 
 router = APIRouter(tags=["pricing"])
@@ -83,6 +86,7 @@ def estimate_price(
     prompt_length: int = Query(default=0, ge=0),
     input_asset_ids: str | None = Query(default=None),
     db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> PriceEstimate:
     # `operation` は API 契約上の必須クエリ(将来 generate/edit で推定の仕方を分ける余地の
     # ため)だが、現在の計算式は operation を見ない。
@@ -92,7 +96,12 @@ def estimate_price(
     input_images: list[tuple[uuid.UUID, int, int]] = []
     if asset_ids:
         rows = (
-            db.execute(select(Asset).where(Asset.id.in_(asset_ids), Asset.deleted_at.is_(None)))
+            # 見えない Asset(他人のもの)は存在しない Asset と同じく数えない(ADR-0025)。
+            db.execute(
+                select(Asset).where(
+                    Asset.id.in_(asset_ids), Asset.deleted_at.is_(None), asset_visible(user)
+                )
+            )
             .scalars()
             .all()
         )

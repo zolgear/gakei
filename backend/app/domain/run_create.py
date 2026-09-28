@@ -13,12 +13,13 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.domain import api_key as api_key_domain
-from app.domain.asset_groups import get_active_group_or_none
-from app.domain.models import Asset, Run, RunInput, RunStatus
+from app.domain.models import Run, RunInput, RunStatus
 from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
 from app.domain.schemas import RunCreateRequest
+from app.domain.visibility import get_visible_asset, get_visible_group
 from app.i18n import t
 from app.providers.base import ProviderUnavailableError, RunDraft
 from app.providers.registry import ProviderRegistry
@@ -51,10 +52,14 @@ def create_run(
     settings: Settings,
     body: RunCreateRequest,
     *,
-    created_by_user_id: uuid.UUID | None,
+    viewer: CurrentUser,
     origin: RunOrigin | None = None,
 ) -> Run:
     """検証してから Run を挿入してコミットし、runner を起こす。作った Run を返す。
+
+    実行者は `viewer`(`created_by_user_id = viewer.id`。個人モードは null)。入力画像・マスク・
+    出力先のグループは `viewer` に見えるものだけを指定でき、見えないものは存在しない場合と
+    同じエラーにする(ADR-0025 3章)。
 
     検証に通らなければ何も書き込まずに `RunCreateError` を送出する(Run は追記のみの証跡の
     ため、実行して failed にするより作る前に断る方が記録を汚さない。ADR-0012、ADR-0013)。
@@ -81,10 +86,11 @@ def create_run(
             unavailable_reason or t("runs.providerUnavailable", label=provider.label),
         )
 
-    # ADR-0022: 出力を入れるグループ。存在しない・削除済みなら Run を作らない。
+    # ADR-0022: 出力を入れるグループ。存在しない・削除済み・見えない(ADR-0025)なら
+    # Run を作らない。
     if (
         body.asset_group_id is not None
-        and get_active_group_or_none(db, body.asset_group_id) is None
+        and get_visible_group(db, viewer, body.asset_group_id) is None
     ):
         raise RunCreateError("not_found", t("assetGroups.notFound"))
 
@@ -92,7 +98,7 @@ def create_run(
 
     input_metas: list[RunInputMeta] = []
     for item in body.inputs:
-        asset = db.get(Asset, item.asset_id)
+        asset = get_visible_asset(db, viewer, item.asset_id)
         if asset is None or asset.deleted_at is not None:
             raise RunCreateError("invalid", t("runs.assetNotFound", id=item.asset_id))
         input_metas.append(
@@ -138,7 +144,7 @@ def create_run(
         prompt=body.prompt,
         params=params,
         status=RunStatus.QUEUED,
-        created_by_user_id=created_by_user_id,
+        created_by_user_id=viewer.id,
         asset_group_id=body.asset_group_id,
         origin=origin.origin,
         api_token_id=origin.api_token_id,

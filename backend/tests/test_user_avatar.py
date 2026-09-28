@@ -395,15 +395,16 @@ def test_avatar_endpoints_are_404_in_none_mode(client: TestClient) -> None:
     assert get_response.status_code == 404
 
 
-def test_other_users_avatar_is_visible(client_oidc: TestClient) -> None:
+def test_other_users_avatar_is_not_visible(client_oidc: TestClient) -> None:
+    """ADR-0025: 他人の Run・Asset が見えないので、他人のアバターを出す画面も無い。
+    本人のアバターだけを返し、他人のものは存在しないものと同じ 404。"""
     login_as(client_oidc, "avatar-owner@example.com", "Avatar Owner")
     upload = _upload_avatar(client_oidc, make_png_bytes())
     avatar_url = upload.json()["avatar_url"]
+    assert client_oidc.get(avatar_url).status_code == 200
 
     login_as(client_oidc, "avatar-viewer@example.com", "Avatar Viewer")
-    response = client_oidc.get(avatar_url)
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/webp"
+    assert client_oidc.get(avatar_url).status_code == 404
 
 
 def test_avatar_response_has_etag_and_cache_control(client_oidc: TestClient) -> None:

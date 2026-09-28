@@ -387,7 +387,8 @@ export interface paths {
         /**
          * Add Asset Group Assets
          * @description Asset をこのグループへ移す。別のグループに入っていれば外してから入れ、既に入っている
-         *     ものは無視する。削除済みや存在しない Asset が1件でもあれば 404 で全体を拒む。
+         *     ものは無視する。削除済みや存在しない(他人のものを含む)Asset が1件でもあれば 404 で
+         *     全体を拒む。
          */
         post: operations["add_asset_group_assets"];
         delete?: never;
@@ -448,6 +449,7 @@ export interface paths {
          *
          *     出力 Asset(`produced_by_run_id = run_id` で未削除のもの)も同一トランザクションで
          *     論理削除する(ADR-0008「削除」追加分)。`run`/`run_input` の他の列は変更しない。
+         *     他人の Run は存在しないものと同じ 404(ADR-0025)。
          */
         delete: operations["delete_run"];
         options?: never;
@@ -1040,6 +1042,11 @@ export interface components {
         AssetOrigin: {
             /** Asset Id */
             asset_id?: string | null;
+            /**
+             * Asset Hidden
+             * @default false
+             */
+            asset_hidden: boolean;
             /** Same Instance */
             same_instance: boolean;
             /** Meta */
@@ -1724,6 +1731,11 @@ export interface components {
             instance?: string | null;
             /** Resolved Asset Id */
             resolved_asset_id?: string | null;
+            /**
+             * Local Hidden
+             * @default false
+             */
+            local_hidden: boolean;
             /** Embedded Detail */
             embedded_detail?: {
                 [key: string]: unknown;

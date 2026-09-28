@@ -12,6 +12,11 @@ up=2 で1世代分の入力 Asset まで届く、という数え方になる。
 祖先方向でたどり着いた Run(起点を生んだ Run に限らず、さらに祖先の Run も含む)は、
 n>1 で複数出力を持つことがある。その全出力(起点の兄弟に当たる Asset)を起点と同じ
 深さの葉として並べる。兄弟からさらに祖先・子孫へは辿らない。
+
+ADR-0025: 見る人(`viewer`)に見えるノードだけでグラフを作る。見えない Asset・Run は
+ノードにせず、そこから先へも辿らない(`VisibilityChecker`)。由来(`origin_asset_id`)が
+見えない Asset を指すときは、由来を解決できなかった場合と同じく、埋め込まれていたグラフ
+(ファイルに書かれていた内容)を展開する。
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from collections import deque
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.identity import CurrentUser
 from app.domain.assets import asset_is_used_as_input, is_restorable
 from app.domain.embedded_meta import get_instance_id, normalize_lineage_meta
 from app.domain.models import Asset, Run, RunInput, RunInputRole
@@ -33,6 +39,7 @@ from app.domain.schemas import (
     LineageNode,
     LineageRunInfo,
 )
+from app.domain.visibility import VisibilityChecker, asset_visible
 
 # 世代の上限は実質的に設けない(1世代 = Asset→Run→Asset の2ホップ)。探索の量は
 # MAX_NODES で抑える(ADR-0014 6章、2026-09-24 追記)。
@@ -99,7 +106,7 @@ def _valid_embedded_id(value: object) -> uuid.UUID | None:
 
 
 def _resolve_embedded_asset(
-    db: Session, node_id: uuid.UUID, origin_ref: object = None
+    db: Session, checker: VisibilityChecker, node_id: uuid.UUID, origin_ref: object = None
 ) -> uuid.UUID | None:
     """埋め込み(未検証)の asset ノードに対応する、取り込み済みのローカル Asset があれば
     その id(ADR-0014 6章)。`origin_ref_asset_id` が一致し、削除されていないものの
@@ -107,20 +114,25 @@ def _resolve_embedded_asset(
 
     ノードが `origin_ref`(そのノード自身が、加工せずに取り込まれた画像だったときの元の id)
     を持っていれば、その id でも探す。元の id がこのインスタンスの Asset なら、それを使う。
+    いずれも見る人に見える Asset だけを対象にする(ADR-0025)。
     """
     candidates = [node_id]
     ref_id = _valid_embedded_id(origin_ref.get("id")) if isinstance(origin_ref, dict) else None
     if ref_id is not None:
         if isinstance(origin_ref, dict) and origin_ref.get("instance") == get_instance_id(db):
             local = db.get(Asset, ref_id)
-            if local is not None and local.deleted_at is None:
+            if local is not None and local.deleted_at is None and checker.asset(local):
                 return local.id
         candidates.append(ref_id)
     for candidate in candidates:
         row = (
             db.execute(
                 select(Asset)
-                .where(Asset.origin_ref_asset_id == candidate, Asset.deleted_at.is_(None))
+                .where(
+                    Asset.origin_ref_asset_id == candidate,
+                    Asset.deleted_at.is_(None),
+                    asset_visible(checker.user),
+                )
                 .order_by(Asset.created_at.desc())
             )
             .scalars()
@@ -131,7 +143,14 @@ def _resolve_embedded_asset(
     return None
 
 
-def _embedded_node(db: Session, node_id: uuid.UUID, enode: dict, depth: int) -> LineageNode:
+def _embedded_node(
+    db: Session,
+    checker: VisibilityChecker,
+    node_id: uuid.UUID,
+    enode: dict,
+    depth: int,
+    local_hidden: bool = False,
+) -> LineageNode:
     """`normalize_lineage_meta` が返した1ノードから、埋め込み(未検証)の LineageNode を作る。
     自己申告データなので、想定外の型が来ても Pydantic のバリデーションで落ちないよう防御的に
     値を検査する(ADR-0014 6章)。
@@ -155,7 +174,7 @@ def _embedded_node(db: Session, node_id: uuid.UUID, enode: dict, depth: int) -> 
             mime=mime if isinstance(mime, str) else None,
             restorable=False,
         )
-        resolved_asset_id = _resolve_embedded_asset(db, node_id, enode.get("origin_ref"))
+        resolved_asset_id = _resolve_embedded_asset(db, checker, node_id, enode.get("origin_ref"))
     else:
         operation = enode.get("operation")
         if operation not in ("generate", "edit"):
@@ -188,6 +207,7 @@ def _embedded_node(db: Session, node_id: uuid.UUID, enode: dict, depth: int) -> 
         embedded=True,
         instance=instance if isinstance(instance, str) else None,
         resolved_asset_id=resolved_asset_id,
+        local_hidden=local_hidden,
         embedded_detail=enode,
         asset=asset_info,
         run=run_info,
@@ -196,6 +216,7 @@ def _embedded_node(db: Session, node_id: uuid.UUID, enode: dict, depth: int) -> 
 
 def _expand_embedded_ancestors(
     db: Session,
+    checker: VisibilityChecker,
     nodes: dict[uuid.UUID, LineageNode],
     edges: list[LineageEdge],
     embedded: dict,
@@ -246,13 +267,17 @@ def _expand_embedded_ancestors(
 
         node_type = enode.get("type") if enode.get("type") in ("asset", "run") else None
         resolved_locally = False
+        # このインスタンスの行だが、見る人に見えない(ADR-0025)。埋め込みの内容で表示する。
+        local_hidden = False
         substituted = substitute_id is not None and node_id_str == str(start_id)
         edge_target = substitute_id if substituted else node_uuid
 
         if not substituted and node_type is not None and enode.get("instance") == instance_id:
             if node_type == "asset":
                 local_asset = db.get(Asset, node_uuid)
-                if local_asset is not None:
+                if local_asset is not None and not checker.asset(local_asset):
+                    local_hidden = True
+                elif local_asset is not None:
                     if node_uuid not in nodes:
                         if len(nodes) >= max_nodes:
                             truncated = True
@@ -262,7 +287,9 @@ def _expand_embedded_ancestors(
                     resolved_locally = True
             else:
                 local_run = db.get(Run, node_uuid)
-                if local_run is not None:
+                if local_run is not None and not checker.run(local_run):
+                    local_hidden = True
+                elif local_run is not None:
                     if node_uuid not in nodes:
                         if len(nodes) >= max_nodes:
                             truncated = True
@@ -275,7 +302,9 @@ def _expand_embedded_ancestors(
             if len(nodes) >= max_nodes:
                 truncated = True
             else:
-                nodes[node_uuid] = _embedded_node(db, node_uuid, enode, depth)
+                nodes[node_uuid] = _embedded_node(
+                    db, checker, node_uuid, enode, depth, local_hidden=local_hidden
+                )
 
         if resolved_locally:
             # ローカルの Asset に解決できた場合、その祖先はローカルの探索
@@ -331,13 +360,15 @@ def _expand_embedded_ancestors(
 
 def _expand_ancestors(
     db: Session,
+    checker: VisibilityChecker,
     nodes: dict[uuid.UUID, LineageNode],
     edges: list[LineageEdge],
     root_id: uuid.UUID,
     up: int,
     max_nodes: int,
 ) -> bool:
-    """祖先方向: Asset → produced_by の Run → その Run の全入力 Asset → 再帰。"""
+    """祖先方向: Asset → produced_by の Run → その Run の全入力 Asset → 再帰。
+    見る人に見えない Asset・Run はノードにせず、その先へも辿らない(ADR-0025)。"""
     truncated = False
     asset_expanded: set[uuid.UUID] = set()
     run_inputs_expanded: set[uuid.UUID] = set()
@@ -354,7 +385,7 @@ def _expand_ancestors(
         asset_expanded.add(asset_id)
 
         asset = db.get(Asset, asset_id)
-        if asset is None:
+        if asset is None or not checker.asset(asset):
             continue
 
         # ADR-0010(2026-09-23 追記): 上描きスケッチは source_asset_id で下地 Asset を指す。
@@ -368,7 +399,7 @@ def _expand_ancestors(
                     truncated = True
                     continue
                 source_asset = db.get(Asset, asset.source_asset_id)
-                if source_asset is None:
+                if source_asset is None or not checker.asset(source_asset):
                     continue
                 nodes[asset.source_asset_id] = _asset_node(db, source_asset, source_depth)
 
@@ -385,8 +416,9 @@ def _expand_ancestors(
 
         # ADR-0014(2026-09-24 追記): ダウンロードした PNG を再アップロードして、埋め込まれた
         # `gakei` メタ情報が指す既存 Asset と内容が一致しなかった場合の由来(未検証)。
-        # sketch_source と同じく、Run を介さない直接の辺として辿る。
-        if asset.origin_asset_id is not None:
+        # sketch_source と同じく、Run を介さない直接の辺として辿る。見る人に見えない Asset を
+        # 指すときは辿らず、下の「解決できない由来」と同じく埋め込みのグラフを展開する(ADR-0025)。
+        if asset.origin_asset_id is not None and checker.asset_id(asset.origin_asset_id):
             origin_depth = depth - 1
             if -origin_depth > up:
                 continue
@@ -424,6 +456,7 @@ def _expand_ancestors(
                     collapse = asset.origin_ref_asset_id == embedded_root_id
                     embedded_truncated = _expand_embedded_ancestors(
                         db,
+                        checker,
                         nodes,
                         edges,
                         embedded,
@@ -460,7 +493,7 @@ def _expand_ancestors(
                 truncated = True
                 continue
             run = db.get(Run, run_id)
-            if run is None:
+            if run is None or not checker.run(run):
                 continue
             nodes[run_id] = _run_node(run, run_depth)
 
@@ -478,6 +511,8 @@ def _expand_ancestors(
                 .all()
             )
             for sibling_asset in sibling_outputs:
+                if not checker.asset(sibling_asset):
+                    continue
                 if sibling_asset.id not in nodes:
                     if len(nodes) >= max_nodes:
                         truncated = True
@@ -495,6 +530,10 @@ def _expand_ancestors(
                         primary=False,
                     )
                 )
+
+        # Run が見えずにノードにならなかったときは、辺も張らず、その入力へも辿らない。
+        if run_id not in nodes:
+            continue
 
         # この Run がこの Asset を生んだ、という output エッジ(兄弟出力の一括処理で
         # 既に足されていれば二重にしない)。
@@ -527,6 +566,8 @@ def _expand_ancestors(
         )
         for run_input in run_inputs:
             is_primary = run_input.role == RunInputRole.IMAGE and run_input.position == 0
+            if not checker.asset_id(run_input.asset_id):
+                continue
             if run_input.asset_id not in nodes:
                 if len(nodes) >= max_nodes:
                     truncated = True
@@ -565,13 +606,15 @@ def _is_replaced_away_sketch(db: Session, asset: Asset) -> bool:
 
 def _expand_descendants(
     db: Session,
+    checker: VisibilityChecker,
     nodes: dict[uuid.UUID, LineageNode],
     edges: list[LineageEdge],
     root_id: uuid.UUID,
     down: int,
     max_nodes: int,
 ) -> bool:
-    """子孫方向: Asset → それを入力に使った Run(失敗した Run も含む)→ 出力 Asset → 再帰。"""
+    """子孫方向: Asset → それを入力に使った Run(失敗した Run も含む)→ 出力 Asset → 再帰。
+    見る人に見えない Asset・Run はノードにせず、その先へも辿らない(ADR-0025)。"""
     truncated = False
     asset_expanded: set[uuid.UUID] = set()
     run_output_expanded: set[uuid.UUID] = set()
@@ -593,6 +636,8 @@ def _expand_descendants(
             for derived_asset in derived_assets:
                 # 置き換えで消えた未使用スケッチの下書きは辿らない(ADR-0010、2026-09-25 追記)。
                 if _is_replaced_away_sketch(db, derived_asset):
+                    continue
+                if not checker.asset(derived_asset):
                     continue
                 if derived_asset.id not in nodes:
                     if len(nodes) >= max_nodes:
@@ -618,6 +663,8 @@ def _expand_descendants(
                 db.execute(select(Asset).where(Asset.origin_asset_id == asset_id)).scalars().all()
             )
             for derived_asset in derived_from_origin:
+                if not checker.asset(derived_asset):
+                    continue
                 if derived_asset.id not in nodes:
                     if len(nodes) >= max_nodes:
                         truncated = True
@@ -650,7 +697,7 @@ def _expand_descendants(
                     truncated = True
                     continue
                 run = db.get(Run, run_id)
-                if run is None:
+                if run is None or not checker.run(run):
                     continue
                 nodes[run_id] = _run_node(run, run_depth)
 
@@ -683,6 +730,8 @@ def _expand_descendants(
                 .all()
             )
             for output_asset in outputs:
+                if not checker.asset(output_asset):
+                    continue
                 if output_asset.id not in nodes:
                     if len(nodes) >= max_nodes:
                         truncated = True
@@ -706,6 +755,8 @@ def _expand_descendants(
 def build_asset_lineage(
     db: Session,
     root_asset_id: uuid.UUID,
+    *,
+    viewer: CurrentUser,
     up: int = DEFAULT_UP,
     down: int = DEFAULT_DOWN,
     max_nodes: int = MAX_NODES,
@@ -713,17 +764,23 @@ def build_asset_lineage(
     """起点 Asset の系列グラフを組み立てる。
 
     論理削除された Asset / Run も `deleted: true` を付けて含める(来歴として参照できる)。
+    起点が `viewer` に見えなければ、存在しない場合と同じ `LineageNotFoundError`(ADR-0025)。
     """
+    checker = VisibilityChecker(db, viewer)
     root = db.get(Asset, root_asset_id)
-    if root is None:
+    if root is None or not checker.asset(root):
         raise LineageNotFoundError(root_asset_id)
 
     nodes: dict[uuid.UUID, LineageNode] = {root.id: _asset_node(db, root, 0)}
     edges: list[LineageEdge] = []
 
-    truncated_up = _expand_ancestors(db, nodes, edges, root.id, up, max_nodes) if up > 0 else False
+    truncated_up = (
+        _expand_ancestors(db, checker, nodes, edges, root.id, up, max_nodes) if up > 0 else False
+    )
     truncated_down = (
-        _expand_descendants(db, nodes, edges, root.id, down, max_nodes) if down > 0 else False
+        _expand_descendants(db, checker, nodes, edges, root.id, down, max_nodes)
+        if down > 0
+        else False
     )
 
     # 埋め込み(未検証)のグラフは、ノード数の上限や壊れた自己申告で端点が欠けることがある。

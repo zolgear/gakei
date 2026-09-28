@@ -184,7 +184,11 @@ class AssetOrigin(BaseModel):
     """
 
     # 同じインスタンスの既存 Asset を指していた場合のみ(内容は一致しなかった)。
+    # 見る人に見えない Asset(他人のもの。ADR-0025)のときは null にし、`asset_hidden` を立てる。
     asset_id: uuid.UUID | None = None
+    # 由来がこのインスタンスの別の Asset だが、見る人には見せられない(ADR-0025 4章)。
+    # 画面は「このインスタンスの別の Asset(表示できません)」とだけ示す。
+    asset_hidden: bool = False
     # meta["instance"] がこの GAKEI インスタンスの id と一致するか。
     same_instance: bool
     # 読み取った `gakei.lineage/1` の JSON をそのまま返す(自己申告)。
@@ -412,8 +416,13 @@ class LineageNode(BaseModel):
     embedded: bool = False
     instance: str | None = None
     # 埋め込み(未検証)の asset ノードのうち、`origin_ref_asset_id` で対応付けられた
-    # 取り込み済みのローカル Asset があれば、その id(ADR-0014 6章)。
+    # 取り込み済みのローカル Asset があれば、その id(ADR-0014 6章)。見る人に見える
+    # Asset だけを対応付ける(ADR-0025)。
     resolved_asset_id: uuid.UUID | None = None
+    # 埋め込み(未検証)ノードが、このインスタンスの別の Asset / Run を指しているが、見る人には
+    # 見せられない(他人のもの。ADR-0025 4章)。画面は「このインスタンスの別の Asset
+    # (表示できません)」とだけ示す。ノードの内容は埋め込まれていたもの(ファイル由来)だけ。
+    local_hidden: bool = False
     # 埋め込み(未検証)ノードの正規化後の生データ(prompt/params を省略せずに持つ)。
     # インスペクターでの全文表示に使う(ADR-0014 6章)。
     embedded_detail: dict[str, Any] | None = None

@@ -62,7 +62,7 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 | `estimate_cost` | 生成する前に料金の目安(USD)を出す。Run は作らない |
 | `generate_image` | Generate / Edit を実行する(**課金を伴う**)。入力画像とマスクは Asset ID で渡す。Run を登録したらすぐ `run_id` を返す |
 | `get_run` | Run の状態、出力、料金の目安、1 時間の上限の残り。完了まで待つこともできる(1 回最大 25 秒) |
-| `list_runs` | 最近の Run の一覧(実行元、作成時刻、状態、実行者で絞り込み) |
+| `list_runs` | 自分の最近の Run の一覧(実行元、作成時刻、状態で絞り込み) |
 | `cancel_run` | 待機中の Run を取り消す |
 | `search_assets` | ストックを検索する(キーワード、種類、グループ) |
 | `get_asset` | Asset の情報、主たる親、生成した Run |
@@ -72,6 +72,8 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 | `list_groups` / `create_group` / `move_to_group` | グループの一覧、作成、Asset の移動 |
 
 削除と設定の変更は提供していない。画面で行う。
+
+**閲覧範囲:** 認証モードでは、どのツールもトークンの持ち主が作ったものだけを扱う(画面と同じ。ADR-0025)。他人の Run・画像・グループ・プロンプトセットは検索にも一覧にも出ず、id を指定しても「見つからない」エラーになる。入力画像や出力先のグループにも自分のものだけを指定できる。画像の本体(`GET /api/assets/{id}/content`)をトークンで取るときも同じ。管理者のトークンでも他人のものは見えない(個人モードの頃のデータだけは管理者に見える)。
 
 - 出力は Asset ID、原本の URL、画面で開く URL で返る。本文に載る画像はサムネイル(512px)だけで、4K の原本は URL から取得する(「4. 画像の受け渡し」)。
 - `get_asset` は、原本から数えた透過の情報を返す。`has_alpha`(アルファチャンネルがあるか)と `transparent_ratio`(alpha < 255 のピクセルの割合。0〜1)。サムネイルでは透過かどうか分かりにくいので、背景を透過にしたかの確認に使う。
@@ -88,7 +90,7 @@ get_run(run_id="…", wait_seconds=25)
   → {"status": "succeeded", "outputs": [{"asset_id": "…", "url": "…"}], …}
 ```
 
-- `run_id` を見失ったときは `list_runs` で探せる。例: `list_runs(origin="mcp", since="2026-09-28T10:00:00Z")`。既定では自分(トークンの持ち主)が作った Run だけを返す。`created_by="anyone"` で全員の Run も見られる(閲覧範囲は画面と同じく全員全件)。個人モードでは全部の Run が自分の Run になる。
+- `run_id` を見失ったときは `list_runs` で探せる。例: `list_runs(origin="mcp", since="2026-09-28T10:00:00Z")`。自分(トークンの持ち主)が作った Run だけを返す。個人モードでは全部の Run が自分の Run になる。
 - `wait=true` を付けると `generate_image` 自身も最大 25 秒待つ。打ち切っても `run_id` は返る。
 - **サイズは `params.size` に入れる**(`"1024x1024"` のような `幅x高さ`、または `"auto"`)。指定できる範囲は `get_capabilities` の `providers[].size` にある。画質などの他のパラメーターも `params` に入れる。`get_capabilities` の結果の `example_generate_image` がそのまま使える呼び出しの例になっている。
 
