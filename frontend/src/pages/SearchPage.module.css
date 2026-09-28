@@ -220,3 +220,23 @@
     min-height: 44px;
   }
 }
+
+/* タイトル(ADR-0024)。抜粋の上に 1 行で出す。 */
+.assetTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+/* 一致したのがタイトルならタイトルとして、タグなら「#」を付けて出す。 */
+.assetSnippet[data-source='title'] {
+  color: var(--color-text);
+}
+
+.assetSnippet[data-source='tag']::before {
+  content: '#';
+  margin-right: 2px;
+  color: var(--color-text-faint);
+}

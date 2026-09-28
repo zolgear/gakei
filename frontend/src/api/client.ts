@@ -79,6 +79,21 @@ export type GeneralSettingsUpdateRequest = components['schemas']['GeneralSetting
 export type ModerationSetting = components['schemas']['ModerationSetting']
 export type ComfyUITimeoutSetting = components['schemas']['ComfyUITimeoutSetting']
 
+// -- タイトルとタグ(ADR-0024) --------------------------------------------------
+
+export type AssetTagRef = components['schemas']['AssetTagRef']
+export type TagSource = AssetTagRef['source']
+export type AnnotationStatusView = components['schemas']['AnnotationStatusView']
+export type AssetAnnotationResponse = components['schemas']['AssetAnnotationResponse']
+export type TagCount = components['schemas']['TagCount']
+export type TagListResponse = components['schemas']['TagListResponse']
+export type AnnotationSettingsResponse = components['schemas']['AnnotationSettingsResponse']
+export type AnnotationSettingsUpdateRequest = components['schemas']['AnnotationSettingsUpdateRequest']
+export type AnnotationBackfillResponse = components['schemas']['AnnotationBackfillResponse']
+export type OnnxModelStatus = components['schemas']['OnnxModelStatus']
+export type OnnxModelName = OnnxModelStatus['name']
+export type AnnotationEngine = NonNullable<AnnotationSettingsResponse['usable_engines']>[number]
+
 // -- MCP サーバーとアクセストークン(ADR-0023) ----------------------------------
 
 export type McpSettingsResponse = components['schemas']['McpSettingsResponse']
@@ -637,4 +652,85 @@ export function updateComfyWorkflow(
 /** 論理削除。過去の Run の記録(run.params.comfyui_prompt に確定済みのグラフを保存済み)は変わらない。 */
 export function deleteComfyWorkflow(workflowId: string): Promise<void> {
   return request(`/api/comfyui/workflows/${workflowId}`, { method: 'DELETE' })
+}
+
+// -- タイトルとタグ(ADR-0024) --------------------------------------------------
+// 編集はログイン者全員。マスクと削除済みの Asset は 409(detail に理由)。いずれも更新後の注釈を返す。
+
+/** null・空文字はタイトルを消す(以後も自動では付けない)。200 字を超えると 422。 */
+export function updateAssetTitle(assetId: string, title: string | null): Promise<AssetAnnotationResponse> {
+  return request(`/api/assets/${assetId}/title`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+}
+
+/** 名前はサーバーで正規化される(NFKC、小文字化など)。付けたタグは source=user。 */
+export function addAssetTag(assetId: string, name: string): Promise<AssetAnnotationResponse> {
+  return request(`/api/assets/${assetId}/tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+/** 自動のタグを消すと、再推定でも付け直さない(サーバー側で記録する)。 */
+export function removeAssetTag(assetId: string, name: string): Promise<AssetAnnotationResponse> {
+  return request(`/api/assets/${assetId}/tags/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+/** 再推定を待ち行列に入れる。使えるエンジンが無ければ 409。人が決めたタイトルとタグは保たれる。 */
+export function annotateAsset(assetId: string): Promise<AssetAnnotationResponse> {
+  return request(`/api/assets/${assetId}/annotate`, { method: 'POST' })
+}
+
+/** 件数の多い順。`q` は部分一致(正規化してから比べる)。 */
+export function listTags(params: operations['list_tags']['parameters']['query'] = {}): Promise<TagListResponse> {
+  return request(`/api/tags${toQuery(params)}`)
+}
+
+/** 全ログイン者が読める(ビューアの「再推定」を出すかどうかに `usable_engines` を使う)。 */
+export function getAnnotationSettings(): Promise<AnnotationSettingsResponse> {
+  return request('/api/settings/annotation')
+}
+
+/** 管理者のみ。省略した項目は変更しない。`base_url` は null か空文字で「OpenAI の設定を流用」に戻す。 */
+export function updateAnnotationSettings(body: AnnotationSettingsUpdateRequest): Promise<AnnotationSettingsResponse> {
+  return request('/api/settings/annotation', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 推定専用のキー(管理者のみ)。値は応答に載らない(`api_key_set` だけ)。 */
+export function setAnnotationApiKey(apiKey: string): Promise<AnnotationSettingsResponse> {
+  return request('/api/settings/annotation/api-key', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey }),
+  })
+}
+
+export function deleteAnnotationApiKey(): Promise<AnnotationSettingsResponse> {
+  return request('/api/settings/annotation/api-key', { method: 'DELETE' })
+}
+
+/** ONNX タガーのモデルのダウンロードを始める(202)。進捗は `getAnnotationSettings` をポーリングして見る。 */
+export function downloadOnnxModel(model: OnnxModelName): Promise<AnnotationSettingsResponse> {
+  return request('/api/settings/annotation/onnx/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+}
+
+export function deleteOnnxModel(model: OnnxModelName): Promise<AnnotationSettingsResponse> {
+  return request(`/api/settings/annotation/onnx/${encodeURIComponent(model)}`, { method: 'DELETE' })
+}
+
+/** 推定を一度も実行していない画像(削除済みを除く)をまとめて待ち行列に入れる。 */
+export function backfillAnnotations(): Promise<AnnotationBackfillResponse> {
+  return request('/api/settings/annotation/backfill', { method: 'POST' })
 }

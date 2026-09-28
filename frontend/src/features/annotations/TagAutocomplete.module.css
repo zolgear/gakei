@@ -1,0 +1,106 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.submitButton {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.submitButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.submitButton:disabled {
+  opacity: 0.5;
+}
+
+/* 文書の流れのまま入力欄の直下に出す(スクロール領域の下端で切れないように)。 */
+.list {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.option:hover,
+.option[data-active='true'] {
+  background: var(--color-header-band);
+}
+
+.optionName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionCount {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 767px) {
+  .input,
+  .submitButton {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .option {
+    min-height: 44px;
+    font-size: 14px;
+  }
+}

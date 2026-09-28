@@ -42,4 +42,11 @@ describe('visibleSections', () => {
     expect(sections.indexOf('mcp')).toBe(sections.indexOf('comfyui') + 1)
     expect(visibleSections(false, true)).not.toContain('mcp')
   })
+
+  it('自動タイトル・タグは管理者設定の「生成」の直後で、非管理者には見せない', () => {
+    const sections = visibleSections(true, false)
+    expect(sections.indexOf('annotation')).toBe(sections.indexOf('generation') + 1)
+    expect(visibleSections(false, false)).not.toContain('annotation')
+    expect(visibleSections(false, true)).not.toContain('annotation')
+  })
 })

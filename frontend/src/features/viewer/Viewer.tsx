@@ -25,6 +25,8 @@ import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from '../lineage/EmbeddedMetaSection'
 import { OriginRecipeSection } from '../lineage/OriginRecipeSection'
 import { AssetGroupsSection } from './AssetGroupsSection'
+import { AssetAnnotationSection } from './AssetAnnotationSection'
+import { annotationPollInterval, supportsAnnotation } from '../annotations/annotationStatus'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
 import styles from './Viewer.module.css'
@@ -55,7 +57,12 @@ function isEditableTarget(el: Element | null): boolean {
 
 export function Viewer({ assetId }: ViewerProps) {
   const { t } = useI18n()
-  const assetQuery = useQuery({ queryKey: ['asset', assetId], queryFn: () => getAsset(assetId) })
+  // 推定中(ADR-0024)は終わるまで取り直す(`annotationPollInterval`)。
+  const assetQuery = useQuery({
+    queryKey: ['asset', assetId],
+    queryFn: () => getAsset(assetId),
+    refetchInterval: (query) => annotationPollInterval(query.state.data),
+  })
   const { originAssetId, setOriginAssetId } = useLineageOrigin()
   const { selectedPanel, openPanel } = useResourcePanel()
   const goBack = useBackNavigate('/')
@@ -257,6 +264,7 @@ export function Viewer({ assetId }: ViewerProps) {
                 </div>
               </div>
             )}
+            {supportsAnnotation(asset) && <AssetAnnotationSection asset={asset} />}
             <dl className={styles.metaList}>
               <dt>{t.viewer.dimensions}</dt>
               <dd>

@@ -76,6 +76,16 @@
   gap: 2px;
 }
 
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text);
+}
+
 .prompt {
   font-size: 12px;
   line-height: 1.35;
@@ -115,4 +125,9 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* タイトルがある行はプロンプトを 1 行にして、行の高さを大きく変えない。 */
+.title + .prompt {
+  -webkit-line-clamp: 1;
 }

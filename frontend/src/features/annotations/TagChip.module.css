@@ -1,0 +1,96 @@
+/* タグのチップ。人のタグ = 塗り + 実線の枠、自動のタグ = 塗りなし + 点線の枠 + 控えめな文字色。 */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 28px;
+  box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.chip[data-source='user'] {
+  background: var(--color-header-band);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.chip[data-source='auto'] {
+  background: transparent;
+  border: 1px dashed var(--color-text-faint);
+  color: var(--color-text-muted);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+  max-width: 220px;
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: inherit;
+  font: inherit;
+}
+
+.chip[data-removable='true'] .label {
+  padding-right: 2px;
+}
+
+button.label {
+  cursor: pointer;
+}
+
+button.label:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* × はチップの中に収める(隣のチップと当たり判定が重ならないように、外へは広げない)。 */
+.removeButton {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+}
+
+.removeButton:hover:not(:disabled) {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.removeButton:disabled {
+  opacity: 0.5;
+}
+
+@media (max-width: 767px) {
+  .chip {
+    height: 40px;
+    font-size: 13px;
+  }
+
+  .label {
+    max-width: 180px;
+    padding: 0 12px;
+  }
+
+  .removeButton {
+    width: 38px;
+    height: 38px;
+  }
+}
