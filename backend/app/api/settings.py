@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 import openai
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
@@ -24,11 +24,13 @@ from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_provider, get_session, get_settings
 from app.domain import api_key as api_key_domain
-from app.domain import general_settings
+from app.domain import general_settings, mcp_settings
 from app.domain.schemas import (
     ComfyUITimeoutSetting,
     GeneralSettingsResponse,
     GeneralSettingsUpdateRequest,
+    McpSettingsResponse,
+    McpSettingsUpdateRequest,
     ModerationSetting,
     OpenAIBaseUrlStatusResponse,
     OpenAIBaseUrlUpdateRequest,
@@ -283,3 +285,58 @@ def update_general_settings(
     if "comfyui_timeout_seconds" in fields_set:
         general_settings.save_timeout_seconds(db, body.comfyui_timeout_seconds)
     return _general_settings_response(db, settings)
+
+
+# -- MCP サーバー(ADR-0023) ----------------------------------------------------
+# 有効/無効(既定は無効)と、MCP 経由で作る Run の上限(1時間あたり)。GET は全ログイン者
+# (画面の表示用)、更新は管理者だけ。
+
+
+def _mcp_settings_response(
+    db: Session, settings: Settings, request: Request
+) -> McpSettingsResponse:
+    base = mcp_settings.resolve_public_base(settings.public_base_url, str(request.base_url))
+    return McpSettingsResponse(
+        enabled=mcp_settings.is_enabled(db),
+        hourly_run_limit=mcp_settings.hourly_run_limit(db),
+        hourly_run_limit_default=mcp_settings.DEFAULT_HOURLY_RUN_LIMIT,
+        hourly_run_limit_max=mcp_settings.HOURLY_RUN_LIMIT_MAX,
+        runs_last_hour=mcp_settings.count_recent_mcp_runs(db),
+        endpoint_url=base + mcp_settings.MCP_PATH,
+    )
+
+
+@router.get("/mcp", response_model=McpSettingsResponse, operation_id="get_mcp_settings")
+def get_mcp_settings(
+    request: Request,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> McpSettingsResponse:
+    return _mcp_settings_response(db, settings, request)
+
+
+@router.patch("/mcp", response_model=McpSettingsResponse, operation_id="update_mcp_settings")
+def update_mcp_settings(
+    body: McpSettingsUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    _user: CurrentUser = Depends(require_admin),
+) -> McpSettingsResponse:
+    fields_set = body.model_fields_set
+    try:
+        # 先に全項目を検証してから保存する(片方だけ保存される事態を避けるため)。
+        if "enabled" in fields_set:
+            mcp_settings.validate_enabled(body.enabled)
+        if "hourly_run_limit" in fields_set:
+            mcp_settings.validate_hourly_run_limit(body.hourly_run_limit)
+    except mcp_settings.McpSettingsValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if "enabled" in fields_set:
+        assert body.enabled is not None
+        mcp_settings.save_enabled(db, body.enabled)
+    if "hourly_run_limit" in fields_set:
+        assert body.hourly_run_limit is not None
+        mcp_settings.save_hourly_run_limit(db, body.hourly_run_limit)
+    return _mcp_settings_response(db, settings, request)

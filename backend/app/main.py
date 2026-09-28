@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import about as about_api
+from app.api import api_tokens as api_tokens_api
 from app.api import asset_groups as asset_groups_api
 from app.api import assets as assets_api
 from app.api import auth as auth_api
@@ -35,6 +36,8 @@ from app.db import make_engine, make_session_factory
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.storage import LocalFsStore
 from app.i18n import console_t, parse_accept_language, set_locale, t
+from app.mcp.endpoint import McpEndpoint
+from app.mcp.server import build_mcp_server, build_session_manager
 from app.providers.registry import _is_loopback_url, build_registry
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
@@ -158,9 +161,15 @@ def _build_lifespan(settings: Settings):
         if settings.auth_mode == "oidc":
             app.state.oidc_client = AuthlibOidcClient(settings)
 
+        # ADR-0023: `/mcp` のセッションマネージャー。`run()` は1インスタンスにつき1回しか
+        # 呼べないので、lifespan のたびに作り直す(テストで同じアプリを複数回起動するため)。
+        mcp_session_manager = build_session_manager(build_mcp_server())
+        app.state.mcp_session_manager = mcp_session_manager
+
         await runner.start()
         try:
-            yield
+            async with mcp_session_manager.run():
+                yield
         finally:
             await runner.stop()
             engine.dispose()
@@ -256,6 +265,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(pricing_api.router, dependencies=auth_dep)
     app.include_router(settings_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
+    app.include_router(api_tokens_api.router, dependencies=auth_dep)
+
+    # ADR-0023: MCP サーバー(Streamable HTTP、stateless)。認証は Cookie ではなく
+    # アクセストークンなので `require_user` は掛けず、`McpEndpoint` の中で行う。
+    # SPA のフォールバック(`/{full_path:path}`)より先に登録する。
+    app.router.add_route(
+        "/mcp", McpEndpoint(), methods=["GET", "POST", "DELETE"], include_in_schema=False
+    )
 
     # フロントの配信は、dist の有無を起動時ではなくリクエスト時に見る。
     # `npm run build` は dist を一度空にするので、サーバー起動中の再ビルドや、
