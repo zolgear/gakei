@@ -3,6 +3,9 @@
 ツールは REST を HTTP で呼ばず、REST と同じドメイン関数を直接呼ぶ。削除と設定の変更は
 提供しない。画像は Asset ID と URL で返し、本文に載せるのはサムネイル(512px WebP)だけ
 (ADR-0004)。
+
+ADR-0025: どのツールも、トークンの持ち主(`mc.user`)に見えるものだけを扱う
+(`app/domain/visibility.py`)。他人のものは「見つからない」と同じエラーにする。
 """
 
 from __future__ import annotations
@@ -37,7 +40,6 @@ from app.domain.alpha_stats import alpha_stats
 from app.domain.asset_groups import (
     AssetGroupAssetsMissingError,
     add_members,
-    get_active_group_or_none,
     group_for_asset,
 )
 from app.domain.asset_groups import create_group as create_group_domain
@@ -58,6 +60,14 @@ from app.domain.schemas import AssetGroupCreate, RunCreateRequest, RunInputCreat
 from app.domain.search import MAX_LIMIT as SEARCH_MAX_LIMIT
 from app.domain.search import InvalidSearchQueryError, search
 from app.domain.storage import AssetStore
+from app.domain.visibility import (
+    asset_visible,
+    get_visible_asset,
+    get_visible_group,
+    get_visible_run,
+    run_visible,
+    visible_asset_ids,
+)
 from app.mcp.context import McpRequestContext, get_mcp_context
 from app.providers.openai_pricing import PRICING_CHECKED_AT, PRICING_SOURCE_URL
 from app.version import get_version
@@ -159,9 +169,11 @@ def _run_payload(
         .scalars()
         .all()
     )
+    # 見えない入力(以前のデータで他人の Asset を入力にしていた場合)は id も返さない(ADR-0025)。
+    visible_inputs = visible_asset_ids(db, mc.user, [i.asset_id for i in inputs])
     group = None
     if run.asset_group_id is not None:
-        g = get_active_group_or_none(db, run.asset_group_id)
+        g = get_visible_group(db, mc.user, run.asset_group_id)
         if g is not None:
             group = {"id": str(g.id), "name": g.name}
     payload: dict[str, Any] = {
@@ -182,6 +194,7 @@ def _run_payload(
         "inputs": [
             {"asset_id": str(i.asset_id), "role": str(i.role), "position": i.position}
             for i in inputs
+            if i.asset_id in visible_inputs
         ],
         "outputs": [_asset_brief(mc, a) for a in outputs],
     }
@@ -206,7 +219,7 @@ def _load_run_result(
     mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool
 ) -> tuple[dict[str, Any], list[ImageContent]] | None:
     with _session(mc) as db:
-        run = db.get(Run, run_id)
+        run = get_visible_run(db, mc.user, run_id)
         if run is None or run.deleted_at is not None:
             return None
         return _run_payload(mc, db, run, include_thumbnails)
@@ -214,7 +227,7 @@ def _load_run_result(
 
 def _run_status(mc: McpRequestContext, run_id: uuid.UUID) -> RunStatus | None:
     with _session(mc) as db:
-        run = db.get(Run, run_id)
+        run = get_visible_run(db, mc.user, run_id)
         return None if run is None else RunStatus(run.status)
 
 
@@ -262,12 +275,17 @@ def _supports_pricing(mc: McpRequestContext, provider_name: str) -> bool:
     return bool(provider is not None and getattr(provider, "supports_pricing", False))
 
 
-def _input_sizes(db: Session, asset_ids: list[uuid.UUID]) -> list[tuple[uuid.UUID, int, int]]:
-    """見積もりに使う入力画像の大きさ(削除済み・大きさ不明は数えない。REST と同じ)。"""
+def _input_sizes(
+    mc: McpRequestContext, db: Session, asset_ids: list[uuid.UUID]
+) -> list[tuple[uuid.UUID, int, int]]:
+    """見積もりに使う入力画像の大きさ(削除済み・大きさ不明・見えない(ADR-0025)ものは
+    数えない。REST と同じ)。"""
     if not asset_ids:
         return []
     rows = db.execute(
-        select(Asset).where(Asset.id.in_(asset_ids), Asset.deleted_at.is_(None))
+        select(Asset).where(
+            Asset.id.in_(asset_ids), Asset.deleted_at.is_(None), asset_visible(mc.user)
+        )
     ).scalars()
     by_id = {a.id: a for a in rows}
     sizes: list[tuple[uuid.UUID, int, int]] = []
@@ -279,6 +297,7 @@ def _input_sizes(db: Session, asset_ids: list[uuid.UUID]) -> list[tuple[uuid.UUI
 
 
 def _estimate(
+    mc: McpRequestContext,
     db: Session,
     model: str,
     params: dict[str, Any],
@@ -294,7 +313,7 @@ def _estimate(
         size=str(params.get("size") or "auto"),
         n=n,
         prompt_length=prompt_length,
-        input_images=_input_sizes(db, input_asset_ids),
+        input_images=_input_sizes(mc, db, input_asset_ids),
     )
 
 
@@ -322,7 +341,7 @@ def _run_cost(
         return None
     params = run.params or {}
     image_ids = [i.asset_id for i in inputs if i.role == RunInputRole.IMAGE]
-    result = _estimate(db, run.model, params, _params_n(params), len(run.prompt), image_ids)
+    result = _estimate(mc, db, run.model, params, _params_n(params), len(run.prompt), image_ids)
     if result.total_usd is None:
         return None
     return {"usd": round(result.total_usd, 6), "basis": "estimate", "note": _COST_NOTE}
@@ -389,7 +408,7 @@ def _create_mcp_run(mc: McpRequestContext, body: RunCreateRequest) -> uuid.UUID:
                 mc.state.runner,
                 mc.state.settings,
                 body,
-                created_by_user_id=mc.user.id,
+                viewer=mc.user,
                 origin=run_create_domain.RunOrigin(
                     origin=mcp_settings.ORIGIN_MCP, api_token_id=mc.api_token_id
                 ),
@@ -544,7 +563,7 @@ async def cancel_run(
 
     def _cancel() -> None:
         with _session(mc) as db:
-            run = db.get(Run, run_id)
+            run = get_visible_run(db, mc.user, run_id)
             if run is None or run.deleted_at is not None:
                 raise ToolError(f"Run {run_id} not found.")
             if run.status != RunStatus.QUEUED:
@@ -584,23 +603,29 @@ async def search_assets(
 
     def _search() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
-            if group_id is not None and get_active_group_or_none(db, group_id) is None:
+            if group_id is not None and get_visible_group(db, mc.user, group_id) is None:
                 raise ToolError(f"Group {group_id} not found.")
             if query and query.strip():
                 try:
-                    hits = search(db, query, limit=SEARCH_LIMIT_MAX, types={"asset"}).assets
+                    hits = search(
+                        db, query, viewer=mc.user, limit=SEARCH_LIMIT_MAX, types={"asset"}
+                    ).assets
                 except InvalidSearchQueryError as e:
                     raise ToolError(str(e)) from e
                 snippets = {h.id: h.prompt_snippet for h in hits}
                 ids = [h.id for h in hits]
                 assets_by_id = {
                     a.id: a
-                    for a in db.execute(select(Asset).where(Asset.id.in_(ids))).scalars().all()
+                    for a in db.execute(
+                        select(Asset).where(Asset.id.in_(ids), asset_visible(mc.user))
+                    )
+                    .scalars()
+                    .all()
                 }
                 assets = [assets_by_id[i] for i in ids if i in assets_by_id]
             else:
                 snippets = {}
-                q = select(Asset).where(Asset.deleted_at.is_(None))
+                q = select(Asset).where(Asset.deleted_at.is_(None), asset_visible(mc.user))
                 if kind is not None:
                     q = q.where(Asset.kind == kind)
                 if group_id is not None:
@@ -634,7 +659,7 @@ async def search_assets(
             items = []
             for asset in assets:
                 item = _asset_brief(mc, asset)
-                group = group_for_asset(db, asset.id)
+                group = group_for_asset(db, asset.id, mc.user)
                 item["group"] = group.model_dump(mode="json") if group else None
                 if asset.id in snippets:
                     item["prompt_snippet"] = snippets[asset.id]
@@ -663,12 +688,12 @@ async def get_asset(
 
     def _get() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
-            asset = db.get(Asset, asset_id)
+            asset = get_visible_asset(db, mc.user, asset_id)
             if asset is None:
                 raise ToolError(f"Asset {asset_id} not found.")
             payload = _asset_brief(mc, asset)
             payload.update(_transparency(mc.state.store, asset))
-            group = group_for_asset(db, asset.id)
+            group = group_for_asset(db, asset.id, mc.user)
             payload["group"] = group.model_dump(mode="json") if group else None
             payload["produced_by_run"] = None
             payload["primary_parent_asset_id"] = None
@@ -692,6 +717,8 @@ async def get_asset(
                             RunInput.position == 0,
                         )
                     ).scalar_one_or_none()
+                    if parent is not None and not visible_asset_ids(db, mc.user, [parent]):
+                        parent = None
                     payload["primary_parent_asset_id"] = str(parent) if parent else None
             images: list[ImageContent] = []
             if include_thumbnail:
@@ -756,7 +783,7 @@ async def upload_image(
                     mc.state.store,
                     data,
                     AssetKind.UPLOAD,
-                    created_by_user_id=mc.user.id,
+                    viewer=mc.user,
                 )
             except IngestError as e:
                 db.rollback()
@@ -775,7 +802,7 @@ async def list_prompt_sets(ctx: Context) -> CallToolResult:
 
     def _list() -> dict[str, Any]:
         with _session(mc) as db:
-            return list_prompt_sets_rest(db).model_dump(mode="json")
+            return list_prompt_sets_rest(db, mc.user).model_dump(mode="json")
 
     return _result(await _in_thread(_list))
 
@@ -786,7 +813,7 @@ async def list_groups(ctx: Context) -> CallToolResult:
 
     def _list() -> dict[str, Any]:
         with _session(mc) as db:
-            return {"items": [g.model_dump(mode="json") for g in list_groups_domain(db)]}
+            return {"items": [g.model_dump(mode="json") for g in list_groups_domain(db, mc.user)]}
 
     return _result(await _in_thread(_list))
 
@@ -804,7 +831,7 @@ async def create_group(
 
     def _create() -> dict[str, Any]:
         with _session(mc) as db:
-            row = create_group_domain(db, normalized, created_by_user_id=mc.user.id)
+            row = create_group_domain(db, normalized, mc.user)
             db.commit()
             return row.model_dump(mode="json")
 
@@ -824,11 +851,11 @@ async def move_to_group(
 
     def _move() -> dict[str, Any]:
         with _session(mc) as db:
-            group = get_active_group_or_none(db, group_id)
+            group = get_visible_group(db, mc.user, group_id)
             if group is None:
                 raise ToolError(f"Group {group_id} not found.")
             try:
-                row = add_members(db, group, asset_ids)
+                row = add_members(db, group, asset_ids, viewer=mc.user)
             except AssetGroupAssetsMissingError as e:
                 db.rollback()
                 ids = ", ".join(str(i) for i in e.missing_ids)
@@ -845,15 +872,6 @@ async def list_runs(
         Literal["mcp", "web", "any"],
         Field(description="'mcp' = created through MCP, 'web' = created in the web UI."),
     ] = "any",
-    created_by: Annotated[
-        Literal["me", "anyone"],
-        Field(
-            description=(
-                "'me' = only runs created by you (the owner of the access token). In personal "
-                "mode (no login) every run counts as yours."
-            )
-        ),
-    ] = "me",
     since: Annotated[
         datetime | None,
         Field(
@@ -872,21 +890,21 @@ async def list_runs(
         bool, Field(description="Attach 512px WebP thumbnails of the outputs.")
     ] = False,
 ) -> CallToolResult:
-    """List recent runs (newest first) with their status, outputs and reference cost, plus the
-    remaining hourly quota. Use it to find a run whose run_id you lost, e.g.
-    list_runs(origin="mcp", since="2026-09-28T10:00:00Z"). Deleted runs are excluded."""
+    """List your recent runs (newest first) with their status, outputs and reference cost, plus
+    the remaining hourly quota. Only runs created by you (the owner of the access token) are
+    listed; in personal mode (no login) every run is yours. Use it to find a run whose run_id
+    you lost, e.g. list_runs(origin="mcp", since="2026-09-28T10:00:00Z"). Deleted runs are
+    excluded."""
     mc = get_mcp_context(ctx)
 
     def _list() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
-            q = select(Run).where(Run.deleted_at.is_(None))
+            # ADR-0025: 常に本人の Run だけ(個人モードは全件が本人のもの)。
+            q = select(Run).where(Run.deleted_at.is_(None), run_visible(mc.user))
             if origin == "mcp":
                 q = q.where(Run.origin == mcp_settings.ORIGIN_MCP)
             elif origin == "web":
                 q = q.where(Run.origin.is_(None))
-            # 個人モードは実行者を記録しない(常に null)ので、全件が「自分の」Run になる。
-            if created_by == "me" and mc.user.id is not None:
-                q = q.where(Run.created_by_user_id == mc.user.id)
             if since is not None:
                 moment = since if since.tzinfo is not None else since.replace(tzinfo=UTC)
                 q = q.where(Run.queued_at >= moment.astimezone(UTC))
@@ -1019,7 +1037,13 @@ async def estimate_cost(
             }
         with _session(mc) as db:
             result = _estimate(
-                db, resolved_model, values, count, len(prompt or ""), list(input_asset_ids or [])
+                mc,
+                db,
+                resolved_model,
+                values,
+                count,
+                len(prompt or ""),
+                list(input_asset_ids or []),
             )
         reason = result.unavailable_reason
         prices = result.unit_prices

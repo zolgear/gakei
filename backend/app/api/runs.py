@@ -35,6 +35,7 @@ from app.domain.schemas import (
     RunListResponse,
     RunSummary,
 )
+from app.domain.visibility import get_visible_run, run_visible, visible_asset_ids
 from app.i18n import t
 from app.providers.registry import ProviderRegistry
 from app.worker.progress import ProgressBus
@@ -47,26 +48,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _to_summary(db: Session, run: Run) -> RunSummary:
-    outputs = bulk_output_refs(db, [run.id])[run.id]
-    input_count, primary_parent_asset_id = bulk_input_summary(db, [run.id])[run.id]
-    descendant_run_count = bulk_descendant_run_counts(db, [run.id])[run.id]
-    created_by = bulk_users(db, [run.created_by_user_id]).get(run.created_by_user_id)
-    asset_group = bulk_asset_groups(db, [run.asset_group_id]).get(run.asset_group_id)
-    return RunSummary(
-        **run_summary_fields(
-            run,
-            outputs,
-            input_count,
-            primary_parent_asset_id,
-            descendant_run_count,
-            created_by,
-            asset_group,
-        )
-    )
-
-
-def _to_detail(db: Session, run: Run) -> RunDetail:
+def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
     inputs = (
         db.execute(select(RunInput).where(RunInput.run_id == run.id).order_by(RunInput.position))
         .scalars()
@@ -74,12 +56,16 @@ def _to_detail(db: Session, run: Run) -> RunDetail:
     )
     outputs = bulk_output_refs(db, [run.id])[run.id]
     input_count = sum(1 for i in inputs if i.role == RunInputRole.IMAGE)
+    # ADR-0025: 見えない Asset(以前のデータで他人の Asset を入力にしていた場合)は、
+    # 入力の一覧・主たる親に出さない(id も返さない)。枚数は Run 自身の情報なので数える。
+    visible_inputs = visible_asset_ids(db, user, [i.asset_id for i in inputs])
+    inputs = [i for i in inputs if i.asset_id in visible_inputs]
     primary_parent_asset_id = next(
         (i.asset_id for i in inputs if i.role == RunInputRole.IMAGE and i.position == 0), None
     )
-    descendant_run_count = bulk_descendant_run_counts(db, [run.id])[run.id]
+    descendant_run_count = bulk_descendant_run_counts(db, [run.id], user)[run.id]
     created_by = bulk_users(db, [run.created_by_user_id]).get(run.created_by_user_id)
-    asset_group = bulk_asset_groups(db, [run.asset_group_id]).get(run.asset_group_id)
+    asset_group = bulk_asset_groups(db, [run.asset_group_id], user).get(run.asset_group_id)
     return RunDetail(
         **run_summary_fields(
             run,
@@ -110,9 +96,7 @@ def create_run(
 ) -> RunCreateResponse:
     # 検証〜挿入〜runner への投入は MCP と共通のドメイン関数に任せる(ADR-0023 1章)。
     try:
-        run = run_create_domain.create_run(
-            db, registry, runner, settings, body, created_by_user_id=user.id
-        )
+        run = run_create_domain.create_run(db, registry, runner, settings, body, viewer=user)
     except run_create_domain.RunCreateError as e:
         raise HTTPException(status_code=_ERROR_STATUS[e.kind], detail=str(e)) from e
     return RunCreateResponse(id=run.id, status=run.status)
@@ -123,8 +107,10 @@ def list_runs(
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
     db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> RunListResponse:
-    query = select(Run).where(Run.deleted_at.is_(None))
+    # ADR-0025: 見える Run だけ(App バーの実行中・待機中の件数もこの一覧から数える)。
+    query = select(Run).where(Run.deleted_at.is_(None), run_visible(user))
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)
@@ -145,10 +131,10 @@ def list_runs(
     # 1ページ分の run_id をまとめて引く(N+1 を避ける)。
     run_ids = [r.id for r in rows]
     outputs_map = bulk_output_refs(db, run_ids)
-    inputs_map = bulk_input_summary(db, run_ids)
-    descendant_map = bulk_descendant_run_counts(db, run_ids)
+    inputs_map = bulk_input_summary(db, run_ids, user)
+    descendant_map = bulk_descendant_run_counts(db, run_ids, user)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
-    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows])
+    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], user)
     items = [
         RunSummary(
             **run_summary_fields(
@@ -168,21 +154,30 @@ def list_runs(
 
 
 @router.get("/{run_id}", response_model=RunDetail, operation_id="get_run")
-def get_run(run_id: uuid.UUID, db: Session = Depends(get_session)) -> RunDetail:
-    run = db.get(Run, run_id)
+def get_run(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> RunDetail:
+    run = get_visible_run(db, user, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=t("runs.notFound"))
-    return _to_detail(db, run)
+    return _to_detail(db, run, user)
 
 
 @router.delete("/{run_id}", status_code=204, operation_id="delete_run")
-def delete_run(run_id: uuid.UUID, db: Session = Depends(get_session)) -> None:
+def delete_run(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> None:
     """論理削除。終了状態(succeeded/failed/canceled)の Run だけ削除できる。
 
     出力 Asset(`produced_by_run_id = run_id` で未削除のもの)も同一トランザクションで
     論理削除する(ADR-0008「削除」追加分)。`run`/`run_input` の他の列は変更しない。
+    他人の Run は存在しないものと同じ 404(ADR-0025)。
     """
-    run = db.get(Run, run_id)
+    run = get_visible_run(db, user, run_id)
     if run is None or run.deleted_at is not None:
         raise HTTPException(status_code=404, detail=t("runs.notFound"))
     if run.status not in (RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED):
@@ -206,8 +201,9 @@ async def cancel_run(
     run_id: uuid.UUID,
     db: Session = Depends(get_session),
     bus: ProgressBus = Depends(get_progress_bus),
+    user: CurrentUser = Depends(require_user),
 ) -> RunCancelResponse:
-    run = db.get(Run, run_id)
+    run = get_visible_run(db, user, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=t("runs.notFound"))
     if run.status != RunStatus.QUEUED:

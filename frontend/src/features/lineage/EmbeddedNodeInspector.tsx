@@ -64,6 +64,8 @@ export function EmbeddedNodeInspector({ node, renderPromptActions }: EmbeddedNod
         <dt>{t.lineage.embeddedInstanceLabel}</dt>
         <dd className={styles.mono}>{node.instance ?? t.lineage.unknownValue}</dd>
       </dl>
+      {/* ADR-0025: このインスタンスの他人の Asset / Run。埋め込まれていた内容だけを出す。 */}
+      {node.local_hidden && <p className={styles.note}>{t.lineage.originRecipe.originHidden}</p>}
 
       {node.type === 'asset' ? (
         <AssetSection node={node} detail={detail} />

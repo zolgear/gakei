@@ -43,6 +43,8 @@ export function OriginRecipeSection({ origin }: OriginRecipeSectionProps) {
       <p className={styles.meta}>
         {rt.sourcePrefix} {origin.same_instance ? rt.sourceSameInstance : rt.sourceOtherInstance}
       </p>
+      {/* ADR-0025: 由来が他人の Asset のときは id を受け取らず、その旨だけを示す。 */}
+      {origin.asset_hidden && <p className={styles.meta}>{rt.originHidden}</p>}
       {origin.asset_id && (
         <Link to={`/lineage/${origin.asset_id}`} className={styles.link}>
           {rt.viewOriginInLineage}

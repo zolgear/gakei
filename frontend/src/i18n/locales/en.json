@@ -924,6 +924,7 @@
       "sourceSameInstance": "this GAKEI",
       "sourceOtherInstance": "another GAKEI",
       "viewOriginInLineage": "View the origin Asset in the lineage graph",
+      "originHidden": "Another Asset in this instance (cannot be shown)",
       "loadIntoForm": "Load these settings into the form",
       "inputsNotRestored": "Input images are not restored.",
       "missingRecipe": "The embedded settings have no generation info.",

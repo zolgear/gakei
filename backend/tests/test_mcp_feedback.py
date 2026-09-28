@@ -193,9 +193,9 @@ def test_list_runs_created_by_me_in_oidc(client_oidc: TestClient) -> None:
 
     own = _ok(_call(client_oidc, "list_runs", {}, alice))["items"]
     assert [r["run_id"] for r in own] == [mine["run_id"]]
-    # 閲覧範囲は全員全件(ADR-0019)なので、明示すれば他人の Run も見られる。
-    anyone = _ok(_call(client_oidc, "list_runs", {"created_by": "anyone"}, alice))["items"]
-    assert {r["run_id"] for r in anyone} == {mine["run_id"], theirs["run_id"]}
+    # ADR-0025: 他人の Run は見られない(`created_by=anyone` は廃止。常に本人の範囲)。
+    bobs = _ok(_call(client_oidc, "list_runs", {}, bob))["items"]
+    assert [r["run_id"] for r in bobs] == [theirs["run_id"]]
 
 
 # -- アップロード URL(7章 2) --------------------------------------------------------

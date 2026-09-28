@@ -17,6 +17,7 @@ from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 from sqlalchemy.orm import sessionmaker
 
+from app.auth.identity import LOCAL_ADMIN
 from app.domain.assets import ingest
 from app.domain.embedded_meta import (
     MAX_LINEAGE_NODES,
@@ -222,7 +223,7 @@ def test_build_lineage_meta_for_uploaded_asset_is_a_single_node_graph(
         asset = ingest(session, local_store, make_png_bytes(), AssetKind.UPLOAD)
         session.commit()
 
-        meta = build_lineage_meta(session, asset)
+        meta = build_lineage_meta(session, asset, viewer=LOCAL_ADMIN)
         assert meta["schema"] == "gakei.lineage/2"
         assert meta["root"] == str(asset.id)
         assert meta["truncated"] is False
@@ -276,7 +277,7 @@ def test_build_lineage_meta_for_generated_asset_includes_run_and_inputs_and_excl
         )
         session.commit()
 
-        meta = build_lineage_meta(session, output_asset)
+        meta = build_lineage_meta(session, output_asset, viewer=LOCAL_ADMIN)
         run_node = _node(meta, run.id)
         assert run_node["type"] == "run"
         assert run_node["prompt"] == "テスト用プロンプト"
@@ -308,7 +309,7 @@ def test_build_lineage_meta_for_sketch_asset_includes_source_asset(
         )
         session.commit()
 
-        meta = build_lineage_meta(session, sketch)
+        meta = build_lineage_meta(session, sketch, viewer=LOCAL_ADMIN)
         _node(meta, base.id)
         _edge(meta, base.id, sketch.id, "sketch_source")
         assert not any(n["type"] == "run" for n in meta["nodes"])
@@ -321,8 +322,8 @@ def test_build_lineage_meta_is_deterministic_for_same_asset(
         asset = ingest(session, local_store, make_png_bytes(), AssetKind.UPLOAD)
         session.commit()
 
-        first = build_lineage_meta(session, asset)
-        second = build_lineage_meta(session, asset)
+        first = build_lineage_meta(session, asset, viewer=LOCAL_ADMIN)
+        second = build_lineage_meta(session, asset, viewer=LOCAL_ADMIN)
         assert first == second
 
         first_text = json.dumps(first, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -418,7 +419,7 @@ def test_build_lineage_meta_three_generation_chain_with_mask_and_reference_inclu
         )
         session.commit()
 
-        meta = build_lineage_meta(session, asset_c)
+        meta = build_lineage_meta(session, asset_c, viewer=LOCAL_ADMIN)
         assert meta["truncated"] is False
 
         node_ids = {n["id"] for n in meta["nodes"]}
@@ -493,7 +494,7 @@ def test_build_lineage_meta_caps_at_max_nodes_and_sets_truncated(
         )
         session.commit()
 
-        meta = build_lineage_meta(session, asset_b)
+        meta = build_lineage_meta(session, asset_b, viewer=LOCAL_ADMIN)
         assert meta["truncated"] is True
         assert len(meta["nodes"]) <= 3
 
@@ -536,7 +537,7 @@ def test_build_lineage_meta_size_cap_drops_params_then_prompt_from_farthest_ance
         )
         session.commit()
 
-        meta = build_lineage_meta(session, asset_b)
+        meta = build_lineage_meta(session, asset_b, viewer=LOCAL_ADMIN)
         assert meta["truncated"] is True
         gen_node = _node(meta, gen_run.id)
         edit_node = _node(meta, edit_run.id)
@@ -592,7 +593,7 @@ def test_build_lineage_meta_merges_embedded_graph_from_foreign_instance(tmp_path
         )
         session_a.commit()
 
-        meta_a = build_lineage_meta(session_a, asset_a2)
+        meta_a = build_lineage_meta(session_a, asset_a2, viewer=LOCAL_ADMIN)
 
     with factory_b() as session_b:
         instance_b = get_instance_id(session_b)
@@ -619,7 +620,7 @@ def test_build_lineage_meta_merges_embedded_graph_from_foreign_instance(tmp_path
         )
         session_b.commit()
 
-        meta_b = build_lineage_meta(session_b, output_b)
+        meta_b = build_lineage_meta(session_b, output_b, viewer=LOCAL_ADMIN)
 
     nodes_by_id = {n["id"]: n for n in meta_b["nodes"]}
     assert nodes_by_id[str(output_b.id)]["instance"] == instance_b

@@ -335,6 +335,11 @@ class PromptSet(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 作成したユーザー(ADR-0025。マイグレーション 0018)。`none` モードと、0018 より前の行は
+    # null(認証モードでは管理者だけに見える)。追記のみ(INSERT 時に設定し、UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
