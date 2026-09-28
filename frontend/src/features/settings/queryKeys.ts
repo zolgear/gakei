@@ -13,3 +13,9 @@ export const GENERAL_SETTINGS_QUERY_KEY = ['general-settings'] as const
 
 /** `GET /api/about`(ADR-0021 3章)。「GAKEI について」だけが読む。 */
 export const ABOUT_QUERY_KEY = ['about'] as const
+
+/** `GET /api/settings/mcp`(ADR-0023)。管理者設定の「MCP」セクションだけが読む。 */
+export const MCP_SETTINGS_QUERY_KEY = ['mcp-settings'] as const
+
+/** `GET /api/users/me/api-tokens`(ADR-0023)。ユーザー設定の「アクセストークン」だけが読む。 */
+export const API_TOKENS_QUERY_KEY = ['api-tokens'] as const

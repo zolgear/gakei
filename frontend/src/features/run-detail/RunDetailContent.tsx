@@ -287,6 +287,12 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
               </dd>
             </>
           )}
+          {run.origin === 'mcp' && (
+            <>
+              <dt>{t.runDetail.origin}</dt>
+              <dd>{t.runDetail.originMcp}</dd>
+            </>
+          )}
           <dt>API</dt>
           <dd className={styles.mono}>{run.operation}</dd>
           <dt>queued_at</dt>
