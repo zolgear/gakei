@@ -5,16 +5,30 @@
  * 役割)。「GAKEI について」はどちらの区分にも属さず、末尾に常に表示する。
  * 「プロフィール」(アバター、ADR-0020)は oidc モードのときだけユーザー設定の先頭に足す
  * (個人モード(`AUTH_MODE=none`)にはユーザーが無いので出さない)。
+ * 「アクセストークン」(MCP の接続に使う、ADR-0023 6章)も oidc モードだけで、ユーザー設定の末尾に足す。
+ * 「MCP」(有効/無効、上限、接続先。ADR-0023 6章)は管理者設定の末尾(ComfyUI の後)に置く。
  */
-export type SettingsSectionId = 'profile' | 'language' | 'display' | 'apiKey' | 'generation' | 'comfyui' | 'about'
+export type SettingsSectionId =
+  | 'profile'
+  | 'language'
+  | 'display'
+  | 'accessTokens'
+  | 'apiKey'
+  | 'generation'
+  | 'comfyui'
+  | 'mcp'
+  | 'about'
 
 export const USER_SETTINGS_SECTIONS: readonly SettingsSectionId[] = ['language', 'display']
-export const ADMIN_SETTINGS_SECTIONS: readonly SettingsSectionId[] = ['apiKey', 'generation', 'comfyui']
+export const ADMIN_SETTINGS_SECTIONS: readonly SettingsSectionId[] = ['apiKey', 'generation', 'comfyui', 'mcp']
 
-/** 管理者なら全セクション、非管理者はユーザー設定と「GAKEI について」だけ。oidc モードなら先頭に「プロフィール」を足す。 */
+/**
+ * 管理者なら全セクション、非管理者はユーザー設定と「GAKEI について」だけ。oidc モードなら
+ * 先頭に「プロフィール」、ユーザー設定の末尾に「アクセストークン」を足す。
+ */
 export function visibleSections(isAdmin: boolean, isOidc: boolean): readonly SettingsSectionId[] {
   const userSections: readonly SettingsSectionId[] = isOidc
-    ? ['profile', ...USER_SETTINGS_SECTIONS]
+    ? ['profile', ...USER_SETTINGS_SECTIONS, 'accessTokens']
     : USER_SETTINGS_SECTIONS
   return isAdmin
     ? [...userSections, ...ADMIN_SETTINGS_SECTIONS, 'about']

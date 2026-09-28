@@ -324,6 +324,8 @@ class RunSummary(BaseModel):
     # 生成時に指定したグループ(ADR-0022)。指定なし・削除済みのグループなら null。
     # 再実行でフォームに戻すためと、履歴・Run 詳細の表示に使う。
     asset_group: AssetGroupRef | None = None
+    # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツールから作った Run。
+    origin: str | None = None
 
 
 class RunDetail(RunSummary):
@@ -726,3 +728,54 @@ class AboutResponse(BaseModel):
 
     version: str
     commit: str | None = None
+
+
+# -- MCP サーバー(ADR-0023) --------------------------------------------------
+
+
+class McpSettingsResponse(BaseModel):
+    """`GET /api/settings/mcp`。有効/無効と、MCP 経由の Run の上限(1時間あたり)。"""
+
+    enabled: bool
+    hourly_run_limit: int
+    hourly_run_limit_default: int
+    hourly_run_limit_max: int
+    # 直近1時間に MCP から作った Run の件数(上限との比較の参考)。
+    runs_last_hour: int
+    # エージェントに登録する接続先(`PUBLIC_BASE_URL` があればそれ、無ければリクエストの URL
+    # から組み立てる)。
+    endpoint_url: str
+
+
+class McpSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/mcp` の本文。省略した項目は変更しない。
+
+    値の妥当性は `app/domain/mcp_settings.py` が検証し、i18n 対応のメッセージで 422 にする。
+    """
+
+    enabled: bool | None = None
+    hourly_run_limit: int | None = None
+
+
+class ApiTokenRow(BaseModel):
+    """アクセストークンの1件。値そのものは発行時の応答(`ApiTokenCreateResponse`)にだけ載る。"""
+
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+
+
+class ApiTokenListResponse(BaseModel):
+    items: list[ApiTokenRow] = Field(default_factory=list)
+
+
+class ApiTokenCreateRequest(BaseModel):
+    """名前の妥当性(空でない、100文字以内)は `app/domain/api_tokens.py` が検証する。"""
+
+    name: str
+
+
+class ApiTokenCreateResponse(ApiTokenRow):
+    # 発行したトークンの値。この応答でだけ返し、以後は取り出せない。
+    token: str

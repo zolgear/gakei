@@ -16,10 +16,8 @@ from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_progress_bus, get_registry, get_runner, get_session, get_settings
-from app.domain import api_key as api_key_domain
-from app.domain.asset_groups import get_active_group_or_none
+from app.domain import run_create as run_create_domain
 from app.domain.models import Asset, Run, RunInput, RunInputRole, RunStatus
-from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
 from app.domain.run_views import (
     bulk_asset_groups,
     bulk_descendant_run_counts,
@@ -38,7 +36,6 @@ from app.domain.schemas import (
     RunSummary,
 )
 from app.i18n import t
-from app.providers.base import ProviderUnavailableError, RunDraft
 from app.providers.registry import ProviderRegistry
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
@@ -99,6 +96,9 @@ def _to_detail(db: Session, run: Run) -> RunDetail:
     )
 
 
+_ERROR_STATUS = {"invalid": 422, "conflict": 409, "not_found": 404}
+
+
 @router.post("", response_model=RunCreateResponse, status_code=202, operation_id="create_run")
 def create_run(
     body: RunCreateRequest,
@@ -108,107 +108,13 @@ def create_run(
     settings: Settings = Depends(get_settings),
     user: CurrentUser = Depends(require_user),
 ) -> RunCreateResponse:
-    # provider を引く(省略時は主プロバイダー)。未知の provider は 422(ADR-0013)。
-    provider_name = body.provider or registry.primary
-    provider = registry.get(provider_name)
-    if provider is None:
-        raise HTTPException(
-            status_code=422,
-            detail=t("runs.unknownProvider", provider=provider_name),
-        )
-
-    # ADR-0012: キーが無い状態で Run を作らない(Run は追記のみの証跡のため、実行して
-    # missingApiKey で failed にするより、作る前に断る方が記録を汚さない)。
-    if getattr(provider, "requires_api_key", False):
-        api_key, _source = api_key_domain.resolve_key(settings)
-        if not api_key:
-            raise HTTPException(
-                status_code=409,
-                detail=t("openai.missingApiKey"),
-            )
-
-    # ADR-0013: 接続できない等でプロバイダーが使えない場合も、Run を作らずに 409 で断る。
-    available, unavailable_reason = provider.availability()
-    if not available:
-        raise HTTPException(
-            status_code=409,
-            detail=unavailable_reason or t("runs.providerUnavailable", label=provider.label),
-        )
-
-    # ADR-0022: 出力を入れるグループ。存在しない・削除済みなら Run を作らずに 404。
-    if (
-        body.asset_group_id is not None
-        and get_active_group_or_none(db, body.asset_group_id) is None
-    ):
-        raise HTTPException(status_code=404, detail=t("assetGroups.notFound"))
-
-    caps = provider.capabilities()
-
-    input_metas: list[RunInputMeta] = []
-    for item in body.inputs:
-        asset = db.get(Asset, item.asset_id)
-        if asset is None or asset.deleted_at is not None:
-            raise HTTPException(
-                status_code=422,
-                detail=t("runs.assetNotFound", id=item.asset_id),
-            )
-        input_metas.append(
-            RunInputMeta(
-                asset_id=item.asset_id,
-                role=item.role,
-                position=item.position,
-                width=asset.width,
-                height=asset.height,
-                sha256=asset.sha256,
-                mime=asset.mime,
-            )
-        )
-
+    # 検証〜挿入〜runner への投入は MCP と共通のドメイン関数に任せる(ADR-0023 1章)。
     try:
-        validate_run_request(
-            caps, body.operation, body.model, body.prompt, body.params, input_metas
+        run = run_create_domain.create_run(
+            db, registry, runner, settings, body, created_by_user_id=user.id
         )
-    except RunValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-
-    draft = RunDraft(
-        operation=body.operation,
-        model=body.model,
-        prompt=body.prompt,
-        params=body.params,
-        inputs=input_metas,
-    )
-    try:
-        params = provider.finalize_params(db, draft)
-    except RunValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    except ProviderUnavailableError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-
-    run = Run(
-        # レジストリのキー(provider_name)を記録する。runner はこのキーで実行レーンを選ぶ
-        # ため、provider.name(自己申告の属性)ではなくこちらを正とする。
-        provider=provider_name,
-        model=body.model,
-        deployment=None,
-        operation=body.operation,
-        prompt=body.prompt,
-        params=params,
-        status=RunStatus.QUEUED,
-        created_by_user_id=user.id,
-        asset_group_id=body.asset_group_id,
-    )
-    db.add(run)
-    db.flush()
-
-    for item in body.inputs:
-        db.add(
-            RunInput(run_id=run.id, asset_id=item.asset_id, role=item.role, position=item.position)
-        )
-
-    db.commit()
-    runner.notify()
-
+    except run_create_domain.RunCreateError as e:
+        raise HTTPException(status_code=_ERROR_STATUS[e.kind], detail=str(e)) from e
     return RunCreateResponse(id=run.id, status=run.status)
 
 

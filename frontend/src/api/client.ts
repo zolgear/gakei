@@ -79,6 +79,50 @@ export type GeneralSettingsUpdateRequest = components['schemas']['GeneralSetting
 export type ModerationSetting = components['schemas']['ModerationSetting']
 export type ComfyUITimeoutSetting = components['schemas']['ComfyUITimeoutSetting']
 
+// -- MCP サーバーとアクセストークン(ADR-0023) ----------------------------------
+
+export type McpSettingsResponse = components['schemas']['McpSettingsResponse']
+export type McpSettingsUpdateRequest = components['schemas']['McpSettingsUpdateRequest']
+export type ApiTokenRow = components['schemas']['ApiTokenRow']
+export type ApiTokenListResponse = components['schemas']['ApiTokenListResponse']
+export type ApiTokenCreateResponse = components['schemas']['ApiTokenCreateResponse']
+
+// -- MCP サーバー(ADR-0023) ---------------------------------------------------
+
+/** 全ログイン者が読める。`runs_last_hour` は直近1時間に MCP 経由で作られた Run の数。 */
+export function getMcpSettings(): Promise<McpSettingsResponse> {
+  return request('/api/settings/mcp')
+}
+
+/** 管理者のみ。省略した項目は変更しない。範囲外の上限は 422(`ApiError.message` に detail)。 */
+export function updateMcpSettings(body: McpSettingsUpdateRequest): Promise<McpSettingsResponse> {
+  return request('/api/settings/mcp', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+// -- アクセストークン(ADR-0023、oidc モードだけ) --------------------------------
+// none モードでは3つとも 404(`t("auth.disabled")`)。
+
+export function listApiTokens(): Promise<ApiTokenListResponse> {
+  return request('/api/users/me/api-tokens')
+}
+
+/** 発行する。トークンの値(`token`)はこの応答にだけ載り、以降は取得できない。 */
+export function createApiToken(name: string): Promise<ApiTokenCreateResponse> {
+  return request('/api/users/me/api-tokens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function revokeApiToken(tokenId: string): Promise<void> {
+  return request(`/api/users/me/api-tokens/${tokenId}`, { method: 'DELETE' })
+}
+
 // -- ComfyUI ワークフロー(ADR-0013) ------------------------------------------
 
 export type ComfyUIStatus = components['schemas']['ComfyUIStatusResponse']
