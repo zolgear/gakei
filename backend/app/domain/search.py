@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.models import Asset, AssetKind, PromptSet, PromptSetItem, Run
 from app.domain.run_views import (
+    bulk_asset_groups,
     bulk_descendant_run_counts,
     bulk_input_summary,
     bulk_output_refs,
@@ -124,6 +125,7 @@ def _search_runs(db: Session, terms: list[str], limit: int) -> tuple[list[Search
     inputs_map = bulk_input_summary(db, run_ids)
     descendant_map = bulk_descendant_run_counts(db, run_ids)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
+    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows])
 
     hits = [
         SearchRunHit(
@@ -133,6 +135,7 @@ def _search_runs(db: Session, terms: list[str], limit: int) -> tuple[list[Search
                 *inputs_map[run.id],
                 descendant_map[run.id],
                 users_map.get(run.created_by_user_id),
+                groups_map.get(run.asset_group_id),
             ),
             snippet=build_snippet(run.prompt, terms),
         )

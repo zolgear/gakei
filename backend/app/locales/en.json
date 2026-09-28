@@ -153,6 +153,10 @@
     "general": {
       "invalidModeration": "moderation must be auto or low",
       "invalidTimeoutSeconds": "The ComfyUI timeout must be an integer between {min} and {max} seconds"
+    },
+    "mcp": {
+      "invalidEnabled": "enabled must be true or false",
+      "invalidHourlyRunLimit": "The hourly limit must be an integer from {min} to {max}"
     }
   },
   "runValidation": {
@@ -223,6 +227,12 @@
     "notFound": "Prompt set not found",
     "itemNotFound": "Prompt set item not found"
   },
+  "assetGroups": {
+    "notFound": "Group not found",
+    "assetNotFound": "Asset not found: {ids}",
+    "groupIdAndUngrouped": "group_id and ungrouped cannot be combined",
+    "orderMismatch": "The order list does not match the current groups"
+  },
   "worker": {
     "interruptedByRestart": "Interrupted by a server restart",
     "providerNotRegistered": "provider={provider} is not registered"
@@ -256,5 +266,16 @@
       "invalidCrop": "The crop rectangle is malformed",
       "cropOutOfBounds": "The crop rectangle is outside the image"
     }
+  },
+  "apiTokens": {
+    "nameEmpty": "Enter a name for the token",
+    "nameTooLong": "The token name must be {max} characters or fewer",
+    "notFound": "Access token not found"
+  },
+  "mcp": {
+    "disabled": "The MCP server is disabled. Enable it under Admin settings → MCP.",
+    "tokenRequired": "An access token is required (Authorization: Bearer <token>).",
+    "tokenInvalid": "The access token is invalid or has been revoked.",
+    "originForbidden": "MCP requests from this Origin are not allowed."
   }
 }

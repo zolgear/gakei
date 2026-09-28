@@ -25,4 +25,21 @@ describe('visibleSections', () => {
     expect(visibleSections(true, false)).not.toContain('profile')
     expect(visibleSections(false, false)).not.toContain('profile')
   })
+
+  it('アクセストークンは oidc モードだけ、ユーザー設定の末尾(管理者設定より前)に見せる', () => {
+    for (const admin of [true, false]) {
+      const sections = visibleSections(admin, true)
+      expect(sections).toContain('accessTokens')
+      expect(sections.indexOf('accessTokens')).toBeGreaterThan(sections.indexOf('display'))
+      expect(visibleSections(admin, false)).not.toContain('accessTokens')
+    }
+    const adminSections = visibleSections(true, true)
+    expect(adminSections.indexOf('accessTokens')).toBeLessThan(adminSections.indexOf('apiKey'))
+  })
+
+  it('MCP は管理者設定の末尾(ComfyUI の後)で、非管理者には見せない', () => {
+    const sections = visibleSections(true, false)
+    expect(sections.indexOf('mcp')).toBe(sections.indexOf('comfyui') + 1)
+    expect(visibleSections(false, true)).not.toContain('mcp')
+  })
 })

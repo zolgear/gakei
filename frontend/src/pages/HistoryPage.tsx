@@ -18,6 +18,7 @@ import { hasNewlySucceededRun } from '../features/run-status/assetInvalidation'
 import { hasActiveRuns, countQueue } from '../shell/queueStatus'
 import { useScrollRestoration } from '../shell/useScrollRestoration'
 import { useI18n } from '../i18n'
+import { invalidateAssetGroupQueries } from '../features/stock/groups/assetGroupQueries'
 import styles from './HistoryPage.module.css'
 
 const ACTIVE_POLL_INTERVAL_MS = 4000
@@ -81,7 +82,8 @@ export function HistoryPage() {
   useEffect(() => {
     if (allRuns.length === 0) return
     if (prevRunStatusByIdRef.current && hasNewlySucceededRun(prevRunStatusByIdRef.current, allRuns)) {
-      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      // 生成時に指定したグループ(ADR-0022)の枚数・表紙も変わるので、グループ一覧も取り直す。
+      invalidateAssetGroupQueries(queryClient)
     }
     prevRunStatusByIdRef.current = new Map(allRuns.map((run) => [run.id, run.status]))
   }, [allRuns, queryClient])

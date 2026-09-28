@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
 from app.providers.base import ProviderCapabilities
@@ -89,6 +89,74 @@ class CreatedBy(BaseModel):
     avatar_url: str | None = None
 
 
+# -- Asset groups (ADR-0022) -----------------------------------------------
+# ストックの手動整理。証跡ではないので更新・論理削除ができる。名前は前後の空白を
+# 除いて1〜100文字(同名は禁止しない)。
+
+
+def _normalize_group_name(value: str) -> str:
+    stripped = value.strip()
+    if not (1 <= len(stripped) <= 100):
+        raise ValueError("name must be 1-100 characters after stripping whitespace")
+    return stripped
+
+
+class AssetGroupCreate(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        return _normalize_group_name(value)
+
+
+class AssetGroupUpdate(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        return _normalize_group_name(value)
+
+
+class AssetGroupRow(BaseModel):
+    """`GET /api/asset-groups` の1件。`member_count` / `cover_asset_id` は
+    削除済みでない Asset だけを数える(cover は `added_at` が最新のメンバー)。
+    `position` は利用者が決める並び順(小さいほど上)。"""
+
+    id: uuid.UUID
+    name: str
+    position: int
+    member_count: int
+    cover_asset_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssetGroupListResponse(BaseModel):
+    items: list[AssetGroupRow] = Field(default_factory=list)
+
+
+class AssetGroupOrderRequest(BaseModel):
+    """`PUT /api/asset-groups/order` の本文。削除済みでない全グループの id を望む順に並べたもの
+    (過不足・重複があれば 422)。"""
+
+    group_ids: list[uuid.UUID]
+
+
+class AssetGroupMembersRequest(BaseModel):
+    """`.../assets` と `.../assets/remove` の共通の本文。1〜200件。"""
+
+    asset_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class AssetGroupRef(BaseModel):
+    """`AssetDetail.group` と `RunSummary.asset_group` の1件。"""
+
+    id: uuid.UUID
+    name: str
+
+
 # -- Asset ---------------------------------------------------------------
 
 
@@ -165,6 +233,10 @@ class AssetDetail(AssetSummary):
     # ユーザー(ADR-0019。runner が `run.created_by_user_id` をそのまま引き継ぐ)。
     # `none` モードは常に null。
     created_by: CreatedBy | None = None
+    # 所属しているグループ(ADR-0022)。1 つの Asset が属するグループは 1 つだけ
+    # (2026-09-28 に `groups: []` から変更)。未所属、または削除済みグループにだけ残っている
+    # ときは null。`AssetSummary` には足さない(一覧が重くなるため)。
+    group: AssetGroupRef | None = None
 
 
 class AssetUploadResponse(AssetDetail):
@@ -195,6 +267,8 @@ class RunCreateRequest(BaseModel):
     provider: str | None = None
     params: dict[str, Any] = Field(default_factory=dict)
     inputs: list[RunInputCreate] = Field(default_factory=list)
+    # 出力を入れるグループ(ADR-0022)。存在しない・削除済みなら 404。
+    asset_group_id: uuid.UUID | None = None
 
 
 class RunCreateResponse(BaseModel):
@@ -247,6 +321,11 @@ class RunSummary(BaseModel):
     cost_usd: float | None = None
     # 実行したユーザー(ADR-0019)。`none` モードは常に null。
     created_by: CreatedBy | None = None
+    # 生成時に指定したグループ(ADR-0022)。指定なし・削除済みのグループなら null。
+    # 再実行でフォームに戻すためと、履歴・Run 詳細の表示に使う。
+    asset_group: AssetGroupRef | None = None
+    # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツールから作った Run。
+    origin: str | None = None
 
 
 class RunDetail(RunSummary):
@@ -649,3 +728,54 @@ class AboutResponse(BaseModel):
 
     version: str
     commit: str | None = None
+
+
+# -- MCP サーバー(ADR-0023) --------------------------------------------------
+
+
+class McpSettingsResponse(BaseModel):
+    """`GET /api/settings/mcp`。有効/無効と、MCP 経由の Run の上限(1時間あたり)。"""
+
+    enabled: bool
+    hourly_run_limit: int
+    hourly_run_limit_default: int
+    hourly_run_limit_max: int
+    # 直近1時間に MCP から作った Run の件数(上限との比較の参考)。
+    runs_last_hour: int
+    # エージェントに登録する接続先(`PUBLIC_BASE_URL` があればそれ、無ければリクエストの URL
+    # から組み立てる)。
+    endpoint_url: str
+
+
+class McpSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/mcp` の本文。省略した項目は変更しない。
+
+    値の妥当性は `app/domain/mcp_settings.py` が検証し、i18n 対応のメッセージで 422 にする。
+    """
+
+    enabled: bool | None = None
+    hourly_run_limit: int | None = None
+
+
+class ApiTokenRow(BaseModel):
+    """アクセストークンの1件。値そのものは発行時の応答(`ApiTokenCreateResponse`)にだけ載る。"""
+
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+
+
+class ApiTokenListResponse(BaseModel):
+    items: list[ApiTokenRow] = Field(default_factory=list)
+
+
+class ApiTokenCreateRequest(BaseModel):
+    """名前の妥当性(空でない、100文字以内)は `app/domain/api_tokens.py` が検証する。"""
+
+    name: str
+
+
+class ApiTokenCreateResponse(ApiTokenRow):
+    # 発行したトークンの値。この応答でだけ返し、以後は取り出せない。
+    token: str

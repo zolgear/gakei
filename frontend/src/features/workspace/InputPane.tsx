@@ -47,6 +47,7 @@ import { InputChipsRow, type InputImagesProps } from './InputChipsRow'
 import { InputImageTiles } from './InputImageTiles'
 import { ModelSelect } from './ModelSelect'
 import { OtherParamsDetails, PrimaryParamFields } from './ParamFields'
+import { AssetGroupField } from '../run-form/AssetGroupField'
 import { PromptToolsRow } from './PromptToolsRow'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
@@ -280,9 +281,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   function handleSketchSave(
     asset: AssetDetail,
     options: SketchSaveOptions,
-    replaceAssetId?: string,
+    replaceInputId?: string,
   ) {
-    editLogic.saveSketch(asset, replaceAssetId)
+    editLogic.saveSketch(asset, replaceInputId)
     if (options.insertRecommendedPrompt) {
       form.insertPrompt(recommendedSketchPrompt(), 'insert', readPromptCursorPos())
     }
@@ -440,6 +441,15 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     />
   )
 
+  const groupField = (
+    <AssetGroupField
+      value={form.assetGroupId}
+      groups={form.assetGroups}
+      onChange={form.setAssetGroupId}
+      className={styles.spanTwo}
+    />
+  )
+
   const otherParams = (
     <OtherParamsDetails
       other={other}
@@ -458,6 +468,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     notices,
     modelField,
     paramFields,
+    groupField,
     otherParams,
   }
 
@@ -521,7 +532,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       {sketchEditorState?.mode === 'over' && editLogic.sketchOverAsset && (
         <SketchEditor
           base={{ kind: 'asset', asset: editLogic.sketchOverAsset }}
-          onSave={(asset, options) => handleSketchSave(asset, options, sketchEditorState.assetId)}
+          onSave={(asset, options) => handleSketchSave(asset, options, sketchEditorState.inputId)}
           onCancel={editLogic.closeSketchEditor}
         />
       )}

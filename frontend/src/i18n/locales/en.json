@@ -142,6 +142,8 @@
     "comfyuiPromptSummary": "Graph sent to ComfyUI (JSON)",
     "timingHeading": "Timing & status",
     "createdBy": "Run by",
+    "origin": "Origin",
+    "originMcp": "MCP",
     "duration": "Duration",
     "usageHeading": "usage",
     "estimatedCost": "Estimated cost {amount}",
@@ -247,6 +249,36 @@
         "help": "On narrow screens (under 768px) the input pane always sits below the result. You can also switch from the button at the top right of the result area."
       }
     },
+    "accessTokens": {
+      "heading": "Access tokens",
+      "intro": "Used to connect AI agents to GAKEI over MCP. A token acts with your permissions, so do not share it with anyone.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load access tokens.",
+      "retry": "Reload",
+      "communicationFailed": "Communication failed",
+      "nameLabel": "Name",
+      "nameTooltip": "A name that tells you which agent or PC uses it (up to 100 characters).",
+      "namePlaceholder": "e.g. Claude Code on my PC",
+      "create": "Issue",
+      "creating": "Issuing...",
+      "createdToast": "Token issued",
+      "createdHeading": "Issued token: {name}",
+      "createdWarning": "This value is shown only now. It cannot be shown again after you leave this page.",
+      "copy": "Copy",
+      "copiedToast": "Copied",
+      "copyFailed": "Could not copy. Select the text and copy it manually.",
+      "dismiss": "Hide",
+      "empty": "No tokens issued.",
+      "createdAt": "Created",
+      "lastUsedAt": "Last used",
+      "neverUsed": "Never used",
+      "revoke": "Revoke",
+      "revokeConfirm": {
+        "message": "Revoke the token \"{name}\"? Agents using it will no longer be able to connect. This cannot be undone.",
+        "confirmLabel": "Revoke"
+      },
+      "revokedToast": "Token revoked"
+    },
     "apiKey": {
       "heading": "OpenAI API key",
       "loading": "Loading...",
@@ -328,6 +360,36 @@
         "invalid": "Enter an integer between 1 and 180",
         "resetToDefault": "Reset to default ({default} min)"
       }
+    },
+    "mcp": {
+      "heading": "MCP",
+      "intro": "Lets AI agents such as Claude Code use GAKEI generation and stock over MCP (Model Context Protocol). Runs created by agents are recorded in lineage and history just like runs created from this UI.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the MCP settings.",
+      "retry": "Reload",
+      "saveFailed": "Failed to save",
+      "enabledLabel": "Enable the MCP server",
+      "enabledTooltip": "While disabled, agents cannot connect. Disabled by default.",
+      "enabledToast": "MCP enabled",
+      "disabledToast": "MCP disabled",
+      "limitLabel": "Hourly limit",
+      "limitTooltip": "The number of runs that can be created through MCP in the last hour (0-{max}). Set it to 0 to stop generation through MCP. Read-only tools, such as browsing stock, remain available.",
+      "limitSave": "Save",
+      "limitInvalid": "Enter a whole number from 0 to {max}",
+      "limitSavedToast": "Limit saved",
+      "limitStopped": "The limit is 0, so generation through MCP is stopped.",
+      "resetToDefault": "Reset to default ({default})",
+      "runsLastHourLabel": "Runs through MCP in the last hour",
+      "runsLastHourTooltip": "The number of runs created through MCP. Once the limit is reached, new generation requests fail.",
+      "runsLastHourValue": "{count} / {limit}",
+      "endpointLabel": "Endpoint URL",
+      "endpointTooltip": "The URL to register in the agent. If agents connect from another PC, make sure it is reachable from there (PUBLIC_BASE_URL fixes it).",
+      "commandLabel": "Example: register in Claude Code",
+      "tokenPlaceholder": "<TOKEN>",
+      "commandTokenNote": "Replace <TOKEN> with a value each user issues under User settings > Access tokens.",
+      "copy": "Copy",
+      "copiedToast": "Copied",
+      "copyFailed": "Could not copy. Select the text and copy it manually."
     },
     "about": {
       "heading": "About GAKEI",
@@ -701,6 +763,10 @@
       "droppedParamsInputs": "{names} are not usable with the current inputs and were reset to unspecified",
       "submitFailedDefault": "Failed to start the run",
       "listSeparator": ", "
+    },
+    "group": {
+      "label": "Group",
+      "none": "None"
     }
   },
   "sketch": {
@@ -802,7 +868,14 @@
     "zoomInTitle": "Zoom in (10%)",
     "fitToScreen": "Fit to screen",
     "actualSize": "Actual size (100%)",
-    "imageAlt": "Generated result"
+    "imageAlt": "Generated result",
+    "groups": {
+      "heading": "Group",
+      "change": "Change",
+      "assign": "Add to a group",
+      "remove": "Remove from \"{name}\"",
+      "empty": "Not in a group."
+    }
   },
   "compare": {
     "back": "← Back",
@@ -917,11 +990,7 @@
   },
   "stock": {
     "heading": "Stock",
-    "countLoading": "...",
-    "countLabel": {
-      "one": "{count} item",
-      "other": "{count} items"
-    },
+    "kindHeading": "Type",
     "kindAll": "All",
     "kindGenerated": "Generated",
     "kindUpload": "Upload",
@@ -944,7 +1013,47 @@
     "restoreFailed": "Failed to restore.",
     "deletedToast": "Image deleted.",
     "undo": "Undo",
-    "maxInputImages": "You've reached the input image limit ({max})."
+    "maxInputImages": "You've reached the input image limit ({max}).",
+    "groups": {
+      "new": "New group…",
+      "newButton": "New group",
+      "newPlaceholder": "Group name",
+      "rename": "Rename",
+      "delete": "Delete",
+      "deleteConfirm": "This deletes the group \"{name}\". The images themselves are not deleted.",
+      "menu": "Actions for \"{name}\"",
+      "memberCount": {
+        "one": "{count} item",
+        "other": "{count} items"
+      },
+      "moveTo": "Move to a group",
+      "removeFromThis": "Remove from this group",
+      "removeFromGroups": "Remove from group",
+      "ungrouped": "Ungrouped",
+      "ungroupedEmpty": "Every image is in a group.",
+      "dropHere": "Drop images here",
+      "showMore": "Show more",
+      "noGroups": "No groups yet.",
+      "createFailed": "Failed to create the group.",
+      "renameFailed": "Failed to rename the group.",
+      "deleteFailed": "Failed to delete the group.",
+      "moveFailed": "Failed to move to the group.",
+      "removeFailed": "Failed to remove from the group.",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "dragToReorder": "Drag to reorder",
+      "reorderFailed": "Failed to reorder the groups."
+    },
+    "selection": {
+      "enter": "Select",
+      "done": "Done",
+      "count": {
+        "one": "{count} item selected",
+        "other": "{count} items selected"
+      },
+      "clear": "Clear selection",
+      "toggleTile": "Toggle selection"
+    }
   },
   "comfyui": {
     "experimentalBadge": "Experimental",

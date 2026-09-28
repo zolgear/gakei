@@ -10,6 +10,7 @@ import { Link, NavLink, useNavigate } from 'react-router'
 import { getCapabilities } from '../api/client'
 import { useRunFormContext } from '../context/useRunFormContext'
 import { clearFormContent, hasFormContent } from '../features/run-form/formStateHelpers'
+import { loadLastAssetGroupId } from '../context/lastAssetGroupStorage'
 import { SearchLauncher } from '../features/search/SearchLauncher'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { GakeiMark } from '../components/GakeiMark'
@@ -41,7 +42,7 @@ export function AppBar({ onToggleDrawer, drawerOpen }: AppBarProps) {
   // /studio の上段(結果エリア)は resetAt を見て、進行中/直前の Run の表示を空に戻す
   // (表示中の Asset は ?asset= の有無で決まるので、ここでは navigate だけでよい)。
   const startNewRun = useCallback(() => {
-    setFormState(clearFormContent(capsQuery.data))
+    setFormState(clearFormContent(capsQuery.data, loadLastAssetGroupId()))
     navigate('/studio', { state: { resetAt: Date.now() } })
   }, [capsQuery.data, navigate, setFormState])
 

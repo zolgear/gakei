@@ -38,10 +38,30 @@
   color: var(--color-text-muted);
 }
 
-.count {
-  font-family: var(--font-mono);
-  font-size: 11px;
+/* ヘッダーの「選択」。 */
+.headerButton {
+  height: 28px;
+  padding: 0 10px;
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
   color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.headerButton[data-active='true'] {
+  background: var(--color-header-band);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+/* 「種類」の見出しはチップ行の上に左寄せで置く(チップの横に縦中央で並べない)。 */
+.kindFilter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .chips {
@@ -78,87 +98,6 @@
   color: var(--color-success, #4ade80);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: var(--color-bg);
-}
-
-.tileImageButton {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  display: block;
-  width: 100%;
-}
-
-.tileImage {
-  width: 100%;
-  height: 96px;
-  object-fit: cover;
-  display: block;
-}
-
-.addButton {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(23, 24, 27, 0.85);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 50%;
-  color: var(--color-text);
-  font-size: 14px;
-  line-height: 1;
-}
-
-.addButton:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-.deleteButton {
-  position: absolute;
-  bottom: 27px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(23, 24, 27, 0.85);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 50%;
-  color: var(--color-text-muted);
-}
-
-.deleteButton:hover {
-  color: var(--color-danger);
-  border-color: var(--color-danger);
-}
-
-.caption {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--color-text-muted);
-  padding: 5px 7px;
-  text-align: left;
-}
-
 /* 細い破線のアップロードバー。パネル上部の sticky ヘッダーに常時表示する(D&D の受け口は
    .panel 全体に広げているので、このバー自体はクリックでのファイル選択が主な役目)。 */
 .uploadBar {
@@ -188,63 +127,55 @@
   display: none;
 }
 
-.emptyState {
-  margin: 0;
-  padding: 28px 12px;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
-  text-align: center;
+/* 選択モードの下部の操作バー(ADR-0022 4章)。パネルのスクロール下端に固定し、
+   768px 未満でも折り返して収まるようにする。 */
+.selectionFooter {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0 2px;
+  margin-top: -8px;
+  background: var(--color-bg-raised);
+  border-top: 1px solid var(--color-border);
+}
+
+.selectionCount {
   font-size: 12px;
   color: var(--color-text-muted);
 }
 
-/* 自動読み込みの番兵。通常は見えない(IntersectionObserver が交差を検知した時点で次ページを
-   取りに行く)。取得中・失敗時・observer 非対応環境でだけ中身を表示する。 */
-.sentinel {
+.selectionActions {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 4px 0;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.sentinelLoading {
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.sentinelButton {
-  padding: 8px 16px;
+.selectionButton {
+  height: 36px;
+  padding: 0 12px;
   background: var(--color-header-band);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius);
-  font-size: 12px;
   color: var(--color-text);
+  font-size: 12px;
 }
 
-.sentinelButton:hover:not(:disabled) {
-  border-color: var(--color-accent);
+.selectionButton:disabled {
+  opacity: 0.5;
 }
 
 @media (max-width: 767px) {
-  .addButton {
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
-  }
-
-  .deleteButton {
-    width: 40px;
-    height: 40px;
-    bottom: 46px;
-  }
-
-  .tileImageButton {
-    min-height: 44px;
-  }
-
   .uploadBar {
     height: 44px;
     font-size: 13px;
+  }
+
+  .headerButton,
+  .chip,
+  .selectionButton {
+    min-height: 44px;
   }
 }

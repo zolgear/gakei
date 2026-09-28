@@ -109,14 +109,14 @@ describe('hasFormContent', () => {
     expect(
       hasFormContent({
         ...createEmptyFormState(),
-        inputs: [{ assetId: 'a', role: 'image', position: 0 }],
+        inputs: [{ inputId: 'in-a', assetId: 'a', role: 'image', position: 0 }],
       }),
     ).toBe(true)
   })
 })
 
 describe('clearFormContent', () => {
-  it('prompt・inputs を空にし、provider/model/params は capabilities の初期値に戻す', () => {
+  it('prompt・inputs を空にし、provider/model/params は capabilities の初期値に戻す(グループはなし)', () => {
     const result = clearFormContent(caps())
     expect(result).toEqual({
       provider: 'fake',
@@ -124,11 +124,17 @@ describe('clearFormContent', () => {
       prompt: '',
       params: { quality: 'low', n: 1, size: '1024x1024' },
       inputs: [],
+      assetGroupId: null,
     })
   })
 
   it('caps が未取得なら空のフォーム(model: \'\')を返す', () => {
     expect(clearFormContent(undefined)).toEqual(createEmptyFormState())
+  })
+
+  it('渡した「最後に選んだグループ」を既定のグループにする(caps の有無によらない)', () => {
+    expect(clearFormContent(caps(), 'g1').assetGroupId).toBe('g1')
+    expect(clearFormContent(undefined, 'g1')).toEqual({ ...createEmptyFormState(), assetGroupId: 'g1' })
   })
 
   it('default_model が models に無ければ先頭モデルにフォールバックする', () => {

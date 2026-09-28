@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { getCapabilities } from '../../api/client'
 import { useRunFormContext } from '../../context/useRunFormContext'
+import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import { useI18n } from '../../i18n'
 import { buildOriginFormState, originRecipeDisabledReason, type OriginRunInfo } from './originRecipe'
 import styles from './OriginRecipeSection.module.css'
@@ -26,7 +27,7 @@ export function RecipeLoadButton({ runInfo }: RecipeLoadButtonProps) {
 
   function handleLoadRecipe() {
     if (runInfo === null || disabledReason !== null) return
-    setFormState(buildOriginFormState(runInfo))
+    setFormState(buildOriginFormState(runInfo, loadLastAssetGroupId()))
     navigate('/studio')
   }
 

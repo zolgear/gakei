@@ -15,9 +15,12 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "run_input",
         "prompt_set",
         "prompt_set_item",
+        "asset_group",
+        "asset_group_member",
         "comfy_workflow",
         "app_user",
         "auth_session",
+        "api_token",
         "alembic_version",
     } <= tables
 
@@ -247,4 +250,308 @@ def test_migration_upgrades_from_0010_to_0011_adds_avatar_column(tmp_path) -> No
     engine = create_engine(f"sqlite:///{db_path}")
     columns_after_downgrade = {c["name"] for c in sa_inspect(engine).get_columns("app_user")}
     assert "avatar_sha256" not in columns_after_downgrade
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0011_to_0012_adds_asset_group_tables(tmp_path) -> None:  # noqa: ANN001
+    """既存の0011適用済みDBでも、起動時のupgrade headで0012(asset_group、
+    asset_group_member)が当たること(ADR-0022)。"""
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0011")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables_after_0011 = set(sa_inspect(engine).get_table_names())
+    assert "asset_group" not in tables_after_0011
+    assert "asset_group_member" not in tables_after_0011
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables_after_head = set(sa_inspect(engine).get_table_names())
+    assert {"asset_group", "asset_group_member"} <= tables_after_head
+    engine.dispose()
+
+    command.downgrade(cfg, "0011")
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables_after_downgrade = set(sa_inspect(engine).get_table_names())
+    assert "asset_group" not in tables_after_downgrade
+    assert "asset_group_member" not in tables_after_downgrade
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0012_to_0013_adds_run_asset_group_id(tmp_path) -> None:  # noqa: ANN001
+    """既存の0012適用済みDBでも、起動時のupgrade headで0013(run.asset_group_id)
+    が当たること(ADR-0022)。"""
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0012")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns_after_0012 = {c["name"] for c in sa_inspect(engine).get_columns("run")}
+    assert "asset_group_id" not in columns_after_0012
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    columns_after_head = {c["name"] for c in inspector.get_columns("run")}
+    assert "asset_group_id" in columns_after_head
+    assert "ix_run_asset_group_id" in {i["name"] for i in inspector.get_indexes("run")}
+    fks = {fk["name"]: fk for fk in inspector.get_foreign_keys("run")}
+    assert fks["fk_run_asset_group_id_asset_group"]["referred_table"] == "asset_group"
+    engine.dispose()
+
+    command.downgrade(cfg, "0012")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    columns_after_downgrade = {c["name"] for c in inspector.get_columns("run")}
+    assert "asset_group_id" not in columns_after_downgrade
+    assert "ix_run_asset_group_id" not in {i["name"] for i in inspector.get_indexes("run")}
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0013_to_0014_adds_asset_group_position(tmp_path) -> None:  # noqa: ANN001
+    """既存の0013適用済みDBでも、起動時のupgrade headで0014(asset_group.position)が当たり、
+    既存行はそれまでの表示順(updated_at DESC)が 0..n-1 になるよう埋まること(ADR-0022)。"""
+    import uuid
+
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0013")
+
+    from sqlalchemy import Uuid, bindparam, create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns_after_0013 = {c["name"] for c in sa_inspect(engine).get_columns("asset_group")}
+    assert "position" not in columns_after_0013
+
+    # updated_at が古い順に old / middle / new を入れる(挿入順とは変えておく)。
+    ids = {name: uuid.uuid4() for name in ("old", "middle", "new")}
+    seeds = [
+        ("middle", "2026-09-02 00:00:00.000000"),
+        ("new", "2026-09-03 00:00:00.000000"),
+        ("old", "2026-09-01 00:00:00.000000"),
+    ]
+    insert = text(
+        "INSERT INTO asset_group (id, name, created_at, updated_at) VALUES (:id, :name, :ts, :ts)"
+    ).bindparams(bindparam("id", type_=Uuid()))
+    with engine.begin() as conn:
+        for name, ts in seeds:
+            conn.execute(insert, {"id": ids[name], "name": name, "ts": ts})
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns = {c["name"]: c for c in sa_inspect(engine).get_columns("asset_group")}
+    assert "position" in columns
+    assert columns["position"]["nullable"] is False
+    assert columns["position"]["default"] is None  # 埋めた後は DB 側の既定値を外す
+    with engine.connect() as conn:
+        positions = dict(conn.execute(text("SELECT name, position FROM asset_group")).all())
+    assert positions == {"new": 0, "middle": 1, "old": 2}
+    engine.dispose()
+
+    command.downgrade(cfg, "0013")
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns_after_downgrade = {c["name"] for c in sa_inspect(engine).get_columns("asset_group")}
+    assert "position" not in columns_after_downgrade
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM asset_group")).scalar_one() == 3
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0014_to_0015_makes_member_asset_id_unique(tmp_path) -> None:  # noqa: ANN001
+    """既存の0014適用済みDBでも、起動時のupgrade headで0015が当たり、複数のグループに
+    入っていた Asset の行が 1 行に減り(削除済みでないグループを優先し、その中で added_at が
+    最新の行を残す)、asset_id の一意索引ができること(ADR-0022、2026-09-28)。"""
+    import uuid
+
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0014")
+
+    from sqlalchemy import Uuid, bindparam, create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    groups = {name: uuid.uuid4() for name in ("g1", "g2", "deleted")}
+    assets = {name: uuid.uuid4() for name in ("two_live", "live_and_deleted", "only_deleted")}
+    insert_group = text(
+        "INSERT INTO asset_group (id, name, position, created_at, updated_at, deleted_at) "
+        "VALUES (:id, :name, 0, :ts, :ts, :deleted_at)"
+    ).bindparams(bindparam("id", type_=Uuid()))
+    insert_asset = text(
+        "INSERT INTO asset (id, kind, sha256, blob_key, mime, width, height, bytes, created_at) "
+        "VALUES (:id, 'upload', :sha, :key, 'image/png', 1, 1, 1, '2026-09-01 00:00:00.000000')"
+    ).bindparams(bindparam("id", type_=Uuid()))
+    insert_member = text(
+        "INSERT INTO asset_group_member (asset_group_id, asset_id, added_at) "
+        "VALUES (:group_id, :asset_id, :added_at)"
+    ).bindparams(bindparam("group_id", type_=Uuid()), bindparam("asset_id", type_=Uuid()))
+    ts = "2026-09-01 00:00:00.000000"
+    with engine.begin() as conn:
+        for name, group_id in groups.items():
+            deleted_at = ts if name == "deleted" else None
+            conn.execute(
+                insert_group, {"id": group_id, "name": name, "ts": ts, "deleted_at": deleted_at}
+            )
+        for name, asset_id in assets.items():
+            conn.execute(insert_asset, {"id": asset_id, "sha": name, "key": name})
+        seeds = [
+            # 削除済みでないグループ 2 つ → added_at が新しい g2 を残す。
+            ("g1", "two_live", "2026-09-01 00:00:00.000000"),
+            ("g2", "two_live", "2026-09-03 00:00:00.000000"),
+            # 削除済みグループの方が新しくても、削除済みでない g1 を残す。
+            ("g1", "live_and_deleted", "2026-09-01 00:00:00.000000"),
+            ("deleted", "live_and_deleted", "2026-09-05 00:00:00.000000"),
+            # 削除済みグループにだけ入っている行はそのまま残す。
+            ("deleted", "only_deleted", "2026-09-02 00:00:00.000000"),
+        ]
+        for group_name, asset_name, added_at in seeds:
+            conn.execute(
+                insert_member,
+                {
+                    "group_id": groups[group_name],
+                    "asset_id": assets[asset_name],
+                    "added_at": added_at,
+                },
+            )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    indexes = {i["name"]: i for i in sa_inspect(engine).get_indexes("asset_group_member")}
+    assert "ix_asset_group_member_asset_id" not in indexes
+    assert indexes["ux_asset_group_member_asset_id"]["unique"]
+    assert indexes["ux_asset_group_member_asset_id"]["column_names"] == ["asset_id"]
+    group_names = {group_id.hex: name for name, group_id in groups.items()}
+    asset_names = {asset_id.hex: name for name, asset_id in assets.items()}
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT asset_id, asset_group_id, added_at FROM asset_group_member")
+        ).all()
+    remaining = {
+        asset_names[uuid.UUID(str(a)).hex]: (group_names[uuid.UUID(str(g)).hex], added)
+        for a, g, added in rows
+    }
+    assert len(rows) == 3
+    assert remaining == {
+        "two_live": ("g2", "2026-09-03 00:00:00.000000"),
+        "live_and_deleted": ("g1", "2026-09-01 00:00:00.000000"),
+        "only_deleted": ("deleted", "2026-09-02 00:00:00.000000"),
+    }
+    engine.dispose()
+
+    command.downgrade(cfg, "0014")
+    engine = create_engine(f"sqlite:///{db_path}")
+    indexes = {i["name"]: i for i in sa_inspect(engine).get_indexes("asset_group_member")}
+    assert "ux_asset_group_member_asset_id" not in indexes
+    assert not indexes["ix_asset_group_member_asset_id"]["unique"]
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0015_to_0016_adds_api_token_and_run_origin(tmp_path) -> None:  # noqa: ANN001
+    """既存の0015適用済みDBでも、起動時のupgrade headで0016(api_token、run.origin、
+    run.api_token_id)が当たり、既存の Run は null(= 画面)のままであること。downgrade も
+    できること(ADR-0023)。"""
+    import uuid
+
+    from alembic import command
+    from alembic.config import Config
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_path = tmp_path / "existing.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+
+    command.upgrade(cfg, "0015")
+
+    from sqlalchemy import Uuid, bindparam, create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    run_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO run (id, provider, model, operation, prompt, params, status, "
+                "queued_at) VALUES (:id, 'fake', 'm', 'generate', 'p', '{}', 'succeeded', "
+                "'2026-09-01 00:00:00.000000')"
+            ).bindparams(bindparam("id", type_=Uuid())),
+            {"id": run_id},
+        )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    assert "api_token" in set(inspector.get_table_names())
+    token_columns = {c["name"] for c in inspector.get_columns("api_token")}
+    assert token_columns == {
+        "id",
+        "user_id",
+        "name",
+        "token_hash",
+        "created_at",
+        "last_used_at",
+        "revoked_at",
+    }
+    run_columns = {c["name"] for c in inspector.get_columns("run")}
+    assert {"origin", "api_token_id"} <= run_columns
+    fks = {fk["name"]: fk for fk in inspector.get_foreign_keys("run")}
+    assert fks["fk_run_api_token_id_api_token"]["referred_table"] == "api_token"
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT origin, api_token_id FROM run")).one()
+    assert tuple(row) == (None, None)
+    engine.dispose()
+
+    command.downgrade(cfg, "0015")
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = sa_inspect(engine)
+    assert "api_token" not in set(inspector.get_table_names())
+    run_columns = {c["name"] for c in inspector.get_columns("run")}
+    assert "origin" not in run_columns
+    assert "api_token_id" not in run_columns
     engine.dispose()

@@ -1,0 +1,52 @@
+/* 生成フォームの「グループ」(ADR-0022)。ラベルと選択欄は ParamField の `.field` に揃え、
+ * 選択欄の右に「+」(ストックの「グループなし」の見出しの「+」と同じ色・ホバー)を置く。
+ * 名前の入力とエラーは共通部品(`NewGroupInline.module.css`)の見た目。 */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+
+.select {
+  flex: 1;
+}
+
+.addButton {
+  flex-shrink: 0;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+}
+
+.addButton:hover,
+.addButton[aria-expanded='true'] {
+  color: var(--color-text);
+}
+
+@media (max-width: 767px) {
+  /* `.field select`(34px)より詳細度を上げて 44px にする。16px は iOS のフォーカス時の
+   * 拡大を防ぐため(ParamField と同じ)。 */
+  .root .select,
+  .root .nameInput {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .addButton {
+    width: 44px;
+  }
+}

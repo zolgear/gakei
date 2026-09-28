@@ -17,7 +17,8 @@
 - **バージョンは SemVer。** ローカルMVPの間は `0.y.z` で、`0.y` を上げるのは利用者に見える機能の追加や互換性のない変更(設定名や DB の意味が変わるとき)、`z` は修正と小さな改善。`1.0.0` にするのは本線(Azure)に着手したときではなく、「ローカルMVPとして完成」とユーザーが判断したとき。
 - **バージョンの正は `backend/pyproject.toml` の `version` の1か所。** `frontend/package.json` の `version` は使わない(`"private": true` で npm に公開しないパッケージなので `0.0.0` のまま)。サーバーは起動時に `pyproject.toml` を読み、画面と API に出す(3章)。
 - **タグは `vX.Y.Z`**(先頭に `v`)。プレリリースは `vX.Y.Z-rc.N`。タグは main のコミットにだけ打つ。
-- **リリースの手順:** (1) `pyproject.toml` のバージョンを上げる PR を作り、マージする。(2) main で `git tag vX.Y.Z && git push origin vX.Y.Z`。(3) 以降は自動(2章)。手順は `docs/release.md` に書く。
+- **ブランチは `dev` と `main` の2本**(2026-09-27 追記)。開発は `dev` に PR で集め、リリースのときだけ `dev` → `main` の PR を入れる。`main` は常にリリース済みの状態を指し、既定ブランチも `main`(利用者が clone して手にするのはリリース済みの状態。PR の向き先は `dev` を明示する)。両方とも PR 経由のみ・CI 必須・force push 禁止をルールセットで強制し、`v*` タグは削除と上書きを禁止する。
+- **リリースの手順:** (1) `dev` で `pyproject.toml` のバージョンを上げる PR を作り、マージする。(2) `dev` → `main` の PR をマージする。(3) main で `git tag vX.Y.Z && git push origin vX.Y.Z`。(4) 以降は自動(2章)。手順は `docs/release.md` に書く。
 - **リリースノートは GitHub の自動生成**(マージされた PR の一覧)を使い、手で書かない。書きたいことがあれば、GitHub Release の本文を後から編集する。
 - CHANGELOG ファイルは作らない。変更の経緯は ADR と GitHub Release で追う。
 
@@ -38,7 +39,7 @@
 その他:
 
 - ワークフローの権限は `contents: write`(Release の作成)と `packages: write`(GHCR)だけ。`GITHUB_TOKEN` で足り、個人のトークンや secret は要らない。
-- GHCR のパッケージは最初の push では private になる。**public にするのは GitHub の設定画面で1回だけ手で行う**(`docs/release.md` に書く)。
+- GHCR のパッケージの公開範囲はリポジトリに従う。public リポジトリの Actions から push すれば自動で public になる(2026-09-27 の `v0.1.0` で確認。当初は手で切り替える想定だったが不要だった)。private リポジトリから push した場合だけ、設定画面で手で public にする(`docs/release.md`)。
 - private リポジトリのうちに `v0.1.0-rc.1` のようなプレリリースのタグで一度動かして確かめる。その際に作られたパッケージと Release は、公開リポジトリでの最初のリリースより前に削除する(名前が同じ `ghcr.io/zolgear/gakei` になり、旧リポジトリに紐づいたパッケージが残ると混乱する)。
 - CI(`ci.yml`)の docker ジョブは変えない(単一アーキテクチャのビルドと起動確認のまま)。マルチアーキテクチャのビルドは時間がかかるので、リリース時だけ行う。
 
@@ -98,8 +99,8 @@
 
 ## Action Items
 
-1. [ ] `GET /api/about`、`GET /api/about/third-party-notices`、`app/version.py`、`app/domain/third_party.py`、`app.tools.third_party_notices`
-2. [ ] `frontend/scripts/third-party-notices.mjs` と `npm run build` への組み込み、「GAKEI について」にバージョンと表記へのリンク
-3. [ ] `Dockerfile`(`$BUILDPLATFORM`、`GAKEI_COMMIT`、LICENSE / NOTICE のコピー、OCI ラベル)、`.github/workflows/release.yml`
-4. [ ] `docs/release.md`、README(日英)の Docker の節、`docs/configuration.md`(`GAKEI_COMMIT` は利用者が設定するものではないので載せない)、CLAUDE.md、ADR-0016 / ADR-0011 への追記
-5. [ ] private リポジトリで `v0.1.0-rc.1` を打ってワークフローを一度動かし、パッケージと Release を消す
+1. [x] `GET /api/about`、`GET /api/about/third-party-notices`、`app/version.py`、`app/domain/third_party.py`、`app.tools.third_party_notices`
+2. [x] `frontend/scripts/third-party-notices.mjs` と `npm run build` への組み込み、「GAKEI について」にバージョンと表記へのリンク
+3. [x] `Dockerfile`(`$BUILDPLATFORM`、`GAKEI_COMMIT`、LICENSE / NOTICE のコピー、OCI ラベル)、`.github/workflows/release.yml`
+4. [x] `docs/release.md`、README(日英)の Docker の節、`docs/configuration.md`(`GAKEI_COMMIT` は利用者が設定するものではないので載せない)、CLAUDE.md、ADR-0016 / ADR-0011 への追記
+5. [x] private リポジトリで `v0.1.0-rc.1` を打ってワークフローを一度動かし、パッケージと Release を消す(2026-09-27。同日に public で `v0.1.0` をリリース)

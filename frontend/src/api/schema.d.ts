@@ -339,6 +339,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/asset-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Asset Groups */
+        get: operations["list_asset_groups"];
+        put?: never;
+        /** Create Asset Group */
+        post: operations["create_asset_group"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/asset-groups/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Reorder Asset Groups */
+        put: operations["reorder_asset_groups"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/asset-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Asset Group */
+        delete: operations["delete_asset_group"];
+        options?: never;
+        head?: never;
+        /** Update Asset Group */
+        patch: operations["update_asset_group"];
+        trace?: never;
+    };
+    "/api/asset-groups/{group_id}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Asset Group Assets
+         * @description Asset をこのグループへ移す。別のグループに入っていれば外してから入れ、既に入っている
+         *     ものは無視する。削除済みや存在しない Asset が1件でもあれば 404 で全体を拒む。
+         */
+        post: operations["add_asset_group_assets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/asset-groups/{group_id}/assets/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Asset Group Assets */
+        post: operations["remove_asset_group_assets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs": {
         parameters: {
             query?: never;
@@ -593,6 +684,24 @@ export interface paths {
         patch: operations["update_general_settings"];
         trace?: never;
     };
+    "/api/settings/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Mcp Settings */
+        get: operations["get_mcp_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Mcp Settings */
+        patch: operations["update_mcp_settings"];
+        trace?: never;
+    };
     "/api/users/me/avatar": {
         parameters: {
             query?: never;
@@ -645,6 +754,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/me/api-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Api Tokens */
+        get: operations["list_api_tokens"];
+        put?: never;
+        /** Create Api Token */
+        post: operations["create_api_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/api-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Api Token
+         * @description 失効させる(行は消さない。Run の `api_token_id` から参照されるため)。
+         */
+        delete: operations["revoke_api_token"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -658,6 +805,58 @@ export interface components {
             version: string;
             /** Commit */
             commit?: string | null;
+        };
+        /**
+         * ApiTokenCreateRequest
+         * @description 名前の妥当性(空でない、100文字以内)は `app/domain/api_tokens.py` が検証する。
+         */
+        ApiTokenCreateRequest: {
+            /** Name */
+            name: string;
+        };
+        /** ApiTokenCreateResponse */
+        ApiTokenCreateResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Token */
+            token: string;
+        };
+        /** ApiTokenListResponse */
+        ApiTokenListResponse: {
+            /** Items */
+            items?: components["schemas"]["ApiTokenRow"][];
+        };
+        /**
+         * ApiTokenRow
+         * @description アクセストークンの1件。値そのものは発行時の応答(`ApiTokenCreateResponse`)にだけ載る。
+         */
+        ApiTokenRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Used At */
+            last_used_at?: string | null;
         };
         /** AssetDetail */
         AssetDetail: {
@@ -706,6 +905,83 @@ export interface components {
              */
             used_as_input: boolean;
             created_by?: components["schemas"]["CreatedBy"] | null;
+            group?: components["schemas"]["AssetGroupRef"] | null;
+        };
+        /** AssetGroupCreate */
+        AssetGroupCreate: {
+            /** Name */
+            name: string;
+        };
+        /** AssetGroupListResponse */
+        AssetGroupListResponse: {
+            /** Items */
+            items?: components["schemas"]["AssetGroupRow"][];
+        };
+        /**
+         * AssetGroupMembersRequest
+         * @description `.../assets` と `.../assets/remove` の共通の本文。1〜200件。
+         */
+        AssetGroupMembersRequest: {
+            /** Asset Ids */
+            asset_ids: string[];
+        };
+        /**
+         * AssetGroupOrderRequest
+         * @description `PUT /api/asset-groups/order` の本文。削除済みでない全グループの id を望む順に並べたもの
+         *     (過不足・重複があれば 422)。
+         */
+        AssetGroupOrderRequest: {
+            /** Group Ids */
+            group_ids: string[];
+        };
+        /**
+         * AssetGroupRef
+         * @description `AssetDetail.group` と `RunSummary.asset_group` の1件。
+         */
+        AssetGroupRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * AssetGroupRow
+         * @description `GET /api/asset-groups` の1件。`member_count` / `cover_asset_id` は
+         *     削除済みでない Asset だけを数える(cover は `added_at` が最新のメンバー)。
+         *     `position` は利用者が決める並び順(小さいほど上)。
+         */
+        AssetGroupRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+            /** Member Count */
+            member_count: number;
+            /** Cover Asset Id */
+            cover_asset_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AssetGroupUpdate */
+        AssetGroupUpdate: {
+            /** Name */
+            name: string;
         };
         /** AssetLineageResponse */
         AssetLineageResponse: {
@@ -828,6 +1104,7 @@ export interface components {
              */
             used_as_input: boolean;
             created_by?: components["schemas"]["CreatedBy"] | null;
+            group?: components["schemas"]["AssetGroupRef"] | null;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -1471,6 +1748,36 @@ export interface components {
             /** Input */
             input?: string | null;
         };
+        /**
+         * McpSettingsResponse
+         * @description `GET /api/settings/mcp`。有効/無効と、MCP 経由の Run の上限(1時間あたり)。
+         */
+        McpSettingsResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Hourly Run Limit */
+            hourly_run_limit: number;
+            /** Hourly Run Limit Default */
+            hourly_run_limit_default: number;
+            /** Hourly Run Limit Max */
+            hourly_run_limit_max: number;
+            /** Runs Last Hour */
+            runs_last_hour: number;
+            /** Endpoint Url */
+            endpoint_url: string;
+        };
+        /**
+         * McpSettingsUpdateRequest
+         * @description `PATCH /api/settings/mcp` の本文。省略した項目は変更しない。
+         *
+         *     値の妥当性は `app/domain/mcp_settings.py` が検証し、i18n 対応のメッセージで 422 にする。
+         */
+        McpSettingsUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Hourly Run Limit */
+            hourly_run_limit?: number | null;
+        };
         /** ModelCapabilities */
         ModelCapabilities: {
             /** Model */
@@ -1854,6 +2161,8 @@ export interface components {
             };
             /** Inputs */
             inputs?: components["schemas"]["RunInputCreate"][];
+            /** Asset Group Id */
+            asset_group_id?: string | null;
         };
         /** RunCreateResponse */
         RunCreateResponse: {
@@ -1933,6 +2242,9 @@ export interface components {
             /** Cost Usd */
             cost_usd?: number | null;
             created_by?: components["schemas"]["CreatedBy"] | null;
+            asset_group?: components["schemas"]["AssetGroupRef"] | null;
+            /** Origin */
+            origin?: string | null;
             /** Deployment */
             deployment?: string | null;
             /** Provider Request Id */
@@ -2089,6 +2401,9 @@ export interface components {
             /** Cost Usd */
             cost_usd?: number | null;
             created_by?: components["schemas"]["CreatedBy"] | null;
+            asset_group?: components["schemas"]["AssetGroupRef"] | null;
+            /** Origin */
+            origin?: string | null;
         };
         /**
          * SearchAssetHit
@@ -2235,6 +2550,9 @@ export interface components {
             /** Cost Usd */
             cost_usd?: number | null;
             created_by?: components["schemas"]["CreatedBy"] | null;
+            asset_group?: components["schemas"]["AssetGroupRef"] | null;
+            /** Origin */
+            origin?: string | null;
             /** Snippet */
             snippet: string;
         };
@@ -2871,6 +3189,10 @@ export interface operations {
         parameters: {
             query?: {
                 kind?: ("upload" | "generated" | "mask" | "sketch") | null;
+                /** @description 指定すると、そのグループのメンバーだけに絞る(ADR-0022)。 */
+                group_id?: string | null;
+                /** @description true なら、削除済みでないどのグループにも入っていない Asset だけに絞る(ストックの「グループなし」の節。ADR-0022)。`group_id` と同時には指定できない。 */
+                ungrouped?: boolean;
                 limit?: number;
                 cursor?: string | null;
             };
@@ -3095,6 +3417,249 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetLineageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_asset_groups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetGroupListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_asset_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetGroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetGroupRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_asset_groups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetGroupOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetGroupListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_asset_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_asset_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetGroupUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetGroupRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_asset_group_assets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetGroupMembersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetGroupRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_asset_group_assets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetGroupMembersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetGroupRow"];
                 };
             };
             /** @description Validation Error */
@@ -3920,6 +4485,72 @@ export interface operations {
             };
         };
     };
+    get_mcp_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mcp_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_avatar: {
         parameters: {
             query?: never;
@@ -4042,6 +4673,103 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_api_tokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiTokenListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_api_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiTokenCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiTokenCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_api_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

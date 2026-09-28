@@ -6,6 +6,12 @@
 export type Operation = 'generate' | 'edit'
 
 export interface RunInputItem {
+  /**
+   * 入力1件ごとのクライアント側の一意キー(issue #12・#13)。同じ Asset を複数回入力に
+   * 入れられる(ADR-0003 の run_input は同じ Asset の複数回を許す)ため、削除・並べ替え・
+   * React の key は assetId ではなくこれで行う。API には送らない(送信時は assetId だけを使う)。
+   */
+  inputId: string
   assetId: string
   role: 'image' | 'mask' | 'reference'
   position: number
@@ -18,6 +24,12 @@ export interface RunFormState {
   prompt: string
   params: Record<string, string | number | boolean>
   inputs: RunInputItem[]
+  /**
+   * ADR-0022: 生成時に出力を入れるグループ(null はグループなし)。他のパラメーターと同じく
+   * フォームの状態として持ち、localStorage にも保存する。params には入れない
+   * (run.params は API に送った値そのもので、グループはプロバイダーに送る値ではないため)。
+   */
+  assetGroupId: string | null
 }
 
 export function createEmptyFormState(): RunFormState {
@@ -27,5 +39,6 @@ export function createEmptyFormState(): RunFormState {
     prompt: '',
     params: {},
     inputs: [],
+    assetGroupId: null,
   }
 }

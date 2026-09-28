@@ -153,6 +153,10 @@
     "general": {
       "invalidModeration": "moderation は auto または low である必要があります",
       "invalidTimeoutSeconds": "ComfyUI のタイムアウトは{min}〜{max}秒の整数である必要があります"
+    },
+    "mcp": {
+      "invalidEnabled": "enabled は true か false である必要があります",
+      "invalidHourlyRunLimit": "1時間あたりの上限は{min}〜{max}の整数である必要があります"
     }
   },
   "runValidation": {
@@ -223,6 +227,12 @@
     "notFound": "プロンプトセットが見つかりません",
     "itemNotFound": "プロンプトセットの項目が見つかりません"
   },
+  "assetGroups": {
+    "notFound": "グループが見つかりません",
+    "assetNotFound": "対象の画像が見つかりません: {ids}",
+    "groupIdAndUngrouped": "group_id と ungrouped は同時に指定できません",
+    "orderMismatch": "並べ替えの一覧が現在のグループと一致しません"
+  },
   "worker": {
     "interruptedByRestart": "サーバー再起動により中断されました",
     "providerNotRegistered": "provider={provider} は登録されていません"
@@ -256,5 +266,16 @@
       "invalidCrop": "切り出す範囲の指定が壊れています",
       "cropOutOfBounds": "切り出す範囲が画像の外にはみ出しています"
     }
+  },
+  "apiTokens": {
+    "nameEmpty": "トークンの名前を入力してください",
+    "nameTooLong": "トークンの名前は{max}文字以内にしてください",
+    "notFound": "アクセストークンが見つかりません"
+  },
+  "mcp": {
+    "disabled": "MCP サーバーは無効です。管理者設定の「MCP」で有効にしてください。",
+    "tokenRequired": "アクセストークンが必要です(Authorization: Bearer <token>)。",
+    "tokenInvalid": "アクセストークンが無効か、失効しています。",
+    "originForbidden": "この Origin からの MCP の呼び出しは許可されていません。"
   }
 }
