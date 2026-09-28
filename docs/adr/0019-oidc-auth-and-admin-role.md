@@ -21,7 +21,9 @@
 ### 2. サーバー側で Authorization Code + PKCE を行い、セッションは Cookie で持つ(BFF)
 
 - ログインはサーバーが仲介する: `GET /api/auth/login` → IdP → `GET /api/auth/callback`。コードの交換と ID トークンの検証(署名、`iss`、`aud`、`nonce`、期限)は Authlib に任せ、自前でトークン検証を書かない(ADR-0006 の Trade-off「トークン検証の実装ミスが起きない」を踏襲)。
-- ログイン後は **サーバー側セッション** を `auth_session` 表に持ち、ブラウザには HttpOnly の Cookie `gakei_session` にランダムなトークンだけを渡す(DB にはそのハッシュを置く)。ログアウトで即時失効し、期限(`AUTH_SESSION_HOURS`)を過ぎたものは次のログイン時に掃除する。**1ユーザー1セッションにする(2026-09-27 追記)。** callback で新しいセッションを作る直前に、同じ `app_user.id` の既存セッションを全て消す。再ログインしても、別のブラウザ・別の端末に残っていた古いセッションが使われ続けることを防ぐ(セキュリティ監査の指摘 I-3)。
+- ログイン後は **サーバー側セッション** を `auth_session` 表に持ち、ブラウザには HttpOnly の Cookie `gakei_session` にランダムなトークンだけを渡す(DB にはそのハッシュを置く)。ログアウトで即時失効し、期限(`AUTH_SESSION_HOURS`)を過ぎたものは次のログイン時に掃除する。**同じ利用者が複数の端末で同時にログインできる。1ユーザーあたり最大 10 セッション(2026-09-28 改訂)。** ログインしても、別のブラウザや端末のセッションは消さない。callback で新しいセッションを作る直前に、同じ `app_user.id` のセッションが 10 件以上あれば、古い順に消して新しいものを含め 10 件に収める。
+  - 2026-09-27 には、セキュリティ監査の指摘 I-3 を受けて「1ユーザー1セッション」にしていた。再ログインしても、別の端末に残った古いセッションが使われ続けることを防ぐためだった。
+  - 2026-09-28、別の端末でログインすると既存のログインが切れることが問題になり、ユーザーの判断で改めた。残ったセッションの懸念は、有効期限(`AUTH_SESSION_HOURS`、既定 12 時間)と件数の上限で抑える。
 - Cookie を使う理由: 画像の配信(`<img src="/api/assets/{id}/content">`)と進捗の SSE(`EventSource`)はリクエストヘッダーを付けられない。Bearer トークンでは、この2つの経路(ADR-0004 の配信方針)が通らない。
 - Cookie の属性: `HttpOnly`、`SameSite=Lax`、`Path=/`。`Secure` は `PUBLIC_BASE_URL` が `https` のときだけ付ける(手元の `http://127.0.0.1` でも試せるように)。
 - Authlib が state / nonce / code_verifier を一時的に置く場所として、Starlette の `SessionMiddleware`(署名付き Cookie `gakei_oidc`、有効 10 分)を oidc モードのときだけ追加する。この Cookie はログイン手続き中しか使わず、ログイン済みセッションとは別物。`SessionMiddleware` は純粋 ASGI で本文をバッファしないため、SSE に影響しない(`BaseHTTPMiddleware` を避ける方針は `main.py` の `LocaleMiddleware` と同じ)。
