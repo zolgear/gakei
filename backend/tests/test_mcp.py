@@ -499,8 +499,8 @@ def test_mcp_settings_defaults_and_validation(client: TestClient) -> None:
     body = client.get("/api/settings/mcp").json()
     assert body == {
         "enabled": False,
-        "hourly_run_limit": 20,
-        "hourly_run_limit_default": 20,
+        "hourly_run_limit": 30,
+        "hourly_run_limit_default": 30,
         "hourly_run_limit_max": 1000,
         "runs_last_hour": 0,
         "endpoint_url": "http://testserver/mcp",

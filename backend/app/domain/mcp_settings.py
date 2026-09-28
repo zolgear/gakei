@@ -1,7 +1,7 @@
 """MCP サーバーの管理者設定(ADR-0023 1章・5章)。
 
 - `mcp.enabled`: `/mcp` を応答させるか。既定は無効(false)。
-- `mcp.hourly_run_limit`: MCP 経由で作る Run の上限(直近1時間の件数)。既定 20、0 で生成を止める。
+- `mcp.hourly_run_limit`: MCP 経由で作る Run の上限(直近1時間の件数)。既定 30、0 で生成を止める。
 
 どちらも `app_setting` に保存する(画面で保存した値だけ。環境変数の既定値は持たない)。値の
 読み書きは `general_settings` と同じ形式(`{"value": ...}`)。
@@ -22,7 +22,7 @@ ENABLED_KEY = "mcp.enabled"
 HOURLY_RUN_LIMIT_KEY = "mcp.hourly_run_limit"
 
 DEFAULT_ENABLED = False
-DEFAULT_HOURLY_RUN_LIMIT = 20
+DEFAULT_HOURLY_RUN_LIMIT = 30
 HOURLY_RUN_LIMIT_MIN = 0
 HOURLY_RUN_LIMIT_MAX = 1000
 
