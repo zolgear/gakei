@@ -305,23 +305,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/assets/{asset_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Asset Content */
-        get: operations["get_asset_content"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/assets/{asset_id}/lineage": {
         parameters: {
             query?: never;
@@ -787,6 +770,48 @@ export interface paths {
          * @description 失効させる(行は消さない。Run の `api_token_id` から参照されるため)。
          */
         delete: operations["revoke_api_token"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Asset Content */
+        get: operations["get_asset_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload By Url
+         * @description MCP の `create_upload_url` で発行した URL に画像を送り、ストックに取り込む。
+         *     URL は10分間・1回限り有効。不明な URL は 404、使用済み・期限切れは 410。
+         */
+        put: operations["upload_by_url"];
+        /**
+         * Upload By Url Post
+         * @description `PUT` と同じ(PUT を送りにくいクライアント向け。`curl -F file=@image.png` など)。
+         */
+        post: operations["upload_by_url_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2623,6 +2648,29 @@ export interface components {
             /** Image Output */
             image_output: number;
         };
+        /** UploadByUrlResponse */
+        UploadByUrlResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /** Kind */
+            kind: string;
+            /** Mime */
+            mime: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Bytes */
+            bytes: number;
+            /** Sha256 */
+            sha256: string;
+            /** Ingest Outcome */
+            ingest_outcome: string;
+            /** Url */
+            url: string;
+            /** Viewer Url */
+            viewer_url: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -3343,42 +3391,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_asset_content: {
-        parameters: {
-            query?: {
-                variant?: "thumb" | "preview" | "original";
-                download?: number;
-            };
-            header?: never;
-            path: {
-                asset_id: string;
-            };
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -4770,6 +4782,116 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_asset_content: {
+        parameters: {
+            query?: {
+                variant?: "thumb" | "preview" | "original";
+                download?: number;
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_by_url: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        /** @description 画像ファイル(PNG / JPEG / WebP)のバイト列そのもの。multipart/form-data も可。 */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+                "image/png": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadByUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_by_url_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        /** @description 画像ファイル(PNG / JPEG / WebP)のバイト列そのもの。multipart/form-data も可。 */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+                "image/png": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadByUrlResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

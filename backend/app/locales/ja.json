@@ -277,5 +277,12 @@
     "tokenRequired": "アクセストークンが必要です(Authorization: Bearer <token>)。",
     "tokenInvalid": "アクセストークンが無効か、失効しています。",
     "originForbidden": "この Origin からの MCP の呼び出しは許可されていません。"
+  },
+  "uploads": {
+    "notFound": "このアップロード URL は存在しません。",
+    "gone": "このアップロード URL は使用済みか、期限が切れています。MCP の create_upload_url で新しい URL を発行してください。",
+    "tooLarge": "アップロード画像は{mb}MB未満である必要があります",
+    "empty": "本文が空です。画像ファイルのバイト列をそのまま送ってください。",
+    "noFile": "multipart の本文に画像ファイルがありません。"
   }
 }
