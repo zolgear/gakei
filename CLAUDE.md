@@ -78,7 +78,7 @@ docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:
 - **データモデル(ADR-0003):** 画像の `asset` と 1 回の API 実行の `run` の二部グラフ(`asset → run_input → run → asset`)。Edit は複数入力なので DAG。`run`、`run_input`、`asset` の来歴列は追記のみで、更新してよいのは `run.status` などの状態遷移だけ。再実行は必ず新しい Run。削除は `deleted_at` の論理削除。`run.params` には API に送った値をそのまま保存する。系列の表示は `position = 0` の主たる親だけを辿る。 グループ(`asset_group`、ADR-0022)は利用者の分類で証跡ではないので、名前もメンバーも自由に変えられる。
 - **ジョブ(ADR-0005):** キューは `run` テーブルそのもの。`queued → running → succeeded | failed | canceled`。失敗も証跡として残す。進捗は SSE。途中経過画像は Asset にしない。
 - **プロバイダー(ADR-0005、0013):** `ImageProvider`(`capabilities()` と `execute()`)だけを共通にし、パラメーターは共通化せず UI は `capabilities()` からフォームを組み立てる。
-- **画像(ADR-0004):** base64 をブラウザにも DB にも渡さない。原本は sha256 で保存して不変、派生(thumb 512px / preview 2048px の WebP)を作り、配信は API 経由(`GET /api/assets/{id}/content?variant=`)。ビューアは `<img>` + パン/ズーム。
+- **画像(ADR-0004):** base64 をブラウザにも DB にも渡さない。原本は sha256 で保存して不変、派生(thumb 512px / preview 2048px の WebP)を作り、配信は API 経由(`GET /api/assets/{id}/content?variant=`)。ビューアは `<img>` + パン/ズーム。ローカルFSの原本のキーは ADR-0026 で `assets/{プロバイダー}/{モデル}/{YYYY-MM}/{日時}_{短ID}.{拡張子}`(アップロード等は `assets/uploads/` など)に改めた。同じ内容は `ingest` が sha256 で DB を引いて既存のファイルを共有し、古いキー(`assets/{2文字}/{sha256}`)の Asset もそのまま読む。
 - **認証(ADR-0019):** 既定は認証なし。OIDC は BFF 方式(サーバー側で Authorization Code + PKCE、サーバー側セッション + HttpOnly Cookie)。ロールは `user` / `admin` で、管理者は `AUTH_ADMIN_EMAILS`。
 
 ## 作業ルール
