@@ -163,6 +163,7 @@
       "invalidModel": "The model name must be 1 to {max} characters",
       "invalidApiStyle": "The API style must be responses or chat",
       "invalidLanguage": "The language must be ja or en",
+      "invalidTagLanguage": "The tag language must be native or localized",
       "invalidHourlyLimit": "The hourly limit must be an integer from {min} to {max}",
       "invalidOnnxModel": "The ONNX tagger model must be wd-vit-tagger-v3, wd-swinv2-tagger-v3 or wd-eva02-large-tagger-v3",
       "invalidThreshold": "The threshold must be a number from {min} to {max}",

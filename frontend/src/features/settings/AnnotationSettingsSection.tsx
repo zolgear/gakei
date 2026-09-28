@@ -350,6 +350,20 @@ function AnnotationSettingsBody({ data, toast }: BodyProps) {
           </select>
         </div>
 
+        <div className={styles.field}>
+          <label htmlFor="gakei-annotation-tag-language">{m.api.tagLanguageLabel}</label>
+          <select
+            id="gakei-annotation-tag-language"
+            className={styles.select}
+            value={form.tag_language}
+            onChange={(e) => update('tag_language', e.target.value as AnnotationForm['tag_language'])}
+          >
+            <option value="localized">{m.api.tagLanguageLocalized}</option>
+            <option value="native">{m.api.tagLanguageNative}</option>
+          </select>
+          <p className={styles.helpText}>{m.api.tagLanguageHelp}</p>
+        </div>
+
         <TextField
           id="gakei-annotation-hourly-limit"
           label={m.api.hourlyLimitLabel}

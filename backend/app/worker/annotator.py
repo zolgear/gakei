@@ -9,6 +9,12 @@ api プロセス内の asyncio タスクが1件ずつ(古い依頼から)処理�
 - LLM と VLM の呼び出しは直近1時間の回数を数え、上限(設定 `hourly_limit`)に達したら失敗に
   せず、行を `queued` に戻して次の枠まで待つ。回数はプロセス内で数える(再起動で 0 に戻る)。
 - 推定に失敗したら `failed` と理由を記録し、自動では再試行しない。
+
+実行順(ADR-0024 6章): LLM(タイトル)は API の応答待ちなので ONNX と並行して動かす。ONNX
+(`asyncio.to_thread`)を先に終え、そのタグを VLM に渡す(同じ意味のタグを付け直さない。
+localized ならその訳も同じ呼び出しで返させる)。VLM が無効で LLM が有効なら、ONNX の後に
+LLM で訳す。どれか1つが失敗したら、動いている他の処理を取り消して全体を `failed` にする。
+LLM・VLM の呼び出しは、始める前に要る回数だけ1時間の枠が空いているかを確かめる。
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from app.annotation.engines import (
     FakeEngines,
     OpenAIEngines,
     image_to_jpeg,
+    wants_translation,
 )
 from app.annotation.wd_tagger import WdTagger
 from app.domain import annotation_settings
@@ -169,12 +176,17 @@ class Annotator:
         while self._calls and now - self._calls[0] >= _WINDOW_SECONDS:
             self._calls.popleft()
 
-    def _take_call(self, limit: int) -> None:
+    def _ensure_capacity(self, needed: int, limit: int) -> None:
+        """この1件で要る呼び出し回数が枠に収まるかを先に確かめる(途中で上限に当たって、
+        一部の呼び出しだけが無駄になるのを避ける)。枠が空なら、上限より多く要っても進める
+        (上限が小さすぎて永久に待つのを避ける)。"""
         now = time.monotonic()
         self._trim_calls(now)
-        if len(self._calls) >= limit:
+        if self._calls and len(self._calls) + needed > limit:
             raise _RateLimitedError
-        self._calls.append(now)
+
+    def _record_call(self) -> None:
+        self._calls.append(time.monotonic())
 
     def _limit_reached(self, limit: int) -> bool:
         return self.calls_last_hour() >= limit
@@ -276,49 +288,8 @@ class Annotator:
             return
 
         ctx = EngineContext(config=job.config, connection=job.connection)
-        title: str | None = None
-        tags: list[tuple[str, float | None]] | None = None
-        ran: list[str] = []
-        models: dict[str, str] = {}
         try:
-            image: Image.Image | None = None
-            if job.image_bytes is not None:
-                image = Image.open(io.BytesIO(job.image_bytes))
-                image.load()
-
-            if not job.title_locked and job.prompt and annotations_domain.ENGINE_LLM in job.engines:
-                if job.sibling_title:
-                    title = job.sibling_title
-                else:
-                    self._take_call(job.config.hourly_limit)
-                    title = await self.engines.title_from_prompt(job.prompt, ctx)
-                ran.append(annotations_domain.ENGINE_LLM)
-                models[annotations_domain.ENGINE_LLM] = job.config.llm_model
-
-            onnx_tags: list[tuple[str, float | None]] | None = None
-            if annotations_domain.ENGINE_ONNX in job.engines and image is not None:
-                onnx_tags = list(await asyncio.to_thread(self.engines.onnx_tags, image, ctx))
-
-            vlm_tags: list[tuple[str, float | None]] | None = None
-            if annotations_domain.ENGINE_VLM in job.engines and image is not None:
-                want_title = not job.title_locked and not job.prompt
-                self._take_call(job.config.hourly_limit)
-                result = await self.engines.describe_image(
-                    image_to_jpeg(image), job.prompt, want_title, ctx
-                )
-                if want_title and result.title:
-                    title = result.title
-                vlm_tags = [(name, None) for name in result.tags]
-
-            if onnx_tags is not None:
-                ran.append(annotations_domain.ENGINE_ONNX)
-                models[annotations_domain.ENGINE_ONNX] = job.config.onnx_model
-            if vlm_tags is not None:
-                ran.append(annotations_domain.ENGINE_VLM)
-                models[annotations_domain.ENGINE_VLM] = job.config.vlm_model
-            if onnx_tags is not None or vlm_tags is not None:
-                # ONNX を先に置く(同じ名前なら確信度の付いた方を残す)。
-                tags = (onnx_tags or []) + (vlm_tags or [])
+            outcome = await self._run_engines(job, ctx)
         except _RateLimitedError:
             await asyncio.to_thread(self._requeue, asset_id)
             return
@@ -330,7 +301,110 @@ class Annotator:
             await asyncio.to_thread(self._finish_failed, asset_id, f"internalError: {e}")
             return
 
+        title, tags, ran, models = outcome
         await asyncio.to_thread(self._finish_succeeded, asset_id, title, tags, ran, models)
+
+    async def _run_engines(
+        self, job: _Job, ctx: EngineContext
+    ) -> tuple[str | None, list[tuple[str, float | None]] | None, list[str], dict[str, str]]:
+        """エンジンを動かして (タイトル, タグ, 動かしたエンジン, モデル名) を返す。順序は
+        モジュールの docstring のとおり。"""
+        config = job.config
+        engines = job.engines
+        # 画像のデコードと縮小も CPU を使うので、イベントループの外で行う。
+        image: Image.Image | None = None
+        if job.image_bytes is not None:
+            image = await asyncio.to_thread(_decode_image, job.image_bytes)
+
+        use_llm_title = (
+            not job.title_locked and job.prompt and annotations_domain.ENGINE_LLM in engines
+        )
+        call_llm_title = bool(use_llm_title and not job.sibling_title)
+        use_onnx = annotations_domain.ENGINE_ONNX in engines and image is not None
+        use_vlm = annotations_domain.ENGINE_VLM in engines and image is not None
+        # VLM が無効で LLM が有効なら、ONNX のタグを LLM で訳す(localized で英語以外のとき)。
+        translate_by_llm = (
+            use_onnx
+            and not use_vlm
+            and annotations_domain.ENGINE_LLM in engines
+            and wants_translation(config)
+        )
+        needed = int(call_llm_title) + int(use_vlm) + int(translate_by_llm)
+        if needed:
+            self._ensure_capacity(needed, config.hourly_limit)
+
+        title: str | None = None
+        ran: list[str] = []
+        models: dict[str, str] = {}
+
+        title_task: asyncio.Task[str] | None = None
+        if call_llm_title:
+            assert job.prompt is not None
+            self._record_call()
+            title_task = asyncio.create_task(self.engines.title_from_prompt(job.prompt, ctx))
+        elif use_llm_title:
+            title = job.sibling_title
+
+        try:
+            onnx_tags: list[tuple[str, float | None]] | None = None
+            if use_onnx:
+                onnx_tags = list(await asyncio.to_thread(self.engines.onnx_tags, image, ctx))
+            onnx_names = [name for name, _ in onnx_tags or []]
+
+            # タイトルの LLM が既に失敗していれば、VLM を呼ぶ前にここで止める(無駄な課金を
+            # 避ける)。
+            if title_task is not None and title_task.done():
+                title_task.result()
+
+            vlm_tags: list[tuple[str, float | None]] | None = None
+            translations: dict[str, str] = {}
+            if use_vlm:
+                assert image is not None
+                want_title = not job.title_locked and not job.prompt
+                self._record_call()
+                image_jpeg = await asyncio.to_thread(image_to_jpeg, image)
+                result = await self.engines.describe_image(
+                    image_jpeg, job.prompt, want_title, ctx, onnx_names or None
+                )
+                if want_title and result.title:
+                    title = result.title
+                vlm_tags = [(name, None) for name in result.tags]
+                translations = result.translations
+            elif translate_by_llm and onnx_names:
+                self._record_call()
+                translations = await self.engines.translate_tags(onnx_names, ctx)
+
+            if title_task is not None:
+                title = await title_task
+        except BaseException:
+            if title_task is not None and not title_task.done():
+                title_task.cancel()
+                try:
+                    await title_task
+                except BaseException:  # noqa: BLE001 - 取り消しの後始末
+                    pass
+            raise
+
+        if use_llm_title:
+            ran.append(annotations_domain.ENGINE_LLM)
+            models[annotations_domain.ENGINE_LLM] = config.llm_model
+        elif translate_by_llm and onnx_names:
+            ran.append(annotations_domain.ENGINE_LLM)
+            models[annotations_domain.ENGINE_LLM] = config.llm_model
+
+        tags: list[tuple[str, float | None]] | None = None
+        if onnx_tags is not None:
+            ran.append(annotations_domain.ENGINE_ONNX)
+            models[annotations_domain.ENGINE_ONNX] = config.onnx_model
+        if vlm_tags is not None:
+            ran.append(annotations_domain.ENGINE_VLM)
+            models[annotations_domain.ENGINE_VLM] = config.vlm_model
+        if onnx_tags is not None or vlm_tags is not None:
+            # ONNX(英語)→ その訳 → VLM の順に並べる(同じ名前なら先のもの、つまり確信度の
+            # 付いた方を残す)。訳は元のタグの確信度を引き継ぐ。
+            translated = translated_tags(onnx_tags or [], translations)
+            tags = (onnx_tags or []) + translated + (vlm_tags or [])
+        return title, tags, ran, models
 
     def _requeue(self, asset_id: uuid.UUID) -> None:
         with self.session_factory() as session:
@@ -377,3 +451,29 @@ class Annotator:
             row.auto_finished_at = now
             row.updated_at = now
             session.commit()
+
+
+def _decode_image(data: bytes) -> Image.Image:
+    image = Image.open(io.BytesIO(data))
+    image.load()
+    return image
+
+
+def translated_tags(
+    onnx_tags: list[tuple[str, float | None]], translations: dict[str, str]
+) -> list[tuple[str, float | None]]:
+    """ONNX のタグの訳をタグにする(元のタグの確信度を引き継ぐ)。訳の無いもの・元と同じ
+    表記のものは足さない。キーの照合は大文字・小文字と `_` / 空白の違いを無視する。"""
+    if not translations:
+        return []
+
+    def key(name: str) -> str:
+        return " ".join(name.replace("_", " ").lower().split())
+
+    by_key = {key(original): translated for original, translated in translations.items()}
+    result: list[tuple[str, float | None]] = []
+    for name, score in onnx_tags:
+        translated = by_key.get(key(name))
+        if translated and key(translated) != key(name):
+            result.append((translated, score))
+    return result

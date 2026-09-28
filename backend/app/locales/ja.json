@@ -163,6 +163,7 @@
       "invalidModel": "モデル名は1〜{max}文字で指定してください",
       "invalidApiStyle": "API 形式は responses か chat である必要があります",
       "invalidLanguage": "言語は ja か en である必要があります",
+      "invalidTagLanguage": "タグの言語は native か localized である必要があります",
       "invalidHourlyLimit": "1時間あたりの上限は{min}〜{max}の整数である必要があります",
       "invalidOnnxModel": "ONNX タガーのモデルは wd-vit-tagger-v3、wd-swinv2-tagger-v3、wd-eva02-large-tagger-v3 のいずれかです",
       "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",

@@ -873,6 +873,8 @@ class AnnotationSettingsResponse(BaseModel):
     base_url: str | None = None
     api_style: Literal["responses", "chat"]
     language: Literal["ja", "en"]
+    # タグの言語(ADR-0024 6章)。native はエンジン任せ、localized は `language` に合わせる。
+    tag_language: Literal["native", "localized"]
     hourly_limit: int
     onnx_enabled: bool
     onnx_model: Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
@@ -903,6 +905,7 @@ class AnnotationSettingsUpdateRequest(BaseModel):
     base_url: str | None = None
     api_style: str | None = None
     language: str | None = None
+    tag_language: str | None = None
     hourly_limit: int | None = None
     onnx_enabled: bool | None = None
     onnx_model: str | None = None

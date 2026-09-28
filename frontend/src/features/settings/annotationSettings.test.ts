@@ -21,6 +21,7 @@ function settings(overrides: Partial<AnnotationSettingsResponse> = {}): Annotati
     base_url: null,
     api_style: 'responses',
     language: 'ja',
+    tag_language: 'localized',
     hourly_limit: 100,
     onnx_enabled: false,
     onnx_model: 'wd-vit-tagger-v3',
@@ -45,8 +46,21 @@ describe('diffAnnotationForm', () => {
 
   it('変わった項目だけを載せ、数値は数に直す', () => {
     const s = settings()
-    const form = { ...formFromSettings(s), llm_model: ' gpt-x ', hourly_limit: '50', onnx_threshold: '0.5', language: 'en' as const }
-    expect(diffAnnotationForm(form, s)).toEqual({ llm_model: 'gpt-x', hourly_limit: 50, onnx_threshold: 0.5, language: 'en' })
+    const form = {
+      ...formFromSettings(s),
+      llm_model: ' gpt-x ',
+      hourly_limit: '50',
+      onnx_threshold: '0.5',
+      language: 'en' as const,
+      tag_language: 'native' as const,
+    }
+    expect(diffAnnotationForm(form, s)).toEqual({
+      llm_model: 'gpt-x',
+      hourly_limit: 50,
+      onnx_threshold: 0.5,
+      language: 'en',
+      tag_language: 'native',
+    })
   })
 
   it('Base URL を空にすると null(OpenAI の設定を流用)を送る', () => {

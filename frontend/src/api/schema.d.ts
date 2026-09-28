@@ -1072,6 +1072,11 @@ export interface components {
              * @enum {string}
              */
             language: "ja" | "en";
+            /**
+             * Tag Language
+             * @enum {string}
+             */
+            tag_language: "native" | "localized";
             /** Hourly Limit */
             hourly_limit: number;
             /** Onnx Enabled */
@@ -1118,6 +1123,8 @@ export interface components {
             api_style?: string | null;
             /** Language */
             language?: string | null;
+            /** Tag Language */
+            tag_language?: string | null;
             /** Hourly Limit */
             hourly_limit?: number | null;
             /** Onnx Enabled */

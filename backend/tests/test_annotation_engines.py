@@ -109,8 +109,9 @@ def test_wd_tagger_with_mocked_session(monkeypatch: pytest.MonkeyPatch, tmp_path
     created: list[Any] = []
 
     class FakeSession:
-        def __init__(self, path: str, providers: list[str]) -> None:
+        def __init__(self, path: str, sess_options: Any, providers: list[str]) -> None:
             self.path = path
+            self.sess_options = sess_options
             self.providers = providers
             self.inputs_seen: list[np.ndarray] = []
             created.append(self)
@@ -128,6 +129,9 @@ def test_wd_tagger_with_mocked_session(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert tags == [("1girl", pytest.approx(0.8)), ("some character", pytest.approx(0.5))]
     assert created[0].path.endswith("model.onnx")
     assert created[0].providers == ["CPUExecutionProvider"]
+    # 推論のスレッド数は CPU コア数の半分に抑える(API の応答を妨げないため)。
+    assert created[0].sess_options.intra_op_num_threads == wd_tagger.inference_threads()
+    assert created[0].sess_options.inter_op_num_threads == 1
     assert created[0].inputs_seen[0].shape == (1, 16, 16, 3)
 
     # 2回目は同じセッションを使う。
@@ -253,6 +257,39 @@ def test_clean_title() -> None:
     assert clean_title("Title: 海辺の灯台") == "海辺の灯台"
     assert clean_title("   ") is None
     assert len(clean_title("あ" * 500) or "") == 100
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # 実機で見つかった例(Issue #5): 末尾に強調の記号が残る。
+        ("赤ずきんと魔女の少女の抱擁**", "赤ずきんと魔女の少女の抱擁"),
+        ("**赤ずきんと魔女**", "赤ずきんと魔女"),
+        ("__夜の港__", "夜の港"),
+        ("*夜の港*", "夜の港"),
+        ("_夜の港_", "夜の港"),
+        ("# 夜の港", "夜の港"),
+        ("## **夜の港**", "夜の港"),
+        ("「夜の港」", "夜の港"),
+        ("『夜の港』", "夜の港"),
+        ("'Harbor at night'", "Harbor at night"),
+        ('**"Harbor at night."**', "Harbor at night"),
+        ("夜の港。", "夜の港"),
+        ("タイトル: 「夜の港」。", "夜の港"),
+        ("Title: **Harbor**", "Harbor"),
+        ("snake_case の名前", "snake_case の名前"),
+        ("Wait...", "Wait..."),
+        ("**\n夜の港", "夜の港"),
+    ],
+)
+def test_clean_title_strips_markdown_and_quotes(raw: str, expected: str) -> None:
+    assert clean_title(raw) == expected
+
+
+def test_inference_threads_is_half_of_cpus() -> None:
+    assert wd_tagger.inference_threads(8) == 4
+    assert wd_tagger.inference_threads(1) == 1
+    assert wd_tagger.inference_threads(3) == 1
 
 
 def test_image_to_jpeg_fits_within_1024() -> None:

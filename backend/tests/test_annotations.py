@@ -86,9 +86,9 @@ class CountingEngines(FakeEngines):
         self.title_calls += 1
         return await super().title_from_prompt(prompt, ctx)
 
-    async def describe_image(self, image_jpeg, prompt, want_title, ctx):  # noqa: ANN001, ANN201
+    async def describe_image(self, image_jpeg, prompt, want_title, ctx, known_tags=None):  # noqa: ANN001, ANN201
         self.vlm_calls += 1
-        return await super().describe_image(image_jpeg, prompt, want_title, ctx)
+        return await super().describe_image(image_jpeg, prompt, want_title, ctx, known_tags)
 
     def onnx_tags(self, image, ctx):  # noqa: ANN001, ANN201
         self.onnx_calls += 1
@@ -363,7 +363,13 @@ def test_auto_on_ingest_upload_without_prompt_uses_vlm_title(
     assert counting.title_calls == 0
     assert (body["title"], body["title_source"]) == ("ダミー画像", "auto")
     names = {t["name"]: t["source"] for t in body["tags"]}
-    assert names == {"fake onnx": "auto", "fake vlm": "auto", "landscape": "auto"}
+    # 既定のタグの言語は localized(ja)。ONNX の英語のタグの訳も VLM が返す。
+    assert names == {
+        "fake onnx": "auto",
+        "訳 fake onnx": "auto",
+        "fake vlm": "auto",
+        "landscape": "auto",
+    }
 
 
 def test_auto_on_ingest_upload_with_embedded_prompt_uses_llm(
@@ -452,7 +458,12 @@ def test_reannotate_keeps_user_title_and_removed_tags(client: TestClient) -> Non
     body = _wait_annotation(client, asset_id)
     assert (body["title"], body["title_source"]) == ("人のタイトル", "user")
     names = {t["name"]: t["source"] for t in body["tags"]}
-    assert names == {"mine": "user", "fake onnx": "auto", "landscape": "auto"}
+    assert names == {
+        "mine": "user",
+        "fake onnx": "auto",
+        "訳 fake onnx": "auto",
+        "landscape": "auto",
+    }
 
 
 def test_backfill_queues_pending_assets(client: TestClient) -> None:
@@ -475,7 +486,7 @@ def test_engine_failure_is_recorded(client: TestClient) -> None:
     from app.annotation.engines import AnnotationEngineError
 
     class Broken(FakeEngines):
-        async def describe_image(self, image_jpeg, prompt, want_title, ctx):  # noqa: ANN001, ANN201
+        async def describe_image(self, image_jpeg, prompt, want_title, ctx, known_tags=None):  # noqa: ANN001, ANN201
             raise AnnotationEngineError("VLM が壊れた")
 
     client.app.state.annotator.engines = Broken()

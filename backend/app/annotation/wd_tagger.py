@@ -12,13 +12,15 @@
 モデルの出力はシグモイド適用済みの確率。
 
 セッションは初回の推論で読み込み、`IDLE_RELEASE_SECONDS` 使わなければ解放する
-(`release_if_idle` を worker が定期的に呼ぶ)。推論は呼び出し側が `asyncio.to_thread` で
-別スレッドに逃がす。
+(`release_if_idle` を worker が定期的に呼ぶ)。読み込み(`InferenceSession` の生成)も推論も
+`tag()` の中で行い、呼び出し側が `asyncio.to_thread` で別スレッドに逃がす(イベントループを
+塞がない)。推論のスレッド数は CPU コア数の半分に抑える(API の応答を妨げないため)。
 """
 
 from __future__ import annotations
 
 import csv
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -102,6 +104,19 @@ def _input_size(session: Any) -> int:
     return DEFAULT_INPUT_SIZE
 
 
+def inference_threads(cpu_count: int | None = None) -> int:
+    """推論に使うスレッド数。CPU コア数の半分(最低1)。"""
+    count = cpu_count if cpu_count is not None else (os.cpu_count() or 2)
+    return max(1, count // 2)
+
+
+def session_options(onnxruntime: Any) -> Any:
+    options = onnxruntime.SessionOptions()
+    options.intra_op_num_threads = inference_threads()
+    options.inter_op_num_threads = 1
+    return options
+
+
 class WdTagger:
     """モデル1つ分のセッションとラベル。スレッドから呼ばれる前提でロックを持つ。"""
 
@@ -124,7 +139,9 @@ class WdTagger:
             if not (directory / filename).is_file():
                 raise FileNotFoundError(directory / filename)
         session = onnxruntime.InferenceSession(
-            str(directory / MODEL_FILE), providers=["CPUExecutionProvider"]
+            str(directory / MODEL_FILE),
+            sess_options=session_options(onnxruntime),
+            providers=["CPUExecutionProvider"],
         )
         self._labels = load_labels(directory / TAGS_FILE)
         self._session = session

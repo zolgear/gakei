@@ -39,10 +39,14 @@ _SECRET_FIELD = "annotation_api_key"
 
 ApiStyle = Literal["responses", "chat"]
 Language = Literal["ja", "en"]
+# タグの言語(ADR-0024 6章)。native はエンジン任せ、localized は `language` に合わせる
+# (WD Tagger の英語のタグには訳を足す)。
+TagLanguage = Literal["native", "localized"]
 OnnxModelName = Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
 
 API_STYLES: tuple[str, ...] = get_args(ApiStyle)
 LANGUAGES: tuple[str, ...] = get_args(Language)
+TAG_LANGUAGES: tuple[str, ...] = get_args(TagLanguage)
 ONNX_MODEL_NAMES: tuple[str, ...] = get_args(OnnxModelName)
 
 # 既定のモデル。gpt-5.6-luna は安価なテキストモデルとして選んだ。画像入力(VLM)に
@@ -75,6 +79,7 @@ class AnnotationConfig:
     base_url: str | None = None
     api_style: ApiStyle = "responses"
     language: Language = "ja"
+    tag_language: TagLanguage = "localized"
     hourly_limit: int = DEFAULT_HOURLY_LIMIT
     onnx_enabled: bool = False
     onnx_model: OnnxModelName = "wd-vit-tagger-v3"
@@ -147,6 +152,10 @@ def normalize_value(name: str, value: Any) -> Any:
     if name == "language":
         if value not in LANGUAGES:
             raise AnnotationSettingsValidationError(t("settings.annotation.invalidLanguage"))
+        return value
+    if name == "tag_language":
+        if value not in TAG_LANGUAGES:
+            raise AnnotationSettingsValidationError(t("settings.annotation.invalidTagLanguage"))
         return value
     if name == "hourly_limit":
         if not _is_hourly_limit(value):

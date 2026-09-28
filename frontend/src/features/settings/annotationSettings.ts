@@ -21,6 +21,7 @@ export interface AnnotationForm {
   base_url: string
   api_style: AnnotationSettingsResponse['api_style']
   language: AnnotationSettingsResponse['language']
+  tag_language: AnnotationSettingsResponse['tag_language']
   hourly_limit: string
   onnx_threshold: string
 }
@@ -32,6 +33,7 @@ export function formFromSettings(settings: AnnotationSettingsResponse): Annotati
     base_url: settings.base_url ?? '',
     api_style: settings.api_style,
     language: settings.language,
+    tag_language: settings.tag_language,
     hourly_limit: String(settings.hourly_limit),
     onnx_threshold: String(settings.onnx_threshold),
   }
@@ -85,6 +87,7 @@ export function diffAnnotationForm(
   if (baseUrl !== (settings.base_url ?? '')) body.base_url = baseUrl === '' ? null : baseUrl
   if (form.api_style !== settings.api_style) body.api_style = form.api_style
   if (form.language !== settings.language) body.language = form.language
+  if (form.tag_language !== settings.tag_language) body.tag_language = form.tag_language
   const limit = Number(form.hourly_limit.trim())
   if (form.hourly_limit.trim() !== '' && limit !== settings.hourly_limit) body.hourly_limit = limit
   const threshold = Number(form.onnx_threshold.trim())
