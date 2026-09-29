@@ -991,7 +991,8 @@
       "empty": "グループに入っていません"
     },
     "annotation": {
-      "heading": "タイトルとタグ",
+      "showAllTags": "すべて表示({count})",
+      "collapseTags": "折りたたむ",
       "titleLabel": "タイトル",
       "titlePlaceholder": "タイトルを入力",
       "noTitle": "タイトルはありません",

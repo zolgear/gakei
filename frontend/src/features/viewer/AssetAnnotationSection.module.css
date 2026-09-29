@@ -18,11 +18,6 @@
   color: var(--color-text-muted);
 }
 
-.subLabel {
-  font-size: 11px;
-  color: var(--color-text-faint);
-}
-
 .empty {
   margin: 0;
   font-size: 12px;
@@ -154,12 +149,6 @@
   border-color: var(--color-danger);
 }
 
-.tagsBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .tagList {
   margin: 0;
   padding: 0;
@@ -172,6 +161,28 @@
 .tagItem {
   display: flex;
   max-width: 100%;
+}
+
+/* 「すべて表示(N)」/「折りたたむ」。チップと区別できるよう、枠なしの文字ボタンにする。 */
+.toggleButton {
+  align-self: flex-start;
+  margin-top: -4px;
+  padding: 2px 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toggleButton:hover {
+  text-decoration: underline;
+}
+
+.toggleButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .statusRow {
@@ -249,5 +260,10 @@
 
   .tagList {
     gap: 8px;
+  }
+
+  .toggleButton {
+    min-height: 44px;
+    margin-top: 0;
   }
 }

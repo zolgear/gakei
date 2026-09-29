@@ -991,7 +991,8 @@
       "empty": "Not in a group."
     },
     "annotation": {
-      "heading": "Title and tags",
+      "showAllTags": "Show all ({count})",
+      "collapseTags": "Show less",
       "titleLabel": "Title",
       "titlePlaceholder": "Enter a title",
       "noTitle": "No title",
