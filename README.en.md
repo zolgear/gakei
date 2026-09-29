@@ -97,11 +97,13 @@ volumes:
 ```bash
 git clone https://github.com/zolgear/gakei.git
 cd gakei
+echo "POSTGRES_PASSWORD=your-password" >> .env
 docker compose up -d --build
 ```
 
 Once it's running, open `http://127.0.0.1:8000`. A `.env` at the repository root is read if present (`HOST`/`PORT`/`DATA_DIR` are overridden with the container's values).
 
+- **PostgreSQL is bundled (ADR-0027).** Without `POSTGRES_PASSWORD` in `.env`, it won't start. To keep using SQLite instead, comment out the PostgreSQL-related settings following the comments inside `compose.yaml`. Usage and migration: [docs/postgresql.md](docs/postgresql.md) (Japanese).
 - **Updating:** `git pull && docker compose up -d --build`
 
 ### Common notes
@@ -112,7 +114,7 @@ Once it's running, open `http://127.0.0.1:8000`. A `.env` at the repository root
   ```
 - **Exposure:** defaults to `127.0.0.1` only. With `docker run`, change the `-p` mapping; with the repository's `compose.yaml`, use `GAKEI_BIND=0.0.0.0` (and `GAKEI_PORT`) to expose it to the LAN or the internet. Either way, there is no authentication by default, so if you expose it, enable login with `AUTH_MODE=oidc` ([docs/auth.md](docs/auth.md)) or put an authenticating reverse proxy in front.
 - **ComfyUI:** connect to ComfyUI running on the same host at `http://host.docker.internal:8188` (Settings → ComfyUI). With plain `docker run`, add `--add-host=host.docker.internal:host-gateway` for this to resolve (the repository's `compose.yaml` already sets this up).
-- **Run only one replica.** Jobs run inside the api process and the DB is SQLite, so don't share the same volume across multiple containers.
+- **Run only one replica.** Jobs run inside the api process, so whether the DB is SQLite or PostgreSQL, don't share the same DB / volume across multiple containers.
 
 The version you're running is shown in Settings under "About GAKEI". See [Releases](https://github.com/zolgear/gakei/releases) on GitHub for the full list (release process: [docs/release.md](docs/release.md), Japanese).
 

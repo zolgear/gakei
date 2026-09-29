@@ -133,7 +133,7 @@ def _resolve_embedded_asset(
                     Asset.deleted_at.is_(None),
                     asset_visible(checker.user),
                 )
-                .order_by(Asset.created_at.desc())
+                .order_by(Asset.created_at.desc(), Asset.id.desc())
             )
             .scalars()
             .first()

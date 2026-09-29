@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 
@@ -48,7 +49,11 @@ def test_running_run_becomes_failed_interrupted_on_restart(
             session.commit()
 
     # 2回目の起動: 本物の Runner.start() を使い、reset_interrupted_runs が働くことを確認する。
+    database_url = os.environ.get("DATABASE_URL")
     monkeypatch.undo()
+    # ADR-0027 6章: PostgreSQL で走らせているときは、同じ一時 DB につなぎ直す。
+    if database_url:
+        monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     monkeypatch.setenv("FAKE_PROVIDER", "1")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -98,7 +103,11 @@ def test_unregistered_provider_queued_run_becomes_failed_on_restart(
             run.provider = "ghost-provider"  # もう登録されていない provider を装う
             session.commit()
 
+    database_url = os.environ.get("DATABASE_URL")
     monkeypatch.undo()
+    # ADR-0027 6章: PostgreSQL で走らせているときは、同じ一時 DB につなぎ直す。
+    if database_url:
+        monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     monkeypatch.setenv("FAKE_PROVIDER", "1")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

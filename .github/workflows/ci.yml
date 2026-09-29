@@ -207,6 +207,39 @@ jobs:
           Get-Content launcher-stdout.log -ErrorAction SilentlyContinue
           Get-Content launcher-stderr.log -ErrorAction SilentlyContinue
 
+  # ADR-0027 6章: バックエンドのテストを PostgreSQL でも全部回す。Ubuntu だけで、PR でも走らせる。
+  # ruff とフロントエンドは上の test ジョブに任せる。テストは GAKEI_TEST_DATABASE_URL の
+  # サーバーに、テストごとの一時 DB を作って使う(tests/conftest.py)。
+  postgres:
+    name: test (postgresql)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: gakei
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
+      - name: uv のセットアップ
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: backend pytest (PostgreSQL)
+        working-directory: backend
+        env:
+          GAKEI_TEST_DATABASE_URL: postgresql://postgres:gakei@127.0.0.1:5432/postgres
+        run: uv run --frozen pytest -q -n auto
+
   # ADR-0016: Docker イメージのビルドと起動確認。run.sh/run.bat とは別の配布経路なので、
   # 上の test ジョブとは独立に実行する。
   docker:

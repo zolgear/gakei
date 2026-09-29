@@ -52,6 +52,7 @@ DB は PostgreSQL 一つに、メタデータ、世代グラフ、ジョブキ�
 
 - コンテナイメージは1種類(起動コマンドで api / worker を切り替え)。
 - TypeScript / React の保守が必要になる。主要言語ではないため、UIライブラリは少数に絞る。
+- (2026-09-29 注記: 本線に先立ち、ADR-0027 でローカルMVPのセルフホスト版でも `DATABASE_URL` を指定すると PostgreSQL を選べるようになった。ジョブキューとしての `SKIP LOCKED` はまだ入っていない。)
 - 候補ライブラリ(着手時に確定): ズーム表示 `react-zoom-pan-pinch`、マスク描画は素の Canvas API、ツリー表示 `React Flow`、データ取得 `TanStack Query`。
 
 ## Action Items

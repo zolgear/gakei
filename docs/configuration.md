@@ -28,9 +28,10 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 |---|---|---|
 | `OPENAI_API_KEY` | なし | OpenAI の API キー。設定画面で保存したキーより優先される |
 | `OPENAI_BASE_URL` | なし(OpenAI 本体) | OpenAI 互換 API(LiteLLM などのプロキシ)の接続先。通常 `/v1` まで含む(例: `http://127.0.0.1:4000/v1`)。設定画面で保存した値より優先される。ループバック以外への `http` を指定すると、起動時に警告を出す |
-| `DATA_DIR` | `./data` | 画像、SQLite、画面で保存した API キー・接続先の保存先。変える場合は絶対パスで書く |
+| `DATA_DIR` | `./data` | 画像、画面で保存した API キー・接続先の保存先。`DATABASE_URL` 未指定時は SQLite のファイルもここに置く。変える場合は絶対パスで書く |
 | `HOST` | `127.0.0.1` | 待ち受けるアドレス |
 | `PORT` | `8000` | 待ち受けるポート |
+| `DATABASE_URL` | なし(SQLite) | メタデータの DB を PostgreSQL にする場合の接続先(`postgresql://user:pass@host:5432/gakei`。ADR-0027)。指定しても、画像のために `DATA_DIR` は引き続き必要。詳しくは [postgresql.md](postgresql.md) |
 | `OPENAI_MAX_RETRIES` | `4` | 429 などの再試行回数。再試行は OpenAI SDK が行う |
 | `OPENAI_TIMEOUT_SECONDS` | `600` | 1リクエストのタイムアウト(秒)。4K や高品質の生成は数分かかる |
 | `MODERATION` | `low` | Generate のときに送る表現の制限。`auto` または `low`。設定画面(設定 → 生成)で保存すると、そちらが優先される |
@@ -65,3 +66,4 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 |---|---|---|
 | `GAKEI_BIND` | `127.0.0.1` | ホスト側の待ち受けアドレス |
 | `GAKEI_PORT` | `8000` | ホスト側の待ち受けポート |
+| `POSTGRES_PASSWORD` | なし(必須) | リポジトリの `compose.yaml` に同梱した PostgreSQL(ADR-0027)のパスワード。未指定だと `docker compose up` が起動しない。SQLite で使う場合の切り替え方は [postgresql.md](postgresql.md) |

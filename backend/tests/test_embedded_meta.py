@@ -32,7 +32,7 @@ from app.domain.embedded_meta import (
 )
 from app.domain.models import AssetKind, Run, RunInput, RunInputRole, RunOperation, RunStatus
 from app.domain.storage import LocalFsStore
-from tests.conftest import make_png_bytes
+from tests.conftest import extra_database_url, make_png_bytes
 
 _SAMPLE_META = {
     "schema": "gakei.lineage/1",
@@ -555,7 +555,8 @@ def test_build_lineage_meta_merges_embedded_graph_from_foreign_instance(tmp_path
 
     def _new_env(name: str) -> tuple[sessionmaker, LocalFsStore]:
         base = tmp_path / name
-        engine = make_engine(base / "gakei.db")
+        # ADR-0027 6章: PostgreSQL で走らせているときは、インスタンスごとに別の一時 DB。
+        engine = make_engine(extra_database_url() or (base / "gakei.db"))
         create_all(engine)
         return make_session_factory(engine), LocalFsStore(base)
 

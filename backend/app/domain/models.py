@@ -20,15 +20,29 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
 
 class Base(DeclarativeBase):
     pass
+
+
+# ADR-0027 2章: JSON の列は PostgreSQL では JSONB にする(`json` 型は等値比較ができず、
+# DISTINCT や重複の確認で失敗するため)。SQLite ではこれまでどおり JSON(TEXT)。
+JsonType = JSON().with_variant(JSONB(), "postgresql")
+
+# ADR-0027 2章: 文字列の列の型の分け方。
+# - 利用者や外部(IdP、プロバイダー、ComfyUI など)から来る文字列は、長さのない `Text`
+#   (PostgreSQL では TEXT)。長さの上限が要るものは API の入力検証(Pydantic など)で弾く。
+#   SQLite は VARCHAR(n) の長さを無視するので、PostgreSQL だけが失敗することを避ける。
+# - コードが決める値(status、kind、role、origin、sha256 など)は `String(n)` のまま。
+#   長さが決まっているので、超えたらバグとして気づける。
 
 
 def _new_uuid() -> uuid.UUID:
@@ -104,10 +118,10 @@ class AppUser(Base):
     __table_args__ = (UniqueConstraint("issuer", "subject", name="uq_app_user_issuer_subject"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
-    issuer: Mapped[str] = mapped_column(String(255), nullable=False)
-    subject: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    issuer: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     last_login_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
@@ -146,7 +160,7 @@ class ApiToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("app_user.id"), nullable=False, index=True
     )
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     last_used_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
@@ -189,7 +203,7 @@ class Asset(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
     kind: Mapped[AssetKind] = mapped_column(String(16), nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    blob_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    blob_key: Mapped[str] = mapped_column(Text, nullable=False)
     mime: Mapped[str] = mapped_column(String(64), nullable=False)
     width: Mapped[int] = mapped_column(Integer, nullable=False)
     height: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -215,7 +229,7 @@ class Asset(Base):
         Uuid, ForeignKey("asset.id"), nullable=True, index=True
     )
     # 読み取った `gakei.lineage/1`・`/2` の JSON をそのまま保存する(自己申告)。
-    origin_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    origin_meta: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
 
     # 埋め込まれていたグラフ(ADR-0014 6章)の root が自称する asset id への対応付け。
     # このファイルからチャンクを除いた sha256 が、その root が自称する sha256 と一致した
@@ -227,7 +241,7 @@ class Asset(Base):
     # (ADR-0018、2026-09-26 追記。`gakei.embedded/1` の JSON)。kind=upload 以外は常に null。
     # 署名の無い自己申告(画面では「未検証」)で、run/run_input には書き込まない。追記のみ。
     # 例外として app/tools/backfill_embedded_meta.py だけが null の行を一度だけ埋める。
-    embedded_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    embedded_meta: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
 
     # アップロード/マスク/スケッチを行ったユーザー(ADR-0019)。`none` モードと、生成出力
     # (produced_by_run 経由。実行者は run.created_by_user_id 側に記録する)は常に null。
@@ -254,19 +268,19 @@ class Run(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
-    model: Mapped[str] = mapped_column(String(64), nullable=False)
-    deployment: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    deployment: Mapped[str | None] = mapped_column(Text, nullable=True)
     operation: Mapped[RunOperation] = mapped_column(String(16), nullable=False)
-    prompt: Mapped[str] = mapped_column(String(32_000), nullable=False)
-    params: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    params: Mapped[dict] = mapped_column(JsonType, nullable=False, default=dict)
 
     status: Mapped[RunStatus] = mapped_column(
         String(16), nullable=False, default=RunStatus.QUEUED, index=True
     )
     error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    provider_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    usage: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+    provider_request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # 実行したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
     # (INSERT 時に設定し、UPDATE しない)。
@@ -348,7 +362,7 @@ class PromptSet(Base):
     __tablename__ = "prompt_set"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     # 作成したユーザー(ADR-0025。マイグレーション 0018)。`none` モードと、0018 より前の行は
     # null(認証モードでは管理者だけに見える)。追記のみ(INSERT 時に設定し、UPDATE しない)。
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -372,8 +386,8 @@ class PromptSetItem(Base):
     prompt_set_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("prompt_set.id"), nullable=False, index=True
     )
-    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    text: Mapped[str] = mapped_column(String(32_000), nullable=False)
+    label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
@@ -394,7 +408,7 @@ class AssetGroup(Base):
     __tablename__ = "asset_group"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     # 利用者が決める並び順(小さいほど上。ADR-0022 2章)。一覧は `position ASC, created_at DESC`。
     # 新しいグループは既存の最小値 − 1 で先頭に入り、並べ替えで 0 から振り直す。
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -440,7 +454,7 @@ class AppSetting(Base):
     __tablename__ = "app_setting"
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
-    value: Mapped[dict] = mapped_column(JSON, nullable=False)
+    value: Mapped[dict] = mapped_column(JsonType, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
@@ -455,15 +469,15 @@ class ComfyWorkflow(Base):
     __tablename__ = "comfy_workflow"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     operation: Mapped[RunOperation] = mapped_column(String(16), nullable=False)
     # API 形式のグラフ({node_id: {class_type, inputs, _meta?}})。ComfyUI の
     # 「Export (API)」の書き出しそのままを保存する。
-    template: Mapped[dict] = mapped_column(JSON, nullable=False)
+    template: Mapped[dict] = mapped_column(JsonType, nullable=False)
     # domain/comfy_workflow.py の Bindings を model_dump(mode="json") した dict。
-    bindings: Mapped[dict] = mapped_column(JSON, nullable=False)
+    bindings: Mapped[dict] = mapped_column(JsonType, nullable=False)
     # domain/comfy_workflow.py の ExposedParam のリストを model_dump(mode="json") した list。
-    exposed_params: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    exposed_params: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
     template_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
@@ -480,15 +494,15 @@ class AssetAnnotation(Base):
     __tablename__ = "asset_annotation"
 
     asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
-    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
     # auto | user。user になったタイトルは再推定で上書きしない。
     title_source: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # queued | running | succeeded | failed(NULL は未実行)
     auto_status: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     # 実行したエンジン(例 `llm+vlm+onnx`)
     auto_engines: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    auto_models: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    auto_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    auto_models: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+    auto_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     auto_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     auto_finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
@@ -501,7 +515,7 @@ class Tag(Base):
     __tablename__ = "tag"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
-    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 

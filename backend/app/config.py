@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     # 既定はリポジトリ直下の data/。
     data_dir: Path = Field(default=_REPO_ROOT / "data", alias="DATA_DIR")
 
+    # ADR-0027: メタデータの DB。未指定なら `DATA_DIR/gakei.db`(SQLite)。PostgreSQL は
+    # `postgresql://user:pass@host:5432/gakei` の形で指定する(`sqlalchemy_url` で psycopg 3
+    # のドライバ名に読み替える)。PostgreSQL でも画像などは `DATA_DIR` に置く。
+    database_url: str | None = Field(default=None, alias="DATABASE_URL")
+
     # ADR-0017: 主プロバイダーは常に openai。FAKE_PROVIDER=1 のときだけ fake に切り替える
     # (開発・CI・確認用の内部フラグ。利用者向けの設定一覧には載せない)。
     fake_provider: bool = Field(default=False, alias="FAKE_PROVIDER")
@@ -123,6 +128,21 @@ class Settings(BaseSettings):
         return self.data_dir / "gakei.db"
 
     @property
+    def sqlalchemy_url(self) -> str:
+        """SQLAlchemy に渡す接続 URL(ADR-0027 1章)。接続先を決めるのはこの1か所だけ。
+
+        `DATABASE_URL` が空なら `DATA_DIR/gakei.db`(SQLite)。パスワードを含むので、ログや
+        画面に出すときは `display_database_url()` を使う。
+        """
+        if self.database_url and self.database_url.strip():
+            return normalize_database_url(self.database_url.strip())
+        return sqlite_url(self.db_path)
+
+    @property
+    def uses_sqlite(self) -> bool:
+        return self.sqlalchemy_url.startswith("sqlite")
+
+    @property
     def assets_dir(self) -> Path:
         return self.data_dir / "assets"
 
@@ -133,6 +153,32 @@ class Settings(BaseSettings):
     @property
     def tmp_partial_dir(self) -> Path:
         return self.data_dir / "tmp" / "partial"
+
+
+def sqlite_url(db_path: Path) -> str:
+    return f"sqlite:///{db_path}"
+
+
+def normalize_database_url(url: str) -> str:
+    """`postgresql://` と `postgres://` を psycopg 3 のドライバ名(`postgresql+psycopg://`)に
+    読み替える(ADR-0027 1章)。ドライバ名を明示した URL と SQLite の URL はそのまま返す。
+    """
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
+
+
+def display_database_url(url: str) -> str:
+    """ログや画面に出す用に、パスワードを伏せた接続 URL を返す(ADR-0027 1章)。"""
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.exc import ArgumentError
+
+    try:
+        return make_url(url).render_as_string(hide_password=True)
+    except (ArgumentError, ValueError):
+        # 形式が壊れている URL は中身を出さない(パスワードが含まれているかもしれない)。
+        return "(invalid URL)"
 
 
 def get_settings() -> Settings:

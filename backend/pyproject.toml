@@ -24,6 +24,7 @@ dependencies = [
     "mcp>=2.2",
     "onnxruntime>=1.30.0",
     "numpy>=2.5.3",
+    "psycopg[binary]>=3.2",
 ]
 
 [dependency-groups]
