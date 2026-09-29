@@ -72,6 +72,9 @@ def test_normalize_segment_truncates_to_64_chars_and_strips_again() -> None:
 # -- キー規則(ADR-0026 1章) --------------------------------------------------------
 
 
+# time.tzset() は Unix にしかない。TZ で切り替わるのは Docker(Linux)での話なので、
+# Windows ではこのテストを飛ばす。
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset() は Unix のみ")
 def test_generated_key_uses_provider_model_month_and_local_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
