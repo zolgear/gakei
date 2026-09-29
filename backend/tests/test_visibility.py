@@ -233,6 +233,8 @@ _PARAM_SOURCES = {
 _EXCLUDED_PREFIXES = (
     "/api/auth/",
     "/api/uploads/",
+    # 1回限りのダウンロード URL。見える範囲は tests/test_mcp_image_access.py で確かめる。
+    "/api/downloads/",
     "/api/comfyui/",
     "/api/settings/annotation/onnx/",
 )

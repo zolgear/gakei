@@ -7,11 +7,13 @@ SDK は stateless + JSON 応答で動かしているので、`initialize` を省
 from __future__ import annotations
 
 import base64
+import io
 import uuid
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 from sqlalchemy import func, select
 
 from app.domain.models import ApiToken, Run
@@ -117,6 +119,8 @@ def test_tools_list_when_enabled(client: TestClient) -> None:
         "cancel_run",
         "search_assets",
         "get_asset",
+        "get_image",
+        "create_download_url",
         "upload_image",
         "create_upload_url",
         "list_prompt_sets",
@@ -196,10 +200,11 @@ def test_generate_image_returns_outputs_and_thumbnail(client: TestClient) -> Non
 
     images = [c for c in result["content"] if c["type"] == "image"]
     assert len(images) == 1
-    assert images[0]["mimeType"] == "image/webp"
-    # サムネイル(512px WebP の派生画像)そのものであること。原本は載せない。
-    thumb = client.get(f"/api/assets/{asset_id}/content?variant=thumb").content
-    assert base64.b64decode(images[0]["data"]) == thumb
+    # サムネイル(長辺 512px)を JPEG / PNG で載せる(ADR-0023 8章 2)。原本は載せない。
+    assert images[0]["mimeType"] in ("image/jpeg", "image/png")
+    with Image.open(io.BytesIO(base64.b64decode(images[0]["data"]))) as thumb:
+        assert thumb.format in ("JPEG", "PNG")
+        assert max(thumb.size) <= 512
 
     # 画面の Run 詳細でも実行元が分かる。none モードなので実行者・トークンは null。
     detail = client.get(f"/api/runs/{payload['run_id']}").json()

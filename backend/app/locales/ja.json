@@ -316,6 +316,9 @@
     "empty": "本文が空です。画像ファイルのバイト列をそのまま送ってください。",
     "noFile": "multipart の本文に画像ファイルがありません。"
   },
+  "downloads": {
+    "notFound": "このダウンロード URL は存在しないか、使用済みか、期限が切れています。MCP の create_download_url で新しい URL を発行してください。"
+  },
   "migrateToPostgres": {
     "description": "SQLite(DATA_DIR/gakei.db)のメタデータを PostgreSQL に移します(ADR-0027)。GAKEI を止めてから実行してください。画像などのファイル(DATA_DIR)は移しません。",
     "toHelp": "移行先の PostgreSQL の URL(例 postgresql://user:pass@host:5432/gakei)。空の DB を指定してください",

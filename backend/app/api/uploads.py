@@ -11,21 +11,19 @@ MCP が無効のときは 404。
 
 from __future__ import annotations
 
-import uuid
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
-from app.auth.identity import LOCAL_ADMIN, CurrentUser
+from app.auth.sessions import viewer_for_issuer
 from app.config import Settings
 from app.deps import get_session, get_settings, get_store
 from app.domain import mcp_settings
 from app.domain import upload_tickets as upload_tickets_domain
 from app.domain.assets import MAX_UPLOAD_BYTES, IngestError, ingest_upload
-from app.domain.models import AppUser, AssetKind
+from app.domain.models import AssetKind
 from app.domain.storage import AssetStore
 from app.i18n import t
 
@@ -47,29 +45,6 @@ class UploadByUrlResponse(BaseModel):
     # 原本(`GET /api/assets/{id}/content?variant=original`)と、画面のビューアの URL。
     url: str
     viewer_url: str
-
-
-def _ticket_viewer(
-    db: Session, user_id: uuid.UUID | None, settings: Settings
-) -> CurrentUser | None:
-    """URL を発行した利用者として取り込むための `CurrentUser`(ADR-0025 の重複判定に使う)。
-
-    個人モード(発行者が null)は `LOCAL_ADMIN`。認証モードは `app_user` から作り、ロールは
-    ログイン時と同じく現在の `AUTH_ADMIN_EMAILS` で決める。発行者が見つからなければ None。
-    """
-    if user_id is None:
-        return LOCAL_ADMIN if settings.auth_mode == "none" else None
-    app_user = db.get(AppUser, user_id)
-    if app_user is None:
-        return None
-    email = (app_user.email or "").strip().lower()
-    return CurrentUser(
-        id=app_user.id,
-        name=app_user.name,
-        email=app_user.email,
-        role="admin" if email in settings.admin_email_set() else "user",
-        avatar_sha256=app_user.avatar_sha256,
-    )
 
 
 def _too_large() -> HTTPException:
@@ -146,7 +121,12 @@ async def _upload(
                 raise HTTPException(status_code=410, detail=t("uploads.gone"))
             raise HTTPException(status_code=404, detail=t("uploads.notFound"))
         ticket = claim.ticket
-        viewer = _ticket_viewer(db, ticket.user_id, settings)
+        viewer = viewer_for_issuer(
+            db,
+            ticket.user_id,
+            auth_mode=settings.auth_mode,
+            admin_emails=settings.admin_email_set(),
+        )
         if viewer is None:
             db.rollback()
             raise HTTPException(status_code=404, detail=t("uploads.notFound"))

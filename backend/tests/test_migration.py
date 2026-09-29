@@ -27,6 +27,7 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "tag",
         "asset_tag",
         "upload_ticket",
+        "download_ticket",
         "alembic_version",
     } <= tables
 
@@ -845,3 +846,57 @@ def test_migration_0020_is_noop_on_sqlite(tmp_path) -> None:  # noqa: ANN001
     engine.dispose()
     assert before == after
     command.downgrade(cfg, "0019")
+
+
+def test_migration_upgrades_from_0020_to_0021_adds_download_ticket(
+    empty_database_url: str,
+) -> None:
+    """既存の0020適用済みDBでも、起動時のupgrade headで0021(download_ticket)が当たること。
+    downgrade も通ること(ADR-0023 8章 3)。
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_url = empty_database_url
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+
+    command.upgrade(cfg, "0020")
+    engine = create_engine(db_url)
+    assert "download_ticket" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(db_url)
+    inspector = sa_inspect(engine)
+    assert "download_ticket" in set(inspector.get_table_names())
+    columns = {c["name"] for c in inspector.get_columns("download_ticket")}
+    assert columns == {
+        "id",
+        "token_hash",
+        "asset_id",
+        "user_id",
+        "api_token_id",
+        "created_at",
+        "expires_at",
+        "used_at",
+    }
+    fks = {fk["name"]: fk["referred_table"] for fk in inspector.get_foreign_keys("download_ticket")}
+    assert fks == {
+        "fk_download_ticket_asset_id_asset": "asset",
+        "fk_download_ticket_user_id_app_user": "app_user",
+        "fk_download_ticket_api_token_id_api_token": "api_token",
+    }
+    uniques = inspector.get_unique_constraints("download_ticket")
+    assert any(u["column_names"] == ["token_hash"] for u in uniques)
+    engine.dispose()
+
+    command.downgrade(cfg, "0020")
+    engine = create_engine(db_url)
+    assert "download_ticket" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
