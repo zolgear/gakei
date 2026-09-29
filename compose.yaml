@@ -1,15 +1,21 @@
 # ADR-0016: サーバーに置いて常駐させたい人向け。個人の PC ではこれまでどおり run.sh /
-# run.bat(ADR-0012)を使う。サービスは1つだけで、DB や逆プロキシ、ComfyUI は同梱しない。
+# run.bat(ADR-0012)を使う。サービスは gakei と PostgreSQL の2つで、逆プロキシや ComfyUI
+# は同梱しない。
 #
 # ADR-0021: このファイルは clone してソースからビルドする人向け。GHCR に公開している
 # イメージ(ghcr.io/zolgear/gakei)を使う場合は、このファイルではなく README の例を使う。
+#
+# ADR-0027: 既定は PostgreSQL を同梱する構成にしている。SQLite のまま使いたい場合は、
+# 下にある「SQLite で使う場合」のコメントに従って、postgres サービス・gakei の
+# depends_on・DATABASE_URL・gakei-pg ボリュームの4箇所をコメントアウトする。
 #
 # 既定では認証がないので、ホストの 127.0.0.1 にしか公開しない。LAN やインターネットに
 # 出す場合は、.env で AUTH_MODE=oidc にして認証を有効にする(docs/auth.md)か、認証付きの
 # リバースプロキシを前段に置いたうえで GAKEI_BIND=0.0.0.0 にする(README 参照)。
 #
-# レプリカは常に1つだけにする。ローカルMVPはジョブの実行を api プロセス内で行い、
-# DB は SQLite なので、同じボリュームを複数のコンテナで共有してはいけない。
+# レプリカは常に1つだけにする。ローカルMVPはジョブの実行を api プロセス内で行うため、
+# DB を SQLite・PostgreSQL のどちらにしても、同じ DB / ボリュームを複数のコンテナで
+# 共有してはいけない(ADR-0027 3章)。
 services:
   gakei:
     build: .
@@ -18,7 +24,8 @@ services:
     ports:
       - "${GAKEI_BIND:-127.0.0.1}:${GAKEI_PORT:-8000}:8000"
     volumes:
-      # SQLite、画像、画面で保存した API キー(secrets.json)がここに入る。
+      # 画像、画面で保存した API キー(secrets.json)がここに入る。SQLite で使う場合は
+      # gakei.db もここに入る。
       - gakei-data:/data
     env_file:
       # リポジトリ直下の .env(あれば読む。手元起動用の .env をそのまま使い回せる)。
@@ -29,10 +36,38 @@ services:
       HOST: "0.0.0.0"
       PORT: "8000"
       DATA_DIR: "/data"
+      # PostgreSQL を使う場合(既定)。SQLite で使う場合はこの行をコメントアウトする
+      # (.env や環境変数で別途 DATABASE_URL を指定していないことも確認する)。
+      DATABASE_URL: postgresql://gakei:${POSTGRES_PASSWORD}@postgres:5432/gakei
+    depends_on:
+      # SQLite で使う場合はこの depends_on ごとコメントアウトする。
+      postgres:
+        condition: service_healthy
     extra_hosts:
       # ホストで動く ComfyUI に接続できるようにする(設定画面で
       # http://host.docker.internal:8188 を指定する)。
       - "host.docker.internal:host-gateway"
 
+  # PostgreSQL(ADR-0027)。SQLite で使う場合は、このサービスごとコメントアウトする。
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    volumes:
+      - gakei-pg:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: gakei
+      POSTGRES_USER: gakei
+      # .env に書く。未指定なら起動しない。
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env, or comment out the postgres service (and gakei's depends_on / DATABASE_URL) to use SQLite instead}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gakei -d gakei"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # ホストにポートを公開しない(gakei コンテナからのみ接続する)。
+
 volumes:
   gakei-data:
+  # SQLite で使う場合はこのボリュームもコメントアウトしてよい(使わないだけで、
+  # 残しても害はない)。
+  gakei-pg:

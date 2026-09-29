@@ -42,6 +42,7 @@ import {
   diffAnnotationForm,
   downloadPercent,
   formFromSettings,
+  formatMemoryGb,
   hasChanges,
   isAnyOnnxDownloading,
   validateAnnotationForm,
@@ -421,6 +422,7 @@ function AnnotationSettingsBody({ data, toast }: BodyProps) {
               busy={downloadMutation.isPending || deleteModelMutation.isPending}
             />
           ))}
+          <p className={styles.helpText}>{m.onnx.modelHelp}</p>
         </fieldset>
 
         <TextField
@@ -567,6 +569,7 @@ function OnnxModelRow({ model, selected, disabled, busy, onSelect, onDownload, o
         <input type="radio" name="gakei-onnx-model" checked={selected} disabled={disabled} onChange={onSelect} />
         <span className={styles.modelName}>{model.name}</span>
         <span className={styles.modelSize}>{formatBytes(model.size_bytes)}</span>
+        <span className={styles.modelMemory}>{fmt(m.memoryEstimate, { size: formatMemoryGb(model.memory_bytes) })}</span>
       </label>
       <div className={styles.modelStatusRow}>
         <span

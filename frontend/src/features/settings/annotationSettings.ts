@@ -109,3 +109,8 @@ export function downloadPercent(progress: number | null | undefined): number | n
   if (progress == null || !Number.isFinite(progress)) return null
   return Math.max(0, Math.min(100, Math.round(progress * 100)))
 }
+
+/** メモリの目安(バイト)を 10 進の GB で小数1桁にする(例 1600000000 → "1.6")。 */
+export function formatMemoryGb(bytes: number): string {
+  return (bytes / 1e9).toFixed(1)
+}

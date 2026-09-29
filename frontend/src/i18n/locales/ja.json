@@ -412,6 +412,8 @@
         "notice": "WD Tagger v3(Apache-2.0)でタグを付けます。イラスト向けで、写真には向きません。タグは英語です。画像は外部に送りません。モデルは Hugging Face からダウンロードします。",
         "enabledLabel": "ONNX タガーでタグを付ける",
         "modelLabel": "モデル",
+        "memoryEstimate": "メモリ目安 約 {size} GB",
+        "modelHelp": "GPU の無い環境では wd-swinv2-tagger-v3(Base)を推奨します。wd-eva02-large-tagger-v3(Large)は読み込みに多くのメモリを使い、1 枚の推定にも数倍の時間がかかります。空きメモリが目安より少ないときは、モデルを読み込まずに推定を失敗にします。",
         "modelNotDownloaded": "選んだモデルをダウンロードするまで使えません。",
         "downloaded": "ダウンロード済み",
         "notDownloaded": "未ダウンロード",
@@ -989,7 +991,8 @@
       "empty": "グループに入っていません"
     },
     "annotation": {
-      "heading": "タイトルとタグ",
+      "showAllTags": "すべて表示({count})",
+      "collapseTags": "折りたたむ",
       "titleLabel": "タイトル",
       "titlePlaceholder": "タイトルを入力",
       "noTitle": "タイトルはありません",

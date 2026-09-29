@@ -1,9 +1,10 @@
 """画像バイトの取り込み。形式検証・保存・派生生成・Asset 行の作成をまとめて行う。
 
 呼び出し側がトランザクション(commit)を制御できるよう、ここでは `session.flush()` までに
-留める。同一内容(sha256)は Blob を共有するが、`ingest` は呼び出しごとに新しい Asset 行を
-作る(重複排除しない)。`POST /api/assets` はダウンロードした PNG の再アップロードを
-検知して既存の Asset を返せる `ingest_upload`(ADR-0014)を使う。
+留める。同一内容(sha256)は原本のファイルを共有するが(ADR-0026 3章)、`ingest` は
+呼び出しごとに新しい Asset 行を作る(重複排除しない)。`POST /api/assets` は、
+ダウンロードした PNG の再アップロードを検知して既存の Asset を返せる `ingest_upload`
+(ADR-0014)を使う。
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from app.domain.embedded_meta import (
 )
 from app.domain.generation_meta import extract_generation_meta
 from app.domain.models import Asset, AssetKind, Run, RunInput
-from app.domain.storage import AssetStore
+from app.domain.storage import AssetStore, OriginalKeyInfo
 from app.domain.visibility import get_visible_asset
 from app.i18n import t
 
@@ -73,7 +74,14 @@ def ingest(
     output_index: int | None = None,
     source_asset_id: uuid.UUID | None = None,
     created_by_user_id: uuid.UUID | None = None,
+    provider: str | None = None,
+    model: str | None = None,
 ) -> Asset:
+    """画像バイトを検証して保存し、Asset 行を作る。
+
+    `provider` と `model` は kind=generated のときの原本の保存先(ADR-0026 1章)を決める。
+    ComfyUI では `model` にワークフロー名を渡す。他の kind では使わない。
+    """
     # ADR-0010(2026-09-23 追記): 上描きスケッチの下地 Asset。kind=sketch のときだけ許す。
     if source_asset_id is not None:
         if kind != AssetKind.SKETCH:
@@ -107,7 +115,22 @@ def ingest(
 
     mime, ext = _ALLOWED_FORMATS[fmt]
     sha256 = hashlib.sha256(data).hexdigest()
-    blob_key = store.write_original(data, sha256, ext)
+    # ADR-0026: ファイル名に Asset の id と作成時刻を使うので、保存の前に決めておく。
+    asset_id = uuid.uuid4()
+    created_at = _utcnow()
+    blob_key = _find_shared_blob_key(session, store, sha256)
+    if blob_key is None:
+        blob_key = store.write_original(
+            data,
+            ext,
+            OriginalKeyInfo(
+                kind=AssetKind(kind).value,
+                asset_id=asset_id,
+                created_at=created_at,
+                provider=provider,
+                model=model,
+            ),
+        )
 
     thumb_bytes = derivatives.make_thumb(image)
     preview_bytes = derivatives.make_preview(image)
@@ -115,6 +138,7 @@ def ingest(
     store.write_derived(sha256, "preview", preview_bytes)
 
     asset = Asset(
+        id=asset_id,
         kind=kind,
         sha256=sha256,
         blob_key=blob_key,
@@ -126,10 +150,27 @@ def ingest(
         output_index=output_index,
         source_asset_id=source_asset_id,
         created_by_user_id=created_by_user_id,
+        created_at=created_at,
     )
     session.add(asset)
     session.flush()
     return asset
+
+
+def _find_shared_blob_key(session: Session, store: AssetStore, sha256: str) -> str | None:
+    """同じ sha256 の既存 Asset(論理削除済みを含む)の原本ファイルを探す(ADR-0026 3章)。
+
+    見つかればそのキーを共有し、新しいファイルは書かない。行はあってもファイルが実在
+    しない(手で消された等)ものは飛ばし、どれも無ければ None(新しい規則で書く)。
+    古いキー(ADR-0004)の Asset もそのまま共有の対象になる。
+    """
+    keys = session.scalars(
+        select(Asset.blob_key).where(Asset.sha256 == sha256).order_by(Asset.created_at, Asset.id)
+    ).all()
+    for key in dict.fromkeys(keys):  # 同じキーを共有する行が並ぶので、順序を保って重複を除く
+        if store.exists(key):
+            return key
+    return None
 
 
 IngestOutcome = Literal["created", "matched_existing"]

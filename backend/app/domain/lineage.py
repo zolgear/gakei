@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.domain.assets import asset_is_used_as_input, is_restorable
 from app.domain.embedded_meta import get_instance_id, normalize_lineage_meta
+from app.domain.lineage_mermaid import LineageGraph
 from app.domain.models import Asset, Run, RunInput, RunInputRole
 from app.domain.run_views import model_label_from_params
 from app.domain.schemas import (
@@ -38,6 +39,7 @@ from app.domain.schemas import (
     LineageEdge,
     LineageNode,
     LineageRunInfo,
+    RunLineageResponse,
 )
 from app.domain.visibility import VisibilityChecker, asset_visible
 
@@ -57,6 +59,14 @@ class LineageNotFoundError(Exception):
     def __init__(self, asset_id: uuid.UUID) -> None:
         self.asset_id = asset_id
         super().__init__(f"asset not found: {asset_id}")
+
+
+class RunLineageNotFoundError(Exception):
+    """起点の Run が存在しない、または見る人に見えない場合。"""
+
+    def __init__(self, run_id: uuid.UUID) -> None:
+        self.run_id = run_id
+        super().__init__(f"run not found: {run_id}")
 
 
 def _asset_node(db: Session, asset: Asset, depth: int) -> LineageNode:
@@ -133,7 +143,7 @@ def _resolve_embedded_asset(
                     Asset.deleted_at.is_(None),
                     asset_visible(checker.user),
                 )
-                .order_by(Asset.created_at.desc())
+                .order_by(Asset.created_at.desc(), Asset.id.desc())
             )
             .scalars()
             .first()
@@ -792,4 +802,222 @@ def build_asset_lineage(
         nodes=list(nodes.values()),
         edges=edges,
         truncated=truncated_up or truncated_down,
+    )
+
+
+def build_run_lineage(
+    db: Session,
+    run_id: uuid.UUID,
+    *,
+    viewer: CurrentUser,
+    up: int = DEFAULT_UP,
+    max_nodes: int = MAX_NODES,
+) -> RunLineageResponse:
+    """Run を起点にした系列グラフ: 入力 Asset(とその祖先)→ Run → 出力 Asset(ADR-0023 9章)。
+
+    入力の祖先は、入力ごとに `build_asset_lineage(up=up, down=0)` を呼んで合成する(見える範囲
+    や埋め込み(未検証)ノードの扱いは画面の系列グラフと同じ)。主たる親(position 0 の image)
+    を先に辿るので、ノード数の上限に掛かったときも主たる親の系列が優先して残る。`up` は入力
+    Asset から数えたホップ数。Run の状態は問わない(queued / running でも入力と Run は描く)。
+    """
+    checker = VisibilityChecker(db, viewer)
+    run = db.get(Run, run_id)
+    if run is None or not checker.run(run):
+        raise RunLineageNotFoundError(run_id)
+
+    nodes: dict[uuid.UUID, LineageNode] = {run.id: _run_node(run, 0)}
+    edges: list[LineageEdge] = []
+    truncated = False
+
+    run_inputs = (
+        db.execute(select(RunInput).where(RunInput.run_id == run.id).order_by(RunInput.position))
+        .scalars()
+        .all()
+    )
+    # 主たる親 → 他の image → mask / reference の順に辿る。
+    ordered_inputs = sorted(
+        run_inputs,
+        key=lambda i: (
+            not (i.role == RunInputRole.IMAGE and i.position == 0),
+            i.role != RunInputRole.IMAGE,
+            i.position,
+        ),
+    )
+    for run_input in ordered_inputs:
+        input_asset = db.get(Asset, run_input.asset_id)
+        if input_asset is None or not checker.asset(input_asset):
+            continue
+        if run_input.asset_id not in nodes:
+            remaining = max_nodes - len(nodes)
+            if remaining <= 0:
+                truncated = True
+                continue
+            try:
+                sub = build_asset_lineage(
+                    db, run_input.asset_id, viewer=viewer, up=up, down=0, max_nodes=remaining
+                )
+            except LineageNotFoundError:
+                continue
+            truncated = truncated or sub.truncated
+            for node in sub.nodes:
+                if node.id not in nodes:
+                    nodes[node.id] = node.model_copy(update={"depth": node.depth - 1})
+            edges.extend(sub.edges)
+        edges.append(
+            LineageEdge(
+                source=run_input.asset_id,
+                target=run.id,
+                kind="input",
+                role=run_input.role,
+                position=run_input.position,
+                primary=run_input.role == RunInputRole.IMAGE and run_input.position == 0,
+            )
+        )
+
+    outputs = (
+        db.execute(
+            select(Asset).where(Asset.produced_by_run_id == run.id).order_by(Asset.output_index)
+        )
+        .scalars()
+        .all()
+    )
+    for output_asset in outputs:
+        if not checker.asset(output_asset):
+            continue
+        if output_asset.id not in nodes:
+            if len(nodes) >= max_nodes:
+                truncated = True
+                continue
+            nodes[output_asset.id] = _asset_node(db, output_asset, 1)
+        edges.append(
+            LineageEdge(
+                source=run.id,
+                target=output_asset.id,
+                kind="output",
+                output_index=output_asset.output_index,
+                primary=False,
+            )
+        )
+
+    # 入力どうしの系列が重なると同じ辺が複数回入るので、まとめる。
+    unique: dict[tuple[object, ...], LineageEdge] = {}
+    for e in edges:
+        if e.source in nodes and e.target in nodes:
+            unique.setdefault((e.source, e.target, e.kind, e.role, e.position), e)
+
+    return RunLineageResponse(
+        root_run_id=run.id,
+        nodes=list(nodes.values()),
+        edges=list(unique.values()),
+        truncated=truncated,
+    )
+
+
+def lineage_frontier(
+    db: Session,
+    viewer: CurrentUser,
+    nodes: list[LineageNode],
+    edges: list[LineageEdge],
+) -> tuple[set[uuid.UUID], set[uuid.UUID]]:
+    """世代の上限で描いていない先があるノードを返す: (祖先がまだあるもの, 子孫がまだあるもの)。
+
+    祖先側(depth <= 0)は「入ってくる辺が無いのに、見える親がある」ノード、子孫側
+    (depth >= 0)は「出ていく辺が無いのに、見える子がある」ノード。埋め込み(未検証)
+    ノードは対象にしない。見えない親・子は数えない(ADR-0025)。
+    """
+    checker = VisibilityChecker(db, viewer)
+    has_in = {e.target for e in edges}
+    has_out = {e.source for e in edges}
+    more_up: set[uuid.UUID] = set()
+    more_down: set[uuid.UUID] = set()
+    for node in nodes:
+        if node.embedded:
+            continue
+        if node.type == "asset":
+            asset = db.get(Asset, node.id)
+            if asset is None:
+                continue
+            if node.depth <= 0 and node.id not in has_in and _asset_has_parent(checker, asset):
+                more_up.add(node.id)
+            if node.depth >= 0 and node.id not in has_out and _asset_has_child(db, checker, asset):
+                more_down.add(node.id)
+        else:
+            if node.depth <= 0 and node.id not in has_in:
+                input_ids = db.execute(
+                    select(RunInput.asset_id).where(RunInput.run_id == node.id)
+                ).scalars()
+                if any(checker.asset_id(a) for a in input_ids):
+                    more_up.add(node.id)
+            if node.depth >= 0 and node.id not in has_out:
+                output_rows = db.execute(
+                    select(Asset).where(Asset.produced_by_run_id == node.id)
+                ).scalars()
+                if any(checker.asset(a) for a in output_rows):
+                    more_down.add(node.id)
+    return more_up, more_down
+
+
+def _asset_has_parent(checker: VisibilityChecker, asset: Asset) -> bool:
+    if asset.source_asset_id is not None and checker.asset_id(asset.source_asset_id):
+        return True
+    if asset.origin_asset_id is not None and checker.asset_id(asset.origin_asset_id):
+        return True
+    # 由来が見えない・解決できないときは、埋め込まれていたグラフを展開する(`_expand_ancestors`)。
+    if asset.origin_meta is not None and normalize_lineage_meta(asset.origin_meta) is not None:
+        return True
+    if asset.produced_by_run_id is not None:
+        # 見えない Run が生んだ Asset は、そもそも見えない(VisibilityChecker.asset)。
+        return True
+    return False
+
+
+def _asset_has_child(db: Session, checker: VisibilityChecker, asset: Asset) -> bool:
+    run_ids = db.execute(select(RunInput.run_id).where(RunInput.asset_id == asset.id)).scalars()
+    for run_id in run_ids:
+        run = db.get(Run, run_id)
+        if run is not None and checker.run(run):
+            return True
+    derived = db.execute(
+        select(Asset).where(
+            (Asset.source_asset_id == asset.id) | (Asset.origin_asset_id == asset.id)
+        )
+    ).scalars()
+    return any(checker.asset(a) and not _is_replaced_away_sketch(db, a) for a in derived)
+
+
+def asset_lineage_graph(
+    db: Session,
+    asset_id: uuid.UUID,
+    *,
+    viewer: CurrentUser,
+    up: int,
+    down: int,
+    max_nodes: int,
+) -> LineageGraph:
+    """`build_asset_lineage` に、描いていない先の注記(`lineage_frontier`)を足した描画の入力。"""
+    lineage = build_asset_lineage(
+        db, asset_id, viewer=viewer, up=up, down=down, max_nodes=max_nodes
+    )
+    more_up, more_down = lineage_frontier(db, viewer, lineage.nodes, lineage.edges)
+    return LineageGraph.from_asset_lineage(
+        lineage, more_ancestors=more_up, more_descendants=more_down
+    )
+
+
+def run_lineage_graph(
+    db: Session,
+    run_id: uuid.UUID,
+    *,
+    viewer: CurrentUser,
+    up: int,
+    max_nodes: int,
+) -> LineageGraph:
+    """`build_run_lineage` に、描いていない先の注記(`lineage_frontier`)を足した描画の入力。
+
+    出力 Asset の子孫は描かないが、子孫があれば「…」の注記を付ける。
+    """
+    lineage = build_run_lineage(db, run_id, viewer=viewer, up=up, max_nodes=max_nodes)
+    more_up, more_down = lineage_frontier(db, viewer, lineage.nodes, lineage.edges)
+    return LineageGraph.from_run_lineage(
+        lineage, more_ancestors=more_up, more_descendants=more_down
     )

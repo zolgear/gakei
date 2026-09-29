@@ -52,7 +52,7 @@ The first run takes a few minutes to fetch dependencies and build the UI. Once s
 
 - **Updating:** run `git pull`, then `./run.sh` (`run.bat`) again. The UI is rebuilt automatically if its source has changed.
 - **Startup options:** `--port 8001`, `--data-dir <absolute path>`, `--no-browser` (don't open a browser), `--host`.
-- **Data:** generated images, SQLite, and the API key saved from Settings (`secrets.json`) live under `data/`. Back up or delete that directory as a whole.
+- **Data:** generated images, SQLite, and the API key saved from Settings (`secrets.json`) live under `data/`. Back up or delete that directory as a whole. Don't delete or move image files inside it directly — the images will stop displaying. Delete images from the UI instead ([docs/configuration.md](docs/configuration.md), Japanese).
 - **Using it from AI agents:** register GAKEI as an MCP server in an AI agent such as Claude Code to generate images and search your stock from the agent. Enable it in Settings first. See [docs/mcp.md](docs/mcp.md) (Japanese).
 - **Using a proxy such as LiteLLM:** change the connection through Settings (or the `OPENAI_BASE_URL` environment variable). The proxy must offer the same model names GAKEI sends (GAKEI does not remap model names). Prices shown in the UI are still OpenAI's list prices and may not match the actual bill through a proxy.
 
@@ -97,11 +97,13 @@ volumes:
 ```bash
 git clone https://github.com/zolgear/gakei.git
 cd gakei
+echo "POSTGRES_PASSWORD=your-password" >> .env
 docker compose up -d --build
 ```
 
 Once it's running, open `http://127.0.0.1:8000`. A `.env` at the repository root is read if present (`HOST`/`PORT`/`DATA_DIR` are overridden with the container's values).
 
+- **PostgreSQL is bundled (ADR-0027).** Without `POSTGRES_PASSWORD` in `.env`, it won't start. To keep using SQLite instead, comment out the PostgreSQL-related settings following the comments inside `compose.yaml`. Usage and migration: [docs/postgresql.md](docs/postgresql.md) (Japanese).
 - **Updating:** `git pull && docker compose up -d --build`
 
 ### Common notes
@@ -112,7 +114,7 @@ Once it's running, open `http://127.0.0.1:8000`. A `.env` at the repository root
   ```
 - **Exposure:** defaults to `127.0.0.1` only. With `docker run`, change the `-p` mapping; with the repository's `compose.yaml`, use `GAKEI_BIND=0.0.0.0` (and `GAKEI_PORT`) to expose it to the LAN or the internet. Either way, there is no authentication by default, so if you expose it, enable login with `AUTH_MODE=oidc` ([docs/auth.md](docs/auth.md)) or put an authenticating reverse proxy in front.
 - **ComfyUI:** connect to ComfyUI running on the same host at `http://host.docker.internal:8188` (Settings → ComfyUI). With plain `docker run`, add `--add-host=host.docker.internal:host-gateway` for this to resolve (the repository's `compose.yaml` already sets this up).
-- **Run only one replica.** Jobs run inside the api process and the DB is SQLite, so don't share the same volume across multiple containers.
+- **Run only one replica.** Jobs run inside the api process, so whether the DB is SQLite or PostgreSQL, don't share the same DB / volume across multiple containers.
 
 The version you're running is shown in Settings under "About GAKEI". See [Releases](https://github.com/zolgear/gakei/releases) on GitHub for the full list (release process: [docs/release.md](docs/release.md), Japanese).
 

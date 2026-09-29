@@ -15,6 +15,20 @@
 (`release_if_idle` を worker が定期的に呼ぶ)。読み込み(`InferenceSession` の生成)も推論も
 `tag()` の中で行い、呼び出し側が `asyncio.to_thread` で別スレッドに逃がす(イベントループを
 塞がない)。推論のスレッド数は CPU コア数の半分に抑える(API の応答を妨げないため)。
+
+メモリ対策(2026-09-29。メモリ 4GB の VM で eva02-large を読み込んで OOM で落ちた報告を受けて):
+
+- セッションの設定で重みの prepacking(`session.disable_prepacking`)とメモリパターン
+  (`enable_mem_pattern`)を切る。Raspberry Pi 5 の実測で最大 RSS が vit 約 0.69→0.53GiB、
+  swinv2 約 0.93→0.70GiB、eva02-large 約 2.1→1.42GiB に下がり、推論時間の増加は 5〜10%、
+  上位タグは変わらなかった。`enable_cpu_mem_arena=False` はかえって山が高くなったので使わない。
+- 別のモデルに切り替えるときは、今のセッションを手放してから読み込む(2つを同時に載せない)。
+- 読み込む前に空きメモリ(Linux の `/proc/meminfo` の MemAvailable と、cgroup の上限の残り)を
+  モデルの目安(`WdModel.memory_bytes`)と比べ、足りなければ読み込まずに
+  `InsufficientMemoryError` にする。推定は `failed` になり、自動では再試行しない(ADR-0024
+  4章)。プロセスが落ちると起動時に `running` の行が待ち行列に戻り、同じモデルを読んで
+  また落ちるので、その繰り返しをここで止める。空きメモリを読めない環境(Windows、macOS)
+  では確かめない。
 """
 
 from __future__ import annotations
@@ -23,6 +37,7 @@ import csv
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,7 +45,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from app.annotation.wd_models import MODEL_FILE, TAGS_FILE, model_dir
+from app.annotation.wd_models import MODEL_FILE, TAGS_FILE, WD_MODELS, model_dir
 
 CATEGORY_GENERAL = 0
 CATEGORY_CHARACTER = 4
@@ -114,14 +129,112 @@ def session_options(onnxruntime: Any) -> Any:
     options = onnxruntime.SessionOptions()
     options.intra_op_num_threads = inference_threads()
     options.inter_op_num_threads = 1
+    # 読み込み時と推論時のメモリの山を下げる(モジュールの docstring を参照)。
+    options.enable_mem_pattern = False
+    options.add_session_config_entry("session.disable_prepacking", "1")
     return options
+
+
+# -- 空きメモリの確認 -------------------------------------------------------------
+
+_PROC_MEMINFO = Path("/proc/meminfo")
+_CGROUP_ROOT = Path("/sys/fs/cgroup")
+# cgroup v1 で上限が無いときの値(ページ境界に丸めた int64 の最大値)。これ以上は上限なしとみなす。
+_CGROUP_UNLIMITED = 1 << 60
+
+
+class InsufficientMemoryError(Exception):
+    """モデルを読み込むだけの空きメモリが無い。"""
+
+    def __init__(self, model_name: str, needed: int, available: int) -> None:
+        super().__init__(f"{model_name}: needed={needed} available={available}")
+        self.model_name = model_name
+        self.needed = needed
+        self.available = available
+
+
+def _read_int(path: Path) -> int | None:
+    try:
+        text = path.read_text(encoding="ascii").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _read_stat(path: Path, key: str) -> int:
+    try:
+        for line in path.read_text(encoding="ascii").splitlines():
+            name, _, value = line.partition(" ")
+            if name == key:
+                return int(value.strip())
+    except (OSError, UnicodeDecodeError, ValueError):
+        pass
+    return 0
+
+
+def meminfo_available(path: Path = _PROC_MEMINFO) -> int | None:
+    """`/proc/meminfo` の MemAvailable(バイト)。読めなければ None。"""
+    try:
+        for line in path.read_text(encoding="ascii").splitlines():
+            if line.startswith("MemAvailable:"):
+                parts = line.split()
+                return int(parts[1]) * 1024
+    except (OSError, UnicodeDecodeError, ValueError, IndexError):
+        return None
+    return None
+
+
+def cgroup_available(root: Path = _CGROUP_ROOT) -> int | None:
+    """cgroup のメモリ上限の残り(バイト)。上限が無い・読めなければ None。
+
+    コンテナの中では `/proc/meminfo` がホストの値を返すので、上限はこちらで見る。使用量から
+    捨てられるページキャッシュ(inactive_file)を除く。v2(`memory.max`)と v1
+    (`memory/memory.limit_in_bytes`)の両方を見る。
+    """
+    max_path = root / "memory.max"
+    if max_path.is_file():
+        limit = _read_int(max_path)  # 上限なしは "max" で、int にならず None
+        usage = _read_int(root / "memory.current")
+        inactive = _read_stat(root / "memory.stat", "inactive_file")
+    else:
+        v1 = root / "memory"
+        limit = _read_int(v1 / "memory.limit_in_bytes")
+        usage = _read_int(v1 / "memory.usage_in_bytes")
+        inactive = _read_stat(v1 / "memory.stat", "total_inactive_file")
+    if limit is None or usage is None or limit >= _CGROUP_UNLIMITED:
+        return None
+    return max(0, limit - max(0, usage - inactive))
+
+
+def available_memory_bytes() -> int | None:
+    """今使える空きメモリ(バイト)。MemAvailable と cgroup の残りの小さい方。読めなければ
+    None(Windows、macOS など)。"""
+    values = [v for v in (meminfo_available(), cgroup_available()) if v is not None]
+    return min(values) if values else None
+
+
+def check_memory(model_name: str, probe: Callable[[], int | None]) -> None:
+    """モデルの目安より空きメモリが少なければ `InsufficientMemoryError`。"""
+    needed = WD_MODELS[model_name].memory_bytes
+    available = probe()
+    if available is not None and available < needed:
+        raise InsufficientMemoryError(model_name, needed, available)
 
 
 class WdTagger:
     """モデル1つ分のセッションとラベル。スレッドから呼ばれる前提でロックを持つ。"""
 
-    def __init__(self, data_dir: Path) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        memory_probe: Callable[[], int | None] = available_memory_bytes,
+    ) -> None:
         self.data_dir = data_dir
+        # テストでは差し替える。
+        self._memory_probe = memory_probe
         self._lock = threading.Lock()
         self._model_name: str | None = None
         self._session: Any = None
@@ -132,12 +245,19 @@ class WdTagger:
     def _ensure_loaded(self, model_name: str) -> None:
         if self._session is not None and self._model_name == model_name:
             return
-        import onnxruntime
+        # 別のモデルを読む前に今のセッションを手放す(2つを同時にメモリに載せない)。
+        self._session = None
+        self._model_name = None
+        self._labels = []
 
         directory = model_dir(self.data_dir, model_name)
         for filename in (MODEL_FILE, TAGS_FILE):
             if not (directory / filename).is_file():
                 raise FileNotFoundError(directory / filename)
+        check_memory(model_name, self._memory_probe)
+
+        import onnxruntime
+
         session = onnxruntime.InferenceSession(
             str(directory / MODEL_FILE),
             sess_options=session_options(onnxruntime),

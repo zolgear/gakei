@@ -1021,6 +1021,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/downloads/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download By Url
+         * @description MCP の `create_download_url` で発行した URL から原本を取得する。URL は10分間・1回限り
+         *     有効。不明・使用済み・期限切れ・見えなくなった Asset は、どれも 404。
+         */
+        get: operations["download_by_url"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2247,6 +2268,8 @@ export interface components {
             name: "wd-vit-tagger-v3" | "wd-swinv2-tagger-v3" | "wd-eva02-large-tagger-v3";
             /** Size Bytes */
             size_bytes: number;
+            /** Memory Bytes */
+            memory_bytes: number;
             /** Downloaded */
             downloaded: boolean;
             /**
@@ -5740,6 +5763,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadByUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_by_url: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 原本の画像ファイル */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "image/*": unknown;
                 };
             };
             /** @description Validation Error */

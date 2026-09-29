@@ -27,11 +27,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain import annotation_settings
 from app.domain.models import Asset, AssetAnnotation, AssetKind, AssetTag, Tag
 from app.domain.schemas import AnnotationStatusView, AssetAnnotationResponse, AssetTagRef
+from app.domain.sql_compat import binary_order, savepoints_are_safe
 from app.domain.visibility import asset_visible, get_visible_asset
 from app.i18n import t
 
@@ -138,10 +140,22 @@ def _get_or_create_annotation(db: Session, asset_id: uuid.UUID) -> AssetAnnotati
 
 def _get_or_create_tag(db: Session, name: str) -> Tag:
     tag = db.execute(select(Tag).where(Tag.name == name)).scalar_one_or_none()
-    if tag is None:
+    if tag is not None:
+        return tag
+    if not savepoints_are_safe(db):
         tag = Tag(name=name)
         db.add(tag)
         db.flush()
+        return tag
+    # 推定の worker と人の操作が同じ名前のタグを同時に作ると、一意制約に当たることがある。
+    # PostgreSQL では失敗した後のトランザクションを続けて使えないので、SAVEPOINT で囲んで
+    # その部分だけを戻し、先に作られた行を引き直す(ADR-0027 2章)。
+    try:
+        with db.begin_nested():
+            tag = Tag(name=name)
+            db.add(tag)
+    except IntegrityError:
+        tag = db.execute(select(Tag).where(Tag.name == name)).scalar_one()
     return tag
 
 
@@ -370,7 +384,7 @@ def backfill(db: Session) -> int:
         select(Asset.id, AssetAnnotation)
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         .where(_pending_condition())
-        .order_by(Asset.created_at.asc())
+        .order_by(Asset.created_at.asc(), Asset.id.asc())
     ).all()
     now = _utcnow()
     for asset_id, annotation in rows:
@@ -497,7 +511,8 @@ def list_tags(db: Session, user: CurrentUser, q: str | None, limit: int) -> list
         .join(Asset, Asset.id == AssetTag.asset_id)
         .where(AssetTag.removed.is_(False), Asset.deleted_at.is_(None), asset_visible(user))
         .group_by(Tag.id, Tag.name)
-        .order_by(count.desc(), Tag.name.asc())
+        # ADR-0027 2章: 名前の並びは両方の DB でバイト順にそろえる。
+        .order_by(count.desc(), binary_order(Tag.name).asc())
         .limit(limit)
     )
     if q is not None and q.strip():

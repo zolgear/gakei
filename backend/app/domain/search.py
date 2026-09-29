@@ -75,7 +75,8 @@ def parse_types(raw: str | None) -> set[str]:
 
 
 def escape_like(term: str) -> str:
-    """SQLite の LIKE 用に `\\` `%` `_` をエスケープする(`ESCAPE '\\'` と組で使う)。"""
+    """LIKE 用に `\\` `%` `_` をエスケープする(`ESCAPE '\\'` と組で使う。SQLite と
+    PostgreSQL で同じ結果になる。ADR-0027 2章)。"""
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
@@ -156,12 +157,11 @@ def _embedded_prompt_text_expr() -> Any:
     """`asset.embedded_meta`(`gakei.embedded/1`)の prompt / negative_prompt を連結した、
     大文字小文字を無視した検索用テキストの SQL 式。
 
-    SQLite の `json_extract` を使う。PostgreSQL へ移行して `embedded_meta` が JSONB に
-    なったときは、この関数の中身だけを `Asset.embedded_meta["prompt"].astext` 相当の式に
-    差し替えればよい(ADR-0008、ローカルMVPは SQLite)。
+    SQLAlchemy の JSON の添字と `as_string()` を使う。SQLite では `json_extract`、
+    PostgreSQL(JSONB)では `->>` になり、1つの書き方で両方に通る(ADR-0027 2章)。
     """
-    prompt = func.coalesce(func.json_extract(Asset.embedded_meta, "$.prompt"), "")
-    negative_prompt = func.coalesce(func.json_extract(Asset.embedded_meta, "$.negative_prompt"), "")
+    prompt = func.coalesce(Asset.embedded_meta["prompt"].as_string(), "")
+    negative_prompt = func.coalesce(Asset.embedded_meta["negative_prompt"].as_string(), "")
     return func.lower(prompt.op("||")(" ").op("||")(negative_prompt))
 
 

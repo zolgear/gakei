@@ -249,9 +249,20 @@ def test_session_token_hash_is_sha256_and_raw_token_absent_from_db_file(
         row = db.execute(select(AuthSession)).scalars().one()
         assert row.token_hash == hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
-    db_path = client_oidc.app.state.settings.db_path
-    db_bytes = db_path.read_bytes()
-    assert raw_token.encode("utf-8") not in db_bytes
+    settings = client_oidc.app.state.settings
+    if settings.uses_sqlite:
+        db_bytes = settings.db_path.read_bytes()
+        assert raw_token.encode("utf-8") not in db_bytes
+    else:
+        # ADR-0027: PostgreSQL ではファイルを直接読めないので、全テーブルの全行を文字列に
+        # して探す。
+        from sqlalchemy import inspect, text
+
+        engine = client_oidc.app.state.engine
+        with engine.connect() as conn:
+            for table in inspect(engine).get_table_names():
+                rows = conn.execute(text(f'SELECT t::text FROM "{table}" AS t')).scalars()
+                assert all(raw_token not in row for row in rows), table
 
 
 # -- L-3: 管理者一覧・許可ドメインをリクエストごとに評価する ---------------------------

@@ -1,8 +1,15 @@
-"""pytest 共通フィクスチャ。DATA_DIR を一時ディレクトリに切り替え、FakeProvider で完結させる。"""
+"""pytest 共通フィクスチャ。DATA_DIR を一時ディレクトリに切り替え、FakeProvider で完結させる。
+
+ADR-0027 6章: 環境変数 `GAKEI_TEST_DATABASE_URL`(PostgreSQL のサーバーへの接続。例
+`postgresql://postgres:gakei@127.0.0.1:55433/postgres`)があれば、テストごとに一意な名前の
+一時 DB を作り、`DATABASE_URL` に入れて PostgreSQL で走らせる(終わったら DROP する)。
+無ければこれまでどおり SQLite(`DATA_DIR/gakei.db`)。
+"""
 
 from __future__ import annotations
 
 import io
+import os
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -12,9 +19,11 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
-from app.config import Settings
+from app.config import Settings, normalize_database_url
 from app.db import create_all, make_engine, make_session_factory
 from app.domain.storage import LocalFsStore
 
@@ -44,6 +53,150 @@ def _isolate_from_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FAKE_PROVIDER", raising=False)
     # ADR-0013: テストは実物の ComfyUI(既定 127.0.0.1:8188)に接続しない。
     monkeypatch.setenv("COMFYUI_URL", "")
+
+
+# --- DB の切り替え(ADR-0027 6章) ------------------------------------------------
+
+_PG_SERVER_URL = os.environ.get("GAKEI_TEST_DATABASE_URL", "").strip() or None
+
+requires_postgresql = pytest.mark.skipif(
+    _PG_SERVER_URL is None, reason="GAKEI_TEST_DATABASE_URL(PostgreSQL)が無い"
+)
+requires_sqlite = pytest.mark.skipif(
+    _PG_SERVER_URL is not None, reason="SQLite(ファイル)に固有のテスト"
+)
+
+
+def using_postgresql() -> bool:
+    return _PG_SERVER_URL is not None
+
+
+def _pg_admin_engine():  # noqa: ANN202
+    assert _PG_SERVER_URL is not None
+    return create_engine(
+        normalize_database_url(_PG_SERVER_URL), isolation_level="AUTOCOMMIT", pool_pre_ping=True
+    )
+
+
+def _pg_database_url(name: str) -> str:
+    assert _PG_SERVER_URL is not None
+    url = make_url(normalize_database_url(_PG_SERVER_URL)).set(database=name)
+    return url.render_as_string(hide_password=False)
+
+
+def _unique_db_name(prefix: str) -> str:
+    # pytest-xdist の並列でも衝突しないよう、worker 名と uuid を入れる(63 バイト以内)。
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
+    return f"{prefix}_{worker}_{uuid.uuid4().hex[:16]}"
+
+
+def _create_pg_database(name: str, template: str | None = None) -> str:
+    engine = _pg_admin_engine()
+    try:
+        with engine.connect() as conn:
+            clause = f' TEMPLATE "{template}"' if template else ""
+            conn.execute(text(f'CREATE DATABASE "{name}"{clause}'))
+    finally:
+        engine.dispose()
+    return _pg_database_url(name)
+
+
+def _drop_pg_database(name: str) -> None:
+    engine = _pg_admin_engine()
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def _pg_template_database() -> Iterator[str | None]:
+    """PostgreSQL のとき、最新のスキーマまで上げた雛形の DB(worker ごとに1つ)。
+
+    テストごとの DB はこれを TEMPLATE にして作る(毎回 0001 から upgrade するより速い)。
+    """
+    if _PG_SERVER_URL is None:
+        yield None
+        return
+    from app.main import run_migrations
+
+    name = _unique_db_name("gakei_tmpl")
+    url = _create_pg_database(name)
+    try:
+        run_migrations(url)
+        yield name
+    finally:
+        _drop_pg_database(name)
+
+
+@pytest.fixture
+def pg_empty_database_url() -> Iterator[str]:
+    """PostgreSQL の空の一時 DB(マイグレーションや移行ツールのテスト用)。PG が無ければ skip。"""
+    if _PG_SERVER_URL is None:
+        pytest.skip("GAKEI_TEST_DATABASE_URL(PostgreSQL)が無い")
+    name = _unique_db_name("gakei_test_empty")
+    url = _create_pg_database(name)
+    try:
+        yield url
+    finally:
+        _drop_pg_database(name)
+
+
+@pytest.fixture
+def empty_database_url(tmp_path: Path) -> Iterator[str]:
+    """テーブルが1つも無い DB の URL。PostgreSQL なら一時 DB、SQLite なら一時ファイル。"""
+    if _PG_SERVER_URL is None:
+        yield f"sqlite:///{tmp_path / 'existing.db'}"
+        return
+    name = _unique_db_name("gakei_test_empty")
+    url = _create_pg_database(name)
+    try:
+        yield url
+    finally:
+        _drop_pg_database(name)
+
+
+# このテストの間に `extra_database_url()` で作った DB(テストの終わりにまとめて DROP する)。
+_extra_databases: list[str] = []
+_current_template: list[str] = []
+
+
+def extra_database_url() -> str | None:
+    """別の GAKEI インスタンス用に、もう1つの DB を用意する(PostgreSQL のとき)。
+
+    SQLite のときは None(インスタンスごとの `DATA_DIR/gakei.db` を使うので要らない)。
+    PostgreSQL のときは、作った DB の URL を返す。呼び出し側で `DATABASE_URL` に入れる。
+    """
+    if not _current_template:
+        return None
+    name = _unique_db_name("gakei_test_extra")
+    url = _create_pg_database(name, template=_current_template[0])
+    _extra_databases.append(name)
+    return url
+
+
+@pytest.fixture(autouse=True)
+def _test_database(
+    monkeypatch: pytest.MonkeyPatch, _pg_template_database: str | None
+) -> Iterator[str | None]:
+    """テストごとの DB を `DATABASE_URL` に入れる(PostgreSQL のとき)。SQLite のときは
+    `DATABASE_URL` を消す(開発者の環境変数を持ち込まない)。値は PostgreSQL の URL か None。
+    """
+    if _pg_template_database is None:
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        yield None
+        return
+    name = _unique_db_name("gakei_test")
+    url = _create_pg_database(name, template=_pg_template_database)
+    monkeypatch.setenv("DATABASE_URL", url)
+    _current_template[:] = [_pg_template_database]
+    try:
+        yield url
+    finally:
+        _drop_pg_database(name)
+        while _extra_databases:
+            _drop_pg_database(_extra_databases.pop())
 
 
 @pytest.fixture(autouse=True)
@@ -156,10 +309,10 @@ def login_as(client: TestClient, email: str, name: str = "Test User") -> None:
 
 
 @pytest.fixture
-def db_session_factory(tmp_path: Path) -> Iterator[sessionmaker]:
-    """HTTP を介さずドメイン層を直接テストしたい場合の DB。"""
-    db_path = tmp_path / "domain_data" / "gakei.db"
-    engine = make_engine(db_path)
+def db_session_factory(tmp_path: Path, _test_database: str | None) -> Iterator[sessionmaker]:
+    """HTTP を介さずドメイン層を直接テストしたい場合の DB。PostgreSQL のときはテストごとの
+    一時 DB(雛形からの複製で、スキーマは作成済み)。"""
+    engine = make_engine(_test_database or (tmp_path / "domain_data" / "gakei.db"))
     create_all(engine)
     factory = make_session_factory(engine)
     yield factory

@@ -1,6 +1,6 @@
 [project]
 name = "gakei-backend"
-version = "0.3.0"
+version = "0.4.0"
 description = "GAKEI ローカルMVP バックエンド"
 license = "Apache-2.0"
 authors = [
@@ -24,6 +24,7 @@ dependencies = [
     "mcp>=2.2",
     "onnxruntime>=1.30.0",
     "numpy>=2.5.3",
+    "psycopg[binary]>=3.2",
 ]
 
 [dependency-groups]

@@ -5,7 +5,8 @@
     "legacyProviderAborted": "PROVIDER={value} is set, but this setting has been removed. Use FAKE_PROVIDER=1 to try it with dummy images, or remove PROVIDER to connect to the real API.",
     "authConfigMissing": "AUTH_MODE=oidc but required environment variable(s) are missing: {missing}",
     "authUrlInvalid": "{name} is not a valid URL (it must be http or https and include a host): {value}",
-    "authUrlInsecure": "{name} points to http (not https) on a non-loopback address ({value}). Authentication traffic would be sent in plain text."
+    "authUrlInsecure": "{name} points to http (not https) on a non-loopback address ({value}). Authentication traffic would be sent in plain text.",
+    "databaseUnavailable": "Cannot connect to the database ({url}). Check DATABASE_URL and that PostgreSQL is running and accepting connections. Details: {error}"
   },
   "auth": {
     "required": "Login required.",
@@ -302,6 +303,7 @@
     "apiKeyMissing": "No API key for estimation. Set the OpenAI API key or a dedicated key for estimation",
     "emptyTitle": "The LLM did not return a title",
     "onnxModelMissing": "The ONNX tagger model was not found. Download it from Admin settings",
+    "onnxInsufficientMemory": "The ONNX tagger model {model} was not loaded because there is not enough free memory (needs about {needed} GB, about {available} GB free). Choose a smaller model in Admin settings or add memory",
     "download": {
       "httpError": "Failed to download {file} (HTTP {status})",
       "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
@@ -313,5 +315,38 @@
     "tooLarge": "Uploaded images must be under {mb}MB",
     "empty": "The request body is empty. Send the image file bytes as the body.",
     "noFile": "The multipart body does not contain an image file."
+  },
+  "downloads": {
+    "notFound": "This download URL does not exist, has already been used, or has expired. Issue a new one with the MCP tool create_download_url."
+  },
+  "migrateToPostgres": {
+    "description": "Move the metadata in SQLite (DATA_DIR/gakei.db) to PostgreSQL (ADR-0027). Stop GAKEI before running this. Files such as images (DATA_DIR) are not moved.",
+    "toHelp": "URL of the destination PostgreSQL database (e.g. postgresql://user:pass@host:5432/gakei). It must be an empty database",
+    "fromHelp": "Source SQLite file (default: DATA_DIR/gakei.db)",
+    "dryRunHelp": "Only show the row count of each table without changing the destination",
+    "targetNotPostgres": "Specify a PostgreSQL URL (postgresql://...) as the destination.",
+    "sourceMissing": "Source SQLite file not found: {source}",
+    "sourceNotHead": "The source schema is not up to date ({source}, current {current}, latest {head}). Start the current version of GAKEI once to upgrade it, then run this again.",
+    "targetNotEmpty": "The destination is not empty ({target}). GAKEI tables already exist: {tables}. Specify an empty database.",
+    "countMismatch": "Row counts did not match, so the migration was rolled back (the destination was not changed): {tables}",
+    "failed": "The migration failed and was rolled back (the destination was not changed): {error}",
+    "source": "Source: {source}",
+    "target": "Destination: {target}",
+    "tableRows": {
+      "one": "  {table}: {count} row",
+      "other": "  {table}: {count} rows"
+    },
+    "tableRowsCopied": {
+      "one": "  {table}: {count} row (after copy: {copied})",
+      "other": "  {table}: {count} rows (after copy: {copied})"
+    },
+    "dryRunDone": {
+      "one": "--dry-run: {count} row in total. The destination was not changed.",
+      "other": "--dry-run: {count} rows in total. The destination was not changed."
+    },
+    "done": {
+      "one": "Migration complete ({tables} tables, {count} row in total). Set DATABASE_URL and start GAKEI (keep using the same DATA_DIR).",
+      "other": "Migration complete ({tables} tables, {count} rows in total). Set DATABASE_URL and start GAKEI (keep using the same DATA_DIR)."
+    }
   }
 }

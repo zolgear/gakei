@@ -255,3 +255,47 @@ def test_run_rejects_client_supplied_comfyui_prompt_param(
         },
     )
     assert response.status_code == 422
+
+
+def _output_blob_key(client: TestClient, asset_id: str) -> str:
+    import uuid
+
+    from app.domain.models import Asset
+
+    with client.app.state.session_factory() as session:
+        asset = session.get(Asset, uuid.UUID(asset_id))
+        assert asset is not None
+        return asset.blob_key
+
+
+def test_comfyui_output_is_saved_under_workflow_name_folder(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0026: ComfyUI の出力は `assets/comfyui/{ワークフロー名}/{YYYY-MM}/` に保存する。
+    Run の model(ワークフローの id)ではなく、保存時点の名前を正規化して使う。"""
+    import re
+
+    _mark_available(monkeypatch)
+    workflow = _create_t2i_workflow(client_with_comfyui, name="Anime 線画 v2/final")
+    fake = FakeComfyUI()
+    _configure_success(fake)
+    _install_fake_comfyui(client_with_comfyui, fake)
+
+    response = client_with_comfyui.post(
+        "/api/runs",
+        json={
+            "operation": "generate",
+            "model": workflow["id"],
+            "prompt": "a cat",
+            "provider": "comfyui",
+            "params": {},
+        },
+    )
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client_with_comfyui, response.json()["id"])
+    assert detail["status"] == "succeeded", detail
+
+    key = _output_blob_key(client_with_comfyui, detail["outputs"][0]["asset_id"])
+    assert re.fullmatch(
+        r"assets/comfyui/Anime_v2_final/\d{4}-\d{2}/\d{8}-\d{6}_[0-9a-f]{8}\.png", key
+    ), key

@@ -28,9 +28,10 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 |---|---|---|
 | `OPENAI_API_KEY` | なし | OpenAI の API キー。設定画面で保存したキーより優先される |
 | `OPENAI_BASE_URL` | なし(OpenAI 本体) | OpenAI 互換 API(LiteLLM などのプロキシ)の接続先。通常 `/v1` まで含む(例: `http://127.0.0.1:4000/v1`)。設定画面で保存した値より優先される。ループバック以外への `http` を指定すると、起動時に警告を出す |
-| `DATA_DIR` | `./data` | 画像、SQLite、画面で保存した API キー・接続先の保存先。変える場合は絶対パスで書く |
+| `DATA_DIR` | `./data` | 画像、画面で保存した API キー・接続先の保存先。`DATABASE_URL` 未指定時は SQLite のファイルもここに置く。変える場合は絶対パスで書く |
 | `HOST` | `127.0.0.1` | 待ち受けるアドレス |
 | `PORT` | `8000` | 待ち受けるポート |
+| `DATABASE_URL` | なし(SQLite) | メタデータの DB を PostgreSQL にする場合の接続先(`postgresql://user:pass@host:5432/gakei`。ADR-0027)。指定しても、画像のために `DATA_DIR` は引き続き必要。詳しくは [postgresql.md](postgresql.md) |
 | `OPENAI_MAX_RETRIES` | `4` | 429 などの再試行回数。再試行は OpenAI SDK が行う |
 | `OPENAI_TIMEOUT_SECONDS` | `600` | 1リクエストのタイムアウト(秒)。4K や高品質の生成は数分かかる |
 | `MODERATION` | `low` | Generate のときに送る表現の制限。`auto` または `low`。設定画面(設定 → 生成)で保存すると、そちらが優先される |
@@ -51,6 +52,10 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 
 `DATA_DIR` に相対パスを書くと、サーバーの作業ディレクトリ(`backend/`)からの位置として解釈される。
 
+`DATA_DIR/assets/` の原本は、プロバイダー・モデル別、月別のフォルダに保存される(例: `assets/openai/gpt-image-2.5/2026-09/20260929-093015_1a2b3c4d.png`。アップロードは `assets/uploads/`、マスクは `assets/masks/`、スケッチは `assets/sketches/`。ADR-0026)。以前のバージョンで保存した画像は `assets/{2文字}/` に残り、移さない。同じ内容の画像は、最初に保存した場所の 1 つのファイルを共有する。
+
+**`DATA_DIR` の中のファイルを、ファイルマネージャーなどで直接消したり動かしたり名前を変えたりしないこと。** DB に記録した場所と合わなくなり、画像が表示できなくなる。画像の削除は画面から行う。`DATA_DIR` をフォルダごとバックアップに取るのは構わない。
+
 ## Docker(ADR-0016、ADR-0021)
 
 `compose.yaml` で起動する場合、コンテナ内の `HOST`/`PORT`/`DATA_DIR` は `0.0.0.0`/`8000`/`/data` に固定されており、`.env` で指定しても上書きされない。ホスト側に公開するアドレスとポートは、代わりに Compose 専用の変数で指定する。
@@ -61,3 +66,4 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 |---|---|---|
 | `GAKEI_BIND` | `127.0.0.1` | ホスト側の待ち受けアドレス |
 | `GAKEI_PORT` | `8000` | ホスト側の待ち受けポート |
+| `POSTGRES_PASSWORD` | なし(必須) | リポジトリの `compose.yaml` に同梱した PostgreSQL(ADR-0027)のパスワード。未指定だと `docker compose up` が起動しない。SQLite で使う場合の切り替え方は [postgresql.md](postgresql.md) |

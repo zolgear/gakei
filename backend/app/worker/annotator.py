@@ -84,7 +84,11 @@ def _pick(session_factory: sessionmaker) -> uuid.UUID | None:
         candidate = session.execute(
             select(AssetAnnotation.asset_id)
             .where(AssetAnnotation.auto_status == annotations_domain.STATUS_QUEUED)
-            .order_by(AssetAnnotation.auto_requested_at.asc())
+            # ADR-0027 2章: NULL の位置と同順位の並びを SQLite の挙動(NULL が先頭)にそろえる。
+            .order_by(
+                AssetAnnotation.auto_requested_at.asc().nulls_first(),
+                AssetAnnotation.asset_id.asc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if candidate is None:

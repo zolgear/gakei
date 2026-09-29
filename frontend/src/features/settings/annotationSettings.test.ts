@@ -4,6 +4,7 @@ import {
   diffAnnotationForm,
   downloadPercent,
   formFromSettings,
+  formatMemoryGb,
   hasChanges,
   isAnyOnnxDownloading,
   isValidAnnotationHourlyLimit,
@@ -112,6 +113,7 @@ describe('isAnyOnnxDownloading / downloadPercent', () => {
     const model = {
       name: 'wd-vit-tagger-v3' as const,
       size_bytes: 1,
+      memory_bytes: 1,
       downloaded: false,
       download_status: 'downloading' as const,
     }
@@ -124,5 +126,12 @@ describe('isAnyOnnxDownloading / downloadPercent', () => {
     expect(downloadPercent(0.426)).toBe(43)
     expect(downloadPercent(1)).toBe(100)
     expect(downloadPercent(null)).toBeNull()
+  })
+})
+
+describe('formatMemoryGb', () => {
+  it('10 進の GB で小数1桁にする', () => {
+    expect(formatMemoryGb(600_000_000)).toBe('0.6')
+    expect(formatMemoryGb(1_600_000_000)).toBe('1.6')
   })
 })

@@ -260,6 +260,9 @@ def test_settings_defaults(client: TestClient) -> None:
         m["downloaded"] is False and m["download_status"] == "idle" for m in body["onnx_models"]
     )
     assert body["onnx_models"][0]["size_bytes"] > 300_000_000
+    # メモリの目安(設定画面に出す)。eva02-large は Base の2つより大きい。
+    memory = {m["name"]: m["memory_bytes"] for m in body["onnx_models"]}
+    assert memory["wd-eva02-large-tagger-v3"] > memory["wd-swinv2-tagger-v3"] > 0
 
 
 def test_settings_patch_and_validation(client: TestClient) -> None:
@@ -498,18 +501,15 @@ def test_engine_failure_is_recorded(client: TestClient) -> None:
     assert body["annotation"]["finished_at"] is not None
 
 
-def test_running_rows_are_requeued_on_start(tmp_path) -> None:  # noqa: ANN001
+def test_running_rows_are_requeued_on_start(tmp_path, db_session_factory) -> None:  # noqa: ANN001
     from datetime import UTC, datetime
 
-    from app.db import create_all, make_engine, make_session_factory
     from app.domain.assets import ingest
     from app.domain.models import AssetAnnotation, AssetKind
     from app.domain.storage import LocalFsStore
     from app.worker.annotator import reset_running_annotations
 
-    engine = make_engine(tmp_path / "x.db")
-    create_all(engine)
-    factory = make_session_factory(engine)
+    factory = db_session_factory
     store = LocalFsStore(tmp_path)
     with factory() as db:
         asset = ingest(db, store, make_png_bytes(), AssetKind.UPLOAD)
@@ -521,7 +521,6 @@ def test_running_rows_are_requeued_on_start(tmp_path) -> None:  # noqa: ANN001
     assert reset_running_annotations(factory) == 1
     with factory() as db:
         assert db.get(AssetAnnotation, asset_id).auto_status == "queued"
-    engine.dispose()
 
 
 # -- ONNX モデルのダウンロード(FAKE ではダウンロードしない) ---------------------------

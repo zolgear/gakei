@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 何を作っているか
 
-GAKEI は、OpenAI の画像 API(Generate / Edit)をセルフホストで使うための Web ツール。生成・編集のフォーム、4K ビューア、マスクとスケッチ、実行履歴、系列(リネージ)、プロンプトセット、任意の OIDC 認証と管理者ロール、Docker イメージ(GHCR)を持つ。`backend/`(FastAPI + SQLAlchemy + SQLite、画像はローカル FS の `data/`)と `frontend/`(React + TypeScript + Vite の SPA。ビルド成果物を FastAPI が配信)から成る。名前は GAKEI(表示は大文字。パッケージ名や localStorage のキーなどの識別子は小文字の `gakei`)。
+GAKEI は、OpenAI の画像 API(Generate / Edit)をセルフホストで使うための Web ツール。生成・編集のフォーム、4K ビューア、マスクとスケッチ、実行履歴、系列(リネージ)、プロンプトセット、任意の OIDC 認証と管理者ロール、Docker イメージ(GHCR)を持つ。`backend/`(FastAPI + SQLAlchemy。メタデータは既定 SQLite、`DATABASE_URL` で PostgreSQL も選べる。ADR-0027、`docs/postgresql.md`。画像はローカル FS の `data/`)と `frontend/`(React + TypeScript + Vite の SPA。ビルド成果物を FastAPI が配信)から成る。名前は GAKEI(表示は大文字。パッケージ名や localStorage のキーなどの識別子は小文字の `gakei`)。
 
 設計判断は `docs/adr/` にある。作業を始める前に `docs/adr/README.md`(一覧)を読み、作業に関連する ADR を読む。Azure での組織向けホスティング(ADR-0002〜0007)は設計だけで未着手。
 
@@ -29,6 +29,8 @@ FAKE_PROVIDER=1 DATA_DIR=$(mktemp -d) uv run python -m app   # 課金なしで�
 uv run python -m app.tools.export_openapi <出力パス>        # サーバーを立てずに OpenAPI を書き出す
 uv run python -m app.tools.third_party_notices <出力パス|->  # 第三者ライセンス表記を書き出す(ADR-0021)
 uv run python -m app.tools.backfill_embedded_meta --dry-run   # 既存の upload Asset の埋め込み生成メタ情報を埋め戻す(ADR-0018。サーバー停止中に)
+uv run python -m app.tools.migrate_to_postgres --to postgresql://... --dry-run   # SQLite → PostgreSQL 移行(ADR-0027。docs/postgresql.md)
+GAKEI_TEST_DATABASE_URL=postgresql://... uv run pytest -q   # 同じテストを PostgreSQL でも回す(既定は SQLite のまま)
 ```
 
 フロントエンド(`frontend/`、Node 24):
@@ -41,11 +43,11 @@ npm test          # vitest
 npm run gen:api   # バックエンドの OpenAPI から src/api/schema.d.ts を再生成(API を変えたら必ず実行)
 ```
 
-Docker(ADR-0016、ADR-0021):
+Docker(ADR-0016、ADR-0021、ADR-0027):
 
 ```bash
-docker compose up -d --build                              # clone してビルドする人向け(http://127.0.0.1:8000)
-docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:8792:8000 gakei:test   # 確認用(課金なし。.env を読まず、ボリュームも作らない)
+POSTGRES_PASSWORD=x docker compose up -d --build          # clone してビルドする人向け(http://127.0.0.1:8000)。PostgreSQL を同梱、POSTGRES_PASSWORD が必須(docs/postgresql.md)
+docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:8792:8000 gakei:test   # 確認用(課金なし。.env を読まず、ボリュームも作らない。SQLite のまま)
 ```
 
 公開イメージは `ghcr.io/zolgear/gakei`。リリースは `docs/release.md`(バージョンの正は `backend/pyproject.toml` の `version`。`GET /api/about` と設定画面の「GAKEI について」で確認できる)。
@@ -78,7 +80,7 @@ docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:
 - **データモデル(ADR-0003):** 画像の `asset` と 1 回の API 実行の `run` の二部グラフ(`asset → run_input → run → asset`)。Edit は複数入力なので DAG。`run`、`run_input`、`asset` の来歴列は追記のみで、更新してよいのは `run.status` などの状態遷移だけ。再実行は必ず新しい Run。削除は `deleted_at` の論理削除。`run.params` には API に送った値をそのまま保存する。系列の表示は `position = 0` の主たる親だけを辿る。 グループ(`asset_group`、ADR-0022)は利用者の分類で証跡ではないので、名前もメンバーも自由に変えられる。
 - **ジョブ(ADR-0005):** キューは `run` テーブルそのもの。`queued → running → succeeded | failed | canceled`。失敗も証跡として残す。進捗は SSE。途中経過画像は Asset にしない。
 - **プロバイダー(ADR-0005、0013):** `ImageProvider`(`capabilities()` と `execute()`)だけを共通にし、パラメーターは共通化せず UI は `capabilities()` からフォームを組み立てる。
-- **画像(ADR-0004):** base64 をブラウザにも DB にも渡さない。原本は sha256 で保存して不変、派生(thumb 512px / preview 2048px の WebP)を作り、配信は API 経由(`GET /api/assets/{id}/content?variant=`)。ビューアは `<img>` + パン/ズーム。
+- **画像(ADR-0004):** base64 をブラウザにも DB にも渡さない。原本は sha256 で保存して不変、派生(thumb 512px / preview 2048px の WebP)を作り、配信は API 経由(`GET /api/assets/{id}/content?variant=`)。ビューアは `<img>` + パン/ズーム。ローカルFSの原本のキーは ADR-0026 で `assets/{プロバイダー}/{モデル}/{YYYY-MM}/{日時}_{短ID}.{拡張子}`(アップロード等は `assets/uploads/` など)に改めた。同じ内容は `ingest` が sha256 で DB を引いて既存のファイルを共有し、古いキー(`assets/{2文字}/{sha256}`)の Asset もそのまま読む。
 - **認証(ADR-0019):** 既定は認証なし。OIDC は BFF 方式(サーバー側で Authorization Code + PKCE、サーバー側セッション + HttpOnly Cookie)。ロールは `user` / `admin` で、管理者は `AUTH_ADMIN_EMAILS`。
 
 ## 作業ルール

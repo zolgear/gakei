@@ -10,6 +10,11 @@
 - ダウンロードは同じディレクトリの一時ファイル(`.<name>.part`)に書き、sha256 が一致して
   から `os.replace` で置き換える。一致しなければ一時ファイルを消して失敗にする。
 - 両方のファイルがそろっていれば「ダウンロード済み」。
+- `memory_bytes` は、読み込みと推論1回でプロセスが使うメモリの目安(最大 RSS)。2026-09-29 に
+  Raspberry Pi 5(aarch64、onnxruntime 1.30、`wd_tagger.session_options` の設定)で、新しい
+  プロセスで読み込み、512px の画像を推論して `ru_maxrss` を測った値(vit 約 0.53〜0.59GiB、swinv2
+  約 0.70GiB、eva02-large 約 1.42GiB)を 10 進の GB に直して切り上げた。設定画面の目安の
+  表示と、読み込み前の空きメモリの確認(`wd_tagger.check_memory`)に使う。
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ TAGS_FILE = "selected_tags.csv"
 
 _TAGS_SHA256 = "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217"
 _TAGS_SIZE = 308468
+_MB = 1000 * 1000
 
 
 @dataclass(frozen=True)
@@ -49,6 +55,8 @@ class WdModel:
     name: str
     revision: str
     files: tuple[RemoteFile, ...]
+    # 読み込みと推論に要るメモリの目安(モジュールの docstring を参照)。
+    memory_bytes: int
 
     @property
     def size_bytes(self) -> int:
@@ -67,6 +75,7 @@ WD_MODELS: dict[str, WdModel] = {
             ),
             RemoteFile(TAGS_FILE, _TAGS_SIZE, _TAGS_SHA256),
         ),
+        memory_bytes=700 * _MB,
     ),
     "wd-swinv2-tagger-v3": WdModel(
         name="wd-swinv2-tagger-v3",
@@ -79,6 +88,7 @@ WD_MODELS: dict[str, WdModel] = {
             ),
             RemoteFile(TAGS_FILE, _TAGS_SIZE, _TAGS_SHA256),
         ),
+        memory_bytes=800 * _MB,
     ),
     "wd-eva02-large-tagger-v3": WdModel(
         name="wd-eva02-large-tagger-v3",
@@ -91,6 +101,7 @@ WD_MODELS: dict[str, WdModel] = {
             ),
             RemoteFile(TAGS_FILE, _TAGS_SIZE, _TAGS_SHA256),
         ),
+        memory_bytes=1600 * _MB,
     ),
 }
 

@@ -508,6 +508,18 @@ class AssetLineageResponse(BaseModel):
     truncated: bool = False
 
 
+class RunLineageResponse(BaseModel):
+    """Run を起点にした系列グラフ(入力 Asset の祖先 → Run → 出力 Asset)。
+
+    `depth` は起点の Run=0、入力は -1、出力は +1(ADR-0023 9章)。REST には出していない。
+    """
+
+    root_run_id: uuid.UUID
+    nodes: list[LineageNode] = Field(default_factory=list)
+    edges: list[LineageEdge] = Field(default_factory=list)
+    truncated: bool = False
+
+
 # -- Prompt sets (ADR-0009) ----------------------------------------------
 # 証跡ではないので更新・論理削除ができる。Run との外部キーは張らない。
 
@@ -854,6 +866,8 @@ class OnnxModelStatus(BaseModel):
     name: Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
     # 取得するファイル(model.onnx と selected_tags.csv)の合計の大きさ。
     size_bytes: int
+    # 読み込みと推論1回に要るメモリの目安(バイト。`WdModel.memory_bytes`)。
+    memory_bytes: int
     downloaded: bool
     download_status: Literal["idle", "downloading", "failed"]
     # 0〜1。ダウンロード中だけ値が入る。

@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.auth.identity import CurrentUser, Role
+from app.auth.identity import LOCAL_ADMIN, CurrentUser, Role
 from app.auth.oidc import OidcIdentity
 from app.domain.models import AppUser, AuthSession
 
@@ -170,3 +170,27 @@ def purge_expired(db: Session) -> None:
     """期限切れセッションを消す。定期ジョブは持たず、ログインのたびに呼ぶ。"""
     db.execute(delete(AuthSession).where(AuthSession.expires_at <= _utcnow()))
     db.flush()
+
+
+def viewer_for_issuer(
+    db: Session, user_id: uuid.UUID | None, *, auth_mode: str, admin_emails: set[str]
+) -> CurrentUser | None:
+    """1回限りの URL(アップロード・ダウンロード。ADR-0023 7章 2・8章 3)を発行した利用者の
+    `CurrentUser`(ADR-0025 の可視性の判定に使う)。
+
+    個人モード(発行者が null)は `LOCAL_ADMIN`。認証モードは `app_user` から作り、ロールは
+    ログイン時と同じく現在の `admin_emails` で決める。発行者が見つからなければ None。
+    """
+    if user_id is None:
+        return LOCAL_ADMIN if auth_mode == "none" else None
+    app_user = db.get(AppUser, user_id)
+    if app_user is None:
+        return None
+    email = (app_user.email or "").strip().lower()
+    return CurrentUser(
+        id=app_user.id,
+        name=app_user.name,
+        email=app_user.email,
+        role="admin" if email in admin_emails else "user",
+        avatar_sha256=app_user.avatar_sha256,
+    )

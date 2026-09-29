@@ -61,11 +61,13 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 | `get_capabilities` | 使えるプロバイダー、モデル、パラメーター、サイズ |
 | `estimate_cost` | 生成する前に料金の目安(USD)を出す。Run は作らない |
 | `generate_image` | Generate / Edit を実行する(**課金を伴う**)。入力画像とマスクは Asset ID で渡す。Run を登録したらすぐ `run_id` を返す |
-| `get_run` | Run の状態、出力、料金の目安、1 時間の上限の残り。完了まで待つこともできる(1 回最大 25 秒) |
+| `get_run` | Run の状態、出力、料金の目安、1 時間の上限の残り、系列グラフ(`lineage_mermaid`)。完了まで待つこともできる(1 回最大 25 秒) |
 | `list_runs` | 自分の最近の Run の一覧(実行元、作成時刻、状態で絞り込み) |
 | `cancel_run` | 待機中の Run を取り消す |
 | `search_assets` | ストックを検索する(キーワード、種類、グループ) |
-| `get_asset` | Asset の情報、主たる親、生成した Run |
+| `get_asset` | Asset の情報、主たる親、生成した Run、系列グラフ(`lineage_mermaid`) |
+| `get_image` | 画像を見る。長辺 1568px(既定)か 512px の JPEG / PNG を応答の本文に載せて返す |
+| `create_download_url` | 原本を取り出すための、10 分間・1 回限りのダウンロード URL を発行する |
 | `create_upload_url` | 手元の画像ファイルを送るための、10 分間・1 回限りのアップロード URL を発行する |
 | `upload_image` | 画像(base64)を取り込む。小さい画像向け。大きい画像は `create_upload_url` を使う |
 | `list_prompt_sets` | プロンプトセットの一覧 |
@@ -75,7 +77,7 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 
 **閲覧範囲:** 認証モードでは、どのツールもトークンの持ち主が作ったものだけを扱う(画面と同じ。ADR-0025)。他人の Run・画像・グループ・プロンプトセットは検索にも一覧にも出ず、id を指定しても「見つからない」エラーになる。入力画像や出力先のグループにも自分のものだけを指定できる。画像の本体(`GET /api/assets/{id}/content`)をトークンで取るときも同じ。管理者のトークンでも他人のものは見えない(個人モードの頃のデータだけは管理者に見える)。
 
-- 出力は Asset ID、原本の URL、画面で開く URL で返る。本文に載る画像はサムネイル(512px)だけで、4K の原本は URL から取得する(「4. 画像の受け渡し」)。
+- 出力は Asset ID、原本の URL、画面で開く URL で返る。本文に載る画像はサムネイル(512px の JPEG / PNG)だけ。エージェントが画像を細かく見るには `get_image`、加工のために原本が要るときは `create_download_url` を使う(「4. 画像の受け渡し」)。結果の URL は利用者がブラウザで開くためのもの。
 - `get_asset` は、原本から数えた透過の情報を返す。`has_alpha`(アルファチャンネルがあるか)と `transparent_ratio`(alpha < 255 のピクセルの割合。0〜1)。サムネイルでは透過かどうか分かりにくいので、背景を透過にしたかの確認に使う。
 - MCP 経由で作った Run は、Run の詳細に「実行元: MCP」と出る。
 
@@ -100,7 +102,51 @@ get_run(run_id="…", wait_seconds=25)
 - Run の結果(`generate_image`・`get_run`・`list_runs`)の `cost` には、分かる場合だけ料金の目安が入る。完了した Run は実際の使用量(usage)から、実行前・実行中の Run はパラメーターからの見積もり(`basis` で区別)。どちらも請求額ではない。
 - 同じく `quota` に 1 時間の上限(`hourly_run_limit`)、直近 1 時間の件数(`runs_last_hour`)、残り(`remaining`)が入る。
 
+### 系列グラフ(`lineage_mermaid`)
+
+`generate_image`・`get_run`・`get_asset` の結果には、画像がどう作られたかを表す Mermaid の `flowchart` の文字列 `lineage_mermaid` が付く(ADR-0023 9章)。エージェントが Asset と Run の関係(どの画像を元に、どの Run で作ったか)を読み取るためのもの。Mermaid を表示できる画面に貼れば、そのまま図になる。
+
+- `get_run`(`generate_image` を含む): 入力画像とその祖先 → この Run → 出力。出力から数えて祖先 3 世代まで。入力の無い generate は Run → 出力だけ。実行前・実行中でも入力と Run は描く。
+- `get_asset`: その画像を起点に、祖先 3 世代と子孫 2 世代。
+- 角丸の箱が Asset(画像)、六角形が Run(API の 1 回の実行)。矢印は「入力 Asset → Run → 出力 Asset」の向きで、入力の辺には役割(`primary` = 主たる親、`reference` = 他の入力画像、`mask`)を書く。起点は太枠。
+- ラベルの ID は先頭 8 文字だけ。完全な ID は先頭のコメント行(`%% a1 = asset <ID>`)にあり、そのまま `input_asset_ids` などに渡せる。
+- 削除済みは「(deleted)」、他の GAKEI や他の環境で作られた画像に埋め込まれていた系列(自己申告で未検証)は「(embedded, unverified)」と付く。
+- 世代の上限より先がある場合は「… older ancestors」「… more descendants」の注記ノードが付く。ノード数の上限(40)に掛かった場合は `%% truncated:` のコメントと注記ノードが付く。
+- 画面の系列グラフと同じ探索で作るので、見える範囲も同じ(認証モードでは自分のものだけ)。
+- プロンプトなどの文字列は Mermaid のエンティティ(`#quot;` など)に置き換えてあり、構文を壊さない。
+- 不要なら `include_lineage=false` で付けない。`list_runs` には付かない。
+
+```mermaid
+flowchart LR
+%% GAKEI lineage: (rounded box) = asset (image), {{hexagon}} = run (one API call); arrows go input asset -> run -> output asset. Full IDs are listed below.
+%% r1 = run 256e44f9-5b16-46fd-926e-810c1f5782be
+%% a1 = asset c7576914-11b3-4af0-87d0-61da1809cf9c
+%% r2 = run 4c3b36a6-cbb0-437d-978d-11859d68ba87 (focus)
+%% a2 = asset b56eeacc-342a-4a23-8f83-fd90701d4edb
+    r1{{"run 256e44f9<br/>generate gpt-image-2.5-flare<br/>“a lighthouse at dusk”"}}
+    a1("asset c7576914<br/>generated 1024x1024")
+    r2{{"run 4c3b36a6<br/>edit gpt-image-2.5-flare<br/>“make it #quot;stormy#quot; #91;night#93; #124; with #lt;waves#gt;”"}}
+    a2("asset b56eeacc<br/>generated 1024x1024")
+    r1 -->|output| a1
+    a1 -->|primary| r2
+    r2 -->|output| a2
+    classDef focus stroke-width:3px,stroke:#d9480f
+    class r2 focus
+```
+
+(generate → その出力を `input_asset_ids` に渡した edit の後の `get_run`。FAKE プロバイダーでの出力例)
+
 ## 4. 画像の受け渡し
+
+### 生成結果を続けて編集する(asset_id を渡す)
+
+GAKEI にある画像(前の生成結果、ストックの画像)を続けて編集するときは、その `asset_id` を `generate_image` の `input_asset_ids` にそのまま渡す。`get_run` の `outputs[].asset_id`、`search_assets` や `get_asset` の結果の ID が使える。原本をダウンロードしてアップロードし直す必要はない。
+
+- 転送が要らず、原本の画質のまま編集できる。
+- 系列(どの画像を元に作ったか)が GAKEI に残る。アップロードし直すと、別の画像として取り込まれて系列がつながらない。
+- アップロードは、GAKEI にまだ無い画像(手元のファイル、GAKEI の外で作った・加工した画像)だけに使う。
+
+MCP の説明とツールの説明にもこの使い方を書いてあるので、エージェントは通常こちらを選ぶ。
 
 ### 手元の画像を送る(アップロード URL)
 
@@ -120,7 +166,38 @@ curl --fail-with-body -F file=@image.png 'http://127.0.0.1:8000/api/uploads/<tok
 - 発行に使ったアクセストークンを失効させると、そのトークンで発行した未使用の URL も使えなくなる。MCP を無効にしている間は 404。
 - サーバーが指定の URL を取りに行く機能(`upload_from_url`)は無い。LAN 内の任意の URL に届く穴になるため。
 
-### 原寸の画像を取る
+### エージェントが画像を見る(`get_image`)
+
+`get_image(asset_id, size)` は、画像を MCP の応答の本文に載せて返す。MCP がつながっていれば、エージェントがどこで動いていても(クラウドでも)見られる。
+
+- `size` は `"large"`(既定。長辺 1568px。Claude が画像を細かく見られる上限)か `"small"`(長辺 512px)。元の画像がそれより小さければ拡大しない。
+- 透過のある画像(alpha < 255 の画素がある)は PNG、それ以外は JPEG で返す。WebP は扱えないクライアントがあるので使わない(各ツールに付くサムネイルも同じ)。
+- 応答が約 1MB を超えないよう(Claude Desktop は大きすぎるツールの結果を受け取らない)、JPEG は品質を、PNG は大きさを下げて収める。実際に返した幅と高さは結果の `width` / `height` に入る。
+- 見るためのもので、原本ではない。4K の原本は本文に載せない。
+
+### 原本を取り出す(`create_download_url`)
+
+加工のために原本が要るときは、`create_download_url(asset_id)` で URL を発行し、手元で動く道具(curl など)で取る。
+
+```bash
+# create_download_url の結果の download_url から取る(10 分間・1 回限り有効)
+curl --fail -o image.png 'http://127.0.0.1:8000/api/downloads/<token>'
+```
+
+- URL 自体が認可になっているので、`Authorization` ヘッダーは要らない。エージェント(モデル)がアクセストークンを知らなくても取れる。
+- 中身は画面の「原本をダウンロード」と同じ。PNG には系列情報が埋め込まれる([ADR-0014](adr/0014-embedded-lineage-metadata.md))。
+- 使用済み・期限切れ・存在しない URL は、どれも 404。取得の時点でも、発行した人にその画像が見えるか(ADR-0025)と、MCP が有効かを確かめ、だめなら 404 になる。発行に使ったアクセストークンを失効させると、そのトークンで発行した URL も使えなくなる。
+- 長く使える署名付き URL は、漏れると誰でも開けるので発行しない。この URL は 10 分・1 回限りに絞って、アップロード URL と同じ程度の危険にとどめている。
+
+### クラウドで動く道具からは届かない
+
+結果の `url`・`viewer_url`、アップロード URL、ダウンロード URL は、どれも GAKEI のサーバーを指す。GAKEI が LAN の中(や `127.0.0.1`)にある限り、エージェントがクラウド側で動く道具(Web の取得、クラウドのコード実行など)で取りに行っても届かない。
+
+- 画像を**見る**だけなら `get_image` を使う(MCP の応答に載るので、どこでも届く)。
+- 原本を**加工する**なら `create_download_url` で URL を得て、利用者の PC で動く道具(Claude Code の Bash、手元の curl など)で取る。
+- クラウドで動くコード実行に原本を渡す方法はない。MCP の応答には大きさの上限があり、原本は本文に載せられないため。
+
+### 原寸の画像を取る(アクセストークン)
 
 結果の `url`(`/api/assets/{id}/content?variant=original`)で原本を取れる。個人モードでは認証は要らない。認証モードでは、`/mcp` と同じアクセストークンを付ければ取れる。
 

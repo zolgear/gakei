@@ -25,7 +25,7 @@ import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from '../lineage/EmbeddedMetaSection'
 import { OriginRecipeSection } from '../lineage/OriginRecipeSection'
 import { AssetGroupsSection } from './AssetGroupsSection'
-import { AssetAnnotationSection } from './AssetAnnotationSection'
+import { AssetTagsSection, AssetTitleSection } from './AssetAnnotationSection'
 import { annotationPollInterval, supportsAnnotation } from '../annotations/annotationStatus'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
@@ -264,7 +264,7 @@ export function Viewer({ assetId }: ViewerProps) {
                 </div>
               </div>
             )}
-            {supportsAnnotation(asset) && <AssetAnnotationSection asset={asset} />}
+            {supportsAnnotation(asset) && <AssetTitleSection asset={asset} />}
             <dl className={styles.metaList}>
               <dt>{t.viewer.dimensions}</dt>
               <dd>
@@ -312,6 +312,9 @@ export function Viewer({ assetId }: ViewerProps) {
                 )}
               </>
             )}
+
+            {/* タグはプロンプトの下(Run が無い画像では大きさ・形式の下)。多いと畳む。 */}
+            {supportsAnnotation(asset) && <AssetTagsSection asset={asset} />}
 
             {asset.origin && <OriginRecipeSection origin={asset.origin} />}
             {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}

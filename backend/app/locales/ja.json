@@ -5,7 +5,8 @@
     "legacyProviderAborted": "環境変数 PROVIDER={value} が設定されていますが、この設定は廃止されました。ダミー画像で確認したい場合は FAKE_PROVIDER=1 を使ってください。実 API に接続する場合は PROVIDER を削除してください。",
     "authConfigMissing": "AUTH_MODE=oidc ですが、必須の環境変数が設定されていません: {missing}",
     "authUrlInvalid": "{name} の形式が不正です(http または https で、ホストを含む URL である必要があります): {value}",
-    "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。"
+    "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。",
+    "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}"
   },
   "auth": {
     "required": "ログインが必要です。",
@@ -302,6 +303,7 @@
     "apiKeyMissing": "推定に使う API キーがありません。OpenAI の API キーか、推定専用のキーを設定してください",
     "emptyTitle": "LLM がタイトルを返しませんでした",
     "onnxModelMissing": "ONNX タガーのモデルが見つかりません。管理者設定からダウンロードしてください",
+    "onnxInsufficientMemory": "空きメモリが足りないため、ONNX タガーのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)。管理者設定で小さいモデルを選ぶか、メモリを増やしてください",
     "download": {
       "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
       "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
@@ -313,5 +315,38 @@
     "tooLarge": "アップロード画像は{mb}MB未満である必要があります",
     "empty": "本文が空です。画像ファイルのバイト列をそのまま送ってください。",
     "noFile": "multipart の本文に画像ファイルがありません。"
+  },
+  "downloads": {
+    "notFound": "このダウンロード URL は存在しないか、使用済みか、期限が切れています。MCP の create_download_url で新しい URL を発行してください。"
+  },
+  "migrateToPostgres": {
+    "description": "SQLite(DATA_DIR/gakei.db)のメタデータを PostgreSQL に移します(ADR-0027)。GAKEI を止めてから実行してください。画像などのファイル(DATA_DIR)は移しません。",
+    "toHelp": "移行先の PostgreSQL の URL(例 postgresql://user:pass@host:5432/gakei)。空の DB を指定してください",
+    "fromHelp": "移行元の SQLite ファイル(既定は DATA_DIR/gakei.db)",
+    "dryRunHelp": "移行先を変更せず、テーブルごとの行数を表示するだけにする",
+    "targetNotPostgres": "移行先には PostgreSQL の URL(postgresql://...)を指定してください。",
+    "sourceMissing": "移行元の SQLite ファイルが見つかりません: {source}",
+    "sourceNotHead": "移行元のスキーマが最新ではありません({source}、現在 {current}、最新 {head})。先に今の版の GAKEI を1回起動して、最新にしてから実行してください。",
+    "targetNotEmpty": "移行先が空ではありません({target})。GAKEI のテーブルがすでにあります: {tables}。空の DB を指定してください。",
+    "countMismatch": "行数が一致しないため、移行を取り消しました(移行先は変更していません): {tables}",
+    "failed": "移行に失敗したため、取り消しました(移行先は変更していません): {error}",
+    "source": "移行元: {source}",
+    "target": "移行先: {target}",
+    "tableRows": {
+      "one": "  {table}: {count} 行",
+      "other": "  {table}: {count} 行"
+    },
+    "tableRowsCopied": {
+      "one": "  {table}: {count} 行(コピー後 {copied} 行)",
+      "other": "  {table}: {count} 行(コピー後 {copied} 行)"
+    },
+    "dryRunDone": {
+      "one": "--dry-run: 合計 {count} 行。移行先は変更していません。",
+      "other": "--dry-run: 合計 {count} 行。移行先は変更していません。"
+    },
+    "done": {
+      "one": "移行が完了しました({tables} テーブル、合計 {count} 行)。DATABASE_URL を設定して GAKEI を起動してください(DATA_DIR は今までと同じものを使います)。",
+      "other": "移行が完了しました({tables} テーブル、合計 {count} 行)。DATABASE_URL を設定して GAKEI を起動してください(DATA_DIR は今までと同じものを使います)。"
+    }
   }
 }

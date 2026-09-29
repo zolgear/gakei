@@ -107,8 +107,8 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
-    run_migrations(settings.db_path)
-    engine = make_engine(settings.db_path)
+    run_migrations(settings.sqlalchemy_url)
+    engine = make_engine(settings.sqlalchemy_url)
     try:
         session_factory = make_session_factory(engine)
         store = LocalFsStore(settings.data_dir)

@@ -1,8 +1,9 @@
 """MCP のツール(ADR-0023 3章)と、SDK のサーバー・セッションマネージャーの組み立て。
 
 ツールは REST を HTTP で呼ばず、REST と同じドメイン関数を直接呼ぶ。削除と設定の変更は
-提供しない。画像は Asset ID と URL で返し、本文に載せるのはサムネイル(512px WebP)だけ
-(ADR-0004)。
+提供しない。画像は Asset ID と URL で返し、本文に載せるのはサムネイル(512px)と、`get_image`
+で求められた長辺 1568px までの画像だけ(ADR-0004、ADR-0023 8章)。どちらも JPEG / PNG で、
+4K の原本は載せない。原本は `create_download_url` の1回限りの URL で取り出す。
 
 ADR-0025: どのツールも、トークンの持ち主(`mc.user`)に見えるものだけを扱う
 (`app/domain/visibility.py`)。他人のものは「見つからない」と同じエラーにする。
@@ -33,8 +34,9 @@ from sqlalchemy.orm import Session
 
 from app.api.capabilities import get_capabilities_endpoint
 from app.api.prompt_sets import list_prompt_sets as list_prompt_sets_rest
+from app.domain import agent_images, mcp_settings
 from app.domain import annotations as annotations_domain
-from app.domain import mcp_settings
+from app.domain import download_tickets as download_tickets_domain
 from app.domain import run_create as run_create_domain
 from app.domain import upload_tickets as upload_tickets_domain
 from app.domain.alpha_stats import alpha_stats
@@ -46,6 +48,13 @@ from app.domain.asset_groups import (
 from app.domain.asset_groups import create_group as create_group_domain
 from app.domain.asset_groups import list_groups as list_groups_domain
 from app.domain.assets import MAX_UPLOAD_BYTES, IngestError, ingest_upload
+from app.domain.lineage import (
+    LineageNotFoundError,
+    RunLineageNotFoundError,
+    asset_lineage_graph,
+    run_lineage_graph,
+)
+from app.domain.lineage_mermaid import LineageGraph, MermaidOptions, render_lineage_mermaid
 from app.domain.models import (
     Asset,
     AssetGroupMember,
@@ -89,6 +98,14 @@ MAX_REQUEST_BODY_BYTES = math.ceil(MAX_UPLOAD_BYTES / 3) * 4 + 1024 * 1024
 
 _TERMINAL = {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED}
 
+# `lineage_mermaid`(ADR-0023 9章)の範囲。1世代 = Asset→Run→Asset の2ホップ。
+# `get_asset` は起点の祖先 3 世代・子孫 2 世代。`get_run` は出力から数えて祖先 3 世代
+# (入力 Asset が1世代目なので、入力からはさらに 2 世代 = 4 ホップ)。
+LINEAGE_UP_GENERATIONS = 3
+LINEAGE_DOWN_GENERATIONS = 2
+LINEAGE_MAX_NODES = 40
+_LINEAGE_OPTIONS = MermaidOptions(direction="LR", prompt_chars=40)
+
 _INSTRUCTIONS = (
     "GAKEI is a self-hosted image generation workspace. Use get_capabilities to see models "
     'and parameters (put the image size in params.size, e.g. {"size": "1024x1024"}), '
@@ -98,10 +115,24 @@ _INSTRUCTIONS = (
     "succeeded, failed or canceled. If you lose a run_id, list_runs shows your recent runs. "
     "To use a local image as an edit input, call create_upload_url and send the file with "
     "curl (upload_image with base64 is only for small images). search_assets / get_asset find "
-    "existing images, and groups organize them. Images are referenced by asset ID; results "
-    "include the original image URL (fetch it with the same Authorization header as /mcp when "
-    "GAKEI requires login) and a small thumbnail. Deleting and changing settings are only "
-    "possible in the GAKEI web UI."
+    "existing images, and groups organize them. Images are referenced by asset ID. "
+    "To keep editing a result (chained edits), pass the output asset_id from get_run (or any "
+    "asset_id from search_assets / get_asset) directly in generate_image's input_asset_ids. "
+    "Prefer this over downloading and re-uploading the image: it needs no transfer, keeps the "
+    "original quality and records the lineage (parent image) in GAKEI. Upload only images "
+    "that are not in GAKEI yet (e.g. local files or images you created outside GAKEI). "
+    "To LOOK at an image, call get_image (it returns the image in the tool result, up to "
+    "1568 px on the long edge; results also carry small 512 px thumbnails). To get the "
+    "ORIGINAL file for processing, call create_download_url and fetch the one-time URL with a "
+    "tool that runs on the user's machine (e.g. curl). The url and viewer_url fields are for "
+    "the user to open in a browser: GAKEI usually runs inside the user's LAN, so tools that "
+    "run in the cloud (web fetch, cloud code execution) cannot reach any GAKEI URL, and there "
+    "is no way to hand the original to cloud code execution. Deleting and changing settings "
+    "are only possible in the GAKEI web UI. get_run / generate_image / get_asset results "
+    "include lineage_mermaid, a Mermaid flowchart of how images were made: rounded boxes "
+    "are assets (images), hexagons are runs (one API call), arrows go input asset -> run -> "
+    "output asset with the input role (primary parent, reference, mask), and the %% comment "
+    "lines map the short node IDs (a1, r1) to full asset / run IDs you can pass to other tools."
 )
 
 _SIZE_HINT = (
@@ -125,13 +156,19 @@ def _asset_urls(mc: McpRequestContext, asset_id: uuid.UUID) -> dict[str, str]:
     }
 
 
+def _image_content(image: agent_images.AgentImage) -> ImageContent:
+    return ImageContent(type="image", data=image.base64, mime_type=image.mime_type)
+
+
 def _thumbnail(store: AssetStore, asset: Asset) -> ImageContent | None:
-    """サムネイル(512px WebP の派生画像)。原本・プレビューは載せない(ADR-0004)。"""
-    path = store.content_path(asset.blob_key, asset.sha256, "thumb")
-    if not path.is_file():
+    """長辺 512px のサムネイル(ADR-0023 8章 2)。WebP を扱えないクライアントがあるので、
+    `get_image` と同じ規則で JPEG / PNG にする(透過の判定はサムネイルの画素で行い、4K の
+    原本はデコードしない)。原本・プレビューは載せない(ADR-0004)。"""
+    try:
+        image = agent_images.render_asset(store, asset, "small")
+    except (OSError, ValueError):
         return None
-    data = base64.b64encode(path.read_bytes()).decode("ascii")
-    return ImageContent(type="image", data=data, mime_type="image/webp")
+    return None if image is None else _image_content(image)
 
 
 def _result(payload: dict[str, Any], images: list[ImageContent] | None = None) -> CallToolResult:
@@ -155,8 +192,45 @@ def _asset_brief(mc: McpRequestContext, asset: Asset) -> dict[str, Any]:
     }
 
 
+def _mermaid(build: Callable[[], LineageGraph]) -> str | None:
+    """系列グラフを Mermaid にする。起点が見えない・無いときは None。"""
+    try:
+        return render_lineage_mermaid(build(), _LINEAGE_OPTIONS)
+    except (LineageNotFoundError, RunLineageNotFoundError):
+        return None
+
+
+def _run_lineage_mermaid(mc: McpRequestContext, db: Session, run_id: uuid.UUID) -> str | None:
+    return _mermaid(
+        lambda: run_lineage_graph(
+            db,
+            run_id,
+            viewer=mc.user,
+            up=LINEAGE_UP_GENERATIONS * 2 - 2,
+            max_nodes=LINEAGE_MAX_NODES,
+        )
+    )
+
+
+def _asset_lineage_mermaid(mc: McpRequestContext, db: Session, asset_id: uuid.UUID) -> str | None:
+    return _mermaid(
+        lambda: asset_lineage_graph(
+            db,
+            asset_id,
+            viewer=mc.user,
+            up=LINEAGE_UP_GENERATIONS * 2,
+            down=LINEAGE_DOWN_GENERATIONS * 2,
+            max_nodes=LINEAGE_MAX_NODES,
+        )
+    )
+
+
 def _run_payload(
-    mc: McpRequestContext, db: Session, run: Run, include_thumbnails: bool
+    mc: McpRequestContext,
+    db: Session,
+    run: Run,
+    include_thumbnails: bool,
+    include_lineage: bool = False,
 ) -> tuple[dict[str, Any], list[ImageContent]]:
     outputs = (
         db.execute(
@@ -200,6 +274,8 @@ def _run_payload(
         "outputs": [_asset_brief(mc, a) for a in outputs],
     }
     payload["cost"] = _run_cost(mc, db, run, inputs)
+    if include_lineage:
+        payload["lineage_mermaid"] = _run_lineage_mermaid(mc, db, run.id)
     if run.status not in _TERMINAL:
         payload["note"] = (
             "The run has not finished yet. Call get_run with this run_id and wait_seconds "
@@ -217,13 +293,13 @@ def _run_payload(
 
 
 def _load_run_result(
-    mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool
+    mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool, include_lineage: bool
 ) -> tuple[dict[str, Any], list[ImageContent]] | None:
     with _session(mc) as db:
         run = get_visible_run(db, mc.user, run_id)
         if run is None or run.deleted_at is not None:
             return None
-        return _run_payload(mc, db, run, include_thumbnails)
+        return _run_payload(mc, db, run, include_thumbnails, include_lineage)
 
 
 def _run_status(mc: McpRequestContext, run_id: uuid.UUID) -> RunStatus | None:
@@ -244,9 +320,16 @@ async def _wait_for_terminal(mc: McpRequestContext, run_id: uuid.UUID, seconds: 
 
 
 async def _run_result(
-    mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool, *, with_quota: bool
+    mc: McpRequestContext,
+    run_id: uuid.UUID,
+    include_thumbnails: bool,
+    *,
+    with_quota: bool,
+    include_lineage: bool = False,
 ) -> CallToolResult:
-    loaded = await _in_thread(lambda: _load_run_result(mc, run_id, include_thumbnails))
+    loaded = await _in_thread(
+        lambda: _load_run_result(mc, run_id, include_thumbnails, include_lineage)
+    )
     if loaded is None:
         raise ToolError(f"Run {run_id} not found.")
     payload, images = loaded
@@ -447,7 +530,11 @@ async def generate_image(
     input_asset_ids: Annotated[
         list[uuid.UUID] | None,
         Field(
-            description="Input images for 'edit' (up to 16). The first one is the primary parent.",
+            description=(
+                "Input images for 'edit' (up to 16). The first one is the primary parent. "
+                "To edit a previous result, pass its output asset_id here directly; do not "
+                "download and re-upload it (that loses the lineage and wastes a transfer)."
+            ),
             max_length=16,
         ),
     ] = None,
@@ -469,7 +556,16 @@ async def generate_image(
         ),
     ] = False,
     include_thumbnails: Annotated[
-        bool, Field(description="Attach 512px WebP thumbnails of the outputs.")
+        bool, Field(description="Attach 512px JPEG/PNG thumbnails of the outputs.")
+    ] = True,
+    include_lineage: Annotated[
+        bool,
+        Field(
+            description=(
+                "Include lineage_mermaid: a Mermaid flowchart of the input images' ancestry "
+                "-> this run -> its outputs."
+            )
+        ),
     ] = True,
 ) -> CallToolResult:
     """Generate or edit images with GAKEI. Each call creates a new run that is BILLED to the
@@ -480,8 +576,9 @@ async def generate_image(
     params.size, e.g. {"size": "1024x1024", "quality": "low"}. Use estimate_cost first to see
     a reference price. The number of runs created through MCP per hour is limited by the
     administrator; the result includes the remaining quota, and when the limit is reached no
-    run is created and an error is returned. Outputs are returned as asset IDs with the
-    original image URL (and optional thumbnails).
+    run is created and an error is returned. Outputs are returned as asset IDs (and optional
+    512px thumbnails). To look at an output in detail use get_image; to get the original file
+    use create_download_url. The url / viewer_url fields are for the user's browser.
     """
     mc = get_mcp_context(ctx)
 
@@ -514,7 +611,9 @@ async def generate_image(
     try:
         if wait:
             await _wait_for_terminal(mc, run_id, WAIT_MAX_SECONDS)
-        return await _run_result(mc, run_id, include_thumbnails, with_quota=True)
+        return await _run_result(
+            mc, run_id, include_thumbnails, with_quota=True, include_lineage=include_lineage
+        )
     except Exception:  # noqa: BLE001
         return _result(
             {
@@ -543,15 +642,27 @@ async def get_run(
         ),
     ] = 0,
     include_thumbnails: Annotated[
-        bool, Field(description="Attach 512px WebP thumbnails of the outputs.")
+        bool, Field(description="Attach 512px JPEG/PNG thumbnails of the outputs.")
+    ] = True,
+    include_lineage: Annotated[
+        bool,
+        Field(
+            description=(
+                "Include lineage_mermaid: a Mermaid flowchart of the input images' ancestry "
+                "-> this run -> its outputs."
+            )
+        ),
     ] = True,
 ) -> CallToolResult:
     """Get a run's status, parameters, outputs, reference cost and the remaining hourly quota.
-    Optionally wait (up to 25 s per call) for it to finish."""
+    Optionally wait (up to 25 s per call) for it to finish. lineage_mermaid is a Mermaid
+    flowchart of the inputs' ancestry -> this run -> its outputs."""
     mc = get_mcp_context(ctx)
     if wait_seconds > 0:
         await _wait_for_terminal(mc, run_id, wait_seconds)
-    return await _run_result(mc, run_id, include_thumbnails, with_quota=True)
+    return await _run_result(
+        mc, run_id, include_thumbnails, with_quota=True, include_lineage=include_lineage
+    )
 
 
 async def cancel_run(
@@ -600,7 +711,7 @@ async def search_assets(
     ] = None,
     limit: Annotated[int, Field(ge=1, le=SEARCH_LIMIT_MAX)] = 20,
     include_thumbnails: Annotated[
-        bool, Field(description="Attach 512px WebP thumbnails of the results.")
+        bool, Field(description="Attach 512px JPEG/PNG thumbnails of the results.")
     ] = False,
 ) -> CallToolResult:
     """Search or list images in the GAKEI stock (newest first). Deleted assets are excluded.
@@ -708,11 +819,25 @@ async def search_assets(
 async def get_asset(
     ctx: Context,
     asset_id: Annotated[uuid.UUID, Field(description="Asset ID.")],
-    include_thumbnail: Annotated[bool, Field(description="Attach a 512px WebP thumbnail.")] = True,
+    include_thumbnail: Annotated[
+        bool, Field(description="Attach a 512px JPEG/PNG thumbnail.")
+    ] = True,
+    include_lineage: Annotated[
+        bool,
+        Field(
+            description=(
+                "Include lineage_mermaid: a Mermaid flowchart of this image's ancestors and "
+                "descendants (a few generations each way)."
+            )
+        ),
+    ] = True,
 ) -> CallToolResult:
     """Get an image's metadata: kind, size, title, tags, transparency (has_alpha and
     transparent_ratio, counted on the original image), group, the run that produced it
-    (prompt, model, parameters), and its primary parent image.
+    (prompt, model, parameters), its primary parent image, and lineage_mermaid (a Mermaid
+    flowchart of its ancestors and descendants). The attached thumbnail is
+    512px; call get_image to look at the image in more detail, or create_download_url to get
+    the original file.
 
     `title_source` and each tag's `source` are "user" when a person set them and "auto" when
     they were estimated automatically (which may be wrong)."""
@@ -756,6 +881,8 @@ async def get_asset(
                     if parent is not None and not visible_asset_ids(db, mc.user, [parent]):
                         parent = None
                     payload["primary_parent_asset_id"] = str(parent) if parent else None
+            if include_lineage:
+                payload["lineage_mermaid"] = _asset_lineage_mermaid(mc, db, asset.id)
             images: list[ImageContent] = []
             if include_thumbnail:
                 thumb = _thumbnail(mc.state.store, asset)
@@ -765,6 +892,121 @@ async def get_asset(
 
     payload, images = await _in_thread(_get)
     return _result(payload, images)
+
+
+async def get_image(
+    ctx: Context,
+    asset_id: Annotated[uuid.UUID, Field(description="Asset ID.")],
+    size: Annotated[
+        agent_images.ImageSize,
+        Field(
+            description=(
+                f"'large' = up to {agent_images.LARGE_LONG_EDGE}px on the long edge (default; "
+                f"enough to see details), 'small' = up to {agent_images.SMALL_LONG_EDGE}px. "
+                "Images smaller than that are returned at their own size (never enlarged)."
+            )
+        ),
+    ] = "large",
+) -> CallToolResult:
+    """Look at an image: returns it in the tool result so you can see it, wherever you run.
+
+    Images with transparency (any pixel with alpha < 255) come back as PNG, others as JPEG.
+    To keep the result under about 1 MB, JPEG quality is lowered and, if still too large,
+    the image is scaled down (PNG is only scaled down); the actual width and height are in
+    the result. This is for viewing, not for processing: to get the original file (e.g. to
+    edit it with a local tool), use create_download_url. Do not try to fetch the url /
+    viewer_url fields to see an image; they are for the user's browser."""
+    mc = get_mcp_context(ctx)
+
+    def _load() -> tuple[dict[str, Any], ImageContent]:
+        with _session(mc) as db:
+            asset = get_visible_asset(db, mc.user, asset_id)
+            if asset is None:
+                raise ToolError(f"Asset {asset_id} not found.")
+            db.expunge(asset)
+        store: AssetStore = mc.state.store
+        transparency = _transparency(store, asset)
+        ratio = transparency["transparent_ratio"]
+        # 原本から数えた透過(`get_asset` と同じ)で決める。原本が読めなければ画素から判定する。
+        transparent = None if ratio is None else ratio > 0
+        try:
+            image = agent_images.render_asset(store, asset, size, transparent=transparent)
+        except (OSError, ValueError) as e:
+            raise ToolError(f"The image of asset {asset_id} could not be read.") from e
+        if image is None:
+            raise ToolError(f"The image file of asset {asset_id} is missing.")
+        payload = {
+            "asset_id": str(asset.id),
+            "size": size,
+            "mime_type": image.mime_type,
+            "width": image.width,
+            "height": image.height,
+            "original_width": asset.width,
+            "original_height": asset.height,
+            "original_mime": asset.mime,
+            **transparency,
+            **_asset_urls(mc, asset.id),
+        }
+        return payload, _image_content(image)
+
+    payload, image = await _in_thread(_load)
+    return _result(payload, [image])
+
+
+async def create_download_url(
+    ctx: Context,
+    asset_id: Annotated[uuid.UUID, Field(description="Asset ID of the image to download.")],
+) -> CallToolResult:
+    """Get a one-time URL for downloading the ORIGINAL image file (valid for 10 minutes, one
+    download), e.g. to process it with a local tool.
+
+    Fetch it with a tool that runs on the user's machine, e.g. `curl --fail -o image.png
+    <download_url>`. No Authorization header is needed: the URL itself grants the download.
+    PNG files include GAKEI's lineage metadata. GAKEI usually runs inside the user's LAN, so
+    tools that run in the cloud (web fetch, cloud code execution) cannot reach this URL, and
+    there is no way to hand the original to them. To just look at an image, use get_image.
+    To edit an image again in GAKEI, do not download it: pass its asset_id to generate_image's
+    input_asset_ids."""
+    mc = get_mcp_context(ctx)
+
+    def _issue() -> tuple[str, datetime, dict[str, Any]]:
+        with _session(mc) as db:
+            asset = get_visible_asset(db, mc.user, asset_id)
+            if asset is None:
+                raise ToolError(f"Asset {asset_id} not found.")
+            info = {
+                "asset_id": str(asset.id),
+                "mime": asset.mime,
+                "width": asset.width,
+                "height": asset.height,
+                "bytes": asset.bytes,
+            }
+            row, raw = download_tickets_domain.issue_ticket(
+                db, asset_id=asset.id, user_id=mc.user.id, api_token_id=mc.api_token_id
+            )
+            db.commit()
+            return raw, row.expires_at, info
+
+    raw, expires_at, info = await _in_thread(_issue)
+    url = f"{mc.base_url}/api/downloads/{raw}"
+    ttl = int(download_tickets_domain.TICKET_TTL / timedelta(seconds=1))
+    ext = str(info["mime"]).split("/")[-1]
+    return _result(
+        {
+            **info,
+            "download_url": url,
+            "method": "GET",
+            "expires_at": expires_at.isoformat(),
+            "expires_in_seconds": ttl,
+            "curl_example": f"curl --fail -o '{info['asset_id']}.{ext}' '{url}'",
+            "note": (
+                "The URL works once and expires in 10 minutes. No Authorization header is "
+                "needed. Fetch it from the user's machine; cloud tools cannot reach GAKEI "
+                "inside a LAN. Expired or used URLs return 404; call create_download_url "
+                "again for a new one."
+            ),
+        }
+    )
 
 
 def _transparency(store: AssetStore, asset: Asset) -> dict[str, Any]:
@@ -929,7 +1171,7 @@ async def list_runs(
     ] = None,
     limit: Annotated[int, Field(ge=1, le=LIST_RUNS_LIMIT_MAX)] = 10,
     include_thumbnails: Annotated[
-        bool, Field(description="Attach 512px WebP thumbnails of the outputs.")
+        bool, Field(description="Attach 512px JPEG/PNG thumbnails of the outputs.")
     ] = False,
 ) -> CallToolResult:
     """List your recent runs (newest first) with their status, outputs and reference cost, plus
@@ -975,7 +1217,9 @@ async def create_upload_url(ctx: Context) -> CallToolResult:
     @image.png <upload_url>` (a multipart POST with `curl -F file=@image.png <upload_url>` also
     works). No Authorization header is needed: the URL itself grants the upload. The response
     is JSON with the new asset_id, which you can pass to generate_image as an edit input.
-    Prefer this over upload_image for anything but tiny images."""
+    Prefer this over upload_image for anything but tiny images. Only upload images that are
+    not in GAKEI yet: to edit a GAKEI image (e.g. a previous result), pass its asset_id to
+    generate_image's input_asset_ids instead."""
     mc = get_mcp_context(ctx)
 
     def _issue() -> tuple[str, datetime]:
@@ -1144,6 +1388,14 @@ def build_mcp_server() -> MCPServer:
     )
     server.add_tool(search_assets, title="Search assets", annotations=_READ_ONLY)
     server.add_tool(get_asset, title="Get asset", annotations=_READ_ONLY)
+    server.add_tool(get_image, title="Get image", annotations=_READ_ONLY)
+    server.add_tool(
+        create_download_url,
+        title="Create download URL",
+        annotations=ToolAnnotations(
+            read_only_hint=False, destructive_hint=False, idempotent_hint=False
+        ),
+    )
     server.add_tool(
         upload_image,
         title="Upload image",

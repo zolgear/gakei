@@ -52,7 +52,7 @@ cd gakei
 
 - **更新:** `git pull` してから、もう一度 `./run.sh`(`run.bat`)を実行する。画面のソースが変わっていれば自動でビルドし直す。
 - **起動オプション:** `--port 8001`、`--data-dir <絶対パス>`、`--no-browser`(ブラウザを開かない)、`--host`。
-- **データ:** 生成した画像、SQLite、画面で保存した API キー(`secrets.json`)は `data/` にできる。バックアップや削除はこのディレクトリごと行う。
+- **データ:** 生成した画像、SQLite、画面で保存した API キー(`secrets.json`)は `data/` にできる。バックアップや削除はこのディレクトリごと行う。中の画像ファイルを直接消したり動かしたりしない(画像が表示できなくなる。削除は画面から。[docs/configuration.md](docs/configuration.md))。
 - **AI エージェントから使う:** Claude Code などの AI エージェントに MCP サーバーとして登録すると、生成やストックの検索をエージェントから行える。設定画面で有効にしてから使う。手順は [docs/mcp.md](docs/mcp.md)。
 - **LiteLLM などのプロキシ経由で使う:** 設定画面(または環境変数 `OPENAI_BASE_URL`)で接続先を変えられる。プロキシ側に GAKEI が送るのと同じモデル名を用意する必要がある(モデル名の読み替えは行わない)。画面に出る料金の目安は OpenAI の価格のままで、プロキシ経由の実際の請求とは一致しないことがある。
 
@@ -97,11 +97,13 @@ volumes:
 ```bash
 git clone https://github.com/zolgear/gakei.git
 cd gakei
+echo "POSTGRES_PASSWORD=好きなパスワード" >> .env
 docker compose up -d --build
 ```
 
 起動したら `http://127.0.0.1:8000` を開く。リポジトリ直下に `.env` があれば読み込む(`HOST`/`PORT`/`DATA_DIR` はコンテナ用の値で上書きする)。
 
+- **PostgreSQL を同梱している(ADR-0027)。** `.env` に `POSTGRES_PASSWORD` を指定しないと起動しない。SQLite のまま使いたい場合は、`compose.yaml` の中のコメントに従って PostgreSQL 関連の設定をコメントアウトする。使い方と移行手順は [docs/postgresql.md](docs/postgresql.md)。
 - **更新:** `git pull && docker compose up -d --build`
 
 ### 共通の注意事項
@@ -112,7 +114,7 @@ docker compose up -d --build
   ```
 - **公開範囲:** 既定は `127.0.0.1` のみ。`docker run` の場合は `-p` の指定を変え、リポジトリの `compose.yaml` の場合は `GAKEI_BIND=0.0.0.0`(と `GAKEI_PORT`)で LAN やインターネットに公開できるが、既定では認証がないので、公開する場合は `AUTH_MODE=oidc` で認証を有効にする([docs/auth.md](docs/auth.md))か、認証付きのリバースプロキシを前段に置く。
 - **ComfyUI:** 同じホストで動く ComfyUI には `http://host.docker.internal:8188` で接続する(設定 → ComfyUI)。Docker で `host.docker.internal` を使うには `docker run` に `--add-host=host.docker.internal:host-gateway` を足す(リポジトリの `compose.yaml` は設定済み)。
-- **レプリカは1つだけ。** ジョブの実行が api プロセス内、DB が SQLite なので、同じボリュームを複数のコンテナで共有しない。
+- **レプリカは1つだけ。** ジョブの実行が api プロセス内で行われるため、DB が SQLite・PostgreSQL のどちらでも、同じ DB / ボリュームを複数のコンテナで共有しない。
 
 使っている版は設定画面の「GAKEI について」に出る。リリースの一覧は GitHub の [Releases](https://github.com/zolgear/gakei/releases)(手順は [docs/release.md](docs/release.md))。
 
