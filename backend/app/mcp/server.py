@@ -101,6 +101,11 @@ _INSTRUCTIONS = (
     "To use a local image as an edit input, call create_upload_url and send the file with "
     "curl (upload_image with base64 is only for small images). search_assets / get_asset find "
     "existing images, and groups organize them. Images are referenced by asset ID. "
+    "To keep editing a result (chained edits), pass the output asset_id from get_run (or any "
+    "asset_id from search_assets / get_asset) directly in generate_image's input_asset_ids. "
+    "Prefer this over downloading and re-uploading the image: it needs no transfer, keeps the "
+    "original quality and records the lineage (parent image) in GAKEI. Upload only images "
+    "that are not in GAKEI yet (e.g. local files or images you created outside GAKEI). "
     "To LOOK at an image, call get_image (it returns the image in the tool result, up to "
     "1568 px on the long edge; results also carry small 512 px thumbnails). To get the "
     "ORIGINAL file for processing, call create_download_url and fetch the one-time URL with a "
@@ -460,7 +465,11 @@ async def generate_image(
     input_asset_ids: Annotated[
         list[uuid.UUID] | None,
         Field(
-            description="Input images for 'edit' (up to 16). The first one is the primary parent.",
+            description=(
+                "Input images for 'edit' (up to 16). The first one is the primary parent. "
+                "To edit a previous result, pass its output asset_id here directly; do not "
+                "download and re-upload it (that loses the lineage and wastes a transfer)."
+            ),
             max_length=16,
         ),
     ] = None,
@@ -855,7 +864,9 @@ async def create_download_url(
     <download_url>`. No Authorization header is needed: the URL itself grants the download.
     PNG files include GAKEI's lineage metadata. GAKEI usually runs inside the user's LAN, so
     tools that run in the cloud (web fetch, cloud code execution) cannot reach this URL, and
-    there is no way to hand the original to them. To just look at an image, use get_image."""
+    there is no way to hand the original to them. To just look at an image, use get_image.
+    To edit an image again in GAKEI, do not download it: pass its asset_id to generate_image's
+    input_asset_ids."""
     mc = get_mcp_context(ctx)
 
     def _issue() -> tuple[str, datetime, dict[str, Any]]:
@@ -1106,7 +1117,9 @@ async def create_upload_url(ctx: Context) -> CallToolResult:
     @image.png <upload_url>` (a multipart POST with `curl -F file=@image.png <upload_url>` also
     works). No Authorization header is needed: the URL itself grants the upload. The response
     is JSON with the new asset_id, which you can pass to generate_image as an edit input.
-    Prefer this over upload_image for anything but tiny images."""
+    Prefer this over upload_image for anything but tiny images. Only upload images that are
+    not in GAKEI yet: to edit a GAKEI image (e.g. a previous result), pass its asset_id to
+    generate_image's input_asset_ids instead."""
     mc = get_mcp_context(ctx)
 
     def _issue() -> tuple[str, datetime]:
