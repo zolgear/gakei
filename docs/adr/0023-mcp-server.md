@@ -137,6 +137,17 @@ Claude Desktop(mcp-remote 経由)で使ったところ、Claude が生成画像�
    - 画像を見るには `get_image` を使う。加工のための原本は `create_download_url` で URL を得て、手元で動く道具で取る。
    - GAKEI が LAN の中にある限り、クラウドで動くコード実行に原本を渡す方法はない(MCP の応答に大きさの上限があるため)。この制約は `docs/mcp.md` にも書く。
 
+### 9. 系列を Mermaid のグラフで返す(2026-09-29、ユーザーの依頼による試み)
+
+エージェントが GAKEI のノード(Asset と Run の二部グラフ。ADR-0003)と、画像どうしの関係(どの画像を元に、どの Run で作ったか)を理解しやすいよう、結果に Mermaid 形式の系列グラフを付ける。
+
+- `get_run`(`generate_image` の結果を含む)と `get_asset` の結果に、`lineage_mermaid`(Mermaid の `flowchart` の文字列)を足す。
+  - `get_run`: その Run の入力 Asset(の祖先を数世代)→ Run → 出力 Asset。
+  - `get_asset`: その Asset の祖先と子孫を数世代。
+- グラフは画面の系列グラフと同じ探索(`build_asset_lineage`)から作り、見える範囲(ADR-0025)も同じ。世代数とノード数に小さな上限を設け、打ち切ったときはグラフの中に注記する。
+- Asset と Run は形を変えて描き分け、辺には入力の役割(主たる親、参照、マスク)を書く。ノードのラベルには短い ID と要点(Asset は種類と大きさ、Run は操作・モデル・プロンプトの冒頭)を書き、完全な ID はコメント行(`%%`)で対応を示す。エージェントが ID をそのまま次のツール(`generate_image` の `input_asset_ids` など)に渡せるようにするため。
+- 引数で付けないこともできる(既定は付ける)。
+
 ## Options Considered
 
 ### Option A: 別プロセスの MCP サーバー(stdio)が REST API を呼ぶ
@@ -170,3 +181,4 @@ MCP 仕様は OAuth 2.1 による認可を定めていて、エージェント�
 5. [x] `docs/mcp.md`(接続方法。Claude Code と Claude Desktop の例)と README への一文
 6. [x] 7 章の改訂(すぐ返す生成と `list_runs`、アップロード URL、画像本体のトークン認証、透過の情報、size の説明、料金の見積もりと上限の残り)
 7. [x] 8 章(`get_image`、サムネイルの JPEG / PNG 化、`create_download_url`、説明の修正)
+8. [ ] 9 章(`lineage_mermaid`)
