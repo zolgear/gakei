@@ -97,11 +97,13 @@ volumes:
 ```bash
 git clone https://github.com/zolgear/gakei.git
 cd gakei
+echo "POSTGRES_PASSWORD=好きなパスワード" >> .env
 docker compose up -d --build
 ```
 
 起動したら `http://127.0.0.1:8000` を開く。リポジトリ直下に `.env` があれば読み込む(`HOST`/`PORT`/`DATA_DIR` はコンテナ用の値で上書きする)。
 
+- **PostgreSQL を同梱している(ADR-0027)。** `.env` に `POSTGRES_PASSWORD` を指定しないと起動しない。SQLite のまま使いたい場合は、`compose.yaml` の中のコメントに従って PostgreSQL 関連の設定をコメントアウトする。使い方と移行手順は [docs/postgresql.md](docs/postgresql.md)。
 - **更新:** `git pull && docker compose up -d --build`
 
 ### 共通の注意事項
@@ -112,7 +114,7 @@ docker compose up -d --build
   ```
 - **公開範囲:** 既定は `127.0.0.1` のみ。`docker run` の場合は `-p` の指定を変え、リポジトリの `compose.yaml` の場合は `GAKEI_BIND=0.0.0.0`(と `GAKEI_PORT`)で LAN やインターネットに公開できるが、既定では認証がないので、公開する場合は `AUTH_MODE=oidc` で認証を有効にする([docs/auth.md](docs/auth.md))か、認証付きのリバースプロキシを前段に置く。
 - **ComfyUI:** 同じホストで動く ComfyUI には `http://host.docker.internal:8188` で接続する(設定 → ComfyUI)。Docker で `host.docker.internal` を使うには `docker run` に `--add-host=host.docker.internal:host-gateway` を足す(リポジトリの `compose.yaml` は設定済み)。
-- **レプリカは1つだけ。** ジョブの実行が api プロセス内、DB が SQLite なので、同じボリュームを複数のコンテナで共有しない。
+- **レプリカは1つだけ。** ジョブの実行が api プロセス内で行われるため、DB が SQLite・PostgreSQL のどちらでも、同じ DB / ボリュームを複数のコンテナで共有しない。
 
 使っている版は設定画面の「GAKEI について」に出る。リリースの一覧は GitHub の [Releases](https://github.com/zolgear/gakei/releases)(手順は [docs/release.md](docs/release.md))。
 

@@ -1,4 +1,5 @@
-"""Alembic 実行環境。`app.domain.models` の metadata を使い、SQLite 向けに batch モードで動かす。"""
+"""Alembic 実行環境。`app.domain.models` の metadata を使い、SQLite 向けに batch モードで動かす
+(PostgreSQL でも同じマイグレーションが通る。ADR-0027)。"""
 
 from __future__ import annotations
 
@@ -35,6 +36,20 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    # 呼び出し側が接続を渡した場合(`app.tools.migrate_to_postgres`)は、その接続の
+    # トランザクションの中で流す(スキーマの作成とデータのコピーを1つのトランザクションに
+    # まとめ、途中で失敗したら全体を戻すため。ADR-0027 4章)。
+    shared_connection = config.attributes.get("connection")
+    if shared_connection is not None:
+        context.configure(
+            connection=shared_connection,
+            target_metadata=target_metadata,
+            render_as_batch=True,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+        return
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

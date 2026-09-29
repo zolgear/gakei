@@ -30,5 +30,6 @@
 | ADR-0024 | [0024-auto-title-and-tags.md](0024-auto-title-and-tags.md) | タイトルとタグ(人の編集と、VLM・ONNX タガーによる自動付与) | Proposed |
 | ADR-0025 | [0025-owner-only-visibility.md](0025-owner-only-visibility.md) | 認証モードでは本人のものだけを見せる(他人のプライバシーを守る) | Proposed |
 | ADR-0026 | [0026-storage-directory-hierarchy.md](0026-storage-directory-hierarchy.md) | 原本をプロバイダー・モデル別のフォルダに保存する(ローカルFS) | Proposed |
+| ADR-0027 | [0027-postgresql-option.md](0027-postgresql-option.md) | メタデータの DB に PostgreSQL も選べるようにする | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

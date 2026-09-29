@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.domain.embedded_meta import embed_gakei_chunk, read_gakei_meta, strip_gakei_chunk
-from tests.conftest import make_png_bytes, wait_for_run_terminal
+from tests.conftest import extra_database_url, make_png_bytes, wait_for_run_terminal
 
 
 def _upload(client: TestClient, kind: str = "upload", data: bytes | None = None) -> dict:
@@ -89,6 +89,10 @@ def _second_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, name: str) -
     monkeypatch.setenv("DATA_DIR", str(tmp_path / name))
     monkeypatch.setenv("FAKE_PROVIDER", "1")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # ADR-0027 6章: PostgreSQL で走らせているときは、インスタンスごとに別の DB を使う。
+    database_url = extra_database_url()
+    if database_url is not None:
+        monkeypatch.setenv("DATABASE_URL", database_url)
 
     from app.main import create_app
 

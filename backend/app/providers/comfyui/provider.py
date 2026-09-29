@@ -37,6 +37,7 @@ from app.domain.comfy_workflow import (
 )
 from app.domain.models import ComfyWorkflow
 from app.domain.run_validation import RunInputMeta, RunValidationError
+from app.domain.sql_compat import binary_order
 from app.i18n import t
 from app.providers.base import (
     InputImage,
@@ -114,7 +115,8 @@ class ComfyUIProvider:
                 session.execute(
                     select(ComfyWorkflow)
                     .where(ComfyWorkflow.deleted_at.is_(None))
-                    .order_by(ComfyWorkflow.name)
+                    # ADR-0027 2章: 名前の並びは両方の DB でバイト順にそろえる。
+                    .order_by(binary_order(ComfyWorkflow.name), ComfyWorkflow.id)
                 )
                 .scalars()
                 .all()

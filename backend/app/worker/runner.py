@@ -113,7 +113,7 @@ def _pick_and_start_run(session_factory: sessionmaker, provider_name: str) -> Ru
         candidate = session.execute(
             select(Run)
             .where(Run.status == RunStatus.QUEUED, Run.provider == provider_name)
-            .order_by(Run.queued_at.asc())
+            .order_by(Run.queued_at.asc(), Run.id.asc())
             .limit(1)
         ).scalar_one_or_none()
         if candidate is None:

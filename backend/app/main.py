@@ -34,7 +34,7 @@ from app.api import users as users_api
 from app.auth.deps import require_user
 from app.auth.oidc import AuthlibOidcClient
 from app.auth.secret import load_or_create_auth_secret
-from app.config import Settings, get_settings
+from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.storage import LocalFsStore
@@ -120,14 +120,70 @@ def check_auth_env(settings: Settings) -> None:
             logger.warning(console_t("app.authUrlInsecure", name=name, value=value))
 
 
-def run_migrations(db_path: Path) -> None:
+class DatabaseUnavailableError(RuntimeError):
+    """ADR-0027 1章: 起動時に DB(主に `DATABASE_URL` の PostgreSQL)へ接続できない場合。"""
+
+
+def check_database_connection(settings: Settings) -> None:
+    """DB に1回つないでみて、だめなら分かる文言で `DatabaseUnavailableError` を送出する。
+
+    SQLite(`DATABASE_URL` 未指定)はファイルを作るだけなので検査しない。接続 URL を文言に
+    含めるときはパスワードを伏せる。
+    """
+    if settings.uses_sqlite:
+        return
+    from sqlalchemy import text
+    from sqlalchemy.exc import SQLAlchemyError
+
+    url = settings.sqlalchemy_url
+    try:
+        engine = make_engine(url)
+    except Exception as exc:  # noqa: BLE001 - URL の形式やドライバの誤りも同じ案内にする
+        # URL を解釈できない場合の例外の文言には URL(パスワードを含む)がそのまま入るので、
+        # 例外の種類だけを出す。
+        raise DatabaseUnavailableError(
+            console_t(
+                "app.databaseUnavailable",
+                url=display_database_url(url),
+                error=type(exc).__name__,
+            )
+        ) from exc
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        raise DatabaseUnavailableError(
+            console_t(
+                "app.databaseUnavailable",
+                url=display_database_url(url),
+                error=_first_line(getattr(exc, "orig", None) or exc),
+            )
+        ) from exc
+    finally:
+        engine.dispose()
+
+
+def _first_line(exc: BaseException) -> str:
+    lines = str(exc).strip().splitlines()
+    return lines[0] if lines else type(exc).__name__
+
+
+def run_migrations(url: str) -> None:
     """Alembic の `upgrade head` を実行する。起動時のほか、`app.tools.backfill_embedded_meta`
     のようにサーバーを立てずに DB だけ用意したいツールからも呼べるよう公開する。
+
+    `url` は `Settings.sqlalchemy_url`(SQLite / PostgreSQL。ADR-0027)。
     """
+    command.upgrade(alembic_config(url), "head")
+
+
+def alembic_config(url: str) -> Config:
+    """この URL の DB に対する Alembic の設定(マイグレーションのテストや移行ツールでも使う)。"""
     cfg = Config()
     cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
-    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
-    command.upgrade(cfg, "head")
+    # Config は configparser の補間を通すので、パスワードに含まれうる `%` を逃がす。
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    return cfg
 
 
 def _build_lifespan(settings: Settings):
@@ -141,14 +197,16 @@ def _build_lifespan(settings: Settings):
         check_auth_env(settings)
 
         settings.data_dir.mkdir(parents=True, exist_ok=True)
-        run_migrations(settings.db_path)
+        # ADR-0027 1章: PostgreSQL に接続できなければ、分かる文言で起動を中止する。
+        check_database_connection(settings)
+        run_migrations(settings.sqlalchemy_url)
 
         # ADR-0017 2章: ループバック以外への http の接続先は、保存時だけでなく起動時にも警告する。
         base_url, _source = resolve_base_url(settings)
         if base_url:
             warn_if_insecure_base_url(base_url)
 
-        engine = make_engine(settings.db_path)
+        engine = make_engine(settings.sqlalchemy_url)
         session_factory = make_session_factory(engine)
         store = LocalFsStore(settings.data_dir)
         registry = build_registry(settings, session_factory)

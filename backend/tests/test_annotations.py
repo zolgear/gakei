@@ -498,18 +498,15 @@ def test_engine_failure_is_recorded(client: TestClient) -> None:
     assert body["annotation"]["finished_at"] is not None
 
 
-def test_running_rows_are_requeued_on_start(tmp_path) -> None:  # noqa: ANN001
+def test_running_rows_are_requeued_on_start(tmp_path, db_session_factory) -> None:  # noqa: ANN001
     from datetime import UTC, datetime
 
-    from app.db import create_all, make_engine, make_session_factory
     from app.domain.assets import ingest
     from app.domain.models import AssetAnnotation, AssetKind
     from app.domain.storage import LocalFsStore
     from app.worker.annotator import reset_running_annotations
 
-    engine = make_engine(tmp_path / "x.db")
-    create_all(engine)
-    factory = make_session_factory(engine)
+    factory = db_session_factory
     store = LocalFsStore(tmp_path)
     with factory() as db:
         asset = ingest(db, store, make_png_bytes(), AssetKind.UPLOAD)
@@ -521,7 +518,6 @@ def test_running_rows_are_requeued_on_start(tmp_path) -> None:  # noqa: ANN001
     assert reset_running_annotations(factory) == 1
     with factory() as db:
         assert db.get(AssetAnnotation, asset_id).auto_status == "queued"
-    engine.dispose()
 
 
 # -- ONNX モデルのダウンロード(FAKE ではダウンロードしない) ---------------------------

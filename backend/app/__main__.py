@@ -131,8 +131,10 @@ def main(argv: list[str] | None = None) -> None:
     # lifespan 側にも同じ検査があるが、そちらは uvicorn のトレースバックに埋もれるため。
     from app.main import (
         AuthConfigError,
+        DatabaseUnavailableError,
         LegacyProviderAbortedError,
         check_auth_env,
+        check_database_connection,
         check_legacy_provider_env,
     )
 
@@ -149,6 +151,14 @@ def main(argv: list[str] | None = None) -> None:
     try:
         check_auth_env(settings)
     except AuthConfigError as exc:
+        print(exc, file=sys.stderr, flush=True)
+        raise SystemExit(1) from None
+
+    # ADR-0027 1章: DATABASE_URL の PostgreSQL に接続できなければ、同じくトレースバックを
+    # 出さずに案内だけして止める。
+    try:
+        check_database_connection(settings)
+    except DatabaseUnavailableError as exc:
         print(exc, file=sys.stderr, flush=True)
         raise SystemExit(1) from None
 
