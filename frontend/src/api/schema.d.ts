@@ -2247,6 +2247,8 @@ export interface components {
             name: "wd-vit-tagger-v3" | "wd-swinv2-tagger-v3" | "wd-eva02-large-tagger-v3";
             /** Size Bytes */
             size_bytes: number;
+            /** Memory Bytes */
+            memory_bytes: number;
             /** Downloaded */
             downloaded: boolean;
             /**

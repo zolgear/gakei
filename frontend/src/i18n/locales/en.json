@@ -412,6 +412,8 @@
         "notice": "Adds tags with WD Tagger v3 (Apache-2.0). It is made for illustrations and does not suit photos. Tags are in English. Images are not sent anywhere. Models are downloaded from Hugging Face.",
         "enabledLabel": "Add tags with the ONNX tagger",
         "modelLabel": "Model",
+        "memoryEstimate": "About {size} GB of memory",
+        "modelHelp": "Without a GPU, wd-swinv2-tagger-v3 (Base) is recommended. wd-eva02-large-tagger-v3 (Large) uses much more memory to load and takes several times longer per image. If free memory is below the estimate, the model is not loaded and the estimation fails.",
         "modelNotDownloaded": "The selected model cannot be used until it is downloaded.",
         "downloaded": "Downloaded",
         "notDownloaded": "Not downloaded",

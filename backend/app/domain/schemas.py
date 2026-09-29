@@ -854,6 +854,8 @@ class OnnxModelStatus(BaseModel):
     name: Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
     # 取得するファイル(model.onnx と selected_tags.csv)の合計の大きさ。
     size_bytes: int
+    # 読み込みと推論1回に要るメモリの目安(バイト。`WdModel.memory_bytes`)。
+    memory_bytes: int
     downloaded: bool
     download_status: Literal["idle", "downloading", "failed"]
     # 0〜1。ダウンロード中だけ値が入る。

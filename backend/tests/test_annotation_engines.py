@@ -124,7 +124,7 @@ def test_wd_tagger_with_mocked_session(monkeypatch: pytest.MonkeyPatch, tmp_path
             return [np.array([[0.9, 0.8, 0.2, 0.5]], dtype=np.float32)]
 
     monkeypatch.setattr(onnxruntime, "InferenceSession", FakeSession)
-    tagger = WdTagger(tmp_path)
+    tagger = WdTagger(tmp_path, memory_probe=lambda: None)
     tags = tagger.tag(Image.new("RGB", (30, 30)), "wd-vit-tagger-v3", 0.35)
     assert tags == [("1girl", pytest.approx(0.8)), ("some character", pytest.approx(0.5))]
     assert created[0].path.endswith("model.onnx")
@@ -132,6 +132,9 @@ def test_wd_tagger_with_mocked_session(monkeypatch: pytest.MonkeyPatch, tmp_path
     # 推論のスレッド数は CPU コア数の半分に抑える(API の応答を妨げないため)。
     assert created[0].sess_options.intra_op_num_threads == wd_tagger.inference_threads()
     assert created[0].sess_options.inter_op_num_threads == 1
+    # 読み込み時のメモリの山を下げる設定(prepacking とメモリパターンを切る)。
+    assert created[0].sess_options.enable_mem_pattern is False
+    assert created[0].sess_options.get_session_config_entry("session.disable_prepacking") == "1"
     assert created[0].inputs_seen[0].shape == (1, 16, 16, 3)
 
     # 2回目は同じセッションを使う。
@@ -142,6 +145,121 @@ def test_wd_tagger_with_mocked_session(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert tagger.release_if_idle(idle_seconds=3600) is False
     assert tagger.release_if_idle(idle_seconds=0) is True
     assert tagger.loaded is False
+
+
+def _fake_session_class(created: list[Any]) -> type:
+    class FakeSession:
+        def __init__(self, path: str, sess_options: Any, providers: list[str]) -> None:
+            self.path = path
+            created.append(self)
+
+        def get_inputs(self) -> list[Any]:
+            return [SimpleNamespace(name="input_1", shape=["batch", 16, 16, 3])]
+
+        def run(self, output_names: Any, feeds: dict[str, np.ndarray]) -> list[np.ndarray]:
+            return [np.array([[0.9, 0.8, 0.2, 0.5]], dtype=np.float32)]
+
+    return FakeSession
+
+
+def test_onnx_engine_refuses_to_load_without_enough_memory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """空きメモリがモデルの目安より少なければ、読み込まずに失敗にする(OOM で落ちない)。"""
+    import onnxruntime
+
+    _write_model_dir(tmp_path, "wd-eva02-large-tagger-v3")
+    created: list[Any] = []
+    monkeypatch.setattr(onnxruntime, "InferenceSession", _fake_session_class(created))
+    engines = OpenAIEngines(WdTagger(tmp_path, memory_probe=lambda: 1_000_000_000))
+    ctx = EngineContext(
+        AnnotationConfig(onnx_enabled=True, onnx_model="wd-eva02-large-tagger-v3"),
+        Connection("k", None),
+    )
+    with pytest.raises(AnnotationEngineError) as excinfo:
+        engines.onnx_tags(Image.new("RGB", (8, 8)), ctx)
+    assert "wd-eva02-large-tagger-v3" in str(excinfo.value)
+    assert "1.6" in str(excinfo.value) and "1.0" in str(excinfo.value)
+    assert created == []
+
+
+def test_wd_tagger_loads_when_memory_is_enough_or_unknown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import onnxruntime
+
+    _write_model_dir(tmp_path, "wd-vit-tagger-v3")
+    created: list[Any] = []
+    monkeypatch.setattr(onnxruntime, "InferenceSession", _fake_session_class(created))
+    WdTagger(tmp_path, memory_probe=lambda: 8_000_000_000).tag(
+        Image.new("RGB", (8, 8)), "wd-vit-tagger-v3", 0.35
+    )
+    # 空きメモリを読めない環境(Windows など)では確かめずに読み込む。
+    WdTagger(tmp_path, memory_probe=lambda: None).tag(
+        Image.new("RGB", (8, 8)), "wd-vit-tagger-v3", 0.35
+    )
+    assert len(created) == 2
+
+
+def test_wd_tagger_releases_previous_model_before_switching(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """別のモデルに切り替えるときは、今のセッションを手放してから確かめて読み込む。"""
+    import onnxruntime
+
+    _write_model_dir(tmp_path, "wd-vit-tagger-v3")
+    _write_model_dir(tmp_path, "wd-eva02-large-tagger-v3")
+    created: list[Any] = []
+    monkeypatch.setattr(onnxruntime, "InferenceSession", _fake_session_class(created))
+    free = {"bytes": 8_000_000_000}
+    tagger = WdTagger(tmp_path, memory_probe=lambda: free["bytes"])
+    tagger.tag(Image.new("RGB", (8, 8)), "wd-vit-tagger-v3", 0.35)
+    assert tagger.loaded is True
+
+    free["bytes"] = 500_000_000
+    # 読み込み済みのモデルはそのまま使える(確かめ直さない)。
+    tagger.tag(Image.new("RGB", (8, 8)), "wd-vit-tagger-v3", 0.35)
+    with pytest.raises(wd_tagger.InsufficientMemoryError):
+        tagger.tag(Image.new("RGB", (8, 8)), "wd-eva02-large-tagger-v3", 0.35)
+    assert tagger.loaded is False
+    assert len(created) == 1
+
+
+def test_meminfo_available(tmp_path: Path) -> None:
+    path = tmp_path / "meminfo"
+    path.write_text(
+        "MemTotal:        8256768 kB\nMemFree:          197632 kB\nMemAvailable:    5845000 kB\n",
+        encoding="ascii",
+    )
+    assert wd_tagger.meminfo_available(path) == 5845000 * 1024
+    path.write_text("MemTotal: 1 kB\n", encoding="ascii")
+    assert wd_tagger.meminfo_available(path) is None
+    assert wd_tagger.meminfo_available(tmp_path / "missing") is None
+
+
+def test_cgroup_available_v2(tmp_path: Path) -> None:
+    (tmp_path / "memory.max").write_text("4000000000\n", encoding="ascii")
+    (tmp_path / "memory.current").write_text("1500000000\n", encoding="ascii")
+    (tmp_path / "memory.stat").write_text(
+        "anon 1000000000\ninactive_file 500000000\nactive_file 1\n", encoding="ascii"
+    )
+    # 上限 4GB − (使用 1.5GB − 捨てられるキャッシュ 0.5GB) = 3GB
+    assert wd_tagger.cgroup_available(tmp_path) == 3_000_000_000
+    (tmp_path / "memory.max").write_text("max\n", encoding="ascii")
+    assert wd_tagger.cgroup_available(tmp_path) is None
+
+
+def test_cgroup_available_v1(tmp_path: Path) -> None:
+    v1 = tmp_path / "memory"
+    v1.mkdir()
+    (v1 / "memory.limit_in_bytes").write_text("2000000000\n", encoding="ascii")
+    (v1 / "memory.usage_in_bytes").write_text("800000000\n", encoding="ascii")
+    (v1 / "memory.stat").write_text("total_inactive_file 300000000\n", encoding="ascii")
+    assert wd_tagger.cgroup_available(tmp_path) == 1_500_000_000
+    # 上限なし(int64 の最大値近く)
+    (v1 / "memory.limit_in_bytes").write_text("9223372036854771712\n", encoding="ascii")
+    assert wd_tagger.cgroup_available(tmp_path) is None
+    assert wd_tagger.cgroup_available(tmp_path / "missing") is None
 
 
 def test_onnx_engine_reports_missing_model(tmp_path: Path) -> None:
@@ -163,7 +281,7 @@ def _small_model(content: dict[str, bytes], sha_override: dict[str, str] | None 
         )
         for name, data in content.items()
     )
-    return WdModel(name="wd-vit-tagger-v3", revision="abc123", files=files)
+    return WdModel(name="wd-vit-tagger-v3", revision="abc123", files=files, memory_bytes=1)
 
 
 def _run_download(tmp_path: Path, model: WdModel, served: dict[str, bytes], monkeypatch) -> Any:  # noqa: ANN001

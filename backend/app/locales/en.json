@@ -303,6 +303,7 @@
     "apiKeyMissing": "No API key for estimation. Set the OpenAI API key or a dedicated key for estimation",
     "emptyTitle": "The LLM did not return a title",
     "onnxModelMissing": "The ONNX tagger model was not found. Download it from Admin settings",
+    "onnxInsufficientMemory": "The ONNX tagger model {model} was not loaded because there is not enough free memory (needs about {needed} GB, about {available} GB free). Choose a smaller model in Admin settings or add memory",
     "download": {
       "httpError": "Failed to download {file} (HTTP {status})",
       "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"

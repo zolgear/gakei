@@ -271,6 +271,11 @@
   color: var(--color-text-faint);
 }
 
+.modelMemory {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
 .modelStatusRow {
   display: flex;
   align-items: center;

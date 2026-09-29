@@ -34,7 +34,7 @@ import openai
 from openai import AsyncOpenAI
 from PIL import Image
 
-from app.annotation.wd_tagger import WdTagger
+from app.annotation.wd_tagger import InsufficientMemoryError, WdTagger
 from app.domain.annotation_settings import AnnotationConfig, Connection
 from app.i18n import t
 
@@ -417,6 +417,15 @@ class OpenAIEngines:
             return self.tagger.tag(image, ctx.config.onnx_model, ctx.config.onnx_threshold)
         except FileNotFoundError as e:
             raise AnnotationEngineError(t("annotations.onnxModelMissing")) from e
+        except InsufficientMemoryError as e:
+            raise AnnotationEngineError(
+                t(
+                    "annotations.onnxInsufficientMemory",
+                    model=e.model_name,
+                    needed=f"{e.needed / 1e9:.1f}",
+                    available=f"{e.available / 1e9:.1f}",
+                )
+            ) from e
 
     def release_idle(self) -> None:
         self.tagger.release_if_idle()
