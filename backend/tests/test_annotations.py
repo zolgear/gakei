@@ -260,6 +260,9 @@ def test_settings_defaults(client: TestClient) -> None:
         m["downloaded"] is False and m["download_status"] == "idle" for m in body["onnx_models"]
     )
     assert body["onnx_models"][0]["size_bytes"] > 300_000_000
+    # メモリの目安(設定画面に出す)。eva02-large は Base の2つより大きい。
+    memory = {m["name"]: m["memory_bytes"] for m in body["onnx_models"]}
+    assert memory["wd-eva02-large-tagger-v3"] > memory["wd-swinv2-tagger-v3"] > 0
 
 
 def test_settings_patch_and_validation(client: TestClient) -> None:

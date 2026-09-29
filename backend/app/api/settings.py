@@ -372,6 +372,7 @@ def _onnx_model_statuses(
             OnnxModelStatus(
                 name=name,  # type: ignore[arg-type]
                 size_bytes=model.size_bytes,
+                memory_bytes=model.memory_bytes,
                 downloaded=is_downloaded(settings.data_dir, name),
                 download_status=state.status,  # type: ignore[arg-type]
                 download_progress=state.progress,

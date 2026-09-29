@@ -303,6 +303,7 @@
     "apiKeyMissing": "推定に使う API キーがありません。OpenAI の API キーか、推定専用のキーを設定してください",
     "emptyTitle": "LLM がタイトルを返しませんでした",
     "onnxModelMissing": "ONNX タガーのモデルが見つかりません。管理者設定からダウンロードしてください",
+    "onnxInsufficientMemory": "空きメモリが足りないため、ONNX タガーのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)。管理者設定で小さいモデルを選ぶか、メモリを増やしてください",
     "download": {
       "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
       "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
