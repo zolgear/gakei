@@ -61,11 +61,11 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 | `get_capabilities` | 使えるプロバイダー、モデル、パラメーター、サイズ |
 | `estimate_cost` | 生成する前に料金の目安(USD)を出す。Run は作らない |
 | `generate_image` | Generate / Edit を実行する(**課金を伴う**)。入力画像とマスクは Asset ID で渡す。Run を登録したらすぐ `run_id` を返す |
-| `get_run` | Run の状態、出力、料金の目安、1 時間の上限の残り。完了まで待つこともできる(1 回最大 25 秒) |
+| `get_run` | Run の状態、出力、料金の目安、1 時間の上限の残り、系列グラフ(`lineage_mermaid`)。完了まで待つこともできる(1 回最大 25 秒) |
 | `list_runs` | 自分の最近の Run の一覧(実行元、作成時刻、状態で絞り込み) |
 | `cancel_run` | 待機中の Run を取り消す |
 | `search_assets` | ストックを検索する(キーワード、種類、グループ) |
-| `get_asset` | Asset の情報、主たる親、生成した Run |
+| `get_asset` | Asset の情報、主たる親、生成した Run、系列グラフ(`lineage_mermaid`) |
 | `get_image` | 画像を見る。長辺 1568px(既定)か 512px の JPEG / PNG を応答の本文に載せて返す |
 | `create_download_url` | 原本を取り出すための、10 分間・1 回限りのダウンロード URL を発行する |
 | `create_upload_url` | 手元の画像ファイルを送るための、10 分間・1 回限りのアップロード URL を発行する |
@@ -101,6 +101,40 @@ get_run(run_id="…", wait_seconds=25)
 - `estimate_cost(provider, model, params, n)` は、画面の見積もりと同じ計算で料金の目安(USD)を返す。`params.quality` と `params.size` を指定しないと(`auto` のままでは)見積もれず、`total_usd` が `null` になって `unavailable_reason` に理由が入る。入力画像(`input_asset_ids`)とプロンプトも渡すと、その分のトークンも数える。ComfyUI のように料金表の無いプロバイダーは見積もれない。
 - Run の結果(`generate_image`・`get_run`・`list_runs`)の `cost` には、分かる場合だけ料金の目安が入る。完了した Run は実際の使用量(usage)から、実行前・実行中の Run はパラメーターからの見積もり(`basis` で区別)。どちらも請求額ではない。
 - 同じく `quota` に 1 時間の上限(`hourly_run_limit`)、直近 1 時間の件数(`runs_last_hour`)、残り(`remaining`)が入る。
+
+### 系列グラフ(`lineage_mermaid`)
+
+`generate_image`・`get_run`・`get_asset` の結果には、画像がどう作られたかを表す Mermaid の `flowchart` の文字列 `lineage_mermaid` が付く(ADR-0023 9章)。エージェントが Asset と Run の関係(どの画像を元に、どの Run で作ったか)を読み取るためのもの。Mermaid を表示できる画面に貼れば、そのまま図になる。
+
+- `get_run`(`generate_image` を含む): 入力画像とその祖先 → この Run → 出力。出力から数えて祖先 3 世代まで。入力の無い generate は Run → 出力だけ。実行前・実行中でも入力と Run は描く。
+- `get_asset`: その画像を起点に、祖先 3 世代と子孫 2 世代。
+- 角丸の箱が Asset(画像)、六角形が Run(API の 1 回の実行)。矢印は「入力 Asset → Run → 出力 Asset」の向きで、入力の辺には役割(`primary` = 主たる親、`reference` = 他の入力画像、`mask`)を書く。起点は太枠。
+- ラベルの ID は先頭 8 文字だけ。完全な ID は先頭のコメント行(`%% a1 = asset <ID>`)にあり、そのまま `input_asset_ids` などに渡せる。
+- 削除済みは「(deleted)」、他の GAKEI や他の環境で作られた画像に埋め込まれていた系列(自己申告で未検証)は「(embedded, unverified)」と付く。
+- 世代の上限より先がある場合は「… older ancestors」「… more descendants」の注記ノードが付く。ノード数の上限(40)に掛かった場合は `%% truncated:` のコメントと注記ノードが付く。
+- 画面の系列グラフと同じ探索で作るので、見える範囲も同じ(認証モードでは自分のものだけ)。
+- プロンプトなどの文字列は Mermaid のエンティティ(`#quot;` など)に置き換えてあり、構文を壊さない。
+- 不要なら `include_lineage=false` で付けない。`list_runs` には付かない。
+
+```mermaid
+flowchart LR
+%% GAKEI lineage: (rounded box) = asset (image), {{hexagon}} = run (one API call); arrows go input asset -> run -> output asset. Full IDs are listed below.
+%% r1 = run 256e44f9-5b16-46fd-926e-810c1f5782be
+%% a1 = asset c7576914-11b3-4af0-87d0-61da1809cf9c
+%% r2 = run 4c3b36a6-cbb0-437d-978d-11859d68ba87 (focus)
+%% a2 = asset b56eeacc-342a-4a23-8f83-fd90701d4edb
+    r1{{"run 256e44f9<br/>generate gpt-image-2.5-flare<br/>“a lighthouse at dusk”"}}
+    a1("asset c7576914<br/>generated 1024x1024")
+    r2{{"run 4c3b36a6<br/>edit gpt-image-2.5-flare<br/>“make it #quot;stormy#quot; #91;night#93; #124; with #lt;waves#gt;”"}}
+    a2("asset b56eeacc<br/>generated 1024x1024")
+    r1 -->|output| a1
+    a1 -->|primary| r2
+    r2 -->|output| a2
+    classDef focus stroke-width:3px,stroke:#d9480f
+    class r2 focus
+```
+
+(generate → その出力を `input_asset_ids` に渡した edit の後の `get_run`。FAKE プロバイダーでの出力例)
 
 ## 4. 画像の受け渡し
 

@@ -181,4 +181,4 @@ MCP 仕様は OAuth 2.1 による認可を定めていて、エージェント�
 5. [x] `docs/mcp.md`(接続方法。Claude Code と Claude Desktop の例)と README への一文
 6. [x] 7 章の改訂(すぐ返す生成と `list_runs`、アップロード URL、画像本体のトークン認証、透過の情報、size の説明、料金の見積もりと上限の残り)
 7. [x] 8 章(`get_image`、サムネイルの JPEG / PNG 化、`create_download_url`、説明の修正)
-8. [ ] 9 章(`lineage_mermaid`)
+8. [x] 9 章(`lineage_mermaid`)

@@ -48,6 +48,13 @@ from app.domain.asset_groups import (
 from app.domain.asset_groups import create_group as create_group_domain
 from app.domain.asset_groups import list_groups as list_groups_domain
 from app.domain.assets import MAX_UPLOAD_BYTES, IngestError, ingest_upload
+from app.domain.lineage import (
+    LineageNotFoundError,
+    RunLineageNotFoundError,
+    asset_lineage_graph,
+    run_lineage_graph,
+)
+from app.domain.lineage_mermaid import LineageGraph, MermaidOptions, render_lineage_mermaid
 from app.domain.models import (
     Asset,
     AssetGroupMember,
@@ -91,6 +98,14 @@ MAX_REQUEST_BODY_BYTES = math.ceil(MAX_UPLOAD_BYTES / 3) * 4 + 1024 * 1024
 
 _TERMINAL = {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED}
 
+# `lineage_mermaid`(ADR-0023 9章)の範囲。1世代 = Asset→Run→Asset の2ホップ。
+# `get_asset` は起点の祖先 3 世代・子孫 2 世代。`get_run` は出力から数えて祖先 3 世代
+# (入力 Asset が1世代目なので、入力からはさらに 2 世代 = 4 ホップ)。
+LINEAGE_UP_GENERATIONS = 3
+LINEAGE_DOWN_GENERATIONS = 2
+LINEAGE_MAX_NODES = 40
+_LINEAGE_OPTIONS = MermaidOptions(direction="LR", prompt_chars=40)
+
 _INSTRUCTIONS = (
     "GAKEI is a self-hosted image generation workspace. Use get_capabilities to see models "
     'and parameters (put the image size in params.size, e.g. {"size": "1024x1024"}), '
@@ -113,7 +128,11 @@ _INSTRUCTIONS = (
     "the user to open in a browser: GAKEI usually runs inside the user's LAN, so tools that "
     "run in the cloud (web fetch, cloud code execution) cannot reach any GAKEI URL, and there "
     "is no way to hand the original to cloud code execution. Deleting and changing settings "
-    "are only possible in the GAKEI web UI."
+    "are only possible in the GAKEI web UI. get_run / generate_image / get_asset results "
+    "include lineage_mermaid, a Mermaid flowchart of how images were made: rounded boxes "
+    "are assets (images), hexagons are runs (one API call), arrows go input asset -> run -> "
+    "output asset with the input role (primary parent, reference, mask), and the %% comment "
+    "lines map the short node IDs (a1, r1) to full asset / run IDs you can pass to other tools."
 )
 
 _SIZE_HINT = (
@@ -173,8 +192,45 @@ def _asset_brief(mc: McpRequestContext, asset: Asset) -> dict[str, Any]:
     }
 
 
+def _mermaid(build: Callable[[], LineageGraph]) -> str | None:
+    """系列グラフを Mermaid にする。起点が見えない・無いときは None。"""
+    try:
+        return render_lineage_mermaid(build(), _LINEAGE_OPTIONS)
+    except (LineageNotFoundError, RunLineageNotFoundError):
+        return None
+
+
+def _run_lineage_mermaid(mc: McpRequestContext, db: Session, run_id: uuid.UUID) -> str | None:
+    return _mermaid(
+        lambda: run_lineage_graph(
+            db,
+            run_id,
+            viewer=mc.user,
+            up=LINEAGE_UP_GENERATIONS * 2 - 2,
+            max_nodes=LINEAGE_MAX_NODES,
+        )
+    )
+
+
+def _asset_lineage_mermaid(mc: McpRequestContext, db: Session, asset_id: uuid.UUID) -> str | None:
+    return _mermaid(
+        lambda: asset_lineage_graph(
+            db,
+            asset_id,
+            viewer=mc.user,
+            up=LINEAGE_UP_GENERATIONS * 2,
+            down=LINEAGE_DOWN_GENERATIONS * 2,
+            max_nodes=LINEAGE_MAX_NODES,
+        )
+    )
+
+
 def _run_payload(
-    mc: McpRequestContext, db: Session, run: Run, include_thumbnails: bool
+    mc: McpRequestContext,
+    db: Session,
+    run: Run,
+    include_thumbnails: bool,
+    include_lineage: bool = False,
 ) -> tuple[dict[str, Any], list[ImageContent]]:
     outputs = (
         db.execute(
@@ -218,6 +274,8 @@ def _run_payload(
         "outputs": [_asset_brief(mc, a) for a in outputs],
     }
     payload["cost"] = _run_cost(mc, db, run, inputs)
+    if include_lineage:
+        payload["lineage_mermaid"] = _run_lineage_mermaid(mc, db, run.id)
     if run.status not in _TERMINAL:
         payload["note"] = (
             "The run has not finished yet. Call get_run with this run_id and wait_seconds "
@@ -235,13 +293,13 @@ def _run_payload(
 
 
 def _load_run_result(
-    mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool
+    mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool, include_lineage: bool
 ) -> tuple[dict[str, Any], list[ImageContent]] | None:
     with _session(mc) as db:
         run = get_visible_run(db, mc.user, run_id)
         if run is None or run.deleted_at is not None:
             return None
-        return _run_payload(mc, db, run, include_thumbnails)
+        return _run_payload(mc, db, run, include_thumbnails, include_lineage)
 
 
 def _run_status(mc: McpRequestContext, run_id: uuid.UUID) -> RunStatus | None:
@@ -262,9 +320,16 @@ async def _wait_for_terminal(mc: McpRequestContext, run_id: uuid.UUID, seconds: 
 
 
 async def _run_result(
-    mc: McpRequestContext, run_id: uuid.UUID, include_thumbnails: bool, *, with_quota: bool
+    mc: McpRequestContext,
+    run_id: uuid.UUID,
+    include_thumbnails: bool,
+    *,
+    with_quota: bool,
+    include_lineage: bool = False,
 ) -> CallToolResult:
-    loaded = await _in_thread(lambda: _load_run_result(mc, run_id, include_thumbnails))
+    loaded = await _in_thread(
+        lambda: _load_run_result(mc, run_id, include_thumbnails, include_lineage)
+    )
     if loaded is None:
         raise ToolError(f"Run {run_id} not found.")
     payload, images = loaded
@@ -493,6 +558,15 @@ async def generate_image(
     include_thumbnails: Annotated[
         bool, Field(description="Attach 512px JPEG/PNG thumbnails of the outputs.")
     ] = True,
+    include_lineage: Annotated[
+        bool,
+        Field(
+            description=(
+                "Include lineage_mermaid: a Mermaid flowchart of the input images' ancestry "
+                "-> this run -> its outputs."
+            )
+        ),
+    ] = True,
 ) -> CallToolResult:
     """Generate or edit images with GAKEI. Each call creates a new run that is BILLED to the
     GAKEI operator's image API account, and is recorded with its lineage.
@@ -537,7 +611,9 @@ async def generate_image(
     try:
         if wait:
             await _wait_for_terminal(mc, run_id, WAIT_MAX_SECONDS)
-        return await _run_result(mc, run_id, include_thumbnails, with_quota=True)
+        return await _run_result(
+            mc, run_id, include_thumbnails, with_quota=True, include_lineage=include_lineage
+        )
     except Exception:  # noqa: BLE001
         return _result(
             {
@@ -568,13 +644,25 @@ async def get_run(
     include_thumbnails: Annotated[
         bool, Field(description="Attach 512px JPEG/PNG thumbnails of the outputs.")
     ] = True,
+    include_lineage: Annotated[
+        bool,
+        Field(
+            description=(
+                "Include lineage_mermaid: a Mermaid flowchart of the input images' ancestry "
+                "-> this run -> its outputs."
+            )
+        ),
+    ] = True,
 ) -> CallToolResult:
     """Get a run's status, parameters, outputs, reference cost and the remaining hourly quota.
-    Optionally wait (up to 25 s per call) for it to finish."""
+    Optionally wait (up to 25 s per call) for it to finish. lineage_mermaid is a Mermaid
+    flowchart of the inputs' ancestry -> this run -> its outputs."""
     mc = get_mcp_context(ctx)
     if wait_seconds > 0:
         await _wait_for_terminal(mc, run_id, wait_seconds)
-    return await _run_result(mc, run_id, include_thumbnails, with_quota=True)
+    return await _run_result(
+        mc, run_id, include_thumbnails, with_quota=True, include_lineage=include_lineage
+    )
 
 
 async def cancel_run(
@@ -734,10 +822,20 @@ async def get_asset(
     include_thumbnail: Annotated[
         bool, Field(description="Attach a 512px JPEG/PNG thumbnail.")
     ] = True,
+    include_lineage: Annotated[
+        bool,
+        Field(
+            description=(
+                "Include lineage_mermaid: a Mermaid flowchart of this image's ancestors and "
+                "descendants (a few generations each way)."
+            )
+        ),
+    ] = True,
 ) -> CallToolResult:
     """Get an image's metadata: kind, size, title, tags, transparency (has_alpha and
     transparent_ratio, counted on the original image), group, the run that produced it
-    (prompt, model, parameters), and its primary parent image. The attached thumbnail is
+    (prompt, model, parameters), its primary parent image, and lineage_mermaid (a Mermaid
+    flowchart of its ancestors and descendants). The attached thumbnail is
     512px; call get_image to look at the image in more detail, or create_download_url to get
     the original file.
 
@@ -783,6 +881,8 @@ async def get_asset(
                     if parent is not None and not visible_asset_ids(db, mc.user, [parent]):
                         parent = None
                     payload["primary_parent_asset_id"] = str(parent) if parent else None
+            if include_lineage:
+                payload["lineage_mermaid"] = _asset_lineage_mermaid(mc, db, asset.id)
             images: list[ImageContent] = []
             if include_thumbnail:
                 thumb = _thumbnail(mc.state.store, asset)
