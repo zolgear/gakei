@@ -41,9 +41,10 @@ def test_all_non_auth_endpoints_require_login(client_oidc: TestClient) -> None:
     for path, method in _iter_paths_and_methods(client_oidc.app):
         if path.startswith("/api/auth/"):
             continue
-        # 1回限りのアップロード URL の受け口は、URL のトークン自体が認可(ログインは要らない。
-        # ADR-0023 7章 2)。不正・期限切れのトークンの扱いは tests/test_mcp_feedback.py で確かめる。
-        if path.startswith("/api/uploads/"):
+        # 1回限りのアップロード・ダウンロード URL の受け口は、URL のトークン自体が認可(ログインは
+        # 要らない。ADR-0023 7章 2・8章 3)。不正・期限切れのトークンの扱いは
+        # tests/test_mcp_feedback.py と tests/test_mcp_image_access.py で確かめる。
+        if path.startswith(("/api/uploads/", "/api/downloads/")):
             continue
         filled = _fill_path_params(path)
         response = client_oidc.request(method, filled)

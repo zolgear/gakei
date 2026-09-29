@@ -367,6 +367,31 @@ def get_asset_content(
     if asset is None:
         raise HTTPException(status_code=404, detail=t("assets.notFound"))
 
+    return asset_content_response(
+        db,
+        store,
+        asset,
+        viewer=user,
+        variant=variant,
+        download=bool(download),
+        if_none_match=request.headers.get("if-none-match"),
+    )
+
+
+def asset_content_response(
+    db: Session,
+    store: AssetStore,
+    asset: Asset,
+    *,
+    viewer: CurrentUser,
+    variant: Literal["thumb", "preview", "original"],
+    download: bool,
+    if_none_match: str | None = None,
+    cache_control: str = "private, immutable, max-age=31536000",
+) -> Response:
+    """画像の本体の応答。`GET /api/assets/{id}/content` と、1回限りのダウンロード URL
+    (`GET /api/downloads/{token}`。ADR-0023 8章 3)で共通。見えるかどうかは呼び出し側が
+    確かめる。ファイルが無ければ 404。"""
     path = store.content_path(asset.blob_key, asset.sha256, variant)
     if not path.exists():
         raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
@@ -374,11 +399,11 @@ def get_asset_content(
     # ADR-0014(2026-09-24 追記): original をダウンロードする PNG にだけ、系列情報
     # (gakei チャンク)を埋め込んで返す。保存している原本・画面表示用の
     # original/thumb/preview(download=0)は変えない(ETag も区別する)。
-    embed_meta = variant == "original" and bool(download) and asset.mime == "image/png"
+    embed_meta = variant == "original" and download and asset.mime == "image/png"
     etag = f'"{asset.sha256}-original-gakei1"' if embed_meta else f'"{asset.sha256}-{variant}"'
-    headers = {"ETag": etag, "Cache-Control": "private, immutable, max-age=31536000"}
+    headers = {"ETag": etag, "Cache-Control": cache_control}
 
-    if request.headers.get("if-none-match") == etag:
+    if if_none_match == etag:
         return Response(status_code=304, headers=headers)
 
     media_type = asset.mime if variant == "original" else _DERIVED_MEDIA_TYPE
@@ -388,7 +413,7 @@ def get_asset_content(
 
     if embed_meta:
         data = store.read(asset.blob_key)
-        meta = build_lineage_meta(db, asset, viewer=user)
+        meta = build_lineage_meta(db, asset, viewer=viewer)
         embedded = embed_gakei_chunk(data, meta)
         return Response(content=embedded, media_type=media_type, headers=headers)
 

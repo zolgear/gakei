@@ -316,6 +316,9 @@
     "empty": "The request body is empty. Send the image file bytes as the body.",
     "noFile": "The multipart body does not contain an image file."
   },
+  "downloads": {
+    "notFound": "This download URL does not exist, has already been used, or has expired. Issue a new one with the MCP tool create_download_url."
+  },
   "migrateToPostgres": {
     "description": "Move the metadata in SQLite (DATA_DIR/gakei.db) to PostgreSQL (ADR-0027). Stop GAKEI before running this. Files such as images (DATA_DIR) are not moved.",
     "toHelp": "URL of the destination PostgreSQL database (e.g. postgresql://user:pass@host:5432/gakei). It must be an empty database",

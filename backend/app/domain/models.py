@@ -192,6 +192,33 @@ class UploadTicket(Base):
     asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("asset.id"), nullable=True)
 
 
+class DownloadTicket(Base):
+    """MCP の `create_download_url` が発行する、原本の1回限りのダウンロード URL
+    (ADR-0023 8章 3)。
+
+    アップロード URL(`UploadTicket`)と同じ作りで、URL に含むトークンは保存せず SHA-256 の
+    ハッシュだけを持つ。有効期限は発行から10分。取得したら `used_at` を書く(証跡ではないが、
+    行は消さない)。`user_id` は発行者(個人モードは null)で、取得の時点でもこの利用者に
+    `asset_id` が見えるかを確かめる(ADR-0025)。`api_token_id` は認証モードで発行に使った
+    トークン(失効していたら URL も無効にする)。
+    """
+
+    __tablename__ = "download_ticket"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    api_token_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("api_token.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
 class Asset(Base):
     """画像そのものを表すノード。バイナリは不変。
 
