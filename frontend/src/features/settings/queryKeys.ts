@@ -25,3 +25,12 @@ export const API_TOKENS_QUERY_KEY = ['api-tokens'] as const
  * 「再推定」(使えるエンジンがあるか)が読む。
  */
 export const ANNOTATION_SETTINGS_QUERY_KEY = ['annotation-settings'] as const
+
+/**
+ * `GET /api/settings/share`(ADR-0029)。管理者設定の「共有リンク」と、ビューアの「共有」
+ * ボタン(有効なときだけ出す)、ユーザー設定の「共有リンク」(無効の注記)が読む。
+ */
+export const SHARE_SETTINGS_QUERY_KEY = ['share-settings'] as const
+
+/** `GET /api/shares`(ADR-0029)。ユーザー設定の「共有リンク」の一覧。 */
+export const SHARES_QUERY_KEY = ['shares'] as const

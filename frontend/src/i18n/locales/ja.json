@@ -516,6 +516,52 @@
       "missingKey": "OpenAI の API キーが未設定です。",
       "openSettings": "設定を開く",
       "missingKeyContactAdmin": "OpenAI の API キーが未設定です。管理者に連絡してください。"
+    },
+    "shares": {
+      "heading": "共有リンク",
+      "intro": "自分が作った共有リンクです。リンクを知っている人は、ログインしなくても見られます。取り消すと、そのリンクは開けなくなります(元に戻せません)。",
+      "disabledNote": "共有リンクは、いま管理者設定で無効になっています。既存のリンクも開けません。",
+      "loading": "読み込み中...",
+      "loadFailed": "共有リンクの一覧を取得できませんでした。",
+      "retry": "再読み込み",
+      "empty": "共有リンクはありません。ビューアの「共有」から作れます。",
+      "scope": "範囲",
+      "original": "原本",
+      "originalAllowed": "許可",
+      "originalDenied": "プレビューまで",
+      "imageCount": {
+        "one": "{count} 枚",
+        "other": "{count} 枚"
+      },
+      "createdAt": "作成",
+      "lastAccessedAt": "最後に開かれた日時",
+      "neverAccessed": "まだ開かれていません",
+      "accessCount": "開かれた回数",
+      "rootDeleted": "起点の画像が削除されたため、このリンクは開けません。",
+      "copy": "リンクをコピー",
+      "copiedToast": "リンクをコピーしました",
+      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+      "revoke": "取り消す",
+      "revokeConfirm": {
+        "message": "この共有リンクを取り消しますか? リンクは開けなくなり、元に戻せません。",
+        "confirmLabel": "取り消す"
+      },
+      "revokedToast": "共有リンクを取り消しました",
+      "revokeFailed": "取り消せませんでした",
+      "openRoot": "起点の画像を開く"
+    },
+    "shareAdmin": {
+      "heading": "共有リンク",
+      "intro": "利用者が、ログイン不要のリンクで画像を共有できるようにします。リンクでは、画像とプロンプト・パラメーターが見えます(実行者、タグ、料金は見えません)。",
+      "enabledLabel": "共有リンクを有効にする",
+      "enabledTooltip": "無効の間は共有リンクを作れず、既存のリンクもすべて開けなくなります(記録は残り、有効に戻せばまた開けます)。既定は無効です。",
+      "enabledToast": "共有リンクを有効にしました",
+      "disabledToast": "共有リンクを無効にしました",
+      "saveFailed": "保存に失敗しました",
+      "loading": "読み込み中...",
+      "loadFailed": "共有リンクの設定を取得できませんでした。",
+      "retry": "再読み込み",
+      "personalModeWarning": "個人モード(AUTH_MODE=none)には認証がありません。サーバーをそのままインターネットに出すと、共有していない画像も含めて全部が見えます。外に出すのは、逆プロキシで共有のページに要るパス(/s/、/api/public/、/static/ など)だけにしてください。設定例は docs/sharing.md にあります。"
     }
   },
   "promptSets": {
@@ -1398,5 +1444,67 @@
       "nameRequired": "名前を入力してください",
       "templateRequired": "ワークフローの JSON ファイルを選択してください"
     }
+  },
+  "share": {
+    "button": "共有",
+    "buttonTooltip": "ログインしていない人にも見られるリンクを作ります",
+    "dialogTitle": "共有リンクを作る",
+    "intro": "リンクを知っている人は、ログインしなくても見られます。含まれる画像と、それを作ったときのプロンプト・パラメーターが見えます。実行者、タグ、料金は見えません。",
+    "scopeLabel": "範囲",
+    "scopes": {
+      "single": "この1枚",
+      "ancestors": "祖先まで",
+      "lineage": "祖先と子孫"
+    },
+    "scopeHelp": {
+      "single": "この画像だけを共有します。",
+      "ancestors": "この画像と、Edit の元になった画像をさかのぼって共有します。",
+      "lineage": "祖先に加えて、この画像から作った画像も共有します。"
+    },
+    "allowOriginalLabel": "原本の表示とダウンロードを許す",
+    "allowOriginalHelp": "オフにすると、プレビュー(長辺 2048px)までになります。",
+    "previewLoading": "含まれる画像を確かめています...",
+    "previewFailed": "含まれる画像を取得できませんでした。",
+    "previewCount": {
+      "one": "{count} 枚の画像が含まれます",
+      "other": "{count} 枚の画像が含まれます"
+    },
+    "previewFixedNote": "範囲は今の時点で固定します。あとで作った画像は、自動では載りません。",
+    "previewTruncated": "系列が大きいため、一部だけを含めます。",
+    "create": "リンクを作る",
+    "creating": "作成中...",
+    "createFailed": "共有リンクを作れませんでした",
+    "createdHeading": "共有リンクを作りました",
+    "createdNote": "取り消すまで有効です。一覧と取り消しは、設定の「共有リンク」から行えます。",
+    "copy": "コピー",
+    "copiedToast": "リンクをコピーしました",
+    "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+    "close": "閉じる"
+  },
+  "publicShare": {
+    "loading": "読み込み中...",
+    "invalid": "このリンクは無効です",
+    "invalidDetail": "リンクが取り消されたか、共有が無効になっているか、URL が間違っています。",
+    "sharedBy": "GAKEI で共有された画像",
+    "images": {
+      "one": "{count} 枚",
+      "other": "{count} 枚"
+    },
+    "lineageHeading": "系列",
+    "promptHeading": "プロンプト",
+    "paramsHeading": "パラメーター",
+    "model": "モデル",
+    "operation": "操作",
+    "operations": {
+      "generate": "生成",
+      "edit": "編集"
+    },
+    "created": "作成日時",
+    "dimensions": "大きさ",
+    "noRun": "この画像はアップロードされたもので、プロンプトの記録はありません。",
+    "downloadOriginal": "原本をダウンロード",
+    "originalNotAllowed": "この共有では、原本は公開されていません。",
+    "untitled": "無題",
+    "imageListLabel": "含まれる画像"
   }
 }

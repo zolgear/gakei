@@ -516,6 +516,52 @@
       "missingKey": "No OpenAI API key is set.",
       "openSettings": "Open settings",
       "missingKeyContactAdmin": "No OpenAI API key is set. Please contact an admin."
+    },
+    "shares": {
+      "heading": "Share links",
+      "intro": "Share links you created. Anyone with a link can view it without signing in. Revoking a link stops it from opening (this cannot be undone).",
+      "disabledNote": "Share links are currently turned off in the admin settings. Existing links do not open either.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load your share links.",
+      "retry": "Reload",
+      "empty": "You have no share links. Create one with Share in the viewer.",
+      "scope": "Scope",
+      "original": "Original",
+      "originalAllowed": "Allowed",
+      "originalDenied": "Preview only",
+      "imageCount": {
+        "one": "{count} image",
+        "other": "{count} images"
+      },
+      "createdAt": "Created",
+      "lastAccessedAt": "Last opened",
+      "neverAccessed": "Not opened yet",
+      "accessCount": "Times opened",
+      "rootDeleted": "The starting image was deleted, so this link does not open.",
+      "copy": "Copy link",
+      "copiedToast": "Link copied",
+      "copyFailed": "Could not copy. Select the text and copy it by hand.",
+      "revoke": "Revoke",
+      "revokeConfirm": {
+        "message": "Revoke this share link? The link will stop opening, and this cannot be undone.",
+        "confirmLabel": "Revoke"
+      },
+      "revokedToast": "Share link revoked",
+      "revokeFailed": "Could not revoke the link",
+      "openRoot": "Open the starting image"
+    },
+    "shareAdmin": {
+      "heading": "Share links",
+      "intro": "Let users share images with links that need no sign-in. A link shows the images and their prompts and parameters (not who ran them, tags, or cost).",
+      "enabledLabel": "Enable share links",
+      "enabledTooltip": "While off, nobody can create share links and all existing links stop opening (the records stay, and links open again when you turn this back on). Off by default.",
+      "enabledToast": "Share links enabled",
+      "disabledToast": "Share links disabled",
+      "saveFailed": "Could not save",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the share link settings.",
+      "retry": "Reload",
+      "personalModeWarning": "Personal mode (AUTH_MODE=none) has no sign-in. If you expose the server to the internet as is, every image is visible, including ones you did not share. Expose only the paths the share page needs (/s/, /api/public/, /static/, and so on) through a reverse proxy. See docs/sharing.md for an example."
     }
   },
   "promptSets": {
@@ -1398,5 +1444,67 @@
       "nameRequired": "Please enter a name.",
       "templateRequired": "Please choose the workflow JSON file."
     }
+  },
+  "share": {
+    "button": "Share",
+    "buttonTooltip": "Create a link that people can open without signing in",
+    "dialogTitle": "Create a share link",
+    "intro": "Anyone with the link can view it without signing in. They see the included images and the prompts and parameters used to make them. They do not see who ran them, tags, or cost.",
+    "scopeLabel": "Scope",
+    "scopes": {
+      "single": "This image",
+      "ancestors": "With ancestors",
+      "lineage": "Ancestors and descendants"
+    },
+    "scopeHelp": {
+      "single": "Share only this image.",
+      "ancestors": "Share this image and the images it was edited from.",
+      "lineage": "Also share the images made from this image."
+    },
+    "allowOriginalLabel": "Allow viewing and downloading the original",
+    "allowOriginalHelp": "When off, viewers get the preview only (2048px on the long edge).",
+    "previewLoading": "Checking the included images...",
+    "previewFailed": "Could not load the included images.",
+    "previewCount": {
+      "one": "{count} image is included",
+      "other": "{count} images are included"
+    },
+    "previewFixedNote": "The scope is fixed now. Images you make later are not added automatically.",
+    "previewTruncated": "The lineage is large, so only part of it is included.",
+    "create": "Create link",
+    "creating": "Creating...",
+    "createFailed": "Could not create the share link",
+    "createdHeading": "Share link created",
+    "createdNote": "It stays valid until you revoke it. You can list and revoke links under Share links in Settings.",
+    "copy": "Copy",
+    "copiedToast": "Link copied",
+    "copyFailed": "Could not copy. Select the text and copy it by hand.",
+    "close": "Close"
+  },
+  "publicShare": {
+    "loading": "Loading...",
+    "invalid": "This link is not valid",
+    "invalidDetail": "The link was revoked, sharing is turned off, or the URL is wrong.",
+    "sharedBy": "Images shared from GAKEI",
+    "images": {
+      "one": "{count} image",
+      "other": "{count} images"
+    },
+    "lineageHeading": "Lineage",
+    "promptHeading": "Prompt",
+    "paramsHeading": "Parameters",
+    "model": "Model",
+    "operation": "Operation",
+    "operations": {
+      "generate": "Generate",
+      "edit": "Edit"
+    },
+    "created": "Created",
+    "dimensions": "Size",
+    "noRun": "This image was uploaded, so there is no prompt on record.",
+    "downloadOriginal": "Download original",
+    "originalNotAllowed": "The original is not shared by this link.",
+    "untitled": "Untitled",
+    "imageListLabel": "Included images"
   }
 }

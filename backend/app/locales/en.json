@@ -174,6 +174,9 @@
       "invalidThreshold": "The threshold must be a number from {min} to {max}",
       "unknownOnnxModel": "Unknown ONNX tagger model",
       "onnxDownloading": "A model cannot be deleted while it is downloading"
+    },
+    "share": {
+      "invalidEnabled": "enabled must be true or false"
     }
   },
   "runValidation": {
@@ -382,5 +385,10 @@
       "one": "Migration finished ({count} object in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI.",
       "other": "Migration finished ({count} objects in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI."
     }
+  },
+  "shares": {
+    "disabled": "Share links are disabled in the admin settings",
+    "notFound": "Share link not found",
+    "publicNotFound": "This link is not valid"
   }
 }

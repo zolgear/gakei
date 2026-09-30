@@ -49,4 +49,16 @@ describe('visibleSections', () => {
     expect(visibleSections(false, false)).not.toContain('annotation')
     expect(visibleSections(false, true)).not.toContain('annotation')
   })
+
+  it('共有リンクの一覧は両方のモードのユーザー設定に、有効/無効は管理者設定の末尾に置く', () => {
+    for (const oidc of [true, false]) {
+      for (const admin of [true, false]) {
+        const sections = visibleSections(admin, oidc)
+        expect(sections.indexOf('shares')).toBe(sections.indexOf('display') + 1)
+      }
+      expect(visibleSections(false, oidc)).not.toContain('shareAdmin')
+    }
+    const sections = visibleSections(true, false)
+    expect(sections.indexOf('shareAdmin')).toBe(sections.indexOf('mcp') + 1)
+  })
 })

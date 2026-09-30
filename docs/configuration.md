@@ -50,7 +50,7 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 | `OIDC_CLIENT_ID` | なし | IdP に登録したクライアント ID。`AUTH_MODE=oidc` のとき必須 |
 | `OIDC_CLIENT_SECRET` | なし | クライアントシークレット。空なら public client(PKCE のみ)として扱う |
 | `OIDC_SCOPES` | `openid profile email` | 要求するスコープ(空白区切り) |
-| `PUBLIC_BASE_URL` | なし | 利用者がブラウザで開く URL(例: `https://gakei.example.com`)。IdP からの戻り先は `{PUBLIC_BASE_URL}/api/auth/callback`。`https` ならセッション Cookie に `Secure` を付ける。`AUTH_MODE=oidc` のとき必須 |
+| `PUBLIC_BASE_URL` | なし | 利用者がブラウザで開く URL(例: `https://gakei.example.com`)。IdP からの戻り先は `{PUBLIC_BASE_URL}/api/auth/callback`。`https` ならセッション Cookie に `Secure` を付ける。`AUTH_MODE=oidc` のとき必須。共有リンク(`{PUBLIC_BASE_URL}/s/{トークン}`)と MCP の接続先の表示にも使う(無ければリクエストの URL から組み立てる。[sharing.md](sharing.md)) |
 | `AUTH_ADMIN_EMAILS` | 空 | 管理者にするメールアドレス(カンマ区切り。大文字小文字は無視)。リクエストのたびに評価する(再起動後、次のリクエストから反映。ログインし直す必要もセッションを消す必要もない。L-3、2026-09-27 追記) |
 | `AUTH_ALLOWED_EMAIL_DOMAINS` | 空(制限なし) | ログインを許すメールアドレスのドメイン(カンマ区切り。例: `example.co.jp,example.com`)。Google のように誰でもアカウントを持てる IdP では必ず指定する。`AUTH_ADMIN_EMAILS` の人は常に許す。これもリクエストのたびに評価する(L-3、2026-09-27 追記) |
 | `AUTH_SESSION_HOURS` | `12` | ログインしてからセッションが切れるまでの時間。1〜720(30日)の範囲(I-10、2026-09-27 追記) |

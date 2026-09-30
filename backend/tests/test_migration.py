@@ -28,6 +28,8 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "asset_tag",
         "upload_ticket",
         "download_ticket",
+        "share",
+        "share_asset",
         "alembic_version",
     } <= tables
 
@@ -899,4 +901,55 @@ def test_migration_upgrades_from_0020_to_0021_adds_download_ticket(
     command.downgrade(cfg, "0020")
     engine = create_engine(db_url)
     assert "download_ticket" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0021_to_0022_adds_share_tables(empty_database_url: str) -> None:
+    """0021 適用済みの DB に 0022(share / share_asset。ADR-0029)が当たり、downgrade も通ること。"""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_url = empty_database_url
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+
+    command.upgrade(cfg, "0021")
+    engine = create_engine(db_url)
+    assert "share" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(db_url)
+    inspector = sa_inspect(engine)
+    assert {"share", "share_asset"} <= set(inspector.get_table_names())
+    assert {c["name"] for c in inspector.get_columns("share")} == {
+        "id",
+        "token",
+        "root_asset_id",
+        "scope",
+        "allow_original",
+        "created_by_user_id",
+        "created_at",
+        "revoked_at",
+        "last_accessed_at",
+        "access_count",
+    }
+    assert {c["name"] for c in inspector.get_columns("share_asset")} == {
+        "share_id",
+        "asset_id",
+        "depth",
+    }
+    uniques = inspector.get_unique_constraints("share")
+    assert any(u["column_names"] == ["token"] for u in uniques)
+    engine.dispose()
+
+    command.downgrade(cfg, "0021")
+    engine = create_engine(db_url)
+    tables = set(sa_inspect(engine).get_table_names())
+    assert "share" not in tables and "share_asset" not in tables
     engine.dispose()

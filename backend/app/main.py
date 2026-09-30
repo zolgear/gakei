@@ -29,6 +29,7 @@ from app.api import prompt_sets as prompt_sets_api
 from app.api import runs as runs_api
 from app.api import search as search_api
 from app.api import settings as settings_api
+from app.api import shares as shares_api
 from app.api import tags as tags_api
 from app.api import uploads as uploads_api
 from app.api import users as users_api
@@ -280,6 +281,37 @@ class LocaleMiddleware:
         await self._app(scope, receive, send)
 
 
+# ADR-0029 6章: 共有のページ(`/s/{トークン}`)と、その API(`/api/public/`)の応答に付ける
+# ヘッダー。検索エンジンに載せない・トークンを含む URL を Referer で外に渡さない。
+_PUBLIC_SHARE_PREFIXES = ("/s/", "/api/public/")
+_PUBLIC_SHARE_HEADERS = (
+    (b"x-robots-tag", b"noindex"),
+    (b"referrer-policy", b"no-referrer"),
+)
+
+
+class PublicShareHeadersMiddleware:
+    """共有のページと公開の API の応答(404 などのエラーも含む)にヘッダーを足す純粋な ASGI
+    ミドルウェア(`LocaleMiddleware` と同じく、`BaseHTTPMiddleware` は使わない)。"""
+
+    def __init__(self, app) -> None:  # noqa: ANN001
+        self._app = app
+
+    async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
+        if scope["type"] != "http" or not scope.get("path", "").startswith(_PUBLIC_SHARE_PREFIXES):
+            await self._app(scope, receive, send)
+            return
+
+        async def send_with_headers(message) -> None:  # noqa: ANN001
+            if message["type"] == "http.response.start":
+                names = {name.lower() for name, _ in message.get("headers", [])}
+                extra = [(k, v) for k, v in _PUBLIC_SHARE_HEADERS if k not in names]
+                message = {**message, "headers": [*message.get("headers", []), *extra]}
+            await send(message)
+
+        await self._app(scope, receive, send_with_headers)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """`settings` を渡すと、環境変数を経由せずその設定でアプリを組み立てる(ADR-0017)。
 
@@ -301,6 +333,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.add_middleware(LocaleMiddleware)
+    app.add_middleware(PublicShareHeadersMiddleware)
 
     # JS / CSS / JSON を圧縮する。画像、フォント、SSE(text/event-stream)は
     # ミドルウェアの既定で対象外なので、進捗の配信が遅れることはない。
@@ -342,6 +375,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(settings_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
+    app.include_router(shares_api.router, dependencies=auth_dep)
 
     # ADR-0023 7章: 画像の本体の配信(Cookie かアクセストークン。ルーター自身が認可を掛ける)と、
     # 1回限りのアップロード URL の受け口(URL のトークン自体が認可)。いずれも `require_user`
@@ -350,6 +384,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(uploads_api.router)
     # ADR-0023 8章 3: 原本の1回限りのダウンロード URL(URL のトークン自体が認可)。
     app.include_router(downloads_api.router)
+
+    # ADR-0029 6章: ログイン不要の共有リンク。`require_user` を掛けず、見せてよいかは
+    # `app/domain/shares.resolve_public_share` だけで確かめる。
+    app.include_router(shares_api.public_router)
 
     # ADR-0023: MCP サーバー(Streamable HTTP、stateless)。認証は Cookie ではなく
     # アクセストークンなので `require_user` は掛けず、`McpEndpoint` の中で行う。

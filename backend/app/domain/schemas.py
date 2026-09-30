@@ -937,3 +937,123 @@ class OnnxDownloadRequest(BaseModel):
 class AnnotationBackfillResponse(BaseModel):
     # 待ち行列に入れた件数。
     queued: int
+
+
+# -- 共有リンク(ADR-0029) ---------------------------------------------------------
+# 本人向け(`/api/shares`、ログインが要る)と、ログイン不要の公開(`/api/public/shares`)。
+# 公開の応答は、ほかの画面の型(AssetDetail、RunSummary、LineageNode など)を使い回さず、
+# 見せてよい項目だけを持つ専用の型にする(ほかの型に項目が増えても、公開には載らないように)。
+
+ShareScope = Literal["single", "ancestors", "lineage"]
+
+
+class ShareSettingsResponse(BaseModel):
+    """`GET /api/settings/share`。有効/無効(既定は無効)。"""
+
+    enabled: bool
+
+
+class ShareSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/share` の本文。省略した項目は変更しない。"""
+
+    enabled: bool | None = None
+
+
+class SharePreviewRequest(BaseModel):
+    asset_id: uuid.UUID
+    scope: ShareScope
+
+
+class ShareCreateRequest(SharePreviewRequest):
+    # 原本の表示とダウンロードを許すか(ADR-0029 4章。既定は許す)。
+    allow_original: bool = True
+
+
+class SharePreviewAsset(BaseModel):
+    """共有に含まれる画像1件(作る前の確認用。サムネイルは本人向けの配信 URL で出す)。"""
+
+    id: uuid.UUID
+    kind: Literal["upload", "generated", "mask", "sketch"]
+    width: int
+    height: int
+    title: str | None = None
+
+
+class SharePreviewResponse(BaseModel):
+    scope: ShareScope
+    asset_count: int
+    assets: list[SharePreviewAsset] = Field(default_factory=list)
+    # 系列グラフのノード数の上限で、たどり切れなかった(ADR-0009)。
+    truncated: bool = False
+
+
+class ShareRow(BaseModel):
+    """自分の共有リンクの1件(ADR-0029 7章)。"""
+
+    id: uuid.UUID
+    url: str
+    root_asset_id: uuid.UUID
+    # 起点の画像が削除されている(共有のページは 404 になっている)。
+    root_deleted: bool = False
+    root_title: str | None = None
+    scope: ShareScope
+    allow_original: bool
+    asset_count: int
+    created_at: datetime
+    last_accessed_at: datetime | None = None
+    access_count: int = 0
+
+
+class ShareListResponse(BaseModel):
+    items: list[ShareRow] = Field(default_factory=list)
+
+
+class PublicShareAsset(BaseModel):
+    id: uuid.UUID
+    kind: Literal["upload", "generated", "mask", "sketch"]
+    mime: str
+    width: int
+    height: int
+    created_at: datetime
+    title: str | None = None
+    # この画像を作った Run(共有に含まれるときだけ)。
+    run_id: uuid.UUID | None = None
+    # 作成時の系列グラフでの深さ(起点 0、祖先が負、子孫が正)。
+    depth: int = 0
+
+
+class PublicShareRun(BaseModel):
+    """画像を作った Run のうち、見せてよい項目だけ(ADR-0029 3章)。実行者、料金・usage、
+    エラー、入力の Asset の id は含めない。`params` は `shares.public_params` で絞った値。"""
+
+    id: uuid.UUID
+    operation: Literal["generate", "edit"]
+    # モデル名(ComfyUI はワークフローの名前)。
+    model: str
+    prompt: str
+    params: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class PublicShareEdge(BaseModel):
+    """共有に含まれるノードどうしの辺だけ(範囲外のノードへの辺は含めない)。"""
+
+    source: uuid.UUID
+    target: uuid.UUID
+    kind: Literal["input", "output", "sketch_source", "origin"]
+    role: Literal["image", "mask", "reference"] | None = None
+    position: int | None = None
+    output_index: int | None = None
+    primary: bool = False
+
+
+class PublicShareResponse(BaseModel):
+    """`GET /api/public/shares/{token}`(ログイン不要)。"""
+
+    root_asset_id: uuid.UUID
+    scope: ShareScope
+    allow_original: bool
+    created_at: datetime
+    assets: list[PublicShareAsset] = Field(default_factory=list)
+    runs: list[PublicShareRun] = Field(default_factory=list)
+    edges: list[PublicShareEdge] = Field(default_factory=list)

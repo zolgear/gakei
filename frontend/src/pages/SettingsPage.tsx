@@ -1,6 +1,7 @@
 /**
  * `/settings`。上から「表示言語」「表示」「OpenAI API キー」「生成」「ComfyUI」「GAKEI について」の
- * 6セクション(oidc モードでは「プロフィール」「アクセストークン」、管理者には「MCP」も。ADR-0023)を、「ユーザー設定」(言語、表示)と「管理者設定」(OpenAI キー・Base URL、生成、
+ * 6セクション(oidc モードでは「プロフィール」「アクセストークン」、管理者には「MCP」も。ADR-0023。
+ * 自分の「共有リンク」の一覧と、管理者には共有リンクの有効/無効も。ADR-0029)を、「ユーザー設定」(言語、表示)と「管理者設定」(OpenAI キー・Base URL、生成、
  * ComfyUI)の見出しで括る(ADR-0019 5章)。「GAKEI について」はどちらにも属さず末尾のまま。
  * 管理者設定は `isAdmin`(`features/auth/authState.ts`。none モードは常に true)のときだけ
  * 描画し、非管理者には一文(`settings.adminOnly`)だけを出す。どのセクションを見せるかは
@@ -60,6 +61,8 @@ import { ComfyUITimeoutField } from '../features/settings/ComfyUITimeoutField'
 import { McpSettingsSection } from '../features/settings/McpSettingsSection'
 import { AnnotationSettingsSection } from '../features/settings/AnnotationSettingsSection'
 import { ApiTokensSection } from '../features/settings/ApiTokensSection'
+import { SharesSection } from '../features/settings/SharesSection'
+import { ShareSettingsSection } from '../features/settings/ShareSettingsSection'
 import { visibleSections } from '../features/settings/settingsSections'
 import { isAdmin, useAuth } from '../features/auth/authState'
 import { LANGUAGE_SETTING_LABEL, LOCALES, LOCALE_LABELS, isLocale, useI18n } from '../i18n'
@@ -245,6 +248,8 @@ export function SettingsPage() {
         <p className={styles.helpText}>{t.settings.display.studioLayout.help}</p>
       </section>
 
+      {sections.includes('shares') && <SharesSection toast={toast} />}
+
       {sections.includes('accessTokens') && <ApiTokensSection toast={toast} />}
 
       <h2 className={styles.groupHeading}>{t.settings.adminHeading}</h2>
@@ -417,6 +422,8 @@ export function SettingsPage() {
       )}
 
       {sections.includes('mcp') && <McpSettingsSection toast={toast} />}
+
+      {sections.includes('shareAdmin') && <ShareSettingsSection toast={toast} />}
 
       <AboutSection />
 
