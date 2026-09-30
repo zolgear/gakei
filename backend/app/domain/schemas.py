@@ -219,12 +219,28 @@ class TagListResponse(BaseModel):
     items: list[TagCount] = Field(default_factory=list)
 
 
+class RunTextOutput(BaseModel):
+    """実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
+    (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った
+    グラフ(`run.params.comfyui_prompt`)から取った値。"""
+
+    role: str
+    node_id: str | None = None
+    class_type: str | None = None
+    title: str | None = None
+    text: str
+    # 100,000 文字を超えて切り詰めたとき true。
+    truncated: bool = False
+
+
 class ProducedByRunSummary(BaseModel):
     id: uuid.UUID
     operation: Literal["generate", "edit"]
     model: str
     status: Literal["queued", "running", "succeeded", "failed", "canceled"]
     prompt: str
+    # 最終プロンプトなど(ADR-0030)。無ければ null。
+    text_outputs: list[RunTextOutput] | None = None
 
 
 class AssetOrigin(BaseModel):
@@ -385,6 +401,9 @@ class RunSummary(BaseModel):
     asset_group: AssetGroupRef | None = None
     # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツールから作った Run。
     origin: str | None = None
+    # 実行時にワークフローが作ったテキスト(ADR-0030。ComfyUI の最終プロンプト)。
+    # 成功した Run のうち、記録があるものだけ。それ以外は null。
+    text_outputs: list[RunTextOutput] | None = None
 
 
 class RunDetail(RunSummary):
@@ -1033,6 +1052,8 @@ class PublicShareRun(BaseModel):
     prompt: str
     params: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     created_at: datetime
+    # 最終プロンプト(PE の出力。ADR-0030 4章)。無ければ null。
+    text_outputs: list[RunTextOutput] | None = None
 
 
 class PublicShareEdge(BaseModel):

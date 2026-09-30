@@ -1738,6 +1738,8 @@ export interface components {
             mask?: components["schemas"]["MaskBinding"] | null;
             /** Outputs */
             outputs: string[];
+            /** Final Prompt */
+            final_prompt?: string | null;
         };
         /** Body_create_asset */
         Body_create_asset: {
@@ -2566,6 +2568,8 @@ export interface components {
             status: "queued" | "running" | "succeeded" | "failed" | "canceled";
             /** Prompt */
             prompt: string;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
         };
         /** PromptSetCreateRequest */
         PromptSetCreateRequest: {
@@ -2845,6 +2849,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
         };
         /** RunCancelResponse */
         RunCancelResponse: {
@@ -2962,6 +2968,8 @@ export interface components {
             asset_group?: components["schemas"]["AssetGroupRef"] | null;
             /** Origin */
             origin?: string | null;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
             /** Deployment */
             deployment?: string | null;
             /** Provider Request Id */
@@ -3123,6 +3131,31 @@ export interface components {
             asset_group?: components["schemas"]["AssetGroupRef"] | null;
             /** Origin */
             origin?: string | null;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
+        };
+        /**
+         * RunTextOutput
+         * @description 実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
+         *     (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った
+         *     グラフ(`run.params.comfyui_prompt`)から取った値。
+         */
+        RunTextOutput: {
+            /** Role */
+            role: string;
+            /** Node Id */
+            node_id?: string | null;
+            /** Class Type */
+            class_type?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Text */
+            text: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /**
          * SearchAssetHit
@@ -3274,6 +3307,8 @@ export interface components {
             asset_group?: components["schemas"]["AssetGroupRef"] | null;
             /** Origin */
             origin?: string | null;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
             /** Snippet */
             snippet: string;
         };
@@ -3471,6 +3506,8 @@ export interface components {
             mask?: components["schemas"]["MaskBinding"] | null;
             /** Outputs */
             outputs?: string[];
+            /** Final Prompt */
+            final_prompt?: string | null;
         };
         /** TagCount */
         TagCount: {

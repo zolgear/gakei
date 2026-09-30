@@ -637,3 +637,38 @@ def test_get_asset_returns_title_and_tags_with_source(client: TestClient) -> Non
         {"name": "cat", "source": "user"},
         {"name": "sky", "source": "auto"},
     ]
+
+
+# -- 最終プロンプト(ADR-0030 4章) ---------------------------------------------------
+
+
+def test_run_and_asset_include_text_outputs(client: TestClient) -> None:
+    """`get_run` と `get_asset` の `produced_by_run` に `text_outputs` を出す。記録の無い Run は
+    null。(FAKE では書かれないので、ComfyUI の実行結果に相当する値を DB に直接書く。)"""
+    _enable(client)
+    payload = _generate(client, {"prompt": "pe check"})
+    assert payload["text_outputs"] is None
+    asset_id = payload["outputs"][0]["asset_id"]
+    assert (
+        _ok(_call(client, "get_asset", {"asset_id": asset_id}))["produced_by_run"]["text_outputs"]
+        is None
+    )
+
+    item = {
+        "role": "final_prompt",
+        "node_id": "472",
+        "class_type": "PreviewAny",
+        "title": None,
+        "text": "A warm, cozy room",
+    }
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(payload["run_id"]))
+        assert run is not None
+        run.text_outputs = [item]
+        db.commit()
+
+    expected = [{**item, "truncated": False}]
+    run_payload = _ok(_call(client, "get_run", {"run_id": payload["run_id"]}))
+    assert run_payload["text_outputs"] == expected
+    asset = _ok(_call(client, "get_asset", {"asset_id": asset_id}))
+    assert asset["produced_by_run"]["text_outputs"] == expected

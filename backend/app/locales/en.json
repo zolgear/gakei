@@ -51,6 +51,7 @@
       "bindingInputMissing": "{label}: node {node} has no input {input}",
       "bindingDuplicate": "Duplicate binding: node {node} input {input}",
       "outputNodeMissing": "Output node {node} does not exist",
+      "finalPromptNodeMissing": "Final prompt node {node} does not exist",
       "editRequiresImage": "edit requires an image binding",
       "generateCannotHaveImageOrMask": "generate cannot have image or mask bindings (register it as edit instead)",
       "exposedParamDuplicate": "Duplicate exposed parameter name: {name}",

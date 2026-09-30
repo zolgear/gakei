@@ -27,6 +27,7 @@ from app.domain.avatars import avatar_url
 from app.domain.embedded_meta import build_lineage_meta, embed_gakei_chunk, get_instance_id
 from app.domain.lineage import DEFAULT_UP, MAX_DEPTH, LineageNotFoundError, build_asset_lineage
 from app.domain.models import AppUser, Asset, AssetGroup, AssetGroupMember, AssetKind, Run
+from app.domain.run_views import run_text_outputs
 from app.domain.schemas import (
     AssetAnnotationResponse,
     AssetDetail,
@@ -144,6 +145,7 @@ def _to_detail(
             model=produced_by_run.model,
             status=produced_by_run.status,
             prompt=produced_by_run.prompt,
+            text_outputs=run_text_outputs(produced_by_run),
         )
     return AssetDetail(
         id=asset.id,

@@ -35,7 +35,7 @@ from app.domain.models import (
     Share,
     ShareAsset,
 )
-from app.domain.run_views import model_label_from_params
+from app.domain.run_views import model_label_from_params, run_text_outputs
 from app.domain.schemas import (
     PublicShareAsset,
     PublicShareEdge,
@@ -430,6 +430,7 @@ def build_public_response(db: Session, share: Share) -> PublicShareResponse:
             prompt=r.prompt,
             params=public_params(r.params),
             created_at=r.queued_at,
+            text_outputs=run_text_outputs(r),
         )
         for r in sorted(runs, key=lambda r: (r.queued_at, str(r.id)))
     ]

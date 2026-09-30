@@ -185,7 +185,7 @@ def test_copies_all_tables_and_row_counts_match(
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
     engine.dispose()
-    assert version == "0022"
+    assert version == "0023"
 
     # 元の SQLite は消さない(戻したい場合は DATABASE_URL を外せば元の状態で動く)。
     assert source_db.is_file()

@@ -45,6 +45,7 @@ from tests.comfyui_graphs import (
     PRIMITIVE_SEED_OBJECT_INFO,
     PRIMITIVE_TEXT_GRAPH,
     PROMPT_ENHANCER_GRAPH,
+    QWEN21_PE_GRAPH,
     QWEN_EDIT_GRAPH,
     QWEN_LIKE_GRAPH,
     QWEN_LIKE_OBJECT_INFO,
@@ -850,3 +851,71 @@ def test_resolve_prompt_sets_each_slot_in_order() -> None:
     )
     assert result["480"]["inputs"]["image"] == "gakei_aaa.png"
     assert result["410"]["inputs"]["image"] == "gakei_bbb.png"
+
+
+# -- 最終プロンプト(PE の出力。ADR-0030 1章) --------------------------------------
+
+
+def test_analyze_suggests_final_prompt_preview_any_upstream_of_encoder() -> None:
+    result = analyze_workflow(clone(QWEN21_PE_GRAPH))
+    assert result.suggested_bindings.final_prompt == "472"
+
+
+def test_analyze_suggests_final_prompt_with_object_info_output_node() -> None:
+    """`/object_info` があれば、`output_node: true` のテキスト表示ノード(カスタムノード)も
+    候補にする。配線を数段さかのぼった先でも見つかる。"""
+    graph = clone(QWEN21_PE_GRAPH)
+    graph["472"]["class_type"] = "MyTextShow"
+    graph["490"] = {"class_type": "StringFormat", "inputs": {"values.a": ["472", 0]}}
+    graph["452"]["inputs"]["prompt"] = ["490", 0]
+    object_info = {
+        "MyTextShow": {"output_node": True, "input": {"required": {"source": ["*", {}]}}},
+        "SaveImageAdvanced": {"output_node": True},
+        "TextEncodeQwenImage21": {
+            "input": {
+                "required": {"prompt": ["STRING", {}], "clip": ["CLIP"]},
+                "optional": {"negative_prompt": ["STRING", {}]},
+            }
+        },
+    }
+    result = analyze_workflow(graph, object_info)
+    assert result.suggested_bindings.final_prompt == "472"
+    # /object_info が無ければ、知らない class_type は推定しない。
+    assert analyze_workflow(graph).suggested_bindings.final_prompt is None
+
+
+def test_analyze_final_prompt_title_convention_wins() -> None:
+    graph = clone(QWEN21_PE_GRAPH)
+    graph["481"]["_meta"] = {"title": "gakei:final_prompt"}
+    result = analyze_workflow(graph)
+    assert result.suggested_bindings.final_prompt == "481"
+
+
+def test_analyze_final_prompt_none_without_pe_and_no_warning() -> None:
+    result = analyze_workflow(clone(T2I_GRAPH))
+    assert result.suggested_bindings.final_prompt is None
+    assert result.warnings == []
+
+
+def test_analyze_final_prompt_ignores_preview_any_not_on_prompt_path() -> None:
+    """プロンプトの経路に無いデバッグ用の PreviewAny は選ばない。"""
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {"class_type": "PreviewAny", "inputs": {"source": ["3", 0]}}
+    assert analyze_workflow(graph).suggested_bindings.final_prompt is None
+
+
+def test_validate_workflow_accepts_final_prompt_of_any_class_type() -> None:
+    bindings = _t2i_bindings().model_copy(update={"final_prompt": "5"})
+    validate_workflow(clone(T2I_GRAPH), "generate", bindings, [])
+
+
+def test_validate_workflow_rejects_missing_final_prompt_node() -> None:
+    bindings = _t2i_bindings().model_copy(update={"final_prompt": "999"})
+    with pytest.raises(WorkflowValidationError, match="999"):
+        validate_workflow(clone(T2I_GRAPH), "generate", bindings, [])
+
+
+def test_bindings_without_final_prompt_key_reads_as_none() -> None:
+    legacy = _t2i_bindings().model_dump(mode="json")
+    legacy.pop("final_prompt")
+    assert Bindings.model_validate(legacy).final_prompt is None

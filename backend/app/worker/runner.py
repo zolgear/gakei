@@ -7,7 +7,8 @@ ComfyUI の実行が、OpenAI の実行を待たせないようにするため�
 
 状態遷移は queued → running → succeeded | failed | canceled。
 更新してよいのは run.status / started_at / finished_at /
-error_* / usage / provider_request_id のみ。
+error_* / usage / provider_request_id / text_outputs のみ(text_outputs は成功時の1回だけ。
+ADR-0030)。
 """
 
 from __future__ import annotations
@@ -239,6 +240,9 @@ def _finish_run_succeeded(
         run.status = RunStatus.SUCCEEDED
         run.finished_at = _utcnow()
         run.usage = result.usage
+        if result.text_outputs is not None:
+            # None を代入すると JSON の null が入るので、無いときは触れない(SQL の NULL のまま)。
+            run.text_outputs = result.text_outputs
         run.provider_request_id = result.provider_request_id
         session.commit()
     if annotation_queued and annotator is not None:

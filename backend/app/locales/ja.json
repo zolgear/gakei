@@ -51,6 +51,7 @@
       "bindingInputMissing": "{label}: ノード {node} に入力 {input} がありません",
       "bindingDuplicate": "差し込み先が重複しています: ノード {node} の入力 {input}",
       "outputNodeMissing": "出力ノード {node} が存在しません",
+      "finalPromptNodeMissing": "最終プロンプトのノード {node} が存在しません",
       "editRequiresImage": "edit には image の差し込み先が必要です",
       "generateCannotHaveImageOrMask": "generate には image と mask の差し込み先を指定できません(edit として登録してください)",
       "exposedParamDuplicate": "公開パラメータ名が重複しています: {name}",

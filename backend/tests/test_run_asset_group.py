@@ -117,6 +117,7 @@ def test_group_deleted_before_completion_run_still_succeeds(
         outputs=[SimpleNamespace(data=make_png_bytes(width=64, height=64))],
         usage=None,
         provider_request_id=None,
+        text_outputs=None,
     )
     output_ids = _finish_run_succeeded(
         state.session_factory, state.store, uuid.UUID(run_id), result
@@ -148,6 +149,7 @@ def test_finish_adds_member_once_and_readding_is_ignored(client_no_runner: TestC
         outputs=[SimpleNamespace(data=make_png_bytes(width=64, height=64))],
         usage=None,
         provider_request_id=None,
+        text_outputs=None,
     )
     output_ids = _finish_run_succeeded(
         state.session_factory, state.store, uuid.UUID(run_id), result

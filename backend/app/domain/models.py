@@ -308,6 +308,10 @@ class Run(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     usage: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
     provider_request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 実行時にワークフローが作ったテキスト(ADR-0030。ComfyUI の最終プロンプト)。
+    # `[{"role", "node_id", "class_type", "title", "text", "truncated"?}]`。
+    # 成功時に1回だけ書く(失敗した Run は null のまま)。
+    text_outputs: Mapped[list | None] = mapped_column(JsonType, nullable=True)
 
     # 実行したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
     # (INSERT 時に設定し、UPDATE しない)。

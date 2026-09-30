@@ -66,6 +66,7 @@ from app.domain.models import (
 )
 from app.domain.pricing import EstimateResult, cost_from_usage
 from app.domain.pricing import estimate_cost as estimate_cost_domain
+from app.domain.run_views import run_text_outputs
 from app.domain.schemas import AssetGroupCreate, RunCreateRequest, RunInputCreate
 from app.domain.search import MAX_LIMIT as SEARCH_MAX_LIMIT
 from app.domain.search import InvalidSearchQueryError, search
@@ -225,6 +226,14 @@ def _asset_lineage_mermaid(mc: McpRequestContext, db: Session, asset_id: uuid.UU
     )
 
 
+def _text_outputs_payload(run: Run) -> list[dict[str, Any]] | None:
+    """最終プロンプト(PE の出力)など、実行時に作られたテキスト(ADR-0030 4章)。無ければ None。"""
+    items = run_text_outputs(run)
+    if items is None:
+        return None
+    return [item.model_dump(mode="json") for item in items]
+
+
 def _run_payload(
     mc: McpRequestContext,
     db: Session,
@@ -265,6 +274,7 @@ def _run_payload(
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
         "origin": run.origin,
+        "text_outputs": _text_outputs_payload(run),
         "asset_group": group,
         "inputs": [
             {"asset_id": str(i.asset_id), "role": str(i.role), "position": i.position}
@@ -656,7 +666,9 @@ async def get_run(
 ) -> CallToolResult:
     """Get a run's status, parameters, outputs, reference cost and the remaining hourly quota.
     Optionally wait (up to 25 s per call) for it to finish. lineage_mermaid is a Mermaid
-    flowchart of the inputs' ancestry -> this run -> its outputs."""
+    flowchart of the inputs' ancestry -> this run -> its outputs. text_outputs holds text the
+    workflow produced at run time (role "final_prompt": the prompt rewritten by a ComfyUI
+    prompt enhancer), or null."""
     mc = get_mcp_context(ctx)
     if wait_seconds > 0:
         await _wait_for_terminal(mc, run_id, wait_seconds)
@@ -834,7 +846,8 @@ async def get_asset(
 ) -> CallToolResult:
     """Get an image's metadata: kind, size, title, tags, transparency (has_alpha and
     transparent_ratio, counted on the original image), group, the run that produced it
-    (prompt, model, parameters), its primary parent image, and lineage_mermaid (a Mermaid
+    (prompt, model, parameters, and text_outputs such as the final prompt rewritten by a
+    ComfyUI prompt enhancer), its primary parent image, and lineage_mermaid (a Mermaid
     flowchart of its ancestors and descendants). The attached thumbnail is
     512px; call get_image to look at the image in more detail, or create_download_url to get
     the original file.
@@ -870,6 +883,7 @@ async def get_asset(
                         "prompt": run.prompt,
                         "params": run.params or {},
                         "origin": run.origin,
+                        "text_outputs": _text_outputs_payload(run),
                     }
                     parent = db.execute(
                         select(RunInput.asset_id).where(
