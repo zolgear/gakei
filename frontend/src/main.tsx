@@ -20,7 +20,7 @@ import { initLocale } from './i18n'
 import { LocaleRoot } from './i18n/LocaleRoot'
 import { AuthGate } from './features/auth/AuthGate'
 import { PublicSharePage } from './features/share/PublicSharePage'
-import { publicShareTokenFromPath } from './features/share/publicSharePath'
+import { parsePublicSharePath } from './features/share/publicSharePath'
 
 // 最初の描画より前に表示言語を決める(ADR-0015)。
 initLocale()
@@ -28,15 +28,16 @@ initLocale()
 const queryClient = new QueryClient()
 
 // ログイン不要の共有のページ(`/s/{トークン}`。ADR-0029)は、`AuthGate` とルーティングの外で描く
-// (`/api/auth/me` を呼ばず、App バーなどログイン前提の画面も出さない)。
-const shareToken = publicShareTokenFromPath(window.location.pathname)
+// (`/api/auth/me` を呼ばず、App バーなどログイン前提の画面も出さない)。`/s/{トークン}/runs/{run_id}`
+// (Run の詳細の直リンク)も同じ。
+const sharePath = parsePublicSharePath(window.location.pathname)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <LocaleRoot>
-        {shareToken !== null ? (
-          <PublicSharePage token={shareToken} />
+        {sharePath !== null ? (
+          <PublicSharePage token={sharePath.token} initialRunId={sharePath.runId} />
         ) : (
           /* oidc モードの未ログインはここで足止めする(ADR-0019)。ログイン画面は
              ルーティングを必要としないので BrowserRouter の外側に置く。 */

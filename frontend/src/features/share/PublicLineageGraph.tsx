@@ -2,7 +2,8 @@
  * 共有のページの系列グラフ(ADR-0029 3章)。`lineageFlow.ts` の部品(`buildFlowGraph`、
  * ノードの描画)と `LineageGraph.module.css` の見た目を使い回し、データは共有のページの応答から
  * 作る(`toLineageResponse`)。ルーティングに依存しない(共有のページは `BrowserRouter` の外で
- * 描く)。ノードを選ぶと、画像ならビューアでその画像を開き、Run ならその Run が作った画像を開く。
+ * 描く)。ノードを選ぶと、画像ならビューアでその画像を開き、Run ならその Run の詳細を開く
+ * (ADR-0029 3章、2026-09-30 追記)。
  */
 import { useEffect, useMemo, useRef } from 'react'
 import { Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
@@ -15,9 +16,11 @@ import styles from './PublicSharePage.module.css'
 
 interface PublicLineageGraphProps {
   data: PublicShareResponse
-  selectedAssetId: string
+  /** 強調するノード(開いている画像、または Run の詳細を開いているならその Run)。 */
+  highlightedNodeId: string
   thumbUrlFor: (assetId: string) => string
   onSelectAsset: (assetId: string) => void
+  onSelectRun: (runId: string) => void
 }
 
 export function PublicLineageGraph(props: PublicLineageGraphProps) {
@@ -30,12 +33,18 @@ export function PublicLineageGraph(props: PublicLineageGraphProps) {
   )
 }
 
-function PublicLineageGraphInner({ data, selectedAssetId, thumbUrlFor, onSelectAsset }: PublicLineageGraphProps) {
+function PublicLineageGraphInner({
+  data,
+  highlightedNodeId,
+  thumbUrlFor,
+  onSelectAsset,
+  onSelectRun,
+}: PublicLineageGraphProps) {
   const { fitView } = useReactFlow()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const { nodes, edges } = useMemo(
-    () => buildFlowGraph(toLineageResponse(data), data.root_asset_id, selectedAssetId, thumbUrlFor),
-    [data, selectedAssetId, thumbUrlFor],
+    () => buildFlowGraph(toLineageResponse(data), data.root_asset_id, highlightedNodeId, thumbUrlFor),
+    [data, highlightedNodeId, thumbUrlFor],
   )
 
   // キャンバスの大きさが決まってから(狭い幅で縦に並べ替わったときも)全体を収める。
@@ -54,8 +63,7 @@ function PublicLineageGraphInner({ data, selectedAssetId, thumbUrlFor, onSelectA
       onSelectAsset(id)
       return
     }
-    const output = (data.assets ?? []).find((a) => a.run_id === id)
-    if (output) onSelectAsset(output.id)
+    if (type === 'run') onSelectRun(id)
   }
 
   return (

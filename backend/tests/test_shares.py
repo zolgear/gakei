@@ -11,11 +11,13 @@ import json
 import re
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import Settings
 from app.domain.embedded_meta import read_gakei_meta
 from app.domain.models import (
     Asset,
@@ -535,3 +537,74 @@ def test_public_run_includes_text_outputs(client: TestClient) -> None:
         db.commit()
     runs = _public(client, _token(share)).json()["runs"]
     assert runs[0]["text_outputs"] == [item]
+
+
+# -- Run の詳細(ADR-0029 3章、2026-09-30 追記) --------------------------------------
+
+
+def test_run_detail_edges_only_cover_shared_inputs_and_outputs(client: TestClient) -> None:
+    """共有のページの Run の詳細は `edges` から入力・出力を組み立てる。範囲外の入力の辺は返さず、
+    主たる親(`position = 0` の `image`)には `primary` と役割・位置が付く。"""
+    _enable(client)
+    g0 = _outputs(_run(client, "base zebra"))[0]
+    x0 = _outputs(_run(client, "other zebra"))[0]
+    e = _run(client, "edit zebra", inputs=[g0, x0], n=2)
+    e0, e1 = _outputs(e)
+    # g0 を起点に子孫まで: E の出力(e0, e1)は入るが、E のもう一つの入力 x0 は祖先でも子孫でもない。
+    body = _public(client, _token(_create(client, g0, "lineage"))).json()
+    assert {a["id"] for a in body["assets"]} == {g0, e0, e1}
+    inputs = [ed for ed in body["edges"] if ed["kind"] == "input" and ed["target"] == e["id"]]
+    assert inputs == [
+        {
+            "source": g0,
+            "target": e["id"],
+            "kind": "input",
+            "role": "image",
+            "position": 0,
+            "output_index": None,
+            "primary": True,
+        }
+    ]
+    outputs = {
+        ed["target"]: ed["output_index"]
+        for ed in body["edges"]
+        if ed["kind"] == "output" and ed["source"] == e["id"]
+    }
+    assert outputs == {e0: 0, e1: 1}
+    assert x0 not in json.dumps(body)
+
+
+def test_canceled_run_is_hidden_from_run_detail(client: TestClient, chain: Chain) -> None:
+    """取り消した Run は、出力の画像が共有に含まれていても Run としては返さない(Run の詳細の
+    直リンクも、画面では「このリンクは無効です」になる)。"""
+    share = _create(client, chain.e0, "ancestors")
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(chain.e["id"]))
+        assert run is not None
+        run.status = RunStatus.CANCELED
+        db.commit()
+    body = _public(client, _token(share)).json()
+    assert chain.e["id"] not in {r["id"] for r in body["runs"]}
+    assert "edit zebra" not in json.dumps(body)
+    assert all(chain.e["id"] not in (ed["source"], ed["target"]) for ed in body["edges"])
+    assert {a["id"]: a["run_id"] for a in body["assets"]}[chain.e0] is None
+
+
+def test_run_detail_path_serves_spa(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, data_dir: Path
+) -> None:
+    """`/s/{トークン}/runs/{run_id}` も SPA の index.html を返す(画面側で解釈する)。"""
+    import app.main as app_main
+    from app.main import create_app
+
+    dist_dir = tmp_path / "frontend-dist"
+    dist_dir.mkdir()
+    (dist_dir / "index.html").write_text("<html>gakei spa</html>", encoding="utf-8")
+    monkeypatch.setattr(app_main, "_FRONTEND_DIST", dist_dir)
+    app = create_app(Settings(_env_file=None, data_dir=data_dir, fake_provider=True))
+    with TestClient(app) as test_client:
+        for path in ("/s/abc", f"/s/abc/runs/{uuid.uuid4()}"):
+            response = test_client.get(path)
+            assert response.status_code == 200, path
+            assert "gakei spa" in response.text
+            assert response.headers["x-robots-tag"] == "noindex"
