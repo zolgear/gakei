@@ -168,7 +168,10 @@ def test_missing_local_original_is_reported(
     assert target.size_of(asset.blob_key) is None
 
 
-def test_missing_sqlite_database(tmp_path: Path) -> None:
+def test_missing_sqlite_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # SQLite のファイルが無い場合の確認なので、PostgreSQL で回すとき(ADR-0027 6章)の
+    # DATABASE_URL は外す。
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     with pytest.raises(MigrationAbortedError):
         migrate(_settings(tmp_path / "empty"), "s3", dry_run=True)
 
