@@ -582,12 +582,16 @@
     "shares": {
       "heading": "共有リンク",
       "intro": "自分が作った共有リンクです。リンクを知っている人は、ログインしなくても見られます。取り消すと、そのリンクは開けなくなります(元に戻せません)。",
-      "disabledNote": "共有リンクは、いま管理者設定で無効になっています。既存のリンクも開けません。",
       "loading": "読み込み中...",
       "loadFailed": "共有リンクの一覧を取得できませんでした。",
       "retry": "再読み込み",
       "empty": "共有リンクはありません。ビューアの「共有」から作れます。",
-      "scope": "範囲",
+      "count": {
+        "one": "{count} 件",
+        "other": "{count} 件"
+      },
+      "openList": "一覧を開く",
+      "dialogTitle": "共有リンクの一覧",
       "original": "原本",
       "originalAllowed": "許可",
       "originalDenied": "プレビューまで",
@@ -622,8 +626,7 @@
       "saveFailed": "保存に失敗しました",
       "loading": "読み込み中...",
       "loadFailed": "共有リンクの設定を取得できませんでした。",
-      "retry": "再読み込み",
-      "personalModeWarning": "個人モード(AUTH_MODE=none)には認証がありません。サーバーをそのままインターネットに出すと、共有していない画像も含めて全部が見えます。外に出すのは、逆プロキシで共有のページに要るパス(/s/、/api/public/、/static/ など)だけにしてください。設定例は docs/sharing.md にあります。"
+      "retry": "再読み込み"
     }
   },
   "promptSets": {
