@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 何を作っているか
 
-GAKEI は、OpenAI の画像 API(Generate / Edit)をセルフホストで使うための Web ツール。生成・編集のフォーム、4K ビューア、マスクとスケッチ、実行履歴、系列(リネージ)、プロンプトセット、任意の OIDC 認証と管理者ロール、Docker イメージ(GHCR)を持つ。`backend/`(FastAPI + SQLAlchemy。メタデータは既定 SQLite、`DATABASE_URL` で PostgreSQL も選べる。ADR-0027、`docs/postgresql.md`。画像はローカル FS の `data/`)と `frontend/`(React + TypeScript + Vite の SPA。ビルド成果物を FastAPI が配信)から成る。名前は GAKEI(表示は大文字。パッケージ名や localStorage のキーなどの識別子は小文字の `gakei`)。
+GAKEI は、OpenAI の画像 API(Generate / Edit)をセルフホストで使うための Web ツール。生成・編集のフォーム、4K ビューア、マスクとスケッチ、実行履歴、系列(リネージ)、プロンプトセット、任意の OIDC 認証と管理者ロール、Docker イメージ(GHCR)を持つ。`backend/`(FastAPI + SQLAlchemy。メタデータは既定 SQLite、`DATABASE_URL` で PostgreSQL も選べる。ADR-0027、`docs/postgresql.md`。画像は既定でローカル FS の `data/`、`STORAGE_BACKEND` で Azure Blob / S3 互換も選べる。ADR-0028、`docs/object-storage.md`)と `frontend/`(React + TypeScript + Vite の SPA。ビルド成果物を FastAPI が配信)から成る。名前は GAKEI(表示は大文字。パッケージ名や localStorage のキーなどの識別子は小文字の `gakei`)。
 
 設計判断は `docs/adr/` にある。作業を始める前に `docs/adr/README.md`(一覧)を読み、作業に関連する ADR を読む。Azure での組織向けホスティング(ADR-0002〜0007)は設計だけで未着手。
 
@@ -31,6 +31,8 @@ uv run python -m app.tools.third_party_notices <出力パス|->  # 第三者ラ�
 uv run python -m app.tools.backfill_embedded_meta --dry-run   # 既存の upload Asset の埋め込み生成メタ情報を埋め戻す(ADR-0018。サーバー停止中に)
 uv run python -m app.tools.migrate_to_postgres --to postgresql://... --dry-run   # SQLite → PostgreSQL 移行(ADR-0027。docs/postgresql.md)
 GAKEI_TEST_DATABASE_URL=postgresql://... uv run pytest -q   # 同じテストを PostgreSQL でも回す(既定は SQLite のまま)
+uv run python -m app.tools.migrate_storage --to azure_blob|s3 --dry-run   # ローカルの画像をオブジェクトストレージへ移す(ADR-0028。docs/object-storage.md)
+GAKEI_TEST_AZURE_BLOB_CONNECTION_STRING=... uv run pytest -q tests/test_object_storage.py   # Azure Blob(Azurite)でも保存先のテストを回す。S3 は既定で moto が回る。GAKEI_TEST_S3_* で実機にもつなげる
 ```
 
 フロントエンド(`frontend/`、Node 24):
@@ -64,7 +66,7 @@ docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:
 ## 構成
 
 - `backend/app/api/`: ルーター(capabilities、assets と lineage、runs、events(SSE)、prompt_sets、asset_groups(グループ。ADR-0022)、search、pricing、settings、comfyui、auth、users、about)。`/api/auth/*` 以外の全ルーターに `require_user` が掛かり、管理者設定の更新系だけ `require_admin`。
-- `backend/app/domain/`: モデル、スキーマ、サイズ検証、`AssetStore`(ローカル FS)、派生画像、`ingest`、Run の検証、系列グラフの探索、`embedded_meta.py`(ダウンロード PNG への系列情報の埋め込み。ADR-0014)、`generation_meta.py`(他ツールが埋め込んだ生成メタ情報の読み取り。ADR-0018)、`avatars.py`(ADR-0020)、`third_party.py`(ADR-0021)、`asset_groups.py`(グループ。証跡ではないので更新・論理削除できる。ADR-0022)。
+- `backend/app/domain/`: モデル、スキーマ、サイズ検証、`AssetStore`(`storage.py` のローカル FS と、`object_storage.py` の Azure Blob / S3。ADR-0028。配信は `content_exists` / `open_content` を経由し、ローカルのパスを外に出さない)、派生画像、`ingest`、Run の検証、系列グラフの探索、`embedded_meta.py`(ダウンロード PNG への系列情報の埋め込み。ADR-0014)、`generation_meta.py`(他ツールが埋め込んだ生成メタ情報の読み取り。ADR-0018)、`avatars.py`(ADR-0020)、`third_party.py`(ADR-0021)、`asset_groups.py`(グループ。証跡ではないので更新・論理削除できる。ADR-0022)。
 - `backend/app/providers/`: `ImageProvider`、`registry.py`(登録簿)、`openai_images.py`、`fake.py`、`comfyui/`(ローカル ComfyUI。ADR-0013。利用者向けには実験的)。パラメーターの定義は `openai_spec.py` に集約し、フォームはここから組み立てる。主プロバイダーは常に `openai`(`FAKE_PROVIDER=1` のときだけ `fake`。利用者向けの設定一覧には載せない)。接続先は `OPENAI_BASE_URL` または設定画面で変えられる(ADR-0017)。
 - `backend/app/mcp/`(ADR-0023): MCP サーバー。`/mcp`(Streamable HTTP、stateless)を FastAPI に同居させる。既定は無効で、管理者設定で有効にする。ツールは REST を呼ばず、REST と同じドメイン関数(Run 作成は `domain/run_create.py`)を直接呼ぶ。認証モードは `api_token`(ユーザー設定で発行するアクセストークン)の Bearer だけを受ける。MCP で作った Run は `run.origin = 'mcp'`。削除と設定変更のツールは作らない。
 - `backend/app/worker/`: api プロセス内で動く runner(`run` 行がキュー)と、SSE 用のプロセス内 pub/sub。

@@ -126,9 +126,9 @@ uv run python -m app.tools.migrate_storage --to azure_blob|s3 [--dry-run]
 
 ## Action Items
 
-1. [ ] `AssetStore` の `content_path` を `content_exists` / `open_content` に置き換え、配信・ダウンロード・MCP・タガーを書き換える(ローカル FS の振る舞いは変えない)
-2. [ ] 設定(`STORAGE_BACKEND` ほか)と起動時の確認
-3. [ ] `AzureBlobStore` と `S3Store`(条件付き書き込みによる連番)
-4. [ ] ストアの共通テスト(S3 は moto、Azure Blob は Azurite)、Azurite の CI ジョブ
-5. [ ] 移行ツール `app.tools.migrate_storage`
-6. [ ] `docs/configuration.md`、`docs/`(オブジェクトストレージの使い方、移行、バックアップ)、README、CLAUDE.md、ADR-0004 / 0008 への注記
+1. [x] `AssetStore` の `content_path` を `content_exists` / `open_content` に置き換え、配信・ダウンロード・MCP・タガーを書き換える(ローカル FS の振る舞いは変えない)
+2. [x] 設定(`STORAGE_BACKEND` ほか)と起動時の確認
+3. [x] `AzureBlobStore` と `S3Store`(条件付き書き込みによる連番)
+4. [x] ストアの共通テスト(S3 は moto、Azure Blob は Azurite)、Azurite の CI ジョブ
+5. [x] 移行ツール `app.tools.migrate_storage`
+6. [x] `docs/configuration.md`、`docs/`(オブジェクトストレージの使い方、移行、バックアップ)、README、CLAUDE.md、ADR-0004 / 0008 への注記

@@ -32,6 +32,14 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 | `HOST` | `127.0.0.1` | 待ち受けるアドレス |
 | `PORT` | `8000` | 待ち受けるポート |
 | `DATABASE_URL` | なし(SQLite) | メタデータの DB を PostgreSQL にする場合の接続先(`postgresql://user:pass@host:5432/gakei`。ADR-0027)。指定しても、画像のために `DATA_DIR` は引き続き必要。詳しくは [postgresql.md](postgresql.md) |
+| `STORAGE_BACKEND` | `local` | 画像の原本と派生の保存先。`local`(`DATA_DIR`)、`azure_blob`(Azure Blob Storage)、`s3`(S3 互換ストレージ)。ADR-0028。`local` 以外でも、アバターや `secrets.json` などのために `DATA_DIR` は引き続き必要。詳しくは [object-storage.md](object-storage.md) |
+| `AZURE_STORAGE_CONTAINER` | なし | `azure_blob` のときのコンテナ名(必須)。コンテナは先に作っておく |
+| `AZURE_STORAGE_CONNECTION_STRING` | なし | `azure_blob` の接続文字列(アカウントのキーを含む)。`AZURE_STORAGE_ACCOUNT_URL` とはどちらか一方 |
+| `AZURE_STORAGE_ACCOUNT_URL` | なし | `azure_blob` のアカウントの URL(`https://<アカウント名>.blob.core.windows.net`)。認証は `DefaultAzureCredential`(マネージド ID、`az login` など) |
+| `S3_BUCKET` | なし | `s3` のときのバケット名(必須)。バケットは先に作っておく。資格情報は `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` や IAM ロールなど、boto3 の標準の探し方に任せる |
+| `S3_REGION` | なし | `s3` のリージョン(Cloudflare R2 は `auto`) |
+| `S3_ENDPOINT_URL` | なし(AWS S3) | AWS 以外の S3 互換ストレージの接続先(例: `https://<アカウント ID>.r2.cloudflarestorage.com`) |
+| `S3_FORCE_PATH_STYLE` | `false` | `true` でパス形式の URL で接続する(仮想ホスト形式を受けない互換ストレージ向け) |
 | `OPENAI_MAX_RETRIES` | `4` | 429 などの再試行回数。再試行は OpenAI SDK が行う |
 | `OPENAI_TIMEOUT_SECONDS` | `600` | 1リクエストのタイムアウト(秒)。4K や高品質の生成は数分かかる |
 | `MODERATION` | `low` | Generate のときに送る表現の制限。`auto` または `low`。設定画面(設定 → 生成)で保存すると、そちらが優先される |
@@ -55,6 +63,8 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 `DATA_DIR/assets/` の原本は、プロバイダー・モデル別、月別のフォルダに保存される(例: `assets/openai/gpt-image-2.5/2026-09/20260929-093015_1a2b3c4d.png`。アップロードは `assets/uploads/`、マスクは `assets/masks/`、スケッチは `assets/sketches/`。ADR-0026)。以前のバージョンで保存した画像は `assets/{2文字}/` に残り、移さない。同じ内容の画像は、最初に保存した場所の 1 つのファイルを共有する。
 
 **`DATA_DIR` の中のファイルを、ファイルマネージャーなどで直接消したり動かしたり名前を変えたりしないこと。** DB に記録した場所と合わなくなり、画像が表示できなくなる。画像の削除は画面から行う。`DATA_DIR` をフォルダごとバックアップに取るのは構わない。
+
+`STORAGE_BACKEND` を `azure_blob` か `s3` にすると、原本と派生は `DATA_DIR` ではなく、コンテナ(バケット)の中に同じキーで保存される。起動時に接続と読み書きを確かめ、できなければ起動を中止する。ローカルから移すツールもある([object-storage.md](object-storage.md))。
 
 ## Docker(ADR-0016、ADR-0021)
 
