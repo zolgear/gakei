@@ -1,7 +1,7 @@
 /**
  * `/settings`。上から「表示言語」「表示」「OpenAI API キー」「生成」「ComfyUI」「GAKEI について」の
  * 6セクション(oidc モードでは「プロフィール」「アクセストークン」、管理者には「MCP」も。ADR-0023。
- * 自分の「共有リンク」の一覧と、管理者には共有リンクの有効/無効も。ADR-0029)を、「ユーザー設定」(言語、表示)と「管理者設定」(OpenAI キー・Base URL、生成、
+ * 自分の「共有リンク」の一覧(管理者設定で有効のときだけ)と、管理者には共有リンクの有効/無効も。ADR-0029)を、「ユーザー設定」(言語、表示)と「管理者設定」(OpenAI キー・Base URL、生成、
  * ComfyUI)の見出しで括る(ADR-0019 5章)。「GAKEI について」はどちらにも属さず末尾のまま。
  * 管理者設定は `isAdmin`(`features/auth/authState.ts`。none モードは常に true)のときだけ
  * 描画し、非管理者には一文(`settings.adminOnly`)だけを出す。どのセクションを見せるかは
@@ -31,6 +31,7 @@ import {
   getComfyUIStatus,
   getOpenAiBaseUrlStatus,
   getOpenAiKeyStatus,
+  getShareSettings,
   setOpenAiBaseUrl,
   setOpenAiKey,
 } from '../api/client'
@@ -40,6 +41,7 @@ import { ToastHost, useToast } from '../components/Toast'
 import {
   OPENAI_BASE_URL_STATUS_QUERY_KEY,
   OPENAI_KEY_STATUS_QUERY_KEY,
+  SHARE_SETTINGS_QUERY_KEY,
 } from '../features/settings/queryKeys'
 import {
   apiKeyStatusView,
@@ -83,7 +85,10 @@ export function SettingsPage() {
   const toast = useToast()
   const auth = useAuth()
   const admin = isAdmin(auth)
-  const sections = visibleSections(admin, auth.mode === 'oidc')
+  // 共有リンク(ADR-0029)が無効のあいだは、ユーザー設定の一覧ごと隠す。取得できるまでと失敗したときも
+  // 出さない(存在を漏らさない側に倒す)。管理者設定で切り替えると同じキャッシュが更新され、すぐ反映される。
+  const shareSettingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
+  const sections = visibleSections(admin, auth.mode === 'oidc', shareSettingsQuery.data?.enabled === true)
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [baseUrlInput, setBaseUrlInput] = useState('')

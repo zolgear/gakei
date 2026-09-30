@@ -2,12 +2,12 @@
  * 設定 →「ユーザー設定」の「共有リンク」(ADR-0029 7章)。自分が作った、取り消していない共有の
  * 一覧(起点のサムネイル、範囲、原本の可否、作成日時、最後に開かれた日時、開かれた回数)と、
  * リンクのコピー、取り消し(`ConfirmDialog` で確認)。管理者も他人の共有は見えない。
- * 機能が無効のあいだも一覧と取り消しはできる(無効である旨を添える)。
+ * 管理者設定で無効のあいだは、このセクションごと出さない(`settingsSections.ts::visibleSections`)。
  */
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { ApiError, getShareSettings, listShares, revokeShare, type ShareRow } from '../../api/client'
+import { ApiError, listShares, revokeShare, type ShareRow } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import type { UseToastResult } from '../../components/Toast'
@@ -15,7 +15,7 @@ import { copyText } from '../../lib/copyText'
 import { formatDateTime } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
 import { shareScopeLabel } from '../share/shareScope'
-import { SHARES_QUERY_KEY, SHARE_SETTINGS_QUERY_KEY } from './queryKeys'
+import { SHARES_QUERY_KEY } from './queryKeys'
 import styles from './SharesSection.module.css'
 
 interface SharesSectionProps {
@@ -27,7 +27,6 @@ export function SharesSection({ toast }: SharesSectionProps) {
   const s = t.settings.shares
   const queryClient = useQueryClient()
   const query = useQuery({ queryKey: SHARES_QUERY_KEY, queryFn: listShares })
-  const settingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
   const [revokeTarget, setRevokeTarget] = useState<ShareRow | null>(null)
 
   const revokeMutation = useMutation({
@@ -49,7 +48,6 @@ export function SharesSection({ toast }: SharesSectionProps) {
     <section id="shares" className={styles.section}>
       <h2 className={styles.sectionHeading}>{s.heading}</h2>
       <p className={styles.helpText}>{s.intro}</p>
-      {settingsQuery.data?.enabled === false && <p className={styles.warningText}>{s.disabledNote}</p>}
 
       {revokeMutation.isError && (
         <p className={styles.errorText}>

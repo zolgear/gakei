@@ -582,7 +582,6 @@
     "shares": {
       "heading": "Share links",
       "intro": "Share links you created. Anyone with a link can view it without signing in. Revoking a link stops it from opening (this cannot be undone).",
-      "disabledNote": "Share links are currently turned off in the admin settings. Existing links do not open either.",
       "loading": "Loading...",
       "loadFailed": "Could not load your share links.",
       "retry": "Reload",
@@ -622,8 +621,7 @@
       "saveFailed": "Could not save",
       "loading": "Loading...",
       "loadFailed": "Could not load the share link settings.",
-      "retry": "Reload",
-      "personalModeWarning": "Personal mode (AUTH_MODE=none) has no sign-in. If you expose the server to the internet as is, every image is visible, including ones you did not share. Expose only the paths the share page needs (/s/, /api/public/, /static/, and so on) through a reverse proxy. See docs/sharing.md for an example."
+      "retry": "Reload"
     }
   },
   "promptSets": {

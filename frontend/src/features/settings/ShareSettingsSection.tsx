@@ -1,13 +1,12 @@
 /**
  * 設定 →「管理者設定」の「共有リンク」(ADR-0029 5章)。有効/無効(既定は無効)を切り替える
- * チェックボックス(切り替えると即座に保存。MCP と同じ)。個人モード(認証なし)では、サーバーを
- * そのまま外に出すと全部の画像が見えるので、逆プロキシで共有のページのパスだけを出す旨を警告する。
+ * チェックボックス(切り替えると即座に保存。MCP と同じ)。個人モードで外に出すときの逆プロキシの
+ * 注意は、画面では変えられない運用上の情報なのでここには書かず、`docs/sharing.md` にだけ書く。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, getShareSettings, updateShareSettings } from '../../api/client'
 import type { UseToastResult } from '../../components/Toast'
 import { useI18n } from '../../i18n'
-import { useAuth } from '../auth/authState'
 import { SHARE_SETTINGS_QUERY_KEY } from './queryKeys'
 import styles from './McpSettingsSection.module.css'
 
@@ -18,7 +17,6 @@ interface ShareSettingsSectionProps {
 export function ShareSettingsSection({ toast }: ShareSettingsSectionProps) {
   const { t } = useI18n()
   const s = t.settings.shareAdmin
-  const auth = useAuth()
   const queryClient = useQueryClient()
   const query = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
 
@@ -62,7 +60,6 @@ export function ShareSettingsSection({ toast }: ShareSettingsSectionProps) {
         <p className={styles.errorText}>{mutation.error instanceof ApiError ? mutation.error.message : s.saveFailed}</p>
       )}
 
-      {auth.mode === 'none' && <p className={styles.warningText}>{s.personalModeWarning}</p>}
     </section>
   )
 }
