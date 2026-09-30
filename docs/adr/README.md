@@ -32,5 +32,6 @@
 | ADR-0026 | [0026-storage-directory-hierarchy.md](0026-storage-directory-hierarchy.md) | 原本をプロバイダー・モデル別のフォルダに保存する(ローカルFS) | Proposed |
 | ADR-0027 | [0027-postgresql-option.md](0027-postgresql-option.md) | メタデータの DB に PostgreSQL も選べるようにする | Proposed |
 | ADR-0028 | [0028-object-storage-option.md](0028-object-storage-option.md) | 画像の保存先に Azure Blob Storage と S3 互換ストレージも選べるようにする | Proposed |
+| ADR-0029 | [0029-public-share-links.md](0029-public-share-links.md) | ログイン不要の共有リンク(画像1枚、または系列) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。
