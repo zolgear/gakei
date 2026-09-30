@@ -104,7 +104,7 @@ def test_backfill_reports_missing_blob(client: TestClient) -> None:
     with session_factory() as session:
         asset = session.get(Asset, uuid.UUID(uploaded["id"]))
         assert asset is not None
-        blob_path = store.content_path(asset.blob_key, asset.sha256, "original")
+        blob_path = store.local_path(asset.blob_key, asset.sha256, "original")
     blob_path.unlink()
 
     stats = run_backfill(session_factory, store)

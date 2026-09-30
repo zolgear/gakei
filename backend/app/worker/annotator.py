@@ -264,9 +264,9 @@ class Annotator:
                 annotations_domain.ENGINE_VLM in engines
                 or annotations_domain.ENGINE_ONNX in engines
             ):
-                preview = self.store.content_path(asset.blob_key, asset.sha256, "preview")
+                preview = self.store.open_content(asset.blob_key, asset.sha256, "preview")
                 image_bytes = (
-                    preview.read_bytes() if preview.is_file() else self.store.read(asset.blob_key)
+                    preview.read_all() if preview is not None else self.store.read(asset.blob_key)
                 )
 
             return _Job(

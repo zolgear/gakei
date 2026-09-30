@@ -6,7 +6,11 @@
     "authConfigMissing": "AUTH_MODE=oidc ですが、必須の環境変数が設定されていません: {missing}",
     "authUrlInvalid": "{name} の形式が不正です(http または https で、ホストを含む URL である必要があります): {value}",
     "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。",
-    "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}"
+    "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}",
+    "storageConfigMissing": "STORAGE_BACKEND に必要な環境変数が設定されていません: {missing}",
+    "storageAzureBothConnections": "AZURE_STORAGE_CONNECTION_STRING と AZURE_STORAGE_ACCOUNT_URL の両方が設定されています。どちらか一方だけを設定してください。",
+    "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING の形式が不正です。Azure portal の「アクセスキー」にある接続文字列をそのまま設定してください。",
+    "storageUnavailable": "画像の保存先({storage})に接続できないか、読み書きできません。コンテナ(バケット)が作成済みか、接続先と資格情報、読み書きの権限を確認してください。詳細: {error}"
   },
   "auth": {
     "required": "ログインが必要です。",

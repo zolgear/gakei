@@ -162,6 +162,17 @@ def main(argv: list[str] | None = None) -> None:
         print(exc, file=sys.stderr, flush=True)
         raise SystemExit(1) from None
 
+    # ADR-0028 2章: 画像の保存先(Azure Blob / S3)に接続・読み書きできなければ、同じく
+    # トレースバックを出さずに案内だけして止める。ローカルFS(既定)は何もしない。
+    if settings.storage_backend != "local":
+        from app.domain.storage import StorageUnavailableError, open_store
+
+        try:
+            open_store(settings)
+        except StorageUnavailableError as exc:
+            print(exc, file=sys.stderr, flush=True)
+            raise SystemExit(1) from None
+
     if port_in_use(settings.host, settings.port):
         print(
             console_t(
