@@ -91,6 +91,7 @@ class World:
     a_prompt_set: str = ""
     a_prompt_item: str = ""
     a_token_id: str = ""
+    a_share: str = ""
     # B のデータ
     b_group: str = ""
     b_upload: str = ""
@@ -161,6 +162,7 @@ def world(client_oidc: TestClient) -> World:
 
     login_as(client, emails["C"], "Admin C")
     _enable(client)
+    assert client.patch("/api/settings/share", json={"enabled": True}).status_code == 200
     for who, email in emails.items():
         login_as(client, email, f"User {who}")
         cookies[who] = _session_cookie(client)
@@ -196,6 +198,9 @@ def world(client_oidc: TestClient) -> World:
     w.a_prompt_set = prompt_set.json()["id"]
     w.a_prompt_item = prompt_set.json()["items"][0]["id"]
     w.a_token_id = c.get("/api/users/me/api-tokens").json()["items"][0]["id"]
+    share = c.post("/api/shares", json={"asset_id": w.a_output, "scope": "single"})
+    assert share.status_code == 201, share.text
+    w.a_share = share.json()["id"]
     # タイトルとタグ(ADR-0024)。タグ名 alicetag は A の Asset にだけ付ける。
     assert (
         c.patch(f"/api/assets/{w.a_output}/title", json={"title": "alice title"})
@@ -227,6 +232,8 @@ _PARAM_SOURCES = {
     "index": "literal:0",
     # タグ名(ADR-0024)。A の Asset に付けたタグ(`world` で付ける)。
     "name": "literal:alicetag",
+    # 共有リンク(ADR-0029)。A が自分の Asset から作った共有。
+    "share_id": "a_share",
 }
 
 # 利用者のデータではないので対象外のルート(ADR-0025 5章: 管理者設定は利用者のデータと別)。
@@ -235,6 +242,8 @@ _EXCLUDED_PREFIXES = (
     "/api/uploads/",
     # 1回限りのダウンロード URL。見える範囲は tests/test_mcp_image_access.py で確かめる。
     "/api/downloads/",
+    # ログイン不要の共有リンク(ADR-0029)。見せる範囲は tests/test_shares.py で確かめる。
+    "/api/public/",
     "/api/comfyui/",
     "/api/settings/annotation/onnx/",
 )
@@ -312,6 +321,8 @@ def test_every_id_route_returns_404_for_others(world: World) -> None:
     assert sets[w.a_prompt_set]["name"] == "alice zebra set"
     assert [i["text"] for i in sets[w.a_prompt_set]["items"]] == ["zebra text"]
     assert len(c.get("/api/users/me/api-tokens").json()["items"]) == 1
+    # 共有リンク(ADR-0029)も他人には取り消せない。
+    assert [s["id"] for s in c.get("/api/shares").json()["items"]] == [w.a_share]
 
     # 本人には見える(404 にならない)ことを代表的なルートで確かめる。
     for path in (

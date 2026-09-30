@@ -565,3 +565,49 @@ class AssetTag(Base):
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     removed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class Share(Base):
+    """ログイン不要の共有リンク(ADR-0029)。証跡ではないので、取り消し(`revoked_at`。論理削除)
+    と、開かれた日時・回数(`last_accessed_at` / `access_count`)は更新してよい。行は消さない。
+
+    `token` は URL(`/s/{token}`)に含める乱数そのもの。共有した人があとからリンクをコピーできる
+    よう、ハッシュにせず平文で持つ(ADR-0029 1章)。含まれる Asset は作成時に固定し
+    (`ShareAsset`)、そのあと作った子孫は載せない(2章)。
+    """
+
+    __tablename__ = "share"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    root_asset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("asset.id"), nullable=False, index=True
+    )
+    # single | ancestors | lineage
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    allow_original: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # 共有した人(ADR-0019)。個人モードでは null。追記のみ(INSERT 時に設定し、UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    last_accessed_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    access_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ShareAsset(Base):
+    """共有に含まれる Asset(ADR-0029 2章)。作成時に書き、UPDATE しない。
+
+    `depth` は作成時の系列グラフでの深さ(起点 0、祖先が負、子孫が正)。共有のページで
+    グラフを段組みするのに使う。Run は持たない(含まれる Asset の `produced_by_run_id` から
+    引く。Run と run_input は追記のみなので、Asset の一覧が決まれば Run も一意に決まる)。
+    """
+
+    __tablename__ = "share_asset"
+
+    share_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("share.id"), primary_key=True)
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("asset.id"), primary_key=True, index=True
+    )
+    depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

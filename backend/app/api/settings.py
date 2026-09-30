@@ -30,7 +30,7 @@ from app.deps import (
     get_settings,
     get_wd_downloader,
 )
-from app.domain import annotation_settings, general_settings, mcp_settings
+from app.domain import annotation_settings, general_settings, mcp_settings, share_settings
 from app.domain import annotations as annotations_domain
 from app.domain import api_key as api_key_domain
 from app.domain.schemas import (
@@ -50,6 +50,8 @@ from app.domain.schemas import (
     OpenAIBaseUrlUpdateRequest,
     OpenAIKeyStatusResponse,
     OpenAIKeyUpdateRequest,
+    ShareSettingsResponse,
+    ShareSettingsUpdateRequest,
 )
 from app.i18n import t
 from app.providers.base import ImageProvider
@@ -355,6 +357,31 @@ def update_mcp_settings(
         assert body.hourly_run_limit is not None
         mcp_settings.save_hourly_run_limit(db, body.hourly_run_limit)
     return _mcp_settings_response(db, settings, request)
+
+
+# -- 共有リンク(ADR-0029) ----------------------------------------------------------
+# 有効/無効(既定は無効)。GET は全ログイン者(共有の操作を画面に出すかの判断)、更新は管理者だけ。
+
+
+@router.get("/share", response_model=ShareSettingsResponse, operation_id="get_share_settings")
+def get_share_settings(db: Session = Depends(get_session)) -> ShareSettingsResponse:
+    return ShareSettingsResponse(enabled=share_settings.is_enabled(db))
+
+
+@router.patch("/share", response_model=ShareSettingsResponse, operation_id="update_share_settings")
+def update_share_settings(
+    body: ShareSettingsUpdateRequest,
+    db: Session = Depends(get_session),
+    _user: CurrentUser = Depends(require_admin),
+) -> ShareSettingsResponse:
+    if "enabled" in body.model_fields_set:
+        try:
+            share_settings.validate_enabled(body.enabled)
+        except share_settings.ShareSettingsValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        assert body.enabled is not None
+        share_settings.save_enabled(db, body.enabled)
+    return ShareSettingsResponse(enabled=share_settings.is_enabled(db))
 
 
 # -- 自動タイトル・タグ(ADR-0024) ------------------------------------------------

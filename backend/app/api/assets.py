@@ -383,7 +383,7 @@ def asset_content_response(
     store: AssetStore,
     asset: Asset,
     *,
-    viewer: CurrentUser,
+    viewer: CurrentUser | None,
     variant: Literal["thumb", "preview", "original"],
     download: bool,
     if_none_match: str | None = None,
@@ -391,14 +391,17 @@ def asset_content_response(
 ) -> Response:
     """画像の本体の応答。`GET /api/assets/{id}/content` と、1回限りのダウンロード URL
     (`GET /api/downloads/{token}`。ADR-0023 8章 3)で共通。見えるかどうかは呼び出し側が
-    確かめる。ファイルが無ければ 404。
+    確かめる。ファイルが無ければ 404。`viewer` が None なら、原本をダウンロードするときも
+    系列情報を埋め込まない(ログイン不要の共有リンク。ADR-0029 4章)。
 
     ローカルFSは `FileResponse`(Range 要求に応える)、オブジェクトストレージは読み出した
     チャンクをそのまま流す(`Content-Length` 付き、Range には応えない。ADR-0028 4章)。"""
     # ADR-0014(2026-09-24 追記): original をダウンロードする PNG にだけ、系列情報
     # (gakei チャンク)を埋め込んで返す。保存している原本・画面表示用の
     # original/thumb/preview(download=0)は変えない(ETag も区別する)。
-    embed_meta = variant == "original" and download and asset.mime == "image/png"
+    embed_meta = (
+        viewer is not None and variant == "original" and download and asset.mime == "image/png"
+    )
     etag = f'"{asset.sha256}-original-gakei1"' if embed_meta else f'"{asset.sha256}-{variant}"'
     headers = {"ETag": etag, "Cache-Control": cache_control}
 
@@ -420,6 +423,7 @@ def asset_content_response(
 
     if embed_meta:
         data = content.read_all()
+        assert viewer is not None
         meta = build_lineage_meta(db, asset, viewer=viewer)
         embedded = embed_gakei_chunk(data, meta)
         return Response(content=embedded, media_type=media_type, headers=headers)

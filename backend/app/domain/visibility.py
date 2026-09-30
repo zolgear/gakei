@@ -11,11 +11,15 @@
 - アップロード・マスク・スケッチの Asset: `asset.created_by_user_id`
 - グループ: `asset_group.created_by_user_id`
 - プロンプトセット: `prompt_set.created_by_user_id`
+- 共有リンク(ADR-0029): `share.created_by_user_id`(一覧・取り消しは本人のものだけ)
 
 一覧・検索は `*_visible(user)` が返す SQLAlchemy の条件を `where()` に足し、詳細・操作は
 `get_visible_*()`(見えなければ None。呼び出し側は「存在しない」と同じ 404 にする)を使う。
 取り出し済みの行を判定するときは `VisibilityChecker`(系列グラフなどで Run の所有者を
-キャッシュする)を使う。共有機能を足すときは、このモジュールの条件を広げればよい。
+キャッシュする)を使う。
+
+ログイン不要の共有リンク(ADR-0029)で外に見せる範囲は、ここではなく `app/domain/shares.py`
+の `resolve_public_share` だけで判定する(可視性の判定とは別の関数にする。ADR-0029 6章)。
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ from sqlalchemy import ColumnElement, and_, false, or_, select, true
 from sqlalchemy.orm import Session, aliased
 
 from app.auth.identity import CurrentUser
-from app.domain.models import Asset, AssetGroup, PromptSet, Run
+from app.domain.models import Asset, AssetGroup, PromptSet, Run, Share
 
 
 def sees_everything(user: CurrentUser) -> bool:
@@ -107,6 +111,13 @@ def prompt_set_visible(user: CurrentUser) -> ColumnElement[bool]:
     return _owner_condition(PromptSet.created_by_user_id, user)
 
 
+def share_visible(user: CurrentUser) -> ColumnElement[bool]:
+    """自分が作った共有リンク(ADR-0029 7章)。管理者も他人のものは見えない(ADR-0025 5章)。"""
+    if sees_everything(user):
+        return true()
+    return _owner_condition(Share.created_by_user_id, user)
+
+
 # -- 取り出し済みの行の判定 --------------------------------------------------
 
 
@@ -131,6 +142,10 @@ def can_see_group(user: CurrentUser, group: AssetGroup) -> bool:
 
 def can_see_prompt_set(user: CurrentUser, prompt_set: PromptSet) -> bool:
     return owner_matches(user, prompt_set.created_by_user_id)
+
+
+def can_see_share(user: CurrentUser, share: Share) -> bool:
+    return owner_matches(user, share.created_by_user_id)
 
 
 def get_visible_run(db: Session, user: CurrentUser, run_id: uuid.UUID) -> Run | None:
