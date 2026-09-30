@@ -65,7 +65,7 @@ docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:
 
 ## 構成
 
-- `backend/app/api/`: ルーター(capabilities、assets と lineage、runs、events(SSE)、prompt_sets、asset_groups(グループ。ADR-0022)、search、pricing、settings、comfyui、auth、users、about)。`/api/auth/*` 以外の全ルーターに `require_user` が掛かり、管理者設定の更新系だけ `require_admin`。
+- `backend/app/api/`: ルーター(health、capabilities、assets と lineage、runs、events(SSE)、prompt_sets、asset_groups(グループ。ADR-0022)、search、pricing、settings、comfyui、auth、users、about)。`/api/auth/*` と生存確認の `GET /api/health`(Issue #43)以外の全ルーターに `require_user` が掛かり、管理者設定の更新系だけ `require_admin`。
 - `backend/app/domain/`: モデル、スキーマ、サイズ検証、`AssetStore`(`storage.py` のローカル FS と、`object_storage.py` の Azure Blob / S3。ADR-0028。配信は `content_exists` / `open_content` を経由し、ローカルのパスを外に出さない)、派生画像、`ingest`、Run の検証、系列グラフの探索、`embedded_meta.py`(ダウンロード PNG への系列情報の埋め込み。ADR-0014)、`generation_meta.py`(他ツールが埋め込んだ生成メタ情報の読み取り。ADR-0018)、`avatars.py`(ADR-0020)、`third_party.py`(ADR-0021)、`asset_groups.py`(グループ。証跡ではないので更新・論理削除できる。ADR-0022)。
 - `backend/app/providers/`: `ImageProvider`、`registry.py`(登録簿)、`openai_images.py`、`fake.py`、`comfyui/`(ローカル ComfyUI。ADR-0013。利用者向けには実験的)。パラメーターの定義は `openai_spec.py` に集約し、フォームはここから組み立てる。主プロバイダーは常に `openai`(`FAKE_PROVIDER=1` のときだけ `fake`。利用者向けの設定一覧には載せない)。接続先は `OPENAI_BASE_URL` または設定画面で変えられる(ADR-0017)。
 - `backend/app/mcp/`(ADR-0023): MCP サーバー。`/mcp`(Streamable HTTP、stateless)を FastAPI に同居させる。既定は無効で、管理者設定で有効にする。ツールは REST を呼ばず、REST と同じドメイン関数(Run 作成は `domain/run_create.py`)を直接呼ぶ。認証モードは `api_token`(ユーザー設定で発行するアクセストークン)の Bearer だけを受ける。MCP で作った Run は `run.origin = 'mcp'`。削除と設定変更のツールは作らない。

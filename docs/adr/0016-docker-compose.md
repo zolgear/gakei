@@ -28,7 +28,7 @@ ADR-0012 では、個人向けの配布方法として `git clone` と起動ス�
 4. **レプリカは1つだけ。** ローカルMVPはジョブの実行を api プロセス内で行い、DB は SQLite なので、複数のコンテナで同じボリュームを共有してはいけない。(2026-09-29 注記: ADR-0027 で PostgreSQL も選べるようになったが、ジョブの実行が api プロセス内である点は変わらないため、この制約は PostgreSQL でも同じ。)
 5. **認証がないことは変わらない。** LAN やインターネットに公開する場合は、利用者が認証付きのリバースプロキシなどを前段に置く。README に明記し、Compose の既定では公開しない。
 6. ~~**イメージをレジストリに公開しない。** 利用者は clone して `docker compose up -d --build` でビルドする。公開は OSS 公開(ADR-0011)の後に改めて検討する。~~(2026-09-27 改訂: ADR-0021 でイメージを GHCR(`ghcr.io/zolgear/gakei`)に公開することにした。この項は ADR-0021 で置き換える。`compose.yaml` は clone してビルドする人向けのまま変えない)
-7. **CI でイメージのビルドと起動を確認する。** Linux で `docker build` し、`FAKE_PROVIDER=1`(ADR-0017)で起動して `/api/capabilities` が応答することを確かめる。
+7. **CI でイメージのビルドと起動を確認する。** Linux で `docker build` し、`FAKE_PROVIDER=1`(ADR-0017)で起動して `/api/capabilities` が応答することを確かめる。(2026-09-30 追記、Issue #43: 起動待ちはログイン不要の `GET /api/health` で行い、その後に `/api/capabilities` も確かめる。イメージの `HEALTHCHECK` も `/api/health` を使う)
 
 ## Options Considered
 

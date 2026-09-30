@@ -818,6 +818,12 @@ class ComfyWorkflowListResponse(BaseModel):
 # -- About (ADR-0021 3章) ---------------------------------------------------
 
 
+class HealthResponse(BaseModel):
+    """`GET /api/health`(Issue #43)。ログインなしで呼べるので、これ以外の情報は出さない。"""
+
+    status: Literal["ok"] = "ok"
+
+
 class AboutResponse(BaseModel):
     """`GET /api/about`。バージョンの正は `backend/pyproject.toml`(`app.version.get_version`)。"""
 

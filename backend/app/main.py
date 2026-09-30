@@ -24,6 +24,7 @@ from app.api import capabilities as capabilities_api
 from app.api import comfyui as comfyui_api
 from app.api import downloads as downloads_api
 from app.api import events as events_api
+from app.api import health as health_api
 from app.api import pricing as pricing_api
 from app.api import prompt_sets as prompt_sets_api
 from app.api import runs as runs_api
@@ -359,6 +360,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # `none` モードでの 404 化はルーター内で行うので、ここでの扱いは他と同じでよい。
     # `about`(ADR-0021)もログインが要る他の API と同じ扱いにする。
     app.include_router(auth_api.router)
+    # 生存確認(Issue #43)。コンテナの HEALTHCHECK が oidc モードでも通るよう、ログイン不要。
+    # 応答は `{"status": "ok"}` だけで、情報は出さない(ADR-0019 の例外)。
+    app.include_router(health_api.router)
 
     auth_dep = [Depends(require_user)]
     app.include_router(about_api.router, dependencies=auth_dep)
