@@ -566,3 +566,40 @@ def test_oidc_admin_can_change_annotation_settings(client_oidc: TestClient) -> N
 
 def test_unauthenticated_cannot_read_tags(client_oidc: TestClient) -> None:
     assert client_oidc.get("/api/tags").status_code == 401
+
+
+def test_call_records_are_safe_across_threads(client: TestClient) -> None:
+    """API のスレッド(`calls_last_hour`)と worker が同時に呼び出し記録を触っても壊れない。"""
+    import threading
+    from collections import deque
+
+    annotator = client.app.state.annotator
+    errors: list[BaseException] = []
+    # 窓の外の古い記録を多数置き、`_trim_calls` がキーを消す状況を作る。
+    with annotator._calls_lock:
+        for i in range(200):
+            annotator._calls[f"old-{i}"] = deque([0.0])
+
+    def reader() -> None:
+        try:
+            for _ in range(300):
+                annotator.calls_last_hour()
+                annotator.calls_last_hour("c1")
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    def writer() -> None:
+        try:
+            for _ in range(300):
+                annotator._record_call("c1")
+                annotator._fits({"c1": 1}, 10_000)
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=f) for f in (reader, reader, writer, writer)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    assert annotator.calls_last_hour("c1") == 600

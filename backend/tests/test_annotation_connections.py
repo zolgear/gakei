@@ -443,6 +443,95 @@ def test_migration_is_noop_on_fresh_install(
         assert s.load(db).profiles == s.Profiles()
 
 
+def test_migration_keeps_legacy_key_when_profiles_already_exist(
+    db_session_factory: sessionmaker, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """組が既にあるのに旧い行と旧キーが残っているとき、旧い行は消すが、旧キーは黙って消さずに
+    残して警告を出す。"""
+    data_dir = tmp_path / "d6"
+    data_dir.mkdir()
+    settings = _settings(data_dir)
+    with db_session_factory() as db:
+        s.save_profiles(db, s.Profiles(default_llm=s.TargetChoice("openai", "m-now")))
+    _write_legacy(db_session_factory, {"base_url": LOCAL_URL})
+    api_key_domain.write_secret_field(data_dir, "annotation_api_key", "sk-old")
+
+    with caplog.at_level("WARNING", logger="app.domain.annotation_settings"):
+        with db_session_factory() as db:
+            assert s.migrate_legacy(db, settings) is True
+            assert _get_raw_value(db, "annotation.base_url") is None
+            assert s.load(db).profiles.default_llm == s.TargetChoice("openai", "m-now")
+    assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") == "sk-old"
+    assert any("annotation_api_key" in r.getMessage() for r in caplog.records)
+
+    # 次の起動でも消さない(行はもう無いので、変更なし)。
+    with db_session_factory() as db:
+        assert s.migrate_legacy(db, settings) is False
+    assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") == "sk-old"
+
+
+def test_migration_commit_failure_then_rerun(
+    db_session_factory: sessionmaker, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """commit に失敗したらキーは書かず(旧キーは残る)、次の起動で最初からやり直せる。"""
+    data_dir = tmp_path / "d7"
+    data_dir.mkdir()
+    settings = _settings(data_dir)
+    _write_legacy(db_session_factory, {"base_url": LOCAL_URL})
+    api_key_domain.write_secret_field(data_dir, "annotation_api_key", "sk-local")
+
+    with db_session_factory() as db:
+
+        def broken_commit() -> None:
+            raise RuntimeError("commit に失敗")
+
+        monkeypatch.setattr(db, "commit", broken_commit)
+        with pytest.raises(RuntimeError):
+            s.migrate_legacy(db, settings)
+    secrets = json.loads((data_dir / "secrets.json").read_text(encoding="utf-8"))
+    assert secrets == {"annotation_api_key": "sk-local"}
+
+    with db_session_factory() as db:
+        assert s.migrate_legacy(db, settings) is True
+        config = s.load(db)
+        assert _get_raw_value(db, "annotation.legacy_key_connection") is None
+    assert len(config.connections) == 1
+    assert s.read_connection_key(data_dir, config.connections[0].id) == "sk-local"
+    assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") is None
+
+
+def test_migration_key_write_failure_after_commit_then_rerun(
+    db_session_factory: sessionmaker, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """commit の後、キーを書く前に落ちても、次の起動で目印と残った旧キーから書き直す。"""
+    data_dir = tmp_path / "d8"
+    data_dir.mkdir()
+    settings = _settings(data_dir)
+    _write_legacy(db_session_factory, {"base_url": LOCAL_URL})
+    api_key_domain.write_secret_field(data_dir, "annotation_api_key", "sk-local")
+
+    def broken_write(*args: Any) -> None:
+        raise OSError("書き込みに失敗")
+
+    with monkeypatch.context() as m:
+        m.setattr(s, "write_connection_key", broken_write)
+        with db_session_factory() as db, pytest.raises(OSError):
+            s.migrate_legacy(db, settings)
+    with db_session_factory() as db:
+        assert isinstance(_get_raw_value(db, "annotation.legacy_key_connection"), str)
+    assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") == "sk-local"
+
+    with db_session_factory() as db:
+        assert s.migrate_legacy(db, settings) is True
+        config = s.load(db)
+        assert _get_raw_value(db, "annotation.legacy_key_connection") is None
+    assert len(config.connections) == 1
+    assert s.read_connection_key(data_dir, config.connections[0].id) == "sk-local"
+    assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") is None
+    with db_session_factory() as db:
+        assert s.migrate_legacy(db, settings) is False
+
+
 def test_migration_runs_on_startup(data_dir: Path) -> None:
     from app.main import create_app
 
@@ -636,3 +725,53 @@ def test_hourly_limit_is_counted_per_connection(
 
     _patch_settings(client, hourly_limit=10)
     assert _wait_annotation(client, second)["annotation"]["status"] == "succeeded"
+
+
+def test_head_row_needing_more_than_left_does_not_block_other_profile(
+    client: TestClient, recording: RecordingEngines
+) -> None:
+    """使用数が上限−1 のとき、1件に2回要る行が先頭にあっても、ほかの組の行は進む。
+    先頭の行は取っては戻すのを繰り返さない(画像も読み直さない)。"""
+    local = _setup_comfyui_override(client, hourly_limit=2)
+    uploaded = _upload(client, color=(3, 3, 3))["id"]
+    run = _generate(client, "a fox")
+    head = run["outputs"][0]["asset_id"]
+    comfy_asset = _comfyui_asset(client)
+
+    # OpenAI の枠を1回使う(プロンプトの無いアップロードは VLM だけ)。
+    _patch_settings(client, vlm_enabled=True)
+    assert _annotate(client, uploaded)["annotation"]["status"] == "succeeded"
+    _patch_settings(client, llm_enabled=True)
+
+    store = client.app.state.annotator.store
+    original_open = store.open_content
+    opened: list[str] = []
+
+    def counting_open(blob_key: str, sha256: str, variant: str):  # type: ignore[no-untyped-def]
+        opened.append(sha256)
+        return original_open(blob_key, sha256, variant)
+
+    store.open_content = counting_open  # type: ignore[method-assign]
+    try:
+        # 既定の組の行(タイトルと VLM の2回が要る。1 + 2 > 2)が先頭。
+        client.post(f"/api/assets/{head}/annotate")
+        time.sleep(1.5)
+        assert client.get(f"/api/assets/{head}").json()["annotation"]["status"] == "queued"
+        # ComfyUI の組(別の接続先)の行は先頭の行に塞がれない。
+        assert _annotate(client, comfy_asset)["annotation"]["status"] == "succeeded"
+        time.sleep(1.5)
+        assert client.get(f"/api/assets/{head}").json()["annotation"]["status"] == "queued"
+        # 枠に収まらない行のために画像を読んでいない(読んだのは ComfyUI の画像の1回だけ)。
+        assert len(opened) == 1
+    finally:
+        store.open_content = original_open  # type: ignore[method-assign]
+
+    assert recording.calls[0] == ("vlm", "openai", "gpt-vlm")
+    assert sorted(recording.calls[1:]) == [
+        ("title", local, "local-llm"),
+        ("vlm", local, "local-vlm"),
+    ]
+
+    # 上限を上げれば、止めていた組も再開する。
+    _patch_settings(client, hourly_limit=10)
+    assert _wait_annotation(client, head)["annotation"]["status"] == "succeeded"
