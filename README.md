@@ -133,7 +133,7 @@ GAKEI は [Claude Code](https://claude.com/claude-code) の AI エージェン�
 
 コード中のコメント、CLAUDE.md、`docs/` の設計資料は日本語で書いている。英語に対応しているのは、画面、サーバーが返すメッセージ、起動スクリプトの表示、README だけ。
 
-### 手元で動かす
+### ローカルで動かす
 
 ```bash
 cd frontend && npm ci && npm run build        # 画面をビルドする(dist/ をバックエンドが配信する)

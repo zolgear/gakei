@@ -99,14 +99,14 @@ def test_get_status_fake_provider_not_required(client_fake: TestClient) -> None:
     response = client_fake.get("/api/settings/openai-key")
     assert response.status_code == 200
     body = response.json()
-    assert body == {"required": False, "configured": False, "source": None, "hint": None}
+    assert body == {"required": False, "configured": False, "source": None}
 
 
 def test_get_status_openai_provider_no_key(client_openai_no_key: TestClient) -> None:
     response = client_openai_no_key.get("/api/settings/openai-key")
     assert response.status_code == 200
     body = response.json()
-    assert body == {"required": True, "configured": False, "source": None, "hint": None}
+    assert body == {"required": True, "configured": False, "source": None}
 
 
 def test_get_status_openai_provider_env_key(client_openai_env_key: TestClient) -> None:
@@ -116,7 +116,9 @@ def test_get_status_openai_provider_env_key(client_openai_env_key: TestClient) -
     assert body["required"] is True
     assert body["configured"] is True
     assert body["source"] == "env"
-    assert body["hint"] == "…1234"
+    # キーは一部(末尾など)も返さない。
+    assert set(body) == {"required", "configured", "source"}
+    assert "1234" not in response.text
 
 
 def test_get_status_openai_provider_file_key(client_openai_no_key: TestClient) -> None:
@@ -125,7 +127,7 @@ def test_get_status_openai_provider_file_key(client_openai_no_key: TestClient) -
     body = response.json()
     assert body["configured"] is True
     assert body["source"] == "file"
-    assert body["hint"] == "…5678"
+    assert "5678" not in response.text
 
 
 # -- PUT -----------------------------------------------------------------
@@ -146,7 +148,7 @@ def test_put_saves_key_on_successful_validation(client_openai_no_key: TestClient
     body = response.json()
     assert body["configured"] is True
     assert body["source"] == "file"
-    assert body["hint"] == "…9999"
+    assert "9999" not in response.text
     # 前後の空白を trim して保存する。
     assert read_file_key(client_openai_no_key.app.state.settings.data_dir) == "sk-new-key-9999"
 

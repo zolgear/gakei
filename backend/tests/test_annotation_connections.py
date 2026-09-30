@@ -121,7 +121,7 @@ def _auto_models(client: TestClient, asset_id: str) -> dict | None:
 
 
 def test_create_update_delete_connection(client: TestClient, data_dir: Path) -> None:
-    connection_id = _add_connection(client, " Ollama ", api_key="sk-local-1234")
+    connection_id = _add_connection(client, " Ollama ", api_key="sk-local-wxyz")
     body = client.get("/api/settings/annotation").json()
     view = _connection(body, connection_id)
     assert view == {
@@ -131,14 +131,14 @@ def test_create_update_delete_connection(client: TestClient, data_dir: Path) -> 
         "base_url": LOCAL_URL,
         "api_style": "chat",
         "api_key_set": True,
-        "api_key_hint": "…1234",
         "in_use": False,
         "calls_last_hour": 0,
     }
     # キーは DB ではなく secrets.json に置き、API では返さない。
     secrets = json.loads((data_dir / "secrets.json").read_text())
-    assert secrets[f"annotation_connection_key.{connection_id}"] == "sk-local-1234"
-    assert "sk-local-1234" not in json.dumps(body)
+    assert secrets[f"annotation_connection_key.{connection_id}"] == "sk-local-wxyz"
+    # キーは一部(末尾など)も返さない。
+    assert "wxyz" not in json.dumps(body)
 
     response = client.patch(
         f"/api/settings/annotation/connections/{connection_id}",
@@ -175,14 +175,14 @@ def test_connection_key_set_and_delete(client: TestClient) -> None:
         is False
     )
     url = f"/api/settings/annotation/connections/{connection_id}/api-key"
-    response = client.put(url, json={"api_key": "sk-abcd9876"})
+    response = client.put(url, json={"api_key": "sk-abcd-qrst"})
     assert response.status_code == 200
-    assert "sk-abcd9876" not in response.text
-    assert _connection(response.json(), connection_id)["api_key_hint"] == "…9876"
+    assert "qrst" not in response.text
+    assert _connection(response.json(), connection_id)["api_key_set"] is True
     assert client.put(url, json={"api_key": "  "}).status_code == 400
     response = client.delete(url)
     view = _connection(response.json(), connection_id)
-    assert (view["api_key_set"], view["api_key_hint"]) == (False, None)
+    assert view["api_key_set"] is False
     assert (
         client.put(
             "/api/settings/annotation/connections/nope/api-key", json={"api_key": "x"}
@@ -224,13 +224,15 @@ def test_builtin_connection_is_read_only_except_api_style(client: TestClient) ->
 
 
 def test_builtin_connection_shows_openai_settings(client: TestClient, data_dir: Path) -> None:
-    api_key_domain.write_file_key(data_dir, "sk-openai-5678")
+    api_key_domain.write_file_key(data_dir, "sk-openai-uvwx")
     api_key_domain.write_file_base_url(data_dir, "http://127.0.0.1:4000/v1")
-    view = _connection(client.get("/api/settings/annotation").json(), "openai")
+    response = client.get("/api/settings/annotation")
+    view = _connection(response.json(), "openai")
     assert view["builtin"] is True
     assert view["name"] == "OpenAI の設定"
     assert view["base_url"] == "http://127.0.0.1:4000/v1"
-    assert (view["api_key_set"], view["api_key_hint"]) == (True, "…5678")
+    assert view["api_key_set"] is True
+    assert "uvwx" not in response.text
 
 
 def test_connection_in_use_cannot_be_deleted(client: TestClient) -> None:
@@ -278,14 +280,15 @@ def test_profiles_roundtrip(client: TestClient) -> None:
     }
 
 
-def test_oidc_non_admin_does_not_see_key_hints(client_oidc: TestClient) -> None:
+def test_oidc_non_admin_does_not_see_key(client_oidc: TestClient) -> None:
     from tests.conftest import login_as
 
     login_as(client_oidc, "admin@example.com")
-    connection_id = _add_connection(client_oidc, api_key="sk-secret-4321")
+    connection_id = _add_connection(client_oidc, api_key="sk-secret-mnop")
     login_as(client_oidc, "user@example.com")
-    view = _connection(client_oidc.get("/api/settings/annotation").json(), connection_id)
-    assert (view["api_key_set"], view["api_key_hint"]) == (True, None)
+    response = client_oidc.get("/api/settings/annotation")
+    assert _connection(response.json(), connection_id)["api_key_set"] is True
+    assert "mnop" not in response.text
 
 
 # -- 今の設定からの移行 --------------------------------------------------------------
@@ -549,7 +552,7 @@ def test_failure_on_comfyui_pair_does_not_fall_back_to_default(client: TestClien
             self._record("title", ctx.llm)
             assert ctx.llm is not None
             if ctx.llm.connection_id != "openai":
-                raise AnnotationEngineError("手元の LLM に繋がらない")
+                raise AnnotationEngineError("ローカルの LLM に繋がらない")
             return "既定のタイトル"
 
     engines = BrokenLocal()
@@ -559,7 +562,7 @@ def test_failure_on_comfyui_pair_does_not_fall_back_to_default(client: TestClien
     _patch_settings(client, llm_enabled=True)
     body = _annotate(client, asset_id)
     assert body["annotation"]["status"] == "failed"
-    assert body["annotation"]["error"] == "手元の LLM に繋がらない"
+    assert body["annotation"]["error"] == "ローカルの LLM に繋がらない"
     assert engines.calls == [("title", local, "local-llm")]
     assert body["title"] is None
 
@@ -622,7 +625,7 @@ def test_hourly_limit_is_counted_per_connection(
     time.sleep(1.5)
     assert client.get(f"/api/assets/{second}").json()["annotation"]["status"] == "queued"
 
-    # 手元の接続先は別に数えるので、ComfyUI の画像は先に進む(既定の組の行に塞がれない)。
+    # ローカルの接続先は別に数えるので、ComfyUI の画像は先に進む(既定の組の行に塞がれない)。
     assert _annotate(client, comfy_asset)["annotation"]["status"] == "succeeded"
     body = client.get("/api/settings/annotation").json()
     assert _connection(body, "openai")["calls_last_hour"] == 1

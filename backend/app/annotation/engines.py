@@ -2,7 +2,7 @@
 無ければタイトルも)、ONNX タガー(WD Tagger v3)。
 
 LLM と VLM は OpenAI 互換 API を OpenAI Python SDK で呼ぶ。Responses API(既定)と Chat
-Completions の両方に対応する(手元のサーバーには Chat Completions しか持たないものがあるため)。
+Completions の両方に対応する(ローカルのサーバーには Chat Completions しか持たないものがあるため)。
 応答の JSON は `response_format` に頼らず、指示で JSON を求めて本文から取り出す(互換
 サーバーの対応がまちまちなため)。
 

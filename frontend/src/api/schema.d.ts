@@ -854,7 +854,7 @@ export interface paths {
         put?: never;
         /**
          * Create Annotation Connection
-         * @description 接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(手元のサーバー向けに
+         * @description 接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(ローカルのサーバー向けに
          *     任意の文字列を受け付けるため、有効性の確認はしない)。
          */
         post: operations["create_annotation_connection"];
@@ -1311,8 +1311,6 @@ export interface components {
             api_style: "responses" | "chat";
             /** Api Key Set */
             api_key_set: boolean;
-            /** Api Key Hint */
-            api_key_hint?: string | null;
             /** In Use */
             in_use: boolean;
             /** Calls Last Hour */
@@ -2587,8 +2585,6 @@ export interface components {
             configured: boolean;
             /** Source */
             source?: ("env" | "file") | null;
-            /** Hint */
-            hint?: string | null;
         };
         /** OpenAIKeyUpdateRequest */
         OpenAIKeyUpdateRequest: {

@@ -13,7 +13,7 @@
   OpenAI の設定に Chat Completions で送っていた場合を変えないため)。
 - 接続先のキーは DB に入れず、`DATA_DIR/secrets.json` の `annotation_connection_key.<id>` に
   置く(`app/domain/api_key.py` と同じファイル・同じ書き込み)。キーが無ければダミーのキー
-  (`PLACEHOLDER_API_KEY`)を送る(手元の Ollama などへ OpenAI のキーを漏らさないため。SDK は
+  (`PLACEHOLDER_API_KEY`)を送る(ローカルの Ollama などへ OpenAI のキーを漏らさないため。SDK は
   空のキーを受け付けない)。
 - **用途ごとの組**(`annotation.profiles`): 「既定」(`default`)と「ComfyUI の画像」
   (`comfyui`)のそれぞれに、タイトル(`llm`)とタグ(`vlm`)の `{connection_id, model}`。

@@ -145,17 +145,19 @@ def test_get_endpoints_are_allowed_for_regular_user(client_oidc: TestClient) -> 
         assert response.status_code == 200, (path, response.text)
 
 
-def test_openai_key_hint_hidden_for_regular_user(client_oidc: TestClient) -> None:
+def test_openai_key_not_exposed_even_to_admin(client_oidc: TestClient) -> None:
+    # キーは管理者にも一部(末尾など)を返さない。設定済みかどうかと出どころだけ。
     from app.domain.api_key import write_file_key
 
     write_file_key(client_oidc.app.state.settings.data_dir, "sk-visible-only-to-admin")
 
     _login_admin(client_oidc)
-    admin_body = client_oidc.get("/api/settings/openai-key").json()
-    assert admin_body["hint"] == "…dmin"
+    admin_response = client_oidc.get("/api/settings/openai-key")
+    assert admin_response.json()["configured"] is True
+    assert "dmin" not in admin_response.text
     client_oidc.post("/api/auth/logout")
 
     _login_user(client_oidc)
-    user_body = client_oidc.get("/api/settings/openai-key").json()
-    assert user_body["configured"] is True
-    assert user_body["hint"] is None
+    user_response = client_oidc.get("/api/settings/openai-key")
+    assert user_response.json()["configured"] is True
+    assert "dmin" not in user_response.text

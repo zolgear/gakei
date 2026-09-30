@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from app.config import Settings
-from app.domain.api_key import delete_file_key, hint, read_file_key, resolve_key, write_file_key
+from app.domain.api_key import delete_file_key, read_file_key, resolve_key, write_file_key
 
 
 def test_read_file_key_missing_file_returns_none(tmp_path: Path) -> None:
@@ -70,14 +70,6 @@ def test_read_file_key_ignores_corrupted_json(tmp_path: Path) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "secrets.json").write_text("not-json{{{", encoding="utf-8")
     assert read_file_key(tmp_path) is None
-
-
-def test_hint_shows_only_last_four_chars() -> None:
-    assert hint("sk-abcdefgh1234") == "…1234"
-
-
-def test_hint_on_short_key_returns_whole_key() -> None:
-    assert hint("ab") == "…ab"
 
 
 def _settings(*, data_dir: Path, openai_api_key: str | None) -> Settings:

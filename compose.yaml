@@ -28,7 +28,7 @@ services:
       # gakei.db もここに入る。
       - gakei-data:/data
     env_file:
-      # リポジトリ直下の .env(あれば読む。手元起動用の .env をそのまま使い回せる)。
+      # リポジトリ直下の .env(あれば読む。ローカル起動用の .env をそのまま使い回せる)。
       - path: .env
         required: false
     environment:
