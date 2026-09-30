@@ -1570,7 +1570,15 @@
     "downloadOriginal": "Download original",
     "originalNotAllowed": "The original is not shared by this link.",
     "untitled": "Untitled",
-    "imageListLabel": "Included images"
+    "imageListLabel": "Included images",
+    "viewRunDetail": "View Generated details",
+    "runDetailTitle": "Generated details",
+    "backToImage": "← Back to image details",
+    "outputsHeading": "Outputs",
+    "primaryParentHeading": "Primary parent",
+    "referencesHeading": "References",
+    "compareWithOriginal": "Compare with original",
+    "endCompare": "End comparison"
   },
   "finalPrompt": {
     "heading": "PE output",

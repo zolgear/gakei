@@ -1570,7 +1570,15 @@
     "downloadOriginal": "原本をダウンロード",
     "originalNotAllowed": "この共有では、原本は公開されていません。",
     "untitled": "無題",
-    "imageListLabel": "含まれる画像"
+    "imageListLabel": "含まれる画像",
+    "viewRunDetail": "Generated 詳細を見る",
+    "runDetailTitle": "Generated 詳細",
+    "backToImage": "← 画像の情報に戻る",
+    "outputsHeading": "出力",
+    "primaryParentHeading": "主たる親",
+    "referencesHeading": "参照",
+    "compareWithOriginal": "編集前と比較する",
+    "endCompare": "比較を終える"
   },
   "finalPrompt": {
     "heading": "PE の出力",
