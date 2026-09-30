@@ -38,6 +38,20 @@ describe('buildWorkflowCreateRequest / buildWorkflowUpdateRequest', () => {
     expect(body.exposed_params?.[0].name).toBe('steps')
   })
 
+  it('always includes final_prompt in bindings (null when none), so an update does not drop it', () => {
+    const none = buildWorkflowUpdateRequest({ name: 'x', operation: 'generate', template, bindings, exposedRows: [] })
+    expect(none.bindings?.final_prompt).toBeNull()
+    expect(Object.keys(none.bindings ?? {})).toContain('final_prompt')
+    const chosen = buildWorkflowUpdateRequest({
+      name: 'x',
+      operation: 'generate',
+      template,
+      bindings: { ...bindings, finalPrompt: '472' },
+      exposedRows: [],
+    })
+    expect(chosen.bindings?.final_prompt).toBe('472')
+  })
+
   it('buildWorkflowUpdateRequest produces the same shape as create', () => {
     const args = { name: 'x', operation: 'edit' as const, template, bindings, exposedRows: [enabledRow] }
     expect(buildWorkflowUpdateRequest(args)).toEqual(buildWorkflowCreateRequest(args))

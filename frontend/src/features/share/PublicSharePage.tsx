@@ -4,7 +4,8 @@
  *
  * - 画像: 選んだ画像をパン/ズームで表示する(`AssetCanvas`)。原本を許す共有なら、拡大すると
  *   原本に差し替え、ダウンロードもできる。許さない共有はプレビュー(長辺 2048px)まで。
- * - 画像のタイトル、作成日時、その画像を作った Run のプロンプトとパラメーター。
+ * - 画像のタイトル、作成日時、その画像を作った Run のプロンプト(と PE の出力。ADR-0030)と
+ *   パラメーター。
  * - 含まれる画像の一覧(2枚以上のとき)と、範囲が系列なら系列グラフ。
  * - 見つからない・取り消し済み・機能が無効は、区別せず「このリンクは無効です」だけを出す。
  */
@@ -16,6 +17,7 @@ import { GakeiMark } from '../../components/GakeiMark'
 import { assetKindLabel, formatDateTime } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
 import { AssetCanvas } from '../viewer/AssetCanvas'
+import { FinalPromptSection } from '../run-detail/FinalPromptSection'
 import { PublicLineageGraph } from './PublicLineageGraph'
 import { showsLineage } from './shareScope'
 import styles from './PublicSharePage.module.css'
@@ -121,6 +123,13 @@ function PublicShareBody({ token, data }: { token: string; data: PublicShareResp
           <>
             <h2 className={styles.subheading}>{p.promptHeading}</h2>
             <p className={styles.prompt}>{run.prompt}</p>
+            {/* PE の出力(ADR-0030 4章)。閲覧専用なので「コピー」だけ(挿入・置き換えは出さない)。 */}
+            <FinalPromptSection
+              className={styles.finalPrompt}
+              textOutputs={run.text_outputs}
+              headingLevel="h2"
+              headingClassName={styles.subheading}
+            />
             {params.length > 0 && (
               <>
                 <h2 className={styles.subheading}>{p.paramsHeading}</h2>

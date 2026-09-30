@@ -30,6 +30,8 @@ import { annotationPollInterval, supportsAnnotation } from '../annotations/annot
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
 import { ShareDialog } from '../share/ShareDialog'
+import { FinalPromptSection } from '../run-detail/FinalPromptSection'
+import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import styles from './Viewer.module.css'
 
@@ -316,6 +318,13 @@ export function Viewer({ assetId }: ViewerProps) {
                     </Link>
                   </p>
                 )}
+                {/* PE の出力(ADR-0030 3章)。挿入・置き換えはスタジオへ移って反映する。 */}
+                <FinalPromptSection
+                  className={styles.finalPrompt}
+                  textOutputs={asset.produced_by_run.text_outputs}
+                  headingClassName={styles.subheading}
+                  renderActions={(text) => <StudioPromptActions prompt={text} />}
+                />
               </>
             )}
 

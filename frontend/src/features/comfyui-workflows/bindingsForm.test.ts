@@ -37,8 +37,10 @@ describe('bindingsFormFromApi / bindingsFormToApi', () => {
       images: [{ node: '4', input: 'image' }, { node: '6', input: 'image' }],
       mask: { mode: 'load_image_mask', node: '5', input: 'image' },
       outputs: ['3'],
+      final_prompt: '7',
     }
     const state = bindingsFormFromApi(api)
+    expect(state.finalPrompt).toBe('7')
     expect(state.images).toEqual([{ node: '4', input: 'image' }, { node: '6', input: 'image' }])
     expect(state.maskMode).toBe('load_image_mask')
     expect(state.maskRef).toEqual({ node: '5', input: 'image' })
@@ -89,6 +91,37 @@ describe('bindingsFormFromApi / bindingsFormToApi', () => {
     expect(state.seeds).toEqual([{ node: '459:458', input: 'seed' }])
     expect(state.images).toEqual([{ node: '459:1', input: 'image' }])
     expect(state.outputs).toEqual([])
+  })
+})
+
+describe('finalPrompt (ADR-0030)', () => {
+  it('reads old bindings without final_prompt as none', () => {
+    const api: ComfyBindings = { prompt: { node: '1', input: 'text' }, outputs: ['3'] }
+    expect(bindingsFormFromApi(api).finalPrompt).toBeNull()
+  })
+
+  it('always sends final_prompt, as null when none is chosen', () => {
+    const state = form({ prompt: { node: '1', input: 'text' }, outputs: ['3'] })
+    const api = bindingsFormToApi(state)
+    expect('final_prompt' in api).toBe(true)
+    expect(api.final_prompt).toBeNull()
+    expect(bindingsFormToApi({ ...state, finalPrompt: '7' }).final_prompt).toBe('7')
+  })
+
+  it('takes the suggested final prompt node as the initial value', () => {
+    const suggestion: ComfySuggestedBindings = {
+      prompt: { node: '1', input: 'text' },
+      outputs: ['3'],
+      final_prompt: '472',
+    }
+    expect(bindingsFormFromSuggestion(suggestion).finalPrompt).toBe('472')
+    expect(bindingsFormFromSuggestion({ prompt: null, outputs: [] }).finalPrompt).toBeNull()
+  })
+
+  it('is not an input ref, so it is not part of bindingRefsList and needs no validation', () => {
+    const state = form({ prompt: { node: '1', input: 'text' }, outputs: ['3'], finalPrompt: '3' })
+    expect(bindingRefsList(state)).toEqual([{ node: '1', input: 'text' }])
+    expect(validateBindingsForm(state, 'generate')).toEqual([])
   })
 })
 
@@ -276,6 +309,17 @@ describe('reconcileBindingsWithNodes', () => {
     const { next, clearedFields } = reconcileBindingsWithNodes(state, NODES)
     expect(next.outputs).toEqual(['3'])
     expect(clearedFields).toContain('出力ノード')
+  })
+
+  it('clears the final prompt node when it disappeared, keeps it otherwise', () => {
+    const state = form({ prompt: { node: '1', input: 'text' }, outputs: ['3'], finalPrompt: '99' })
+    const gone = reconcileBindingsWithNodes(state, NODES)
+    expect(gone.next.finalPrompt).toBeNull()
+    expect(gone.clearedFields).toContain('最終プロンプト')
+
+    const kept = reconcileBindingsWithNodes({ ...state, finalPrompt: '3' }, NODES)
+    expect(kept.next.finalPrompt).toBe('3')
+    expect(kept.clearedFields).toEqual([])
   })
 
   it('leaves not-yet-chosen seed and image rows alone', () => {

@@ -35,6 +35,7 @@ export type RunListResponse = components['schemas']['RunListResponse']
 export type RunInputCreate = components['schemas']['RunInputCreate']
 export type RunEvent = components['schemas']['RunEvent']
 export type RunOutputRef = components['schemas']['RunOutputRef']
+export type RunTextOutput = components['schemas']['RunTextOutput']
 export type RunStatus = RunSummary['status']
 
 export type AssetDetail = components['schemas']['AssetDetail']

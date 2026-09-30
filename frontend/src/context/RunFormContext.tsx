@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ensureInputIds } from '../features/run-form/editInputs'
+import type { PromptInsertMode } from '../features/run-form/promptInsertion'
 import { createEmptyFormState, type RunFormState } from '../features/run-form/types'
 import { loadLastAssetGroupId, saveLastAssetGroupId } from './lastAssetGroupStorage'
 import { loadRunFormState, saveRunFormState } from './runFormStorage'
@@ -31,9 +32,9 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
   const [formState, setFormStateRaw] = useState<RunFormState>(initialFormState)
   const formStateRef = useRef(formState)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [pendingPromptInsert, setPendingPromptInsert] = useState<{ text: string; nonce: number } | null>(
-    null,
-  )
+  const [pendingPromptInsert, setPendingPromptInsert] = useState<
+    { text: string; mode: PromptInsertMode; nonce: number } | null
+  >(null)
   const insertNonceRef = useRef(0)
 
   function flushSave() {
@@ -59,9 +60,9 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
     }, SAVE_DEBOUNCE_MS)
   }, [])
 
-  const requestPromptInsert = useCallback((text: string) => {
+  const requestPromptInsert = useCallback((text: string, mode: PromptInsertMode = 'insert') => {
     insertNonceRef.current += 1
-    setPendingPromptInsert({ text, nonce: insertNonceRef.current })
+    setPendingPromptInsert({ text, mode, nonce: insertNonceRef.current })
   }, [])
 
   const clearPendingPromptInsert = useCallback(() => setPendingPromptInsert(null), [])

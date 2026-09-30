@@ -1356,6 +1356,8 @@
       "maskModeImageAlpha": "Input image transparency",
       "maskRefLabel": "Mask node / input",
       "outputsLabel": "Output nodes (required, multiple allowed)",
+      "finalPromptLabel": "Final prompt (PE output)",
+      "finalPromptHelp": "Choose the node that outputs the final prompt built at run time by a Prompt Enhancer or similar (such as PreviewAny). Its text is saved with the run and shown as \"PE output\" in the viewer and elsewhere. Leave it as \"None\" if you don't use one.",
       "exposedParamsHeading": "Exposed parameters",
       "saving": "Saving...",
       "update": "Update",
@@ -1428,7 +1430,8 @@
         "negativePrompt": "Negative prompt",
         "width": "Width",
         "height": "Height",
-        "batchSize": "Count"
+        "batchSize": "Count",
+        "finalPrompt": "Final prompt"
       }
     },
     "exposedParamValidation": {
@@ -1506,5 +1509,14 @@
     "originalNotAllowed": "The original is not shared by this link.",
     "untitled": "Untitled",
     "imageListLabel": "Included images"
+  },
+  "finalPrompt": {
+    "heading": "PE output",
+    "truncated": "Too long; only the beginning is saved.",
+    "expand": "Show all",
+    "collapse": "Collapse",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Couldn't copy"
   }
 }
