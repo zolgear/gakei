@@ -257,7 +257,7 @@ export function SettingsPage() {
       {!admin && <p className={styles.helpText}>{t.settings.adminOnly}</p>}
 
       {sections.includes('apiKey') && (
-      <section className={styles.section}>
+      <section id="openai" className={styles.section}>
         <h2 className={styles.sectionHeading}>{t.settings.apiKey.heading}</h2>
 
         {statusQuery.isLoading && <p className={styles.placeholder}>{t.settings.apiKey.loading}</p>}
