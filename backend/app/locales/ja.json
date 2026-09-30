@@ -10,7 +10,10 @@
     "storageConfigMissing": "STORAGE_BACKEND に必要な環境変数が設定されていません: {missing}",
     "storageAzureBothConnections": "AZURE_STORAGE_CONNECTION_STRING と AZURE_STORAGE_ACCOUNT_URL の両方が設定されています。どちらか一方だけを設定してください。",
     "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING の形式が不正です。Azure portal の「アクセスキー」にある接続文字列をそのまま設定してください。",
-    "storageUnavailable": "画像の保存先({storage})に接続できないか、読み書きできません。コンテナ(バケット)が作成済みか、接続先と資格情報、読み書きの権限を確認してください。詳細: {error}"
+    "storageUnavailable": "画像の保存先({storage})に接続できないか、読み書きできません。コンテナ(バケット)が作成済みか、接続先と資格情報、読み書きの権限を確認してください。詳細: {error}",
+    "storageS3LookupForbidden": "存在しないかもしれないオブジェクトの確認が 403(AccessDenied)で拒否されました(キー: {key})。AWS S3 は、s3:ListBucket の権限が無いと、存在しないキーに 404 ではなく 403 を返します。IAM ポリシーで、バケット(arn:aws:s3:::バケット名)に対する s3:ListBucket を許可してください。",
+    "storageConditionalWriteRejected": "保存先が条件付きの書き込み(If-None-Match: *)を受け付けません(HTTP {status} {code})。このままでは画像の原本を保存できません。条件付きの書き込みに対応した S3 互換ストレージを使ってください。",
+    "storageConditionalWriteIgnored": "画像の保存先が条件付きの書き込み(If-None-Match: *)の条件を無視しました。同じ名前の原本は上書きされえますが、名前に Asset の id の先頭 8 文字が入るので、実際に同名になることはまずありません。"
   },
   "auth": {
     "required": "ログインが必要です。",
@@ -373,6 +376,8 @@
     "invalidTarget": "移行先の種類が不正です: {target}(azure_blob か s3 を指定してください)",
     "databaseMissing": "DB のファイルが見つかりません: {source}",
     "sizeMismatch": "移行先に同じキーで大きさの違うオブジェクトがあるため、中止しました(上書きしません): {key}(ローカル {local} バイト、移行先 {remote} バイト)",
+    "copyFailed": "{key} のコピーに失敗したため、中止しました。もう一度実行すると続きからコピーします。詳細: {error}",
+    "derivedSizeMismatch": "注意: 移行先に同じキーで大きさの違う派生があったので、上書きしました(派生は原本から作り直せるため): {key}(ローカル {local} バイト、移行先 {remote} バイト)",
     "source": "移行元: {source}",
     "target": "移行先: {target}",
     "originals": {

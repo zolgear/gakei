@@ -10,7 +10,10 @@
     "storageConfigMissing": "Required environment variables for STORAGE_BACKEND are not set: {missing}",
     "storageAzureBothConnections": "Both AZURE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_ACCOUNT_URL are set. Set only one of them.",
     "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING is malformed. Paste the connection string from \"Access keys\" in the Azure portal as is.",
-    "storageUnavailable": "Cannot connect to, or read and write, the image storage ({storage}). Check that the container (bucket) exists, and check the endpoint, credentials, and read/write permissions. Details: {error}"
+    "storageUnavailable": "Cannot connect to, or read and write, the image storage ({storage}). Check that the container (bucket) exists, and check the endpoint, credentials, and read/write permissions. Details: {error}",
+    "storageS3LookupForbidden": "Checking for an object that may not exist was denied with 403 (AccessDenied) (key: {key}). Without the s3:ListBucket permission, AWS S3 returns 403 instead of 404 for keys that do not exist. Allow s3:ListBucket on the bucket (arn:aws:s3:::bucket-name) in the IAM policy.",
+    "storageConditionalWriteRejected": "The storage does not accept conditional writes (If-None-Match: *) (HTTP {status} {code}). Original images cannot be saved as is. Use an S3-compatible storage that supports conditional writes.",
+    "storageConditionalWriteIgnored": "The image storage ignored the condition of a conditional write (If-None-Match: *). Originals with the same name could be overwritten, but this is unlikely in practice because names include the first 8 characters of the asset ID."
   },
   "auth": {
     "required": "Login required.",
@@ -373,6 +376,8 @@
     "invalidTarget": "Invalid destination type: {target} (specify azure_blob or s3)",
     "databaseMissing": "Database file not found: {source}",
     "sizeMismatch": "Aborted because the destination has an object with the same key but a different size (it will not be overwritten): {key} (local {local} bytes, destination {remote} bytes)",
+    "copyFailed": "Aborted because copying {key} failed. Run the tool again to continue from where it stopped. Details: {error}",
+    "derivedSizeMismatch": "Note: The destination had a derived image with the same key but a different size, so it was overwritten (derived images can be recreated from the originals): {key} (local {local} bytes, destination {remote} bytes)",
     "source": "Source: {source}",
     "target": "Destination: {target}",
     "originals": {

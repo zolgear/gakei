@@ -7,8 +7,10 @@
   指定する。`STORAGE_BACKEND` の値は見ず、`--to` の種類を使う。GAKEI を止めてから使う。
 - DB の全 Asset(論理削除済みを含む)の `blob_key` の原本と、`DATA_DIR/derived/` の派生を、
   同じキーでコピーする。DB は読むだけで書き換えない。ローカルのファイルは消さない。
-- 移行先に同じキーがあれば、大きさが同じなら飛ばし、違えば中止する(上書きしない)。途中で
+- 移行先に同じキーがあれば、大きさが同じなら飛ばし、違えば中止する(上書きしない)。ただし
+  派生(`derived/...`)は原本から作り直せるので、大きさが違えば警告して上書きする。途中で
   止まっても、もう一度実行すれば続きからコピーする。
+- 保存先との通信の失敗などは、トレースバックではなく文言を出して中止する(鍵は出さない)。
 - DB にあってローカルに無い原本は、数えて知らせるだけで中止しない(手で消されたものなど)。
 - `--dry-run` は、コピーする対象の件数と合計サイズを表示するだけ(移行先には接続しない)。
 """
@@ -27,7 +29,13 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import Settings, display_database_url, get_settings
 from app.domain.models import Asset
-from app.domain.storage import StorageUnavailableError, describe_store, open_store
+from app.domain.storage import (
+    StorageIOError,
+    StorageUnavailableError,
+    _first_line,
+    describe_store,
+    open_store,
+)
 from app.i18n import console_t
 
 TARGETS = ("azure_blob", "s3")
@@ -98,14 +106,41 @@ def _derived_keys(data_dir: Path) -> Iterator[str]:
 
 
 def _copy(target: Any, key: str, path: Path, report: MigrationReport) -> None:
+    """1件をコピーする。保存先の失敗(`OSError`。SDK の例外は `StorageIOError` に包まれて
+    いる)は、トレースバックではなく文言で止めるため `MigrationAbortedError` にする。"""
+    try:
+        _copy_one(target, key, path, report)
+    except MigrationAbortedError:
+        raise
+    except OSError as exc:
+        # StorageIOError の文言は伏せ字済み(権限不足の案内が長いので切り詰めない)。
+        # 元の例外はつながない。
+        error = str(exc) if isinstance(exc, StorageIOError) else _first_line(exc)
+        raise MigrationAbortedError(
+            console_t("migrateStorage.copyFailed", key=key, error=error)
+        ) from None
+
+
+def _copy_one(target: Any, key: str, path: Path, report: MigrationReport) -> None:
     size = path.stat().st_size
+    derived = key.startswith("derived/")
     existing = target.size_of(key)
     if existing is not None:
-        if existing != size:
+        if existing == size:
+            report.skipped += 1
+            return
+        if not derived:
             raise MigrationAbortedError(
                 console_t("migrateStorage.sizeMismatch", key=key, local=size, remote=existing)
             )
-        report.skipped += 1
+        # 派生は原本から作り直せるので、止めずに警告して上書きする(原本は上書きしない)。
+        print(
+            console_t("migrateStorage.derivedSizeMismatch", key=key, local=size, remote=existing),
+            file=sys.stderr,
+            flush=True,
+        )
+        target.overwrite(key, path.read_bytes())
+        report.copied += 1
         return
     try:
         target.write_new(key, path.read_bytes())
@@ -148,7 +183,7 @@ def migrate(settings: Settings, to: str, *, dry_run: bool = False) -> MigrationR
     try:
         target = open_store(target_settings)
     except StorageUnavailableError as exc:
-        raise MigrationAbortedError(str(exc)) from exc
+        raise MigrationAbortedError(str(exc)) from None
     for key, path in [*originals, *derived]:
         _copy(target, key, path, report)
     return report
