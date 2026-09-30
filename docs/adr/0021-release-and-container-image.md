@@ -27,7 +27,7 @@
 `v*` のタグが push されたら動く。手順は次のとおりで、途中で失敗したらそこで止まる。
 
 1. **タグとバージョンの一致を確かめる。** `pyproject.toml` の `version` が `X.Y.Z` で、タグが `vX.Y.Z` でなければ失敗する(タグの打ち間違いと、バージョンを上げ忘れたタグを防ぐ)。プレリリース `vX.Y.Z-rc.N` は「これから出す `X.Y.Z` の候補」なので、`-` の前の `vX.Y.Z` だけを比べる(`pyproject.toml` は PEP 440 で `-rc.N` の形を書けず、候補のたびに版を書き換えたくもない)。
-2. **イメージを `linux/amd64` で作り、起動確認する。** CI の docker ジョブと同じく `FAKE_PROVIDER=1` で起動し、`/api/capabilities` と `/`(`<title>GAKEI</title>`)を確かめる。push より前に行い、壊れたイメージを公開しない。
+2. **イメージを `linux/amd64` で作り、起動確認する。** CI の docker ジョブと同じく `FAKE_PROVIDER=1` で起動し、`/api/capabilities` と `/`(`<title>GAKEI</title>`)を確かめる。push より前に行い、壊れたイメージを公開しない。(2026-09-30 追記、Issue #43: 起動待ちはログイン不要の生存確認 `GET /api/health` で行い、その後に `/api/capabilities` と `/` を確かめる。イメージの `HEALTHCHECK` も `/api/health` を叩く。`/api/capabilities` は oidc モードではログインが要り、ヘルスチェックが 401 で unhealthy になるため)
 3. **`linux/amd64` と `linux/arm64` のマルチアーキテクチャでビルドして GHCR に push する。** イメージ名は `ghcr.io/<owner>/gakei`(`github.repository` から取る。public リポジトリでは `ghcr.io/zolgear/gakei`)。
    - タグ: `X.Y.Z`、`X.Y`、`latest`。プレリリース(`-rc.N` など)には `X.Y.Z-rc.N` だけを付け、`X.Y` と `latest` は動かさない。
    - OCI のラベル(`org.opencontainers.image.source` / `version` / `revision` / `licenses`)を付ける。`source` により GHCR のパッケージがリポジトリに紐づき、README がパッケージのページに出る。
@@ -96,6 +96,7 @@
 - 依存が増えたときに何もしなくても表記に載る。
 - `docs/release.md` にリリースの手順(バージョンを上げる PR → タグ → 確認 → 失敗したときの対処、GHCR を public にする手順、private での予行演習)を置く。
 - 開発者向けの環境(`run.sh`)でも設定画面にバージョンが出るので、不具合の報告に版を書いてもらえる。
+- (2026-09-30 追記、Issue #43)イメージの `HEALTHCHECK` と CI の起動待ちは `GET /api/health`(ログイン不要。`{"status":"ok"}` だけを返す)を使う。`AUTH_MODE=oidc` でもコンテナが healthy になる。
 
 ## Action Items
 

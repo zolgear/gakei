@@ -459,6 +459,8 @@ _UNAUTHENTICATED_PREFIXES = (
     # ログイン不要の共有リンク(ADR-0029 6章)。
     "/api/public/",
 )
+# 前方一致ではなく完全一致で許すルート。生存確認(Issue #43)は `{"status": "ok"}` だけを返す。
+_UNAUTHENTICATED_PATHS = frozenset({"/api/health"})
 
 
 def test_only_known_routes_answer_without_login(client_oidc: TestClient) -> None:
@@ -479,7 +481,11 @@ def test_only_known_routes_answer_without_login(client_oidc: TestClient) -> None
             client.cookies.clear()
             filled = _PATH_PARAM_RE.sub("00000000-0000-4000-8000-000000000000", path)
             response = client.request(method, filled)
-            if response.status_code != 401 and not path.startswith(_UNAUTHENTICATED_PREFIXES):
+            if (
+                response.status_code != 401
+                and not path.startswith(_UNAUTHENTICATED_PREFIXES)
+                and path not in _UNAUTHENTICATED_PATHS
+            ):
                 unexpected.append(f"{method.upper()} {path} -> {response.status_code}")
     assert not unexpected, "ログインなしで応答するルート:\n" + "\n".join(unexpected)
     assert public_routes == {

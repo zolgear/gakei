@@ -77,9 +77,10 @@ ENV HOST=0.0.0.0 \
 VOLUME ["/data"]
 EXPOSE 8000
 
-# capabilities は認証もキーも要らない、最も軽い生存確認用エンドポイント。
+# /api/health はログインもキーも要らない生存確認用のエンドポイント(Issue #43)。
+# oidc モード(ADR-0019)でも 401 にならず、DB にも触れない。
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8000\")}/api/capabilities', timeout=3)"
+    CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8000\")}/api/health', timeout=3)"
 
 # ランチャー(run.sh/run.bat)ではなく `python -m app` を直接使う。
 # ビルド判定・uv 用意・ブラウザ起動はイメージの中では不要なため。

@@ -65,7 +65,7 @@
 
 ### 6. 認可の掛け方
 
-- `/api/auth/*` 以外の既存ルーターすべてに、ルーター単位の依存(`require_user`)を付ける。oidc モードで未ログインなら 401、管理者限定のエンドポイントで `user` なら 403。本文は `Accept-Language` に従って日本語か英語(ADR-0015)。
+- `/api/auth/*` 以外の既存ルーターすべてに、ルーター単位の依存(`require_user`)を付ける(例外として `GET /api/health`(`{"status":"ok"}` だけを返す生存確認。2026-09-30 追記、Issue #43))。oidc モードで未ログインなら 401、管理者限定のエンドポイントで `user` なら 403。本文は `Accept-Language` に従って日本語か英語(ADR-0015)。
 - none モードでは `require_user` が暗黙の管理者を返すので、既存の動作は変わらない。
 
 ## Options Considered
