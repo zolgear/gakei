@@ -337,7 +337,7 @@ def test_share_url_uses_public_base_url(client: TestClient, chain: Chain) -> Non
 
 _PUBLIC_KEYS = {"root_asset_id", "scope", "allow_original", "created_at", "assets", "runs", "edges"}
 _ASSET_KEYS = {"id", "kind", "mime", "width", "height", "created_at", "title", "run_id", "depth"}
-_RUN_KEYS = {"id", "operation", "model", "prompt", "params", "created_at"}
+_RUN_KEYS = {"id", "operation", "model", "prompt", "params", "created_at", "text_outputs"}
 
 
 def test_public_response_hides_private_fields(client_oidc: TestClient) -> None:
@@ -503,3 +503,29 @@ def test_upload_png_asset_can_be_shared(client: TestClient) -> None:
     assert body["runs"] == []
     with client.app.state.session_factory() as db:
         assert db.get(Asset, uuid.UUID(asset_id)) is not None
+
+
+def test_public_run_includes_text_outputs(client: TestClient) -> None:
+    """ADR-0030 4章: 公開の API の Run に最終プロンプト(PE の出力)を出す。"""
+    _enable(client)
+    detail = _run(client, "pe share")
+    asset_id = _outputs(detail)[0]
+    share = _create(client, asset_id, "single")
+    runs = _public(client, _token(share)).json()["runs"]
+    assert runs[0]["text_outputs"] is None
+
+    item = {
+        "role": "final_prompt",
+        "node_id": "472",
+        "class_type": "PreviewAny",
+        "title": None,
+        "text": "A warm, cozy room",
+        "truncated": True,
+    }
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(detail["id"]))
+        assert run is not None
+        run.text_outputs = [item]
+        db.commit()
+    runs = _public(client, _token(share)).json()["runs"]
+    assert runs[0]["text_outputs"] == [item]

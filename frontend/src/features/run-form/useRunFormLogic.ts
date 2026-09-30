@@ -386,7 +386,8 @@ export function useRunFormLogic(
     setRawParams(fillSeedDefaults(initialGenerateDefs, initialRaw, loadSeedMode()))
   }
 
-  // サイドバー(プロンプトセット)の「末尾に追加」リクエストを消費する。スタジオが未マウント
+  // スタジオの外からの挿入・置き換えのリクエスト(サイドバーのプロンプトセットの「末尾に追加」、
+  // ビューア・Run 詳細の「PE の出力」の挿入・置き換え)を消費する。スタジオが未マウント
   // の間はリクエストが context に残り、マウント後(この effect が初めて走るのは、
   // 同じ render で上の useState 初期化(initialRef からの prompt 復元)が終わった後)に反映する。
   // nonce で同じリクエストの二重消費を防ぐ。
@@ -395,7 +396,7 @@ export function useRunFormLogic(
     if (!pendingPromptInsert) return
     if (consumedInsertNonceRef.current === pendingPromptInsert.nonce) return
     consumedInsertNonceRef.current = pendingPromptInsert.nonce
-    insertPrompt(pendingPromptInsert.text, 'insert', null)
+    insertPrompt(pendingPromptInsert.text, pendingPromptInsert.mode, null)
     clearPendingPromptInsert()
   }, [pendingPromptInsert, insertPrompt, clearPendingPromptInsert])
 

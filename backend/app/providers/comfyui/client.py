@@ -211,6 +211,28 @@ def collect_output_images(
     return refs
 
 
+def collect_output_texts(history_entry: dict[str, Any], node_id: str) -> str | None:
+    """`outputs[node_id]["text"]` を1つの文字列にする(ADR-0030 2章)。
+
+    `text` は文字列のリスト(`PreviewAny` など)。文字列単体でも受ける。リストの要素は
+    改行でつなぐ。ノードの出力が無い、`text` が無い、文字列が1つも無いときは None。
+    """
+    outputs = history_entry.get("outputs")
+    if not isinstance(outputs, dict):
+        return None
+    node_output = outputs.get(node_id)
+    if not isinstance(node_output, dict):
+        return None
+    text = node_output.get("text")
+    if isinstance(text, str):
+        return text
+    if isinstance(text, list):
+        parts = [item for item in text if isinstance(item, str)]
+        if parts:
+            return "\n".join(parts)
+    return None
+
+
 def check_available(
     base_url: str, timeout: float = 1.0
 ) -> tuple[bool, str | None, dict[str, Any] | None]:

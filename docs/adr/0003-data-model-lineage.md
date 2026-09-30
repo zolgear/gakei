@@ -35,7 +35,7 @@ Asset(入力) ──RunInput──▶ Run ──produced_by──▶ Asset(出�
 
 ### ルール
 
-1. `run` と `run_input`、`asset` の来歴に関わる列は **追記のみ**。UPDATE するのは `run.status` など実行状態の遷移だけ。
+1. `run` と `run_input`、`asset` の来歴に関わる列は **追記のみ**。UPDATE するのは `run.status` など実行状態の遷移だけ。ComfyUI の最終プロンプト(`run.text_outputs`)は、完了時に1回だけ書く結果として、この例外に含める(2026-09-30 追記。ADR-0030)。
 2. 削除は `deleted_at` による論理削除のみ。他の Run の入力になっている Asset は Blob も消さない。
 3. プロンプトを変えてやり直すのは、既存 Run の更新ではなく **新しい Run** を作る。UIの「再実行」「パラメータを変えて実行」はすべて新規 Run。
 4. `params` には API に送った値をそのまま保存する。プロバイダー固有の項目を列にしない。

@@ -177,6 +177,9 @@ class RunResult(BaseModel):
     outputs: list[RunOutputImage]
     usage: dict[str, Any] | None = None
     provider_request_id: str | None = None
+    # 実行時にワークフローが作ったテキスト(ADR-0030。今は ComfyUI の最終プロンプトだけ)。
+    # `run.text_outputs` にそのまま書く。無ければ None。
+    text_outputs: list[dict[str, Any]] | None = None
 
 
 class PartialImageEvent(BaseModel):

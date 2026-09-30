@@ -861,3 +861,73 @@ NO_PROMPT_CANDIDATES_GRAPH: dict[str, Any] = {
     "8": {"class_type": "SomeConstant", "inputs": {"amount": 5}},
     "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "gakei", "images": ["3", 0]}},
 }
+
+
+# Qwen Image 2.1 の t2i テンプレート相当(ADR-0030)。Prompt Enhancer(TextGenerate)が
+# 利用者のプロンプトを書き直し、切り替え(ComfySwitchNode)を経て PreviewAny(472)を
+# 通ってからエンコーダーの prompt に入る。最終プロンプトのノードは 472 と推定されるはず。
+# モデル名などは汎用のものにしてある。
+QWEN21_PE_GRAPH: dict[str, Any] = {
+    "1": {
+        "class_type": "PrimitiveStringMultiline",
+        "inputs": {"value": ""},
+        "_meta": {"title": "prompt"},
+    },
+    "2": {"class_type": "PrimitiveInt", "inputs": {"value": 1}, "_meta": {"title": "seed"}},
+    "3": {
+        "class_type": "PrimitiveBoolean",
+        "inputs": {"value": True},
+        "_meta": {"title": "prompt_enhance"},
+    },
+    "4": {
+        "class_type": "PrimitiveBoolean",
+        "inputs": {"value": False},
+        "_meta": {"title": "transparent"},
+    },
+    "451": {"class_type": "UNETLoader", "inputs": {"unet_name": "model.safetensors"}},
+    "452": {
+        "class_type": "TextEncodeQwenImage21",
+        "inputs": {"clip": ["453", 0], "prompt": ["472", 0], "negative_prompt": ""},
+    },
+    "453": {"class_type": "CLIPLoader", "inputs": {"clip_name": "clip.safetensors"}},
+    "454": {"class_type": "VAELoader", "inputs": {"vae_name": "vae.safetensors"}},
+    "456": {
+        "class_type": "EmptyLatentImage",
+        "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
+    },
+    "457": {"class_type": "VAEDecode", "inputs": {"samples": ["458", 0], "vae": ["454", 0]}},
+    "458": {
+        "class_type": "KSampler",
+        "inputs": {
+            "model": ["451", 0],
+            "positive": ["452", 0],
+            "negative": ["452", 1],
+            "latent_image": ["456", 0],
+            "seed": ["2", 0],
+            "steps": 20,
+            "cfg": 4.0,
+            "sampler_name": "euler",
+            "scheduler": "simple",
+            "denoise": 1.0,
+        },
+    },
+    "461": {
+        "class_type": "SaveImageAdvanced",
+        "inputs": {"images": ["457", 0], "filename_prefix": "gakei"},
+    },
+    "471": {
+        "class_type": "TextGenerate",
+        "inputs": {"clip": ["473", 0], "prompt": ["1", 0], "sampling_mode.seed": ["2", 0]},
+    },
+    "472": {"class_type": "PreviewAny", "inputs": {"source": ["482", 0]}},
+    "473": {"class_type": "CLIPLoader", "inputs": {"clip_name": "pe.safetensors"}},
+    "474": {
+        "class_type": "ComfySwitchNode",
+        "inputs": {"switch": ["3", 0], "on_false": ["1", 0], "on_true": ["471", 0]},
+    },
+    "481": {"class_type": "StringFormat", "inputs": {"values.a": ["1", 0]}},
+    "482": {
+        "class_type": "ComfySwitchNode",
+        "inputs": {"switch": ["4", 0], "on_false": ["474", 0], "on_true": ["481", 0]},
+    },
+}

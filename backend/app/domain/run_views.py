@@ -13,6 +13,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -28,7 +29,7 @@ from app.domain.models import (
     RunInputRole,
 )
 from app.domain.pricing import cost_from_usage
-from app.domain.schemas import AssetGroupRef, CreatedBy, RunOutputRef
+from app.domain.schemas import AssetGroupRef, CreatedBy, RunOutputRef, RunTextOutput
 from app.domain.visibility import asset_visible, group_visible, run_visible
 
 
@@ -167,6 +168,23 @@ def model_label_from_params(params: dict[str, Any] | None) -> str | None:
     return None
 
 
+def run_text_outputs(run: Run) -> list[RunTextOutput] | None:
+    """`run.text_outputs` を API の形にする(ADR-0030)。形の崩れた要素は飛ばし、
+    1件も残らなければ None。"""
+    raw = run.text_outputs
+    if not isinstance(raw, list):
+        return None
+    items: list[RunTextOutput] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            items.append(RunTextOutput.model_validate(item))
+        except ValidationError:
+            continue
+    return items or None
+
+
 def run_summary_fields(
     run: Run,
     outputs: list[RunOutputRef],
@@ -205,4 +223,5 @@ def run_summary_fields(
         "created_by": created_by,
         "asset_group": asset_group,
         "origin": run.origin,
+        "text_outputs": run_text_outputs(run),
     }

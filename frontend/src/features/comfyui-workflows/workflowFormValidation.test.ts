@@ -24,6 +24,13 @@ describe('validateWorkflowForm', () => {
     expect(validateWorkflowForm(baseInput())).toEqual([])
   })
 
+  it('does not treat the final prompt node as a duplicate of outputs or bindings', () => {
+    const input = baseInput()
+    expect(
+      validateWorkflowForm({ ...input, bindings: { ...input.bindings, finalPrompt: '3' } }),
+    ).toEqual([])
+  })
+
   it('requires a name and a selected template file', () => {
     const errors = validateWorkflowForm(baseInput({ name: '  ', hasTemplate: false }))
     expect(errors).toContain('名前を入力してください')

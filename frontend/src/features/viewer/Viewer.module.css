@@ -219,6 +219,11 @@
   color: var(--color-text-muted);
 }
 
+/* PE の出力(ADR-0030)。見出しの上の余白は .subheading と揃える。 */
+.finalPrompt {
+  margin-top: 12px;
+}
+
 .runLink {
   font-size: 12px;
 }

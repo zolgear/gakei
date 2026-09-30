@@ -46,6 +46,7 @@ import { buildWorkflowCreateRequest, buildWorkflowUpdateRequest } from './workfl
 import { formDisconnectedNotice } from './comfyuiConnectionForm'
 import { NodeInputPicker } from './NodeInputPicker'
 import { NodeMultiPicker } from './NodeMultiPicker'
+import { NodeSelectPicker } from './NodeSelectPicker'
 import { ExposedParamsTable } from './ExposedParamsTable'
 import panelStyles from './ComfyUIStatusPanel.module.css'
 import styles from './ComfyUIWorkflowFormPage.module.css'
@@ -517,6 +518,16 @@ export function ComfyUIWorkflowFormPage() {
                 value={bindings.outputs}
                 onChange={(outputs) => setBindings((b) => ({ ...b, outputs }))}
               />
+            </div>
+
+            <div className={styles.subField}>
+              <NodeSelectPicker
+                label={t.comfyui.form.finalPromptLabel}
+                nodes={nodes}
+                value={bindings.finalPrompt}
+                onChange={(finalPrompt) => setBindings((b) => ({ ...b, finalPrompt }))}
+              />
+              <p className={styles.helpText}>{t.comfyui.form.finalPromptHelp}</p>
             </div>
           </section>
 

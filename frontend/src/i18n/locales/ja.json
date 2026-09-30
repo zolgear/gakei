@@ -1356,6 +1356,8 @@
       "maskModeImageAlpha": "入力画像の透明度",
       "maskRefLabel": "マスクのノード・入力",
       "outputsLabel": "出力ノード(必須、複数可)",
+      "finalPromptLabel": "最終プロンプト(PE の出力)",
+      "finalPromptHelp": "Prompt Enhancer などが実行時に作った最終プロンプトを出すノード(PreviewAny など)を選ぶと、そのテキストを Run に記録し、ビューアなどに「PE の出力」として表示します。使わないときは「なし」のままにします。",
       "exposedParamsHeading": "公開パラメーター",
       "saving": "保存中...",
       "update": "更新する",
@@ -1428,7 +1430,8 @@
         "negativePrompt": "ネガティブプロンプト",
         "width": "幅",
         "height": "高さ",
-        "batchSize": "枚数"
+        "batchSize": "枚数",
+        "finalPrompt": "最終プロンプト"
       }
     },
     "exposedParamValidation": {
@@ -1506,5 +1509,14 @@
     "originalNotAllowed": "この共有では、原本は公開されていません。",
     "untitled": "無題",
     "imageListLabel": "含まれる画像"
+  },
+  "finalPrompt": {
+    "heading": "PE の出力",
+    "truncated": "長すぎるため途中までを保存しています",
+    "expand": "すべて表示",
+    "collapse": "折り畳む",
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "copyFailed": "コピーできませんでした"
   }
 }
