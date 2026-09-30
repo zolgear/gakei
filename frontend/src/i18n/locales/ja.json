@@ -1580,7 +1580,9 @@
     "primaryParentHeading": "主たる親",
     "referencesHeading": "参照",
     "compareWithOriginal": "編集前と比較する",
-    "endCompare": "比較を終える"
+    "endCompare": "比較を終える",
+    "backToViewer": "ビューアに戻る",
+    "expandLineageLabel": "系列グラフを全画面に広げる"
   },
   "finalPrompt": {
     "heading": "PE の出力",
