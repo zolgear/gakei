@@ -1124,14 +1124,15 @@ class PublicShareAsset(BaseModel):
 
 class PublicShareRun(BaseModel):
     """画像を作った Run のうち、見せてよい項目だけ(ADR-0029 3章)。実行者、料金・usage、
-    エラー、入力の Asset の id は含めない。`params` は `shares.public_params` で絞った値。"""
+    エラー、入力の Asset の id は含めない。`params` は `shares.public_params` の値(ComfyUI の
+    Run は `run.params` そのもので入れ子を含む。ADR-0029 3章、2026-10-01 改訂)。"""
 
     id: uuid.UUID
     operation: Literal["generate", "edit"]
     # モデル名(ComfyUI はワークフローの名前)。
     model: str
     prompt: str
-    params: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     # 最終プロンプト(PE の出力。ADR-0030 4章)。無ければ null。
     text_outputs: list[RunTextOutput] | None = None

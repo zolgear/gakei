@@ -1,8 +1,8 @@
 /**
  * 共有のページの Run(Generated)の詳細(ADR-0029 3章、2026-09-30 追記)。右のパネルに、画像の情報の
  * かわりに出す。項目は通常の画面の Run の詳細(`RunDetailContent`)にそろえ、見せないもの(実行者、
- * 料金・usage、タグ、エラー、ComfyUI の内部値)は出さない。「同じ設定で新規作成」などログイン
- * 前提の操作も出さない。
+ * 料金・usage、タグ、エラー)は出さない。ComfyUI の Run のパラメーターは `comfyui_*` も含めて出す
+ * (2026-10-01 改訂)。「同じ設定で新規作成」などログイン前提の操作も出さない。
  *
  * 入力・出力は共有に含まれる画像だけ(`buildPublicRunDetail`)。サムネイルを押すとその画像を
  * ビューアで開く(Run の詳細は開いたまま)。
@@ -12,6 +12,7 @@ import { formatDateTime, assetKindLabel } from '../../lib/format'
 import { useI18n } from '../../i18n'
 import { FinalPromptSection } from '../run-detail/FinalPromptSection'
 import type { PublicRunDetail, PublicRunInput } from './publicRunDetail'
+import { PublicParams } from './PublicParams'
 import styles from './PublicSharePage.module.css'
 
 interface PublicRunDetailPanelProps {
@@ -35,7 +36,6 @@ export function PublicRunDetailPanel({
   const { t } = useI18n()
   const p = t.publicShare
   const { run, primaryParent, references, outputs } = detail
-  const params = Object.entries(run.params ?? {})
 
   function thumb(assetId: string, label: ReactNode, key: string) {
     return (
@@ -105,19 +105,7 @@ export function PublicRunDetailPanel({
         </>
       )}
 
-      {params.length > 0 && (
-        <>
-          <h2 className={styles.subheading}>{p.paramsHeading}</h2>
-          <dl className={styles.params}>
-            {params.map(([key, value]) => (
-              <div key={key} className={styles.paramRow}>
-                <dt>{key}</dt>
-                <dd>{value === null ? 'null' : String(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        </>
-      )}
+      <PublicParams params={run.params} />
 
       {primaryParent && (
         <>

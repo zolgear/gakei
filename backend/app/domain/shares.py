@@ -277,8 +277,8 @@ def record_access(db: Session, share: Share) -> None:
 
 # -- 公開の応答 --------------------------------------------------------------------
 
-# 値に Asset・Run の id や画像の sha256 が含まれていれば出さない(ComfyUI の入力画像の名前
-# `gakei_{sha256}.png` など。共有の範囲の外の画像を指しうるため)。
+# ComfyUI 以外の Run では、値に Asset・Run の id や画像の sha256 が含まれていれば出さない
+# (共有の範囲の外の画像を指しうるため)。ComfyUI の Run には掛けない(ADR-0029 3章、2026-10-01 改訂)。
 _UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
@@ -293,26 +293,27 @@ def _public_scalar(value: Any) -> bool:
     return False
 
 
-def public_params(params: dict[str, Any] | None) -> dict[str, str | int | float | bool | None]:
+def public_params(params: dict[str, Any] | None, provider: str | None = None) -> dict[str, Any]:
     """Run の `params` のうち、共有のページに出してよいもの(ADR-0029 3章)。
 
-    - `comfyui_*`(ComfyUI のグラフ全体、入力画像の名前、ワークフローの id など。ADR-0013)は
-      出さない。実際に使った seed(`comfyui_seed`)だけは `seed` として出す(Run の詳細画面の
-      「同じ設定で再実行」と同じ扱い)。
-    - 値が文字列・数値・真偽値・null のものだけ(入れ子の値は出さない)。
-    - 値に UUID や sha256 の形の文字列を含むものは出さない(範囲外の Asset・Run を指しうるため)。
+    - ComfyUI の Run は `params` をそのまま出す(2026-10-01 改訂)。`comfyui_*`(送ったグラフ
+      全体、入力画像の名前 `gakei_{sha256}.png`、ワークフローの id など。ADR-0013)も入れ子の
+      値も含む。共有は再現できるものを渡すのが目的で、ComfyUI は原寸の PNG に自身でワーク
+      フローを埋め込むので、原寸の画像からも同じ情報が分かるため。
+    - ほかのプロバイダーの Run は、値が文字列・数値・真偽値・null のものだけ(入れ子の値は
+      出さない)。値に UUID や sha256 の形の文字列を含むものは出さない(範囲外の Asset・Run を
+      指しうるため)。
     """
-    result: dict[str, str | int | float | bool | None] = {}
     if not isinstance(params, dict):
-        return result
+        return {}
+    if provider == "comfyui":
+        return {key: value for key, value in params.items() if isinstance(key, str)}
+    result: dict[str, Any] = {}
     for key, value in params.items():
         if not isinstance(key, str) or key.startswith("comfyui_"):
             continue
         if _public_scalar(value):
             result[key] = value
-    seed = params.get("comfyui_seed")
-    if "seed" not in result and isinstance(seed, int) and not isinstance(seed, bool):
-        result["seed"] = seed
     return result
 
 
@@ -428,7 +429,7 @@ def build_public_response(db: Session, share: Share) -> PublicShareResponse:
             operation=r.operation,
             model=_public_model(r),
             prompt=r.prompt,
-            params=public_params(r.params),
+            params=public_params(r.params, r.provider),
             created_at=r.queued_at,
             text_outputs=run_text_outputs(r),
         )

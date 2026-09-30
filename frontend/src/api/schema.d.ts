@@ -2979,7 +2979,8 @@ export interface components {
         /**
          * PublicShareRun
          * @description 画像を作った Run のうち、見せてよい項目だけ(ADR-0029 3章)。実行者、料金・usage、
-         *     エラー、入力の Asset の id は含めない。`params` は `shares.public_params` で絞った値。
+         *     エラー、入力の Asset の id は含めない。`params` は `shares.public_params` の値(ComfyUI の
+         *     Run は `run.params` そのもので入れ子を含む。ADR-0029 3章、2026-10-01 改訂)。
          */
         PublicShareRun: {
             /**
@@ -2998,7 +2999,7 @@ export interface components {
             prompt: string;
             /** Params */
             params?: {
-                [key: string]: string | number | boolean | null;
+                [key: string]: unknown;
             };
             /**
              * Created At

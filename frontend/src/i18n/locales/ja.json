@@ -1560,6 +1560,7 @@
     "lineageHeading": "系列",
     "promptHeading": "プロンプト",
     "paramsHeading": "パラメーター",
+    "paramJsonSummary": "{key}(JSON)",
     "model": "モデル",
     "operation": "操作",
     "operations": {

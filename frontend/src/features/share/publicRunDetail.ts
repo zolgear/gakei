@@ -86,3 +86,26 @@ export function assetForRun(detail: PublicRunDetail, currentAssetId: string | nu
   if (currentAssetId && detail.outputs.some((o) => o.asset.id === currentAssetId)) return currentAssetId
   return detail.outputs[0]?.asset.id ?? detail.primaryParent?.asset.id ?? currentAssetId
 }
+
+export type PublicParamScalar = string | number | boolean | null
+
+/**
+ * Run の params を、一覧に出すスカラーの値と、畳んだ JSON のブロックで出す入れ子の値に分ける
+ * (ADR-0029 3章、2026-10-01 改訂)。ComfyUI の Run は送ったグラフ全体(`comfyui_prompt`)など
+ * 入れ子の値を含む。並びは params のキーの順のまま。
+ */
+export function splitPublicParams(params: Record<string, unknown> | null | undefined): {
+  scalars: [string, PublicParamScalar][]
+  nested: [string, unknown][]
+} {
+  const scalars: [string, PublicParamScalar][] = []
+  const nested: [string, unknown][] = []
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      scalars.push([key, value])
+    } else if (value !== undefined) {
+      nested.push([key, value])
+    }
+  }
+  return { scalars, nested }
+}

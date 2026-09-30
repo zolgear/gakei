@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PublicShareAsset, PublicShareResponse, PublicShareRun } from '../../api/client'
-import { assetForRun, buildPublicRunDetail, publicCompareTargets } from './publicRunDetail'
+import { assetForRun, buildPublicRunDetail, publicCompareTargets, splitPublicParams } from './publicRunDetail'
 
 const created = '2026-09-30T00:00:00Z'
 
@@ -107,5 +107,36 @@ describe('assetForRun', () => {
     expect(assetForRun(detail, 'e1')).toBe('e1')
     expect(assetForRun(detail, 'g0')).toBe('e0')
     expect(assetForRun(detail, null)).toBe('e0')
+  })
+})
+
+describe('splitPublicParams', () => {
+  it('スカラーは一覧に、入れ子の値は JSON のブロックに分ける(キーの順のまま)', () => {
+    const graph = { '1': { class_type: 'KSampler', inputs: { seed: 1 } } }
+    const result = splitPublicParams({
+      size: '1024x1024',
+      comfyui_prompt: graph,
+      steps: 20,
+      comfyui_uploads: { images: ['gakei_abc.png'] },
+      tiling: false,
+      background: null,
+      list: [1, 2],
+    })
+    expect(result.scalars).toEqual([
+      ['size', '1024x1024'],
+      ['steps', 20],
+      ['tiling', false],
+      ['background', null],
+    ])
+    expect(result.nested).toEqual([
+      ['comfyui_prompt', graph],
+      ['comfyui_uploads', { images: ['gakei_abc.png'] }],
+      ['list', [1, 2]],
+    ])
+  })
+
+  it('params が無ければ空', () => {
+    expect(splitPublicParams(undefined)).toEqual({ scalars: [], nested: [] })
+    expect(splitPublicParams(null)).toEqual({ scalars: [], nested: [] })
   })
 })

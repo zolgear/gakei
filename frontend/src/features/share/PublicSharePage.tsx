@@ -44,6 +44,7 @@ import {
   type PublicShareView,
 } from './publicShareView'
 import { showsLineage } from './shareScope'
+import { PublicParams } from './PublicParams'
 import styles from './PublicSharePage.module.css'
 
 interface PublicSharePageProps {
@@ -192,7 +193,6 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
   }
 
   const run = selected.run_id ? (data.runs ?? []).find((r) => r.id === selected.run_id) : undefined
-  const params = Object.entries(run?.params ?? {})
   // 一覧の画像(マスクは系列グラフにだけ出す。単独で見せる意味が薄いため)。
   const listed = assets.filter((a) => a.kind !== 'mask')
   const compareTargets = runDetail ? publicCompareTargets(runDetail, selected.id) : null
@@ -315,19 +315,7 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
                   headingLevel="h2"
                   headingClassName={styles.subheading}
                 />
-                {params.length > 0 && (
-                  <>
-                    <h2 className={styles.subheading}>{p.paramsHeading}</h2>
-                    <dl className={styles.params}>
-                      {params.map(([key, value]) => (
-                        <div key={key} className={styles.paramRow}>
-                          <dt>{key}</dt>
-                          <dd>{value === null ? 'null' : String(value)}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </>
-                )}
+                <PublicParams params={run.params} />
               </>
             ) : (
               <p className={styles.note}>{p.noRun}</p>

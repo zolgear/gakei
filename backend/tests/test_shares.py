@@ -385,8 +385,8 @@ def test_public_response_hides_private_fields(client_oidc: TestClient) -> None:
         assert secret not in text, secret
 
 
-def test_public_params_filter() -> None:
-    params = {
+def _mixed_params() -> dict[str, Any]:
+    return {
         "n": 1,
         "size": "1024x1024",
         "quality": "low",
@@ -395,20 +395,64 @@ def test_public_params_filter() -> None:
         "list": [1, 2],
         "ref": f"asset {uuid.uuid4()}",
         "image": "gakei_" + "a" * 64 + ".png",
-        "comfyui_workflow": {"id": str(uuid.uuid4()), "name": "wf"},
-        "comfyui_prompt": {"1": {"inputs": {}}},
+        "comfyui_workflow": {"id": str(uuid.uuid4()), "name": "wf", "template_sha256": "c" * 64},
+        "comfyui_prompt": {"1": {"class_type": "LoadImage", "inputs": {"image": "x.png"}}},
         "comfyui_uploads": {"images": ["gakei_" + "b" * 64 + ".png"]},
         "comfyui_seed": 42,
         "negative_prompt": "blurry",
     }
-    assert public_params(params) == {
+
+
+def test_public_params_filter_for_non_comfyui() -> None:
+    """ComfyUI 以外の Run は、スカラーだけを出し、UUID・sha256 を含む値と comfyui_* は出さない。"""
+    expected = {
         "n": 1,
         "size": "1024x1024",
         "quality": "low",
         "background": None,
         "negative_prompt": "blurry",
-        "seed": 42,
     }
+    assert public_params(_mixed_params()) == expected
+    assert public_params(_mixed_params(), "openai") == expected
+    assert public_params(None, "openai") == {}
+
+
+def test_public_params_comfyui_returns_params_as_is() -> None:
+    """ADR-0029 3章(2026-10-01 改訂): ComfyUI の Run は params をそのまま(入れ子、comfyui_*、
+    UUID・sha256 を含む値も)出す。"""
+    params = _mixed_params()
+    assert public_params(params, "comfyui") == params
+    assert public_params(None, "comfyui") == {}
+
+
+def test_public_run_params_by_provider(client: TestClient) -> None:
+    """公開の API の Run の params: ComfyUI の Run は入れ子も含めてそのまま、OpenAI の Run は
+    これまでどおり絞る。原本を許していない共有でも同じ。"""
+    _enable(client)
+    detail = _run(client, "comfy share")
+    asset_id = _outputs(detail)[0]
+    share = _create(client, asset_id, "single", allow_original=False)
+    params = _mixed_params()
+
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(detail["id"]))
+        assert run is not None
+        run.provider = "openai"
+        run.params = params
+        db.commit()
+    runs = _public(client, _token(share)).json()["runs"]
+    assert runs[0]["params"] == public_params(params, "openai")
+    assert "comfyui_prompt" not in runs[0]["params"]
+
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(detail["id"]))
+        assert run is not None
+        run.provider = "comfyui"
+        db.commit()
+    runs = _public(client, _token(share)).json()["runs"]
+    assert runs[0]["params"] == params
+    # モデルはワークフローの名前だけ(id は出さない。ADR-0013)。
+    assert runs[0]["model"] == "wf"
 
 
 # -- 本人だけ(認証モード) --------------------------------------------------------
