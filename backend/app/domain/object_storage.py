@@ -32,6 +32,10 @@ from app.domain.storage import (
 if TYPE_CHECKING:
     from app.config import Settings
 
+# Azure の読み出しの単位。既定(最初の 32MB を1回で取る)のままだと、4K の原本を配信する
+# たびに丸ごとメモリに載るので、小さめにして順に流す。
+_AZURE_GET_SIZE = 4 * 1024 * 1024
+
 # 起動時に読み書きを確かめるためのキー(毎回同じキーに上書きする。GAKEI は削除の権限を
 # 前提にしないので、消さずに残す)。
 HEALTHCHECK_KEY = ".gakei/startup-check"
@@ -63,7 +67,13 @@ class AzureBlobStore:
         from azure.storage.blob import ContainerClient
 
         return cls(
-            ContainerClient.from_connection_string(connection_string, container), prefix=prefix
+            ContainerClient.from_connection_string(
+                connection_string,
+                container,
+                max_single_get_size=_AZURE_GET_SIZE,
+                max_chunk_get_size=_AZURE_GET_SIZE,
+            ),
+            prefix=prefix,
         )
 
     @classmethod
@@ -75,7 +85,13 @@ class AzureBlobStore:
         from azure.storage.blob import ContainerClient
 
         return cls(
-            ContainerClient(account_url, container, credential=DefaultAzureCredential()),
+            ContainerClient(
+                account_url,
+                container,
+                credential=DefaultAzureCredential(),
+                max_single_get_size=_AZURE_GET_SIZE,
+                max_chunk_get_size=_AZURE_GET_SIZE,
+            ),
             prefix=prefix,
         )
 
@@ -92,21 +108,29 @@ class AzureBlobStore:
         )
 
     def write_original(self, data: bytes, ext: str, info: OriginalKeyInfo) -> str:
-        from azure.core.exceptions import ResourceExistsError
-
-        folder, stem, ext = original_key_base(info, ext)
-        for name in candidate_names(stem, ext):
-            key = f"{folder}/{name}"
-            try:
-                # overwrite=False は `If-None-Match: *` の条件付き書き込み。同名があれば失敗する。
-                self._upload(key, data, overwrite=False)
-            except ResourceExistsError:
-                continue
-            return key
-        raise FileExistsError(f"同名のファイルが多すぎます: {folder}/{stem}.{ext}")
+        return _write_original(self, data, ext, info)
 
     def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
         self._upload(derived_key(sha256, variant), data, overwrite=True)
+
+    def write_new(self, key: str, data: bytes) -> None:
+        """キーを指定して、上書きせずに書く(移行ツール用)。あれば `FileExistsError`。"""
+        from azure.core.exceptions import ResourceExistsError
+
+        try:
+            # overwrite=False は `If-None-Match: *` の条件付き書き込み。同名があれば失敗する。
+            self._upload(key, data, overwrite=False)
+        except ResourceExistsError as e:
+            raise FileExistsError(key) from e
+
+    def size_of(self, key: str) -> int | None:
+        """キーの大きさ(バイト)。無ければ None。"""
+        from azure.core.exceptions import ResourceNotFoundError
+
+        try:
+            return int(self._blob(key).get_blob_properties().size)
+        except ResourceNotFoundError:
+            return None
 
     def read(self, blob_key: str) -> bytes:
         from azure.core.exceptions import ResourceNotFoundError
@@ -192,25 +216,36 @@ class S3Store:
         )
 
     def write_original(self, data: bytes, ext: str, info: OriginalKeyInfo) -> str:
-        from botocore.exceptions import ClientError
-
-        folder, stem, ext = original_key_base(info, ext)
-        for name in candidate_names(stem, ext):
-            key = f"{folder}/{name}"
-            try:
-                # `If-None-Match: *` の条件付き書き込み。同名があれば 412 PreconditionFailed。
-                # 同じキーへの書き込みが同時に進んでいると 409 ConditionalRequestConflict に
-                # なりうるので、これも「使われている」として次の連番へ進む。
-                self._put(key, data, IfNoneMatch="*")
-            except ClientError as e:
-                if self._error_code(e) in ("PreconditionFailed", "ConditionalRequestConflict"):
-                    continue
-                raise
-            return key
-        raise FileExistsError(f"同名のファイルが多すぎます: {folder}/{stem}.{ext}")
+        return _write_original(self, data, ext, info)
 
     def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
         self._put(derived_key(sha256, variant), data)
+
+    def write_new(self, key: str, data: bytes) -> None:
+        """キーを指定して、上書きせずに書く(移行ツール用)。あれば `FileExistsError`。"""
+        from botocore.exceptions import ClientError
+
+        try:
+            # `If-None-Match: *` の条件付き書き込み。同名があれば 412 PreconditionFailed。
+            # 同じキーへの書き込みが同時に進んでいると 409 ConditionalRequestConflict に
+            # なりうるので、これも「使われている」とみなす。
+            self._put(key, data, IfNoneMatch="*")
+        except ClientError as e:
+            if self._error_code(e) in ("PreconditionFailed", "ConditionalRequestConflict"):
+                raise FileExistsError(key) from e
+            raise
+
+    def size_of(self, key: str) -> int | None:
+        """キーの大きさ(バイト)。無ければ None。"""
+        from botocore.exceptions import ClientError
+
+        try:
+            response = self._client.head_object(Bucket=self.bucket, Key=self.prefix + key)
+        except ClientError as e:
+            if self._error_code(e) in ("404", "NoSuchKey", "NotFound"):
+                return None
+            raise
+        return int(response["ContentLength"])
 
     def _get(self, key: str) -> dict[str, Any] | None:
         from botocore.exceptions import ClientError
@@ -256,6 +291,21 @@ class S3Store:
         self._put(HEALTHCHECK_KEY, b"ok")
         if self.read(HEALTHCHECK_KEY) != b"ok":
             raise OSError("読み書きの確認で、書いた内容と読んだ内容が一致しません")
+
+
+def _write_original(
+    store: AzureBlobStore | S3Store, data: bytes, ext: str, info: OriginalKeyInfo
+) -> str:
+    """原本を新しいキーで書く。同名があれば `-2`、`-3` を付けて試す(ADR-0028 3章)。"""
+    folder, stem, ext = original_key_base(info, ext)
+    for name in candidate_names(stem, ext):
+        key = f"{folder}/{name}"
+        try:
+            store.write_new(key, data)
+        except FileExistsError:
+            continue
+        return key
+    raise FileExistsError(f"同名のファイルが多すぎます: {folder}/{stem}.{ext}")
 
 
 def _iter_body(body: Any) -> Iterator[bytes]:

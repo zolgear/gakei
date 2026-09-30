@@ -240,6 +240,37 @@ jobs:
           GAKEI_TEST_DATABASE_URL: postgresql://postgres:gakei@127.0.0.1:5432/postgres
         run: uv run --frozen pytest -q -n auto
 
+  # ADR-0028 7章: 画像の保存先の Azure Blob Storage を Azurite(公式のエミュレーター)で確かめる。
+  # Ubuntu だけで、PR でも走らせる。回すのは保存先に関わるテストだけ(S3 は moto を使うので
+  # 上の test ジョブで回る)。Azurite は既定のコマンド(blob / queue / table)のまま起動する
+  # (services には起動の引数を渡せないため)。
+  azure-blob:
+    name: test (azure-blob)
+    runs-on: ubuntu-latest
+    services:
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite
+        ports:
+          - 10000:10000
+    steps:
+      - uses: actions/checkout@v5
+
+      # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
+      - name: uv のセットアップ
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: backend pytest (Azure Blob / Azurite)
+        working-directory: backend
+        env:
+          # Azurite の既定のアカウント(公開されている開発用の鍵)
+          GAKEI_TEST_AZURE_BLOB_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
+        run: >-
+          uv run --frozen pytest -q
+          tests/test_object_storage.py tests/test_object_storage_api.py
+          tests/test_migrate_storage.py tests/test_storage_hierarchy.py
+
   # ADR-0016: Docker イメージのビルドと起動確認。run.sh/run.bat とは別の配布経路なので、
   # 上の test ジョブとは独立に実行する。
   docker:
