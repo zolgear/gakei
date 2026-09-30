@@ -1580,7 +1580,9 @@
     "primaryParentHeading": "Primary parent",
     "referencesHeading": "References",
     "compareWithOriginal": "Compare with original",
-    "endCompare": "End comparison"
+    "endCompare": "End comparison",
+    "backToViewer": "Back to viewer",
+    "expandLineageLabel": "Expand the lineage graph to full screen"
   },
   "finalPrompt": {
     "heading": "PE output",

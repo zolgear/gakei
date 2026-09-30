@@ -593,7 +593,8 @@ def test_canceled_run_is_hidden_from_run_detail(client: TestClient, chain: Chain
 def test_run_detail_path_serves_spa(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, data_dir: Path
 ) -> None:
-    """`/s/{トークン}/runs/{run_id}` も SPA の index.html を返す(画面側で解釈する)。"""
+    """`/s/{トークン}/runs/{run_id}` と `/s/{トークン}/lineage`(全画面の系列グラフ)も
+    SPA の index.html を返す(画面側で解釈する)。"""
     import app.main as app_main
     from app.main import create_app
 
@@ -603,7 +604,7 @@ def test_run_detail_path_serves_spa(
     monkeypatch.setattr(app_main, "_FRONTEND_DIST", dist_dir)
     app = create_app(Settings(_env_file=None, data_dir=data_dir, fake_provider=True))
     with TestClient(app) as test_client:
-        for path in ("/s/abc", f"/s/abc/runs/{uuid.uuid4()}"):
+        for path in ("/s/abc", f"/s/abc/runs/{uuid.uuid4()}", "/s/abc/lineage"):
             response = test_client.get(path)
             assert response.status_code == 200, path
             assert "gakei spa" in response.text

@@ -5,7 +5,7 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { AssetLineageResponse, LineageEdge as ApiLineageEdge } from '../../api/client'
 import { msg } from '../../i18n'
-import { layoutLineage } from './lineageLayout'
+import { layoutLineage, type LineageLayoutOptions } from './lineageLayout'
 import { AssetLineageNode, type AssetNodeData } from './AssetLineageNode'
 import { RunLineageNode, type RunNodeData } from './RunLineageNode'
 
@@ -51,17 +51,19 @@ function edgeLabel(edge: ApiLineageEdge): string | undefined {
 
 /**
  * API の系列グラフを React Flow のノードと辺にする。共有のページ(ADR-0029)も使う
- * (`thumbUrlFor` で Asset ノードのサムネイルの URL を公開のものに差し替える)。
+ * (`thumbUrlFor` で Asset ノードのサムネイルの URL を公開のものに差し替える。ノードを大きく
+ * 描くときは `layoutOptions` で間隔も合わせる)。
  */
 export function buildFlowGraph(
   response: AssetLineageResponse,
   rootAssetId: string,
   highlightedNodeId: string | null,
   thumbUrlFor?: (assetId: string) => string,
+  layoutOptions?: LineageLayoutOptions,
 ): { nodes: Node[]; edges: Edge[] } {
   const apiNodes = response.nodes ?? []
   const apiEdges = response.edges ?? []
-  const positions = new Map(layoutLineage(apiNodes, apiEdges).map((p) => [p.id, p]))
+  const positions = new Map(layoutLineage(apiNodes, apiEdges, layoutOptions).map((p) => [p.id, p]))
 
   const nodeStatus = new Map<string, 'run-failed' | 'other'>()
   for (const n of apiNodes) {

@@ -342,6 +342,40 @@
   overflow: hidden;
 }
 
+/* 全画面の系列グラフ(`/s/:token/lineage`。ADR-0029 3章、2026-10-01 追記)。 */
+.lineageFull {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 16px;
+  box-sizing: border-box;
+}
+
+.lineageFullHeader {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lineageFullTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* ノードを大きく描く(通常は幅 128px・サムネイルの高さ 82px。LineageNodes.module.css)。
+   レイアウトの間隔は PublicLineageGraph.tsx の FULL_LAYOUT で合わせる。 */
+.fullGraph {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  --lineage-node-width: 240px;
+  --lineage-thumb-height: 200px;
+}
+
 @media (max-width: 767px) {
   .page {
     height: auto;
@@ -368,6 +402,14 @@
   .backButton,
   .compareEnd {
     min-height: 44px;
+  }
+
+  /* ページは縦に伸びる(height: auto)ので、全画面の系列グラフは画面の高さに合わせる
+     (ヘッダー 44px + 境界線 1px を除く)。 */
+  .lineageFull {
+    flex: none;
+    height: calc(100dvh - 45px);
+    padding: 10px;
   }
 
   .linkButton {

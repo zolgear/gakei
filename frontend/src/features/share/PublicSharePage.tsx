@@ -11,6 +11,9 @@
  *   見る」)で、右のパネルを Run の詳細に切り替える。URL は `/s/:token/runs/:runId`(直リンクで
  *   開ける。画像の選択はこれまでどおり URL に書かない)。Edit の Run では「編集前と比較する」で
  *   ビューアの場所に比較(`CompareCanvas`)を出す。
+ * - 系列グラフを広げる(2026-10-01 追記): 系列グラフの「広げる」で、グラフだけを全画面で出す。
+ *   URL は `/s/:token/lineage`(直リンクで開ける。系列を含まない共有ではビューアのまま)。ノードを
+ *   押すと全画面を閉じ、画像ならビューアでその画像、Run ならその Run の詳細を開く。
  * - 見つからない・取り消し済み・機能が無効・共有に無い Run は、区別せず「このリンクは無効です」を出す。
  *
  * ルーターの外なので、URL は `history.pushState` と `popstate` で自前で扱う。
@@ -31,7 +34,15 @@ import { FinalPromptSection } from '../run-detail/FinalPromptSection'
 import { PublicLineageGraph } from './PublicLineageGraph'
 import { PublicRunDetailPanel } from './PublicRunDetailPanel'
 import { assetForRun, buildPublicRunDetail, publicCompareTargets } from './publicRunDetail'
-import { buildPublicSharePath, parsePublicSharePath } from './publicSharePath'
+import {
+  closeLineageView,
+  lineageNodeTarget,
+  openLineageView,
+  publicShareHistoryState,
+  publicShareViewFromLocation,
+  publicShareViewPath,
+  type PublicShareView,
+} from './publicShareView'
 import { showsLineage } from './shareScope'
 import styles from './PublicSharePage.module.css'
 
@@ -39,9 +50,11 @@ interface PublicSharePageProps {
   token: string
   /** 直リンク `/s/:token/runs/:runId` で開いたときの Run。 */
   initialRunId?: string | null
+  /** 直リンク `/s/:token/lineage` で開いたか。 */
+  initialLineage?: boolean
 }
 
-export function PublicSharePage({ token, initialRunId = null }: PublicSharePageProps) {
+export function PublicSharePage({ token, initialRunId = null, initialLineage = false }: PublicSharePageProps) {
   const { t } = useI18n()
   const query = useQuery({
     queryKey: ['public-share', token],
@@ -49,24 +62,29 @@ export function PublicSharePage({ token, initialRunId = null }: PublicSharePageP
     retry: false,
     refetchOnWindowFocus: false,
   })
-  const [runId, setRunId] = useState<string | null>(initialRunId)
+  const [view, setView] = useState<PublicShareView>(() => ({ runId: initialRunId, lineage: initialLineage }))
 
   useEffect(() => {
     document.title = 'GAKEI'
   }, [])
 
-  // ブラウザの戻る/進むで、Run の詳細の開閉を URL に合わせる。
+  // ブラウザの戻る/進むで、Run の詳細・全画面の系列グラフの開閉を URL に合わせる。
   useEffect(() => {
-    const onPopState = () => setRunId(parsePublicSharePath(window.location.pathname)?.runId ?? null)
+    const onPopState = (event: PopStateEvent) => {
+      const next = publicShareViewFromLocation(window.location.pathname, event.state)
+      setView(next ?? { runId: null, lineage: false })
+    }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  const navigateRun = useCallback(
-    (next: string | null) => {
-      const path = buildPublicSharePath(token, next)
-      if (window.location.pathname !== path) window.history.pushState(null, '', path)
-      setRunId(next)
+  const navigateView = useCallback(
+    (next: PublicShareView, options: { replace?: boolean } = {}) => {
+      const path = publicShareViewPath(token, next)
+      const state = publicShareHistoryState(next)
+      if (options.replace) window.history.replaceState(state, '', path)
+      else if (window.location.pathname !== path) window.history.pushState(state, '', path)
+      setView(next)
     },
     [token],
   )
@@ -84,7 +102,7 @@ export function PublicSharePage({ token, initialRunId = null }: PublicSharePageP
       </header>
       {query.isLoading && <p className={styles.message}>{t.publicShare.loading}</p>}
       {query.isError && <InvalidLink />}
-      {query.data && <PublicShareBody token={token} data={query.data} runId={runId} onNavigateRun={navigateRun} />}
+      {query.data && <PublicShareBody token={token} data={query.data} view={view} onNavigate={navigateView} />}
     </div>
   )
 }
@@ -102,16 +120,27 @@ function InvalidLink() {
 interface PublicShareBodyProps {
   token: string
   data: PublicShareResponse
-  runId: string | null
-  onNavigateRun: (runId: string | null) => void
+  view: PublicShareView
+  onNavigate: (view: PublicShareView, options?: { replace?: boolean }) => void
 }
 
-function PublicShareBody({ token, data, runId, onNavigateRun }: PublicShareBodyProps) {
+function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps) {
   const { t } = useI18n()
   const p = t.publicShare
   const isMobile = useIsMobileViewport()
   const assets = useMemo(() => data.assets ?? [], [data.assets])
+  const runId = view.runId
+  const hasLineage = showsLineage(data.scope)
+  // 系列を含まない共有(「この1枚」)の `/lineage` は、ビューアで開く(URL も `/s/:token` に直す)。
+  const lineageOpen = view.lineage && hasLineage
   const runDetail = useMemo(() => (runId ? buildPublicRunDetail(data, runId) : null), [data, runId])
+  const onNavigateRun = useCallback(
+    (next: string | null) => onNavigate({ runId: next, lineage: false }),
+    [onNavigate],
+  )
+  useEffect(() => {
+    if (view.lineage && !hasLineage) onNavigate(closeLineageView(view), { replace: true })
+  }, [view, hasLineage, onNavigate])
 
   const [selectedId, setSelectedId] = useState<string>(
     () => (runDetail ? assetForRun(runDetail, null) : null) ?? data.root_asset_id,
@@ -178,6 +207,28 @@ function PublicShareBody({ token, data, runId, onNavigateRun }: PublicShareBodyP
   function showAsset(assetId: string) {
     selectAsset(assetId)
     if (runId !== null) onNavigateRun(null)
+  }
+
+  // 強調するノード: Run の詳細を開いているならその Run、そうでなければビューアの画像。
+  const highlightedNodeId = runDetail ? runDetail.run.id : selected.id
+
+  if (lineageOpen) {
+    const selectFromFull = (id: string, type: 'asset' | 'run') => {
+      const target = lineageNodeTarget({ id, type })
+      if (!target) return
+      if (target.assetId) selectAsset(target.assetId)
+      onNavigate(target.view)
+    }
+    return (
+      <PublicLineageFull
+        data={data}
+        highlightedNodeId={highlightedNodeId}
+        thumbUrlFor={thumbUrlFor}
+        onSelectAsset={(id) => selectFromFull(id, 'asset')}
+        onSelectRun={(id) => selectFromFull(id, 'run')}
+        onClose={() => onNavigate(closeLineageView(view))}
+      />
+    )
   }
 
   return (
@@ -317,19 +368,54 @@ function PublicShareBody({ token, data, runId, onNavigateRun }: PublicShareBodyP
           </>
         )}
 
-        {showsLineage(data.scope) && (
+        {hasLineage && (
           <>
             <h2 className={styles.subheading}>{p.lineageHeading}</h2>
             <PublicLineageGraph
               data={data}
-              highlightedNodeId={runDetail ? runDetail.run.id : selected.id}
+              highlightedNodeId={highlightedNodeId}
               thumbUrlFor={thumbUrlFor}
               onSelectAsset={showAsset}
               onSelectRun={onNavigateRun}
+              onExpand={() => onNavigate(openLineageView(view))}
             />
           </>
         )}
       </aside>
+    </main>
+  )
+}
+
+interface PublicLineageFullProps {
+  data: PublicShareResponse
+  highlightedNodeId: string
+  thumbUrlFor: (assetId: string) => string
+  onSelectAsset: (assetId: string) => void
+  onSelectRun: (runId: string) => void
+  onClose: () => void
+}
+
+/** 全画面の系列グラフ(`/s/:token/lineage`)。Esc でも「ビューアに戻る」と同じく閉じる。 */
+function PublicLineageFull({ onClose, ...graphProps }: PublicLineageFullProps) {
+  const { t } = useI18n()
+  const p = t.publicShare
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  return (
+    <main className={styles.lineageFull}>
+      <div className={styles.lineageFullHeader}>
+        <button type="button" className={styles.backButton} onClick={onClose}>
+          {p.backToViewer}
+        </button>
+        <h1 className={styles.lineageFullTitle}>{p.lineageHeading}</h1>
+      </div>
+      <PublicLineageGraph {...graphProps} variant="full" />
     </main>
   )
 }
