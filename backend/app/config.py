@@ -40,6 +40,24 @@ class Settings(BaseSettings):
     # のドライバ名に読み替える)。PostgreSQL でも画像などは `DATA_DIR` に置く。
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
+    # ADR-0028: 画像の原本と派生の保存先。`local`(既定。`DATA_DIR`)、`azure_blob`、`s3`。
+    # 他の保存先でも、アバター・secrets.json・モデル・SQLite などは `DATA_DIR` に置く。
+    storage_backend: Literal["local", "azure_blob", "s3"] = Field(
+        default="local", alias="STORAGE_BACKEND"
+    )
+    # Azure Blob Storage。接続は接続文字列か、アカウントの URL(`DefaultAzureCredential`)の
+    # どちらか一方。接続文字列は鍵を含むので、ログや画面に出さない。
+    azure_storage_container: str | None = Field(default=None, alias="AZURE_STORAGE_CONTAINER")
+    azure_storage_connection_string: str | None = Field(
+        default=None, alias="AZURE_STORAGE_CONNECTION_STRING"
+    )
+    azure_storage_account_url: str | None = Field(default=None, alias="AZURE_STORAGE_ACCOUNT_URL")
+    # S3 互換ストレージ。資格情報は boto3 の標準の探し方(AWS_ACCESS_KEY_ID など)に任せる。
+    s3_bucket: str | None = Field(default=None, alias="S3_BUCKET")
+    s3_region: str | None = Field(default=None, alias="S3_REGION")
+    s3_endpoint_url: str | None = Field(default=None, alias="S3_ENDPOINT_URL")
+    s3_force_path_style: bool = Field(default=False, alias="S3_FORCE_PATH_STYLE")
+
     # ADR-0017: 主プロバイダーは常に openai。FAKE_PROVIDER=1 のときだけ fake に切り替える
     # (開発・CI・確認用の内部フラグ。利用者向けの設定一覧には載せない)。
     fake_provider: bool = Field(default=False, alias="FAKE_PROVIDER")

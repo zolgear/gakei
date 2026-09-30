@@ -66,7 +66,7 @@ def download_by_url(
     asset = get_visible_asset(db, viewer, ticket.asset_id)
     if asset is None:
         raise _not_found()
-    if not store.content_path(asset.blob_key, asset.sha256, "original").exists():
+    if not store.content_exists(asset.blob_key, asset.sha256, "original"):
         raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
     # 同時に取得されても片方だけが通る。使用済みを確定してから配信する。
     if not download_tickets_domain.mark_used(db, ticket):

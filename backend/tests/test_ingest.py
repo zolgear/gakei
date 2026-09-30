@@ -66,8 +66,8 @@ def test_ingest_generates_derivatives(
         asset = ingest(session, local_store, data, AssetKind.UPLOAD)
         session.commit()
 
-        thumb_path = local_store.content_path(asset.blob_key, asset.sha256, "thumb")
-        preview_path = local_store.content_path(asset.blob_key, asset.sha256, "preview")
+        thumb_path = local_store.local_path(asset.blob_key, asset.sha256, "thumb")
+        preview_path = local_store.local_path(asset.blob_key, asset.sha256, "preview")
         assert thumb_path.exists()
         assert preview_path.exists()
 

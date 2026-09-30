@@ -13,6 +13,7 @@ import os
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -356,3 +357,146 @@ def swapped_primary_provider(client: TestClient, provider: Any) -> Iterator[None
         yield
     finally:
         registry.providers[name] = original
+
+
+# --- オブジェクトストレージ(ADR-0028 7章) ------------------------------------------
+#
+# S3: 既定は moto のサーバーをテストの中で立てる(worker ごとに1つ。空きポートを取る)。
+# `GAKEI_TEST_S3_ENDPOINT_URL` ほかがあれば、moto の代わりにそこ(Cloudflare R2 など)へつなぐ。
+# Azure Blob: `GAKEI_TEST_AZURE_BLOB_CONNECTION_STRING`(Azurite など)があるときだけ回す。
+# どちらも、テストごとにランダムな接頭辞の下を使い、終わったらその下を消す。
+
+_S3_ENV = {
+    "endpoint_url": os.environ.get("GAKEI_TEST_S3_ENDPOINT_URL", "").strip(),
+    "bucket": os.environ.get("GAKEI_TEST_S3_BUCKET", "").strip(),
+    "access_key_id": os.environ.get("GAKEI_TEST_S3_ACCESS_KEY_ID", "").strip(),
+    "secret_access_key": os.environ.get("GAKEI_TEST_S3_SECRET_ACCESS_KEY", "").strip(),
+    "region": os.environ.get("GAKEI_TEST_S3_REGION", "").strip(),
+}
+_AZURE_BLOB_CONNECTION_STRING = (
+    os.environ.get("GAKEI_TEST_AZURE_BLOB_CONNECTION_STRING", "").strip() or None
+)
+# Azurite で使うコンテナ(無ければテストが作る。本番の GAKEI はコンテナを作らない)
+AZURE_TEST_CONTAINER = "gakei-test"
+MOTO_TEST_BUCKET = "gakei-test"
+
+requires_azure_blob = pytest.mark.skipif(
+    _AZURE_BLOB_CONNECTION_STRING is None,
+    reason="GAKEI_TEST_AZURE_BLOB_CONNECTION_STRING(Azurite など)が無い",
+)
+
+
+@dataclass(frozen=True)
+class S3TestTarget:
+    """テストでつなぐ S3 互換ストレージ(moto か実機)。"""
+
+    endpoint_url: str
+    bucket: str
+    access_key_id: str
+    secret_access_key: str
+    region: str
+    is_moto: bool
+
+    def store(self, prefix: str = "") -> Any:
+        from app.domain.object_storage import S3Store
+
+        return S3Store.create(
+            self.bucket,
+            region=self.region,
+            endpoint_url=self.endpoint_url,
+            force_path_style=self.is_moto,
+            access_key_id=self.access_key_id,
+            secret_access_key=self.secret_access_key,
+            prefix=prefix,
+        )
+
+
+@pytest.fixture(scope="session")
+def s3_target() -> Iterator[S3TestTarget]:
+    if _S3_ENV["endpoint_url"]:
+        missing = [k for k in ("bucket", "access_key_id", "secret_access_key") if not _S3_ENV[k]]
+        if missing:
+            pytest.fail(f"GAKEI_TEST_S3_* が足りない: {missing}")
+        yield S3TestTarget(
+            endpoint_url=_S3_ENV["endpoint_url"],
+            bucket=_S3_ENV["bucket"],
+            access_key_id=_S3_ENV["access_key_id"],
+            secret_access_key=_S3_ENV["secret_access_key"],
+            region=_S3_ENV["region"] or "auto",
+            is_moto=False,
+        )
+        return
+
+    from moto.server import ThreadedMotoServer
+
+    server = ThreadedMotoServer(ip_address="127.0.0.1", port=0, verbose=False)
+    server.start()
+    try:
+        host, port = server.get_host_and_port()
+        target = S3TestTarget(
+            endpoint_url=f"http://{host}:{port}",
+            bucket=MOTO_TEST_BUCKET,
+            access_key_id="testing",
+            secret_access_key="testing",
+            region="us-east-1",
+            is_moto=True,
+        )
+        target.store()._client.create_bucket(Bucket=target.bucket)
+        yield target
+    finally:
+        server.stop()
+
+
+def _test_prefix() -> str:
+    return f"gakei-pytest/{uuid.uuid4().hex}/"
+
+
+def _cleanup_s3_prefix(store: Any) -> None:
+    paginator = store._client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=store.bucket, Prefix=store.prefix):
+        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+        if keys:
+            store._client.delete_objects(Bucket=store.bucket, Delete={"Objects": keys})
+
+
+@pytest.fixture
+def s3_store(s3_target: S3TestTarget) -> Iterator[Any]:
+    """テストごとにランダムな接頭辞の下を使う S3Store。終わったら接頭辞の下を消す。"""
+    store = s3_target.store(prefix=_test_prefix())
+    try:
+        yield store
+    finally:
+        _cleanup_s3_prefix(store)
+
+
+@pytest.fixture
+def azure_blob_store() -> Iterator[Any]:
+    """テストごとにランダムな接頭辞の下を使う AzureBlobStore。接続先が無ければ skip。"""
+    if _AZURE_BLOB_CONNECTION_STRING is None:
+        pytest.skip("GAKEI_TEST_AZURE_BLOB_CONNECTION_STRING(Azurite など)が無い")
+    from azure.core.exceptions import ResourceExistsError
+
+    from app.domain.object_storage import AzureBlobStore
+
+    store = AzureBlobStore.from_connection_string(
+        _AZURE_BLOB_CONNECTION_STRING, AZURE_TEST_CONTAINER, prefix=_test_prefix()
+    )
+    try:
+        store._container.create_container()
+    except ResourceExistsError:
+        pass
+    try:
+        yield store
+    finally:
+        for blob in store._container.list_blobs(name_starts_with=store.prefix):
+            store._container.delete_blob(blob.name)
+
+
+@pytest.fixture(params=["local", "s3", "azure_blob"])
+def any_store(request: pytest.FixtureRequest, tmp_path: Path) -> Any:
+    """ストアの共通の振る舞いのテスト用(ローカルFS / S3 / Azure Blob)。"""
+    if request.param == "local":
+        return LocalFsStore(tmp_path / "store")
+    if request.param == "s3":
+        return request.getfixturevalue("s3_store")
+    return request.getfixturevalue("azure_blob_store")

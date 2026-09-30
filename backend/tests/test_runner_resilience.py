@@ -41,7 +41,7 @@ def test_missing_input_file_fails_run_but_runner_keeps_processing(client: TestCl
     store = client.app.state.store
     with session_factory() as session:
         asset = session.get(Asset, uuid.UUID(asset_id))
-        blob_path = store.content_path(asset.blob_key, asset.sha256, "original")
+        blob_path = store.local_path(asset.blob_key, asset.sha256, "original")
     blob_path.unlink()
 
     response = client.post(

@@ -1,4 +1,4 @@
-"""Asset の登録・一覧・詳細・配信。配信のパス解決は `AssetStore.content_path` の1関数に閉じる。"""
+"""Asset の登録・一覧・詳細・配信。配信は `AssetStore.open_content` を経由する(ADR-0028 4章)。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session
@@ -391,11 +391,10 @@ def asset_content_response(
 ) -> Response:
     """画像の本体の応答。`GET /api/assets/{id}/content` と、1回限りのダウンロード URL
     (`GET /api/downloads/{token}`。ADR-0023 8章 3)で共通。見えるかどうかは呼び出し側が
-    確かめる。ファイルが無ければ 404。"""
-    path = store.content_path(asset.blob_key, asset.sha256, variant)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
+    確かめる。ファイルが無ければ 404。
 
+    ローカルFSは `FileResponse`(Range 要求に応える)、オブジェクトストレージは読み出した
+    チャンクをそのまま流す(`Content-Length` 付き、Range には応えない。ADR-0028 4章)。"""
     # ADR-0014(2026-09-24 追記): original をダウンロードする PNG にだけ、系列情報
     # (gakei チャンク)を埋め込んで返す。保存している原本・画面表示用の
     # original/thumb/preview(download=0)は変えない(ETag も区別する)。
@@ -404,7 +403,15 @@ def asset_content_response(
     headers = {"ETag": etag, "Cache-Control": cache_control}
 
     if if_none_match == etag:
+        # 本体は読まない(オブジェクトストレージで原本を丸ごと取りに行かないため)。
+        # ファイルが無ければ、これまでどおり 304 ではなく 404。
+        if not store.content_exists(asset.blob_key, asset.sha256, variant):
+            raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
         return Response(status_code=304, headers=headers)
+
+    content = store.open_content(asset.blob_key, asset.sha256, variant)
+    if content is None:
+        raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
 
     media_type = asset.mime if variant == "original" else _DERIVED_MEDIA_TYPE
     if download:
@@ -412,12 +419,15 @@ def asset_content_response(
         headers["Content-Disposition"] = f'attachment; filename="{asset.id}-{variant}.{ext}"'
 
     if embed_meta:
-        data = store.read(asset.blob_key)
+        data = content.read_all()
         meta = build_lineage_meta(db, asset, viewer=viewer)
         embedded = embed_gakei_chunk(data, meta)
         return Response(content=embedded, media_type=media_type, headers=headers)
 
-    return FileResponse(path, media_type=media_type, headers=headers)
+    if content.path is not None:
+        return FileResponse(content.path, media_type=media_type, headers=headers)
+    headers["Content-Length"] = str(content.size)
+    return StreamingResponse(content.chunks, media_type=media_type, headers=headers)
 
 
 @router.get(

@@ -18,7 +18,7 @@ ADR-0003 のデータモデル(`asset` / `run` / `run_input`)と ADR-0005 の `I
 | 項目 | 本線(ADR) | ローカルMVP | 本線への戻し方 |
 |---|---|---|---|
 | プロバイダー | Azure OpenAI + マネージドID(ADR-0005, 0006) | OpenAI API + APIキー(`.env` または画面の設定。サーバー側のみ。ADR-0012) | `ImageProvider` の実装を追加する。クライアント生成以外は共有する |
-| 画像保存 | Azure Blob(ADR-0004) | ローカルFS。キー規則 `assets/{sha256先頭2文字}/{sha256}.{拡張子}` は同じ | `AssetStore` の実装を差し替える |
+| 画像保存 | Azure Blob(ADR-0004) | ローカルFS。キー規則 `assets/{sha256先頭2文字}/{sha256}.{拡張子}` は同じ(2026-09-30 注記: ADR-0026 でキー規則を改め、ADR-0028 で `STORAGE_BACKEND` により Azure Blob Storage / S3 互換ストレージも選べるようになった。未指定の既定は引き続きローカルFS) | `AssetStore` の実装を差し替える |
 | DB | PostgreSQL / JSONB(ADR-0002) | SQLite(WAL)。SQLAlchemy の `JSON` / `Uuid` 型で両対応にする(2026-09-29 注記: ADR-0027 で `DATABASE_URL` を指定すると PostgreSQL も選べるようになった。未指定の既定は引き続き SQLite) | 接続URLを変え、Alembic を PostgreSQL で流し直す |
 | ジョブ実行 | 別プロセス worker + `SKIP LOCKED`(ADR-0005) | api プロセス内の asyncio タスク。`run` 行がキューである点は同じ | runner を別コマンドに切り出す |
 | 進捗通知 | `LISTEN/NOTIFY` → SSE | プロセス内 pub/sub → SSE。ブラウザから見た I/F は同じ | pub/sub の実装を差し替える |

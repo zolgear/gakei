@@ -1011,9 +1011,8 @@ async def create_download_url(
 
 def _transparency(store: AssetStore, asset: Asset) -> dict[str, Any]:
     """原本から数えた透過の情報(ADR-0023 7章 4)。原本が読めなければ null。"""
-    path = store.content_path(asset.blob_key, asset.sha256, "original")
     try:
-        stats = alpha_stats(asset.sha256, path)
+        stats = alpha_stats(asset.sha256, lambda: store.read(asset.blob_key))
     except (OSError, ValueError):
         return {"has_alpha": None, "transparent_ratio": None}
     return {"has_alpha": stats.has_alpha, "transparent_ratio": stats.transparent_ratio}

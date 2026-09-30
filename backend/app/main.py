@@ -38,7 +38,7 @@ from app.auth.secret import load_or_create_auth_secret
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
-from app.domain.storage import LocalFsStore
+from app.domain.storage import open_store
 from app.i18n import console_t, parse_accept_language, set_locale, t
 from app.mcp.endpoint import McpEndpoint
 from app.mcp.server import build_mcp_server, build_session_manager
@@ -209,7 +209,9 @@ def _build_lifespan(settings: Settings):
 
         engine = make_engine(settings.sqlalchemy_url)
         session_factory = make_session_factory(engine)
-        store = LocalFsStore(settings.data_dir)
+        # ADR-0028 2章: 画像の保存先。接続・読み書きできなければ、分かる文言で起動を中止する
+        # (`StorageUnavailableError`)。
+        store = open_store(settings)
         registry = build_registry(settings, session_factory)
         progress_bus = ProgressBus()
         # ADR-0024: 自動タイトル・タグの推定の worker と、ONNX タガーのモデルのダウンロード。

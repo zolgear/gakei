@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -24,7 +25,7 @@ from app.config import get_settings
 from app.db import make_engine, make_session_factory
 from app.domain.generation_meta import extract_generation_meta
 from app.domain.models import Asset, AssetKind
-from app.domain.storage import AssetStore, LocalFsStore
+from app.domain.storage import AssetStore, StorageUnavailableError, open_store
 from app.main import run_migrations
 
 logger = logging.getLogger(__name__)
@@ -107,11 +108,16 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
+    # ADR-0028: 画像の保存先は `STORAGE_BACKEND` に従う(サーバーと同じ)。
+    try:
+        store = open_store(settings)
+    except StorageUnavailableError as exc:
+        print(exc, file=sys.stderr, flush=True)
+        raise SystemExit(1) from None
     run_migrations(settings.sqlalchemy_url)
     engine = make_engine(settings.sqlalchemy_url)
     try:
         session_factory = make_session_factory(engine)
-        store = LocalFsStore(settings.data_dir)
         stats = run_backfill(session_factory, store, dry_run=args.dry_run, limit=args.limit)
     finally:
         engine.dispose()

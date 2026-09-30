@@ -6,7 +6,11 @@
     "authConfigMissing": "AUTH_MODE=oidc ですが、必須の環境変数が設定されていません: {missing}",
     "authUrlInvalid": "{name} の形式が不正です(http または https で、ホストを含む URL である必要があります): {value}",
     "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。",
-    "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}"
+    "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}",
+    "storageConfigMissing": "STORAGE_BACKEND に必要な環境変数が設定されていません: {missing}",
+    "storageAzureBothConnections": "AZURE_STORAGE_CONNECTION_STRING と AZURE_STORAGE_ACCOUNT_URL の両方が設定されています。どちらか一方だけを設定してください。",
+    "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING の形式が不正です。Azure portal の「アクセスキー」にある接続文字列をそのまま設定してください。",
+    "storageUnavailable": "画像の保存先({storage})に接続できないか、読み書きできません。コンテナ(バケット)が作成済みか、接続先と資格情報、読み書きの権限を確認してください。詳細: {error}"
   },
   "auth": {
     "required": "ログインが必要です。",
@@ -347,6 +351,36 @@
     "done": {
       "one": "移行が完了しました({tables} テーブル、合計 {count} 行)。DATABASE_URL を設定して GAKEI を起動してください(DATA_DIR は今までと同じものを使います)。",
       "other": "移行が完了しました({tables} テーブル、合計 {count} 行)。DATABASE_URL を設定して GAKEI を起動してください(DATA_DIR は今までと同じものを使います)。"
+    }
+  },
+  "migrateStorage": {
+    "description": "ローカル(DATA_DIR)の画像の原本と派生を、Azure Blob Storage か S3 互換ストレージに同じキーでコピーします(ADR-0028)。GAKEI を止めてから実行してください。DB は書き換えず、ローカルのファイルは消しません。",
+    "toHelp": "移行先の種類。接続先は AZURE_STORAGE_* / S3_* の環境変数で指定します",
+    "dryRunHelp": "移行先に接続せず、コピーする対象の件数と合計サイズを表示するだけにする",
+    "invalidTarget": "移行先の種類が不正です: {target}(azure_blob か s3 を指定してください)",
+    "databaseMissing": "DB のファイルが見つかりません: {source}",
+    "sizeMismatch": "移行先に同じキーで大きさの違うオブジェクトがあるため、中止しました(上書きしません): {key}(ローカル {local} バイト、移行先 {remote} バイト)",
+    "source": "移行元: {source}",
+    "target": "移行先: {target}",
+    "originals": {
+      "one": "  原本: {count} 件({mb} MB)",
+      "other": "  原本: {count} 件({mb} MB)"
+    },
+    "derived": {
+      "one": "  派生: {count} 件({mb} MB)",
+      "other": "  派生: {count} 件({mb} MB)"
+    },
+    "missing": {
+      "one": "注意: DB にあってローカルに無い原本が {count} 件あります(コピーしません): {keys}",
+      "other": "注意: DB にあってローカルに無い原本が {count} 件あります(コピーしません): {keys}"
+    },
+    "dryRunDone": {
+      "one": "--dry-run: 合計 {count} 件({mb} MB)。移行先には接続していません。",
+      "other": "--dry-run: 合計 {count} 件({mb} MB)。移行先には接続していません。"
+    },
+    "done": {
+      "one": "移行が完了しました(合計 {count} 件。コピー {copied} 件、移行先にあったので飛ばした {skipped} 件)。STORAGE_BACKEND ほかの環境変数を設定して GAKEI を起動してください。",
+      "other": "移行が完了しました(合計 {count} 件。コピー {copied} 件、移行先にあったので飛ばした {skipped} 件)。STORAGE_BACKEND ほかの環境変数を設定して GAKEI を起動してください。"
     }
   }
 }

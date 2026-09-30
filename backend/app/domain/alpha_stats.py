@@ -12,9 +12,11 @@
 
 from __future__ import annotations
 
+import io
+import threading
+from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
-from functools import lru_cache
-from pathlib import Path
 
 from PIL import Image
 
@@ -25,8 +27,8 @@ class AlphaStats:
     transparent_ratio: float
 
 
-def _compute(path: Path) -> AlphaStats:
-    with Image.open(path) as image:
+def _compute(data: bytes) -> AlphaStats:
+    with Image.open(io.BytesIO(data)) as image:
         has_alpha = image.mode in ("RGBA", "LA", "PA", "RGBa", "La") or (
             "transparency" in image.info
         )
@@ -40,11 +42,23 @@ def _compute(path: Path) -> AlphaStats:
         return AlphaStats(has_alpha=True, transparent_ratio=round(ratio, 6))
 
 
-@lru_cache(maxsize=256)
-def _cached(sha256: str, path_str: str) -> AlphaStats:
-    return _compute(Path(path_str))
+_CACHE_SIZE = 256
+_cache: OrderedDict[str, AlphaStats] = OrderedDict()
+_lock = threading.Lock()
 
 
-def alpha_stats(sha256: str, path: Path) -> AlphaStats:
-    """原本のファイルから透過の情報を求める(内容のハッシュごとに覚えておく)。"""
-    return _cached(sha256, str(path))
+def alpha_stats(sha256: str, read: Callable[[], bytes]) -> AlphaStats:
+    """原本から透過の情報を求める(内容のハッシュごとに覚えておく)。
+
+    `read` は原本のバイト列を返す関数(`AssetStore.read` など)。覚えていないときだけ呼ぶ。
+    """
+    with _lock:
+        if sha256 in _cache:
+            _cache.move_to_end(sha256)
+            return _cache[sha256]
+    stats = _compute(read())
+    with _lock:
+        _cache[sha256] = stats
+        while len(_cache) > _CACHE_SIZE:
+            _cache.popitem(last=False)
+    return stats

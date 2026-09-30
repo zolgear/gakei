@@ -6,7 +6,11 @@
     "authConfigMissing": "AUTH_MODE=oidc but required environment variable(s) are missing: {missing}",
     "authUrlInvalid": "{name} is not a valid URL (it must be http or https and include a host): {value}",
     "authUrlInsecure": "{name} points to http (not https) on a non-loopback address ({value}). Authentication traffic would be sent in plain text.",
-    "databaseUnavailable": "Cannot connect to the database ({url}). Check DATABASE_URL and that PostgreSQL is running and accepting connections. Details: {error}"
+    "databaseUnavailable": "Cannot connect to the database ({url}). Check DATABASE_URL and that PostgreSQL is running and accepting connections. Details: {error}",
+    "storageConfigMissing": "Required environment variables for STORAGE_BACKEND are not set: {missing}",
+    "storageAzureBothConnections": "Both AZURE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_ACCOUNT_URL are set. Set only one of them.",
+    "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING is malformed. Paste the connection string from \"Access keys\" in the Azure portal as is.",
+    "storageUnavailable": "Cannot connect to, or read and write, the image storage ({storage}). Check that the container (bucket) exists, and check the endpoint, credentials, and read/write permissions. Details: {error}"
   },
   "auth": {
     "required": "Login required.",
@@ -347,6 +351,36 @@
     "done": {
       "one": "Migration complete ({tables} tables, {count} row in total). Set DATABASE_URL and start GAKEI (keep using the same DATA_DIR).",
       "other": "Migration complete ({tables} tables, {count} rows in total). Set DATABASE_URL and start GAKEI (keep using the same DATA_DIR)."
+    }
+  },
+  "migrateStorage": {
+    "description": "Copy the original and derived images in local storage (DATA_DIR) to Azure Blob Storage or S3-compatible storage under the same keys (ADR-0028). Stop GAKEI before running this. The database is not modified and local files are not deleted.",
+    "toHelp": "Destination type. The connection is set with the AZURE_STORAGE_* / S3_* environment variables",
+    "dryRunHelp": "Do not connect to the destination; only show the number and total size of the objects to copy",
+    "invalidTarget": "Invalid destination type: {target} (specify azure_blob or s3)",
+    "databaseMissing": "Database file not found: {source}",
+    "sizeMismatch": "Aborted because the destination has an object with the same key but a different size (it will not be overwritten): {key} (local {local} bytes, destination {remote} bytes)",
+    "source": "Source: {source}",
+    "target": "Destination: {target}",
+    "originals": {
+      "one": "  Originals: {count} object ({mb} MB)",
+      "other": "  Originals: {count} objects ({mb} MB)"
+    },
+    "derived": {
+      "one": "  Derived: {count} object ({mb} MB)",
+      "other": "  Derived: {count} objects ({mb} MB)"
+    },
+    "missing": {
+      "one": "Note: {count} original is in the database but not on local storage (not copied): {keys}",
+      "other": "Note: {count} originals are in the database but not on local storage (not copied): {keys}"
+    },
+    "dryRunDone": {
+      "one": "--dry-run: {count} object in total ({mb} MB). Did not connect to the destination.",
+      "other": "--dry-run: {count} objects in total ({mb} MB). Did not connect to the destination."
+    },
+    "done": {
+      "one": "Migration finished ({count} object in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI.",
+      "other": "Migration finished ({count} objects in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI."
     }
   }
 }
