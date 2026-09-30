@@ -91,6 +91,13 @@ export type TagListResponse = components['schemas']['TagListResponse']
 export type AnnotationSettingsResponse = components['schemas']['AnnotationSettingsResponse']
 export type AnnotationSettingsUpdateRequest = components['schemas']['AnnotationSettingsUpdateRequest']
 export type AnnotationBackfillResponse = components['schemas']['AnnotationBackfillResponse']
+export type AnnotationConnectionView = components['schemas']['AnnotationConnectionView']
+export type AnnotationConnectionCreateRequest = components['schemas']['AnnotationConnectionCreateRequest']
+export type AnnotationConnectionUpdateRequest = components['schemas']['AnnotationConnectionUpdateRequest']
+export type AnnotationTarget = components['schemas']['AnnotationTarget']
+export type AnnotationProfiles = components['schemas']['AnnotationProfiles']
+export type AnnotationProfilesUpdate = components['schemas']['AnnotationProfilesUpdate']
+export type AnnotationApiStyle = AnnotationConnectionView['api_style']
 export type OnnxModelStatus = components['schemas']['OnnxModelStatus']
 export type OnnxModelName = OnnxModelStatus['name']
 export type AnnotationEngine = NonNullable<AnnotationSettingsResponse['usable_engines']>[number]
@@ -756,7 +763,10 @@ export function getAnnotationSettings(): Promise<AnnotationSettingsResponse> {
   return request('/api/settings/annotation')
 }
 
-/** 管理者のみ。省略した項目は変更しない。`base_url` は null か空文字で「OpenAI の設定を流用」に戻す。 */
+/**
+ * 管理者のみ。省略した項目は変更しない。`profiles` は書いたマスだけ変わる(ComfyUI の画像の
+ * マスに null を送ると「既定と同じ」に戻す。ADR-0024 8章)。
+ */
 export function updateAnnotationSettings(body: AnnotationSettingsUpdateRequest): Promise<AnnotationSettingsResponse> {
   return request('/api/settings/annotation', {
     method: 'PATCH',
@@ -765,17 +775,45 @@ export function updateAnnotationSettings(body: AnnotationSettingsUpdateRequest):
   })
 }
 
-/** 推定専用のキー(管理者のみ)。値は応答に載らない(`api_key_set` だけ)。 */
-export function setAnnotationApiKey(apiKey: string): Promise<AnnotationSettingsResponse> {
-  return request('/api/settings/annotation/api-key', {
+/** 推定の接続先を足す(管理者のみ。ADR-0024 8章)。キーは任意。 */
+export function createAnnotationConnection(body: AnnotationConnectionCreateRequest): Promise<AnnotationSettingsResponse> {
+  return request('/api/settings/annotation/connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 接続先を変える。組み込みの `openai` は `api_style` だけ変えられる(ほかは 409)。 */
+export function updateAnnotationConnection(
+  connectionId: string,
+  body: AnnotationConnectionUpdateRequest,
+): Promise<AnnotationSettingsResponse> {
+  return request(`/api/settings/annotation/connections/${encodeURIComponent(connectionId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 接続先を消す。組み込み・使用中の接続先は 409。 */
+export function deleteAnnotationConnection(connectionId: string): Promise<AnnotationSettingsResponse> {
+  return request(`/api/settings/annotation/connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' })
+}
+
+/** 接続先のキー(管理者のみ)。値は応答に載らない(`api_key_set` と末尾4文字だけ)。 */
+export function setAnnotationConnectionApiKey(connectionId: string, apiKey: string): Promise<AnnotationSettingsResponse> {
+  return request(`/api/settings/annotation/connections/${encodeURIComponent(connectionId)}/api-key`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ api_key: apiKey }),
   })
 }
 
-export function deleteAnnotationApiKey(): Promise<AnnotationSettingsResponse> {
-  return request('/api/settings/annotation/api-key', { method: 'DELETE' })
+export function deleteAnnotationConnectionApiKey(connectionId: string): Promise<AnnotationSettingsResponse> {
+  return request(`/api/settings/annotation/connections/${encodeURIComponent(connectionId)}/api-key`, {
+    method: 'DELETE',
+  })
 }
 
 /** ONNX タガーのモデルのダウンロードを始める(202)。進捗は `getAnnotationSettings` をポーリングして見る。 */

@@ -174,7 +174,15 @@
       "invalidOnnxModel": "ONNX タガーのモデルは wd-vit-tagger-v3、wd-swinv2-tagger-v3、wd-eva02-large-tagger-v3 のいずれかです",
       "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",
       "unknownOnnxModel": "未知の ONNX タガーのモデルです",
-      "onnxDownloading": "ダウンロード中のモデルは削除できません"
+      "onnxDownloading": "ダウンロード中のモデルは削除できません",
+      "invalidConnectionName": "接続先の名前は1〜{max}文字で指定してください",
+      "invalidTarget": "接続先とモデル名の組の形が正しくありません",
+      "unknownConnection": "指定した接続先がありません",
+      "tooManyConnections": "接続先は{max}件までです",
+      "builtinConnectionName": "OpenAI の設定",
+      "builtinConnectionReadOnly": "「OpenAI の設定」は編集・削除できません(API 形式だけ変えられます。キーと Base URL は OpenAI の設定で変えてください)",
+      "connectionInUse": "この接続先は使い方(既定、または ComfyUI の画像)で使っているため削除できません",
+      "migratedConnectionName": "推定専用"
     },
     "share": {
       "invalidEnabled": "enabled は true か false である必要があります"
@@ -308,14 +316,15 @@
     "noEngine": "使える推定エンジンがありません。管理者設定の「自動タイトル・タグ」で LLM、VLM、ONNX タガーのいずれかを有効にしてください(ONNX タガーはモデルのダウンロードも必要です)",
     "tagNotFound": "このタグは付いていません",
     "invalidVlmResponse": "VLM の応答を JSON として読めませんでした",
-    "apiKeyMissing": "推定に使う API キーがありません。OpenAI の API キーか、推定専用のキーを設定してください",
+    "apiKeyMissing": "推定に使う API キーがありません。OpenAI の API キーを設定するか、別の接続先を選んでください",
     "emptyTitle": "LLM がタイトルを返しませんでした",
     "onnxModelMissing": "ONNX タガーのモデルが見つかりません。管理者設定からダウンロードしてください",
     "onnxInsufficientMemory": "空きメモリが足りないため、ONNX タガーのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)。管理者設定で小さいモデルを選ぶか、メモリを増やしてください",
     "download": {
       "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
       "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
-    }
+    },
+    "connectionMissing": "推定に使う接続先が見つかりません。管理者設定の「自動タイトル・タグ」で使い方の接続先を選び直してください"
   },
   "uploads": {
     "notFound": "このアップロード URL は存在しません。",

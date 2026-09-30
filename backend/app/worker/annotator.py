@@ -6,8 +6,13 @@ api プロセス内の asyncio タスクが1件ずつ(古い依頼から)処理�
 
 - 1 回の Run の出力には同じタイトルを付ける。LLM は Run につき1回だけ呼び、同じ Run の他の
   出力に auto タイトルが既にあればそれを写す(worker は直列なので、2枚目以降は必ず写せる)。
-- LLM と VLM の呼び出しは直近1時間の回数を数え、上限(設定 `hourly_limit`)に達したら失敗に
-  せず、行を `queued` に戻して次の枠まで待つ。回数はプロセス内で数える(再起動で 0 に戻る)。
+- LLM と VLM の呼び出しは直近1時間の回数を接続先ごとに数え(ADR-0024 8章)、上限(共通の設定
+  `hourly_limit`)に達したら失敗にせず、行を `queued` に戻して次の枠まで待つ。回数はプロセス内で
+  数える(再起動で 0 に戻る)。上限に達した接続先を使う組(既定 / ComfyUI の画像)の行は、
+  枠が空くまで取り出さない(ほかの組の行は進める)。
+- 送り先(接続先とモデル名)は、Asset を作った Run のプロバイダーが `comfyui` なら「ComfyUI の
+  画像」の組、それ以外(アップロード、スケッチ、ほかのプロバイダー)は「既定」の組から決める
+  (ADR-0024 8章)。別の組の接続先で失敗しても既定の組には切り替えず `failed` にする。
 - 推定に失敗したら `failed` と理由を記録し、自動では再試行しない。
 
 実行順(ADR-0024 6章): LLM(タイトル)は API の応答待ちなので ONNX と並行して動かす。ONNX
@@ -30,7 +35,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from PIL import Image
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.orm import sessionmaker
 
 from app.annotation.engines import (
@@ -79,17 +84,34 @@ def reset_running_annotations(session_factory: sessionmaker) -> int:
         return result.rowcount or 0
 
 
-def _pick(session_factory: sessionmaker) -> uuid.UUID | None:
+def _pick(
+    session_factory: sessionmaker, blocked_profiles: frozenset[str] = frozenset()
+) -> uuid.UUID | None:
+    """待ち行列の先頭を `running` にして返す。`blocked_profiles` の組(1時間の上限に達した
+    接続先を使う組)の行は飛ばす。"""
     with session_factory() as session:
+        query = select(AssetAnnotation.asset_id).where(
+            AssetAnnotation.auto_status == annotations_domain.STATUS_QUEUED
+        )
+        if blocked_profiles:
+            query = query.join(Asset, Asset.id == AssetAnnotation.asset_id).outerjoin(
+                Run, Run.id == Asset.produced_by_run_id
+            )
+            is_comfyui = and_(
+                Run.id.is_not(None),
+                Run.provider == annotation_settings.COMFYUI_PROVIDER,
+            )
+            if "comfyui" in blocked_profiles:
+                query = query.where(~is_comfyui)
+            if "default" in blocked_profiles:
+                query = query.where(is_comfyui)
         candidate = session.execute(
-            select(AssetAnnotation.asset_id)
-            .where(AssetAnnotation.auto_status == annotations_domain.STATUS_QUEUED)
+            query
             # ADR-0027 2章: NULL の位置と同順位の並びを SQLite の挙動(NULL が先頭)にそろえる。
             .order_by(
                 AssetAnnotation.auto_requested_at.asc().nulls_first(),
                 AssetAnnotation.asset_id.asc(),
-            )
-            .limit(1)
+            ).limit(1)
         ).scalar_one_or_none()
         if candidate is None:
             return None
@@ -111,7 +133,10 @@ def _pick(session_factory: sessionmaker) -> uuid.UUID | None:
 class _Job:
     asset_id: uuid.UUID
     config: annotation_settings.AnnotationConfig
-    connection: annotation_settings.Connection
+    profile: str
+    # 使う用途の送り先(無効なエンジンの用途は None)。
+    llm: annotation_settings.Target | None
+    vlm: annotation_settings.Target | None
     engines: list[str]
     prompt: str | None
     title_locked: bool
@@ -136,7 +161,8 @@ class Annotator:
         self.engines: AnnotationEngines = engines or (
             FakeEngines() if settings.fake_provider else OpenAIEngines(WdTagger(settings.data_dir))
         )
-        self._calls: deque[float] = deque()
+        # 接続先ごとの直近1時間の呼び出し時刻(ADR-0024 8章)。
+        self._calls: dict[str, deque[float]] = {}
         self._wake = asyncio.Event()
         self._stop = asyncio.Event()
         self._task: asyncio.Task | None = None
@@ -158,9 +184,13 @@ class Annotator:
         else:
             loop.call_soon_threadsafe(self._wake.set)
 
-    def calls_last_hour(self) -> int:
+    def calls_last_hour(self, connection_id: str | None = None) -> int:
+        """直近1時間の LLM・VLM の呼び出し回数。`connection_id` を省くと全接続先の合計。"""
         self._trim_calls(time.monotonic())
-        return len(self._calls)
+        if connection_id is None:
+            return sum(len(calls) for calls in self._calls.values())
+        calls = self._calls.get(connection_id)
+        return len(calls) if calls is not None else 0
 
     async def start(self) -> int:
         self._event_loop = asyncio.get_running_loop()
@@ -177,23 +207,41 @@ class Annotator:
     # -- 上限 ------------------------------------------------------------------
 
     def _trim_calls(self, now: float) -> None:
-        while self._calls and now - self._calls[0] >= _WINDOW_SECONDS:
-            self._calls.popleft()
+        for connection_id in list(self._calls):
+            calls = self._calls[connection_id]
+            while calls and now - calls[0] >= _WINDOW_SECONDS:
+                calls.popleft()
+            if not calls:
+                del self._calls[connection_id]
 
-    def _ensure_capacity(self, needed: int, limit: int) -> None:
-        """この1件で要る呼び出し回数が枠に収まるかを先に確かめる(途中で上限に当たって、
-        一部の呼び出しだけが無駄になるのを避ける)。枠が空なら、上限より多く要っても進める
-        (上限が小さすぎて永久に待つのを避ける)。"""
-        now = time.monotonic()
-        self._trim_calls(now)
-        if self._calls and len(self._calls) + needed > limit:
-            raise _RateLimitedError
+    def _ensure_capacity(self, needs: dict[str, int], limit: int) -> None:
+        """この1件で要る呼び出し回数(接続先ごと)が枠に収まるかを先に確かめる(途中で上限に
+        当たって、一部の呼び出しだけが無駄になるのを避ける)。枠が空なら、上限より多く要っても
+        進める(上限が小さすぎて永久に待つのを避ける)。"""
+        self._trim_calls(time.monotonic())
+        for connection_id, needed in needs.items():
+            used = self.calls_last_hour(connection_id)
+            if needed and used and used + needed > limit:
+                raise _RateLimitedError
 
-    def _record_call(self) -> None:
-        self._calls.append(time.monotonic())
+    def _record_call(self, connection_id: str) -> None:
+        self._calls.setdefault(connection_id, deque()).append(time.monotonic())
 
-    def _limit_reached(self, limit: int) -> bool:
-        return self.calls_last_hour() >= limit
+    def _limit_reached(self, connection_id: str, limit: int) -> bool:
+        return self.calls_last_hour(connection_id) >= limit
+
+    def _blocked_profiles(self, config: annotation_settings.AnnotationConfig) -> frozenset[str]:
+        """1時間の上限に達した接続先を使う組(その組の行は枠が空くまで取り出さない)。"""
+        if not config.api_engines_enabled:
+            return frozenset()
+        return frozenset(
+            profile
+            for profile in annotation_settings.PROFILES
+            if any(
+                self._limit_reached(connection_id, config.hourly_limit)
+                for connection_id in config.connection_ids_for(profile)
+            )
+        )
 
     # -- ループ ----------------------------------------------------------------
 
@@ -209,10 +257,11 @@ class Annotator:
             try:
                 await asyncio.to_thread(self.engines.release_idle)
                 config = await asyncio.to_thread(self._load_config)
-                if config.api_engines_enabled and self._limit_reached(config.hourly_limit):
+                blocked = self._blocked_profiles(config)
+                if len(blocked) == len(annotation_settings.PROFILES):
                     await self._sleep()
                     continue
-                picked = await asyncio.to_thread(_pick, self.session_factory)
+                picked = await asyncio.to_thread(_pick, self.session_factory, blocked)
             except Exception:
                 logger.exception("推定の待ち行列の取得に失敗しました")
                 await self._sleep()
@@ -223,9 +272,13 @@ class Annotator:
                 continue
 
             try:
-                await self._process(picked)
+                requeued = await self._process(picked)
             except Exception:
                 logger.exception("asset %s の推定で想定外の例外が発生しました", picked)
+                continue
+            if requeued:
+                # 上限で戻したときは、同じ行をすぐ取り直さないよう少し待つ。
+                await self._sleep()
 
     def _load_config(self) -> annotation_settings.AnnotationConfig:
         with self.session_factory() as session:
@@ -247,13 +300,33 @@ class Annotator:
                 return t("annotations.noEngine")
 
             prompt: str | None = None
+            provider: str | None = None
             if asset.kind == AssetKind.GENERATED and asset.produced_by_run_id is not None:
                 run = session.get(Run, asset.produced_by_run_id)
                 prompt = run.prompt if run is not None else None
+                provider = run.provider if run is not None else None
             elif isinstance(asset.embedded_meta, dict):
                 value = asset.embedded_meta.get("prompt")
                 prompt = value if isinstance(value, str) else None
             prompt = prompt.strip() if prompt and prompt.strip() else None
+
+            # 送り先(ADR-0024 8章)。使う用途だけ解決する。接続先が無ければ失敗にする(既定の
+            # 組には切り替えない)。
+            profile = annotation_settings.profile_for_provider(provider)
+            targets: dict[str, annotation_settings.Target | None] = {}
+            for purpose, engine in (
+                ("llm", annotations_domain.ENGINE_LLM),
+                ("vlm", annotations_domain.ENGINE_VLM),
+            ):
+                if engine not in engines:
+                    targets[purpose] = None
+                    continue
+                try:
+                    targets[purpose] = annotation_settings.resolve_target(
+                        config, self.settings, profile, purpose
+                    )
+                except annotation_settings.ConnectionNotFoundError:
+                    return t("annotations.connectionMissing")
 
             row = session.get(AssetAnnotation, asset_id)
             title_locked = row is not None and row.title_source == annotations_domain.SOURCE_USER
@@ -272,7 +345,9 @@ class Annotator:
             return _Job(
                 asset_id=asset_id,
                 config=config,
-                connection=annotation_settings.resolve_connection(config, self.settings),
+                profile=profile,
+                llm=targets["llm"],
+                vlm=targets["vlm"],
                 engines=engines,
                 prompt=prompt,
                 title_locked=title_locked,
@@ -280,33 +355,35 @@ class Annotator:
                 image_bytes=image_bytes,
             )
 
-    async def _process(self, asset_id: uuid.UUID) -> None:
+    async def _process(self, asset_id: uuid.UUID) -> bool:
+        """1件を処理する。1時間の上限で `queued` に戻したら True。"""
         try:
             job = await asyncio.to_thread(self._load_job, asset_id)
         except Exception as e:  # noqa: BLE001
             logger.exception("asset %s の推定の準備に失敗しました", asset_id)
             await asyncio.to_thread(self._finish_failed, asset_id, f"internalError: {e}")
-            return
+            return False
         if isinstance(job, str):
             await asyncio.to_thread(self._finish_failed, asset_id, job)
-            return
+            return False
 
-        ctx = EngineContext(config=job.config, connection=job.connection)
+        ctx = EngineContext(config=job.config, llm=job.llm, vlm=job.vlm)
         try:
             outcome = await self._run_engines(job, ctx)
         except _RateLimitedError:
             await asyncio.to_thread(self._requeue, asset_id)
-            return
+            return True
         except AnnotationEngineError as e:
             await asyncio.to_thread(self._finish_failed, asset_id, str(e))
-            return
+            return False
         except Exception as e:  # noqa: BLE001 - どの段階の失敗も記録する
             logger.exception("asset %s の推定中に予期しない例外が発生しました", asset_id)
             await asyncio.to_thread(self._finish_failed, asset_id, f"internalError: {e}")
-            return
+            return False
 
         title, tags, ran, models = outcome
         await asyncio.to_thread(self._finish_succeeded, asset_id, title, tags, ran, models)
+        return False
 
     async def _run_engines(
         self, job: _Job, ctx: EngineContext
@@ -333,9 +410,16 @@ class Annotator:
             and annotations_domain.ENGINE_LLM in engines
             and wants_translation(config)
         )
-        needed = int(call_llm_title) + int(use_vlm) + int(translate_by_llm)
-        if needed:
-            self._ensure_capacity(needed, config.hourly_limit)
+        # 接続先ごとに要る呼び出し回数(LLM と VLM が同じ接続先なら合わせて数える)。
+        llm_id = job.llm.connection_id if job.llm is not None else None
+        vlm_id = job.vlm.connection_id if job.vlm is not None else None
+        needs: dict[str, int] = {}
+        if llm_id is not None:
+            needs[llm_id] = needs.get(llm_id, 0) + int(call_llm_title) + int(translate_by_llm)
+        if vlm_id is not None:
+            needs[vlm_id] = needs.get(vlm_id, 0) + int(use_vlm)
+        if any(needs.values()):
+            self._ensure_capacity(needs, config.hourly_limit)
 
         title: str | None = None
         ran: list[str] = []
@@ -343,8 +427,8 @@ class Annotator:
 
         title_task: asyncio.Task[str] | None = None
         if call_llm_title:
-            assert job.prompt is not None
-            self._record_call()
+            assert job.prompt is not None and llm_id is not None
+            self._record_call(llm_id)
             title_task = asyncio.create_task(self.engines.title_from_prompt(job.prompt, ctx))
         elif use_llm_title:
             title = job.sibling_title
@@ -365,7 +449,8 @@ class Annotator:
             if use_vlm:
                 assert image is not None
                 want_title = not job.title_locked and not job.prompt
-                self._record_call()
+                assert vlm_id is not None
+                self._record_call(vlm_id)
                 image_jpeg = await asyncio.to_thread(image_to_jpeg, image)
                 result = await self.engines.describe_image(
                     image_jpeg, job.prompt, want_title, ctx, onnx_names or None
@@ -375,7 +460,8 @@ class Annotator:
                 vlm_tags = [(name, None) for name in result.tags]
                 translations = result.translations
             elif translate_by_llm and onnx_names:
-                self._record_call()
+                assert llm_id is not None
+                self._record_call(llm_id)
                 translations = await self.engines.translate_tags(onnx_names, ctx)
 
             if title_task is not None:
@@ -389,20 +475,18 @@ class Annotator:
                     pass
             raise
 
-        if use_llm_title:
+        # 記録するモデル名は、この画像に実際に使った組のもの(ADR-0024 8章)。
+        if (use_llm_title or (translate_by_llm and onnx_names)) and job.llm is not None:
             ran.append(annotations_domain.ENGINE_LLM)
-            models[annotations_domain.ENGINE_LLM] = config.llm_model
-        elif translate_by_llm and onnx_names:
-            ran.append(annotations_domain.ENGINE_LLM)
-            models[annotations_domain.ENGINE_LLM] = config.llm_model
+            models[annotations_domain.ENGINE_LLM] = job.llm.model
 
         tags: list[tuple[str, float | None]] | None = None
         if onnx_tags is not None:
             ran.append(annotations_domain.ENGINE_ONNX)
             models[annotations_domain.ENGINE_ONNX] = config.onnx_model
-        if vlm_tags is not None:
+        if vlm_tags is not None and job.vlm is not None:
             ran.append(annotations_domain.ENGINE_VLM)
-            models[annotations_domain.ENGINE_VLM] = config.vlm_model
+            models[annotations_domain.ENGINE_VLM] = job.vlm.model
         if onnx_tags is not None or vlm_tags is not None:
             # ONNX(英語)→ その訳 → VLM の順に並べる(同じ名前なら先のもの、つまり確信度の
             # 付いた方を残す)。訳は元のタグの確信度を引き継ぐ。

@@ -7,7 +7,6 @@ FAKE プロバイダーのアプリ(`client`)では推定エンジンもダミ�
 from __future__ import annotations
 
 import io
-import json
 import time
 import uuid
 from typing import Any
@@ -242,15 +241,22 @@ def test_settings_defaults(client: TestClient) -> None:
     assert body["llm_enabled"] is False
     assert body["vlm_enabled"] is False
     assert body["onnx_enabled"] is False
-    assert body["llm_model"] == "gpt-5.6-luna"
-    assert body["vlm_model"] == "gpt-5.6-luna"
-    assert body["base_url"] is None
-    assert body["api_style"] == "responses"
+    # 接続先は組み込みの「OpenAI の設定」だけ。既定の組はそれと gpt-5.6-luna(ADR-0024 8章)。
+    assert [c["id"] for c in body["connections"]] == ["openai"]
+    assert body["connections"][0]["builtin"] is True
+    assert body["connections"][0]["api_style"] == "responses"
+    assert body["connections"][0]["api_key_set"] is False
+    assert body["profiles"] == {
+        "default": {
+            "llm": {"connection_id": "openai", "model": "gpt-5.6-luna"},
+            "vlm": {"connection_id": "openai", "model": "gpt-5.6-luna"},
+        },
+        "comfyui": {"llm": None, "vlm": None},
+    }
     assert body["language"] == "ja"
     assert body["hourly_limit"] == 100
     assert body["onnx_model"] == "wd-vit-tagger-v3"
     assert body["onnx_threshold"] == pytest.approx(0.35)
-    assert body["api_key_set"] is False
     assert body["usable_engines"] == []
     assert body["calls_last_hour"] == 0
     assert body["queued_count"] == 0
@@ -269,77 +275,42 @@ def test_settings_patch_and_validation(client: TestClient) -> None:
     body = _patch_settings(
         client,
         llm_enabled=True,
-        llm_model=" my-model ",
-        base_url="http://127.0.0.1:11434/v1/",
-        api_style="chat",
         language="en",
         hourly_limit=5,
         onnx_threshold=0.5,
         onnx_model="wd-eva02-large-tagger-v3",
+        profiles={"default": {"llm": {"connection_id": "openai", "model": " my-model "}}},
     )
     assert body["llm_enabled"] is True
-    assert body["llm_model"] == "my-model"
-    assert body["base_url"] == "http://127.0.0.1:11434/v1"
-    assert body["api_style"] == "chat"
+    assert body["profiles"]["default"]["llm"] == {"connection_id": "openai", "model": "my-model"}
+    # 書かなかったマスは変えない。
+    assert body["profiles"]["default"]["vlm"]["model"] == "gpt-5.6-luna"
     assert body["language"] == "en"
     assert body["hourly_limit"] == 5
     assert body["onnx_threshold"] == pytest.approx(0.5)
     assert body["usable_engines"] == ["llm"]
 
-    assert _patch_settings(client, base_url="")["base_url"] is None
-
     for bad in (
-        {"api_style": "foo"},
         {"language": "fr"},
         {"hourly_limit": 0},
         {"onnx_threshold": 1.5},
         {"onnx_model": "other"},
-        {"llm_model": ""},
-        {"base_url": "ftp://x"},
         {"llm_enabled": None},
+        {"profiles": {"default": {"llm": {"connection_id": "openai", "model": ""}}}},
+        {"profiles": {"default": {"llm": {"connection_id": "nope", "model": "m"}}}},
+        {"profiles": {"default": {"vlm": None}}},
+        {"profiles": None},
     ):
         response = client.patch("/api/settings/annotation", json=bad)
         assert response.status_code == 422, bad
     # 一部が不正なら何も保存しない。
     client.patch("/api/settings/annotation", json={"language": "ja", "hourly_limit": -1})
-    assert client.get("/api/settings/annotation").json()["language"] == "en"
-
-
-def test_annotation_api_key_is_stored_in_secrets_and_never_returned(
-    client: TestClient, data_dir
-) -> None:  # noqa: ANN001
-    response = client.put("/api/settings/annotation/api-key", json={"api_key": "sk-local-123"})
-    assert response.status_code == 200
-    assert response.json()["api_key_set"] is True
-    assert "sk-local-123" not in response.text
-    secrets = json.loads((data_dir / "secrets.json").read_text())
-    assert secrets["annotation_api_key"] == "sk-local-123"
-    assert client.put("/api/settings/annotation/api-key", json={"api_key": " "}).status_code == 400
-
-    response = client.delete("/api/settings/annotation/api-key")
-    assert response.json()["api_key_set"] is False
-
-
-def test_connection_resolution(client: TestClient, data_dir) -> None:  # noqa: ANN001
-    from app.domain import annotation_settings as s
-    from app.domain import api_key
-
-    settings = client.app.state.settings
-    api_key.write_file_key(data_dir, "sk-openai")
-
-    config = s.AnnotationConfig()
-    assert s.resolve_connection(config, settings) == s.Connection("sk-openai", None)
-
-    s.write_api_key(data_dir, "sk-own")
-    assert s.resolve_connection(config, settings) == s.Connection("sk-own", None)
-
-    # 推定専用の Base URL では、推定専用キーが無ければ OpenAI のキーは送らない。
-    local = s.AnnotationConfig(base_url="http://127.0.0.1:1234/v1")
-    assert s.resolve_connection(local, settings).api_key == "sk-own"
-    s.delete_api_key(data_dir)
-    assert s.resolve_connection(local, settings) == s.Connection(
-        s.PLACEHOLDER_API_KEY, "http://127.0.0.1:1234/v1"
+    response = client.patch(
+        "/api/settings/annotation",
+        json={"language": "ja", "profiles": {"comfyui": {"llm": {"connection_id": "x"}}}},
     )
+    assert response.status_code == 422
+    assert client.get("/api/settings/annotation").json()["language"] == "en"
 
 
 # -- worker(FAKE のエンジン) ---------------------------------------------------
@@ -562,8 +533,16 @@ def test_oidc_user_cannot_change_annotation_settings(client_oidc: TestClient) ->
             "/api/settings/annotation/onnx/download", json={"model": "wd-vit-tagger-v3"}
         ),
         client_oidc.delete("/api/settings/annotation/onnx/wd-vit-tagger-v3"),
-        client_oidc.put("/api/settings/annotation/api-key", json={"api_key": "x"}),
-        client_oidc.delete("/api/settings/annotation/api-key"),
+        client_oidc.post(
+            "/api/settings/annotation/connections",
+            json={"name": "x", "base_url": "http://127.0.0.1:11434/v1"},
+        ),
+        client_oidc.patch("/api/settings/annotation/connections/openai", json={"name": "x"}),
+        client_oidc.delete("/api/settings/annotation/connections/openai"),
+        client_oidc.put(
+            "/api/settings/annotation/connections/openai/api-key", json={"api_key": "x"}
+        ),
+        client_oidc.delete("/api/settings/annotation/connections/openai/api-key"),
     ]
     assert [r.status_code for r in forbidden] == [403] * len(forbidden)
 

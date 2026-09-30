@@ -39,6 +39,7 @@ from app.auth.oidc import AuthlibOidcClient
 from app.auth.secret import load_or_create_auth_secret
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
+from app.domain import annotation_settings
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.storage import open_store
 from app.i18n import console_t, parse_accept_language, set_locale, t
@@ -211,6 +212,9 @@ def _build_lifespan(settings: Settings):
 
         engine = make_engine(settings.sqlalchemy_url)
         session_factory = make_session_factory(engine)
+        # ADR-0024 8章: 推定の接続先1組の設定を、接続先の一覧と用途ごとの組に移す(冪等)。
+        with session_factory() as session:
+            annotation_settings.migrate_legacy(session, settings)
         # ADR-0028 2章: 画像の保存先。接続・読み書きできなければ、分かる文言で起動を中止する
         # (`StorageUnavailableError`)。
         store = open_store(settings)

@@ -27,7 +27,24 @@ from app.annotation.engines import (
 )
 from app.annotation.wd_models import RemoteFile, WdModel, WdModelDownloader
 from app.annotation.wd_tagger import Label, WdTagger, load_labels, postprocess, preprocess
-from app.domain.annotation_settings import AnnotationConfig, Connection
+from app.domain.annotation_settings import AnnotationConfig, Target
+
+
+def make_ctx(
+    config: AnnotationConfig | None = None,
+    *,
+    llm_model: str = "llm-model",
+    vlm_model: str = "vlm-model",
+    api_style: str = "responses",
+    api_key: str | None = "k",
+) -> EngineContext:
+    """テスト用の EngineContext(LLM と VLM を同じ接続先にする)。"""
+
+    def target(model: str) -> Target:
+        return Target("c", model, api_key, None, api_style)  # type: ignore[arg-type]
+
+    return EngineContext(config or AnnotationConfig(), target(llm_model), target(vlm_model))
+
 
 # -- WD Tagger の前処理・後処理 ------------------------------------------------------
 
@@ -172,10 +189,7 @@ def test_onnx_engine_refuses_to_load_without_enough_memory(
     created: list[Any] = []
     monkeypatch.setattr(onnxruntime, "InferenceSession", _fake_session_class(created))
     engines = OpenAIEngines(WdTagger(tmp_path, memory_probe=lambda: 1_000_000_000))
-    ctx = EngineContext(
-        AnnotationConfig(onnx_enabled=True, onnx_model="wd-eva02-large-tagger-v3"),
-        Connection("k", None),
-    )
+    ctx = make_ctx(AnnotationConfig(onnx_enabled=True, onnx_model="wd-eva02-large-tagger-v3"))
     with pytest.raises(AnnotationEngineError) as excinfo:
         engines.onnx_tags(Image.new("RGB", (8, 8)), ctx)
     assert "wd-eva02-large-tagger-v3" in str(excinfo.value)
@@ -264,7 +278,7 @@ def test_cgroup_available_v1(tmp_path: Path) -> None:
 
 def test_onnx_engine_reports_missing_model(tmp_path: Path) -> None:
     engines = OpenAIEngines(WdTagger(tmp_path))
-    ctx = EngineContext(AnnotationConfig(onnx_enabled=True), Connection("k", None))
+    ctx = make_ctx(AnnotationConfig(onnx_enabled=True))
     with pytest.raises(AnnotationEngineError):
         engines.onnx_tags(Image.new("RGB", (8, 8)), ctx)
 
@@ -435,15 +449,14 @@ class _FakeClient:
 
 def _engines_with(client: _FakeClient, tmp_path: Path) -> OpenAIEngines:
     engines = OpenAIEngines(WdTagger(tmp_path))
-    engines._client = client  # type: ignore[assignment]
-    engines._client_key = ("k", None)
+    engines._client_for = lambda target: client  # type: ignore[assignment,method-assign]
     return engines
 
 
 def test_openai_engines_responses_api(tmp_path: Path) -> None:
     client = _FakeClient('{"title": "猫", "tags": ["cat"]}')
     engines = _engines_with(client, tmp_path)
-    ctx = EngineContext(AnnotationConfig(vlm_model="vlm-x"), Connection("k", None))
+    ctx = make_ctx(vlm_model="vlm-x")
     result = asyncio.run(engines.describe_image(b"\xff\xd8jpeg", None, True, ctx))
     assert (result.title, result.tags) == ("猫", ["cat"])
     style, kwargs = client.calls[0]
@@ -457,9 +470,7 @@ def test_openai_engines_responses_api(tmp_path: Path) -> None:
 def test_openai_engines_chat_api_and_title(tmp_path: Path) -> None:
     client = _FakeClient("A quiet harbor")
     engines = _engines_with(client, tmp_path)
-    ctx = EngineContext(
-        AnnotationConfig(api_style="chat", llm_model="llm-x", language="en"), Connection("k", None)
-    )
+    ctx = make_ctx(AnnotationConfig(language="en"), api_style="chat", llm_model="llm-x")
     assert asyncio.run(engines.title_from_prompt("harbor at dawn", ctx)) == "A quiet harbor"
     style, kwargs = client.calls[0]
     assert style == "chat"
@@ -470,7 +481,7 @@ def test_openai_engines_chat_api_and_title(tmp_path: Path) -> None:
 def test_openai_engines_vlm_title_is_dropped_when_prompt_exists(tmp_path: Path) -> None:
     client = _FakeClient('{"title": "ignored", "tags": ["cat"]}')
     engines = _engines_with(client, tmp_path)
-    ctx = EngineContext(AnnotationConfig(api_style="chat"), Connection("k", None))
+    ctx = make_ctx(api_style="chat")
     result = asyncio.run(engines.describe_image(b"jpeg", "a cat", False, ctx))
     assert result.title is None
     content = client.calls[0][1]["messages"][1]["content"]
@@ -480,7 +491,7 @@ def test_openai_engines_vlm_title_is_dropped_when_prompt_exists(tmp_path: Path) 
 
 def test_openai_engines_without_key_fail(tmp_path: Path) -> None:
     engines = OpenAIEngines(WdTagger(tmp_path))
-    ctx = EngineContext(AnnotationConfig(), Connection(None, None))
+    ctx = make_ctx(api_key=None)
     with pytest.raises(AnnotationEngineError):
         asyncio.run(engines.title_from_prompt("x", ctx))
 
