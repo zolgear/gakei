@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router'
-import { ApiError, deleteAsset, getAsset, getRun, restoreAsset } from '../../api/client'
+import { ApiError, deleteAsset, getAsset, getRun, getShareSettings, restoreAsset } from '../../api/client'
 import {
   comfyUiSeedTooltip,
   describeComfyUiSeed,
@@ -29,6 +29,8 @@ import { AssetTagsSection, AssetTitleSection } from './AssetAnnotationSection'
 import { annotationPollInterval, supportsAnnotation } from '../annotations/annotationStatus'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
+import { ShareDialog } from '../share/ShareDialog'
+import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import styles from './Viewer.module.css'
 
 interface ViewerProps {
@@ -72,7 +74,11 @@ export function Viewer({ assetId }: ViewerProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
   const toast = useToast()
+  // 共有リンク(ADR-0029)は管理者設定で有効なときだけ「共有」を出す。
+  const shareSettingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
+  const shareEnabled = shareSettingsQuery.data?.enabled === true
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteAsset(assetId),
@@ -135,7 +141,7 @@ export function Viewer({ assetId }: ViewerProps) {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-      if (deleteConfirmOpen || addToInputs.isPending) return
+      if (deleteConfirmOpen || addToInputs.isPending || shareOpen) return
       if (isEditableTarget(document.activeElement)) return
       const targetAssetId = e.key === 'ArrowLeft' ? nav.previousAssetId : nav.nextAssetId
       if (!targetAssetId) return
@@ -144,7 +150,7 @@ export function Viewer({ assetId }: ViewerProps) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [outputNav, deleteConfirmOpen, addToInputs.isPending, navigate])
+  }, [outputNav, deleteConfirmOpen, addToInputs.isPending, shareOpen, navigate])
 
   const isReady = !assetQuery.isLoading && !assetQuery.isError && asset !== undefined
 
@@ -350,6 +356,16 @@ export function Viewer({ assetId }: ViewerProps) {
               >
                 {t.viewer.viewLineageGraph}
               </Link>
+              {shareEnabled && !asset.deleted_at && (
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  title={t.share.buttonTooltip}
+                  onClick={() => setShareOpen(true)}
+                >
+                  {t.share.button}
+                </button>
+              )}
               {!asset.deleted_at && (
                 <button
                   type="button"
@@ -382,6 +398,7 @@ export function Viewer({ assetId }: ViewerProps) {
           onCancel={() => setDeleteConfirmOpen(false)}
         />
       )}
+      <ShareDialog open={shareOpen} assetId={assetId} onClose={() => setShareOpen(false)} toast={toast} />
       <ToastHost toast={toast.toast} onDismiss={toast.dismiss} />
     </div>
   )

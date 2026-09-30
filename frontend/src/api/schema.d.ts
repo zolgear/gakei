@@ -790,6 +790,24 @@ export interface paths {
         patch: operations["update_mcp_settings"];
         trace?: never;
     };
+    "/api/settings/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Share Settings */
+        get: operations["get_share_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Share Settings */
+        patch: operations["update_share_settings"];
+        trace?: never;
+    };
     "/api/settings/annotation": {
         parameters: {
             query?: never;
@@ -979,6 +997,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/shares/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Share
+         * @description 共有を作る前に、範囲に含まれる画像を確かめる(ADR-0029 2章)。何も書き込まない。
+         */
+        post: operations["preview_share"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Shares
+         * @description 自分の、取り消していない共有(新しい順)。機能が無効のあいだも見られる(取り消せるように)。
+         */
+        get: operations["list_shares"];
+        put?: never;
+        /**
+         * Create Share
+         * @description 共有を作る。作れるのは起点の Asset を見られる人だけ(見えなければ 404)。
+         */
+        post: operations["create_share"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Share
+         * @description 取り消す(元に戻せない)。他人の共有・取り消し済みは 404。
+         */
+        delete: operations["revoke_share"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/content": {
         parameters: {
             query?: never;
@@ -1034,6 +1116,47 @@ export interface paths {
          *     有効。不明・使用済み・期限切れ・見えなくなった Asset は、どれも 404。
          */
         get: operations["download_by_url"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/shares/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Share
+         * @description 共有のページの内容(画像、タイトル、Run のプロンプトとパラメーター、範囲内の系列)。
+         */
+        get: operations["get_public_share"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/shares/{token}/assets/{asset_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Share Asset Content
+         * @description 共有に含まれる画像の配信。原本は、共有が許しているときだけ(ADR-0029 4章)。
+         *     ダウンロードする PNG にも系列情報(ADR-0014)は埋め込まない。
+         */
+        get: operations["get_public_share_asset_content"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2599,6 +2722,130 @@ export interface components {
             /** Supports Pricing */
             supports_pricing: boolean;
         };
+        /** PublicShareAsset */
+        PublicShareAsset: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "mask" | "sketch";
+            /** Mime */
+            mime: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Title */
+            title?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Depth
+             * @default 0
+             */
+            depth: number;
+        };
+        /**
+         * PublicShareEdge
+         * @description 共有に含まれるノードどうしの辺だけ(範囲外のノードへの辺は含めない)。
+         */
+        PublicShareEdge: {
+            /**
+             * Source
+             * Format: uuid
+             */
+            source: string;
+            /**
+             * Target
+             * Format: uuid
+             */
+            target: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "output" | "sketch_source" | "origin";
+            /** Role */
+            role?: ("image" | "mask" | "reference") | null;
+            /** Position */
+            position?: number | null;
+            /** Output Index */
+            output_index?: number | null;
+            /**
+             * Primary
+             * @default false
+             */
+            primary: boolean;
+        };
+        /**
+         * PublicShareResponse
+         * @description `GET /api/public/shares/{token}`(ログイン不要)。
+         */
+        PublicShareResponse: {
+            /**
+             * Root Asset Id
+             * Format: uuid
+             */
+            root_asset_id: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+            /** Allow Original */
+            allow_original: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Assets */
+            assets?: components["schemas"]["PublicShareAsset"][];
+            /** Runs */
+            runs?: components["schemas"]["PublicShareRun"][];
+            /** Edges */
+            edges?: components["schemas"]["PublicShareEdge"][];
+        };
+        /**
+         * PublicShareRun
+         * @description 画像を作った Run のうち、見せてよい項目だけ(ADR-0029 3章)。実行者、料金・usage、
+         *     エラー、入力の Asset の id は含めない。`params` は `shares.public_params` で絞った値。
+         */
+        PublicShareRun: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "generate" | "edit";
+            /** Model */
+            model: string;
+            /** Prompt */
+            prompt: string;
+            /** Params */
+            params?: {
+                [key: string]: string | number | boolean | null;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** RunCancelResponse */
         RunCancelResponse: {
             /**
@@ -3047,6 +3294,143 @@ export interface components {
              * @default false
              */
             prompt_sets: boolean;
+        };
+        /** ShareCreateRequest */
+        ShareCreateRequest: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+            /**
+             * Allow Original
+             * @default true
+             */
+            allow_original: boolean;
+        };
+        /** ShareListResponse */
+        ShareListResponse: {
+            /** Items */
+            items?: components["schemas"]["ShareRow"][];
+        };
+        /**
+         * SharePreviewAsset
+         * @description 共有に含まれる画像1件(作る前の確認用。サムネイルは本人向けの配信 URL で出す)。
+         */
+        SharePreviewAsset: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "mask" | "sketch";
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Title */
+            title?: string | null;
+        };
+        /** SharePreviewRequest */
+        SharePreviewRequest: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+        };
+        /** SharePreviewResponse */
+        SharePreviewResponse: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+            /** Asset Count */
+            asset_count: number;
+            /** Assets */
+            assets?: components["schemas"]["SharePreviewAsset"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * ShareRow
+         * @description 自分の共有リンクの1件(ADR-0029 7章)。
+         */
+        ShareRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Url */
+            url: string;
+            /**
+             * Root Asset Id
+             * Format: uuid
+             */
+            root_asset_id: string;
+            /**
+             * Root Deleted
+             * @default false
+             */
+            root_deleted: boolean;
+            /** Root Title */
+            root_title?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+            /** Allow Original */
+            allow_original: boolean;
+            /** Asset Count */
+            asset_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Accessed At */
+            last_accessed_at?: string | null;
+            /**
+             * Access Count
+             * @default 0
+             */
+            access_count: number;
+        };
+        /**
+         * ShareSettingsResponse
+         * @description `GET /api/settings/share`。有効/無効(既定は無効)。
+         */
+        ShareSettingsResponse: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /**
+         * ShareSettingsUpdateRequest
+         * @description `PATCH /api/settings/share` の本文。省略した項目は変更しない。
+         */
+        ShareSettingsUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
         };
         /** SizeConstraints */
         SizeConstraints: {
@@ -5204,6 +5588,72 @@ export interface operations {
             };
         };
     };
+    get_share_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_share_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_annotation_settings: {
         parameters: {
             query?: never;
@@ -5666,6 +6116,138 @@ export interface operations {
             };
         };
     };
+    preview_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SharePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_asset_content: {
         parameters: {
             query?: {
@@ -5788,6 +6370,73 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 原本の画像ファイル */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "image/*": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicShareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_share_asset_content: {
+        parameters: {
+            query?: {
+                variant?: "thumb" | "preview" | "original";
+                download?: number;
+            };
+            header?: never;
+            path: {
+                token: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 画像 */
             200: {
                 headers: {
                     [name: string]: unknown;

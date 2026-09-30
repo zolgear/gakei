@@ -13,7 +13,6 @@ import {
   useControls,
   type ReactZoomPanPinchRef,
 } from 'react-zoom-pan-pinch'
-import type { AssetDetail } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
 import { computeFitScale, type Size } from '../../lib/geometry'
 import { useI18n } from '../../i18n'
@@ -26,10 +25,21 @@ const PREVIEW_LONG_EDGE = 2048
 // ホイール1ノッチ、および +/− ボタン1回あたりの倍率の変化(10%)。
 const ZOOM_STEP = 0.1
 
+/** 表示に要るのは id と大きさだけ(`AssetDetail` のほか、共有のページの画像も渡せる)。 */
+export interface CanvasImage {
+  id: string
+  width: number
+  height: number
+}
+
 interface AssetCanvasProps {
-  asset: AssetDetail
+  asset: CanvasImage
   /** ズームツールバーの左に横並びで置く要素(ビューアの「← 戻る」など)。 */
   toolbarLeading?: ReactNode
+  /** 画像の URL。既定は本人向けの配信 URL。共有のページは公開の URL を渡す(ADR-0029)。 */
+  urlFor?: (variant: 'preview' | 'original') => string
+  /** false なら拡大しても original に差し替えない(共有で原本を許していないとき。ADR-0029 4章)。 */
+  allowOriginal?: boolean
 }
 
 function CanvasToolbar({ scalePercent, leading }: { scalePercent: number; leading?: ReactNode }) {
@@ -99,7 +109,7 @@ function CanvasToolbar({ scalePercent, leading }: { scalePercent: number; leadin
   )
 }
 
-export function AssetCanvas({ asset, toolbarLeading }: AssetCanvasProps) {
+export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = true }: AssetCanvasProps) {
   const { t } = useI18n()
   // asset が切り替わったら preview から見直す(差し替え前の倍率を引きずらない)。
   // effect ではなく、レンダー中に「直前に見ていた asset.id」とズレていたらその場で補正する
@@ -131,7 +141,7 @@ export function AssetCanvas({ asset, toolbarLeading }: AssetCanvasProps) {
 
   function handleTransform(_ref: ReactZoomPanPinchRef, state: { scale: number }) {
     setScalePercent(Math.round(state.scale * 100))
-    if (variant === 'original') return
+    if (variant === 'original' || !allowOriginal) return
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
     if (shouldUseOriginal(state.scale, asset, PREVIEW_LONG_EDGE, dpr)) {
       setVariant('original')
@@ -166,7 +176,7 @@ export function AssetCanvas({ asset, toolbarLeading }: AssetCanvasProps) {
             contentClass={styles.content}
           >
             <img
-              src={assetUrl(asset.id, variant)}
+              src={urlFor ? urlFor(variant) : assetUrl(asset.id, variant)}
               alt={t.viewer.imageAlt}
               width={asset.width}
               height={asset.height}

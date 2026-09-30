@@ -8,6 +8,9 @@
  * 「アクセストークン」(MCP の接続に使う、ADR-0023 6章)も oidc モードだけで、ユーザー設定の末尾に足す。
  * 「MCP」(有効/無効、上限、接続先。ADR-0023 6章)は管理者設定の末尾(ComfyUI の後)に置く。
  * 「自動タイトル・タグ」(ADR-0024 5章)は OpenAI の設定を流用するので「生成」の直後に置く。
+ * 「共有リンク」(ADR-0029)は2つに分かれる。自分の共有の一覧(`shares`)は、両方のモードで
+ * ユーザー設定の「表示」の後に置く(個人モードでも共有は作れる)。有効/無効(`shareAdmin`)は
+ * 外に出す機能の設定なので、管理者設定の末尾(MCP の後)に置く。
  */
 export type SettingsSectionId =
   | 'profile'
@@ -19,10 +22,19 @@ export type SettingsSectionId =
   | 'annotation'
   | 'comfyui'
   | 'mcp'
+  | 'shares'
+  | 'shareAdmin'
   | 'about'
 
-export const USER_SETTINGS_SECTIONS: readonly SettingsSectionId[] = ['language', 'display']
-export const ADMIN_SETTINGS_SECTIONS: readonly SettingsSectionId[] = ['apiKey', 'generation', 'annotation', 'comfyui', 'mcp']
+export const USER_SETTINGS_SECTIONS: readonly SettingsSectionId[] = ['language', 'display', 'shares']
+export const ADMIN_SETTINGS_SECTIONS: readonly SettingsSectionId[] = [
+  'apiKey',
+  'generation',
+  'annotation',
+  'comfyui',
+  'mcp',
+  'shareAdmin',
+]
 
 /**
  * 管理者なら全セクション、非管理者はユーザー設定と「GAKEI について」だけ。oidc モードなら

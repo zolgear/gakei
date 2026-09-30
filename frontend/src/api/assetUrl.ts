@@ -18,3 +18,18 @@ export function assetUrl(
 export function runPartialUrl(runId: string, index: number): string {
   return `/api/runs/${runId}/partials/${index}`
 }
+
+/**
+ * ログイン不要の共有リンクの画像の URL(ADR-0029)。本人向けの `assetUrl` とは別のパス
+ * (`/api/public/`)で、トークン自体が認可になる。
+ */
+export function publicShareAssetUrl(
+  token: string,
+  assetId: string,
+  variant: AssetVariant,
+  opts: { download?: boolean } = {},
+): string {
+  const qs = new URLSearchParams({ variant })
+  if (opts.download) qs.set('download', '1')
+  return `/api/public/shares/${encodeURIComponent(token)}/assets/${assetId}/content?${qs.toString()}`
+}

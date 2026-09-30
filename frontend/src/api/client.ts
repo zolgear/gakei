@@ -138,6 +138,66 @@ export function revokeApiToken(tokenId: string): Promise<void> {
   return request(`/api/users/me/api-tokens/${tokenId}`, { method: 'DELETE' })
 }
 
+// -- 共有リンク(ADR-0029) -------------------------------------------------------
+
+export type ShareScope = components['schemas']['SharePreviewRequest']['scope']
+export type ShareSettingsResponse = components['schemas']['ShareSettingsResponse']
+export type SharePreviewResponse = components['schemas']['SharePreviewResponse']
+export type SharePreviewAsset = components['schemas']['SharePreviewAsset']
+export type ShareCreateRequest = components['schemas']['ShareCreateRequest']
+export type ShareRow = components['schemas']['ShareRow']
+export type ShareListResponse = components['schemas']['ShareListResponse']
+export type PublicShareResponse = components['schemas']['PublicShareResponse']
+export type PublicShareAsset = components['schemas']['PublicShareAsset']
+export type PublicShareRun = components['schemas']['PublicShareRun']
+export type PublicShareEdge = components['schemas']['PublicShareEdge']
+
+/** 全ログイン者が読める(共有の操作を画面に出すかの判断)。既定は無効。 */
+export function getShareSettings(): Promise<ShareSettingsResponse> {
+  return request('/api/settings/share')
+}
+
+/** 管理者のみ。 */
+export function updateShareSettings(enabled: boolean): Promise<ShareSettingsResponse> {
+  return request('/api/settings/share', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+/** 作る前の確認(範囲に含まれる画像)。何も書き込まない。機能が無効なら 409。 */
+export function previewShare(assetId: string, scope: ShareScope): Promise<SharePreviewResponse> {
+  return request('/api/shares/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ asset_id: assetId, scope }),
+  })
+}
+
+export function createShare(body: ShareCreateRequest): Promise<ShareRow> {
+  return request('/api/shares', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 自分の、取り消していない共有(新しい順)。 */
+export function listShares(): Promise<ShareListResponse> {
+  return request('/api/shares')
+}
+
+/** 取り消す(元に戻せない)。 */
+export function revokeShare(shareId: string): Promise<void> {
+  return request(`/api/shares/${shareId}`, { method: 'DELETE' })
+}
+
+/** 共有のページの内容(ログイン不要)。無効・取り消し済み・不明はどれも 404。 */
+export function getPublicShare(token: string): Promise<PublicShareResponse> {
+  return request(`/api/public/shares/${encodeURIComponent(token)}`)
+}
+
 // -- ComfyUI ワークフロー(ADR-0013) ------------------------------------------
 
 export type ComfyUIStatus = components['schemas']['ComfyUIStatusResponse']
