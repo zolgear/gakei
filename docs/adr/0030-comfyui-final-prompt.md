@@ -102,8 +102,8 @@ ADR-0013 は「作らないもの」に「動画、音声、3D など画像以�
 
 ## Action Items
 
-1. [ ] `Bindings.final_prompt` と推定、ワークフローの登録画面の選択欄
-2. [ ] `run.text_outputs`(マイグレーション 0023)、`RunResult` と runner、`collect_output_texts`
-3. [ ] API(`RunSummary`、`produced_by_run`)、MCP、共有リンク
-4. [ ] ビューアの Asset パネル、Run の詳細、系列インスペクターの表示と挿入・置き換え・コピー
-5. [ ] 利用者向けの説明(README の ComfyUI の節など)
+1. [x] `Bindings.final_prompt` と推定、ワークフローの登録画面の選択欄
+2. [x] `run.text_outputs`(マイグレーション 0023)、`RunResult` と runner、`collect_output_texts`
+3. [x] API(`RunSummary`、`produced_by_run`)、MCP、共有リンク
+4. [x] ビューアの Asset パネル、Run の詳細、系列インスペクターの表示と挿入・置き換え・コピー
+5. [x] 利用者向けの説明(README の ComfyUI の節など)

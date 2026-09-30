@@ -67,9 +67,12 @@ export function FinalPromptSection({
         <Heading className={headingClassName ?? styles.heading}>{fp.heading}</Heading>
         {nodeLabel && <span className={styles.nodeLabel}>{nodeLabel}</span>}
       </div>
-      <p className={styles.text} data-collapsed={collapsed || undefined}>
-        {item.text}
-      </p>
+      {/* 折り畳みの line-clamp は内側の要素に掛ける(枠の padding に次の行が覗かないように)。 */}
+      <div className={styles.textBox}>
+        <p className={styles.text} data-collapsed={collapsed || undefined}>
+          {item.text}
+        </p>
+      </div>
       {item.truncated && <p className={styles.note}>{fp.truncated}</p>}
       {collapsible && (
         <button

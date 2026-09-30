@@ -31,12 +31,15 @@
   overflow-wrap: anywhere;
 }
 
-.text {
-  margin: 0;
+.textBox {
   padding: 8px 10px;
   background: var(--color-bg-sunken);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+}
+
+.text {
+  margin: 0;
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -65,9 +68,9 @@
   gap: 6px;
 }
 
-/* 差し込まれた操作(RunPromptActions の行)は上の余白を持つので、同じ行に並べるときは消す。 */
+/* 差し込まれた操作(RunPromptActions の行)の枠を外し、コピーと同じ並びで折り返す。 */
 .toolbar > div {
-  margin-top: 0;
+  display: contents;
 }
 
 .linkButton {
