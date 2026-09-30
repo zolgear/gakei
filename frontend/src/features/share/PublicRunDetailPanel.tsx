@@ -80,7 +80,7 @@ export function PublicRunDetailPanel({
 
       <h2 className={styles.subheading}>{p.promptHeading}</h2>
       <p className={styles.prompt}>{run.prompt}</p>
-      {/* PE の出力(ADR-0030 4章)。閲覧専用なので「コピー」だけ。 */}
+      {/* 最終プロンプト(ADR-0030 4章)。閲覧専用なので「コピー」だけ。 */}
       <FinalPromptSection
         className={styles.finalPrompt}
         textOutputs={run.text_outputs}

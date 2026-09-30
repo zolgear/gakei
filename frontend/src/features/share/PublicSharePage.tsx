@@ -4,7 +4,7 @@
  *
  * - 画像: 選んだ画像をパン/ズームで表示する(`AssetCanvas`)。原本を許す共有なら、拡大すると
  *   原本に差し替え、ダウンロードもできる。許さない共有はプレビュー(長辺 2048px)まで。
- * - 画像のタイトル、作成日時、その画像を作った Run のプロンプト(と PE の出力。ADR-0030)と
+ * - 画像のタイトル、作成日時、その画像を作った Run のプロンプト(と最終プロンプト。ADR-0030)と
  *   パラメーター。
  * - 含まれる画像の一覧(2枚以上のとき)と、範囲が系列なら系列グラフ。
  * - Run の詳細(2026-09-30 追記): グラフの Run のノード(または画像の情報の「Generated 詳細を
@@ -308,7 +308,7 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
                   </button>
                 </div>
                 <p className={styles.prompt}>{run.prompt}</p>
-                {/* PE の出力(ADR-0030 4章)。閲覧専用なので「コピー」だけ(挿入・置き換えは出さない)。 */}
+                {/* 最終プロンプト(ADR-0030 4章)。閲覧専用なので「コピー」だけ(挿入・置き換えは出さない)。 */}
                 <FinalPromptSection
                   className={styles.finalPrompt}
                   textOutputs={run.text_outputs}

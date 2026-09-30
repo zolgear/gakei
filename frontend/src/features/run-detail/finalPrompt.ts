@@ -1,5 +1,5 @@
 /**
- * 最終プロンプト(PE の出力。ADR-0030)の表示に使う純粋関数。`run.text_outputs` のうち
+ * 最終プロンプト(ADR-0030)の表示に使う純粋関数。`run.text_outputs` のうち
  * `role === "final_prompt"` の要素だけを扱い、将来の別の role は無視する。
  */
 import type { RunTextOutput } from '../../api/client'

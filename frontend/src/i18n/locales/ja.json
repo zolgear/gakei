@@ -1420,8 +1420,8 @@
       "maskModeImageAlpha": "入力画像の透明度",
       "maskRefLabel": "マスクのノード・入力",
       "outputsLabel": "出力ノード(必須、複数可)",
-      "finalPromptLabel": "最終プロンプト(PE の出力)",
-      "finalPromptHelp": "Prompt Enhancer などが実行時に作った最終プロンプトを出すノード(PreviewAny など)を選ぶと、そのテキストを Run に記録し、ビューアなどに「PE の出力」として表示します。使わないときは「なし」のままにします。",
+      "finalPromptLabel": "最終プロンプト",
+      "finalPromptHelp": "Prompt Enhancer などが実行時に作った最終プロンプトを出すノード(PreviewAny など)を選ぶと、そのテキストを Run に記録し、ビューアなどに「最終プロンプト」として表示します。使わないときは「なし」のままにします。",
       "exposedParamsHeading": "公開パラメーター",
       "saving": "保存中...",
       "update": "更新する",
@@ -1585,7 +1585,7 @@
     "expandLineageLabel": "系列グラフを全画面に広げる"
   },
   "finalPrompt": {
-    "heading": "PE の出力",
+    "heading": "最終プロンプト",
     "truncated": "長すぎるため途中までを保存しています",
     "expand": "すべて表示",
     "collapse": "折り畳む",

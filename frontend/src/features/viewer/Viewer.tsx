@@ -318,7 +318,7 @@ export function Viewer({ assetId }: ViewerProps) {
                     </Link>
                   </p>
                 )}
-                {/* PE の出力(ADR-0030 3章)。挿入・置き換えはスタジオへ移って反映する。 */}
+                {/* 最終プロンプト(ADR-0030 3章)。挿入・置き換えはスタジオへ移って反映する。 */}
                 <FinalPromptSection
                   className={styles.finalPrompt}
                   textOutputs={asset.produced_by_run.text_outputs}
