@@ -1188,9 +1188,12 @@ def test_collect_output_texts_sanitizes_joined_text() -> None:
 @run_async
 async def test_execute_sanitizes_final_prompt(db_session_factory: sessionmaker) -> None:
     # 偽の ComfyUI は対になっていないサロゲートを JSON にできないので、ここでは NUL だけ
-    # 確かめる(サロゲートは `sanitize_text` の単体テストで見る)。
+    # 確かめる(サロゲートは `sanitize_text` の単体テストで見る)。タイトルの NUL は、
+    # PostgreSQL ではワークフローの登録(JSONB)の時点で拒まれるので SQLite のときだけ入れる。
     graph, bindings = _pe_graph_and_bindings()
-    graph["20"]["_meta"]["title"] = "PE\x00 title"
+    on_sqlite = db_session_factory.kw["bind"].dialect.name == "sqlite"
+    if on_sqlite:
+        graph["20"]["_meta"]["title"] = "PE\x00 title"
     result = await _execute_with_history(
         db_session_factory,
         graph=graph,
@@ -1199,7 +1202,8 @@ async def test_execute_sanitizes_final_prompt(db_session_factory: sessionmaker) 
     )
     assert result.text_outputs is not None
     assert result.text_outputs[0]["text"] == "warm room"
-    assert result.text_outputs[0]["title"] == "PE title"
+    if on_sqlite:
+        assert result.text_outputs[0]["title"] == "PE title"
 
 
 @run_async
