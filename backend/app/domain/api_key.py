@@ -138,14 +138,8 @@ def resolve_key(settings: Settings) -> tuple[str | None, Source | None]:
     return None, None
 
 
-def hint(api_key: str) -> str:
-    """画面に見せてよい表示用の断片(末尾4文字のみ)。"""
-    tail = api_key[-4:] if len(api_key) >= 4 else api_key
-    return f"…{tail}"
-
-
 # -- Base URL(ADR-0017) ---------------------------------------------------
-# 値は秘密ではないので、画面には全文を返してよい(`hint` に相当する処理は無い)。
+# 値は秘密ではないので、画面には全文を返してよい(キーは一部も返さない)。
 
 
 class BaseUrlValidationError(Exception):

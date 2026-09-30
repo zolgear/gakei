@@ -6,7 +6,7 @@
 import type { OpenAIKeyStatus } from '../../api/client'
 import { msg } from '../../i18n'
 
-/** 設定画面の状態表示。`state` でバッジの色を、`detail` でキーの末尾と出所を示す。 */
+/** 設定画面の状態表示。`state` でバッジの色を、`detail` で出所を示す(キーは一部も出さない)。 */
 export interface ApiKeyStatusView {
   state: 'configured' | 'missing'
   title: string
@@ -22,7 +22,7 @@ export function apiKeyStatusView(status: OpenAIKeyStatus): ApiKeyStatusView {
   return {
     state: 'configured',
     title: t.configured,
-    detail: status.hint ? `${status.hint} · ${origin}` : origin,
+    detail: origin,
   }
 }
 

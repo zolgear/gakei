@@ -13,7 +13,7 @@
  * - 使い方、言語、1 時間の上限、しきい値はまとめて「保存」する。変わった項目だけを PATCH に載せる
  *   (`diffAnnotationForm`)。保存ボタンは使い方・上限・ONNX の小節に置くが、どれを押しても変更を
  *   すべて保存する。
- * - 接続先の追加・編集は、それぞれのフォームで送る。キーは値を表示しない(末尾4文字だけ)。
+ * - 接続先の追加・編集は、それぞれのフォームで送る。キーは一部も表示しない(設定済みかどうかだけ)。
  * - 削除(接続先、キー、ONNX のモデル)と一括実行は確認を挟む(`ConfirmDialog`)。
  * - ONNX のモデルはダウンロード中だけ設定を取り直して進捗を出す。待ち行列が残っている間も
  *   件数を更新するためにゆっくり取り直す。
@@ -701,7 +701,7 @@ function KeyStatus({ view }: { view: AnnotationConnectionView }) {
   const { t } = useI18n()
   const m = t.settings.annotation.connections
   let text: string
-  if (view.api_key_set) text = view.api_key_hint ? fmt(m.apiKeySetWithHint, { hint: view.api_key_hint }) : m.apiKeySet
+  if (view.api_key_set) text = m.apiKeySet
   else text = view.builtin ? m.builtinApiKeyNotSet : m.apiKeyNotSet
   return (
     <span className={styles.keyStatus} data-set={view.api_key_set}>

@@ -642,7 +642,7 @@ class SearchResponse(BaseModel):
 
 
 # -- Settings (ADR-0012 Decision 4) --------------------------------------
-# 画面から OpenAI の API キーを設定する。キーの全文は返さない(末尾4文字のみ)。
+# 画面から OpenAI の API キーを設定する。キーは一部も返さない(設定済みかどうかと出どころだけ)。
 
 
 class OpenAIKeyStatusResponse(BaseModel):
@@ -650,8 +650,6 @@ class OpenAIKeyStatusResponse(BaseModel):
     required: bool
     configured: bool
     source: Literal["env", "file"] | None = None
-    # 例: "…abcd"。未設定なら null。
-    hint: str | None = None
 
 
 class OpenAIKeyUpdateRequest(BaseModel):
@@ -915,8 +913,6 @@ class AnnotationConnectionView(BaseModel):
     api_style: Literal["responses", "chat"]
     # キーを設定しているか(組み込みの接続先は OpenAI のキーの有無)。
     api_key_set: bool
-    # キーの末尾4文字(`…abcd`)。未設定なら null。
-    api_key_hint: str | None = None
     # 用途の組(既定 / ComfyUI の画像)のどこかで使っているか(使っていれば削除できない)。
     in_use: bool
     # この接続先への直近1時間の LLM・VLM の呼び出し回数(上限は接続先ごと)。

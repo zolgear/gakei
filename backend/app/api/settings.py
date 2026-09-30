@@ -112,17 +112,13 @@ def get_key_validator() -> KeyValidator:
     return _validate_key_live
 
 
-def _status_response(
-    settings: Settings, provider: ImageProvider, user: CurrentUser
-) -> OpenAIKeyStatusResponse:
+def _status_response(settings: Settings, provider: ImageProvider) -> OpenAIKeyStatusResponse:
+    # キーは一部も返さない。設定済みかどうかと出どころだけ。
     api_key, source = api_key_domain.resolve_key(settings)
     return OpenAIKeyStatusResponse(
         required=getattr(provider, "requires_api_key", False),
         configured=api_key is not None,
         source=source,
-        # 管理者以外には末尾4文字も見せない(ADR-0019。GET 自体は非管理者の画面のバナー等
-        # からも呼ぶため許可し、この項目だけ絞る)。
-        hint=api_key_domain.hint(api_key) if api_key and user.is_admin else None,
     )
 
 
@@ -141,9 +137,9 @@ def _reject_if_env_locked(settings: Settings) -> None:
 def get_openai_key(
     settings: Settings = Depends(get_settings),
     provider: ImageProvider = Depends(get_provider),
-    user: CurrentUser = Depends(require_user),
+    _user: CurrentUser = Depends(require_user),
 ) -> OpenAIKeyStatusResponse:
-    return _status_response(settings, provider, user)
+    return _status_response(settings, provider)
 
 
 @router.put("/openai-key", response_model=OpenAIKeyStatusResponse, operation_id="set_openai_key")
@@ -152,7 +148,7 @@ async def set_openai_key(
     settings: Settings = Depends(get_settings),
     provider: ImageProvider = Depends(get_provider),
     validate_key: KeyValidator = Depends(get_key_validator),
-    user: CurrentUser = Depends(require_admin),
+    _user: CurrentUser = Depends(require_admin),
 ) -> OpenAIKeyStatusResponse:
     api_key = body.api_key.strip()
     if not api_key:
@@ -165,7 +161,7 @@ async def set_openai_key(
     await validate_key(api_key, base_url)
 
     api_key_domain.write_file_key(settings.data_dir, api_key)
-    return _status_response(settings, provider, user)
+    return _status_response(settings, provider)
 
 
 @router.delete(
@@ -174,17 +170,16 @@ async def set_openai_key(
 def delete_openai_key(
     settings: Settings = Depends(get_settings),
     provider: ImageProvider = Depends(get_provider),
-    user: CurrentUser = Depends(require_admin),
+    _user: CurrentUser = Depends(require_admin),
 ) -> OpenAIKeyStatusResponse:
     _reject_if_env_locked(settings)
     api_key_domain.delete_file_key(settings.data_dir)
-    return _status_response(settings, provider, user)
+    return _status_response(settings, provider)
 
 
 # -- OpenAI の接続先(Base URL。ADR-0017) --------------------------------------
 # キーと同じ扱い: 環境変数 / `.env` が画面で保存した値より優先し、環境変数が有効な間は
-# 画面から変更・削除できない。値は秘密ではないので全文を返す(キーの `hint` に相当する
-# 省略はしない)。
+# 画面から変更・削除できない。値は秘密ではないので全文を返す(キーは一部も返さない)。
 
 
 def _base_url_status_response(settings: Settings) -> OpenAIBaseUrlStatusResponse:
@@ -421,7 +416,6 @@ def _connection_views(
     config: annotation_settings.AnnotationConfig,
     settings: Settings,
     annotator: Annotator,
-    show_hints: bool,
 ) -> list[AnnotationConnectionView]:
     in_use = config.profiles.connection_ids()
     views: list[AnnotationConnectionView] = []
@@ -442,8 +436,6 @@ def _connection_views(
                 base_url=base_url,
                 api_style=connection.api_style,
                 api_key_set=key is not None,
-                # 管理者以外には末尾4文字も見せない(`_status_response` と同じ。ADR-0019)。
-                api_key_hint=api_key_domain.hint(key) if key and show_hints else None,
                 in_use=connection.id in in_use,
                 calls_last_hour=annotator.calls_last_hour(connection.id),
             )
@@ -475,12 +467,11 @@ def _annotation_settings_response(
     settings: Settings,
     annotator: Annotator,
     downloader: WdModelDownloader,
-    show_hints: bool = True,
 ) -> AnnotationSettingsResponse:
     config = annotation_settings.load(db)
     return AnnotationSettingsResponse(
         **{name: getattr(config, name) for name in annotation_settings.SCALAR_FIELDS},
-        connections=_connection_views(config, settings, annotator, show_hints),
+        connections=_connection_views(config, settings, annotator),
         profiles=_profiles_view(config.profiles),
         onnx_models=_onnx_model_statuses(settings, downloader),
         pending_count=annotations_domain.pending_count(db),
@@ -500,9 +491,9 @@ def get_annotation_settings(
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
     downloader: WdModelDownloader = Depends(get_wd_downloader),
-    user: CurrentUser = Depends(require_user),
+    _user: CurrentUser = Depends(require_user),
 ) -> AnnotationSettingsResponse:
-    return _annotation_settings_response(db, settings, annotator, downloader, user.is_admin)
+    return _annotation_settings_response(db, settings, annotator, downloader)
 
 
 @router.patch(

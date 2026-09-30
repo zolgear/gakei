@@ -58,7 +58,7 @@
 | 管理者設定 | OpenAI の API キーと接続先(Base URL)、生成(moderation)、ComfyUI(接続、タイムアウト、ワークフローの登録) | `secrets.json` / `app_setting` / `comfy_workflow` | 更新系は `admin` のみ(403) |
 
 - 管理者に限定するエンドポイント: `PUT/DELETE /api/settings/openai-key`、`PUT/DELETE /api/settings/openai-base-url`、`PATCH /api/settings/general`、`PUT/DELETE /api/comfyui/connection`、`POST /api/comfyui/connection/test`、`POST /api/comfyui/workflows/analyze`、`POST/PATCH/DELETE /api/comfyui/workflows*`。
-- 参照系の GET は、ログインしていれば誰でも呼べる(キー未設定のバナー、モデル選択、ワークフローの一覧が使うため)。ただし `GET /api/settings/openai-key` の `hint`(末尾4文字)は非管理者には返さない。
+- 参照系の GET は、ログインしていれば誰でも呼べる(キー未設定のバナー、モデル選択、ワークフローの一覧が使うため)。`GET /api/settings/openai-key` はキーの一部も返さない(設定済みかどうかと出どころだけ。2026-09-30 に、非管理者にだけ伏せていた末尾4文字の `hint` を管理者にも返さないよう改めた。ADR-0012)。
 - 画面では、設定ページを「ユーザー設定」「管理者設定」の見出しで括り、管理者設定は `admin`(none モードでは常に)にだけ表示する。ワークフローの登録画面(`/settings/comfyui*`)も同様。非管理者にはキー未設定の案内を「管理者に連絡」に変える。
 - ADR-0013 7章の「本線では、この設定は `admin` だけが変えられるようにする」は、この ADR で実装したことになる。
 - 設定のアイコンは歯車にする(これまでの円と8本の線は太陽に見えた)。

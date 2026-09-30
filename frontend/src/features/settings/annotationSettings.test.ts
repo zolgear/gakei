@@ -33,7 +33,6 @@ function connection(overrides: Partial<AnnotationConnectionView> = {}): Annotati
     base_url: null,
     api_style: 'responses',
     api_key_set: true,
-    api_key_hint: '…abcd',
     in_use: true,
     calls_last_hour: 0,
     ...overrides,
@@ -47,7 +46,6 @@ const OLLAMA = connection({
   base_url: 'http://127.0.0.1:11434/v1',
   api_style: 'chat',
   api_key_set: false,
-  api_key_hint: null,
   in_use: false,
 })
 

@@ -1311,8 +1311,6 @@ export interface components {
             api_style: "responses" | "chat";
             /** Api Key Set */
             api_key_set: boolean;
-            /** Api Key Hint */
-            api_key_hint?: string | null;
             /** In Use */
             in_use: boolean;
             /** Calls Last Hour */
@@ -2587,8 +2585,6 @@ export interface components {
             configured: boolean;
             /** Source */
             source?: ("env" | "file") | null;
-            /** Hint */
-            hint?: string | null;
         };
         /** OpenAIKeyUpdateRequest */
         OpenAIKeyUpdateRequest: {

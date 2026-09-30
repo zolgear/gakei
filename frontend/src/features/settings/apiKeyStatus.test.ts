@@ -8,7 +8,7 @@ import {
 import type { OpenAIKeyStatus } from '../../api/client'
 
 function status(overrides: Partial<OpenAIKeyStatus>): OpenAIKeyStatus {
-  return { required: true, configured: false, source: null, hint: null, ...overrides }
+  return { required: true, configured: false, source: null, ...overrides }
 }
 
 describe('apiKeyStatusView', () => {
@@ -17,18 +17,18 @@ describe('apiKeyStatusView', () => {
   })
 
   it('画面で保存したキー', () => {
-    expect(apiKeyStatusView(status({ configured: true, source: 'file', hint: '…abcd' }))).toEqual({
+    expect(apiKeyStatusView(status({ configured: true, source: 'file' }))).toEqual({
       state: 'configured',
       title: '設定済み',
-      detail: '…abcd · 画面で保存(secrets.json)',
+      detail: '画面で保存(secrets.json)',
     })
   })
 
   it('環境変数のキー', () => {
-    expect(apiKeyStatusView(status({ configured: true, source: 'env', hint: '…abcd' }))).toEqual({
+    expect(apiKeyStatusView(status({ configured: true, source: 'env' }))).toEqual({
       state: 'configured',
       title: '設定済み',
-      detail: '…abcd · 環境変数(.env)',
+      detail: '環境変数(.env)',
     })
   })
 })
