@@ -46,6 +46,24 @@
   color: var(--color-danger);
 }
 
+.summaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.count {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .list {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,8 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 150;
+  /* 汎用の Modal(160)の上に重ねて出せるように、その上・Toast(200)の下に置く。 */
+  z-index: 170;
   display: flex;
   align-items: center;
   justify-content: center;
