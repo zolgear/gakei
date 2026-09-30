@@ -246,6 +246,8 @@ _EXCLUDED_PREFIXES = (
     "/api/public/",
     "/api/comfyui/",
     "/api/settings/annotation/onnx/",
+    # 推定の接続先(ADR-0024 8章)。管理者設定で、利用者のデータではない。
+    "/api/settings/annotation/connections/",
 )
 
 

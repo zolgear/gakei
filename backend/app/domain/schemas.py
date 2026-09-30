@@ -894,17 +894,60 @@ class OnnxModelStatus(BaseModel):
     download_error: str | None = None
 
 
+class AnnotationConnectionView(BaseModel):
+    """推定の接続先1つ(ADR-0024 8章)。キーの値は返さない。"""
+
+    id: str
+    # 組み込みの接続先(`openai`、OpenAI の設定)の名前は画面の言語で表示する(サーバーの言語の
+    # 文言を入れて返すが、画面は `builtin` を見て自分の言語で出してよい)。
+    name: str
+    # 組み込みの接続先(OpenAI の設定。ADR-0017)なら true。名前・Base URL・キーは変えられず、
+    # 削除もできない(API 形式だけは変えられる)。
+    builtin: bool
+    # 組み込みの接続先は OpenAI の設定の Base URL(未設定なら null = OpenAI 本体)。
+    base_url: str | None = None
+    api_style: Literal["responses", "chat"]
+    # キーを設定しているか(組み込みの接続先は OpenAI のキーの有無)。
+    api_key_set: bool
+    # キーの末尾4文字(`…abcd`)。未設定なら null。
+    api_key_hint: str | None = None
+    # 用途の組(既定 / ComfyUI の画像)のどこかで使っているか(使っていれば削除できない)。
+    in_use: bool
+    # この接続先への直近1時間の LLM・VLM の呼び出し回数(上限は接続先ごと)。
+    calls_last_hour: int
+
+
+class AnnotationTarget(BaseModel):
+    """用途1つの「接続先 + モデル名」の組。"""
+
+    connection_id: str
+    model: str
+
+
+class AnnotationDefaultProfile(BaseModel):
+    llm: AnnotationTarget
+    vlm: AnnotationTarget
+
+
+class AnnotationComfyuiProfile(BaseModel):
+    # null なら「既定と同じ」。
+    llm: AnnotationTarget | None = None
+    vlm: AnnotationTarget | None = None
+
+
+class AnnotationProfiles(BaseModel):
+    """用途ごとの組(ADR-0024 8章)。`comfyui` は ComfyUI の Run の出力にだけ使う。"""
+
+    default: AnnotationDefaultProfile
+    comfyui: AnnotationComfyuiProfile
+
+
 class AnnotationSettingsResponse(BaseModel):
     """`GET /api/settings/annotation`。"""
 
     auto_on_ingest: bool
     llm_enabled: bool
-    llm_model: str
     vlm_enabled: bool
-    vlm_model: str
-    # 推定専用の接続先。null なら OpenAI の設定(キー、Base URL)を流用する。
-    base_url: str | None = None
-    api_style: Literal["responses", "chat"]
     language: Literal["ja", "en"]
     # タグの言語(ADR-0024 6章)。native はエンジン任せ、localized は `language` に合わせる。
     tag_language: Literal["native", "localized"]
@@ -912,37 +955,73 @@ class AnnotationSettingsResponse(BaseModel):
     onnx_enabled: bool
     onnx_model: Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
     onnx_threshold: float
-    # 推定専用の API キーを保存しているか(値は返さない)。
-    api_key_set: bool
+    # 接続先の一覧。先頭は常に組み込みの `openai`。追加した接続先は追加した順に並ぶ。
+    connections: list[AnnotationConnectionView] = Field(default_factory=list)
+    profiles: AnnotationProfiles
     onnx_models: list[OnnxModelStatus] = Field(default_factory=list)
     # 一度も推定していない Asset(削除済み・マスクを除く)の件数。一括実行の対象。
     pending_count: int
     # 待ち行列にある件数(queued と running)。
     queued_count: int
-    # 直近1時間の LLM・VLM の呼び出し回数(プロセス内で数える。再起動で 0 に戻る)。
+    # 直近1時間の LLM・VLM の呼び出し回数の全接続先の合計(接続先ごとの値は `connections`。
+    # プロセス内で数える。再起動で 0 に戻る)。
     calls_last_hour: int
     # いま使えるエンジン(有効かつ、ONNX はモデルをダウンロード済み)。空なら推定できない。
     usable_engines: list[Literal["llm", "vlm", "onnx"]] = Field(default_factory=list)
 
 
+class AnnotationDefaultProfileUpdate(BaseModel):
+    """省略した用途は変更しない。null にはできない。"""
+
+    llm: AnnotationTarget | None = None
+    vlm: AnnotationTarget | None = None
+
+
+class AnnotationComfyuiProfileUpdate(BaseModel):
+    """省略した用途は変更しない。null を送ると「既定と同じ」に戻す。"""
+
+    llm: AnnotationTarget | None = None
+    vlm: AnnotationTarget | None = None
+
+
+class AnnotationProfilesUpdate(BaseModel):
+    default: AnnotationDefaultProfileUpdate | None = None
+    comfyui: AnnotationComfyuiProfileUpdate | None = None
+
+
 class AnnotationSettingsUpdateRequest(BaseModel):
-    """`PATCH /api/settings/annotation`。省略した項目は変更しない。`base_url` は null か空文字で
-    「OpenAI の設定を流用」に戻す。値の妥当性は `app/domain/annotation_settings.py` が検証する。
+    """`PATCH /api/settings/annotation`。省略した項目は変更しない。値の妥当性は
+    `app/domain/annotation_settings.py` が検証する。`profiles` は書いたマスだけ変える。
     """
 
     auto_on_ingest: bool | None = None
     llm_enabled: bool | None = None
-    llm_model: str | None = None
     vlm_enabled: bool | None = None
-    vlm_model: str | None = None
-    base_url: str | None = None
-    api_style: str | None = None
     language: str | None = None
     tag_language: str | None = None
     hourly_limit: int | None = None
     onnx_enabled: bool | None = None
     onnx_model: str | None = None
     onnx_threshold: float | None = None
+    profiles: AnnotationProfilesUpdate | None = None
+
+
+class AnnotationConnectionCreateRequest(BaseModel):
+    """`POST /api/settings/annotation/connections`。キーは任意(省略・空ならキーなし)。"""
+
+    name: str
+    base_url: str
+    api_style: str = "responses"
+    api_key: str | None = None
+
+
+class AnnotationConnectionUpdateRequest(BaseModel):
+    """`PATCH /api/settings/annotation/connections/{id}`。省略した項目は変更しない。
+    組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。"""
+
+    name: str | None = None
+    base_url: str | None = None
+    api_style: str | None = None
 
 
 class AnnotationApiKeyUpdateRequest(BaseModel):

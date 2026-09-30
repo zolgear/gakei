@@ -174,7 +174,15 @@
       "invalidOnnxModel": "The ONNX tagger model must be wd-vit-tagger-v3, wd-swinv2-tagger-v3 or wd-eva02-large-tagger-v3",
       "invalidThreshold": "The threshold must be a number from {min} to {max}",
       "unknownOnnxModel": "Unknown ONNX tagger model",
-      "onnxDownloading": "A model cannot be deleted while it is downloading"
+      "onnxDownloading": "A model cannot be deleted while it is downloading",
+      "invalidConnectionName": "Connection name must be 1-{max} characters",
+      "invalidTarget": "Invalid connection and model pair",
+      "unknownConnection": "The specified connection does not exist",
+      "tooManyConnections": "You can add up to {max} connections",
+      "builtinConnectionName": "OpenAI settings",
+      "builtinConnectionReadOnly": "\"OpenAI settings\" cannot be edited or deleted (only the API style can be changed; change the key and Base URL in the OpenAI settings)",
+      "connectionInUse": "This connection is in use (by the default or ComfyUI images pairs) and cannot be deleted",
+      "migratedConnectionName": "Annotation only"
     },
     "share": {
       "invalidEnabled": "enabled must be true or false"
@@ -308,14 +316,15 @@
     "noEngine": "No estimation engine is available. Enable the LLM, the VLM or the ONNX tagger in Admin settings > Auto titles and tags (the ONNX tagger also needs its model downloaded)",
     "tagNotFound": "This tag is not on the image",
     "invalidVlmResponse": "Could not read the VLM response as JSON",
-    "apiKeyMissing": "No API key for estimation. Set the OpenAI API key or a dedicated key for estimation",
+    "apiKeyMissing": "No API key for annotation. Set the OpenAI API key or choose another connection",
     "emptyTitle": "The LLM did not return a title",
     "onnxModelMissing": "The ONNX tagger model was not found. Download it from Admin settings",
     "onnxInsufficientMemory": "The ONNX tagger model {model} was not loaded because there is not enough free memory (needs about {needed} GB, about {available} GB free). Choose a smaller model in Admin settings or add memory",
     "download": {
       "httpError": "Failed to download {file} (HTTP {status})",
       "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
-    }
+    },
+    "connectionMissing": "The connection used for annotation was not found. Choose the connections again in Admin settings > Auto titles and tags"
   },
   "uploads": {
     "notFound": "This upload URL does not exist.",

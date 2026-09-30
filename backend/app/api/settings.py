@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import NoReturn
 
 import openai
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -36,8 +37,15 @@ from app.domain import api_key as api_key_domain
 from app.domain.schemas import (
     AnnotationApiKeyUpdateRequest,
     AnnotationBackfillResponse,
+    AnnotationComfyuiProfile,
+    AnnotationConnectionCreateRequest,
+    AnnotationConnectionUpdateRequest,
+    AnnotationConnectionView,
+    AnnotationDefaultProfile,
+    AnnotationProfiles,
     AnnotationSettingsResponse,
     AnnotationSettingsUpdateRequest,
+    AnnotationTarget,
     ComfyUITimeoutSetting,
     GeneralSettingsResponse,
     GeneralSettingsUpdateRequest,
@@ -385,7 +393,7 @@ def update_share_settings(
 
 
 # -- 自動タイトル・タグ(ADR-0024) ------------------------------------------------
-# GET は全ログイン者(画面の表示用)、更新・推定専用キー・モデルのダウンロード・一括実行は
+# GET は全ログイン者(画面の表示用)、更新・接続先とそのキー・モデルのダウンロード・一括実行は
 # 管理者だけ。
 
 
@@ -409,13 +417,71 @@ def _onnx_model_statuses(
     return statuses
 
 
+def _connection_views(
+    config: annotation_settings.AnnotationConfig,
+    settings: Settings,
+    annotator: Annotator,
+    show_hints: bool,
+) -> list[AnnotationConnectionView]:
+    in_use = config.profiles.connection_ids()
+    views: list[AnnotationConnectionView] = []
+    for connection in config.all_connections():
+        if connection.builtin:
+            key, _ = api_key_domain.resolve_key(settings)
+            base_url, _ = api_key_domain.resolve_base_url(settings)
+            name = t("settings.annotation.builtinConnectionName")
+        else:
+            key = annotation_settings.read_connection_key(settings.data_dir, connection.id)
+            base_url = connection.base_url
+            name = connection.name
+        views.append(
+            AnnotationConnectionView(
+                id=connection.id,
+                name=name,
+                builtin=connection.builtin,
+                base_url=base_url,
+                api_style=connection.api_style,
+                api_key_set=key is not None,
+                # 管理者以外には末尾4文字も見せない(`_status_response` と同じ。ADR-0019)。
+                api_key_hint=api_key_domain.hint(key) if key and show_hints else None,
+                in_use=connection.id in in_use,
+                calls_last_hour=annotator.calls_last_hour(connection.id),
+            )
+        )
+    return views
+
+
+def _target_view(value: annotation_settings.TargetChoice | None) -> AnnotationTarget | None:
+    if value is None:
+        return None
+    return AnnotationTarget(connection_id=value.connection_id, model=value.model)
+
+
+def _profiles_view(profiles: annotation_settings.Profiles) -> AnnotationProfiles:
+    return AnnotationProfiles(
+        default=AnnotationDefaultProfile(
+            llm=_target_view(profiles.default_llm),  # type: ignore[arg-type]
+            vlm=_target_view(profiles.default_vlm),  # type: ignore[arg-type]
+        ),
+        comfyui=AnnotationComfyuiProfile(
+            llm=_target_view(profiles.comfyui_llm),
+            vlm=_target_view(profiles.comfyui_vlm),
+        ),
+    )
+
+
 def _annotation_settings_response(
-    db: Session, settings: Settings, annotator: Annotator, downloader: WdModelDownloader
+    db: Session,
+    settings: Settings,
+    annotator: Annotator,
+    downloader: WdModelDownloader,
+    show_hints: bool = True,
 ) -> AnnotationSettingsResponse:
     config = annotation_settings.load(db)
     return AnnotationSettingsResponse(
-        **config.__dict__,
-        api_key_set=annotation_settings.read_api_key(settings.data_dir) is not None,
+        **{name: getattr(config, name) for name in annotation_settings.SCALAR_FIELDS},
+        connections=_connection_views(config, settings, annotator, show_hints),
+        profiles=_profiles_view(config.profiles),
         onnx_models=_onnx_model_statuses(settings, downloader),
         pending_count=annotations_domain.pending_count(db),
         queued_count=annotations_domain.queued_count(db),
@@ -434,8 +500,9 @@ def get_annotation_settings(
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
     downloader: WdModelDownloader = Depends(get_wd_downloader),
+    user: CurrentUser = Depends(require_user),
 ) -> AnnotationSettingsResponse:
-    return _annotation_settings_response(db, settings, annotator, downloader)
+    return _annotation_settings_response(db, settings, annotator, downloader, user.is_admin)
 
 
 @router.patch(
@@ -451,22 +518,147 @@ def update_annotation_settings(
     downloader: WdModelDownloader = Depends(get_wd_downloader),
     _user: CurrentUser = Depends(require_admin),
 ) -> AnnotationSettingsResponse:
-    updates = {name: getattr(body, name) for name in body.model_fields_set}
-    # base_url 以外は null を「変更しない」ではなく不正な値として扱う(検証で 422)。
+    updates = {name: getattr(body, name) for name in body.model_fields_set if name != "profiles"}
+    # null を「変更しない」ではなく不正な値として扱う(検証で 422)。組(`profiles`)は書いた
+    # マスだけ変える。先に全部を検証してから保存する(一部だけ保存される事態を避ける)。
     try:
+        for name, value in updates.items():
+            annotation_settings.normalize_value(name, value)
+        profiles = None
+        if "profiles" in body.model_fields_set:
+            if body.profiles is None:
+                raise annotation_settings.AnnotationSettingsValidationError(
+                    t("settings.annotation.invalidTarget")
+                )
+            profiles = annotation_settings.validate_profile_updates(
+                annotation_settings.load(db),
+                body.profiles.model_dump(exclude_unset=True),
+            )
         annotation_settings.save(db, updates)
+        if profiles is not None:
+            annotation_settings.save_profiles(db, profiles)
     except annotation_settings.AnnotationSettingsValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     annotator.notify()
     return _annotation_settings_response(db, settings, annotator, downloader)
 
 
-@router.put(
-    "/annotation/api-key",
-    response_model=AnnotationSettingsResponse,
-    operation_id="set_annotation_api_key",
+# -- 推定の接続先(ADR-0024 8章) --------------------------------------------------
+
+
+def _raise_connection_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, annotation_settings.AnnotationSettingsValidationError):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if isinstance(exc, annotation_settings.ConnectionNotFoundError):
+        raise HTTPException(
+            status_code=404, detail=t("settings.annotation.unknownConnection")
+        ) from exc
+    if isinstance(exc, annotation_settings.ConnectionReservedError):
+        raise HTTPException(
+            status_code=409, detail=t("settings.annotation.builtinConnectionReadOnly")
+        ) from exc
+    if isinstance(exc, annotation_settings.ConnectionInUseError):
+        raise HTTPException(
+            status_code=409, detail=t("settings.annotation.connectionInUse")
+        ) from exc
+    raise exc
+
+
+_CONNECTION_ERRORS = (
+    annotation_settings.AnnotationSettingsValidationError,
+    annotation_settings.ConnectionNotFoundError,
+    annotation_settings.ConnectionReservedError,
+    annotation_settings.ConnectionInUseError,
 )
-def set_annotation_api_key(
+
+
+def _require_user_connection(db: Session, connection_id: str) -> None:
+    """キーを扱えるのは利用者の接続先だけ(組み込みは 409、無ければ 404)。"""
+    if connection_id == annotation_settings.BUILTIN_CONNECTION_ID:
+        _raise_connection_error(annotation_settings.ConnectionReservedError())
+    if annotation_settings.load(db).find_connection(connection_id) is None:
+        _raise_connection_error(annotation_settings.ConnectionNotFoundError())
+
+
+@router.post(
+    "/annotation/connections",
+    response_model=AnnotationSettingsResponse,
+    status_code=201,
+    operation_id="create_annotation_connection",
+)
+def create_annotation_connection(
+    body: AnnotationConnectionCreateRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationSettingsResponse:
+    """接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(手元のサーバー向けに
+    任意の文字列を受け付けるため、有効性の確認はしない)。"""
+    try:
+        connection_id = annotation_settings.add_connection(
+            db, body.name, body.base_url, body.api_style
+        )
+    except _CONNECTION_ERRORS as exc:
+        _raise_connection_error(exc)
+    key = (body.api_key or "").strip()
+    if key:
+        annotation_settings.write_connection_key(settings.data_dir, connection_id, key)
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+@router.patch(
+    "/annotation/connections/{connection_id}",
+    response_model=AnnotationSettingsResponse,
+    operation_id="update_annotation_connection",
+)
+def update_annotation_connection(
+    connection_id: str,
+    body: AnnotationConnectionUpdateRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationSettingsResponse:
+    updates = {name: getattr(body, name) for name in body.model_fields_set}
+    try:
+        annotation_settings.update_connection(db, connection_id, updates)
+    except _CONNECTION_ERRORS as exc:
+        _raise_connection_error(exc)
+    annotator.notify()
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+@router.delete(
+    "/annotation/connections/{connection_id}",
+    response_model=AnnotationSettingsResponse,
+    operation_id="delete_annotation_connection",
+)
+def delete_annotation_connection(
+    connection_id: str,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationSettingsResponse:
+    """接続先を消す(キーも消す)。組み込みの接続先と、組で使っている接続先は 409。"""
+    try:
+        annotation_settings.delete_connection(db, settings.data_dir, connection_id)
+    except _CONNECTION_ERRORS as exc:
+        _raise_connection_error(exc)
+    return _annotation_settings_response(db, settings, annotator, downloader)
+
+
+@router.put(
+    "/annotation/connections/{connection_id}/api-key",
+    response_model=AnnotationSettingsResponse,
+    operation_id="set_annotation_connection_api_key",
+)
+def set_annotation_connection_api_key(
+    connection_id: str,
     body: AnnotationApiKeyUpdateRequest,
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -474,28 +666,31 @@ def set_annotation_api_key(
     downloader: WdModelDownloader = Depends(get_wd_downloader),
     _user: CurrentUser = Depends(require_admin),
 ) -> AnnotationSettingsResponse:
-    """推定専用の API キーを保存する(`secrets.json`。値は返さない)。手元のサーバー向けに
-    任意の文字列を受け付けるため、有効性の確認はしない。"""
+    """接続先のキーを保存する(`secrets.json`。値は返さない)。有効性の確認はしない。組み込みの
+    接続先のキーは OpenAI の設定で変える(409)。"""
+    _require_user_connection(db, connection_id)
     value = body.api_key.strip()
     if not value:
         raise HTTPException(status_code=400, detail=t("openai.keyEmpty"))
-    annotation_settings.write_api_key(settings.data_dir, value)
+    annotation_settings.write_connection_key(settings.data_dir, connection_id, value)
     return _annotation_settings_response(db, settings, annotator, downloader)
 
 
 @router.delete(
-    "/annotation/api-key",
+    "/annotation/connections/{connection_id}/api-key",
     response_model=AnnotationSettingsResponse,
-    operation_id="delete_annotation_api_key",
+    operation_id="delete_annotation_connection_api_key",
 )
-def delete_annotation_api_key(
+def delete_annotation_connection_api_key(
+    connection_id: str,
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
     downloader: WdModelDownloader = Depends(get_wd_downloader),
     _user: CurrentUser = Depends(require_admin),
 ) -> AnnotationSettingsResponse:
-    annotation_settings.delete_api_key(settings.data_dir)
+    _require_user_connection(db, connection_id)
+    annotation_settings.delete_connection_key(settings.data_dir, connection_id)
     return _annotation_settings_response(db, settings, annotator, downloader)
 
 

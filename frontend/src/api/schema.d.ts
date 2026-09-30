@@ -826,7 +826,49 @@ export interface paths {
         patch: operations["update_annotation_settings"];
         trace?: never;
     };
-    "/api/settings/annotation/api-key": {
+    "/api/settings/annotation/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Annotation Connection
+         * @description 接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(手元のサーバー向けに
+         *     任意の文字列を受け付けるため、有効性の確認はしない)。
+         */
+        post: operations["create_annotation_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/annotation/connections/{connection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Annotation Connection
+         * @description 接続先を消す(キーも消す)。組み込みの接続先と、組で使っている接続先は 409。
+         */
+        delete: operations["delete_annotation_connection"];
+        options?: never;
+        head?: never;
+        /** Update Annotation Connection */
+        patch: operations["update_annotation_connection"];
+        trace?: never;
+    };
+    "/api/settings/annotation/connections/{connection_id}/api-key": {
         parameters: {
             query?: never;
             header?: never;
@@ -835,14 +877,14 @@ export interface paths {
         };
         get?: never;
         /**
-         * Set Annotation Api Key
-         * @description 推定専用の API キーを保存する(`secrets.json`。値は返さない)。手元のサーバー向けに
-         *     任意の文字列を受け付けるため、有効性の確認はしない。
+         * Set Annotation Connection Api Key
+         * @description 接続先のキーを保存する(`secrets.json`。値は返さない)。有効性の確認はしない。組み込みの
+         *     接続先のキーは OpenAI の設定で変える(409)。
          */
-        put: operations["set_annotation_api_key"];
+        put: operations["set_annotation_connection_api_key"];
         post?: never;
-        /** Delete Annotation Api Key */
-        delete: operations["delete_annotation_api_key"];
+        /** Delete Annotation Connection Api Key */
+        delete: operations["delete_annotation_connection_api_key"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1189,6 +1231,102 @@ export interface components {
             /** Queued */
             queued: number;
         };
+        /** AnnotationComfyuiProfile */
+        AnnotationComfyuiProfile: {
+            llm?: components["schemas"]["AnnotationTarget"] | null;
+            vlm?: components["schemas"]["AnnotationTarget"] | null;
+        };
+        /**
+         * AnnotationComfyuiProfileUpdate
+         * @description 省略した用途は変更しない。null を送ると「既定と同じ」に戻す。
+         */
+        AnnotationComfyuiProfileUpdate: {
+            llm?: components["schemas"]["AnnotationTarget"] | null;
+            vlm?: components["schemas"]["AnnotationTarget"] | null;
+        };
+        /**
+         * AnnotationConnectionCreateRequest
+         * @description `POST /api/settings/annotation/connections`。キーは任意(省略・空ならキーなし)。
+         */
+        AnnotationConnectionCreateRequest: {
+            /** Name */
+            name: string;
+            /** Base Url */
+            base_url: string;
+            /**
+             * Api Style
+             * @default responses
+             */
+            api_style: string;
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /**
+         * AnnotationConnectionUpdateRequest
+         * @description `PATCH /api/settings/annotation/connections/{id}`。省略した項目は変更しない。
+         *     組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。
+         */
+        AnnotationConnectionUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Api Style */
+            api_style?: string | null;
+        };
+        /**
+         * AnnotationConnectionView
+         * @description 推定の接続先1つ(ADR-0024 8章)。キーの値は返さない。
+         */
+        AnnotationConnectionView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Builtin */
+            builtin: boolean;
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Api Style
+             * @enum {string}
+             */
+            api_style: "responses" | "chat";
+            /** Api Key Set */
+            api_key_set: boolean;
+            /** Api Key Hint */
+            api_key_hint?: string | null;
+            /** In Use */
+            in_use: boolean;
+            /** Calls Last Hour */
+            calls_last_hour: number;
+        };
+        /** AnnotationDefaultProfile */
+        AnnotationDefaultProfile: {
+            llm: components["schemas"]["AnnotationTarget"];
+            vlm: components["schemas"]["AnnotationTarget"];
+        };
+        /**
+         * AnnotationDefaultProfileUpdate
+         * @description 省略した用途は変更しない。null にはできない。
+         */
+        AnnotationDefaultProfileUpdate: {
+            llm?: components["schemas"]["AnnotationTarget"] | null;
+            vlm?: components["schemas"]["AnnotationTarget"] | null;
+        };
+        /**
+         * AnnotationProfiles
+         * @description 用途ごとの組(ADR-0024 8章)。`comfyui` は ComfyUI の Run の出力にだけ使う。
+         */
+        AnnotationProfiles: {
+            default: components["schemas"]["AnnotationDefaultProfile"];
+            comfyui: components["schemas"]["AnnotationComfyuiProfile"];
+        };
+        /** AnnotationProfilesUpdate */
+        AnnotationProfilesUpdate: {
+            default?: components["schemas"]["AnnotationDefaultProfileUpdate"] | null;
+            comfyui?: components["schemas"]["AnnotationComfyuiProfileUpdate"] | null;
+        };
         /**
          * AnnotationSettingsResponse
          * @description `GET /api/settings/annotation`。
@@ -1198,19 +1336,8 @@ export interface components {
             auto_on_ingest: boolean;
             /** Llm Enabled */
             llm_enabled: boolean;
-            /** Llm Model */
-            llm_model: string;
             /** Vlm Enabled */
             vlm_enabled: boolean;
-            /** Vlm Model */
-            vlm_model: string;
-            /** Base Url */
-            base_url?: string | null;
-            /**
-             * Api Style
-             * @enum {string}
-             */
-            api_style: "responses" | "chat";
             /**
              * Language
              * @enum {string}
@@ -1232,8 +1359,9 @@ export interface components {
             onnx_model: "wd-vit-tagger-v3" | "wd-swinv2-tagger-v3" | "wd-eva02-large-tagger-v3";
             /** Onnx Threshold */
             onnx_threshold: number;
-            /** Api Key Set */
-            api_key_set: boolean;
+            /** Connections */
+            connections?: components["schemas"]["AnnotationConnectionView"][];
+            profiles: components["schemas"]["AnnotationProfiles"];
             /** Onnx Models */
             onnx_models?: components["schemas"]["OnnxModelStatus"][];
             /** Pending Count */
@@ -1247,24 +1375,16 @@ export interface components {
         };
         /**
          * AnnotationSettingsUpdateRequest
-         * @description `PATCH /api/settings/annotation`。省略した項目は変更しない。`base_url` は null か空文字で
-         *     「OpenAI の設定を流用」に戻す。値の妥当性は `app/domain/annotation_settings.py` が検証する。
+         * @description `PATCH /api/settings/annotation`。省略した項目は変更しない。値の妥当性は
+         *     `app/domain/annotation_settings.py` が検証する。`profiles` は書いたマスだけ変える。
          */
         AnnotationSettingsUpdateRequest: {
             /** Auto On Ingest */
             auto_on_ingest?: boolean | null;
             /** Llm Enabled */
             llm_enabled?: boolean | null;
-            /** Llm Model */
-            llm_model?: string | null;
             /** Vlm Enabled */
             vlm_enabled?: boolean | null;
-            /** Vlm Model */
-            vlm_model?: string | null;
-            /** Base Url */
-            base_url?: string | null;
-            /** Api Style */
-            api_style?: string | null;
             /** Language */
             language?: string | null;
             /** Tag Language */
@@ -1277,6 +1397,7 @@ export interface components {
             onnx_model?: string | null;
             /** Onnx Threshold */
             onnx_threshold?: number | null;
+            profiles?: components["schemas"]["AnnotationProfilesUpdate"] | null;
         };
         /**
          * AnnotationStatusView
@@ -1294,6 +1415,16 @@ export interface components {
             requested_at?: string | null;
             /** Finished At */
             finished_at?: string | null;
+        };
+        /**
+         * AnnotationTarget
+         * @description 用途1つの「接続先 + モデル名」の組。
+         */
+        AnnotationTarget: {
+            /** Connection Id */
+            connection_id: string;
+            /** Model */
+            model: string;
         };
         /**
          * ApiTokenCreateRequest
@@ -5757,11 +5888,118 @@ export interface operations {
             };
         };
     };
-    set_annotation_api_key: {
+    create_annotation_connection: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationConnectionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_annotation_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_annotation_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationConnectionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_annotation_connection_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
             cookie?: {
                 gakei_session?: string | null;
             };
@@ -5792,11 +6030,13 @@ export interface operations {
             };
         };
     };
-    delete_annotation_api_key: {
+    delete_annotation_connection_api_key: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                connection_id: string;
+            };
             cookie?: {
                 gakei_session?: string | null;
             };

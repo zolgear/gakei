@@ -35,7 +35,7 @@ from openai import AsyncOpenAI
 from PIL import Image
 
 from app.annotation.wd_tagger import InsufficientMemoryError, WdTagger
-from app.domain.annotation_settings import AnnotationConfig, Connection
+from app.domain.annotation_settings import AnnotationConfig, Target
 from app.i18n import t
 
 VLM_MAX_SIDE = 1024
@@ -134,8 +134,13 @@ class AnnotationEngineError(Exception):
 
 @dataclass
 class EngineContext:
+    """推定1件の設定と送り先。`llm` はタイトルとタグの訳(6章)、`vlm` はタグに使う
+    (ADR-0024 8章。画像ごとに「既定」か「ComfyUI の画像」の組から決める)。"""
+
     config: AnnotationConfig
-    connection: Connection
+    # 使わない用途(無効なエンジン)は None。
+    llm: Target | None = None
+    vlm: Target | None = None
 
 
 @dataclass
@@ -315,39 +320,48 @@ def _safe_api_message(e: openai.APIError) -> str:
 
 
 class OpenAIEngines:
+    # 接続先ごとのクライアントを持つ上限(設定を何度も変えたときに増え続けないように)。
+    _CLIENTS_MAX = 8
+
     def __init__(self, tagger: WdTagger) -> None:
         self.tagger = tagger
-        self._client: AsyncOpenAI | None = None
-        self._client_key: tuple[str, str | None] | None = None
+        # (キー, Base URL) ごとのクライアント。LLM と VLM で接続先が異なりうる(ADR-0024 8章)。
+        self._clients: dict[tuple[str, str | None], AsyncOpenAI] = {}
 
-    def _client_for(self, connection: Connection) -> AsyncOpenAI:
-        if not connection.api_key:
+    def _client_for(self, target: Target) -> AsyncOpenAI:
+        if not target.api_key:
             raise AnnotationEngineError(t("annotations.apiKeyMissing"))
-        key = (connection.api_key, connection.base_url)
-        if self._client is None or self._client_key != key:
-            self._client = AsyncOpenAI(
-                api_key=connection.api_key,
-                base_url=connection.base_url,
+        key = (target.api_key, target.base_url)
+        client = self._clients.get(key)
+        if client is None:
+            if len(self._clients) >= self._CLIENTS_MAX:
+                self._clients.clear()
+            client = AsyncOpenAI(
+                api_key=target.api_key,
+                base_url=target.base_url,
                 max_retries=2,
                 timeout=_TIMEOUT_SECONDS,
             )
-            self._client_key = key
-        return self._client
+            self._clients[key] = client
+        return client
 
     async def _complete(
         self,
-        ctx: EngineContext,
-        model: str,
+        target: Target | None,
         instructions: str,
         text: str,
         image_jpeg: bytes | None = None,
     ) -> str:
-        client = self._client_for(ctx.connection)
+        """`target` の接続先の `target.model` を呼ぶ。"""
+        if target is None:
+            raise AnnotationEngineError(t("annotations.connectionMissing"))
+        client = self._client_for(target)
+        model = target.model
         data_url = None
         if image_jpeg is not None:
             data_url = "data:image/jpeg;base64," + base64.b64encode(image_jpeg).decode("ascii")
         try:
-            if ctx.config.api_style == "chat":
+            if target.api_style == "chat":
                 content: Any = text
                 if data_url is not None:
                     content = [
@@ -376,9 +390,7 @@ class OpenAIEngines:
 
     async def title_from_prompt(self, prompt: str, ctx: EngineContext) -> str:
         language = ctx.config.language
-        raw = await self._complete(
-            ctx, ctx.config.llm_model, _TITLE_INSTRUCTIONS[language], prompt[:4000]
-        )
+        raw = await self._complete(ctx.llm, _TITLE_INSTRUCTIONS[language], prompt[:4000])
         title = clean_title(raw)
         if title is None:
             raise AnnotationEngineError(t("annotations.emptyTitle"))
@@ -395,7 +407,7 @@ class OpenAIEngines:
         language = ctx.config.language
         instructions = build_vlm_instructions(ctx.config, want_title, known_tags)
         text = _VLM_HINT[language].format(prompt=prompt[:4000]) if prompt else "-"
-        raw = await self._complete(ctx, ctx.config.vlm_model, instructions, text, image_jpeg)
+        raw = await self._complete(ctx.vlm, instructions, text, image_jpeg)
         result = parse_vlm_json(raw)
         if not want_title:
             result.title = None
@@ -405,8 +417,7 @@ class OpenAIEngines:
 
     async def translate_tags(self, tags: list[str], ctx: EngineContext) -> dict[str, str]:
         raw = await self._complete(
-            ctx,
-            ctx.config.llm_model,
+            ctx.llm,
             _TRANSLATE_INSTRUCTIONS[ctx.config.language],
             "\n".join(tags),
         )
