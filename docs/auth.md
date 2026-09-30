@@ -52,7 +52,7 @@ AUTH_ALLOWED_EMAIL_DOMAINS=example.co.jp
 
 ## Keycloak での手順(組織で運用する)
 
-### 1. Keycloak を起動する(手元で試す場合)
+### 1. Keycloak を起動する(ローカルで試す場合)
 
 ```bash
 docker run --rm -p 8080:8080 \
@@ -60,7 +60,7 @@ docker run --rm -p 8080:8080 \
   quay.io/keycloak/keycloak:26.2 start-dev
 ```
 
-`http://localhost:8080` の管理コンソールに `admin` / `admin` で入る(この `http://localhost:8080` は手元の確認用。本番では https にする)。
+`http://localhost:8080` の管理コンソールに `admin` / `admin` で入る(この `http://localhost:8080` はローカルの確認用。本番では https にする)。
 
 ### 2. レルムとクライアントを作る
 
@@ -91,7 +91,7 @@ AUTH_ADMIN_EMAILS=you@example.com
 
 ## `PUBLIC_BASE_URL` について
 
-`PUBLIC_BASE_URL` は「利用者がブラウザで開く URL」で、IdP に登録した redirect URI と一致している必要がある。`run.sh` / `run.bat`(と `python -m app`)は `http://{HOST}:{PORT}/`、既定では `http://127.0.0.1:8000/` をブラウザで開くので、手元で試すときはこの形(`localhost` ではなく `127.0.0.1`)に揃える。`localhost` で開きたい場合は、`PUBLIC_BASE_URL` と IdP の redirect URI の両方を `localhost` にする(ブラウザの URL、`PUBLIC_BASE_URL`、redirect URI の3つが一致していればどちらでもよい)。リバースプロキシの後ろに置くなら、プロキシの外側の URL(`https://gakei.example.com`)を書く。`https` のとき、セッション Cookie に `Secure` が付く。
+`PUBLIC_BASE_URL` は「利用者がブラウザで開く URL」で、IdP に登録した redirect URI と一致している必要がある。`run.sh` / `run.bat`(と `python -m app`)は `http://{HOST}:{PORT}/`、既定では `http://127.0.0.1:8000/` をブラウザで開くので、ローカルで試すときはこの形(`localhost` ではなく `127.0.0.1`)に揃える。`localhost` で開きたい場合は、`PUBLIC_BASE_URL` と IdP の redirect URI の両方を `localhost` にする(ブラウザの URL、`PUBLIC_BASE_URL`、redirect URI の3つが一致していればどちらでもよい)。リバースプロキシの後ろに置くなら、プロキシの外側の URL(`https://gakei.example.com`)を書く。`https` のとき、セッション Cookie に `Secure` が付く。
 
 ## 確認
 

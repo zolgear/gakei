@@ -854,7 +854,7 @@ export interface paths {
         put?: never;
         /**
          * Create Annotation Connection
-         * @description 接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(手元のサーバー向けに
+         * @description 接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(ローカルのサーバー向けに
          *     任意の文字列を受け付けるため、有効性の確認はしない)。
          */
         post: operations["create_annotation_connection"];

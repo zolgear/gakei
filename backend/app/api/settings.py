@@ -585,7 +585,7 @@ def create_annotation_connection(
     downloader: WdModelDownloader = Depends(get_wd_downloader),
     _user: CurrentUser = Depends(require_admin),
 ) -> AnnotationSettingsResponse:
-    """接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(手元のサーバー向けに
+    """接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(ローカルのサーバー向けに
     任意の文字列を受け付けるため、有効性の確認はしない)。"""
     try:
         connection_id = annotation_settings.add_connection(

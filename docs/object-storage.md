@@ -43,7 +43,7 @@ AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...;A
 AZURE_STORAGE_ACCOUNT_URL=https://<アカウント名>.blob.core.windows.net
 ```
 
-認証は `DefaultAzureCredential` に任せる。Azure 上ではマネージド ID、手元では `az login` のログイン、あるいは `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET`(サービスプリンシパル)などが使われる。使う ID に、コンテナに対する「ストレージ BLOB データ共同作成者」(Storage Blob Data Contributor)のロールを割り当てる。
+認証は `DefaultAzureCredential` に任せる。Azure 上ではマネージド ID、ローカルでは `az login` のログイン、あるいは `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET`(サービスプリンシパル)などが使われる。使う ID に、コンテナに対する「ストレージ BLOB データ共同作成者」(Storage Blob Data Contributor)のロールを割り当てる。
 
 ## S3 互換ストレージ
 

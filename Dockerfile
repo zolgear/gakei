@@ -32,7 +32,7 @@ LABEL org.opencontainers.image.title="GAKEI" \
       org.opencontainers.image.source="https://github.com/zolgear/gakei"
 
 # uv 本体だけをコピーする(uv のインストーラーは使わない)。バージョンは
-# 手元で `uv --version` を確認して固定している。
+# ローカルで `uv --version` を確認して固定している。
 COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /usr/local/bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \

@@ -48,7 +48,7 @@ LLM と VLM の送り先は、管理者設定の「自動タイトル・タグ�
 **例: Ollama**(接続先とモデルが組になる)
 
 1. 接続先に Ollama を登録します(例: Base URL `http://127.0.0.1:11434/v1`、API 形式は Chat Completions、キーは空)。
-2. 使い方の「ComfyUI の画像」で、タイトルに Ollama と `qwen3:8b` を、タグに Ollama と画像入力に対応したモデル(例: `qwen2.5vl:7b`)を選びます。既定は「OpenAI の設定」のままにすれば、OpenAI で作った画像は OpenAI で、ComfyUI で手元の GPU で作った画像は手元の Ollama で推定します。
+2. 使い方の「ComfyUI の画像」で、タイトルに Ollama と `qwen3:8b` を、タグに Ollama と画像入力に対応したモデル(例: `qwen2.5vl:7b`)を選びます。既定は「OpenAI の設定」のままにすれば、OpenAI で作った画像は OpenAI で、ComfyUI でローカルの GPU で作った画像はローカルの Ollama で推定します。
 
 以前の版で「推定専用の接続先(Base URL)とキー」を設定していた場合は、更新後の最初の起動で接続先「推定専用」に移り、既定の組がそれを使います。推定の送り先とモデルは変わりません。
 

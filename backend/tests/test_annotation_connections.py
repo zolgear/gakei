@@ -552,7 +552,7 @@ def test_failure_on_comfyui_pair_does_not_fall_back_to_default(client: TestClien
             self._record("title", ctx.llm)
             assert ctx.llm is not None
             if ctx.llm.connection_id != "openai":
-                raise AnnotationEngineError("手元の LLM に繋がらない")
+                raise AnnotationEngineError("ローカルの LLM に繋がらない")
             return "既定のタイトル"
 
     engines = BrokenLocal()
@@ -562,7 +562,7 @@ def test_failure_on_comfyui_pair_does_not_fall_back_to_default(client: TestClien
     _patch_settings(client, llm_enabled=True)
     body = _annotate(client, asset_id)
     assert body["annotation"]["status"] == "failed"
-    assert body["annotation"]["error"] == "手元の LLM に繋がらない"
+    assert body["annotation"]["error"] == "ローカルの LLM に繋がらない"
     assert engines.calls == [("title", local, "local-llm")]
     assert body["title"] is None
 
@@ -625,7 +625,7 @@ def test_hourly_limit_is_counted_per_connection(
     time.sleep(1.5)
     assert client.get(f"/api/assets/{second}").json()["annotation"]["status"] == "queued"
 
-    # 手元の接続先は別に数えるので、ComfyUI の画像は先に進む(既定の組の行に塞がれない)。
+    # ローカルの接続先は別に数えるので、ComfyUI の画像は先に進む(既定の組の行に塞がれない)。
     assert _annotate(client, comfy_asset)["annotation"]["status"] == "succeeded"
     body = client.get("/api/settings/annotation").json()
     assert _connection(body, "openai")["calls_last_hour"] == 1
