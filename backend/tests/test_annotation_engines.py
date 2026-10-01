@@ -498,3 +498,24 @@ def test_openai_engines_without_key_fail(tmp_path: Path) -> None:
 
 def test_tagger_module_default_size() -> None:
     assert wd_tagger.DEFAULT_INPUT_SIZE == 448
+
+
+def test_evicted_clients_are_closed(tmp_path: Path) -> None:
+    """クライアントのキャッシュが上限を超えたら、最も長く使っていないものを捨てて閉じる。"""
+    engines = OpenAIEngines(WdTagger(tmp_path, memory_probe=lambda: None))
+
+    def target(i: int) -> Target:
+        return Target(connection_id=f"c{i}", model="m", api_key=f"sk-{i}", base_url=None)
+
+    async def scenario() -> tuple[list[Any], Any]:
+        first = [engines._client_for(target(i)) for i in range(OpenAIEngines._CLIENTS_MAX)]
+        # 0 番を使い直すと、捨てられるのは 1 番になる。
+        assert engines._client_for(target(0)) is first[0]
+        engines._client_for(target(100))
+        await asyncio.gather(*engines._closing)
+        return first, engines._clients
+
+    first, clients = asyncio.run(scenario())
+    assert len(clients) == OpenAIEngines._CLIENTS_MAX
+    assert first[1].is_closed()
+    assert all(not c.is_closed() for i, c in enumerate(first) if i != 1)

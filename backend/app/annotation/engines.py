@@ -23,9 +23,11 @@ VLM には ONNX のタグ(`known_tags`)を渡し、同じ意味のタグを付�
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -37,6 +39,8 @@ from PIL import Image
 from app.annotation.wd_tagger import InsufficientMemoryError, WdTagger
 from app.domain.annotation_settings import AnnotationConfig, Target
 from app.i18n import t
+
+logger = logging.getLogger(__name__)
 
 VLM_MAX_SIDE = 1024
 VLM_MAX_TAGS = 10
@@ -326,23 +330,49 @@ class OpenAIEngines:
     def __init__(self, tagger: WdTagger) -> None:
         self.tagger = tagger
         # (キー, Base URL) ごとのクライアント。LLM と VLM で接続先が異なりうる(ADR-0024 8章)。
+        # 使った順に並べ(最後が最新)、上限を超えたら最も古いものから捨てる。
         self._clients: dict[tuple[str, str | None], AsyncOpenAI] = {}
+        # 捨てたクライアントを閉じるタスク(終わるまで参照を持っておく)。
+        self._closing: set[asyncio.Task[None]] = set()
+
+    def _discard_client(self, client: AsyncOpenAI) -> None:
+        """捨てたクライアントを閉じる(接続を残さないように)。`AsyncOpenAI.close()` は
+        コルーチンなので、イベントループの上ではタスクにして閉じる。ループの外なら閉じずに
+        ガベージコレクションに任せる。"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self._close_quietly(client))
+        self._closing.add(task)
+        task.add_done_callback(self._closing.discard)
+
+    @staticmethod
+    async def _close_quietly(client: AsyncOpenAI) -> None:
+        try:
+            await client.close()
+        except Exception:  # noqa: BLE001 - 捨てるクライアントの後始末の失敗は無視する
+            logger.debug("推定のクライアントを閉じられませんでした", exc_info=True)
 
     def _client_for(self, target: Target) -> AsyncOpenAI:
         if not target.api_key:
             raise AnnotationEngineError(t("annotations.apiKeyMissing"))
         key = (target.api_key, target.base_url)
-        client = self._clients.get(key)
+        client = self._clients.pop(key, None)
         if client is None:
-            if len(self._clients) >= self._CLIENTS_MAX:
-                self._clients.clear()
+            # 最も長く使っていないものから捨てる(worker は1件ずつ処理し、1件で使うのは
+            # 高々2つなので、使用中のクライアントを捨てることは無い)。
+            while len(self._clients) >= self._CLIENTS_MAX:
+                oldest = next(iter(self._clients))
+                self._discard_client(self._clients.pop(oldest))
             client = AsyncOpenAI(
                 api_key=target.api_key,
                 base_url=target.base_url,
                 max_retries=2,
                 timeout=_TIMEOUT_SECONDS,
             )
-            self._clients[key] = client
+        # 最新として末尾に入れ直す。
+        self._clients[key] = client
         return client
 
     async def _complete(

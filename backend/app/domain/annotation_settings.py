@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -44,6 +45,8 @@ from app.i18n import t
 if TYPE_CHECKING:
     from app.config import Settings
 
+logger = logging.getLogger(__name__)
+
 _KEY_PREFIX = "annotation."
 _CONNECTIONS_KEY = _KEY_PREFIX + "connections"
 _PROFILES_KEY = _KEY_PREFIX + "profiles"
@@ -53,6 +56,9 @@ _CONNECTION_SECRET_PREFIX = "annotation_connection_key."
 # 移行前(接続先1組の形)の項目。`migrate_legacy` が読み、移したあと消す。
 _LEGACY_KEYS = ("base_url", "api_style", "llm_model", "vlm_model")
 _LEGACY_SECRET_FIELD = "annotation_api_key"
+# 移行で旧キーを移す先の接続先 id。DB の commit の後にキーを書くので、書き終えるまでの目印に
+# する(キーを書く前に落ちても、次の起動でこの目印と残った旧キーから書き直す)。
+_LEGACY_KEY_TARGET_KEY = _KEY_PREFIX + "legacy_key_connection"
 
 ApiStyle = Literal["responses", "chat"]
 Language = Literal["ja", "en"]
@@ -627,17 +633,26 @@ def migrate_legacy(db: Session, settings: Settings) -> bool:
       作る(組み込みの接続先は OpenAI のキーしか使えないため)。
     - どちらも無ければ組み込みの接続先を使い、API 形式は組み込みの接続先に移す。
     - LLM と VLM のモデル名は「既定」の組に入れる。
-    - 既に組(`annotation.profiles`)があれば、古い項目を消すだけにする。
+    - 既に組(`annotation.profiles`)があれば、古い項目を消すだけにする。旧キーが残っていても
+      どの接続先のものか分からないので、消さずに残して警告をログに出す。
+    - 旧キーは DB の commit の後に接続先へ書く(commit に失敗しても旧キーは残り、次の起動で
+      最初からやり直せる)。書く先は目印(`annotation.legacy_key_connection`)として同じ commit
+      で残し、キーを書く前に落ちたときは次の起動で目印から書き直す。
     """
     data_dir = settings.data_dir
     legacy_rows = [
         name for name in _LEGACY_KEYS if db.get(AppSetting, _KEY_PREFIX + name) is not None
     ]
     legacy_key = api_key_domain.read_secret_field(data_dir, _LEGACY_SECRET_FIELD)
-    if not legacy_rows and legacy_key is None:
+    key_target = _get_raw_value(db, _LEGACY_KEY_TARGET_KEY)
+    if not isinstance(key_target, str):
+        key_target = None
+    if not legacy_rows and legacy_key is None and key_target is None:
         return False
 
+    changed = bool(legacy_rows) or key_target is not None
     if db.get(AppSetting, _PROFILES_KEY) is None:
+        changed = True
         legacy = {name: _get_raw_value(db, _KEY_PREFIX + name) for name in _LEGACY_KEYS}
         base_url: str | None = None
         if legacy["base_url"] is not None:
@@ -674,7 +689,8 @@ def migrate_legacy(db: Session, settings: Settings) -> bool:
             )
             connection_id = connection.id
             if legacy_key is not None:
-                write_connection_key(data_dir, connection_id, legacy_key)
+                _put(db, _LEGACY_KEY_TARGET_KEY, connection_id)
+                key_target = connection_id
         elif api_style != "responses":
             _put(db, _OPENAI_API_STYLE_KEY, api_style)
 
@@ -683,12 +699,33 @@ def migrate_legacy(db: Session, settings: Settings) -> bool:
             default_vlm=TargetChoice(connection_id, vlm_model),
         )
         _put(db, _PROFILES_KEY, _profiles_to_json(profiles))
+    elif legacy_key is not None and key_target is None:
+        logger.warning(
+            "推定の組は既にありますが、旧い推定専用キー(secrets.json の %s)が残っています。"
+            "どの接続先のキーか分からないので、移さずに残します。必要なら管理者設定で接続先に"
+            "キーを設定し、secrets.json からこの項目を消してください。",
+            _LEGACY_SECRET_FIELD,
+        )
 
     for name in legacy_rows:
         row = db.get(AppSetting, _KEY_PREFIX + name)
         if row is not None:
             db.delete(row)
     db.commit()
-    if legacy_key is not None:
-        api_key_domain.delete_secret_field(data_dir, _LEGACY_SECRET_FIELD)
-    return True
+
+    # キーは commit の後に書く(上の docstring)。
+    if key_target is not None:
+        if legacy_key is not None:
+            connections = _connections_from_json(_get_raw_value(db, _CONNECTIONS_KEY))
+            if any(c.id == key_target for c in connections):
+                write_connection_key(data_dir, key_target, legacy_key)
+                api_key_domain.delete_secret_field(data_dir, _LEGACY_SECRET_FIELD)
+            else:
+                logger.warning(
+                    "旧い推定専用キーを移す先の接続先が見つからないので、移さずに残します。"
+                )
+        row = db.get(AppSetting, _LEGACY_KEY_TARGET_KEY)
+        if row is not None:
+            db.delete(row)
+            db.commit()
+    return changed
