@@ -18,6 +18,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.models import ComfyWorkflow
+from app.domain.secret_values import find_secret_inputs
 from app.i18n import t
 from app.providers.base import ModelCapabilities, OperationCapabilities, ParamDef, ParamType
 
@@ -1426,6 +1427,18 @@ def analyze_workflow(
             if "Painter" in class_type or "Mask" in class_type:
                 warnings.append(t("comfyui.workflow.maskMethodUnsupported"))
                 break
+
+    # 秘密に見える値(API キーなど)が書かれた入力。値そのものは出さない。登録は止めない
+    # (判定は推測のため。ADR-0013 8章、2026-10-01 追記)。
+    for found in find_secret_inputs(template):
+        warnings.append(
+            t(
+                "comfyui.workflow.secretValueFound",
+                node=found.node_id,
+                class_type=found.class_type or "?",
+                input=found.input,
+            )
+        )
 
     # 見つからなかった必須項目(prompt、edit の image)は上の warnings に書いてあるが、
     # 見つかった他の提案(seed、出力ノードなど)は捨てずに返す(ADR-0013 フォローアップ)。

@@ -1572,6 +1572,7 @@
     "noRun": "この画像はアップロードされたもので、プロンプトの記録はありません。",
     "downloadOriginal": "原本をダウンロード",
     "originalNotAllowed": "この共有では、原本は公開されていません。",
+    "originalNotAllowedForImage": "この画像の原本は公開されていません。",
     "untitled": "無題",
     "imageListLabel": "含まれる画像",
     "viewRunDetail": "Generated 詳細を見る",

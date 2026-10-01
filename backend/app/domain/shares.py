@@ -42,6 +42,7 @@ from app.domain.schemas import (
     PublicShareResponse,
     PublicShareRun,
 )
+from app.domain.secret_values import comfyui_params_have_secret, redact_comfyui_params
 from app.domain.visibility import get_visible_asset, share_visible
 
 ScopeName = Literal["single", "ancestors", "lineage"]
@@ -241,6 +242,8 @@ def resolve_public_share(
     - 起点の Asset が削除されていない
     - (`asset_id` を指定したとき)その Asset が共有に含まれ、削除されていない
     - (`variant == "original"` のとき)共有が原本を許している
+    - (`variant == "original"` で `asset_id` を指定したとき)その画像を作った Run が、秘密に
+      見える値を含む ComfyUI の Run でない(ADR-0029 4章、2026-10-01 追記)
     """
     if not share_settings.is_enabled(db):
         return None
@@ -262,8 +265,28 @@ def resolve_public_share(
         asset = db.get(Asset, asset_id)
         if asset is None or asset.deleted_at is not None:
             return None
+        if variant == "original" and not original_allowed(db, share, asset):
+            return None
         access.asset = asset
     return access
+
+
+def _run_has_secret(run: Run | None) -> bool:
+    return run is not None and run.provider == "comfyui" and comfyui_params_have_secret(run.params)
+
+
+def original_allowed(db: Session, share: Share, asset: Asset, run: Run | None = None) -> bool:
+    """共有のページで、この画像の原本を出してよいか(ADR-0029 4章)。共有が原本を許していて、
+    かつ、その画像を作った Run(`produced_by_run_id`)が秘密に見える値を含む ComfyUI の Run で
+    ないこと(2026-10-01 追記。ComfyUI は原寸の PNG に送ったグラフを埋め込むため)。Run の
+    状態・論理削除は問わない。`run` を渡せば引き直さない。"""
+    if not share.allow_original:
+        return False
+    if asset.produced_by_run_id is None:
+        return True
+    if run is None or run.id != asset.produced_by_run_id:
+        run = db.get(Run, asset.produced_by_run_id)
+    return not _run_has_secret(run)
 
 
 def record_access(db: Session, share: Share) -> None:
@@ -299,7 +322,9 @@ def public_params(params: dict[str, Any] | None, provider: str | None = None) ->
     - ComfyUI の Run は `params` をそのまま出す(2026-10-01 改訂)。`comfyui_*`(送ったグラフ
       全体、入力画像の名前 `gakei_{sha256}.png`、ワークフローの id など。ADR-0013)も入れ子の
       値も含む。共有は再現できるものを渡すのが目的で、ComfyUI は原寸の PNG に自身でワーク
-      フローを埋め込むので、原寸の画像からも同じ情報が分かるため。
+      フローを埋め込むので、原寸の画像からも同じ情報が分かるため。ただし、送ったグラフの
+      各ノードの入力と公開パラメーターのうち、秘密に見える値は `***` に置き換える(キーは
+      残す。元の `params` は変えない。2026-10-01 追記)。
     - ほかのプロバイダーの Run は、値が文字列・数値・真偽値・null のものだけ(入れ子の値は
       出さない)。値に UUID や sha256 の形の文字列を含むものは出さない(範囲外の Asset・Run を
       指しうるため)。
@@ -307,7 +332,9 @@ def public_params(params: dict[str, Any] | None, provider: str | None = None) ->
     if not isinstance(params, dict):
         return {}
     if provider == "comfyui":
-        return {key: value for key, value in params.items() if isinstance(key, str)}
+        return redact_comfyui_params(
+            {key: value for key, value in params.items() if isinstance(key, str)}
+        )
     result: dict[str, Any] = {}
     for key, value in params.items():
         if not isinstance(key, str) or key.startswith("comfyui_"):
@@ -342,21 +369,15 @@ def build_public_response(db: Session, share: Share) -> PublicShareResponse:
     asset_ids = {a.id for a in assets}
 
     run_ids = {a.produced_by_run_id for a in assets if a.produced_by_run_id is not None}
-    runs = (
-        list(
-            db.execute(
-                select(Run).where(
-                    Run.id.in_(list(run_ids)),
-                    Run.deleted_at.is_(None),
-                    Run.status == RunStatus.SUCCEEDED,
-                )
-            )
-            .scalars()
-            .all()
-        )
+    # 画像を作った Run(状態・論理削除を問わない)。原本を出せるかの判定に使い、ページに出すのは
+    # 成功して削除されていないものだけ。
+    all_runs = (
+        list(db.execute(select(Run).where(Run.id.in_(list(run_ids)))).scalars().all())
         if run_ids
         else []
     )
+    all_runs_by_id = {r.id: r for r in all_runs}
+    runs = [r for r in all_runs if r.deleted_at is None and r.status == RunStatus.SUCCEEDED]
     runs_by_id = {r.id: r for r in runs}
 
     edges: list[PublicShareEdge] = []
@@ -420,6 +441,12 @@ def build_public_response(db: Session, share: Share) -> PublicShareResponse:
             title=titles.get(a.id),
             run_id=a.produced_by_run_id if a.produced_by_run_id in runs_by_id else None,
             depth=depth_by_id[a.id],
+            allow_original=original_allowed(
+                db,
+                share,
+                a,
+                all_runs_by_id.get(a.produced_by_run_id) if a.produced_by_run_id else None,
+            ),
         )
         for a in assets
     ]

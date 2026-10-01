@@ -3,7 +3,9 @@
  * 外で描く(`/api/auth/me` に依存しない。App バーやサイドバーなど、ログイン前提の画面は出さない)。
  *
  * - 画像: 選んだ画像をパン/ズームで表示する(`AssetCanvas`)。原本を許す共有なら、拡大すると
- *   原本に差し替え、ダウンロードもできる。許さない共有はプレビュー(長辺 2048px)まで。
+ *   原本に差し替え、ダウンロードもできる。許さない共有はプレビュー(長辺 2048px)まで。共有が
+ *   許していても、画像ごとの `allow_original` が false の画像(秘密に見える値を含む ComfyUI の
+ *   Run の画像。2026-10-01 追記)は、許さない共有と同じくプレビューまで。
  * - 画像のタイトル、作成日時、その画像を作った Run のプロンプト(と最終プロンプト。ADR-0030)と
  *   パラメーター。
  * - 含まれる画像の一覧(2枚以上のとき)と、範囲が系列なら系列グラフ。
@@ -33,7 +35,13 @@ import { resolveEffectiveMode, type CompareMode } from '../compare/compareState'
 import { FinalPromptSection } from '../run-detail/FinalPromptSection'
 import { PublicLineageGraph } from './PublicLineageGraph'
 import { PublicRunDetailPanel } from './PublicRunDetailPanel'
-import { assetForRun, buildPublicRunDetail, publicCompareTargets } from './publicRunDetail'
+import {
+  assetForRun,
+  buildPublicRunDetail,
+  compareAllowsOriginal,
+  originalAvailability,
+  publicCompareTargets,
+} from './publicRunDetail'
 import {
   closeLineageView,
   lineageNodeTarget,
@@ -197,6 +205,8 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
   const listed = assets.filter((a) => a.kind !== 'mask')
   const compareTargets = runDetail ? publicCompareTargets(runDetail, selected.id) : null
   const effectiveCompareMode = resolveEffectiveMode(compareMode, isMobile)
+  // この画像の原本を出せるか(共有単位の許可と、画像ごとの判定。ADR-0029 4章)。
+  const original = originalAvailability(data, selected)
 
   function selectAsset(assetId: string) {
     setComparing(false)
@@ -251,7 +261,7 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
                 after={compareTargets.after}
                 mode={effectiveCompareMode}
                 urlFor={compareUrlFor}
-                allowOriginal={data.allow_original}
+                allowOriginal={compareAllowsOriginal(data, compareTargets)}
               />
             </div>
           </div>
@@ -259,7 +269,7 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
           <AssetCanvas
             asset={selected}
             urlFor={(variant) => publicShareAssetUrl(token, selected.id, variant)}
-            allowOriginal={data.allow_original}
+            allowOriginal={original === 'allowed'}
           />
         )}
       </section>
@@ -323,7 +333,7 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
           </>
         )}
 
-        {data.allow_original ? (
+        {original === 'allowed' ? (
           <a
             className={styles.downloadButton}
             href={publicShareAssetUrl(token, selected.id, 'original', { download: true })}
@@ -331,7 +341,9 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
             {p.downloadOriginal}
           </a>
         ) : (
-          <p className={styles.note}>{p.originalNotAllowed}</p>
+          <p className={styles.note}>
+            {original === 'image' ? p.originalNotAllowedForImage : p.originalNotAllowed}
+          </p>
         )}
 
         {!runDetail && listed.length > 1 && (

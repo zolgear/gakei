@@ -87,6 +87,31 @@ export function assetForRun(detail: PublicRunDetail, currentAssetId: string | nu
   return detail.outputs[0]?.asset.id ?? detail.primaryParent?.asset.id ?? currentAssetId
 }
 
+/**
+ * この画像の原本を出せるか(ADR-0029 4章)。`allowed` 以外は、プレビューまで(原本のダウンロード
+ * は出さない)。共有が原本を許していても、秘密に見える値を含む ComfyUI の Run の画像はサーバーが
+ * 画像ごとに `allow_original: false` を返す(2026-10-01 追記)。
+ * - `share`: 共有が原本を許していない
+ * - `image`: 共有は許しているが、この画像は出さない
+ */
+export function originalAvailability(
+  share: Pick<PublicShareResponse, 'allow_original'>,
+  asset: Pick<PublicShareAsset, 'allow_original'>,
+): 'allowed' | 'share' | 'image' {
+  if (!share.allow_original) return 'share'
+  return asset.allow_original ? 'allowed' : 'image'
+}
+
+/** 比較で原本まで拡大してよいか(比べる2枚のどちらも原本を出せるときだけ)。 */
+export function compareAllowsOriginal(
+  share: Pick<PublicShareResponse, 'allow_original'>,
+  targets: { before: Pick<PublicShareAsset, 'allow_original'>; after: Pick<PublicShareAsset, 'allow_original'> },
+): boolean {
+  return (
+    originalAvailability(share, targets.before) === 'allowed' && originalAvailability(share, targets.after) === 'allowed'
+  )
+}
+
 export type PublicParamScalar = string | number | boolean | null
 
 /**

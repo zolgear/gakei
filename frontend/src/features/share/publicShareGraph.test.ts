@@ -8,6 +8,7 @@ const base = {
   height: 10,
   created_at: '2026-09-30T00:00:00Z',
   title: null,
+  allow_original: true,
 }
 
 describe('toLineageResponse', () => {

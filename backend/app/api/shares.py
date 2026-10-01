@@ -192,7 +192,8 @@ def get_public_share_asset_content(
     db: Session = Depends(get_session),
     store: AssetStore = Depends(get_store),
 ) -> Response:
-    """共有に含まれる画像の配信。原本は、共有が許しているときだけ(ADR-0029 4章)。
+    """共有に含まれる画像の配信。原本は、共有が許していて、その画像が秘密に見える値を含む
+    ComfyUI の Run の画像でないときだけ(判定は `resolve_public_share`。ADR-0029 4章)。
     ダウンロードする PNG にも系列情報(ADR-0014)は埋め込まない。"""
     # id の形が違うときも、ほかの見せられない理由と同じ 404 にする(422 で区別しない)。
     try:

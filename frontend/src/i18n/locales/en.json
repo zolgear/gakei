@@ -1572,6 +1572,7 @@
     "noRun": "This image was uploaded, so there is no prompt on record.",
     "downloadOriginal": "Download original",
     "originalNotAllowed": "The original is not shared by this link.",
+    "originalNotAllowedForImage": "The original of this image is not shared.",
     "untitled": "Untitled",
     "imageListLabel": "Included images",
     "viewRunDetail": "View Generated details",

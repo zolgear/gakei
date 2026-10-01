@@ -73,7 +73,8 @@
       "promptBindingCandidates": "プロンプトの差し込み先を特定できませんでした。次の候補から手動で選択してください: {candidates}",
       "moreCandidatesSuffix": "、ほか {count} 件",
       "imageBindingNotFound": "入力画像(LoadImage)の差し込み先が見つかりませんでした。",
-      "maskMethodUnsupported": "このワークフローのマスクは GAKEI から渡せない方式です。"
+      "maskMethodUnsupported": "このワークフローのマスクは GAKEI から渡せない方式です。",
+      "secretValueFound": "ノード {node}({class_type})の入力 {input} に、API キーなどの秘密の値が書かれているようです。共有のページでは値を伏せ、このワークフローで作った画像の原本は出しません。"
     },
     "client": {
       "genericError": "エラー",
