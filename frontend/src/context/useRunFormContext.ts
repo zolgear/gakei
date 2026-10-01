@@ -8,7 +8,7 @@ export interface RunFormContextValue {
   setFormState: (state: RunFormState) => void
   /**
    * スタジオの外からプロンプト欄へ入れたいテキストのリクエスト。プロンプトセットの
-   * サイドバーの「末尾に追加」(mode='insert')と、ビューア・Run 詳細の「PE の出力」の
+   * サイドバーの「末尾に追加」(mode='insert')と、ビューア・Run 詳細の「最終プロンプト」の
    * 挿入・置き換え(ADR-0030 3章)が使う。スタジオ(useRunFormLogic)が消費して、ローカルの
    * prompt state に反映する(insert はフォーカスが無い扱いなので末尾に追加)。
    * nonce は同じテキストを連続で選んでも取りこぼさず・二重消費もしないための通し番号。

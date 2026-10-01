@@ -36,7 +36,12 @@ from app.providers.base import (
     RunRequest,
     StepProgressEvent,
 )
-from app.providers.comfyui.client import ComfyUIClient, WsMessage
+from app.providers.comfyui.client import (
+    ComfyUIClient,
+    WsMessage,
+    collect_output_texts,
+    sanitize_text,
+)
 from app.providers.comfyui.provider import ClientFactory, ComfyUIProvider
 from tests.comfyui_fake import (
     FakeComfyUI,
@@ -1155,6 +1160,62 @@ async def test_execute_ignores_text_when_final_prompt_unset(
         bindings=_t2i_bindings(),
         outputs={**_IMAGE_OUTPUT, "20": {"text": ["ignored"]}},
     )
+    assert result.text_outputs is None
+
+
+def test_sanitize_text_removes_nul_and_replaces_lone_surrogate() -> None:
+    """ADR-0030 2026-10-01 改訂: PostgreSQL の JSONB に書けない NUL は取り除き、対になって
+    いないサロゲートは置き換える。ふつうの文字(絵文字を含む)はそのまま。"""
+    assert sanitize_text("a\x00b\x00") == "ab"
+    assert sanitize_text("x\ud800y") == "x?y"
+    assert sanitize_text("猫 \U0001f408 cat") == "猫 \U0001f408 cat"
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["", [""], ["", ""], "  \n ", ["\x00"], []],
+)
+def test_collect_output_texts_returns_none_for_empty(text: object) -> None:
+    """ADR-0030 2026-10-01 改訂: 空白を除いて空の最終プロンプトは記録しない。"""
+    assert collect_output_texts({"outputs": {"20": {"text": text}}}, "20") is None
+
+
+def test_collect_output_texts_sanitizes_joined_text() -> None:
+    entry = {"outputs": {"20": {"text": ["a\x00b", "c\udc80"]}}}
+    assert collect_output_texts(entry, "20") == "ab\nc?"
+
+
+@run_async
+async def test_execute_sanitizes_final_prompt(db_session_factory: sessionmaker) -> None:
+    # 偽の ComfyUI は対になっていないサロゲートを JSON にできないので、ここでは NUL だけ
+    # 確かめる(サロゲートは `sanitize_text` の単体テストで見る)。タイトルの NUL は、
+    # PostgreSQL ではワークフローの登録(JSONB)の時点で拒まれるので SQLite のときだけ入れる。
+    graph, bindings = _pe_graph_and_bindings()
+    on_sqlite = db_session_factory.kw["bind"].dialect.name == "sqlite"
+    if on_sqlite:
+        graph["20"]["_meta"]["title"] = "PE\x00 title"
+    result = await _execute_with_history(
+        db_session_factory,
+        graph=graph,
+        bindings=bindings,
+        outputs={**_IMAGE_OUTPUT, "20": {"text": ["warm\x00 room"]}},
+    )
+    assert result.text_outputs is not None
+    assert result.text_outputs[0]["text"] == "warm room"
+    if on_sqlite:
+        assert result.text_outputs[0]["title"] == "PE title"
+
+
+@run_async
+async def test_execute_skips_empty_final_prompt(db_session_factory: sessionmaker) -> None:
+    graph, bindings = _pe_graph_and_bindings()
+    result = await _execute_with_history(
+        db_session_factory,
+        graph=graph,
+        bindings=bindings,
+        outputs={**_IMAGE_OUTPUT, "20": {"text": [""]}},
+    )
+    assert len(result.outputs) == 1
     assert result.text_outputs is None
 
 

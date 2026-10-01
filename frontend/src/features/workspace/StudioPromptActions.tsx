@@ -1,6 +1,6 @@
 /**
  * スタジオの外(ビューア、Run の詳細ページ、`/lineage` のインスペクター)から「プロンプトに挿入/
- * 置き換え」をするための `RunPromptActions`(ADR-0030 3章。PE の出力の欄で使う)。
+ * 置き換え」をするための `RunPromptActions`(ADR-0030 3章。最終プロンプトの欄で使う)。
  *
  * スタジオのプロンプト欄は `useRunFormLogic` のローカル state なので、ここからは直接書き換え
  * られない。そこで RunFormContext の `requestPromptInsert` にリクエストを積んでスタジオへ移り、

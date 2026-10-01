@@ -62,6 +62,7 @@ from app.providers.comfyui.client import (
     check_available,
     collect_output_images,
     collect_output_texts,
+    sanitize_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -544,8 +545,8 @@ def _collect_final_prompt(
     item: dict[str, Any] = {
         "role": "final_prompt",
         "node_id": node_id,
-        "class_type": class_type if isinstance(class_type, str) else None,
-        "title": title if isinstance(title, str) else None,
+        "class_type": sanitize_text(class_type) if isinstance(class_type, str) else None,
+        "title": sanitize_text(title) if isinstance(title, str) else None,
         "text": text,
     }
     if len(text) > TEXT_OUTPUT_MAX_CHARS:

@@ -106,7 +106,7 @@
   overflow-wrap: anywhere;
 }
 
-/* PE の出力(ADR-0030)。見出しの上の余白は .subheading と揃える。 */
+/* 最終プロンプト(ADR-0030)。見出しの上の余白は .subheading と揃える。 */
 .finalPrompt {
   margin-top: 8px;
 }

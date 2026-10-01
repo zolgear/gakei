@@ -188,7 +188,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
         {promptActions?.(run.prompt)}
       </section>
 
-      {/* PE の出力(ADR-0030 3章)。スタジオ内では呼び出し側の挿入・置き換え(promptActions)を
+      {/* 最終プロンプト(ADR-0030 3章)。スタジオ内では呼び出し側の挿入・置き換え(promptActions)を
           そのまま使い、スタジオの外ではリクエストを積んでスタジオへ移る(StudioPromptActions)。 */}
       {finalPrompt && (
         <section className={styles.section}>

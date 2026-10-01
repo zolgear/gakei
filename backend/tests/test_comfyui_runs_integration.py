@@ -396,6 +396,34 @@ def test_successful_run_records_text_outputs(
     assert asset["produced_by_run"]["text_outputs"] == expected
 
 
+def test_final_prompt_with_nul_still_succeeds(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0030 2026-10-01 改訂: NUL を含む出力でも、完了時の commit が失敗せず
+    (PostgreSQL の JSONB は `\\u0000` を受け付けない)Run は成功になる。"""
+    _mark_available(monkeypatch)
+    workflow = _create_pe_workflow(client_with_comfyui)
+    fake = FakeComfyUI()
+    fake.set_history(
+        "prompt-1",
+        {
+            "outputs": {
+                "9": {"images": [{"filename": "out.png", "subfolder": "", "type": "output"}]},
+                "20": {"text": ["A warm\x00, cozy room"]},
+            },
+            "status": {"status_str": "success", "completed": True},
+        },
+    )
+    fake.add_output_file("out.png", "", "output", make_png_bytes())
+    _install_fake_comfyui(client_with_comfyui, fake)
+
+    response = _post_comfy_run(client_with_comfyui, workflow)
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client_with_comfyui, response.json()["id"])
+    assert detail["status"] == "succeeded", detail
+    assert detail["text_outputs"][0]["text"] == "A warm, cozy room"
+
+
 def test_failed_run_has_null_text_outputs(
     client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
