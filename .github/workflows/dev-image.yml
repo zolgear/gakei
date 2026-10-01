@@ -1,0 +1,142 @@
+# ADR-0021 2a 章: dev 版のイメージ。dev のコミットを `dev-image` ブランチに push したとき
+# (`git push -f origin origin/dev:dev-image`)か、手動で実行したとき(dev ブランチに限る)だけ動く。
+# workflow_dispatch はワークフローが既定ブランチ(main)に入るまで使えないので、push を主に使う。
+# linux/amd64 で起動確認をしてから、linux/amd64 + linux/arm64 で GHCR に push する。
+# タグは `dev` と `dev-<SHA の先頭 7 文字>`。`latest` や番号のタグ、GitHub Release には触れない。
+name: Dev image
+
+on:
+  push:
+    branches: [dev-image]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write   # GHCR への push
+
+# `dev` のタグを後から走ったものが古い内容で上書きしないよう、1本ずつ順に動かす。
+concurrency:
+  group: dev-image
+  cancel-in-progress: false
+
+jobs:
+  dev-image:
+    name: dev image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # dev に含まれるコミットかを確かめるため、全履歴を取る
+
+      - name: dev のコミットかを確認
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${GITHUB_REF}" != "refs/heads/dev" ]; then
+              echo "dev 版のイメージは dev ブランチからだけ作る(実行したのは ${GITHUB_REF})" >&2
+              exit 1
+            fi
+          else
+            # dev-image ブランチへの push: dev に入っていないコミット(レビュー前の変更)からは作らない。
+            git fetch --no-tags origin +refs/heads/dev:refs/remotes/origin/dev
+            if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/dev; then
+              echo "${GITHUB_SHA} は dev に含まれていません。git push -f origin origin/dev:dev-image で dev のコミットを送ってください" >&2
+              exit 1
+            fi
+          fi
+
+      - name: QEMU のセットアップ
+        uses: docker/setup-qemu-action@v3
+
+      - name: Buildx のセットアップ
+        uses: docker/setup-buildx-action@v3
+
+      - name: GHCR にログイン
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: イメージのメタデータ(タグ・ラベル)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=dev
+            type=sha,prefix=dev-,format=short
+          flavor: |
+            latest=false
+          labels: |
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: イメージのビルド(linux/amd64、起動確認用)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: gakei:dev-test
+          build-args: |
+            GAKEI_COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: FAKE_PROVIDER=1 で起動
+        run: |
+          docker run -d --name gakei-dev-test -e FAKE_PROVIDER=1 -p 127.0.0.1:8798:8000 gakei:dev-test
+
+      - name: /api/health が応答するまで待つ(HEALTHCHECK と同じ生存確認)
+        run: |
+          set -euo pipefail
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8798/api/health >/dev/null 2>&1; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "コンテナが時間内に起動しませんでした" >&2
+            exit 1
+          fi
+
+      - name: /api/capabilities と / を確認し、/api/about にコミットが出ることを確認
+        run: |
+          set -euo pipefail
+          curl -sf http://127.0.0.1:8798/api/capabilities >/dev/null
+          body="$(curl -sf http://127.0.0.1:8798/)"
+          if ! printf '%s' "$body" | grep -qF '<title>GAKEI</title>'; then
+            echo "/ のレスポンスに <title>GAKEI</title> が含まれていません" >&2
+            exit 1
+          fi
+          about="$(curl -sf http://127.0.0.1:8798/api/about)"
+          echo "$about"
+          if ! printf '%s' "$about" | grep -qF "${GITHUB_SHA:0:7}"; then
+            echo "/api/about にコミット ${GITHUB_SHA} が出ていません" >&2
+            exit 1
+          fi
+
+      - name: コンテナのログ(失敗時)
+        if: failure()
+        run: docker logs gakei-dev-test || true
+
+      - name: 起動確認用コンテナの後片付け
+        if: always()
+        run: docker rm -f gakei-dev-test || true
+
+      - name: イメージのビルドと push(linux/amd64 + linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GAKEI_COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

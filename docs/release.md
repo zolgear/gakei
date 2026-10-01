@@ -59,6 +59,24 @@ GAKEI のバージョン付けとリリースの自動化は ADR-0021 で決め�
 - **起動確認(`linux/amd64` のビルドと `/api/health`・`/api/capabilities`・`/` の確認)で失敗:** GHCR への push より前なので、この時点でも何も公開されていない。原因を直す PR をマージしてから、同じ手順でタグを打ち直す。
 - **GHCR への push は終わったが、その後に問題が見つかった:** 一度公開したタグは上書きしない(`latest` や `X.Y` を含め、動かしたタグを消したり差し替えたりしない)。修正して次のパッチ版(`vX.Y.(Z+1)`)を出す。
 
+## dev 版のイメージ
+
+リリース前の dev の状態をサーバーで試すときは、dev 版のイメージを作る(ADR-0021 2a 章)。
+
+```bash
+git fetch origin
+git push -f origin origin/dev:dev-image   # dev の今のコミットを dev-image ブランチに送ると、イメージが作られる
+gh run watch "$(gh run list --workflow dev-image.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+```
+
+- `dev-image` ブランチは作るきっかけにだけ使う。dev に含まれていないコミットを送ると失敗する。
+- ワークフローが `main` に入った後(次のリリース以降)は、Actions → Dev image → Run workflow(Branch は `dev`)からも作れる。
+
+- できるタグは `ghcr.io/zolgear/gakei:dev`(実行のたびに最新の dev 版に動く)と `ghcr.io/zolgear/gakei:dev-<SHA の先頭 7 文字>`。`latest` や番号のタグは動かない。
+- `/api/about`(設定画面の「GAKEI について」)の `commit` で、どのコミットかを確かめられる。`version` は直前のリリースの番号のまま。
+- dev 版は起動時に DB を `upgrade head` する。リリース版に戻すことがあるなら、切り替える前に DB をバックアップする。
+- 古い `dev-<SHA>` のタグは自動では消さない。増えたらパッケージのページで消す。
+
 ## GHCR のパッケージの公開範囲
 
 public リポジトリの Actions から最初に push されたパッケージは、リポジトリに紐づいて自動で public になる(2026-09-27 の `v0.1.0` で確認。手作業は要らなかった)。パッケージのページは `https://github.com/users/zolgear/packages/container/package/gakei`。
