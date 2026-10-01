@@ -1,20 +1,8 @@
 /* 共有リンクの一覧にしか無いもの。カード、一覧、ボタン、文言は settings.module.css。 */
-.summaryRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
 .count {
+  margin: 0;
   font-size: 13px;
   color: var(--color-text-muted);
-}
-
-.dialogBody {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 /* 共通の .item(settings.module.css)と違い、サムネイルに合わせて上で揃え、狭いと折り返す */

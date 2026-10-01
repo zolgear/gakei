@@ -623,8 +623,6 @@
         "one": "{count} 件",
         "other": "{count} 件"
       },
-      "openList": "一覧を開く",
-      "dialogTitle": "共有リンクの一覧",
       "original": "原本",
       "originalAllowed": "許可",
       "originalDenied": "プレビューまで",

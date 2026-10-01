@@ -623,8 +623,6 @@
         "one": "{count} share link",
         "other": "{count} share links"
       },
-      "openList": "Open list",
-      "dialogTitle": "Your share links",
       "original": "Original",
       "originalAllowed": "Allowed",
       "originalDenied": "Preview only",
