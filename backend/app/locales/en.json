@@ -73,7 +73,8 @@
       "promptBindingCandidates": "Could not determine the prompt binding. Choose one of these candidates manually: {candidates}",
       "moreCandidatesSuffix": ", and {count} more",
       "imageBindingNotFound": "Could not find an input image (LoadImage) binding.",
-      "maskMethodUnsupported": "This workflow's mask method cannot be passed from GAKEI."
+      "maskMethodUnsupported": "This workflow's mask method cannot be passed from GAKEI.",
+      "secretValueFound": "Input {input} of node {node} ({class_type}) seems to contain a secret such as an API key. Share pages hide the value and do not serve the originals of images made with this workflow."
     },
     "client": {
       "genericError": "Error",

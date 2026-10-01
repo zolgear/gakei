@@ -1120,18 +1120,23 @@ class PublicShareAsset(BaseModel):
     run_id: uuid.UUID | None = None
     # 作成時の系列グラフでの深さ(起点 0、祖先が負、子孫が正)。
     depth: int = 0
+    # この画像の原本を出せるか(ADR-0029 4章)。共有が原本を許していても、秘密に見える値を含む
+    # ComfyUI の Run の画像は false(2026-10-01 追記)。false ならプレビューまで。
+    allow_original: bool
 
 
 class PublicShareRun(BaseModel):
     """画像を作った Run のうち、見せてよい項目だけ(ADR-0029 3章)。実行者、料金・usage、
-    エラー、入力の Asset の id は含めない。`params` は `shares.public_params` で絞った値。"""
+    エラー、入力の Asset の id は含めない。`params` は `shares.public_params` の値(ComfyUI の
+    Run は `run.params` の写しで入れ子を含み、秘密に見える値は `***` に伏せる。ADR-0029 3章、
+    2026-10-01 改訂・追記)。"""
 
     id: uuid.UUID
     operation: Literal["generate", "edit"]
     # モデル名(ComfyUI はワークフローの名前)。
     model: str
     prompt: str
-    params: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     # 最終プロンプト(PE の出力。ADR-0030 4章)。無ければ null。
     text_outputs: list[RunTextOutput] | None = None

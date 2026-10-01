@@ -1212,7 +1212,8 @@ export interface paths {
         };
         /**
          * Get Public Share Asset Content
-         * @description 共有に含まれる画像の配信。原本は、共有が許しているときだけ(ADR-0029 4章)。
+         * @description 共有に含まれる画像の配信。原本は、共有が許していて、その画像が秘密に見える値を含む
+         *     ComfyUI の Run の画像でないときだけ(判定は `resolve_public_share`。ADR-0029 4章)。
          *     ダウンロードする PNG にも系列情報(ADR-0014)は埋め込まない。
          */
         get: operations["get_public_share_asset_content"];
@@ -2914,6 +2915,8 @@ export interface components {
              * @default 0
              */
             depth: number;
+            /** Allow Original */
+            allow_original: boolean;
         };
         /**
          * PublicShareEdge
@@ -2979,7 +2982,9 @@ export interface components {
         /**
          * PublicShareRun
          * @description 画像を作った Run のうち、見せてよい項目だけ(ADR-0029 3章)。実行者、料金・usage、
-         *     エラー、入力の Asset の id は含めない。`params` は `shares.public_params` で絞った値。
+         *     エラー、入力の Asset の id は含めない。`params` は `shares.public_params` の値(ComfyUI の
+         *     Run は `run.params` の写しで入れ子を含み、秘密に見える値は `***` に伏せる。ADR-0029 3章、
+         *     2026-10-01 改訂・追記)。
          */
         PublicShareRun: {
             /**
@@ -2998,7 +3003,7 @@ export interface components {
             prompt: string;
             /** Params */
             params?: {
-                [key: string]: string | number | boolean | null;
+                [key: string]: unknown;
             };
             /**
              * Created At

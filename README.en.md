@@ -18,7 +18,7 @@ All it needs is an OpenAI API key. Images are stored in a local directory and me
 - **Embedded lineage:** PNGs downloaded at full resolution carry their lineage. Uploading such a PNG back to the same GAKEI treats it as the original image.
 - **Display language:** Japanese and English. Follows the browser's language by default and can be switched from Settings.
 - **Layout:** The input pane of the studio can sit at the bottom (default) or in a left sidebar. Switch from Settings → Display or the button in the result area.
-- **Local ComfyUI (preview):** connect to ComfyUI running on the same machine and use workflows exported with "Export (API)" alongside the OpenAI models. GAKEI only injects values such as prompt, seed, input images, and masks; it does not modify the graph. Disabled by default; connect from Settings → ComfyUI.
+- **Local ComfyUI (preview):** connect to ComfyUI running on the same machine and use workflows exported with "Export (API)" alongside the OpenAI models. GAKEI only injects values such as prompt, seed, input images, and masks; it does not modify the graph. Disabled by default; connect from Settings → ComfyUI. If a node input seems to contain an API key or similar secret, registration shows a warning (share links hide the value and do not serve the originals of those images).
 
 ## Screenshots
 

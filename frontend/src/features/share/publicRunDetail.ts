@@ -86,3 +86,51 @@ export function assetForRun(detail: PublicRunDetail, currentAssetId: string | nu
   if (currentAssetId && detail.outputs.some((o) => o.asset.id === currentAssetId)) return currentAssetId
   return detail.outputs[0]?.asset.id ?? detail.primaryParent?.asset.id ?? currentAssetId
 }
+
+/**
+ * この画像の原本を出せるか(ADR-0029 4章)。`allowed` 以外は、プレビューまで(原本のダウンロード
+ * は出さない)。共有が原本を許していても、秘密に見える値を含む ComfyUI の Run の画像はサーバーが
+ * 画像ごとに `allow_original: false` を返す(2026-10-01 追記)。
+ * - `share`: 共有が原本を許していない
+ * - `image`: 共有は許しているが、この画像は出さない
+ */
+export function originalAvailability(
+  share: Pick<PublicShareResponse, 'allow_original'>,
+  asset: Pick<PublicShareAsset, 'allow_original'>,
+): 'allowed' | 'share' | 'image' {
+  if (!share.allow_original) return 'share'
+  return asset.allow_original ? 'allowed' : 'image'
+}
+
+/** 比較で原本まで拡大してよいか(比べる2枚のどちらも原本を出せるときだけ)。 */
+export function compareAllowsOriginal(
+  share: Pick<PublicShareResponse, 'allow_original'>,
+  targets: { before: Pick<PublicShareAsset, 'allow_original'>; after: Pick<PublicShareAsset, 'allow_original'> },
+): boolean {
+  return (
+    originalAvailability(share, targets.before) === 'allowed' && originalAvailability(share, targets.after) === 'allowed'
+  )
+}
+
+export type PublicParamScalar = string | number | boolean | null
+
+/**
+ * Run の params を、一覧に出すスカラーの値と、畳んだ JSON のブロックで出す入れ子の値に分ける
+ * (ADR-0029 3章、2026-10-01 改訂)。ComfyUI の Run は送ったグラフ全体(`comfyui_prompt`)など
+ * 入れ子の値を含む。並びは params のキーの順のまま。
+ */
+export function splitPublicParams(params: Record<string, unknown> | null | undefined): {
+  scalars: [string, PublicParamScalar][]
+  nested: [string, unknown][]
+} {
+  const scalars: [string, PublicParamScalar][] = []
+  const nested: [string, unknown][] = []
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      scalars.push([key, value])
+    } else if (value !== undefined) {
+      nested.push([key, value])
+    }
+  }
+  return { scalars, nested }
+}

@@ -1,11 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import type { PublicShareAsset, PublicShareResponse, PublicShareRun } from '../../api/client'
-import { assetForRun, buildPublicRunDetail, publicCompareTargets } from './publicRunDetail'
+import {
+  assetForRun,
+  buildPublicRunDetail,
+  compareAllowsOriginal,
+  originalAvailability,
+  publicCompareTargets,
+  splitPublicParams,
+} from './publicRunDetail'
 
 const created = '2026-09-30T00:00:00Z'
 
-function asset(id: string, runId: string | null = null, kind: PublicShareAsset['kind'] = 'generated'): PublicShareAsset {
-  return { id, kind, mime: 'image/png', width: 10, height: 10, created_at: created, title: null, run_id: runId, depth: 0 }
+function asset(
+  id: string,
+  runId: string | null = null,
+  kind: PublicShareAsset['kind'] = 'generated',
+  allowOriginal = true,
+): PublicShareAsset {
+  return {
+    id,
+    kind,
+    mime: 'image/png',
+    width: 10,
+    height: 10,
+    created_at: created,
+    title: null,
+    run_id: runId,
+    depth: 0,
+    allow_original: allowOriginal,
+  }
 }
 
 function run(id: string, operation: 'generate' | 'edit'): PublicShareRun {
@@ -107,5 +130,66 @@ describe('assetForRun', () => {
     expect(assetForRun(detail, 'e1')).toBe('e1')
     expect(assetForRun(detail, 'g0')).toBe('e0')
     expect(assetForRun(detail, null)).toBe('e0')
+  })
+})
+
+describe('splitPublicParams', () => {
+  it('スカラーは一覧に、入れ子の値は JSON のブロックに分ける(キーの順のまま)', () => {
+    const graph = { '1': { class_type: 'KSampler', inputs: { seed: 1 } } }
+    const result = splitPublicParams({
+      size: '1024x1024',
+      comfyui_prompt: graph,
+      steps: 20,
+      comfyui_uploads: { images: ['gakei_abc.png'] },
+      tiling: false,
+      background: null,
+      list: [1, 2],
+    })
+    expect(result.scalars).toEqual([
+      ['size', '1024x1024'],
+      ['steps', 20],
+      ['tiling', false],
+      ['background', null],
+    ])
+    expect(result.nested).toEqual([
+      ['comfyui_prompt', graph],
+      ['comfyui_uploads', { images: ['gakei_abc.png'] }],
+      ['list', [1, 2]],
+    ])
+  })
+
+  it('params が無ければ空', () => {
+    expect(splitPublicParams(undefined)).toEqual({ scalars: [], nested: [] })
+    expect(splitPublicParams(null)).toEqual({ scalars: [], nested: [] })
+  })
+})
+
+describe('originalAvailability', () => {
+  it('共有が許し、画像ごとの判定も許すときだけ原本を出す', () => {
+    expect(originalAvailability({ allow_original: true }, asset('a'))).toBe('allowed')
+    // 秘密に見える値を含む ComfyUI の Run の画像(ADR-0029 4章、2026-10-01 追記)。
+    expect(originalAvailability({ allow_original: true }, asset('a', 'R', 'generated', false))).toBe('image')
+    // 共有が許していなければ、画像ごとの判定によらず共有の理由。
+    expect(originalAvailability({ allow_original: false }, asset('a'))).toBe('share')
+    expect(originalAvailability({ allow_original: false }, asset('a', 'R', 'generated', false))).toBe('share')
+  })
+
+  it('同じ共有の中でも、その画像だけ原本を出さない', () => {
+    const data = share({
+      assets: [asset('g0', 'G'), asset('e0', 'E', 'generated', false)],
+    })
+    const byId = Object.fromEntries((data.assets ?? []).map((a) => [a.id, originalAvailability(data, a)]))
+    expect(byId).toEqual({ g0: 'allowed', e0: 'image' })
+  })
+})
+
+describe('compareAllowsOriginal', () => {
+  it('比べる2枚のどちらかが原本を出せなければ、比較もプレビューまで', () => {
+    const ok = asset('a')
+    const hidden = asset('b', 'R', 'generated', false)
+    expect(compareAllowsOriginal({ allow_original: true }, { before: ok, after: ok })).toBe(true)
+    expect(compareAllowsOriginal({ allow_original: true }, { before: ok, after: hidden })).toBe(false)
+    expect(compareAllowsOriginal({ allow_original: true }, { before: hidden, after: ok })).toBe(false)
+    expect(compareAllowsOriginal({ allow_original: false }, { before: ok, after: ok })).toBe(false)
   })
 })

@@ -338,7 +338,18 @@ def test_share_url_uses_public_base_url(client: TestClient, chain: Chain) -> Non
 # -- 見せないもの ------------------------------------------------------------------
 
 _PUBLIC_KEYS = {"root_asset_id", "scope", "allow_original", "created_at", "assets", "runs", "edges"}
-_ASSET_KEYS = {"id", "kind", "mime", "width", "height", "created_at", "title", "run_id", "depth"}
+_ASSET_KEYS = {
+    "id",
+    "kind",
+    "mime",
+    "width",
+    "height",
+    "created_at",
+    "title",
+    "run_id",
+    "depth",
+    "allow_original",
+}
 _RUN_KEYS = {"id", "operation", "model", "prompt", "params", "created_at", "text_outputs"}
 
 
@@ -385,8 +396,8 @@ def test_public_response_hides_private_fields(client_oidc: TestClient) -> None:
         assert secret not in text, secret
 
 
-def test_public_params_filter() -> None:
-    params = {
+def _mixed_params() -> dict[str, Any]:
+    return {
         "n": 1,
         "size": "1024x1024",
         "quality": "low",
@@ -395,20 +406,178 @@ def test_public_params_filter() -> None:
         "list": [1, 2],
         "ref": f"asset {uuid.uuid4()}",
         "image": "gakei_" + "a" * 64 + ".png",
-        "comfyui_workflow": {"id": str(uuid.uuid4()), "name": "wf"},
-        "comfyui_prompt": {"1": {"inputs": {}}},
+        "comfyui_workflow": {"id": str(uuid.uuid4()), "name": "wf", "template_sha256": "c" * 64},
+        "comfyui_prompt": {"1": {"class_type": "LoadImage", "inputs": {"image": "x.png"}}},
         "comfyui_uploads": {"images": ["gakei_" + "b" * 64 + ".png"]},
         "comfyui_seed": 42,
         "negative_prompt": "blurry",
     }
-    assert public_params(params) == {
+
+
+def test_public_params_filter_for_non_comfyui() -> None:
+    """ComfyUI 以外の Run は、スカラーだけを出し、UUID・sha256 を含む値と comfyui_* は出さない。"""
+    expected = {
         "n": 1,
         "size": "1024x1024",
         "quality": "low",
         "background": None,
         "negative_prompt": "blurry",
-        "seed": 42,
     }
+    assert public_params(_mixed_params()) == expected
+    assert public_params(_mixed_params(), "openai") == expected
+    assert public_params(None, "openai") == {}
+
+
+def test_public_params_comfyui_returns_params_as_is() -> None:
+    """ADR-0029 3章(2026-10-01 改訂): ComfyUI の Run は params をそのまま(入れ子、comfyui_*、
+    UUID・sha256 を含む値も)出す。"""
+    params = _mixed_params()
+    assert public_params(params, "comfyui") == params
+    assert public_params(None, "comfyui") == {}
+
+
+def test_public_run_params_by_provider(client: TestClient) -> None:
+    """公開の API の Run の params: ComfyUI の Run は入れ子も含めてそのまま、OpenAI の Run は
+    これまでどおり絞る。原本を許していない共有でも同じ。"""
+    _enable(client)
+    detail = _run(client, "comfy share")
+    asset_id = _outputs(detail)[0]
+    share = _create(client, asset_id, "single", allow_original=False)
+    params = _mixed_params()
+
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(detail["id"]))
+        assert run is not None
+        run.provider = "openai"
+        run.params = params
+        db.commit()
+    runs = _public(client, _token(share)).json()["runs"]
+    assert runs[0]["params"] == public_params(params, "openai")
+    assert "comfyui_prompt" not in runs[0]["params"]
+
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(detail["id"]))
+        assert run is not None
+        run.provider = "comfyui"
+        db.commit()
+    runs = _public(client, _token(share)).json()["runs"]
+    assert runs[0]["params"] == params
+    # モデルはワークフローの名前だけ(id は出さない。ADR-0013)。
+    assert runs[0]["model"] == "wf"
+
+
+# -- 秘密に見える値(ADR-0029 3章・4章、2026-10-01 追記) --------------------------
+
+# 形だけそれらしい値(実在のキーではない)。
+_FAKE_OPENAI_KEY = "sk-proj-" + "Ab3dEf6hIj9kLm2nOp5qRs8t"
+
+
+def _comfy_params(*, secret: bool) -> dict[str, Any]:
+    graph: dict[str, Any] = {
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "a cat", "clip": ["4", 1]}},
+        "12": {
+            "class_type": "SomeApiNode",
+            "inputs": {"api_key": "plain-secret" if secret else "", "max_tokens": 256},
+        },
+    }
+    return {
+        "negative_prompt": "blurry",
+        "style_token": _FAKE_OPENAI_KEY if secret else "",
+        "comfyui_workflow": {"id": str(uuid.uuid4()), "name": "wf", "template_sha256": "c" * 64},
+        "comfyui_prompt": graph,
+        "comfyui_seed": 42,
+    }
+
+
+def _make_comfyui(client: TestClient, run_id: str, *, secret: bool) -> dict[str, Any]:
+    params = _comfy_params(secret=secret)
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(run_id))
+        assert run is not None
+        run.provider = "comfyui"
+        run.params = params
+        db.commit()
+    return params
+
+
+def test_public_params_redacts_secret_values() -> None:
+    params = _comfy_params(secret=True)
+    before = json.loads(json.dumps(params))
+    result = public_params(params, "comfyui")
+    # 元の params は変えない。
+    assert params == before
+    assert result["comfyui_prompt"]["12"]["inputs"]["api_key"] == "***"
+    assert result["comfyui_prompt"]["12"]["inputs"]["max_tokens"] == 256
+    assert result["comfyui_prompt"]["6"] == params["comfyui_prompt"]["6"]
+    assert result["style_token"] == "***"
+    assert result["negative_prompt"] == "blurry"
+    assert set(result) == set(params)
+    # 秘密の無い ComfyUI の Run はそのまま。
+    clean = _comfy_params(secret=False)
+    assert public_params(clean, "comfyui") == clean
+
+
+def test_secret_comfyui_run_hides_original(client: TestClient, chain: Chain) -> None:
+    """秘密に見える値を含む ComfyUI の Run の画像は、共有が原本を許していても原本を出さない。
+    ほかの画像(OpenAI の Run の画像)は従来どおり原本を出す。"""
+    share = _create(client, chain.e0, "ancestors")
+    assert share["allow_original"] is True
+    token = _token(share)
+    params = _make_comfyui(client, chain.e["id"], secret=True)
+
+    body = _public(client, token).json()
+    assert body["allow_original"] is True
+    allow = {a["id"]: a["allow_original"] for a in body["assets"]}
+    assert allow == {chain.g0: True, chain.e0: False}
+    run_e = next(r for r in body["runs"] if r["id"] == chain.e["id"])
+    assert run_e["params"]["comfyui_prompt"]["12"]["inputs"]["api_key"] == "***"
+    assert run_e["params"]["style_token"] == "***"
+    text = json.dumps(body)
+    assert "plain-secret" not in text
+    assert _FAKE_OPENAI_KEY not in text
+
+    for variant in ("thumb", "preview"):
+        assert _content(client, token, chain.e0, variant).status_code == 200
+    assert _content(client, token, chain.e0, "original").status_code == 404
+    assert _content(client, token, chain.e0, "original", download="1").status_code == 404
+    assert _content(client, token, chain.g0, "original").status_code == 200
+
+    # DB の params は変わっていない。
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(chain.e["id"]))
+        assert run is not None
+        assert run.params == params
+
+
+def test_comfyui_run_without_secret_serves_original(client: TestClient, chain: Chain) -> None:
+    share = _create(client, chain.e0, "single")
+    token = _token(share)
+    _make_comfyui(client, chain.e["id"], secret=False)
+    body = _public(client, token).json()
+    assert [a["allow_original"] for a in body["assets"]] == [True]
+    assert _content(client, token, chain.e0, "original").status_code == 200
+
+
+def test_secret_check_ignores_run_state(client: TestClient, chain: Chain) -> None:
+    """画像を作った Run が論理削除されていても(ページに Run は出ないが)、原本は出さない。"""
+    token = _token(_create(client, chain.e0, "single"))
+    _make_comfyui(client, chain.e["id"], secret=True)
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(chain.e["id"]))
+        assert run is not None
+        run.deleted_at = datetime.now(UTC)
+        db.commit()
+    body = _public(client, token).json()
+    assert body["runs"] == []
+    assert [a["allow_original"] for a in body["assets"]] == [False]
+    assert _content(client, token, chain.e0, "original").status_code == 404
+
+
+def test_disallowed_share_marks_every_asset(client: TestClient, chain: Chain) -> None:
+    token = _token(_create(client, chain.e0, "ancestors", allow_original=False))
+    body = _public(client, token).json()
+    assert body["allow_original"] is False
+    assert all(a["allow_original"] is False for a in body["assets"])
 
 
 # -- 本人だけ(認証モード) --------------------------------------------------------

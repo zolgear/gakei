@@ -416,3 +416,25 @@
     min-height: 32px;
   }
 }
+
+.paramJson {
+  font-size: 12px;
+}
+
+.paramJson summary {
+  cursor: pointer;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.paramJsonBlock {
+  margin: 4px 0 0;
+  padding: 8px;
+  max-height: 480px;
+  overflow: auto;
+  background: var(--color-bg-sunken);
+  border-radius: var(--radius);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
