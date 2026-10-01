@@ -172,7 +172,6 @@
     "annotation": {
       "invalidBool": "{name} must be true or false",
       "invalidModel": "The model name must be 1 to {max} characters",
-      "invalidApiStyle": "The API style must be responses or chat",
       "invalidLanguage": "The language must be ja or en",
       "invalidTagLanguage": "The tag language must be native or localized",
       "invalidHourlyLimit": "The hourly limit must be an integer from {min} to {max}",
@@ -180,14 +179,22 @@
       "invalidThreshold": "The threshold must be a number from {min} to {max}",
       "unknownOnnxModel": "Unknown ONNX tagger model",
       "onnxDownloading": "A model cannot be deleted while it is downloading",
-      "invalidConnectionName": "Connection name must be 1-{max} characters",
       "invalidTarget": "Invalid connection and model pair",
       "unknownConnection": "The specified connection does not exist",
-      "tooManyConnections": "You can add up to {max} connections",
-      "builtinConnectionName": "OpenAI settings",
-      "builtinConnectionReadOnly": "\"OpenAI settings\" cannot be edited or deleted (only the API style can be changed; change the key and Base URL in the OpenAI settings)",
-      "connectionInUse": "This connection is in use (by the default or ComfyUI images pairs) and cannot be deleted",
       "migratedConnectionName": "Annotation only"
+    },
+    "llmConnections": {
+      "invalidName": "Connection name must be 1-{max} characters",
+      "invalidApiStyle": "The API style must be responses or chat",
+      "tooMany": "You can add up to {max} connections",
+      "notFound": "The specified connection does not exist",
+      "builtinName": "OpenAI settings",
+      "builtinReadOnly": "\"OpenAI settings\" cannot be edited or deleted (only the API style can be changed; change the key and Base URL in the OpenAI settings)",
+      "inUse": "This connection is used by {features} and cannot be deleted",
+      "featureSeparator": ", ",
+      "features": {
+        "annotation": "Auto titles and tags"
+      }
     },
     "share": {
       "invalidEnabled": "enabled must be true or false"

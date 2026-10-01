@@ -91,16 +91,21 @@ export type TagListResponse = components['schemas']['TagListResponse']
 export type AnnotationSettingsResponse = components['schemas']['AnnotationSettingsResponse']
 export type AnnotationSettingsUpdateRequest = components['schemas']['AnnotationSettingsUpdateRequest']
 export type AnnotationBackfillResponse = components['schemas']['AnnotationBackfillResponse']
-export type AnnotationConnectionView = components['schemas']['AnnotationConnectionView']
-export type AnnotationConnectionCreateRequest = components['schemas']['AnnotationConnectionCreateRequest']
-export type AnnotationConnectionUpdateRequest = components['schemas']['AnnotationConnectionUpdateRequest']
+export type AnnotationConnectionCalls = components['schemas']['AnnotationConnectionCalls']
 export type AnnotationTarget = components['schemas']['AnnotationTarget']
 export type AnnotationProfiles = components['schemas']['AnnotationProfiles']
 export type AnnotationProfilesUpdate = components['schemas']['AnnotationProfilesUpdate']
-export type AnnotationApiStyle = AnnotationConnectionView['api_style']
 export type OnnxModelStatus = components['schemas']['OnnxModelStatus']
 export type OnnxModelName = OnnxModelStatus['name']
 export type AnnotationEngine = NonNullable<AnnotationSettingsResponse['usable_engines']>[number]
+
+// -- LLM の接続先(ADR-0032) ----------------------------------------------------
+export type LlmConnectionsResponse = components['schemas']['LlmConnectionsResponse']
+export type LlmConnectionView = components['schemas']['LlmConnectionView']
+export type LlmConnectionCreateRequest = components['schemas']['LlmConnectionCreateRequest']
+export type LlmConnectionUpdateRequest = components['schemas']['LlmConnectionUpdateRequest']
+export type LlmApiStyle = LlmConnectionView['api_style']
+export type LlmConnectionFeature = NonNullable<LlmConnectionView['used_by']>[number]
 
 // -- MCP サーバーとアクセストークン(ADR-0023) ----------------------------------
 
@@ -775,47 +780,6 @@ export function updateAnnotationSettings(body: AnnotationSettingsUpdateRequest):
   })
 }
 
-/** 推定の接続先を足す(管理者のみ。ADR-0024 8章)。キーは任意。 */
-export function createAnnotationConnection(body: AnnotationConnectionCreateRequest): Promise<AnnotationSettingsResponse> {
-  return request('/api/settings/annotation/connections', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-}
-
-/** 接続先を変える。組み込みの `openai` は `api_style` だけ変えられる(ほかは 409)。 */
-export function updateAnnotationConnection(
-  connectionId: string,
-  body: AnnotationConnectionUpdateRequest,
-): Promise<AnnotationSettingsResponse> {
-  return request(`/api/settings/annotation/connections/${encodeURIComponent(connectionId)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-}
-
-/** 接続先を消す。組み込み・使用中の接続先は 409。 */
-export function deleteAnnotationConnection(connectionId: string): Promise<AnnotationSettingsResponse> {
-  return request(`/api/settings/annotation/connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' })
-}
-
-/** 接続先のキー(管理者のみ)。値は応答に載らない(`api_key_set` と末尾4文字だけ)。 */
-export function setAnnotationConnectionApiKey(connectionId: string, apiKey: string): Promise<AnnotationSettingsResponse> {
-  return request(`/api/settings/annotation/connections/${encodeURIComponent(connectionId)}/api-key`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ api_key: apiKey }),
-  })
-}
-
-export function deleteAnnotationConnectionApiKey(connectionId: string): Promise<AnnotationSettingsResponse> {
-  return request(`/api/settings/annotation/connections/${encodeURIComponent(connectionId)}/api-key`, {
-    method: 'DELETE',
-  })
-}
-
 /** ONNX タガーのモデルのダウンロードを始める(202)。進捗は `getAnnotationSettings` をポーリングして見る。 */
 export function downloadOnnxModel(model: OnnxModelName): Promise<AnnotationSettingsResponse> {
   return request('/api/settings/annotation/onnx/download', {
@@ -832,4 +796,52 @@ export function deleteOnnxModel(model: OnnxModelName): Promise<AnnotationSetting
 /** 推定を一度も実行していない画像(削除済みを除く)をまとめて待ち行列に入れる。 */
 export function backfillAnnotations(): Promise<AnnotationBackfillResponse> {
   return request('/api/settings/annotation/backfill', { method: 'POST' })
+}
+
+// -- LLM の接続先(ADR-0032) ----------------------------------------------------
+
+/** 接続先の一覧(全ログイン者)。先頭は組み込みの「OpenAI の設定」。キーは設定済みかどうかだけ。 */
+export function listLlmConnections(): Promise<LlmConnectionsResponse> {
+  return request('/api/settings/llm-connections')
+}
+
+/** 接続先を足す(管理者のみ)。キーは任意。 */
+export function createLlmConnection(body: LlmConnectionCreateRequest): Promise<LlmConnectionsResponse> {
+  return request('/api/settings/llm-connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 接続先を変える。組み込みの `openai` は `api_style` だけ変えられる(ほかは 409)。 */
+export function updateLlmConnection(
+  connectionId: string,
+  body: LlmConnectionUpdateRequest,
+): Promise<LlmConnectionsResponse> {
+  return request(`/api/settings/llm-connections/${encodeURIComponent(connectionId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 接続先を消す。組み込みと、どこかの機能で使っている接続先は 409。 */
+export function deleteLlmConnection(connectionId: string): Promise<LlmConnectionsResponse> {
+  return request(`/api/settings/llm-connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' })
+}
+
+/** 接続先のキー(管理者のみ)。値は応答に載らない(設定済みかどうかだけ)。 */
+export function setLlmConnectionApiKey(connectionId: string, apiKey: string): Promise<LlmConnectionsResponse> {
+  return request(`/api/settings/llm-connections/${encodeURIComponent(connectionId)}/api-key`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey }),
+  })
+}
+
+export function deleteLlmConnectionApiKey(connectionId: string): Promise<LlmConnectionsResponse> {
+  return request(`/api/settings/llm-connections/${encodeURIComponent(connectionId)}/api-key`, {
+    method: 'DELETE',
+  })
 }

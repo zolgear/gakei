@@ -898,24 +898,11 @@ class OnnxModelStatus(BaseModel):
     download_error: str | None = None
 
 
-class AnnotationConnectionView(BaseModel):
-    """推定の接続先1つ(ADR-0024 8章)。キーの値は返さない。"""
+class AnnotationConnectionCalls(BaseModel):
+    """接続先1つへの、自動タイトル・タグの直近1時間の LLM・VLM の呼び出し回数(上限は接続先
+    ごと。ADR-0024 8章)。"""
 
-    id: str
-    # 組み込みの接続先(`openai`、OpenAI の設定)の名前は画面の言語で表示する(サーバーの言語の
-    # 文言を入れて返すが、画面は `builtin` を見て自分の言語で出してよい)。
-    name: str
-    # 組み込みの接続先(OpenAI の設定。ADR-0017)なら true。名前・Base URL・キーは変えられず、
-    # 削除もできない(API 形式だけは変えられる)。
-    builtin: bool
-    # 組み込みの接続先は OpenAI の設定の Base URL(未設定なら null = OpenAI 本体)。
-    base_url: str | None = None
-    api_style: Literal["responses", "chat"]
-    # キーを設定しているか(組み込みの接続先は OpenAI のキーの有無)。
-    api_key_set: bool
-    # 用途の組(既定 / ComfyUI の画像)のどこかで使っているか(使っていれば削除できない)。
-    in_use: bool
-    # この接続先への直近1時間の LLM・VLM の呼び出し回数(上限は接続先ごと)。
+    connection_id: str
     calls_last_hour: int
 
 
@@ -957,17 +944,18 @@ class AnnotationSettingsResponse(BaseModel):
     onnx_enabled: bool
     onnx_model: Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
     onnx_threshold: float
-    # 接続先の一覧。先頭は常に組み込みの `openai`。追加した接続先は追加した順に並ぶ。
-    connections: list[AnnotationConnectionView] = Field(default_factory=list)
     profiles: AnnotationProfiles
     onnx_models: list[OnnxModelStatus] = Field(default_factory=list)
     # 一度も推定していない Asset(削除済み・マスクを除く)の件数。一括実行の対象。
     pending_count: int
     # 待ち行列にある件数(queued と running)。
     queued_count: int
-    # 直近1時間の LLM・VLM の呼び出し回数の全接続先の合計(接続先ごとの値は `connections`。
-    # プロセス内で数える。再起動で 0 に戻る)。
+    # 直近1時間の LLM・VLM の呼び出し回数の全接続先の合計(プロセス内で数える。再起動で 0 に
+    # 戻る)。
     calls_last_hour: int
+    # 接続先ごとの直近1時間の呼び出し回数。LLM の接続先の一覧と同じ順(先頭は組み込みの
+    # `openai`)。接続先そのものは `GET /api/settings/llm-connections`。
+    connection_calls: list[AnnotationConnectionCalls] = Field(default_factory=list)
     # いま使えるエンジン(有効かつ、ONNX はモデルをダウンロード済み)。空なら推定できない。
     usable_engines: list[Literal["llm", "vlm", "onnx"]] = Field(default_factory=list)
 
@@ -1008,8 +996,40 @@ class AnnotationSettingsUpdateRequest(BaseModel):
     profiles: AnnotationProfilesUpdate | None = None
 
 
-class AnnotationConnectionCreateRequest(BaseModel):
-    """`POST /api/settings/annotation/connections`。キーは任意(省略・空ならキーなし)。"""
+# -- LLM の接続先(ADR-0032) --------------------------------------------------
+
+# 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
+LlmConnectionFeature = Literal["annotation"]
+
+
+class LlmConnectionView(BaseModel):
+    """LLM・VLM の接続先1つ(ADR-0032、ADR-0024 8章)。キーの値は一部も返さない。"""
+
+    id: str
+    # 組み込みの接続先(`openai`、OpenAI の設定)の名前は画面の言語で表示する(サーバーの言語の
+    # 文言を入れて返すが、画面は `builtin` を見て自分の言語で出してよい)。
+    name: str
+    # 組み込みの接続先(OpenAI の設定。ADR-0017)なら true。名前・Base URL・キーは変えられず、
+    # 削除もできない(API 形式だけは変えられる)。
+    builtin: bool
+    # 組み込みの接続先は OpenAI の設定の Base URL(未設定なら null = OpenAI 本体)。
+    base_url: str | None = None
+    api_style: Literal["responses", "chat"]
+    # キーを設定しているか(組み込みの接続先は OpenAI のキーの有無)。
+    api_key_set: bool
+    # この接続先を使っている機能。空でなければ削除できない。
+    used_by: list[LlmConnectionFeature] = Field(default_factory=list)
+
+
+class LlmConnectionsResponse(BaseModel):
+    """`GET /api/settings/llm-connections` と、接続先を変える API の応答。"""
+
+    # 先頭は常に組み込みの `openai`。追加した接続先は追加した順に並ぶ。
+    connections: list[LlmConnectionView]
+
+
+class LlmConnectionCreateRequest(BaseModel):
+    """`POST /api/settings/llm-connections`。キーは任意(省略・空ならキーなし)。"""
 
     name: str
     base_url: str
@@ -1017,8 +1037,8 @@ class AnnotationConnectionCreateRequest(BaseModel):
     api_key: str | None = None
 
 
-class AnnotationConnectionUpdateRequest(BaseModel):
-    """`PATCH /api/settings/annotation/connections/{id}`。省略した項目は変更しない。
+class LlmConnectionUpdateRequest(BaseModel):
+    """`PATCH /api/settings/llm-connections/{id}`。省略した項目は変更しない。
     組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。"""
 
     name: str | None = None
@@ -1026,7 +1046,7 @@ class AnnotationConnectionUpdateRequest(BaseModel):
     api_style: str | None = None
 
 
-class AnnotationApiKeyUpdateRequest(BaseModel):
+class LlmConnectionApiKeyUpdateRequest(BaseModel):
     api_key: str
 
 

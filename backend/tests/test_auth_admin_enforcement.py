@@ -64,6 +64,8 @@ _SIMPLE_CASES: list[tuple[str, str, dict | None]] = [
     ("PUT", "/api/settings/openai-base-url", {"base_url": "http://127.0.0.1:9"}),
     ("DELETE", "/api/settings/openai-base-url", None),
     ("PATCH", "/api/settings/general", {}),
+    ("POST", "/api/settings/llm-connections", {"name": "x", "base_url": "http://127.0.0.1:9"}),
+    ("PATCH", "/api/settings/llm-connections/openai", {"api_style": "chat"}),
     ("PUT", "/api/comfyui/connection", {"url": "http://127.0.0.1:8188"}),
     ("DELETE", "/api/comfyui/connection", None),
     ("POST", "/api/comfyui/connection/test", {}),
@@ -138,6 +140,7 @@ def test_get_endpoints_are_allowed_for_regular_user(client_oidc: TestClient) -> 
         "/api/settings/openai-key",
         "/api/settings/openai-base-url",
         "/api/settings/general",
+        "/api/settings/llm-connections",
         "/api/comfyui/status",
         "/api/comfyui/workflows",
     ):

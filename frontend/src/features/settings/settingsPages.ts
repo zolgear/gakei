@@ -15,6 +15,7 @@ export type SettingsPageId =
   | 'shares'
   | 'accessTokens'
   | 'openai'
+  | 'llmConnections'
   | 'annotation'
   | 'comfyui'
   | 'mcp'
@@ -28,6 +29,7 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   shares: 'shares',
   accessTokens: 'access-tokens',
   openai: 'openai',
+  llmConnections: 'llm-connections',
   annotation: 'annotation',
   comfyui: 'comfyui',
   mcp: 'mcp',
@@ -36,7 +38,14 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
 }
 
 export const USER_SETTINGS_PAGES: readonly SettingsPageId[] = ['profile', 'display', 'shares', 'accessTokens']
-export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = ['openai', 'annotation', 'comfyui', 'mcp', 'shareLinks']
+export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
+  'openai',
+  'llmConnections',
+  'annotation',
+  'comfyui',
+  'mcp',
+  'shareLinks',
+]
 
 /** 幅が十分なとき、`/settings` で本文に出すページ。 */
 export const DEFAULT_SETTINGS_PAGE: SettingsPageId = 'display'

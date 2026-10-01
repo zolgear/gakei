@@ -16,7 +16,7 @@ const ALL = { isAdmin: true, isOidc: true, sharingEnabled: true }
 
 describe('settingsToc / visibleSettingsPages', () => {
   it('管理者には管理者設定のページを ADR-0031 1章の順で出す', () => {
-    expect(settingsToc(ALL).admin).toEqual(['openai', 'annotation', 'comfyui', 'mcp', 'shareLinks'])
+    expect(settingsToc(ALL).admin).toEqual(['openai', 'llmConnections', 'annotation', 'comfyui', 'mcp', 'shareLinks'])
   })
 
   it('非管理者には管理者設定のページを出さない(見出しごと隠せるよう空にする)', () => {
@@ -67,6 +67,7 @@ describe('settingsPagePath / settingsPageFromSlug', () => {
     expect(settingsPagePath('accessTokens')).toBe('/settings/access-tokens')
     expect(settingsPagePath('shareLinks')).toBe('/settings/share-links')
     expect(settingsPagePath('comfyui')).toBe('/settings/comfyui')
+    expect(settingsPagePath('llmConnections')).toBe('/settings/llm-connections')
   })
 
   it('知らない区切りは null', () => {

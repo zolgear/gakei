@@ -53,7 +53,7 @@ from app.annotation.engines import (
     wants_translation,
 )
 from app.annotation.wd_tagger import WdTagger
-from app.domain import annotation_settings
+from app.domain import annotation_settings, llm_connections
 from app.domain import annotations as annotations_domain
 from app.domain.models import Asset, AssetAnnotation, AssetKind, Run
 from app.domain.storage import AssetStore
@@ -421,7 +421,7 @@ class Annotator:
                     targets[purpose] = annotation_settings.resolve_target(
                         config, self.settings, profile, purpose
                     )
-                except annotation_settings.ConnectionNotFoundError:
+                except llm_connections.ConnectionNotFoundError:
                     return t("annotations.connectionMissing")
 
             row = session.get(AssetAnnotation, asset_id)
