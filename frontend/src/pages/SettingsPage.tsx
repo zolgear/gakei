@@ -35,10 +35,10 @@ import { McpSettingsPage } from '../features/settings/pages/McpSettingsPage'
 import { OpenAiSettingsPage } from '../features/settings/pages/OpenAiSettingsPage'
 import { ComfyUISettingsPage } from '../features/settings/pages/ComfyUISettingsPage'
 import { ShareLinksSettingsPage } from '../features/settings/pages/ShareLinksSettingsPage'
+import { AnnotationSettingsPage } from '../features/settings/pages/AnnotationSettingsPage'
 import {
   AboutSettingsPage,
   AccessTokensSettingsPage,
-  AnnotationSettingsPage,
   ProfileSettingsPage,
   SharesSettingsPage,
 } from '../features/settings/pages/OperationSettingsPages'

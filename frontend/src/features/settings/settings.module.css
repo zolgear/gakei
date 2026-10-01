@@ -290,6 +290,14 @@
   min-width: 0;
 }
 
+/* ラベルを上に置く入力欄(ダイアログの中、表のマスの中) */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
 /* 変えた欄は縁をアクセント色にする(ADR-0031 3章) */
 .row[data-changed='true'] .rowControl .input,
 .row[data-changed='true'] .rowControl .select {

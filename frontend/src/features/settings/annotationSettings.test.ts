@@ -2,26 +2,32 @@ import { describe, expect, it } from 'vitest'
 import type { AnnotationConnectionView, AnnotationSettingsResponse } from '../../api/client'
 import {
   CONNECTIONS_MAX,
+  annotationDraftErrors,
+  backfillBlocker,
   canAddConnection,
   changeComfyuiConnection,
   connectionCreateBody,
   connectionDeleteBlocker,
   connectionDisplayName,
   connectionFormFromView,
+  diffAnnotationDraft,
   diffAnnotationForm,
   diffConnectionForm,
   downloadPercent,
+  draftFromSettings,
   emptyConnectionForm,
   formFromSettings,
   formatMemoryGb,
   hasChanges,
   isAnyOnnxDownloading,
+  isUsageCellChanged,
   isValidAnnotationHourlyLimit,
   isValidConnectionBaseUrl,
   isValidConnectionName,
   isValidOnnxThreshold,
   validateAnnotationForm,
   validateConnectionForm,
+  type AnnotationDraft,
   type AnnotationForm,
 } from './annotationSettings'
 
@@ -350,5 +356,102 @@ describe('formatMemoryGb', () => {
   it('10 進の GB で小数1桁にする', () => {
     expect(formatMemoryGb(600_000_000)).toBe('0.6')
     expect(formatMemoryGb(1_600_000_000)).toBe('1.6')
+  })
+})
+
+describe('ページの下書き(ADR-0031)', () => {
+  it('draftFromSettings はスイッチとモデルの選択も持つ', () => {
+    const draft = draftFromSettings(settings({ auto_on_ingest: true, onnx_enabled: true }))
+    expect(draft.auto_on_ingest).toBe(true)
+    expect(draft.llm_enabled).toBe(false)
+    expect(draft.onnx_enabled).toBe(true)
+    expect(draft.onnx_model).toBe('wd-vit-tagger-v3')
+    expect(draft.hourly_limit).toBe('100')
+  })
+
+  it('変わっていなければ空', () => {
+    const s = settings()
+    expect(diffAnnotationDraft(draftFromSettings(s), s)).toEqual({})
+  })
+
+  it('スイッチとモデルの選択も、使い方・数値と一緒に1つの本文にまとめる', () => {
+    const s = settings()
+    const base = draftFromSettings(s)
+    const draft: AnnotationDraft = {
+      ...base,
+      llm_enabled: true,
+      onnx_model: 'wd-swinv2-tagger-v3',
+      hourly_limit: '20',
+      default: { ...base.default, vlm: { connection_id: 'c1', model: 'qwen2.5vl:7b' } },
+    }
+    expect(diffAnnotationDraft(draft, s)).toEqual({
+      llm_enabled: true,
+      onnx_model: 'wd-swinv2-tagger-v3',
+      hourly_limit: 20,
+      profiles: { default: { vlm: { connection_id: 'c1', model: 'qwen2.5vl:7b' } } },
+    })
+  })
+
+  it('一度変えて元に戻したスイッチは送らない', () => {
+    const s = settings({ vlm_enabled: true })
+    const draft = { ...draftFromSettings(s), vlm_enabled: true }
+    expect(diffAnnotationDraft(draft, s)).toEqual({})
+  })
+
+  it('マスの検証の結果を、下書きのキー(default / comfyui / 数値)にまとめる', () => {
+    expect(annotationDraftErrors({})).toEqual({})
+    const errors = annotationDraftErrors({
+      default_llm_model: true,
+      comfyui_vlm_connection: true,
+      hourly_limit: true,
+    })
+    expect(Object.keys(errors).sort()).toEqual(['comfyui', 'default', 'hourly_limit'])
+    expect(annotationDraftErrors({ onnx_threshold: true }).onnx_threshold).toBeTruthy()
+  })
+
+  it('isUsageCellChanged は書き換えたマスだけを示す', () => {
+    const saved = formFromSettings(settings())
+    expect(isUsageCellChanged(saved, saved, 'default', 'llm')).toBe(false)
+    const edited: AnnotationForm = {
+      ...saved,
+      default: { ...saved.default, llm: { connection_id: 'openai', model: 'gpt-x' } },
+    }
+    expect(isUsageCellChanged(edited, saved, 'default', 'llm')).toBe(true)
+    expect(isUsageCellChanged(edited, saved, 'default', 'vlm')).toBe(false)
+    // 空白だけの違いは変更にしない(送らないため)。
+    const spaced: AnnotationForm = {
+      ...saved,
+      default: { ...saved.default, llm: { connection_id: 'openai', model: ' gpt-5.6-luna ' } },
+    }
+    expect(isUsageCellChanged(spaced, saved, 'default', 'llm')).toBe(false)
+  })
+
+  it('「既定と同じ」のマスは、隠れているモデル名の下書きを比べない', () => {
+    const saved = formFromSettings(settings())
+    const draft = withComfyLlm(saved, null, 'leftover')
+    expect(isUsageCellChanged(draft, saved, 'comfyui', 'llm')).toBe(false)
+    expect(isUsageCellChanged(withComfyLlm(saved, 'c1', 'qwen3:8b'), saved, 'comfyui', 'llm')).toBe(true)
+  })
+})
+
+describe('backfillBlocker', () => {
+  const ok = { dirty: false, usableEngineCount: 1, pendingCount: 3, running: false }
+
+  it('押せるときは null', () => {
+    expect(backfillBlocker(ok)).toBeNull()
+  })
+
+  it('保存していない変更がある間は押せない', () => {
+    expect(backfillBlocker({ ...ok, dirty: true })).toBe('unsaved')
+  })
+
+  it('使えるエンジンが無い・未実行が無い・実行中も押せない', () => {
+    expect(backfillBlocker({ ...ok, usableEngineCount: 0 })).toBe('noEngines')
+    expect(backfillBlocker({ ...ok, pendingCount: 0 })).toBe('nothingPending')
+    expect(backfillBlocker({ ...ok, running: true })).toBe('running')
+  })
+
+  it('未保存の理由を、エンジンが無い理由より先に出す(保存すれば解ける理由を先に)', () => {
+    expect(backfillBlocker({ ...ok, dirty: true, usableEngineCount: 0 })).toBe('unsaved')
   })
 })

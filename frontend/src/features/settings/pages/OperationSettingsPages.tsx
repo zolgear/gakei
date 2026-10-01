@@ -2,12 +2,9 @@
  * 「操作」だけのページ(ADR-0031 2章: ボタンを押すとその場で実行する。取り消せないものは確認を出す)
  * と、「GAKEI について」。中身はこれまでのセクションをそのまま使い、共通の枠に入れる。
  * 保存の対象が無いので、ヘッダーに保存のボタンは出さない。
- * 自動タイトル・タグ(ADR-0024)は第2段で下書き + ヘッダーの保存に移す。それまでは今のセクションを
- * (中の保存ボタンごと)そのまま載せる。
  */
 import { useI18n } from '../../../i18n'
 import { AboutSection } from '../AboutSection'
-import { AnnotationSettingsSection } from '../AnnotationSettingsSection'
 import { ApiTokensSection } from '../ApiTokensSection'
 import { ProfileSection } from '../ProfileSection'
 import { SettingsPageFrame } from '../SettingsPageFrame'
@@ -49,16 +46,6 @@ export function AboutSettingsPage() {
   return (
     <SettingsPageFrame pageId="about" title={t.settings.pages.about}>
       <AboutSection />
-    </SettingsPageFrame>
-  )
-}
-
-export function AnnotationSettingsPage() {
-  const { t } = useI18n()
-  const { toast } = useSettingsShell()
-  return (
-    <SettingsPageFrame pageId="annotation" title={t.settings.pages.annotation}>
-      <AnnotationSettingsSection toast={toast} />
     </SettingsPageFrame>
   )
 }

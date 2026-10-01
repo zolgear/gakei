@@ -253,7 +253,6 @@
       "generationHeading": "Generation"
     },
     "profile": {
-      "avatarLabel": "Avatar",
       "upload": "Upload image",
       "chooseFromStock": "Choose from stock",
       "delete": "Remove",
@@ -391,15 +390,11 @@
       "resetPending": "Saving will reset this to the default ({default})."
     },
     "annotation": {
-      "heading": "Automatic titles and tags",
       "intro": "Adds titles and tags to images automatically. Titles are inferred from the prompt with an LLM, and tags from the image with a VLM or the ONNX tagger. Titles and tags set by people are never overwritten. All engines are disabled by default.",
       "loading": "Loading...",
       "loadFailed": "Could not load the automatic title and tag settings.",
       "retry": "Reload",
-      "saveFailed": "Could not save",
-      "savedToast": "Settings saved",
-      "save": "Save",
-      "unsavedChanges": "You have unsaved changes",
+      "communicationFailed": "Communication failed",
       "autoOnIngestLabel": "Infer automatically when images are added",
       "autoOnIngestHelp": "Queues inference for every generated output, upload, and sketch.",
       "usableEnginesLabel": "Available engines",
@@ -437,16 +432,17 @@
         "callsLabel": "Calls in the last hour",
         "callsValue": "{count} / {limit}",
         "edit": "Edit",
+        "editHeading": "Edit endpoint",
+        "editSubmit": "Apply changes",
         "delete": "Delete",
         "cancel": "Cancel",
-        "saveEdit": "Save",
         "deleteDisabledInUse": "Cannot be deleted while it is selected under “Usage”.",
         "deleteConfirm": {
           "message": "Deletes the endpoint “{name}” and its saved key.",
           "confirmLabel": "Delete"
         },
         "deletedToast": "Endpoint deleted",
-        "updatedToast": "Endpoint saved",
+        "updatedToast": "Endpoint updated",
         "add": "Add endpoint",
         "addHeading": "Add endpoint",
         "addSubmit": "Add",
@@ -538,7 +534,6 @@
         "thresholdInvalid": "Enter a number from {min} to {max}"
       },
       "backfill": {
-        "heading": "Images not yet inferred",
         "pendingLabel": "Images never inferred",
         "pendingValue": {
           "one": "{count} image",
@@ -551,6 +546,7 @@
         },
         "run": "Infer all",
         "noEngines": "Cannot run because no engine is available.",
+        "unsavedBlocked": "You have unsaved changes. Save them before running.",
         "confirm": {
           "message": {
             "one": "Queues inference for {count} image that has never been inferred.",

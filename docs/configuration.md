@@ -19,8 +19,8 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 次の項目は例外で、設定画面で保存すると、以降は画面の設定が環境変数より優先される(環境変数は、画面で保存するまでの既定値として使う)。
 
 - ComfyUI の接続先(`COMFYUI_URL`): 設定画面で一度でも接続または切り離しをしたとき
-- `MODERATION`: 設定 → 生成
-- `COMFYUI_TIMEOUT_SECONDS`: 設定 → ComfyUI
+- `MODERATION`: 設定 → OpenAI(`/settings/openai`)で変えて、ページ上部の「保存」を押したとき
+- `COMFYUI_TIMEOUT_SECONDS`: 設定 → ComfyUI(`/settings/comfyui`)で変えて、ページ上部の「保存」を押したとき
 
 ## 一覧
 
@@ -42,7 +42,7 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 | `S3_FORCE_PATH_STYLE` | `false` | `true` でパス形式の URL で接続する(仮想ホスト形式を受けない互換ストレージ向け) |
 | `OPENAI_MAX_RETRIES` | `4` | 429 などの再試行回数。再試行は OpenAI SDK が行う |
 | `OPENAI_TIMEOUT_SECONDS` | `600` | 1リクエストのタイムアウト(秒)。4K や高品質の生成は数分かかる |
-| `MODERATION` | `low` | Generate のときに送る表現の制限。`auto` または `low`。設定画面(設定 → 生成)で保存すると、そちらが優先される |
+| `MODERATION` | `low` | Generate のときに送る表現の制限。`auto` または `low`。設定画面(設定 → OpenAI)で保存すると、そちらが優先される |
 | `COMFYUI_URL` | なし(無効) | ローカルの ComfyUI の URL(例: `http://127.0.0.1:8188`)。通常は設定画面(設定 → ComfyUI)から接続する。ループバック以外を指定すると、起動時に警告を出す |
 | `COMFYUI_TIMEOUT_SECONDS` | `1800` | ComfyUI の1回の実行を待つ上限(秒)。設定画面(設定 → ComfyUI)で保存すると、そちらが優先される |
 | `AUTH_MODE` | `none` | `none`(個人モード。認証なし)か `oidc`(OIDC でログイン。ADR-0019)。手順は [auth.md](auth.md) |

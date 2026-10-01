@@ -92,23 +92,29 @@ export interface ConnectionDetail {
 
 interface ConnectionCardProps {
   title: string
-  state: ConnectionCardState
-  status: string
+  /** 状態の表示。省くと出さない(状態を細目の表で見せるカードなど)。 */
+  state?: ConnectionCardState
+  status?: string
+  /** 名前の横に出す小さな印(「組み込み」「使用中」など)。 */
+  badges?: ReactNode
   details?: ConnectionDetail[]
   /** 状態の下に出す注記(環境変数の値が優先される旨など)。 */
   notes?: ReactNode
   actions?: ReactNode
 }
 
-export function ConnectionCard({ title, state, status, details, notes, actions }: ConnectionCardProps) {
+export function ConnectionCard({ title, state = 'ok', status, badges, details, notes, actions }: ConnectionCardProps) {
   return (
     <div className={styles.card}>
       <div className={styles.cardHead}>
         <span className={styles.cardTitle}>{title}</span>
-        <span className={styles.cardStatus} data-state={state}>
-          <span className={styles.dot} data-state={state} aria-hidden="true" />
-          {status}
-        </span>
+        {badges}
+        {status && (
+          <span className={styles.cardStatus} data-state={state}>
+            <span className={styles.dot} data-state={state} aria-hidden="true" />
+            {status}
+          </span>
+        )}
       </div>
       {details && details.length > 0 && (
         <dl className={styles.detailList}>

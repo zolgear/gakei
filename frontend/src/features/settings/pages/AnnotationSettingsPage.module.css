@@ -1,0 +1,392 @@
+/*
+ * 自動タイトル・タグのページ(`/settings/annotation`)にしか無いものだけを置く。
+ * セクション、行、入力、ボタン、接続のカードなどは共通の `settings.module.css` を使う(ADR-0031 5章)。
+ */
+
+.value {
+  font-size: 13px;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* 外部の API に送られる旨。読み落とされないよう、枠と警告色の左の線で目立たせる。 */
+.notice {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+.examples {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.exampleList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+/* ---------- 接続先 ---------- */
+
+.connectionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 9px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.badge[data-tone='accent'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ボタンの横に並べる短い注記(使用中のため削除できない旨) */
+.inlineNote {
+  align-self: center;
+}
+
+.keyStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.keyStatus[data-set='true'] {
+  color: var(--color-success);
+}
+
+.keyStatus[data-set='true'] .statusDot {
+  background: var(--color-success);
+}
+
+/* 編集のダイアログの中のキーの欄(接続先の欄とは別に送る) */
+.keyBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.keyRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keyRow input {
+  flex: 1 1 200px;
+  max-width: none;
+}
+
+/* ---------- 使い方(表) ---------- */
+
+/*
+ * 表の幅で並べ方を変える(コンテナクエリ)。設定ページの本文は最大 760px なので、画面の幅では
+ * なく表の入れ物の幅で決める。狭いときは列ごとに縦に積む(見出し → タイトル → タグ)。
+ */
+.usage {
+  container: annotation-usage / inline-size;
+}
+
+.usageGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.usageRowHeader {
+  display: none;
+}
+
+.usageColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.usageColumnHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.usageColumnTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.usageCell {
+  /* 読み上げ用に隠したマスの見出し(position: absolute)の基準にする */
+  position: relative;
+  margin: 0;
+  padding: 8px 10px 10px;
+  min-width: 0;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 変えたマスは縁をアクセント色にする(ADR-0031 3章) */
+.usageCell[data-changed='true'] {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.usageCellLegend {
+  float: left;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.cellLabel {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.cellControl {
+  max-width: none;
+}
+
+.inheritSummary {
+  margin: 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * 広いとき: 3列の grid(行の見出し、既定、ComfyUI の画像)。列の入れ物は display: contents にして、
+ * 中の見出しとマスを `--row` / `--col` の位置に置く。
+ */
+@container annotation-usage (min-width: 560px) {
+  .usageGrid {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px 10px;
+  }
+
+  .usageColumn {
+    display: contents;
+  }
+
+  .usageRowHeader,
+  .usageColumnHeader,
+  .usageCell {
+    grid-row: var(--row);
+    grid-column: var(--col);
+  }
+
+  .usageRowHeader {
+    display: block;
+    align-self: start;
+    padding-top: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  /* 行の見出しがあるので、マスの見出しは読み上げだけに残す。 */
+  .usageCellLegend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* ---------- ONNX のモデル ---------- */
+
+.modelList {
+  margin: 0;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.modelList legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.modelRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.modelRow[data-selected='true'] {
+  border-color: var(--color-border-strong);
+}
+
+/* 選び直した(保存していない)モデルは縁をアクセント色にする */
+.modelList[data-changed='true'] .modelRow[data-selected='true'] {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.modelChoice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 13px;
+}
+
+.modelName {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.modelSize {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.modelMemory {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.modelStatusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-left: 24px;
+}
+
+.modelStatus {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.modelStatus[data-state='ready'] {
+  color: var(--color-success);
+}
+
+.modelStatus[data-state='failed'] {
+  color: var(--color-danger);
+}
+
+.progressTrack {
+  height: 4px;
+  margin-left: 24px;
+  background: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.3s ease;
+}
+
+.progressBar[data-indeterminate='true'] {
+  width: 30% !important;
+  animation: indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressBar[data-indeterminate='true'] {
+    animation: none;
+  }
+}
+
+/* ---------- 狭い画面(ADR-0009 5章: タップ 44px 以上) ---------- */
+
+@media (max-width: 767px) {
+  .modelChoice {
+    min-height: 44px;
+  }
+
+  .modelChoice input {
+    width: 20px;
+    height: 20px;
+  }
+
+  .modelStatusRow {
+    padding-left: 0;
+  }
+
+  .progressTrack {
+    margin-left: 0;
+  }
+}
