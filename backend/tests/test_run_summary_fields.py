@@ -115,27 +115,37 @@ def test_list_runs_query_count_does_not_grow_with_page_size(client: TestClient) 
         wait_for_run_terminal(client, run_id)
         run_ids.append(run_id)
 
-    import threading
-    from collections import Counter
-
     from sqlalchemy import event
+    from sqlalchemy.orm import ORMExecuteState
 
-    engine = client.app.state.engine
-    # スレッドごとに SELECT 回数を数える。同じエンジンを runner のポーリング
-    # (`_pick_and_start_run`。別スレッド)も使うので、全体を数えると計測中にたまたま
-    # 走った 1 回で境界を越えて不安定になる(2026-09-27 に CI で再現)。
-    # 1 リクエストの処理は 1 スレッドで完結するので、最多のスレッドの回数がリクエスト分。
-    select_counts: Counter[int] = Counter()
+    from app.deps import get_session
 
-    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany) -> None:  # noqa: ANN001
-        if statement.strip().upper().startswith("SELECT"):
-            select_counts[threading.get_ident()] += 1
+    # このリクエストに渡すセッションで実行した SELECT だけを数える。エンジン全体やスレッドごとに
+    # 数えると、runner・annotator のポーリング(asyncio の executor スレッドで SELECT する)が
+    # 計測中に走った回数まで拾い、境界を越えて不安定になる(2026-09-27・2026-10-01 に CI で再現)。
+    # `do_orm_execute` は関連の読み込み(selectin・lazy)も通るので、N+1 になれば回数に表れる。
+    select_count = 0
 
-    event.listen(engine, "before_cursor_execute", _before_cursor_execute)
+    def _count_selects(state: ORMExecuteState) -> None:
+        nonlocal select_count
+        if state.is_select:
+            select_count += 1
+
+    app = client.app
+
+    def _counting_session():  # noqa: ANN202
+        session = app.state.session_factory()
+        event.listen(session, "do_orm_execute", _count_selects)
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_session] = _counting_session
     try:
         response = client.get("/api/runs", params={"limit": 10})
     finally:
-        event.remove(engine, "before_cursor_execute", _before_cursor_execute)
+        app.dependency_overrides.pop(get_session, None)
 
     assert response.status_code == 200
     listed_ids = [item["id"] for item in response.json()["items"]]
@@ -143,4 +153,4 @@ def test_list_runs_query_count_does_not_grow_with_page_size(client: TestClient) 
 
     # 一覧本体 + outputs一括 + inputs一括 でおおむね定数回のはず。
     # Run 件数(5件)より十分少ない回数に収まっていることだけ確認する(N+1になっていない)。
-    assert max(select_counts.values()) < len(run_ids)
+    assert 0 < select_count < len(run_ids)

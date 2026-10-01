@@ -503,7 +503,13 @@ def test_s3_sdk_errors_are_wrapped_in_oserror() -> None:
         with pytest.raises(StorageIOError) as exc_info:
             call()
         assert isinstance(exc_info.value, OSError)
-        assert "EndpointConnectionError" in str(exc_info.value)
+        # 閉じたポートへの接続は、Linux ではすぐ拒否されて EndpointConnectionError になるが、
+        # Windows は SYN を再送するので先に接続のタイムアウトに達し ConnectTimeoutError になる
+        # (2026-10-01、main・dev への push の Windows CI で再現)。どちらも接続の失敗。
+        assert any(
+            name in str(exc_info.value)
+            for name in ("EndpointConnectionError", "ConnectTimeoutError")
+        )
         assert _UNREACHABLE_SECRET not in str(exc_info.value)
         assert exc_info.value.__cause__ is None
 
