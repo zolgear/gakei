@@ -16,14 +16,15 @@
 - `AUTH_MODE=none`(既定): これまでどおり認証なし。暗黙の利用者1人が管理者として扱われ、設定はすべて操作できる。
 - `AUTH_MODE=oidc`: OIDC の発行者(Keycloak、Entra ID など OpenID Connect Discovery に対応するもの)でログインしないと `/api/*` を使えない。SPA の `index.html` と `/static/*` は公開のままで、画面側がログイン画面を出す。
 - oidc モードで `OIDC_ISSUER`、`OIDC_CLIENT_ID`、`PUBLIC_BASE_URL` のいずれかが無ければ起動を中止する(ADR-0017 の `PROVIDER` の移行安全策と同じ扱い)。Discovery 文書は初回ログイン時に取得してキャッシュし、IdP が落ちていても起動はできる。
-- 設定項目は `docs/configuration.md` に載せる: `AUTH_MODE`、`OIDC_ISSUER`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`(空なら public client)、`OIDC_SCOPES`(既定 `openid profile email`)、`PUBLIC_BASE_URL`、`AUTH_ADMIN_EMAILS`、`AUTH_SESSION_HOURS`(既定 12)、`AUTH_SECRET`(未指定なら生成して `DATA_DIR/secrets.json` に保存)。
+- 設定項目は `docs/configuration.md` に載せる: `AUTH_MODE`、`OIDC_ISSUER`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`(空なら public client)、`OIDC_SCOPES`(既定 `openid profile email`)、`PUBLIC_BASE_URL`、`AUTH_ADMIN_EMAILS`、`AUTH_SESSION_HOURS`(既定 720。2026-10-01 に 12 から改めた)、`AUTH_SECRET`(未指定なら生成して `DATA_DIR/secrets.json` に保存)。
 
 ### 2. サーバー側で Authorization Code + PKCE を行い、セッションは Cookie で持つ(BFF)
 
 - ログインはサーバーが仲介する: `GET /api/auth/login` → IdP → `GET /api/auth/callback`。コードの交換と ID トークンの検証(署名、`iss`、`aud`、`nonce`、期限)は Authlib に任せ、自前でトークン検証を書かない(ADR-0006 の Trade-off「トークン検証の実装ミスが起きない」を踏襲)。
 - ログイン後は **サーバー側セッション** を `auth_session` 表に持ち、ブラウザには HttpOnly の Cookie `gakei_session` にランダムなトークンだけを渡す(DB にはそのハッシュを置く)。ログアウトで即時失効し、期限(`AUTH_SESSION_HOURS`)を過ぎたものは次のログイン時に掃除する。**同じ利用者が複数の端末で同時にログインできる。1ユーザーあたり最大 10 セッション(2026-09-28 改訂)。** ログインしても、別のブラウザや端末のセッションは消さない。callback で新しいセッションを作る直前に、同じ `app_user.id` のセッションが 10 件以上あれば、古い順に消して新しいものを含め 10 件に収める。
   - 2026-09-27 には、セキュリティ監査の指摘 I-3 を受けて「1ユーザー1セッション」にしていた。再ログインしても、別の端末に残った古いセッションが使われ続けることを防ぐためだった。
-  - 2026-09-28、別の端末でログインすると既存のログインが切れることが問題になり、ユーザーの判断で改めた。残ったセッションの懸念は、有効期限(`AUTH_SESSION_HOURS`、既定 12 時間)と件数の上限で抑える。
+  - **セッションの既定の長さは 30日(2026-10-01 改訂)。** 既定の 12 時間では毎日ログインし直すことになり、ユーザーの判断で改めた。期限はログインした時刻から数え、使っても延びない。IdP のアクセストークン・リフレッシュトークンは保存せず、期限内に IdP へ問い合わせ直すこともしない(Open WebUI の OIDC と同じ程度。Open WebUI は自前の JWT で、既定 4 週間)。そのため、IdP 側でユーザーを無効にしても、GAKEI のセッションは期限まで使える。早く締め出したい組織は `AUTH_SESSION_HOURS` を短くする。上限は 720 時間(30日)のまま。
+  - 2026-09-28、別の端末でログインすると既存のログインが切れることが問題になり、ユーザーの判断で改めた。残ったセッションの懸念は、有効期限(`AUTH_SESSION_HOURS`)と件数の上限で抑える。
 - Cookie を使う理由: 画像の配信(`<img src="/api/assets/{id}/content">`)と進捗の SSE(`EventSource`)はリクエストヘッダーを付けられない。Bearer トークンでは、この2つの経路(ADR-0004 の配信方針)が通らない。
 - Cookie の属性: `HttpOnly`、`SameSite=Lax`、`Path=/`。`Secure` は `PUBLIC_BASE_URL` が `https` のときだけ付ける(ローカルの `http://127.0.0.1` でも試せるように)。
 - Authlib が state / nonce / code_verifier を一時的に置く場所として、Starlette の `SessionMiddleware`(署名付き Cookie `gakei_oidc`、有効 10 分)を oidc モードのときだけ追加する。この Cookie はログイン手続き中しか使わず、ログイン済みセッションとは別物。`SessionMiddleware` は純粋 ASGI で本文をバッファしないため、SSE に影響しない(`BaseHTTPMiddleware` を避ける方針は `main.py` の `LocaleMiddleware` と同じ)。
