@@ -170,7 +170,8 @@
 }
 
 .pageTitle {
-  flex: 1;
+  /* 名前の幅を基準に折り返す(狭いときは名前を潰さず、変更の件数・取り消す・保存を次の行へ回す) */
+  flex: 1 1 auto;
   min-width: 0;
   margin: 0;
   font-size: 16px;
@@ -645,7 +646,7 @@
   padding-top: 4px;
 }
 
-/* ---------- 一覧(アクセストークン、共有リンク) ---------- */
+/* ---------- 一覧(アクセストークン、共有リンク、ComfyUI のワークフロー) ---------- */
 
 .list {
   display: flex;
@@ -680,6 +681,24 @@
   font-size: 13px;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.itemName a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.itemName a:hover {
+  color: var(--color-accent);
+}
+
+/* 行の右に並べる複数の操作(ComfyUI のワークフローの編集・削除) */
+.itemActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .itemMeta {

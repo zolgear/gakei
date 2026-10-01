@@ -3,12 +3,10 @@ import { setLocale } from '../../i18n'
 import {
   canSaveConnection,
   connectionState,
-  connectionSummary,
   disconnectedNotice,
   envSourceNote,
   formDisconnectedNotice,
   isLoopbackUrl,
-  listDisconnectedNotice,
   lockedMessage,
   testSuccessNotice,
 } from './comfyuiConnectionForm'
@@ -189,21 +187,6 @@ describe('disconnectedNotice', () => {
   })
 })
 
-describe('listDisconnectedNotice', () => {
-  it('ワークフローが0件なら、接続状態に関わらず出さない', () => {
-    expect(listDisconnectedNotice(false, 0)).toBeNull()
-    expect(listDisconnectedNotice(true, 0)).toBeNull()
-  })
-
-  it('1件以上あって未接続なら出す', () => {
-    expect(listDisconnectedNotice(false, 2)).not.toBeNull()
-  })
-
-  it('1件以上あっても接続済みなら出さない', () => {
-    expect(listDisconnectedNotice(true, 2)).toBeNull()
-  })
-})
-
 describe('formDisconnectedNotice', () => {
   it('接続済みなら出さない', () => {
     expect(formDisconnectedNotice(true)).toBeNull()
@@ -216,40 +199,8 @@ describe('formDisconnectedNotice', () => {
   })
 })
 
-describe('connectionSummary', () => {
-  it('無効なら「未接続」', () => {
-    expect(connectionSummary({ enabled: false, available: false, url: null })).toEqual({
-      state: 'disabled',
-      label: '未接続',
-    })
-  })
-
-  it('接続できるときは URL を含む', () => {
-    expect(
-      connectionSummary({ enabled: true, available: true, url: 'http://127.0.0.1:8188' }),
-    ).toEqual({ state: 'available', label: '接続済み: http://127.0.0.1:8188' })
-  })
-
-  it('接続できないときは理由なしの短い文言', () => {
-    expect(connectionSummary({ enabled: true, available: false, url: 'http://127.0.0.1:8188' })).toEqual(
-      { state: 'unavailable', label: '接続できません' },
-    )
-  })
-})
-
 describe('en locale', () => {
   afterEach(() => setLocale('ja'))
-
-  it('connectionSummary interpolates the URL in English', () => {
-    setLocale('en')
-    expect(
-      connectionSummary({ enabled: true, available: true, url: 'http://127.0.0.1:8188' }),
-    ).toEqual({ state: 'available', label: 'Connected: http://127.0.0.1:8188' })
-    expect(connectionSummary({ enabled: false, available: false, url: null })).toEqual({
-      state: 'disabled',
-      label: 'Not connected',
-    })
-  })
 
   it('lockedMessage differs per action in English', () => {
     setLocale('en')

@@ -6,11 +6,14 @@
  *   `/settings` では「表示」を出す。狭ければ `/settings` は目次だけ、各ページは別の画面になる。
  * - 1ページだった頃のハッシュ付きのリンク(`/settings#comfyui` など)は、対応するページへ置き換える。
  * - 見せてはいけない・知らないページは `/settings` へ置き換える。
+ * - ComfyUI のワークフローの登録・編集(`/settings/comfyui/workflows/new`、`/:id`)も枠の中に出し、
+ *   目次は ComfyUI を選んだ状態にする(ADR-0031 1章の 2026-10-01 追記)。
+ * ルートは `/settings` の子のルート(`App.tsx`)。子の間を移ってもこの枠は作り直さない。
  * トーストは設定画面で1つだけ持ち、各ページへは `SettingsShellContext` で渡す。
  */
 import { useCallback, useMemo, useState, type ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, Navigate, useLocation, useParams } from 'react-router'
+import { Link, Navigate, useLocation, useMatch } from 'react-router'
 import { getShareSettings } from '../api/client'
 import { ToastHost, useToast } from '../components/Toast'
 import { isAdmin, useAuth } from '../features/auth/authState'
@@ -42,6 +45,7 @@ import {
   ProfileSettingsPage,
   SharesSettingsPage,
 } from '../features/settings/pages/OperationSettingsPages'
+import { ComfyUIWorkflowFormPage } from '../features/comfyui-workflows/ComfyUIWorkflowFormPage'
 import styles from '../features/settings/settings.module.css'
 
 const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
@@ -59,7 +63,17 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
 
 export function SettingsPage() {
   const { t } = useI18n()
-  const { page: slug } = useParams()
+  const slug = useMatch('/settings/:page')?.params.page
+  const workflowNewMatch = useMatch('/settings/comfyui/workflows/new')
+  const workflowEditMatch = useMatch('/settings/comfyui/workflows/:id')
+  // ワークフローの登録・編集の画面か(`new` は `:id` にも当たるので先に見る)。
+  const workflowForm = workflowNewMatch
+    ? { workflowId: undefined }
+    : workflowEditMatch
+      ? { workflowId: workflowEditMatch.params.id }
+      : null
+  // 目次だけでなく、ページの本文を出すパスか(狭いときは目次を隠す)。
+  const isPageView = Boolean(slug) || workflowForm !== null
   const location = useLocation()
   const auth = useAuth()
   const toast = useToast()
@@ -93,12 +107,12 @@ export function SettingsPage() {
   if (auth.status === 'loading') return null
 
   // 1ページだった頃のハッシュ付きのリンク。
-  if (!slug && location.hash) {
+  if (!isPageView && location.hash) {
     const legacy = legacySettingsHashPath(location.hash)
     if (legacy) return <Navigate to={legacy} replace />
   }
 
-  const pageId = slug ? settingsPageFromSlug(slug) : DEFAULT_SETTINGS_PAGE
+  const pageId: SettingsPageId | null = workflowForm ? 'comfyui' : slug ? settingsPageFromSlug(slug) : DEFAULT_SETTINGS_PAGE
   if (!pageId) return <Navigate to="/settings" replace />
   if (!visibleSettingsPages(visibility).includes(pageId)) {
     // 共有リンクの一覧は、設定を読み込み終わるまで出すかどうか決められない。
@@ -107,7 +121,7 @@ export function SettingsPage() {
   }
 
   const PageComponent = PAGE_COMPONENTS[pageId]
-  const activePage = slug ? pageId : isWide ? DEFAULT_SETTINGS_PAGE : null
+  const activePage = isPageView ? pageId : isWide ? DEFAULT_SETTINGS_PAGE : null
 
   function renderTocItem(id: SettingsPageId) {
     return (
@@ -133,7 +147,7 @@ export function SettingsPage() {
   return (
     <SettingsShellContext.Provider value={shell}>
       <div ref={rootRef} className={styles.root}>
-        <div className={styles.layout} data-view={slug ? 'page' : 'index'}>
+        <div className={styles.layout} data-view={isPageView ? 'page' : 'index'}>
           <nav className={styles.toc} aria-label={t.settings.frame.tocLabel}>
             <div className={styles.tocHeader}>
               <button type="button" className={`${styles.backButton} ${styles.tocBack}`} onClick={goBack}>
@@ -157,7 +171,11 @@ export function SettingsPage() {
           </nav>
           <div className={styles.content}>
             {/* 狭いときの `/settings` は目次だけ(本文は CSS で隠す)。ページを切り替えたら作り直す。 */}
-            <PageComponent key={pageId} />
+            {workflowForm ? (
+              <ComfyUIWorkflowFormPage key={location.pathname} workflowId={workflowForm.workflowId} />
+            ) : (
+              <PageComponent key={pageId} />
+            )}
           </div>
         </div>
       </div>

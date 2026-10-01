@@ -1,34 +1,19 @@
 /**
- * 接続のカード(`ComfyUIConnectionCard.tsx`)、ワークフロー一覧のコンパクトな接続状態表示
- * (`ComfyUIConnectionSummary.tsx`)、ワークフロー一覧・登録編集画面の未接続案内、
+ * 接続のカード(`ComfyUIConnectionCard.tsx`)と、ワークフローの登録・編集画面の未接続案内、
  * それぞれの判定を切り出した純粋関数。
  * ループバック判定はサーバー側(`app/providers/registry.py` の `_is_loopback_url`)と
  * 同じ規則(ホストが `localhost`、`127.0.0.0/8`、`::1`)を保存前の画面側でも再現する。
  * 最終判定は常にサーバー(422)なので、ここでの判定は確認チェックを出す/省くための目安。
  */
 import type { ComfyUIConnectionTestResponse, ComfyUIStatus } from '../../api/client'
-import { fmt, msg } from '../../i18n'
+import { msg } from '../../i18n'
 
 export type ConnectionState = 'disabled' | 'available' | 'unavailable'
 
-/** 接続の3状態(無効/接続できる/接続できない)。パネルとコンパクト表示の両方の色分けに使う。 */
+/** 接続の3状態(無効/接続できる/接続できない)。接続のカードの色分けに使う。 */
 export function connectionState(status: Pick<ComfyUIStatus, 'enabled' | 'available'>): ConnectionState {
   if (!status.enabled) return 'disabled'
   return status.available ? 'available' : 'unavailable'
-}
-
-export interface ConnectionSummary {
-  state: ConnectionState
-  label: string
-}
-
-/** `/settings/comfyui/workflows` に出す1行分の要約(状態 + 短いラベル)。詳しい操作はパネル側で行う。 */
-export function connectionSummary(status: Pick<ComfyUIStatus, 'enabled' | 'available' | 'url'>): ConnectionSummary {
-  const t = msg().comfyui.connection
-  const state = connectionState(status)
-  if (state === 'disabled') return { state, label: t.disconnectedLabel }
-  if (state === 'available') return { state, label: fmt(t.connectedLabel, { url: status.url ?? '' }) }
-  return { state, label: t.unavailableLabel }
 }
 
 export function isLoopbackUrl(url: string): boolean {
@@ -96,19 +81,13 @@ export function testSuccessNotice(params: {
 }
 
 /**
- * ワークフロー一覧・登録編集画面(`/settings/comfyui/workflows`)で出す未接続の案内。
+ * ワークフローの登録・編集画面(`/settings/comfyui/workflows/new`、`/:id`)で出す未接続の案内。
  * 接続テストのみで保存し忘れた場合と同じく `enabled === false` を根拠にする
  * (`GET /api/comfyui/status` の結果。ADR-0013 7章: 無効時はモデル選択に出ない)。
  */
 export function disconnectedNotice(enabled: boolean): string | null {
   if (enabled) return null
   return msg().comfyui.connection.disconnectedNotice
-}
-
-/** ワークフロー一覧向け: ワークフローが1件もなければ「未接続」の表示だけで十分なので出さない。 */
-export function listDisconnectedNotice(enabled: boolean, workflowCount: number): string | null {
-  if (workflowCount === 0) return null
-  return disconnectedNotice(enabled)
 }
 
 /** 登録・編集画面向け: 未接続の間は analyze の `/object_info` 補完も効かないことを付け加える。 */
