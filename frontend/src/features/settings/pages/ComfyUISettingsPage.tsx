@@ -4,14 +4,15 @@
  * - 「保存で反映」: 1回の実行を待つ上限(タイムアウト、2026-09-24)。画面では分で入力し、保存時に秒へ
  *   変換して `PATCH /api/settings/general` の `comfyui_timeout_seconds` だけを送る。「既定値に戻す」は
  *   下書きに null を入れる。環境変数(`COMFYUI_TIMEOUT_SECONDS`)由来でも入力欄はロックしない。
- * - ワークフロー管理(`/settings/comfyui/workflows`)への入口。
+ * - ワークフローの一覧(`ComfyUIWorkflowList`。ADR-0031 1章の 2026-10-01 追記)。登録・編集は設定の枠の中の
+ *   別の画面(`/settings/comfyui/workflows/new`、`/:id`)、削除は確認のあとすぐ実行する「操作」。
  */
 import { useCallback, useMemo } from 'react'
-import { Link } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getComfyUIStatus, getGeneralSettings, updateGeneralSettings } from '../../../api/client'
 import { fmt, useI18n } from '../../../i18n'
 import { ComfyUIConnectionCard } from '../../comfyui-workflows/ComfyUIConnectionCard'
+import { ComfyUIWorkflowList } from '../../comfyui-workflows/ComfyUIWorkflowList'
 import {
   TIMEOUT_MAX_MINUTES,
   TIMEOUT_MIN_MINUTES,
@@ -121,12 +122,8 @@ export function ComfyUISettingsPage() {
 
       <SettingsSection heading={c.workflowsHeading}>
         <p className={styles.helpText}>{c.workflowsHelp}</p>
-        <div className={styles.actions}>
-          <Link to="/settings/comfyui/workflows" className={styles.linkButton}>
-            {c.manageWorkflows}
-          </Link>
-        </div>
         {comfyStatusQuery.data?.enabled === false && <p className={styles.helpText}>{c.notConnectedHint}</p>}
+        <ComfyUIWorkflowList />
       </SettingsSection>
     </SettingsPageFrame>
   )

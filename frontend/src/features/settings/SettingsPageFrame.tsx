@@ -4,6 +4,7 @@
  * 「保存で反映」の項目があるページだけ `draft` を渡す。渡さないページ(即時・操作だけのページ)には
  * 保存のボタンを出さない。
  * 保存していない変更がある間は、目次に点を付け(`reportDirty`)、離れる前に確かめる。
+ * ページの中のページ(ComfyUI のワークフローの登録・編集)は `onBack` で「戻る」の行き先を変える。
  */
 import { useEffect, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router'
@@ -19,10 +20,12 @@ interface SettingsPageFrameProps {
   title: string
   intro?: ReactNode
   draft?: SettingsDraftControls
+  /** 「戻る」を差し替える(省くと ADR-0031 3章の行き先)。 */
+  onBack?: () => void
   children: ReactNode
 }
 
-export function SettingsPageFrame({ pageId, title, intro, draft, children }: SettingsPageFrameProps) {
+export function SettingsPageFrame({ pageId, title, intro, draft, onBack, children }: SettingsPageFrameProps) {
   const { t } = useI18n()
   const f = t.settings.frame
   const { isWide, reportDirty } = useSettingsShell()
@@ -36,6 +39,10 @@ export function SettingsPageFrame({ pageId, title, intro, draft, children }: Set
   useEffect(() => () => reportDirty(pageId, false), [pageId, reportDirty])
 
   function goBack() {
+    if (onBack) {
+      onBack()
+      return
+    }
     const dest = settingsBackDestination({
       isWide,
       openedFromToc: isOpenedFromToc(location.state),

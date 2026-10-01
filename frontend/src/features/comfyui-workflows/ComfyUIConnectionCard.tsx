@@ -2,8 +2,7 @@
  * ComfyUI の接続のカード(`GET /api/comfyui/status`。ADR-0013 7章、ADR-0031 2章「接続」)。
  * `/settings/comfyui` に置く。状態をカードで見せ、接続する・URL を変えるときはダイアログで入力し、
  * 接続テストで確かめてから登録する。切り離しは確認ダイアログを出してから行う。
- * ワークフロー一覧(`/settings/comfyui/workflows`)は接続状態を1行で示すだけ
- * (`ComfyUIConnectionSummary`)で、操作はここに集約している。
+ * 同じページの「ワークフロー」の節に、登録済みのワークフローの一覧(`ComfyUIWorkflowList`)がある。
  * `COMFYUI_URL` 環境変数は、画面で一度も設定していないときだけの既定値で、ここで接続・切り離しを
  * すると以降は画面の設定が優先される(`source: 'env'` のときだけその旨を表示する)。
  * 接続・切り離しの成功後は、この状態(`comfyui-status`)と capabilities のキャッシュを両方無効化し、
