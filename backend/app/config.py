@@ -111,8 +111,8 @@ class Settings(BaseSettings):
     auth_allowed_email_domains: str = Field(default="", alias="AUTH_ALLOWED_EMAIL_DOMAINS")
 
     # ログインセッション(`auth_session`)の有効期間(時間)。1時間〜30日(720時間)の範囲
-    # (I-10、2026-09-27 追記)。
-    auth_session_hours: int = Field(default=12, ge=1, le=24 * 30, alias="AUTH_SESSION_HOURS")
+    # (I-10、2026-09-27 追記)。既定は 30日(2026-10-01 改訂。ADR-0019 2章)。
+    auth_session_hours: int = Field(default=24 * 30, ge=1, le=24 * 30, alias="AUTH_SESSION_HOURS")
 
     # `gakei_oidc` Cookie(state/nonce/PKCE の一時保存)の署名鍵。未指定なら生成して
     # `DATA_DIR/secrets.json` の `auth_secret` に保存する(auth/secret.py)。

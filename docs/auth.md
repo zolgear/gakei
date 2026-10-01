@@ -6,6 +6,7 @@ GAKEI は既定では認証を持たず、同じ PC からだけ開ける(`HOST=
 
 - ログインはサーバーが仲介する(Authorization Code + PKCE)。ブラウザは `/api/auth/login` から IdP へ移り、`/api/auth/callback` に戻ってくる。
 - ログイン後はサーバー側にセッションを持ち、ブラウザには HttpOnly の Cookie(`gakei_session`)だけを渡す。画像の表示と進捗の配信(SSE)もこの Cookie で通る。
+- セッションは既定で 30日有効(`AUTH_SESSION_HOURS`、時間で指定、上限 720)。期限はログインした時刻から数える。GAKEI は IdP のトークンを持たず、期限内に IdP へ問い合わせ直さないので、IdP 側でユーザーを無効にしても期限までは使える。早く締め出したいときは短くする。
 - ロールは `user` と `admin` の2つ。`AUTH_ADMIN_EMAILS` に載せたメールアドレスの人が `admin` になり、API キーや ComfyUI の接続など「管理者設定」を変えられる。それ以外の人は生成と閲覧はできるが、管理者設定は変えられない。
 - **ログインできる人の範囲は `AUTH_ALLOWED_EMAIL_DOMAINS` で絞る。** 空だと、IdP が認証した人は誰でもログインできる。Keycloak のように IdP 側で利用者を管理するなら空でよいが、Google のように誰でもアカウントを持てる IdP では必ず指定する(指定しないと、世界中の誰でも `user` としてログインし、組織のキーで画像を生成できる)。`AUTH_ADMIN_EMAILS` の人は常にログインできる。
 - 生成した Run とアップロードした画像に、誰が実行したかが記録され、履歴と Run 詳細に表示される。
