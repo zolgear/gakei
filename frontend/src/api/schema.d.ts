@@ -843,70 +843,6 @@ export interface paths {
         patch: operations["update_annotation_settings"];
         trace?: never;
     };
-    "/api/settings/annotation/connections": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Annotation Connection
-         * @description 接続先を足す。足した接続先は `connections` の末尾に入る。キーは任意(ローカルのサーバー向けに
-         *     任意の文字列を受け付けるため、有効性の確認はしない)。
-         */
-        post: operations["create_annotation_connection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/annotation/connections/{connection_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Annotation Connection
-         * @description 接続先を消す(キーも消す)。組み込みの接続先と、組で使っている接続先は 409。
-         */
-        delete: operations["delete_annotation_connection"];
-        options?: never;
-        head?: never;
-        /** Update Annotation Connection */
-        patch: operations["update_annotation_connection"];
-        trace?: never;
-    };
-    "/api/settings/annotation/connections/{connection_id}/api-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Annotation Connection Api Key
-         * @description 接続先のキーを保存する(`secrets.json`。値は返さない)。有効性の確認はしない。組み込みの
-         *     接続先のキーは OpenAI の設定で変える(409)。
-         */
-        put: operations["set_annotation_connection_api_key"];
-        post?: never;
-        /** Delete Annotation Connection Api Key */
-        delete: operations["delete_annotation_connection_api_key"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/settings/annotation/onnx/download": {
         parameters: {
             query?: never;
@@ -961,6 +897,74 @@ export interface paths {
          */
         post: operations["backfill_annotations"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Llm Connections
+         * @description 接続先の一覧。先頭は組み込みの「OpenAI の設定」。
+         */
+        get: operations["list_llm_connections"];
+        put?: never;
+        /**
+         * Create Llm Connection
+         * @description 接続先を足す。足した接続先は一覧の末尾に入る。キーは任意(ローカルのサーバー向けに任意の
+         *     文字列を受け付けるため、有効性の確認はしない)。
+         */
+        post: operations["create_llm_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm-connections/{connection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Llm Connection
+         * @description 接続先を消す(キーも消す)。組み込みの接続先と、どこかの機能で使っている接続先は 409。
+         */
+        delete: operations["delete_llm_connection"];
+        options?: never;
+        head?: never;
+        /** Update Llm Connection */
+        patch: operations["update_llm_connection"];
+        trace?: never;
+    };
+    "/api/settings/llm-connections/{connection_id}/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Llm Connection Api Key
+         * @description 接続先のキーを保存する(`secrets.json`。値は返さない)。有効性の確認はしない。組み込みの
+         *     接続先のキーは OpenAI の設定で変える(409)。
+         */
+        put: operations["set_llm_connection_api_key"];
+        post?: never;
+        /** Delete Llm Connection Api Key */
+        delete: operations["delete_llm_connection_api_key"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1239,11 +1243,6 @@ export interface components {
             /** Commit */
             commit?: string | null;
         };
-        /** AnnotationApiKeyUpdateRequest */
-        AnnotationApiKeyUpdateRequest: {
-            /** Api Key */
-            api_key: string;
-        };
         /** AnnotationBackfillResponse */
         AnnotationBackfillResponse: {
             /** Queued */
@@ -1263,57 +1262,13 @@ export interface components {
             vlm?: components["schemas"]["AnnotationTarget"] | null;
         };
         /**
-         * AnnotationConnectionCreateRequest
-         * @description `POST /api/settings/annotation/connections`。キーは任意(省略・空ならキーなし)。
+         * AnnotationConnectionCalls
+         * @description 接続先1つへの、自動タイトル・タグの直近1時間の LLM・VLM の呼び出し回数(上限は接続先
+         *     ごと。ADR-0024 8章)。
          */
-        AnnotationConnectionCreateRequest: {
-            /** Name */
-            name: string;
-            /** Base Url */
-            base_url: string;
-            /**
-             * Api Style
-             * @default responses
-             */
-            api_style: string;
-            /** Api Key */
-            api_key?: string | null;
-        };
-        /**
-         * AnnotationConnectionUpdateRequest
-         * @description `PATCH /api/settings/annotation/connections/{id}`。省略した項目は変更しない。
-         *     組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。
-         */
-        AnnotationConnectionUpdateRequest: {
-            /** Name */
-            name?: string | null;
-            /** Base Url */
-            base_url?: string | null;
-            /** Api Style */
-            api_style?: string | null;
-        };
-        /**
-         * AnnotationConnectionView
-         * @description 推定の接続先1つ(ADR-0024 8章)。キーの値は返さない。
-         */
-        AnnotationConnectionView: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Builtin */
-            builtin: boolean;
-            /** Base Url */
-            base_url?: string | null;
-            /**
-             * Api Style
-             * @enum {string}
-             */
-            api_style: "responses" | "chat";
-            /** Api Key Set */
-            api_key_set: boolean;
-            /** In Use */
-            in_use: boolean;
+        AnnotationConnectionCalls: {
+            /** Connection Id */
+            connection_id: string;
             /** Calls Last Hour */
             calls_last_hour: number;
         };
@@ -1375,8 +1330,6 @@ export interface components {
             onnx_model: "wd-vit-tagger-v3" | "wd-swinv2-tagger-v3" | "wd-eva02-large-tagger-v3";
             /** Onnx Threshold */
             onnx_threshold: number;
-            /** Connections */
-            connections?: components["schemas"]["AnnotationConnectionView"][];
             profiles: components["schemas"]["AnnotationProfiles"];
             /** Onnx Models */
             onnx_models?: components["schemas"]["OnnxModelStatus"][];
@@ -1386,6 +1339,8 @@ export interface components {
             queued_count: number;
             /** Calls Last Hour */
             calls_last_hour: number;
+            /** Connection Calls */
+            connection_calls?: components["schemas"]["AnnotationConnectionCalls"][];
             /** Usable Engines */
             usable_engines?: ("llm" | "vlm" | "onnx")[];
         };
@@ -2453,6 +2408,72 @@ export interface components {
             error_code?: string | null;
             /** Queued At */
             queued_at?: string | null;
+        };
+        /** LlmConnectionApiKeyUpdateRequest */
+        LlmConnectionApiKeyUpdateRequest: {
+            /** Api Key */
+            api_key: string;
+        };
+        /**
+         * LlmConnectionCreateRequest
+         * @description `POST /api/settings/llm-connections`。キーは任意(省略・空ならキーなし)。
+         */
+        LlmConnectionCreateRequest: {
+            /** Name */
+            name: string;
+            /** Base Url */
+            base_url: string;
+            /**
+             * Api Style
+             * @default responses
+             */
+            api_style: string;
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /**
+         * LlmConnectionUpdateRequest
+         * @description `PATCH /api/settings/llm-connections/{id}`。省略した項目は変更しない。
+         *     組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。
+         */
+        LlmConnectionUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Api Style */
+            api_style?: string | null;
+        };
+        /**
+         * LlmConnectionView
+         * @description LLM・VLM の接続先1つ(ADR-0032、ADR-0024 8章)。キーの値は一部も返さない。
+         */
+        LlmConnectionView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Builtin */
+            builtin: boolean;
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Api Style
+             * @enum {string}
+             */
+            api_style: "responses" | "chat";
+            /** Api Key Set */
+            api_key_set: boolean;
+            /** Used By */
+            used_by?: "annotation"[];
+        };
+        /**
+         * LlmConnectionsResponse
+         * @description `GET /api/settings/llm-connections` と、接続先を変える API の応答。
+         */
+        LlmConnectionsResponse: {
+            /** Connections */
+            connections: components["schemas"]["LlmConnectionView"][];
         };
         /**
          * MaskBinding
@@ -5938,181 +5959,6 @@ export interface operations {
             };
         };
     };
-    create_annotation_connection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnnotationConnectionCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_annotation_connection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                connection_id: string;
-            };
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_annotation_connection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                connection_id: string;
-            };
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnnotationConnectionUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_annotation_connection_api_key: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                connection_id: string;
-            };
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnnotationApiKeyUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_annotation_connection_api_key: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                connection_id: string;
-            };
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     download_onnx_model: {
         parameters: {
             query?: never;
@@ -6199,6 +6045,212 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnnotationBackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_llm_connections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_llm_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmConnectionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_llm_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_llm_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmConnectionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_llm_connection_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmConnectionApiKeyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_llm_connection_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
                 };
             };
             /** @description Validation Error */

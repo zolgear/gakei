@@ -172,7 +172,6 @@
     "annotation": {
       "invalidBool": "{name} は true か false である必要があります",
       "invalidModel": "モデル名は1〜{max}文字で指定してください",
-      "invalidApiStyle": "API 形式は responses か chat である必要があります",
       "invalidLanguage": "言語は ja か en である必要があります",
       "invalidTagLanguage": "タグの言語は native か localized である必要があります",
       "invalidHourlyLimit": "1時間あたりの上限は{min}〜{max}の整数である必要があります",
@@ -180,14 +179,22 @@
       "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",
       "unknownOnnxModel": "未知の ONNX タガーのモデルです",
       "onnxDownloading": "ダウンロード中のモデルは削除できません",
-      "invalidConnectionName": "接続先の名前は1〜{max}文字で指定してください",
       "invalidTarget": "接続先とモデル名の組の形が正しくありません",
       "unknownConnection": "指定した接続先がありません",
-      "tooManyConnections": "接続先は{max}件までです",
-      "builtinConnectionName": "OpenAI の設定",
-      "builtinConnectionReadOnly": "「OpenAI の設定」は編集・削除できません(API 形式だけ変えられます。キーと Base URL は OpenAI の設定で変えてください)",
-      "connectionInUse": "この接続先は使い方(既定、または ComfyUI の画像)で使っているため削除できません",
       "migratedConnectionName": "推定専用"
+    },
+    "llmConnections": {
+      "invalidName": "接続先の名前は1〜{max}文字で指定してください",
+      "invalidApiStyle": "API 形式は responses か chat である必要があります",
+      "tooMany": "接続先は{max}件までです",
+      "notFound": "指定した接続先がありません",
+      "builtinName": "OpenAI の設定",
+      "builtinReadOnly": "「OpenAI の設定」は編集・削除できません(API 形式だけ変えられます。キーと Base URL は OpenAI の設定で変えてください)",
+      "inUse": "この接続先は{features}で使っているため削除できません",
+      "featureSeparator": "、",
+      "features": {
+        "annotation": "自動タイトル・タグ"
+      }
     },
     "share": {
       "invalidEnabled": "enabled は true か false である必要があります"

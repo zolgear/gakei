@@ -224,6 +224,7 @@
       "shares": "共有リンク",
       "accessTokens": "アクセストークン",
       "openai": "OpenAI",
+      "llmConnections": "LLM の接続先",
       "annotation": "自動タイトル・タグ",
       "comfyui": "ComfyUI",
       "mcp": "MCP",
@@ -389,6 +390,65 @@
       },
       "resetPending": "保存すると既定値({default})に戻ります"
     },
+    "llmConnections": {
+      "intro": "LLM と VLM(画像を読むモデル)の送り先です。自動タイトル・タグなど、LLM を使う機能はここに登録した接続先から選びます。Ollama や LM Studio、LiteLLM など、OpenAI 互換のサーバーを登録できます。",
+      "loading": "読み込み中...",
+      "loadFailed": "LLM の接続先を取得できませんでした。",
+      "retry": "再読み込み",
+      "communicationFailed": "通信に失敗しました",
+      "builtinName": "OpenAI の設定",
+      "builtinBadge": "組み込み",
+      "builtinHelp": "名前、Base URL、キーは OpenAI の設定を使います。変えられるのは API の形式だけです。",
+      "openAiSettingsLink": "OpenAI の設定を開く",
+      "baseUrlLabel": "Base URL",
+      "baseUrlOpenAiDefault": "OpenAI(既定)",
+      "apiStyleLabel": "API の形式",
+      "apiStyleResponses": "Responses API",
+      "apiStyleChat": "Chat Completions",
+      "apiStyleHelp": "Responses API に対応していなければ Chat Completions を選びます。",
+      "apiKeyLabel": "キー",
+      "apiKeySet": "設定済み",
+      "apiKeyNotSet": "未設定(ダミーのキーを送ります)",
+      "builtinApiKeyNotSet": "未設定",
+      "edit": "編集",
+      "editHeading": "接続先を編集",
+      "editSubmit": "変更を反映",
+      "delete": "削除",
+      "cancel": "キャンセル",
+      "deleteConfirm": {
+        "message": "接続先「{name}」を削除します。保存したキーも削除します。",
+        "confirmLabel": "削除する"
+      },
+      "deletedToast": "接続先を削除しました",
+      "updatedToast": "接続先を更新しました",
+      "add": "接続先を追加",
+      "addHeading": "接続先を追加",
+      "addSubmit": "追加",
+      "addedToast": "接続先を追加しました",
+      "limitReached": "接続先は {max} 件まで登録できます。",
+      "nameLabel": "名前",
+      "namePlaceholder": "例: Ollama",
+      "nameInvalid": "1〜{max} 文字で入力してください",
+      "baseUrlPlaceholder": "例: http://127.0.0.1:11434/v1",
+      "baseUrlInvalid": "http:// か https:// で始まる URL を入力してください",
+      "apiKeyPlaceholder": "キーを入力",
+      "apiKeyOptionalHelp": "任意です。キーの要らないサーバーでは空のままにします(ダミーのキーを送ります)。",
+      "apiKeySave": "キーを設定",
+      "apiKeyDelete": "キーを削除",
+      "apiKeySavedToast": "キーを設定しました",
+      "apiKeyDeletedToast": "キーを削除しました",
+      "apiKeyDeleteConfirm": {
+        "message": "接続先「{name}」のキーを削除します。以後はダミーのキーを送ります。",
+        "confirmLabel": "削除する"
+      },
+      "usedByLabel": "使っている機能",
+      "usedByNone": "なし",
+      "featureSeparator": "、",
+      "features": {
+        "annotation": "自動タイトル・タグ"
+      },
+      "deleteDisabledInUse": "使っている機能があるため削除できません。"
+    },
     "annotation": {
       "intro": "画像にタイトルとタグを自動で付けます。タイトルはプロンプトから LLM で推測し、タグは画像から VLM や ONNX タガーで推定します。人が付けたタイトルとタグは上書きしません。どのエンジンも既定では無効です。",
       "loading": "読み込み中...",
@@ -411,59 +471,6 @@
         "vlmHelp": "プロンプトが無い画像には、タイトルも画像から付けます。",
         "targetHelp": "LLM と VLM の送り先とモデルは、下の「使い方」で選びます。"
       },
-      "connections": {
-        "heading": "接続先",
-        "intro": "LLM と VLM の送り先です。Ollama や LM Studio、LiteLLM など、OpenAI 互換のサーバーを登録できます。",
-        "builtinName": "OpenAI の設定",
-        "builtinBadge": "組み込み",
-        "inUseBadge": "使用中",
-        "builtinHelp": "名前、Base URL、キーは OpenAI の設定を使います。変えられるのは API の形式だけです。",
-        "openAiSettingsLink": "OpenAI の設定を開く",
-        "baseUrlLabel": "Base URL",
-        "baseUrlOpenAiDefault": "OpenAI(既定)",
-        "apiStyleLabel": "API の形式",
-        "apiStyleResponses": "Responses API",
-        "apiStyleChat": "Chat Completions",
-        "apiStyleHelp": "Responses API に対応していなければ Chat Completions を選びます。",
-        "apiKeyLabel": "キー",
-        "apiKeySet": "設定済み",
-        "apiKeyNotSet": "未設定(ダミーのキーを送ります)",
-        "builtinApiKeyNotSet": "未設定",
-        "callsLabel": "直近 1 時間の呼び出し",
-        "callsValue": "{count} / {limit}",
-        "edit": "編集",
-        "editHeading": "接続先を編集",
-        "editSubmit": "変更を反映",
-        "delete": "削除",
-        "cancel": "キャンセル",
-        "deleteDisabledInUse": "「使い方」で選んでいるため削除できません。",
-        "deleteConfirm": {
-          "message": "接続先「{name}」を削除します。保存したキーも削除します。",
-          "confirmLabel": "削除する"
-        },
-        "deletedToast": "接続先を削除しました",
-        "updatedToast": "接続先を更新しました",
-        "add": "接続先を追加",
-        "addHeading": "接続先を追加",
-        "addSubmit": "追加",
-        "addedToast": "接続先を追加しました",
-        "limitReached": "接続先は {max} 件まで登録できます。",
-        "nameLabel": "名前",
-        "namePlaceholder": "例: Ollama",
-        "nameInvalid": "1〜{max} 文字で入力してください",
-        "baseUrlPlaceholder": "例: http://127.0.0.1:11434/v1",
-        "baseUrlInvalid": "http:// か https:// で始まる URL を入力してください",
-        "apiKeyPlaceholder": "キーを入力",
-        "apiKeyOptionalHelp": "任意です。キーの要らないサーバーでは空のままにします(ダミーのキーを送ります)。",
-        "apiKeySave": "キーを設定",
-        "apiKeyDelete": "キーを削除",
-        "apiKeySavedToast": "キーを設定しました",
-        "apiKeyDeletedToast": "キーを削除しました",
-        "apiKeyDeleteConfirm": {
-          "message": "接続先「{name}」のキーを削除します。以後はダミーのキーを送ります。",
-          "confirmLabel": "削除する"
-        }
-      },
       "usage": {
         "heading": "使い方",
         "intro": "タイトル(LLM)とタグ(VLM)のそれぞれで、接続先とモデル名を選びます。",
@@ -484,7 +491,9 @@
         "examplesHeading": "選び方の例",
         "liteLlmExample": "LiteLLM などの中継サーバー: 接続先は同じものを選び、モデル名だけを変えます。",
         "ollamaExample": "Ollama など: 「ComfyUI の画像」でその接続先とモデルを選ぶと、ComfyUI で作った画像はそこで、ほかの画像は既定の接続先で推定します。",
-        "comfyuiIsolation": "「ComfyUI の画像」で別の接続先を選ぶと、その画像は既定の接続先には送りません。失敗しても既定には切り替えません。"
+        "comfyuiIsolation": "「ComfyUI の画像」で別の接続先を選ぶと、その画像は既定の接続先には送りません。失敗しても既定には切り替えません。",
+        "connectionsHelp": "接続先の追加・編集とキーは「LLM の接続先」で行います。",
+        "connectionsLink": "LLM の接続先を開く"
       },
       "language": {
         "heading": "言語",
@@ -505,7 +514,10 @@
         "callsLastHourValue": {
           "one": "{count} 回",
           "other": "{count} 回"
-        }
+        },
+        "perConnectionLabel": "直近 1 時間の呼び出し(接続先ごと)",
+        "perConnectionHelp": "自動タイトル・タグで選んでいる接続先と、直近 1 時間に呼び出した接続先を出します。",
+        "perConnectionValue": "{name}: {count} / {limit}"
       },
       "onnx": {
         "heading": "ONNX タガー(このサーバー内で実行)",

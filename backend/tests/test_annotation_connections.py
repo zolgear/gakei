@@ -1,7 +1,6 @@
 """推定の接続先の一覧と、用途ごとの「接続先 + モデル名」の組(ADR-0024 8章)。
 
-- 接続先の追加・変更・削除とキー(組み込みの `openai` は編集・削除できない、使用中は消せない、
-  キーは返さない)
+- 用途ごとの組の読み書き(接続先の追加・変更・削除とキーは `test_llm_connections.py`)
 - 今の設定(接続先1組の形)からの移行(推定専用の Base URL あり・なし、冪等、送り先が変わらない)
 - 画像ごとの組の選び方(ComfyUI の Run の出力、アップロード、OpenAI の Run、ComfyUI 用が null)
 - 1時間の上限を接続先ごとに数える、失敗しても既定の組に切り替えない、記録するモデル名、
@@ -26,9 +25,11 @@ from app.annotation.engines import AnnotationEngineError, EngineContext, FakeEng
 from app.config import Settings
 from app.domain import annotation_settings as s
 from app.domain import api_key as api_key_domain
+from app.domain import llm_connections
 from app.domain.general_settings import _get_raw_value, _save
 from app.domain.models import Run
 from tests.test_annotations import _generate, _patch_settings, _upload, _wait_annotation
+from tests.test_llm_connections import add_llm_connection
 
 LOCAL_URL = "http://127.0.0.1:11434/v1"
 
@@ -72,20 +73,15 @@ def recording(client: TestClient) -> RecordingEngines:
 
 
 def _add_connection(client: TestClient, name: str = "Ollama", **extra: Any) -> str:
-    before = {c["id"] for c in client.get("/api/settings/annotation").json()["connections"]}
-    response = client.post(
-        "/api/settings/annotation/connections",
-        json={"name": name, "base_url": LOCAL_URL, "api_style": "chat", **extra},
+    return add_llm_connection(client, name, base_url=LOCAL_URL, api_style="chat", **extra)
+
+
+def _connection_calls(body: dict, connection_id: str) -> int:
+    return next(
+        c["calls_last_hour"]
+        for c in body["connection_calls"]
+        if c["connection_id"] == connection_id
     )
-    assert response.status_code == 201, response.text
-    created = [c for c in response.json()["connections"] if c["id"] not in before]
-    assert len(created) == 1
-    assert response.json()["connections"][-1]["id"] == created[0]["id"]
-    return created[0]["id"]
-
-
-def _connection(body: dict, connection_id: str) -> dict:
-    return next(c for c in body["connections"] if c["id"] == connection_id)
 
 
 def _set_provider(client: TestClient, run_id: str, provider: str) -> None:
@@ -117,138 +113,7 @@ def _auto_models(client: TestClient, asset_id: str) -> dict | None:
         return row.auto_models if row is not None else None
 
 
-# -- 接続先の CRUD ------------------------------------------------------------------
-
-
-def test_create_update_delete_connection(client: TestClient, data_dir: Path) -> None:
-    connection_id = _add_connection(client, " Ollama ", api_key="sk-local-wxyz")
-    body = client.get("/api/settings/annotation").json()
-    view = _connection(body, connection_id)
-    assert view == {
-        "id": connection_id,
-        "name": "Ollama",
-        "builtin": False,
-        "base_url": LOCAL_URL,
-        "api_style": "chat",
-        "api_key_set": True,
-        "in_use": False,
-        "calls_last_hour": 0,
-    }
-    # キーは DB ではなく secrets.json に置き、API では返さない。
-    secrets = json.loads((data_dir / "secrets.json").read_text())
-    assert secrets[f"annotation_connection_key.{connection_id}"] == "sk-local-wxyz"
-    # キーは一部(末尾など)も返さない。
-    assert "wxyz" not in json.dumps(body)
-
-    response = client.patch(
-        f"/api/settings/annotation/connections/{connection_id}",
-        json={
-            "name": "LiteLLM",
-            "base_url": "https://llm.example.com/v1/",
-            "api_style": "responses",
-        },
-    )
-    assert response.status_code == 200, response.text
-    view = _connection(response.json(), connection_id)
-    assert (view["name"], view["base_url"], view["api_style"]) == (
-        "LiteLLM",
-        "https://llm.example.com/v1",
-        "responses",
-    )
-
-    response = client.delete(f"/api/settings/annotation/connections/{connection_id}")
-    assert response.status_code == 200
-    assert [c["id"] for c in response.json()["connections"]] == ["openai"]
-    # キーも消える。
-    assert not (data_dir / "secrets.json").exists() or (
-        f"annotation_connection_key.{connection_id}"
-        not in json.loads((data_dir / "secrets.json").read_text())
-    )
-    missing = client.delete(f"/api/settings/annotation/connections/{connection_id}")
-    assert missing.status_code == 404
-
-
-def test_connection_key_set_and_delete(client: TestClient) -> None:
-    connection_id = _add_connection(client)
-    assert (
-        _connection(client.get("/api/settings/annotation").json(), connection_id)["api_key_set"]
-        is False
-    )
-    url = f"/api/settings/annotation/connections/{connection_id}/api-key"
-    response = client.put(url, json={"api_key": "sk-abcd-qrst"})
-    assert response.status_code == 200
-    assert "qrst" not in response.text
-    assert _connection(response.json(), connection_id)["api_key_set"] is True
-    assert client.put(url, json={"api_key": "  "}).status_code == 400
-    response = client.delete(url)
-    view = _connection(response.json(), connection_id)
-    assert view["api_key_set"] is False
-    assert (
-        client.put(
-            "/api/settings/annotation/connections/nope/api-key", json={"api_key": "x"}
-        ).status_code
-        == 404
-    )
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        {"name": "", "base_url": LOCAL_URL},
-        {"name": "x", "base_url": "ftp://127.0.0.1/v1"},
-        {"name": "x", "base_url": ""},
-        {"name": "x", "base_url": "http://user:pw@127.0.0.1/v1"},
-        {"name": "x", "base_url": LOCAL_URL, "api_style": "grpc"},
-    ],
-)
-def test_create_connection_validation(client: TestClient, body: dict) -> None:
-    response = client.post("/api/settings/annotation/connections", json=body)
-    assert response.status_code == 422, body
-    assert [c["id"] for c in client.get("/api/settings/annotation").json()["connections"]] == [
-        "openai"
-    ]
-
-
-def test_builtin_connection_is_read_only_except_api_style(client: TestClient) -> None:
-    base = "/api/settings/annotation/connections/openai"
-    for body in ({"name": "x"}, {"base_url": LOCAL_URL}, {"name": "x", "api_style": "chat"}):
-        assert client.patch(base, json=body).status_code == 409, body
-    assert client.delete(base).status_code == 409
-    assert client.put(base + "/api-key", json={"api_key": "x"}).status_code == 409
-    assert client.delete(base + "/api-key").status_code == 409
-
-    response = client.patch(base, json={"api_style": "chat"})
-    assert response.status_code == 200
-    assert _connection(response.json(), "openai")["api_style"] == "chat"
-    assert client.patch(base, json={"api_style": "grpc"}).status_code == 422
-
-
-def test_builtin_connection_shows_openai_settings(client: TestClient, data_dir: Path) -> None:
-    api_key_domain.write_file_key(data_dir, "sk-openai-uvwx")
-    api_key_domain.write_file_base_url(data_dir, "http://127.0.0.1:4000/v1")
-    response = client.get("/api/settings/annotation")
-    view = _connection(response.json(), "openai")
-    assert view["builtin"] is True
-    assert view["name"] == "OpenAI の設定"
-    assert view["base_url"] == "http://127.0.0.1:4000/v1"
-    assert view["api_key_set"] is True
-    assert "uvwx" not in response.text
-
-
-def test_connection_in_use_cannot_be_deleted(client: TestClient) -> None:
-    connection_id = _add_connection(client)
-    _patch_settings(
-        client, profiles={"comfyui": {"llm": {"connection_id": connection_id, "model": "m"}}}
-    )
-    body = client.get("/api/settings/annotation").json()
-    assert _connection(body, connection_id)["in_use"] is True
-    response = client.delete(f"/api/settings/annotation/connections/{connection_id}")
-    assert response.status_code == 409
-
-    # 「既定と同じ」に戻せば消せる。
-    _patch_settings(client, profiles={"comfyui": {"llm": None}})
-    response = client.delete(f"/api/settings/annotation/connections/{connection_id}")
-    assert response.status_code == 200
+# -- 用途ごとの組 ----------------------------------------------------------------
 
 
 def test_profiles_roundtrip(client: TestClient) -> None:
@@ -278,17 +143,6 @@ def test_profiles_roundtrip(client: TestClient) -> None:
         "llm": {"connection_id": local, "model": "qwen3"},
         "vlm": None,
     }
-
-
-def test_oidc_non_admin_does_not_see_key(client_oidc: TestClient) -> None:
-    from tests.conftest import login_as
-
-    login_as(client_oidc, "admin@example.com")
-    connection_id = _add_connection(client_oidc, api_key="sk-secret-mnop")
-    login_as(client_oidc, "user@example.com")
-    response = client_oidc.get("/api/settings/annotation")
-    assert _connection(response.json(), connection_id)["api_key_set"] is True
-    assert "mnop" not in response.text
 
 
 # -- 今の設定からの移行 --------------------------------------------------------------
@@ -343,7 +197,7 @@ def test_migration_with_dedicated_base_url(
     migrated = config.connections[0]
     assert (migrated.name, migrated.base_url, migrated.api_style) == ("推定専用", LOCAL_URL, "chat")
     assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") is None
-    assert s.read_connection_key(data_dir, migrated.id) == "sk-local"
+    assert llm_connections.read_connection_key(data_dir, migrated.id) == "sk-local"
 
     # 送り先は移行前(推定専用の Base URL と推定専用キー、chat)と同じ。
     llm, vlm = _targets(db_session_factory, settings)
@@ -379,7 +233,7 @@ def test_migration_with_dedicated_base_url_without_key(
     llm, vlm = _targets(db_session_factory, settings)
     # OpenAI のキーは送らず、ダミーのキー(移行前と同じ)。モデルは既定のまま。
     assert (llm.api_key, llm.base_url, llm.api_style, llm.model) == (
-        s.PLACEHOLDER_API_KEY,
+        llm_connections.PLACEHOLDER_API_KEY,
         LOCAL_URL,
         "responses",
         s.DEFAULT_LLM_MODEL,
@@ -429,7 +283,7 @@ def test_migration_with_only_dedicated_key_keeps_sending_it_to_openai_base(
     with db_session_factory() as db:
         assert s.migrate_legacy(db, settings) is True
     llm, _ = _targets(db_session_factory, settings)
-    assert (llm.api_key, llm.base_url) == ("sk-own", s.OPENAI_DEFAULT_BASE_URL)
+    assert (llm.api_key, llm.base_url) == ("sk-own", llm_connections.OPENAI_DEFAULT_BASE_URL)
 
 
 def test_migration_is_noop_on_fresh_install(
@@ -496,7 +350,7 @@ def test_migration_commit_failure_then_rerun(
         config = s.load(db)
         assert _get_raw_value(db, "annotation.legacy_key_connection") is None
     assert len(config.connections) == 1
-    assert s.read_connection_key(data_dir, config.connections[0].id) == "sk-local"
+    assert llm_connections.read_connection_key(data_dir, config.connections[0].id) == "sk-local"
     assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") is None
 
 
@@ -514,7 +368,7 @@ def test_migration_key_write_failure_after_commit_then_rerun(
         raise OSError("書き込みに失敗")
 
     with monkeypatch.context() as m:
-        m.setattr(s, "write_connection_key", broken_write)
+        m.setattr(llm_connections, "write_connection_key", broken_write)
         with db_session_factory() as db, pytest.raises(OSError):
             s.migrate_legacy(db, settings)
     with db_session_factory() as db:
@@ -526,7 +380,7 @@ def test_migration_key_write_failure_after_commit_then_rerun(
         config = s.load(db)
         assert _get_raw_value(db, "annotation.legacy_key_connection") is None
     assert len(config.connections) == 1
-    assert s.read_connection_key(data_dir, config.connections[0].id) == "sk-local"
+    assert llm_connections.read_connection_key(data_dir, config.connections[0].id) == "sk-local"
     assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") is None
     with db_session_factory() as db:
         assert s.migrate_legacy(db, settings) is False
@@ -540,8 +394,9 @@ def test_migration_runs_on_startup(data_dir: Path) -> None:
         _write_legacy(app.state.session_factory, {"base_url": LOCAL_URL, "llm_model": "m1"})
     with TestClient(app) as client:
         body = client.get("/api/settings/annotation").json()
-    assert [c["name"] for c in body["connections"]] == ["OpenAI の設定", "推定専用"]
-    local = body["connections"][1]["id"]
+        connections = client.get("/api/settings/llm-connections").json()["connections"]
+    assert [c["name"] for c in connections] == ["OpenAI の設定", "推定専用"]
+    local = connections[1]["id"]
     assert body["profiles"]["default"]["llm"] == {"connection_id": local, "model": "m1"}
 
 
@@ -683,7 +538,7 @@ def test_user_connection_without_key_sends_placeholder(client: TestClient, data_
         config = s.load(db)
     target = s.resolve_target(config, settings, "comfyui", "llm")
     assert (target.api_key, target.base_url, target.api_style) == (
-        s.PLACEHOLDER_API_KEY,
+        llm_connections.PLACEHOLDER_API_KEY,
         LOCAL_URL,
         "chat",
     )
@@ -717,8 +572,8 @@ def test_hourly_limit_is_counted_per_connection(
     # ローカルの接続先は別に数えるので、ComfyUI の画像は先に進む(既定の組の行に塞がれない)。
     assert _annotate(client, comfy_asset)["annotation"]["status"] == "succeeded"
     body = client.get("/api/settings/annotation").json()
-    assert _connection(body, "openai")["calls_last_hour"] == 1
-    assert _connection(body, local)["calls_last_hour"] == 1
+    assert _connection_calls(body, "openai") == 1
+    assert _connection_calls(body, local) == 1
     assert body["calls_last_hour"] == 2
     assert client.get(f"/api/assets/{second}").json()["annotation"]["status"] == "queued"
     assert recording.calls == [("vlm", "openai", "gpt-5.6-luna"), ("vlm", local, "local-vlm")]

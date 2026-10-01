@@ -242,10 +242,12 @@ def test_settings_defaults(client: TestClient) -> None:
     assert body["vlm_enabled"] is False
     assert body["onnx_enabled"] is False
     # 接続先は組み込みの「OpenAI の設定」だけ。既定の組はそれと gpt-5.6-luna(ADR-0024 8章)。
-    assert [c["id"] for c in body["connections"]] == ["openai"]
-    assert body["connections"][0]["builtin"] is True
-    assert body["connections"][0]["api_style"] == "responses"
-    assert body["connections"][0]["api_key_set"] is False
+    connections = client.get("/api/settings/llm-connections").json()["connections"]
+    assert [c["id"] for c in connections] == ["openai"]
+    assert connections[0]["builtin"] is True
+    assert connections[0]["api_style"] == "responses"
+    assert connections[0]["api_key_set"] is False
+    assert body["connection_calls"] == [{"connection_id": "openai", "calls_last_hour": 0}]
     assert body["profiles"] == {
         "default": {
             "llm": {"connection_id": "openai", "model": "gpt-5.6-luna"},
@@ -533,16 +535,6 @@ def test_oidc_user_cannot_change_annotation_settings(client_oidc: TestClient) ->
             "/api/settings/annotation/onnx/download", json={"model": "wd-vit-tagger-v3"}
         ),
         client_oidc.delete("/api/settings/annotation/onnx/wd-vit-tagger-v3"),
-        client_oidc.post(
-            "/api/settings/annotation/connections",
-            json={"name": "x", "base_url": "http://127.0.0.1:11434/v1"},
-        ),
-        client_oidc.patch("/api/settings/annotation/connections/openai", json={"name": "x"}),
-        client_oidc.delete("/api/settings/annotation/connections/openai"),
-        client_oidc.put(
-            "/api/settings/annotation/connections/openai/api-key", json={"api_key": "x"}
-        ),
-        client_oidc.delete("/api/settings/annotation/connections/openai/api-key"),
     ]
     assert [r.status_code for r in forbidden] == [403] * len(forbidden)
 

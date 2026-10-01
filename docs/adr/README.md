@@ -35,5 +35,6 @@
 | ADR-0029 | [0029-public-share-links.md](0029-public-share-links.md) | ログイン不要の共有リンク(画像1枚、または系列) | Proposed |
 | ADR-0030 | [0030-comfyui-final-prompt.md](0030-comfyui-final-prompt.md) | ComfyUI の最終プロンプト(PE の出力)を Run に記録する | Proposed |
 | ADR-0031 | [0031-settings-pages-and-save-rules.md](0031-settings-pages-and-save-rules.md) | 設定画面をページに分け、保存のしかたをページ単位で揃える | Proposed |
+| ADR-0032 | [0032-llm-connections.md](0032-llm-connections.md) | LLM の接続先を、自動タイトル・タグから独立させる | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

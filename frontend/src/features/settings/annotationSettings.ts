@@ -6,16 +6,14 @@
  * ONNX のモデルの選択、使い方の表、言語、上限、しきい値)は下書き(`AnnotationDraft`)に持ち、
  * ページ上部の「保存」で、変わった項目だけを1つの PATCH に載せて送る(`diffAnnotationDraft`)。
  * 使い方の表(profiles)は、書き換えたマスだけを送る(`diffProfiles`)。
- * 接続先の追加・編集・キーは「接続」としてダイアログで送る(ページの保存には混ぜない)。
+ * 接続先そのもの(追加・編集・キー)は「LLM の接続先」のページ(`llmConnections.ts`。ADR-0032)。
  */
 import type {
-  AnnotationApiStyle,
-  AnnotationConnectionCreateRequest,
-  AnnotationConnectionUpdateRequest,
-  AnnotationConnectionView,
+  AnnotationConnectionCalls,
   AnnotationProfilesUpdate,
   AnnotationSettingsResponse,
   AnnotationSettingsUpdateRequest,
+  LlmConnectionView,
   OnnxModelName,
 } from '../../api/client'
 import type { DraftErrors } from './settingsDraft'
@@ -26,9 +24,6 @@ export const ANNOTATION_HOURLY_LIMIT_MAX = 10000
 export const ONNX_THRESHOLD_MIN = 0.01
 export const ONNX_THRESHOLD_MAX = 0.99
 export const MODEL_NAME_MAX = 200
-export const CONNECTION_NAME_MAX = 100
-/** 追加できる接続先の数(組み込みの「OpenAI の設定」は数えない)。 */
-export const CONNECTIONS_MAX = 50
 
 /** 用途。タイトル(LLM)とタグ(VLM)。 */
 export type AnnotationPurpose = 'llm' | 'vlm'
@@ -124,7 +119,7 @@ export function isValidOnnxThreshold(input: string): boolean {
  */
 export function validateAnnotationForm(
   form: AnnotationForm,
-  connections: readonly Pick<AnnotationConnectionView, 'id'>[],
+  connections: readonly Pick<LlmConnectionView, 'id'>[],
 ): AnnotationFormErrors {
   const errors: AnnotationFormErrors = {}
   const ids = new Set(connections.map((c) => c.id))
@@ -288,108 +283,26 @@ export function backfillBlocker(params: {
   return null
 }
 
-// -- 接続先 ------------------------------------------------------------------------
+// -- 1時間の上限(接続先ごと) ----------------------------------------------------------
 
-/** 接続先の追加・編集のフォーム。キーは追加のときだけ使う(編集ではキーを別に設定・削除する)。 */
-export interface ConnectionForm {
-  name: string
-  base_url: string
-  api_style: AnnotationApiStyle
-  api_key: string
-}
-
-export function emptyConnectionForm(): ConnectionForm {
-  return { name: '', base_url: '', api_style: 'responses', api_key: '' }
-}
-
-export function connectionFormFromView(view: AnnotationConnectionView): ConnectionForm {
-  return { name: view.name, base_url: view.base_url ?? '', api_style: view.api_style, api_key: '' }
-}
-
-export type ConnectionFormErrors = Partial<Record<'name' | 'base_url', true>>
-
-export function isValidConnectionName(value: string): boolean {
-  const trimmed = value.trim()
-  return trimmed.length > 0 && trimmed.length <= CONNECTION_NAME_MAX
+export interface ConnectionCallsRow<C> {
+  connection: C
+  calls: number
 }
 
 /**
- * Base URL の検証(サーバーの `normalize_base_url` と同じ規則。ADR-0017)。http / https で
- * ホストがあり、ユーザー情報・クエリー・フラグメントを含まないこと。
+ * 「1時間の上限」に出す、接続先ごとの直近1時間の呼び出し回数(ADR-0024 8章: 回数は接続先ごと)。
+ * 自動タイトル・タグで選んでいる接続先と、直近1時間に呼び出した接続先だけを、LLM の接続先の一覧の
+ * 順に並べる(選んでいない接続先を並べても意味が無いため)。
  */
-export function isValidConnectionBaseUrl(value: string): boolean {
-  const trimmed = value.trim()
-  if (!trimmed) return false
-  let url: URL
-  try {
-    url = new URL(trimmed)
-  } catch {
-    return false
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
-  if (!url.hostname) return false
-  if (url.username || url.password) return false
-  // `new URL` は空のクエリー(`?` だけ)を '' にするので、元の文字列でも確かめる。
-  if (url.search || url.hash || trimmed.includes('?') || trimmed.includes('#')) return false
-  return true
-}
-
-export function validateConnectionForm(form: ConnectionForm): ConnectionFormErrors {
-  const errors: ConnectionFormErrors = {}
-  if (!isValidConnectionName(form.name)) errors.name = true
-  if (!isValidConnectionBaseUrl(form.base_url)) errors.base_url = true
-  return errors
-}
-
-/** 追加の本文。キーは空なら送らない(キーなし)。 */
-export function connectionCreateBody(form: ConnectionForm): AnnotationConnectionCreateRequest {
-  const body: AnnotationConnectionCreateRequest = {
-    name: form.name.trim(),
-    base_url: form.base_url.trim(),
-    api_style: form.api_style,
-  }
-  const key = form.api_key.trim()
-  if (key) body.api_key = key
-  return body
-}
-
-/**
- * 編集の差分(PATCH の本文)。Base URL はサーバーが末尾の `/` を取るので、比べるときも取る
- * (`…/v1/` と入れ直しただけで差分にしないため)。
- */
-export function diffConnectionForm(
-  form: ConnectionForm,
-  view: AnnotationConnectionView,
-): AnnotationConnectionUpdateRequest {
-  const body: AnnotationConnectionUpdateRequest = {}
-  const name = form.name.trim()
-  if (name !== view.name) body.name = name
-  const baseUrl = form.base_url.trim()
-  if (baseUrl.replace(/\/+$/, '') !== (view.base_url ?? '').replace(/\/+$/, '')) body.base_url = baseUrl
-  if (form.api_style !== view.api_style) body.api_style = form.api_style
-  return body
-}
-
-/** 追加した接続先(組み込みを除く)がまだ上限に達していないか。 */
-export function canAddConnection(connections: readonly Pick<AnnotationConnectionView, 'builtin'>[]): boolean {
-  return connections.filter((c) => !c.builtin).length < CONNECTIONS_MAX
-}
-
-/** 削除できない理由。削除できるなら null。 */
-export function connectionDeleteBlocker(
-  view: Pick<AnnotationConnectionView, 'builtin' | 'in_use'>,
-): 'builtin' | 'in_use' | null {
-  if (view.builtin) return 'builtin'
-  if (view.in_use) return 'in_use'
-  return null
-}
-
-/** 画面に出す名前。組み込みの接続先は画面の言語の名前にする(サーバーの言語で返るため)。 */
-export function connectionDisplayName(
-  view: Pick<AnnotationConnectionView, 'builtin' | 'name'>,
-  builtinName: string,
-): string {
-  return view.builtin ? builtinName : view.name
+export function connectionCallsRows<C extends Pick<LlmConnectionView, 'id' | 'used_by'>>(
+  connections: readonly C[],
+  calls: readonly AnnotationConnectionCalls[] | undefined,
+): ConnectionCallsRow<C>[] {
+  const byId = new Map((calls ?? []).map((c) => [c.connection_id, c.calls_last_hour]))
+  return connections
+    .map((connection) => ({ connection, calls: byId.get(connection.id) ?? 0 }))
+    .filter(({ connection, calls }) => calls > 0 || (connection.used_by ?? []).includes('annotation'))
 }
 
 // -- ONNX タガー --------------------------------------------------------------------

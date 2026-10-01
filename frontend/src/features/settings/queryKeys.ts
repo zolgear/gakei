@@ -26,6 +26,12 @@ export const API_TOKENS_QUERY_KEY = ['api-tokens'] as const
 export const ANNOTATION_SETTINGS_QUERY_KEY = ['annotation-settings'] as const
 
 /**
+ * `GET /api/settings/llm-connections`(ADR-0032)。管理者設定の「LLM の接続先」と、
+ * 「自動タイトル・タグ」の使い方の表(接続先の選択肢)が読む。
+ */
+export const LLM_CONNECTIONS_QUERY_KEY = ['llm-connections'] as const
+
+/**
  * `GET /api/settings/share`(ADR-0029)。管理者設定の「共有リンク」と、ビューアの「共有」
  * ボタン(有効なときだけ出す)、ユーザー設定の「共有リンク」(無効の注記)が読む。
  */

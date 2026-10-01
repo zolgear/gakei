@@ -224,6 +224,7 @@
       "shares": "Share links",
       "accessTokens": "Access tokens",
       "openai": "OpenAI",
+      "llmConnections": "LLM connections",
       "annotation": "Auto titles and tags",
       "comfyui": "ComfyUI",
       "mcp": "MCP",
@@ -389,6 +390,65 @@
       },
       "resetPending": "Saving will reset this to the default ({default})."
     },
+    "llmConnections": {
+      "intro": "Where LLM and VLM (models that read images) requests are sent. Features that use an LLM, such as auto titles and tags, choose from the endpoints registered here. You can register OpenAI-compatible servers such as Ollama, LM Studio, or LiteLLM.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the LLM connections.",
+      "retry": "Reload",
+      "communicationFailed": "Communication failed",
+      "builtinName": "OpenAI settings",
+      "builtinBadge": "Built-in",
+      "builtinHelp": "Uses the name, Base URL, and key from the OpenAI settings. Only the API style can be changed.",
+      "openAiSettingsLink": "Open the OpenAI settings",
+      "baseUrlLabel": "Base URL",
+      "baseUrlOpenAiDefault": "OpenAI (default)",
+      "apiStyleLabel": "API style",
+      "apiStyleResponses": "Responses API",
+      "apiStyleChat": "Chat Completions",
+      "apiStyleHelp": "Choose Chat Completions if the server does not support the Responses API.",
+      "apiKeyLabel": "Key",
+      "apiKeySet": "Set",
+      "apiKeyNotSet": "Not set (a dummy key is sent)",
+      "builtinApiKeyNotSet": "Not set",
+      "edit": "Edit",
+      "editHeading": "Edit endpoint",
+      "editSubmit": "Apply changes",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "deleteConfirm": {
+        "message": "Deletes the endpoint “{name}” and its saved key.",
+        "confirmLabel": "Delete"
+      },
+      "deletedToast": "Endpoint deleted",
+      "updatedToast": "Endpoint updated",
+      "add": "Add endpoint",
+      "addHeading": "Add endpoint",
+      "addSubmit": "Add",
+      "addedToast": "Endpoint added",
+      "limitReached": "You can register up to {max} endpoints.",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Ollama",
+      "nameInvalid": "Enter 1 to {max} characters",
+      "baseUrlPlaceholder": "e.g. http://127.0.0.1:11434/v1",
+      "baseUrlInvalid": "Enter a URL starting with http:// or https://",
+      "apiKeyPlaceholder": "Enter a key",
+      "apiKeyOptionalHelp": "Optional. Leave empty for servers that need no key (a dummy key is sent).",
+      "apiKeySave": "Set key",
+      "apiKeyDelete": "Delete key",
+      "apiKeySavedToast": "Key set",
+      "apiKeyDeletedToast": "Key deleted",
+      "apiKeyDeleteConfirm": {
+        "message": "Deletes the key for the endpoint “{name}”. A dummy key will be sent instead.",
+        "confirmLabel": "Delete"
+      },
+      "usedByLabel": "Used by",
+      "usedByNone": "None",
+      "featureSeparator": ", ",
+      "features": {
+        "annotation": "Auto titles and tags"
+      },
+      "deleteDisabledInUse": "Cannot be deleted while a feature uses it."
+    },
     "annotation": {
       "intro": "Adds titles and tags to images automatically. Titles are inferred from the prompt with an LLM, and tags from the image with a VLM or the ONNX tagger. Titles and tags set by people are never overwritten. All engines are disabled by default.",
       "loading": "Loading...",
@@ -411,59 +471,6 @@
         "vlmHelp": "For images without a prompt, the title is also inferred from the image.",
         "targetHelp": "Choose where the LLM and VLM are sent, and which models, under “Usage” below."
       },
-      "connections": {
-        "heading": "Endpoints",
-        "intro": "Where LLM and VLM requests are sent. You can register OpenAI-compatible servers such as Ollama, LM Studio, or LiteLLM.",
-        "builtinName": "OpenAI settings",
-        "builtinBadge": "Built-in",
-        "inUseBadge": "In use",
-        "builtinHelp": "Uses the name, Base URL, and key from the OpenAI settings. Only the API style can be changed.",
-        "openAiSettingsLink": "Open the OpenAI settings",
-        "baseUrlLabel": "Base URL",
-        "baseUrlOpenAiDefault": "OpenAI (default)",
-        "apiStyleLabel": "API style",
-        "apiStyleResponses": "Responses API",
-        "apiStyleChat": "Chat Completions",
-        "apiStyleHelp": "Choose Chat Completions if the server does not support the Responses API.",
-        "apiKeyLabel": "Key",
-        "apiKeySet": "Set",
-        "apiKeyNotSet": "Not set (a dummy key is sent)",
-        "builtinApiKeyNotSet": "Not set",
-        "callsLabel": "Calls in the last hour",
-        "callsValue": "{count} / {limit}",
-        "edit": "Edit",
-        "editHeading": "Edit endpoint",
-        "editSubmit": "Apply changes",
-        "delete": "Delete",
-        "cancel": "Cancel",
-        "deleteDisabledInUse": "Cannot be deleted while it is selected under “Usage”.",
-        "deleteConfirm": {
-          "message": "Deletes the endpoint “{name}” and its saved key.",
-          "confirmLabel": "Delete"
-        },
-        "deletedToast": "Endpoint deleted",
-        "updatedToast": "Endpoint updated",
-        "add": "Add endpoint",
-        "addHeading": "Add endpoint",
-        "addSubmit": "Add",
-        "addedToast": "Endpoint added",
-        "limitReached": "You can register up to {max} endpoints.",
-        "nameLabel": "Name",
-        "namePlaceholder": "e.g. Ollama",
-        "nameInvalid": "Enter 1 to {max} characters",
-        "baseUrlPlaceholder": "e.g. http://127.0.0.1:11434/v1",
-        "baseUrlInvalid": "Enter a URL starting with http:// or https://",
-        "apiKeyPlaceholder": "Enter a key",
-        "apiKeyOptionalHelp": "Optional. Leave empty for servers that need no key (a dummy key is sent).",
-        "apiKeySave": "Set key",
-        "apiKeyDelete": "Delete key",
-        "apiKeySavedToast": "Key set",
-        "apiKeyDeletedToast": "Key deleted",
-        "apiKeyDeleteConfirm": {
-          "message": "Deletes the key for the endpoint “{name}”. A dummy key will be sent instead.",
-          "confirmLabel": "Delete"
-        }
-      },
       "usage": {
         "heading": "Usage",
         "intro": "For titles (LLM) and tags (VLM), choose an endpoint and a model name.",
@@ -484,7 +491,9 @@
         "examplesHeading": "Examples",
         "liteLlmExample": "Relay servers such as LiteLLM: choose the same endpoint and change only the model name.",
         "ollamaExample": "Ollama and similar: choose that endpoint and model under “ComfyUI images” so images made with ComfyUI are inferred there and other images use the default endpoint.",
-        "comfyuiIsolation": "When “ComfyUI images” uses a different endpoint, those images are never sent to the default endpoint, and failures do not fall back to the default."
+        "comfyuiIsolation": "When “ComfyUI images” uses a different endpoint, those images are never sent to the default endpoint, and failures do not fall back to the default.",
+        "connectionsHelp": "Add and edit endpoints and their keys under “LLM connections”.",
+        "connectionsLink": "Open LLM connections"
       },
       "language": {
         "heading": "Language",
@@ -505,7 +514,10 @@
         "callsLastHourValue": {
           "one": "{count} call",
           "other": "{count} calls"
-        }
+        },
+        "perConnectionLabel": "Calls in the last hour (per endpoint)",
+        "perConnectionHelp": "Shows the endpoints selected for auto titles and tags, and those called in the last hour.",
+        "perConnectionValue": "{name}: {count} / {limit}"
       },
       "onnx": {
         "heading": "ONNX tagger (runs on this server)",

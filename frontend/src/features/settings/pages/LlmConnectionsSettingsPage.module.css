@@ -1,0 +1,87 @@
+/*
+ * LLM の接続先のページ(`/settings/llm-connections`)にしか無いものだけを置く。
+ * セクション、行、入力、ボタン、接続のカードなどは共通の `settings.module.css` を使う(ADR-0031 5章)。
+ */
+
+.connectionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 9px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.badge[data-tone='accent'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ボタンの横に並べる短い注記(使用中のため削除できない旨) */
+.inlineNote {
+  align-self: center;
+}
+
+.keyStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.keyStatus[data-set='true'] {
+  color: var(--color-success);
+}
+
+.keyStatus[data-set='true'] .statusDot {
+  background: var(--color-success);
+}
+
+/* 編集のダイアログの中のキーの欄(接続先の欄とは別に送る) */
+.keyBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.keyRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keyRow input {
+  flex: 1 1 200px;
+  max-width: none;
+}
+
+/* 使っている機能の印を並べる */
+.features {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

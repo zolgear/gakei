@@ -40,6 +40,7 @@
 | 共有リンク | `/settings/shares` | ユーザー(共有が有効なときのみ) | 自分の共有の一覧と取り消し(ADR-0029) |
 | アクセストークン | `/settings/access-tokens` | ユーザー(oidc のみ) | 発行と失効(ADR-0023) |
 | OpenAI | `/settings/openai` | 管理者 | API キー、接続先(Base URL)、moderation(これまでの「生成」セクション) |
+| LLM の接続先 | `/settings/llm-connections` | 管理者 | LLM・VLM の接続先(2026-10-01 追加。ADR-0032) |
 | 自動タイトル・タグ | `/settings/annotation` | 管理者 | ADR-0024 の6小節。順序は変えない |
 | ComfyUI | `/settings/comfyui` | 管理者 | 接続、タイムアウト、ワークフロー管理への入口 |
 | MCP | `/settings/mcp` | 管理者 | 有効化、1時間の上限、接続先 |

@@ -1,37 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import type { AnnotationConnectionView, AnnotationSettingsResponse } from '../../api/client'
+import type { AnnotationSettingsResponse, LlmConnectionView } from '../../api/client'
 import {
-  CONNECTIONS_MAX,
   annotationDraftErrors,
   backfillBlocker,
-  canAddConnection,
   changeComfyuiConnection,
-  connectionCreateBody,
-  connectionDeleteBlocker,
-  connectionDisplayName,
-  connectionFormFromView,
+  connectionCallsRows,
   diffAnnotationDraft,
   diffAnnotationForm,
-  diffConnectionForm,
   downloadPercent,
   draftFromSettings,
-  emptyConnectionForm,
   formFromSettings,
   formatMemoryGb,
   hasChanges,
   isAnyOnnxDownloading,
   isUsageCellChanged,
   isValidAnnotationHourlyLimit,
-  isValidConnectionBaseUrl,
-  isValidConnectionName,
   isValidOnnxThreshold,
   validateAnnotationForm,
-  validateConnectionForm,
   type AnnotationDraft,
   type AnnotationForm,
 } from './annotationSettings'
 
-function connection(overrides: Partial<AnnotationConnectionView> = {}): AnnotationConnectionView {
+function connection(overrides: Partial<LlmConnectionView> = {}): LlmConnectionView {
   return {
     id: 'openai',
     name: 'OpenAI の設定',
@@ -39,8 +29,7 @@ function connection(overrides: Partial<AnnotationConnectionView> = {}): Annotati
     base_url: null,
     api_style: 'responses',
     api_key_set: true,
-    in_use: true,
-    calls_last_hour: 0,
+    used_by: ['annotation'],
     ...overrides,
   }
 }
@@ -52,7 +41,7 @@ const OLLAMA = connection({
   base_url: 'http://127.0.0.1:11434/v1',
   api_style: 'chat',
   api_key_set: false,
-  in_use: false,
+  used_by: ['annotation'],
 })
 
 function settings(overrides: Partial<AnnotationSettingsResponse> = {}): AnnotationSettingsResponse {
@@ -66,7 +55,6 @@ function settings(overrides: Partial<AnnotationSettingsResponse> = {}): Annotati
     onnx_enabled: false,
     onnx_model: 'wd-vit-tagger-v3',
     onnx_threshold: 0.35,
-    connections: [connection(), OLLAMA],
     profiles: {
       default: {
         llm: { connection_id: 'openai', model: 'gpt-5.6-luna' },
@@ -78,6 +66,7 @@ function settings(overrides: Partial<AnnotationSettingsResponse> = {}): Annotati
     pending_count: 0,
     queued_count: 0,
     calls_last_hour: 0,
+    connection_calls: [],
     usable_engines: [],
     ...overrides,
   }
@@ -262,72 +251,25 @@ describe('validateAnnotationForm', () => {
   })
 })
 
-describe('接続先のフォーム', () => {
-  it('名前は 1〜100 文字', () => {
-    expect(isValidConnectionName('Ollama')).toBe(true)
-    expect(isValidConnectionName('   ')).toBe(false)
-    expect(isValidConnectionName('x'.repeat(100))).toBe(true)
-    expect(isValidConnectionName('x'.repeat(101))).toBe(false)
+describe('connectionCallsRows', () => {
+  it('自動タイトル・タグで選んでいる接続先と、呼び出しのあった接続先だけを一覧の順に出す', () => {
+    const unused = connection({ id: 'c2', name: 'LM Studio', builtin: false, used_by: [] })
+    const rows = connectionCallsRows(
+      [connection(), OLLAMA, unused],
+      [
+        { connection_id: 'openai', calls_last_hour: 2 },
+        { connection_id: 'c1', calls_last_hour: 1 },
+        { connection_id: 'c2', calls_last_hour: 0 },
+      ],
+    )
+    expect(rows.map((r) => [r.connection.id, r.calls])).toEqual([
+      ['openai', 2],
+      ['c1', 1],
+    ])
   })
 
-  it('Base URL は http / https で、ユーザー情報・クエリー・フラグメントを含まない', () => {
-    expect(isValidConnectionBaseUrl('http://127.0.0.1:11434/v1')).toBe(true)
-    expect(isValidConnectionBaseUrl(' https://example.com/v1/ ')).toBe(true)
-    expect(isValidConnectionBaseUrl('')).toBe(false)
-    expect(isValidConnectionBaseUrl('ftp://example.com')).toBe(false)
-    expect(isValidConnectionBaseUrl('example.com/v1')).toBe(false)
-    expect(isValidConnectionBaseUrl('https://user:pass@example.com')).toBe(false)
-    expect(isValidConnectionBaseUrl('https://example.com/v1?x=1')).toBe(false)
-    expect(isValidConnectionBaseUrl('https://example.com/v1?')).toBe(false)
-    expect(isValidConnectionBaseUrl('https://example.com/v1#a')).toBe(false)
-  })
-
-  it('validateConnectionForm は空の欄を指摘する', () => {
-    expect(validateConnectionForm(emptyConnectionForm())).toEqual({ name: true, base_url: true })
-    expect(validateConnectionForm({ ...emptyConnectionForm(), name: 'a', base_url: 'http://x' })).toEqual({})
-  })
-
-  it('追加の本文は前後の空白を除き、空のキーは送らない', () => {
-    const form = { name: ' Ollama ', base_url: ' http://127.0.0.1:11434/v1 ', api_style: 'chat' as const, api_key: '  ' }
-    expect(connectionCreateBody(form)).toEqual({
-      name: 'Ollama',
-      base_url: 'http://127.0.0.1:11434/v1',
-      api_style: 'chat',
-    })
-    expect(connectionCreateBody({ ...form, api_key: ' sk-x ' }).api_key).toBe('sk-x')
-  })
-
-  it('編集の差分は変わった項目だけ。末尾の / だけの違いは差分にしない', () => {
-    const form = connectionFormFromView(OLLAMA)
-    expect(form.api_key).toBe('')
-    expect(diffConnectionForm(form, OLLAMA)).toEqual({})
-    expect(diffConnectionForm({ ...form, base_url: 'http://127.0.0.1:11434/v1/' }, OLLAMA)).toEqual({})
-    expect(diffConnectionForm({ ...form, name: 'Ollama 2', api_style: 'responses' }, OLLAMA)).toEqual({
-      name: 'Ollama 2',
-      api_style: 'responses',
-    })
-    expect(diffConnectionForm({ ...form, base_url: 'http://10.0.0.2:11434/v1' }, OLLAMA)).toEqual({
-      base_url: 'http://10.0.0.2:11434/v1',
-    })
-  })
-})
-
-describe('接続先の一覧', () => {
-  it('追加できるのは組み込みを除いて 50 件まで', () => {
-    const custom = Array.from({ length: CONNECTIONS_MAX - 1 }, (_, i) => ({ builtin: false, id: `c${i}` }))
-    expect(canAddConnection([{ builtin: true }, ...custom])).toBe(true)
-    expect(canAddConnection([{ builtin: true }, ...custom, { builtin: false }])).toBe(false)
-  })
-
-  it('削除できない理由(組み込み、使用中)', () => {
-    expect(connectionDeleteBlocker(connection())).toBe('builtin')
-    expect(connectionDeleteBlocker({ ...OLLAMA, in_use: true })).toBe('in_use')
-    expect(connectionDeleteBlocker(OLLAMA)).toBeNull()
-  })
-
-  it('組み込みの接続先は画面の言語の名前で出す', () => {
-    expect(connectionDisplayName(connection({ name: 'OpenAI の設定' }), 'OpenAI settings')).toBe('OpenAI settings')
-    expect(connectionDisplayName(OLLAMA, 'OpenAI settings')).toBe('Ollama')
+  it('回数が無くても、選んでいる接続先は 0 回で出す', () => {
+    expect(connectionCallsRows([connection()], undefined)).toEqual([{ connection: connection(), calls: 0 }])
   })
 })
 

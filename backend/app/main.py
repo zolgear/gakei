@@ -25,6 +25,7 @@ from app.api import comfyui as comfyui_api
 from app.api import downloads as downloads_api
 from app.api import events as events_api
 from app.api import health as health_api
+from app.api import llm_connections as llm_connections_api
 from app.api import pricing as pricing_api
 from app.api import prompt_sets as prompt_sets_api
 from app.api import runs as runs_api
@@ -387,6 +388,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tags_api.router, dependencies=auth_dep)
     app.include_router(pricing_api.router, dependencies=auth_dep)
     app.include_router(settings_api.router, dependencies=auth_dep)
+    app.include_router(llm_connections_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
     app.include_router(shares_api.router, dependencies=auth_dep)

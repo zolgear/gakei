@@ -3,17 +3,16 @@
  *
  * 上から ADR-0024 8章「設定画面の配置」の順に並べる(順序は変えない)。
  * 1. 有効化と実行: 取り込み時の自動実行、LLM・VLM の有効化、未実行の件数と一括実行
- * 2. 接続先: カードの一覧。追加・編集・キーの設定と削除はダイアログ(`ConnectionDialog`)
- * 3. 使い方: 行がタイトル(LLM)とタグ(VLM)、列が「既定」と「ComfyUI の画像」の表(`UsageTable`)
- * 4. 言語 5. 1時間の上限 6. ONNX タガー
+ * 2. 使い方: 行がタイトル(LLM)とタグ(VLM)、列が「既定」と「ComfyUI の画像」の表(`UsageTable`)。
+ *    接続先の選択肢は「LLM の接続先」(`/settings/llm-connections`。ADR-0032)の一覧から取り、
+ *    接続先の追加・編集・キーはそのページで行う(リンクを置く)。
+ * 3. 言語 4. 1時間の上限(接続先ごとの回数も出す) 5. ONNX タガー
  *
  * 項目の種類(ADR-0031 2章):
  * - 保存で反映: スイッチ(取り込み時の自動実行、LLM・VLM・ONNX の有効化)、ONNX のモデルの選択、
  *   使い方の表、言語、上限、しきい値。下書き(`useSettingsDraft`)に持ち、ページ上部の「保存」で
  *   変わった項目だけを `PATCH /api/settings/annotation` 1回で送る(`diffAnnotationDraft`。
  *   使い方は書き換えたマスだけ)。
- * - 接続: 接続先の追加・編集(組み込みの接続先は API の形式だけ)・キーの設定と削除。ダイアログで送る。
- *   キーは一部も表示しない(設定済みかどうかだけ)。接続先の削除は確認してからその場で行う。
  * - 操作: ONNX のモデルのダウンロード・削除、一括実行(確認を挟む)。一括実行は保存済みの設定で
  *   動くので、ページに保存していない変更がある間は押せなくし、理由をボタンの近くに出す。
  *
@@ -26,61 +25,47 @@ import { Link } from 'react-router'
 import {
   ApiError,
   backfillAnnotations,
-  createAnnotationConnection,
-  deleteAnnotationConnection,
-  deleteAnnotationConnectionApiKey,
   deleteOnnxModel,
   downloadOnnxModel,
   getAnnotationSettings,
-  setAnnotationConnectionApiKey,
-  updateAnnotationConnection,
+  listLlmConnections,
   updateAnnotationSettings,
-  type AnnotationApiStyle,
-  type AnnotationConnectionView,
   type AnnotationSettingsResponse,
+  type LlmConnectionView,
   type OnnxModelName,
   type OnnxModelStatus,
 } from '../../../api/client'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
-import { Modal } from '../../../components/Modal'
 import { fmt, useI18n } from '../../../i18n'
 import { formatBytes } from '../../../lib/format'
 import {
   ANNOTATION_HOURLY_LIMIT_MAX,
   ANNOTATION_HOURLY_LIMIT_MIN,
   ANNOTATION_PURPOSES,
-  CONNECTION_NAME_MAX,
-  CONNECTIONS_MAX,
   MODEL_NAME_MAX,
   ONNX_THRESHOLD_MAX,
   ONNX_THRESHOLD_MIN,
   annotationDraftErrors,
   backfillBlocker,
-  canAddConnection,
   changeComfyuiConnection,
-  connectionCreateBody,
-  connectionDeleteBlocker,
-  connectionDisplayName,
-  connectionFormFromView,
+  connectionCallsRows,
   diffAnnotationDraft,
-  diffConnectionForm,
   downloadPercent,
   draftFromSettings,
-  emptyConnectionForm,
   formatMemoryGb,
   hasChanges,
   isAnyOnnxDownloading,
   isUsageCellChanged,
   validateAnnotationForm,
-  validateConnectionForm,
   type AnnotationDraft,
   type AnnotationFormErrors,
   type AnnotationPurpose,
-  type ConnectionForm,
 } from '../annotationSettings'
-import { ANNOTATION_SETTINGS_QUERY_KEY } from '../queryKeys'
+import { connectionDisplayName } from '../llmConnections'
+import { ANNOTATION_SETTINGS_QUERY_KEY, LLM_CONNECTIONS_QUERY_KEY } from '../queryKeys'
+import { settingsPagePath } from '../settingsPages'
 import { SettingsPageFrame } from '../SettingsPageFrame'
-import { ConnectionCard, QueryStatus, SettingsRow, SettingsSection, SettingsSwitch } from '../SettingsParts'
+import { QueryStatus, SettingsRow, SettingsSection, SettingsSwitch } from '../SettingsParts'
 import { useSettingsShell } from '../settingsShell'
 import { useSettingsDraft, type SettingsDraft } from '../useSettingsDraft'
 import styles from '../settings.module.css'
@@ -110,10 +95,12 @@ export function AnnotationSettingsPage() {
       return false
     },
   })
+  // 使い方の表の接続先の選択肢(ADR-0032)。
+  const connectionsQuery = useQuery({ queryKey: LLM_CONNECTIONS_QUERY_KEY, queryFn: listLlmConnections })
   const data = query.data
+  const connections = connectionsQuery.data?.connections
 
   const saved = useMemo(() => (data ? draftFromSettings(data) : undefined), [data])
-  const connections = data?.connections
   const validate = useCallback(
     (values: AnnotationDraft) => annotationDraftErrors(validateAnnotationForm(values, connections ?? [])),
     [connections],
@@ -135,15 +122,24 @@ export function AnnotationSettingsPage() {
   return (
     <SettingsPageFrame pageId="annotation" title={t.settings.pages.annotation} intro={m.intro} draft={draft}>
       <QueryStatus
-        isLoading={query.isLoading}
-        isError={query.isError}
+        isLoading={query.isLoading || connectionsQuery.isLoading}
+        isError={query.isError || connectionsQuery.isError}
         loadingText={m.loading}
         errorText={m.loadFailed}
         retryText={m.retry}
-        onRetry={() => void query.refetch()}
+        onRetry={() => {
+          if (query.isError) void query.refetch()
+          if (connectionsQuery.isError) void connectionsQuery.refetch()
+        }}
       />
-      {data && saved && draft.values && (
-        <AnnotationSettingsBody data={data} saved={saved} values={draft.values} draft={draft} />
+      {data && connections && saved && draft.values && (
+        <AnnotationSettingsBody
+          data={data}
+          connections={connections}
+          saved={saved}
+          values={draft.values}
+          draft={draft}
+        />
       )}
     </SettingsPageFrame>
   )
@@ -151,12 +147,13 @@ export function AnnotationSettingsPage() {
 
 interface BodyProps {
   data: AnnotationSettingsResponse
+  connections: LlmConnectionView[]
   saved: AnnotationDraft
   values: AnnotationDraft
   draft: SettingsDraft<AnnotationDraft>
 }
 
-function AnnotationSettingsBody({ data, saved, values, draft }: BodyProps) {
+function AnnotationSettingsBody({ data, connections, saved, values, draft }: BodyProps) {
   const { t } = useI18n()
   const m = t.settings.annotation
   const { toast } = useSettingsShell()
@@ -193,7 +190,6 @@ function AnnotationSettingsBody({ data, saved, values, draft }: BodyProps) {
     },
   })
 
-  const connections = data.connections ?? []
   const cellErrors = validateAnnotationForm(values, connections)
   const usableEngines = data.usable_engines ?? []
   const onnxModels = data.onnx_models ?? []
@@ -209,6 +205,8 @@ function AnnotationSettingsBody({ data, saved, values, draft }: BodyProps) {
   const blockerText = blocker === 'unsaved' ? m.backfill.unsavedBlocked : blocker === 'noEngines' ? m.backfill.noEngines : null
   const backfillError = errorText(backfillMutation.error, m.communicationFailed)
   const modelOpError = errorText(downloadMutation.error ?? deleteModelMutation.error, m.communicationFailed)
+
+  const callRows = connectionCallsRows(connections, data.connection_calls)
 
   const hourlyLimitError = cellErrors.hourly_limit
     ? fmt(m.limit.hourlyLimitInvalid, { min: ANNOTATION_HOURLY_LIMIT_MIN, max: ANNOTATION_HOURLY_LIMIT_MAX })
@@ -294,12 +292,12 @@ function AnnotationSettingsBody({ data, saved, values, draft }: BodyProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* 2. 接続先 */}
-      <ConnectionsSection data={data} />
-
-      {/* 3. 使い方 */}
+      {/* 2. 使い方 */}
       <SettingsSection heading={m.usage.heading}>
         <p className={styles.helpText}>{m.usage.intro}</p>
+        <p className={styles.helpText}>
+          {m.usage.connectionsHelp} <Link to={settingsPagePath('llmConnections')}>{m.usage.connectionsLink}</Link>
+        </p>
         <p className={own.notice}>{m.usage.externalNotice}</p>
         <UsageTable
           values={values}
@@ -319,7 +317,7 @@ function AnnotationSettingsBody({ data, saved, values, draft }: BodyProps) {
         </div>
       </SettingsSection>
 
-      {/* 4. 言語 */}
+      {/* 3. 言語 */}
       <SettingsSection heading={m.language.heading}>
         <SettingsRow
           label={m.language.languageLabel}
@@ -356,7 +354,7 @@ function AnnotationSettingsBody({ data, saved, values, draft }: BodyProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* 5. 1時間の上限 */}
+      {/* 4. 1時間の上限 */}
       <SettingsSection heading={m.limit.heading}>
         <SettingsRow
           label={m.limit.hourlyLimitLabel}
@@ -382,9 +380,24 @@ function AnnotationSettingsBody({ data, saved, values, draft }: BodyProps) {
         <SettingsRow label={m.limit.callsLastHourLabel}>
           <span className={styles.mono}>{fmt(m.limit.callsLastHourValue, { count: data.calls_last_hour })}</span>
         </SettingsRow>
+        {callRows.length > 0 && (
+          <SettingsRow label={m.limit.perConnectionLabel} description={m.limit.perConnectionHelp}>
+            <ul className={own.callList}>
+              {callRows.map(({ connection, calls }) => (
+                <li key={connection.id} className={styles.mono}>
+                  {fmt(m.limit.perConnectionValue, {
+                    name: connectionDisplayName(connection, t.settings.llmConnections.builtinName),
+                    count: calls,
+                    limit: data.hourly_limit,
+                  })}
+                </li>
+              ))}
+            </ul>
+          </SettingsRow>
+        )}
       </SettingsSection>
 
-      {/* 6. ONNX タガー */}
+      {/* 5. ONNX タガー */}
       <SettingsSection heading={m.onnx.heading}>
         <p className={styles.helpText}>{m.onnx.notice}</p>
         <SettingsRow label={m.onnx.enabledLabel} htmlFor="gakei-annotation-onnx" changed={draft.isChanged('onnx_enabled')}>
@@ -465,393 +478,13 @@ function AnnotationSettingsBody({ data, saved, values, draft }: BodyProps) {
   )
 }
 
-// -- 接続先 ------------------------------------------------------------------------
-
-/** ダイアログで開いているもの。`add` は追加、それ以外は編集する接続先の id。 */
-type ConnectionDialogTarget = { type: 'add' } | { type: 'edit'; id: string }
-
-/**
- * 接続先の一覧(カード)と、追加・編集のダイアログ、削除(確認してからその場で行う)。
- * 削除のエラーはこの小節の中に出す(ページの保存の失敗と取り違えないため)。
- */
-function ConnectionsSection({ data }: { data: AnnotationSettingsResponse }) {
-  const { t } = useI18n()
-  const m = t.settings.annotation.connections
-  const { toast } = useSettingsShell()
-  const queryClient = useQueryClient()
-  const connections = data.connections ?? []
-  const [dialog, setDialog] = useState<ConnectionDialogTarget | null>(null)
-  const [toDelete, setToDelete] = useState<AnnotationConnectionView | null>(null)
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteAnnotationConnection(id),
-    onSuccess: (next) => {
-      queryClient.setQueryData(ANNOTATION_SETTINGS_QUERY_KEY, next)
-      toast.show({ message: m.deletedToast })
-    },
-  })
-  const deleteError = errorText(deleteMutation.error, t.settings.annotation.communicationFailed)
-  const addAllowed = canAddConnection(connections)
-  // 編集中の接続先は、取り直した一覧から引く(キーの設定・削除がすぐ表示に出るように)。
-  const editing = dialog?.type === 'edit' ? connections.find((c) => c.id === dialog.id) : undefined
-
-  return (
-    <SettingsSection heading={m.heading}>
-      <p className={styles.helpText}>{m.intro}</p>
-
-      <ul className={own.connectionList}>
-        {connections.map((view) => {
-          const idPrefix = `gakei-annotation-connection-${view.id}`
-          return (
-            <li key={view.id}>
-              <ConnectionCard
-                title={connectionDisplayName(view, m.builtinName)}
-                badges={
-                  <>
-                    {view.builtin && <span className={own.badge}>{m.builtinBadge}</span>}
-                    {view.in_use && (
-                      <span className={own.badge} data-tone="accent">
-                        {m.inUseBadge}
-                      </span>
-                    )}
-                  </>
-                }
-                details={[
-                  {
-                    label: m.baseUrlLabel,
-                    value: view.base_url ?? m.baseUrlOpenAiDefault,
-                    mono: Boolean(view.base_url),
-                  },
-                  { label: m.apiStyleLabel, value: view.api_style === 'chat' ? m.apiStyleChat : m.apiStyleResponses },
-                  { label: m.apiKeyLabel, value: <KeyStatus view={view} /> },
-                  {
-                    label: m.callsLabel,
-                    value: fmt(m.callsValue, { count: view.calls_last_hour, limit: data.hourly_limit }),
-                    mono: true,
-                  },
-                ]}
-                notes={
-                  view.builtin && (
-                    <p className={styles.helpText}>
-                      {m.builtinHelp} <Link to="/settings/openai">{m.openAiSettingsLink}</Link>
-                    </p>
-                  )
-                }
-                actions={
-                  <>
-                    <button
-                      type="button"
-                      className={styles.secondaryButton}
-                      onClick={() => setDialog({ type: 'edit', id: view.id })}
-                    >
-                      {m.edit}
-                    </button>
-                    {!view.builtin && (
-                      <button
-                        type="button"
-                        className={styles.dangerButton}
-                        disabled={connectionDeleteBlocker(view) !== null || deleteMutation.isPending}
-                        aria-describedby={view.in_use ? `${idPrefix}-in-use` : undefined}
-                        onClick={() => setToDelete(view)}
-                      >
-                        {m.delete}
-                      </button>
-                    )}
-                    {!view.builtin && view.in_use && (
-                      <span id={`${idPrefix}-in-use`} className={`${styles.helpText} ${own.inlineNote}`}>
-                        {m.deleteDisabledInUse}
-                      </span>
-                    )}
-                  </>
-                }
-              />
-            </li>
-          )
-        })}
-      </ul>
-
-      <button
-        type="button"
-        className={styles.secondaryButton}
-        disabled={!addAllowed}
-        onClick={() => setDialog({ type: 'add' })}
-      >
-        {m.add}
-      </button>
-      {!addAllowed && <p className={styles.helpText}>{fmt(m.limitReached, { max: CONNECTIONS_MAX })}</p>}
-      {deleteError && (
-        <p className={styles.errorText} role="alert">
-          {deleteError}
-        </p>
-      )}
-
-      {dialog?.type === 'add' && <ConnectionDialog onClose={() => setDialog(null)} />}
-      {editing && <ConnectionDialog view={editing} onClose={() => setDialog(null)} />}
-
-      <ConfirmDialog
-        open={toDelete !== null}
-        message={fmt(m.deleteConfirm.message, { name: toDelete?.name ?? '' })}
-        confirmLabel={m.deleteConfirm.confirmLabel}
-        onConfirm={() => {
-          if (toDelete) deleteMutation.mutate(toDelete.id)
-          setToDelete(null)
-        }}
-        onCancel={() => setToDelete(null)}
-      />
-    </SettingsSection>
-  )
-}
-
-function KeyStatus({ view }: { view: AnnotationConnectionView }) {
-  const { t } = useI18n()
-  const m = t.settings.annotation.connections
-  let text: string
-  if (view.api_key_set) text = m.apiKeySet
-  else text = view.builtin ? m.builtinApiKeyNotSet : m.apiKeyNotSet
-  return (
-    <span className={own.keyStatus} data-set={view.api_key_set}>
-      <span className={own.statusDot} aria-hidden="true" />
-      <span>{text}</span>
-    </span>
-  )
-}
-
-/**
- * 接続先の追加・編集のダイアログ。`view` が無ければ追加(キーも一緒に送れる)。
- * 編集では、名前・Base URL・API の形式の変わった項目だけを送る。組み込みの接続先は API の形式だけ。
- * キーは値を出さず、設定・削除を別に送る(ダイアログは開いたまま)。
- */
-function ConnectionDialog({ view, onClose }: { view?: AnnotationConnectionView; onClose: () => void }) {
-  const { t } = useI18n()
-  const m = t.settings.annotation.connections
-  const fallback = t.settings.annotation.communicationFailed
-  const { toast } = useSettingsShell()
-  const queryClient = useQueryClient()
-  const [form, setForm] = useState<ConnectionForm>(() => (view ? connectionFormFromView(view) : emptyConnectionForm()))
-  const [keyInput, setKeyInput] = useState('')
-  const [keyDeleteOpen, setKeyDeleteOpen] = useState(false)
-  const builtin = view?.builtin ?? false
-  const idPrefix = view ? `gakei-annotation-connection-${view.id}-dialog` : 'gakei-annotation-connection-new'
-
-  const setSettings = (next: AnnotationSettingsResponse) =>
-    queryClient.setQueryData(ANNOTATION_SETTINGS_QUERY_KEY, next)
-
-  const submitMutation = useMutation({
-    mutationFn: () =>
-      view
-        ? updateAnnotationConnection(view.id, diffConnectionForm(form, view))
-        : createAnnotationConnection(connectionCreateBody(form)),
-    onSuccess: (next) => {
-      setSettings(next)
-      toast.show({ message: view ? m.updatedToast : m.addedToast })
-      onClose()
-    },
-  })
-  const keySaveMutation = useMutation({
-    mutationFn: ({ id, key }: { id: string; key: string }) => setAnnotationConnectionApiKey(id, key),
-    onSuccess: (next) => {
-      setSettings(next)
-      setKeyInput('')
-      toast.show({ message: m.apiKeySavedToast })
-    },
-  })
-  const keyDeleteMutation = useMutation({
-    mutationFn: (id: string) => deleteAnnotationConnectionApiKey(id),
-    onSuccess: (next) => {
-      setSettings(next)
-      toast.show({ message: m.apiKeyDeletedToast })
-    },
-  })
-
-  const busy = submitMutation.isPending || keySaveMutation.isPending || keyDeleteMutation.isPending
-  const close = useCallback(() => {
-    // 確認ダイアログを重ねている間の Esc は、確認のほうだけを閉じる。
-    if (!busy && !keyDeleteOpen) onClose()
-  }, [busy, keyDeleteOpen, onClose])
-
-  const errors = builtin ? {} : validateConnectionForm(form)
-  const changed = view ? hasChanges(diffConnectionForm(form, view)) : true
-  const canSubmit = changed && Object.keys(errors).length === 0 && !busy
-  // 入力を始める前から赤くしないよう、空の欄はエラーを出さない(ボタンは押せないまま)。
-  const nameError = errors.name && form.name !== '' ? fmt(m.nameInvalid, { max: CONNECTION_NAME_MAX }) : null
-  const baseUrlError = errors.base_url && form.base_url !== '' ? m.baseUrlInvalid : null
-  const submitError = errorText(submitMutation.error, fallback)
-  const keyError = errorText(keySaveMutation.error ?? keyDeleteMutation.error, fallback)
-
-  const update = (patch: Partial<ConnectionForm>) => {
-    setForm((prev) => ({ ...prev, ...patch }))
-    submitMutation.reset()
-  }
-
-  return (
-    <>
-      <Modal open title={view ? m.editHeading : m.addHeading} onClose={close}>
-        <form
-          className={styles.dialogForm}
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (canSubmit) submitMutation.mutate()
-          }}
-        >
-          {view && builtin && (
-            <p className={styles.helpText}>
-              {m.builtinHelp} <Link to="/settings/openai">{m.openAiSettingsLink}</Link>
-            </p>
-          )}
-          {!builtin && (
-            <>
-              <div className={styles.field}>
-                <label htmlFor={`${idPrefix}-name`} className={styles.rowLabel}>
-                  {m.nameLabel}
-                </label>
-                <input
-                  id={`${idPrefix}-name`}
-                  type="text"
-                  className={styles.input}
-                  value={form.name}
-                  placeholder={m.namePlaceholder}
-                  aria-invalid={nameError ? true : undefined}
-                  disabled={busy}
-                  autoFocus
-                  onChange={(e) => update({ name: e.target.value })}
-                />
-                {nameError && <p className={styles.errorText}>{nameError}</p>}
-              </div>
-              <div className={styles.field}>
-                <label htmlFor={`${idPrefix}-base-url`} className={styles.rowLabel}>
-                  {m.baseUrlLabel}
-                </label>
-                <input
-                  id={`${idPrefix}-base-url`}
-                  type="url"
-                  className={`${styles.input} ${styles.mono}`}
-                  value={form.base_url}
-                  placeholder={m.baseUrlPlaceholder}
-                  aria-invalid={baseUrlError ? true : undefined}
-                  autoComplete="off"
-                  spellCheck={false}
-                  disabled={busy}
-                  onChange={(e) => update({ base_url: e.target.value })}
-                />
-                {baseUrlError && <p className={styles.errorText}>{baseUrlError}</p>}
-              </div>
-            </>
-          )}
-          <div className={styles.field}>
-            <label htmlFor={`${idPrefix}-style`} className={styles.rowLabel}>
-              {m.apiStyleLabel}
-            </label>
-            <select
-              id={`${idPrefix}-style`}
-              className={styles.select}
-              value={form.api_style}
-              disabled={busy}
-              onChange={(e) => update({ api_style: e.target.value as AnnotationApiStyle })}
-            >
-              <option value="responses">{m.apiStyleResponses}</option>
-              <option value="chat">{m.apiStyleChat}</option>
-            </select>
-            <p className={styles.helpText}>{m.apiStyleHelp}</p>
-          </div>
-          {!view && (
-            <div className={styles.field}>
-              <label htmlFor={`${idPrefix}-key`} className={styles.rowLabel}>
-                {m.apiKeyLabel}
-              </label>
-              <input
-                id={`${idPrefix}-key`}
-                type="password"
-                className={styles.input}
-                placeholder={m.apiKeyPlaceholder}
-                autoComplete="off"
-                value={form.api_key}
-                disabled={busy}
-                onChange={(e) => update({ api_key: e.target.value })}
-              />
-              <p className={styles.helpText}>{m.apiKeyOptionalHelp}</p>
-            </div>
-          )}
-          {submitError && <p className={styles.errorText}>{submitError}</p>}
-          <div className={styles.dialogActions}>
-            <button type="button" className={styles.secondaryButton} disabled={busy} onClick={onClose}>
-              {m.cancel}
-            </button>
-            <button type="submit" className={styles.primaryButton} disabled={!canSubmit}>
-              {view ? m.editSubmit : m.addSubmit}
-            </button>
-          </div>
-        </form>
-
-        {/* キーは値を出さず、設定・削除だけを別に送る(組み込みの接続先は OpenAI の設定のキーを使う)。 */}
-        {view && !builtin && (
-          <div className={own.keyBlock}>
-            <span className={styles.rowLabel} id={`${idPrefix}-key-label`}>
-              {m.apiKeyLabel}
-            </span>
-            <KeyStatus view={view} />
-            <div className={own.keyRow}>
-              <input
-                type="password"
-                className={styles.input}
-                aria-labelledby={`${idPrefix}-key-label`}
-                placeholder={m.apiKeyPlaceholder}
-                autoComplete="off"
-                value={keyInput}
-                disabled={busy}
-                onChange={(e) => {
-                  setKeyInput(e.target.value)
-                  keySaveMutation.reset()
-                }}
-              />
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                disabled={!keyInput.trim() || busy}
-                onClick={() => keySaveMutation.mutate({ id: view.id, key: keyInput.trim() })}
-              >
-                {m.apiKeySave}
-              </button>
-              {view.api_key_set && (
-                <button
-                  type="button"
-                  className={styles.dangerButton}
-                  disabled={busy}
-                  onClick={() => setKeyDeleteOpen(true)}
-                >
-                  {m.apiKeyDelete}
-                </button>
-              )}
-            </div>
-            {keyError && <p className={styles.errorText}>{keyError}</p>}
-            <p className={styles.helpText}>{m.apiKeyOptionalHelp}</p>
-          </div>
-        )}
-      </Modal>
-
-      {/* Modal の外(兄弟)に置き、ダイアログの上に重ねる(重なり順は ConfirmDialog.module.css)。 */}
-      {view && (
-        <ConfirmDialog
-          open={keyDeleteOpen}
-          message={fmt(m.apiKeyDeleteConfirm.message, { name: view.name })}
-          confirmLabel={m.apiKeyDeleteConfirm.confirmLabel}
-          onConfirm={() => {
-            setKeyDeleteOpen(false)
-            keyDeleteMutation.mutate(view.id)
-          }}
-          onCancel={() => setKeyDeleteOpen(false)}
-        />
-      )}
-    </>
-  )
-}
-
 // -- 使い方 ------------------------------------------------------------------------
 
 interface UsageTableProps {
   values: AnnotationDraft
   saved: AnnotationDraft
   errors: AnnotationFormErrors
-  connections: readonly AnnotationConnectionView[]
+  connections: readonly LlmConnectionView[]
   disabled: boolean
   onChange: <K extends 'default' | 'comfyui'>(key: K, value: AnnotationDraft[K]) => void
 }
@@ -865,7 +498,7 @@ interface UsageTableProps {
 function UsageTable({ values, saved, errors, connections, disabled, onChange }: UsageTableProps) {
   const { t } = useI18n()
   const m = t.settings.annotation.usage
-  const cm = t.settings.annotation.connections
+  const cm = t.settings.llmConnections
   const purposeLabel: Record<AnnotationPurpose, string> = { llm: m.llmLabel, vlm: m.vlmLabel }
   const nameOf = (id: string) => {
     const view = connections.find((c) => c.id === id)

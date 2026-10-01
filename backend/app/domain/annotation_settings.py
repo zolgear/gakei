@@ -6,15 +6,9 @@
 
 接続先とモデルの組(ADR-0024 8章):
 
-- **接続先**(`annotation.connections`): 名前、Base URL、API 形式を持つ接続先の一覧。組み込みの
-  接続先 `openai`(「OpenAI の設定」)は一覧に保存せず、常に先頭にあるものとして扱う。これは
-  ADR-0017 のキーと Base URL をそのまま使い、名前・Base URL・キーは変えられず、削除もできない。
-  API 形式だけは `annotation.openai_api_style` に保存して変えられる(今の設定からの移行で、
-  OpenAI の設定に Chat Completions で送っていた場合を変えないため)。
-- 接続先のキーは DB に入れず、`DATA_DIR/secrets.json` の `annotation_connection_key.<id>` に
-  置く(`app/domain/api_key.py` と同じファイル・同じ書き込み)。キーが無ければダミーのキー
-  (`PLACEHOLDER_API_KEY`)を送る(ローカルの Ollama などへ OpenAI のキーを漏らさないため。SDK は
-  空のキーを受け付けない)。
+- **接続先**: LLM の接続先(`app/domain/llm_connections.py`。ADR-0032)から選ぶ。接続先の一覧と
+  キーの読み書きは向こうにある。この設定は、用途ごとの組で使っている接続先を
+  `llm_connections.register_usage` で答える(使っている接続先は削除できない)。
 - **用途ごとの組**(`annotation.profiles`): 「既定」(`default`)と「ComfyUI の画像」
   (`comfyui`)のそれぞれに、タイトル(`llm`)とタグ(`vlm`)の `{connection_id, model}`。
   `comfyui` の各用途は null なら「既定と同じ」。
@@ -27,17 +21,24 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field, fields, replace
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from sqlalchemy.orm import Session
 
 from app.domain import api_key as api_key_domain
+from app.domain import llm_connections
 from app.domain.general_settings import (
     GeneralSettingsValidationError,
     _get_raw_value,
     _save,
     _utcnow,
+)
+from app.domain.llm_connections import (
+    API_STYLES,
+    BUILTIN_CONNECTION_ID,
+    ApiStyle,
+    ConnectionConfig,
+    ConnectionNotFoundError,
 )
 from app.domain.models import AppSetting
 from app.i18n import t
@@ -48,10 +49,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _KEY_PREFIX = "annotation."
-_CONNECTIONS_KEY = _KEY_PREFIX + "connections"
 _PROFILES_KEY = _KEY_PREFIX + "profiles"
-_OPENAI_API_STYLE_KEY = _KEY_PREFIX + "openai_api_style"
-_CONNECTION_SECRET_PREFIX = "annotation_connection_key."
 
 # 移行前(接続先1組の形)の項目。`migrate_legacy` が読み、移したあと消す。
 _LEGACY_KEYS = ("base_url", "api_style", "llm_model", "vlm_model")
@@ -60,7 +58,6 @@ _LEGACY_SECRET_FIELD = "annotation_api_key"
 # する(キーを書く前に落ちても、次の起動でこの目印と残った旧キーから書き直す)。
 _LEGACY_KEY_TARGET_KEY = _KEY_PREFIX + "legacy_key_connection"
 
-ApiStyle = Literal["responses", "chat"]
 Language = Literal["ja", "en"]
 # タグの言語(ADR-0024 6章)。native はエンジン任せ、localized は `language` に合わせる
 # (WD Tagger の英語のタグには訳を足す)。
@@ -69,15 +66,12 @@ OnnxModelName = Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-lar
 Profile = Literal["default", "comfyui"]
 Purpose = Literal["llm", "vlm"]
 
-API_STYLES: tuple[str, ...] = get_args(ApiStyle)
 LANGUAGES: tuple[str, ...] = get_args(Language)
 TAG_LANGUAGES: tuple[str, ...] = get_args(TagLanguage)
 ONNX_MODEL_NAMES: tuple[str, ...] = get_args(OnnxModelName)
 PROFILES: tuple[str, ...] = get_args(Profile)
 PURPOSES: tuple[str, ...] = get_args(Purpose)
 
-# 組み込みの接続先(OpenAI の設定。ADR-0017)の id。利用者の接続先には使えない。
-BUILTIN_CONNECTION_ID = "openai"
 # ComfyUI の画像の組を使う Run のプロバイダー(ADR-0024 8章)。
 COMFYUI_PROVIDER = "comfyui"
 
@@ -92,46 +86,13 @@ DEFAULT_ONNX_THRESHOLD = 0.35
 ONNX_THRESHOLD_MIN = 0.01
 ONNX_THRESHOLD_MAX = 0.99
 MODEL_NAME_MAX = 200
-CONNECTION_NAME_MAX = 100
-CONNECTIONS_MAX = 50
-# OpenAI の設定に Base URL が無いとき(OpenAI 本体)の URL。移行で接続先を作るときに使う。
-OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
-
-# 利用者の接続先にキーが無いときに送るダミーのキー。
-PLACEHOLDER_API_KEY = "gakei-no-key"
 
 
 class AnnotationSettingsValidationError(GeneralSettingsValidationError):
     """保存しようとした値が不正(API 層で 422 にする)。"""
 
 
-class ConnectionNotFoundError(Exception):
-    """指定した接続先が無い(API 層で 404、推定では `failed`)。"""
-
-
-class ConnectionReservedError(Exception):
-    """組み込みの接続先は編集・削除できない(API 層で 409)。"""
-
-
-class ConnectionInUseError(Exception):
-    """用途の組で使っている接続先は削除できない(API 層で 409)。"""
-
-
 # -- 設定の型 ------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class ConnectionConfig:
-    """推定の接続先1つ。組み込みの `openai` は `base_url=None`(実行時に ADR-0017 の値を使う)。"""
-
-    id: str
-    name: str
-    base_url: str | None
-    api_style: ApiStyle = "responses"
-
-    @property
-    def builtin(self) -> bool:
-        return self.id == BUILTIN_CONNECTION_ID
 
 
 @dataclass(frozen=True)
@@ -190,7 +151,8 @@ class AnnotationConfig:
     onnx_enabled: bool = False
     onnx_model: OnnxModelName = "wd-vit-tagger-v3"
     onnx_threshold: float = DEFAULT_ONNX_THRESHOLD
-    # 利用者が登録した接続先(組み込みの openai は含まない。`all_connections` を参照)。
+    # LLM の接続先のうち利用者が登録したもの(組み込みの openai は含まない。`all_connections`
+    # を参照)。`llm_connections` から読む。
     connections: tuple[ConnectionConfig, ...] = ()
     # 組み込みの接続先(OpenAI の設定)の API 形式。
     openai_api_style: ApiStyle = "responses"
@@ -201,13 +163,10 @@ class AnnotationConfig:
         return self.llm_enabled or self.vlm_enabled
 
     def all_connections(self) -> tuple[ConnectionConfig, ...]:
-        builtin = ConnectionConfig(
-            id=BUILTIN_CONNECTION_ID, name="", base_url=None, api_style=self.openai_api_style
-        )
-        return (builtin, *self.connections)
+        return llm_connections.all_connections(self.connections, self.openai_api_style)
 
     def find_connection(self, connection_id: str) -> ConnectionConfig | None:
-        return next((c for c in self.all_connections() if c.id == connection_id), None)
+        return llm_connections.find_connection(self.all_connections(), connection_id)
 
     def connection_ids_for(self, profile: str) -> set[str]:
         """その組で有効な用途(LLM・VLM)が使う接続先。1時間の上限の事前確認に使う。"""
@@ -305,30 +264,6 @@ def normalize_model(value: object) -> str:
     return value.strip()
 
 
-def normalize_api_style(value: object) -> ApiStyle:
-    if value not in API_STYLES:
-        raise AnnotationSettingsValidationError(t("settings.annotation.invalidApiStyle"))
-    return value  # type: ignore[return-value]
-
-
-def normalize_connection_name(value: object) -> str:
-    if not isinstance(value, str) or not (0 < len(value.strip()) <= CONNECTION_NAME_MAX):
-        raise AnnotationSettingsValidationError(
-            t("settings.annotation.invalidConnectionName", max=CONNECTION_NAME_MAX)
-        )
-    return value.strip()
-
-
-def normalize_connection_base_url(value: object) -> str:
-    """接続先の Base URL(必須。http / https のみ。ADR-0017 と同じ検証)。"""
-    if not isinstance(value, str) or not value.strip():
-        raise AnnotationSettingsValidationError(t("openai.baseUrl.invalid"))
-    try:
-        return api_key_domain.normalize_base_url(value.strip())
-    except api_key_domain.BaseUrlValidationError as e:
-        raise AnnotationSettingsValidationError(str(e)) from e
-
-
 def _parse_choice(value: object) -> TargetChoice:
     """`{"connection_id": ..., "model": ...}` を読む。不正なら AnnotationSettingsValidationError
     (接続先があるかどうかは呼び出し側で確かめる)。"""
@@ -371,46 +306,6 @@ def _profiles_from_json(raw: object) -> Profiles:
     return Profiles(**values)  # type: ignore[arg-type]
 
 
-def _connection_to_json(connection: ConnectionConfig) -> dict[str, Any]:
-    return {
-        "id": connection.id,
-        "name": connection.name,
-        "base_url": connection.base_url,
-        "api_style": connection.api_style,
-    }
-
-
-def _connections_from_json(raw: object) -> tuple[ConnectionConfig, ...]:
-    """保存された接続先の一覧を読む。壊れた項目・重複した id・予約 id は捨てる。"""
-    if not isinstance(raw, list):
-        return ()
-    result: list[ConnectionConfig] = []
-    seen: set[str] = set()
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        connection_id = item.get("id")
-        if (
-            not isinstance(connection_id, str)
-            or not connection_id
-            or connection_id == BUILTIN_CONNECTION_ID
-            or connection_id in seen
-        ):
-            continue
-        try:
-            connection = ConnectionConfig(
-                id=connection_id,
-                name=normalize_connection_name(item.get("name")),
-                base_url=normalize_connection_base_url(item.get("base_url")),
-                api_style=normalize_api_style(item.get("api_style", "responses")),
-            )
-        except AnnotationSettingsValidationError:
-            continue
-        seen.add(connection_id)
-        result.append(connection)
-    return tuple(result)
-
-
 # -- 読み書き ------------------------------------------------------------------
 
 
@@ -425,10 +320,8 @@ def load(db: Session) -> AnnotationConfig:
             values[name] = normalize_value(name, raw)
         except AnnotationSettingsValidationError:
             continue
-    values["connections"] = _connections_from_json(_get_raw_value(db, _CONNECTIONS_KEY))
-    raw_style = _get_raw_value(db, _OPENAI_API_STYLE_KEY)
-    if raw_style in API_STYLES:
-        values["openai_api_style"] = raw_style
+    values["connections"] = llm_connections.load_user_connections(db)
+    values["openai_api_style"] = llm_connections.load_openai_api_style(db)
     values["profiles"] = _profiles_from_json(_get_raw_value(db, _PROFILES_KEY))
     return replace(_DEFAULTS, **values)
 
@@ -476,86 +369,14 @@ def save_profiles(db: Session, profiles: Profiles) -> None:
     _save(db, _PROFILES_KEY, _profiles_to_json(profiles))
 
 
-def _save_connections(db: Session, connections: tuple[ConnectionConfig, ...]) -> None:
-    _save(db, _CONNECTIONS_KEY, [_connection_to_json(c) for c in connections])
+def used_connection_ids(db: Session) -> set[str]:
+    """用途ごとの組(既定 / ComfyUI の画像)のどこかで使っている接続先。有効かどうかに関わらず
+    数える(LLM の接続先の「使っている機能」と、削除の禁止に使う。ADR-0032 3章)。"""
+    return _profiles_from_json(_get_raw_value(db, _PROFILES_KEY)).connection_ids()
 
 
-def add_connection(db: Session, name: object, base_url: object, api_style: object) -> str:
-    """接続先を足して、その id を返す。"""
-    config = load(db)
-    if len(config.connections) >= CONNECTIONS_MAX:
-        raise AnnotationSettingsValidationError(
-            t("settings.annotation.tooManyConnections", max=CONNECTIONS_MAX)
-        )
-    normalized_url = normalize_connection_base_url(base_url)
-    connection = ConnectionConfig(
-        id=uuid.uuid4().hex,
-        name=normalize_connection_name(name),
-        base_url=normalized_url,
-        api_style=normalize_api_style(api_style),
-    )
-    api_key_domain.warn_if_insecure_base_url(normalized_url)
-    _save_connections(db, (*config.connections, connection))
-    return connection.id
-
-
-def update_connection(db: Session, connection_id: str, updates: dict[str, Any]) -> None:
-    """接続先の名前・Base URL・API 形式を変える(書いた項目だけ)。組み込みの接続先は API 形式
-    だけ変えられる。"""
-    if connection_id == BUILTIN_CONNECTION_ID:
-        if set(updates) - {"api_style"}:
-            raise ConnectionReservedError
-        if "api_style" in updates:
-            _save(db, _OPENAI_API_STYLE_KEY, normalize_api_style(updates["api_style"]))
-        return
-    config = load(db)
-    current = config.find_connection(connection_id)
-    if current is None:
-        raise ConnectionNotFoundError
-    changed = current
-    if "name" in updates:
-        changed = replace(changed, name=normalize_connection_name(updates["name"]))
-    if "base_url" in updates:
-        changed = replace(changed, base_url=normalize_connection_base_url(updates["base_url"]))
-    if "api_style" in updates:
-        changed = replace(changed, api_style=normalize_api_style(updates["api_style"]))
-    if changed.base_url and changed.base_url != current.base_url:
-        api_key_domain.warn_if_insecure_base_url(changed.base_url)
-    _save_connections(
-        db, tuple(changed if c.id == connection_id else c for c in config.connections)
-    )
-
-
-def delete_connection(db: Session, data_dir: Path, connection_id: str) -> None:
-    """接続先を消す(キーも消す)。組み込み・使用中なら例外。"""
-    if connection_id == BUILTIN_CONNECTION_ID:
-        raise ConnectionReservedError
-    config = load(db)
-    if config.find_connection(connection_id) is None:
-        raise ConnectionNotFoundError
-    if connection_id in config.profiles.connection_ids():
-        raise ConnectionInUseError
-    _save_connections(db, tuple(c for c in config.connections if c.id != connection_id))
-    delete_connection_key(data_dir, connection_id)
-
-
-# -- 接続先のキー(secrets.json) ------------------------------------------------
-
-
-def _secret_field(connection_id: str) -> str:
-    return _CONNECTION_SECRET_PREFIX + connection_id
-
-
-def read_connection_key(data_dir: Path, connection_id: str) -> str | None:
-    return api_key_domain.read_secret_field(data_dir, _secret_field(connection_id))
-
-
-def write_connection_key(data_dir: Path, connection_id: str, value: str) -> None:
-    api_key_domain.write_secret_field(data_dir, _secret_field(connection_id), value)
-
-
-def delete_connection_key(data_dir: Path, connection_id: str) -> None:
-    api_key_domain.delete_secret_field(data_dir, _secret_field(connection_id))
+FEATURE_ID = "annotation"
+llm_connections.register_usage(FEATURE_ID, used_connection_ids)
 
 
 # -- 接続先の解決 ----------------------------------------------------------------
@@ -590,23 +411,13 @@ def resolve_target(
     connection = config.find_connection(choice.connection_id)
     if connection is None:
         raise ConnectionNotFoundError(choice.connection_id)
-    if connection.builtin:
-        openai_key, _ = api_key_domain.resolve_key(settings)
-        base_url, _ = api_key_domain.resolve_base_url(settings)
-        return Target(
-            connection_id=connection.id,
-            model=choice.model,
-            api_key=openai_key,
-            base_url=base_url,
-            api_style=connection.api_style,
-        )
-    own_key = read_connection_key(settings.data_dir, connection.id)
+    resolved = llm_connections.resolve(connection, settings)
     return Target(
         connection_id=connection.id,
         model=choice.model,
-        api_key=own_key or PLACEHOLDER_API_KEY,
-        base_url=connection.base_url,
-        api_style=connection.api_style,
+        api_key=resolved.api_key,
+        base_url=resolved.base_url,
+        api_style=resolved.api_style,
     )
 
 
@@ -657,8 +468,8 @@ def migrate_legacy(db: Session, settings: Settings) -> bool:
         base_url: str | None = None
         if legacy["base_url"] is not None:
             try:
-                base_url = normalize_connection_base_url(legacy["base_url"])
-            except AnnotationSettingsValidationError:
+                base_url = llm_connections.normalize_connection_base_url(legacy["base_url"])
+            except llm_connections.LlmConnectionValidationError:
                 base_url = None
         api_style: ApiStyle = "responses"
         if legacy["api_style"] in API_STYLES:
@@ -674,25 +485,25 @@ def migrate_legacy(db: Session, settings: Settings) -> bool:
         if base_url is not None or legacy_key is not None:
             if base_url is None:
                 openai_base, _ = api_key_domain.resolve_base_url(settings)
-                base_url = openai_base or OPENAI_DEFAULT_BASE_URL
+                base_url = openai_base or llm_connections.OPENAI_DEFAULT_BASE_URL
             connection = ConnectionConfig(
                 id=uuid.uuid4().hex,
                 name=t("settings.annotation.migratedConnectionName"),
                 base_url=base_url,
                 api_style=api_style,
             )
-            connections = _connections_from_json(_get_raw_value(db, _CONNECTIONS_KEY))
+            connections = llm_connections.load_user_connections(db)
             _put(
                 db,
-                _CONNECTIONS_KEY,
-                [_connection_to_json(c) for c in (*connections, connection)],
+                llm_connections.CONNECTIONS_KEY,
+                [llm_connections.connection_to_json(c) for c in (*connections, connection)],
             )
             connection_id = connection.id
             if legacy_key is not None:
                 _put(db, _LEGACY_KEY_TARGET_KEY, connection_id)
                 key_target = connection_id
         elif api_style != "responses":
-            _put(db, _OPENAI_API_STYLE_KEY, api_style)
+            _put(db, llm_connections.OPENAI_API_STYLE_KEY, api_style)
 
         profiles = Profiles(
             default_llm=TargetChoice(connection_id, llm_model),
@@ -716,9 +527,9 @@ def migrate_legacy(db: Session, settings: Settings) -> bool:
     # キーは commit の後に書く(上の docstring)。
     if key_target is not None:
         if legacy_key is not None:
-            connections = _connections_from_json(_get_raw_value(db, _CONNECTIONS_KEY))
+            connections = llm_connections.load_user_connections(db)
             if any(c.id == key_target for c in connections):
-                write_connection_key(data_dir, key_target, legacy_key)
+                llm_connections.write_connection_key(data_dir, key_target, legacy_key)
                 api_key_domain.delete_secret_field(data_dir, _LEGACY_SECRET_FIELD)
             else:
                 logger.warning(
