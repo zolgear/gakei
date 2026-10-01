@@ -193,3 +193,61 @@ def test_cli_dry_run_output(
     with pytest.raises(SystemExit) as exc_info:
         migrate_storage.main(["--to", "local"])
     assert exc_info.value.code == 2
+
+
+def test_derived_size_mismatch_is_overwritten_with_warning(
+    populated: TestClient, data_dir: Path, target: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """派生は原本から作り直せるので、大きさが違っても止めずに警告して上書きする。"""
+    files = _local_files(data_dir)
+    derived_key = next(k for k in files if k.startswith("derived/"))
+    target.write_new(derived_key, b"stale")
+
+    report = migrate(_settings(data_dir), "s3")
+    assert report.copied == len(files)
+    assert target.read(derived_key) == files[derived_key]
+    err = capsys.readouterr().err
+    assert derived_key in err
+    assert "上書き" in err
+
+
+def test_storage_error_aborts_with_message(
+    populated: TestClient,
+    data_dir: Path,
+    target: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """コピー中の保存先の失敗は、トレースバックではなく文言を出して終了する(鍵は出さない)。"""
+    from app.domain.storage import StorageIOError
+
+    def _fail(key: str, data: bytes) -> None:
+        raise StorageIOError("EndpointConnectionError: Could not connect")
+
+    monkeypatch.setattr(target, "write_new", _fail)
+    with pytest.raises(MigrationAbortedError) as exc_info:
+        migrate(_settings(data_dir), "s3")
+    assert "EndpointConnectionError" in str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+
+    monkeypatch.setattr(migrate_storage, "get_settings", lambda: _settings(data_dir))
+    with pytest.raises(SystemExit) as exit_info:
+        migrate_storage.main(["--to", "s3"])
+    assert exit_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "EndpointConnectionError" in err
+    assert "Traceback" not in err
+
+
+def test_size_check_error_aborts_with_message(
+    populated: TestClient, data_dir: Path, target: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.domain.storage import StoragePermissionError
+
+    def _forbidden(key: str) -> int | None:
+        raise StoragePermissionError(f"403 s3:ListBucket {key}")
+
+    monkeypatch.setattr(target, "size_of", _forbidden)
+    with pytest.raises(MigrationAbortedError) as exc_info:
+        migrate(_settings(data_dir), "s3")
+    assert "s3:ListBucket" in str(exc_info.value)

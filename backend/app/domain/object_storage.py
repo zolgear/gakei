@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 import mimetypes
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Literal
@@ -21,8 +22,12 @@ from typing import TYPE_CHECKING, Any, Literal
 from app.domain.storage import (
     CHUNK_SIZE,
     OriginalKeyInfo,
+    StorageConditionalWriteError,
+    StorageIOError,
+    StoragePermissionError,
     StoredContent,
     Variant,
+    _first_line,
     candidate_names,
     content_key,
     derived_key,
@@ -32,13 +37,26 @@ from app.domain.storage import (
 if TYPE_CHECKING:
     from app.config import Settings
 
+logger = logging.getLogger(__name__)
+
 # Azure の読み出しの単位。既定(最初の 32MB を1回で取る)のままだと、4K の原本を配信する
 # たびに丸ごとメモリに載るので、小さめにして順に流す。
 _AZURE_GET_SIZE = 4 * 1024 * 1024
 
+# タイムアウト(秒)。SDK の既定は Azure が接続・読み取りとも 300 秒、boto3 が 60 秒で、
+# 保存先が応答しないと配信や生成の保存が数分止まる。接続は同じリージョン・同じネットワーク
+# なら 1 秒もかからないので 5 秒で諦める。読み取りのタイムアウトは応答の途切れ(ソケットの
+# 1回の読み取りを待つ時間)で、転送全体の時間ではないので、大きな原本でも 30 秒で足りる。
+# boto3 の再試行は、最初の1回を含めて 3 回まで(既定の legacy は 5 回)。
+CONNECT_TIMEOUT = 5
+READ_TIMEOUT = 30
+S3_MAX_ATTEMPTS = 3
+
 # 起動時に読み書きを確かめるためのキー(毎回同じキーに上書きする。GAKEI は削除の権限を
 # 前提にしないので、消さずに残す)。
 HEALTHCHECK_KEY = ".gakei/startup-check"
+# 起動時に「無いキー」の確認が 404 になるかを確かめるためのキー(書かない)。
+HEALTHCHECK_ABSENT_KEY = ".gakei/startup-check-absent"
 
 
 class StorageConfigError(ValueError):
@@ -47,6 +65,29 @@ class StorageConfigError(ValueError):
 
 def _content_type(key: str) -> str:
     return mimetypes.guess_type(key)[0] or "application/octet-stream"
+
+
+def _io_error(e: BaseException) -> StorageIOError:
+    """SDK の例外を `StorageIOError`(`OSError` の派生)に包み直す。鍵・署名は伏せる。
+
+    呼び出し側は `raise _io_error(e) from None` とする(元の例外の全文をつながない)。
+    """
+    return StorageIOError(f"{type(e).__name__}: {_first_line(e)}")
+
+
+def _azure_errors() -> tuple[type[BaseException], ...]:
+    # HttpResponseError(ResourceNotFoundError などを含む)、ServiceRequestError、
+    # azure-identity の ClientAuthenticationError は、どれも AzureError の派生。
+    from azure.core.exceptions import AzureError
+
+    return (AzureError,)
+
+
+def _s3_errors() -> tuple[type[BaseException], ...]:
+    # EndpointConnectionError、ReadTimeoutError、NoCredentialsError などは BotoCoreError の派生。
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    return (ClientError, BotoCoreError)
 
 
 class AzureBlobStore:
@@ -72,6 +113,8 @@ class AzureBlobStore:
                 container,
                 max_single_get_size=_AZURE_GET_SIZE,
                 max_chunk_get_size=_AZURE_GET_SIZE,
+                connection_timeout=CONNECT_TIMEOUT,
+                read_timeout=READ_TIMEOUT,
             ),
             prefix=prefix,
         )
@@ -91,6 +134,8 @@ class AzureBlobStore:
                 credential=DefaultAzureCredential(),
                 max_single_get_size=_AZURE_GET_SIZE,
                 max_chunk_get_size=_AZURE_GET_SIZE,
+                connection_timeout=CONNECT_TIMEOUT,
+                read_timeout=READ_TIMEOUT,
             ),
             prefix=prefix,
         )
@@ -111,7 +156,14 @@ class AzureBlobStore:
         return _write_original(self, data, ext, info)
 
     def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
-        self._upload(derived_key(sha256, variant), data, overwrite=True)
+        self.overwrite(derived_key(sha256, variant), data)
+
+    def overwrite(self, key: str, data: bytes) -> None:
+        """上書きしてよいキー(派生)に書く。"""
+        try:
+            self._upload(key, data, overwrite=True)
+        except _azure_errors() as e:
+            raise _io_error(e) from None
 
     def write_new(self, key: str, data: bytes) -> None:
         """キーを指定して、上書きせずに書く(移行ツール用)。あれば `FileExistsError`。"""
@@ -122,6 +174,8 @@ class AzureBlobStore:
             self._upload(key, data, overwrite=False)
         except ResourceExistsError as e:
             raise FileExistsError(key) from e
+        except _azure_errors() as e:
+            raise _io_error(e) from None
 
     def size_of(self, key: str) -> int | None:
         """キーの大きさ(バイト)。無ければ None。"""
@@ -131,6 +185,8 @@ class AzureBlobStore:
             return int(self._blob(key).get_blob_properties().size)
         except ResourceNotFoundError:
             return None
+        except _azure_errors() as e:
+            raise _io_error(e) from None
 
     def read(self, blob_key: str) -> bytes:
         from azure.core.exceptions import ResourceNotFoundError
@@ -139,9 +195,14 @@ class AzureBlobStore:
             return self._blob(blob_key).download_blob().readall()
         except ResourceNotFoundError as e:
             raise FileNotFoundError(blob_key) from e
+        except _azure_errors() as e:
+            raise _io_error(e) from None
 
     def exists(self, blob_key: str) -> bool:
-        return bool(self._blob(blob_key).exists())
+        try:
+            return bool(self._blob(blob_key).exists())
+        except _azure_errors() as e:
+            raise _io_error(e) from None
 
     def content_exists(self, blob_key: str, sha256: str, variant: Variant) -> bool:
         return self.exists(content_key(blob_key, sha256, variant))
@@ -153,13 +214,20 @@ class AzureBlobStore:
             downloader = self._blob(content_key(blob_key, sha256, variant)).download_blob()
         except ResourceNotFoundError:
             return None
-        return StoredContent(size=int(downloader.size), chunks=iter(downloader.chunks()))
+        except _azure_errors() as e:
+            raise _io_error(e) from None
+        return StoredContent(size=int(downloader.size), chunks=_iter_azure(downloader))
 
     def check(self) -> None:
-        """コンテナに接続でき、読み書きできるかを確かめる(ADR-0028 2章)。"""
-        self._upload(HEALTHCHECK_KEY, b"ok", overwrite=True)
+        """コンテナに接続でき、読み書きできるかを確かめる(ADR-0028 2章)。
+
+        条件付きの書き込み(`overwrite=False`)の対応は確かめない。Azure Blob Storage の
+        実装は Azure 本体と公式のエミュレーター(Azurite)だけで、どちらも対応している
+        (S3 互換ストレージのように、実装ごとに対応が分かれることがない)。
+        """
+        self.overwrite(HEALTHCHECK_KEY, b"ok")
         if self.read(HEALTHCHECK_KEY) != b"ok":
-            raise OSError("読み書きの確認で、書いた内容と読んだ内容が一致しません")
+            raise StorageIOError("読み書きの確認で、書いた内容と読んだ内容が一致しません")
 
 
 class S3Store:
@@ -190,7 +258,12 @@ class S3Store:
         import boto3
         from botocore.config import Config
 
-        config = Config(s3={"addressing_style": "path" if force_path_style else "auto"})
+        config = Config(
+            s3={"addressing_style": "path" if force_path_style else "auto"},
+            connect_timeout=CONNECT_TIMEOUT,
+            read_timeout=READ_TIMEOUT,
+            retries={"total_max_attempts": S3_MAX_ATTEMPTS, "mode": "standard"},
+        )
         client = boto3.client(
             "s3",
             region_name=region or None,
@@ -202,9 +275,32 @@ class S3Store:
         return cls(client, bucket, prefix=prefix)
 
     @staticmethod
-    def _error_code(e: Exception) -> str:
+    def _error_code(e: BaseException) -> str:
         response = getattr(e, "response", None) or {}
         return str(response.get("Error", {}).get("Code", ""))
+
+    @staticmethod
+    def _status(e: BaseException) -> int | None:
+        response = getattr(e, "response", None) or {}
+        status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        return int(status) if status is not None else None
+
+    @classmethod
+    def _is_missing(cls, e: BaseException) -> bool:
+        return cls._error_code(e) in ("404", "NoSuchKey", "NotFound") or cls._status(e) == 404
+
+    def _lookup_error(self, e: BaseException, key: str) -> StorageIOError:
+        """無いかもしれないキーの HEAD / GET の失敗(404 以外)を包み直す。
+
+        AWS S3 は、`s3:ListBucket` の権限が無いと、存在しないキーに 404 ではなく 403
+        AccessDenied を返す。403 を「無い」とみなすと権限の誤りを隠すので、権限不足と分かる
+        文言にする(ADR-0028、2026-10-01 改訂)。
+        """
+        if self._status(e) == 403 or self._error_code(e) in ("403", "AccessDenied", "Forbidden"):
+            from app.i18n import console_t
+
+            return StoragePermissionError(console_t("app.storageS3LookupForbidden", key=key))
+        return _io_error(e)
 
     def _put(self, key: str, data: bytes, **kwargs: Any) -> None:
         self._client.put_object(
@@ -219,60 +315,62 @@ class S3Store:
         return _write_original(self, data, ext, info)
 
     def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
-        self._put(derived_key(sha256, variant), data)
+        self.overwrite(derived_key(sha256, variant), data)
+
+    def overwrite(self, key: str, data: bytes) -> None:
+        """上書きしてよいキー(派生)に書く。"""
+        try:
+            self._put(key, data)
+        except _s3_errors() as e:
+            raise _io_error(e) from None
 
     def write_new(self, key: str, data: bytes) -> None:
         """キーを指定して、上書きせずに書く(移行ツール用)。あれば `FileExistsError`。"""
-        from botocore.exceptions import ClientError
-
         try:
             # `If-None-Match: *` の条件付き書き込み。同名があれば 412 PreconditionFailed。
             # 同じキーへの書き込みが同時に進んでいると 409 ConditionalRequestConflict に
             # なりうるので、これも「使われている」とみなす。
             self._put(key, data, IfNoneMatch="*")
-        except ClientError as e:
+        except _s3_errors() as e:
             if self._error_code(e) in ("PreconditionFailed", "ConditionalRequestConflict"):
                 raise FileExistsError(key) from e
-            raise
+            raise _io_error(e) from None
 
     def size_of(self, key: str) -> int | None:
         """キーの大きさ(バイト)。無ければ None。"""
-        from botocore.exceptions import ClientError
-
         try:
             response = self._client.head_object(Bucket=self.bucket, Key=self.prefix + key)
-        except ClientError as e:
-            if self._error_code(e) in ("404", "NoSuchKey", "NotFound"):
+        except _s3_errors() as e:
+            if self._is_missing(e):
                 return None
-            raise
+            raise self._lookup_error(e, key) from None
         return int(response["ContentLength"])
 
     def _get(self, key: str) -> dict[str, Any] | None:
-        from botocore.exceptions import ClientError
-
         try:
             return self._client.get_object(Bucket=self.bucket, Key=self.prefix + key)
-        except ClientError as e:
-            if self._error_code(e) in ("NoSuchKey", "404"):
+        except _s3_errors() as e:
+            if self._is_missing(e):
                 return None
-            raise
+            raise self._lookup_error(e, key) from None
 
     def read(self, blob_key: str) -> bytes:
         response = self._get(blob_key)
         if response is None:
             raise FileNotFoundError(blob_key)
-        with response["Body"] as body:
-            return body.read()
+        try:
+            with response["Body"] as body:
+                return body.read()
+        except _s3_errors() as e:
+            raise _io_error(e) from None
 
     def exists(self, blob_key: str) -> bool:
-        from botocore.exceptions import ClientError
-
         try:
             self._client.head_object(Bucket=self.bucket, Key=self.prefix + blob_key)
-        except ClientError as e:
-            if self._error_code(e) in ("404", "NoSuchKey", "NotFound"):
+        except _s3_errors() as e:
+            if self._is_missing(e):
                 return False
-            raise
+            raise self._lookup_error(e, blob_key) from None
         return True
 
     def content_exists(self, blob_key: str, sha256: str, variant: Variant) -> bool:
@@ -287,10 +385,44 @@ class S3Store:
         )
 
     def check(self) -> None:
-        """バケットに接続でき、読み書きできるかを確かめる(ADR-0028 2章)。"""
-        self._put(HEALTHCHECK_KEY, b"ok")
+        """バケットに接続でき、読み書きできるかを確かめる(ADR-0028 2章、2026-10-01 改訂)。
+
+        1. 読み書きできるか(`HEALTHCHECK_KEY` に上書きして読み戻す)。
+        2. 無いキーの確認が 404 になるか。AWS S3 は `s3:ListBucket` が無いと 403 を返し、
+           そのままでは配信や移行が失敗するので、ここで権限不足として止める。
+        3. 条件付きの書き込み(`If-None-Match: *`)に対応しているか。既にある
+           `HEALTHCHECK_KEY` に条件を付けて書き、412 なら対応。成功(条件を無視)なら
+           上書きが起こりうることを警告して続ける(ADR-0028 3章が許容している)。それ以外の
+           失敗(400 / 501 など)は、生成のたびに原本の保存が失敗するので起動を止める。
+        """
+        self.overwrite(HEALTHCHECK_KEY, b"ok")
         if self.read(HEALTHCHECK_KEY) != b"ok":
-            raise OSError("読み書きの確認で、書いた内容と読んだ内容が一致しません")
+            raise StorageIOError("読み書きの確認で、書いた内容と読んだ内容が一致しません")
+        self.exists(HEALTHCHECK_ABSENT_KEY)
+        self._check_conditional_write()
+
+    def _check_conditional_write(self) -> None:
+        from app.i18n import console_t
+
+        try:
+            self._put(HEALTHCHECK_KEY, b"ok", IfNoneMatch="*")
+        except _s3_errors() as e:
+            if self._error_code(e) in ("PreconditionFailed", "ConditionalRequestConflict"):
+                return
+            if self._status(e) in (412, 409):
+                return
+            status = self._status(e)
+            if status is None:
+                # 接続の失敗など(HTTP の応答が無い)。
+                raise _io_error(e) from None
+            raise StorageConditionalWriteError(
+                console_t(
+                    "app.storageConditionalWriteRejected",
+                    status=status,
+                    code=self._error_code(e) or "-",
+                )
+            ) from None
+        logger.warning(console_t("app.storageConditionalWriteIgnored"))
 
 
 def _write_original(
@@ -311,9 +443,20 @@ def _write_original(
 def _iter_body(body: Any) -> Iterator[bytes]:
     """botocore の StreamingBody をチャンクで読み、読み終えたら(途中でやめても)閉じる。"""
     try:
-        yield from body.iter_chunks(CHUNK_SIZE)
+        try:
+            yield from body.iter_chunks(CHUNK_SIZE)
+        except _s3_errors() as e:
+            raise _io_error(e) from None
     finally:
         body.close()
+
+
+def _iter_azure(downloader: Any) -> Iterator[bytes]:
+    """Azure の StorageStreamDownloader をチャンクで読む(途中の失敗も OSError に包む)。"""
+    try:
+        yield from downloader.chunks()
+    except _azure_errors() as e:
+        raise _io_error(e) from None
 
 
 def _missing(*names: str) -> StorageConfigError:

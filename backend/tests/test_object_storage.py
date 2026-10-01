@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from app.config import Settings
+from app.domain.object_storage import S3Store
 from app.domain.storage import (
     LocalFsStore,
     OriginalKeyInfo,
@@ -334,3 +335,267 @@ def test_app_startup_aborts_when_storage_unavailable(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path, fake_provider=True, storage_backend="s3"))
     with pytest.raises(StorageUnavailableError), TestClient(app):
         pass
+
+
+# -- 2026-10-01 改訂: 403 の扱い、条件付き書き込みの確認、SDK の例外、タイムアウト ----------
+
+
+def _client_error(status: int, code: str, operation: str) -> Exception:
+    from botocore.exceptions import ClientError
+
+    return ClientError(
+        {"Error": {"Code": code, "Message": code}, "ResponseMetadata": {"HTTPStatusCode": status}},
+        operation,
+    )
+
+
+def _forbid_lookups(store: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ListBucket の無い AWS S3 と同じく、無いキーの HEAD / GET を 403 にする。"""
+    head = store._client.head_object
+    get = store._client.get_object
+
+    def _head(**kwargs: Any) -> Any:
+        try:
+            return head(**kwargs)
+        except Exception as e:
+            if S3Store._is_missing(e):
+                raise _client_error(403, "403", "HeadObject") from None
+            raise
+
+    def _get(**kwargs: Any) -> Any:
+        try:
+            return get(**kwargs)
+        except Exception as e:
+            if S3Store._is_missing(e):
+                raise _client_error(403, "AccessDenied", "GetObject") from None
+            raise
+
+    monkeypatch.setattr(store._client, "head_object", _head)
+    monkeypatch.setattr(store._client, "get_object", _get)
+
+
+def _open_with(store: Any, tmp_path: Path) -> Any:
+    """`build_store` を差し替えて `open_store`(起動時の確認)を通す。"""
+    import app.domain.storage as storage_module
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(storage_module, "build_store", lambda _settings: store)
+        return open_store(_settings(tmp_path, storage_backend="s3", s3_bucket=store.bucket))
+
+
+def test_s3_forbidden_lookup_is_permission_error(
+    s3_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """403 を「無い」とみなさず、ListBucket が要ると分かる OSError にする。"""
+    from app.domain.storage import StoragePermissionError
+
+    _forbid_lookups(s3_store, monkeypatch)
+    key = "assets/openai/none/2026-09/missing.png"
+    for call in (
+        lambda: s3_store.size_of(key),
+        lambda: s3_store.exists(key),
+        lambda: s3_store.read(key),
+        lambda: s3_store.open_content(key, "0" * 64, "original"),
+    ):
+        with pytest.raises(StoragePermissionError) as exc_info:
+            call()
+        assert isinstance(exc_info.value, OSError)
+        assert "s3:ListBucket" in str(exc_info.value)
+        assert key in str(exc_info.value)
+
+
+def test_s3_startup_aborts_without_list_bucket(
+    s3_store: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _forbid_lookups(s3_store, monkeypatch)
+    with pytest.raises(StorageUnavailableError) as exc_info:
+        _open_with(s3_store, tmp_path)
+    message = str(exc_info.value)
+    assert "s3:ListBucket" in message
+    assert exc_info.value.__cause__ is None
+
+
+def test_s3_check_accepts_conditional_write(
+    s3_store: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """moto(と R2・AWS S3)は既にあるキーへの `If-None-Match: *` に 412 を返す。"""
+    with caplog.at_level("WARNING", logger="app.domain.object_storage"):
+        assert _open_with(s3_store, tmp_path) is s3_store
+    assert "If-None-Match" not in caplog.text
+
+
+def test_s3_check_warns_when_condition_is_ignored(
+    s3_store: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """条件を無視して上書きする互換ストレージは、警告して起動を続ける(ADR-0028 3章)。"""
+    put = s3_store._client.put_object
+
+    def _put_ignoring_condition(**kwargs: Any) -> Any:
+        kwargs.pop("IfNoneMatch", None)
+        return put(**kwargs)
+
+    monkeypatch.setattr(s3_store._client, "put_object", _put_ignoring_condition)
+    with caplog.at_level("WARNING", logger="app.domain.object_storage"):
+        _open_with(s3_store, tmp_path)
+    assert "If-None-Match" in caplog.text
+
+
+@pytest.mark.parametrize(("status", "code"), [(501, "NotImplemented"), (400, "InvalidRequest")])
+def test_s3_check_aborts_when_condition_is_rejected(
+    s3_store: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: int, code: str
+) -> None:
+    """`If-None-Match` を受け付けない互換ストレージでは、生成のたびに原本の保存が失敗する
+    (課金後に Run が failed になる)ので、起動を止める。"""
+    from app.domain.storage import StorageConditionalWriteError
+
+    put = s3_store._client.put_object
+
+    def _put_rejecting_condition(**kwargs: Any) -> Any:
+        if "IfNoneMatch" in kwargs:
+            raise _client_error(status, code, "PutObject")
+        return put(**kwargs)
+
+    monkeypatch.setattr(s3_store._client, "put_object", _put_rejecting_condition)
+    with pytest.raises(StorageConditionalWriteError):
+        s3_store.check()
+    with pytest.raises(StorageUnavailableError) as exc_info:
+        _open_with(s3_store, tmp_path)
+    assert "If-None-Match" in str(exc_info.value)
+    assert f"HTTP {status} {code}" in str(exc_info.value)
+
+
+_UNREACHABLE_SECRET = "TOPSECRET-for-gakei-tests"
+
+
+def _unreachable_s3_store() -> Any:
+    """接続できない S3 のストア(接続は即座に拒否され、再試行もしない)。"""
+    import boto3
+    from botocore.config import Config
+
+    client = boto3.client(
+        "s3",
+        region_name="us-east-1",
+        endpoint_url="http://127.0.0.1:1",
+        aws_access_key_id="testing",
+        aws_secret_access_key=_UNREACHABLE_SECRET,
+        config=Config(
+            s3={"addressing_style": "path"}, connect_timeout=1, retries={"max_attempts": 1}
+        ),
+    )
+    return S3Store(client, "gakei-test")
+
+
+def test_s3_sdk_errors_are_wrapped_in_oserror() -> None:
+    """SDK の例外は OSError の派生に包まれ、`except OSError` の呼び出し側が劣化できる。"""
+    from app.domain.storage import StorageIOError
+
+    store = _unreachable_s3_store()
+    key = "assets/x.png"
+    for call in (
+        lambda: store.size_of(key),
+        lambda: store.exists(key),
+        lambda: store.read(key),
+        lambda: store.open_content(key, "0" * 64, "original"),
+        lambda: store.write_new(key, b"x"),
+        lambda: store.write_derived("ab" * 32, "thumb", b"x"),
+        lambda: store.write_original(b"x", "png", _info()),
+    ):
+        with pytest.raises(StorageIOError) as exc_info:
+            call()
+        assert isinstance(exc_info.value, OSError)
+        assert "EndpointConnectionError" in str(exc_info.value)
+        assert _UNREACHABLE_SECRET not in str(exc_info.value)
+        assert exc_info.value.__cause__ is None
+
+
+def test_s3_stream_errors_are_wrapped_in_oserror(s3_store: Any) -> None:
+    """配信の途中(本文の読み出し)で失敗しても OSError に包む。"""
+    from botocore.exceptions import ResponseStreamingError
+
+    from app.domain.storage import StorageIOError
+
+    key = s3_store.write_original(b"abc", "png", _info())
+    content = s3_store.open_content(key, "0" * 64, "original")
+    assert content is not None
+
+    class _Broken:
+        def iter_chunks(self, _size: int) -> Any:
+            raise ResponseStreamingError(error="connection reset")
+            yield b""  # pragma: no cover
+
+        def close(self) -> None:
+            pass
+
+    from app.domain import object_storage
+
+    with pytest.raises(StorageIOError):
+        list(object_storage._iter_body(_Broken()))
+    content.read_all()
+
+
+def test_s3_timeouts_are_explicit() -> None:
+    from app.domain import object_storage
+
+    store = S3Store.create("gakei-test", region="us-east-1")
+    config = store._client.meta.config
+    assert config.connect_timeout == object_storage.CONNECT_TIMEOUT == 5
+    assert config.read_timeout == object_storage.READ_TIMEOUT == 30
+    assert config.retries["total_max_attempts"] == object_storage.S3_MAX_ATTEMPTS == 3
+
+
+def test_azure_timeouts_are_explicit() -> None:
+    from app.domain import object_storage
+    from app.domain.object_storage import AzureBlobStore
+
+    store = AzureBlobStore.from_connection_string(
+        "DefaultEndpointsProtocol=http;AccountName=a;AccountKey=YWJj;"
+        "BlobEndpoint=http://127.0.0.1:1/a;",
+        "images",
+    )
+    connection = store._container._pipeline._transport.connection_config
+    assert connection.timeout == object_storage.CONNECT_TIMEOUT
+    assert connection.read_timeout == object_storage.READ_TIMEOUT
+
+
+def test_azure_sdk_errors_are_wrapped_in_oserror(tmp_path: Path) -> None:
+    from app.domain.object_storage import AzureBlobStore
+    from app.domain.storage import StorageIOError
+
+    key = "c2VjcmV0LWtleS1mb3ItZ2FrZWktdGVzdHM="
+    store = AzureBlobStore.from_connection_string(
+        "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
+        f"AccountKey={key};BlobEndpoint=http://127.0.0.1:1/devstoreaccount1;",
+        "images",
+    )
+    store._container._config.retry_policy.total_retries = 0
+    for call in (
+        lambda: store.size_of("a.png"),
+        lambda: store.exists("a.png"),
+        lambda: store.read("a.png"),
+        lambda: store.open_content("a.png", "0" * 64, "original"),
+        lambda: store.write_new("a.png", b"x"),
+        lambda: store.write_derived("ab" * 32, "thumb", b"x"),
+    ):
+        with pytest.raises(StorageIOError) as exc_info:
+            call()
+        assert key not in str(exc_info.value)
+
+
+def test_mcp_degrades_when_storage_is_unreachable(client: Any) -> None:
+    """保存先に接続できなくても、MCP の `get_asset` はサムネイルと透過の情報を null にして
+    返す(ローカルFSの頃の `except OSError` のまま劣化する)。`get_image` はツールのエラー。"""
+    from tests.test_mcp import _call, _enable, _error_text, _ok
+    from tests.test_mcp_feedback import _upload_via_url
+
+    _enable(client)
+    asset_id = _upload_via_url(client, make_png_bytes(64, 64, (10, 20, 30)))
+    client.app.state.store = _unreachable_s3_store()
+
+    result = _call(client, "get_asset", {"asset_id": asset_id})
+    payload = _ok(result)
+    assert payload["has_alpha"] is None
+    assert payload["transparent_ratio"] is None
+    assert [c for c in result["content"] if c["type"] == "image"] == []
+
+    result = _call(client, "get_image", {"asset_id": asset_id})
+    assert "could not be read" in _error_text(result)

@@ -267,6 +267,23 @@ class StorageUnavailableError(RuntimeError):
     """ADR-0028 2章: 設定の不足や接続・読み書きの失敗で、保存先を使えない(文言は i18n 済み)。"""
 
 
+class StorageIOError(OSError):
+    """オブジェクトストレージの SDK の例外を包み直したもの(ADR-0028、2026-10-01 改訂)。
+
+    SDK の例外は `OSError` の派生ではないので、ローカルFSの頃から `except OSError` で劣化
+    させている呼び出し側(MCP のサムネイルなど)が、そのまま劣化できるようにする。文言は
+    `_first_line` で鍵・署名を伏せた1行だけにする。
+    """
+
+
+class StoragePermissionError(StorageIOError):
+    """権限不足で拒否された(S3 の ListBucket が無いときの 403 など)。文言は i18n 済み。"""
+
+
+class StorageConditionalWriteError(StorageIOError):
+    """条件付きの書き込み(`If-None-Match: *`)を保存先が受け付けない。文言は i18n 済み。"""
+
+
 def describe_store(settings: Settings) -> str:
     """ログや文言に出す保存先の表示。種類とコンテナ(バケット)名だけ(接続文字列は出さない)。"""
     backend = settings.storage_backend
@@ -284,21 +301,25 @@ def open_store(settings: Settings) -> AssetStore:
     """
     from app.i18n import console_t
 
+    # 元の例外はつながない(`from None`)。トレースバックに SDK の例外の全文(接続先の URL
+    # など)が出ないようにするため。必要な情報は、伏せ字にした1行を文言に入れてある。
     try:
         store = build_store(settings)
     except ValueError as exc:
         # object_storage.StorageConfigError(ValueError の派生)は i18n 済みの文言を持つ。
-        raise StorageUnavailableError(str(exc)) from exc
+        raise StorageUnavailableError(str(exc)) from None
     try:
         store.check()
     except Exception as exc:  # noqa: BLE001 - SDK ごとに例外の種類が違うので同じ案内にする
+        # StorageIOError は伏せ字済みの文言を持つ(権限不足などの案内が長くなるので、切り詰めない)。
+        error = str(exc) if isinstance(exc, StorageIOError) else _first_line(exc)
         raise StorageUnavailableError(
             console_t(
                 "app.storageUnavailable",
                 storage=describe_store(settings),
-                error=_first_line(exc),
+                error=error,
             )
-        ) from exc
+        ) from None
     return store
 
 
