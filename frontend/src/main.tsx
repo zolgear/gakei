@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router'
+import { RouterProvider, createBrowserRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // フォントは Google Fonts の CDN ではなく npm 同梱(オフラインでも表示崩れしないように)。
 // 400/600 の2ウェイトだけ import する(500 は使用箇所を 400/600 に寄せて廃止)。
@@ -35,6 +35,28 @@ const queryClient = new QueryClient()
 const sharePath = parsePublicSharePath(window.location.pathname)
 const shareView = publicShareViewFromLocation(window.location.pathname, window.history.state)
 
+// ルーターはデータルーター(`createBrowserRouter`)にする。設定画面の「保存していない変更があります」
+// の確認に使う `useBlocker` がデータルーターでしか動かないため(ADR-0031 4章)。ルートの定義は
+// これまでどおり `App.tsx` の `<Routes>` に置き、ここでは `path: '*'` の1ルートでそのまま包む。
+// 共有のページではルーターを使わないので作らない(履歴の監視も始めない)。
+const router =
+  sharePath === null
+    ? createBrowserRouter([
+        {
+          path: '*',
+          element: (
+            <RunFormProvider>
+              <LineageOriginProvider>
+                <StudioReturnProvider>
+                  <App />
+                </StudioReturnProvider>
+              </LineageOriginProvider>
+            </RunFormProvider>
+          ),
+        },
+      ])
+    : null
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -47,18 +69,8 @@ createRoot(document.getElementById('root')!).render(
           />
         ) : (
           /* oidc モードの未ログインはここで足止めする(ADR-0019)。ログイン画面は
-             ルーティングを必要としないので BrowserRouter の外側に置く。 */
-          <AuthGate>
-            <BrowserRouter>
-              <RunFormProvider>
-                <LineageOriginProvider>
-                  <StudioReturnProvider>
-                    <App />
-                  </StudioReturnProvider>
-                </LineageOriginProvider>
-              </RunFormProvider>
-            </BrowserRouter>
-          </AuthGate>
+             ルーティングを必要としないのでルーターの外側に置く。 */
+          <AuthGate>{router && <RouterProvider router={router} />}</AuthGate>
         )}
       </LocaleRoot>
     </QueryClientProvider>

@@ -1,11 +1,12 @@
 /**
- * 管理者設定「自動タイトル・タグ」(ADR-0024 5章・8章)の表示・検証の純粋関数。API 呼び出しと
- * 状態管理は `AnnotationSettingsSection.tsx` が行う。
+ * 管理者設定「自動タイトル・タグ」(`/settings/annotation`。ADR-0024 5章・8章、ADR-0031)の
+ * 表示・検証の純粋関数。API 呼び出しと状態管理は `pages/AnnotationSettingsPage.tsx` が行う。
  *
- * チェックボックス(取り込み時の自動実行、LLM/VLM/ONNX の有効化)、ONNX のモデルの選択、組み込みの
- * 接続先の API の形式は切り替えるとすぐ保存し、使い方(用途ごとの「接続先 + モデル名」)、言語、
- * 上限、しきい値はまとめて「保存」する。保存では変わった項目だけを PATCH に載せる(部分更新)。
- * 接続先の追加・編集は、それぞれのフォームの「追加」「保存」で送る。
+ * ADR-0031 2章の「保存で反映」に当たる項目(取り込み時の自動実行、LLM・VLM・ONNX の有効化、
+ * ONNX のモデルの選択、使い方の表、言語、上限、しきい値)は下書き(`AnnotationDraft`)に持ち、
+ * ページ上部の「保存」で、変わった項目だけを1つの PATCH に載せて送る(`diffAnnotationDraft`)。
+ * 使い方の表(profiles)は、書き換えたマスだけを送る(`diffProfiles`)。
+ * 接続先の追加・編集・キーは「接続」としてダイアログで送る(ページの保存には混ぜない)。
  */
 import type {
   AnnotationApiStyle,
@@ -15,7 +16,9 @@ import type {
   AnnotationProfilesUpdate,
   AnnotationSettingsResponse,
   AnnotationSettingsUpdateRequest,
+  OnnxModelName,
 } from '../../api/client'
+import type { DraftErrors } from './settingsDraft'
 
 /** `backend/app/domain/annotation_settings.py` と同じ範囲。 */
 export const ANNOTATION_HOURLY_LIMIT_MIN = 1
@@ -192,6 +195,97 @@ export function diffAnnotationForm(
 
 export function hasChanges(body: object): boolean {
   return Object.keys(body).length > 0
+}
+
+// -- ページの下書き(ADR-0031) --------------------------------------------------------
+
+/**
+ * ページの「保存で反映」の項目をすべて持つ下書き。スイッチとモデルの選択も、保存を押すまで送らない
+ * (ADR-0031 2章「スイッチも例外にしない」)。
+ */
+export interface AnnotationDraft extends AnnotationForm {
+  auto_on_ingest: boolean
+  llm_enabled: boolean
+  vlm_enabled: boolean
+  onnx_enabled: boolean
+  onnx_model: OnnxModelName
+}
+
+export function draftFromSettings(settings: AnnotationSettingsResponse): AnnotationDraft {
+  return {
+    ...formFromSettings(settings),
+    auto_on_ingest: settings.auto_on_ingest,
+    llm_enabled: settings.llm_enabled,
+    vlm_enabled: settings.vlm_enabled,
+    onnx_enabled: settings.onnx_enabled,
+    onnx_model: settings.onnx_model,
+  }
+}
+
+const DRAFT_FLAG_KEYS = ['auto_on_ingest', 'llm_enabled', 'vlm_enabled', 'onnx_enabled', 'onnx_model'] as const
+
+/**
+ * 下書きと保存済みの設定の差分(PATCH の本文)。使い方・言語・上限・しきい値は `diffAnnotationForm`
+ * と同じ規則(使い方は書き換えたマスだけ、数値は数に直す)で、スイッチとモデルの選択は変わったものだけを足す。
+ */
+export function diffAnnotationDraft(
+  draft: AnnotationDraft,
+  settings: AnnotationSettingsResponse,
+): AnnotationSettingsUpdateRequest {
+  const body: AnnotationSettingsUpdateRequest = diffAnnotationForm(draft, settings)
+  for (const key of DRAFT_FLAG_KEYS) {
+    if (draft[key] !== settings[key]) Object.assign(body, { [key]: draft[key] })
+  }
+  return body
+}
+
+/**
+ * マスごとの検証の結果(`validateAnnotationForm`)を、下書きのキーごとのエラーに直す
+ * (ヘッダーの「保存」を押せるかの判定に使う。文言はマスの側に出すので、ここでは印だけ)。
+ */
+export function annotationDraftErrors(errors: AnnotationFormErrors): DraftErrors<AnnotationDraft> {
+  const result: DraftErrors<AnnotationDraft> = {}
+  for (const key of Object.keys(errors) as AnnotationFormErrorKey[]) {
+    if (!errors[key]) continue
+    if (key === 'hourly_limit' || key === 'onnx_threshold') result[key] = key
+    else if (key.startsWith('default_')) result.default = key
+    else result.comfyui = key
+  }
+  return result
+}
+
+/** 使い方の表の1マスを、保存済みから書き換えたか(変えたマスの縁をアクセント色にする)。 */
+export function isUsageCellChanged(
+  draft: AnnotationForm,
+  saved: AnnotationForm,
+  profile: AnnotationProfileName,
+  purpose: AnnotationPurpose,
+): boolean {
+  const a = draft[profile][purpose]
+  const b = saved[profile][purpose]
+  if (a.connection_id !== b.connection_id) return true
+  // 「既定と同じ」のマスは、隠れているモデル名の下書きを比べない(送らないため)。
+  if (profile === 'comfyui' && a.connection_id === null) return false
+  return a.model.trim() !== b.model.trim()
+}
+
+/**
+ * 一括実行を押せない理由。押せるなら null。保存していない変更がある間は、保存済みの設定で動く
+ * 一括実行を押させない(ADR-0031 2章「保存前は操作を押せないことがある」)。
+ */
+export type BackfillBlocker = 'unsaved' | 'noEngines' | 'nothingPending' | 'running'
+
+export function backfillBlocker(params: {
+  dirty: boolean
+  usableEngineCount: number
+  pendingCount: number
+  running: boolean
+}): BackfillBlocker | null {
+  if (params.running) return 'running'
+  if (params.dirty) return 'unsaved'
+  if (params.usableEngineCount === 0) return 'noEngines'
+  if (params.pendingCount === 0) return 'nothingPending'
+  return null
 }
 
 // -- 接続先 ------------------------------------------------------------------------

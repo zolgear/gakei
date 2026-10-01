@@ -1,7 +1,7 @@
 /**
  * 設定 →「ユーザー設定」の「アクセストークン」(ADR-0023 6章)。AI エージェントを MCP で接続する
  * ときに `Authorization: Bearer` で渡すトークンを、各自が発行・失効させる。oidc モードのときだけ
- * 描画される(呼び出し側の `visibleSections` が制御する。none モードは API も 404)。
+ * 描画される(設定画面の `settingsToc` が制御する。none モードは API も 404)。
  * - 発行: 名前を付けて発行し、値はその応答にだけ載るので、この部品の state にだけ置いて1回だけ
  *   見せる(コピーボタン付き)。画面を離れると消え、再表示できない。
  * - 一覧: 名前、作成日時、最終使用日時(未使用なら「未使用」)。
@@ -25,6 +25,7 @@ import { CopyableValue } from './CopyableValue'
 import { API_TOKENS_QUERY_KEY } from './queryKeys'
 import { API_TOKEN_NAME_MAX_LENGTH, formatLastUsed, isValidApiTokenName } from './mcpSettings'
 import styles from './ApiTokensSection.module.css'
+import common from './settings.module.css'
 
 interface ApiTokensSectionProps {
   toast: UseToastResult
@@ -72,9 +73,7 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
   const items = query.data?.items ?? []
 
   return (
-    <section id="access-tokens" className={styles.section}>
-      <h2 className={styles.sectionHeading}>{a.heading}</h2>
-      <p className={styles.helpText}>{a.intro}</p>
+    <section id="access-tokens" className={common.section}>
 
       <form
         className={styles.form}
@@ -90,7 +89,7 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
           <input
             id="gakei-api-token-name"
             type="text"
-            className={styles.input}
+            className={common.input}
             value={nameInput}
             maxLength={API_TOKEN_NAME_MAX_LENGTH}
             placeholder={a.namePlaceholder}
@@ -99,7 +98,7 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
             disabled={createMutation.isPending}
             onChange={(e) => setNameInput(e.target.value)}
           />
-          <button type="submit" className={styles.saveButton} disabled={!nameValid || createMutation.isPending}>
+          <button type="submit" className={common.primaryButton} disabled={!nameValid || createMutation.isPending}>
             {createMutation.isPending ? a.creating : a.create}
           </button>
         </div>
@@ -115,35 +114,35 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
             copyFailedMessage={a.copyFailed}
             toast={toast}
           />
-          <p className={styles.warningText}>{a.createdWarning}</p>
-          <button type="button" className={styles.secondaryButton} onClick={() => setCreated(null)}>
+          <p className={common.warningText}>{a.createdWarning}</p>
+          <button type="button" className={common.secondaryButton} onClick={() => setCreated(null)}>
             {a.dismiss}
           </button>
         </div>
       )}
 
-      {errorMessage && <p className={styles.errorText}>{errorMessage}</p>}
+      {errorMessage && <p className={common.errorText}>{errorMessage}</p>}
 
-      {query.isLoading && <p className={styles.placeholder}>{a.loading}</p>}
+      {query.isLoading && <p className={common.placeholder}>{a.loading}</p>}
 
       {query.isError && (
-        <div className={styles.loadError}>
-          <p className={styles.errorText}>{a.loadFailed}</p>
-          <button type="button" className={styles.secondaryButton} onClick={() => void query.refetch()}>
+        <div className={common.loadError}>
+          <p className={common.errorText}>{a.loadFailed}</p>
+          <button type="button" className={common.secondaryButton} onClick={() => void query.refetch()}>
             {a.retry}
           </button>
         </div>
       )}
 
-      {query.data && items.length === 0 && <p className={styles.placeholder}>{a.empty}</p>}
+      {query.data && items.length === 0 && <p className={common.placeholder}>{a.empty}</p>}
 
       {items.length > 0 && (
-        <ul className={styles.list}>
+        <ul className={common.list}>
           {items.map((item) => (
-            <li key={item.id} className={styles.item}>
-              <div className={styles.itemText}>
-                <span className={styles.itemName}>{item.name}</span>
-                <dl className={styles.itemMeta}>
+            <li key={item.id} className={common.item}>
+              <div className={common.itemText}>
+                <span className={common.itemName}>{item.name}</span>
+                <dl className={common.itemMeta}>
                   <dt>{a.createdAt}</dt>
                   <dd>{formatDateTime(item.created_at)}</dd>
                   <dt>{a.lastUsedAt}</dt>
@@ -154,7 +153,7 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
               </div>
               <button
                 type="button"
-                className={styles.deleteButton}
+                className={common.dangerButton}
                 disabled={revokeMutation.isPending}
                 onClick={() => setRevokeTarget(item)}
               >

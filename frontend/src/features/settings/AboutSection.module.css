@@ -1,19 +1,4 @@
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--color-bg-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
-.sectionHeading {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
+/* 「GAKEI について」にしか無いもの。カードは settings.module.css。 */
 .line {
   margin: 0;
   font-size: 12px;

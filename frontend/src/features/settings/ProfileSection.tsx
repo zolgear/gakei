@@ -1,6 +1,6 @@
 /**
  * 設定 →「ユーザー設定」の「プロフィール」(ADR-0020)。oidc モードのときだけ描画される
- * (呼び出し側の `SettingsPage.tsx` が `visibleSections` の結果でこのコンポーネント自体の
+ * (設定画面(`pages/SettingsPage.tsx`)が `settingsToc` の結果でこのコンポーネント自体の
  * 描画を制御するので、ここでも念のため oidc モードでなければ何も描かない)。
  * 現在のアバター(`UserAvatar`。無ければ頭文字)、名前・メール(読み取り専用)、
  * 「画像をアップロード」「ストックから選ぶ」「削除」を出す。ストックから選ぶ一覧は
@@ -31,6 +31,7 @@ import { StockPickerGrid } from '../stock/StockPickerGrid'
 import { ImageCropDialog } from '../crop/ImageCropDialog'
 import type { CropRect } from '../crop/cropMath'
 import styles from './ProfileSection.module.css'
+import common from './settings.module.css'
 
 interface ProfileSectionProps {
   toast: UseToastResult
@@ -81,7 +82,7 @@ export function ProfileSection({ toast }: ProfileSectionProps) {
     },
   })
 
-  // none モードには出さない(呼び出し側の `visibleSections` が既にこの分岐をしているが、
+  // none モードには出さない(設定画面の `settingsToc` が既にこの分岐をしているが、
   // 単体で使われても安全なように二重に見ておく)。全 hooks の後で早期 return する。
   if (auth.mode !== 'oidc' || !auth.user) return null
   const user = auth.user
@@ -138,8 +139,7 @@ export function ProfileSection({ toast }: ProfileSectionProps) {
   }
 
   return (
-    <section className={styles.section}>
-      <h2 className={styles.sectionHeading}>{t.settings.profile.heading}</h2>
+    <section className={common.section}>
 
       <div className={styles.identityRow}>
         <UserAvatar name={user.name ?? user.email} avatarUrl={user.avatar_url} size={72} />
@@ -149,10 +149,10 @@ export function ProfileSection({ toast }: ProfileSectionProps) {
         </div>
       </div>
 
-      <div className={styles.actions}>
+      <div className={common.actions}>
         <button
           type="button"
-          className={styles.actionButton}
+          className={common.secondaryButton}
           disabled={uploadMutation.isPending}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -165,13 +165,13 @@ export function ProfileSection({ toast }: ProfileSectionProps) {
           className={styles.hiddenFileInput}
           onChange={(e) => handleFileChange(e.target.files)}
         />
-        <button type="button" className={styles.actionButton} onClick={() => setPickerOpen(true)}>
+        <button type="button" className={common.secondaryButton} onClick={() => setPickerOpen(true)}>
           {t.settings.profile.chooseFromStock}
         </button>
         {user.avatar_url && (
           <button
             type="button"
-            className={styles.deleteButton}
+            className={common.dangerButton}
             disabled={deleteMutation.isPending}
             onClick={() => setDeleteConfirmOpen(true)}
           >
@@ -180,8 +180,8 @@ export function ProfileSection({ toast }: ProfileSectionProps) {
         )}
       </div>
 
-      {errorMessage && <p className={styles.errorText}>{errorMessage}</p>}
-      <p className={styles.helpText}>{t.settings.profile.help}</p>
+      {errorMessage && <p className={common.errorText}>{errorMessage}</p>}
+      <p className={common.helpText}>{t.settings.profile.help}</p>
 
       <Modal open={pickerOpen} title={t.settings.profile.pickerTitle} onClose={handleClosePicker} size="large">
         <div className={styles.pickerBody}>
@@ -196,12 +196,12 @@ export function ProfileSection({ toast }: ProfileSectionProps) {
           />
         </div>
         <div className={styles.pickerFooter}>
-          <button type="button" className={styles.closeButton} onClick={handleClosePicker}>
+          <button type="button" className={common.secondaryButton} onClick={handleClosePicker}>
             {t.common.close}
           </button>
           <button
             type="button"
-            className={styles.confirmButton}
+            className={common.primaryButton}
             disabled={!pickerSelectedAsset}
             onClick={handleConfirmPicker}
           >

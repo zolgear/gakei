@@ -11,6 +11,7 @@ import { getAbout } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { GAKEI_COPYRIGHT, GAKEI_LICENSE_NAME, GAKEI_LICENSE_URL, GAKEI_REPOSITORY_URL } from './about'
 import styles from './AboutSection.module.css'
+import common from './settings.module.css'
 import { ABOUT_QUERY_KEY } from './queryKeys'
 
 const THIRD_PARTY_NOTICES_URL = '/api/about/third-party-notices'
@@ -21,8 +22,7 @@ export function AboutSection() {
   const about = aboutQuery.data
 
   return (
-    <section className={styles.section}>
-      <h2 className={styles.sectionHeading}>{t.settings.about.heading}</h2>
+    <section className={common.section}>
 
       <p className={styles.line}>{GAKEI_COPYRIGHT}</p>
 

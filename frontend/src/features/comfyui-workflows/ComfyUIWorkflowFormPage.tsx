@@ -1,5 +1,5 @@
 /**
- * `/settings/comfyui/new` と `/settings/comfyui/:id`(ADR-0013)。ComfyUI の「Export (API)」で
+ * `/settings/comfyui/workflows/new` と `/settings/comfyui/workflows/:id`(ADR-0013)。ComfyUI の「Export (API)」で
  * 書き出した JSON を選び、analyze の提案を初期値にして差し込み先・公開パラメーターを整え、
  * 保存する。編集時は保存済みの bindings/exposed_params を初期値にする(analyze の提案では
  * 上書きしない)。判定・変換のロジックは同じディレクトリの純粋関数(*.ts)に委ねている。
@@ -48,7 +48,7 @@ import { NodeInputPicker } from './NodeInputPicker'
 import { NodeMultiPicker } from './NodeMultiPicker'
 import { NodeSelectPicker } from './NodeSelectPicker'
 import { ExposedParamsTable } from './ExposedParamsTable'
-import panelStyles from './ComfyUIStatusPanel.module.css'
+import panelStyles from './ComfyUIStatus.module.css'
 import styles from './ComfyUIWorkflowFormPage.module.css'
 
 function operationOptions(t: Messages): { value: ComfyOperation; label: string }[] {
@@ -63,7 +63,7 @@ export function ComfyUIWorkflowFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEdit = id !== undefined
   const navigate = useNavigate()
-  const goBack = useBackNavigate('/settings/comfyui')
+  const goBack = useBackNavigate('/settings/comfyui/workflows')
   const queryClient = useQueryClient()
   const toast = useToast()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -217,7 +217,7 @@ export function ComfyUIWorkflowFormPage() {
       queryClient.invalidateQueries({ queryKey: ['comfyui-workflows'] })
       if (isEdit) queryClient.invalidateQueries({ queryKey: ['comfyui-workflow', id] })
       toast.show({ message: isEdit ? t.comfyui.form.updated : t.comfyui.form.created })
-      navigate('/settings/comfyui')
+      navigate('/settings/comfyui/workflows')
     },
   })
 
@@ -262,7 +262,7 @@ export function ComfyUIWorkflowFormPage() {
       {disconnectedNotice && (
         <div className={panelStyles.warningBox}>
           <p className={panelStyles.warningText}>
-            {disconnectedNotice} <Link to="/settings#comfyui">{t.comfyui.list.disconnectedSettingsLink}</Link>
+            {disconnectedNotice} <Link to="/settings/comfyui">{t.comfyui.list.disconnectedSettingsLink}</Link>
           </p>
         </div>
       )}
