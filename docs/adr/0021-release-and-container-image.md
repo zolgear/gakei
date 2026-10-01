@@ -43,6 +43,18 @@
 - private リポジトリのうちに `v0.1.0-rc.1` のようなプレリリースのタグで一度動かして確かめる。その際に作られたパッケージと Release は、公開リポジトリでの最初のリリースより前に削除する(名前が同じ `ghcr.io/zolgear/gakei` になり、旧リポジトリに紐づいたパッケージが残ると混乱する)。
 - CI(`ci.yml`)の docker ジョブは変えない(単一アーキテクチャのビルドと起動確認のまま)。マルチアーキテクチャのビルドは時間がかかるので、リリース時だけ行う。
 
+### 2a. dev 版のイメージ(2026-10-01 追記)
+
+リリース前の dev の状態をサーバーで試すため、dev 版のイメージも公開する(ユーザーの判断)。
+
+- **作ると決めたときだけ作る**(`.github/workflows/dev-image.yml`)。dev への push や PR のたびには作らない(マルチアーキテクチャのビルドに時間がかかるため)。きっかけは次の2つ。
+  - `dev-image` ブランチへの push(`git push -f origin origin/dev:dev-image`)。このブランチは作るきっかけにだけ使い、開発には使わない。push したコミットが dev に含まれていなければ失敗させる(レビューを経ていない変更を公開しない)。
+  - 手動実行(`workflow_dispatch`)。dev ブランチ以外で実行したら失敗させる。ただし `workflow_dispatch` は、ワークフローのファイルが既定ブランチ(`main`)にないと実行できない。`main` はリリースのときしか動かないので、主に push のほうを使う。
+- 手順は2章の 2・3 と同じ(`linux/amd64` で起動確認してから、`linux/amd64` と `linux/arm64` で push する)。`GAKEI_COMMIT` を渡すので、`/api/about` と設定画面の「GAKEI について」でコミットが分かる。
+- タグは `dev`(最新の dev 版。実行のたびに動く)と `dev-<コミットの SHA の先頭 7 文字>`。`latest`・`X.Y.Z`・`X.Y` は動かさず、GitHub Release も作らない。
+- パッケージは public なので、dev 版も誰でも pull できる。利用者向けの案内(README)には載せず、`docs/release.md` にだけ書く。dev 版はリリース前の状態で、起動時の `upgrade head`(ADR-0008)で DB が先に進むと、リリース版に戻すには DB のバックアップが要る。
+- 古い `dev-<SHA>` のタグは自動では消さない。増えすぎたら GHCR のパッケージの画面で消す。
+
 ### 3. バージョンと第三者ライセンス表記を画面と API に出す
 
 - **`GET /api/about`** → `{ "version": "0.1.0", "commit": "abc1234..." | null }`。`version` は `pyproject.toml` から、`commit` は環境変数 `GAKEI_COMMIT` から(未設定なら `null`。起動スクリプトで動かすときは null になる。git を呼んで補うことはしない)。他の API と同じくログインが要る(ADR-0019)。
@@ -105,3 +117,4 @@
 3. [x] `Dockerfile`(`$BUILDPLATFORM`、`GAKEI_COMMIT`、LICENSE / NOTICE のコピー、OCI ラベル)、`.github/workflows/release.yml`
 4. [x] `docs/release.md`、README(日英)の Docker の節、`docs/configuration.md`(`GAKEI_COMMIT` は利用者が設定するものではないので載せない)、CLAUDE.md、ADR-0016 / ADR-0011 への追記
 5. [x] private リポジトリで `v0.1.0-rc.1` を打ってワークフローを一度動かし、パッケージと Release を消す(2026-09-27。同日に public で `v0.1.0` をリリース)
+6. [x] dev 版のイメージ(2a 章。`dev-image.yml`、`docs/release.md`。2026-10-01)
