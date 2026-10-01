@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router'
+import { Navigate, Route, Routes, useParams } from 'react-router'
 import { AppShell } from './shell/AppShell'
 import { HistoryPage } from './pages/HistoryPage'
 import { StudioWorkspace } from './features/workspace/StudioWorkspace'
@@ -26,10 +26,11 @@ export function App() {
         <Route path="/assets/:id" element={<AssetViewerPage />} />
         <Route path="/lineage/:assetId" element={<LineagePage />} />
         <Route path="/search" element={<SearchPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        {/* 設定はページに分ける(ADR-0031)。`/settings` は目次(広いときは「表示」も)。 */}
+        <Route path="/settings/:page?" element={<SettingsPage />} />
         {/* ワークフローの登録は管理者設定(ADR-0019 5章)。非管理者は /settings に戻す。 */}
         <Route
-          path="/settings/comfyui"
+          path="/settings/comfyui/workflows"
           element={
             <RequireAdmin>
               <ComfyUIWorkflowsListPage />
@@ -37,7 +38,7 @@ export function App() {
           }
         />
         <Route
-          path="/settings/comfyui/new"
+          path="/settings/comfyui/workflows/new"
           element={
             <RequireAdmin>
               <ComfyUIWorkflowFormPage />
@@ -45,14 +46,23 @@ export function App() {
           }
         />
         <Route
-          path="/settings/comfyui/:id"
+          path="/settings/comfyui/workflows/:id"
           element={
             <RequireAdmin>
               <ComfyUIWorkflowFormPage />
             </RequireAdmin>
           }
         />
+        {/* ADR-0031 より前のパス。ブックマーク等のため新しいパスへ転送する。 */}
+        <Route path="/settings/comfyui/new" element={<Navigate to="/settings/comfyui/workflows/new" replace />} />
+        <Route path="/settings/comfyui/:id" element={<LegacyWorkflowRedirect />} />
       </Route>
     </Routes>
   )
+}
+
+/** `/settings/comfyui/:id`(ADR-0031 より前のワークフロー編集のパス)を新しいパスへ転送する。 */
+function LegacyWorkflowRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/settings/comfyui/workflows/${id ?? ''}`} replace />
 }

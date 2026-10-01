@@ -1,5 +1,5 @@
 /**
- * 接続パネル(`ComfyUIStatusPanel.tsx`)、ワークフロー一覧のコンパクトな接続状態表示
+ * 接続のカード(`ComfyUIConnectionCard.tsx`)、ワークフロー一覧のコンパクトな接続状態表示
  * (`ComfyUIConnectionSummary.tsx`)、ワークフロー一覧・登録編集画面の未接続案内、
  * それぞれの判定を切り出した純粋関数。
  * ループバック判定はサーバー側(`app/providers/registry.py` の `_is_loopback_url`)と
@@ -22,7 +22,7 @@ export interface ConnectionSummary {
   label: string
 }
 
-/** `/settings/comfyui` に出す1行分の要約(状態 + 短いラベル)。詳しい操作はパネル側で行う。 */
+/** `/settings/comfyui/workflows` に出す1行分の要約(状態 + 短いラベル)。詳しい操作はパネル側で行う。 */
 export function connectionSummary(status: Pick<ComfyUIStatus, 'enabled' | 'available' | 'url'>): ConnectionSummary {
   const t = msg().comfyui.connection
   const state = connectionState(status)
@@ -96,7 +96,7 @@ export function testSuccessNotice(params: {
 }
 
 /**
- * ワークフロー一覧・登録編集画面(`/settings/comfyui`)で出す未接続の案内。
+ * ワークフロー一覧・登録編集画面(`/settings/comfyui/workflows`)で出す未接続の案内。
  * 接続テストのみで保存し忘れた場合と同じく `enabled === false` を根拠にする
  * (`GET /api/comfyui/status` の結果。ADR-0013 7章: 無効時はモデル選択に出ない)。
  */

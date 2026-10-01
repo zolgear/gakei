@@ -1,6 +1,6 @@
 /**
  * 設定 →「管理者設定」の「自動タイトル・タグ」(ADR-0024 5章・8章)。管理者にだけ描画される
- * (呼び出し側の `SettingsPage.tsx` が `visibleSections` で制御する)。
+ * (設定画面(`pages/SettingsPage.tsx`)が `settingsToc` で制御する)。
  *
  * 上から ADR-0024 8章「設定画面の配置」の順に並べる。
  * 1. 有効化と実行: 取り込み時の自動実行、LLM・VLM の有効化、未実行の件数と一括実行
@@ -20,6 +20,7 @@
  */
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router'
 import {
   ApiError,
   backfillAnnotations,
@@ -756,7 +757,7 @@ function ConnectionSummary({ view, limit, styleDisabled, onApiStyleChange }: Con
       </dl>
       {view.builtin && (
         <p className={styles.helpText}>
-          {m.builtinHelp} <a href="#openai">{m.openAiSettingsLink}</a>
+          {m.builtinHelp} <Link to="/settings/openai">{m.openAiSettingsLink}</Link>
         </p>
       )}
     </>

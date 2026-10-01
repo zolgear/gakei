@@ -218,9 +218,41 @@
     "title": "設定",
     "userHeading": "ユーザー設定",
     "adminHeading": "管理者設定",
-    "adminOnly": "管理者だけが変更できます。",
+    "pages": {
+      "profile": "プロフィール",
+      "display": "表示",
+      "shares": "共有リンク",
+      "accessTokens": "アクセストークン",
+      "openai": "OpenAI",
+      "annotation": "自動タイトル・タグ",
+      "comfyui": "ComfyUI",
+      "mcp": "MCP",
+      "shareLinks": "共有リンクの公開",
+      "about": "GAKEI について"
+    },
+    "frame": {
+      "changeCount": {
+        "one": "{count} 件の変更",
+        "other": "{count} 件の変更"
+      },
+      "discard": "変更を取り消す",
+      "save": "保存",
+      "saving": "保存中…",
+      "savedToast": "保存しました",
+      "saveFailed": "保存に失敗しました",
+      "unsavedMark": "保存していない変更があります",
+      "tocLabel": "設定の目次"
+    },
+    "leave": {
+      "message": "保存していない変更があります",
+      "discard": "変更を破棄して移動",
+      "stay": "このページに残る"
+    },
+    "openai": {
+      "connectionHeading": "接続",
+      "generationHeading": "生成"
+    },
     "profile": {
-      "heading": "プロフィール",
       "avatarLabel": "アバター",
       "upload": "画像をアップロード",
       "chooseFromStock": "ストックから選ぶ",
@@ -237,7 +269,7 @@
       "help": "自分の生成画像やアップロードした画像をアバターに使えます(PNG/JPEG/WebP、20MB以下)。切り出す範囲を選べます。"
     },
     "display": {
-      "heading": "表示",
+      "intro": "このページの項目は、変えるとすぐに反映されます。このブラウザにだけ保存されます。",
       "faviconProgress": {
         "label": "タブのアイコンで進捗を示す",
         "help": "生成の待機中・実行中に、ブラウザのタブのアイコンで状態を示します。オフにしてもアプリ内のロゴの動きは変わりません。"
@@ -250,7 +282,6 @@
       }
     },
     "accessTokens": {
-      "heading": "アクセストークン",
       "intro": "AI エージェントを MCP で GAKEI に接続するときに使います。トークンはあなたの権限で動くので、他の人と共有しないでください。",
       "loading": "読み込み中...",
       "loadFailed": "アクセストークンを取得できませんでした。",
@@ -280,7 +311,7 @@
       "revokedToast": "トークンを失効させました"
     },
     "apiKey": {
-      "heading": "OpenAI API キー",
+      "heading": "API キー",
       "loading": "読み込み中...",
       "loadFailed": "キーの状態を取得できませんでした。サーバーを更新した直後なら、サーバーを起動し直してください。",
       "retry": "再読み込み",
@@ -288,8 +319,7 @@
       "notRequired": "現在のプロバイダーは API キーを使いません(確認用のダミー画像を返します)。ただし、キーの登録・削除はここから行えます。",
       "inputPlaceholder": "sk-...",
       "verifying": "確認中...",
-      "save": "保存",
-      "delete": "削除",
+      "delete": "キーを削除",
       "communicationFailed": "通信に失敗しました",
       "helpTextBefore": "画面から登録したキーは、この PC のデータディレクトリ(secrets.json)に保存されます。キーは",
       "helpTextLink": "OpenAI の管理画面",
@@ -312,10 +342,9 @@
         "loadFailed": "接続先の状態を取得できませんでした。サーバーを更新した直後なら、サーバーを起動し直してください。",
         "retry": "再読み込み",
         "envLocked": "環境変数(.env)の値が優先されるため、ここでは変更できません。",
-        "inputPlaceholder": "空欄なら OpenAI 本体(https://api.openai.com/v1)を使います",
+        "inputPlaceholder": "例: http://127.0.0.1:4000/v1",
         "helpText": "LiteLLM などの OpenAI 互換プロキシを使うときに指定します。モデル名はそのまま送るため、プロキシ側で GAKEI と同じモデル名を用意してください。表示される価格の目安は OpenAI の価格のままです。",
         "verifying": "確認中...",
-        "save": "保存",
         "clear": "既定に戻す",
         "communicationFailed": "通信に失敗しました",
         "savedToast": "接続先を保存しました",
@@ -328,24 +357,38 @@
           "default": "OpenAI 本体",
           "sourceEnv": "環境変数(.env)",
           "sourceFile": "画面で保存(secrets.json)"
-        }
-      }
+        },
+        "customStatus": "OpenAI 互換の接続先",
+        "urlLabel": "URL",
+        "defaultUrl": "https://api.openai.com/v1",
+        "sourceLabel": "出どころ",
+        "change": "接続先を変更",
+        "dialogTitle": "接続先を変更",
+        "verifyHelp": "登録する前にこの接続先につないで、使えるか確かめます(15 秒ほどかかることがあります)。OpenAI 本体に戻すときは「既定に戻す」を使います。",
+        "verifyAndRegister": "確かめて登録"
+      },
+      "sourceLabel": "出どころ",
+      "register": "キーを登録",
+      "replace": "キーを差し替える",
+      "registerDialogTitle": "API キーを登録",
+      "replaceDialogTitle": "API キーを差し替える",
+      "inputLabel": "API キー",
+      "verifyHelp": "登録する前に OpenAI に接続して、このキーが使えるか確かめます(15 秒ほどかかることがあります)。",
+      "verifyAndRegister": "確かめて登録"
     },
     "general": {
-      "heading": "生成",
       "loading": "読み込み中...",
       "loadFailed": "設定を取得できませんでした。",
       "retry": "再読み込み",
-      "saveFailed": "保存に失敗しました",
       "envNote": "環境変数(.env)の値を使用中です。ここで保存すると、以降は画面の設定が優先されます。",
       "moderation": {
         "label": "moderation",
         "optionLow": "low",
         "optionAuto": "auto",
         "help": "入力画像を使わない生成(Generate API)にだけ適用されます。編集(Edit)には影響しません。low は auto より制限が緩く、auto は OpenAI の標準のフィルタリングです。",
-        "savedToast": "moderation を保存しました",
         "resetToDefault": "既定値({default})に戻す"
-      }
+      },
+      "resetPending": "保存すると既定値({default})に戻ります"
     },
     "annotation": {
       "heading": "自動タイトル・タグ",
@@ -523,35 +566,31 @@
       }
     },
     "comfyui": {
-      "heading": "ComfyUI",
       "intro": "同じ PC で動く ComfyUI に接続すると、登録したワークフローをモデルとして選べます(実験的機能)。",
       "manageWorkflows": "ワークフローを管理する",
       "notConnectedHint": "接続していなくてもワークフローの登録はできますが、実行するには接続が必要です。",
       "timeout": {
         "label": "タイムアウト(分)",
         "help": "1回の ComfyUI 実行を待つ上限です。次に始まる実行から反映されます(実行中・待機中の Generated には影響しません)。",
-        "save": "保存",
-        "savedToast": "タイムアウトを保存しました",
         "invalid": "1〜180の整数を入力してください",
-        "resetToDefault": "既定値({default}分)に戻す"
-      }
+        "resetToDefault": "既定値({default}分)に戻す",
+        "resetPending": "保存すると既定値({default}分)に戻ります"
+      },
+      "connectionHeading": "接続",
+      "runHeading": "実行",
+      "workflowsHeading": "ワークフロー",
+      "workflowsHelp": "ComfyUI の「Export (API)」で書き出したワークフローを登録すると、モデルとして選べます。"
     },
     "mcp": {
-      "heading": "MCP",
       "intro": "Claude Code などの AI エージェントから、MCP(Model Context Protocol)で GAKEI の生成とストックを使えるようにします。エージェント経由の生成も、画面からの生成と同じく系列と証跡に残ります。",
       "loading": "読み込み中...",
       "loadFailed": "MCP の設定を取得できませんでした。",
       "retry": "再読み込み",
-      "saveFailed": "保存に失敗しました",
       "enabledLabel": "MCP サーバーを有効にする",
       "enabledTooltip": "無効の間は、エージェントから接続できません。既定は無効です。",
-      "enabledToast": "MCP を有効にしました",
-      "disabledToast": "MCP を無効にしました",
       "limitLabel": "1 時間あたりの上限",
       "limitTooltip": "直近 1 時間に MCP 経由で作れる Run の数です(0〜{max})。0 にすると MCP 経由の生成を止めます。ストックの閲覧など、読み取りのツールは引き続き使えます。",
-      "limitSave": "保存",
       "limitInvalid": "0〜{max} の整数を入力してください",
-      "limitSavedToast": "上限を保存しました",
       "limitStopped": "上限が 0 のため、MCP 経由の生成は止まっています。",
       "resetToDefault": "既定値({default})に戻す",
       "runsLastHourLabel": "直近 1 時間の MCP 経由の Run",
@@ -564,10 +603,10 @@
       "commandTokenNote": "<トークン> は、各自がユーザー設定の「アクセストークン」で発行した値に置き換えます。",
       "copy": "コピー",
       "copiedToast": "コピーしました",
-      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。"
+      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+      "connectHeading": "接続のしかた"
     },
     "about": {
-      "heading": "GAKEI について",
       "versionLabel": "バージョン",
       "licenseLabel": "ライセンス",
       "repositoryLink": "GitHub リポジトリ",
@@ -579,7 +618,6 @@
       "missingKeyContactAdmin": "OpenAI の API キーが未設定です。管理者に連絡してください。"
     },
     "shares": {
-      "heading": "共有リンク",
       "intro": "自分が作った共有リンクです。リンクを知っている人は、ログインしなくても見られます。取り消すと、そのリンクは開けなくなります(元に戻せません)。",
       "loading": "読み込み中...",
       "loadFailed": "共有リンクの一覧を取得できませんでした。",
@@ -616,13 +654,9 @@
       "openRoot": "起点の画像を開く"
     },
     "shareAdmin": {
-      "heading": "共有リンク",
       "intro": "利用者が、ログイン不要のリンクで画像を共有できるようにします。リンクでは、画像とプロンプト・パラメーターが見えます(実行者、タグ、料金は見えません)。",
       "enabledLabel": "共有リンクを有効にする",
       "enabledTooltip": "無効の間は共有リンクを作れず、既存のリンクもすべて開けなくなります(記録は残り、有効に戻せばまた開けます)。既定は無効です。",
-      "enabledToast": "共有リンクを有効にしました",
-      "disabledToast": "共有リンクを無効にしました",
-      "saveFailed": "保存に失敗しました",
       "loading": "読み込み中...",
       "loadFailed": "共有リンクの設定を取得できませんでした。",
       "retry": "再読み込み"
@@ -1344,30 +1378,32 @@
       "testConnection": "接続テスト",
       "changeUrl": "URL を変更",
       "detach": "切り離す",
-      "urlIntroPrefix": "接続先の URL を入力して保存すると、ComfyUI が使えるようになります。ComfyUI のポータブル版の既定は",
+      "urlIntroPrefix": "ComfyUI の URL を入力して接続すると、ComfyUI が使えるようになります。ComfyUI のポータブル版の既定は",
       "urlIntroSuffix": "です。",
       "nonLoopbackWarning": "ループバック(このPC自身)以外のアドレスです。認証のない ComfyUI に入力画像とプロンプトを送信することになります。",
-      "confirmNonLoopback": "内容を確認したうえで保存します",
+      "confirmNonLoopback": "内容を確認したうえで接続します",
       "connecting": "接続中...",
-      "save": "保存",
-      "saveAndConnect": "保存して接続",
       "cancel": "キャンセル",
       "detachConfirmMessage": "ComfyUI を切り離します。",
       "detachConfirmWarning": "モデルの選択肢から ComfyUI が消えます。登録済みのワークフローと過去の Run は消えず、再び接続すればそのまま使えます。この選択は設定として保存されるため、環境変数 COMFYUI_URL が指定されていても、再起動で自動的には戻りません。",
       "detachConfirmLabel": "切り離す",
-      "testResultHeadlineAvailable": "接続テスト: 接続できます",
-      "testResultHeadlineUnavailable": "接続テスト: 接続できません",
       "disconnectedLabel": "未接続",
       "connectedLabel": "接続済み: {url}",
       "unavailableLabel": "接続できません",
       "envNote": "この接続は環境変数 COMFYUI_URL の既定値です。ここで保存または切り離すと、再起動しても以降はこの画面の設定が優先されます。",
       "lockedSave": "ComfyUI の Run が実行中または待機中のため、今は接続設定を変更できません。実行が終わってから試してください。",
       "lockedDetach": "ComfyUI の Run が実行中または待機中のため、今は切り離せません。実行が終わってから試してください。",
-      "testSuccessSaveNotice": "接続テストに成功しました。まだ保存されていません。「保存」を押すと、この URL に切り替わります。",
-      "testSuccessSaveAndConnectNotice": "接続テストに成功しました。まだ保存されていません。「保存して接続」を押すと、ComfyUI がモデルの選択肢に加わります。",
-      "testSuccessNonLoopbackSuffix": " ループバック以外のアドレスのため、保存するには確認チェックにもチェックが必要です。",
-      "disconnectedNotice": "ComfyUI が未接続のため、登録したワークフローはモデルの選択肢に出ません。設定画面で接続先を保存してください。",
-      "disconnectedNoticeFormSuffix": " 未接続の間は、選択肢や範囲の補完(/object_info)が効きません。"
+      "testSuccessSaveNotice": "接続テストに成功しました。まだ切り替わっていません。「この URL に切り替える」を押すと、この URL に切り替わります。",
+      "testSuccessSaveAndConnectNotice": "接続テストに成功しました。まだ接続していません。「接続する」を押すと、ComfyUI がモデルの選択肢に加わります。",
+      "testSuccessNonLoopbackSuffix": " ループバック以外のアドレスのため、接続するには確認チェックにもチェックが必要です。",
+      "disconnectedNotice": "ComfyUI が未接続のため、登録したワークフローはモデルの選択肢に出ません。設定の ComfyUI のページで接続してください。",
+      "disconnectedNoticeFormSuffix": " 未接続の間は、選択肢や範囲の補完(/object_info)が効きません。",
+      "cardTitle": "ComfyUI",
+      "connect": "接続する",
+      "switchUrl": "この URL に切り替える",
+      "connectDialogTitle": "ComfyUI に接続",
+      "changeDialogTitle": "接続先の URL を変更",
+      "testResultTitle": "接続テストの結果"
     },
     "operationLabels": {
       "generate": "生成",

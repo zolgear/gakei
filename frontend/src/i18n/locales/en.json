@@ -218,9 +218,41 @@
     "title": "Settings",
     "userHeading": "User settings",
     "adminHeading": "Admin settings",
-    "adminOnly": "Only an admin can change this.",
+    "pages": {
+      "profile": "Profile",
+      "display": "Display",
+      "shares": "Share links",
+      "accessTokens": "Access tokens",
+      "openai": "OpenAI",
+      "annotation": "Auto titles and tags",
+      "comfyui": "ComfyUI",
+      "mcp": "MCP",
+      "shareLinks": "Public share links",
+      "about": "About GAKEI"
+    },
+    "frame": {
+      "changeCount": {
+        "one": "{count} change",
+        "other": "{count} changes"
+      },
+      "discard": "Discard changes",
+      "save": "Save",
+      "saving": "Saving…",
+      "savedToast": "Saved.",
+      "saveFailed": "Save failed.",
+      "unsavedMark": "Unsaved changes",
+      "tocLabel": "Settings contents"
+    },
+    "leave": {
+      "message": "You have unsaved changes.",
+      "discard": "Discard changes and leave",
+      "stay": "Stay on this page"
+    },
+    "openai": {
+      "connectionHeading": "Connection",
+      "generationHeading": "Generation"
+    },
     "profile": {
-      "heading": "Profile",
       "avatarLabel": "Avatar",
       "upload": "Upload image",
       "chooseFromStock": "Choose from stock",
@@ -237,7 +269,7 @@
       "help": "You can use your own generated or uploaded images as your avatar (PNG/JPEG/WebP, up to 20MB). You can choose the area to crop."
     },
     "display": {
-      "heading": "Display",
+      "intro": "Changes on this page take effect immediately. They are stored only in this browser.",
       "faviconProgress": {
         "label": "Show progress in the tab icon",
         "help": "Shows the run status in the browser tab icon while a run is queued or running. Turning this off does not change the animated logo in the app bar."
@@ -250,7 +282,6 @@
       }
     },
     "accessTokens": {
-      "heading": "Access tokens",
       "intro": "Used to connect AI agents to GAKEI over MCP. A token acts with your permissions, so do not share it with anyone.",
       "loading": "Loading...",
       "loadFailed": "Could not load access tokens.",
@@ -280,7 +311,7 @@
       "revokedToast": "Token revoked"
     },
     "apiKey": {
-      "heading": "OpenAI API key",
+      "heading": "API key",
       "loading": "Loading...",
       "loadFailed": "Could not load the key status. If the server was just updated, try restarting it.",
       "retry": "Retry",
@@ -288,8 +319,7 @@
       "notRequired": "The current provider does not use an API key (it returns a dummy image for testing). You can still add or remove a key here.",
       "inputPlaceholder": "sk-...",
       "verifying": "Verifying...",
-      "save": "Save",
-      "delete": "Delete",
+      "delete": "Delete key",
       "communicationFailed": "Communication failed.",
       "helpTextBefore": "A key you save here is stored in this PC's data directory (secrets.json). You can get one from",
       "helpTextLink": "OpenAI's dashboard",
@@ -312,10 +342,9 @@
         "loadFailed": "Could not load the base URL status. If the server was just updated, try restarting it.",
         "retry": "Retry",
         "envLocked": "The environment variable (.env) value takes priority, so it cannot be changed here.",
-        "inputPlaceholder": "Leave empty to use OpenAI directly (https://api.openai.com/v1)",
+        "inputPlaceholder": "e.g. http://127.0.0.1:4000/v1",
         "helpText": "Set this to use an OpenAI-compatible proxy such as LiteLLM. GAKEI sends its model names as-is, so the proxy must offer the same model names. Prices shown are still OpenAI's list prices.",
         "verifying": "Verifying...",
-        "save": "Save",
         "clear": "Reset to default",
         "communicationFailed": "Communication failed.",
         "savedToast": "Base URL saved.",
@@ -328,24 +357,38 @@
           "default": "OpenAI directly",
           "sourceEnv": "Environment variable (.env)",
           "sourceFile": "Saved in app (secrets.json)"
-        }
-      }
+        },
+        "customStatus": "OpenAI-compatible endpoint",
+        "urlLabel": "URL",
+        "defaultUrl": "https://api.openai.com/v1",
+        "sourceLabel": "Source",
+        "change": "Change base URL",
+        "dialogTitle": "Change base URL",
+        "verifyHelp": "Before registering, GAKEI connects to this URL to check that it works (this can take about 15 seconds). To go back to OpenAI itself, use \"Reset to default\".",
+        "verifyAndRegister": "Verify and register"
+      },
+      "sourceLabel": "Source",
+      "register": "Register key",
+      "replace": "Replace key",
+      "registerDialogTitle": "Register API key",
+      "replaceDialogTitle": "Replace API key",
+      "inputLabel": "API key",
+      "verifyHelp": "Before registering, GAKEI connects to OpenAI to check that the key works (this can take about 15 seconds).",
+      "verifyAndRegister": "Verify and register"
     },
     "general": {
-      "heading": "Generation",
       "loading": "Loading...",
       "loadFailed": "Could not load the settings.",
       "retry": "Retry",
-      "saveFailed": "Save failed",
       "envNote": "Using the environment variable (.env) value. Saving here makes the screen setting take priority from now on.",
       "moderation": {
         "label": "moderation",
         "optionLow": "low",
         "optionAuto": "auto",
         "help": "Applies only to generation without input images (Generate API); it has no effect on editing (Edit). low is less restrictive than auto, and auto is OpenAI's standard filtering.",
-        "savedToast": "moderation saved.",
         "resetToDefault": "Reset to default ({default})"
-      }
+      },
+      "resetPending": "Saving will reset this to the default ({default})."
     },
     "annotation": {
       "heading": "Automatic titles and tags",
@@ -523,35 +566,31 @@
       }
     },
     "comfyui": {
-      "heading": "ComfyUI",
       "intro": "Connecting to ComfyUI running on the same PC lets you pick registered workflows as a model (experimental).",
       "manageWorkflows": "Manage workflows",
       "notConnectedHint": "You can register workflows without connecting, but running them requires a connection.",
       "timeout": {
         "label": "Timeout (minutes)",
         "help": "The upper limit on waiting for one ComfyUI run. It applies from the next run that starts (running or queued Generated items are unaffected).",
-        "save": "Save",
-        "savedToast": "Timeout saved.",
         "invalid": "Enter an integer between 1 and 180",
-        "resetToDefault": "Reset to default ({default} min)"
-      }
+        "resetToDefault": "Reset to default ({default} min)",
+        "resetPending": "Saving will reset this to the default ({default} min)."
+      },
+      "connectionHeading": "Connection",
+      "runHeading": "Runs",
+      "workflowsHeading": "Workflows",
+      "workflowsHelp": "Register workflows exported with \"Export (API)\" in ComfyUI to choose them as models."
     },
     "mcp": {
-      "heading": "MCP",
       "intro": "Lets AI agents such as Claude Code use GAKEI generation and stock over MCP (Model Context Protocol). Runs created by agents are recorded in lineage and history just like runs created from this UI.",
       "loading": "Loading...",
       "loadFailed": "Could not load the MCP settings.",
       "retry": "Reload",
-      "saveFailed": "Failed to save",
       "enabledLabel": "Enable the MCP server",
       "enabledTooltip": "While disabled, agents cannot connect. Disabled by default.",
-      "enabledToast": "MCP enabled",
-      "disabledToast": "MCP disabled",
       "limitLabel": "Hourly limit",
       "limitTooltip": "The number of runs that can be created through MCP in the last hour (0-{max}). Set it to 0 to stop generation through MCP. Read-only tools, such as browsing stock, remain available.",
-      "limitSave": "Save",
       "limitInvalid": "Enter a whole number from 0 to {max}",
-      "limitSavedToast": "Limit saved",
       "limitStopped": "The limit is 0, so generation through MCP is stopped.",
       "resetToDefault": "Reset to default ({default})",
       "runsLastHourLabel": "Runs through MCP in the last hour",
@@ -564,10 +603,10 @@
       "commandTokenNote": "Replace <TOKEN> with a value each user issues under User settings > Access tokens.",
       "copy": "Copy",
       "copiedToast": "Copied",
-      "copyFailed": "Could not copy. Select the text and copy it manually."
+      "copyFailed": "Could not copy. Select the text and copy it manually.",
+      "connectHeading": "How to connect"
     },
     "about": {
-      "heading": "About GAKEI",
       "versionLabel": "Version",
       "licenseLabel": "License",
       "repositoryLink": "GitHub repository",
@@ -579,7 +618,6 @@
       "missingKeyContactAdmin": "No OpenAI API key is set. Please contact an admin."
     },
     "shares": {
-      "heading": "Share links",
       "intro": "Share links you created. Anyone with a link can view it without signing in. Revoking a link stops it from opening (this cannot be undone).",
       "loading": "Loading...",
       "loadFailed": "Could not load your share links.",
@@ -616,13 +654,9 @@
       "openRoot": "Open the starting image"
     },
     "shareAdmin": {
-      "heading": "Share links",
       "intro": "Let users share images with links that need no sign-in. A link shows the images and their prompts and parameters (not who ran them, tags, or cost).",
       "enabledLabel": "Enable share links",
       "enabledTooltip": "While off, nobody can create share links and all existing links stop opening (the records stay, and links open again when you turn this back on). Off by default.",
-      "enabledToast": "Share links enabled",
-      "disabledToast": "Share links disabled",
-      "saveFailed": "Could not save",
       "loading": "Loading...",
       "loadFailed": "Could not load the share link settings.",
       "retry": "Reload"
@@ -1344,30 +1378,32 @@
       "testConnection": "Test connection",
       "changeUrl": "Change URL",
       "detach": "Disconnect",
-      "urlIntroPrefix": "Enter the connection URL and save to start using ComfyUI. The default for the ComfyUI portable build is",
+      "urlIntroPrefix": "Enter the ComfyUI URL and connect to start using ComfyUI. The default for the ComfyUI portable build is",
       "urlIntroSuffix": ".",
       "nonLoopbackWarning": "This address is not a loopback (this machine itself). Input images and prompts will be sent to a ComfyUI instance with no authentication.",
-      "confirmNonLoopback": "I have reviewed this and want to save anyway",
+      "confirmNonLoopback": "I have reviewed this and want to connect anyway",
       "connecting": "Connecting...",
-      "save": "Save",
-      "saveAndConnect": "Save and connect",
       "cancel": "Cancel",
       "detachConfirmMessage": "This disconnects ComfyUI.",
       "detachConfirmWarning": "ComfyUI will disappear from the model choices. Registered workflows and past Runs stay as they are, and reconnecting brings them back. This choice is saved, so even if the COMFYUI_URL environment variable is set, restarting will not bring it back automatically.",
       "detachConfirmLabel": "Disconnect",
-      "testResultHeadlineAvailable": "Connection test: can connect",
-      "testResultHeadlineUnavailable": "Connection test: cannot connect",
       "disconnectedLabel": "Not connected",
       "connectedLabel": "Connected: {url}",
       "unavailableLabel": "Cannot connect",
       "envNote": "This connection is the default from the COMFYUI_URL environment variable. Saving or disconnecting here makes this screen’s setting take priority from now on, even after a restart.",
       "lockedSave": "A ComfyUI Run is running or queued, so connection settings cannot be changed right now. Try again once it finishes.",
       "lockedDetach": "A ComfyUI Run is running or queued, so you cannot disconnect right now. Try again once it finishes.",
-      "testSuccessSaveNotice": "Connection test succeeded. Not saved yet. Press \"Save\" to switch to this URL.",
-      "testSuccessSaveAndConnectNotice": "Connection test succeeded. Not saved yet. Press \"Save and connect\" to add ComfyUI to the model choices.",
-      "testSuccessNonLoopbackSuffix": " This is a non-loopback address, so you must also check the confirmation box to save.",
-      "disconnectedNotice": "ComfyUI is not connected, so registered workflows do not appear in the model choices. Save a connection on the settings screen.",
-      "disconnectedNoticeFormSuffix": " While disconnected, choices and range autofill (/object_info) do not work."
+      "testSuccessSaveNotice": "Connection test succeeded. Nothing has changed yet. Press \"Switch to this URL\" to switch to this URL.",
+      "testSuccessSaveAndConnectNotice": "Connection test succeeded. Not connected yet. Press \"Connect\" to add ComfyUI to the model choices.",
+      "testSuccessNonLoopbackSuffix": " This is a non-loopback address, so you must also check the confirmation box to connect.",
+      "disconnectedNotice": "ComfyUI is not connected, so registered workflows do not appear in the model choices. Connect on the ComfyUI settings page.",
+      "disconnectedNoticeFormSuffix": " While disconnected, choices and range autofill (/object_info) do not work.",
+      "cardTitle": "ComfyUI",
+      "connect": "Connect",
+      "switchUrl": "Switch to this URL",
+      "connectDialogTitle": "Connect to ComfyUI",
+      "changeDialogTitle": "Change the ComfyUI URL",
+      "testResultTitle": "Connection test result"
     },
     "operationLabels": {
       "generate": "Generate",

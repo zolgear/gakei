@@ -129,7 +129,7 @@ describe('testSuccessNotice', () => {
     ).toBeNull()
   })
 
-  it('ループバックで成功していれば保存を促す案内を出す', () => {
+  it('ループバックで成功していれば「接続する」を促す案内を出す', () => {
     const notice = testSuccessNotice({
       showForm: true,
       enabled: false,
@@ -137,12 +137,12 @@ describe('testSuccessNotice', () => {
       testResult: { available: true, url: loopbackUrl },
       confirmNonLoopback: false,
     })
-    expect(notice).toContain('まだ保存されていません')
-    expect(notice).toContain('保存して接続')
+    expect(notice).toContain('まだ接続していません')
+    expect(notice).toContain('「接続する」')
     expect(notice).not.toContain('確認チェック')
   })
 
-  it('有効化済みで URL を変更中なら「保存」で切り替わると案内する', () => {
+  it('有効化済みで URL を変更中なら「この URL に切り替える」で切り替わると案内する', () => {
     const notice = testSuccessNotice({
       showForm: true,
       enabled: true,
@@ -150,8 +150,8 @@ describe('testSuccessNotice', () => {
       testResult: { available: true, url: loopbackUrl },
       confirmNonLoopback: false,
     })
-    expect(notice).toContain('「保存」を押すと、この URL に切り替わります')
-    expect(notice).not.toContain('保存して接続')
+    expect(notice).toContain('「この URL に切り替える」を押すと、この URL に切り替わります')
+    expect(notice).not.toContain('「接続する」')
   })
 
   it('ループバック以外で確認チェック未了なら、その旨も添える', () => {

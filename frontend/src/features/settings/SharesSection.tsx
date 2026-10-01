@@ -4,7 +4,7 @@
  * 最後に開かれた日時、開かれた回数)と、リンクのコピー、取り消し(`ConfirmDialog` で確認)は
  * ダイアログ(`Modal`)に出す。共有が増えても設定画面が縦に伸びないようにするため。
  * 管理者も他人の共有は見えない。
- * 管理者設定で無効のあいだは、このセクションごと出さない(`settingsSections.ts::visibleSections`)。
+ * 管理者設定で無効のあいだは、このセクションごと出さない(`settingsPages.ts::settingsToc`)。
  */
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -21,6 +21,7 @@ import { shareScopeLabel } from '../share/shareScope'
 import { SHARES_QUERY_KEY } from './queryKeys'
 import { sharesCardState, sharesDialogCloseTarget } from './sharesSummary'
 import styles from './SharesSection.module.css'
+import common from './settings.module.css'
 
 interface SharesSectionProps {
   toast: UseToastResult
@@ -47,22 +48,20 @@ export function SharesSection({ toast }: SharesSectionProps) {
   }
 
   return (
-    <section id="shares" className={styles.section}>
-      <h2 className={styles.sectionHeading}>{s.heading}</h2>
-      <p className={styles.helpText}>{s.intro}</p>
+    <section id="shares" className={common.section}>
 
-      {state === 'loading' && <p className={styles.placeholder}>{s.loading}</p>}
+      {state === 'loading' && <p className={common.placeholder}>{s.loading}</p>}
 
       {state === 'error' && (
-        <div className={styles.loadError}>
-          <p className={styles.errorText}>{s.loadFailed}</p>
-          <button type="button" className={styles.secondaryButton} onClick={() => void query.refetch()}>
+        <div className={common.loadError}>
+          <p className={common.errorText}>{s.loadFailed}</p>
+          <button type="button" className={common.secondaryButton} onClick={() => void query.refetch()}>
             {s.retry}
           </button>
         </div>
       )}
 
-      {state === 'empty' && <p className={styles.placeholder}>{s.empty}</p>}
+      {state === 'empty' && <p className={common.placeholder}>{s.empty}</p>}
 
       {state === 'list' && (
         <div className={styles.summaryRow}>
@@ -70,7 +69,7 @@ export function SharesSection({ toast }: SharesSectionProps) {
           <button
             ref={openButtonRef}
             type="button"
-            className={styles.secondaryButton}
+            className={common.secondaryButton}
             onClick={() => setDialogOpen(true)}
           >
             {s.openList}
@@ -144,17 +143,17 @@ function SharesListDialog({ open, items, onClose, toast }: SharesListDialogProps
       <Modal open={open} title={s.dialogTitle} onClose={handleClose}>
         <div className={styles.dialogBody}>
           {revokeMutation.isError && (
-            <p className={styles.errorText}>
+            <p className={common.errorText}>
               {revokeMutation.error instanceof ApiError ? revokeMutation.error.message : s.revokeFailed}
             </p>
           )}
 
-          {items.length === 0 && <p className={styles.placeholder}>{s.empty}</p>}
+          {items.length === 0 && <p className={common.placeholder}>{s.empty}</p>}
 
           {items.length > 0 && (
-            <ul className={styles.list}>
+            <ul className={common.list}>
               {items.map((item) => (
-                <li key={item.id} className={styles.item}>
+                <li key={item.id} className={`${common.item} ${styles.item}`}>
                   <Link
                     to={`/assets/${item.root_asset_id}`}
                     className={styles.thumbLink}
@@ -169,12 +168,12 @@ function SharesListDialog({ open, items, onClose, toast }: SharesListDialogProps
                       data-deleted={item.root_deleted || undefined}
                     />
                   </Link>
-                  <div className={styles.itemText}>
-                    <span className={styles.itemName}>
+                  <div className={common.itemText}>
+                    <span className={common.itemName}>
                       {shareScopeLabel(item.scope)} · {fmt(s.imageCount, { count: item.asset_count })}
                     </span>
                     <code className={styles.url}>{item.url}</code>
-                    <dl className={styles.itemMeta}>
+                    <dl className={common.itemMeta}>
                       <dt>{s.original}</dt>
                       <dd>{item.allow_original ? s.originalAllowed : s.originalDenied}</dd>
                       <dt>{s.createdAt}</dt>
@@ -186,19 +185,19 @@ function SharesListDialog({ open, items, onClose, toast }: SharesListDialogProps
                       <dt>{s.accessCount}</dt>
                       <dd>{item.access_count}</dd>
                     </dl>
-                    {item.root_deleted && <p className={styles.warningText}>{s.rootDeleted}</p>}
+                    {item.root_deleted && <p className={common.warningText}>{s.rootDeleted}</p>}
                   </div>
                   <div className={styles.itemActions}>
                     <button
                       type="button"
-                      className={styles.secondaryButton}
+                      className={common.secondaryButton}
                       onClick={() => void handleCopy(item.url)}
                     >
                       {s.copy}
                     </button>
                     <button
                       type="button"
-                      className={styles.deleteButton}
+                      className={common.dangerButton}
                       disabled={revokeMutation.isPending}
                       onClick={(e) => openConfirm(item, e.currentTarget)}
                     >

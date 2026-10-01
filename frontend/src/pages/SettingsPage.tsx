@@ -1,479 +1,171 @@
 /**
- * `/settings`。上から「表示言語」「表示」「OpenAI API キー」「生成」「ComfyUI」「GAKEI について」の
- * 6セクション(oidc モードでは「プロフィール」「アクセストークン」、管理者には「MCP」も。ADR-0023。
- * 自分の「共有リンク」の一覧(管理者設定で有効のときだけ)と、管理者には共有リンクの有効/無効も。ADR-0029)を、「ユーザー設定」(言語、表示)と「管理者設定」(OpenAI キー・Base URL、生成、
- * ComfyUI)の見出しで括る(ADR-0019 5章)。「GAKEI について」はどちらにも属さず末尾のまま。
- * 管理者設定は `isAdmin`(`features/auth/authState.ts`。none モードは常に true)のときだけ
- * 描画し、非管理者には一文(`settings.adminOnly`)だけを出す。どのセクションを見せるかは
- * 純粋関数 `settingsSections.ts::visibleSections` が決める。
- * 表示: 生成中の進捗をファビコンに出すかの設定と、生成画面の入力欄の配置(下段/サイドバー。
- * ADR-0009 1章・2026-09-26 追記)。どちらも即時反映(保存ボタンなし)で `useSyncExternalStore` /
- * `useStudioLayout` を使う。
- * OpenAI: 環境変数(`.env`)のキーは画面のものより優先し、画面からは変更・削除できない
- * (`isEnvLocked`)。保存前に OpenAI へ有効性を確認するため、保存ボタンの応答に
- * 最大15秒程度かかる(`確認中...` を出す)。キーはこのページの入力欄以外(localStorage 等)
- * には一切保持しない。
- * 生成: `GenerationSettingsSection` が moderation(Generate 専用。入力画像を使わない生成にだけ
- * 効く)を auto/low から選ぶ(ADR-0009 1章、2026-09-24)。API キーと違い、環境変数
- * (`MODERATION`)由来でも入力欄はロックしない(画面で保存した値が優先。注記だけ出す)。
- * ComfyUI: 接続の設定(接続/URL変更/接続テスト/切り離す)は `ComfyUIStatusPanel` に、
- * 1回の実行を待つ上限(タイムアウト)は `ComfyUITimeoutField` に集約し、ここでインラインに
- * 表示する。`/settings/comfyui`(ワークフロー一覧)からは `#comfyui` 付きでこのページへ
- * 戻れるので、マウント時にハッシュがあればそこへスクロールする。
+ * `/settings` と `/settings/:page`(ADR-0031)。設定をページに分け、左に目次、右に本文を置く。
+ * - 目次は「ユーザー設定」「管理者設定」の見出しで括る(ADR-0019 5章)。どのページを出すかは
+ *   `settingsPages.ts::settingsToc`。非管理者には管理者設定の見出しも出さない。
+ * - 設定ページの幅で判定する(コンテナクエリ。720px 以上)。広ければ目次と本文を横に並べ、
+ *   `/settings` では「表示」を出す。狭ければ `/settings` は目次だけ、各ページは別の画面になる。
+ * - 1ページだった頃のハッシュ付きのリンク(`/settings#comfyui` など)は、対応するページへ置き換える。
+ * - 見せてはいけない・知らないページは `/settings` へ置き換える。
+ * トーストは設定画面で1つだけ持ち、各ページへは `SettingsShellContext` で渡す。
  */
-import { useEffect, useState, useSyncExternalStore } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation } from 'react-router'
-import {
-  ApiError,
-  deleteOpenAiBaseUrl,
-  deleteOpenAiKey,
-  getComfyUIStatus,
-  getOpenAiBaseUrlStatus,
-  getOpenAiKeyStatus,
-  getShareSettings,
-  setOpenAiBaseUrl,
-  setOpenAiKey,
-} from '../api/client'
-import { useBackNavigate } from '../lib/useBackNavigate'
-import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useCallback, useMemo, useState, type ComponentType } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Link, Navigate, useLocation, useParams } from 'react-router'
+import { getShareSettings } from '../api/client'
 import { ToastHost, useToast } from '../components/Toast'
-import {
-  OPENAI_BASE_URL_STATUS_QUERY_KEY,
-  OPENAI_KEY_STATUS_QUERY_KEY,
-  SHARE_SETTINGS_QUERY_KEY,
-} from '../features/settings/queryKeys'
-import {
-  apiKeyStatusView,
-  canDeleteKey,
-  isEnvLocked,
-  type ApiKeyStatusView,
-} from '../features/settings/apiKeyStatus'
-import {
-  baseUrlStatusView,
-  canClearBaseUrl,
-  isBaseUrlEnvLocked,
-  type BaseUrlStatusView,
-} from '../features/settings/baseUrlStatus'
-import { ComfyUIStatusPanel } from '../features/comfyui-workflows/ComfyUIStatusPanel'
-import { AboutSection } from '../features/settings/AboutSection'
-import { ProfileSection } from '../features/settings/ProfileSection'
-import { GenerationSettingsSection } from '../features/settings/GenerationSettingsSection'
-import { ComfyUITimeoutField } from '../features/settings/ComfyUITimeoutField'
-import { McpSettingsSection } from '../features/settings/McpSettingsSection'
-import { AnnotationSettingsSection } from '../features/settings/AnnotationSettingsSection'
-import { ApiTokensSection } from '../features/settings/ApiTokensSection'
-import { SharesSection } from '../features/settings/SharesSection'
-import { ShareSettingsSection } from '../features/settings/ShareSettingsSection'
-import { visibleSections } from '../features/settings/settingsSections'
 import { isAdmin, useAuth } from '../features/auth/authState'
-import { LANGUAGE_SETTING_LABEL, LOCALES, LOCALE_LABELS, isLocale, useI18n } from '../i18n'
+import { useI18n, type Messages } from '../i18n'
+import { useBackNavigate } from '../lib/useBackNavigate'
+import { useElementSize } from '../lib/useElementSize'
+import { SHARE_SETTINGS_QUERY_KEY } from '../features/settings/queryKeys'
 import {
-  getFaviconProgressEnabled,
-  setFaviconProgressEnabled,
-  subscribeFaviconProgressEnabled,
-} from '../features/favicon/faviconPrefs'
-import { isStudioLayout, setStudioLayout } from '../features/workspace/studioLayout'
-import { useStudioLayout } from '../features/workspace/useStudioLayout'
-import styles from './SettingsPage.module.css'
+  DEFAULT_SETTINGS_PAGE,
+  SETTINGS_TOC_STATE,
+  SETTINGS_WIDE_MIN_WIDTH,
+  legacySettingsHashPath,
+  settingsPageFromSlug,
+  settingsPagePath,
+  settingsToc,
+  visibleSettingsPages,
+  type SettingsPageId,
+} from '../features/settings/settingsPages'
+import { SettingsShellContext, type SettingsShellValue } from '../features/settings/settingsShell'
+import { DisplaySettingsPage } from '../features/settings/pages/DisplaySettingsPage'
+import { McpSettingsPage } from '../features/settings/pages/McpSettingsPage'
+import { OpenAiSettingsPage } from '../features/settings/pages/OpenAiSettingsPage'
+import { ComfyUISettingsPage } from '../features/settings/pages/ComfyUISettingsPage'
+import { ShareLinksSettingsPage } from '../features/settings/pages/ShareLinksSettingsPage'
+import {
+  AboutSettingsPage,
+  AccessTokensSettingsPage,
+  AnnotationSettingsPage,
+  ProfileSettingsPage,
+  SharesSettingsPage,
+} from '../features/settings/pages/OperationSettingsPages'
+import styles from '../features/settings/settings.module.css'
+
+const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
+  profile: ProfileSettingsPage,
+  display: DisplaySettingsPage,
+  shares: SharesSettingsPage,
+  accessTokens: AccessTokensSettingsPage,
+  openai: OpenAiSettingsPage,
+  annotation: AnnotationSettingsPage,
+  comfyui: ComfyUISettingsPage,
+  mcp: McpSettingsPage,
+  shareLinks: ShareLinksSettingsPage,
+  about: AboutSettingsPage,
+}
 
 export function SettingsPage() {
-  const { t, locale, setLocale } = useI18n()
-  const goBack = useBackNavigate('/')
+  const { t } = useI18n()
+  const { page: slug } = useParams()
   const location = useLocation()
-  const queryClient = useQueryClient()
-  const toast = useToast()
   const auth = useAuth()
-  const admin = isAdmin(auth)
+  const toast = useToast()
+  const goBack = useBackNavigate('/')
+  const [rootRef, , rootSize] = useElementSize<HTMLDivElement>()
+  const isWide = (rootSize?.width ?? 0) >= SETTINGS_WIDE_MIN_WIDTH
+  const [dirtyPages, setDirtyPages] = useState<ReadonlySet<SettingsPageId>>(() => new Set())
+
   // 共有リンク(ADR-0029)が無効のあいだは、ユーザー設定の一覧ごと隠す。取得できるまでと失敗したときも
   // 出さない(存在を漏らさない側に倒す)。管理者設定で切り替えると同じキャッシュが更新され、すぐ反映される。
   const shareSettingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
-  const sections = visibleSections(admin, auth.mode === 'oidc', shareSettingsQuery.data?.enabled === true)
-  const [apiKeyInput, setApiKeyInput] = useState('')
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [baseUrlInput, setBaseUrlInput] = useState('')
-  const [baseUrlClearConfirmOpen, setBaseUrlClearConfirmOpen] = useState(false)
-  const faviconProgressEnabled = useSyncExternalStore(
-    subscribeFaviconProgressEnabled,
-    getFaviconProgressEnabled,
-    getFaviconProgressEnabled,
-  )
-  const studioLayout = useStudioLayout()
+  const visibility = {
+    isAdmin: isAdmin(auth),
+    isOidc: auth.mode === 'oidc',
+    sharingEnabled: shareSettingsQuery.data?.enabled === true,
+  }
+  const toc = settingsToc(visibility)
 
-  // ハッシュ付きでこのページに来たとき(例: `/settings/comfyui` の「接続の設定」リンク)、
-  // 該当セクションへスクロールする。react-router はハッシュへの自動スクロールをしない。
-  useEffect(() => {
-    if (!location.hash) return
-    const target = document.getElementById(location.hash.slice(1))
-    target?.scrollIntoView({ block: 'start' })
-  }, [location.hash])
+  const reportDirty = useCallback((page: SettingsPageId, dirty: boolean) => {
+    setDirtyPages((prev) => {
+      if (prev.has(page) === dirty) return prev
+      const next = new Set(prev)
+      if (dirty) next.add(page)
+      else next.delete(page)
+      return next
+    })
+  }, [])
 
-  const statusQuery = useQuery({
-    queryKey: OPENAI_KEY_STATUS_QUERY_KEY,
-    queryFn: getOpenAiKeyStatus,
-  })
+  const shell = useMemo<SettingsShellValue>(() => ({ toast, isWide, reportDirty }), [toast, isWide, reportDirty])
 
-  const baseUrlQuery = useQuery({
-    queryKey: OPENAI_BASE_URL_STATUS_QUERY_KEY,
-    queryFn: getOpenAiBaseUrlStatus,
-  })
+  if (auth.status === 'loading') return null
 
-  // Base URL は秘密ではないので、現在の値を常に入力欄に映す(キーと違い読み戻す)。
-  useEffect(() => {
-    if (baseUrlQuery.data) {
-      setBaseUrlInput(baseUrlQuery.data.value ?? '')
-    }
-  }, [baseUrlQuery.data])
-
-  // `ComfyUIStatusPanel` と同じキャッシュ(`['comfyui-status']`)を読むだけ。パネル側の
-  // 取得と重複しても react-query が1回のリクエストにまとめる。未接続時だけ下のリンクに
-  // ヒントを添えるために使う。
-  const comfyStatusQuery = useQuery({ queryKey: ['comfyui-status'], queryFn: getComfyUIStatus })
-
-  const saveMutation = useMutation({
-    mutationFn: setOpenAiKey,
-    onSuccess: (data) => {
-      queryClient.setQueryData(OPENAI_KEY_STATUS_QUERY_KEY, data)
-      setApiKeyInput('')
-      toast.show({ message: t.settings.apiKey.savedToast })
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteOpenAiKey,
-    onSuccess: (data) => {
-      queryClient.setQueryData(OPENAI_KEY_STATUS_QUERY_KEY, data)
-      toast.show({ message: t.settings.apiKey.deletedToast })
-    },
-  })
-
-  const saveBaseUrlMutation = useMutation({
-    mutationFn: setOpenAiBaseUrl,
-    onSuccess: (data) => {
-      queryClient.setQueryData(OPENAI_BASE_URL_STATUS_QUERY_KEY, data)
-      toast.show({ message: t.settings.apiKey.baseUrl.savedToast })
-    },
-  })
-
-  const clearBaseUrlMutation = useMutation({
-    mutationFn: deleteOpenAiBaseUrl,
-    onSuccess: (data) => {
-      queryClient.setQueryData(OPENAI_BASE_URL_STATUS_QUERY_KEY, data)
-      toast.show({ message: t.settings.apiKey.baseUrl.clearedToast })
-    },
-  })
-
-  const status = statusQuery.data
-  const locked = status ? isEnvLocked(status) : false
-  const showDelete = status ? canDeleteKey(status) : false
-  const activeError = saveMutation.error ?? deleteMutation.error
-  const errorMessage =
-    activeError instanceof ApiError ? activeError.message : activeError ? t.settings.apiKey.communicationFailed : null
-
-  function handleSave() {
-    const value = apiKeyInput.trim()
-    if (!value) return
-    saveMutation.mutate(value)
+  // 1ページだった頃のハッシュ付きのリンク。
+  if (!slug && location.hash) {
+    const legacy = legacySettingsHashPath(location.hash)
+    if (legacy) return <Navigate to={legacy} replace />
   }
 
-  const baseUrlStatus = baseUrlQuery.data
-  const baseUrlLocked = baseUrlStatus ? isBaseUrlEnvLocked(baseUrlStatus) : false
-  const showClearBaseUrl = baseUrlStatus ? canClearBaseUrl(baseUrlStatus) : false
-  const activeBaseUrlError = saveBaseUrlMutation.error ?? clearBaseUrlMutation.error
-  const baseUrlErrorMessage =
-    activeBaseUrlError instanceof ApiError
-      ? activeBaseUrlError.message
-      : activeBaseUrlError
-        ? t.settings.apiKey.baseUrl.communicationFailed
-        : null
+  const pageId = slug ? settingsPageFromSlug(slug) : DEFAULT_SETTINGS_PAGE
+  if (!pageId) return <Navigate to="/settings" replace />
+  if (!visibleSettingsPages(visibility).includes(pageId)) {
+    // 共有リンクの一覧は、設定を読み込み終わるまで出すかどうか決められない。
+    if (pageId === 'shares' && shareSettingsQuery.isLoading) return null
+    return <Navigate to="/settings" replace />
+  }
 
-  function handleSaveBaseUrl() {
-    const value = baseUrlInput.trim()
-    if (!value) return
-    saveBaseUrlMutation.mutate(value)
+  const PageComponent = PAGE_COMPONENTS[pageId]
+  const activePage = slug ? pageId : isWide ? DEFAULT_SETTINGS_PAGE : null
+
+  function renderTocItem(id: SettingsPageId) {
+    return (
+      <li key={id}>
+        <Link
+          to={settingsPagePath(id)}
+          // 広いときは目次での移動を履歴に積まない(「戻る」で設定を開く前の画面へ戻れるように)。
+          // 狭いときは目次 → ページを積み、ページの「戻る」で目次へ戻る。
+          replace={isWide}
+          state={isWide ? undefined : SETTINGS_TOC_STATE}
+          className={styles.tocLink}
+          aria-current={activePage === id ? 'page' : undefined}
+        >
+          <span className={styles.tocLinkLabel}>{pageTitle(t, id)}</span>
+          {dirtyPages.has(id) && (
+            <span className={styles.tocDot} role="img" aria-label={t.settings.frame.unsavedMark} />
+          )}
+        </Link>
+      </li>
+    )
   }
 
   return (
-    <div className={styles.page}>
-      <button type="button" className={styles.backLink} onClick={goBack}>
-        {t.common.back}
-      </button>
-      <h1 className={styles.title}>{t.settings.title}</h1>
-
-      <h2 className={styles.groupHeading}>{t.settings.userHeading}</h2>
-
-      {sections.includes('profile') && <ProfileSection toast={toast} />}
-
-      <section className={styles.section}>
-        <h2 className={styles.sectionHeading}>
-          <label htmlFor="gakei-locale">{LANGUAGE_SETTING_LABEL}</label>
-        </h2>
-        <select
-          id="gakei-locale"
-          className={styles.languageSelect}
-          value={locale}
-          onChange={(e) => {
-            if (isLocale(e.target.value)) setLocale(e.target.value)
-          }}
-        >
-          {LOCALES.map((l) => (
-            <option key={l} value={l}>
-              {LOCALE_LABELS[l]}
-            </option>
-          ))}
-        </select>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.sectionHeading}>{t.settings.display.heading}</h2>
-        <label className={styles.checkboxRow}>
-          <input
-            type="checkbox"
-            checked={faviconProgressEnabled}
-            onChange={(e) => setFaviconProgressEnabled(e.target.checked)}
-          />
-          <span>{t.settings.display.faviconProgress.label}</span>
-        </label>
-        <p className={styles.helpText}>{t.settings.display.faviconProgress.help}</p>
-
-        <div className={styles.field}>
-          <label htmlFor="gakei-studio-layout">{t.settings.display.studioLayout.label}</label>
-          <select
-            id="gakei-studio-layout"
-            className={styles.languageSelect}
-            value={studioLayout}
-            onChange={(e) => {
-              if (isStudioLayout(e.target.value)) setStudioLayout(e.target.value)
-            }}
-          >
-            <option value="bottom">{t.settings.display.studioLayout.optionBottom}</option>
-            <option value="sidebar">{t.settings.display.studioLayout.optionSidebar}</option>
-          </select>
-        </div>
-        <p className={styles.helpText}>{t.settings.display.studioLayout.help}</p>
-      </section>
-
-      {sections.includes('shares') && <SharesSection toast={toast} />}
-
-      {sections.includes('accessTokens') && <ApiTokensSection toast={toast} />}
-
-      <h2 className={styles.groupHeading}>{t.settings.adminHeading}</h2>
-
-      {!admin && <p className={styles.helpText}>{t.settings.adminOnly}</p>}
-
-      {sections.includes('apiKey') && (
-      <section id="openai" className={styles.section}>
-        <h2 className={styles.sectionHeading}>{t.settings.apiKey.heading}</h2>
-
-        {statusQuery.isLoading && <p className={styles.placeholder}>{t.settings.apiKey.loading}</p>}
-
-        {statusQuery.isError && (
-          <div className={styles.loadError}>
-            <p className={styles.errorText}>{t.settings.apiKey.loadFailed}</p>
-            <button type="button" className={styles.retryButton} onClick={() => void statusQuery.refetch()}>
-              {t.settings.apiKey.retry}
-            </button>
-          </div>
-        )}
-
-        {status && (
-          <>
-            <StatusBadge view={apiKeyStatusView(status)} />
-            {locked && <p className={styles.helpText}>{t.settings.apiKey.envLocked}</p>}
-            {!status.required && <p className={styles.helpText}>{t.settings.apiKey.notRequired}</p>}
-
-            {!locked && (
-              <div className={styles.form}>
-                <input
-                  type="password"
-                  className={styles.input}
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder={t.settings.apiKey.inputPlaceholder}
-                  autoComplete="off"
-                  spellCheck={false}
-                  disabled={saveMutation.isPending}
-                />
-                <div className={styles.actions}>
-                  <button
-                    type="button"
-                    className={styles.saveButton}
-                    disabled={apiKeyInput.trim() === '' || saveMutation.isPending}
-                    onClick={handleSave}
-                  >
-                    {saveMutation.isPending ? t.settings.apiKey.verifying : t.settings.apiKey.save}
-                  </button>
-                  {showDelete && (
-                    <button
-                      type="button"
-                      className={styles.deleteButton}
-                      disabled={deleteMutation.isPending}
-                      onClick={() => setDeleteConfirmOpen(true)}
-                    >
-                      {t.settings.apiKey.delete}
-                    </button>
-                  )}
-                </div>
-                {errorMessage && <p className={styles.errorText}>{errorMessage}</p>}
+    <SettingsShellContext.Provider value={shell}>
+      <div ref={rootRef} className={styles.root}>
+        <div className={styles.layout} data-view={slug ? 'page' : 'index'}>
+          <nav className={styles.toc} aria-label={t.settings.frame.tocLabel}>
+            <div className={styles.tocHeader}>
+              <button type="button" className={`${styles.backButton} ${styles.tocBack}`} onClick={goBack}>
+                {t.common.back}
+              </button>
+              <h1 className={styles.tocTitle}>{t.settings.title}</h1>
+            </div>
+            <div className={styles.tocGroup}>
+              <h2 className={styles.tocGroupHeading}>{t.settings.userHeading}</h2>
+              <ul className={styles.tocList}>{toc.user.map(renderTocItem)}</ul>
+            </div>
+            {toc.admin.length > 0 && (
+              <div className={styles.tocGroup}>
+                <h2 className={styles.tocGroupHeading}>{t.settings.adminHeading}</h2>
+                <ul className={styles.tocList}>{toc.admin.map(renderTocItem)}</ul>
               </div>
             )}
-          </>
-        )}
-
-        <p className={styles.helpText}>
-          {t.settings.apiKey.helpTextBefore}{' '}
-          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
-            {t.settings.apiKey.helpTextLink}
-          </a>{' '}
-          {t.settings.apiKey.helpTextAfter}
-        </p>
-
-        <div className={styles.subsection}>
-          <h3 className={styles.subheading}>{t.settings.apiKey.baseUrl.heading}</h3>
-
-          {baseUrlQuery.isLoading && (
-            <p className={styles.placeholder}>{t.settings.apiKey.baseUrl.loading}</p>
-          )}
-
-          {baseUrlQuery.isError && (
-            <div className={styles.loadError}>
-              <p className={styles.errorText}>{t.settings.apiKey.baseUrl.loadFailed}</p>
-              <button
-                type="button"
-                className={styles.retryButton}
-                onClick={() => void baseUrlQuery.refetch()}
-              >
-                {t.settings.apiKey.baseUrl.retry}
-              </button>
+            <div className={styles.tocGroup}>
+              <ul className={styles.tocList}>{toc.other.map(renderTocItem)}</ul>
             </div>
-          )}
-
-          {baseUrlStatus && (
-            <>
-              {baseUrlLocked ? (
-                <>
-                  <p className={styles.helpText}>
-                    <BaseUrlDetail view={baseUrlStatusView(baseUrlStatus)} />
-                  </p>
-                  <p className={styles.helpText}>{t.settings.apiKey.baseUrl.envLocked}</p>
-                </>
-              ) : (
-                <div className={styles.form}>
-                  <input
-                    type="text"
-                    className={styles.input}
-                    value={baseUrlInput}
-                    onChange={(e) => setBaseUrlInput(e.target.value)}
-                    placeholder={t.settings.apiKey.baseUrl.inputPlaceholder}
-                    autoComplete="off"
-                    spellCheck={false}
-                    disabled={saveBaseUrlMutation.isPending}
-                  />
-                  <div className={styles.actions}>
-                    <button
-                      type="button"
-                      className={styles.saveButton}
-                      disabled={baseUrlInput.trim() === '' || saveBaseUrlMutation.isPending}
-                      onClick={handleSaveBaseUrl}
-                    >
-                      {saveBaseUrlMutation.isPending
-                        ? t.settings.apiKey.baseUrl.verifying
-                        : t.settings.apiKey.baseUrl.save}
-                    </button>
-                    {showClearBaseUrl && (
-                      <button
-                        type="button"
-                        className={styles.deleteButton}
-                        disabled={clearBaseUrlMutation.isPending}
-                        onClick={() => setBaseUrlClearConfirmOpen(true)}
-                      >
-                        {t.settings.apiKey.baseUrl.clear}
-                      </button>
-                    )}
-                  </div>
-                  {baseUrlErrorMessage && (
-                    <p className={styles.errorText}>{baseUrlErrorMessage}</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          <p className={styles.helpText}>{t.settings.apiKey.baseUrl.helpText}</p>
+          </nav>
+          <div className={styles.content}>
+            {/* 狭いときの `/settings` は目次だけ(本文は CSS で隠す)。ページを切り替えたら作り直す。 */}
+            <PageComponent key={pageId} />
+          </div>
         </div>
-      </section>
-      )}
-
-      {sections.includes('generation') && <GenerationSettingsSection toast={toast} />}
-
-      {sections.includes('annotation') && <AnnotationSettingsSection toast={toast} />}
-
-      {sections.includes('comfyui') && (
-      <section id="comfyui" className={styles.section}>
-        <h2 className={styles.sectionHeading}>{t.settings.comfyui.heading}</h2>
-        <p className={styles.helpText}>{t.settings.comfyui.intro}</p>
-
-        <ComfyUIStatusPanel toast={toast} />
-
-        <ComfyUITimeoutField toast={toast} />
-
-        <Link to="/settings/comfyui" className={styles.linkButton}>
-          {t.settings.comfyui.manageWorkflows}
-        </Link>
-        {comfyStatusQuery.data?.enabled === false && (
-          <p className={styles.helpText}>{t.settings.comfyui.notConnectedHint}</p>
-        )}
-      </section>
-      )}
-
-      {sections.includes('mcp') && <McpSettingsSection toast={toast} />}
-
-      {sections.includes('shareAdmin') && <ShareSettingsSection toast={toast} />}
-
-      <AboutSection />
-
-      <ConfirmDialog
-        open={deleteConfirmOpen}
-        message={t.settings.apiKey.deleteConfirm.message}
-        confirmLabel={t.settings.apiKey.deleteConfirm.confirmLabel}
-        onConfirm={() => {
-          setDeleteConfirmOpen(false)
-          deleteMutation.mutate()
-        }}
-        onCancel={() => setDeleteConfirmOpen(false)}
-      />
-
-      <ConfirmDialog
-        open={baseUrlClearConfirmOpen}
-        message={t.settings.apiKey.baseUrl.clearConfirm.message}
-        confirmLabel={t.settings.apiKey.baseUrl.clearConfirm.confirmLabel}
-        onConfirm={() => {
-          setBaseUrlClearConfirmOpen(false)
-          clearBaseUrlMutation.mutate()
-        }}
-        onCancel={() => setBaseUrlClearConfirmOpen(false)}
-      />
-
+      </div>
       <ToastHost toast={toast.toast} onDismiss={toast.dismiss} />
-    </div>
+    </SettingsShellContext.Provider>
   )
 }
 
-function StatusBadge({ view }: { view: ApiKeyStatusView }) {
-  return (
-    <div className={styles.status} data-state={view.state}>
-      <span className={styles.statusDot} aria-hidden="true" />
-      <span className={styles.statusTitle}>{view.title}</span>
-      {view.detail && <span className={styles.statusDetail}>{view.detail}</span>}
-    </div>
-  )
-}
-
-function BaseUrlDetail({ view }: { view: BaseUrlStatusView }) {
-  return (
-    <>
-      {view.title}
-      {view.detail && <> · {view.detail}</>}
-    </>
-  )
+function pageTitle(t: Messages, id: SettingsPageId): string {
+  return t.settings.pages[id]
 }

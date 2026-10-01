@@ -1,0 +1,42 @@
+/*
+ * ワークフロー一覧・登録編集の画面で使う、接続状態の小さな表示(`ComfyUIConnectionSummary`)と
+ * 未接続の警告。接続の操作は設定の ComfyUI のページ(`ComfyUIConnectionCard`、settings.module.css)。
+ */
+.placeholder {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  flex-shrink: 0;
+}
+
+.dot[data-state='available'] {
+  background: var(--color-success);
+}
+
+.dot[data-state='unavailable'] {
+  background: var(--color-danger);
+}
+
+.warningBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(227, 179, 65, 0.12);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius);
+}
+
+.warningText {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-warning);
+  line-height: 1.6;
+}

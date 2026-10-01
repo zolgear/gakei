@@ -1,0 +1,736 @@
+/*
+ * 設定画面の共通のスタイル(ADR-0031 5章)。ページの枠(目次・ヘッダー・本文)、項目の行、
+ * 接続のカード、ボタン類をここに集める。各セクションの CSS Module には、そのセクションにしか
+ * 無いものだけを残す。
+ * 幅の判定は画面の幅ではなく設定ページの幅で行う(コンテナクエリ。右のリソースのパネルで
+ * 狭くなったときも縦に積む)。720px 以上で目次と本文を横に並べる(`SETTINGS_WIDE_MIN_WIDTH`)。
+ */
+
+/* ---------- 枠: 目次 + 本文 ---------- */
+
+.root {
+  container: settings / inline-size;
+  width: 100%;
+}
+
+.layout {
+  display: block;
+  width: 100%;
+}
+
+/* 狭いとき: `/settings` は目次だけ、各ページは本文だけ。 */
+.layout[data-view='index'] .content {
+  display: none;
+}
+
+.layout[data-view='page'] .toc {
+  display: none;
+}
+
+.toc {
+  padding: 16px 20px 20px;
+}
+
+.tocHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tocTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tocGroup + .tocGroup {
+  margin-top: 16px;
+}
+
+/* 「ユーザー設定」「管理者設定」の見出し(ADR-0019 5章) */
+.tocGroupHeading {
+  margin: 0 0 6px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.tocList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tocLink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.tocLink:hover {
+  background: var(--color-bg-raised);
+}
+
+.tocLink[aria-current='page'] {
+  background: var(--color-header-band);
+  font-weight: 600;
+}
+
+.tocLinkLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 保存していない変更があるページの印 */
+.tocDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.content {
+  min-width: 0;
+}
+
+@container settings (min-width: 720px) {
+  .layout,
+  .layout[data-view] {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 760px);
+    justify-content: center;
+    align-items: start;
+    gap: 8px;
+  }
+
+  .layout[data-view] .toc,
+  .layout[data-view] .content {
+    display: block;
+  }
+
+  .toc {
+    position: sticky;
+    top: 0;
+    padding: 16px 0 20px 16px;
+  }
+
+  /* 広いときの「戻る」は各ページのヘッダーにある */
+  .tocBack {
+    display: none;
+  }
+}
+
+/* ---------- ページ: ヘッダー + 本文 ---------- */
+
+.page {
+  container: settings-page / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 760px;
+  padding: 0 20px 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+
+/* スクロールしても上に残す(スマホも上。ADR-0031 3章)。スクロールするのは <main>。 */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 -20px;
+  padding: 12px 20px 10px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.headerRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.pageTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.changeCount {
+  font-size: 12px;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+.saveError {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.backButton {
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.backButton:hover {
+  color: var(--color-text);
+}
+
+.intro {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+
+/* ---------- セクション(カード) ---------- */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.sectionHeading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ---------- 項目の行: 左にラベルと説明、右に入力 ---------- */
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-border);
+}
+
+.row:first-child {
+  padding-top: 0;
+}
+
+.row:last-child {
+  padding-bottom: 0;
+}
+
+@container settings-page (min-width: 560px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rowLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.rowControl {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 変えた欄は縁をアクセント色にする(ADR-0031 3章) */
+.row[data-changed='true'] .rowControl .input,
+.row[data-changed='true'] .rowControl .select {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.row[data-changed='true'] .switchTrack {
+  box-shadow: 0 0 0 2px var(--color-bg-raised), 0 0 0 3px var(--color-accent);
+}
+
+/* ---------- 入力 ---------- */
+
+.input,
+.select {
+  height: 34px;
+  width: 100%;
+  max-width: 320px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  padding: 0 10px;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.input[aria-invalid='true'],
+.row[data-changed='true'] .rowControl .input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+  box-shadow: none;
+}
+
+.numberInput {
+  max-width: 120px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* スイッチ(チェックボックスを使う。保存で反映の項目は保存まで送らない) */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.switchInput {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.switchTrack {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--color-border-strong);
+  transition: background 0.15s;
+}
+
+.switchTrack::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-text);
+  transition: transform 0.15s;
+}
+
+.switchInput:checked + .switchTrack {
+  background: var(--color-accent);
+}
+
+.switchInput:checked + .switchTrack::after {
+  transform: translateX(16px);
+  background: #17181b;
+}
+
+.switchInput:focus-visible + .switchTrack {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.switchInput:disabled + .switchTrack {
+  opacity: 0.5;
+}
+
+/* ---------- 文言 ---------- */
+
+.helpText {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  line-height: 1.6;
+}
+
+.helpText a,
+.intro a {
+  color: var(--color-accent);
+}
+
+.helpText code {
+  font-family: var(--font-mono);
+}
+
+.placeholder {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.noteText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-accent);
+}
+
+.warningText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-warning);
+  line-height: 1.6;
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.loadError {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.warningBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(227, 179, 65, 0.12);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius);
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+/* ---------- ボタン ---------- */
+
+.primaryButton,
+.secondaryButton,
+.dangerButton,
+.linkButton {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.primaryButton {
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  font-weight: 600;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.secondaryButton,
+.linkButton {
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.secondaryButton:hover:not(:disabled),
+.linkButton:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.dangerButton {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-danger);
+}
+
+.dangerButton:hover:not(:disabled) {
+  border-color: var(--color-danger);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.dangerButton:disabled {
+  opacity: 0.5;
+}
+
+/* 「既定値に戻す」など、行の中の控えめな操作 */
+.textButton {
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.textButton:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- 接続のカード(ADR-0031 2章「接続」) ---------- */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.cardTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cardStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.cardStatus[data-state='ok'] {
+  color: var(--color-success);
+}
+
+.cardStatus[data-state='error'] {
+  color: var(--color-danger);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  flex-shrink: 0;
+}
+
+.dot[data-state='ok'] {
+  background: var(--color-success);
+}
+
+.dot[data-state='error'] {
+  background: var(--color-danger);
+}
+
+.detailList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.detailList dt {
+  color: var(--color-text-faint);
+}
+
+.detailList dd {
+  margin: 0;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* 接続のダイアログの中身 */
+.dialogForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialogForm .input {
+  max-width: none;
+  font-family: var(--font-mono);
+}
+
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+/* ---------- 一覧(アクセストークン、共有リンク) ---------- */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.item > button {
+  align-self: center;
+}
+
+.itemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itemName {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.itemMeta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.itemMeta dt {
+  color: var(--color-text-faint);
+}
+
+.itemMeta dd {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.itemMeta dd[data-never='true'] {
+  color: var(--color-text-faint);
+}
+
+/* ---------- 狭い画面(ADR-0009 5章: 入力 16px 以上、タップ 44px 以上) ---------- */
+
+@media (max-width: 767px) {
+  .page {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .header {
+    margin: 0 -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .toc {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .input,
+  .select {
+    font-size: 16px;
+  }
+
+  .tocLink,
+  .backButton,
+  .switch,
+  .primaryButton,
+  .secondaryButton,
+  .dangerButton,
+  .linkButton,
+  .textButton {
+    min-height: 44px;
+  }
+
+  .detailList {
+    grid-template-columns: 1fr;
+  }
+}

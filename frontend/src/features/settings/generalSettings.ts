@@ -1,7 +1,7 @@
 /**
- * 設定画面の「生成」セクション(moderation)と ComfyUI セクションのタイムアウト欄が共有する
- * 表示・検証の純粋関数(ADR-0009、ADR-0013 7章)。API 呼び出しやコンポーネントの状態管理は
- * `GenerationSettingsSection.tsx` / `ComfyUITimeoutField.tsx` が行う。
+ * 設定の OpenAI のページ(moderation)と ComfyUI のページ(タイムアウト)が共有する
+ * 表示・検証の純粋関数(ADR-0009、ADR-0013 7章)。API 呼び出しや下書きの管理は
+ * `pages/OpenAiSettingsPage.tsx` / `pages/ComfyUISettingsPage.tsx` が行う。
  *
  * どちらの設定も優先順位は同じ3段階(画面で保存 > 環境変数 > 組み込みの既定値)で、
  * `ModerationSetting` / `ComfyUITimeoutSetting` は同じ形(`value`/`source`/`default`)を持つ

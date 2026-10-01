@@ -1,6 +1,6 @@
 /**
- * `/settings/comfyui`。登録済み ComfyUI ワークフローの一覧。
- * 接続の設定(接続/URL変更/接続テスト/切り離す)は `/settings#comfyui` に集約したので、
+ * `/settings/comfyui/workflows`。登録済み ComfyUI ワークフローの一覧。
+ * 接続の設定(接続/URL変更/接続テスト/切り離す)は `/settings/comfyui` に集約したので、
  * ここでは `ComfyUIConnectionSummary` で状態を1行だけ示し、そこへのリンクを出す。
  * 削除はアプリ内の確認(ConfirmDialog)で行う論理削除。過去の Run の記録は変わらない
  * (Run 作成時に確定したグラフを `run.params.comfyui_prompt` に保存済みのため)。
@@ -24,7 +24,7 @@ import { ToastHost, useToast } from '../../components/Toast'
 import { fmt, useI18n, type Messages } from '../../i18n'
 import { ComfyUIConnectionSummary } from './ComfyUIConnectionSummary'
 import { listDisconnectedNotice } from './comfyuiConnectionForm'
-import panelStyles from './ComfyUIStatusPanel.module.css'
+import panelStyles from './ComfyUIStatus.module.css'
 import styles from './ComfyUIWorkflowsListPage.module.css'
 
 function operationLabels(t: Messages): Record<ComfyWorkflowSummary['operation'], string> {
@@ -36,7 +36,7 @@ function operationLabels(t: Messages): Record<ComfyWorkflowSummary['operation'],
 
 export function ComfyUIWorkflowsListPage() {
   const { t } = useI18n()
-  const goBack = useBackNavigate('/settings')
+  const goBack = useBackNavigate('/settings/comfyui')
   const queryClient = useQueryClient()
   const toast = useToast()
   const [deleteTarget, setDeleteTarget] = useState<ComfyWorkflowSummary | null>(null)
@@ -72,7 +72,7 @@ export function ComfyUIWorkflowsListPage() {
           {t.comfyui.list.title}
           <span className={styles.badge}>{t.comfyui.experimentalBadge}</span>
         </h1>
-        <Link to="/settings/comfyui/new" className={styles.newButton}>
+        <Link to="/settings/comfyui/workflows/new" className={styles.newButton}>
           {t.comfyui.list.newButton}
         </Link>
       </div>
@@ -82,7 +82,7 @@ export function ComfyUIWorkflowsListPage() {
       {disconnectedNotice && (
         <div className={panelStyles.warningBox}>
           <p className={panelStyles.warningText}>
-            {disconnectedNotice} <Link to="/settings#comfyui">{t.comfyui.list.disconnectedSettingsLink}</Link>
+            {disconnectedNotice} <Link to="/settings/comfyui">{t.comfyui.list.disconnectedSettingsLink}</Link>
           </p>
         </div>
       )}
@@ -98,7 +98,7 @@ export function ComfyUIWorkflowsListPage() {
           {workflows.map((wf) => (
             <div key={wf.id} className={styles.row}>
               <div className={styles.rowMain}>
-                <Link to={`/settings/comfyui/${wf.id}`} className={styles.rowName}>
+                <Link to={`/settings/comfyui/workflows/${wf.id}`} className={styles.rowName}>
                   {wf.name}
                 </Link>
                 <span className={styles.badge} data-operation={wf.operation}>
@@ -112,7 +112,7 @@ export function ComfyUIWorkflowsListPage() {
                 </span>
               </div>
               <div className={styles.rowActions}>
-                <Link to={`/settings/comfyui/${wf.id}`} className={styles.actionButton}>
+                <Link to={`/settings/comfyui/workflows/${wf.id}`} className={styles.actionButton}>
                   {t.comfyui.list.edit}
                 </Link>
                 <button

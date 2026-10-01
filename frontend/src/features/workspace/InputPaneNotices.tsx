@@ -41,7 +41,7 @@ export function InputPaneNotices({
           {isMissingApiKeyError(submitError) && (
             <>
               {' '}
-              <Link to="/settings">{ip.openSettings}</Link>
+              <Link to="/settings/openai">{ip.openSettings}</Link>
             </>
           )}
         </p>

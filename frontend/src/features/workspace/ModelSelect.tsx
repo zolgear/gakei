@@ -53,7 +53,7 @@ export function ModelSelect({ caps, provider, model, selectedModelDescription, o
         ))}
       </select>
       {(caps.providers ?? []).some((p) => p.provider === 'comfyui' && p.available && p.models.length === 0) && (
-        <Link to="/settings/comfyui" className={styles.comfyWorkflowLink}>
+        <Link to="/settings/comfyui/workflows" className={styles.comfyWorkflowLink}>
           {ip.registerComfyWorkflow}
         </Link>
       )}
