@@ -29,6 +29,7 @@ from PIL import Image, UnidentifiedImageError
 from app.domain.comfy_workflow import is_api_format_template
 from app.domain.embedded_meta import PNG_SIGNATURE, iter_png_chunks, split_itxt
 from app.domain.schemas import EmbeddedGenerationMeta
+from app.domain.text_safety import sanitize_external
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +73,13 @@ def extract_generation_meta(data: bytes) -> dict[str, Any] | None:
     純粋関数で DB に触れない。どんな入力でも例外を投げない(最外で捕まえて None を返す)。
     """
     try:
-        return _extract(data)
+        meta = _extract(data)
     except Exception:  # noqa: BLE001 - どんな入力でも取り込みを止めないための最終防波堤
         logger.warning("画像の生成メタ情報の解析中に例外が発生したため無視した", exc_info=True)
         return None
+    # 他ツールが書いた本文(zTXt / iTXt、EXIF の UserComment など)は外部由来なので、NUL と
+    # UTF-8 にできない文字を除いてから返す(PostgreSQL の JSONB に保存できないため。ADR-0027)。
+    return sanitize_external(meta) if meta is not None else None
 
 
 # -- 材料の収集 ----------------------------------------------------------

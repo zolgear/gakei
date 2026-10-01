@@ -37,6 +37,11 @@ from app.domain.models import (
     RunStatus,
 )
 from app.domain.storage import AssetStore
+from app.domain.text_safety import (
+    sanitize_external,
+    sanitize_external_text,
+    sanitize_external_text_or_none,
+)
 from app.i18n import t
 from app.providers.base import (
     ImageProvider,
@@ -239,11 +244,12 @@ def _finish_run_succeeded(
 
         run.status = RunStatus.SUCCEEDED
         run.finished_at = _utcnow()
-        run.usage = result.usage
+        # プロバイダーの応答から来る値は外部由来なので、NUL などを除いてから保存する(ADR-0027)。
+        run.usage = sanitize_external(result.usage)
         if result.text_outputs is not None:
             # None を代入すると JSON の null が入るので、無いときは触れない(SQL の NULL のまま)。
-            run.text_outputs = result.text_outputs
-        run.provider_request_id = result.provider_request_id
+            run.text_outputs = sanitize_external(result.text_outputs)
+        run.provider_request_id = sanitize_external_text_or_none(result.provider_request_id)
         session.commit()
     if annotation_queued and annotator is not None:
         annotator.notify()
@@ -262,10 +268,11 @@ def _finish_run_failed(
         assert run is not None
         run.status = RunStatus.FAILED
         run.finished_at = _utcnow()
-        run.error_code = error_code
-        run.error_message = error_message[:2000]
+        # プロバイダーのエラーの文言は外部由来。NUL などを除いてから保存する(ADR-0027)。
+        run.error_code = sanitize_external_text(error_code)
+        run.error_message = sanitize_external_text(error_message)[:2000]
         if provider_request_id:
-            run.provider_request_id = provider_request_id
+            run.provider_request_id = sanitize_external_text(provider_request_id)
         session.commit()
 
 
@@ -451,6 +458,9 @@ class Runner:
         provider_request_id: str | None,
     ) -> None:
         """Run を failed として記録する。記録自体に失敗してもループは止めない。"""
+        # SSE で送る値も、保存する値(`_finish_run_failed`)と揃える。
+        error_code = sanitize_external_text(error_code)
+        error_message = sanitize_external_text(error_message)
         try:
             await asyncio.to_thread(
                 _finish_run_failed,

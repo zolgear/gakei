@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.auth.identity import LOCAL_ADMIN, CurrentUser, Role
 from app.auth.oidc import OidcIdentity
 from app.domain.models import AppUser, AuthSession
+from app.domain.text_safety import sanitize_external_text, sanitize_external_text_or_none
 
 
 def _utcnow() -> datetime:
@@ -48,30 +49,34 @@ def upsert_user(db: Session, identity: OidcIdentity, admin_emails: set[str]) -> 
     """`(issuer, subject)` で既存ユーザーを探し、無ければ作る。ロールはログインのたびに
     `admin_emails`(`Settings.admin_email_set()`)から再計算する(IdP のクレームは使わない。
     ADR-0019 の決定)。
+
+    IdP のクレームは外部由来なので、NUL などを除いてから検索・保存する(ADR-0027)。
     """
+    issuer = sanitize_external_text(identity.issuer)
+    subject = sanitize_external_text(identity.subject)
+    email = sanitize_external_text_or_none(identity.email)
+    name = sanitize_external_text_or_none(identity.name)
     user = db.execute(
-        select(AppUser).where(
-            AppUser.issuer == identity.issuer, AppUser.subject == identity.subject
-        )
+        select(AppUser).where(AppUser.issuer == issuer, AppUser.subject == subject)
     ).scalar_one_or_none()
 
-    role = "admin" if (identity.email or "").strip().lower() in admin_emails else "user"
+    role = "admin" if (email or "").strip().lower() in admin_emails else "user"
     now = _utcnow()
 
     if user is None:
         user = AppUser(
-            issuer=identity.issuer,
-            subject=identity.subject,
-            email=identity.email,
-            name=identity.name,
+            issuer=issuer,
+            subject=subject,
+            email=email,
+            name=name,
             role=role,
             created_at=now,
             last_login_at=now,
         )
         db.add(user)
     else:
-        user.email = identity.email
-        user.name = identity.name
+        user.email = email
+        user.name = name
         user.role = role
         user.last_login_at = now
 

@@ -13,7 +13,8 @@
     "storageUnavailable": "画像の保存先({storage})に接続できないか、読み書きできません。コンテナ(バケット)が作成済みか、接続先と資格情報、読み書きの権限を確認してください。詳細: {error}",
     "storageS3LookupForbidden": "存在しないかもしれないオブジェクトの確認が 403(AccessDenied)で拒否されました(キー: {key})。AWS S3 は、s3:ListBucket の権限が無いと、存在しないキーに 404 ではなく 403 を返します。IAM ポリシーで、バケット(arn:aws:s3:::バケット名)に対する s3:ListBucket を許可してください。",
     "storageConditionalWriteRejected": "保存先が条件付きの書き込み(If-None-Match: *)を受け付けません(HTTP {status} {code})。このままでは画像の原本を保存できません。条件付きの書き込みに対応した S3 互換ストレージを使ってください。",
-    "storageConditionalWriteIgnored": "画像の保存先が条件付きの書き込み(If-None-Match: *)の条件を無視しました。同じ名前の原本は上書きされえますが、名前に Asset の id の先頭 8 文字が入るので、実際に同名になることはまずありません。"
+    "storageConditionalWriteIgnored": "画像の保存先が条件付きの書き込み(If-None-Match: *)の条件を無視しました。同じ名前の原本は上書きされえますが、名前に Asset の id の先頭 8 文字が入るので、実際に同名になることはまずありません。",
+    "nulInRequest": "入力に NUL 文字(\\u0000)が含まれているため受け付けられません(場所: {location})。NUL 文字を取り除いてから送ってください。"
   },
   "auth": {
     "required": "ログインが必要です。",
