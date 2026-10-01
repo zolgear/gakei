@@ -34,6 +34,7 @@ from app.api import shares as shares_api
 from app.api import tags as tags_api
 from app.api import uploads as uploads_api
 from app.api import users as users_api
+from app.api.request_text import reject_nul_in_request
 from app.auth.deps import require_user
 from app.auth.oidc import AuthlibOidcClient
 from app.auth.secret import load_or_create_auth_secret
@@ -334,7 +335,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else {}
     )
     app = FastAPI(
-        title="GAKEI ローカルMVP", lifespan=_build_lifespan(resolved_settings), **docs_kwargs
+        title="GAKEI ローカルMVP",
+        lifespan=_build_lifespan(resolved_settings),
+        # ADR-0027 2章の追記: リクエストの文字列に NUL があれば、全ルートの入口で 422 にする
+        # (PostgreSQL は NUL を保存も検索もできないため。`app/api/request_text.py`)。
+        dependencies=[Depends(reject_nul_in_request)],
+        **docs_kwargs,
     )
 
     app.add_middleware(LocaleMiddleware)

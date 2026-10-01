@@ -34,6 +34,8 @@ DATABASE_URL=postgresql://user:pass@host:5432/gakei
 
 GHCR の公開イメージ(`ghcr.io/zolgear/gakei`)を `docker run` する場合も、`-e DATABASE_URL=...` を渡すだけでよい。
 
+PostgreSQL は NUL 文字(`\u0000`)を保存できないため、GAKEI は DB の種類に関わらず、NUL を含むリクエストを 422 で拒み、アップロードした画像の埋め込みメタ情報やプロバイダーの応答などから来る NUL は取り除いて保存する(ADR-0027 2章)。
+
 ## SQLite から PostgreSQL への移行
 
 既に SQLite で使っている GAKEI のデータを PostgreSQL に移すツールを用意している。

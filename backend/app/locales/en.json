@@ -13,7 +13,8 @@
     "storageUnavailable": "Cannot connect to, or read and write, the image storage ({storage}). Check that the container (bucket) exists, and check the endpoint, credentials, and read/write permissions. Details: {error}",
     "storageS3LookupForbidden": "Checking for an object that may not exist was denied with 403 (AccessDenied) (key: {key}). Without the s3:ListBucket permission, AWS S3 returns 403 instead of 404 for keys that do not exist. Allow s3:ListBucket on the bucket (arn:aws:s3:::bucket-name) in the IAM policy.",
     "storageConditionalWriteRejected": "The storage does not accept conditional writes (If-None-Match: *) (HTTP {status} {code}). Original images cannot be saved as is. Use an S3-compatible storage that supports conditional writes.",
-    "storageConditionalWriteIgnored": "The image storage ignored the condition of a conditional write (If-None-Match: *). Originals with the same name could be overwritten, but this is unlikely in practice because names include the first 8 characters of the asset ID."
+    "storageConditionalWriteIgnored": "The image storage ignored the condition of a conditional write (If-None-Match: *). Originals with the same name could be overwritten, but this is unlikely in practice because names include the first 8 characters of the asset ID.",
+    "nulInRequest": "The request contains a NUL character (\\u0000) and cannot be accepted (at: {location}). Remove the NUL character and try again."
   },
   "auth": {
     "required": "Login required.",

@@ -57,6 +57,11 @@ from app.domain import annotation_settings
 from app.domain import annotations as annotations_domain
 from app.domain.models import Asset, AssetAnnotation, AssetKind, Run
 from app.domain.storage import AssetStore
+from app.domain.text_safety import (
+    sanitize_external,
+    sanitize_external_text,
+    sanitize_external_text_or_none,
+)
 from app.i18n import t
 
 if TYPE_CHECKING:
@@ -620,7 +625,8 @@ class Annotator:
                 return
             now = _utcnow()
             row.auto_status = annotations_domain.STATUS_FAILED
-            row.auto_error = message[:_ERROR_MAX]
+            # 推定のエンジン(外部の LLM・VLM など)のエラー文言は外部由来。NUL などを除く(ADR-0027)。
+            row.auto_error = sanitize_external_text(message)[:_ERROR_MAX]
             row.auto_finished_at = now
             row.updated_at = now
             session.commit()
@@ -633,6 +639,11 @@ class Annotator:
         ran: list[str],
         models: dict[str, str],
     ) -> None:
+        # LLM・VLM の出力は外部由来。NUL などを除いてから保存する(ADR-0027)。
+        title = sanitize_external_text_or_none(title)
+        if tags is not None:
+            tags = [(sanitize_external_text(name), score) for name, score in tags]
+        models = sanitize_external(models)
         with self.session_factory() as session:
             annotations_domain.apply_auto_result(session, asset_id, title=title, tags=tags)
             row = session.get(AssetAnnotation, asset_id)

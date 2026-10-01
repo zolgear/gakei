@@ -14,13 +14,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import functools
 import json
 import math
 import time
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 import anyio.to_thread
 from mcp.server.mcpserver import Context, MCPServer
@@ -71,6 +72,7 @@ from app.domain.schemas import AssetGroupCreate, RunCreateRequest, RunInputCreat
 from app.domain.search import MAX_LIMIT as SEARCH_MAX_LIMIT
 from app.domain.search import InvalidSearchQueryError, search
 from app.domain.storage import AssetStore
+from app.domain.text_safety import find_nul
 from app.domain.visibility import (
     asset_visible,
     get_visible_asset,
@@ -1375,10 +1377,41 @@ async def estimate_cost(
 _READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
 
+def _reject_nul_args[F: Callable[..., Any]](fn: F) -> F:
+    """ツール引数の文字列(入れ子の dict / list の中と dict のキーを含む)に NUL があれば
+    ツールのエラーにする(ADR-0027 2章の追記。REST の `app/api/request_text.py` と同じ規則)。
+
+    PostgreSQL は NUL を保存も検索もできないため、ドメイン関数を呼ぶ前に拒む。`ctx` 以外の
+    引数をすべて見る。`functools.wraps` で元の関数のシグネチャと型注釈を引き継ぐので、
+    SDK が作る引数のスキーマは変わらない。
+    """
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        for name, value in kwargs.items():
+            if isinstance(value, Context):
+                continue
+            found = find_nul(value, (name,))
+            if found is not None:
+                location = ".".join(str(part) for part in found)
+                raise ToolError(
+                    f"The argument contains a NUL character (\\u0000) at {location}. "
+                    "Remove it and try again."
+                )
+        return await fn(*args, **kwargs)
+
+    return cast(F, wrapper)
+
+
 def build_mcp_server() -> MCPServer:
     server = MCPServer(name="gakei", version=get_version(), instructions=_INSTRUCTIONS)
-    server.add_tool(get_capabilities, title="Get capabilities", annotations=_READ_ONLY)
-    server.add_tool(
+
+    def add_tool(fn: Callable[..., Any], **kwargs: Any) -> None:
+        # すべてのツールの引数に NUL の検査を掛ける(`_reject_nul_args`)。
+        server.add_tool(_reject_nul_args(fn), **kwargs)
+
+    add_tool(get_capabilities, title="Get capabilities", annotations=_READ_ONLY)
+    add_tool(
         generate_image,
         title="Generate image (billed)",
         annotations=ToolAnnotations(
@@ -1389,50 +1422,50 @@ def build_mcp_server() -> MCPServer:
             open_world_hint=True,
         ),
     )
-    server.add_tool(get_run, title="Get run", annotations=_READ_ONLY)
-    server.add_tool(list_runs, title="List runs", annotations=_READ_ONLY)
-    server.add_tool(estimate_cost, title="Estimate cost", annotations=_READ_ONLY)
-    server.add_tool(
+    add_tool(get_run, title="Get run", annotations=_READ_ONLY)
+    add_tool(list_runs, title="List runs", annotations=_READ_ONLY)
+    add_tool(estimate_cost, title="Estimate cost", annotations=_READ_ONLY)
+    add_tool(
         cancel_run,
         title="Cancel run",
         annotations=ToolAnnotations(
             read_only_hint=False, destructive_hint=False, idempotent_hint=True
         ),
     )
-    server.add_tool(search_assets, title="Search assets", annotations=_READ_ONLY)
-    server.add_tool(get_asset, title="Get asset", annotations=_READ_ONLY)
-    server.add_tool(get_image, title="Get image", annotations=_READ_ONLY)
-    server.add_tool(
+    add_tool(search_assets, title="Search assets", annotations=_READ_ONLY)
+    add_tool(get_asset, title="Get asset", annotations=_READ_ONLY)
+    add_tool(get_image, title="Get image", annotations=_READ_ONLY)
+    add_tool(
         create_download_url,
         title="Create download URL",
         annotations=ToolAnnotations(
             read_only_hint=False, destructive_hint=False, idempotent_hint=False
         ),
     )
-    server.add_tool(
+    add_tool(
         upload_image,
         title="Upload image",
         annotations=ToolAnnotations(
             read_only_hint=False, destructive_hint=False, idempotent_hint=False
         ),
     )
-    server.add_tool(
+    add_tool(
         create_upload_url,
         title="Create upload URL",
         annotations=ToolAnnotations(
             read_only_hint=False, destructive_hint=False, idempotent_hint=False
         ),
     )
-    server.add_tool(list_prompt_sets, title="List prompt sets", annotations=_READ_ONLY)
-    server.add_tool(list_groups, title="List groups", annotations=_READ_ONLY)
-    server.add_tool(
+    add_tool(list_prompt_sets, title="List prompt sets", annotations=_READ_ONLY)
+    add_tool(list_groups, title="List groups", annotations=_READ_ONLY)
+    add_tool(
         create_group,
         title="Create group",
         annotations=ToolAnnotations(
             read_only_hint=False, destructive_hint=False, idempotent_hint=False
         ),
     )
-    server.add_tool(
+    add_tool(
         move_to_group,
         title="Move to group",
         annotations=ToolAnnotations(
