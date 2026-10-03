@@ -80,11 +80,13 @@ uv run python -m app.tools.migrate_to_postgres --to postgresql://user:pass@host/
 - PostgreSQL のポートはホストに公開しない。
 - **これまで Compose で使ってきた人への影響:** 更新後にそのまま `docker compose up` すると、空の PostgreSQL につながり、今までのデータが見えなくなる(SQLite のファイルはボリューム `gakei-data` に残っていて消えない)。移行ツール(4章)で移すか、コメントアウトで SQLite のまま使う。リポジトリの Compose をそのまま使っている利用者はほぼいないと見込み、この案内はリリースノートに書くだけにする(同日のユーザーの判断)。
 - GHCR のイメージを使う README の `docker run` の例は、SQLite のまま変えない。外部の PostgreSQL につなぐ場合は `DATABASE_URL` を渡すだけでよい。
+- 2026-10-03 追記(ADR-0033): 画像の埋め込みの検索に pgvector を使うため、同梱のイメージを `pgvector/pgvector:pg17` に替える。同じメジャーバージョンなので、既存のボリュームはそのまま使える。外部の PostgreSQL で拡張 `vector` を使えない場合も、GAKEI は動く(埋め込みの検索は numpy の全件比較になる)。
 
 ### 6. テストと CI
 
 - テストは、環境変数 `GAKEI_TEST_DATABASE_URL`(PostgreSQL のサーバーへの接続)があれば、テストごとに一時的な DB を作って PostgreSQL で走る。無ければこれまでどおり SQLite。既定の `uv run pytest` は変わらない。
 - CI に PostgreSQL のジョブを足す(Ubuntu、`services` で `postgres:17`、PR でも走らせる)。バックエンドのテストを全部 PostgreSQL で回す。
+  - 2026-10-03 追記(ADR-0033): `services` のイメージを `pgvector/pgvector:pg17` に替える。拡張が無い場合に numpy に切り替わることも、テストで確かめる。
 - マイグレーションのテストは、両方の DB で `upgrade head` と `downgrade` を通す。
 
 ### 7. バックアップ

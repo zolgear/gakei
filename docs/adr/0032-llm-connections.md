@@ -83,6 +83,7 @@ LLM・VLM の接続先(名前、Base URL、キー、API 形式)は、ADR-0024 8�
 - 自動タイトル・タグのページが短くなる。
 - LLM を使う機能を足すときは、`domain/llm_connections.py` の接続先を選ばせ、「使っている機能」に答える関数を足す。
 - ADR-0024 8章の「接続先(一覧)」の中身は変わらない。置き場所が、この ADR に移る。
+- 2026-10-03 追記(ADR-0033): 画像の埋め込みのリモートの推論サーバー(Infinity 形式)も、この接続先から選ぶ。使っている機能に「埋め込み」が加わる(`register_usage("embedding", ...)`)。接続先の API 形式(Responses / Chat Completions)は LLM の呼び方の設定なので、埋め込みでは使わない。埋め込みの API 形式は、埋め込みの設定に持つ。
 
 ## Action Items
 
