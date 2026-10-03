@@ -376,16 +376,16 @@ pgvector は、PostgreSQL を選ぶ規模の利用者に索引の利点を出す
    - Raspberry Pi 5 での推論時間とメモリの目安
    - umap-js に計算済みの近傍を渡せるか
    - 結果はこの ADR に書き戻す
-2. [ ] バックエンドの基盤
+2. [x] バックエンドの基盤
    - ダウンローダーとカタログを WD Tagger と共通にする
    - エンジン(ONNX、Infinity、Fake)
    - マイグレーションと pgvector
    - worker と取り込み時の待ち行列
    - 設定の API
    - Compose と CI のイメージ、`migrate_to_postgres`
-3. [ ] 検索の API(文章、似た画像、重複、マップの元データ)と MCP
-4. [ ] 画面: 設定、検索、ビューア、重複の候補
+3. [x] 検索の API(文章、似た画像、重複、マップの元データ)と MCP
+4. [x] 画面: 設定、検索、ビューア、重複の候補
 5. [x] 画面: マップ(地図とネットワーク)
-6. [ ] ドキュメント
+6. [x] ドキュメント
    - `docs/embeddings.md`(運用、モデルの選び方、pgvector)を新しく書く
    - `docs/postgresql.md`、`docs/configuration.md`、README、CLAUDE.md を更新する

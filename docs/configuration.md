@@ -62,6 +62,8 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 
 `DATA_DIR/assets/` の原本は、プロバイダー・モデル別、月別のフォルダに保存される(例: `assets/openai/gpt-image-2.5/2026-09/20260929-093015_1a2b3c4d.png`。アップロードは `assets/uploads/`、マスクは `assets/masks/`、スケッチは `assets/sketches/`。ADR-0026)。以前のバージョンで保存した画像は `assets/{2文字}/` に残り、移さない。同じ内容の画像は、最初に保存した場所の 1 つのファイルを共有する。
 
+設定画面からダウンロードしたモデルは `DATA_DIR/models/` に置く(自動タグの WD Tagger は `models/wd/`、画像の埋め込みの CLIP は `models/clip/`。[auto-tags.md](auto-tags.md)、[embeddings.md](embeddings.md))。`STORAGE_BACKEND` を変えても、モデルは `DATA_DIR` に置く。消しても設定画面からダウンロードし直せる。画像の埋め込みに環境変数は無く、管理者設定の「埋め込み」で設定する。
+
 **`DATA_DIR` の中のファイルを、ファイルマネージャーなどで直接消したり動かしたり名前を変えたりしないこと。** DB に記録した場所と合わなくなり、画像が表示できなくなる。画像の削除は画面から行う。`DATA_DIR` をフォルダごとバックアップに取るのは構わない。
 
 `STORAGE_BACKEND` を `azure_blob` か `s3` にすると、原本と派生は `DATA_DIR` ではなく、コンテナ(バケット)の中に同じキーで保存される。起動時に接続と読み書きを確かめ、できなければ起動を中止する。ローカルから移すツールもある([object-storage.md](object-storage.md))。
