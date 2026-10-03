@@ -240,3 +240,80 @@
   margin-right: 2px;
   color: var(--color-text-faint);
 }
+
+/* ---------- 埋め込み(ADR-0033 8章) ---------- */
+
+/* 「キーワード / 意味」の切り替え。比較ビューの表示モードの切り替えと同じ見た目。 */
+.modeSwitch {
+  align-self: flex-start;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: -10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.modeButton {
+  height: 28px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.modeButton[data-active='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+}
+
+.modeButton:hover {
+  color: var(--color-text);
+}
+
+/* 英語向けのモデルで日本語を検索したときの注記。 */
+.hint {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+.assetScore {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+.similarHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.similarOrigin {
+  flex: 0 0 auto;
+  width: 72px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.similarOrigin:hover .assetThumb {
+  border-color: var(--color-accent);
+}
+
+@media (max-width: 767px) {
+  .modeButton {
+    height: 40px;
+    padding: 0 16px;
+  }
+}

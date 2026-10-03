@@ -211,7 +211,17 @@
       "submit": "検索",
       "enterQuery": "検索語を入力してください。",
       "countSuffix": "{count} 件",
-      "truncatedNote": "上位 {limit} 件のみ表示しています"
+      "truncatedNote": "上位 {limit} 件のみ表示しています",
+      "modeLabel": "検索の方式",
+      "modeKeyword": "キーワード",
+      "modeSemantic": "意味",
+      "semanticPlaceholder": "探したい画像を文章で",
+      "semanticEnterQuery": "探したい画像を文章で入力してください。",
+      "semanticNoResults": "見つかりません。",
+      "englishOnlyHint": "使っているモデルは英語向けです。日本語ではほとんど当たらないので、英語で検索してください。",
+      "similarHeading": "この画像に似た画像",
+      "similarOriginLabel": "起点の画像を開く",
+      "searchFailed": "検索に失敗しました。"
     }
   },
   "settings": {
@@ -226,6 +236,7 @@
       "openai": "OpenAI",
       "llmConnections": "LLM の接続先",
       "annotation": "自動タイトル・タグ",
+      "embeddings": "埋め込み",
       "comfyui": "ComfyUI",
       "mcp": "MCP",
       "shareLinks": "共有リンクの公開",
@@ -572,6 +583,131 @@
           "one": "{count} 件を待ち行列に入れました",
           "other": "{count} 件を待ち行列に入れました"
         }
+      }
+    },
+    "embeddings": {
+      "intro": "画像を CLIP 系のモデルでベクトルにし、文章での検索、似た画像、重複の候補に使います。",
+      "loading": "読み込み中…",
+      "loadFailed": "設定を読み込めませんでした。",
+      "retry": "再読み込み",
+      "communicationFailed": "通信に失敗しました。",
+      "enable": {
+        "heading": "有効化",
+        "enabledLabel": "埋め込みを使う",
+        "enabledHelp": "無効の間は、検索の「意味」、ビューアの「似た画像」、重複の候補を画面に出しません。",
+        "engineLabel": "エンジン",
+        "engineOnnx": "ローカル(このサーバー内で実行)",
+        "engineRemote": "リモート(推論サーバー)",
+        "notUsable": "有効ですが、まだ使えません。モデルをダウンロードするか、接続先とモデル名を設定してください。"
+      },
+      "onnx": {
+        "heading": "ローカルのモデル",
+        "notice": "画像は外部に送りません。モデルは Hugging Face からダウンロードします。",
+        "modelLabel": "モデル",
+        "memoryEstimate": "メモリ目安 約 {size} GB",
+        "languagesValue": "対応言語: {languages}",
+        "languageSeparator": "・",
+        "languageNames": {
+          "ja": "日本語",
+          "en": "英語"
+        },
+        "englishOnlyNote": "英語向けのモデルです。日本語で検索してもほとんど当たりません。",
+        "modelHelp": "日本語で検索するなら clip-japanese-base を選んでください。clip-vit-b32-u8 は軽くて速い英語向けのモデルです。",
+        "modelNotDownloaded": "選んだモデルをダウンロードするまで使えません。",
+        "downloaded": "ダウンロード済み",
+        "notDownloaded": "未ダウンロード",
+        "downloading": "ダウンロード中…",
+        "downloadingPercent": "ダウンロード中… {percent}%",
+        "downloadFailed": "ダウンロードに失敗しました: {error}",
+        "downloadFailedNoReason": "ダウンロードに失敗しました",
+        "download": "ダウンロード",
+        "delete": "削除",
+        "downloadStartedToast": "ダウンロードを始めました",
+        "deletedToast": "モデルを削除しました",
+        "deleteConfirm": {
+          "message": "モデル「{name}」のファイルを削除します。保存済みのベクトルは残ります。使うにはもう一度ダウンロードが要ります。",
+          "confirmLabel": "削除する"
+        }
+      },
+      "remote": {
+        "heading": "リモートの推論サーバー",
+        "notice": "選んだ接続先に、画像(512px に縮めたもの)と検索の文章を送ります。",
+        "connectionLabel": "接続先",
+        "connectionHelp": "接続先の追加・編集・キーは次のページで行います:",
+        "connectionsLink": "LLM の接続先",
+        "connectionPlaceholder": "選んでください",
+        "noConnections": "選べる接続先がありません。先に「LLM の接続先」で追加してください。",
+        "modelLabel": "モデル名",
+        "modelHelp": "推論サーバーで動かしているモデルの名前。",
+        "formatLabel": "形式",
+        "formatInfinity": "Infinity",
+        "sameSpaceNote": "接続先の Base URL を変えても、同じ接続先なら同じモデルとみなします。中身のモデルが変わったときは、「保存済みのベクトル」で削除してから計算し直してください。",
+        "errors": {
+          "connectionRequired": "接続先を選んでください",
+          "connectionUnknown": "この接続先はもうありません。選び直してください",
+          "modelRequired": "モデル名を入力してください",
+          "modelTooLong": "{max} 文字以内で入力してください"
+        }
+      },
+      "run": {
+        "heading": "計算",
+        "autoOnIngestLabel": "取り込み時に計算する",
+        "autoOnIngestHelp": "生成・アップロード・スケッチのたびに、使うモデルでベクトルを計算します。",
+        "pendingLabel": "未計算の画像",
+        "pendingValue": {
+          "one": "{count} 枚",
+          "other": "{count} 枚"
+        },
+        "queuedLabel": "待ち行列",
+        "queuedValue": {
+          "one": "{count} 件",
+          "other": "{count} 件"
+        },
+        "failedLabel": "失敗",
+        "failedValue": {
+          "one": "{count} 件",
+          "other": "{count} 件"
+        },
+        "run": "まとめて計算する",
+        "unsavedBlocked": "保存していない変更があります。保存してから実行できます。",
+        "notUsable": "使えるモデルが無いため実行できません。",
+        "switchedHint": "モデルを切り替えたら、まとめて計算してください。",
+        "confirm": {
+          "message": {
+            "one": "ベクトルが無い {count} 枚の画像を、計算の待ち行列に入れます。",
+            "other": "ベクトルが無い {count} 枚の画像を、計算の待ち行列に入れます。"
+          },
+          "confirmLabel": "待ち行列に入れる"
+        },
+        "queuedToast": {
+          "one": "{count} 件を待ち行列に入れました",
+          "other": "{count} 件を待ち行列に入れました"
+        }
+      },
+      "duplicates": {
+        "heading": "重複の候補",
+        "thresholdLabel": "しきい値の既定",
+        "thresholdHelp": "重複の候補のページで最初に使う類似度のしきい値({min}〜{max})。ページの中では一時的に変えられます。",
+        "thresholdInvalid": "{min}〜{max} の数を入力してください"
+      },
+      "stored": {
+        "heading": "保存済みのベクトル",
+        "help": "モデルを切り替えても、前のモデルのベクトルは残ります。戻したときは計算し直さずに使えます。",
+        "empty": "まだありません。",
+        "activeBadge": "使用中",
+        "countValue": {
+          "one": "{count} 件",
+          "other": "{count} 件"
+        },
+        "delete": "削除",
+        "deleteConfirm": {
+          "message": {
+            "one": "「{name}」のベクトル {count} 件を削除します。使うには計算し直しが要ります。",
+            "other": "「{name}」のベクトル {count} 件を削除します。使うには計算し直しが要ります。"
+          },
+          "confirmLabel": "削除する"
+        },
+        "deletedToast": "ベクトルを削除しました"
       }
     },
     "comfyui": {
@@ -1172,6 +1308,10 @@
       "reannotateTooltip": "タイトルとタグを推定し直します。人が付けたタイトルとタグ、人が外したタグはそのまま保ちます。",
       "saveFailed": "保存に失敗しました",
       "annotateFailed": "推定を始められませんでした"
+    },
+    "similar": {
+      "heading": "似た画像",
+      "showMore": "検索ページでもっと見る"
     }
   },
   "compare": {
@@ -1358,7 +1498,8 @@
       },
       "clear": "選択を解除",
       "toggleTile": "選択を切り替える"
-    }
+    },
+    "duplicatesLink": "重複の候補"
   },
   "comfyui": {
     "connection": {
@@ -1627,5 +1768,52 @@
     "copy": "コピー",
     "copied": "コピーしました",
     "copyFailed": "コピーできませんでした"
+  },
+  "embeddings": {
+    "pending": "この画像のベクトルを計算中です…",
+    "missing": "この画像のベクトルはまだありません。",
+    "failed": "この画像のベクトルの計算に失敗しました。",
+    "compute": "計算する",
+    "recompute": "計算し直す",
+    "requestFailed": "計算を頼めませんでした。",
+    "loadFailed": "似た画像を読み込めませんでした。",
+    "unavailable": "埋め込みは今は使えません。",
+    "noSimilar": "似た画像はありません。",
+    "score": "類似度 {score}"
+  },
+  "duplicates": {
+    "title": "重複の候補",
+    "intro": "似た画像をグループにまとめて並べます。比べて、要らないものを削除できます(削除は元に戻せます)。",
+    "thresholdLabel": "しきい値",
+    "thresholdHelp": "類似度がこの値以上の画像をまとめます。",
+    "resetThreshold": "既定に戻す",
+    "summary": {
+      "one": "{groups} グループ・{scanned} 枚を比べました",
+      "other": "{groups} グループ・{scanned} 枚を比べました"
+    },
+    "truncatedNote": "画像が多いため、新しい {scanned} 枚だけを比べています。",
+    "groupsTruncatedNote": "グループが多いため、大きいものから表示しています。",
+    "empty": "しきい値以上の組は見つかりませんでした。",
+    "loading": "読み込み中…",
+    "loadFailed": "重複の候補を読み込めませんでした。",
+    "groupHeading": "グループ {index}",
+    "groupCount": {
+      "one": "{count} 枚",
+      "other": "{count} 枚"
+    },
+    "groupMaxScore": "最大 {score}",
+    "firstBadge": "最初",
+    "firstBadgeTitle": "グループでいちばん古い画像",
+    "compare": "比べる",
+    "compareHint": "比べる 2 枚を選んでください",
+    "selectForCompare": "比べる画像に選ぶ",
+    "compareTitle": "比べる",
+    "open": "ビューアで開く",
+    "delete": "削除",
+    "deleteConfirmMessage": "この画像をストックから削除します。",
+    "deletedToast": "削除しました",
+    "undo": "元に戻す",
+    "deleteFailed": "削除できませんでした。",
+    "restoreFailed": "元に戻せませんでした。"
   }
 }

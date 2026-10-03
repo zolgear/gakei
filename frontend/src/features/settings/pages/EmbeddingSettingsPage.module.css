@@ -1,0 +1,111 @@
+/*
+ * 埋め込みのページ(`/settings/embeddings`)にしか無いものだけを置く。
+ * セクション、行、入力、ボタンは共通の `settings.module.css`、モデルの行は自動タイトル・タグの
+ * ONNX タガーと同じ `AnnotationSettingsPage.module.css` を使う(ADR-0031 5章)。
+ */
+
+.value {
+  font-size: 13px;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.radioGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.modelNote {
+  margin: 0;
+  padding-left: 24px;
+  font-size: 12px;
+  color: var(--color-warning);
+}
+
+/* ---------- 保存済みのベクトル ---------- */
+
+.storedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.storedRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.storedText {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.storedName {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.storedKey {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--color-accent);
+  border-radius: 9px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+/* ---------- 狭い画面(ADR-0009 5章: タップ 44px 以上) ---------- */
+
+@media (max-width: 767px) {
+  .radio {
+    min-height: 44px;
+  }
+
+  .radio input {
+    width: 20px;
+    height: 20px;
+  }
+
+  .modelNote {
+    padding-left: 0;
+  }
+}

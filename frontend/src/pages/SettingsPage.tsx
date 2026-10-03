@@ -39,6 +39,7 @@ import { OpenAiSettingsPage } from '../features/settings/pages/OpenAiSettingsPag
 import { ComfyUISettingsPage } from '../features/settings/pages/ComfyUISettingsPage'
 import { ShareLinksSettingsPage } from '../features/settings/pages/ShareLinksSettingsPage'
 import { AnnotationSettingsPage } from '../features/settings/pages/AnnotationSettingsPage'
+import { EmbeddingSettingsPage } from '../features/settings/pages/EmbeddingSettingsPage'
 import { LlmConnectionsSettingsPage } from '../features/settings/pages/LlmConnectionsSettingsPage'
 import {
   AboutSettingsPage,
@@ -57,6 +58,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   openai: OpenAiSettingsPage,
   llmConnections: LlmConnectionsSettingsPage,
   annotation: AnnotationSettingsPage,
+  embeddings: EmbeddingSettingsPage,
   comfyui: ComfyUISettingsPage,
   mcp: McpSettingsPage,
   shareLinks: ShareLinksSettingsPage,

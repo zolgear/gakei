@@ -42,6 +42,7 @@
 | OpenAI | `/settings/openai` | 管理者 | API キー、接続先(Base URL)、moderation(これまでの「生成」セクション) |
 | LLM の接続先 | `/settings/llm-connections` | 管理者 | LLM・VLM の接続先(2026-10-01 追加。ADR-0032) |
 | 自動タイトル・タグ | `/settings/annotation` | 管理者 | ADR-0024 の6小節。順序は変えない |
+| 埋め込み | `/settings/embeddings` | 管理者 | 画像の埋め込みのエンジン、モデル、計算、重複のしきい値の既定(2026-10-03 追加。ADR-0033) |
 | ComfyUI | `/settings/comfyui` | 管理者 | 接続、タイムアウト、ワークフロー管理への入口 |
 | MCP | `/settings/mcp` | 管理者 | 有効化、1時間の上限、接続先 |
 | 共有リンクの公開 | `/settings/share-links` | 管理者 | 共有リンク機能の有効化(ADR-0029) |

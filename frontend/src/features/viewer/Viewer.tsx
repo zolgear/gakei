@@ -25,6 +25,9 @@ import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from '../lineage/EmbeddedMetaSection'
 import { OriginRecipeSection } from '../lineage/OriginRecipeSection'
 import { AssetGroupsSection } from './AssetGroupsSection'
+import { SimilarAssetsSection } from './SimilarAssetsSection'
+import { supportsSimilar } from '../embeddings/similarAssets'
+import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
 import { AssetTagsSection, AssetTitleSection } from './AssetAnnotationSection'
 import { annotationPollInterval, supportsAnnotation } from '../annotations/annotationStatus'
 import { resolveRunOutputNav } from './runOutputs'
@@ -81,6 +84,8 @@ export function Viewer({ assetId }: ViewerProps) {
   // 共有リンク(ADR-0029)は管理者設定で有効なときだけ「共有」を出す。
   const shareSettingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
   const shareEnabled = shareSettingsQuery.data?.enabled === true
+  // 似た画像(ADR-0033)は埋め込みが使えるときだけ出す。
+  const embeddingCaps = useEmbeddingCapabilities()
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteAsset(assetId),
@@ -334,6 +339,7 @@ export function Viewer({ assetId }: ViewerProps) {
             {asset.origin && <OriginRecipeSection origin={asset.origin} />}
             {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
             <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
+            {embeddingCaps && supportsSimilar(asset) && <SimilarAssetsSection key={asset.id} assetId={asset.id} />}
 
             <div className={styles.actions}>
               <a

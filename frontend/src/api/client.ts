@@ -858,3 +858,87 @@ export function deleteLlmConnectionApiKey(connectionId: string): Promise<LlmConn
     method: 'DELETE',
   })
 }
+
+// -- 画像の埋め込み(ADR-0033) --------------------------------------------------
+// 検索系(文章での検索、似た画像、重複の候補)は、埋め込みが無効・使えないと 409
+// (`ApiError.code === 'embeddings_unavailable'`)。似た画像は起点のベクトルの状態でも 409
+// (`embedding_pending` / `embedding_failed` / `embedding_missing` / `embedding_not_supported`)。
+
+export type EmbeddingCapabilities = components['schemas']['EmbeddingCapabilities']
+export type EmbeddingSettingsResponse = components['schemas']['EmbeddingSettingsResponse']
+export type EmbeddingSettingsUpdateRequest = components['schemas']['EmbeddingSettingsUpdateRequest']
+export type EmbeddingOnnxModelStatus = components['schemas']['EmbeddingOnnxModelStatus']
+export type EmbeddingOnnxModelName = EmbeddingOnnxModelStatus['name']
+export type EmbeddingStoredCount = components['schemas']['EmbeddingStoredCount']
+export type EmbeddingBackfillResponse = components['schemas']['EmbeddingBackfillResponse']
+export type EmbeddingLanguage = EmbeddingOnnxModelStatus['languages'][number]
+export type EmbeddingErrorCode = components['schemas']['EmbeddingErrorDetail']['code']
+export type AssetEmbeddingStatus = components['schemas']['AssetEmbeddingStatus']
+export type SemanticSearchResponse = components['schemas']['SemanticSearchResponse']
+export type SemanticAssetHit = components['schemas']['SemanticAssetHit']
+export type SimilarAssetsResponse = components['schemas']['SimilarAssetsResponse']
+export type DuplicatesResponse = components['schemas']['DuplicatesResponse']
+export type DuplicateGroup = components['schemas']['DuplicateGroup']
+export type DuplicateAsset = components['schemas']['DuplicateAsset']
+
+/** 全ログイン者が読める(重複の候補のしきい値の既定などに使う)。 */
+export function getEmbeddingSettings(): Promise<EmbeddingSettingsResponse> {
+  return request('/api/settings/embeddings')
+}
+
+/** 管理者のみ。省略した項目は変更しない。`remote_connection_id` と `remote_model` は null で未設定に戻す。 */
+export function updateEmbeddingSettings(body: EmbeddingSettingsUpdateRequest): Promise<EmbeddingSettingsResponse> {
+  return request('/api/settings/embeddings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** モデルのダウンロードを始める(202)。進捗は `getEmbeddingSettings` をポーリングして見る。 */
+export function downloadEmbeddingModel(model: EmbeddingOnnxModelName): Promise<EmbeddingSettingsResponse> {
+  return request('/api/settings/embeddings/onnx/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+}
+
+/** モデルのファイルを消す(保存済みのベクトルは消さない)。 */
+export function deleteEmbeddingModel(model: EmbeddingOnnxModelName): Promise<EmbeddingSettingsResponse> {
+  return request(`/api/settings/embeddings/onnx/${encodeURIComponent(model)}`, { method: 'DELETE' })
+}
+
+/** 使うモデルのベクトルが無い画像をまとめて待ち行列に入れる。 */
+export function backfillEmbeddings(): Promise<EmbeddingBackfillResponse> {
+  return request('/api/settings/embeddings/backfill', { method: 'POST' })
+}
+
+/** そのモデル(`model_key`)のベクトルをすべて消す。 */
+export function deleteEmbeddingVectors(modelKey: string): Promise<EmbeddingSettingsResponse> {
+  return request(`/api/settings/embeddings/vectors/${encodeURIComponent(modelKey)}`, { method: 'DELETE' })
+}
+
+/** 1枚の埋め込みを、使うモデルで計算し直す(待ち行列に入れる)。 */
+export function requestAssetEmbedding(assetId: string): Promise<AssetEmbeddingStatus> {
+  return request(`/api/assets/${assetId}/embedding`, { method: 'POST' })
+}
+
+/** 文章での検索(類似度の高い順)。 */
+export function semanticSearch(
+  params: operations['semantic_search']['parameters']['query'],
+): Promise<SemanticSearchResponse> {
+  return request(`/api/search/semantic${toQuery(params)}`)
+}
+
+/** 似た画像(起点の画像自身は含めない)。 */
+export function similarAssets(assetId: string, limit?: number): Promise<SimilarAssetsResponse> {
+  return request(`/api/assets/${assetId}/similar${toQuery({ limit })}`)
+}
+
+/** 重複の候補。`threshold` を省くと管理者設定の値。 */
+export function embeddingDuplicates(
+  params: NonNullable<operations['embedding_duplicates']['parameters']['query']> = {},
+): Promise<DuplicatesResponse> {
+  return request(`/api/embeddings/duplicates${toQuery(params)}`)
+}
