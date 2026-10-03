@@ -193,11 +193,26 @@
       "inUse": "This connection is used by {features} and cannot be deleted",
       "featureSeparator": ", ",
       "features": {
-        "annotation": "Auto titles and tags"
+        "annotation": "Auto titles and tags",
+        "embedding": "Embeddings"
       }
     },
     "share": {
       "invalidEnabled": "enabled must be true or false"
+    },
+    "embedding": {
+      "invalidBool": "{name} must be true or false",
+      "invalidNull": "{name} cannot be null",
+      "invalidEngine": "The engine must be onnx or remote",
+      "invalidOnnxModel": "The embedding model must be one of {models}",
+      "unknownOnnxModel": "Unknown embedding model",
+      "onnxDownloading": "A model cannot be deleted while it is downloading",
+      "unknownConnection": "The specified connection does not exist",
+      "builtinConnection": "The OpenAI settings cannot be used for embeddings. Add a connection for your inference server and select it",
+      "invalidModel": "The model name must be 1 to {max} characters",
+      "invalidApiFormat": "The format must be infinity",
+      "invalidThreshold": "The threshold must be a number between {min} and {max}",
+      "vectorsNotFound": "There are no vectors for this model"
     }
   },
   "runValidation": {
@@ -332,10 +347,6 @@
     "emptyTitle": "The LLM did not return a title",
     "onnxModelMissing": "The ONNX tagger model was not found. Download it from Admin settings",
     "onnxInsufficientMemory": "The ONNX tagger model {model} was not loaded because there is not enough free memory (needs about {needed} GB, about {available} GB free). Choose a smaller model in Admin settings or add memory",
-    "download": {
-      "httpError": "Failed to download {file} (HTTP {status})",
-      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
-    },
     "connectionMissing": "The connection used for annotation was not found. Choose the connections again in Admin settings > Auto titles and tags"
   },
   "uploads": {
@@ -414,5 +425,25 @@
     "disabled": "Share links are disabled in the admin settings",
     "notFound": "Share link not found",
     "publicNotFound": "This link is not valid"
+  },
+  "modelStore": {
+    "download": {
+      "httpError": "Failed to download {file} (HTTP {status})",
+      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
+    }
+  },
+  "embeddings": {
+    "notUsable": "Embeddings are not available. Enable them under Admin settings > Embeddings and prepare a model (local models must be downloaded)",
+    "notConfigured": "No embedding model is configured",
+    "connectionMissing": "The connection used for embeddings was not found. Choose it again under Admin settings > Embeddings",
+    "modelMissing": "The embedding model {model} was not found. Download it from the admin settings",
+    "insufficientMemory": "Did not load the embedding model {model} because there is not enough free memory (needs about {needed} GB, about {available} GB free)",
+    "remoteUnavailable": "Could not connect to the inference server ({error})",
+    "remoteHttpError": "The inference server returned an error (HTTP {status}): {body}",
+    "remoteInvalidResponse": "Could not read the inference server's response as embeddings",
+    "assetDeleted": "Embeddings are not computed for deleted images",
+    "maskNotSupported": "Embeddings are not computed for masks",
+    "imageUnreadable": "Could not read the image",
+    "modelUnreadable": "Could not read the files of the embedding model {model}. Delete the model in the admin settings and download it again"
   }
 }

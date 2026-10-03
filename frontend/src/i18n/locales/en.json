@@ -445,7 +445,8 @@
       "usedByNone": "None",
       "featureSeparator": ", ",
       "features": {
-        "annotation": "Auto titles and tags"
+        "annotation": "Auto titles and tags",
+        "embedding": "Embeddings"
       },
       "deleteDisabledInUse": "Cannot be deleted while a feature uses it."
     },

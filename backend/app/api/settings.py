@@ -25,6 +25,9 @@ from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import (
     get_annotator,
+    get_clip_downloader,
+    get_embedder,
+    get_embedding_index_backend,
     get_provider,
     get_session,
     get_settings,
@@ -32,12 +35,14 @@ from app.deps import (
 )
 from app.domain import (
     annotation_settings,
+    embedding_settings,
     general_settings,
     mcp_settings,
     share_settings,
 )
 from app.domain import annotations as annotations_domain
 from app.domain import api_key as api_key_domain
+from app.domain import embeddings as embeddings_domain
 from app.domain.schemas import (
     AnnotationBackfillResponse,
     AnnotationComfyuiProfile,
@@ -48,6 +53,11 @@ from app.domain.schemas import (
     AnnotationSettingsUpdateRequest,
     AnnotationTarget,
     ComfyUITimeoutSetting,
+    EmbeddingBackfillResponse,
+    EmbeddingOnnxModelStatus,
+    EmbeddingSettingsResponse,
+    EmbeddingSettingsUpdateRequest,
+    EmbeddingStoredCount,
     GeneralSettingsResponse,
     GeneralSettingsUpdateRequest,
     McpSettingsResponse,
@@ -62,9 +72,12 @@ from app.domain.schemas import (
     ShareSettingsResponse,
     ShareSettingsUpdateRequest,
 )
+from app.embedding.catalog import CLIP_MODELS, ClipModelDownloader, onnx_model_key
+from app.embedding.catalog import is_downloaded as clip_is_downloaded
 from app.i18n import t
 from app.providers.base import ImageProvider
 from app.worker.annotator import Annotator
+from app.worker.embedder import Embedder
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -583,3 +596,219 @@ def backfill_annotations(
     db.commit()
     annotator.notify()
     return AnnotationBackfillResponse(queued=count)
+
+
+# -- 画像の埋め込み(ADR-0033) ---------------------------------------------------
+# GET は全ログイン者(画面の表示用)、更新・モデルのダウンロードと削除・一括実行・ベクトルの
+# 削除は管理者だけ。リモートの接続先は LLM の接続先(ADR-0032)から選ぶ。
+
+
+def _embedding_model_statuses(
+    settings: Settings, downloader: ClipModelDownloader
+) -> list[EmbeddingOnnxModelStatus]:
+    statuses: list[EmbeddingOnnxModelStatus] = []
+    for name, model in CLIP_MODELS.items():
+        state = downloader.state(name)
+        statuses.append(
+            EmbeddingOnnxModelStatus(
+                name=name,  # type: ignore[arg-type]
+                model_key=onnx_model_key(model),
+                languages=list(model.languages),  # type: ignore[arg-type]
+                dim=model.dim,
+                size_bytes=model.size_bytes,
+                memory_bytes=model.memory_bytes,
+                memory_text_bytes=model.memory_text_bytes,
+                license=model.license,
+                downloaded=clip_is_downloaded(settings.data_dir, name),
+                download_status=state.status,  # type: ignore[arg-type]
+                download_progress=state.progress,
+                download_error=state.error if state.status == "failed" else None,
+            )
+        )
+    return statuses
+
+
+def _embedding_settings_response(
+    db: Session,
+    settings: Settings,
+    downloader: ClipModelDownloader,
+    index_backend: str,
+) -> EmbeddingSettingsResponse:
+    config = embedding_settings.load(db)
+    active_key = embedding_settings.active_model_key(config, settings)
+    languages = None
+    if config.engine == "onnx" and config.onnx_model in CLIP_MODELS:
+        languages = list(CLIP_MODELS[config.onnx_model].languages)
+    pending = queued = failed = 0
+    if active_key is not None:
+        pending = embeddings_domain.pending_count(db, active_key)
+        queued = embeddings_domain.status_count(
+            db,
+            active_key,
+            (embeddings_domain.STATUS_QUEUED, embeddings_domain.STATUS_RUNNING),
+        )
+        failed = embeddings_domain.status_count(db, active_key, (embeddings_domain.STATUS_FAILED,))
+    return EmbeddingSettingsResponse(
+        **{name: getattr(config, name) for name in embedding_settings.FIELDS},
+        active_model_key=active_key,
+        active_languages=languages,  # type: ignore[arg-type]
+        usable=embedding_settings.usable(config, settings),
+        index_backend=index_backend,  # type: ignore[arg-type]
+        onnx_models=_embedding_model_statuses(settings, downloader),
+        stored=[
+            EmbeddingStoredCount(model_key=key, count=count, dim=dim, active=key == active_key)
+            for key, count, dim in embeddings_domain.stored_counts(db)
+        ],
+        pending_count=pending,
+        queued_count=queued,
+        failed_count=failed,
+    )
+
+
+@router.get(
+    "/embeddings",
+    response_model=EmbeddingSettingsResponse,
+    operation_id="get_embedding_settings",
+)
+def get_embedding_settings(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    _user: CurrentUser = Depends(require_user),
+) -> EmbeddingSettingsResponse:
+    return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+_NULLABLE_EMBEDDING_FIELDS = ("remote_connection_id", "remote_model")
+
+
+@router.patch(
+    "/embeddings",
+    response_model=EmbeddingSettingsResponse,
+    operation_id="update_embedding_settings",
+)
+def update_embedding_settings(
+    body: EmbeddingSettingsUpdateRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    embedder: Embedder = Depends(get_embedder),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingSettingsResponse:
+    updates = {name: getattr(body, name) for name in body.model_fields_set}
+    # `remote_connection_id` と `remote_model` のほかは、null を「変更しない」ではなく不正な値と
+    # して扱う(検証で 422)。先に全部を検証してから保存する(一部だけ保存される事態を避ける)。
+    try:
+        for name, value in updates.items():
+            if value is None and name not in _NULLABLE_EMBEDDING_FIELDS:
+                raise embedding_settings.EmbeddingSettingsValidationError(
+                    t("settings.embedding.invalidNull", name=name)
+                )
+        embedding_settings.save(db, updates)
+    except embedding_settings.EmbeddingSettingsValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if embedder.pgvector:
+        # 使うモデルの索引(ADR-0033 4章)。
+        embedder.ensure_active_index()
+    embedder.notify()
+    return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+def _known_embedding_model(name: str) -> str:
+    if name not in CLIP_MODELS:
+        raise HTTPException(status_code=404, detail=t("settings.embedding.unknownOnnxModel"))
+    return name
+
+
+@router.post(
+    "/embeddings/onnx/download",
+    response_model=EmbeddingSettingsResponse,
+    status_code=202,
+    operation_id="download_embedding_model",
+)
+async def download_embedding_model(
+    body: OnnxDownloadRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingSettingsResponse:
+    """モデルを Hugging Face からバックグラウンドで取得する。進み具合は GET の `onnx_models`
+    で見る。既にダウンロード中なら何もしない。"""
+    name = _known_embedding_model(body.model)
+    downloader.start(name)
+    return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+@router.delete(
+    "/embeddings/onnx/{model}",
+    response_model=EmbeddingSettingsResponse,
+    operation_id="delete_embedding_model",
+)
+def delete_embedding_model(
+    model: str,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingSettingsResponse:
+    """モデルのファイルを消す(保存済みのベクトルは消さない)。"""
+    name = _known_embedding_model(model)
+    if downloader.is_downloading(name):
+        raise HTTPException(status_code=409, detail=t("settings.embedding.onnxDownloading"))
+    downloader.delete(name)
+    return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+@router.post(
+    "/embeddings/backfill",
+    response_model=EmbeddingBackfillResponse,
+    operation_id="backfill_embeddings",
+)
+def backfill_embeddings(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    embedder: Embedder = Depends(get_embedder),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingBackfillResponse:
+    """使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)をまとめて
+    待ち行列に入れる。埋め込みが無効、またはモデルが使えなければ 409。"""
+    config = embedding_settings.load(db)
+    if not embedding_settings.usable(config, settings):
+        raise HTTPException(status_code=409, detail=t("embeddings.notUsable"))
+    model_key = embedding_settings.active_model_key(config, settings)
+    assert model_key is not None
+    count = embeddings_domain.backfill(db, model_key)
+    db.commit()
+    embedder.notify()
+    return EmbeddingBackfillResponse(queued=count)
+
+
+@router.delete(
+    "/embeddings/vectors/{model_key:path}",
+    response_model=EmbeddingSettingsResponse,
+    operation_id="delete_embedding_vectors",
+)
+def delete_embedding_vectors(
+    model_key: str,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    embedder: Embedder = Depends(get_embedder),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingSettingsResponse:
+    """そのモデルのベクトルと計算の状態をすべて消す(使っているモデルも消せる。画像の取り込み時や
+    一括実行で計算し直す)。無ければ 404。"""
+    count = embeddings_domain.delete_vectors(db, model_key)
+    if count == 0:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=t("settings.embedding.vectorsNotFound"))
+    db.commit()
+    embedder.bump(model_key)
+    return _embedding_settings_response(db, settings, downloader, index_backend)

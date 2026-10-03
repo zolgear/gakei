@@ -31,7 +31,10 @@ def make_engine(url: str | Path) -> Engine:
         # 届かないホストで起動が長く止まらないよう、接続の待ち時間に上限を付ける
         # (URL に `?connect_timeout=` があればそちらを使う)。
         connect_args = {} if "connect_timeout" in parsed.query else {"connect_timeout": 10}
-        return create_engine(url, pool_pre_ping=True, connect_args=connect_args)
+        pg_engine = create_engine(url, pool_pre_ping=True, connect_args=connect_args)
+        if parsed.get_backend_name() == "postgresql":
+            event.listen(pg_engine, "connect", _register_pgvector)
+        return pg_engine
 
     if parsed.database and parsed.database != ":memory:":
         Path(parsed.database).parent.mkdir(parents=True, exist_ok=True)
@@ -45,6 +48,24 @@ def make_engine(url: str | Path) -> Engine:
         cursor.close()
 
     return engine
+
+
+def _register_pgvector(dbapi_connection, _connection_record) -> None:  # noqa: ANN001
+    """ADR-0033 4章: 拡張 `vector` がある DB への接続でだけ、pgvector の型を psycopg に登録する
+    (拡張が無ければ何もしない)。型を調べる問い合わせのトランザクションは閉じておく。"""
+    try:
+        import psycopg
+        from pgvector.psycopg import register_vector
+    except ImportError:
+        return
+    if not isinstance(dbapi_connection, psycopg.Connection):
+        return
+    try:
+        register_vector(dbapi_connection)
+    except psycopg.Error:
+        pass
+    finally:
+        dbapi_connection.rollback()
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

@@ -193,11 +193,26 @@
       "inUse": "この接続先は{features}で使っているため削除できません",
       "featureSeparator": "、",
       "features": {
-        "annotation": "自動タイトル・タグ"
+        "annotation": "自動タイトル・タグ",
+        "embedding": "埋め込み"
       }
     },
     "share": {
       "invalidEnabled": "enabled は true か false である必要があります"
+    },
+    "embedding": {
+      "invalidBool": "{name} は true か false である必要があります",
+      "invalidNull": "{name} は null にできません",
+      "invalidEngine": "エンジンは onnx か remote である必要があります",
+      "invalidOnnxModel": "埋め込みのモデルは {models} のいずれかです",
+      "unknownOnnxModel": "未知の埋め込みのモデルです",
+      "onnxDownloading": "ダウンロード中のモデルは削除できません",
+      "unknownConnection": "指定した接続先がありません",
+      "builtinConnection": "OpenAI の設定は埋め込みの接続先に使えません。推論サーバーの接続先を追加して選んでください",
+      "invalidModel": "モデル名は1〜{max}文字で指定してください",
+      "invalidApiFormat": "形式は infinity である必要があります",
+      "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",
+      "vectorsNotFound": "このモデルのベクトルはありません"
     }
   },
   "runValidation": {
@@ -332,10 +347,6 @@
     "emptyTitle": "LLM がタイトルを返しませんでした",
     "onnxModelMissing": "ONNX タガーのモデルが見つかりません。管理者設定からダウンロードしてください",
     "onnxInsufficientMemory": "空きメモリが足りないため、ONNX タガーのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)。管理者設定で小さいモデルを選ぶか、メモリを増やしてください",
-    "download": {
-      "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
-      "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
-    },
     "connectionMissing": "推定に使う接続先が見つかりません。管理者設定の「自動タイトル・タグ」で使い方の接続先を選び直してください"
   },
   "uploads": {
@@ -414,5 +425,25 @@
     "disabled": "共有リンクは管理者設定で無効になっています",
     "notFound": "共有リンクが見つかりません",
     "publicNotFound": "このリンクは無効です"
+  },
+  "modelStore": {
+    "download": {
+      "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
+      "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
+    }
+  },
+  "embeddings": {
+    "notUsable": "埋め込みを使えません。管理者設定の「埋め込み」で有効にし、モデルを用意してください(ローカルのモデルはダウンロードが必要です)",
+    "notConfigured": "埋め込みのモデルが設定されていません",
+    "connectionMissing": "埋め込みに使う接続先が見つかりません。管理者設定の「埋め込み」で接続先を選び直してください",
+    "modelMissing": "埋め込みのモデル {model} が見つかりません。管理者設定からダウンロードしてください",
+    "insufficientMemory": "空きメモリが足りないため、埋め込みのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)",
+    "remoteUnavailable": "推論サーバーに接続できませんでした({error})",
+    "remoteHttpError": "推論サーバーがエラーを返しました(HTTP {status}): {body}",
+    "remoteInvalidResponse": "推論サーバーの応答を埋め込みとして読めませんでした",
+    "assetDeleted": "削除された画像の埋め込みは計算しません",
+    "maskNotSupported": "マスクの埋め込みは計算しません",
+    "imageUnreadable": "画像を読み込めませんでした",
+    "modelUnreadable": "埋め込みのモデル {model} のファイルを読み込めませんでした。管理者設定でモデルを削除し、ダウンロードし直してください"
   }
 }
