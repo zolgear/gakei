@@ -107,9 +107,20 @@
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
+/* 選んだタグのチップと入力欄を横に並べ、入り切らなければ折り返す。 */
+.tagFilterBox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 480px;
+}
+
 .tagChipRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 4px;
   min-height: 30px;
 }
 
@@ -279,6 +290,15 @@
 
   .tagInput {
     width: 100%;
+  }
+
+  /* 狭い幅ではタグの欄を2列ぶん使う(チップが増えても入力欄を潰さない)。 */
+  .filters > [role='group'] {
+    grid-column: 1 / -1;
+  }
+
+  .tagFilterBox {
+    max-width: none;
   }
 
   .networkControls {

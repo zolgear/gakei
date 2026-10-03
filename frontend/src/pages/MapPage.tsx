@@ -1,13 +1,14 @@
 /**
- * `/map` マップ(ADR-0033 8章)。埋め込みの近さで画像を並べる。タブは2つ。
+ * `/map` マップ(ADR-0033 8章)。埋め込みの近さで画像を並べる。タブは2つ(2026-10-04 から
+ * ネットワークが先頭で既定)。
  *
- * - 地図: umap-js の 2D 配置(`UmapView`)。
  * - ネットワーク: 類似度がしきい値以上の組を辺にした力学モデル(`NetworkView`)。系列の辺も重ねられる。
+ * - 地図: umap-js の 2D 配置(`UmapView`)。
  *
- * 元データは `GET /api/embeddings/graph`。グループ・タグ・上限・近傍の数で絞り込める。タブ、
+ * 元データは `GET /api/embeddings/graph`。グループ・タグ(複数なら AND)・上限・近傍の数で絞り込める。タブ、
  * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
  * ときに保つ。履歴を増やさないよう replace で書く)。上限で切ったときは、絞り込みを促す。
- * 埋め込みが使えないときはアイコンレールの入口を出さない。直接開いたときは使えない旨だけを出す。
+ * 埋め込みが使えないときは App バーの入口を出さない。直接開いたときは使えない旨だけを出す。
  */
 import { useId, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -15,7 +16,6 @@ import { useSearchParams } from 'react-router'
 import { embeddingGraph } from '../api/client'
 import { TagAutocomplete } from '../features/annotations/TagAutocomplete'
 import { TagChip } from '../features/annotations/TagChip'
-import { normalizeTagName } from '../features/annotations/tagInput'
 import { embeddingErrorKind, retryEmbeddingQuery } from '../features/embeddings/embeddingErrors'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { lineagePairs, similarityEdges } from '../features/map/edges'
@@ -28,6 +28,7 @@ import {
   activeFilterCount,
   buildMapSearchParams,
   clampThreshold,
+  normalizeTagList,
   parseMapUrlState,
   type MapUrlState,
   type MapView,
@@ -88,13 +89,13 @@ function MapBody() {
   }
 
   const query = useQuery({
-    queryKey: ['embeddings', 'graph', state.k, state.limit, state.groupId, state.tag],
+    queryKey: ['embeddings', 'graph', state.k, state.limit, state.groupId, state.tags],
     queryFn: () =>
       embeddingGraph({
         k: state.k,
         limit: state.limit,
         group_id: state.groupId ?? undefined,
-        tag: state.tag ?? undefined,
+        tag: state.tags.length > 0 ? state.tags : undefined,
         include_lineage: true,
       }),
     retry: retryEmbeddingQuery,
@@ -126,7 +127,7 @@ function MapBody() {
       <header className={styles.toolbar}>
         <h1 className={styles.title}>{m.title}</h1>
         <div className={styles.tabs} role="tablist" aria-label={m.viewLabel}>
-          {(['umap', 'network'] as MapView[]).map((view) => (
+          {(['network', 'umap'] as MapView[]).map((view) => (
             <button
               key={view}
               type="button"
@@ -153,7 +154,7 @@ function MapBody() {
 
       <div id={filtersId} className={styles.filters} data-open={filtersOpen}>
         <GroupFilter value={state.groupId} onChange={(groupId) => update({ groupId })} />
-        <TagFilter value={state.tag} onChange={(tag) => update({ tag })} />
+        <TagFilter value={state.tags} onChange={(tags) => update({ tags })} />
         <label className={styles.field}>
           <span className={styles.fieldLabel}>{m.limitLabel}</span>
           <select
@@ -280,27 +281,44 @@ function GroupFilter({ value, onChange }: { value: string | null; onChange: (gro
   )
 }
 
-function TagFilter({ value, onChange }: { value: string | null; onChange: (tag: string | null) => void }) {
+/** タグの絞り込み。複数を選べて、すべてが付いた画像だけを並べる(AND)。 */
+function TagFilter({ value, onChange }: { value: string[]; onChange: (tags: string[]) => void }) {
   const { t } = useI18n()
   const m = t.map
   const f = t.stock.tagFilter
+  const exclude = value.map((name) => ({ name }))
+  const placeholder = value.length > 0 ? m.tagAddMore : f.placeholder
   return (
-    <div className={styles.field} role="group" aria-label={m.tagLabel}>
+    <div className={styles.field} role="group" aria-label={m.tagLabel} title={m.tagHelp}>
       <span className={styles.fieldLabel}>{m.tagLabel}</span>
-      {value ? (
-        <div className={styles.tagChipRow}>
-          <TagChip name={value} source="user" onRemove={() => onChange(null)} removeLabel={fmt(f.clear, { name: value })} />
-        </div>
-      ) : (
+      <div className={styles.tagFilterBox}>
+        {value.length > 0 && (
+          <div className={styles.tagChipRow}>
+            {value.map((name) => (
+              <TagChip
+                key={name}
+                name={name}
+                source="user"
+                onRemove={() => onChange(value.filter((v) => v !== name))}
+                removeLabel={fmt(f.clear, { name })}
+              />
+            ))}
+          </div>
+        )}
         <div className={styles.tagInput}>
           <TagAutocomplete
-            placeholder={f.placeholder}
-            ariaLabel={f.placeholder}
+            placeholder={placeholder}
+            ariaLabel={placeholder}
             suggestionsLabel={f.suggestions}
-            onPick={(name) => onChange(normalizeTagName(name) || null)}
+            exclude={exclude}
+            onPick={(name) => {
+              const next = normalizeTagList([...value, name])
+              if (next.length === value.length) return false
+              onChange(next)
+            }}
           />
         </div>
-      )}
+      </div>
     </div>
   )
 }

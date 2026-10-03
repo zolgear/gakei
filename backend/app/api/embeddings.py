@@ -178,7 +178,10 @@ def graph_endpoint(
     k: int = Query(default=domain.GRAPH_DEFAULT_K, ge=1, le=domain.GRAPH_MAX_K),
     limit: int = Query(default=domain.GRAPH_DEFAULT_LIMIT, ge=1, le=domain.GRAPH_MAX_LIMIT),
     group_id: uuid.UUID | None = Query(default=None),
-    tag: str | None = Query(default=None),
+    tag: list[str] | None = Query(
+        default=None,
+        description="このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND)",
+    ),
     include_lineage: bool = Query(default=False, description="系列の主たる親の辺も返す"),
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -196,7 +199,7 @@ def graph_endpoint(
             k=k,
             limit=limit,
             group_id=group_id,
-            tag=tag,
+            tags=tag,
             include_lineage=include_lineage,
         )
     except _ERRORS as exc:

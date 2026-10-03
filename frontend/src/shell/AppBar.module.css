@@ -157,7 +157,7 @@
 
 @media (max-width: 767px) {
   .bar {
-    gap: 6px;
+    gap: 4px;
     padding-left: max(8px, env(safe-area-inset-left));
     padding-right: max(8px, env(safe-area-inset-right));
   }
@@ -174,9 +174,15 @@
     display: none;
   }
 
+  /* 「生成」「履歴」「マップ」の3つを 390px 幅に収める(高さは 48px のままなので、押せる範囲は足りる)。
+     それより狭いと、タブの列だけが横にスクロールする。 */
   .tab {
-    min-width: 44px;
-    padding: 0 10px;
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .right {
+    gap: 4px;
   }
 
   /* 「実行中 n」の文字は省く。パルスする点だけ残す(タイトル属性で意味を補う)。 */

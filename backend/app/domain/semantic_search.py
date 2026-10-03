@@ -182,20 +182,29 @@ def build_filter(
     viewer: CurrentUser,
     *,
     group_id: uuid.UUID | None = None,
-    tag: str | None = None,
+    tags: Sequence[str] | None = None,
     kind: str | None = None,
 ) -> AssetFilter:
     """グループが見えなければ EmbeddingsNotFoundError、タグ名が不正なら
-    EmbeddingsInvalidQueryError。"""
+    EmbeddingsInvalidQueryError。`tags` は複数ならすべてが付いている画像だけ(AND)。
+    空の要素は無視し、正規化して同じになるものは1つにまとめる。"""
     if group_id is not None and get_visible_group(db, viewer, group_id) is None:
         raise EmbeddingsNotFoundError(t("assetGroups.notFound"))
-    tag_value = tag.strip() if tag is not None and tag.strip() else None
-    if tag_value is not None:
+    normalized: list[str] = []
+    for raw in tags or ():
+        if not raw.strip():
+            continue
         try:
-            annotations_domain.normalize_tag_name(tag_value)
+            name = annotations_domain.normalize_tag_name(raw)
         except annotations_domain.TagNameError as e:
             raise EmbeddingsInvalidQueryError(str(e)) from e
-    return AssetFilter(viewer=viewer, group_id=group_id, tag=tag_value, kind=kind)
+        if name not in normalized:
+            normalized.append(name)
+    return AssetFilter(viewer=viewer, group_id=group_id, tags=tuple(normalized), kind=kind)
+
+
+def _single_tag(tag: str | None) -> list[str] | None:
+    return [tag] if tag is not None else None
 
 
 def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
@@ -248,7 +257,7 @@ def semantic_search(
     if len(text) > QUERY_MAX_CHARS:
         raise EmbeddingsInvalidQueryError(t("embeddings.queryTooLong", max=QUERY_MAX_CHARS))
     active = require_active(db, settings)
-    flt = build_filter(db, viewer, group_id=group_id, tag=tag, kind=kind)
+    flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     vector = embed_query(db, active, text, engines, cache)
     hits = index.top_k(db, active.model_key, vector, flt, limit)
     return SemanticSearchResponse(
@@ -294,7 +303,7 @@ def similar_assets(
     if asset is None:
         raise EmbeddingsNotFoundError(t("assets.notFound"))
     active = require_active(db, settings)
-    flt = build_filter(db, viewer, group_id=group_id, tag=tag, kind=kind)
+    flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     hits = neighbors(index, db, active.model_key, asset.id, flt, limit)
     if hits is None:
         raise _missing_vector_error(db, asset, active.model_key)
@@ -507,11 +516,12 @@ def build_graph(
     k: int = GRAPH_DEFAULT_K,
     limit: int = GRAPH_DEFAULT_LIMIT,
     group_id: uuid.UUID | None = None,
-    tag: str | None = None,
+    tags: Sequence[str] | None = None,
     include_lineage: bool = False,
 ) -> EmbeddingGraphResponse:
+    """`tags` は複数ならすべてが付いている画像だけ(AND)。"""
     active = require_active(db, settings)
-    flt = build_filter(db, viewer, group_id=group_id, tag=tag)
+    flt = build_filter(db, viewer, group_id=group_id, tags=tags)
     all_ids = candidate_ids(db, active.model_key, flt)
     total = len(all_ids)
     ordered, matrix = index.subset(db, active.model_key, all_ids[:limit])

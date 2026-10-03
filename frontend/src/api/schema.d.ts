@@ -6177,7 +6177,8 @@ export interface operations {
                 k?: number;
                 limit?: number;
                 group_id?: string | null;
-                tag?: string | null;
+                /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
+                tag?: string[] | null;
                 /** @description 系列の主たる親の辺も返す */
                 include_lineage?: boolean;
             };

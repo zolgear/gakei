@@ -24,13 +24,6 @@
   color: var(--color-text-muted);
 }
 
-.separator {
-  width: 28px;
-  height: 1px;
-  margin: 4px 0;
-  background: var(--color-border);
-}
-
 .item[data-active='true'] {
   background: var(--color-header-band);
   border-left-color: var(--color-accent);
@@ -52,13 +45,6 @@
   border-right: 2px solid transparent;
 }
 
-[data-side='right'] .separator {
-  width: 28px;
-  height: 1px;
-  margin: 4px 0;
-  background: var(--color-border);
-}
-
-.item[data-active='true'] {
+[data-side='right'] .item[data-active='true'] {
   border-right-color: var(--color-accent);
 }

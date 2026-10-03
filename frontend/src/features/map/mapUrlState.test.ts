@@ -15,9 +15,9 @@ describe('mapUrlState', () => {
 
   it('往復で同じ状態に戻る', () => {
     const state = {
-      view: 'network' as const,
+      view: 'umap' as const,
       groupId: 'g1',
-      tag: '猫',
+      tags: ['猫', 'outdoor'],
       limit: 2000,
       k: 20,
       threshold: 0.85,
@@ -29,14 +29,34 @@ describe('mapUrlState', () => {
 
   it('選べない値は既定に戻す', () => {
     const s = parseMapUrlState(new URLSearchParams('view=x&limit=123&k=abc'))
-    expect(s.view).toBe('umap')
+    expect(s.view).toBe('network')
     expect(s.limit).toBe(DEFAULT_MAP_URL_STATE.limit)
     expect(s.k).toBe(DEFAULT_MAP_URL_STATE.k)
   })
 
   it('既定から変えた絞り込みを数える', () => {
     expect(activeFilterCount(DEFAULT_MAP_URL_STATE)).toBe(0)
-    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, tag: 'a', k: 5, view: 'network' })).toBe(2)
+    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, tags: ['a'], k: 5, view: 'umap' })).toBe(2)
+    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, tags: ['a', 'b', 'c'] })).toBe(3)
+  })
+
+  it('ネットワークが既定。地図は view=map', () => {
+    expect(DEFAULT_MAP_URL_STATE.view).toBe('network')
+    expect(buildMapSearchParams({ ...DEFAULT_MAP_URL_STATE, view: 'umap' }).toString()).toBe('view=map')
+    expect(buildMapSearchParams({ ...DEFAULT_MAP_URL_STATE, view: 'network' }).toString()).toBe('')
+    expect(parseMapUrlState(new URLSearchParams('view=map')).view).toBe('umap')
+    // 以前の URL も読める。
+    expect(parseMapUrlState(new URLSearchParams('view=network')).view).toBe('network')
+    expect(parseMapUrlState(new URLSearchParams('view=umap')).view).toBe('umap')
+  })
+
+  it('タグは繰り返しの tag=。正規化して重複と空を除き、順を保つ', () => {
+    const s = parseMapUrlState(new URLSearchParams('tag=%20Blue%E3%80%80%20Sky%20&tag=cat&tag=&tag=CAT&tag=blue%20sky'))
+    expect(s.tags).toEqual(['blue sky', 'cat'])
+    expect(buildMapSearchParams({ ...DEFAULT_MAP_URL_STATE, tags: ['b', 'A', 'a'] }).toString()).toBe('tag=b&tag=a')
+    expect(parseMapUrlState(new URLSearchParams(`tag=${'x'.repeat(101)}`)).tags).toEqual([])
+    // 1つだけの tag= も従来どおり読める。
+    expect(parseMapUrlState(new URLSearchParams('tag=猫')).tags).toEqual(['猫'])
   })
 
   it('しきい値・系列・選択を URL に置き、既定は省く', () => {

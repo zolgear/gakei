@@ -299,9 +299,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
-function toQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+function toQuery(
+  params: Record<string, string | number | boolean | readonly string[] | undefined | null>,
+): string {
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
+    // 配列は同じキーを繰り返す(`tag=a&tag=b`)。空の要素は送らない。
+    if (Array.isArray(value)) {
+      for (const item of value as readonly string[]) if (item !== '') qs.append(key, item)
+      continue
+    }
     // 真偽値のフラグ(`ungrouped` など)は true のときだけ送る(false は既定と同じなので省く)。
     if (value === undefined || value === null || value === '' || value === false) continue
     qs.set(key, String(value))

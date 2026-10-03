@@ -53,6 +53,7 @@
       "workspaceNav": "ワークスペース",
       "historyTab": "履歴",
       "studioTab": "生成",
+      "mapTab": "マップ",
       "queueStatus": "実行中 {running}、待機 {queued}",
       "running": "実行中 {count}",
       "queued": "待機 {count}",
@@ -73,8 +74,7 @@
       "prompts": "プロンプトセット",
       "graph": "系列グラフ",
       "history": "履歴",
-      "search": "検索",
-      "map": "マップ"
+      "search": "検索"
     },
     "sidebar": {
       "resourcePanel": "リソースパネル",
@@ -1837,6 +1837,8 @@
     "groupAll": "すべて",
     "groupUnknown": "(見つからないグループ)",
     "tagLabel": "タグ",
+    "tagAddMore": "タグを足す",
+    "tagHelp": "選んだタグがすべて付いた画像だけを並べます。",
     "limitLabel": "上限",
     "limitOption": "{count} 枚",
     "kLabel": "近傍の数",

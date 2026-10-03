@@ -348,6 +348,39 @@ def test_graph_shape_and_lineage(client: TestClient) -> None:
     assert client.get("/api/embeddings/graph?limit=5001").status_code == 422
 
 
+def _tag(client: TestClient, asset_id: str, name: str) -> None:
+    response = client.post(f"/api/assets/{asset_id}/tags", json={"name": name})
+    assert response.status_code == 200, response.text
+
+
+def test_graph_multiple_tags_are_and(client: TestClient) -> None:
+    """`tag` を繰り返すと、すべてのタグが付いた画像だけ(AND)。1つなら従来どおり。"""
+    _enable(client)
+    red, red2, other = _three_images(client)
+    _tag(client, red, "cat")
+    _tag(client, red, "Outdoor")
+    _tag(client, red2, "cat")
+    _tag(client, other, "outdoor")
+
+    def node_ids(params: Any) -> set[str]:
+        response = client.get("/api/embeddings/graph", params=params)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["total"] == len(body["nodes"])
+        return {n["id"] for n in body["nodes"]}
+
+    assert node_ids({"tag": "cat"}) == {red, red2}
+    assert node_ids({"tag": "outdoor"}) == {red, other}
+    assert node_ids([("tag", "cat"), ("tag", "outdoor")]) == {red}
+    # 正規化(大文字・前後の空白)と重複、空の値は無視する。
+    assert node_ids([("tag", " CAT "), ("tag", "cat"), ("tag", "Outdoor"), ("tag", "")]) == {red}
+    assert node_ids([("tag", "cat"), ("tag", "nothing")]) == set()
+    # 消したタグは条件に当たらない。
+    response = client.delete(f"/api/assets/{red}/tags/outdoor")
+    assert response.status_code == 200, response.text
+    assert node_ids([("tag", "cat"), ("tag", "outdoor")]) == set()
+
+
 def test_cache_follows_new_vectors(client: TestClient) -> None:
     """worker が書いたベクトルは、次の検索から見える(numpy の行列は版で読み直す)。"""
     _enable(client)
@@ -399,6 +432,24 @@ def test_oidc_other_users_assets_never_appear(client_oidc: TestClient) -> None:
     graph = client_oidc.get("/api/embeddings/graph", params={"include_lineage": True}).json()
     assert {n["id"] for n in graph["nodes"]} == {bob_red, bob_other}
     assert graph["total"] == 2
+
+    # タグの AND で絞っても、他人の画像は出ない(同じタグが付いていても)。
+    _tag(client_oidc, bob_red, "warm")
+    _tag(client_oidc, bob_red, "square")
+    client_oidc.cookies.clear()
+    login_as(client_oidc, "alice@example.com")
+    _tag(client_oidc, alice_red, "warm")
+    _tag(client_oidc, alice_red, "square")
+    graph = client_oidc.get(
+        "/api/embeddings/graph", params=[("tag", "warm"), ("tag", "square")]
+    ).json()
+    assert [n["id"] for n in graph["nodes"]] == [alice_red]
+    client_oidc.cookies.clear()
+    login_as(client_oidc, "bob@example.com")
+    graph = client_oidc.get(
+        "/api/embeddings/graph", params=[("tag", "warm"), ("tag", "square")]
+    ).json()
+    assert [n["id"] for n in graph["nodes"]] == [bob_red]
 
 
 # -- MCP ----------------------------------------------------------------------------

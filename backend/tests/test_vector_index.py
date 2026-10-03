@@ -210,6 +210,12 @@ def test_group_and_tag_filters(db_session_factory: sessionmaker, backend: str) -
         db.flush()
         db.add(AssetTag(asset_id=ids[5], tag_id=tag.id, source="user"))
         db.add(AssetTag(asset_id=ids[6], tag_id=tag.id, source="auto", removed=True))
+        dog = Tag(name="dog")
+        db.add(dog)
+        db.flush()
+        db.add(AssetTag(asset_id=ids[4], tag_id=tag.id, source="user"))
+        db.add(AssetTag(asset_id=ids[4], tag_id=dog.id, source="user"))
+        db.add(AssetTag(asset_id=ids[5], tag_id=dog.id, source="user", removed=True))
         db.commit()
         group_id = group.id
 
@@ -219,8 +225,15 @@ def test_group_and_tag_filters(db_session_factory: sessionmaker, backend: str) -
             db, MODEL, query, AssetFilter(viewer=LOCAL_ADMIN, group_id=group_id), 10
         )
         assert [h.asset_id for h in hits] == world.expected(query, ids[:3], 10)
-        hits = world.index.top_k(db, MODEL, query, AssetFilter(viewer=LOCAL_ADMIN, tag="Cat"), 10)
-        assert [h.asset_id for h in hits] == [ids[5]]
+        hits = world.index.top_k(
+            db, MODEL, query, AssetFilter(viewer=LOCAL_ADMIN, tags=("Cat",)), 10
+        )
+        assert [h.asset_id for h in hits] == world.expected(query, [ids[4], ids[5]], 10)
+        # 複数のタグは AND(ids[5] には dog が無いので当たらない)。
+        hits = world.index.top_k(
+            db, MODEL, query, AssetFilter(viewer=LOCAL_ADMIN, tags=("cat", "dog")), 10
+        )
+        assert [h.asset_id for h in hits] == [ids[4]]
 
 
 def test_neighbors_and_subset(db_session_factory: sessionmaker, backend: str) -> None:

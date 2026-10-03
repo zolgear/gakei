@@ -53,6 +53,7 @@
       "workspaceNav": "Workspace",
       "historyTab": "History",
       "studioTab": "Studio",
+      "mapTab": "Map",
       "queueStatus": "Running {running}, queued {queued}",
       "running": "Running {count}",
       "queued": "Queued {count}",
@@ -73,8 +74,7 @@
       "prompts": "Prompt sets",
       "graph": "Lineage graph",
       "history": "History",
-      "search": "Search",
-      "map": "Map"
+      "search": "Search"
     },
     "sidebar": {
       "resourcePanel": "Resource panel",
@@ -1836,7 +1836,9 @@
     "groupLabel": "Group",
     "groupAll": "All",
     "groupUnknown": "(Group not found)",
-    "tagLabel": "Tag",
+    "tagLabel": "Tags",
+    "tagAddMore": "Add another tag",
+    "tagHelp": "Shows only images that have all of the selected tags.",
     "limitLabel": "Limit",
     "limitOption": "{count} images",
     "kLabel": "Neighbors",
