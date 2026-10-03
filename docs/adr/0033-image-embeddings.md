@@ -371,7 +371,7 @@ pgvector は、PostgreSQL を選ぶ規模の利用者に索引の利点を出す
    - Compose と CI のイメージ、`migrate_to_postgres`
 3. [ ] 検索の API(文章、似た画像、重複、マップの元データ)と MCP
 4. [ ] 画面: 設定、検索、ビューア、重複の候補
-5. [ ] 画面: マップ(地図とネットワーク)
+5. [x] 画面: マップ(地図とネットワーク)
 6. [ ] ドキュメント
    - `docs/embeddings.md`(運用、モデルの選び方、pgvector)を新しく書く
    - `docs/postgresql.md`、`docs/configuration.md`、README、CLAUDE.md を更新する
