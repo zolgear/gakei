@@ -4,8 +4,10 @@
     "legacyProviderIgnored": "Ignoring PROVIDER=openai (this setting is no longer used).",
     "legacyProviderAborted": "PROVIDER={value} is set, but this setting has been removed. Use FAKE_PROVIDER=1 to try it with dummy images, or remove PROVIDER to connect to the real API.",
     "authConfigMissing": "AUTH_MODE=oidc but required environment variable(s) are missing: {missing}",
+    "authConfigMissingFromSettings": "The authentication mode is set to oidc in the settings, but required values are missing: {missing}. To start with authentication temporarily disabled, add AUTH_MODE=none to .env and restart (the saved settings are kept).",
     "authUrlInvalid": "{name} is not a valid URL (it must be http or https and include a host): {value}",
     "authUrlInsecure": "{name} points to http (not https) on a non-loopback address ({value}). Authentication traffic would be sent in plain text.",
+    "authEmergencyDisable": "To start with authentication temporarily disabled, add AUTH_MODE=none to .env and restart (the saved settings are kept).",
     "databaseUnavailable": "Cannot connect to the database ({url}). Check DATABASE_URL and that PostgreSQL is running and accepting connections. Details: {error}",
     "storageConfigMissing": "Required environment variables for STORAGE_BACKEND are not set: {missing}",
     "storageAzureBothConnections": "Both AZURE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_ACCOUNT_URL are set. Set only one of them.",
@@ -20,8 +22,20 @@
     "required": "Login required.",
     "adminRequired": "This action requires administrator privileges.",
     "disabled": "Login is not available in personal mode (AUTH_MODE=none).",
-    "idpUnavailable": "Cannot reach the identity provider. Check OIDC_ISSUER and the IdP's status.",
-    "callbackFailed": "Login could not be completed. Please try again."
+    "idpUnavailable": "Cannot reach the identity provider. Check the issuer in Admin settings > Authentication (or OIDC_ISSUER) and the IdP's status.",
+    "callbackFailed": "Login could not be completed. Please try again.",
+    "testLogin": {
+      "title": "Test sign-in",
+      "success": "Test sign-in succeeded. Close this window and return to the settings page.",
+      "errors": {
+        "no_connection": "No connection is registered. Register a connection on the settings page.",
+        "callback_failed": "Sign-in failed. Check the issuer, client ID, secret, and the redirect URI registered with the IdP.",
+        "email_missing": "No email address was received from the IdP. Include email in the scopes and set an email address on the IdP account.",
+        "email_unverified": "The email address at the IdP is not verified. Verify it at the IdP and try again.",
+        "email_not_admin": "The signed-in email address is not in the admin emails. Save the admin emails and try again.",
+        "config_changed": "The connection settings changed during the test. Please test again."
+      }
+    }
   },
   "provider": {
     "unknown": "Unknown provider: {name}"
@@ -213,6 +227,28 @@
       "invalidApiFormat": "The format must be infinity",
       "invalidThreshold": "The threshold must be a number between {min} and {max}",
       "vectorsNotFound": "There are no vectors for this model"
+    },
+    "auth": {
+      "invalid": {
+        "issuer": "The issuer must be an http or https URL with a host",
+        "public_base_url": "PUBLIC_BASE_URL must be an http or https URL with a host",
+        "client_id": "Enter a client ID",
+        "scopes": "Scopes must be space-separated and include openid",
+        "client_secret": "The client secret is too long",
+        "admin_emails": "The admin emails contain a value that is not an email address",
+        "allowed_email_domains": "The allowed domains contain a value that is not a domain (e.g. example.com)",
+        "session_hours": "The session length must be an integer from {min} to {max} hours"
+      },
+      "discoveryFailed": "Could not fetch the discovery document ({url}). Check the issuer URL and that the IdP is reachable. Details: {reason}",
+      "discoveryInvalid": "The discovery document ({url}) is not an OpenID Connect document. Check the issuer URL. Details: {reason}",
+      "conflict": {
+        "env_locked": "AUTH_MODE in .env takes precedence, so the authentication mode cannot be changed here. Change .env and restart.",
+        "no_connection": "No connection is registered, so oidc cannot be enabled. Register a connection and run a test sign-in first.",
+        "not_verified": "A test sign-in with the current connection has not succeeded, so oidc cannot be enabled. Run a test sign-in first.",
+        "admin_emails_empty": "oidc requires at least one admin email.",
+        "verified_email_not_admin": "The email address used for the test sign-in is not in the admin emails.",
+        "self_not_admin": "You cannot remove your own email address from the admin emails."
+      }
     }
   },
   "runValidation": {

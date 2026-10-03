@@ -9,9 +9,10 @@ from urllib.parse import urlparse
 
 from alembic import command
 from alembic.config import Config
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.annotation.wd_models import WdModelDownloader
@@ -20,6 +21,7 @@ from app.api import api_tokens as api_tokens_api
 from app.api import asset_groups as asset_groups_api
 from app.api import assets as assets_api
 from app.api import auth as auth_api
+from app.api import auth_settings as auth_settings_api
 from app.api import capabilities as capabilities_api
 from app.api import comfyui as comfyui_api
 from app.api import downloads as downloads_api
@@ -38,12 +40,13 @@ from app.api import uploads as uploads_api
 from app.api import users as users_api
 from app.api.request_text import reject_nul_in_request
 from app.auth.deps import require_user
-from app.auth.oidc import AuthlibOidcClient
+from app.auth.runtime import AuthRuntime
 from app.auth.secret import load_or_create_auth_secret
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
 from app.domain import annotation_settings, embedding_index
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
+from app.domain.auth_settings import EffectiveAuthConfig, resolve_auth_config
 from app.domain.semantic_search import QueryVectorCache
 from app.domain.storage import open_store
 from app.domain.vector_index import build_index as build_vector_index
@@ -60,9 +63,6 @@ from app.worker.runner import Runner
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
 _MIGRATIONS_DIR = _BACKEND_DIR / "migrations"
 _FRONTEND_DIST = _BACKEND_DIR.parent / "frontend" / "dist"
-
-# I-1(2026-09-27 追記): oidc モードで無効にした3つのパス(`spa_fallback` 側の扱いに使う)。
-_DISABLED_DOCS_PATHS = {"docs", "redoc", "openapi.json"}
 
 logger = logging.getLogger(__name__)
 
@@ -91,42 +91,54 @@ def check_legacy_provider_env(settings: Settings) -> None:
 
 
 class AuthConfigError(RuntimeError):
-    """ADR-0019: `AUTH_MODE=oidc` なのに必須の環境変数が欠けている場合。"""
+    """ADR-0019・0034: 実効の認証モードが oidc なのに、必須の値が欠けている・不正な場合。"""
 
 
-def check_auth_env(settings: Settings) -> None:
-    """oidc モードに必要な環境変数が揃っているか起動時に検査する。
+def check_auth_env(config: EffectiveAuthConfig | Settings) -> None:
+    """実効の設定(ADR-0034 4章。起動時は DB を読んだ後)が oidc なら、必要な値が揃っているか
+    検査する。`Settings` を渡したときは `.env` と既定だけから決めた設定で検査する。
 
-    `none`(既定)モードは何も要らないので常に通る。IdP が実際に落ちていても discovery は
-    初回ログイン時まで行わないため、ここでは値の有無だけを見る。
+    `none` モードは何も要らないので常に通る。IdP が実際に落ちていても discovery は
+    初回ログイン時まで行わないため、ここでは値の有無と形だけを見る。
     """
-    if settings.auth_mode != "oidc":
+    if isinstance(config, Settings):
+        config = resolve_auth_config(None, config)
+    if config.mode != "oidc":
         return
 
+    # モードが画面の設定(DB)から来ているときは、`.env` に AUTH_MODE=none を書いて再起動すれば
+    # 起動できることを案内する(ADR-0034 4章)。
+    from_settings = config.mode_source == "setting"
     missing = [
         name
-        for name, value in (
-            ("OIDC_ISSUER", settings.oidc_issuer),
-            ("OIDC_CLIENT_ID", settings.oidc_client_id),
-            ("PUBLIC_BASE_URL", settings.public_base_url),
+        for name, valued in (
+            ("OIDC_ISSUER", config.issuer),
+            ("OIDC_CLIENT_ID", config.client_id),
+            ("PUBLIC_BASE_URL", config.public_base_url),
         )
-        if not value
+        if not valued.value
     ]
     if missing:
-        raise AuthConfigError(console_t("app.authConfigMissing", missing=", ".join(missing)))
+        joined = ", ".join(missing)
+        if from_settings:
+            raise AuthConfigError(console_t("app.authConfigMissingFromSettings", missing=joined))
+        raise AuthConfigError(console_t("app.authConfigMissing", missing=joined))
 
     # L-4(2026-09-27 追記): 両方とも値はあるので、形式(スキームとホスト)を検査する。
     # スキームが http/https でない、あるいはホストが無いものは起動を中止する
     # (redirect_uri の組み立てや Cookie の Secure 判定が壊れた値のまま起動しないため)。
     # ループバック以外への http は、動作はするが平文になるため警告に留める。
     for name, value in (
-        ("PUBLIC_BASE_URL", settings.public_base_url),
-        ("OIDC_ISSUER", settings.oidc_issuer),
+        ("PUBLIC_BASE_URL", config.public_base_url.value),
+        ("OIDC_ISSUER", config.issuer.value),
     ):
         assert value is not None  # 上の missing チェックを通過済み
         parsed = urlparse(value)
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            raise AuthConfigError(console_t("app.authUrlInvalid", name=name, value=value))
+            message = console_t("app.authUrlInvalid", name=name, value=value)
+            if from_settings:
+                message += " " + console_t("app.authEmergencyDisable")
+            raise AuthConfigError(message)
         if parsed.scheme == "http" and not _is_loopback_url(value):
             logger.warning(console_t("app.authUrlInsecure", name=name, value=value))
 
@@ -205,7 +217,6 @@ def _build_lifespan(settings: Settings):
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         check_legacy_provider_env(settings)
-        check_auth_env(settings)
 
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         # ADR-0027 1章: PostgreSQL に接続できなければ、分かる文言で起動を中止する。
@@ -219,6 +230,15 @@ def _build_lifespan(settings: Settings):
 
         engine = make_engine(settings.sqlalchemy_url)
         session_factory = make_session_factory(engine)
+        # ADR-0034 4章: 実効の認証の設定を DB から読み、それに対して起動時の検査をする。
+        auth_runtime = AuthRuntime(settings)
+        try:
+            with session_factory() as session:
+                auth_runtime.reload(session)
+            check_auth_env(auth_runtime.config)
+        except BaseException:
+            engine.dispose()
+            raise
         # ADR-0024 8章: 推定の接続先1組の設定を、接続先の一覧と用途ごとの組に移す(冪等)。
         with session_factory() as session:
             annotation_settings.migrate_legacy(session, settings)
@@ -270,8 +290,7 @@ def _build_lifespan(settings: Settings):
         app.state.embedding_index_backend = embedding_index_backend
         app.state.vector_index = vector_index
         app.state.query_vector_cache = QueryVectorCache()
-        if settings.auth_mode == "oidc":
-            app.state.oidc_client = AuthlibOidcClient(settings)
+        app.state.auth_runtime = auth_runtime
 
         # ADR-0023: `/mcp` のセッションマネージャー。`run()` は1インスタンスにつき1回しか
         # 呼べないので、lifespan のたびに作り直す(テストで同じアプリを複数回起動するため)。
@@ -354,6 +373,56 @@ class PublicShareHeadersMiddleware:
         await self._app(scope, receive, send_with_headers)
 
 
+class OidcCookieSecureMiddleware:
+    """`gakei_oidc`(SessionMiddleware)の Set-Cookie に、必要なら `Secure` を足す純粋な ASGI
+    ミドルウェア(ADR-0034 4章)。
+
+    以前は `SessionMiddleware(https_only=PUBLIC_BASE_URL が https か)` で起動時に決めていた。
+    `PUBLIC_BASE_URL` は画面から変えられるようになったので、レスポンスのたびに実効の値で
+    決める。実効の `PUBLIC_BASE_URL` が https(TLS を終端するプロキシの後ろでもブラウザから
+    見て https)、またはこのリクエスト自体が https なら付ける。仮登録の値では決めない(テスト中に
+    通常のログインの Cookie が http で送られなくなるのを避けるため)。
+    """
+
+    def __init__(self, app) -> None:  # noqa: ANN001
+        self._app = app
+
+    async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+
+        async def send_with_secure(message) -> None:  # noqa: ANN001
+            if message["type"] == "http.response.start":
+                headers = message.get("headers", [])
+                if any(
+                    name.lower() == b"set-cookie" and value.startswith(b"gakei_oidc=")
+                    for name, value in headers
+                ) and _wants_secure(scope):
+                    message = {
+                        **message,
+                        "headers": [
+                            (name, value + b"; secure")
+                            if name.lower() == b"set-cookie"
+                            and value.startswith(b"gakei_oidc=")
+                            and b"secure" not in value.lower()
+                            else (name, value)
+                            for name, value in headers
+                        ],
+                    }
+            await send(message)
+
+        await self._app(scope, receive, send_with_secure)
+
+
+def _wants_secure(scope) -> bool:  # noqa: ANN001
+    if scope.get("scheme") == "https":
+        return True
+    app = scope.get("app")
+    runtime = getattr(getattr(app, "state", None), "auth_runtime", None)
+    return bool(runtime is not None and runtime.public_base_is_https)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """`settings` を渡すと、環境変数を経由せずその設定でアプリを組み立てる(ADR-0017)。
 
@@ -361,22 +430,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     `get_settings()` を解決して lifespan にも同じ値を渡す(ADR-0019)。
     """
     resolved_settings = settings or get_settings()
-    # I-1(2026-09-27 追記): oidc モードでは /docs・/redoc・/openapi.json も未ログインで
-    # 読めてしまうため無効にする(API の形はレスポンス自体からも推測できるが、わざわざ
-    # 一覧を公開しない)。none モードはこれまでどおり(`app.tools.export_openapi` は
-    # none モードのまま `app.openapi()` を直接呼ぶので、ここでは影響しない)。
-    docs_kwargs: dict[str, str | None] = (
-        {"docs_url": None, "redoc_url": None, "openapi_url": None}
-        if resolved_settings.auth_mode == "oidc"
-        else {}
-    )
     app = FastAPI(
         title="GAKEI ローカルMVP",
         lifespan=_build_lifespan(resolved_settings),
         # ADR-0027 2章の追記: リクエストの文字列に NUL があれば、全ルートの入口で 422 にする
         # (PostgreSQL は NUL を保存も検索もできないため。`app/api/request_text.py`)。
         dependencies=[Depends(reject_nul_in_request)],
-        **docs_kwargs,
+        # /docs・/redoc・/openapi.json は下で自前のルートとして置く(モードで出し分けるため)。
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
 
     app.add_middleware(LocaleMiddleware)
@@ -386,19 +449,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ミドルウェアの既定で対象外なので、進捗の配信が遅れることはない。
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
-    if resolved_settings.auth_mode == "oidc":
-        # state/nonce/PKCE の一時保存用(ADR-0019)。ログイン済みセッションの Cookie
-        # (`gakei_session`)とは別物で、oidc モードのときだけ追加する。
-        from starlette.middleware.sessions import SessionMiddleware
+    # state/nonce/PKCE の一時保存用(ADR-0019)。ログイン済みセッションの Cookie
+    # (`gakei_session`)とは別物。ADR-0034 4章: モードを再起動なしで切り替えるので常に入れる
+    # (手続き中でなければ中身が空なので Cookie は出ない)。`Secure` は
+    # `OidcCookieSecureMiddleware` がレスポンスのたびに決める(外側に置く)。
+    from starlette.middleware.sessions import SessionMiddleware
 
-        app.add_middleware(
-            SessionMiddleware,
-            secret_key=load_or_create_auth_secret(resolved_settings),
-            session_cookie="gakei_oidc",
-            max_age=600,
-            same_site="lax",
-            https_only=resolved_settings.public_base_is_https,
-        )
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=load_or_create_auth_secret(resolved_settings),
+        session_cookie="gakei_oidc",
+        max_age=600,
+        same_site="lax",
+        https_only=False,
+    )
+    app.add_middleware(OidcCookieSecureMiddleware)
+
+    # I-1(2026-09-27 追記)・ADR-0034 4章: oidc モードでは /docs・/redoc・/openapi.json も
+    # 未ログインで読めてしまうため 404 にする(API の形はレスポンス自体からも推測できるが、
+    # わざわざ一覧を公開しない)。モードは実行中に変わるので、ルートは常に置いてリクエストの
+    # たびに見る(`app.tools.export_openapi` は `app.openapi()` を直接呼ぶので影響しない)。
+    def _docs_available(request: Request) -> None:
+        runtime = getattr(request.app.state, "auth_runtime", None)
+        if runtime is None or runtime.is_oidc:
+            raise HTTPException(status_code=404)
+
+    @app.get("/openapi.json", include_in_schema=False)
+    def openapi_json(request: Request) -> JSONResponse:
+        _docs_available(request)
+        return JSONResponse(app.openapi())
+
+    @app.get("/docs", include_in_schema=False)
+    def swagger_ui(request: Request) -> HTMLResponse:
+        _docs_available(request)
+        return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{app.title} - Swagger UI")
+
+    @app.get("/redoc", include_in_schema=False)
+    def redoc(request: Request) -> HTMLResponse:
+        _docs_available(request)
+        return get_redoc_html(openapi_url="/openapi.json", title=f"{app.title} - ReDoc")
 
     # `/api/auth` だけは認可を付けない(未ログインでも /me・/login・/callback は呼べる必要が
     # あるため)。他のルーターは `require_user` を通す(ADR-0019。`none` モードは常に
@@ -424,6 +513,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tags_api.router, dependencies=auth_dep)
     app.include_router(pricing_api.router, dependencies=auth_dep)
     app.include_router(settings_api.router, dependencies=auth_dep)
+    # ADR-0034: 認証の設定(各ルートで `require_admin`)。
+    app.include_router(auth_settings_api.router, dependencies=auth_dep)
     app.include_router(llm_connections_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
@@ -469,11 +560,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str) -> FileResponse:
         if full_path == "api" or full_path.startswith("api/"):
-            raise HTTPException(status_code=404)
-        # I-1: oidc モードで `docs_url` 等を None にして無効化した3つのパスは、この
-        # catch-all が拾って index.html を返してしまわないよう明示的に 404 にする
-        # (none モードでは FastAPI 自身のルートが先に処理するのでここには来ない)。
-        if full_path in _DISABLED_DOCS_PATHS:
             raise HTTPException(status_code=404)
         candidate = (dist_root / full_path).resolve()
         # `..` を含むパスで dist の外のファイルを返さない。

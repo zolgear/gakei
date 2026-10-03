@@ -21,7 +21,7 @@ from app.auth.sessions import is_email_allowed
 from app.config import Settings
 from app.domain.models import AppUser, AuthSession
 from app.main import create_app
-from tests.conftest import login_as
+from tests.conftest import login_as, reload_auth_runtime
 
 # -- _sanitize_next(オープンリダイレクト対策)の単体テスト ---------------------------
 
@@ -76,7 +76,7 @@ def test_allowed_email_domain_set_normalizes_at_prefix_case_and_spaces() -> None
         _env_file=None,
         auth_allowed_email_domains="@example.com, Example.COM",
     )
-    assert settings.allowed_email_domain_set() == {"example.com"}
+    assert settings.allowed_email_domain_list() == ["example.com"]
 
 
 # -- M-1: email_verified ----------------------------------------------------------
@@ -150,7 +150,7 @@ def test_callback_translates_unexpected_exception_via_real_client(
     settings = _oidc_settings_for(tmp_path / "data")
     app = create_app(settings)
     with TestClient(app) as client:
-        real_client = app.state.oidc_client
+        real_client = app.state.auth_runtime.oidc_client
         monkeypatch.setattr(
             real_client._client,
             "load_server_metadata",
@@ -178,7 +178,7 @@ def test_callback_with_real_client_rejects_forged_state_and_denied_consent(
     settings = _oidc_settings_for(tmp_path / "data")
     app = create_app(settings)
     with TestClient(app) as client:
-        real_client = app.state.oidc_client
+        real_client = app.state.auth_runtime.oidc_client
         monkeypatch.setattr(
             real_client._client,
             "load_server_metadata",
@@ -274,9 +274,12 @@ def test_admin_role_changes_take_effect_without_relogin(client_oidc: TestClient)
 
     # 同じ Cookie のまま、設定(admin 一覧)だけを書き換える(再ログインしない)。
     client_oidc.app.state.settings.auth_admin_emails = "same-cookie@example.com"
+    reload_auth_runtime(client_oidc)
     assert client_oidc.get("/api/auth/me").json()["user"]["role"] == "admin"
 
     client_oidc.app.state.settings.auth_admin_emails = "admin@example.com"
+
+    reload_auth_runtime(client_oidc)
     assert client_oidc.get("/api/auth/me").json()["user"]["role"] == "user"
 
 
@@ -287,10 +290,14 @@ def test_session_becomes_unauthenticated_when_email_leaves_allowed_domains(
     assert client_oidc.get("/api/capabilities").status_code == 200
 
     client_oidc.app.state.settings.auth_allowed_email_domains = "other.example.jp"
+
+    reload_auth_runtime(client_oidc)
     response = client_oidc.get("/api/capabilities")
     assert response.status_code == 401
 
     client_oidc.app.state.settings.auth_allowed_email_domains = ""
+
+    reload_auth_runtime(client_oidc)
 
 
 # -- 複数端末のログイン(2026-09-28 改訂。I-3 の 1ユーザー1セッションを改めた) ---------

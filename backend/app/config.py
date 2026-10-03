@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -85,8 +84,10 @@ class Settings(BaseSettings):
     comfyui_url: str = Field(default="", alias="COMFYUI_URL")
     comfyui_timeout_seconds: float = Field(default=1800.0, alias="COMFYUI_TIMEOUT_SECONDS")
 
-    # ADR-0019: 個人モード(none、既定)か OIDC(Keycloak・Entra ID 等)か。
-    auth_mode: Literal["none", "oidc"] = Field(default="none", alias="AUTH_MODE")
+    # ADR-0019: 個人モード(none)か OIDC(Keycloak・Entra ID 等)か。ADR-0034 1章: 明示した
+    # ときだけ DB(画面の設定)より優先し、画面のモード切り替えをロックする(緊急の無効化にも
+    # 使う)。未指定(None)なら DB → 既定 none。実効のモードは `app.auth.runtime` から読む。
+    auth_mode: Literal["none", "oidc"] | None = Field(default=None, alias="AUTH_MODE")
 
     # OIDC の発行者(例 https://keycloak.example.com/realms/gakei)。discovery は
     # `{issuer}/.well-known/openid-configuration` から行う(初回ログイン時、Authlib がキャッシュ)。
@@ -123,23 +124,16 @@ class Settings(BaseSettings):
     # で動かす場合は未設定のままでよい(`app.version.get_commit` が None を返す)。
     gakei_commit: str | None = Field(default=None, alias="GAKEI_COMMIT")
 
-    def admin_email_set(self) -> set[str]:
-        """`AUTH_ADMIN_EMAILS` を小文字化・trim して集合にする。"""
-        return {part.strip().lower() for part in self.auth_admin_emails.split(",") if part.strip()}
+    # ADR-0034: 以下の `.env` の認証の値は、DB(画面の設定)に値が無い項目の初期値として
+    # `app.domain.auth_settings` が読む。リクエストの処理からは直接読まない。
 
-    def allowed_email_domain_set(self) -> set[str]:
-        """`AUTH_ALLOWED_EMAIL_DOMAINS` を小文字化・trim して集合にする(先頭の `@` は取る)。"""
-        return {
-            part.strip().lower().lstrip("@")
-            for part in self.auth_allowed_email_domains.split(",")
-            if part.strip()
-        }
+    def admin_email_list(self) -> list[str]:
+        """`AUTH_ADMIN_EMAILS` を小文字化・trim した一覧(重複は除き、順序は保つ)。"""
+        return _split_csv(self.auth_admin_emails)
 
-    @property
-    def public_base_is_https(self) -> bool:
-        if not self.public_base_url:
-            return False
-        return urlparse(self.public_base_url).scheme == "https"
+    def allowed_email_domain_list(self) -> list[str]:
+        """`AUTH_ALLOWED_EMAIL_DOMAINS` を小文字化・trim した一覧(先頭の `@` は取る)。"""
+        return _split_csv(self.auth_allowed_email_domains, strip_at=True)
 
     @property
     def db_path(self) -> Path:
@@ -171,6 +165,17 @@ class Settings(BaseSettings):
     @property
     def tmp_partial_dir(self) -> Path:
         return self.data_dir / "tmp" / "partial"
+
+
+def _split_csv(raw: str, *, strip_at: bool = False) -> list[str]:
+    result: list[str] = []
+    for part in raw.split(","):
+        value = part.strip().lower()
+        if strip_at:
+            value = value.lstrip("@")
+        if value and value not in result:
+            result.append(value)
+    return result
 
 
 def sqlite_url(db_path: Path) -> str:

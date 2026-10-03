@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
+from app.auth.runtime import AuthRuntime, get_auth_runtime
 from app.config import Settings
 from app.deps import get_session, get_settings, get_store
 from app.domain.avatars import (
@@ -35,8 +36,8 @@ from app.i18n import t
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-def _require_oidc_mode(settings: Settings) -> None:
-    if settings.auth_mode != "oidc":
+def _require_oidc_mode(runtime: AuthRuntime) -> None:
+    if not runtime.is_oidc:
         raise HTTPException(status_code=404, detail=t("auth.disabled"))
 
 
@@ -92,10 +93,11 @@ def upload_avatar(
     file: UploadFile = File(...),
     crop: str | None = Form(None),
     settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> AuthUser:
-    _require_oidc_mode(settings)
+    _require_oidc_mode(runtime)
     data = file.file.read()
     if len(data) > MAX_AVATAR_BYTES:
         raise HTTPException(status_code=413, detail=t("users.avatar.tooLarge"))
@@ -107,11 +109,12 @@ def upload_avatar(
 def set_avatar_from_asset(
     body: AvatarFromAssetRequest,
     settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     store: AssetStore = Depends(get_store),
     user: CurrentUser = Depends(require_user),
 ) -> AuthUser:
-    _require_oidc_mode(settings)
+    _require_oidc_mode(runtime)
     # 他人の Asset は存在しないものと同じ扱い(ADR-0025)。
     asset = get_visible_asset(db, user, body.asset_id)
     if asset is None or asset.deleted_at is not None:
@@ -123,10 +126,11 @@ def set_avatar_from_asset(
 @router.delete("/me/avatar", response_model=AuthUser, operation_id="delete_avatar")
 def remove_avatar(
     settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> AuthUser:
-    _require_oidc_mode(settings)
+    _require_oidc_mode(runtime)
     assert user.id is not None
     delete_avatar(settings.data_dir, user.id)
     app_user = _get_app_user(db, user)
@@ -140,10 +144,11 @@ def get_avatar(
     user_id: uuid.UUID,
     request: Request,
     settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> Response:
-    _require_oidc_mode(settings)
+    _require_oidc_mode(runtime)
     # ADR-0025: 他人の Run や Asset は見えないので、他人の実行者表示(アバター)を出す画面も
     # 無い。本人のアバターだけを返し、他人の id は存在しないものと同じ 404 にする。
     if user.id != user_id:

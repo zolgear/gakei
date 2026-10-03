@@ -32,7 +32,13 @@ def _client_with_inner(  # noqa: ANN001
     monkeypatch: pytest.MonkeyPatch, data_dir
 ) -> tuple[AuthlibOidcClient, AsyncMock]:
     """`AuthlibOidcClient._client`(プロパティ)を `AsyncMock` に差し替えて返す。"""
-    client = AuthlibOidcClient(_settings(data_dir))
+    settings = _settings(data_dir)
+    client = AuthlibOidcClient(
+        issuer=settings.oidc_issuer,
+        client_id=settings.oidc_client_id,
+        client_secret=settings.oidc_client_secret,
+        scopes=settings.oidc_scopes,
+    )
     inner = AsyncMock()
     monkeypatch.setattr(AuthlibOidcClient, "_client", property(lambda self: inner))
     return client, inner

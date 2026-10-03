@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator
 
 from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
 from app.providers.base import ProviderCapabilities
@@ -73,6 +73,138 @@ class AuthLogoutResponse(BaseModel):
     """`POST /api/auth/logout`。SPA はこの URL に `window.location.assign()` で遷移する。"""
 
     redirect_url: str
+
+
+# -- 認証の設定 (ADR-0034) ---------------------------------------------------
+# 管理者だけが見る。クライアントシークレットは一部も返さない(設定済みかと出どころだけ)。
+
+AuthSettingSource = Literal["setting", "env", "default"]
+
+
+class AuthModeSetting(BaseModel):
+    value: Literal["none", "oidc"]
+    source: AuthSettingSource
+    # `.env` に AUTH_MODE が明示されていて、画面から変えられない。
+    locked: bool
+
+
+class AuthTextSetting(BaseModel):
+    value: str | None
+    source: AuthSettingSource
+
+
+class AuthListSetting(BaseModel):
+    value: list[str]
+    source: AuthSettingSource
+
+
+class AuthSessionHoursSetting(BaseModel):
+    value: int
+    source: AuthSettingSource
+    min: int
+    max: int
+
+
+class AuthClientSecretStatus(BaseModel):
+    configured: bool
+    source: Literal["file", "env"] | None = None
+
+
+class AuthConnectionView(BaseModel):
+    """本登録の接続。`configured` は発行者・クライアント ID・`PUBLIC_BASE_URL` が揃っているか。"""
+
+    configured: bool
+    issuer: AuthTextSetting
+    client_id: AuthTextSetting
+    scopes: AuthTextSetting
+    public_base_url: AuthTextSetting
+    client_secret: AuthClientSecretStatus
+    # IdP に登録するリダイレクト URI。`PUBLIC_BASE_URL` が無ければ null。
+    redirect_uri: str | None = None
+
+
+class AuthPendingConnectionView(BaseModel):
+    """仮登録の接続(テストログインに成功するまで使われない)。"""
+
+    issuer: str
+    client_id: str
+    scopes: str
+    public_base_url: str
+    client_secret: AuthClientSecretStatus
+    redirect_uri: str
+    created_at: datetime | None = None
+
+
+class AuthVerifiedView(BaseModel):
+    """テストログインに成功した記録。`matches_current` は今の本登録の接続でのテストか。"""
+
+    email: str
+    verified_at: datetime
+    matches_current: bool
+
+
+AuthEnableBlocker = Literal[
+    "env_locked",
+    "no_connection",
+    "not_verified",
+    "admin_emails_empty",
+    "verified_email_not_admin",
+]
+
+
+class AuthSettingsResponse(BaseModel):
+    """`GET /api/settings/auth`(管理者だけ)。"""
+
+    mode: AuthModeSetting
+    connection: AuthConnectionView
+    pending: AuthPendingConnectionView | None = None
+    verified: AuthVerifiedView | None = None
+    admin_emails: AuthListSetting
+    allowed_email_domains: AuthListSetting
+    session_hours: AuthSessionHoursSetting
+    # 今の設定のまま oidc にできない理由(画面のスイッチの近くに出す)。空なら有効にできる。
+    enable_blockers: list[AuthEnableBlocker]
+
+
+class AuthSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/auth` の本文。省略した項目は変更せず、明示的な `null` は保存済みの
+    値を消して `.env`・既定値に戻す(`model_fields_set` で区別する)。値の妥当性は
+    `app/domain/auth_settings.py` が検証し、i18n 対応のメッセージで 422 にする。
+    """
+
+    mode: Literal["none", "oidc"] | None = None
+    admin_emails: list[str] | None = None
+    allowed_email_domains: list[str] | None = None
+    # `true` を 1 として受けないよう厳密にする。
+    session_hours: StrictInt | None = None
+
+
+class AuthConnectionRequest(BaseModel):
+    """`PUT /api/settings/auth/connection`(仮登録)の本文。
+
+    `client_secret` は、省略すると今のもの(仮登録があればそのもの、無ければ本登録のもの)を
+    引き継ぎ、空文字なら public client(シークレットなし)、値があれば差し替える。
+    """
+
+    issuer: str
+    client_id: str
+    scopes: str
+    public_base_url: str
+    client_secret: str | None = None
+
+
+class AuthSettingsErrorDetail(BaseModel):
+    """認証の設定の 409・422・502 の `detail`。`code` で画面の案内を出し分ける。
+
+    - 409: `env_locked` / `no_connection` / `not_verified` / `admin_emails_empty` /
+      `verified_email_not_admin` / `self_not_admin`
+    - 422: `invalid_value`(入力の形)/ `discovery_invalid`(Discovery 文書の中身)
+    - 502: `discovery_failed`(Discovery 文書を取得できない)
+    """
+
+    code: str
+    message: str
+    field: str | None = None
 
 
 # -- Users / avatar (ADR-0020) ---------------------------------------------
