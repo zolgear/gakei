@@ -107,7 +107,7 @@ def test_hnsw_index_name_is_stable_and_safe() -> None:
     assert name.replace("_", "").isalnum()
     assert len(name) <= 63
     assert name == embedding_index.hnsw_index_name("remote:abc:org/model'; DROP")
-    assert embedding_index._quote_literal("a'b") == "'a''b'"
+    assert embedding_index.quote_literal("a'b") == "'a''b'"
 
 
 def _wait_succeeded(client: TestClient, asset_id: str) -> None:

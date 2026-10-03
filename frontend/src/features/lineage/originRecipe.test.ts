@@ -43,6 +43,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
 
 const caps: CapabilitiesResponse = {
   default_provider: 'openai',
+  embeddings: { available: false, index_backend: 'numpy' },
   providers: [
     provider({
       provider: 'openai',

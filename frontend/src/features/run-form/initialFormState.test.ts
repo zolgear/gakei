@@ -87,6 +87,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
 function caps(overrides: Partial<CapabilitiesResponse> = {}): CapabilitiesResponse {
   return {
     default_provider: 'fake',
+    embeddings: { available: false, index_backend: 'numpy' },
     providers: [provider({ provider: 'fake' })],
     ...overrides,
   }
@@ -154,6 +155,7 @@ describe('computeInitialFormValues', () => {
   it('default_provider にモデルが1件も無ければ、モデルのある別のプロバイダーを選ぶ', () => {
     const result = computeInitialFormValues({
       default_provider: 'comfyui',
+      embeddings: { available: false, index_backend: 'numpy' },
       providers: [
         provider({ provider: 'comfyui', models: [], default_model: '' }),
         provider({ provider: 'fake' }),
@@ -164,7 +166,11 @@ describe('computeInitialFormValues', () => {
   })
 
   it('プロバイダーが1件も無ければ空値を返す', () => {
-    const result = computeInitialFormValues({ default_provider: '', providers: [] })
+    const result = computeInitialFormValues({
+      default_provider: '',
+      providers: [],
+      embeddings: { available: false, index_backend: 'numpy' },
+    })
     expect(result).toEqual({ provider: '', model: '', params: {} })
   })
 })

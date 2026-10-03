@@ -238,17 +238,24 @@ export type PriceEstimateUnavailableReason = NonNullable<PriceEstimateResponse['
 
 export class ApiError extends Error {
   readonly status: number
+  /** `detail` が `{code, message}` の形のときの `code`(埋め込みの API の 409 など。ADR-0033)。 */
+  readonly code: string | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
 /** FastAPI の 422/4xx が返す `detail` を人が読める1つの文字列にする。 */
 function formatDetail(detail: unknown): string | null {
   if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object' && 'message' in detail) {
+    const message = (detail as { message: unknown }).message
+    if (typeof message === 'string') return message
+  }
   if (Array.isArray(detail)) {
     const messages = detail
       .map((item) => (item && typeof item === 'object' && 'msg' in item ? String(item.msg) : null))
@@ -270,15 +277,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       markUnauthenticated()
     }
     let message = res.statusText || `HTTP ${res.status}`
+    let code: string | null = null
     try {
       const body: unknown = await res.json()
       if (body && typeof body === 'object' && 'detail' in body) {
-        message = formatDetail((body as { detail: unknown }).detail) ?? message
+        const detail = (body as { detail: unknown }).detail
+        message = formatDetail(detail) ?? message
+        if (detail && typeof detail === 'object' && 'code' in detail) {
+          const value = (detail as { code: unknown }).code
+          code = typeof value === 'string' ? value : null
+        }
       }
     } catch {
       // レスポンスが JSON でない場合はそのまま statusText を使う。
     }
-    throw new ApiError(res.status, message)
+    throw new ApiError(res.status, message, code)
   }
   if (res.status === 204) {
     return undefined as T
