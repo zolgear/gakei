@@ -148,6 +148,12 @@ Claude Desktop(mcp-remote 経由)で使ったところ、Claude が生成画像�
 - Asset と Run は形を変えて描き分け、辺には入力の役割(主たる親、参照、マスク)を書く。ノードのラベルには短い ID と要点(Asset は種類と大きさ、Run は操作・モデル・プロンプトの冒頭)を書き、完全な ID はコメント行(`%%`)で対応を示す。エージェントが ID をそのまま次のツール(`generate_image` の `input_asset_ids` など)に渡せるようにするため。
 - 引数で付けないこともできる(既定は付ける)。
 
+### 10. 文章での検索と似た画像(2026-10-03 追記、ADR-0033)
+
+- `search_assets` に `mode`(`keyword` / `semantic`、既定 `keyword`)を足す。`semantic` は画像の埋め込みで、意味の近い順に返す。
+- 読み取り専用のツール `find_similar_assets`(`asset_id`、`limit`)を足す。
+- 見える範囲(ADR-0025)は REST と同じ。埋め込みを無効にしている間は、`get_capabilities` で使えないことを返し、`semantic` と `find_similar_assets` はエラーを返す。
+
 ## Options Considered
 
 ### Option A: 別プロセスの MCP サーバー(stdio)が REST API を呼ぶ

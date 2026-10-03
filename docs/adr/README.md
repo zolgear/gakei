@@ -36,5 +36,6 @@
 | ADR-0030 | [0030-comfyui-final-prompt.md](0030-comfyui-final-prompt.md) | ComfyUI の最終プロンプト(PE の出力)を Run に記録する | Proposed |
 | ADR-0031 | [0031-settings-pages-and-save-rules.md](0031-settings-pages-and-save-rules.md) | 設定画面をページに分け、保存のしかたをページ単位で揃える | Proposed |
 | ADR-0032 | [0032-llm-connections.md](0032-llm-connections.md) | LLM の接続先を、自動タイトル・タグから独立させる | Proposed |
+| ADR-0033 | [0033-image-embeddings.md](0033-image-embeddings.md) | 画像の埋め込み(CLIP 系)で、文章での検索、似た画像、重複の検出、マップを作る | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。
