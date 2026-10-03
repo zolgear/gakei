@@ -445,7 +445,8 @@
       "usedByNone": "なし",
       "featureSeparator": "、",
       "features": {
-        "annotation": "自動タイトル・タグ"
+        "annotation": "自動タイトル・タグ",
+        "embedding": "埋め込み"
       },
       "deleteDisabledInUse": "使っている機能があるため削除できません。"
     },

@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 
 from app.api.capabilities import get_capabilities_endpoint
 from app.api.prompt_sets import list_prompt_sets as list_prompt_sets_rest
-from app.domain import agent_images, mcp_settings
+from app.domain import agent_images, ingest_hooks, mcp_settings
 from app.domain import annotations as annotations_domain
 from app.domain import download_tickets as download_tickets_domain
 from app.domain import run_create as run_create_domain
@@ -1081,13 +1081,17 @@ async def upload_image(
             except IngestError as e:
                 db.rollback()
                 raise ToolError(str(e)) from e
-            # ADR-0024 4章: 取り込み時の自動推定(設定がオンで、新しく作ったときだけ)。
-            queued = result.outcome == "created" and annotations_domain.enqueue_on_ingest(
-                db, result.asset, mc.state.settings
-            )
+            # ADR-0024 4章・ADR-0033 5章: 取り込み時の自動推定と埋め込み(設定がオンで、
+            # 新しく作ったときだけ)。
+            queued = ingest_hooks.IngestQueued()
+            if result.outcome == "created":
+                queued = ingest_hooks.enqueue_after_ingest(db, result.asset, mc.state.settings)
             db.commit()
-            if queued:
-                mc.state.annotator.notify()
+            ingest_hooks.notify_workers(
+                queued,
+                annotator=mc.state.annotator,
+                embedder=getattr(mc.state, "embedder", None),
+            )
             return _asset_brief(mc, result.asset), result.outcome
 
     payload, outcome = await _in_thread(_ingest)

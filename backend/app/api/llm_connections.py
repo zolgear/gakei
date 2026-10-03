@@ -19,8 +19,8 @@ from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_annotator, get_session, get_settings
 
-# annotation_settings は、読み込むと使っている機能を登録する(上の docstring)。
-from app.domain import annotation_settings, llm_connections
+# annotation_settings と embedding_settings は、読み込むと使っている機能を登録する(上の docstring)。
+from app.domain import annotation_settings, embedding_settings, llm_connections
 from app.domain.schemas import (
     LlmConnectionApiKeyUpdateRequest,
     LlmConnectionCreateRequest,
@@ -60,6 +60,8 @@ def _feature_name(feature: str) -> str:
     # `t()` のキーはリテラルで書く(tests/test_i18n.py)。機能を足したらここにも足す。
     if feature == annotation_settings.FEATURE_ID:
         return t("settings.llmConnections.features.annotation")
+    if feature == embedding_settings.FEATURE_ID:
+        return t("settings.llmConnections.features.embedding")
     return feature
 
 

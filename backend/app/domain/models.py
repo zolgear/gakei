@@ -19,6 +19,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -569,6 +570,34 @@ class AssetTag(Base):
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     removed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class AssetEmbedding(Base):
+    """Asset の埋め込みベクトル(ADR-0033 4章)。証跡ではないので更新・削除してよい。
+
+    (Asset、`model_key`)ごとに1行。`status` が計算の待ち行列を兼ねる(`queued` の行を
+    `app/worker/embedder.py` が処理する。ADR-0033 5章)。`vector` は float32 リトルエンディアンで
+    L2 正規化済みのベクトルで、これが正本。
+
+    PostgreSQL で拡張 `vector` が使えるときは `embedding vector` 列もある(同じ値。検索の索引に
+    使う)。SQLite と同じモデルを保つため、その列は ORM には載せず SQL で読み書きする
+    (`app/domain/embedding_index.py`)。
+    """
+
+    __tablename__ = "asset_embedding"
+    __table_args__ = (Index("ix_asset_embedding_model_key_status", "model_key", "status"),)
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    # ベクトル空間の識別子(`onnx:<モデル>@<リビジョン>`、`remote:<接続先>:<モデル>`)。
+    model_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    # queued | running | succeeded | failed
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vector: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class Share(Base):

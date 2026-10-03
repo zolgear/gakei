@@ -999,7 +999,7 @@ class AnnotationSettingsUpdateRequest(BaseModel):
 # -- LLM の接続先(ADR-0032) --------------------------------------------------
 
 # 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
-LlmConnectionFeature = Literal["annotation"]
+LlmConnectionFeature = Literal["annotation", "embedding"]
 
 
 class LlmConnectionView(BaseModel):
@@ -1057,6 +1057,107 @@ class OnnxDownloadRequest(BaseModel):
 class AnnotationBackfillResponse(BaseModel):
     # 待ち行列に入れた件数。
     queued: int
+
+
+# -- 画像の埋め込み(ADR-0033) -------------------------------------------------------
+
+EmbeddingOnnxModelName = Literal["clip-vit-b32-u8", "clip-vit-b32", "clip-japanese-base"]
+
+
+class EmbeddingOnnxModelStatus(BaseModel):
+    """埋め込みのローカルの ONNX モデル1つの状態。"""
+
+    name: EmbeddingOnnxModelName
+    # このモデルのベクトルの `model_key`(`onnx:<モデル>@<リビジョン>`)。
+    model_key: str
+    # 対応する言語。英語だけのモデルでは、日本語で検索してもほとんど当たらない。
+    languages: list[Literal["ja", "en"]]
+    dim: int
+    # 取得するファイルの合計の大きさ。
+    size_bytes: int
+    # 読み込みと推論に要るメモリの目安(バイト)。画像側と文章側の両方を読み込んだとき。
+    memory_bytes: int
+    # 文章での検索だけのとき(文章側だけを読み込む)のメモリの目安(バイト)。
+    memory_text_bytes: int
+    license: str
+    downloaded: bool
+    download_status: Literal["idle", "downloading", "failed"]
+    # 0〜1。ダウンロード中だけ値が入る。
+    download_progress: float | None = None
+    download_error: str | None = None
+
+
+class EmbeddingStoredCount(BaseModel):
+    """モデル(`model_key`)ごとの保存済みのベクトルの件数。"""
+
+    model_key: str
+    count: int
+    dim: int | None = None
+    # 今使っているモデルか。
+    active: bool
+
+
+class EmbeddingSettingsResponse(BaseModel):
+    """`GET /api/settings/embeddings`。"""
+
+    enabled: bool
+    engine: Literal["onnx", "remote"]
+    onnx_model: EmbeddingOnnxModelName
+    # リモートの接続先(LLM の接続先の id。ADR-0032)。未設定なら null。
+    remote_connection_id: str | None = None
+    remote_model: str | None = None
+    remote_api_format: Literal["infinity"]
+    auto_on_ingest: bool
+    duplicate_threshold: float
+    # 使うモデルの `model_key`。リモートで接続先かモデル名が未設定なら null。
+    active_model_key: str | None = None
+    # 使うモデルの対応言語(ローカルのモデルだけ分かる。リモートは null)。
+    active_languages: list[Literal["ja", "en"]] | None = None
+    # 有効で、いま計算できるか(ローカルはモデルをダウンロード済み)。
+    usable: bool
+    # 検索の方式(ADR-0033 4章)。起動時に決める。
+    index_backend: Literal["pgvector", "numpy"]
+    onnx_models: list[EmbeddingOnnxModelStatus] = Field(default_factory=list)
+    stored: list[EmbeddingStoredCount] = Field(default_factory=list)
+    # 使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)の件数。
+    # 一括実行の対象。
+    pending_count: int
+    # 使うモデルの待ち行列にある件数(queued と running)。
+    queued_count: int
+    # 使うモデルで計算に失敗した件数。
+    failed_count: int
+
+
+class EmbeddingSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/embeddings`。省略した項目は変更しない。値の妥当性は
+    `app/domain/embedding_settings.py` が検証する。`remote_connection_id` と `remote_model` は
+    null で未設定に戻す(ほかの項目の null は 422)。
+    """
+
+    enabled: bool | None = None
+    engine: str | None = None
+    onnx_model: str | None = None
+    remote_connection_id: str | None = None
+    remote_model: str | None = None
+    remote_api_format: str | None = None
+    auto_on_ingest: bool | None = None
+    duplicate_threshold: float | None = None
+
+
+class EmbeddingBackfillResponse(BaseModel):
+    # 待ち行列に入れた件数。
+    queued: int
+
+
+class AssetEmbeddingStatus(BaseModel):
+    """1枚の埋め込みの状態(`POST /api/assets/{id}/embedding` の応答)。"""
+
+    asset_id: uuid.UUID
+    model_key: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    error: str | None = None
+    requested_at: datetime | None = None
+    finished_at: datetime | None = None
 
 
 # -- 共有リンク(ADR-0029) ---------------------------------------------------------

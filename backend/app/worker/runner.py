@@ -56,6 +56,7 @@ from app.worker.progress import ProgressBus
 
 if TYPE_CHECKING:
     from app.worker.annotator import Annotator
+    from app.worker.embedder import Embedder
 
 logger = logging.getLogger(__name__)
 
@@ -202,12 +203,14 @@ def _finish_run_succeeded(
     run_id: uuid.UUID,
     result,
     annotator: Annotator | None = None,
+    embedder: Embedder | None = None,
 ) -> list[uuid.UUID]:
     """出力を取り込んで Run を成功にする。`annotator` があれば、取り込み時の自動推定
-    (ADR-0024 4章。設定がオンのときだけ)を同じトランザクションで待ち行列に入れる。"""
-    from app.domain import annotations as annotations_domain
+    (ADR-0024 4章)と埋め込み(ADR-0033 5章)を、設定がオンのときだけ同じトランザクションで
+    待ち行列に入れる。"""
+    from app.domain import ingest_hooks
 
-    annotation_queued = False
+    queued = ingest_hooks.IngestQueued()
     with session_factory() as session:
         run = session.get(Run, run_id)
         assert run is not None
@@ -228,9 +231,8 @@ def _finish_run_succeeded(
             )
             output_ids.append(asset.id)
             if annotator is not None:
-                annotation_queued = (
-                    annotations_domain.enqueue_on_ingest(session, asset, annotator.settings)
-                    or annotation_queued
+                queued = queued | ingest_hooks.enqueue_after_ingest(
+                    session, asset, annotator.settings
                 )
 
         # ADR-0022: 生成時にグループが指定されていれば、取り込んだ出力を同じトランザクションで
@@ -251,8 +253,7 @@ def _finish_run_succeeded(
             run.text_outputs = sanitize_external(result.text_outputs)
         run.provider_request_id = sanitize_external_text_or_none(result.provider_request_id)
         session.commit()
-    if annotation_queued and annotator is not None:
-        annotator.notify()
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder)
     return output_ids
 
 
@@ -288,9 +289,11 @@ class Runner:
         data_dir: Path,
         *,
         annotator: Annotator | None = None,
+        embedder: Embedder | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.annotator = annotator
+        self.embedder = embedder
         self.store = store
         self.registry = registry
         self.progress_bus = progress_bus
@@ -432,6 +435,7 @@ class Runner:
                 run.id,
                 result,
                 self.annotator,
+                self.embedder,
             )
         except ProviderError as e:
             await self._mark_failed(run.id, e.code, e.message, e.request_id)

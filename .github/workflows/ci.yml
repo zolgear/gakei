@@ -215,7 +215,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        # 拡張 pgvector 入り(ADR-0033 4章)。拡張が無い場合の切り替えはテストが別に確かめる。
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_PASSWORD: gakei
         ports:

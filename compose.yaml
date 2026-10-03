@@ -49,8 +49,10 @@ services:
       - "host.docker.internal:host-gateway"
 
   # PostgreSQL(ADR-0027)。SQLite で使う場合は、このサービスごとコメントアウトする。
+  # 画像の埋め込みの索引に pgvector を使うため、拡張入りのイメージにする(ADR-0033 4章)。
+  # postgres:17 と同じメジャーバージョンなので、既存のデータディレクトリをそのまま使える。
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     restart: unless-stopped
     volumes:
       - gakei-pg:/var/lib/postgresql/data

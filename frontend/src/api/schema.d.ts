@@ -421,6 +421,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/embedding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Asset Embedding
+         * @description この Asset の埋め込みを、使うモデルで計算し直す(待ち行列に入れる)。見えなければ 404、
+         *     マスクと削除済み、埋め込みが無効・使えないときは 409。既に待ち行列にあれば何もしない。
+         */
+        post: operations["request_asset_embedding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/asset-groups": {
         parameters: {
             query?: never;
@@ -897,6 +918,107 @@ export interface paths {
          */
         post: operations["backfill_annotations"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/embeddings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Embedding Settings */
+        get: operations["get_embedding_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Embedding Settings */
+        patch: operations["update_embedding_settings"];
+        trace?: never;
+    };
+    "/api/settings/embeddings/onnx/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download Embedding Model
+         * @description モデルを Hugging Face からバックグラウンドで取得する。進み具合は GET の `onnx_models`
+         *     で見る。既にダウンロード中なら何もしない。
+         */
+        post: operations["download_embedding_model"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/embeddings/onnx/{model}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Embedding Model
+         * @description モデルのファイルを消す(保存済みのベクトルは消さない)。
+         */
+        delete: operations["delete_embedding_model"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/embeddings/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backfill Embeddings
+         * @description 使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)をまとめて
+         *     待ち行列に入れる。埋め込みが無効、またはモデルが使えなければ 409。
+         */
+        post: operations["backfill_embeddings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/embeddings/vectors/{model_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Embedding Vectors
+         * @description そのモデルのベクトルと計算の状態をすべて消す(使っているモデルも消せる。画像の取り込み時や
+         *     一括実行で計算し直す)。無ければ 404。
+         */
+        delete: operations["delete_embedding_vectors"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1522,6 +1644,30 @@ export interface components {
             /** Tags */
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
+        };
+        /**
+         * AssetEmbeddingStatus
+         * @description 1枚の埋め込みの状態(`POST /api/assets/{id}/embedding` の応答)。
+         */
+        AssetEmbeddingStatus: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Model Key */
+            model_key: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /** Error */
+            error?: string | null;
+            /** Requested At */
+            requested_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
         };
         /** AssetGroupCreate */
         AssetGroupCreate: {
@@ -2178,6 +2324,137 @@ export interface components {
              */
             verified: false;
         };
+        /** EmbeddingBackfillResponse */
+        EmbeddingBackfillResponse: {
+            /** Queued */
+            queued: number;
+        };
+        /**
+         * EmbeddingOnnxModelStatus
+         * @description 埋め込みのローカルの ONNX モデル1つの状態。
+         */
+        EmbeddingOnnxModelStatus: {
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "clip-vit-b32-u8" | "clip-vit-b32" | "clip-japanese-base";
+            /** Model Key */
+            model_key: string;
+            /** Languages */
+            languages: ("ja" | "en")[];
+            /** Dim */
+            dim: number;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Memory Bytes */
+            memory_bytes: number;
+            /** Memory Text Bytes */
+            memory_text_bytes: number;
+            /** License */
+            license: string;
+            /** Downloaded */
+            downloaded: boolean;
+            /**
+             * Download Status
+             * @enum {string}
+             */
+            download_status: "idle" | "downloading" | "failed";
+            /** Download Progress */
+            download_progress?: number | null;
+            /** Download Error */
+            download_error?: string | null;
+        };
+        /**
+         * EmbeddingSettingsResponse
+         * @description `GET /api/settings/embeddings`。
+         */
+        EmbeddingSettingsResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Engine
+             * @enum {string}
+             */
+            engine: "onnx" | "remote";
+            /**
+             * Onnx Model
+             * @enum {string}
+             */
+            onnx_model: "clip-vit-b32-u8" | "clip-vit-b32" | "clip-japanese-base";
+            /** Remote Connection Id */
+            remote_connection_id?: string | null;
+            /** Remote Model */
+            remote_model?: string | null;
+            /**
+             * Remote Api Format
+             * @constant
+             */
+            remote_api_format: "infinity";
+            /** Auto On Ingest */
+            auto_on_ingest: boolean;
+            /** Duplicate Threshold */
+            duplicate_threshold: number;
+            /** Active Model Key */
+            active_model_key?: string | null;
+            /** Active Languages */
+            active_languages?: ("ja" | "en")[] | null;
+            /** Usable */
+            usable: boolean;
+            /**
+             * Index Backend
+             * @enum {string}
+             */
+            index_backend: "pgvector" | "numpy";
+            /** Onnx Models */
+            onnx_models?: components["schemas"]["EmbeddingOnnxModelStatus"][];
+            /** Stored */
+            stored?: components["schemas"]["EmbeddingStoredCount"][];
+            /** Pending Count */
+            pending_count: number;
+            /** Queued Count */
+            queued_count: number;
+            /** Failed Count */
+            failed_count: number;
+        };
+        /**
+         * EmbeddingSettingsUpdateRequest
+         * @description `PATCH /api/settings/embeddings`。省略した項目は変更しない。値の妥当性は
+         *     `app/domain/embedding_settings.py` が検証する。`remote_connection_id` と `remote_model` は
+         *     null で未設定に戻す(ほかの項目の null は 422)。
+         */
+        EmbeddingSettingsUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Engine */
+            engine?: string | null;
+            /** Onnx Model */
+            onnx_model?: string | null;
+            /** Remote Connection Id */
+            remote_connection_id?: string | null;
+            /** Remote Model */
+            remote_model?: string | null;
+            /** Remote Api Format */
+            remote_api_format?: string | null;
+            /** Auto On Ingest */
+            auto_on_ingest?: boolean | null;
+            /** Duplicate Threshold */
+            duplicate_threshold?: number | null;
+        };
+        /**
+         * EmbeddingStoredCount
+         * @description モデル(`model_key`)ごとの保存済みのベクトルの件数。
+         */
+        EmbeddingStoredCount: {
+            /** Model Key */
+            model_key: string;
+            /** Count */
+            count: number;
+            /** Dim */
+            dim?: number | null;
+            /** Active */
+            active: boolean;
+        };
         /**
          * ExposedParam
          * @description 利用者がフォームで指定できる、差し込み先以外の入力。
@@ -2465,7 +2742,7 @@ export interface components {
             /** Api Key Set */
             api_key_set: boolean;
             /** Used By */
-            used_by?: "annotation"[];
+            used_by?: ("annotation" | "embedding")[];
         };
         /**
          * LlmConnectionsResponse
@@ -4669,6 +4946,39 @@ export interface operations {
             };
         };
     };
+    request_asset_embedding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetEmbeddingStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_asset_groups: {
         parameters: {
             query?: never;
@@ -6045,6 +6355,204 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnnotationBackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_embedding_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_embedding_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmbeddingSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_embedding_model: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnnxDownloadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_embedding_model: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backfill_embeddings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingBackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_embedding_vectors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_key: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
                 };
             };
             /** @description Validation Error */

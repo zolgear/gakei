@@ -17,9 +17,10 @@ from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user, require_user_or_api_token
 from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_annotator, get_session, get_settings, get_store
-from app.domain import annotation_settings
+from app.deps import get_annotator, get_embedder, get_session, get_settings, get_store
+from app.domain import annotation_settings, embedding_settings, ingest_hooks
 from app.domain import annotations as annotations_domain
+from app.domain import embeddings as embeddings_domain
 from app.domain.asset_groups import group_for_asset
 from app.domain.assets import IngestError, asset_is_used_as_input, is_restorable
 from app.domain.assets import ingest_upload as ingest_asset
@@ -31,6 +32,7 @@ from app.domain.run_views import run_text_outputs
 from app.domain.schemas import (
     AssetAnnotationResponse,
     AssetDetail,
+    AssetEmbeddingStatus,
     AssetLineageResponse,
     AssetListResponse,
     AssetOrigin,
@@ -51,6 +53,7 @@ from app.domain.visibility import (
 )
 from app.i18n import t
 from app.worker.annotator import Annotator
+from app.worker.embedder import Embedder
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +194,7 @@ def create_asset(
     user: CurrentUser = Depends(require_user),
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
+    embedder: Embedder = Depends(get_embedder),
 ) -> AssetUploadResponse:
     data = file.file.read()
     try:
@@ -206,14 +210,13 @@ def create_asset(
     except IngestError as e:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e)) from e
-    # ADR-0024 4章: 取り込み時の自動推定(設定がオンのときだけ)。既存の Asset を返す場合
-    # (`matched_existing`)は重ねて待ち行列に入れない。
-    annotation_queued = result.outcome == "created" and annotations_domain.enqueue_on_ingest(
-        db, result.asset, settings
-    )
+    # ADR-0024 4章・ADR-0033 5章: 取り込み時の自動推定と埋め込み(設定がオンのときだけ)。
+    # 既存の Asset を返す場合(`matched_existing`)は重ねて待ち行列に入れない。
+    queued = ingest_hooks.IngestQueued()
+    if result.outcome == "created":
+        queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
     db.commit()
-    if annotation_queued:
-        annotator.notify()
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder)
     detail = _to_detail(db, result.asset, produced_by_run=None, user=user)
     return AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
 
@@ -558,3 +561,47 @@ def annotate_asset(
     db.commit()
     annotator.notify()
     return annotations_domain.annotation_response(db, asset_id)
+
+
+# -- 埋め込み(ADR-0033) ----------------------------------------------------------
+
+
+@router.post(
+    "/{asset_id}/embedding",
+    response_model=AssetEmbeddingStatus,
+    operation_id="request_asset_embedding",
+)
+def request_asset_embedding(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    embedder: Embedder = Depends(get_embedder),
+) -> AssetEmbeddingStatus:
+    """この Asset の埋め込みを、使うモデルで計算し直す(待ち行列に入れる)。見えなければ 404、
+    マスクと削除済み、埋め込みが無効・使えないときは 409。既に待ち行列にあれば何もしない。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    if asset.kind == AssetKind.MASK:
+        raise HTTPException(status_code=409, detail=t("embeddings.maskNotSupported"))
+    if asset.deleted_at is not None:
+        raise HTTPException(status_code=409, detail=t("embeddings.assetDeleted"))
+    config = embedding_settings.load(db)
+    if not embedding_settings.usable(config, settings):
+        raise HTTPException(status_code=409, detail=t("embeddings.notUsable"))
+    model_key = embedding_settings.active_model_key(config, settings)
+    assert model_key is not None
+    embeddings_domain.request_embedding(db, asset, model_key)
+    db.commit()
+    embedder.notify()
+    row = embeddings_domain.embedding_status(db, asset_id, model_key)
+    assert row is not None
+    return AssetEmbeddingStatus(
+        asset_id=asset_id,
+        model_key=model_key,
+        status=row.status,  # type: ignore[arg-type]
+        error=row.error,
+        requested_at=row.requested_at,
+        finished_at=row.finished_at,
+    )

@@ -22,6 +22,15 @@ SQLite のまま使いたい場合は、`compose.yaml` の中の「SQLite で使
 
 **既存の Compose 利用者への注意:** 更新後にそのまま `docker compose up` すると、空の PostgreSQL につながり、今までのデータ(履歴・世代情報)が見えなくなる。画像のファイル自体はボリューム `gakei-data` に残っていて消えない。下の「SQLite から PostgreSQL への移行」で移すか、上のコメントアウトで SQLite のまま使う。
 
+## pgvector(画像の埋め込みの索引)
+
+画像の埋め込み(ADR-0033)を使うとき、PostgreSQL で拡張 `vector`([pgvector](https://github.com/pgvector/pgvector))を使えれば、類似度の検索に索引(HNSW)を使う。同梱の Compose は拡張入りのイメージ `pgvector/pgvector:pg17` を使う。
+
+- 以前の `postgres:17` から替えても、メジャーバージョンが同じなので、ボリューム `gakei-pg` のデータはそのまま使える。
+- 拡張は、GAKEI が起動時(マイグレーション)に `CREATE EXTENSION IF NOT EXISTS vector` で作る。拡張が入っていない、作る権限が無いなどで作れなければ、拡張を使わずに動く(ベクトルは DB に保存し、検索は GAKEI のプロセスの中で全件と比べる)。
+- 外部の PostgreSQL で使う場合は、サーバーに pgvector を入れ、GAKEI の DB ユーザーが拡張を作れるようにするか、管理者が先に `CREATE EXTENSION vector;` を実行しておく。後から入れた場合は、次の起動で列を足し、保存済みのベクトルから埋める。
+- どちらの方式で動いているかは、`GET /api/settings/embeddings` の `index_backend`(`pgvector` か `numpy`)で確かめられる。
+
 ## 外部の PostgreSQL に接続する
 
 `run.sh` / `run.bat`、Docker いずれの場合も、`DATABASE_URL` を指定すればマネージドサービスなど外部の PostgreSQL につなげる。

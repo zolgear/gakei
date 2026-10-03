@@ -41,14 +41,16 @@ from app.auth.oidc import AuthlibOidcClient
 from app.auth.secret import load_or_create_auth_secret
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
-from app.domain import annotation_settings
+from app.domain import annotation_settings, embedding_index
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.storage import open_store
+from app.embedding.catalog import ClipModelDownloader
 from app.i18n import console_t, parse_accept_language, set_locale, t
 from app.mcp.endpoint import McpEndpoint
 from app.mcp.server import build_mcp_server, build_session_manager
 from app.providers.registry import _is_loopback_url, build_registry
 from app.worker.annotator import Annotator
+from app.worker.embedder import Embedder
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
 
@@ -225,8 +227,27 @@ def _build_lifespan(settings: Settings):
         # ADR-0024: 自動タイトル・タグの推定の worker と、ONNX タガーのモデルのダウンロード。
         annotator = Annotator(session_factory, store, settings)
         wd_downloader = WdModelDownloader(settings.data_dir, fake=settings.fake_provider)
+        # ADR-0033: 画像の埋め込み。PostgreSQL では pgvector を使えるかを見て、使うモデルの
+        # 索引を作る。
+        embedding_index_backend = embedding_index.prepare(engine)
+        embedder = Embedder(
+            session_factory,
+            store,
+            settings,
+            pgvector=embedding_index_backend == embedding_index.BACKEND_PGVECTOR,
+            db_engine=engine,
+        )
+        if embedder.pgvector:
+            embedder.ensure_active_index()
+        clip_downloader = ClipModelDownloader(settings.data_dir, fake=settings.fake_provider)
         runner = Runner(
-            session_factory, store, registry, progress_bus, settings.data_dir, annotator=annotator
+            session_factory,
+            store,
+            registry,
+            progress_bus,
+            settings.data_dir,
+            annotator=annotator,
+            embedder=embedder,
         )
 
         app.state.settings = settings
@@ -238,6 +259,9 @@ def _build_lifespan(settings: Settings):
         app.state.runner = runner
         app.state.annotator = annotator
         app.state.wd_downloader = wd_downloader
+        app.state.embedder = embedder
+        app.state.clip_downloader = clip_downloader
+        app.state.embedding_index_backend = embedding_index_backend
         if settings.auth_mode == "oidc":
             app.state.oidc_client = AuthlibOidcClient(settings)
 
@@ -248,13 +272,16 @@ def _build_lifespan(settings: Settings):
 
         await runner.start()
         await annotator.start()
+        await embedder.start()
         try:
             async with mcp_session_manager.run():
                 yield
         finally:
             await runner.stop()
             await annotator.stop()
+            await embedder.stop()
             await wd_downloader.stop()
+            await clip_downloader.stop()
             engine.dispose()
 
     return lifespan

@@ -7,8 +7,8 @@
   (`https://huggingface.co/api/models/SmilingWolf/<model>?blobs=true` の `sha` と
   `siblings[].lfs.sha256`)で調べた値。`selected_tags.csv` は LFS ではないので、固定
   リビジョンのファイルを取得して sha256 を計算した(3モデルとも同じ内容)。
-- ダウンロードは同じディレクトリの一時ファイル(`.<name>.part`)に書き、sha256 が一致して
-  から `os.replace` で置き換える。一致しなければ一時ファイルを消して失敗にする。
+- ダウンロードの仕組み(一時ファイル、sha256 の確認)は埋め込みのモデルと共通
+  (`app/model_store/downloader.py`。ADR-0033 2章)。置き場所(`DATA_DIR/models/wd/`)は変えない。
 - 両方のファイルがそろっていれば「ダウンロード済み」。
 - `memory_bytes` は、読み込みと推論1回でプロセスが使うメモリの目安(最大 RSS)。2026-09-29 に
   Raspberry Pi 5(aarch64、onnxruntime 1.30、`wd_tagger.session_options` の設定)で、新しい
@@ -19,20 +19,37 @@
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
-import logging
-import os
-import shutil
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
-from app.i18n import t
+from app.model_store.downloader import (
+    DownloadError,
+    DownloadState,
+    HubModel,
+    ModelDownloader,
+    RemoteFile,
+    default_client_factory,
+    files_present,
+    hub_file_url,
+)
 
-logger = logging.getLogger(__name__)
+__all__ = [
+    "DownloadError",
+    "DownloadState",
+    "MODEL_FILE",
+    "RemoteFile",
+    "TAGS_FILE",
+    "WD_MODELS",
+    "WdModel",
+    "WdModelDownloader",
+    "file_url",
+    "is_downloaded",
+    "model_dir",
+    "models_root",
+]
 
 HF_REPO_OWNER = "SmilingWolf"
 MODEL_FILE = "model.onnx"
@@ -41,13 +58,6 @@ TAGS_FILE = "selected_tags.csv"
 _TAGS_SHA256 = "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217"
 _TAGS_SIZE = 308468
 _MB = 1000 * 1000
-
-
-@dataclass(frozen=True)
-class RemoteFile:
-    name: str
-    size: int
-    sha256: str
 
 
 @dataclass(frozen=True)
@@ -61,6 +71,10 @@ class WdModel:
     @property
     def size_bytes(self) -> int:
         return sum(f.size for f in self.files)
+
+    @property
+    def repo(self) -> str:
+        return f"{HF_REPO_OWNER}/{self.name}"
 
 
 WD_MODELS: dict[str, WdModel] = {
@@ -105,8 +119,6 @@ WD_MODELS: dict[str, WdModel] = {
     ),
 }
 
-_CHUNK = 1024 * 1024
-
 
 def models_root(data_dir: Path) -> Path:
     return data_dir / "models" / "wd"
@@ -121,151 +133,36 @@ def model_dir(data_dir: Path, name: str) -> Path:
 def is_downloaded(data_dir: Path, name: str) -> bool:
     if name not in WD_MODELS:
         return False
-    directory = model_dir(data_dir, name)
-    return all((directory / f.name).is_file() for f in WD_MODELS[name].files)
+    return files_present(model_dir(data_dir, name), WD_MODELS[name])
 
 
 def file_url(model: WdModel, filename: str) -> str:
-    return (
-        f"https://huggingface.co/{HF_REPO_OWNER}/{model.name}/resolve/{model.revision}/{filename}"
-    )
+    return hub_file_url(model, RemoteFile(filename, 0, ""))
 
 
-class DownloadError(Exception):
-    pass
-
-
-@dataclass
-class DownloadState:
-    status: str = "idle"  # idle | downloading | failed
-    downloaded_bytes: int = 0
-    total_bytes: int = 0
-    error: str | None = None
-
-    @property
-    def progress(self) -> float | None:
-        if self.status != "downloading" or self.total_bytes <= 0:
-            return None
-        return min(1.0, self.downloaded_bytes / self.total_bytes)
-
-
-def _default_client_factory() -> httpx.AsyncClient:
-    return httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60.0, connect=15.0))
-
-
-async def _download_file(
-    client: httpx.AsyncClient,
-    url: str,
-    expected: RemoteFile,
-    directory: Path,
-    on_bytes: Callable[[int], None],
-) -> None:
-    final_path = directory / expected.name
-    tmp_path = directory / f".{expected.name}.part"
-    digest = hashlib.sha256()
-    try:
-        async with client.stream("GET", url) as response:
-            if response.status_code != 200:
-                raise DownloadError(
-                    t(
-                        "annotations.download.httpError",
-                        status=response.status_code,
-                        file=expected.name,
-                    )
-                )
-            with tmp_path.open("wb") as f:
-                async for chunk in response.aiter_bytes(_CHUNK):
-                    f.write(chunk)
-                    digest.update(chunk)
-                    on_bytes(len(chunk))
-        actual = digest.hexdigest()
-        if actual != expected.sha256:
-            raise DownloadError(t("annotations.download.hashMismatch", file=expected.name))
-        os.replace(tmp_path, final_path)
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink(missing_ok=True)
-
-
-@dataclass
-class WdModelDownloader:
-    """モデルのダウンロードをバックグラウンドで1モデル1本ずつ行う(プロセス内)。"""
-
-    data_dir: Path
-    fake: bool = False
-    client_factory: Callable[[], httpx.AsyncClient] = _default_client_factory
-    states: dict[str, DownloadState] = field(default_factory=dict)
-    _tasks: dict[str, asyncio.Task] = field(default_factory=dict)
-
-    def state(self, name: str) -> DownloadState:
-        return self.states.setdefault(name, DownloadState())
-
-    def is_downloading(self, name: str) -> bool:
-        task = self._tasks.get(name)
-        return task is not None and not task.done()
-
-    def start(self, name: str) -> None:
-        """ダウンロードを始める(既に実行中なら何もしない)。呼び出し側で存在確認をしておく。"""
-        if self.is_downloading(name):
-            return
-        model = WD_MODELS[name]
-        state = self.state(name)
-        state.status = "downloading"
-        state.downloaded_bytes = 0
-        state.total_bytes = model.size_bytes
-        state.error = None
-        self._tasks[name] = asyncio.create_task(self._run(model), name=f"gakei-wd-{name}")
-
-    async def _run(self, model: WdModel) -> None:
-        state = self.state(model.name)
-        directory = model_dir(self.data_dir, model.name)
-        try:
-            directory.mkdir(parents=True, exist_ok=True)
-            if self.fake:
-                _write_fake_model(directory)
-            else:
-
-                def on_bytes(n: int) -> None:
-                    state.downloaded_bytes += n
-
-                async with self.client_factory() as client:
-                    for remote in model.files:
-                        await _download_file(
-                            client, file_url(model, remote.name), remote, directory, on_bytes
-                        )
-            state.status = "idle"
-            state.error = None
-        except Exception as e:  # noqa: BLE001 - 失敗は状態として画面に出す
-            logger.warning("WD タガーのモデル %s のダウンロードに失敗しました: %s", model.name, e)
-            state.status = "failed"
-            state.error = str(e)[:500]
-
-    async def wait(self, name: str) -> None:
-        """テスト用。実行中のダウンロードの終了を待つ。"""
-        task = self._tasks.get(name)
-        if task is not None:
-            await task
-
-    async def stop(self) -> None:
-        for task in self._tasks.values():
-            if not task.done():
-                task.cancel()
-        for task in self._tasks.values():
-            try:
-                await task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
-
-    def delete(self, name: str) -> None:
-        directory = model_dir(self.data_dir, name)
-        if directory.exists():
-            shutil.rmtree(directory, ignore_errors=True)
-        self.states.pop(name, None)
-
-
-def _write_fake_model(directory: Path) -> None:
+def _write_fake_model(model: HubModel, directory: Path) -> None:
     """`FAKE_PROVIDER=1` 用のダミー(ダウンロードしない)。推定はダミーのエンジンが行う。"""
     (directory / MODEL_FILE).write_bytes(b"fake-onnx-model")
     (directory / TAGS_FILE).write_text(
         "tag_id,name,category,count\n1,fake_tag,0,1\n", encoding="utf-8"
     )
+
+
+class WdModelDownloader(ModelDownloader):
+    """WD Tagger のモデルのダウンロード(仕組みは `ModelDownloader`)。"""
+
+    def __init__(
+        self,
+        data_dir: Path,
+        fake: bool = False,
+        client_factory: Callable[[], httpx.AsyncClient] = default_client_factory,
+    ) -> None:
+        super().__init__(
+            data_dir,
+            catalog=WD_MODELS,
+            directory_for=model_dir,
+            fake=fake,
+            fake_writer=_write_fake_model,
+            client_factory=client_factory,
+            label="wd",
+        )
