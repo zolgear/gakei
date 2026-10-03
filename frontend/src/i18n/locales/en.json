@@ -293,6 +293,15 @@
         "optionBottom": "Input pane at the bottom (default)",
         "optionSidebar": "Input pane on the left (sidebar)",
         "help": "On narrow screens (under 768px) the input pane always sits below the result. You can also switch from the button at the top right of the result area."
+      },
+      "browserStorage": {
+        "heading": "Settings stored in this browser",
+        "label": "Reset this browser's settings to defaults",
+        "help": "The settings on this page, panel sizes and open/closed states, map values, the generation form draft and similar are stored only in this browser. Clearing them restores the defaults.",
+        "clear": "Clear all",
+        "confirmMessage": "This clears all GAKEI settings stored in this browser and reloads the page.\n\nCleared: display language (falls back to the browser's language), tab icon progress, generation screen layout and input size, sidebar width and open panel, open/closed states in the stock and the viewer, map values (tab, neighbors, limit, threshold, lineage edges), sketch pen, seed mode, and the last selected group.\n\nSettings stored on the server, images, history and your login are not affected.",
+        "confirmWarning": "The unsent prompt, parameters and input images in the generation form will also be cleared.",
+        "confirmLabel": "Clear and reload"
       }
     },
     "accessTokens": {

@@ -2,8 +2,13 @@
  * `/settings/display`(ADR-0031 1章)。表示言語、タブのアイコンで進捗を示すか、生成画面の入力欄の配置
  * (ADR-0009 1章・2026-09-26 追記)。どれも「即時」の項目(ブラウザに保存し、その場で反映する)
  * なので、このページには保存のボタンを出さない。
+ *
+ * 末尾の「ブラウザに保存した設定」(2026-10-04)は、GAKEI がこのブラウザに置いたキー(`lib/browserStorage.ts`)
+ * をまとめて消し、メモリ上の状態も戻すためにページを読み込み直す。即時の操作(確認ダイアログを経る)。
  */
-import { useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
+import { ConfirmDialog } from '../../../components/ConfirmDialog'
+import { clearGakeiBrowserStorageAndReload } from '../../../lib/browserStorage'
 import { LANGUAGE_SETTING_LABEL, LOCALES, LOCALE_LABELS, isLocale, useI18n } from '../../../i18n'
 import {
   getFaviconProgressEnabled,
@@ -25,6 +30,8 @@ export function DisplaySettingsPage() {
     getFaviconProgressEnabled,
   )
   const studioLayout = useStudioLayout()
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
+  const b = d.browserStorage
 
   return (
     <SettingsPageFrame pageId="display" title={t.settings.pages.display} intro={d.intro}>
@@ -68,6 +75,26 @@ export function DisplaySettingsPage() {
           </select>
         </SettingsRow>
       </SettingsSection>
+
+      <SettingsSection heading={b.heading}>
+        <SettingsRow label={b.label} description={b.help}>
+          <button type="button" className={styles.dangerButton} onClick={() => setConfirmClearOpen(true)}>
+            {b.clear}
+          </button>
+        </SettingsRow>
+      </SettingsSection>
+
+      <ConfirmDialog
+        open={confirmClearOpen}
+        message={b.confirmMessage}
+        warning={b.confirmWarning}
+        confirmLabel={b.confirmLabel}
+        onConfirm={() => {
+          // 各機能はモジュールや React の状態に読み込み済みの値を持つので、読み込み直して既定に戻す。
+          clearGakeiBrowserStorageAndReload()
+        }}
+        onCancel={() => setConfirmClearOpen(false)}
+      />
     </SettingsPageFrame>
   )
 }

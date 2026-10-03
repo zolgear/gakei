@@ -11,6 +11,9 @@
  * - `th=0.85`: ネットワークの類似度のしきい値(範囲に収め、0.01 刻みに丸める)
  * - `lineage=1`: ネットワークに系列の辺を重ねる
  * - `sel=<Asset ID>`: 選んだ画像(配置にその画像が無ければ選ばない)
+ *
+ * タブ・上限・近傍の数・しきい値・系列の辺は、ブラウザにも覚える(`mapPrefs.ts`。2026-10-04)。
+ * URL に無い値は覚えた値、それも無ければ既定(`parseMapUrlState` の `fallback`)。
  */
 
 import { TAG_NAME_MAX, normalizeTagName } from '../annotations/tagInput'
@@ -63,9 +66,10 @@ export function clampThreshold(value: number): number {
   return Math.round(clamped / MAP_THRESHOLD_STEP) / Math.round(1 / MAP_THRESHOLD_STEP)
 }
 
-function parseThreshold(raw: string | null): number {
-  if (raw === null || raw.trim() === '') return DEFAULT_MAP_THRESHOLD
-  return clampThreshold(Number(raw))
+function parseThreshold(raw: string | null, fallback: number): number {
+  if (raw === null || raw.trim() === '') return fallback
+  const value = Number(raw)
+  return Number.isFinite(value) ? clampThreshold(value) : fallback
 }
 
 /** タグ名を正規化し、空・長すぎるもの・重複を除く(順は最初に現れた順)。 */
@@ -79,21 +83,37 @@ export function normalizeTagList(raw: readonly string[]): string[] {
   return result
 }
 
-function parseView(raw: string | null): MapView {
+function parseView(raw: string | null, fallback: MapView): MapView {
   // `umap` は URL には書かないが、手で書かれても地図として読む。
-  return raw === 'map' || raw === 'umap' ? 'umap' : 'network'
+  if (raw === 'map' || raw === 'umap') return 'umap'
+  if (raw === 'network') return 'network'
+  return fallback
 }
 
-export function parseMapUrlState(params: URLSearchParams): MapUrlState {
+function parseLineage(raw: string | null, fallback: boolean): boolean {
+  if (raw === null) return fallback
+  return raw === '1'
+}
+
+/** URL の状態のうち、ブラウザに覚える(URL に無ければ覚えた値を使う)もの。 */
+export type MapStoredFields = Pick<MapUrlState, 'view' | 'limit' | 'k' | 'threshold' | 'showLineage'>
+
+/**
+ * URL を読む。`fallback` は URL に無い(読めない)ときの値(覚えた値)。省いた項目は既定。
+ * 既定と同じ値は URL から省くので、覚えた値が既定と違うと「URL に無い = 既定」にはならない点に注意
+ * (既定に戻したときは、覚えた値も既定に書き換える)。
+ */
+export function parseMapUrlState(params: URLSearchParams, fallback: Partial<MapStoredFields> = {}): MapUrlState {
+  const base = { ...DEFAULT_MAP_URL_STATE, ...fallback }
   const group = params.get('group')?.trim() || null
   return {
-    view: parseView(params.get('view')),
+    view: parseView(params.get('view'), base.view),
     groupId: group,
     tags: normalizeTagList(params.getAll('tag')),
-    limit: pickChoice(params.get('limit'), MAP_LIMIT_CHOICES, DEFAULT_MAP_LIMIT),
-    k: pickChoice(params.get('k'), MAP_K_CHOICES, DEFAULT_MAP_K),
-    threshold: parseThreshold(params.get('th')),
-    showLineage: params.get('lineage') === '1',
+    limit: pickChoice(params.get('limit'), MAP_LIMIT_CHOICES, base.limit),
+    k: pickChoice(params.get('k'), MAP_K_CHOICES, base.k),
+    threshold: parseThreshold(params.get('th'), base.threshold),
+    showLineage: parseLineage(params.get('lineage'), base.showLineage),
     selectedId: params.get('sel')?.trim() || null,
   }
 }

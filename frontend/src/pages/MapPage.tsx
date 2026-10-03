@@ -7,7 +7,8 @@
  *
  * 元データは `GET /api/embeddings/graph`。グループ・タグ(複数なら AND)・上限・近傍の数で絞り込める。タブ、
  * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
- * ときに保つ。履歴を増やさないよう replace で書く)。上限で切ったときは、絞り込みを促す。
+ * ときに保つ。履歴を増やさないよう replace で書く)。タブ・上限・近傍の数・しきい値・系列の辺は
+ * ブラウザにも覚え、URL に無ければ覚えた値を使う(`mapPrefs.ts`。2026-10-04)。上限で切ったときは、絞り込みを促す。
  * 埋め込みが使えないときは App バーの入口を出さない。直接開いたときは使えない旨だけを出す。
  */
 import { useId, useMemo, useState } from 'react'
@@ -33,6 +34,7 @@ import {
   type MapUrlState,
   type MapView,
 } from '../features/map/mapUrlState'
+import { loadMapPrefs, pickStoredFields, saveMapPrefs } from '../features/map/mapPrefs'
 import { NetworkView } from '../features/map/NetworkView'
 import { UmapView } from '../features/map/UmapView'
 import { useDebouncedValue } from '../features/search/useDebouncedValue'
@@ -69,8 +71,11 @@ function MapBody() {
   // URL の更新は少し遅れて反映されるので、押した値を先に画面へ出す(チェックボックスが一瞬
   // 元に戻って見えないように)。URL が変わったら、URL の値に任せる。
   const [pending, setPending] = useState<{ base: string; patch: Partial<MapUrlState> } | null>(null)
+  // 覚えた値は開いたときに1回だけ読み、変えたらここと localStorage の両方を書き換える
+  // (既定に戻した値は URL から省くので、覚えた値も同時に変えないと戻らない)。
+  const [storedPrefs, setStoredPrefs] = useState(loadMapPrefs)
   const urlKey = searchParams.toString()
-  const urlState = parseMapUrlState(searchParams)
+  const urlState = parseMapUrlState(searchParams, storedPrefs)
   const state: MapUrlState = pending && pending.base === urlKey ? { ...urlState, ...pending.patch } : urlState
   const [filtersOpen, setFiltersOpen] = useState(false)
   const threshold = state.threshold
@@ -81,6 +86,7 @@ function MapBody() {
   // スライダーを動かすたびに呼ばれるので、履歴を増やさないよう replace で書く。
   function update(patch: Partial<MapUrlState>) {
     setPending((prev) => ({ base: urlKey, patch: { ...(prev && prev.base === urlKey ? prev.patch : {}), ...patch } }))
+    if (Object.keys(pickStoredFields(patch)).length > 0) setStoredPrefs(saveMapPrefs(storedPrefs, patch))
     setSearchParams(buildMapSearchParams({ ...state, ...patch }), { replace: true })
   }
 
