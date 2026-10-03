@@ -70,7 +70,7 @@ CLIP 系のモデルは、画像と文章を同じ空間のベクトルにする
 | モデル | 取得元 | サイズ | 言語 | ライセンス |
 |---|---|---|---|---|
 | `clip-vit-b32-u8`(既定) | `Xenova/clip-vit-base-patch32` の画像側 `onnx/vision_model_uint8.onnx` と、文章側 fp32 の `onnx/text_model.onnx`。トークナイザー用の `vocab.json` と `merges.txt` | 約 345MB | 英語 | MIT(元の OpenAI CLIP) |
-| `clip-vit-b32` | 同じリポジトリの fp32(`vision_model.onnx`、`text_model.onnx`) | 約 606MB | 英語 | 同上 |
+| `clip-vit-b32` | 同じリポジトリの fp32(`vision_model.onnx`、`text_model.onnx`) | 約 607MB | 英語 | 同上 |
 | `clip-japanese-base` | `line-corporation/clip-japanese-base` の `onnx/clyp_visual.onnx`、`onnx/clyp_textual.onnx`、`onnx/spiece.model` | 約 790MB | 日本語 | Apache-2.0 |
 
 - 次元はどれも 512。

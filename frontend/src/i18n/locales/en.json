@@ -1794,6 +1794,8 @@
       "one": "{groups} group, compared {scanned} images",
       "other": "{groups} groups, compared {scanned} images"
     },
+    "hashMissing": "Approx.",
+    "hashMissingTitle": "No perceptual hash yet, so this was judged by similarity alone (different images such as color variants may be included)",
     "truncatedNote": "There are many images, so only the newest {scanned} were compared.",
     "groupsTruncatedNote": "There are many groups, so the largest are shown first.",
     "empty": "No pairs at or above the threshold.",

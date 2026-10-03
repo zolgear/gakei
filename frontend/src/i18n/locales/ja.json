@@ -1794,6 +1794,8 @@
       "one": "{groups} グループ・{scanned} 枚を比べました",
       "other": "{groups} グループ・{scanned} 枚を比べました"
     },
+    "hashMissing": "簡易",
+    "hashMissingTitle": "知覚ハッシュがまだ無いため、似ているかどうかだけで判定しました(色違いなどの別の画像が入ることがあります)",
     "truncatedNote": "画像が多いため、新しい {scanned} 枚だけを比べています。",
     "groupsTruncatedNote": "グループが多いため、大きいものから表示しています。",
     "empty": "しきい値以上の組は見つかりませんでした。",

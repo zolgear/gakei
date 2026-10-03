@@ -379,3 +379,14 @@
     min-height: 44px;
   }
 }
+
+/* 知覚ハッシュが無く、CLIP だけで判定した画像の印。 */
+.hashMissing {
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}

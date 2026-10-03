@@ -347,6 +347,12 @@ function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleS
         >
           {formatScore(asset.max_score)}
         </span>
+        {/* ADR-0033 12章: 知覚ハッシュが無い画像は CLIP だけで判定したので、印を付ける。 */}
+        {asset.hash_missing && (
+          <span className={styles.hashMissing} title={m.hashMissingTitle}>
+            {m.hashMissing}
+          </span>
+        )}
         <button type="button" className={styles.deleteButton} disabled={deleting} onClick={onDelete}>
           {m.delete}
         </button>
