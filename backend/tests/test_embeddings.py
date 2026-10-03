@@ -523,7 +523,7 @@ def test_worker_with_remote_engine_end_to_end(tmp_path, db_session_factory) -> N
     asyncio.run(embedder._process(job))
     assert embedder._prepare() is None
 
-    # 3枚をまとめて1回で送る(上限 8)。キーは Bearer で送る。
+    # 3枚をまとめて1回で送る(上限 32)。キーは Bearer で送る。
     assert len(requests) == 1
     assert requests[0].headers["authorization"] == "Bearer sk-local"
     with factory() as db:
@@ -532,3 +532,151 @@ def test_worker_with_remote_engine_end_to_end(tmp_path, db_session_factory) -> N
         assert {r.dim for r in rows} == {3}
         assert blob_to_vector(rows[0].vector).tolist() == pytest.approx([1 / 3, 2 / 3, 2 / 3])
     assert embedder.version(model_key) == 1
+
+
+# -- 取る件数と先読み(Issue #71) --------------------------------------------------------
+
+
+class _StubEngines:
+    """`engine_for` で決まったエンジンを返す(worker のテスト用)。"""
+
+    def __init__(self, engine: Any) -> None:
+        self.engine = engine
+
+    def engine_for(self, db: Any, config: Any) -> Any:  # noqa: ARG002
+        return self.engine
+
+    def release_idle(self) -> None:
+        return None
+
+
+def _remote_worker_setup(tmp_path, factory, count: int):  # noqa: ANN001, ANN202
+    """リモートを使う設定にし、`count` 枚を待ち行列に入れる。(settings, store, model_key)"""
+    from app.config import Settings
+    from app.domain import embedding_settings, llm_connections
+    from app.domain import embeddings as embeddings_domain
+    from app.domain.assets import ingest
+    from app.domain.models import AssetKind
+    from app.domain.storage import LocalFsStore
+
+    settings = Settings(_env_file=None, data_dir=tmp_path / "data", fake_provider=False)
+    store = LocalFsStore(tmp_path / "store")
+    with factory() as db:
+        connection_id = llm_connections.add_connection(
+            db, "infinity", "http://infer.local:7997", "chat"
+        )
+        embedding_settings.save(
+            db,
+            {
+                "enabled": True,
+                "engine": "remote",
+                "remote_connection_id": connection_id,
+                "remote_model": "clip",
+            },
+        )
+        config = embedding_settings.load(db)
+        model_key = embedding_settings.active_model_key(config, settings)
+        for i in range(count):
+            asset = ingest(
+                db, store, make_png_bytes(color=(i % 256, i // 256, 7)), AssetKind.UPLOAD
+            )
+            assert embeddings_domain.enqueue_on_ingest(db, asset, settings)
+        db.commit()
+    return settings, store, model_key
+
+
+def _status_counts(factory) -> dict[str, int]:  # noqa: ANN001
+    counts: dict[str, int] = {}
+    with factory() as db:
+        for row in db.execute(select(AssetEmbedding)).scalars():
+            counts[row.status] = counts.get(row.status, 0) + 1
+    return counts
+
+
+@pytest.mark.parametrize(("batch", "expected"), [(32, 32), (8, 8), (1, 8)])
+def test_worker_claims_up_to_engine_batch_size(
+    tmp_path,
+    db_session_factory,
+    batch: int,
+    expected: int,  # noqa: ANN001
+) -> None:
+    """1回に取る件数は 8 とエンジンのまとめる枚数の大きいほう(リモートは 32、ONNX は 8)。"""
+    import asyncio
+
+    from app.worker.embedder import Embedder
+
+    factory = db_session_factory
+    settings, store, model_key = _remote_worker_setup(tmp_path, factory, 40)
+    engine = FakeEmbeddingEngine(model_key, image_batch_size=batch)
+    embedder = Embedder(factory, store, settings, _StubEngines(engine))
+    job = embedder._prepare()
+    assert job is not None
+    assert len(job.claimed) == expected and len(job.items) == expected
+    assert not job.failures
+    assert _status_counts(factory) == {"running": expected, "queued": 40 - expected}
+    asyncio.run(embedder._process(job))
+    assert _status_counts(factory) == {"succeeded": expected, "queued": 40 - expected}
+    if batch == 32:
+        assert engine.image_calls == [32]
+
+
+def test_worker_claims_default_limit_when_engine_is_unavailable(
+    tmp_path,
+    db_session_factory,  # noqa: ANN001
+) -> None:
+    """エンジンを用意できない(接続先が消えたなど)ときは 8 件を取って失敗にする。"""
+    from app.worker.embedder import Embedder
+
+    class _Broken(_StubEngines):
+        def engine_for(self, db: Any, config: Any) -> Any:  # noqa: ARG002
+            raise EmbeddingError("connection missing")
+
+    factory = db_session_factory
+    settings, store, _ = _remote_worker_setup(tmp_path, factory, 12)
+    embedder = Embedder(factory, store, settings, _Broken(None))
+    job = embedder._prepare()
+    assert job is not None and job.engine is None
+    assert len(job.failures) == 8 and not job.items
+
+
+def test_worker_requeues_prefetched_job_on_stop(tmp_path, db_session_factory) -> None:  # noqa: ANN001
+    """計算中に次の分を先に取る。止めたら、先に取ってまだ計算していない行は queued に戻す。"""
+    import asyncio
+    import threading
+
+    from app.worker.embedder import Embedder
+
+    class _BlockingEngine(FakeEmbeddingEngine):
+        def __init__(self, model_key: str) -> None:
+            super().__init__(model_key, image_batch_size=8)
+            self.started = threading.Event()
+            self.release = threading.Event()
+
+        def embed_images(self, images, *, priority: bool = False):  # noqa: ANN001, ANN201
+            self.started.set()
+            assert self.release.wait(10)
+            return super().embed_images(images, priority=priority)
+
+    factory = db_session_factory
+    settings, store, model_key = _remote_worker_setup(tmp_path, factory, 24)
+    engine = _BlockingEngine(model_key)
+    embedder = Embedder(factory, store, settings, _StubEngines(engine))
+
+    async def main() -> None:
+        await embedder.start()
+        deadline = time.monotonic() + 10
+        # 1つ目(8件)を計算している間に、次の8件を先に取る。
+        while time.monotonic() < deadline:
+            if engine.started.is_set() and _status_counts(factory).get("running") == 16:
+                break
+            await asyncio.sleep(0.02)
+        else:
+            raise TimeoutError("先読みが始まりませんでした")
+        stopping = asyncio.create_task(embedder.stop())
+        await asyncio.sleep(0.05)
+        engine.release.set()
+        await stopping
+
+    asyncio.run(main())
+    assert engine.image_calls == [8]
+    assert _status_counts(factory) == {"succeeded": 8, "queued": 16}

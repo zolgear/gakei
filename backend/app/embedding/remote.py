@@ -5,6 +5,10 @@
 - 送る画像は thumb(512px)を JPEG にしたもの(透明な部分は白で合成する)。原本は送らない。
 - キーがあれば `Authorization: Bearer` で送る。キーの値はエラーの文言にも出さない。
 - 1回に送る件数の上限と時間切れだけを持つ(回数の上限は持たない。ADR-0033 5章)。
+- 画像は1回に最大 32 枚まとめて送る。量子化したモデルを1枚ずつ計算する規則(ローカルの
+  ONNX のもの)はリモートには当てはめない。Infinity は届いたリクエストをサーバー側でバッチに
+  まとめ直すので、こちらが1枚ずつ送ってもバッチの大きさは揃わない(ADR-0033 2章)。
+- JPEG への変換は複数のスレッドで並列に行う(PIL は変換中に GIL を手放す)。
 - 次元は最初の結果が出るまで分からない(`dim` は None)。
 """
 
@@ -12,7 +16,9 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -23,7 +29,9 @@ from app.embedding.base import EmbeddingError, composite_on_white, l2_normalize
 from app.i18n import t
 
 DEFAULT_TIMEOUT_SECONDS = 60.0
-IMAGE_BATCH_SIZE = 8
+IMAGE_BATCH_SIZE = 32
+# 画像を data URI にするスレッドの数(控えめにする)。
+_ENCODE_WORKERS = min(8, os.cpu_count() or 1)
 TEXT_BATCH_SIZE = 32
 _JPEG_MAX_SIDE = 512
 _ERROR_BODY_MAX = 200
@@ -80,7 +88,15 @@ class InfinityEngine:
 
     def embed_images(self, images: list[Image.Image], *, priority: bool = False) -> np.ndarray:
         # 推論サーバーは別のマシンなので、ModelResidency の調停は要らない(`priority` は使わない)。
-        inputs = [image_to_data_uri(image) for image in images]
+        if len(images) <= 1 or _ENCODE_WORKERS <= 1:
+            inputs = [image_to_data_uri(image) for image in images]
+        else:
+            with ThreadPoolExecutor(
+                max_workers=min(_ENCODE_WORKERS, len(images)),
+                thread_name_prefix="gakei-embed-encode",
+            ) as pool:
+                # map は入力の順に結果を返す。
+                inputs = list(pool.map(image_to_data_uri, images))
         return self._embed(inputs, IMAGE_BATCH_SIZE, modality="image")
 
     def embed_texts(self, texts: list[str]) -> np.ndarray:
