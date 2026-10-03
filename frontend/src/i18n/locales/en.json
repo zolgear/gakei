@@ -1881,6 +1881,13 @@
       "other": "Highlighting {count} similar images"
     },
     "openInViewer": "Open in viewer",
-    "similarInSearch": "See similar images in search"
+    "lineageGraph": "Lineage graph",
+    "similarInSearch": "See similar images in search",
+    "expandPreview": "Show larger",
+    "collapsePreview": "Back to card",
+    "previewLabel": "Selected image details",
+    "previewLoadFailed": "Could not load the image details.",
+    "kindLabel": "Kind",
+    "embeddedPromptHeading": "Prompt (embedded in the image, unverified)"
   }
 }

@@ -216,7 +216,11 @@ function MapBody() {
               checked={state.showLineage}
               onChange={(e) => update({ showLineage: e.target.checked })}
             />
-            <span className={styles.lineageSwatch} aria-hidden="true" />
+            {/* canvas の系列の辺と同じ見た目(破線 + 子の側の塗った矢じり)。 */}
+            <svg className={styles.lineageSwatch} width="26" height="10" viewBox="0 0 26 10" aria-hidden="true">
+              <path d="M1 5H18" stroke="var(--color-edit)" strokeWidth="2" strokeDasharray="5 4" />
+              <path d="M25 5L18 1.5V8.5Z" fill="var(--color-edit)" />
+            </svg>
             {m.showLineage}
           </label>
         </div>

@@ -6,6 +6,8 @@
  * - 操作: ドラッグで移動、ホイールとピンチで拡大縮小、クリック(タップ)で選ぶ。何も無い所を
  *   押すと選択を外す。Esc でも外す。
  * - 選んだ画像は、その近傍(`neighborIndices` の行)を強調し、ほかを薄くする(「似た画像」)。
+ * - 選んだ画像は左下のカードに出し、「↗」で大きく見るパネル(`MapPreviewPanel`)に広げられる。
+ *   Esc は、パネルを開いていればまずパネルを畳み、次に選択を外す。
  * - 利用者が動かすまでは、座標が変わるたびに全体が収まるように合わせる(地図の計算の途中経過や、
  *   ネットワークの力学モデルの動きを追う)。
  * - 色は CSS 変数(配色)から読む。
@@ -18,6 +20,7 @@ import { fmt, useI18n } from '../../i18n'
 import { buildSimilarSearchPath } from '../search/searchQuerySync'
 import { neighborsOf, type SimilarityEdge } from './edges'
 import { hitTest } from './hitTest'
+import { MapPreviewPanel } from './MapPreviewPanel'
 import { thumbCache } from './thumbCache'
 import {
   DOT_RADIUS,
@@ -123,6 +126,10 @@ export function MapCanvas({
   const userMovedRef = useRef(false)
   const frameRef = useRef<number | null>(null)
   const [hover, setHover] = useState<{ index: number; x: number; y: number } | null>(null)
+  // 選んだ画像を大きく見るパネルを開いているか。覚えない(選択を外したら閉じる)。
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const expandButtonRef = useRef<HTMLButtonElement | null>(null)
+  if (previewOpen && selected === null) setPreviewOpen(false)
 
   // 描画は requestAnimationFrame から呼ぶので、最新の props を ref で読む。
   const propsRef = useRef({
@@ -560,8 +567,17 @@ export function MapCanvas({
     requestDraw()
   }
 
+  function collapsePreview() {
+    setPreviewOpen(false)
+    // 畳んだら、広げたボタンに焦点を戻す(カードが描かれてから)。
+    requestAnimationFrame(() => expandButtonRef.current?.focus({ preventScroll: true }))
+  }
+
   function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Escape' && selected !== null) {
+    if (e.key === 'Escape' && previewOpen) {
+      e.preventDefault()
+      setPreviewOpen(false)
+    } else if (e.key === 'Escape' && selected !== null) {
       e.preventDefault()
       onSelect(null)
     } else if (e.key === '+' || e.key === '=') {
@@ -581,7 +597,7 @@ export function MapCanvas({
   const { width: cw } = sizeRef.current
 
   return (
-    <div ref={containerRef} className={styles.root}>
+    <div ref={containerRef} className={styles.root} data-preview-open={(previewOpen && selectedNode !== null) || undefined}>
       <canvas
         ref={canvasRef}
         className={styles.canvas}
@@ -628,8 +644,23 @@ export function MapCanvas({
         </div>
       )}
 
-      {selectedNode && (
-        <div className={styles.selectionCard} role="region" aria-label={m.selectionLabel}>
+      {selectedNode && previewOpen && (
+        <MapPreviewPanel assetId={selectedNode.id} fallbackTitle={selectedNode.title} onCollapse={collapsePreview} />
+      )}
+
+      {selectedNode && !previewOpen && (
+        <div
+          className={styles.selectionCard}
+          role="region"
+          aria-label={m.selectionLabel}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              onSelect(null)
+              canvasRef.current?.focus({ preventScroll: true })
+            }
+          }}
+        >
           <Link to={`/assets/${selectedNode.id}`} className={styles.selectionThumbLink} aria-label={m.openInViewer}>
             <img src={assetUrl(selectedNode.id, 'thumb')} alt="" className={styles.selectionThumb} />
           </Link>
@@ -640,12 +671,27 @@ export function MapCanvas({
             </span>
             <div className={styles.selectionLinks}>
               <Link to={`/assets/${selectedNode.id}`}>{m.openInViewer}</Link>
+              <Link to={`/lineage/${selectedNode.id}`}>{m.lineageGraph}</Link>
               <Link to={buildSimilarSearchPath(selectedNode.id)}>{m.similarInSearch}</Link>
             </div>
           </div>
-          <button type="button" className={styles.selectionClose} aria-label={t.common.close} onClick={() => onSelect(null)}>
-            ×
-          </button>
+          <div className={styles.selectionButtons}>
+            <button
+              ref={expandButtonRef}
+              type="button"
+              className={styles.selectionButton}
+              aria-label={m.expandPreview}
+              title={m.expandPreview}
+              onClick={() => setPreviewOpen(true)}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M3 13L12 4M6 4h6v6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button type="button" className={styles.selectionButton} aria-label={t.common.close} title={t.common.close} onClick={() => onSelect(null)}>
+              ×
+            </button>
+          </div>
         </div>
       )}
     </div>

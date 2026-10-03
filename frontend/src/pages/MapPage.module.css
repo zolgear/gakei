@@ -166,9 +166,8 @@
 }
 
 .lineageSwatch {
-  width: 18px;
-  height: 0;
-  border-top: 2px dashed var(--color-edit);
+  flex-shrink: 0;
+  display: block;
 }
 
 .notice {

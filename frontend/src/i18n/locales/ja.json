@@ -1881,6 +1881,13 @@
       "other": "似た画像 {count} 枚を強調しています"
     },
     "openInViewer": "ビューアで開く",
-    "similarInSearch": "似た画像を検索で見る"
+    "lineageGraph": "系列グラフ",
+    "similarInSearch": "似た画像を検索で見る",
+    "expandPreview": "大きく表示",
+    "collapsePreview": "小さく戻す",
+    "previewLabel": "選んだ画像の詳細",
+    "previewLoadFailed": "画像の情報を読み込めませんでした。",
+    "kindLabel": "種類",
+    "embeddedPromptHeading": "プロンプト(画像に埋め込まれた情報、未検証)"
   }
 }
