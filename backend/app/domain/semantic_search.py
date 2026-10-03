@@ -399,8 +399,15 @@ def find_duplicates(
     pairs = filter_by_hash(pairs, by_position)
 
     raw_groups = leader_groups(len(ordered), pairs)
-    # 大きい順。同じ大きさなら、いちばん新しい画像を含むグループを先に(位置が小さい)。
-    raw_groups.sort(key=lambda g: (-(len(g[1]) + 1), min(g[0], g[1][0][0])))
+    # 大きい順。同じ大きさなら類似度の高い順(確かな重複から見せる)、さらに同じなら、
+    # いちばん新しい画像を含むグループを先に(位置が小さい)。
+    raw_groups.sort(
+        key=lambda g: (
+            -(len(g[1]) + 1),
+            -max(score for _, score in g[1]),
+            min(g[0], g[1][0][0]),
+        )
+    )
     groups_truncated = len(raw_groups) > limit
     raw_groups = raw_groups[:limit]
 

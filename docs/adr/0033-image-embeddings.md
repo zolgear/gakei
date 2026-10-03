@@ -130,7 +130,7 @@ INDEX (model_key, status)
 
 - `vector`(BLOB)が正本で、SQLite と PostgreSQL のどちらでも持つ(ADR-0027 の「両方で同じ動作」)。
 - **pgvector:** PostgreSQL で拡張 `vector` を使えるときは、次元を決めない `embedding vector` 列も持つ。書き込むときは BLOB と同じ値を入れる。
-  - 拡張はマイグレーションで `CREATE EXTENSION IF NOT EXISTS vector` を SAVEPOINT の中で試す。権限が無い、拡張が入っていないなどで失敗したら、列は足さずに続ける。起動時に列の有無を見て、検索の方式(pgvector か numpy)を決め、設定画面に出す。
+  - 拡張はマイグレーションで `CREATE EXTENSION IF NOT EXISTS vector` を SAVEPOINT の中で試す。権限が無い、拡張が入っていないなどで失敗したら、列は足さずに続ける。起動時に列の有無を見て、検索の方式(pgvector か numpy)を決める(画面には出さない。8章)。
   - 後から拡張を入れた場合のために、起動時に列が無く拡張を作れるなら列を足し、BLOB から埋める。
   - インデックスは、使うモデルごとの部分 HNSW インデックスにする: `USING hnsw ((embedding::vector(<次元>)) vector_cosine_ops) WHERE model_key = '<model_key>'`。モデルを選んだとき(起動時と設定の保存時)に `IF NOT EXISTS` で作る。
   - ORM のモデルには `embedding` 列を載せず、SQL で読み書きする(SQLite と同じモデルを保つため)。
