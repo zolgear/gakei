@@ -6,7 +6,7 @@
 - 1回に取る件数は `CLAIM_LIMIT`(8)と、エンジンが1回にまとめる枚数(`image_batch_size`。
   リモートは 32)の大きいほう。ローカルの ONNX(8 か 1)は 8 件のまま。
 - thumb の読み込み(オブジェクトストレージならネットワーク)とデコードは、複数のスレッドで
-  並列に行う。
+  並列に行う。知覚ハッシュも取ったときに作る(先読みなら推論と重なる)。
 - 推論している間に、次の分を取って thumb を読み、デコードしておく(先読みは1つだけ)。
   止めるときに、先に取ってまだ計算していない行は `queued` に戻す。先読みは使うモデルが
   変わっていないときだけ行う(計算中のエンジンを閉じないため)。
@@ -346,6 +346,13 @@ class Embedder:
                 job.failures.append((asset.id, t("embeddings.imageUnreadable")))
             else:
                 job.items.append((asset.id, image))
+        if job.items:
+            # 先読みのときは、前の分の推論を待つ間にハッシュも作っておける。
+            try:
+                self._store_hashes(job.items)
+            except Exception:
+                # ハッシュが無くても重複の候補は CLIP だけで判定できる。埋め込みは続ける。
+                logger.exception("知覚ハッシュの保存に失敗しました")
         return job
 
     def _load_images(self, assets: list[Asset]) -> list[Image.Image | None]:
@@ -378,12 +385,6 @@ class Embedder:
         engine = job.engine
 
         decoded = job.items
-        try:
-            await asyncio.to_thread(self._store_hashes, decoded)
-        except Exception:
-            # ハッシュが無くても重複の候補は CLIP だけで判定できる。埋め込みは続ける。
-            logger.exception("知覚ハッシュの保存に失敗しました")
-
         batch = max(1, engine.image_batch_size)
         for start in range(0, len(decoded), batch):
             chunk = decoded[start : start + batch]
