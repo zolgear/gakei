@@ -53,6 +53,7 @@
       "workspaceNav": "ワークスペース",
       "historyTab": "履歴",
       "studioTab": "生成",
+      "mapTab": "マップ",
       "queueStatus": "実行中 {running}、待機 {queued}",
       "running": "実行中 {count}",
       "queued": "待機 {count}",
@@ -186,7 +187,11 @@
     "hint": "実行・画像・プロンプトセットを横断して検索します",
     "openRun": "この Run を表示",
     "showImage": "画像を表示",
-    "loadPrompt": "プロンプト欄に読み込む"
+    "loadPrompt": "プロンプト欄に読み込む",
+    "imageSearch": "画像で探す",
+    "imageSearchTitle": "手元の画像に似た画像を、検索ページで探します(画像は保存しません)",
+    "semanticHint": "探したい画像を文章で入力します",
+    "dropOverlay": "落として、検索ページで似た画像を探す"
   },
   "search": {
     "ariaLabel": "検索",
@@ -216,14 +221,24 @@
       "modeKeyword": "キーワード",
       "modeSemantic": "意味",
       "semanticPlaceholder": "探したい画像を文章で",
-      "semanticEnterQuery": "探したい画像を文章で入力してください。",
+      "semanticEnterQuery": "探したい画像を文章で入力するか、画像で探してください。",
       "semanticNoResults": "見つかりません。",
       "semanticHeading": "近い順",
       "showMore": "さらに表示",
       "englishOnlyHint": "使っているモデルは英語向けです。日本語ではほとんど当たらないので、英語で検索してください。",
       "similarHeading": "この画像に似た画像",
       "similarOriginLabel": "起点の画像を開く",
-      "searchFailed": "検索に失敗しました。"
+      "searchFailed": "検索に失敗しました。",
+      "imageSearch": "画像で探す",
+      "imageSearchChoose": "画像を選ぶ",
+      "imageSearchDropHint": "画像をこの画面に落とすか、貼り付け(Ctrl+V / ⌘V)でも探せます。",
+      "imageSearchNotStored": "画像は保存しません。手元の画像なので URL には残らず、再読み込みすると消えます。",
+      "imageSearchRemote": "画像は、設定された推論サーバーに送られます。",
+      "imageSearchClear": "画像を外す",
+      "imageSearchHeading": "この画像に近い順",
+      "imageSearchQueryLabel": "探す元の画像(保存しません)",
+      "imageSearchDropOverlay": "落として、この画像に似た画像を探す",
+      "imageSearchNotImage": "画像のファイルを選んでください。"
     }
   },
   "settings": {
@@ -292,6 +307,15 @@
         "optionBottom": "下段に入力欄 (既定)",
         "optionSidebar": "左に入力欄 (サイドバー)",
         "help": "狭い幅(768px 未満)では、どちらを選んでも結果の下に入力欄が並びます。生成画面の結果エリア右上のボタンでも切り替えられます。"
+      },
+      "browserStorage": {
+        "heading": "ブラウザに保存した設定",
+        "label": "このブラウザの設定を既定に戻す",
+        "help": "このページの表示の設定、パネルの幅や開閉、マップの値、生成フォームの下書きなどは、このブラウザにだけ保存されています。まとめて消すと既定に戻ります。",
+        "clear": "まとめて消す",
+        "confirmMessage": "このブラウザに保存した GAKEI の設定をまとめて消し、ページを読み込み直します。\n\n消えるもの: 表示言語(ブラウザの言語に戻ります)、タブのアイコンの進捗表示、生成画面のレイアウトと入力欄の幅・高さ、サイドバーの幅と開いていたパネル、ストックとビューアの節の開閉、マップの値(タブ・近傍の数・上限・しきい値・系列の辺)、スケッチのペン、シードのモード、最後に選んだグループ。\n\nサーバーに保存した設定・画像・履歴と、ログインの状態は変わりません。",
+        "confirmWarning": "生成フォームに書きかけのプロンプト・パラメーター・入力画像の指定も消えます。",
+        "confirmLabel": "消して読み込み直す"
       }
     },
     "accessTokens": {
@@ -1822,5 +1846,62 @@
     "undo": "元に戻す",
     "deleteFailed": "削除できませんでした。",
     "restoreFailed": "元に戻せませんでした。"
+  },
+  "map": {
+    "title": "マップ",
+    "viewLabel": "表示",
+    "tabMap": "地図",
+    "tabNetwork": "ネットワーク",
+    "loading": "読み込み中…",
+    "loadFailed": "マップの元データを読み込めませんでした。",
+    "filters": "絞り込み",
+    "filtersWithCount": "絞り込み({count})",
+    "groupLabel": "グループ",
+    "groupAll": "すべて",
+    "groupUnknown": "(見つからないグループ)",
+    "tagLabel": "タグ",
+    "tagAddMore": "タグを足す",
+    "tagHelp": "選んだタグがすべて付いた画像だけを並べます。",
+    "limitLabel": "上限",
+    "limitOption": "{count} 枚",
+    "kLabel": "近傍の数",
+    "kHelp": "1枚ごとに、似た画像を何枚まで見て並べるか。多いほど全体の形が、少ないほど近くの似かたが効きます。",
+    "thresholdLabel": "類似度のしきい値",
+    "edgeCount": {
+      "one": "辺 {count} 本",
+      "other": "辺 {count} 本"
+    },
+    "edgeCountCapped": "辺 {count} 本(全 {total} 本のうち類似度の高いもの)",
+    "showLineage": "系列の辺を重ねる",
+    "truncated": "全 {total} 枚のうち、新しい {count} 枚だけを並べています。グループやタグで絞り込むか、上限を上げてください。",
+    "truncatedAtMax": "全 {total} 枚のうち、新しい {count} 枚だけを並べています。グループやタグで絞り込んでください。",
+    "empty": "並べられる画像がありません。埋め込みを計算した画像だけが並びます。",
+    "emptyFiltered": "この絞り込みで並べられる画像がありません。",
+    "tooFew": "画像が少ないため、地図を作れません({min} 枚以上で作れます)。",
+    "layoutPreparing": "配置を準備中…",
+    "layoutProgress": "配置を計算中 {percent}%",
+    "layoutFailed": "配置を計算できませんでした。",
+    "networkRunning": "配置を調整中…",
+    "umapAriaLabel": "似た画像が近くに並ぶ地図({count} 枚)",
+    "networkAriaLabel": "似た画像を線で結んだネットワーク({count} 枚、辺 {edges} 本)",
+    "zoomGroup": "表示の拡大縮小",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "fit": "全体を表示",
+    "untitled": "(無題)",
+    "selectionLabel": "選んだ画像",
+    "neighborsHighlighted": {
+      "one": "似た画像 {count} 枚を強調しています",
+      "other": "似た画像 {count} 枚を強調しています"
+    },
+    "openInViewer": "ビューアで開く",
+    "lineageGraph": "系列グラフ",
+    "similarInSearch": "似た画像を検索で見る",
+    "expandPreview": "大きく表示",
+    "collapsePreview": "小さく戻す",
+    "previewLabel": "選んだ画像の詳細",
+    "previewLoadFailed": "画像の情報を読み込めませんでした。",
+    "kindLabel": "種類",
+    "embeddedPromptHeading": "プロンプト(画像に埋め込まれた情報、未検証)"
   }
 }

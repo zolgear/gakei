@@ -736,6 +736,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search/similar-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search By Image Endpoint
+         * @description 手元の画像に似た画像(類似度の高い順)。画像は Asset にせず、画像もベクトルも保存しない
+         *     (メモリの中だけで扱う)。大きさの上限と形式は画像の取り込み(`POST /api/assets`)と同じ。
+         */
+        post: operations["search_by_image"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/similar": {
         parameters: {
             query?: never;
@@ -2093,6 +2114,14 @@ export interface components {
              */
             replaces_asset_id?: string | null;
         };
+        /** Body_search_by_image */
+        Body_search_by_image: {
+            /**
+             * File
+             * @description 探す元の画像(PNG / JPEG / WebP)。保存しない
+             */
+            file: string;
+        };
         /** Body_upload_avatar */
         Body_upload_avatar: {
             /** File */
@@ -2493,6 +2522,8 @@ export interface components {
              * @enum {string}
              */
             index_backend: "pgvector" | "numpy";
+            /** Engine */
+            engine?: ("onnx" | "remote") | null;
         };
         /**
          * EmbeddingErrorDetail
@@ -4216,6 +4247,17 @@ export interface components {
              * Format: uuid
              */
             asset_id: string;
+            /** Model Key */
+            model_key: string;
+            /** Assets */
+            assets?: components["schemas"]["SemanticAssetHit"][];
+        };
+        /**
+         * SimilarImageSearchResponse
+         * @description `POST /api/search/similar-image`。手元の画像に似た画像(類似度の高い順)。送った画像は
+         *     保存しないので、起点の id は無い。
+         */
+        SimilarImageSearchResponse: {
             /** Model Key */
             model_key: string;
             /** Assets */
@@ -6082,6 +6124,72 @@ export interface operations {
             };
         };
     };
+    search_by_image: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description このグループの画像に絞る */
+                group_id?: string | null;
+                /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
+                tag?: string[] | null;
+                /** @description この種類の画像に絞る */
+                kind?: ("upload" | "generated" | "sketch") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_search_by_image"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarImageSearchResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description 画像が大きすぎる(バイト数か画素数) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description 画像の埋め込みを計算できない(メモリ不足、推論サーバーに届かない) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     similar_assets: {
         parameters: {
             query?: {
@@ -6177,7 +6285,8 @@ export interface operations {
                 k?: number;
                 limit?: number;
                 group_id?: string | null;
-                tag?: string | null;
+                /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
+                tag?: string[] | null;
                 /** @description 系列の主たる親の辺も返す */
                 include_lineage?: boolean;
             };

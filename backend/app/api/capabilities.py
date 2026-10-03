@@ -34,6 +34,7 @@ def embedding_capabilities(
         languages=list(languages) if languages is not None else None,  # type: ignore[arg-type]
         multilingual=("ja" in languages) if languages is not None else None,
         index_backend=index_backend,  # type: ignore[arg-type]
+        engine=config.engine if available else None,
     )
 
 

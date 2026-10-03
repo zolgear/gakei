@@ -36,6 +36,9 @@ class EmbeddingCapabilities(BaseModel):
     multilingual: bool | None = None
     # 検索の方式(起動時に決める)。
     index_backend: Literal["pgvector", "numpy"]
+    # 使うエンジン(使えないときは null)。リモートなら、画像で探す画像と検索の文章が推論
+    # サーバーに送られることを画面に書く(ADR-0033 2章)。
+    engine: Literal["onnx", "remote"] | None = None
 
 
 class CapabilitiesResponse(BaseModel):
@@ -1204,6 +1207,14 @@ class SimilarAssetsResponse(BaseModel):
     """`GET /api/assets/{id}/similar`。起点の画像自身は含めない。"""
 
     asset_id: uuid.UUID
+    model_key: str
+    assets: list[SemanticAssetHit] = Field(default_factory=list)
+
+
+class SimilarImageSearchResponse(BaseModel):
+    """`POST /api/search/similar-image`。手元の画像に似た画像(類似度の高い順)。送った画像は
+    保存しないので、起点の id は無い。"""
+
     model_key: str
     assets: list[SemanticAssetHit] = Field(default_factory=list)
 

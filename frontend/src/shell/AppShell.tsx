@@ -8,6 +8,7 @@ import { AppBar } from './AppBar'
 import { IconRail } from './IconRail'
 import { SidebarPanel } from './SidebarPanel'
 import { loadSelectedPanel, saveSelectedPanel, type PanelId } from './panelStorage'
+import { autoCollapsesPanel, displayedPanel, selectPanel, type PanelOverride } from './panelVisibility'
 import { ResourcePanelContext } from '../context/useResourcePanel'
 import { useScrollRestoration } from './useScrollRestoration'
 import { MissingApiKeyBanner } from '../features/settings/MissingApiKeyBanner'
@@ -29,7 +30,20 @@ export function AppShell() {
   // タブの favicon で Run の進捗を示す(ADR-0009 8章)。App バーのロゴも同じ状態を読む
   // (useFaviconIconState、AppBar.tsx)。
   useFaviconProgress()
-  const [selectedPanel, setSelectedPanel] = useState<PanelId | null>(() => loadSelectedPanel())
+  // 利用者が覚えさせた選択(localStorage)。マップのようにパネルを自動で畳むページでは、これとは
+  // 別に「その訪問の間だけの選択」(`panelOverride`)を持ち、覚えた選択は書き換えない
+  // (panelVisibility.ts。2026-10-04、ユーザーの指示)。
+  const [rememberedPanel, setRememberedPanel] = useState<PanelId | null>(() => loadSelectedPanel())
+  const collapsed = autoCollapsesPanel(location.pathname)
+  const [panelOverride, setPanelOverride] = useState<PanelOverride>(undefined)
+  // 畳むページに入った/出たら、その訪問の間だけの選択を捨てる(描画中に直す。effect だと1フレーム
+  // 前の選択が見えてしまう)。
+  const [prevCollapsed, setPrevCollapsed] = useState(collapsed)
+  if (prevCollapsed !== collapsed) {
+    setPrevCollapsed(collapsed)
+    setPanelOverride(undefined)
+  }
+  const selectedPanel = displayedPanel(rememberedPanel, collapsed, panelOverride)
   const [drawerOpen, setDrawerOpen] = useState(false)
   // App バーの虫眼鏡 / `/` キーから検索パネルにフォーカスを渡すための要求番号。
   const [searchFocusRequest, setSearchFocusRequest] = useState(0)
@@ -49,9 +63,20 @@ export function AppShell() {
   // していたが、押せるのに反応しない違和感の方が大きく、開いても壊れるものは無いのでやめた
   // (2026-09-26。メインと同じ内容が二重に見えるだけ)。
   function handleSelectPanel(panel: PanelId) {
-    const next = selectedPanel === panel ? null : panel
-    setSelectedPanel(next)
-    saveSelectedPanel(next)
+    const next = selectPanel(rememberedPanel, collapsed, panelOverride, panel)
+    setRememberedPanel(next.remembered)
+    setPanelOverride(next.override)
+    if (next.save) saveSelectedPanel(next.remembered)
+  }
+
+  // ページから開く/畳む。畳むページではその訪問の間だけ従い、覚えた選択は変えない。
+  function setPanelFromPage(panel: PanelId | null) {
+    if (collapsed) {
+      setPanelOverride(panel)
+      return
+    }
+    setRememberedPanel(panel)
+    saveSelectedPanel(panel)
   }
 
   // 履歴カードの「系列を見る」など、ルート配下のページから特定のパネルを開く/閉じるための窓口。
@@ -60,23 +85,20 @@ export function AppShell() {
     () => ({
       selectedPanel,
       openPanel: (panel: PanelId) => {
-        setSelectedPanel(panel)
-        saveSelectedPanel(panel)
+        setPanelFromPage(panel)
         setDrawerOpen(true)
       },
-      collapsePanel: () => {
-        setSelectedPanel(null)
-        saveSelectedPanel(null)
-      },
+      collapsePanel: () => setPanelFromPage(null),
       focusSearchPanel: () => {
-        setSelectedPanel('search')
-        saveSelectedPanel('search')
+        setPanelFromPage('search')
         setDrawerOpen(true)
         setSearchFocusRequest((n) => n + 1)
       },
       searchFocusRequest,
     }),
-    [selectedPanel, searchFocusRequest],
+    // setPanelFromPage は collapsed だけに依存する。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedPanel, collapsed, searchFocusRequest],
   )
 
   return (

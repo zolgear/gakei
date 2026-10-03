@@ -89,15 +89,16 @@ class OnnxClipEngine:
     def image_batch_size(self) -> int:
         return self.model.image_batch_size
 
-    def embed_images(self, images: list[Image.Image]) -> np.ndarray:
+    def embed_images(self, images: list[Image.Image], *, priority: bool = False) -> np.ndarray:
         if not images:
             return np.zeros((0, self.dim), dtype=np.float32)
         preprocess = preprocess_ly if self.model.family == "ly_clip" else preprocess_clip
         input_name, output_name, _ = _IO_NAMES[self.model.family]
         batch = self.image_batch_size
         # 調停(WD Tagger を待つことがある)の外で鍵を取らない。鍵を持ったまま待つと、文章での
-        # 検索がその間ずっと待たされる。
-        with self._residency.use(self.RESIDENCY_OWNER), self._lock:
+        # 検索がその間ずっと待たされる。`priority` は「画像で探す」の1枚(利用者が待っている)
+        # で、文章での検索と同じ優先の区間にする(ADR-0033 2章・6章)。
+        with self._residency.use(self.RESIDENCY_OWNER, priority=priority), self._lock:
             session = self._ensure_vision()
             outputs: list[np.ndarray] = []
             for start in range(0, len(images), batch):

@@ -2,6 +2,7 @@
 
 - `GET /api/search/semantic`: 文章での検索
 - `GET /api/assets/{id}/similar`: 似た画像(その Asset が見えること)
+- `POST /api/search/similar-image`: 手元の画像に似た画像(画像は保存しない)
 - `GET /api/embeddings/duplicates`: 重複の候補
 - `GET /api/embeddings/graph`: マップの元データ
 
@@ -15,7 +16,7 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.auth.deps import require_user
@@ -30,12 +31,14 @@ from app.deps import (
 )
 from app.domain import embedding_settings
 from app.domain import semantic_search as domain
+from app.domain.assets import MAX_UPLOAD_BYTES
 from app.domain.schemas import (
     DuplicatesResponse,
     EmbeddingErrorDetail,
     EmbeddingGraphResponse,
     SemanticSearchResponse,
     SimilarAssetsResponse,
+    SimilarImageSearchResponse,
 )
 from app.domain.vector_index import VectorIndex
 from app.i18n import t
@@ -56,8 +59,14 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, domain.EmbeddingsInvalidQueryError):
         return HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, domain.EmbeddingsQueryImageTooLargeError):
+        return HTTPException(status_code=413, detail=str(exc))
     if isinstance(exc, domain.EmbeddingsEngineError):
         return HTTPException(status_code=503, detail=t("embeddings.queryFailed", error=str(exc)))
+    if isinstance(exc, domain.EmbeddingsImageEngineError):
+        return HTTPException(
+            status_code=503, detail=t("embeddings.queryImageFailed", error=str(exc))
+        )
     raise exc
 
 
@@ -65,7 +74,9 @@ _ERRORS = (
     domain.EmbeddingsConflictError,
     domain.EmbeddingsNotFoundError,
     domain.EmbeddingsInvalidQueryError,
+    domain.EmbeddingsQueryImageTooLargeError,
     domain.EmbeddingsEngineError,
+    domain.EmbeddingsImageEngineError,
 )
 
 
@@ -107,6 +118,56 @@ def semantic_search_endpoint(
         )
     except _ERRORS as exc:
         raise _http_error(exc) from exc
+
+
+@router.post(
+    "/api/search/similar-image",
+    response_model=SimilarImageSearchResponse,
+    operation_id="search_by_image",
+    responses={
+        **_CONFLICT,
+        413: {"description": "画像が大きすぎる(バイト数か画素数)"},
+        503: {"description": "画像の埋め込みを計算できない(メモリ不足、推論サーバーに届かない)"},
+    },
+)
+def search_by_image_endpoint(
+    file: UploadFile = File(..., description="探す元の画像(PNG / JPEG / WebP)。保存しない"),
+    limit: int = Query(default=domain.SEARCH_DEFAULT_LIMIT, ge=1, le=domain.SEARCH_MAX_LIMIT),
+    group_id: uuid.UUID | None = Query(default=None, description="このグループの画像に絞る"),
+    tag: list[str] | None = Query(
+        default=None,
+        description="このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND)",
+    ),
+    kind: Literal["upload", "generated", "sketch"] | None = Query(
+        default=None, description="この種類の画像に絞る"
+    ),
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    index: VectorIndex = Depends(get_vector_index),
+    embedder: Embedder = Depends(get_embedder),
+    user: CurrentUser = Depends(require_user),
+) -> SimilarImageSearchResponse:
+    """手元の画像に似た画像(類似度の高い順)。画像は Asset にせず、画像もベクトルも保存しない
+    (メモリの中だけで扱う)。大きさの上限と形式は画像の取り込み(`POST /api/assets`)と同じ。"""
+    # 上限を1バイト超えるまでだけ読む(取り込みと同じく、上限ちょうど以上は断る)。
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
+    try:
+        return domain.search_by_image(
+            db,
+            settings=settings,
+            index=index,
+            engines=embedder.engines,
+            viewer=user,
+            data=data,
+            limit=limit,
+            group_id=group_id,
+            tags=tag,
+            kind=kind,
+        )
+    except _ERRORS as exc:
+        raise _http_error(exc) from exc
+    finally:
+        del data
 
 
 @router.get(
@@ -178,7 +239,10 @@ def graph_endpoint(
     k: int = Query(default=domain.GRAPH_DEFAULT_K, ge=1, le=domain.GRAPH_MAX_K),
     limit: int = Query(default=domain.GRAPH_DEFAULT_LIMIT, ge=1, le=domain.GRAPH_MAX_LIMIT),
     group_id: uuid.UUID | None = Query(default=None),
-    tag: str | None = Query(default=None),
+    tag: list[str] | None = Query(
+        default=None,
+        description="このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND)",
+    ),
     include_lineage: bool = Query(default=False, description="系列の主たる親の辺も返す"),
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -196,7 +260,7 @@ def graph_endpoint(
             k=k,
             limit=limit,
             group_id=group_id,
-            tag=tag,
+            tags=tag,
             include_lineage=include_lineage,
         )
     except _ERRORS as exc:

@@ -55,7 +55,8 @@ class AssetFilter:
     viewer: CurrentUser
     group_id: uuid.UUID | None = None
     # 正規化前のタグ名(`annotations.tag_filter` が正規化する。不正なら TagNameError)。
-    tag: str | None = None
+    # 複数なら、すべてが付いている画像だけ(AND)。
+    tags: tuple[str, ...] = ()
     kind: str | None = None
 
     def conditions(self) -> list[Any]:
@@ -66,8 +67,9 @@ class AssetFilter:
         ]
         if self.kind is not None:
             clauses.append(Asset.kind == self.kind)
-        if self.tag is not None and self.tag.strip():
-            clauses.append(annotations_domain.tag_filter(self.tag))
+        for tag in self.tags:
+            if tag.strip():
+                clauses.append(annotations_domain.tag_filter(tag))
         if self.group_id is not None:
             clauses.append(
                 exists().where(

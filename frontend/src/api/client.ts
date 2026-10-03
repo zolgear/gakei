@@ -299,9 +299,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
-function toQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+function toQuery(
+  params: Record<string, string | number | boolean | readonly string[] | undefined | null>,
+): string {
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
+    // 配列は同じキーを繰り返す(`tag=a&tag=b`)。空の要素は送らない。
+    if (Array.isArray(value)) {
+      for (const item of value as readonly string[]) if (item !== '') qs.append(key, item)
+      continue
+    }
     // 真偽値のフラグ(`ungrouped` など)は true のときだけ送る(false は既定と同じなので省く)。
     if (value === undefined || value === null || value === '' || value === false) continue
     qs.set(key, String(value))
@@ -877,7 +884,10 @@ export type AssetEmbeddingStatus = components['schemas']['AssetEmbeddingStatus']
 export type SemanticSearchResponse = components['schemas']['SemanticSearchResponse']
 export type SemanticAssetHit = components['schemas']['SemanticAssetHit']
 export type SimilarAssetsResponse = components['schemas']['SimilarAssetsResponse']
+export type SimilarImageSearchResponse = components['schemas']['SimilarImageSearchResponse']
 export type DuplicatesResponse = components['schemas']['DuplicatesResponse']
+export type EmbeddingGraphResponse = components['schemas']['EmbeddingGraphResponse']
+export type EmbeddingGraphNode = components['schemas']['EmbeddingGraphNode']
 export type DuplicateGroup = components['schemas']['DuplicateGroup']
 export type DuplicateAsset = components['schemas']['DuplicateAsset']
 
@@ -931,6 +941,21 @@ export function semanticSearch(
   return request(`/api/search/semantic${toQuery(params)}`)
 }
 
+/**
+ * 手元の画像に似た画像(`POST /api/search/similar-image`、multipart)。画像は Asset にせず、
+ * サーバーは画像もベクトルも保存しない。大きすぎれば 413、画像として読めなければ 422、
+ * 推論できなければ 503。
+ */
+export function searchByImage(
+  file: Blob,
+  params: NonNullable<operations['search_by_image']['parameters']['query']> = {},
+  signal?: AbortSignal,
+): Promise<SimilarImageSearchResponse> {
+  const form = new FormData()
+  form.append('file', file, file instanceof File ? file.name : 'image')
+  return request(`/api/search/similar-image${toQuery(params)}`, { method: 'POST', body: form, signal })
+}
+
 /** 似た画像(起点の画像自身は含めない)。 */
 export function similarAssets(assetId: string, limit?: number): Promise<SimilarAssetsResponse> {
   return request(`/api/assets/${assetId}/similar${toQuery({ limit })}`)
@@ -941,4 +966,14 @@ export function embeddingDuplicates(
   params: NonNullable<operations['embedding_duplicates']['parameters']['query']> = {},
 ): Promise<DuplicatesResponse> {
   return request(`/api/embeddings/duplicates${toQuery(params)}`)
+}
+
+/**
+ * マップの元データ(ノードと k 近傍。ADR-0033 7章)。各行の先頭は自分自身。
+ * `include_lineage` を付けると系列の主たる親の辺(`[親, 子]` の位置)も返す。
+ */
+export function embeddingGraph(
+  params: NonNullable<operations['embedding_graph']['parameters']['query']> = {},
+): Promise<EmbeddingGraphResponse> {
+  return request(`/api/embeddings/graph${toQuery(params)}`)
 }

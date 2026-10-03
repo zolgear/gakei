@@ -78,7 +78,8 @@ class InfinityEngine:
     def image_batch_size(self) -> int:
         return IMAGE_BATCH_SIZE
 
-    def embed_images(self, images: list[Image.Image]) -> np.ndarray:
+    def embed_images(self, images: list[Image.Image], *, priority: bool = False) -> np.ndarray:
+        # 推論サーバーは別のマシンなので、ModelResidency の調停は要らない(`priority` は使わない)。
         inputs = [image_to_data_uri(image) for image in images]
         return self._embed(inputs, IMAGE_BATCH_SIZE, modality="image")
 

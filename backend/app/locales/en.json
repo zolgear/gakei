@@ -449,6 +449,9 @@
     "vectorPending": "The embedding of this image is being computed. Reopen this in a moment",
     "vectorFailed": "Computing the embedding of this image failed. You can recompute it from the image details",
     "vectorMissing": "The embedding of this image has not been computed yet. You can compute it from the image details",
-    "queryFailed": "Could not compute the embedding of the search text: {error}"
+    "queryFailed": "Could not compute the embedding of the search text: {error}",
+    "queryImageEmpty": "The image file is empty",
+    "queryImageTooManyPixels": "The image is too large (up to {max} pixels)",
+    "queryImageFailed": "Could not compute the embedding of the image: {error}"
   }
 }

@@ -5,6 +5,8 @@
   同期エンドポイント、MCP の `_in_thread`)。
 - 似た画像: 起点の画像のベクトルに近い画像(起点は除く)。ベクトルがまだ無ければ理由を返す
   (計算中、失敗、未計算)。
+- 画像で探す: 手元の画像(Asset にしない)のベクトルを、その場で1件だけ計算して近い画像を
+  返す。画像もベクトルも保存しない(メモリの中だけで扱う。2026-10-04 追記)。
 - 重複の候補: 類似度がしきい値以上で、かつ知覚ハッシュが近い組を、代表との類似度でまとめる
   (ADR-0033 12章)。
 - マップ: ノード(新しい順に上限まで)と、各ノードの k 近傍(自分自身を先頭に含める)。
@@ -15,6 +17,7 @@
 
 from __future__ import annotations
 
+import io
 import threading
 import uuid
 from collections import OrderedDict
@@ -23,13 +26,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from PIL import Image
+from PIL import UnidentifiedImageError as PillowUnidentifiedImageError
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
-from app.domain import embedding_settings, perceptual_hash
+from app.domain import derivatives, embedding_settings, perceptual_hash
 from app.domain import embeddings as embeddings_domain
+from app.domain.assets import ALLOWED_UPLOAD_FORMATS, MAX_UPLOAD_BYTES
 from app.domain.models import Asset, AssetKind, AssetPerceptualHash, RunInput, RunInputRole
 from app.domain.schemas import (
     DuplicateAsset,
@@ -40,6 +46,7 @@ from app.domain.schemas import (
     SemanticAssetHit,
     SemanticSearchResponse,
     SimilarAssetsResponse,
+    SimilarImageSearchResponse,
 )
 from app.domain.vector_index import (
     AssetFilter,
@@ -51,7 +58,7 @@ from app.domain.vector_index import (
     pairs_at_least,
 )
 from app.domain.visibility import get_visible_asset, get_visible_group
-from app.embedding.base import EmbeddingError
+from app.embedding.base import EmbeddingError, composite_on_white
 from app.embedding.catalog import CLIP_MODELS
 from app.i18n import t
 
@@ -76,6 +83,12 @@ DUPLICATES_MAX_GROUPS = 500
 
 QUERY_CACHE_SIZE = 128
 
+# 画像で探すときの画素数の上限。Pillow の既定の `Image.MAX_IMAGE_PIXELS`(約 8950 万画素。超えると
+# 警告、2倍で例外)と同じ値を、展開する前の寸法で確かめて 413 にする(展開の爆弾を避ける)。
+QUERY_IMAGE_MAX_PIXELS = 89_478_485
+# 画像で探すときに、同時に展開・推論する数。大きな画像の展開はメモリを使うので1つずつにする。
+_QUERY_IMAGE_SLOTS = threading.BoundedSemaphore(1)
+
 
 class EmbeddingsConflictError(Exception):
     """409 にする(`code` は `EmbeddingErrorDetail.code`)。"""
@@ -92,6 +105,14 @@ class EmbeddingsNotFoundError(Exception):
 
 class EmbeddingsInvalidQueryError(ValueError):
     """検索の文章やタグが不正(422)。"""
+
+
+class EmbeddingsImageEngineError(Exception):
+    """画像で探す画像の推論に失敗した(503)。"""
+
+
+class EmbeddingsQueryImageTooLargeError(Exception):
+    """画像で探す画像が大きすぎる(413。バイト数か画素数)。"""
 
 
 class EmbeddingsEngineError(Exception):
@@ -182,20 +203,29 @@ def build_filter(
     viewer: CurrentUser,
     *,
     group_id: uuid.UUID | None = None,
-    tag: str | None = None,
+    tags: Sequence[str] | None = None,
     kind: str | None = None,
 ) -> AssetFilter:
     """グループが見えなければ EmbeddingsNotFoundError、タグ名が不正なら
-    EmbeddingsInvalidQueryError。"""
+    EmbeddingsInvalidQueryError。`tags` は複数ならすべてが付いている画像だけ(AND)。
+    空の要素は無視し、正規化して同じになるものは1つにまとめる。"""
     if group_id is not None and get_visible_group(db, viewer, group_id) is None:
         raise EmbeddingsNotFoundError(t("assetGroups.notFound"))
-    tag_value = tag.strip() if tag is not None and tag.strip() else None
-    if tag_value is not None:
+    normalized: list[str] = []
+    for raw in tags or ():
+        if not raw.strip():
+            continue
         try:
-            annotations_domain.normalize_tag_name(tag_value)
+            name = annotations_domain.normalize_tag_name(raw)
         except annotations_domain.TagNameError as e:
             raise EmbeddingsInvalidQueryError(str(e)) from e
-    return AssetFilter(viewer=viewer, group_id=group_id, tag=tag_value, kind=kind)
+        if name not in normalized:
+            normalized.append(name)
+    return AssetFilter(viewer=viewer, group_id=group_id, tags=tuple(normalized), kind=kind)
+
+
+def _single_tag(tag: str | None) -> list[str] | None:
+    return [tag] if tag is not None else None
 
 
 def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
@@ -248,7 +278,7 @@ def semantic_search(
     if len(text) > QUERY_MAX_CHARS:
         raise EmbeddingsInvalidQueryError(t("embeddings.queryTooLong", max=QUERY_MAX_CHARS))
     active = require_active(db, settings)
-    flt = build_filter(db, viewer, group_id=group_id, tag=tag, kind=kind)
+    flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     vector = embed_query(db, active, text, engines, cache)
     hits = index.top_k(db, active.model_key, vector, flt, limit)
     return SemanticSearchResponse(
@@ -258,6 +288,92 @@ def semantic_search(
         multilingual=active.multilingual,
         assets=_hits_to_assets(db, hits),
     )
+
+
+# -- 画像で探す ---------------------------------------------------------------------
+
+
+def decode_query_image(data: bytes) -> Image.Image:
+    """画像で探す画像を、取り込みと同じ規則で確かめ、thumb(長辺 512px)と同じ縮め方をした
+    RGB(透明な部分は白で合成)にする。保存はしない。
+
+    取り込み(`assets.ingest`)と同じく、大きさの上限は `MAX_UPLOAD_BYTES`、形式は PNG / JPEG /
+    WebP。中身を実際に展開して確かめる。縮め方を thumb の作り方(WebP にして読み直す)と揃える
+    のは、取り込み済みの同じ画像と同じベクトルになるようにするため(worker は thumb から
+    計算する)。
+    """
+    if not data:
+        raise EmbeddingsInvalidQueryError(t("embeddings.queryImageEmpty"))
+    if len(data) >= MAX_UPLOAD_BYTES:
+        raise EmbeddingsQueryImageTooLargeError(t("assets.uploadTooLarge"))
+    too_many_pixels = t("embeddings.queryImageTooManyPixels", max=f"{QUERY_IMAGE_MAX_PIXELS:,}")
+    try:
+        image = Image.open(io.BytesIO(data))
+    except Image.DecompressionBombError as e:
+        # Pillow の上限(`Image.MAX_IMAGE_PIXELS` の2倍)を超える寸法は、開く時点で断られる。
+        raise EmbeddingsQueryImageTooLargeError(too_many_pixels) from e
+    except (PillowUnidentifiedImageError, OSError, ValueError) as e:
+        raise EmbeddingsInvalidQueryError(t("assets.cannotReadImage")) from e
+    # 展開する前に、寸法(ヘッダーの値)と形式で断る。
+    width, height = image.size
+    if width * height > QUERY_IMAGE_MAX_PIXELS:
+        image.close()
+        raise EmbeddingsQueryImageTooLargeError(too_many_pixels)
+    if image.format not in ALLOWED_UPLOAD_FORMATS:
+        image.close()
+        raise EmbeddingsInvalidQueryError(t("assets.unsupportedFormat", format=image.format))
+    try:
+        image.load()  # ヘッダーだけでなく実際に展開して確かめる
+        thumb = Image.open(io.BytesIO(derivatives.make_thumb(image)))
+        thumb.load()
+    except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
+        raise EmbeddingsInvalidQueryError(t("assets.cannotReadImage")) from e
+    finally:
+        image.close()
+    return composite_on_white(thumb)
+
+
+def embed_query_image(
+    db: Session, active: ActiveModel, image: Image.Image, engines: EmbeddingEngines
+) -> np.ndarray:
+    """画像で探す画像のベクトル(同期。呼び出し側がスレッドで呼ぶ)。利用者が待っているので、
+    ローカルのエンジンでは優先の区間で推論する(文章での検索と同じ。ADR-0033 2章)。
+    画像は毎回違うので覚えない。"""
+    try:
+        engine = engines.engine_for(db, active.config)
+        vectors = engine.embed_images([image], priority=True)
+    except EmbeddingError as e:
+        raise EmbeddingsImageEngineError(str(e)) from e
+    if vectors.shape[0] != 1:
+        raise EmbeddingsImageEngineError(t("embeddings.remoteInvalidResponse"))
+    return np.asarray(vectors[0], dtype=np.float32)
+
+
+def search_by_image(
+    db: Session,
+    *,
+    settings: Settings,
+    index: VectorIndex,
+    engines: EmbeddingEngines,
+    viewer: CurrentUser,
+    data: bytes,
+    limit: int = SEARCH_DEFAULT_LIMIT,
+    group_id: uuid.UUID | None = None,
+    tags: Sequence[str] | None = None,
+    kind: str | None = None,
+) -> SimilarImageSearchResponse:
+    """手元の画像に似た画像(類似度の高い順)。画像は Asset にせず、画像もベクトルも保存しない
+    (DB の行もファイルも作らない)。`tags` は複数ならすべてが付いた画像だけ(AND)。"""
+    active = require_active(db, settings)
+    flt = build_filter(db, viewer, group_id=group_id, tags=tags, kind=kind)
+    with _QUERY_IMAGE_SLOTS:
+        image = decode_query_image(data)
+        try:
+            vector = embed_query_image(db, active, image, engines)
+        finally:
+            image.close()
+    hits = index.top_k(db, active.model_key, vector, flt, limit)
+    return SimilarImageSearchResponse(model_key=active.model_key, assets=_hits_to_assets(db, hits))
 
 
 # -- 似た画像 -----------------------------------------------------------------------
@@ -294,7 +410,7 @@ def similar_assets(
     if asset is None:
         raise EmbeddingsNotFoundError(t("assets.notFound"))
     active = require_active(db, settings)
-    flt = build_filter(db, viewer, group_id=group_id, tag=tag, kind=kind)
+    flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     hits = neighbors(index, db, active.model_key, asset.id, flt, limit)
     if hits is None:
         raise _missing_vector_error(db, asset, active.model_key)
@@ -507,11 +623,12 @@ def build_graph(
     k: int = GRAPH_DEFAULT_K,
     limit: int = GRAPH_DEFAULT_LIMIT,
     group_id: uuid.UUID | None = None,
-    tag: str | None = None,
+    tags: Sequence[str] | None = None,
     include_lineage: bool = False,
 ) -> EmbeddingGraphResponse:
+    """`tags` は複数ならすべてが付いている画像だけ(AND)。"""
     active = require_active(db, settings)
-    flt = build_filter(db, viewer, group_id=group_id, tag=tag)
+    flt = build_filter(db, viewer, group_id=group_id, tags=tags)
     all_ids = candidate_ids(db, active.model_key, flt)
     total = len(all_ids)
     ordered, matrix = index.subset(db, active.model_key, all_ids[:limit])

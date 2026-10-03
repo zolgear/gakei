@@ -53,6 +53,7 @@
       "workspaceNav": "Workspace",
       "historyTab": "History",
       "studioTab": "Studio",
+      "mapTab": "Map",
       "queueStatus": "Running {running}, queued {queued}",
       "running": "Running {count}",
       "queued": "Queued {count}",
@@ -186,7 +187,11 @@
     "hint": "Search across runs, images and prompt sets",
     "openRun": "Show this run",
     "showImage": "Show image",
-    "loadPrompt": "Load into the prompt"
+    "loadPrompt": "Load into the prompt",
+    "imageSearch": "Search by image",
+    "imageSearchTitle": "Find images similar to a local image on the search page (the image is not saved)",
+    "semanticHint": "Describe the image you are looking for",
+    "dropOverlay": "Drop to find similar images on the search page"
   },
   "search": {
     "ariaLabel": "Search",
@@ -216,14 +221,24 @@
       "modeKeyword": "Keyword",
       "modeSemantic": "Semantic",
       "semanticPlaceholder": "Describe the image you want",
-      "semanticEnterQuery": "Describe the image you are looking for.",
+      "semanticEnterQuery": "Describe the image you are looking for, or search by an image.",
       "semanticNoResults": "Nothing found.",
       "semanticHeading": "Closest first",
       "showMore": "Show more",
       "englishOnlyHint": "The active model is for English. Japanese queries rarely match, so search in English.",
       "similarHeading": "Images similar to this one",
       "similarOriginLabel": "Open the source image",
-      "searchFailed": "Search failed."
+      "searchFailed": "Search failed.",
+      "imageSearch": "Search by image",
+      "imageSearchChoose": "Choose an image",
+      "imageSearchDropHint": "You can also drop an image on this page or paste one (Ctrl+V / ⌘V).",
+      "imageSearchNotStored": "The image is not saved. It is a local file, so it is not kept in the URL and disappears when you reload.",
+      "imageSearchRemote": "The image is sent to the configured inference server.",
+      "imageSearchClear": "Remove the image",
+      "imageSearchHeading": "Closest to this image",
+      "imageSearchQueryLabel": "Image to search with (not saved)",
+      "imageSearchDropOverlay": "Drop to find images similar to this one",
+      "imageSearchNotImage": "Choose an image file."
     }
   },
   "settings": {
@@ -292,6 +307,15 @@
         "optionBottom": "Input pane at the bottom (default)",
         "optionSidebar": "Input pane on the left (sidebar)",
         "help": "On narrow screens (under 768px) the input pane always sits below the result. You can also switch from the button at the top right of the result area."
+      },
+      "browserStorage": {
+        "heading": "Settings stored in this browser",
+        "label": "Reset this browser's settings to defaults",
+        "help": "The settings on this page, panel sizes and open/closed states, map values, the generation form draft and similar are stored only in this browser. Clearing them restores the defaults.",
+        "clear": "Clear all",
+        "confirmMessage": "This clears all GAKEI settings stored in this browser and reloads the page.\n\nCleared: display language (falls back to the browser's language), tab icon progress, generation screen layout and input size, sidebar width and open panel, open/closed states in the stock and the viewer, map values (tab, neighbors, limit, threshold, lineage edges), sketch pen, seed mode, and the last selected group.\n\nSettings stored on the server, images, history and your login are not affected.",
+        "confirmWarning": "The unsent prompt, parameters and input images in the generation form will also be cleared.",
+        "confirmLabel": "Clear and reload"
       }
     },
     "accessTokens": {
@@ -1822,5 +1846,62 @@
     "undo": "Undo",
     "deleteFailed": "Couldn't delete.",
     "restoreFailed": "Couldn't undo."
+  },
+  "map": {
+    "title": "Map",
+    "viewLabel": "View",
+    "tabMap": "Map",
+    "tabNetwork": "Network",
+    "loading": "Loading…",
+    "loadFailed": "Couldn't load the map data.",
+    "filters": "Filters",
+    "filtersWithCount": "Filters ({count})",
+    "groupLabel": "Group",
+    "groupAll": "All",
+    "groupUnknown": "(Group not found)",
+    "tagLabel": "Tags",
+    "tagAddMore": "Add another tag",
+    "tagHelp": "Shows only images that have all of the selected tags.",
+    "limitLabel": "Limit",
+    "limitOption": "{count} images",
+    "kLabel": "Neighbors",
+    "kHelp": "How many similar images each image looks at. More emphasizes the overall shape; fewer emphasizes local similarity.",
+    "thresholdLabel": "Similarity threshold",
+    "edgeCount": {
+      "one": "{count} edge",
+      "other": "{count} edges"
+    },
+    "edgeCountCapped": "{count} edges (the most similar of {total})",
+    "showLineage": "Overlay lineage edges",
+    "truncated": "Showing only the newest {count} of {total} images. Narrow down by group or tag, or raise the limit.",
+    "truncatedAtMax": "Showing only the newest {count} of {total} images. Narrow down by group or tag.",
+    "empty": "No images to show. Only images with computed embeddings appear here.",
+    "emptyFiltered": "No images to show with these filters.",
+    "tooFew": "Not enough images to build a map (needs at least {min}).",
+    "layoutPreparing": "Preparing layout…",
+    "layoutProgress": "Computing layout {percent}%",
+    "layoutFailed": "Couldn't compute the layout.",
+    "networkRunning": "Settling layout…",
+    "umapAriaLabel": "Map placing similar images close together ({count} images)",
+    "networkAriaLabel": "Network linking similar images ({count} images, {edges} edges)",
+    "zoomGroup": "Zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to view",
+    "untitled": "(Untitled)",
+    "selectionLabel": "Selected image",
+    "neighborsHighlighted": {
+      "one": "Highlighting {count} similar image",
+      "other": "Highlighting {count} similar images"
+    },
+    "openInViewer": "Open in viewer",
+    "lineageGraph": "Lineage graph",
+    "similarInSearch": "See similar images in search",
+    "expandPreview": "Show larger",
+    "collapsePreview": "Back to card",
+    "previewLabel": "Selected image details",
+    "previewLoadFailed": "Could not load the image details.",
+    "kindLabel": "Kind",
+    "embeddedPromptHeading": "Prompt (embedded in the image, unverified)"
   }
 }
