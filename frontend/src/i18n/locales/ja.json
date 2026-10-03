@@ -187,7 +187,11 @@
     "hint": "実行・画像・プロンプトセットを横断して検索します",
     "openRun": "この Run を表示",
     "showImage": "画像を表示",
-    "loadPrompt": "プロンプト欄に読み込む"
+    "loadPrompt": "プロンプト欄に読み込む",
+    "imageSearch": "画像で探す",
+    "imageSearchTitle": "手元の画像に似た画像を、検索ページで探します(画像は保存しません)",
+    "semanticHint": "探したい画像を文章で入力します",
+    "dropOverlay": "落として、検索ページで似た画像を探す"
   },
   "search": {
     "ariaLabel": "検索",
@@ -217,14 +221,24 @@
       "modeKeyword": "キーワード",
       "modeSemantic": "意味",
       "semanticPlaceholder": "探したい画像を文章で",
-      "semanticEnterQuery": "探したい画像を文章で入力してください。",
+      "semanticEnterQuery": "探したい画像を文章で入力するか、画像で探してください。",
       "semanticNoResults": "見つかりません。",
       "semanticHeading": "近い順",
       "showMore": "さらに表示",
       "englishOnlyHint": "使っているモデルは英語向けです。日本語ではほとんど当たらないので、英語で検索してください。",
       "similarHeading": "この画像に似た画像",
       "similarOriginLabel": "起点の画像を開く",
-      "searchFailed": "検索に失敗しました。"
+      "searchFailed": "検索に失敗しました。",
+      "imageSearch": "画像で探す",
+      "imageSearchChoose": "画像を選ぶ",
+      "imageSearchDropHint": "画像をこの画面に落とすか、貼り付け(Ctrl+V / ⌘V)でも探せます。",
+      "imageSearchNotStored": "画像は保存しません。手元の画像なので URL には残らず、再読み込みすると消えます。",
+      "imageSearchRemote": "画像は、設定された推論サーバーに送られます。",
+      "imageSearchClear": "画像を外す",
+      "imageSearchHeading": "この画像に近い順",
+      "imageSearchQueryLabel": "探す元の画像(保存しません)",
+      "imageSearchDropOverlay": "落として、この画像に似た画像を探す",
+      "imageSearchNotImage": "画像のファイルを選んでください。"
     }
   },
   "settings": {

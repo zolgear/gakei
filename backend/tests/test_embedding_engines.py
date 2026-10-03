@@ -436,3 +436,25 @@ def test_vector_blob_roundtrip_and_normalize() -> None:
     assert blob_to_vector(blob).tolist() == pytest.approx([0.6, 0.8])
     # 長さ 0 のベクトルは 0 のまま(0 で割らない)。
     assert l2_normalize(np.zeros((1, 3))).tolist() == [[0.0, 0.0, 0.0]]
+
+
+def test_embed_images_priority_uses_priority_residency(
+    tmp_path: Path, fake_sessions: list[_FakeSession]
+) -> None:
+    """「画像で探す」の1枚は、文章での検索と同じ優先の区間で推論する(ADR-0033 2章・6章)。"""
+    from contextlib import contextmanager
+
+    _write_model_files(tmp_path, "clip-vit-b32-u8")
+    calls: list[tuple[str, bool]] = []
+
+    class _SpyResidency(ModelResidency):
+        @contextmanager
+        def use(self, owner: str, *, priority: bool = False):  # type: ignore[override]  # noqa: ANN201
+            calls.append((owner, priority))
+            with super().use(owner, priority=priority):
+                yield
+
+    engine = _engine(tmp_path, "clip-vit-b32-u8", residency=_SpyResidency())
+    engine.embed_images([Image.new("RGB", (8, 8))])
+    engine.embed_images([Image.new("RGB", (8, 8))], priority=True)
+    assert calls == [("embedding", False), ("embedding", True)]

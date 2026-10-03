@@ -884,6 +884,7 @@ export type AssetEmbeddingStatus = components['schemas']['AssetEmbeddingStatus']
 export type SemanticSearchResponse = components['schemas']['SemanticSearchResponse']
 export type SemanticAssetHit = components['schemas']['SemanticAssetHit']
 export type SimilarAssetsResponse = components['schemas']['SimilarAssetsResponse']
+export type SimilarImageSearchResponse = components['schemas']['SimilarImageSearchResponse']
 export type DuplicatesResponse = components['schemas']['DuplicatesResponse']
 export type EmbeddingGraphResponse = components['schemas']['EmbeddingGraphResponse']
 export type EmbeddingGraphNode = components['schemas']['EmbeddingGraphNode']
@@ -938,6 +939,21 @@ export function semanticSearch(
   params: operations['semantic_search']['parameters']['query'],
 ): Promise<SemanticSearchResponse> {
   return request(`/api/search/semantic${toQuery(params)}`)
+}
+
+/**
+ * 手元の画像に似た画像(`POST /api/search/similar-image`、multipart)。画像は Asset にせず、
+ * サーバーは画像もベクトルも保存しない。大きすぎれば 413、画像として読めなければ 422、
+ * 推論できなければ 503。
+ */
+export function searchByImage(
+  file: Blob,
+  params: NonNullable<operations['search_by_image']['parameters']['query']> = {},
+  signal?: AbortSignal,
+): Promise<SimilarImageSearchResponse> {
+  const form = new FormData()
+  form.append('file', file, file instanceof File ? file.name : 'image')
+  return request(`/api/search/similar-image${toQuery(params)}`, { method: 'POST', body: form, signal })
 }
 
 /** 似た画像(起点の画像自身は含めない)。 */

@@ -187,7 +187,11 @@
     "hint": "Search across runs, images and prompt sets",
     "openRun": "Show this run",
     "showImage": "Show image",
-    "loadPrompt": "Load into the prompt"
+    "loadPrompt": "Load into the prompt",
+    "imageSearch": "Search by image",
+    "imageSearchTitle": "Find images similar to a local image on the search page (the image is not saved)",
+    "semanticHint": "Describe the image you are looking for",
+    "dropOverlay": "Drop to find similar images on the search page"
   },
   "search": {
     "ariaLabel": "Search",
@@ -217,14 +221,24 @@
       "modeKeyword": "Keyword",
       "modeSemantic": "Semantic",
       "semanticPlaceholder": "Describe the image you want",
-      "semanticEnterQuery": "Describe the image you are looking for.",
+      "semanticEnterQuery": "Describe the image you are looking for, or search by an image.",
       "semanticNoResults": "Nothing found.",
       "semanticHeading": "Closest first",
       "showMore": "Show more",
       "englishOnlyHint": "The active model is for English. Japanese queries rarely match, so search in English.",
       "similarHeading": "Images similar to this one",
       "similarOriginLabel": "Open the source image",
-      "searchFailed": "Search failed."
+      "searchFailed": "Search failed.",
+      "imageSearch": "Search by image",
+      "imageSearchChoose": "Choose an image",
+      "imageSearchDropHint": "You can also drop an image on this page or paste one (Ctrl+V / ⌘V).",
+      "imageSearchNotStored": "The image is not saved. It is a local file, so it is not kept in the URL and disappears when you reload.",
+      "imageSearchRemote": "The image is sent to the configured inference server.",
+      "imageSearchClear": "Remove the image",
+      "imageSearchHeading": "Closest to this image",
+      "imageSearchQueryLabel": "Image to search with (not saved)",
+      "imageSearchDropOverlay": "Drop to find images similar to this one",
+      "imageSearchNotImage": "Choose an image file."
     }
   },
   "settings": {

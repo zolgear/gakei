@@ -30,6 +30,7 @@ class FakeEmbeddingEngine:
         self._image_batch_size = image_batch_size
         self.image_calls: list[int] = []
         self.text_calls: list[int] = []
+        self.priority_image_calls = 0
 
     @property
     def model_key(self) -> str:
@@ -43,8 +44,10 @@ class FakeEmbeddingEngine:
     def image_batch_size(self) -> int:
         return self._image_batch_size
 
-    def embed_images(self, images: list[Image.Image]) -> np.ndarray:
+    def embed_images(self, images: list[Image.Image], *, priority: bool = False) -> np.ndarray:
         self.image_calls.append(len(images))
+        if priority:
+            self.priority_image_calls += 1
         if not images:
             return np.zeros((0, FAKE_DIM), dtype=np.float32)
         rows = []

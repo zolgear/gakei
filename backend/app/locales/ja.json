@@ -449,6 +449,9 @@
     "vectorPending": "この画像の埋め込みを計算中です。しばらくしてから開き直してください",
     "vectorFailed": "この画像の埋め込みの計算に失敗しました。画像の詳細から計算し直せます",
     "vectorMissing": "この画像の埋め込みはまだ計算していません。画像の詳細から計算できます",
-    "queryFailed": "検索の文章の埋め込みを計算できませんでした: {error}"
+    "queryFailed": "検索の文章の埋め込みを計算できませんでした: {error}",
+    "queryImageEmpty": "画像ファイルが空です",
+    "queryImageTooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
+    "queryImageFailed": "画像の埋め込みを計算できませんでした: {error}"
   }
 }
