@@ -30,6 +30,8 @@ OpenAI API のキーがあれば動く。画像はローカルのディレクト
 | ![系列グラフ](docs/images/lineage-ja.webp) | ![編集前と比較](docs/images/compare-ja.webp) |
 | **Generated の詳細と系列** | **スケッチを描いて入力にする** |
 | ![Generated の詳細と系列](docs/images/detail-ja.webp) | ![スケッチを描いて入力にする](docs/images/sketch-ja.webp) |
+| **マップ(似た画像のネットワークと系列)** | **意味で検索(「和風の版画」)** |
+| ![マップ(似た画像のネットワークと系列)](docs/images/map-ja.webp) | ![意味で検索(「和風の版画」)](docs/images/semantic-ja.webp) |
 
 スクリーンショット内の画像は、手描きのスケッチを除き GPT Image 2.5 で生成したサンプル。
 
