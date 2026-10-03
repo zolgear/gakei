@@ -22,6 +22,7 @@ from app.domain.models import (
     Asset,
     AssetEmbedding,
     AssetKind,
+    AssetPerceptualHash,
     AssetTag,
     PromptSet,
     PromptSetItem,
@@ -45,6 +46,7 @@ _RUN_ID = uuid.uuid4()
 _USER_ID = uuid.uuid4()
 _CREATED = datetime(2026, 9, 1, 12, 34, 56, 789000, tzinfo=UTC)
 _VECTOR = np.array([0.5, -0.5, 0.5, 0.5], dtype=np.float32)
+_DHASH = bytes.fromhex("ff00a5c3e7180f81")
 
 
 def _asset(asset_id: uuid.UUID, kind: AssetKind, **kwargs: object) -> Asset:
@@ -130,6 +132,16 @@ def source_db(tmp_path: Path) -> Path:
                 updated_at=_CREATED,
             )
         )
+        # ADR-0033 12章: 知覚ハッシュ。
+        db.add(
+            AssetPerceptualHash(
+                asset_id=_BASE_ID,
+                dhash=_DHASH,
+                color=bytes(range(64)),
+                version=1,
+                created_at=_CREATED,
+            )
+        )
         prompt_set = PromptSet(name="セット")
         db.add(prompt_set)
         db.flush()
@@ -200,6 +212,11 @@ def test_copies_all_tables_and_row_counts_match(
         assert hit == _SKETCH_ID
         embedding = db.execute(select(AssetEmbedding)).scalar_one()
         assert np.array_equal(blob_to_vector(embedding.vector), _VECTOR)
+        # 64 ビット全部を使う値(最上位ビットが立つ)もそのまま移る。
+        phash = db.execute(select(AssetPerceptualHash)).scalar_one()
+        assert phash.dhash == _DHASH
+        assert phash.color == bytes(range(64))
+        assert phash.version == 1
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
         # pgvector を使えるなら、`embedding` 列も BLOB から作っている(ADR-0033 4章)。
@@ -210,7 +227,8 @@ def test_copies_all_tables_and_row_counts_match(
             assert text_value == embedding_index.vector_literal(_VECTOR).replace(" ", "")
     engine.dispose()
     assert counts["asset_embedding"] == (1, 1)
-    assert version == "0024"
+    assert counts["asset_perceptual_hash"] == (1, 1)
+    assert version == "0025"
 
     # 元の SQLite は消さない(戻したい場合は DATABASE_URL を外せば元の状態で動く)。
     assert source_db.is_file()

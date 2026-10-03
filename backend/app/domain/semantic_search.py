@@ -5,7 +5,8 @@
   同期エンドポイント、MCP の `_in_thread`)。
 - 似た画像: 起点の画像のベクトルに近い画像(起点は除く)。ベクトルがまだ無ければ理由を返す
   (計算中、失敗、未計算)。
-- 重複の候補: 類似度がしきい値以上の組を union-find でまとめる。
+- 重複の候補: 類似度がしきい値以上で、かつ知覚ハッシュが近い組を、代表との類似度でまとめる
+  (ADR-0033 12章)。
 - マップ: ノード(新しい順に上限まで)と、各ノードの k 近傍(自分自身を先頭に含める)。
 
 見える範囲(ADR-0025)は近傍を探す前に掛ける(`vector_index.AssetFilter`)。埋め込みが無効、
@@ -27,9 +28,9 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
-from app.domain import embedding_settings
+from app.domain import embedding_settings, perceptual_hash
 from app.domain import embeddings as embeddings_domain
-from app.domain.models import Asset, AssetKind, RunInput, RunInputRole
+from app.domain.models import Asset, AssetKind, AssetPerceptualHash, RunInput, RunInputRole
 from app.domain.schemas import (
     DuplicateAsset,
     DuplicateGroup,
@@ -305,40 +306,73 @@ def similar_assets(
 # -- 重複の候補 ---------------------------------------------------------------------
 
 
-class _UnionFind:
-    def __init__(self, n: int) -> None:
-        self.parent = list(range(n))
+def leader_groups(
+    n: int, pairs: Sequence[tuple[int, int, float]]
+) -> list[tuple[int, list[tuple[int, float]]]]:
+    """組を代表との類似度でまとめる(ADR-0033 12章)。位置は新しい順(0 がいちばん新しい)。
 
-    def find(self, x: int) -> int:
-        while self.parent[x] != x:
-            self.parent[x] = self.parent[self.parent[x]]
-            x = self.parent[x]
-        return x
+    古い画像(位置の大きいもの)から順に、まだどのグループにも入っていない画像を代表にし、
+    代表と組になっている、まだどのグループにも入っていない画像をそのグループに入れる。
+    union-find と違い、A〜B、B〜C の組があっても A と C が組でなければ、A と C は同じグループに
+    ならない(連鎖しない)。返すのは `(代表, [(メンバー, 代表との類似度), ...])` で、メンバーが
+    1件以上あるものだけ。
+    """
+    neighbors: dict[int, dict[int, float]] = {}
+    for i, j, score in pairs:
+        neighbors.setdefault(i, {})[j] = score
+        neighbors.setdefault(j, {})[i] = score
+    assigned: set[int] = set()
+    groups: list[tuple[int, list[tuple[int, float]]]] = []
+    for leader in range(n - 1, -1, -1):
+        if leader in assigned or leader not in neighbors:
+            continue
+        members = sorted((x, score) for x, score in neighbors[leader].items() if x not in assigned)
+        if not members:
+            continue
+        assigned.add(leader)
+        assigned.update(x for x, _ in members)
+        groups.append((leader, members))
+    return groups
 
-    def union(self, a: int, b: int) -> None:
-        ra, rb = self.find(a), self.find(b)
-        if ra != rb:
-            # 小さい位置(新しい画像)を根にする(結果の順を安定させる)。
-            if ra < rb:
-                self.parent[rb] = ra
-            else:
-                self.parent[ra] = rb
+
+def _load_hashes(
+    db: Session, ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, perceptual_hash.PerceptualHash]:
+    """今の版の知覚ハッシュ(無い、版が古いものは含めない)。"""
+    found: dict[uuid.UUID, perceptual_hash.PerceptualHash] = {}
+    ids = list(ids)
+    for start in range(0, len(ids), 900):
+        rows = db.execute(
+            select(
+                AssetPerceptualHash.asset_id,
+                AssetPerceptualHash.dhash,
+                AssetPerceptualHash.color,
+                AssetPerceptualHash.version,
+            ).where(AssetPerceptualHash.asset_id.in_(ids[start : start + 900]))
+        ).all()
+        for asset_id, dhash, color, version in rows:
+            value = perceptual_hash.from_stored(dhash, color, version)
+            if value is not None:
+                found[asset_id] = value
+    return found
 
 
-def group_pairs(n: int, pairs: Sequence[tuple[int, int, float]]) -> list[list[int]]:
-    """組を union-find でまとめる(2件以上のグループだけ。各グループは位置の昇順)。"""
-    uf = _UnionFind(n)
-    for i, j, _ in pairs:
-        uf.union(i, j)
-    groups: dict[int, list[int]] = {}
-    for i, j, _ in pairs:
-        for x in (i, j):
-            groups.setdefault(uf.find(x), [])
-    for x in range(n):
-        root = uf.find(x)
-        if root in groups:
-            groups[root].append(x)
-    return [members for members in groups.values() if len(members) >= 2]
+def filter_by_hash(
+    pairs: Sequence[tuple[int, int, float]],
+    hashes: Sequence[perceptual_hash.PerceptualHash | None],
+) -> list[tuple[int, int, float]]:
+    """知覚ハッシュが近くない組を外す。どちらかにハッシュが無い組は、CLIP だけで判定する
+    (残す)。`hashes` は位置ごとのハッシュ。"""
+    if not pairs:
+        return []
+    table = perceptual_hash.decode_many(list(hashes))
+    i = np.fromiter((p[0] for p in pairs), dtype=np.int64, count=len(pairs))
+    j = np.fromiter((p[1] for p in pairs), dtype=np.int64, count=len(pairs))
+    both = table.present[i] & table.present[j]
+    keep = ~both
+    if both.any():
+        keep[both] = perceptual_hash.close_pairs(table, i[both], j[both])
+    return [pair for pair, ok in zip(pairs, keep.tolist(), strict=True) if ok]
 
 
 def find_duplicates(
@@ -359,17 +393,18 @@ def find_duplicates(
     ordered, matrix = index.subset(db, active.model_key, ids)
     pairs = pairs_at_least(matrix, value) if len(ordered) >= 2 else []
 
-    best: dict[int, float] = {}
-    for i, j, score in pairs:
-        best[i] = max(best.get(i, -1.0), score)
-        best[j] = max(best.get(j, -1.0), score)
-    raw_groups = group_pairs(len(ordered), pairs)
+    involved = sorted({x for i, j, _ in pairs for x in (i, j)})
+    hashes = _load_hashes(db, [ordered[x] for x in involved])
+    by_position = [hashes.get(asset_id) for asset_id in ordered]
+    pairs = filter_by_hash(pairs, by_position)
+
+    raw_groups = leader_groups(len(ordered), pairs)
     # 大きい順。同じ大きさなら、いちばん新しい画像を含むグループを先に(位置が小さい)。
-    raw_groups.sort(key=lambda members: (-len(members), members[0]))
+    raw_groups.sort(key=lambda g: (-(len(g[1]) + 1), min(g[0], g[1][0][0])))
     groups_truncated = len(raw_groups) > limit
     raw_groups = raw_groups[:limit]
 
-    member_ids = [ordered[x] for members in raw_groups for x in members]
+    member_ids = [ordered[x] for leader, members in raw_groups for x in (leader, *dict(members))]
     assets = (
         {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_(member_ids))).scalars()}
         if member_ids
@@ -377,9 +412,11 @@ def find_duplicates(
     )
     titles = annotations_domain.bulk_titles(db, member_ids)
     groups: list[DuplicateGroup] = []
-    for members in raw_groups:
+    for leader, members in raw_groups:
+        # 代表は、メンバーとの類似度の最大値。メンバーは代表との類似度。
+        scores = [(leader, max(score for _, score in members)), *members]
         items: list[DuplicateAsset] = []
-        for x in members:
+        for x, score in scores:
             asset = assets.get(ordered[x])
             if asset is None:
                 continue
@@ -393,12 +430,19 @@ def find_duplicates(
                     bytes=asset.bytes,
                     created_at=asset.created_at,
                     title=titles.get(asset.id),
-                    max_score=round(best.get(x, 0.0), 6),
+                    max_score=round(score, 6),
+                    hash_missing=by_position[x] is None,
                 )
             )
         items.sort(key=lambda a: (a.created_at, str(a.id)))
         if len(items) >= 2:
-            groups.append(DuplicateGroup(assets=items, max_score=max(a.max_score for a in items)))
+            groups.append(
+                DuplicateGroup(
+                    assets=items,
+                    max_score=max(a.max_score for a in items),
+                    hash_missing=any(bool(a.hash_missing) for a in items),
+                )
+            )
     return DuplicatesResponse(
         model_key=active.model_key,
         threshold=value,

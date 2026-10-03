@@ -158,7 +158,8 @@ def duplicates_endpoint(
     index: VectorIndex = Depends(get_vector_index),
     user: CurrentUser = Depends(require_user),
 ) -> DuplicatesResponse:
-    """重複の候補(類似度がしきい値以上の組を union-find でまとめたグループ、大きい順)。"""
+    """重複の候補(類似度がしきい値以上で知覚ハッシュも近い組を、代表との類似度でまとめた
+    グループ、大きい順)。"""
     try:
         return domain.find_duplicates(
             db, settings=settings, index=index, viewer=user, threshold=threshold, limit=limit

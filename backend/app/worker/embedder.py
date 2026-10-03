@@ -14,6 +14,10 @@
   持った行列を読み直す目安にする(ADR-0033 6章)。
 - PostgreSQL で pgvector を使えるときは、BLOB と同じトランザクションで `embedding` 列も書き、
   そのモデルの最初のベクトルを書いたときに部分 HNSW 索引を作る。
+- 知覚ハッシュ(ADR-0033 12章): 埋め込みを計算するときに、同じ thumb からハッシュも作る
+  (無いか、版が古いときだけ)。ハッシュの失敗は記録して飛ばし、埋め込みは失敗にしない。
+  待ち行列が空のときは、埋め込みはあるのにハッシュが無い画像(この機能より前に計算したもの
+  など)を少しずつ埋める。読めなかった画像は、プロセスが動いている間は再び試さない。
 """
 
 from __future__ import annotations
@@ -29,12 +33,13 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PIL import Image
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import sessionmaker
 
 from app.domain import embedding_index, embedding_settings
 from app.domain import embeddings as embeddings_domain
-from app.domain.models import Asset, AssetEmbedding, AssetKind
+from app.domain import perceptual_hash as perceptual_hash_domain
+from app.domain.models import Asset, AssetEmbedding, AssetKind, AssetPerceptualHash
 from app.domain.storage import AssetStore
 from app.domain.text_safety import sanitize_external_text
 from app.embedding.base import EmbeddingEngine, EmbeddingError, vector_to_blob
@@ -47,6 +52,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CLAIM_LIMIT = 8
+# 待ち行列が空のときに、1回で知覚ハッシュを埋める枚数。
+HASH_BACKFILL_LIMIT = 16
 _POLL_INTERVAL_SECONDS = 1.0
 _ERROR_MAX = 500
 
@@ -144,6 +151,8 @@ class Embedder:
         self._stop = asyncio.Event()
         self._task: asyncio.Task | None = None
         self._event_loop: asyncio.AbstractEventLoop | None = None
+        # 知覚ハッシュを作れなかった Asset(プロセス内。埋め戻しで何度も試さないため)。
+        self._hash_failed: set[uuid.UUID] = set()
 
     # -- 公開 API --------------------------------------------------------------
 
@@ -221,7 +230,13 @@ class Embedder:
                 await self._sleep()
                 continue
             if job is None:
-                await self._sleep()
+                try:
+                    filled = await self._backfill_hashes()
+                except Exception:
+                    logger.exception("知覚ハッシュの埋め戻しに失敗しました")
+                    filled = 0
+                if not filled:
+                    await self._sleep()
                 continue
             try:
                 await self._process(job)
@@ -259,10 +274,7 @@ class Embedder:
                     job.failures.append((asset_id, t("embeddings.maskNotSupported")))
                     continue
                 try:
-                    thumb = self.store.open_content(asset.blob_key, asset.sha256, "thumb")
-                    data = (
-                        thumb.read_all() if thumb is not None else self.store.read(asset.blob_key)
-                    )
+                    data = self._read_thumb(asset)
                 except Exception as e:  # noqa: BLE001 - 読めなければその行だけ失敗にする
                     logger.warning("asset %s の画像を読めませんでした: %s", asset_id, e)
                     job.failures.append((asset_id, t("embeddings.imageUnreadable")))
@@ -286,6 +298,12 @@ class Embedder:
                 unreadable.append((asset_id, t("embeddings.imageUnreadable")))
         if unreadable:
             await asyncio.to_thread(self._finish_failed, job.model_key, unreadable)
+        if decoded:
+            try:
+                await asyncio.to_thread(self._store_hashes, decoded)
+            except Exception:
+                # ハッシュが無くても重複の候補は CLIP だけで判定できる。埋め込みは続ける。
+                logger.exception("知覚ハッシュの保存に失敗しました")
 
         batch = max(1, engine.image_batch_size)
         for start in range(0, len(decoded), batch):
@@ -313,6 +331,103 @@ class Embedder:
             await asyncio.to_thread(
                 self._finish_succeeded, job.model_key, list(zip(ids, vectors, strict=True))
             )
+
+    # -- 知覚ハッシュ(ADR-0033 12章) ----------------------------------------------
+
+    def _read_thumb(self, asset: Asset) -> bytes:
+        thumb = self.store.open_content(asset.blob_key, asset.sha256, "thumb")
+        return thumb.read_all() if thumb is not None else self.store.read(asset.blob_key)
+
+    def _store_hashes(self, images: list[tuple[uuid.UUID, Image.Image]]) -> int:
+        """無いか版の古い知覚ハッシュを作って保存し、件数を返す。1枚の失敗は飛ばす。"""
+        ids = [asset_id for asset_id, _ in images]
+        with self.session_factory() as session:
+            rows = {
+                row.asset_id: row
+                for row in session.execute(
+                    select(AssetPerceptualHash).where(AssetPerceptualHash.asset_id.in_(ids))
+                ).scalars()
+            }
+            written = 0
+            for asset_id, image in images:
+                row = rows.get(asset_id)
+                if row is not None and perceptual_hash_domain.from_stored(
+                    row.dhash, row.color, row.version
+                ):
+                    continue
+                try:
+                    value = perceptual_hash_domain.compute(image)
+                except Exception as e:  # noqa: BLE001 - その画像だけ飛ばす
+                    logger.warning("asset %s の知覚ハッシュを作れませんでした: %s", asset_id, e)
+                    self._hash_failed.add(asset_id)
+                    continue
+                if row is None:
+                    row = AssetPerceptualHash(asset_id=asset_id)
+                    session.add(row)
+                row.dhash = value.dhash
+                row.color = value.color
+                row.version = value.version
+                row.created_at = _utcnow()
+                written += 1
+            session.commit()
+            return written
+
+    def _hash_backfill_targets(self) -> list[tuple[uuid.UUID, bytes]]:
+        """埋め込みはあるのに、知覚ハッシュが無いか版の古い画像(thumb のバイト列つき)。"""
+        with self.session_factory() as session:
+            config = embedding_settings.load(session)
+            if not embedding_settings.usable(config, self.settings):
+                return []
+            embedded = (
+                select(AssetEmbedding.asset_id)
+                .where(
+                    AssetEmbedding.asset_id == Asset.id,
+                    AssetEmbedding.status == embeddings_domain.STATUS_SUCCEEDED,
+                )
+                .exists()
+            )
+            query = (
+                select(Asset)
+                .outerjoin(AssetPerceptualHash, AssetPerceptualHash.asset_id == Asset.id)
+                .where(
+                    Asset.deleted_at.is_(None),
+                    Asset.kind != AssetKind.MASK,
+                    embedded,
+                    or_(
+                        AssetPerceptualHash.asset_id.is_(None),
+                        AssetPerceptualHash.version != perceptual_hash_domain.ALGORITHM_VERSION,
+                    ),
+                )
+                .order_by(Asset.created_at.desc(), Asset.id.desc())
+                .limit(HASH_BACKFILL_LIMIT + len(self._hash_failed))
+            )
+            targets: list[tuple[uuid.UUID, bytes]] = []
+            for asset in session.execute(query).scalars():
+                if asset.id in self._hash_failed:
+                    continue
+                try:
+                    targets.append((asset.id, self._read_thumb(asset)))
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("asset %s の画像を読めませんでした: %s", asset.id, e)
+                    self._hash_failed.add(asset.id)
+                if len(targets) >= HASH_BACKFILL_LIMIT:
+                    break
+            return targets
+
+    async def _backfill_hashes(self) -> int:
+        """待ち行列が空のときに呼ぶ。埋めた(または試した)件数を返す(0 なら休む)。"""
+        targets = await asyncio.to_thread(self._hash_backfill_targets)
+        if not targets:
+            return 0
+        decoded: list[tuple[uuid.UUID, Image.Image]] = []
+        for asset_id, data in targets:
+            try:
+                decoded.append((asset_id, await asyncio.to_thread(_decode_image, data)))
+            except Exception:  # noqa: BLE001
+                self._hash_failed.add(asset_id)
+        if decoded:
+            await asyncio.to_thread(self._store_hashes, decoded)
+        return len(targets)
 
     # -- 書き込み ----------------------------------------------------------------
 

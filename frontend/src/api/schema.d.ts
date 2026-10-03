@@ -767,7 +767,8 @@ export interface paths {
         };
         /**
          * Duplicates Endpoint
-         * @description 重複の候補(類似度がしきい値以上の組を union-find でまとめたグループ、大きい順)。
+         * @description 重複の候補(類似度がしきい値以上で知覚ハッシュも近い組を、代表との類似度でまとめた
+         *     グループ、大きい順)。
          */
         get: operations["embedding_duplicates"];
         put?: never;
@@ -2395,6 +2396,8 @@ export interface components {
             title?: string | null;
             /** Max Score */
             max_score: number;
+            /** Hash Missing */
+            hash_missing?: boolean | null;
         };
         /** DuplicateGroup */
         DuplicateGroup: {
@@ -2402,11 +2405,14 @@ export interface components {
             assets: components["schemas"]["DuplicateAsset"][];
             /** Max Score */
             max_score: number;
+            /** Hash Missing */
+            hash_missing?: boolean | null;
         };
         /**
          * DuplicatesResponse
-         * @description `GET /api/embeddings/duplicates`。類似度がしきい値以上の組を union-find でまとめた
-         *     グループ(大きい順)。見るのは新しい順に `scanned` 件まで。それより多ければ `truncated`。
+         * @description `GET /api/embeddings/duplicates`。類似度がしきい値以上で知覚ハッシュも近い組を、
+         *     代表(いちばん古い画像)との類似度でまとめたグループ(大きい順。ADR-0033 12章)。
+         *     見るのは新しい順に `scanned` 件まで。それより多ければ `truncated`。
          */
         DuplicatesResponse: {
             /** Model Key */

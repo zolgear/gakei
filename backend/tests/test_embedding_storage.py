@@ -86,6 +86,43 @@ def test_migration_0024_up_and_down(empty_database_url: str) -> None:
     command.upgrade(cfg, "head")
 
 
+def test_migration_0025_up_and_down(empty_database_url: str) -> None:
+    """知覚ハッシュのテーブル(ADR-0033 12章)。"""
+    from alembic import command
+
+    from app.main import alembic_config
+
+    url = empty_database_url
+    cfg = alembic_config(url)
+    command.upgrade(cfg, "0024")
+    command.upgrade(cfg, "0025")
+
+    engine = create_engine(url)
+    try:
+        inspector = inspect(engine)
+        assert "asset_perceptual_hash" in inspector.get_table_names()
+        columns = {c["name"]: c for c in inspector.get_columns("asset_perceptual_hash")}
+        assert set(columns) == {"asset_id", "dhash", "color", "version", "created_at"}
+        assert not any(c["nullable"] for c in columns.values())
+        assert inspector.get_pk_constraint("asset_perceptual_hash")["constrained_columns"] == [
+            "asset_id"
+        ]
+        fks = inspector.get_foreign_keys("asset_perceptual_hash")
+        assert [(fk["referred_table"], fk["referred_columns"]) for fk in fks] == [("asset", ["id"])]
+    finally:
+        engine.dispose()
+
+    command.downgrade(cfg, "0024")
+    engine = create_engine(url)
+    try:
+        tables = inspect(engine).get_table_names()
+        assert "asset_perceptual_hash" not in tables
+        assert "asset_embedding" in tables
+    finally:
+        engine.dispose()
+    command.upgrade(cfg, "head")
+
+
 def test_sqlite_uses_numpy(client: TestClient) -> None:
     if using_postgresql():
         pytest.skip("SQLite に固有")

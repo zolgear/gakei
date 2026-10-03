@@ -262,9 +262,9 @@ def test_duplicates(client: TestClient) -> None:
         assert group["max_score"] >= 0.99
         assert all(a["max_score"] >= 0.99 for a in group["assets"])
 
-    # しきい値を省くと管理者設定の値(既定 0.95)。
+    # しきい値を省くと管理者設定の値(既定 0.90。ADR-0033 12章)。
     body = client.get("/api/embeddings/duplicates").json()
-    assert body["threshold"] == 0.95
+    assert body["threshold"] == 0.90
     body = client.get("/api/embeddings/duplicates", params={"limit": 1}).json()
     assert len(body["groups"]) == 1
     assert body["groups_truncated"] is True

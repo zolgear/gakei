@@ -29,7 +29,7 @@ from app.domain.models import (
     AssetTag,
     Tag,
 )
-from app.domain.semantic_search import group_pairs
+from app.domain.semantic_search import leader_groups
 from app.domain.vector_index import (
     AssetFilter,
     NumpyIndex,
@@ -291,7 +291,7 @@ def test_knn_matrix_self_first() -> None:
     assert indices.tolist() == [[0]]
 
 
-def test_pairs_and_union_find() -> None:
+def test_pairs_and_leader_groups() -> None:
     base = np.zeros((5, 3), dtype=np.float32)
     base[0] = [1, 0, 0]
     base[1] = [0.99, 0.14, 0]  # 0 と近い
@@ -301,9 +301,25 @@ def test_pairs_and_union_find() -> None:
     matrix = l2_normalize(base)
     pairs = pairs_at_least(matrix, 0.985)
     assert {(i, j) for i, j, _ in pairs} == {(0, 1), (1, 2)}
-    # 連鎖(0-1、1-2)は1つのグループになる。
-    assert group_pairs(5, pairs) == [[0, 1, 2]]
-    assert group_pairs(5, []) == []
+    # 位置は新しい順なので、いちばん古い 2 が代表。2 と組になっている 1 だけが入り、1 とだけ
+    # 組の 0 は連鎖で入らない(ADR-0033 12章)。
+    groups = leader_groups(5, pairs)
+    assert [(leader, [x for x, _ in members]) for leader, members in groups] == [(2, [1])]
+    assert leader_groups(5, []) == []
+
+
+def test_leader_groups_do_not_chain() -> None:
+    """A〜B、B〜C、C〜D と連なっても、代表と組でない画像は同じグループに入らない。"""
+    # 位置 3 がいちばん古い。3〜2、2〜1、1〜0 の連鎖と、3〜1 の組。
+    pairs = [(2, 3, 0.95), (1, 2, 0.95), (0, 1, 0.95), (1, 3, 0.92)]
+    groups = leader_groups(4, pairs)
+    # 代表 3 は 2 と 1 を取る(類似度は代表との値)。0 は 1 とだけ組なので、どこにも入らない。
+    assert groups == [(3, [(1, 0.92), (2, 0.95)])]
+
+    # 代表と組の画像が既にほかのグループに入っていれば、取らない。
+    pairs = [(3, 4, 0.99), (2, 3, 0.99), (0, 2, 0.99), (1, 2, 0.93)]
+    groups = leader_groups(5, pairs)
+    assert groups == [(4, [(3, 0.99)]), (2, [(0, 0.99), (1, 0.93)])]
 
 
 def test_pgvector_query_uses_partial_hnsw_index(db_session_factory: sessionmaker) -> None:
