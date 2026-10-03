@@ -7,7 +7,7 @@ import {
   embeddingDraftFromSettings,
   isAnyEmbeddingModelDownloading,
   isValidDuplicateThreshold,
-  onnxModelNameForKey,
+  describeStoredModelKey,
   sortLanguages,
   validateEmbeddingDraft,
   type EmbeddingDraft,
@@ -173,7 +173,7 @@ describe('embeddingBackfillBlocker', () => {
   })
 })
 
-describe('isAnyEmbeddingModelDownloading / onnxModelNameForKey / sortLanguages', () => {
+describe('isAnyEmbeddingModelDownloading / describeStoredModelKey / sortLanguages', () => {
   it('ダウンロード中のモデルがあれば true', () => {
     expect(isAnyEmbeddingModelDownloading(settings())).toBe(false)
     expect(isAnyEmbeddingModelDownloading(settings({ onnx_models: [model({ download_status: 'downloading' })] }))).toBe(
@@ -182,10 +182,46 @@ describe('isAnyEmbeddingModelDownloading / onnxModelNameForKey / sortLanguages',
     expect(isAnyEmbeddingModelDownloading(undefined)).toBe(false)
   })
 
-  it('model_key をローカルのモデル名に引く(リモートなどは null)', () => {
-    const models = [model()]
-    expect(onnxModelNameForKey('onnx:clip-vit-b32-u8@d15189d', models)).toBe('clip-vit-b32-u8')
-    expect(onnxModelNameForKey('remote:c1:clip', models)).toBeNull()
+  describe('describeStoredModelKey', () => {
+    const models = [{ name: 'clip-vit-b32-u8' as const }]
+    const connections = [
+      { id: 'c1', builtin: false, name: '自宅の Infinity' },
+      { id: 'openai', builtin: true, name: 'openai' },
+    ]
+    const describe_ = (key: string) => describeStoredModelKey(key, models, connections, 'OpenAI の設定')
+
+    it('ローカルのモデルはカタログの名前と短い版', () => {
+      expect(describe_('onnx:clip-vit-b32-u8@d15189d7028b43f1d3e65039190477f6af591c2a')).toEqual({
+        name: 'clip-vit-b32-u8',
+        revision: 'd15189d',
+        fake: false,
+      })
+    })
+
+    it('リモートは「接続先の名前 · モデル名」(モデル名に : を含んでもよい)', () => {
+      expect(describe_('remote:c1:jinaai/jina-clip-v2:latest')).toEqual({
+        name: '自宅の Infinity · jinaai/jina-clip-v2:latest',
+        revision: null,
+        fake: false,
+      })
+      expect(describe_('remote:openai:clip').name).toBe('OpenAI の設定 · clip')
+    })
+
+    it('fake: を外して印を付ける', () => {
+      expect(describe_('fake:onnx:clip-vit-b32-u8@d15189d7028b43f1d3e65039190477f6af591c2a')).toEqual({
+        name: 'clip-vit-b32-u8',
+        revision: 'd15189d',
+        fake: true,
+      })
+      expect(describe_('fake:remote:c1:clip')).toEqual({ name: '自宅の Infinity · clip', revision: null, fake: true })
+    })
+
+    it('分からない接続先・モデル・形式はキーのまま', () => {
+      expect(describe_('remote:gone:clip')).toEqual({ name: 'remote:gone:clip', revision: null, fake: false })
+      expect(describe_('onnx:unknown-model@abc')).toEqual({ name: 'onnx:unknown-model@abc', revision: null, fake: false })
+      expect(describe_('something-else')).toEqual({ name: 'something-else', revision: null, fake: false })
+      expect(describe_('fake:other')).toEqual({ name: 'other', revision: null, fake: true })
+    })
   })
 
   it('日本語を先に並べる', () => {

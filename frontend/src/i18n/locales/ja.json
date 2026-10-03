@@ -218,6 +218,8 @@
       "semanticPlaceholder": "探したい画像を文章で",
       "semanticEnterQuery": "探したい画像を文章で入力してください。",
       "semanticNoResults": "見つかりません。",
+      "semanticHeading": "近い順",
+      "showMore": "さらに表示",
       "englishOnlyHint": "使っているモデルは英語向けです。日本語ではほとんど当たらないので、英語で検索してください。",
       "similarHeading": "この画像に似た画像",
       "similarOriginLabel": "起点の画像を開く",
@@ -695,6 +697,7 @@
         "help": "モデルを切り替えても、前のモデルのベクトルは残ります。戻したときは計算し直さずに使えます。",
         "empty": "まだありません。",
         "activeBadge": "使用中",
+        "fakeMarker": "(ダミー)",
         "countValue": {
           "one": "{count} 件",
           "other": "{count} 件"
@@ -1808,6 +1811,8 @@
     "compareHint": "比べる 2 枚を選んでください",
     "selectForCompare": "比べる画像に選ぶ",
     "compareTitle": "比べる",
+    "compareOlder": "古い · {width}×{height}",
+    "compareNewer": "新しい · {width}×{height}",
     "open": "ビューアで開く",
     "delete": "削除",
     "deleteConfirmMessage": "この画像をストックから削除します。",

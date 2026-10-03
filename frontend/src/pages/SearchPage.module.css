@@ -311,9 +311,33 @@
   border-color: var(--color-accent);
 }
 
+/* 意味での検索の「もっと見る」。 */
+.showMore {
+  align-self: center;
+  height: 32px;
+  padding: 0 16px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.showMore:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.showMore:disabled {
+  opacity: 0.6;
+}
+
 @media (max-width: 767px) {
   .modeButton {
     height: 40px;
     padding: 0 16px;
+  }
+
+  .showMore {
+    height: 44px;
   }
 }

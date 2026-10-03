@@ -2,11 +2,12 @@
  * `/stock/duplicates` 重複の候補(ADR-0033 8章、6章、12章)。ストックのパネルからたどる。
  *
  * - 似た画像のグループ(`GET /api/embeddings/duplicates`)を、グループごとにサムネイルで並べる。
- *   各画像には大きさ、日時、種類、類似度を添える。グループは古い順で、先頭は「最初」の画像。
+ *   各画像には大きさ、日時、種類、類似度を添える。グループの並びはサーバーの順(枚数の多い順、次に
+ *   類似度の高い順)のまま並べ替えない。グループの中は古い順で、先頭は「最初」の画像。
  * - しきい値はスライダーで変えられる。初期値は管理者設定の値(`duplicate_threshold`)で、ページの中で
  *   変えても保存しない。動かしている間は少し待ってから取り直す。
  * - 比べる: 2枚のグループはその2枚、3枚以上のグループは2枚を選んで、比較の表示(`CompareCanvas`)で
- *   見比べる。
+ *   見比べる。左が古い方、右が新しい方。解像度が違っても同じ大きさに揃えて重ねる(`frameBasis='larger'`)。
  * - 削除: 確認してから既存の論理削除(`DELETE /api/assets/{id}`)。トーストの「元に戻す」で戻せる。
  *   重複の自動削除は作らない(ADR-0033 1章)。
  * 埋め込みが使えないときは、ストックの入口を出さない。直接開いたときは使えない旨だけを出す。
@@ -36,8 +37,10 @@ import {
   DUPLICATE_THRESHOLD_STEP,
   clampThreshold,
   compareTargets,
+  formatCompactDateTime,
   formatScore,
   formatThreshold,
+  orderOldestFirst,
   toggleCompareSelection,
 } from '../features/embeddings/duplicates'
 import { embeddingErrorKind, retryEmbeddingQuery } from '../features/embeddings/embeddingErrors'
@@ -45,7 +48,7 @@ import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddi
 import { useDebouncedValue } from '../features/search/useDebouncedValue'
 import { EMBEDDING_SETTINGS_QUERY_KEY } from '../features/settings/queryKeys'
 import { invalidateAssetGroupQueries } from '../features/stock/groups/assetGroupQueries'
-import { fmt, useI18n } from '../i18n'
+import { fmt, intlLocale, useI18n } from '../i18n'
 import { assetKindLabel, formatBytes, formatDateTime } from '../lib/format'
 import { useBackNavigate } from '../lib/useBackNavigate'
 import { useIsMobileViewport } from '../lib/viewport'
@@ -154,7 +157,7 @@ function DuplicatesBody({ defaultThreshold }: { defaultThreshold: number }) {
     if (!pair) return
     const a = group.assets.find((x) => x.id === pair[0])
     const b = group.assets.find((x) => x.id === pair[1])
-    if (a && b) setComparing([a, b])
+    if (a && b) setComparing(orderOldestFirst(a, b))
   }
 
   return (
@@ -268,6 +271,9 @@ function DuplicatesBody({ defaultThreshold }: { defaultThreshold: number }) {
                 before={comparing[0]}
                 after={comparing[1]}
                 mode={resolveEffectiveMode(compareMode, isMobile)}
+                beforeLabel={fmt(m.compareOlder, { width: comparing[0].width, height: comparing[0].height })}
+                afterLabel={fmt(m.compareNewer, { width: comparing[1].width, height: comparing[1].height })}
+                frameBasis="larger"
               />
             </div>
           </div>
@@ -301,7 +307,7 @@ interface DuplicateTileProps {
 }
 
 function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleSelect, onOpen, onDelete }: DuplicateTileProps) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const m = t.duplicates
   return (
     <li className={styles.tile} data-selected={selected}>
@@ -326,10 +332,11 @@ function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleS
         </span>
       )}
       <span className={styles.tileMeta}>
-        {asset.width} × {asset.height} · {formatBytes(asset.bytes)}
+        {asset.width}×{asset.height} · {formatBytes(asset.bytes)}
       </span>
-      <span className={styles.tileMeta}>
-        {assetKindLabel(asset.kind)} · {formatDateTime(asset.created_at)}
+      {/* 狭いタイルでも切れないよう短い日時にし、秒まで含めた値はツールチップに出す。 */}
+      <span className={styles.tileMeta} title={formatDateTime(asset.created_at)}>
+        {assetKindLabel(asset.kind)} · {formatCompactDateTime(asset.created_at, intlLocale(locale))}
       </span>
       <div className={styles.tileFooter}>
         {/* 狭いタイルでも1行に収まるよう数だけ出し、「類似度」はツールチップと読み上げに回す。 */}

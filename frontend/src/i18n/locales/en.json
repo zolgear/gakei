@@ -218,6 +218,8 @@
       "semanticPlaceholder": "Describe the image you want",
       "semanticEnterQuery": "Describe the image you are looking for.",
       "semanticNoResults": "Nothing found.",
+      "semanticHeading": "Closest first",
+      "showMore": "Show more",
       "englishOnlyHint": "The active model is for English. Japanese queries rarely match, so search in English.",
       "similarHeading": "Images similar to this one",
       "similarOriginLabel": "Open the source image",
@@ -695,6 +697,7 @@
         "help": "Switching models keeps the previous model's vectors, so switching back needs no recomputing.",
         "empty": "None yet.",
         "activeBadge": "In use",
+        "fakeMarker": "(dummy)",
         "countValue": {
           "one": "{count} vector",
           "other": "{count} vectors"
@@ -1808,6 +1811,8 @@
     "compareHint": "Choose 2 images to compare",
     "selectForCompare": "Select for comparison",
     "compareTitle": "Compare",
+    "compareOlder": "Older · {width}×{height}",
+    "compareNewer": "Newer · {width}×{height}",
     "open": "Open in viewer",
     "delete": "Delete",
     "deleteConfirmMessage": "Delete this image from the stock.",

@@ -53,7 +53,7 @@ import {
   embeddingConnectionChoices,
   embeddingDraftFromSettings,
   isAnyEmbeddingModelDownloading,
-  onnxModelNameForKey,
+  describeStoredModelKey,
   sortLanguages,
   validateEmbeddingDraft,
   type EmbeddingDraft,
@@ -234,7 +234,8 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
     : null
 
   const stored = data.stored ?? []
-  const storedName = (row: EmbeddingStoredCount) => onnxModelNameForKey(row.model_key, onnxModels) ?? row.model_key
+  const storedLabel = (row: EmbeddingStoredCount) =>
+    describeStoredModelKey(row.model_key, onnxModels, connections, t.settings.llmConnections.builtinName)
 
   return (
     <>
@@ -452,26 +453,31 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
           <p className={styles.helpText}>{m.stored.empty}</p>
         ) : (
           <ul className={own.storedList}>
-            {stored.map((row) => (
-              <li key={row.model_key} className={own.storedRow}>
-                <div className={own.storedText}>
-                  <span className={own.storedName}>
-                    {storedName(row)}
-                    {row.active && <span className={own.badge}>{m.stored.activeBadge}</span>}
-                  </span>
-                  {storedName(row) !== row.model_key && <span className={own.storedKey}>{row.model_key}</span>}
-                </div>
-                <span className={`${own.value} ${styles.mono}`}>{fmt(m.stored.countValue, { count: row.count })}</span>
-                <button
-                  type="button"
-                  className={styles.dangerButton}
-                  disabled={deleteVectorsMutation.isPending}
-                  onClick={() => setVectorsToDelete(row)}
-                >
-                  {m.stored.delete}
-                </button>
-              </li>
-            ))}
+            {stored.map((row) => {
+              const label = storedLabel(row)
+              return (
+                <li key={row.model_key} className={own.storedRow}>
+                  {/* キーそのものはツールチップに残す(ベクトルの削除やサーバーのログと突き合わせるため)。 */}
+                  <div className={own.storedText} title={row.model_key}>
+                    <span className={own.storedName}>
+                      {label.name}
+                      {label.revision && <span className={own.storedKey}>@{label.revision}</span>}
+                      {label.fake && <span className={own.storedKey}>{m.stored.fakeMarker}</span>}
+                      {row.active && <span className={own.badge}>{m.stored.activeBadge}</span>}
+                    </span>
+                  </div>
+                  <span className={`${own.value} ${styles.mono}`}>{fmt(m.stored.countValue, { count: row.count })}</span>
+                  <button
+                    type="button"
+                    className={styles.dangerButton}
+                    disabled={deleteVectorsMutation.isPending}
+                    onClick={() => setVectorsToDelete(row)}
+                  >
+                    {m.stored.delete}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         )}
         {vectorsError && <p className={styles.errorText}>{vectorsError}</p>}
@@ -491,7 +497,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
         open={vectorsToDelete !== null}
         message={
           vectorsToDelete
-            ? fmt(m.stored.deleteConfirm.message, { name: storedName(vectorsToDelete), count: vectorsToDelete.count })
+            ? fmt(m.stored.deleteConfirm.message, { name: storedLabel(vectorsToDelete).name, count: vectorsToDelete.count })
             : ''
         }
         confirmLabel={m.stored.deleteConfirm.confirmLabel}

@@ -16,6 +16,7 @@ import type {
   LlmConnectionView,
 } from '../../api/client'
 import { DUPLICATE_THRESHOLD_MAX, DUPLICATE_THRESHOLD_MIN } from '../embeddings/duplicates'
+import { connectionDisplayName } from './llmConnections'
 import type { DraftErrors } from './settingsDraft'
 
 export { DUPLICATE_THRESHOLD_MAX, DUPLICATE_THRESHOLD_MIN }
@@ -137,12 +138,50 @@ export function isAnyEmbeddingModelDownloading(settings: EmbeddingSettingsRespon
   return (settings?.onnx_models ?? []).some((model) => model.download_status === 'downloading')
 }
 
-/** 保存済みのベクトルの `model_key` を、分かればローカルのモデル名にする(分からなければ null)。 */
-export function onnxModelNameForKey(
+/** 保存済みのベクトルの `model_key` を読める形にしたもの。 */
+export interface StoredModelLabel {
+  /** 主な表示。分からない形式・接続先なら(`fake:` を除いた)キーそのもの。 */
+  name: string
+  /** 補足(ローカルのモデルの版の先頭7文字)。無ければ null。 */
+  revision: string | null
+  /** 課金なしの確認用(`FAKE_PROVIDER=1`)のダミーのエンジンで作ったベクトル(キーが `fake:` で始まる)。 */
+  fake: boolean
+}
+
+const FAKE_PREFIX = 'fake:'
+/** 版の表示の長さ(git の短い SHA と同じ)。 */
+const SHORT_REVISION_LENGTH = 7
+
+/**
+ * 保存済みのベクトルの `model_key`(`backend/app/embedding/catalog.py` の `onnx:<名前>@<版>`、
+ * `remote.py` の `remote:<接続先 id>:<モデル名>`。確認用は先頭に `fake:`)を読める形にする。
+ * ローカルのモデルはカタログの名前と短い版、リモートは「接続先の名前 · モデル名」。接続先が
+ * 分からなければキーのまま出す。
+ */
+export function describeStoredModelKey(
   modelKey: string,
-  models: readonly Pick<EmbeddingOnnxModelStatus, 'name' | 'model_key'>[],
-): EmbeddingOnnxModelName | null {
-  return models.find((m) => m.model_key === modelKey)?.name ?? null
+  models: readonly Pick<EmbeddingOnnxModelStatus, 'name'>[],
+  connections: readonly Pick<LlmConnectionView, 'id' | 'builtin' | 'name'>[],
+  builtinConnectionName: string,
+): StoredModelLabel {
+  const fake = modelKey.startsWith(FAKE_PREFIX)
+  const key = fake ? modelKey.slice(FAKE_PREFIX.length) : modelKey
+  const raw: StoredModelLabel = { name: key, revision: null, fake }
+
+  const onnx = /^onnx:([^@]+)@(.+)$/.exec(key)
+  if (onnx) {
+    const model = models.find((m) => m.name === onnx[1])
+    if (!model) return raw
+    return { name: model.name, revision: onnx[2].slice(0, SHORT_REVISION_LENGTH), fake }
+  }
+
+  const remote = /^remote:([^:]+):(.+)$/.exec(key)
+  if (remote) {
+    const connection = connections.find((c) => c.id === remote[1])
+    if (!connection) return raw
+    return { name: `${connectionDisplayName(connection, builtinConnectionName)} · ${remote[2]}`, revision: null, fake }
+  }
+  return raw
 }
 
 /** 対応言語の並び(日本語を先に)。 */

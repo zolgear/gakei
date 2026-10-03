@@ -10,7 +10,7 @@
  * 埋め込みが使えないときは切り替えを出さず、`mode=semantic` もキーワード検索として扱う。
  */
 import { useState, type FormEvent } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router'
 import { ApiError, search, semanticSearch, similarAssets, type SemanticAssetHit } from '../api/client'
 import { useBackNavigate } from '../lib/useBackNavigate'
@@ -30,6 +30,10 @@ import { fmt, useI18n } from '../i18n'
 import styles from './SearchPage.module.css'
 
 const PAGE_LIMIT = 50
+// 意味での検索は全件に順位を付けるので「当たった件数」は無い。最初は少なめに出し、「もっと見る」で
+// API の上限(SEARCH_MAX_LIMIT = 50)まで増やす。
+const SEMANTIC_INITIAL_LIMIT = 24
+const SEMANTIC_MAX_LIMIT = 50
 
 export function SearchPage() {
   const { t } = useI18n()
@@ -65,11 +69,19 @@ export function SearchPage() {
     queryFn: () => search({ q: urlQuery, limit: PAGE_LIMIT }),
     enabled: urlQuery.length > 0 && mode === 'keyword' && similarId === null && !waitingCaps,
   })
+  // 意味での検索の件数。検索語が変わったら最初の件数に戻す(入力欄と同じ、レンダー中に補正する書き方)。
+  const [semanticLimitState, setSemanticLimitState] = useState(() => ({ query: urlQuery, limit: SEMANTIC_INITIAL_LIMIT }))
+  if (semanticLimitState.query !== urlQuery) {
+    setSemanticLimitState({ query: urlQuery, limit: SEMANTIC_INITIAL_LIMIT })
+  }
+  const semanticLimit = semanticLimitState.limit
   const semanticQuery = useQuery({
-    queryKey: ['embeddings', 'semantic', urlQuery, PAGE_LIMIT],
-    queryFn: () => semanticSearch({ q: urlQuery, limit: PAGE_LIMIT }),
+    queryKey: ['embeddings', 'semantic', urlQuery, semanticLimit],
+    queryFn: () => semanticSearch({ q: urlQuery, limit: semanticLimit }),
     enabled: urlQuery.length > 0 && mode === 'semantic' && similarId === null,
     retry: retryEmbeddingQuery,
+    // 「もっと見る」で取り直す間も、今の結果を出したままにする。同じ検索語のときだけ引き継ぐ。
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === urlQuery ? keepPreviousData(prev) : undefined),
   })
   const similarKey = similarAssetsQueryKey(similarId ?? '', SEARCH_SIMILAR_LIMIT)
   const similarQuery = useQuery({
@@ -218,13 +230,21 @@ export function SearchPage() {
           )}
           {semanticHits.length > 0 && (
             <section className={styles.section}>
-              <h2 className={styles.sectionHeading}>
-                {t.search.groupAssets}
-                <span className={styles.sectionCount}>
-                  {fmt(t.search.page.countSuffix, { count: semanticHits.length })}
-                </span>
-              </h2>
+              {/* 全件に順位を付けるので、件数(当たった数)は出さない。 */}
+              <h2 className={styles.sectionHeading}>{t.search.page.semanticHeading}</h2>
               {renderAssetHits(semanticHits, false)}
+              {semanticHits.length >= semanticLimit && semanticLimit < SEMANTIC_MAX_LIMIT && (
+                <button
+                  type="button"
+                  className={styles.showMore}
+                  disabled={semanticQuery.isFetching}
+                  onClick={() =>
+                    setSemanticLimitState((s) => ({ ...s, limit: Math.min(SEMANTIC_MAX_LIMIT, s.limit + SEMANTIC_INITIAL_LIMIT) }))
+                  }
+                >
+                  {semanticQuery.isFetching ? t.search.searching : t.search.page.showMore}
+                </button>
+              )}
             </section>
           )}
         </>

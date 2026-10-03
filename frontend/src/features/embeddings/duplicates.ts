@@ -44,3 +44,31 @@ export function compareTargets(groupIds: readonly string[], selected: readonly s
   const inGroup = selected.filter((id) => groupIds.includes(id))
   return inGroup.length === 2 ? [inGroup[0], inGroup[1]] : null
 }
+
+/**
+ * 比べる2枚を古い順(左が古い、右が新しい)に並べる。作成日時が同じ・読めないときは渡した順のまま。
+ */
+export function orderOldestFirst<T extends { created_at: string }>(a: T, b: T): [T, T] {
+  const ta = Date.parse(a.created_at)
+  const tb = Date.parse(b.created_at)
+  if (Number.isFinite(ta) && Number.isFinite(tb) && tb < ta) return [b, a]
+  return [a, b]
+}
+
+/**
+ * タイルの日時の短い表示。今年なら「10/3 21:46」、別の年なら「2025/10/3 21:46」。
+ * 160px ほどのタイルでも1行に収まるよう秒を省く(完全な値はツールチップに出す)。
+ * `now` と `locale` はテストのため注入できる。
+ */
+export function formatCompactDateTime(iso: string, locale: string, now: Date = new Date()): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const sameYear = date.getFullYear() === now.getFullYear()
+  const datePart = new Intl.DateTimeFormat(locale, {
+    year: sameYear ? undefined : 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(date)
+  const timePart = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date)
+  return `${datePart} ${timePart}`
+}
