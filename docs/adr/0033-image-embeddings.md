@@ -69,8 +69,8 @@ CLIP 系のモデルは、画像と文章を同じ空間のベクトルにする
 
 | モデル | 取得元 | サイズ | 言語 | ライセンス |
 |---|---|---|---|---|
-| `clip-vit-b32-q8`(既定) | `Xenova/clip-vit-base-patch32` の `onnx/vision_model_quantized.onnx`、`onnx/text_model_quantized.onnx`、`tokenizer.json` | 約 150MB | 英語 | MIT(元の OpenAI CLIP) |
-| `clip-vit-b32` | 同じリポジトリの fp32(`vision_model.onnx`、`text_model.onnx`) | 約 600MB | 英語 | 同上 |
+| `clip-vit-b32-u8`(既定) | `Xenova/clip-vit-base-patch32` の画像側 `onnx/vision_model_uint8.onnx` と、文章側 fp32 の `onnx/text_model.onnx`。トークナイザー用の `vocab.json` と `merges.txt` | 約 345MB | 英語 | MIT(元の OpenAI CLIP) |
+| `clip-vit-b32` | 同じリポジトリの fp32(`vision_model.onnx`、`text_model.onnx`) | 約 606MB | 英語 | 同上 |
 | `clip-japanese-base` | `line-corporation/clip-japanese-base` の `onnx/clyp_visual.onnx`、`onnx/clyp_textual.onnx`、`onnx/spiece.model` | 約 790MB | 日本語 | Apache-2.0 |
 
 - 次元はどれも 512。
@@ -81,10 +81,15 @@ CLIP 系のモデルは、画像と文章を同じ空間のベクトルにする
   - 読み込む前に、空きメモリとメモリの目安を比べる。
   - 初回の推論で読み込み、しばらく使わなければ解放する。
 - WD Tagger と同時に読み込まない。1つのモデルが読み込まれている間は、もう一方を待たせる(メモリの小さいマシンで両方を抱えないため)。
-- トークナイザーは、OpenAI CLIP は `tokenizers`(`tokenizer.json`)、LY は `sentencepiece`(`spiece.model`)で動かす。transformers と torch は入れない。
+- トークナイザーは、OpenAI CLIP は純 Python の BPE(依存にある `regex` と、`vocab.json`・`merges.txt`)、LY は `sentencepiece`(`spiece.model`)で動かす。transformers、torch、`tokenizers` は入れない(`tokenizers` は huggingface-hub を必須の依存に持ち、入れるとパッケージが 16 個増えるため。2026-10-03 にユーザーが決めた)。
+- 検索の文章に特殊トークンの文字列(`<|endoftext|>`、`[CLS]` など)があっても、特殊トークンとしては扱わず、普通の文字として分割する。
 - 前処理はモデルごとに持つ。
   - OpenAI CLIP: 短辺 224 に bicubic でリサイズし、中央を切り出す。正規化は CLIP の mean/std。
-  - LY: 長辺 224 に縮めて余白を足す。正規化は ImageNet の mean/std。
+  - LY: 長辺 224 に bicubic で縮め、黒の余白を足して 224×224 にする。正規化は ImageNet の mean/std。
+  - 透明な部分は、どのモデルでも白で合成してから RGB にする(WD Tagger と、推定に送る画像に揃える)。
+- 量子化したモデル(`clip-vit-b32-u8` の画像側)は、活性値のスケールをバッチ全体で計算する動的量子化のため、まとめて計算する枚数で値が変わる。同じ画像が、取り込み時と一括実行時で違うベクトルにならないよう、量子化したモデルは常に1枚ずつ計算する。
+- LY の画像側は、まとめて計算しても1枚あたりが速くならない(実測)。これも1枚ずつ計算する。
+- 文章での検索だけのときは、文章側のエンコーダーだけを読み込む(LY では最大 RSS が約 0.92GiB から約 0.58GiB に下がる)。
 - モデルは配布物に含めない。管理者が設定画面のボタンで Hugging Face からダウンロードし、`DATA_DIR/models/clip/<モデル>/` に置く。WD Tagger と同じく、リビジョンを固定し、ファイルごとのハッシュを確かめる。そのために、ダウンローダーとカタログを WD Tagger と共通の部品にする。WD Tagger の置き場所(`DATA_DIR/models/wd/`)は変えない。
 - 英語専用のモデルを選んでいると、日本語で検索してもほとんど当たらない。設定画面と検索画面にそのことを出す(モデルごとに対応言語を持つ)。
 
@@ -152,7 +157,7 @@ ADR-0024 4章と同じ形にする。
 - **SQLite(と pgvector の無い PostgreSQL):** 使うモデルのベクトルを行列としてメモリに持ち、numpy で全件と内積を取る。書き込むたびにモデルごとの版を上げ、行列を読み直す。個人の規模(数万枚)では十分速い。
 - **pgvector:** `ORDER BY embedding::vector(<次元>) <=> :q LIMIT k` に見える範囲の条件を付ける。絞り込みで件数が足りなくならないよう、`hnsw.iterative_scan` を有効にする。
 - 両方の方式で同じテストを通す。
-- **重複の候補:** 類似度がしきい値(既定 0.95。実機で確かめて決め直す)以上の組を、union-find でグループにまとめる。しきい値は画面で変えられる。
+- **重複の候補:** 類似度がしきい値(既定 0.95。実機で確かめて決め直す)以上の組を、union-find でグループにまとめる。しきい値は画面で変えられる。量子化したモデルは fp32 と比べて値が揺れる(11章)ので、しきい値はモデルごとに既定を持てるようにする。
 - **キーワード検索との関係:** 今のキーワード検索(`GET /api/search`)はそのまま残す。文章での検索は別の API にし、画面では切り替えて使う。2つの結果を混ぜる順位づけは、今回は作らない。
 
 ### 7. API
@@ -162,7 +167,7 @@ ADR-0024 4章と同じ形にする。
 | `GET /api/search/semantic?q=&limit=` | 文章での検索。Asset の要約と類似度 | 利用者 |
 | `GET /api/assets/{id}/similar?limit=` | 似た画像 | 利用者(その Asset が見えること) |
 | `GET /api/embeddings/duplicates?threshold=` | 重複の候補のグループ | 利用者 |
-| `GET /api/embeddings/graph?k=&limit=&group_id=&tag=` | マップの元データ。ノード、k 近傍の辺と類似度、PCA で落とした座標 | 利用者 |
+| `GET /api/embeddings/graph?k=&limit=&group_id=&tag=` | マップの元データ。ノードと、k 近傍の辺と類似度 | 利用者 |
 | `POST /api/assets/{id}/embedding` | 1枚の再計算 | 利用者(その Asset が見えること) |
 | `GET /api/settings/embeddings` | 設定、モデルの状態、件数 | 利用者 |
 | `PATCH /api/settings/embeddings` | 設定の変更 | 管理者 |
@@ -187,17 +192,80 @@ ADR-0024 4章と同じ形にする。
 - **ビューア:** 情報欄に「似た画像」(上位 12 件)を置き、続きは検索ページ(`?similar=<id>`)で見る。
 - **重複の候補:** ストックからたどれるページ。グループごとに並べ、比べて、要らないものを論理削除できる。
 - **マップ**(`/map`。アイコンレールに足す)。タブを2つ持つ。
-  - **地図:** 2D の配置をブラウザで計算し(umap-js)、サムネイルを canvas に並べる。サーバーは k 近傍と、PCA で次元を落とした座標を返す。サーバーに UMAP の重い依存(numba など)を入れないため。
+  - **地図:** 2D の配置をブラウザで計算し(umap-js)、サムネイルを canvas に並べる。サーバーは k 近傍(各行に自分自身を距離 0 で含める)を返し、ブラウザは `setPrecomputedKNN` で渡す。サーバーに UMAP の重い依存(numba など)を入れないため。
+    - 近傍を渡せば、umap-js は元のベクトルを使わない(点の数だけを使う)。そのため、API は PCA の座標を返さない。
+    - 毎回同じ配置にするため、乱数に種を与える。2000 点で約 7 秒かかる(Pi 5 の node の実測)ので、`initializeFit` と `step` で少しずつ描くか、エポック数を減らす。
   - **ネットワーク:** 画像をノード、類似度がしきい値以上の組を辺にし、力学モデル(d3-force)で配置して canvas に描く。系列(ADR-0003)の辺も重ねて出せる。
   - グループとタグで絞り込める。ノードの数には上限を設け、超えたら絞り込みを促す。
 - 狭い幅(768px 未満)でも一通り操作できること(ADR-0009)。マップは、パンとズームとタップでの選択ができればよい。
 
 ### 9. 依存
 
-- バックエンド: `tokenizers`(Apache-2.0)、`sentencepiece`(Apache-2.0)、`pgvector`(MIT)。aarch64、x86_64、Windows の wheel を確かめてから入れる。
+- バックエンド: `sentencepiece`(Apache-2.0)、`pgvector`(MIT)。どちらも追加の依存が無く、cp312 の wheel が linux aarch64、linux x86_64、win_amd64、macOS arm64 にある(2026-10-03 に確認)。
 - フロント: `umap-js`(MIT)、`d3-force`(ISC)。
 - 第三者ライセンス表記(ADR-0021)は、既存の仕組みで自動的に入る。
 - Compose(ADR-0016、ADR-0027)と CI の PostgreSQL を `postgres:17` から `pgvector/pgvector:pg17` に替える。同じメジャーバージョンなので、既存のデータディレクトリをそのまま使える。
+
+### 11. 実機での確認(2026-10-03、Raspberry Pi 5)
+
+Action Items の 1 の結果。詳しい数値は Issue #63 のコメントに記録する。
+
+**固定するリビジョン:**
+
+| リポジトリ | リビジョン |
+|---|---|
+| `Xenova/clip-vit-base-patch32` | `d15189d7028b43f1d3e65039190477f6af591c2a` |
+| `line-corporation/clip-japanese-base` | `77a62f8af977acd73ec2f927fb73fdaeb13af7d1` |
+
+ファイルごとの sha256 とサイズは、ダウンロードした値と Hugging Face の API の値が一致した。実装のカタログに入れる。
+
+**入出力:**
+
+| モデル | 入力 | 出力 |
+|---|---|---|
+| Xenova の画像側 | `pixel_values` [batch, 3, 224, 224] | `image_embeds` [batch, 512] |
+| Xenova の文章側 | `input_ids` [batch, 長さ]。attention_mask は無い | `text_embeds` [batch, 512] |
+| LY の画像側 | `input` [batch, 3, 224, 224] | `output` [batch, 512] |
+| LY の文章側 | `input0`(input_ids)、`input1`(attention_mask)、`input2`(position_ids) | `output` [batch, 512] |
+
+- 出力は射影済みだが、L2 正規化はされていない。エンジンで正規化する。
+- バッチ軸はどれも可変。
+- **OpenAI CLIP の文章:** BOS 49406 と EOS 49407 を付け、77 で切り詰め、EOS で 77 まで詰める。
+- **LY の文章:** 小文字にして `sentencepiece` で分割し、先頭に [CLS]=4 を付けて最大 77 にする(小文字にしないと未知語になる)。
+  - [PAD]=3 で、バッチ内の最長に合わせて詰める。
+  - attention_mask は実トークンが 1。position_ids は 0 から。
+  - transformers 4.39 の T5Tokenizer と 17 個の文字列で突き合わせ、特殊トークンの文字列を含む1件以外は一致した。
+  - transformers 5 は小文字化を無視するので、照合には使わない。
+
+**ゼロショット:**
+- 合成画像 7 枚に英語の文章を当てると、どのモデルも 7/7 で正しい画像が最上位だった。
+- 日本語の文章では、OpenAI CLIP は 2/7、LY は 7/7 だった。
+- COCO の 10 枚で文章から画像を引くと、最上位が正しかったのは次のとおり。
+  - CLIP の fp32 に英語: 9/10
+  - CLIP の fp32 に日本語: 5/10
+  - LY に日本語: 10/10
+  - LY に英語: 10/10
+
+**速度とメモリ**(推論スレッド 2、prepacking とメモリパターンを切った条件):
+
+| モデル | 画像 1 枚 | 文章 1 件 | 最大 RSS(両方を読み込み) |
+|---|---|---|---|
+| CLIP 画像 uint8 + 文章 fp32(既定) | 約 75ms | 約 130ms | 約 0.6GiB(見込み) |
+| CLIP fp32 | 約 230ms | 約 130ms | 約 0.83GiB |
+| LY | 約 710ms | 約 110ms | 約 0.92GiB |
+
+- 既定の組み合わせの最大 RSS は、画像側 uint8 と文章側 fp32 を別々に測った値からの見込み。実装時に測り直してメモリの目安に入れる。
+
+**量子化の精度:**
+- `*_quantized`(int8)は fp32 との cosine が、画像側で平均 0.953、文章側で平均 0.87〜0.90 だった。1回に計算する枚数でも値が変わった。そのため既定にしない。
+- 画像側の uint8 は、fp32 との cosine が平均 0.985(最小 0.972)で、速度とサイズは int8 と同じだった。
+- 文章側は検索のたびに1件だけ計算するので、fp32 でも十分速い。
+- そのため既定を「画像側 uint8 + 文章側 fp32」にした(2026-10-03 にユーザーが決めた)。
+
+**依存とブラウザ:**
+- `sentencepiece` と `pgvector` は、4つの環境(linux aarch64、linux x86_64、win_amd64、macOS arm64)に wheel がある。
+- 純 Python の BPE は、試作で 22 個の文字列のうち 21 個が `tokenizers` と一致した。違ったのは、本文に `<|endoftext|>` の文字列そのものを含む1件で、これは意図どおり。
+- umap-js 1.4.0 は `setPrecomputedKNN` で近傍を渡せる。
 
 ## Options Considered
 
@@ -222,7 +290,7 @@ ADR-0024 4章と同じ形にする。
 
 | 案 | 評価 |
 |---|---|
-| A. サーバーは近傍と PCA だけ返し、ブラウザで UMAP(採用) | サーバーに重い依存が要らない |
+| A. サーバーは近傍だけ返し、ブラウザで UMAP(採用) | サーバーに重い依存が要らない。近傍を渡せば元のベクトルは要らないので、送る量も小さい |
 | B. サーバーで UMAP(umap-learn) | numba と llvmlite が要る。aarch64 と Windows で入れにくく、初回の JIT も遅い |
 | C. PCA だけ | 依存は無いが、CLIP の埋め込みでは塊が分かれにくく、地図として物足りない |
 
@@ -234,7 +302,7 @@ Infinity は、OpenAI の embeddings の形に `modality` を足しただけで�
 
 決め手はユーザーの方針で、モデルを利用者が選べることを優先する。そのため、エンジンとモデルを差し替えられる形(共通の口、モデルごとの `model_key`、モデルごとの保存)にした。代わりに、設定画面とテストの組み合わせが増える。
 
-費用の面では、既定のモデル(int8 の CLIP、約 150MB)をローカルの CPU で動かすので、外部に画像を出さず、課金も無い。日本語で検索したい人は LY のモデル(約 790MB)を選ぶ。GPU のある人は、リモートの推論サーバーで大きなモデルを使える。
+費用の面では、既定のモデル(画像側を uint8 にした CLIP、約 345MB)をローカルの CPU で動かすので、外部に画像を出さず、課金も無い。日本語で検索したい人は LY のモデル(約 790MB)を選ぶ。GPU のある人は、リモートの推論サーバーで大きなモデルを使える。
 
 pgvector は、PostgreSQL を選ぶ規模の利用者に索引の利点を出すために使う。拡張が無い環境でも numpy に切り替わるので、PostgreSQL を使う人に拡張を必須にはしない。
 
@@ -244,13 +312,13 @@ pgvector は、PostgreSQL を選ぶ規模の利用者に索引の利点を出す
 - ADR-0024 の「埋め込みベクトルは保存しない」は、この ADR で改める。自動タイトル・タグの中身は変えない。
 - 「LLM の接続先」(ADR-0032)を、埋め込みの推論サーバーにも使う。使っている機能に「埋め込み」が加わる。
 - Compose と CI の PostgreSQL のイメージが変わる(ADR-0027)。既存の利用者は、イメージ名を替えるだけで移れる(リリースノートで案内する)。
-- 依存が増える(バックエンド 3 つ、フロント 2 つ)。
+- 依存が増える(バックエンド 2 つ、フロント 2 つ)。
 - ローカルの ONNX のモデルは、WD Tagger と合わせて `DATA_DIR/models/` に数百 MB〜1GB 程度を置くことになる。
 - 推論が CPU を使う。取り込みのたびに1枚ずつ計算するので、普段の負荷は小さい。一括実行の間は、推論のスレッド数を CPU の半分に抑えて、API の応答を妨げないようにする。
 
 ## Action Items
 
-1. [ ] 実装の最初に確かめる
+1. [x] 実装の最初に確かめる(11章)
    - 2つの ONNX の入出力の名前、バッチ軸、出力が射影済みか
    - LY のトークナイザーを sentencepiece だけで再現できるか(transformers の出力と突き合わせ、id をテストの固定値に残す)
    - Raspberry Pi 5 での推論時間とメモリの目安
