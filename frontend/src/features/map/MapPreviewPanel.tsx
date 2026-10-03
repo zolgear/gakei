@@ -1,6 +1,7 @@
 /**
  * マップで選んだ画像を大きく見るパネル(ADR-0033 8章・2026-10-04 追記、ユーザーの指示)。
- * 選択カードの「↗」で開き、「↙」か Esc で小さなカードに戻る。デスクトップではマップの右側に、
+ * 選択カードの「↗」で開き、「↙」か Esc で小さなカードに戻る(開閉はブラウザに覚え、開いている間は
+ * 別の画像を選んでもこのパネルで出す。`MapCanvas`)。画像を押すとビューアを開く。デスクトップではマップの右側に、
  * 768px 未満では下からのシートとして重ねる。
  *
  * 読むだけのパネル(編集はビューアで行う)。情報はビューアの情報欄を縮めたもので、取得もビューアと
@@ -22,13 +23,15 @@ interface MapPreviewPanelProps {
   assetId: string
   /** グラフの元データにあるタイトル(詳細が届く前に出す)。 */
   fallbackTitle: string | null | undefined
+  /** 開いたときに閉じるボタンへ焦点を移すか(「↗」で広げたときだけ)。 */
+  autoFocus: boolean
   onCollapse: () => void
 }
 
 /** プロンプトの抜粋の長さ(残りは CSS で行数を切る)。 */
 const PROMPT_SNIPPET_MAX = 400
 
-export function MapPreviewPanel({ assetId, fallbackTitle, onCollapse }: MapPreviewPanelProps) {
+export function MapPreviewPanel({ assetId, fallbackTitle, autoFocus, onCollapse }: MapPreviewPanelProps) {
   const { t } = useI18n()
   const m = t.map
   const v = t.viewer
@@ -36,10 +39,11 @@ export function MapPreviewPanel({ assetId, fallbackTitle, onCollapse }: MapPrevi
   const query = useQuery({ queryKey: ['asset', assetId], queryFn: () => getAsset(assetId) })
   const asset = query.data
 
-  // 開いたら閉じるボタンに焦点を移す(Esc ですぐ戻れるように)。
+  // 「↗」で開いたら閉じるボタンに焦点を移す(Esc ですぐ戻れるように)。覚えた開閉で開いたとき
+  // (マップで選んだとき)は canvas の焦点を奪わない。Esc はページ全体で受けるので、どちらでも効く。
   useEffect(() => {
-    collapseRef.current?.focus({ preventScroll: true })
-  }, [])
+    if (autoFocus) collapseRef.current?.focus({ preventScroll: true })
+  }, [autoFocus])
 
   // Esc で畳む。パネルの余白を押すと焦点が body に移るので、ページ全体で受ける(canvas が先に
   // 受けて処理したときは defaultPrevented になっているので二重に畳まない)。
@@ -83,12 +87,11 @@ export function MapPreviewPanel({ assetId, fallbackTitle, onCollapse }: MapPrevi
       </header>
 
       <div className={styles.body}>
-        <Link to={`/assets/${assetId}`} className={styles.imageLink} aria-label={m.openInViewer}>
+        <Link to={`/assets/${assetId}`} className={styles.imageLink} aria-label={m.openInViewer} title={m.openInViewer}>
           <img key={assetId} src={assetUrl(assetId, 'preview')} alt="" className={styles.image} />
         </Link>
 
         <div className={styles.actions}>
-          <Link to={`/assets/${assetId}`}>{m.openInViewer}</Link>
           <Link to={`/lineage/${assetId}`}>{m.lineageGraph}</Link>
           <Link to={buildSimilarSearchPath(assetId)}>{m.similarInSearch}</Link>
         </div>

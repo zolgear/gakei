@@ -8,7 +8,8 @@
  * 元データは `GET /api/embeddings/graph`。グループ・タグ(複数なら AND)・上限・近傍の数で絞り込める。タブ、
  * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
  * ときに保つ。履歴を増やさないよう replace で書く)。タブ・上限・近傍の数・しきい値・系列の辺は
- * ブラウザにも覚え、URL に無ければ覚えた値を使う(`mapPrefs.ts`。2026-10-04)。上限で切ったときは、絞り込みを促す。
+ * ブラウザにも覚え、URL に無ければ覚えた値を使う(`mapPrefs.ts`。2026-10-04)。選んだ画像を大きく見る
+ * パネルの開閉もブラウザにだけ覚える(URL には置かない)。上限で切ったときは、絞り込みを促す。
  * 埋め込みが使えないときは App バーの入口を出さない。直接開いたときは使えない旨だけを出す。
  */
 import { useId, useMemo, useState } from 'react'
@@ -93,6 +94,13 @@ function MapBody() {
   function selectId(selectedId: string | null) {
     if (selectedId !== state.selectedId) update({ selectedId })
   }
+
+  // パネルの開閉は URL に置かず、覚えた値だけを書き換える。
+  const previewOpen = storedPrefs.previewOpen ?? false
+  function setPreviewOpen(open: boolean) {
+    if (open !== previewOpen) setStoredPrefs(saveMapPrefs(storedPrefs, { previewOpen: open }))
+  }
+  const preview = { open: previewOpen, onOpenChange: setPreviewOpen }
 
   const query = useQuery({
     queryKey: ['embeddings', 'graph', state.k, state.limit, state.groupId, state.tags],
@@ -250,7 +258,7 @@ function MapBody() {
           <p className={styles.placeholder}>{filterCount > 0 ? m.emptyFiltered : m.empty}</p>
         )}
         {graph && !query.isError && nodeCount > 0 && state.view === 'umap' && (
-          <UmapView graph={graph} selectedId={state.selectedId} onSelectId={selectId} />
+          <UmapView graph={graph} selectedId={state.selectedId} onSelectId={selectId} preview={preview} />
         )}
         {graph && !query.isError && nodeCount > 0 && state.view === 'network' && (
           <NetworkView
@@ -260,6 +268,7 @@ function MapBody() {
             lineageEdges={state.showLineage ? lineage : null}
             selectedId={state.selectedId}
             onSelectId={selectId}
+            preview={preview}
           />
         )}
       </div>

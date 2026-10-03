@@ -36,8 +36,17 @@ describe('parseMapPrefs', () => {
     expect(parseMapPrefs('{"v":1,"threshold":0.8349}').threshold).toBe(0.83)
   })
 
+  it('パネルの開閉は真偽値だけを読む(無い・読めないときは閉じたまま)', () => {
+    expect(parseMapPrefs('{"v":1,"previewOpen":true}')).toEqual({ previewOpen: true })
+    expect(parseMapPrefs('{"v":1,"previewOpen":false}')).toEqual({ previewOpen: false })
+    expect(parseMapPrefs('{"v":1,"previewOpen":"true"}')).toEqual({})
+    expect(parseMapPrefs('{"v":1,"previewOpen":1}')).toEqual({})
+    // 項目を足す前に覚えた値も、そのまま読める。
+    expect(parseMapPrefs('{"v":1,"k":20}')).toEqual({ k: 20 })
+  })
+
   it('書いたものを読み戻せる', () => {
-    const prefs = { view: 'network' as const, k: 5, limit: 500, threshold: 0.7, showLineage: false }
+    const prefs = { view: 'network' as const, k: 5, limit: 500, threshold: 0.7, showLineage: false, previewOpen: true }
     expect(parseMapPrefs(serializeMapPrefs(prefs))).toEqual(prefs)
   })
 })
@@ -46,6 +55,7 @@ describe('pickStoredFields', () => {
   it('グループ・タグ・選んだ画像は覚えない', () => {
     expect(pickStoredFields({ groupId: 'g', tags: ['a'], selectedId: 's', k: 15 })).toEqual({ k: 15 })
     expect(pickStoredFields({ selectedId: null })).toEqual({})
+    expect(pickStoredFields({ previewOpen: false })).toEqual({ previewOpen: false })
   })
 })
 
@@ -58,6 +68,19 @@ describe('loadMapPrefs / saveMapPrefs', () => {
     expect(second).toEqual({ k: 20, threshold: 0.9 })
     expect(JSON.parse(storage.getItem(MAP_PREFS_STORAGE_KEY) ?? '')).toEqual({ v: 1, k: 20, threshold: 0.9 })
     expect(loadMapPrefs(storage)).toEqual({ k: 20, threshold: 0.9 })
+  })
+
+  it('パネルの開閉も、ほかの覚えた値を残したまま重ねて書く', () => {
+    const storage = memoryStorage()
+    const prefs = saveMapPrefs({}, { k: 20 }, storage)
+    const opened = saveMapPrefs(prefs, { previewOpen: true }, storage)
+    expect(opened).toEqual({ k: 20, previewOpen: true })
+    expect(loadMapPrefs(storage)).toEqual({ k: 20, previewOpen: true })
+    // URL の状態を変えても、パネルの開閉は消えない。
+    const changed = saveMapPrefs(opened, { threshold: 0.9, selectedId: 'a' }, storage)
+    expect(loadMapPrefs(storage)).toEqual({ k: 20, threshold: 0.9, previewOpen: true })
+    saveMapPrefs(changed, { previewOpen: false }, storage)
+    expect(loadMapPrefs(storage)).toEqual({ k: 20, threshold: 0.9, previewOpen: false })
   })
 
   it('ストレージが使えなくても例外にせず、結果は返す', () => {

@@ -7,7 +7,10 @@
  *   押すと選択を外す。Esc でも外す。
  * - 選んだ画像は、その近傍(`neighborIndices` の行)を強調し、ほかを薄くする(「似た画像」)。
  * - 選んだ画像は左下のカードに出し、「↗」で大きく見るパネル(`MapPreviewPanel`)に広げられる。
- *   Esc は、パネルを開いていればまずパネルを畳み、次に選択を外す。
+ *   開閉は呼び出し側がブラウザに覚え(`mapPrefs.ts` の `previewOpen`)、広げたあとは別の画像を
+ *   選んでも、次に開いたときもパネルで出す。「↙」と Esc で畳むと畳んだことを覚える。選択を外す
+ *   (「×」・何も無い所を押す)のは開閉を変えない。Esc は、パネルを開いていればまずパネルを畳み、
+ *   次に選択を外す。カードとパネルの画像を押すとビューアを開く。
  * - 利用者が動かすまでは、座標が変わるたびに全体が収まるように合わせる(地図の計算の途中経過や、
  *   ネットワークの力学モデルの動きを追う)。
  * - 色は CSS 変数(配色)から読む。
@@ -41,6 +44,12 @@ import {
 } from './viewport'
 import styles from './MapCanvas.module.css'
 
+/** 選んだ画像を大きく見るパネルの開閉。 */
+export interface MapPreviewState {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
 export interface MapCanvasHandle {
   /** 座標を書き換えたあとに呼ぶ(次のフレームで描き直す)。 */
   redraw: () => void
@@ -65,6 +74,7 @@ interface MapCanvasProps {
    * サムネイルの大きさの倍率。ネットワークでは辺が見えるよう小さめにする。
    */
   tileScale?: number
+  preview: MapPreviewState
 }
 
 /** クリックとみなす移動量の上限。 */
@@ -116,6 +126,7 @@ export function MapCanvas({
   ariaLabel,
   overlay,
   tileScale = 1,
+  preview,
 }: MapCanvasProps) {
   const { t } = useI18n()
   const m = t.map
@@ -126,10 +137,11 @@ export function MapCanvas({
   const userMovedRef = useRef(false)
   const frameRef = useRef<number | null>(null)
   const [hover, setHover] = useState<{ index: number; x: number; y: number } | null>(null)
-  // 選んだ画像を大きく見るパネルを開いているか。覚えない(選択を外したら閉じる)。
-  const [previewOpen, setPreviewOpen] = useState(false)
+  // 選んだ画像を大きく見るパネルを開いているか(呼び出し側が覚える)。
+  const previewOpen = preview.open
   const expandButtonRef = useRef<HTMLButtonElement | null>(null)
-  if (previewOpen && selected === null) setPreviewOpen(false)
+  // 「↗」で広げたときだけパネルへ焦点を移す(覚えた開閉で開いたときは canvas の焦点を奪わない)。
+  const [focusPanel, setFocusPanel] = useState(false)
 
   // 描画は requestAnimationFrame から呼ぶので、最新の props を ref で読む。
   const propsRef = useRef({
@@ -567,16 +579,24 @@ export function MapCanvas({
     requestDraw()
   }
 
+  function expandPreview() {
+    setFocusPanel(true)
+    preview.onOpenChange(true)
+  }
+
+  // 「↙」と Esc は同じ扱い(畳んだことを覚える)。
   function collapsePreview() {
-    setPreviewOpen(false)
+    setFocusPanel(false)
+    preview.onOpenChange(false)
     // 畳んだら、広げたボタンに焦点を戻す(カードが描かれてから)。
     requestAnimationFrame(() => expandButtonRef.current?.focus({ preventScroll: true }))
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Escape' && previewOpen) {
+    if (e.key === 'Escape' && previewOpen && selected !== null) {
       e.preventDefault()
-      setPreviewOpen(false)
+      setFocusPanel(false)
+      preview.onOpenChange(false)
     } else if (e.key === 'Escape' && selected !== null) {
       e.preventDefault()
       onSelect(null)
@@ -645,7 +665,12 @@ export function MapCanvas({
       )}
 
       {selectedNode && previewOpen && (
-        <MapPreviewPanel assetId={selectedNode.id} fallbackTitle={selectedNode.title} onCollapse={collapsePreview} />
+        <MapPreviewPanel
+          assetId={selectedNode.id}
+          fallbackTitle={selectedNode.title}
+          autoFocus={focusPanel}
+          onCollapse={collapsePreview}
+        />
       )}
 
       {selectedNode && !previewOpen && (
@@ -661,7 +686,12 @@ export function MapCanvas({
             }
           }}
         >
-          <Link to={`/assets/${selectedNode.id}`} className={styles.selectionThumbLink} aria-label={m.openInViewer}>
+          <Link
+            to={`/assets/${selectedNode.id}`}
+            className={styles.selectionThumbLink}
+            aria-label={m.openInViewer}
+            title={m.openInViewer}
+          >
             <img src={assetUrl(selectedNode.id, 'thumb')} alt="" className={styles.selectionThumb} />
           </Link>
           <div className={styles.selectionBody}>
@@ -670,7 +700,6 @@ export function MapCanvas({
               {fmt(m.neighborsHighlighted, { count: neighborsOf(neighborIndices, selected!).length })}
             </span>
             <div className={styles.selectionLinks}>
-              <Link to={`/assets/${selectedNode.id}`}>{m.openInViewer}</Link>
               <Link to={`/lineage/${selectedNode.id}`}>{m.lineageGraph}</Link>
               <Link to={buildSimilarSearchPath(selectedNode.id)}>{m.similarInSearch}</Link>
             </div>
@@ -682,7 +711,7 @@ export function MapCanvas({
               className={styles.selectionButton}
               aria-label={m.expandPreview}
               title={m.expandPreview}
-              onClick={() => setPreviewOpen(true)}
+              onClick={expandPreview}
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="M3 13L12 4M6 4h6v6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />

@@ -21,7 +21,7 @@ import type { EmbeddingGraphResponse } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import type { SimilarityEdge } from './edges'
 import { getCachedLayout, layoutKey, setCachedLayout } from './layoutCache'
-import { MapCanvas, type MapCanvasHandle } from './MapCanvas'
+import { MapCanvas, type MapCanvasHandle, type MapPreviewState } from './MapCanvas'
 import { MAP_LAYOUT_SEED, mulberry32 } from './random'
 import { useSelectedIndex } from './useSelectedIndex'
 import styles from './MapViews.module.css'
@@ -46,9 +46,19 @@ interface NetworkViewProps {
   /** 選んだ画像の Asset ID(URL に置く)。 */
   selectedId: string | null
   onSelectId: (id: string | null) => void
+  /** 選んだ画像を大きく見るパネルの開閉(ブラウザに覚える)。 */
+  preview: MapPreviewState
 }
 
-export function NetworkView({ graph, edges, threshold, lineageEdges, selectedId, onSelectId }: NetworkViewProps) {
+export function NetworkView({
+  graph,
+  edges,
+  threshold,
+  lineageEdges,
+  selectedId,
+  onSelectId,
+  preview,
+}: NetworkViewProps) {
   const { t } = useI18n()
   const m = t.map
   const nodes = useMemo(() => graph.nodes ?? [], [graph])
@@ -146,6 +156,7 @@ export function NetworkView({ graph, edges, threshold, lineageEdges, selectedId,
       tileScale={NETWORK_TILE_SCALE}
       selected={selected}
       onSelect={(index) => onSelectId(index === null ? null : (nodes[index]?.id ?? null))}
+      preview={preview}
       controllerRef={controllerRef}
       ariaLabel={fmt(m.networkAriaLabel, { count: nodes.length, edges: edges.length })}
       overlay={running ? <span className={styles.status}>{m.networkRunning}</span> : null}
