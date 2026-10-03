@@ -878,6 +878,8 @@ export type SemanticSearchResponse = components['schemas']['SemanticSearchRespon
 export type SemanticAssetHit = components['schemas']['SemanticAssetHit']
 export type SimilarAssetsResponse = components['schemas']['SimilarAssetsResponse']
 export type DuplicatesResponse = components['schemas']['DuplicatesResponse']
+export type EmbeddingGraphResponse = components['schemas']['EmbeddingGraphResponse']
+export type EmbeddingGraphNode = components['schemas']['EmbeddingGraphNode']
 export type DuplicateGroup = components['schemas']['DuplicateGroup']
 export type DuplicateAsset = components['schemas']['DuplicateAsset']
 
@@ -941,4 +943,14 @@ export function embeddingDuplicates(
   params: NonNullable<operations['embedding_duplicates']['parameters']['query']> = {},
 ): Promise<DuplicatesResponse> {
   return request(`/api/embeddings/duplicates${toQuery(params)}`)
+}
+
+/**
+ * マップの元データ(ノードと k 近傍。ADR-0033 7章)。各行の先頭は自分自身。
+ * `include_lineage` を付けると系列の主たる親の辺(`[親, 子]` の位置)も返す。
+ */
+export function embeddingGraph(
+  params: NonNullable<operations['embedding_graph']['parameters']['query']> = {},
+): Promise<EmbeddingGraphResponse> {
+  return request(`/api/embeddings/graph${toQuery(params)}`)
 }

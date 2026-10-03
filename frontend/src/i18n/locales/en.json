@@ -73,7 +73,8 @@
       "prompts": "Prompt sets",
       "graph": "Lineage graph",
       "history": "History",
-      "search": "Search"
+      "search": "Search",
+      "map": "Map"
     },
     "sidebar": {
       "resourcePanel": "Resource panel",
@@ -1822,5 +1823,53 @@
     "undo": "Undo",
     "deleteFailed": "Couldn't delete.",
     "restoreFailed": "Couldn't undo."
+  },
+  "map": {
+    "title": "Map",
+    "viewLabel": "View",
+    "tabMap": "Map",
+    "tabNetwork": "Network",
+    "loading": "Loading…",
+    "loadFailed": "Couldn't load the map data.",
+    "filters": "Filters",
+    "filtersWithCount": "Filters ({count})",
+    "groupLabel": "Group",
+    "groupAll": "All",
+    "groupUnknown": "(Group not found)",
+    "tagLabel": "Tag",
+    "limitLabel": "Limit",
+    "limitOption": "{count} images",
+    "kLabel": "Neighbors",
+    "kHelp": "How many similar images each image looks at. More emphasizes the overall shape; fewer emphasizes local similarity.",
+    "thresholdLabel": "Similarity threshold",
+    "edgeCount": {
+      "one": "{count} edge",
+      "other": "{count} edges"
+    },
+    "edgeCountCapped": "{count} edges (the most similar of {total})",
+    "showLineage": "Overlay lineage edges",
+    "truncated": "Showing only the newest {count} of {total} images. Narrow down by group or tag, or raise the limit.",
+    "truncatedAtMax": "Showing only the newest {count} of {total} images. Narrow down by group or tag.",
+    "empty": "No images to show. Only images with computed embeddings appear here.",
+    "emptyFiltered": "No images to show with these filters.",
+    "tooFew": "Not enough images to build a map (needs at least {min}).",
+    "layoutPreparing": "Preparing layout…",
+    "layoutProgress": "Computing layout {percent}%",
+    "layoutFailed": "Couldn't compute the layout.",
+    "networkRunning": "Settling layout…",
+    "umapAriaLabel": "Map placing similar images close together ({count} images)",
+    "networkAriaLabel": "Network linking similar images ({count} images, {edges} edges)",
+    "zoomGroup": "Zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to view",
+    "untitled": "(Untitled)",
+    "selectionLabel": "Selected image",
+    "neighborsHighlighted": {
+      "one": "Highlighting {count} similar image",
+      "other": "Highlighting {count} similar images"
+    },
+    "openInViewer": "Open in viewer",
+    "similarInSearch": "See similar images in search"
   }
 }

@@ -73,7 +73,8 @@
       "prompts": "プロンプトセット",
       "graph": "系列グラフ",
       "history": "履歴",
-      "search": "検索"
+      "search": "検索",
+      "map": "マップ"
     },
     "sidebar": {
       "resourcePanel": "リソースパネル",
@@ -1822,5 +1823,53 @@
     "undo": "元に戻す",
     "deleteFailed": "削除できませんでした。",
     "restoreFailed": "元に戻せませんでした。"
+  },
+  "map": {
+    "title": "マップ",
+    "viewLabel": "表示",
+    "tabMap": "地図",
+    "tabNetwork": "ネットワーク",
+    "loading": "読み込み中…",
+    "loadFailed": "マップの元データを読み込めませんでした。",
+    "filters": "絞り込み",
+    "filtersWithCount": "絞り込み({count})",
+    "groupLabel": "グループ",
+    "groupAll": "すべて",
+    "groupUnknown": "(見つからないグループ)",
+    "tagLabel": "タグ",
+    "limitLabel": "上限",
+    "limitOption": "{count} 枚",
+    "kLabel": "近傍の数",
+    "kHelp": "1枚ごとに、似た画像を何枚まで見て並べるか。多いほど全体の形が、少ないほど近くの似かたが効きます。",
+    "thresholdLabel": "類似度のしきい値",
+    "edgeCount": {
+      "one": "辺 {count} 本",
+      "other": "辺 {count} 本"
+    },
+    "edgeCountCapped": "辺 {count} 本(全 {total} 本のうち類似度の高いもの)",
+    "showLineage": "系列の辺を重ねる",
+    "truncated": "全 {total} 枚のうち、新しい {count} 枚だけを並べています。グループやタグで絞り込むか、上限を上げてください。",
+    "truncatedAtMax": "全 {total} 枚のうち、新しい {count} 枚だけを並べています。グループやタグで絞り込んでください。",
+    "empty": "並べられる画像がありません。埋め込みを計算した画像だけが並びます。",
+    "emptyFiltered": "この絞り込みで並べられる画像がありません。",
+    "tooFew": "画像が少ないため、地図を作れません({min} 枚以上で作れます)。",
+    "layoutPreparing": "配置を準備中…",
+    "layoutProgress": "配置を計算中 {percent}%",
+    "layoutFailed": "配置を計算できませんでした。",
+    "networkRunning": "配置を調整中…",
+    "umapAriaLabel": "似た画像が近くに並ぶ地図({count} 枚)",
+    "networkAriaLabel": "似た画像を線で結んだネットワーク({count} 枚、辺 {edges} 本)",
+    "zoomGroup": "表示の拡大縮小",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "fit": "全体を表示",
+    "untitled": "(無題)",
+    "selectionLabel": "選んだ画像",
+    "neighborsHighlighted": {
+      "one": "似た画像 {count} 枚を強調しています",
+      "other": "似た画像 {count} 枚を強調しています"
+    },
+    "openInViewer": "ビューアで開く",
+    "similarInSearch": "似た画像を検索で見る"
   }
 }

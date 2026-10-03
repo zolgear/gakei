@@ -1,5 +1,11 @@
-/** アイコンレール(52px)。ストック/プロンプトセット/系列グラフ/履歴/検索を切り替える。 */
+/**
+ * アイコンレール(52px)。ストック/プロンプトセット/系列グラフ/履歴/検索を切り替える。
+ * 区切りの下の「マップ」(ADR-0033 8章)はパネルではなくページ(`/map`)へ移る。埋め込みが
+ * 使えないときは出さない。
+ */
 import type { ReactNode } from 'react'
+import { Link, useLocation } from 'react-router'
+import { useEmbeddingCapabilities } from '../features/embeddings/useEmbeddingCapabilities'
 import type { PanelId } from './panelStorage'
 import { useI18n, type Messages } from '../i18n'
 import styles from './IconRail.module.css'
@@ -69,6 +75,9 @@ function items(labels: Messages['shell']['iconRail']): { id: PanelId; label: str
 export function IconRail({ selected, onSelect }: IconRailProps) {
   const { t } = useI18n()
   const ITEMS = items(t.shell.iconRail)
+  const embeddings = useEmbeddingCapabilities()
+  const location = useLocation()
+  const onMap = location.pathname === '/map'
   return (
     <nav aria-label={t.shell.iconRail.resourceNav} className={styles.rail}>
       {ITEMS.map((item) => (
@@ -84,6 +93,28 @@ export function IconRail({ selected, onSelect }: IconRailProps) {
           {item.icon}
         </button>
       ))}
+      {embeddings && (
+        <>
+          <span className={styles.separator} aria-hidden="true" />
+          <Link
+            to="/map"
+            aria-label={t.shell.iconRail.map}
+            title={t.shell.iconRail.map}
+            aria-current={onMap ? 'page' : undefined}
+            className={styles.item}
+            data-active={onMap}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <circle cx="4.5" cy="5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="7.5" cy="3.8" r="1.3" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="12.5" cy="10" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="14.5" cy="13.5" r="1.3" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="5" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M5.8 6.2l5.6 2.8M6 11.9l5-1.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+          </Link>
+        </>
+      )}
     </nav>
   )
 }
