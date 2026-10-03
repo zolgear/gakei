@@ -20,8 +20,16 @@ import { neighborsOf, type SimilarityEdge } from './edges'
 import { hitTest } from './hitTest'
 import { thumbCache } from './thumbCache'
 import {
+  DOT_RADIUS,
+  THUMB_MIN_PX,
+  arrowSizePx,
+  drawTilePx,
+  fitNodes,
+  lineageSegment,
+  type LineageSegment,
+} from './nodeSize'
+import {
   computeBounds,
-  fitBounds,
   panBy,
   tileWorldSize,
   worldToScreen,
@@ -56,23 +64,6 @@ interface MapCanvasProps {
   tileScale?: number
 }
 
-/** 全体を表示したときの余白(CSS ピクセル)。 */
-const FIT_PADDING = 32
-/** これより小さく描くときは、サムネイルではなく点にする。 */
-const THUMB_MIN_PX = 12
-/** サムネイルはこれより大きくしない(拡大すると間が空いて見分けやすくなる)。 */
-const THUMB_MAX_PX = 112
-const DOT_RADIUS = 2.5
-/** 枚数がこれ以下なら、重なっても点にせずサムネイルで描く(狭い幅で全体を表示しても絵が見えるように)。 */
-const SMALL_SET_MAX = 400
-/** 枚数が少ないときの、サムネイルの最小の大きさ(CSS ピクセル)。 */
-const SMALL_SET_MIN_PX = 18
-
-/** 描くサムネイルの大きさ(CSS ピクセル)。12px 未満なら点で描く。 */
-function drawTilePx(rawPx: number, count: number): number {
-  const px = Math.min(THUMB_MAX_PX, rawPx)
-  return count <= SMALL_SET_MAX ? Math.max(px, SMALL_SET_MIN_PX) : px
-}
 /** クリックとみなす移動量の上限。 */
 const CLICK_SLOP = 6
 /** 当たり判定の最小の半径(指でも押せるように)。 */
@@ -173,12 +164,14 @@ export function MapCanvas({
     if (!pos || n === 0 || width === 0 || height === 0) return
 
     const bounds = computeBounds(pos, n)
+    const tileWorld = tileWorldSize(bounds, n, pos, p.neighborIndices) * p.tileScale
     if (!userMovedRef.current && bounds) {
-      viewportRef.current = fitBounds(bounds, width, height, FIT_PADDING)
+      // 端の画像(半分の大きさと選択の枠)も画面に収める。
+      viewportRef.current = fitNodes(bounds, width, height, tileWorld, n)
     }
     const v = viewportRef.current
     const colors = readColors(container)
-    const tilePx = drawTilePx(tileWorldSize(bounds, n, pos, p.neighborIndices) * p.tileScale * v.scale, n)
+    const tilePx = drawTilePx(tileWorld * v.scale, n)
     const thumbMode = tilePx >= THUMB_MIN_PX
     const half = thumbMode ? tilePx / 2 : DOT_RADIUS
     const margin = half + 2
@@ -278,33 +271,72 @@ export function MapCanvas({
     if (p.lineageEdges && p.lineageEdges.length > 0) {
       ctx.save()
       ctx.strokeStyle = colors.lineage
+      ctx.fillStyle = colors.lineage
       ctx.globalAlpha = 0.95
       ctx.lineWidth = 2
-      ctx.setLineDash([5, 4])
-      ctx.beginPath()
-      for (const [a, b] of p.lineageEdges) {
-        if (a >= n || b >= n) continue
-        ctx.moveTo(sx[a], sy[a])
-        ctx.lineTo(sx[b], sy[b])
+      if (thumbMode) {
+        // 親の縁から子の縁まで引き、子の側に矢じりを付ける(サムネイルに隠れないように縁で止める)。
+        const arrow = arrowSizePx(tilePx)
+        const wing = arrow * 0.5
+        const segments: LineageSegment[] = []
+        const overlapped: [number, number][] = []
+        for (const [a, b] of p.lineageEdges) {
+          if (a >= n || b >= n) continue
+          const seg = lineageSegment(sx[a], sy[a], sx[b], sy[b], half, arrow)
+          if (seg) segments.push(seg)
+          else overlapped.push([a, b])
+        }
+        ctx.setLineDash([5, 4])
+        ctx.beginPath()
+        for (const s of segments) {
+          ctx.moveTo(s.x0, s.y0)
+          ctx.lineTo(s.x1, s.y1)
+        }
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.beginPath()
+        for (const s of segments) {
+          ctx.moveTo(s.tipX, s.tipY)
+          ctx.lineTo(s.x1 - s.uy * wing, s.y1 + s.ux * wing)
+          ctx.lineTo(s.x1 + s.uy * wing, s.y1 - s.ux * wing)
+          ctx.closePath()
+        }
+        ctx.fill()
+        // サムネイルが重なって線を引けない組は、中心どうしを実線で結ぶ(向きは示せない)。
+        if (overlapped.length > 0) {
+          ctx.beginPath()
+          for (const [a, b] of overlapped) {
+            ctx.moveTo(sx[a], sy[a])
+            ctx.lineTo(sx[b], sy[b])
+          }
+          ctx.stroke()
+        }
+      } else {
+        ctx.setLineDash([5, 4])
+        ctx.beginPath()
+        for (const [a, b] of p.lineageEdges) {
+          if (a >= n || b >= n) continue
+          ctx.moveTo(sx[a], sy[a])
+          ctx.lineTo(sx[b], sy[b])
+        }
+        ctx.stroke()
+        ctx.setLineDash([])
+        // 点のときは、子の側に小さな丸を付けて向きを示す。
+        ctx.beginPath()
+        for (const [a, b] of p.lineageEdges) {
+          if (a >= n || b >= n) continue
+          const dx = sx[a] - sx[b]
+          const dy = sy[a] - sy[b]
+          const len = Math.hypot(dx, dy)
+          if (len < 1) continue
+          const off = Math.min(len / 2, DOT_RADIUS + 4)
+          const cx = sx[b] + (dx / len) * off
+          const cy = sy[b] + (dy / len) * off
+          ctx.moveTo(cx + 2.5, cy)
+          ctx.arc(cx, cy, 2.5, 0, Math.PI * 2)
+        }
+        ctx.fill()
       }
-      ctx.stroke()
-      ctx.setLineDash([])
-      // 子の側に小さな丸を付けて向きを示す。
-      ctx.fillStyle = colors.lineage
-      ctx.beginPath()
-      for (const [a, b] of p.lineageEdges) {
-        if (a >= n || b >= n) continue
-        const dx = sx[a] - sx[b]
-        const dy = sy[a] - sy[b]
-        const len = Math.hypot(dx, dy)
-        if (len < 1) continue
-        const off = Math.min(len / 2, half + 4)
-        const cx = sx[b] + (dx / len) * off
-        const cy = sy[b] + (dy / len) * off
-        ctx.moveTo(cx + 2.5, cy)
-        ctx.arc(cx, cy, 2.5, 0, Math.PI * 2)
-      }
-      ctx.fill()
       ctx.restore()
     }
 

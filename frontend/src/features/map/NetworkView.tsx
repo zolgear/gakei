@@ -23,6 +23,7 @@ import type { SimilarityEdge } from './edges'
 import { getCachedLayout, layoutKey, setCachedLayout } from './layoutCache'
 import { MapCanvas, type MapCanvasHandle } from './MapCanvas'
 import { MAP_LAYOUT_SEED, mulberry32 } from './random'
+import { useSelectedIndex } from './useSelectedIndex'
 import styles from './MapViews.module.css'
 
 /** サムネイルを地図より小さくして、辺が見えるようにする。 */
@@ -42,9 +43,12 @@ interface NetworkViewProps {
   edges: SimilarityEdge[]
   threshold: number
   lineageEdges: [number, number][] | null
+  /** 選んだ画像の Asset ID(URL に置く)。 */
+  selectedId: string | null
+  onSelectId: (id: string | null) => void
 }
 
-export function NetworkView({ graph, edges, threshold, lineageEdges }: NetworkViewProps) {
+export function NetworkView({ graph, edges, threshold, lineageEdges, selectedId, onSelectId }: NetworkViewProps) {
   const { t } = useI18n()
   const m = t.map
   const nodes = useMemo(() => graph.nodes ?? [], [graph])
@@ -59,14 +63,8 @@ export function NetworkView({ graph, edges, threshold, lineageEdges }: NetworkVi
   const [settledKey, setSettledKey] = useState<string | null>(null)
   const positions = cached && cached.length === nodes.length * 2 ? cached : live?.key === key ? live.positions : null
   const running = !cached && settledKey !== key
-  const [selected, setSelected] = useState<number | null>(null)
-  const [selectedFor, setSelectedFor] = useState(graph)
+  const selected = useSelectedIndex(nodes, selectedId, positions !== null)
   const controllerRef = useRef<MapCanvasHandle | null>(null)
-
-  if (selectedFor !== graph) {
-    setSelectedFor(graph)
-    setSelected(null)
-  }
 
   useEffect(() => {
     const n = nodes.length
@@ -147,7 +145,7 @@ export function NetworkView({ graph, edges, threshold, lineageEdges }: NetworkVi
       lineageEdges={lineageEdges}
       tileScale={NETWORK_TILE_SCALE}
       selected={selected}
-      onSelect={setSelected}
+      onSelect={(index) => onSelectId(index === null ? null : (nodes[index]?.id ?? null))}
       controllerRef={controllerRef}
       ariaLabel={fmt(m.networkAriaLabel, { count: nodes.length, edges: edges.length })}
       overlay={running ? <span className={styles.status}>{m.networkRunning}</span> : null}

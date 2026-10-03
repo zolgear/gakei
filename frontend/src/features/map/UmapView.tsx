@@ -10,6 +10,7 @@ import { MapCanvas, type MapCanvasHandle } from './MapCanvas'
 import { MAP_LAYOUT_SEED } from './random'
 import { MIN_MAP_NODES, toUmapInput, umapEpochsFor } from './umapInput'
 import type { UmapWorkerRequest, UmapWorkerResponse } from './umapWorkerProtocol'
+import { useSelectedIndex } from './useSelectedIndex'
 import styles from './MapViews.module.css'
 
 interface Progress {
@@ -17,7 +18,14 @@ interface Progress {
   nEpochs: number
 }
 
-export function UmapView({ graph }: { graph: EmbeddingGraphResponse }) {
+interface UmapViewProps {
+  graph: EmbeddingGraphResponse
+  /** 選んだ画像の Asset ID(URL に置く)。 */
+  selectedId: string | null
+  onSelectId: (id: string | null) => void
+}
+
+export function UmapView({ graph, selectedId, onSelectId }: UmapViewProps) {
   const { t } = useI18n()
   const m = t.map
   const nodes = useMemo(() => graph.nodes ?? [], [graph])
@@ -34,8 +42,8 @@ export function UmapView({ graph }: { graph: EmbeddingGraphResponse }) {
   const [positionsFor, setPositionsFor] = useState(key)
   const [progress, setProgress] = useState<Progress | null>(null)
   const [failed, setFailed] = useState(false)
-  const [selected, setSelected] = useState<number | null>(null)
   const controllerRef = useRef<MapCanvasHandle | null>(null)
+  const selected = useSelectedIndex(nodes, selectedId, positions !== null)
 
   // データが替わったら、覚えている配置か、計算し直した配置に切り替える。
   if (positionsFor !== key) {
@@ -43,7 +51,6 @@ export function UmapView({ graph }: { graph: EmbeddingGraphResponse }) {
     setPositions(getCachedLayout(key) ?? null)
     setProgress(null)
     setFailed(false)
-    setSelected(null)
   }
 
   useEffect(() => {
@@ -114,7 +121,7 @@ export function UmapView({ graph }: { graph: EmbeddingGraphResponse }) {
       dataKey={key}
       neighborIndices={neighborIndices}
       selected={selected}
-      onSelect={setSelected}
+      onSelect={(index) => onSelectId(index === null ? null : (nodes[index]?.id ?? null))}
       controllerRef={controllerRef}
       ariaLabel={fmt(m.umapAriaLabel, { count: nodes.length })}
       overlay={overlay}

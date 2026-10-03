@@ -4,9 +4,9 @@
  * - 地図: umap-js の 2D 配置(`UmapView`)。
  * - ネットワーク: 類似度がしきい値以上の組を辺にした力学モデル(`NetworkView`)。系列の辺も重ねられる。
  *
- * 元データは `GET /api/embeddings/graph`。グループ・タグ・上限・近傍の数で絞り込め、タブと
- * 絞り込みは URL に置く(ビューアから戻ったときに保つ)。ネットワークのしきい値と系列の辺の
- * 表示はページの中だけ(保存しない)。上限で切ったときは、絞り込みを促す。
+ * 元データは `GET /api/embeddings/graph`。グループ・タグ・上限・近傍の数で絞り込める。タブ、
+ * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
+ * ときに保つ。履歴を増やさないよう replace で書く)。上限で切ったときは、絞り込みを促す。
  * 埋め込みが使えないときはアイコンレールの入口を出さない。直接開いたときは使えない旨だけを出す。
  */
 import { useId, useMemo, useState } from 'react'
@@ -22,8 +22,12 @@ import { lineagePairs, similarityEdges } from '../features/map/edges'
 import {
   MAP_K_CHOICES,
   MAP_LIMIT_CHOICES,
+  MAP_THRESHOLD_MAX,
+  MAP_THRESHOLD_MIN,
+  MAP_THRESHOLD_STEP,
   activeFilterCount,
   buildMapSearchParams,
+  clampThreshold,
   parseMapUrlState,
   type MapUrlState,
   type MapView,
@@ -35,11 +39,6 @@ import { useAssetGroups } from '../features/stock/groups/assetGroupQueries'
 import { fmt, useI18n } from '../i18n'
 import styles from './MapPage.module.css'
 
-/** ネットワークのしきい値の初期値と範囲。 */
-const DEFAULT_THRESHOLD = 0.8
-const THRESHOLD_MIN = 0.5
-const THRESHOLD_MAX = 0.99
-const THRESHOLD_STEP = 0.01
 const THRESHOLD_DEBOUNCE_MS = 200
 
 export function MapPage() {
@@ -66,16 +65,26 @@ function MapBody() {
   const { t } = useI18n()
   const m = t.map
   const [searchParams, setSearchParams] = useSearchParams()
-  const state = parseMapUrlState(searchParams)
+  // URL の更新は少し遅れて反映されるので、押した値を先に画面へ出す(チェックボックスが一瞬
+  // 元に戻って見えないように)。URL が変わったら、URL の値に任せる。
+  const [pending, setPending] = useState<{ base: string; patch: Partial<MapUrlState> } | null>(null)
+  const urlKey = searchParams.toString()
+  const urlState = parseMapUrlState(searchParams)
+  const state: MapUrlState = pending && pending.base === urlKey ? { ...urlState, ...pending.patch } : urlState
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD)
+  const threshold = state.threshold
   const debouncedThreshold = useDebouncedValue(threshold, THRESHOLD_DEBOUNCE_MS)
-  const [showLineage, setShowLineage] = useState(false)
   const filtersId = useId()
   const thresholdId = useId()
 
+  // スライダーを動かすたびに呼ばれるので、履歴を増やさないよう replace で書く。
   function update(patch: Partial<MapUrlState>) {
+    setPending((prev) => ({ base: urlKey, patch: { ...(prev && prev.base === urlKey ? prev.patch : {}), ...patch } }))
     setSearchParams(buildMapSearchParams({ ...state, ...patch }), { replace: true })
+  }
+
+  function selectId(selectedId: string | null) {
+    if (selectedId !== state.selectedId) update({ selectedId })
   }
 
   const query = useQuery({
@@ -180,11 +189,11 @@ function MapBody() {
             id={thresholdId}
             type="range"
             className={styles.slider}
-            min={THRESHOLD_MIN}
-            max={THRESHOLD_MAX}
-            step={THRESHOLD_STEP}
+            min={MAP_THRESHOLD_MIN}
+            max={MAP_THRESHOLD_MAX}
+            step={MAP_THRESHOLD_STEP}
             value={threshold}
-            onChange={(e) => setThreshold(Number(e.target.value))}
+            onChange={(e) => update({ threshold: clampThreshold(Number(e.target.value)) })}
           />
           <span className={styles.thresholdValue}>{threshold.toFixed(2)}</span>
           {graph && (
@@ -195,7 +204,11 @@ function MapBody() {
             </span>
           )}
           <label className={styles.checkbox}>
-            <input type="checkbox" checked={showLineage} onChange={(e) => setShowLineage(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={state.showLineage}
+              onChange={(e) => update({ showLineage: e.target.checked })}
+            />
             <span className={styles.lineageSwatch} aria-hidden="true" />
             {m.showLineage}
           </label>
@@ -225,13 +238,17 @@ function MapBody() {
         {graph && !query.isError && nodeCount === 0 && (
           <p className={styles.placeholder}>{filterCount > 0 ? m.emptyFiltered : m.empty}</p>
         )}
-        {graph && !query.isError && nodeCount > 0 && state.view === 'umap' && <UmapView graph={graph} />}
+        {graph && !query.isError && nodeCount > 0 && state.view === 'umap' && (
+          <UmapView graph={graph} selectedId={state.selectedId} onSelectId={selectId} />
+        )}
         {graph && !query.isError && nodeCount > 0 && state.view === 'network' && (
           <NetworkView
             graph={graph}
             edges={edgeResult.edges}
             threshold={debouncedThreshold}
-            lineageEdges={showLineage ? lineage : null}
+            lineageEdges={state.showLineage ? lineage : null}
+            selectedId={state.selectedId}
+            onSelectId={selectId}
           />
         )}
       </div>
