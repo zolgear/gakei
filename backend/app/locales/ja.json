@@ -4,8 +4,10 @@
     "legacyProviderIgnored": "環境変数 PROVIDER=openai は無視します(この設定はもう使いません)。",
     "legacyProviderAborted": "環境変数 PROVIDER={value} が設定されていますが、この設定は廃止されました。ダミー画像で確認したい場合は FAKE_PROVIDER=1 を使ってください。実 API に接続する場合は PROVIDER を削除してください。",
     "authConfigMissing": "AUTH_MODE=oidc ですが、必須の環境変数が設定されていません: {missing}",
+    "authConfigMissingFromSettings": "画面の設定で認証モードが oidc ですが、必須の値が設定されていません: {missing}。認証を一時的に無効にして起動するには、.env に AUTH_MODE=none を書いて再起動してください(画面の設定は消えません)。",
     "authUrlInvalid": "{name} の形式が不正です(http または https で、ホストを含む URL である必要があります): {value}",
     "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。",
+    "authEmergencyDisable": "認証を一時的に無効にして起動するには、.env に AUTH_MODE=none を書いて再起動してください(画面の設定は消えません)。",
     "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}",
     "storageConfigMissing": "STORAGE_BACKEND に必要な環境変数が設定されていません: {missing}",
     "storageAzureBothConnections": "AZURE_STORAGE_CONNECTION_STRING と AZURE_STORAGE_ACCOUNT_URL の両方が設定されています。どちらか一方だけを設定してください。",
@@ -20,8 +22,20 @@
     "required": "ログインが必要です。",
     "adminRequired": "この操作には管理者権限が必要です。",
     "disabled": "個人モード(AUTH_MODE=none)ではログイン機能を使えません。",
-    "idpUnavailable": "認証サーバー(IdP)に接続できません。OIDC_ISSUER の設定と IdP の状態を確認してください。",
-    "callbackFailed": "ログインの処理に失敗しました。もう一度お試しください。"
+    "idpUnavailable": "認証サーバー(IdP)に接続できません。管理者設定の「認証」の発行者(または OIDC_ISSUER)と IdP の状態を確認してください。",
+    "callbackFailed": "ログインの処理に失敗しました。もう一度お試しください。",
+    "testLogin": {
+      "title": "テストログイン",
+      "success": "テストログインに成功しました。このウィンドウを閉じて、設定画面に戻ってください。",
+      "errors": {
+        "no_connection": "接続が登録されていません。設定画面で接続を登録してください。",
+        "callback_failed": "ログインの処理に失敗しました。発行者、クライアント ID、シークレット、IdP に登録したリダイレクト URI を確認してください。",
+        "email_missing": "IdP からメールアドレスを受け取れませんでした。スコープに email を含め、IdP のアカウントにメールアドレスを設定してください。",
+        "email_unverified": "IdP のメールアドレスが確認済みではありません。IdP でメールアドレスを確認してから、もう一度お試しください。",
+        "email_not_admin": "ログインしたメールアドレスが管理者のメールに含まれていません。管理者のメールを保存してから、もう一度お試しください。",
+        "config_changed": "テストの途中で接続の設定が変わりました。もう一度テストしてください。"
+      }
+    }
   },
   "provider": {
     "unknown": "未知のプロバイダーです: {name}"
@@ -213,6 +227,28 @@
       "invalidApiFormat": "形式は infinity である必要があります",
       "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",
       "vectorsNotFound": "このモデルのベクトルはありません"
+    },
+    "auth": {
+      "invalid": {
+        "issuer": "発行者は http または https で、ホストを含む URL である必要があります",
+        "public_base_url": "PUBLIC_BASE_URL は http または https で、ホストを含む URL である必要があります",
+        "client_id": "クライアント ID を入力してください",
+        "scopes": "スコープは空白区切りで、openid を含める必要があります",
+        "client_secret": "クライアントシークレットが長すぎます",
+        "admin_emails": "管理者のメールに、メールアドレスの形でない値があります",
+        "allowed_email_domains": "許可ドメインに、ドメインの形でない値があります(例: example.com)",
+        "session_hours": "セッションの長さは{min}〜{max}時間の整数である必要があります"
+      },
+      "discoveryFailed": "Discovery 文書({url})を取得できませんでした。発行者の URL と、IdP に接続できるかを確認してください。詳細: {reason}",
+      "discoveryInvalid": "Discovery 文書({url})が OpenID Connect の形ではありません。発行者の URL を確認してください。詳細: {reason}",
+      "conflict": {
+        "env_locked": ".env の AUTH_MODE が優先されるため、画面から認証モードを変えられません。.env の値を変更して再起動してください。",
+        "no_connection": "接続が登録されていないため、oidc にできません。先に接続を登録してテストログインをしてください。",
+        "not_verified": "今の接続でのテストログインが済んでいないため、oidc にできません。先にテストログインをしてください。",
+        "admin_emails_empty": "oidc では管理者のメールが1件以上必要です。",
+        "verified_email_not_admin": "テストログインをしたメールアドレスが、管理者のメールに含まれていません。",
+        "self_not_admin": "操作しているあなたのメールアドレスを管理者のメールから外すことはできません。"
+      }
     }
   },
   "runValidation": {

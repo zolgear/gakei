@@ -257,7 +257,8 @@
       "comfyui": "ComfyUI",
       "mcp": "MCP",
       "shareLinks": "共有リンクの公開",
-      "about": "GAKEI について"
+      "about": "GAKEI について",
+      "authentication": "認証"
     },
     "frame": {
       "changeCount": {
@@ -829,6 +830,134 @@
       "loading": "読み込み中...",
       "loadFailed": "共有リンクの設定を取得できませんでした。",
       "retry": "再読み込み"
+    },
+    "authentication": {
+      "intro": "ログインを必須にし、OpenID Connect(OIDC)の IdP で利用者を確かめます。有効にするには、接続を登録し、管理者のメールを保存してから、テストログインに成功する必要があります。",
+      "loading": "読み込み中...",
+      "loadFailed": "認証の設定を取得できませんでした。",
+      "retry": "再読み込み",
+      "communicationFailed": "通信に失敗しました。",
+      "connectionHeading": "OIDC の接続",
+      "loginHeading": "ログイン",
+      "copy": "コピー",
+      "copiedToast": "コピーしました",
+      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+      "redirectUriHelp": "IdP のクライアントに、このリダイレクト URI を登録します。",
+      "envNote": ".env の値を使用中です。ここで保存すると、以降は画面の設定が優先されます。",
+      "defaultNote": "既定値を使用中です。",
+      "resetToEnv": ".env・既定の値に戻す",
+      "resetPending": "保存すると .env・既定の値に戻ります。",
+      "undoReset": "戻さない",
+      "source": {
+        "setting": "画面",
+        "env": ".env",
+        "default": "既定"
+      },
+      "fields": {
+        "issuer": "発行者(Issuer)",
+        "clientId": "クライアント ID",
+        "clientSecret": "クライアントシークレット",
+        "scopes": "スコープ",
+        "publicBaseUrl": "PUBLIC_BASE_URL",
+        "redirectUri": "リダイレクト URI",
+        "verified": "テストログイン",
+        "createdAt": "仮登録した日時"
+      },
+      "card": {
+        "title": "接続",
+        "statusVerified": "テスト済み",
+        "statusNeedsTest": "テストが必要",
+        "statusNotConfigured": "未設定",
+        "notSet": "未設定",
+        "secretConfigured": "設定済み",
+        "secretNone": "なし(public client)",
+        "verifiedValue": "{email}({at})",
+        "verifiedNone": "まだ成功していません",
+        "notConfiguredHelp": "IdP に GAKEI のクライアントを作り、発行者・クライアント ID などを登録します。",
+        "verifiedStale": "接続の設定が変わったため、もう一度テストログインが必要です。",
+        "configure": "接続を設定",
+        "replace": "接続を差し替える"
+      },
+      "pending": {
+        "title": "仮登録の接続",
+        "status": "テストログイン待ち",
+        "help": "テストログインに成功すると、この接続が本登録になります。成功するまでは、今の接続がそのまま使われます。",
+        "discard": "仮登録を取り消す",
+        "discardedToast": "仮登録を取り消しました"
+      },
+      "test": {
+        "button": "テストログイン",
+        "waiting": "テストログイン中…",
+        "waitingHelp": "ポップアップで IdP にログインしてください。閉じると、結果を読み直します。",
+        "help": "ポップアップで IdP にログインします。保存済みの管理者のメールに含まれるアカウントでログインしてください。",
+        "unsavedAdminEmails": "管理者のメールの変更を先に保存してください(テストログインは保存済みの管理者のメールで判定します)。",
+        "noAdminEmails": "先に管理者のメールを入力して保存してください。",
+        "otherOrigin": "PUBLIC_BASE_URL({url})が今開いている画面のアドレスと違うため、結果がこの画面に届きません。ポップアップを閉じたあとで状態を読み直します。",
+        "popupBlocked": "ポップアップを開けませんでした。ブラウザでこのサイトのポップアップを許可してから、もう一度押してください。",
+        "successToast": "テストログインに成功しました",
+        "errors": {
+          "no_connection": "テストする接続がありません。先に接続を設定してください。",
+          "callback_failed": "IdP からの戻りを確かめられませんでした。リダイレクト URI の登録と、クライアント ID・シークレットを確認してください。",
+          "email_missing": "IdP からメールアドレスを受け取れませんでした。スコープに email が含まれているか確認してください。",
+          "email_unverified": "IdP でメールアドレスが確認済みになっていません。",
+          "email_not_admin": "ログインしたアカウントのメールが、保存済みの管理者のメールに含まれていません。",
+          "config_changed": "テストの途中で接続の設定が変わりました。もう一度テストログインしてください。",
+          "unknown": "テストログインに失敗しました。"
+        }
+      },
+      "dialog": {
+        "title": "OIDC の接続を設定",
+        "intro": "入力した接続は仮登録になります。テストログインに成功するまで、今の接続は変わりません。",
+        "issuerHelp": "発行者の URL に /.well-known/openid-configuration を付けて取得し、確かめます。",
+        "issuerChangeWarning": "発行者を変えると、既存のユーザーは別人として扱われます(画像などの付け替えはしません)。",
+        "secretPlaceholderKeep": "空欄なら今のシークレットを引き継ぐ",
+        "secretPlaceholderEmpty": "空欄ならシークレットなし",
+        "noSecret": "シークレットを使わない(public client)",
+        "secretHelp": "シークレットは保存後も画面に表示しません。",
+        "scopesHelp": "空白区切り。openid を含めます。既定は {default}。",
+        "publicBaseUrlHelp": "利用者がブラウザで開く GAKEI のアドレスです。リダイレクト URI はここから作ります。",
+        "submit": "確かめて仮登録",
+        "submitting": "確かめています…",
+        "registered": "仮登録しました。IdP にリダイレクト URI を登録してから、テストログインしてください。"
+      },
+      "mode": {
+        "label": "ログインを必須にする(OIDC)",
+        "help": "有効にすると、IdP でログインした人だけが使えます。無効(個人モード)では、ログインなしで誰でも使えます。",
+        "stateOidc": "OIDC でログインが必要",
+        "stateNone": "個人モード(ログインなし)",
+        "locked": ".env の AUTH_MODE で固定されているため、画面からは変えられません(緊急の無効化はこれを使います)。",
+        "blockedSave": "有効にする条件を満たしていません。",
+        "blockersHeading": "有効にするには:",
+        "blockers": {
+          "env_locked": ".env の AUTH_MODE を外して再起動する",
+          "no_connection": "OIDC の接続を設定する",
+          "not_verified": "今の接続でテストログインに成功する",
+          "admin_emails_empty": "管理者のメールを入力する",
+          "verified_email_not_admin": "テストログインしたメール({email})を管理者のメールに含める",
+          "pending_test": "仮登録の接続でテストログインに成功する"
+        }
+      },
+      "adminEmails": {
+        "label": "管理者のメール",
+        "help": "1行に1件(カンマ区切りも可)。このメールでログインした人が管理者になります。",
+        "empty": "管理者のメールを1件以上入力してください。",
+        "selfMissing": "自分のメール({email})を含めないと保存できません。"
+      },
+      "allowedDomains": {
+        "label": "ログインを許すドメイン",
+        "help": "1行に1件(例: example.com)。Google のように誰でもアカウントを作れる IdP では、必ず指定してください。管理者のメールは、ここに無くてもログインできます。",
+        "emptyNote": "空の間は、IdP でログインできる人は誰でも使えます。"
+      },
+      "sessionHours": {
+        "label": "セッションの長さ(時間)",
+        "help": "ログインしてから、もう一度ログインが必要になるまでの時間です({min}〜{max})。",
+        "invalid": "{min}〜{max} の整数を入力してください"
+      },
+      "disableConfirm": {
+        "message": "認証を無効にすると、ログインなしで誰でも使えるようになります。",
+        "warning": "サーバーを LAN やインターネットに公開しているなら危険です。",
+        "confirmLabel": "無効にして保存"
+      }
     }
   },
   "promptSets": {

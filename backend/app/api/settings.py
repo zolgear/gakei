@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.annotation.wd_models import WD_MODELS, WdModelDownloader, is_downloaded
 from app.auth.deps import require_admin, require_user
 from app.auth.identity import CurrentUser
+from app.auth.runtime import public_base_for
 from app.config import Settings
 from app.deps import (
     get_annotator,
@@ -326,10 +327,8 @@ def update_general_settings(
 # (画面の表示用)、更新は管理者だけ。
 
 
-def _mcp_settings_response(
-    db: Session, settings: Settings, request: Request
-) -> McpSettingsResponse:
-    base = mcp_settings.resolve_public_base(settings.public_base_url, str(request.base_url))
+def _mcp_settings_response(db: Session, request: Request) -> McpSettingsResponse:
+    base = public_base_for(request)
     return McpSettingsResponse(
         enabled=mcp_settings.is_enabled(db),
         hourly_run_limit=mcp_settings.hourly_run_limit(db),
@@ -344,9 +343,8 @@ def _mcp_settings_response(
 def get_mcp_settings(
     request: Request,
     db: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings),
 ) -> McpSettingsResponse:
-    return _mcp_settings_response(db, settings, request)
+    return _mcp_settings_response(db, request)
 
 
 @router.patch("/mcp", response_model=McpSettingsResponse, operation_id="update_mcp_settings")
@@ -354,7 +352,6 @@ def update_mcp_settings(
     body: McpSettingsUpdateRequest,
     request: Request,
     db: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings),
     _user: CurrentUser = Depends(require_admin),
 ) -> McpSettingsResponse:
     fields_set = body.model_fields_set
@@ -373,7 +370,7 @@ def update_mcp_settings(
     if "hourly_run_limit" in fields_set:
         assert body.hourly_run_limit is not None
         mcp_settings.save_hourly_run_limit(db, body.hourly_run_limit)
-    return _mcp_settings_response(db, settings, request)
+    return _mcp_settings_response(db, request)
 
 
 # -- 共有リンク(ADR-0029) ----------------------------------------------------------

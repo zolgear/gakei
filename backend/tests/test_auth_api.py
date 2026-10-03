@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from app.config import Settings
 from app.domain.models import AppUser, AuthSession
-from tests.conftest import login_as
+from tests.conftest import login_as, reload_auth_runtime
 
 # -- 未ログインは401(ADR-0019: /api/auth 以外の9ルーターに require_user が掛かっている) ------
 
@@ -229,6 +229,7 @@ def test_role_is_recomputed_on_each_login(data_dir) -> None:  # noqa: ANN001
         client.post("/api/auth/logout")
 
         app.state.settings.auth_admin_emails = "promote@example.com"
+        reload_auth_runtime(client)
         login_as(client, "promote@example.com", "Promote Me")
         assert client.get("/api/auth/me").json()["user"]["role"] == "admin"
 

@@ -38,6 +38,8 @@ export interface SettingsDraft<T extends object> extends SettingsDraftControls {
   set: <K extends keyof T>(key: K, value: T[K]) => void
   isChanged: (key: keyof T) => boolean
   errors: DraftErrors<T>
+  /** 保存の失敗で、サーバーが原因の欄を示したとき(`detail.field`)の欄の名前。ADR-0031 3章。 */
+  saveErrorField: string | null
 }
 
 interface UseSettingsDraftOptions<T extends object> {
@@ -86,8 +88,11 @@ export function useSettingsDraft<T extends object>({
       : t.settings.frame.saveFailed
     : null
 
+  const saveErrorField = mutation.error instanceof ApiError ? mutation.error.field : null
+
   return {
     values,
+    saveErrorField,
     set,
     isChanged: (key) => changed.includes(key),
     errors,

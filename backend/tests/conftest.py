@@ -309,6 +309,14 @@ def login_as(client: TestClient, email: str, name: str = "Test User") -> None:
     assert callback_response.status_code == 302, callback_response.text
 
 
+def reload_auth_runtime(client: TestClient) -> None:
+    """`app.state.settings` の認証の値を書き換えたテストで、実効の設定(ADR-0034 の
+    `AuthRuntime`)を読み直す(本番では設定 API の保存が読み直す)。"""
+    app = client.app
+    with app.state.session_factory() as db:
+        app.state.auth_runtime.reload(db)
+
+
 @pytest.fixture
 def db_session_factory(tmp_path: Path, _test_database: str | None) -> Iterator[sessionmaker]:
     """HTTP を介さずドメイン層を直接テストしたい場合の DB。PostgreSQL のときはテストごとの

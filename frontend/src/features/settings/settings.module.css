@@ -761,3 +761,45 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- 認証(ADR-0034) ---------- */
+
+/* 一覧(メール、ドメイン)の入力欄。1行1件 */
+.textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* 値の出どころ(.env / 既定)の小さな印 */
+.sourceTag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--color-text-muted);
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+/* モードのスイッチを押せない理由 */
+.blockers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.blockerList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-warning);
+}

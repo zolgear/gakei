@@ -10,12 +10,13 @@
 import { useEffect, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getAuthMe } from '../../api/client'
+import { AUTH_ME_QUERY_KEY } from '../settings/queryKeys'
 import { setLoaded, useAuth } from './authState'
 import { LoginScreen } from './LoginScreen'
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const auth = useAuth()
-  const meQuery = useQuery({ queryKey: ['auth-me'], queryFn: getAuthMe, retry: false })
+  const meQuery = useQuery({ queryKey: AUTH_ME_QUERY_KEY, queryFn: getAuthMe, retry: false })
 
   useEffect(() => {
     if (!meQuery.data) return

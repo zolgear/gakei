@@ -151,6 +151,45 @@ export function revokeApiToken(tokenId: string): Promise<void> {
   return request(`/api/users/me/api-tokens/${tokenId}`, { method: 'DELETE' })
 }
 
+// -- 認証の設定(ADR-0034。管理者のみ) -------------------------------------------
+
+export type AuthSettingsResponse = components['schemas']['AuthSettingsResponse']
+export type AuthSettingsUpdateRequest = components['schemas']['AuthSettingsUpdateRequest']
+export type AuthConnectionRequest = components['schemas']['AuthConnectionRequest']
+export type AuthConnectionView = components['schemas']['AuthConnectionView']
+export type AuthPendingConnectionView = components['schemas']['AuthPendingConnectionView']
+export type AuthEnableBlocker = AuthSettingsResponse['enable_blockers'][number]
+export type AuthSettingSource = AuthSettingsResponse['admin_emails']['source']
+
+export function getAuthSettings(): Promise<AuthSettingsResponse> {
+  return request('/api/settings/auth')
+}
+
+/**
+ * 接続の仮登録(形式の検査と Discovery 文書の取得まで)。`client_secret` は省略で引き継ぎ、
+ * 空文字で public client、値で差し替え。テストログインに成功するまで実効の設定は変わらない。
+ */
+export function setAuthConnection(body: AuthConnectionRequest): Promise<AuthSettingsResponse> {
+  return request('/api/settings/auth/connection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function discardAuthPendingConnection(): Promise<AuthSettingsResponse> {
+  return request('/api/settings/auth/connection/pending', { method: 'DELETE' })
+}
+
+/** 省略した項目は変えない。null は保存済みの値を消して .env・既定に戻す。 */
+export function updateAuthSettings(body: AuthSettingsUpdateRequest): Promise<AuthSettingsResponse> {
+  return request('/api/settings/auth', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 // -- 共有リンク(ADR-0029) -------------------------------------------------------
 
 export type ShareScope = components['schemas']['SharePreviewRequest']['scope']
@@ -240,12 +279,15 @@ export class ApiError extends Error {
   readonly status: number
   /** `detail` が `{code, message}` の形のときの `code`(埋め込みの API の 409 など。ADR-0033)。 */
   readonly code: string | null
+  /** `detail` が `{code, message, field}` の形のときの `field`(どの入力欄が原因か。認証の設定。ADR-0034)。 */
+  readonly field: string | null
 
-  constructor(status: number, message: string, code: string | null = null) {
+  constructor(status: number, message: string, code: string | null = null, field: string | null = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.field = field
   }
 }
 
@@ -278,6 +320,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     let message = res.statusText || `HTTP ${res.status}`
     let code: string | null = null
+    let field: string | null = null
     try {
       const body: unknown = await res.json()
       if (body && typeof body === 'object' && 'detail' in body) {
@@ -287,11 +330,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
           const value = (detail as { code: unknown }).code
           code = typeof value === 'string' ? value : null
         }
+        if (detail && typeof detail === 'object' && 'field' in detail) {
+          const value = (detail as { field: unknown }).field
+          field = typeof value === 'string' ? value : null
+        }
       }
     } catch {
       // レスポンスが JSON でない場合はそのまま statusText を使う。
     }
-    throw new ApiError(res.status, message, code)
+    throw new ApiError(res.status, message, code, field)
   }
   if (res.status === 204) {
     return undefined as T
