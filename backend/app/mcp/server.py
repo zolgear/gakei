@@ -39,6 +39,7 @@ from app.domain import agent_images, ingest_hooks, mcp_settings
 from app.domain import annotations as annotations_domain
 from app.domain import download_tickets as download_tickets_domain
 from app.domain import run_create as run_create_domain
+from app.domain import semantic_search as semantic_domain
 from app.domain import upload_tickets as upload_tickets_domain
 from app.domain.alpha_stats import alpha_stats
 from app.domain.asset_groups import (
@@ -119,6 +120,9 @@ _INSTRUCTIONS = (
     "To use a local image as an edit input, call create_upload_url and send the file with "
     "curl (upload_image with base64 is only for small images). search_assets / get_asset find "
     "existing images, and groups organize them. Images are referenced by asset ID. "
+    "When image embeddings are available (get_capabilities: embeddings.available), "
+    "search_assets with mode='semantic' finds images by a natural-language description, and "
+    "find_similar_assets lists images that look like a given one. "
     "To keep editing a result (chained edits), pass the output asset_id from get_run (or any "
     "asset_id from search_assets / get_asset) directly in generate_image's input_asset_ids. "
     "Prefer this over downloading and re-uploading the image: it needs no transfer, keeps the "
@@ -447,7 +451,8 @@ def _run_cost(
 
 
 async def get_capabilities(ctx: Context) -> CallToolResult:
-    """List the image providers, models, parameters and size constraints GAKEI accepts.
+    """List the image providers, models, parameters and size constraints GAKEI accepts, and
+    whether image embeddings (semantic search, similar images) are available.
 
     Use the returned `default_provider`, each provider's `default_model`, and the per-model
     parameter definitions to build a `generate_image` call. The size is not in the per-model
@@ -455,7 +460,14 @@ async def get_capabilities(ctx: Context) -> CallToolResult:
     the limits in providers[].size. `usage_notes` and `example_generate_image` show how.
     """
     mc = get_mcp_context(ctx)
-    caps = await _in_thread(lambda: get_capabilities_endpoint(mc.state.registry))
+
+    def _caps() -> Any:
+        with _session(mc) as db:
+            return get_capabilities_endpoint(
+                mc.state.registry, db, mc.state.settings, mc.state.embedding_index_backend
+            )
+
+    caps = await _in_thread(_caps)
     payload = caps.model_dump(mode="json")
     default = next((p for p in caps.providers if p.provider == caps.default_provider), None)
     example_params: dict[str, Any] = {}
@@ -472,6 +484,11 @@ async def get_capabilities(ctx: Context) -> CallToolResult:
         "generate_image returns right away with a run_id; wait with get_run(wait_seconds).",
         "estimate_cost gives a reference price before running (set quality and size to get "
         "a number; 'auto' cannot be estimated).",
+        (
+            "embeddings.available tells whether search_assets(mode='semantic') and "
+            "find_similar_assets can be used. If embeddings.multilingual is false, the model "
+            "only understands English: write semantic queries in English."
+        ),
     ]
     payload["example_generate_image"] = {
         "prompt": "a lighthouse at dusk",
@@ -712,8 +729,24 @@ async def search_assets(
     ctx: Context,
     query: Annotated[
         str | None,
-        Field(description="Words to match in the generating prompt (space-separated, AND)."),
+        Field(
+            description=(
+                "keyword mode: words to match in the generating prompt, titles and tags "
+                "(space-separated, AND). semantic mode: a natural-language description of the "
+                "image (required)."
+            )
+        ),
     ] = None,
+    mode: Annotated[
+        Literal["keyword", "semantic"],
+        Field(
+            description=(
+                "keyword (default): text match, newest first. semantic: image embeddings, "
+                "most similar first, each result has a score (cosine similarity). semantic "
+                "needs embeddings to be enabled (see get_capabilities)."
+            )
+        ),
+    ] = "keyword",
     kind: Annotated[
         Literal["upload", "generated", "mask", "sketch"] | None,
         Field(description="Only return assets of this kind."),
@@ -728,11 +761,15 @@ async def search_assets(
         bool, Field(description="Attach 512px JPEG/PNG thumbnails of the results.")
     ] = False,
 ) -> CallToolResult:
-    """Search or list images in the GAKEI stock (newest first). Deleted assets are excluded.
+    """Search or list images in the GAKEI stock. Deleted assets are excluded.
 
-    The query matches the generating prompt, prompts embedded in uploaded images, titles and
-    tag names. Results include each image's title and tags (`source` is "user" for tags a
-    person added, "auto" for automatically estimated ones, which may be wrong).
+    In keyword mode (default) the query matches the generating prompt, prompts embedded in
+    uploaded images, titles and tag names, and results are newest first. In semantic mode the
+    query is a natural-language description and results are ordered by meaning (image
+    embeddings, `score` = cosine similarity), which also finds images without prompts or
+    tags; kind, group_id and tag still narrow the results. Results include each image's title
+    and tags (`source` is "user" for tags a person added, "auto" for automatically estimated
+    ones, which may be wrong).
     """
     mc = get_mcp_context(ctx)
     tag_value = tag.strip() if tag and tag.strip() else None
@@ -741,6 +778,38 @@ async def search_assets(
         with _session(mc) as db:
             if group_id is not None and get_visible_group(db, mc.user, group_id) is None:
                 raise ToolError(f"Group {group_id} not found.")
+            if mode == "semantic":
+                if not query or not query.strip():
+                    raise ToolError("semantic mode needs a query (a description of the image).")
+                try:
+                    response = semantic_domain.semantic_search(
+                        db,
+                        settings=mc.state.settings,
+                        index=mc.state.vector_index,
+                        engines=mc.state.embedder.engines,
+                        cache=mc.state.query_vector_cache,
+                        viewer=mc.user,
+                        q=query,
+                        limit=limit,
+                        group_id=group_id,
+                        tag=tag_value,
+                        kind=kind,
+                    )
+                except _SEMANTIC_ERRORS as e:
+                    raise _semantic_tool_error(e) from e
+                hits = [(h.id, h.score) for h in response.assets]
+                return _scored_items(
+                    mc,
+                    db,
+                    hits,
+                    include_thumbnails,
+                    extra={
+                        "mode": "semantic",
+                        "model_key": response.model_key,
+                        "multilingual": response.multilingual,
+                        "truncated": False,
+                    },
+                )
             tag_clause = None
             if tag_value is not None:
                 try:
@@ -824,9 +893,118 @@ async def search_assets(
                     thumb = _thumbnail(mc.state.store, asset)
                     if thumb is not None:
                         images.append(thumb)
-            return {"items": items, "truncated": truncated}, images
+            return {"mode": "keyword", "items": items, "truncated": truncated}, images
 
     payload, images = await _in_thread(_search)
+    return _result(payload, images)
+
+
+_SEMANTIC_ERRORS = (
+    semantic_domain.EmbeddingsConflictError,
+    semantic_domain.EmbeddingsNotFoundError,
+    semantic_domain.EmbeddingsInvalidQueryError,
+    semantic_domain.EmbeddingsEngineError,
+)
+
+
+def _semantic_tool_error(e: Exception) -> ToolError:
+    if isinstance(e, semantic_domain.EmbeddingsConflictError):
+        if e.code == "embeddings_unavailable":
+            return ToolError(
+                "Image embeddings are not available (turned off or no model is ready in the "
+                "GAKEI admin settings). Use search_assets in keyword mode instead."
+            )
+        if e.code == "embedding_pending":
+            return ToolError("The embedding of this image is still being computed. Try later.")
+        if e.code == "embedding_not_supported":
+            return ToolError("Masks have no embeddings.")
+        return ToolError(
+            "This image has no embedding yet (it was not computed or computing failed). "
+            "It can be computed from the image details in the GAKEI web UI."
+        )
+    if isinstance(e, semantic_domain.EmbeddingsEngineError):
+        return ToolError(f"Could not compute the embedding of the query: {e}")
+    return ToolError(str(e))
+
+
+def _scored_items(
+    mc: McpRequestContext,
+    db: Session,
+    hits: list[tuple[uuid.UUID, float]],
+    include_thumbnails: bool,
+    extra: dict[str, Any],
+) -> tuple[dict[str, Any], list[ImageContent]]:
+    """類似度つきの結果(文章での検索、似た画像)。並びは `hits` の順(類似度の高い順)。"""
+    ids = [asset_id for asset_id, _ in hits]
+    assets_by_id = (
+        {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_(ids))).scalars().all()}
+        if ids
+        else {}
+    )
+    titles = annotations_domain.bulk_titles(db, ids)
+    tags_map = annotations_domain.bulk_tags(db, ids)
+    items = []
+    assets: list[Asset] = []
+    for asset_id, score in hits:
+        asset = assets_by_id.get(asset_id)
+        if asset is None:
+            continue
+        assets.append(asset)
+        item = _asset_brief(mc, asset)
+        item["score"] = round(score, 4)
+        item["title"] = titles.get(asset.id)
+        item["tags"] = [ref.model_dump(mode="json") for ref in tags_map.get(asset.id, [])]
+        group = group_for_asset(db, asset.id, mc.user)
+        item["group"] = group.model_dump(mode="json") if group else None
+        items.append(item)
+    images: list[ImageContent] = []
+    if include_thumbnails:
+        for asset in assets:
+            thumb = _thumbnail(mc.state.store, asset)
+            if thumb is not None:
+                images.append(thumb)
+    return {**extra, "items": items}, images
+
+
+async def find_similar_assets(
+    ctx: Context,
+    asset_id: Annotated[uuid.UUID, Field(description="Asset ID of the image to compare with.")],
+    limit: Annotated[int, Field(ge=1, le=SEARCH_LIMIT_MAX)] = 12,
+    include_thumbnails: Annotated[
+        bool, Field(description="Attach 512px JPEG/PNG thumbnails of the results.")
+    ] = False,
+) -> CallToolResult:
+    """Find images that look similar to the given image (image embeddings, most similar
+    first; `score` is the cosine similarity). The image itself is not included. Needs
+    embeddings to be enabled (see get_capabilities); fails if this image's embedding has not
+    been computed yet."""
+    mc = get_mcp_context(ctx)
+
+    def _find() -> tuple[dict[str, Any], list[ImageContent]]:
+        with _session(mc) as db:
+            try:
+                response = semantic_domain.similar_assets(
+                    db,
+                    settings=mc.state.settings,
+                    index=mc.state.vector_index,
+                    viewer=mc.user,
+                    asset_id=asset_id,
+                    limit=limit,
+                )
+            except semantic_domain.EmbeddingsNotFoundError as e:
+                raise ToolError(f"Asset {asset_id} not found.") from e
+            except _SEMANTIC_ERRORS as e:
+                raise _semantic_tool_error(e) from e
+            hits = [(h.id, h.score) for h in response.assets]
+            return _scored_items(
+                mc,
+                db,
+                hits,
+                include_thumbnails,
+                extra={"asset_id": str(asset_id), "model_key": response.model_key},
+            )
+
+    payload, images = await _in_thread(_find)
     return _result(payload, images)
 
 
@@ -1437,6 +1615,7 @@ def build_mcp_server() -> MCPServer:
         ),
     )
     add_tool(search_assets, title="Search assets", annotations=_READ_ONLY)
+    add_tool(find_similar_assets, title="Find similar assets", annotations=_READ_ONLY)
     add_tool(get_asset, title="Get asset", annotations=_READ_ONLY)
     add_tool(get_image, title="Get image", annotations=_READ_ONLY)
     add_tool(

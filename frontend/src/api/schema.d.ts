@@ -716,6 +716,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search/semantic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Semantic Search Endpoint
+         * @description 文章で画像を探す(類似度の高い順)。キーワード検索(`GET /api/search`)とは別。
+         */
+        get: operations["semantic_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Similar Assets Endpoint
+         * @description 似た画像(起点の画像自身は含めない)。起点のベクトルがまだ無ければ 409
+         *     (`detail.code` が `embedding_pending` / `embedding_failed` / `embedding_missing` /
+         *     `embedding_not_supported`)。
+         */
+        get: operations["similar_assets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/embeddings/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Duplicates Endpoint
+         * @description 重複の候補(類似度がしきい値以上で知覚ハッシュも近い組を、代表との類似度でまとめた
+         *     グループ、大きい順)。
+         */
+        get: operations["embedding_duplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/embeddings/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Graph Endpoint
+         * @description マップの元データ。ノード(新しい順に `limit` 件まで)と、各ノードの k 近傍
+         *     (先頭は自分自身)。
+         */
+        get: operations["embedding_graph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tags": {
         parameters: {
             query?: never;
@@ -2022,6 +2106,7 @@ export interface components {
             default_provider: string;
             /** Providers */
             providers?: components["schemas"]["ProviderEntry"][];
+            embeddings: components["schemas"]["EmbeddingCapabilities"];
         };
         /** ComfyAnalyzeRequest */
         ComfyAnalyzeRequest: {
@@ -2282,6 +2367,67 @@ export interface components {
             /** Height */
             height: number;
         };
+        /** DuplicateAsset */
+        DuplicateAsset: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "mask" | "sketch";
+            /** Mime */
+            mime: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Bytes */
+            bytes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Title */
+            title?: string | null;
+            /** Max Score */
+            max_score: number;
+            /** Hash Missing */
+            hash_missing?: boolean | null;
+        };
+        /** DuplicateGroup */
+        DuplicateGroup: {
+            /** Assets */
+            assets: components["schemas"]["DuplicateAsset"][];
+            /** Max Score */
+            max_score: number;
+            /** Hash Missing */
+            hash_missing?: boolean | null;
+        };
+        /**
+         * DuplicatesResponse
+         * @description `GET /api/embeddings/duplicates`。類似度がしきい値以上で知覚ハッシュも近い組を、
+         *     代表(いちばん古い画像)との類似度でまとめたグループ(大きい順。ADR-0033 12章)。
+         *     見るのは新しい順に `scanned` 件まで。それより多ければ `truncated`。
+         */
+        DuplicatesResponse: {
+            /** Model Key */
+            model_key: string;
+            /** Threshold */
+            threshold: number;
+            /** Groups */
+            groups?: components["schemas"]["DuplicateGroup"][];
+            /** Scanned */
+            scanned: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Groups Truncated */
+            groups_truncated: boolean;
+        };
         /**
          * EmbeddedGenerationMeta
          * @description 他の画像生成ツールや C2PA が画像に埋め込んだ生成メタ情報(ADR-0018、2026-09-26 追記)。
@@ -2328,6 +2474,91 @@ export interface components {
         EmbeddingBackfillResponse: {
             /** Queued */
             queued: number;
+        };
+        /**
+         * EmbeddingCapabilities
+         * @description 画像の埋め込み(ADR-0033 7章)。画面の出し分けに使う。
+         */
+        EmbeddingCapabilities: {
+            /** Available */
+            available: boolean;
+            /** Model Key */
+            model_key?: string | null;
+            /** Languages */
+            languages?: ("ja" | "en")[] | null;
+            /** Multilingual */
+            multilingual?: boolean | null;
+            /**
+             * Index Backend
+             * @enum {string}
+             */
+            index_backend: "pgvector" | "numpy";
+        };
+        /**
+         * EmbeddingErrorDetail
+         * @description 埋め込みの API の 409 の `detail`。`code` で画面の出し分けをする。
+         *
+         *     - `embeddings_unavailable`: 埋め込みが無効、または使えるモデルが無い
+         *     - `embedding_pending`: その画像のベクトルを計算中(待ち行列にある)
+         *     - `embedding_failed`: その画像のベクトルの計算に失敗した
+         *     - `embedding_missing`: その画像のベクトルがまだ無い(計算を頼んでいない)
+         *     - `embedding_not_supported`: マスクは対象外
+         */
+        EmbeddingErrorDetail: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "embeddings_unavailable" | "embedding_pending" | "embedding_failed" | "embedding_missing" | "embedding_not_supported";
+            /** Message */
+            message: string;
+        };
+        /** EmbeddingGraphNode */
+        EmbeddingGraphNode: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "sketch";
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * EmbeddingGraphResponse
+         * @description `GET /api/embeddings/graph`。マップ(2D の地図と類似度のネットワーク)の元データ。
+         *
+         *     ノードは新しい順。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
+         *     (`nodes` の位置と、コサイン類似度)で、先頭は必ず自分自身(類似度 1 = 距離 0)、続いて
+         *     ほかのノードを最大 `k` 件、類似度の高い順に並べる。どの行も同じ長さ
+         *     (`1 + min(k, ノード数 - 1)`)なので、umap-js の `setPrecomputedKNN` にそのまま渡せる
+         *     (距離は `1 - 類似度`)。
+         */
+        EmbeddingGraphResponse: {
+            /** Model Key */
+            model_key: string;
+            /** K */
+            k: number;
+            /** Nodes */
+            nodes?: components["schemas"]["EmbeddingGraphNode"][];
+            /** Neighbor Indices */
+            neighbor_indices?: number[][];
+            /** Neighbor Similarities */
+            neighbor_similarities?: number[][];
+            /** Lineage Edges */
+            lineage_edges?: number[][] | null;
+            /** Total */
+            total: number;
+            /** Truncated */
+            truncated: boolean;
         };
         /**
          * EmbeddingOnnxModelStatus
@@ -3789,6 +4020,55 @@ export interface components {
              */
             prompt_sets: boolean;
         };
+        /**
+         * SemanticAssetHit
+         * @description 文章での検索・似た画像の1件。`score` はコサイン類似度(-1〜1、大きいほど近い)。
+         */
+        SemanticAssetHit: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "mask" | "sketch";
+            /** Mime */
+            mime: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Bytes */
+            bytes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Title */
+            title?: string | null;
+            /** Score */
+            score: number;
+        };
+        /**
+         * SemanticSearchResponse
+         * @description `GET /api/search/semantic`。類似度の高い順。
+         */
+        SemanticSearchResponse: {
+            /** Query */
+            query: string;
+            /** Model Key */
+            model_key: string;
+            /** Languages */
+            languages?: ("ja" | "en")[] | null;
+            /** Multilingual */
+            multilingual?: boolean | null;
+            /** Assets */
+            assets?: components["schemas"]["SemanticAssetHit"][];
+        };
         /** ShareCreateRequest */
         ShareCreateRequest: {
             /**
@@ -3925,6 +4205,21 @@ export interface components {
         ShareSettingsUpdateRequest: {
             /** Enabled */
             enabled?: boolean | null;
+        };
+        /**
+         * SimilarAssetsResponse
+         * @description `GET /api/assets/{id}/similar`。起点の画像自身は含めない。
+         */
+        SimilarAssetsResponse: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Model Key */
+            model_key: string;
+            /** Assets */
+            assets?: components["schemas"]["SemanticAssetHit"][];
         };
         /** SizeConstraints */
         SizeConstraints: {
@@ -5724,6 +6019,192 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    semantic_search: {
+        parameters: {
+            query: {
+                /** @description 検索の文章(自然文) */
+                q: string;
+                limit?: number;
+                /** @description このグループの画像に絞る */
+                group_id?: string | null;
+                /** @description このタグが付いた画像に絞る */
+                tag?: string | null;
+                /** @description この種類の画像に絞る */
+                kind?: ("upload" | "generated" | "sketch") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticSearchResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    similar_assets: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarAssetsResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    embedding_duplicates: {
+        parameters: {
+            query?: {
+                /** @description 類似度のしきい値。省略時は管理者設定の値 */
+                threshold?: number | null;
+                /** @description 返すグループの数の上限 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatesResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    embedding_graph: {
+        parameters: {
+            query?: {
+                k?: number;
+                limit?: number;
+                group_id?: string | null;
+                tag?: string | null;
+                /** @description 系列の主たる親の辺も返す */
+                include_lineage?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingGraphResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
                 };
             };
             /** @description Validation Error */

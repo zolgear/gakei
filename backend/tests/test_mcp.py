@@ -118,6 +118,7 @@ def test_tools_list_when_enabled(client: TestClient) -> None:
         "estimate_cost",
         "cancel_run",
         "search_assets",
+        "find_similar_assets",
         "get_asset",
         "get_image",
         "create_download_url",

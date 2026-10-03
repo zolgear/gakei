@@ -69,7 +69,7 @@ def test_settings_defaults(client: TestClient) -> None:
     assert body["engine"] == "onnx"
     assert body["onnx_model"] == "clip-vit-b32-u8"
     assert body["auto_on_ingest"] is True
-    assert body["duplicate_threshold"] == 0.95
+    assert body["duplicate_threshold"] == 0.90
     assert body["remote_api_format"] == "infinity"
     assert body["active_model_key"] == ACTIVE_KEY
     assert body["active_languages"] == ["en"]

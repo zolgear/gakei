@@ -127,7 +127,7 @@ def hnsw_index_name(model_key: str) -> str:
     return f"ix_asset_embedding_hnsw_{digest}"
 
 
-def _quote_literal(value: str) -> str:
+def quote_literal(value: str) -> str:
     """DDL に値を埋め込むための文字列リテラル(DDL ではバインド変数が使えない)。"""
     return "'" + value.replace("'", "''") + "'"
 
@@ -139,7 +139,7 @@ def ensure_hnsw_index(engine: Engine, model_key: str, dim: int) -> bool:
     statement = (
         f"CREATE INDEX IF NOT EXISTS {hnsw_index_name(model_key)} ON {TABLE} "
         f"USING hnsw (({COLUMN}::vector({int(dim)})) vector_cosine_ops) "
-        f"WHERE model_key = {_quote_literal(model_key)}"
+        f"WHERE model_key = {quote_literal(model_key)}"
     )
     try:
         with engine.begin() as connection:

@@ -13,6 +13,12 @@
 - `drop` はセッションへの参照を外すだけにする(鍵を取らない)。持ち主は `use` の中でしか
   セッションに触れないので、`use` の外で外されても困らない(次の `use` で読み込み直す)。
 - 持ち主自身の「しばらく使わなければ解放」は `release_if_idle` で行う。
+- 優先の区間(`use(owner, priority=True)`。文章での検索の1件の推論)は、利用者を待たせない
+  ための近道を持つ。別の持ち主が推論の最中でなければ、`grace` も `max_hold` も待たずに
+  すぐ手放させる。推論の最中なら、その1回が終わるのだけを待つ。優先の区間が待っている間は、
+  ほかの持ち主は(既に持っていても)新しい区間に入らない(一括実行の次の1件に割り込まれて
+  待ち続けないように)。
+- 同じ持ち主の区間は、別々のスレッドから重なって入ってよい(推論中の数を数える)。
 """
 
 from __future__ import annotations
@@ -40,7 +46,10 @@ class ModelResidency:
         self._cond = threading.Condition()
         self._drops: dict[str, Callable[[], None]] = {}
         self._holder: str | None = None
-        self._busy = False
+        # 持ち主の区間の中にいるスレッドの数(0 なら推論の最中ではない)。
+        self._busy = 0
+        # 優先の区間で待っている持ち主ごとの数。
+        self._priority_waiting: dict[str, int] = {}
         self._hold_started = 0.0
         self._last_used = 0.0
 
@@ -61,37 +70,54 @@ class ModelResidency:
             if drop is not None:
                 drop()
         self._holder = None
-        self._busy = False
+        self._busy = 0
 
-    def _can_evict_locked(self, now: float) -> bool:
+    def _can_evict_locked(self, now: float, priority: bool = False) -> bool:
         if self._busy:
             return False
-        if now - self._last_used >= self.grace_seconds:
+        if priority or now - self._last_used >= self.grace_seconds:
             return True
         # ここに来るのは待っている側だけなので、「待っている側がいる」は満たしている。
         return now - self._hold_started >= self.max_hold_seconds
 
+    def _yields_to_priority_locked(self, owner: str) -> bool:
+        """ほかの持ち主の優先の区間が待っているか(待っている間は新しい区間に入らない)。"""
+        return any(count > 0 for name, count in self._priority_waiting.items() if name != owner)
+
     @contextmanager
-    def use(self, owner: str) -> Iterator[None]:
-        """`owner` がモデルを持つ間の区間。別の持ち主がいれば、手放させるか終わるまで待つ。"""
+    def use(self, owner: str, *, priority: bool = False) -> Iterator[None]:
+        """`owner` がモデルを持つ間の区間。別の持ち主がいれば、手放させるか終わるまで待つ。
+        `priority` は文章での検索の推論(待つのは相手の推論1回分だけ)。"""
         with self._cond:
-            while True:
-                now = self._clock()
-                if self._holder is None or self._holder == owner:
-                    break
-                if self._can_evict_locked(now):
-                    self._evict_locked()
-                    break
-                self._cond.wait(timeout=_WAIT_STEP_SECONDS)
+            if priority:
+                self._priority_waiting[owner] = self._priority_waiting.get(owner, 0) + 1
+            try:
+                while True:
+                    now = self._clock()
+                    if not priority and self._yields_to_priority_locked(owner):
+                        self._cond.wait(timeout=_WAIT_STEP_SECONDS)
+                        continue
+                    if self._holder is None or self._holder == owner:
+                        break
+                    if self._can_evict_locked(now, priority):
+                        self._evict_locked()
+                        break
+                    self._cond.wait(timeout=_WAIT_STEP_SECONDS)
+            finally:
+                if priority:
+                    self._priority_waiting[owner] -= 1
+                    if self._priority_waiting[owner] <= 0:
+                        del self._priority_waiting[owner]
+                    self._cond.notify_all()
             if self._holder != owner:
                 self._holder = owner
                 self._hold_started = self._clock()
-            self._busy = True
+            self._busy += 1
         try:
             yield
         finally:
             with self._cond:
-                self._busy = False
+                self._busy = max(0, self._busy - 1)
                 self._last_used = self._clock()
                 self._cond.notify_all()
 

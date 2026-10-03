@@ -35,7 +35,9 @@ RemoteApiFormat = Literal["infinity"]
 ENGINE_KINDS: tuple[str, ...] = get_args(EngineKind)
 REMOTE_API_FORMATS: tuple[str, ...] = get_args(RemoteApiFormat)
 
-DEFAULT_DUPLICATE_THRESHOLD = 0.95
+# 強い劣化(縮小と JPEG の q60 で 0.936)も拾う。色違いのような別の画像は知覚ハッシュで外す
+# (ADR-0033 12章)。
+DEFAULT_DUPLICATE_THRESHOLD = 0.90
 DUPLICATE_THRESHOLD_MIN = 0.5
 DUPLICATE_THRESHOLD_MAX = 1.0
 # `model_key`(VARCHAR(200))に収まるように: `fake:remote:<接続先 id 32文字>:<モデル名>`。

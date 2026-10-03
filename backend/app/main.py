@@ -23,6 +23,7 @@ from app.api import auth as auth_api
 from app.api import capabilities as capabilities_api
 from app.api import comfyui as comfyui_api
 from app.api import downloads as downloads_api
+from app.api import embeddings as embeddings_api
 from app.api import events as events_api
 from app.api import health as health_api
 from app.api import llm_connections as llm_connections_api
@@ -43,7 +44,9 @@ from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
 from app.domain import annotation_settings, embedding_index
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
+from app.domain.semantic_search import QueryVectorCache
 from app.domain.storage import open_store
+from app.domain.vector_index import build_index as build_vector_index
 from app.embedding.catalog import ClipModelDownloader
 from app.i18n import console_t, parse_accept_language, set_locale, t
 from app.mcp.endpoint import McpEndpoint
@@ -239,6 +242,9 @@ def _build_lifespan(settings: Settings):
         )
         if embedder.pgvector:
             embedder.ensure_active_index()
+        # ADR-0033 6章: 近傍検索。numpy の方式は、worker がベクトルを書くたびに上げる版で
+        # メモリの行列を読み直す。
+        vector_index = build_vector_index(embedding_index_backend, embedder.version)
         clip_downloader = ClipModelDownloader(settings.data_dir, fake=settings.fake_provider)
         runner = Runner(
             session_factory,
@@ -262,6 +268,8 @@ def _build_lifespan(settings: Settings):
         app.state.embedder = embedder
         app.state.clip_downloader = clip_downloader
         app.state.embedding_index_backend = embedding_index_backend
+        app.state.vector_index = vector_index
+        app.state.query_vector_cache = QueryVectorCache()
         if settings.auth_mode == "oidc":
             app.state.oidc_client = AuthlibOidcClient(settings)
 
@@ -412,6 +420,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(events_api.router, dependencies=auth_dep)
     app.include_router(prompt_sets_api.router, dependencies=auth_dep)
     app.include_router(search_api.router, dependencies=auth_dep)
+    app.include_router(embeddings_api.router, dependencies=auth_dep)
     app.include_router(tags_api.router, dependencies=auth_dep)
     app.include_router(pricing_api.router, dependencies=auth_dep)
     app.include_router(settings_api.router, dependencies=auth_dep)

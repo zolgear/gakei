@@ -444,6 +444,11 @@
     "assetDeleted": "Embeddings are not computed for deleted images",
     "maskNotSupported": "Embeddings are not computed for masks",
     "imageUnreadable": "Could not read the image",
-    "modelUnreadable": "Could not read the files of the embedding model {model}. Delete the model in the admin settings and download it again"
+    "modelUnreadable": "Could not read the files of the embedding model {model}. Delete the model in the admin settings and download it again",
+    "queryTooLong": "The search text is too long (up to {max} characters)",
+    "vectorPending": "The embedding of this image is being computed. Reopen this in a moment",
+    "vectorFailed": "Computing the embedding of this image failed. You can recompute it from the image details",
+    "vectorMissing": "The embedding of this image has not been computed yet. You can compute it from the image details",
+    "queryFailed": "Could not compute the embedding of the search text: {error}"
   }
 }

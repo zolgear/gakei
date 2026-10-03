@@ -23,9 +23,25 @@ class ProviderEntry(ProviderCapabilities):
     supports_pricing: bool
 
 
+class EmbeddingCapabilities(BaseModel):
+    """画像の埋め込み(ADR-0033 7章)。画面の出し分けに使う。"""
+
+    # 有効で、いま使えるか(文章での検索、似た画像、重複の候補、マップ)。
+    available: bool
+    # 使うモデルの識別子。使えないときは null。
+    model_key: str | None = None
+    # 使うモデルの対応言語(ローカルのモデルだけ分かる。リモートは null)。
+    languages: list[Literal["ja", "en"]] | None = None
+    # 日本語に対応するか(リモートは分からないので null)。
+    multilingual: bool | None = None
+    # 検索の方式(起動時に決める)。
+    index_backend: Literal["pgvector", "numpy"]
+
+
 class CapabilitiesResponse(BaseModel):
     default_provider: str
     providers: list[ProviderEntry] = Field(default_factory=list)
+    embeddings: EmbeddingCapabilities
 
 
 # -- Auth (ADR-0019) ------------------------------------------------------
@@ -1158,6 +1174,125 @@ class AssetEmbeddingStatus(BaseModel):
     error: str | None = None
     requested_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+# -- 埋め込みでの検索(ADR-0033 6章・7章) --------------------------------------------
+# 埋め込みを無効にしている(または使えるモデルが無い)間は、どれも 409 を返す。
+
+
+class SemanticAssetHit(AssetSummary):
+    """文章での検索・似た画像の1件。`score` はコサイン類似度(-1〜1、大きいほど近い)。"""
+
+    score: float
+
+
+class SemanticSearchResponse(BaseModel):
+    """`GET /api/search/semantic`。類似度の高い順。"""
+
+    query: str
+    # 使ったモデル(ベクトル空間)の識別子。
+    model_key: str
+    # 使うモデルの対応言語(ローカルのモデルだけ分かる。リモートは null)。
+    languages: list[Literal["ja", "en"]] | None = None
+    # 日本語に対応するか。英語だけのモデルでは日本語で検索してもほとんど当たらない。
+    # リモートは分からないので null。
+    multilingual: bool | None = None
+    assets: list[SemanticAssetHit] = Field(default_factory=list)
+
+
+class SimilarAssetsResponse(BaseModel):
+    """`GET /api/assets/{id}/similar`。起点の画像自身は含めない。"""
+
+    asset_id: uuid.UUID
+    model_key: str
+    assets: list[SemanticAssetHit] = Field(default_factory=list)
+
+
+class EmbeddingErrorDetail(BaseModel):
+    """埋め込みの API の 409 の `detail`。`code` で画面の出し分けをする。
+
+    - `embeddings_unavailable`: 埋め込みが無効、または使えるモデルが無い
+    - `embedding_pending`: その画像のベクトルを計算中(待ち行列にある)
+    - `embedding_failed`: その画像のベクトルの計算に失敗した
+    - `embedding_missing`: その画像のベクトルがまだ無い(計算を頼んでいない)
+    - `embedding_not_supported`: マスクは対象外
+    """
+
+    code: Literal[
+        "embeddings_unavailable",
+        "embedding_pending",
+        "embedding_failed",
+        "embedding_missing",
+        "embedding_not_supported",
+    ]
+    message: str
+
+
+class DuplicateAsset(AssetSummary):
+    # 代表(グループでいちばん古い画像)との類似度。代表自身は、メンバーとの類似度の最大値
+    # (ADR-0033 12章)。
+    max_score: float
+    # この画像に知覚ハッシュが無い(まだ作っていない)ので、代表との組を CLIP の類似度だけで
+    # 判定した(代表なら、メンバーとの組すべて)。サーバーは常に true / false を返す(省略可能に
+    # しているのは、生成する TypeScript の型で必須にしないため)。
+    hash_missing: bool | None = None
+
+
+class DuplicateGroup(BaseModel):
+    # 古い順(最初に作った画像が先頭)。
+    assets: list[DuplicateAsset]
+    # 代表との類似度の最大値。
+    max_score: float
+    # 知覚ハッシュが無い画像を含む(その組は CLIP の類似度だけで判定した)。常に true / false。
+    hash_missing: bool | None = None
+
+
+class DuplicatesResponse(BaseModel):
+    """`GET /api/embeddings/duplicates`。類似度がしきい値以上で知覚ハッシュも近い組を、
+    代表(いちばん古い画像)との類似度でまとめたグループ(大きい順。ADR-0033 12章)。
+    見るのは新しい順に `scanned` 件まで。それより多ければ `truncated`。"""
+
+    model_key: str
+    threshold: float
+    groups: list[DuplicateGroup] = Field(default_factory=list)
+    # 比べた画像の数(ベクトルのある、見える画像。新しい順に上限まで)。
+    scanned: int
+    # 上限を超えたので、古い画像を比べていない。
+    truncated: bool
+    # グループの数が `limit` を超えたので、小さいグループを返していない。
+    groups_truncated: bool
+
+
+class EmbeddingGraphNode(BaseModel):
+    id: uuid.UUID
+    kind: Literal["upload", "generated", "sketch"]
+    width: int
+    height: int
+    title: str | None = None
+
+
+class EmbeddingGraphResponse(BaseModel):
+    """`GET /api/embeddings/graph`。マップ(2D の地図と類似度のネットワーク)の元データ。
+
+    ノードは新しい順。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
+    (`nodes` の位置と、コサイン類似度)で、先頭は必ず自分自身(類似度 1 = 距離 0)、続いて
+    ほかのノードを最大 `k` 件、類似度の高い順に並べる。どの行も同じ長さ
+    (`1 + min(k, ノード数 - 1)`)なので、umap-js の `setPrecomputedKNN` にそのまま渡せる
+    (距離は `1 - 類似度`)。
+    """
+
+    model_key: str
+    k: int
+    nodes: list[EmbeddingGraphNode] = Field(default_factory=list)
+    neighbor_indices: list[list[int]] = Field(default_factory=list)
+    neighbor_similarities: list[list[float]] = Field(default_factory=list)
+    # 系列(ADR-0003)の主たる親の辺 `[親の位置, 子の位置]`。両方が `nodes` にあるものだけ。
+    # `include_lineage` を指定したときだけ入る。
+    lineage_edges: list[list[int]] | None = None
+    # 絞り込みに合う、ベクトルのある画像の数。
+    total: int
+    # `limit` を超えたので、古い画像を返していない。
+    truncated: bool
 
 
 # -- 共有リンク(ADR-0029) ---------------------------------------------------------

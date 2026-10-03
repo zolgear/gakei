@@ -20,6 +20,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -598,6 +599,27 @@ class AssetEmbedding(Base):
     requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class AssetPerceptualHash(Base):
+    """Asset の知覚ハッシュ(ADR-0033 12章)。重複の候補の判定に、CLIP の類似度と併せて使う。
+
+    thumb から作り、Asset の原本は不変なので一度作れば変わらない。証跡ではないので、作り直し
+    (`version` が古いとき)や削除をしてよい。値の形は `app/domain/perceptual_hash.py`。
+    埋め込みの worker が、その Asset の埋め込みを計算するときに作る(`app/worker/embedder.py`)。
+    """
+
+    __tablename__ = "asset_perceptual_hash"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    # 差分ハッシュ(64 ビット、ビッグエンディアンの 8 バイト)。PostgreSQL の BIGINT は符号付き
+    # なので、整数ではなくバイト列で持つ。
+    dhash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    # 色(4×4 の Lab と色相のヒストグラム。64 バイト)。
+    color: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    # アルゴリズムの版(`perceptual_hash.ALGORITHM_VERSION`)。違えば作り直す。
+    version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class Share(Base):

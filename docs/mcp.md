@@ -58,13 +58,14 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 
 | ツール | 内容 |
 |---|---|
-| `get_capabilities` | 使えるプロバイダー、モデル、パラメーター、サイズ |
+| `get_capabilities` | 使えるプロバイダー、モデル、パラメーター、サイズ。画像の埋め込み(文章での検索、似た画像)が使えるか(`embeddings`) |
 | `estimate_cost` | 生成する前に料金の目安(USD)を出す。Run は作らない |
 | `generate_image` | Generate / Edit を実行する(**課金を伴う**)。入力画像とマスクは Asset ID で渡す。Run を登録したらすぐ `run_id` を返す |
 | `get_run` | Run の状態、出力、料金の目安、1 時間の上限の残り、系列グラフ(`lineage_mermaid`)。完了まで待つこともできる(1 回最大 25 秒) |
 | `list_runs` | 自分の最近の Run の一覧(実行元、作成時刻、状態で絞り込み) |
 | `cancel_run` | 待機中の Run を取り消す |
-| `search_assets` | ストックを検索する(キーワード、種類、グループ) |
+| `search_assets` | ストックを検索する(キーワード、種類、グループ、タグ)。`mode="semantic"` で文章での検索(意味の近い順) |
+| `find_similar_assets` | 1 枚の画像に似た画像を、似ている順に返す |
 | `get_asset` | Asset の情報、主たる親、生成した Run、系列グラフ(`lineage_mermaid`) |
 | `get_image` | 画像を見る。長辺 1568px(既定)か 512px の JPEG / PNG を応答の本文に載せて返す |
 | `create_download_url` | 原本を取り出すための、10 分間・1 回限りのダウンロード URL を発行する |
@@ -80,6 +81,15 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 - 出力は Asset ID、原本の URL、画面で開く URL で返る。本文に載る画像はサムネイル(512px の JPEG / PNG)だけ。エージェントが画像を細かく見るには `get_image`、加工のために原本が要るときは `create_download_url` を使う(「4. 画像の受け渡し」)。結果の URL は利用者がブラウザで開くためのもの。
 - `get_asset` は、原本から数えた透過の情報を返す。`has_alpha`(アルファチャンネルがあるか)と `transparent_ratio`(alpha < 255 のピクセルの割合。0〜1)。サムネイルでは透過かどうか分かりにくいので、背景を透過にしたかの確認に使う。
 - MCP 経由で作った Run は、Run の詳細に「実行元: MCP」と出る。
+
+### 文章での検索と似た画像
+
+管理者設定の「埋め込み」を有効にしていると(ADR-0033)、次の2つが使える。使えるかは `get_capabilities` の `embeddings.available` で分かる。無効のときはエラーを返す。
+
+- `search_assets(query="夕暮れの海辺", mode="semantic")`: 画像の埋め込みで、文章の意味に近い順に返す。プロンプトやタグの無い画像も見つかる。各結果の `score` はコサイン類似度。`kind`・`group_id`・`tag`・`limit` で絞り込める。`mode` を省くと、これまでどおりのキーワード検索(新しい順)。
+- `find_similar_assets(asset_id=..., limit=12)`: その画像に似た画像を返す(その画像自身は含めない)。その画像の埋め込みをまだ計算していなければエラーになる。
+
+`embeddings.multilingual` が `false` のモデル(既定の OpenAI CLIP など)は英語だけを理解するので、文章は英語で書く。見える範囲は他のツールと同じで、他人の画像は結果に出ない。
 
 ### 生成の流れ
 

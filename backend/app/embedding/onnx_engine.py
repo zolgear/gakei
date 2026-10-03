@@ -95,7 +95,9 @@ class OnnxClipEngine:
         preprocess = preprocess_ly if self.model.family == "ly_clip" else preprocess_clip
         input_name, output_name, _ = _IO_NAMES[self.model.family]
         batch = self.image_batch_size
-        with self._lock, self._residency.use(self.RESIDENCY_OWNER):
+        # 調停(WD Tagger を待つことがある)の外で鍵を取らない。鍵を持ったまま待つと、文章での
+        # 検索がその間ずっと待たされる。
+        with self._residency.use(self.RESIDENCY_OWNER), self._lock:
             session = self._ensure_vision()
             outputs: list[np.ndarray] = []
             for start in range(0, len(images), batch):
@@ -109,7 +111,10 @@ class OnnxClipEngine:
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
         _, _, output_name = _IO_NAMES[self.model.family]
-        with self._lock, self._residency.use(self.RESIDENCY_OWNER):
+        # 文章の推論は検索のときだけ(worker は画像だけを計算する)。利用者を待たせないよう、
+        # 優先の区間にする(WD Tagger の推論1回分だけを待ち、読み込まれたままの WD はすぐ
+        # 手放させる。ADR-0033 2章)。読み込むのは文章側だけ。
+        with self._residency.use(self.RESIDENCY_OWNER, priority=True), self._lock:
             session = self._ensure_text()
             outputs: list[np.ndarray] = []
             for start in range(0, len(texts), TEXT_BATCH_SIZE):
