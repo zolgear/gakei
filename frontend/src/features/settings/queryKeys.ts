@@ -45,3 +45,9 @@ export const SHARES_QUERY_KEY = ['shares'] as const
  * (しきい値の初期値)が読む。
  */
 export const EMBEDDING_SETTINGS_QUERY_KEY = ['embedding-settings'] as const
+
+/** `GET /api/auth/me`(ADR-0019)。`AuthGate` が読む。認証の設定を保存したら取り直す。 */
+export const AUTH_ME_QUERY_KEY = ['auth-me'] as const
+
+/** `GET /api/settings/auth`(ADR-0034)。管理者設定の「認証」だけが読む。 */
+export const AUTH_SETTINGS_QUERY_KEY = ['auth-settings'] as const

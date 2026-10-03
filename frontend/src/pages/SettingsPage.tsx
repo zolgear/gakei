@@ -41,6 +41,7 @@ import { ShareLinksSettingsPage } from '../features/settings/pages/ShareLinksSet
 import { AnnotationSettingsPage } from '../features/settings/pages/AnnotationSettingsPage'
 import { EmbeddingSettingsPage } from '../features/settings/pages/EmbeddingSettingsPage'
 import { LlmConnectionsSettingsPage } from '../features/settings/pages/LlmConnectionsSettingsPage'
+import { AuthSettingsPage } from '../features/settings/pages/AuthSettingsPage'
 import {
   AboutSettingsPage,
   AccessTokensSettingsPage,
@@ -62,6 +63,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   comfyui: ComfyUISettingsPage,
   mcp: McpSettingsPage,
   shareLinks: ShareLinksSettingsPage,
+  authentication: AuthSettingsPage,
   about: AboutSettingsPage,
 }
 

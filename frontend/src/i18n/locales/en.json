@@ -257,7 +257,8 @@
       "comfyui": "ComfyUI",
       "mcp": "MCP",
       "shareLinks": "Public share links",
-      "about": "About GAKEI"
+      "about": "About GAKEI",
+      "authentication": "Authentication"
     },
     "frame": {
       "changeCount": {
@@ -829,6 +830,134 @@
       "loading": "Loading...",
       "loadFailed": "Could not load the share link settings.",
       "retry": "Reload"
+    },
+    "authentication": {
+      "intro": "Require sign-in and verify users with an OpenID Connect (OIDC) IdP. To turn it on, register a connection, save the admin emails, and then complete a test sign-in.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the authentication settings.",
+      "retry": "Reload",
+      "communicationFailed": "Communication failed.",
+      "connectionHeading": "OIDC connection",
+      "loginHeading": "Sign-in",
+      "copy": "Copy",
+      "copiedToast": "Copied",
+      "copyFailed": "Could not copy. Select the text and copy it manually.",
+      "redirectUriHelp": "Register this redirect URI on the client in your IdP.",
+      "envNote": "Using the value from .env. Once you save here, the setting on this screen takes precedence.",
+      "defaultNote": "Using the default value.",
+      "resetToEnv": "Revert to the .env / default value",
+      "resetPending": "Saving reverts this to the .env / default value.",
+      "undoReset": "Keep the current value",
+      "source": {
+        "setting": "screen",
+        "env": ".env",
+        "default": "default"
+      },
+      "fields": {
+        "issuer": "Issuer",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "scopes": "Scopes",
+        "publicBaseUrl": "PUBLIC_BASE_URL",
+        "redirectUri": "Redirect URI",
+        "verified": "Test sign-in",
+        "createdAt": "Registered at"
+      },
+      "card": {
+        "title": "Connection",
+        "statusVerified": "Tested",
+        "statusNeedsTest": "Test required",
+        "statusNotConfigured": "Not configured",
+        "notSet": "Not set",
+        "secretConfigured": "Configured",
+        "secretNone": "None (public client)",
+        "verifiedValue": "{email} ({at})",
+        "verifiedNone": "Not yet successful",
+        "notConfiguredHelp": "Create a client for GAKEI in your IdP, then register the issuer, client ID, and so on.",
+        "verifiedStale": "The connection settings have changed. Run the test sign-in again.",
+        "configure": "Set up connection",
+        "replace": "Replace connection"
+      },
+      "pending": {
+        "title": "Pending connection",
+        "status": "Waiting for test sign-in",
+        "help": "When the test sign-in succeeds, this connection becomes active. Until then, the current connection stays in use.",
+        "discard": "Discard pending connection",
+        "discardedToast": "Discarded the pending connection"
+      },
+      "test": {
+        "button": "Test sign-in",
+        "waiting": "Testing sign-in…",
+        "waitingHelp": "Sign in to your IdP in the popup. When it closes, the status is reloaded.",
+        "help": "Signs in to your IdP in a popup. Use an account whose email is in the saved admin emails.",
+        "unsavedAdminEmails": "Save your changes to the admin emails first (the test sign-in checks against the saved admin emails).",
+        "noAdminEmails": "Enter and save the admin emails first.",
+        "otherOrigin": "PUBLIC_BASE_URL ({url}) differs from the address of this page, so the result cannot reach this page. The status is reloaded after the popup closes.",
+        "popupBlocked": "Could not open the popup. Allow popups for this site in your browser and try again.",
+        "successToast": "Test sign-in succeeded",
+        "errors": {
+          "no_connection": "There is no connection to test. Set up a connection first.",
+          "callback_failed": "Could not verify the response from the IdP. Check the registered redirect URI, client ID, and secret.",
+          "email_missing": "The IdP did not return an email address. Check that the scopes include email.",
+          "email_unverified": "The email address is not verified at the IdP.",
+          "email_not_admin": "The signed-in account's email is not in the saved admin emails.",
+          "config_changed": "The connection settings changed during the test. Run the test sign-in again.",
+          "unknown": "The test sign-in failed."
+        }
+      },
+      "dialog": {
+        "title": "Set up OIDC connection",
+        "intro": "The connection you enter is registered as pending. The current connection does not change until the test sign-in succeeds.",
+        "issuerHelp": "Verified by fetching /.well-known/openid-configuration under the issuer URL.",
+        "issuerChangeWarning": "Changing the issuer makes existing users count as different people (their images and other data are not reassigned).",
+        "secretPlaceholderKeep": "Leave blank to keep the current secret",
+        "secretPlaceholderEmpty": "Leave blank for no secret",
+        "noSecret": "Do not use a secret (public client)",
+        "secretHelp": "The secret is never shown on screen, even after saving.",
+        "scopesHelp": "Space-separated. Must include openid. Default: {default}.",
+        "publicBaseUrlHelp": "The address users open GAKEI at in their browser. The redirect URI is built from it.",
+        "submit": "Verify and register",
+        "submitting": "Verifying…",
+        "registered": "Registered as pending. Register the redirect URI in your IdP, then run the test sign-in."
+      },
+      "mode": {
+        "label": "Require sign-in (OIDC)",
+        "help": "When on, only people who signed in with the IdP can use GAKEI. When off (personal mode), anyone can use it without signing in.",
+        "stateOidc": "Sign-in with OIDC required",
+        "stateNone": "Personal mode (no sign-in)",
+        "locked": "Fixed by AUTH_MODE in .env and cannot be changed here (use it for emergency disabling).",
+        "blockedSave": "The conditions for turning this on are not met.",
+        "blockersHeading": "To turn this on:",
+        "blockers": {
+          "env_locked": "Remove AUTH_MODE from .env and restart",
+          "no_connection": "Set up the OIDC connection",
+          "not_verified": "Complete a test sign-in with the current connection",
+          "admin_emails_empty": "Enter the admin emails",
+          "verified_email_not_admin": "Include the test sign-in email ({email}) in the admin emails",
+          "pending_test": "Complete a test sign-in with the pending connection"
+        }
+      },
+      "adminEmails": {
+        "label": "Admin emails",
+        "help": "One per line (commas also work). People who sign in with these emails become admins.",
+        "empty": "Enter at least one admin email.",
+        "selfMissing": "You cannot save without your own email ({email})."
+      },
+      "allowedDomains": {
+        "label": "Allowed sign-in domains",
+        "help": "One per line (e.g. example.com). Always set this for IdPs where anyone can create an account, such as Google. Admin emails can sign in even if their domain is not listed.",
+        "emptyNote": "While empty, anyone who can sign in to the IdP can use GAKEI."
+      },
+      "sessionHours": {
+        "label": "Session length (hours)",
+        "help": "How long until users need to sign in again ({min}–{max}).",
+        "invalid": "Enter an integer from {min} to {max}"
+      },
+      "disableConfirm": {
+        "message": "Turning off authentication lets anyone use GAKEI without signing in.",
+        "warning": "This is dangerous if the server is exposed to your LAN or the internet.",
+        "confirmLabel": "Turn off and save"
+      }
     }
   },
   "promptSets": {
