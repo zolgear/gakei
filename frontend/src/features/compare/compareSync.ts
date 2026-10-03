@@ -34,6 +34,19 @@ export function computeFrameSize(after: Size | null, before: Size | null): Size 
   return { width: base.width, height: base.height }
 }
 
+/**
+ * 2枚を同じ大きさで見比べるための枠サイズ(重複の候補の比較。ADR-0033 8章)。面積の大きい方の
+ * 寸法を枠にし、小さい方はその枠いっぱいまで拡大して重ねる(縦横比は保つ)。縦横比が違うときは
+ * 両方を同じ枠に contain で収めるので、どちらも同じ中心に揃って余白が付く。面積が同じなら a を使う。
+ * どちらも無効なサイズなら 1x1 を返す。
+ */
+export function computeSharedFrameSize(a: Size | null, b: Size | null): Size {
+  const area = (s: Size | null) => (s && s.width > 0 && s.height > 0 ? s.width * s.height : 0)
+  const base = area(b) > area(a) ? b : a
+  if (!base || area(base) === 0) return { width: 1, height: 1 }
+  return { width: base.width, height: base.height }
+}
+
 export interface ContainRect {
   /** 表示幅(枠基準の px) */
   width: number

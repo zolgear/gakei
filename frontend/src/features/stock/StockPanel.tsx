@@ -52,6 +52,7 @@ import { UNGROUPED_SECTION_KEY, selectedByGroup, toggleSelection, withoutSection
 import type { StockKindFilter } from './stockQueryKey'
 import { StockTagFilter } from './StockTagFilter'
 import { useStockTagFilter } from './stockTagFilterStore'
+import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
 import styles from './StockPanel.module.css'
 
 type KindFilter = StockKindFilter
@@ -95,6 +96,8 @@ export function StockPanel() {
   const toast = useToast()
 
   const capsQuery = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities })
+  // 重複の候補(ADR-0033 8章)は埋め込みが使えるときだけ入口を出す。
+  const embeddingsAvailable = useEmbeddingCapabilities() !== null
   const maxInputImages = editMaxInputImages(capsQuery.data, formState.provider, formState.model)
   const maxInputImageBytes =
     findProvider(capsQuery.data, formState.provider)?.max_input_image_bytes ?? 50 * 1024 * 1024
@@ -285,14 +288,21 @@ export function StockPanel() {
       <div className={styles.header}>
         <div className={styles.headerRow}>
           <h2 className={styles.heading}>{t.stock.heading}</h2>
-          <button
-            type="button"
-            className={styles.headerButton}
-            data-active={selectionMode}
-            onClick={handleToggleSelectionMode}
-          >
-            {selectionMode ? t.stock.selection.done : t.stock.selection.enter}
-          </button>
+          <div className={styles.headerButtons}>
+            {embeddingsAvailable && (
+              <button type="button" className={styles.headerButton} onClick={() => navigate('/stock/duplicates')}>
+                {t.stock.duplicatesLink}
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.headerButton}
+              data-active={selectionMode}
+              onClick={handleToggleSelectionMode}
+            >
+              {selectionMode ? t.stock.selection.done : t.stock.selection.enter}
+            </button>
+          </div>
         </div>
 
         {/* グループの節の見出しと見分けがつくよう、kind のチップ行の上に見出しを付ける(ADR-0022 4章)。 */}

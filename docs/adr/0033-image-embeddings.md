@@ -70,7 +70,7 @@ CLIP 系のモデルは、画像と文章を同じ空間のベクトルにする
 | モデル | 取得元 | サイズ | 言語 | ライセンス |
 |---|---|---|---|---|
 | `clip-vit-b32-u8`(既定) | `Xenova/clip-vit-base-patch32` の画像側 `onnx/vision_model_uint8.onnx` と、文章側 fp32 の `onnx/text_model.onnx`。トークナイザー用の `vocab.json` と `merges.txt` | 約 345MB | 英語 | MIT(元の OpenAI CLIP) |
-| `clip-vit-b32` | 同じリポジトリの fp32(`vision_model.onnx`、`text_model.onnx`) | 約 606MB | 英語 | 同上 |
+| `clip-vit-b32` | 同じリポジトリの fp32(`vision_model.onnx`、`text_model.onnx`) | 約 607MB | 英語 | 同上 |
 | `clip-japanese-base` | `line-corporation/clip-japanese-base` の `onnx/clyp_visual.onnx`、`onnx/clyp_textual.onnx`、`onnx/spiece.model` | 約 790MB | 日本語 | Apache-2.0 |
 
 - 次元はどれも 512。
@@ -188,7 +188,7 @@ ADR-0024 4章と同じ形にする。
   - リモート: 接続先(「LLM の接続先」へのリンクつき)、モデル名、形式
   - 取り込み時の自動実行、未計算の件数と一括実行(その場で実行。保存していない変更がある間は押せない)
   - モデルごとの保存済みの件数と、ベクトルの削除
-  - 検索の方式(pgvector / numpy)の表示
+  - 検索の方式(pgvector / numpy)は画面に出さない(利用者が画面から変えられない情報のため。2026-10-03 改訂)。`GET /api/settings/embeddings` と capabilities の `index_backend` で確かめられ、`docs/embeddings.md` に書く。
 - **検索:** 検索ページに「キーワード / 意味」の切り替えを置く。URL に残す(`mode=semantic`)。
 - **ビューア:** 情報欄に「似た画像」(上位 12 件)を置き、続きは検索ページ(`?similar=<id>`)で見る。
 - **重複の候補:** ストックからたどれるページ。グループごとに並べ、比べて、要らないものを論理削除できる。

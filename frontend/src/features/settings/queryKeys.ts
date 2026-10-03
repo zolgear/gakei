@@ -39,3 +39,9 @@ export const SHARE_SETTINGS_QUERY_KEY = ['share-settings'] as const
 
 /** `GET /api/shares`(ADR-0029)。ユーザー設定の「共有リンク」の一覧。 */
 export const SHARES_QUERY_KEY = ['shares'] as const
+
+/**
+ * `GET /api/settings/embeddings`(ADR-0033)。管理者設定の「埋め込み」と、重複の候補のページ
+ * (しきい値の初期値)が読む。
+ */
+export const EMBEDDING_SETTINGS_QUERY_KEY = ['embedding-settings'] as const

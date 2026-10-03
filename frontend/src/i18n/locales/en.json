@@ -211,7 +211,19 @@
       "submit": "Search",
       "enterQuery": "Enter a search term.",
       "countSuffix": "{count}",
-      "truncatedNote": "Showing the top {limit} results"
+      "truncatedNote": "Showing the top {limit} results",
+      "modeLabel": "Search method",
+      "modeKeyword": "Keyword",
+      "modeSemantic": "Semantic",
+      "semanticPlaceholder": "Describe the image you want",
+      "semanticEnterQuery": "Describe the image you are looking for.",
+      "semanticNoResults": "Nothing found.",
+      "semanticHeading": "Closest first",
+      "showMore": "Show more",
+      "englishOnlyHint": "The active model is for English. Japanese queries rarely match, so search in English.",
+      "similarHeading": "Images similar to this one",
+      "similarOriginLabel": "Open the source image",
+      "searchFailed": "Search failed."
     }
   },
   "settings": {
@@ -226,6 +238,7 @@
       "openai": "OpenAI",
       "llmConnections": "LLM connections",
       "annotation": "Auto titles and tags",
+      "embeddings": "Embeddings",
       "comfyui": "ComfyUI",
       "mcp": "MCP",
       "shareLinks": "Public share links",
@@ -572,6 +585,132 @@
           "one": "Queued {count} item",
           "other": "Queued {count} items"
         }
+      }
+    },
+    "embeddings": {
+      "intro": "Turns images into vectors with a CLIP-style model for text search, similar images, and duplicate candidates.",
+      "loading": "Loading…",
+      "loadFailed": "Couldn't load the settings.",
+      "retry": "Reload",
+      "communicationFailed": "Communication failed.",
+      "enable": {
+        "heading": "Enable",
+        "enabledLabel": "Use embeddings",
+        "enabledHelp": "While disabled, semantic search, \"Similar images\" in the viewer, and duplicate candidates are hidden.",
+        "engineLabel": "Engine",
+        "engineOnnx": "Local (runs on this server)",
+        "engineRemote": "Remote (inference server)",
+        "notUsable": "Enabled, but not usable yet. Download the model, or set the connection and model name."
+      },
+      "onnx": {
+        "heading": "Local model",
+        "notice": "Images are not sent outside. Models are downloaded from Hugging Face.",
+        "modelLabel": "Model",
+        "memoryEstimate": "Memory approx. {size} GB",
+        "languagesValue": "Languages: {languages}",
+        "languageSeparator": ", ",
+        "languageNames": {
+          "ja": "Japanese",
+          "en": "English"
+        },
+        "englishOnlyNote": "English-only model. Searching in Japanese rarely finds anything.",
+        "modelHelp": "To search in Japanese, choose clip-japanese-base. clip-vit-b32-u8 is a light, fast model for English.",
+        "modelNotDownloaded": "The selected model can't be used until it is downloaded.",
+        "downloaded": "Downloaded",
+        "notDownloaded": "Not downloaded",
+        "downloading": "Downloading…",
+        "downloadingPercent": "Downloading… {percent}%",
+        "downloadFailed": "Download failed: {error}",
+        "downloadFailedNoReason": "Download failed",
+        "download": "Download",
+        "delete": "Delete",
+        "downloadStartedToast": "Download started",
+        "deletedToast": "Model deleted",
+        "deleteConfirm": {
+          "message": "Delete the files of model \"{name}\". Stored vectors are kept. You'll need to download it again to use it.",
+          "confirmLabel": "Delete"
+        }
+      },
+      "remote": {
+        "heading": "Remote inference server",
+        "notice": "Images (shrunk to 512px) and search text are sent to the selected connection.",
+        "connectionLabel": "Connection",
+        "connectionHelp": "Add, edit, and set keys for connections on this page:",
+        "connectionsLink": "LLM connections",
+        "connectionPlaceholder": "Choose one",
+        "noConnections": "No connection to choose. Add one in \"LLM connections\" first.",
+        "modelLabel": "Model name",
+        "modelHelp": "The name of the model running on the inference server.",
+        "formatLabel": "Format",
+        "formatInfinity": "Infinity",
+        "sameSpaceNote": "Changing the connection's Base URL keeps it as the same model. If the model behind it changes, delete its vectors under \"Stored vectors\" and compute them again.",
+        "errors": {
+          "connectionRequired": "Choose a connection",
+          "connectionUnknown": "This connection no longer exists. Choose again",
+          "modelRequired": "Enter a model name",
+          "modelTooLong": "Enter up to {max} characters"
+        }
+      },
+      "run": {
+        "heading": "Computing",
+        "autoOnIngestLabel": "Compute on import",
+        "autoOnIngestHelp": "Computes vectors with the active model for every generation, upload, and sketch.",
+        "pendingLabel": "Images without vectors",
+        "pendingValue": {
+          "one": "{count} image",
+          "other": "{count} images"
+        },
+        "queuedLabel": "Queue",
+        "queuedValue": {
+          "one": "{count} item",
+          "other": "{count} items"
+        },
+        "failedLabel": "Failed",
+        "failedValue": {
+          "one": "{count} item",
+          "other": "{count} items"
+        },
+        "run": "Compute all",
+        "unsavedBlocked": "You have unsaved changes. Save them before running.",
+        "notUsable": "Can't run because no model is usable.",
+        "switchedHint": "After switching models, compute all.",
+        "confirm": {
+          "message": {
+            "one": "Add {count} image without vectors to the queue.",
+            "other": "Add {count} images without vectors to the queue."
+          },
+          "confirmLabel": "Add to queue"
+        },
+        "queuedToast": {
+          "one": "Added {count} item to the queue",
+          "other": "Added {count} items to the queue"
+        }
+      },
+      "duplicates": {
+        "heading": "Duplicate candidates",
+        "thresholdLabel": "Default threshold",
+        "thresholdHelp": "The similarity threshold first used on the duplicate candidates page ({min}–{max}). It can be changed temporarily on that page.",
+        "thresholdInvalid": "Enter a number from {min} to {max}"
+      },
+      "stored": {
+        "heading": "Stored vectors",
+        "help": "Switching models keeps the previous model's vectors, so switching back needs no recomputing.",
+        "empty": "None yet.",
+        "activeBadge": "In use",
+        "fakeMarker": "(dummy)",
+        "countValue": {
+          "one": "{count} vector",
+          "other": "{count} vectors"
+        },
+        "delete": "Delete",
+        "deleteConfirm": {
+          "message": {
+            "one": "Delete {count} vector of \"{name}\". Using it again requires recomputing.",
+            "other": "Delete {count} vectors of \"{name}\". Using it again requires recomputing."
+          },
+          "confirmLabel": "Delete"
+        },
+        "deletedToast": "Vectors deleted"
       }
     },
     "comfyui": {
@@ -1172,6 +1311,10 @@
       "reannotateTooltip": "Infers the title and tags again. Titles and tags set by people, and tags people removed, are kept.",
       "saveFailed": "Could not save",
       "annotateFailed": "Could not start inference"
+    },
+    "similar": {
+      "heading": "Similar images",
+      "showMore": "See more on the search page"
     }
   },
   "compare": {
@@ -1358,7 +1501,8 @@
       },
       "clear": "Clear selection",
       "toggleTile": "Toggle selection"
-    }
+    },
+    "duplicatesLink": "Duplicates"
   },
   "comfyui": {
     "connection": {
@@ -1627,5 +1771,56 @@
     "copy": "Copy",
     "copied": "Copied",
     "copyFailed": "Couldn't copy"
+  },
+  "embeddings": {
+    "pending": "Computing this image's vector…",
+    "missing": "This image has no vector yet.",
+    "failed": "Computing this image's vector failed.",
+    "compute": "Compute",
+    "recompute": "Compute again",
+    "requestFailed": "Couldn't request the computation.",
+    "loadFailed": "Couldn't load similar images.",
+    "unavailable": "Embeddings are not available now.",
+    "noSimilar": "No similar images.",
+    "score": "Similarity {score}"
+  },
+  "duplicates": {
+    "title": "Duplicate candidates",
+    "intro": "Groups similar images together. Compare them and delete the ones you don't need (deletion can be undone).",
+    "thresholdLabel": "Threshold",
+    "thresholdHelp": "Images with similarity at or above this value are grouped.",
+    "resetThreshold": "Reset to default",
+    "summary": {
+      "one": "{groups} group, compared {scanned} images",
+      "other": "{groups} groups, compared {scanned} images"
+    },
+    "hashMissing": "Approx.",
+    "hashMissingTitle": "No perceptual hash yet, so this was judged by similarity alone (different images such as color variants may be included)",
+    "truncatedNote": "There are many images, so only the newest {scanned} were compared.",
+    "groupsTruncatedNote": "There are many groups, so the largest are shown first.",
+    "empty": "No pairs at or above the threshold.",
+    "loading": "Loading…",
+    "loadFailed": "Couldn't load duplicate candidates.",
+    "groupHeading": "Group {index}",
+    "groupCount": {
+      "one": "{count} image",
+      "other": "{count} images"
+    },
+    "groupMaxScore": "Max {score}",
+    "firstBadge": "First",
+    "firstBadgeTitle": "The oldest image in the group",
+    "compare": "Compare",
+    "compareHint": "Choose 2 images to compare",
+    "selectForCompare": "Select for comparison",
+    "compareTitle": "Compare",
+    "compareOlder": "Older · {width}×{height}",
+    "compareNewer": "Newer · {width}×{height}",
+    "open": "Open in viewer",
+    "delete": "Delete",
+    "deleteConfirmMessage": "Delete this image from the stock.",
+    "deletedToast": "Deleted",
+    "undo": "Undo",
+    "deleteFailed": "Couldn't delete.",
+    "restoreFailed": "Couldn't undo."
   }
 }

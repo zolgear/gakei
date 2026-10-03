@@ -17,6 +17,7 @@ export type SettingsPageId =
   | 'openai'
   | 'llmConnections'
   | 'annotation'
+  | 'embeddings'
   | 'comfyui'
   | 'mcp'
   | 'shareLinks'
@@ -31,6 +32,7 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   openai: 'openai',
   llmConnections: 'llm-connections',
   annotation: 'annotation',
+  embeddings: 'embeddings',
   comfyui: 'comfyui',
   mcp: 'mcp',
   shareLinks: 'share-links',
@@ -42,6 +44,7 @@ export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
   'openai',
   'llmConnections',
   'annotation',
+  'embeddings',
   'comfyui',
   'mcp',
   'shareLinks',

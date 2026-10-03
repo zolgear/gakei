@@ -12,7 +12,8 @@
  *
  * 入出力で寸法が違う場合、両方を「枠」(出力の縦横比を基準にしたサイズ)に contain で収め、
  * 枠を TransformWrapper の content として扱うことで、パン/ズームの座標系を共有する
- * (= 枠内の同じ相対位置が常に一致する)。
+ * (= 枠内の同じ相対位置が常に一致する)。重複の候補(`frameBasis='larger'`)は面積の大きい方を
+ * 枠にし、小さい方を同じ大きさまで拡大して重ねる。
  */
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { TransformComponent, TransformWrapper, type ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
@@ -26,6 +27,7 @@ import {
   clampSplitPercent,
   computeContainRect,
   computeFrameSize,
+  computeSharedFrameSize,
   computeSplitClipPath,
   splitPercentFromPointer,
   transformsEqual,
@@ -49,6 +51,14 @@ interface CompareCanvasProps {
   urlFor?: (assetId: string, variant: Variant) => string
   /** false なら拡大しても original に差し替えない(共有で原本を許していないとき。ADR-0029 4章)。 */
   allowOriginal?: boolean
+  /** 左(before)・右(after)の見出し。既定は「編集前」「編集後」。重複の候補は「古い」「新しい」を渡す。 */
+  beforeLabel?: string
+  afterLabel?: string
+  /**
+   * 表示枠の決め方。'after'(既定)は出力の縦横比の枠(ADR-0009)。'larger' は面積の大きい方の
+   * 寸法の枠にし、解像度の違う2枚を同じ大きさに揃えて重ねる(重複の候補。`computeSharedFrameSize`)。
+   */
+  frameBasis?: 'after' | 'larger'
 }
 
 function nextVariant(current: Variant, effectiveScale: number, image: CanvasImage, allowOriginal: boolean): Variant {
@@ -79,7 +89,8 @@ function FrameImage({
         src={urlFor(asset.id, variant)}
         alt={label}
         draggable={false}
-        style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+        // object-fit は寸法の記録と実際の画素の縦横比がずれたときの保険(合っていれば何もしない)。
+        style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height, objectFit: 'contain' }}
       />
     </div>
   )
@@ -216,8 +227,19 @@ function SplitHandle({
   )
 }
 
-export function CompareCanvas({ before, after, mode, urlFor = assetUrl, allowOriginal = true }: CompareCanvasProps) {
+export function CompareCanvas({
+  before,
+  after,
+  mode,
+  urlFor = assetUrl,
+  allowOriginal = true,
+  beforeLabel,
+  afterLabel,
+  frameBasis = 'after',
+}: CompareCanvasProps) {
   const { t } = useI18n()
+  const labelBefore = beforeLabel ?? t.compare.before
+  const labelAfter = afterLabel ?? t.compare.after
   const pairKey = `${before.id}:${after.id}`
 
   // 分割バー位置(%)。before/after の組が変わったら中央に戻す(AssetCanvas の
@@ -245,7 +267,7 @@ export function CompareCanvas({ before, after, mode, urlFor = assetUrl, allowOri
   const afterRef = useRef<ReactZoomPanPinchRef | null>(null)
   const isSyncingRef = useRef(false)
 
-  const frame = computeFrameSize(after, before)
+  const frame = frameBasis === 'larger' ? computeSharedFrameSize(before, after) : computeFrameSize(after, before)
   const beforeRect = computeContainRect(frame, before)
   const afterRect = computeContainRect(frame, after)
 
@@ -342,7 +364,7 @@ export function CompareCanvas({ before, after, mode, urlFor = assetUrl, allowOri
                   wrapperStyle={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
                   contentClass={styles.layerContent}
                 >
-                  <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={t.compare.before} urlFor={urlFor} />
+                  <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={labelBefore} urlFor={urlFor} />
                 </TransformComponent>
               </TransformWrapper>
 
@@ -379,16 +401,16 @@ export function CompareCanvas({ before, after, mode, urlFor = assetUrl, allowOri
                   }}
                   contentClass={styles.layerContent}
                 >
-                  <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={t.compare.after} urlFor={urlFor} />
+                  <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={labelAfter} urlFor={urlFor} />
                 </TransformComponent>
               </TransformWrapper>
 
               <SplitHandle splitPercent={splitPercent} onChange={setSplitPercent} stageEl={sliderStageEl} />
               <span className={styles.sideTag} data-side="left">
-                {t.compare.before}
+                {labelBefore}
               </span>
               <span className={styles.sideTag} data-side="right">
-                {t.compare.after}
+                {labelAfter}
               </span>
             </>
           )}
@@ -406,7 +428,7 @@ export function CompareCanvas({ before, after, mode, urlFor = assetUrl, allowOri
       <div className={styles.sideBySideStage} data-mode="side">
         <div ref={leftPaneRef} className={styles.pane}>
           <span className={styles.sideTag} data-side="left">
-            {t.compare.before}
+            {labelBefore}
           </span>
           {leftPaneSize && (
             <TransformWrapper
@@ -425,14 +447,14 @@ export function CompareCanvas({ before, after, mode, urlFor = assetUrl, allowOri
                 wrapperStyle={{ width: '100%', height: '100%' }}
                 contentClass={styles.layerContent}
               >
-                <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={t.compare.before} urlFor={urlFor} />
+                <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={labelBefore} urlFor={urlFor} />
               </TransformComponent>
             </TransformWrapper>
           )}
         </div>
         <div ref={rightPaneRef} className={styles.pane}>
           <span className={styles.sideTag} data-side="right">
-            {t.compare.after}
+            {labelAfter}
           </span>
           {rightPaneSize && (
             <TransformWrapper
@@ -451,7 +473,7 @@ export function CompareCanvas({ before, after, mode, urlFor = assetUrl, allowOri
                 wrapperStyle={{ width: '100%', height: '100%' }}
                 contentClass={styles.layerContent}
               >
-                <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={t.compare.after} urlFor={urlFor} />
+                <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={labelAfter} urlFor={urlFor} />
               </TransformComponent>
             </TransformWrapper>
           )}
