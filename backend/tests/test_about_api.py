@@ -12,6 +12,8 @@ from app.config import Settings
 from app.version import get_version
 from tests.conftest import login_as
 
+pytestmark = pytest.mark.windows
+
 
 def test_get_about_returns_pyproject_version(client: TestClient) -> None:
     response = client.get("/api/about")

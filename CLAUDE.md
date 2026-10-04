@@ -94,6 +94,7 @@ docker build -t gakei:test . && docker run --rm -e FAKE_PROVIDER=1 -p 127.0.0.1:
 - **迷ったら「作らない」。** 非ゴールは ADR-0001 に列挙されている。追加したい場合は、実装より先に ADR の更新を提案する。
 - ADR と矛盾する実装をしない。変えたい場合も ADR の更新が先。ADR の Status は各ファイルと `docs/adr/README.md` で確認する。
 - API 仕様(モデル名、サイズ制約、Edit の入力上限、レート制限など)は変わりやすい。実装時に OpenAI の公式ドキュメントで再確認する。
+- OS の違いが出るテスト(起動とランチャー、ファイルの読み書き、SQLite とマイグレーション、ローカル時刻、文字コード)を足すときは、ファイルに pytest のマーカー `windows`(`pytestmark = pytest.mark.windows`)を付ける。`dev` への push の Windows の CI はこれだけを回す(ADR-0012)。
 
 ## オーケストレーション(モデルの使い分け)
 

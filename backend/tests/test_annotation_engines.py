@@ -29,6 +29,8 @@ from app.annotation.wd_models import RemoteFile, WdModel, WdModelDownloader
 from app.annotation.wd_tagger import Label, WdTagger, load_labels, postprocess, preprocess
 from app.domain.annotation_settings import AnnotationConfig, Target
 
+pytestmark = pytest.mark.windows
+
 
 def make_ctx(
     config: AnnotationConfig | None = None,

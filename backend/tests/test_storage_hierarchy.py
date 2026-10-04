@@ -20,6 +20,8 @@ from app.domain.models import Asset, AssetKind
 from app.domain.storage import LocalFsStore, OriginalKeyInfo, normalize_segment
 from tests.conftest import make_png_bytes, wait_for_run_terminal
 
+pytestmark = pytest.mark.windows
+
 _NAME = r"\d{8}-\d{6}_[0-9a-f]{8}(-\d+)?"
 _MONTH = r"\d{4}-\d{2}"
 

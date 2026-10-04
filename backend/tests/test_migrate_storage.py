@@ -18,6 +18,8 @@ from app.domain.storage import legacy_original_key
 from app.tools.migrate_storage import MigrationAbortedError, migrate
 from tests.conftest import _fake_settings, make_png_bytes, wait_for_run_terminal
 
+pytestmark = pytest.mark.windows
+
 
 @pytest.fixture
 def target(s3_store: Any, monkeypatch: pytest.MonkeyPatch) -> Any:

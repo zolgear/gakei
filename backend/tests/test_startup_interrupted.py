@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 
 from app.domain.models import Run, RunStatus
 
+pytestmark = pytest.mark.windows
+
 
 def test_running_run_becomes_failed_interrupted_on_restart(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path

@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient
 
 from app.i18n import console_t, parse_accept_language, t, use_locale
 
+pytestmark = pytest.mark.windows
+
 _APP_DIR = Path(__file__).resolve().parents[1] / "app"
 _LOCALES_DIR = _APP_DIR / "locales"
 

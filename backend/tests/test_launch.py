@@ -12,6 +12,8 @@ import pytest
 
 from app import launch
 
+pytestmark = pytest.mark.windows
+
 # --- compute_source_hash ------------------------------------------------------
 
 

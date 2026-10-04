@@ -28,6 +28,8 @@ from app.domain.storage import (
 )
 from tests.conftest import S3TestTarget, make_png_bytes
 
+pytestmark = pytest.mark.windows
+
 _CREATED_AT = datetime(2026, 9, 30, 3, 4, 5, tzinfo=UTC)
 
 

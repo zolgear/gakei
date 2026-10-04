@@ -15,6 +15,8 @@ from app.embedding import catalog
 from app.embedding.catalog import ClipModel, ClipModelDownloader
 from app.model_store.downloader import RemoteFile
 
+pytestmark = pytest.mark.windows
+
 
 def test_pinned_catalog_is_complete() -> None:
     assert set(catalog.CLIP_MODELS) == {"clip-vit-b32-u8", "clip-vit-b32", "clip-japanese-base"}

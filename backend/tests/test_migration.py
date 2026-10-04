@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect
 
 from tests.conftest import requires_postgresql
+
+pytestmark = pytest.mark.windows
 
 
 def test_migration_creates_expected_tables(client: TestClient) -> None:

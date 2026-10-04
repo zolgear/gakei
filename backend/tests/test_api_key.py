@@ -12,6 +12,8 @@ import pytest
 from app.config import Settings
 from app.domain.api_key import delete_file_key, read_file_key, resolve_key, write_file_key
 
+pytestmark = pytest.mark.windows
+
 
 def test_read_file_key_missing_file_returns_none(tmp_path: Path) -> None:
     assert read_file_key(tmp_path) is None

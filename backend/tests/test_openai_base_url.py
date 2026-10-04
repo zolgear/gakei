@@ -23,6 +23,8 @@ from app.domain.api_key import (
 )
 from app.main import LegacyProviderAbortedError, check_legacy_provider_env, create_app
 
+pytestmark = pytest.mark.windows
+
 # -- 主プロバイダーの選択(FAKE_PROVIDER) -------------------------------------
 
 
