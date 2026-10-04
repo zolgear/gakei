@@ -7,10 +7,11 @@
  * 受け渡される実体、実際に `setPrompt` を呼ぶ)経由で行う。カーソル位置の「読み取り」だけは
  * ここで DOM から行う(フォーカスの有無・selectionStart は state ではないため)。
  *
- * ブラウザのダイアログは使わない。置き換えの確認はボタン横の2段階確認(「置き換える?」→
- * 「はい」)で行う。
+ * 挿入・置き換えはアイコンだけのボタン(名前は aria-label と title)。ブラウザのダイアログは
+ * 使わない。置き換えの確認はボタン横の2段階確認(「置き換える?」→「はい」)で、ここは文字のまま。
  */
 import { useState } from 'react'
+import { InsertTextIcon, ReplaceIcon } from '../../components/icons'
 import { useI18n } from '../../i18n'
 import type { InsertPromptFn } from '../run-form/promptInsertion'
 import { shouldConfirmReplace } from '../run-form/promptInsertion'
@@ -55,12 +56,24 @@ export function RunPromptActions({ prompt, currentPrompt, insertPrompt }: RunPro
 
   return (
     <div className={styles.row}>
-      <button type="button" className={styles.actionButton} onClick={handleInsert}>
-        {rpa.insertIntoPrompt}
+      <button
+        type="button"
+        className={styles.iconButton}
+        aria-label={rpa.insertIntoPrompt}
+        title={rpa.insertIntoPrompt}
+        onClick={handleInsert}
+      >
+        <InsertTextIcon />
       </button>
       {!confirmingReplace ? (
-        <button type="button" className={styles.actionButton} onClick={handleReplaceClick}>
-          {rpa.replacePrompt}
+        <button
+          type="button"
+          className={styles.iconButton}
+          aria-label={rpa.replacePrompt}
+          title={rpa.replacePrompt}
+          onClick={handleReplaceClick}
+        >
+          <ReplaceIcon />
         </button>
       ) : (
         <span className={styles.confirmGroup}>

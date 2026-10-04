@@ -1,6 +1,6 @@
 /**
  * 最終プロンプト(ADR-0030 3章)の表示。見出し「最終プロンプト」にノードのラベルを小さく
- * 添え、本文は数行だけ見せて折り畳む(改行は保つ)。「コピー」は常に出し、挿入・置き換えなどの
+ * 添え、本文は数行だけ見せて折り畳む(改行は保つ)。「コピー」(アイコン)は常に出し、挿入・置き換えなどの
  * 操作は置き場所ごとに `renderActions` で差し込む(共有リンクのページは渡さない=閲覧専用)。
  *
  * ビューア、Run の詳細、スタジオの系列インスペクター、共有リンクのページから使う。共有リンクの
@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { RunTextOutput } from '../../api/client'
+import { CheckIcon, CopyIcon, CrossIcon } from '../../components/icons'
 import { copyText } from '../../lib/copyText'
 import { useI18n } from '../../i18n'
 import { findFinalPrompt, finalPromptNodeLabel, isFinalPromptCollapsible } from './finalPrompt'
@@ -53,6 +54,7 @@ export function FinalPromptSection({
   const collapsible = isFinalPromptCollapsible(item.text)
   const collapsed = collapsible && !expanded
   const Heading = headingLevel
+  const copyLabel = copyState === 'copied' ? fp.copied : copyState === 'failed' ? fp.copyFailed : fp.copy
 
   async function handleCopy(text: string) {
     const ok = await copyText(text)
@@ -86,9 +88,21 @@ export function FinalPromptSection({
       )}
       <div className={styles.toolbar}>
         {renderActions?.(item.text)}
-        <button type="button" className={styles.copyButton} onClick={() => void handleCopy(item.text)}>
-          {copyState === 'copied' ? fp.copied : copyState === 'failed' ? fp.copyFailed : fp.copy}
+        {/* アイコンだけのボタン。コピーの結果はアイコンと名前を一時的に変えて伝える。 */}
+        <button
+          type="button"
+          className={styles.iconButton}
+          aria-label={copyLabel}
+          title={copyLabel}
+          data-state={copyState}
+          onClick={() => void handleCopy(item.text)}
+        >
+          {copyState === 'copied' ? <CheckIcon /> : copyState === 'failed' ? <CrossIcon /> : <CopyIcon />}
         </button>
+        {/* 名前の変化は読み上げられないことがあるので、結果は別に aria-live で知らせる。 */}
+        <span className={styles.srOnly} aria-live="polite">
+          {copyState === 'idle' ? '' : copyLabel}
+        </span>
       </div>
     </div>
   )

@@ -9,44 +9,6 @@
   box-sizing: border-box;
 }
 
-@media (max-width: 767px) {
-  .page {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    min-height: 100%;
-    overflow-y: auto;
-  }
-
-  .viewerArea {
-    height: 60vh;
-    min-height: 280px;
-    flex-shrink: 0;
-  }
-
-  .sidebar {
-    flex-shrink: 0;
-  }
-
-  .restoreButton {
-    min-height: 44px;
-  }
-
-  .outputNavButton {
-    width: 44px;
-    height: 44px;
-  }
-
-  .outputThumb {
-    width: 56px;
-    height: 56px;
-  }
-
-  .backButton {
-    min-height: 44px;
-  }
-}
-
 .viewerArea {
   position: relative;
   display: flex;
@@ -96,9 +58,60 @@
   overflow-y: auto;
 }
 
+/* 見出し「Asset」とアイコンの操作の行。パネル(.sidebar)をスクロールしても上端に残す。
+   パネルの padding(16px)の分だけ外へ広げて背景で塞ぎ、固定中に下の内容が上に覗かないようにする。 */
+.headerRow {
+  position: sticky;
+  top: -16px;
+  z-index: 2;
+  margin: -8px -16px 0;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--color-bg-raised);
+}
+
+/* 削除済みバナーが無いときはパネルの先頭なので、上の padding ごと覆う。 */
+.headerRow:first-child {
+  margin-top: -16px;
+  padding-top: 16px;
+}
+
 .heading {
   margin: 0;
   font-size: 15px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 文字ラベルは置かず、アイコン + title(ツールチップ)で説明する。 */
+.iconButton {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.iconButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
 }
 
 .subheading {
@@ -228,41 +241,31 @@
   font-size: 12px;
 }
 
+/* 末尾に残す操作は削除だけ(よく使う操作は見出しの行のアイコン)。 */
 .actions {
   margin-top: 16px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.actionButton {
-  display: block;
-  text-align: center;
-  padding: 8px 10px;
-  background: var(--color-bg-sunken);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius);
-  color: var(--color-text);
-  text-decoration: none;
-  font-size: 13px;
-}
-
-.actionButton:hover:not(:disabled) {
-  border-color: var(--color-accent);
-}
-
-.actionButton:disabled {
-  opacity: 0.5;
 }
 
 .deleteButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
   color: var(--color-danger);
-  border-color: var(--color-danger);
+  font-size: 13px;
 }
 
 .deleteButton:hover:not(:disabled) {
   background: var(--color-danger-bg);
-  border-color: var(--color-danger);
+}
+
+.deleteButton:disabled {
+  opacity: 0.5;
 }
 
 .deletedBanner {
@@ -307,4 +310,57 @@
   margin: 4px 0 0;
   font-size: 11px;
   color: var(--color-danger);
+}
+
+/* 狭い幅の上書きは基本の規則より後に置く(前に置くと、同じ詳細度の基本の規則に負ける)。 */
+@media (max-width: 767px) {
+  .page {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+  }
+
+  .viewerArea {
+    height: 60vh;
+    min-height: 280px;
+    flex-shrink: 0;
+  }
+
+  .sidebar {
+    flex-shrink: 0;
+  }
+
+  .restoreButton {
+    min-height: 44px;
+  }
+
+  .outputNavButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .outputThumb {
+    width: 56px;
+    height: 56px;
+  }
+
+  .backButton {
+    min-height: 44px;
+  }
+
+  /* パネルが画像の下に回り、ページ全体がスクロールするので見出しの行は固定しない。 */
+  .headerRow {
+    position: static;
+  }
+
+  .iconButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .deleteButton {
+    min-height: 44px;
+  }
 }

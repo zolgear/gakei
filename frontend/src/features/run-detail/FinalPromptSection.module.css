@@ -83,23 +83,49 @@
   cursor: pointer;
 }
 
-.copyButton {
+/* 文字ラベルは置かず、アイコン + title(ツールチップ)で説明する(RunPromptActions と揃える)。 */
+.iconButton {
+  width: 28px;
   height: 28px;
-  padding: 0 10px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   background: var(--color-bg-sunken);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius);
   color: var(--color-text);
-  font-size: 11.5px;
 }
 
-.copyButton:hover {
+.iconButton:hover {
   border-color: var(--color-accent);
 }
 
+.iconButton[data-state='copied'] {
+  color: var(--color-success);
+}
+
+.iconButton[data-state='failed'] {
+  color: var(--color-danger);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 @media (max-width: 767px) {
-  .copyButton,
   .linkButton {
     min-height: 36px;
+  }
+
+  .iconButton {
+    width: 44px;
+    height: 44px;
   }
 }
