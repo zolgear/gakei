@@ -1,7 +1,15 @@
 """画像の埋め込みの worker(ADR-0033 5章)。自動タイトル・タグの worker とは別。
 
 待ち行列は `asset_embedding.status = 'queued'` の行そのもの。api プロセス内の asyncio タスクが、
-使うモデルの行を古い依頼から最大 `CLAIM_LIMIT` 件ずつ取り、thumb(512px)を読んで計算する。
+使うモデルの行を古い依頼から取り、thumb(512px)を読んで計算する。
+
+- 1回に取る件数は `CLAIM_LIMIT`(8)と、エンジンが1回にまとめる枚数(`image_batch_size`。
+  リモートは 32)の大きいほう。ローカルの ONNX(8 か 1)は 8 件のまま。
+- thumb の読み込み(オブジェクトストレージならネットワーク)とデコードは、複数のスレッドで
+  並列に行う。知覚ハッシュも取ったときに作る(先読みなら推論と重なる)。
+- 推論している間に、次の分を取って thumb を読み、デコードしておく(先読みは1つだけ)。
+  止めるときに、先に取ってまだ計算していない行は `queued` に戻す。先読みは使うモデルが
+  変わっていないときだけ行う(計算中のエンジンを閉じないため)。
 
 - 使うモデル以外の `queued` の行は、そのモデルが選ばれるまで取り出さない。
 - 埋め込みが無効、またはモデルが使えない(ダウンロードしていないなど)間は、行を `queued` の
@@ -27,6 +35,7 @@ import io
 import logging
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -52,6 +61,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CLAIM_LIMIT = 8
+# thumb の読み込みとデコードを並列に行うスレッドの数(控えめにする)。
+_LOAD_WORKERS = 8
 # 待ち行列が空のときに、1回で知覚ハッシュを埋める枚数。
 HASH_BACKFILL_LIMIT = 16
 _POLL_INTERVAL_SECONDS = 1.0
@@ -118,8 +129,10 @@ def claim(
 class _Job:
     model_key: str
     engine: EmbeddingEngine | None
-    # 計算する行(asset_id と画像のバイト列)
-    items: list[tuple[uuid.UUID, bytes]] = field(default_factory=list)
+    # `running` にした行のすべて(止めるときに `queued` に戻すため)
+    claimed: list[uuid.UUID] = field(default_factory=list)
+    # 計算する行(asset_id とデコード済みの画像)
+    items: list[tuple[uuid.UUID, Image.Image]] = field(default_factory=list)
     # 計算する前に失敗が決まった行(asset_id と理由)
     failures: list[tuple[uuid.UUID, str]] = field(default_factory=list)
 
@@ -221,49 +234,102 @@ class Embedder:
             pass
 
     async def _loop(self) -> None:
-        while not self._stop.is_set():
-            try:
-                await asyncio.to_thread(self.engines.release_idle)
-                job = await asyncio.to_thread(self._prepare)
-            except Exception:
-                logger.exception("埋め込みの待ち行列の取得に失敗しました")
-                await self._sleep()
-                continue
-            if job is None:
+        # 先読みしたジョブ(`_prepare` を走らせているタスク)。1つだけ持つ。
+        pending: asyncio.Task[_Job | None] | None = None
+        try:
+            while not self._stop.is_set():
                 try:
-                    filled = await self._backfill_hashes()
+                    if pending is not None:
+                        task, pending = pending, None
+                        job = await task
+                    else:
+                        await asyncio.to_thread(self.engines.release_idle)
+                        job = await asyncio.to_thread(self._prepare)
                 except Exception:
-                    logger.exception("知覚ハッシュの埋め戻しに失敗しました")
-                    filled = 0
-                if not filled:
+                    logger.exception("埋め込みの待ち行列の取得に失敗しました")
                     await self._sleep()
-                continue
-            try:
-                await self._process(job)
-            except Exception:
-                logger.exception("埋め込みの計算で想定外の例外が発生しました")
+                    continue
+                if job is None:
+                    try:
+                        filled = await self._backfill_hashes()
+                    except Exception:
+                        logger.exception("知覚ハッシュの埋め戻しに失敗しました")
+                        filled = 0
+                    if not filled:
+                        await self._sleep()
+                    continue
+                # 計算している間に、次の分を取って thumb を読んでおく。
+                if not self._stop.is_set() and job.engine is not None:
+                    pending = asyncio.create_task(asyncio.to_thread(self._prepare, job.model_key))
+                try:
+                    await self._process(job)
+                except Exception:
+                    logger.exception("埋め込みの計算で想定外の例外が発生しました")
+        finally:
+            if pending is not None:
+                await self._requeue_pending(pending)
 
-    def _prepare(self) -> _Job | None:
-        """使うモデルの行を取り、画像を読む。取るものが無ければ None。"""
+    async def _requeue_pending(self, pending: asyncio.Task[_Job | None]) -> None:
+        """止めるときに、先読みして取ったがまだ計算していない行を `queued` に戻す。"""
+        try:
+            job = await pending
+        except Exception:
+            logger.exception("埋め込みの待ち行列の取得に失敗しました")
+            return
+        if job is None or not job.claimed:
+            return
+        try:
+            await asyncio.to_thread(self._requeue, job.model_key, job.claimed)
+        except Exception:
+            # 戻せなくても、次の起動時に `running` の行は `queued` に戻る。
+            logger.exception("先読みした埋め込みの行を待ち行列に戻せませんでした")
+
+    def _requeue(self, model_key: str, asset_ids: list[uuid.UUID]) -> int:
+        with self.session_factory() as session:
+            result = session.execute(
+                update(AssetEmbedding)
+                .where(
+                    AssetEmbedding.model_key == model_key,
+                    AssetEmbedding.asset_id.in_(asset_ids),
+                    AssetEmbedding.status == embeddings_domain.STATUS_RUNNING,
+                )
+                .values(status=embeddings_domain.STATUS_QUEUED, updated_at=_utcnow())
+            )
+            session.commit()
+            return result.rowcount or 0
+
+    def _prepare(self, expected_model_key: str | None = None) -> _Job | None:
+        """使うモデルの行を取り、画像を読んでデコードする。取るものが無ければ None。
+
+        `expected_model_key` は先読みのときに渡す。使うモデルがそれと違えば何もしない
+        (計算中のエンジンを閉じないよう、モデルの切り替えは計算が終わってから行う)。
+        """
         with self.session_factory() as session:
             config = embedding_settings.load(session)
             if not embedding_settings.usable(config, self.settings):
                 return None
             model_key = embedding_settings.active_model_key(config, self.settings)
             assert model_key is not None
+            if expected_model_key is not None and model_key != expected_model_key:
+                return None
+            engine: EmbeddingEngine | None = None
+            engine_error: str | None = None
+            try:
+                engine = self.engines.engine_for(session, config)
+            except EmbeddingError as e:
+                engine_error = str(e)
 
-        claimed = claim(self.session_factory, model_key)
+        limit = CLAIM_LIMIT if engine is None else max(CLAIM_LIMIT, engine.image_batch_size)
+        claimed = claim(self.session_factory, model_key, limit)
         if not claimed:
             return None
-        job = _Job(model_key=model_key, engine=None)
-        with self.session_factory() as session:
-            try:
-                job.engine = self.engines.engine_for(session, config)
-            except EmbeddingError as e:
-                # 接続先が消えたなど、設定の問題。取った行は失敗にする(自動では再試行しない)。
-                job.failures = [(asset_id, str(e)) for asset_id in claimed]
-                return job
+        job = _Job(model_key=model_key, engine=engine, claimed=list(claimed))
+        if engine_error is not None:
+            # 接続先が消えたなど、設定の問題。取った行は失敗にする(自動では再試行しない)。
+            job.failures = [(asset_id, engine_error) for asset_id in claimed]
+            return job
 
+        targets: list[Asset] = []
         with self.session_factory() as session:
             for asset_id in claimed:
                 asset = session.get(Asset, asset_id)
@@ -273,14 +339,43 @@ class Embedder:
                 if asset.kind == AssetKind.MASK:
                     job.failures.append((asset_id, t("embeddings.maskNotSupported")))
                     continue
-                try:
-                    data = self._read_thumb(asset)
-                except Exception as e:  # noqa: BLE001 - 読めなければその行だけ失敗にする
-                    logger.warning("asset %s の画像を読めませんでした: %s", asset_id, e)
-                    job.failures.append((asset_id, t("embeddings.imageUnreadable")))
-                    continue
-                job.items.append((asset_id, data))
+                targets.append(asset)
+            loaded = self._load_images(targets)
+        for asset, image in zip(targets, loaded, strict=True):
+            if image is None:
+                job.failures.append((asset.id, t("embeddings.imageUnreadable")))
+            else:
+                job.items.append((asset.id, image))
+        if job.items:
+            # 先読みのときは、前の分の推論を待つ間にハッシュも作っておける。
+            try:
+                self._store_hashes(job.items)
+            except Exception:
+                # ハッシュが無くても重複の候補は CLIP だけで判定できる。埋め込みは続ける。
+                logger.exception("知覚ハッシュの保存に失敗しました")
         return job
+
+    def _load_images(self, assets: list[Asset]) -> list[Image.Image | None]:
+        """thumb を読んでデコードする(複数のスレッドで並列に)。読めなければ None。順序は保つ。
+
+        Asset の属性は読み込み済みのものだけを使う(別スレッドから遅延読み込みをしない)。
+        """
+        refs = [(asset.id, asset.blob_key, asset.sha256) for asset in assets]
+
+        def load(ref: tuple[uuid.UUID, str, str]) -> Image.Image | None:
+            asset_id, blob_key, sha256 = ref
+            try:
+                return _decode_image(self._read_thumb_by_key(blob_key, sha256))
+            except Exception as e:  # noqa: BLE001 - 読めなければその行だけ失敗にする
+                logger.warning("asset %s の画像を読めませんでした: %s", asset_id, e)
+                return None
+
+        if len(refs) <= 1:
+            return [load(ref) for ref in refs]
+        with ThreadPoolExecutor(
+            max_workers=min(_LOAD_WORKERS, len(refs)), thread_name_prefix="gakei-embed-load"
+        ) as pool:
+            return list(pool.map(load, refs))
 
     async def _process(self, job: _Job) -> None:
         if job.failures:
@@ -289,22 +384,7 @@ class Embedder:
             return
         engine = job.engine
 
-        decoded: list[tuple[uuid.UUID, Image.Image]] = []
-        unreadable: list[tuple[uuid.UUID, str]] = []
-        for asset_id, data in job.items:
-            try:
-                decoded.append((asset_id, await asyncio.to_thread(_decode_image, data)))
-            except Exception:  # noqa: BLE001
-                unreadable.append((asset_id, t("embeddings.imageUnreadable")))
-        if unreadable:
-            await asyncio.to_thread(self._finish_failed, job.model_key, unreadable)
-        if decoded:
-            try:
-                await asyncio.to_thread(self._store_hashes, decoded)
-            except Exception:
-                # ハッシュが無くても重複の候補は CLIP だけで判定できる。埋め込みは続ける。
-                logger.exception("知覚ハッシュの保存に失敗しました")
-
+        decoded = job.items
         batch = max(1, engine.image_batch_size)
         for start in range(0, len(decoded), batch):
             chunk = decoded[start : start + batch]
@@ -335,8 +415,11 @@ class Embedder:
     # -- 知覚ハッシュ(ADR-0033 12章) ----------------------------------------------
 
     def _read_thumb(self, asset: Asset) -> bytes:
-        thumb = self.store.open_content(asset.blob_key, asset.sha256, "thumb")
-        return thumb.read_all() if thumb is not None else self.store.read(asset.blob_key)
+        return self._read_thumb_by_key(asset.blob_key, asset.sha256)
+
+    def _read_thumb_by_key(self, blob_key: str, sha256: str) -> bytes:
+        thumb = self.store.open_content(blob_key, sha256, "thumb")
+        return thumb.read_all() if thumb is not None else self.store.read(blob_key)
 
     def _store_hashes(self, images: list[tuple[uuid.UUID, Image.Image]]) -> int:
         """無いか版の古い知覚ハッシュを作って保存し、件数を返す。1枚の失敗は飛ばす。"""

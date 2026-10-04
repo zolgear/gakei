@@ -347,8 +347,8 @@ def test_infinity_image_request_shape_and_auth() -> None:
     assert vectors.shape == (10, 4)
     assert np.allclose(np.linalg.norm(vectors, axis=1), 1.0)
     assert engine.dim == 4
-    # 1回に送る件数の上限(8)で分ける。
-    assert [len(json.loads(r.content)["input"]) for r in requests] == [8, 2]
+    # 1回に送る件数の上限(32)以内なら1回で送る。
+    assert [len(json.loads(r.content)["input"]) for r in requests] == [10]
     request = requests[0]
     assert str(request.url) == "http://infer.local:7997/embeddings"
     assert request.headers["authorization"] == "Bearer sk-local"
@@ -361,6 +361,43 @@ def test_infinity_image_request_shape_and_auth() -> None:
     # thumb の大きさ(512px)以内の JPEG。透明な部分は白。
     assert sent.format == "JPEG" and max(sent.size) <= 512
     assert sent.convert("RGB").getpixel((10, 10)) == pytest.approx((255, 255, 255), abs=3)
+
+
+def test_infinity_sends_up_to_32_images_per_request() -> None:
+    requests: list[httpx.Request] = []
+    engine = _infinity(requests)
+    engine.embed_images([Image.new("RGB", (64, 64), (i, 0, 0)) for i in range(32)])
+    assert [len(json.loads(r.content)["input"]) for r in requests] == [32]
+    requests.clear()
+    engine.embed_images([Image.new("RGB", (64, 64), (i, 0, 0)) for i in range(33)])
+    assert [len(json.loads(r.content)["input"]) for r in requests] == [32, 1]
+
+
+def test_infinity_image_output_order_matches_input() -> None:
+    """並列に JPEG にしても、送る順と返すベクトルの順は入力の順のまま。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        data = []
+        for i, uri in enumerate(body["input"]):
+            sent = Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1]))).convert("RGB")
+            red = sent.getpixel((8, 8))[0]
+            # 赤の濃さを向きに写す(正規化しても区別できるように)。
+            data.append({"index": i, "embedding": [float(red), 255.0 - float(red)]})
+        return httpx.Response(200, json={"data": list(reversed(data))})
+
+    engine = InfinityEngine(
+        connection_id="abc123",
+        base_url="http://infer.local:7997",
+        model="clip",
+        api_key=None,
+        client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    reds = [(i * 7) % 256 for i in range(40)]
+    vectors = engine.embed_images([Image.new("RGB", (96, 96), (r, 0, 0)) for r in reds])
+    assert vectors.shape == (40, 2)
+    expected = l2_normalize(np.array([[r, 255.0 - r] for r in reds], dtype=np.float32))
+    assert np.allclose(vectors, expected, atol=0.02)
 
 
 def test_infinity_text_request_has_no_modality_and_no_key() -> None:

@@ -5,13 +5,20 @@
 - 送る画像は thumb(512px)を JPEG にしたもの(透明な部分は白で合成する)。原本は送らない。
 - キーがあれば `Authorization: Bearer` で送る。キーの値はエラーの文言にも出さない。
 - 1回に送る件数の上限と時間切れだけを持つ(回数の上限は持たない。ADR-0033 5章)。
+- 画像は1回に最大 32 枚まとめて送る。量子化したモデルを1枚ずつ計算する規則(ローカルの
+  ONNX のもの)はリモートには当てはめない。Infinity は届いたリクエストをサーバー側でバッチに
+  まとめ直すので、こちらが1枚ずつ送ってもバッチの大きさは揃わない(ADR-0033 2章)。
+- SSL コンテキストはプロセスで1つを使い回す。Client を作るたびに証明書を読み込むと、Windows
+  では1回に 170ms ほどかかり、一括実行の律速になっていた(Issue #71)。
 - 次元は最初の結果が出るまで分からない(`dim` は None)。
 """
 
 from __future__ import annotations
 
 import base64
+import functools
 import io
+import ssl
 from collections.abc import Callable
 from typing import Any
 
@@ -23,10 +30,16 @@ from app.embedding.base import EmbeddingError, composite_on_white, l2_normalize
 from app.i18n import t
 
 DEFAULT_TIMEOUT_SECONDS = 60.0
-IMAGE_BATCH_SIZE = 8
+IMAGE_BATCH_SIZE = 32
 TEXT_BATCH_SIZE = 32
 _JPEG_MAX_SIDE = 512
 _ERROR_BODY_MAX = 200
+
+
+@functools.cache
+def _shared_ssl_context() -> ssl.SSLContext:
+    """httpx の既定と同じ検証の SSL コンテキスト(初回に作り、以後は使い回す)。"""
+    return httpx.create_ssl_context()
 
 
 def remote_model_key(connection_id: str, model: str) -> str:
@@ -62,7 +75,10 @@ class InfinityEngine:
         self.timeout_seconds = timeout_seconds
         # テストでは `httpx.MockTransport` の Client を渡す。
         self._client_factory = client_factory or (
-            lambda: httpx.Client(timeout=httpx.Timeout(timeout_seconds, connect=15.0))
+            lambda: httpx.Client(
+                timeout=httpx.Timeout(timeout_seconds, connect=15.0),
+                verify=_shared_ssl_context(),
+            )
         )
         self._dim: int | None = None
 
