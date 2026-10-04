@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.auth.identity import LOCAL_ADMIN, CurrentUser, Role
 from app.auth.oidc import OidcIdentity
 from app.domain.models import AppUser, AuthSession
+from app.domain.text_safety import sanitize_external_text, sanitize_external_text_or_none
 
 
 def _utcnow() -> datetime:
@@ -46,32 +47,36 @@ def is_email_allowed(email: str, allowed_domains: set[str], admin_emails: set[st
 
 def upsert_user(db: Session, identity: OidcIdentity, admin_emails: set[str]) -> AppUser:
     """`(issuer, subject)` で既存ユーザーを探し、無ければ作る。ロールはログインのたびに
-    `admin_emails`(`Settings.admin_email_set()`)から再計算する(IdP のクレームは使わない。
-    ADR-0019 の決定)。
+    `admin_emails`(実効の設定。`AuthRuntime.admin_email_set()`)から再計算する
+    (IdP のクレームは使わない。ADR-0019 の決定)。
+
+    IdP のクレームは外部由来なので、NUL などを除いてから検索・保存する(ADR-0027)。
     """
+    issuer = sanitize_external_text(identity.issuer)
+    subject = sanitize_external_text(identity.subject)
+    email = sanitize_external_text_or_none(identity.email)
+    name = sanitize_external_text_or_none(identity.name)
     user = db.execute(
-        select(AppUser).where(
-            AppUser.issuer == identity.issuer, AppUser.subject == identity.subject
-        )
+        select(AppUser).where(AppUser.issuer == issuer, AppUser.subject == subject)
     ).scalar_one_or_none()
 
-    role = "admin" if (identity.email or "").strip().lower() in admin_emails else "user"
+    role = "admin" if (email or "").strip().lower() in admin_emails else "user"
     now = _utcnow()
 
     if user is None:
         user = AppUser(
-            issuer=identity.issuer,
-            subject=identity.subject,
-            email=identity.email,
-            name=identity.name,
+            issuer=issuer,
+            subject=subject,
+            email=email,
+            name=name,
             role=role,
             created_at=now,
             last_login_at=now,
         )
         db.add(user)
     else:
-        user.email = identity.email
-        user.name = identity.name
+        user.email = email
+        user.name = name
         user.role = role
         user.last_login_at = now
 
@@ -105,8 +110,8 @@ def find_user_for_token(
 
     L-3(2026-09-27 追記): ロールと許可ドメインは、DB に保存済みの `app_user.role` を
     そのまま返すのではなく、毎リクエスト `admin_emails` / `allowed_domains`(現在の
-    `.env` の値)から評価し直す。`AUTH_ADMIN_EMAILS` / `AUTH_ALLOWED_EMAIL_DOMAINS` を
-    変えたとき、既存のセッションを消さなくても次のリクエストから効くようにするため。
+    実効の設定。ADR-0034)から評価し直す。管理者のメール・許可ドメインを変えたとき、
+    既存のセッションを消さなくても次のリクエストから効くようにするため。
     許可ドメインから外れた場合は None(呼び出し側は 401)。`app_user.role` の更新は
     ログイン時(`upsert_user`)のままでよい(表示用に残すだけ)。
     """

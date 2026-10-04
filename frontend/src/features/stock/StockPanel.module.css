@@ -38,6 +38,13 @@
   color: var(--color-text-muted);
 }
 
+/* ヘッダーの右側のボタン(「重複の候補」「選択」)。 */
+.headerButtons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ヘッダーの「選択」。 */
 .headerButton {
   height: 28px;

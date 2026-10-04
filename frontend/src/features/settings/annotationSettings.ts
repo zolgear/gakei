@@ -1,11 +1,22 @@
 /**
- * 管理者設定「自動タイトル・タグ」(ADR-0024 5章)の表示・検証の純粋関数。API 呼び出しと
- * 状態管理は `AnnotationSettingsSection.tsx` が行う。
+ * 管理者設定「自動タイトル・タグ」(`/settings/annotation`。ADR-0024 5章・8章、ADR-0031)の
+ * 表示・検証の純粋関数。API 呼び出しと状態管理は `pages/AnnotationSettingsPage.tsx` が行う。
  *
- * チェックボックス(取り込み時の自動実行、LLM/VLM/ONNX の有効化)と ONNX のモデルの選択は
- * 切り替えるとすぐ保存し、文字や数値、選択肢の欄はまとめて「保存」する。保存では変わった項目だけを PATCH に載せる(部分更新)。
+ * ADR-0031 2章の「保存で反映」に当たる項目(取り込み時の自動実行、LLM・VLM・ONNX の有効化、
+ * ONNX のモデルの選択、使い方の表、言語、上限、しきい値)は下書き(`AnnotationDraft`)に持ち、
+ * ページ上部の「保存」で、変わった項目だけを1つの PATCH に載せて送る(`diffAnnotationDraft`)。
+ * 使い方の表(profiles)は、書き換えたマスだけを送る(`diffProfiles`)。
+ * 接続先そのもの(追加・編集・キー)は「LLM の接続先」のページ(`llmConnections.ts`。ADR-0032)。
  */
-import type { AnnotationSettingsResponse, AnnotationSettingsUpdateRequest } from '../../api/client'
+import type {
+  AnnotationConnectionCalls,
+  AnnotationProfilesUpdate,
+  AnnotationSettingsResponse,
+  AnnotationSettingsUpdateRequest,
+  LlmConnectionView,
+  OnnxModelName,
+} from '../../api/client'
+import type { DraftErrors } from './settingsDraft'
 
 /** `backend/app/domain/annotation_settings.py` と同じ範囲。 */
 export const ANNOTATION_HOURLY_LIMIT_MIN = 1
@@ -14,12 +25,31 @@ export const ONNX_THRESHOLD_MIN = 0.01
 export const ONNX_THRESHOLD_MAX = 0.99
 export const MODEL_NAME_MAX = 200
 
+/** 用途。タイトル(LLM)とタグ(VLM)。 */
+export type AnnotationPurpose = 'llm' | 'vlm'
+export const ANNOTATION_PURPOSES: readonly AnnotationPurpose[] = ['llm', 'vlm']
+/** 組。「既定」と「ComfyUI の画像」。 */
+export type AnnotationProfileName = 'default' | 'comfyui'
+
+/** 既定の組の1マス。 */
+export interface TargetForm {
+  connection_id: string
+  model: string
+}
+
+/**
+ * ComfyUI の画像の組の1マス。`connection_id` が null なら「既定と同じ」(`model` は使わないが、
+ * 別の接続先に戻したときのために入力を残す)。
+ */
+export interface ComfyuiTargetForm {
+  connection_id: string | null
+  model: string
+}
+
 /** まとめて保存する欄。数値は入力途中の文字列のまま持つ。 */
 export interface AnnotationForm {
-  llm_model: string
-  vlm_model: string
-  base_url: string
-  api_style: AnnotationSettingsResponse['api_style']
+  default: Record<AnnotationPurpose, TargetForm>
+  comfyui: Record<AnnotationPurpose, ComfyuiTargetForm>
   language: AnnotationSettingsResponse['language']
   tag_language: AnnotationSettingsResponse['tag_language']
   hourly_limit: string
@@ -27,11 +57,17 @@ export interface AnnotationForm {
 }
 
 export function formFromSettings(settings: AnnotationSettingsResponse): AnnotationForm {
+  const { profiles } = settings
+  const comfyCell = (purpose: AnnotationPurpose): ComfyuiTargetForm => {
+    const saved = profiles.comfyui[purpose] ?? null
+    return saved ? { connection_id: saved.connection_id, model: saved.model } : { connection_id: null, model: '' }
+  }
   return {
-    llm_model: settings.llm_model,
-    vlm_model: settings.vlm_model,
-    base_url: settings.base_url ?? '',
-    api_style: settings.api_style,
+    default: {
+      llm: { connection_id: profiles.default.llm.connection_id, model: profiles.default.llm.model },
+      vlm: { connection_id: profiles.default.vlm.connection_id, model: profiles.default.vlm.model },
+    },
+    comfyui: { llm: comfyCell('llm'), vlm: comfyCell('vlm') },
     language: settings.language,
     tag_language: settings.tag_language,
     hourly_limit: String(settings.hourly_limit),
@@ -39,9 +75,26 @@ export function formFromSettings(settings: AnnotationSettingsResponse): Annotati
   }
 }
 
-export type AnnotationFormErrors = Partial<Record<'llm_model' | 'vlm_model' | 'hourly_limit' | 'onnx_threshold', true>>
+/**
+ * 「ComfyUI の画像」のマスで接続先を選び直したときの新しい値。「既定と同じ」から接続先に切り替えて
+ * モデル名が空なら、同じ用途の既定のモデル名を下書きとして入れる(LiteLLM のように接続先だけ
+ * 同じでモデル名を変える使い方でも、書き始めやすいように)。
+ */
+export function changeComfyuiConnection(
+  cell: ComfyuiTargetForm,
+  connectionId: string | null,
+  defaultCell: TargetForm,
+): ComfyuiTargetForm {
+  if (connectionId === null) return { ...cell, connection_id: null }
+  const model = cell.connection_id === null && cell.model.trim() === '' ? defaultCell.model : cell.model
+  return { connection_id: connectionId, model }
+}
 
-function isValidModelName(value: string): boolean {
+type CellKey = `${AnnotationProfileName}_${AnnotationPurpose}`
+export type AnnotationFormErrorKey = `${CellKey}_model` | `${CellKey}_connection` | 'hourly_limit' | 'onnx_threshold'
+export type AnnotationFormErrors = Partial<Record<AnnotationFormErrorKey, true>>
+
+export function isValidModelName(value: string): boolean {
   const trimmed = value.trim()
   return trimmed.length > 0 && trimmed.length <= MODEL_NAME_MAX
 }
@@ -60,18 +113,63 @@ export function isValidOnnxThreshold(input: string): boolean {
   return value >= ONNX_THRESHOLD_MIN && value <= ONNX_THRESHOLD_MAX
 }
 
-export function validateAnnotationForm(form: AnnotationForm): AnnotationFormErrors {
+/**
+ * フォームの検証。接続先は `connections` にあるものだけ通す(削除された接続先を指したままの
+ * 下書きを送らないため)。「既定と同じ」のマスは検証しない。
+ */
+export function validateAnnotationForm(
+  form: AnnotationForm,
+  connections: readonly Pick<LlmConnectionView, 'id'>[],
+): AnnotationFormErrors {
   const errors: AnnotationFormErrors = {}
-  if (!isValidModelName(form.llm_model)) errors.llm_model = true
-  if (!isValidModelName(form.vlm_model)) errors.vlm_model = true
+  const ids = new Set(connections.map((c) => c.id))
+  for (const purpose of ANNOTATION_PURPOSES) {
+    const d = form.default[purpose]
+    if (!ids.has(d.connection_id)) errors[`default_${purpose}_connection`] = true
+    if (!isValidModelName(d.model)) errors[`default_${purpose}_model`] = true
+    const c = form.comfyui[purpose]
+    if (c.connection_id !== null) {
+      if (!ids.has(c.connection_id)) errors[`comfyui_${purpose}_connection`] = true
+      if (!isValidModelName(c.model)) errors[`comfyui_${purpose}_model`] = true
+    }
+  }
   if (!isValidAnnotationHourlyLimit(form.hourly_limit)) errors.hourly_limit = true
   if (!isValidOnnxThreshold(form.onnx_threshold)) errors.onnx_threshold = true
   return errors
 }
 
+/** 使い方の差分(PATCH の `profiles`)。変わったマスだけを載せる。変わっていなければ undefined。 */
+export function diffProfiles(
+  form: AnnotationForm,
+  settings: AnnotationSettingsResponse,
+): AnnotationProfilesUpdate | undefined {
+  const saved = settings.profiles
+  const result: AnnotationProfilesUpdate = {}
+  for (const purpose of ANNOTATION_PURPOSES) {
+    const d = form.default[purpose]
+    const dModel = d.model.trim()
+    const dSaved = saved.default[purpose]
+    if (d.connection_id !== dSaved.connection_id || dModel !== dSaved.model) {
+      result.default = { ...result.default, [purpose]: { connection_id: d.connection_id, model: dModel } }
+    }
+
+    const c = form.comfyui[purpose]
+    const cSaved = saved.comfyui[purpose] ?? null
+    if (c.connection_id === null) {
+      // 「既定と同じ」に戻す。
+      if (cSaved !== null) result.comfyui = { ...result.comfyui, [purpose]: null }
+    } else {
+      const cModel = c.model.trim()
+      if (cSaved === null || c.connection_id !== cSaved.connection_id || cModel !== cSaved.model) {
+        result.comfyui = { ...result.comfyui, [purpose]: { connection_id: c.connection_id, model: cModel } }
+      }
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
 /**
  * フォームと保存済みの設定の差分(PATCH の本文)。変わっていない項目は載せない。
- * Base URL を空にしたときは null を送る(「OpenAI の設定を流用」に戻す)。
  * 検証に通らない値が含まれていても差分は作る(保存ボタンを押せるかは `validateAnnotationForm` で決める)。
  */
 export function diffAnnotationForm(
@@ -79,13 +177,8 @@ export function diffAnnotationForm(
   settings: AnnotationSettingsResponse,
 ): AnnotationSettingsUpdateRequest {
   const body: AnnotationSettingsUpdateRequest = {}
-  const llmModel = form.llm_model.trim()
-  if (llmModel !== settings.llm_model) body.llm_model = llmModel
-  const vlmModel = form.vlm_model.trim()
-  if (vlmModel !== settings.vlm_model) body.vlm_model = vlmModel
-  const baseUrl = form.base_url.trim()
-  if (baseUrl !== (settings.base_url ?? '')) body.base_url = baseUrl === '' ? null : baseUrl
-  if (form.api_style !== settings.api_style) body.api_style = form.api_style
+  const profiles = diffProfiles(form, settings)
+  if (profiles) body.profiles = profiles
   if (form.language !== settings.language) body.language = form.language
   if (form.tag_language !== settings.tag_language) body.tag_language = form.tag_language
   const limit = Number(form.hourly_limit.trim())
@@ -95,9 +188,124 @@ export function diffAnnotationForm(
   return body
 }
 
-export function hasChanges(body: AnnotationSettingsUpdateRequest): boolean {
+export function hasChanges(body: object): boolean {
   return Object.keys(body).length > 0
 }
+
+// -- ページの下書き(ADR-0031) --------------------------------------------------------
+
+/**
+ * ページの「保存で反映」の項目をすべて持つ下書き。スイッチとモデルの選択も、保存を押すまで送らない
+ * (ADR-0031 2章「スイッチも例外にしない」)。
+ */
+export interface AnnotationDraft extends AnnotationForm {
+  auto_on_ingest: boolean
+  llm_enabled: boolean
+  vlm_enabled: boolean
+  onnx_enabled: boolean
+  onnx_model: OnnxModelName
+}
+
+export function draftFromSettings(settings: AnnotationSettingsResponse): AnnotationDraft {
+  return {
+    ...formFromSettings(settings),
+    auto_on_ingest: settings.auto_on_ingest,
+    llm_enabled: settings.llm_enabled,
+    vlm_enabled: settings.vlm_enabled,
+    onnx_enabled: settings.onnx_enabled,
+    onnx_model: settings.onnx_model,
+  }
+}
+
+const DRAFT_FLAG_KEYS = ['auto_on_ingest', 'llm_enabled', 'vlm_enabled', 'onnx_enabled', 'onnx_model'] as const
+
+/**
+ * 下書きと保存済みの設定の差分(PATCH の本文)。使い方・言語・上限・しきい値は `diffAnnotationForm`
+ * と同じ規則(使い方は書き換えたマスだけ、数値は数に直す)で、スイッチとモデルの選択は変わったものだけを足す。
+ */
+export function diffAnnotationDraft(
+  draft: AnnotationDraft,
+  settings: AnnotationSettingsResponse,
+): AnnotationSettingsUpdateRequest {
+  const body: AnnotationSettingsUpdateRequest = diffAnnotationForm(draft, settings)
+  for (const key of DRAFT_FLAG_KEYS) {
+    if (draft[key] !== settings[key]) Object.assign(body, { [key]: draft[key] })
+  }
+  return body
+}
+
+/**
+ * マスごとの検証の結果(`validateAnnotationForm`)を、下書きのキーごとのエラーに直す
+ * (ヘッダーの「保存」を押せるかの判定に使う。文言はマスの側に出すので、ここでは印だけ)。
+ */
+export function annotationDraftErrors(errors: AnnotationFormErrors): DraftErrors<AnnotationDraft> {
+  const result: DraftErrors<AnnotationDraft> = {}
+  for (const key of Object.keys(errors) as AnnotationFormErrorKey[]) {
+    if (!errors[key]) continue
+    if (key === 'hourly_limit' || key === 'onnx_threshold') result[key] = key
+    else if (key.startsWith('default_')) result.default = key
+    else result.comfyui = key
+  }
+  return result
+}
+
+/** 使い方の表の1マスを、保存済みから書き換えたか(変えたマスの縁をアクセント色にする)。 */
+export function isUsageCellChanged(
+  draft: AnnotationForm,
+  saved: AnnotationForm,
+  profile: AnnotationProfileName,
+  purpose: AnnotationPurpose,
+): boolean {
+  const a = draft[profile][purpose]
+  const b = saved[profile][purpose]
+  if (a.connection_id !== b.connection_id) return true
+  // 「既定と同じ」のマスは、隠れているモデル名の下書きを比べない(送らないため)。
+  if (profile === 'comfyui' && a.connection_id === null) return false
+  return a.model.trim() !== b.model.trim()
+}
+
+/**
+ * 一括実行を押せない理由。押せるなら null。保存していない変更がある間は、保存済みの設定で動く
+ * 一括実行を押させない(ADR-0031 2章「保存前は操作を押せないことがある」)。
+ */
+export type BackfillBlocker = 'unsaved' | 'noEngines' | 'nothingPending' | 'running'
+
+export function backfillBlocker(params: {
+  dirty: boolean
+  usableEngineCount: number
+  pendingCount: number
+  running: boolean
+}): BackfillBlocker | null {
+  if (params.running) return 'running'
+  if (params.dirty) return 'unsaved'
+  if (params.usableEngineCount === 0) return 'noEngines'
+  if (params.pendingCount === 0) return 'nothingPending'
+  return null
+}
+
+// -- 1時間の上限(接続先ごと) ----------------------------------------------------------
+
+export interface ConnectionCallsRow<C> {
+  connection: C
+  calls: number
+}
+
+/**
+ * 「1時間の上限」に出す、接続先ごとの直近1時間の呼び出し回数(ADR-0024 8章: 回数は接続先ごと)。
+ * 自動タイトル・タグで選んでいる接続先と、直近1時間に呼び出した接続先だけを、LLM の接続先の一覧の
+ * 順に並べる(選んでいない接続先を並べても意味が無いため)。
+ */
+export function connectionCallsRows<C extends Pick<LlmConnectionView, 'id' | 'used_by'>>(
+  connections: readonly C[],
+  calls: readonly AnnotationConnectionCalls[] | undefined,
+): ConnectionCallsRow<C>[] {
+  const byId = new Map((calls ?? []).map((c) => [c.connection_id, c.calls_last_hour]))
+  return connections
+    .map((connection) => ({ connection, calls: byId.get(connection.id) ?? 0 }))
+    .filter(({ connection, calls }) => calls > 0 || (connection.used_by ?? []).includes('annotation'))
+}
+
+// -- ONNX タガー --------------------------------------------------------------------
 
 /** ダウンロード中のモデルがあるか(あれば設定を取り直して進捗を出す)。 */
 export function isAnyOnnxDownloading(settings: AnnotationSettingsResponse | undefined): boolean {

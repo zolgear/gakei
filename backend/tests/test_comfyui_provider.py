@@ -36,7 +36,12 @@ from app.providers.base import (
     RunRequest,
     StepProgressEvent,
 )
-from app.providers.comfyui.client import ComfyUIClient, WsMessage
+from app.providers.comfyui.client import (
+    ComfyUIClient,
+    WsMessage,
+    collect_output_texts,
+    sanitize_text,
+)
 from app.providers.comfyui.provider import ClientFactory, ComfyUIProvider
 from tests.comfyui_fake import (
     FakeComfyUI,
@@ -1016,3 +1021,212 @@ async def test_execute_legacy_single_image_uploads_key_still_works(
 
     assert len(fake.uploads) == 1
     assert fake.uploads[0]["image_filename"] == "legacy.png"
+
+
+# -- 最終プロンプト(PE の出力。ADR-0030 2章) --------------------------------------
+
+
+def _pe_graph_and_bindings() -> tuple[dict, Bindings]:
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {
+        "class_type": "PreviewAny",
+        "inputs": {"source": ["6", 0]},
+        "_meta": {"title": "PE の出力"},
+    }
+    bindings = _t2i_bindings().model_copy(update={"final_prompt": "20"})
+    return graph, bindings
+
+
+def test_finalize_params_records_final_prompt_node(db_session_factory: sessionmaker) -> None:
+    graph, bindings = _pe_graph_and_bindings()
+    workflow_id = _create_workflow(db_session_factory, template=graph, bindings=bindings)
+    provider = ComfyUIProvider("http://127.0.0.1:8188", db_session_factory, 30.0)
+    result = _finalize(provider, db_session_factory, workflow_id=workflow_id, params={"seed": 1})
+    assert result["comfyui_final_prompt"] == "20"
+
+
+def test_finalize_params_omits_final_prompt_when_unset(db_session_factory: sessionmaker) -> None:
+    workflow_id = _create_workflow(
+        db_session_factory, template=clone(T2I_GRAPH), bindings=_t2i_bindings()
+    )
+    provider = ComfyUIProvider("http://127.0.0.1:8188", db_session_factory, 30.0)
+    result = _finalize(provider, db_session_factory, workflow_id=workflow_id, params={"seed": 1})
+    assert "comfyui_final_prompt" not in result
+
+
+async def _execute_with_history(
+    db_session_factory: sessionmaker,
+    *,
+    graph: dict,
+    bindings: Bindings,
+    outputs: dict,
+):
+    workflow_id = _create_workflow(db_session_factory, template=graph, bindings=bindings)
+    fake = FakeComfyUI()
+    fake.set_history("prompt-1", {"outputs": outputs, "status": {"status_str": "success"}})
+    fake.add_output_file("out.png", "", "output", make_png_bytes())
+    provider = ComfyUIProvider(
+        "http://127.0.0.1:8188",
+        db_session_factory,
+        5.0,
+        client_factory=_client_factory(fake, unavailable_ws_connect()),
+    )
+    params = _finalize(provider, db_session_factory, workflow_id=workflow_id, params={"seed": 1})
+    run = RunRequest(
+        run_id=uuid.uuid4(), operation="generate", model=str(workflow_id), prompt="p", params=params
+    )
+    return await provider.execute(run, _noop_progress)
+
+
+_IMAGE_OUTPUT = {"9": {"images": [{"filename": "out.png", "subfolder": "", "type": "output"}]}}
+
+
+@run_async
+async def test_execute_records_final_prompt_text(db_session_factory: sessionmaker) -> None:
+    graph, bindings = _pe_graph_and_bindings()
+    result = await _execute_with_history(
+        db_session_factory,
+        graph=graph,
+        bindings=bindings,
+        outputs={**_IMAGE_OUTPUT, "20": {"text": ["A warm, ", "cozy room"]}},
+    )
+    assert len(result.outputs) == 1
+    assert result.text_outputs == [
+        {
+            "role": "final_prompt",
+            "node_id": "20",
+            "class_type": "PreviewAny",
+            "title": "PE の出力",
+            "text": "A warm, \ncozy room",
+        }
+    ]
+
+
+@run_async
+async def test_execute_accepts_single_string_text(db_session_factory: sessionmaker) -> None:
+    graph, bindings = _pe_graph_and_bindings()
+    del graph["20"]["_meta"]
+    result = await _execute_with_history(
+        db_session_factory,
+        graph=graph,
+        bindings=bindings,
+        outputs={**_IMAGE_OUTPUT, "20": {"text": "only one"}},
+    )
+    assert result.text_outputs is not None
+    assert result.text_outputs[0]["text"] == "only one"
+    assert result.text_outputs[0]["title"] is None
+
+
+@run_async
+async def test_execute_without_text_succeeds_with_no_text_outputs(
+    db_session_factory: sessionmaker, caplog: pytest.LogCaptureFixture
+) -> None:
+    graph, bindings = _pe_graph_and_bindings()
+    with caplog.at_level("WARNING", logger="app.providers.comfyui.provider"):
+        result = await _execute_with_history(
+            db_session_factory, graph=graph, bindings=bindings, outputs=dict(_IMAGE_OUTPUT)
+        )
+    assert len(result.outputs) == 1
+    assert result.text_outputs is None
+    assert any("20" in record.getMessage() for record in caplog.records)
+
+
+@run_async
+async def test_execute_truncates_long_final_prompt(db_session_factory: sessionmaker) -> None:
+    from app.providers.comfyui.provider import TEXT_OUTPUT_MAX_CHARS
+
+    graph, bindings = _pe_graph_and_bindings()
+    long_text = "x" * (TEXT_OUTPUT_MAX_CHARS + 10)
+    result = await _execute_with_history(
+        db_session_factory,
+        graph=graph,
+        bindings=bindings,
+        outputs={**_IMAGE_OUTPUT, "20": {"text": [long_text]}},
+    )
+    assert result.text_outputs is not None
+    item = result.text_outputs[0]
+    assert len(item["text"]) == TEXT_OUTPUT_MAX_CHARS
+    assert item["truncated"] is True
+
+
+@run_async
+async def test_execute_ignores_text_when_final_prompt_unset(
+    db_session_factory: sessionmaker,
+) -> None:
+    graph, _ = _pe_graph_and_bindings()
+    result = await _execute_with_history(
+        db_session_factory,
+        graph=graph,
+        bindings=_t2i_bindings(),
+        outputs={**_IMAGE_OUTPUT, "20": {"text": ["ignored"]}},
+    )
+    assert result.text_outputs is None
+
+
+def test_sanitize_text_removes_nul_and_replaces_lone_surrogate() -> None:
+    """ADR-0030 2026-10-01 改訂: PostgreSQL の JSONB に書けない NUL は取り除き、対になって
+    いないサロゲートは置き換える。ふつうの文字(絵文字を含む)はそのまま。"""
+    assert sanitize_text("a\x00b\x00") == "ab"
+    assert sanitize_text("x\ud800y") == "x?y"
+    assert sanitize_text("猫 \U0001f408 cat") == "猫 \U0001f408 cat"
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["", [""], ["", ""], "  \n ", ["\x00"], []],
+)
+def test_collect_output_texts_returns_none_for_empty(text: object) -> None:
+    """ADR-0030 2026-10-01 改訂: 空白を除いて空の最終プロンプトは記録しない。"""
+    assert collect_output_texts({"outputs": {"20": {"text": text}}}, "20") is None
+
+
+def test_collect_output_texts_sanitizes_joined_text() -> None:
+    entry = {"outputs": {"20": {"text": ["a\x00b", "c\udc80"]}}}
+    assert collect_output_texts(entry, "20") == "ab\nc?"
+
+
+@run_async
+async def test_execute_sanitizes_final_prompt(db_session_factory: sessionmaker) -> None:
+    # 偽の ComfyUI は対になっていないサロゲートを JSON にできないので、ここでは NUL だけ
+    # 確かめる(サロゲートは `sanitize_text` の単体テストで見る)。タイトルの NUL は、
+    # PostgreSQL ではワークフローの登録(JSONB)の時点で拒まれるので SQLite のときだけ入れる。
+    graph, bindings = _pe_graph_and_bindings()
+    on_sqlite = db_session_factory.kw["bind"].dialect.name == "sqlite"
+    if on_sqlite:
+        graph["20"]["_meta"]["title"] = "PE\x00 title"
+    result = await _execute_with_history(
+        db_session_factory,
+        graph=graph,
+        bindings=bindings,
+        outputs={**_IMAGE_OUTPUT, "20": {"text": ["warm\x00 room"]}},
+    )
+    assert result.text_outputs is not None
+    assert result.text_outputs[0]["text"] == "warm room"
+    if on_sqlite:
+        assert result.text_outputs[0]["title"] == "PE title"
+
+
+@run_async
+async def test_execute_skips_empty_final_prompt(db_session_factory: sessionmaker) -> None:
+    graph, bindings = _pe_graph_and_bindings()
+    result = await _execute_with_history(
+        db_session_factory,
+        graph=graph,
+        bindings=bindings,
+        outputs={**_IMAGE_OUTPUT, "20": {"text": [""]}},
+    )
+    assert len(result.outputs) == 1
+    assert result.text_outputs is None
+
+
+@run_async
+async def test_execute_text_only_still_raises_no_output(db_session_factory: sessionmaker) -> None:
+    graph, bindings = _pe_graph_and_bindings()
+    with pytest.raises(ProviderError) as exc_info:
+        await _execute_with_history(
+            db_session_factory,
+            graph=graph,
+            bindings=bindings,
+            outputs={"20": {"text": ["only text"]}},
+        )
+    assert exc_info.value.code == "comfyuiNoOutput"

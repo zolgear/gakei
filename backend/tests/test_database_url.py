@@ -8,6 +8,8 @@ import pytest
 
 from app.config import Settings, display_database_url, normalize_database_url
 
+pytestmark = pytest.mark.windows
+
 
 @pytest.mark.parametrize(
     ("raw", "expected"),

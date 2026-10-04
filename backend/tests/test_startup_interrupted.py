@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import uuid
 from pathlib import Path
 
@@ -10,6 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.domain.models import Run, RunStatus
+
+pytestmark = pytest.mark.windows
 
 
 def test_running_run_becomes_failed_interrupted_on_restart(
@@ -25,39 +26,34 @@ def test_running_run_becomes_failed_interrupted_on_restart(
     async def _noop_start(self: Runner) -> int:  # noqa: ANN001
         return 0
 
-    # 1回目の起動: マイグレーションだけ済ませ、running な Run を直接作る(runner は動かさない)。
-    monkeypatch.setattr(Runner, "start", _noop_start)
     from app.main import create_app
 
-    app1 = create_app()
-    with TestClient(app1) as client1:
-        response = client1.post(
-            "/api/runs",
-            json={
-                "operation": "generate",
-                "model": "gpt-image-2.5-sunburst",
-                "prompt": "will be interrupted",
-                "params": {"n": 1},
-            },
-        )
-        run_id = response.json()["id"]
+    # 1回目の起動: マイグレーションだけ済ませ、running な Run を直接作る(runner は動かさない)。
+    # Runner.start の差し替えはこの区間だけにする。`monkeypatch.undo()` で戻すと、conftest の
+    # `.env` の切り離しまで戻り、2回目の起動が開発者の `.env` を読んでしまう。
+    with monkeypatch.context() as patch:
+        patch.setattr(Runner, "start", _noop_start)
+        app1 = create_app()
+        with TestClient(app1) as client1:
+            response = client1.post(
+                "/api/runs",
+                json={
+                    "operation": "generate",
+                    "model": "gpt-image-2.5-sunburst",
+                    "prompt": "will be interrupted",
+                    "params": {"n": 1},
+                },
+            )
+            run_id = response.json()["id"]
 
-        session_factory = client1.app.state.session_factory
-        with session_factory() as session:
-            run = session.get(Run, uuid.UUID(run_id))
-            run.status = RunStatus.RUNNING
-            session.commit()
+            session_factory = client1.app.state.session_factory
+            with session_factory() as session:
+                run = session.get(Run, uuid.UUID(run_id))
+                run.status = RunStatus.RUNNING
+                session.commit()
 
     # 2回目の起動: 本物の Runner.start() を使い、reset_interrupted_runs が働くことを確認する。
-    database_url = os.environ.get("DATABASE_URL")
-    monkeypatch.undo()
-    # ADR-0027 6章: PostgreSQL で走らせているときは、同じ一時 DB につなぎ直す。
-    if database_url:
-        monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("DATA_DIR", str(data_dir))
-    monkeypatch.setenv("FAKE_PROVIDER", "1")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
+    # 環境変数(DATA_DIR、PostgreSQL のときの DATABASE_URL)は1回目と同じものが残っている。
     app2 = create_app()
     with TestClient(app2) as client2:
         detail = client2.get(f"/api/runs/{run_id}").json()
@@ -81,36 +77,28 @@ def test_unregistered_provider_queued_run_becomes_failed_on_restart(
     async def _noop_start(self: Runner) -> int:  # noqa: ANN001
         return 0
 
-    monkeypatch.setattr(Runner, "start", _noop_start)
     from app.main import create_app
 
-    app1 = create_app()
-    with TestClient(app1) as client1:
-        response = client1.post(
-            "/api/runs",
-            json={
-                "operation": "generate",
-                "model": "gpt-image-2.5-sunburst",
-                "prompt": "will lose its provider",
-                "params": {"n": 1},
-            },
-        )
-        run_id = response.json()["id"]
+    with monkeypatch.context() as patch:
+        patch.setattr(Runner, "start", _noop_start)
+        app1 = create_app()
+        with TestClient(app1) as client1:
+            response = client1.post(
+                "/api/runs",
+                json={
+                    "operation": "generate",
+                    "model": "gpt-image-2.5-sunburst",
+                    "prompt": "will lose its provider",
+                    "params": {"n": 1},
+                },
+            )
+            run_id = response.json()["id"]
 
-        session_factory = client1.app.state.session_factory
-        with session_factory() as session:
-            run = session.get(Run, uuid.UUID(run_id))
-            run.provider = "ghost-provider"  # もう登録されていない provider を装う
-            session.commit()
-
-    database_url = os.environ.get("DATABASE_URL")
-    monkeypatch.undo()
-    # ADR-0027 6章: PostgreSQL で走らせているときは、同じ一時 DB につなぎ直す。
-    if database_url:
-        monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("DATA_DIR", str(data_dir))
-    monkeypatch.setenv("FAKE_PROVIDER", "1")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+            session_factory = client1.app.state.session_factory
+            with session_factory() as session:
+                run = session.get(Run, uuid.UUID(run_id))
+                run.provider = "ghost-provider"  # もう登録されていない provider を装う
+                session.commit()
 
     app2 = create_app()
     with TestClient(app2) as client2:

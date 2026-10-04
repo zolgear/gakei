@@ -1,4 +1,4 @@
-"""Asset の登録・一覧・詳細・配信。配信のパス解決は `AssetStore.content_path` の1関数に閉じる。"""
+"""Asset の登録・一覧・詳細・配信。配信は `AssetStore.open_content` を経由する(ADR-0028 4章)。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session
@@ -17,9 +17,10 @@ from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user, require_user_or_api_token
 from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_annotator, get_session, get_settings, get_store
-from app.domain import annotation_settings
+from app.deps import get_annotator, get_embedder, get_session, get_settings, get_store
+from app.domain import annotation_settings, embedding_settings, ingest_hooks
 from app.domain import annotations as annotations_domain
+from app.domain import embeddings as embeddings_domain
 from app.domain.asset_groups import group_for_asset
 from app.domain.assets import IngestError, asset_is_used_as_input, is_restorable
 from app.domain.assets import ingest_upload as ingest_asset
@@ -27,9 +28,11 @@ from app.domain.avatars import avatar_url
 from app.domain.embedded_meta import build_lineage_meta, embed_gakei_chunk, get_instance_id
 from app.domain.lineage import DEFAULT_UP, MAX_DEPTH, LineageNotFoundError, build_asset_lineage
 from app.domain.models import AppUser, Asset, AssetGroup, AssetGroupMember, AssetKind, Run
+from app.domain.run_views import run_text_outputs
 from app.domain.schemas import (
     AssetAnnotationResponse,
     AssetDetail,
+    AssetEmbeddingStatus,
     AssetLineageResponse,
     AssetListResponse,
     AssetOrigin,
@@ -50,6 +53,7 @@ from app.domain.visibility import (
 )
 from app.i18n import t
 from app.worker.annotator import Annotator
+from app.worker.embedder import Embedder
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +148,7 @@ def _to_detail(
             model=produced_by_run.model,
             status=produced_by_run.status,
             prompt=produced_by_run.prompt,
+            text_outputs=run_text_outputs(produced_by_run),
         )
     return AssetDetail(
         id=asset.id,
@@ -189,6 +194,7 @@ def create_asset(
     user: CurrentUser = Depends(require_user),
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
+    embedder: Embedder = Depends(get_embedder),
 ) -> AssetUploadResponse:
     data = file.file.read()
     try:
@@ -204,21 +210,24 @@ def create_asset(
     except IngestError as e:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e)) from e
-    # ADR-0024 4章: 取り込み時の自動推定(設定がオンのときだけ)。既存の Asset を返す場合
-    # (`matched_existing`)は重ねて待ち行列に入れない。
-    annotation_queued = result.outcome == "created" and annotations_domain.enqueue_on_ingest(
-        db, result.asset, settings
-    )
+    # ADR-0024 4章・ADR-0033 5章: 取り込み時の自動推定と埋め込み(設定がオンのときだけ)。
+    # 既存の Asset を返す場合(`matched_existing`)は重ねて待ち行列に入れない。
+    queued = ingest_hooks.IngestQueued()
+    if result.outcome == "created":
+        queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
     db.commit()
-    if annotation_queued:
-        annotator.notify()
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder)
     detail = _to_detail(db, result.asset, produced_by_run=None, user=user)
     return AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
 
 
 @router.get("", response_model=AssetListResponse, operation_id="list_assets")
 def list_assets(
-    kind: Literal["upload", "generated", "mask", "sketch"] | None = Query(default=None),
+    kind: list[Literal["upload", "generated", "mask", "sketch"]] | None = Query(
+        default=None,
+        description="繰り返して指定できる(`?kind=generated&kind=upload`)。指定した種類の"
+        "どれかに当たる Asset に絞る。省くと全種類(ADR-0035)。",
+    ),
     group_id: uuid.UUID | None = Query(
         default=None, description="指定すると、そのグループのメンバーだけに絞る(ADR-0022)。"
     ),
@@ -244,8 +253,8 @@ def list_assets(
 
     # ADR-0025: 見える Asset だけ(ページングの件数・カーソルも同じ条件の上で数える)。
     query = select(Asset).where(Asset.deleted_at.is_(None), asset_visible(user))
-    if kind is not None:
-        query = query.where(Asset.kind == kind)
+    if kind:
+        query = query.where(Asset.kind.in_(kind))
     if tag is not None and tag.strip():
         try:
             query = query.where(annotations_domain.tag_filter(tag))
@@ -383,7 +392,7 @@ def asset_content_response(
     store: AssetStore,
     asset: Asset,
     *,
-    viewer: CurrentUser,
+    viewer: CurrentUser | None,
     variant: Literal["thumb", "preview", "original"],
     download: bool,
     if_none_match: str | None = None,
@@ -391,20 +400,30 @@ def asset_content_response(
 ) -> Response:
     """画像の本体の応答。`GET /api/assets/{id}/content` と、1回限りのダウンロード URL
     (`GET /api/downloads/{token}`。ADR-0023 8章 3)で共通。見えるかどうかは呼び出し側が
-    確かめる。ファイルが無ければ 404。"""
-    path = store.content_path(asset.blob_key, asset.sha256, variant)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
+    確かめる。ファイルが無ければ 404。`viewer` が None なら、原本をダウンロードするときも
+    系列情報を埋め込まない(ログイン不要の共有リンク。ADR-0029 4章)。
 
+    ローカルFSは `FileResponse`(Range 要求に応える)、オブジェクトストレージは読み出した
+    チャンクをそのまま流す(`Content-Length` 付き、Range には応えない。ADR-0028 4章)。"""
     # ADR-0014(2026-09-24 追記): original をダウンロードする PNG にだけ、系列情報
     # (gakei チャンク)を埋め込んで返す。保存している原本・画面表示用の
     # original/thumb/preview(download=0)は変えない(ETag も区別する)。
-    embed_meta = variant == "original" and download and asset.mime == "image/png"
+    embed_meta = (
+        viewer is not None and variant == "original" and download and asset.mime == "image/png"
+    )
     etag = f'"{asset.sha256}-original-gakei1"' if embed_meta else f'"{asset.sha256}-{variant}"'
     headers = {"ETag": etag, "Cache-Control": cache_control}
 
     if if_none_match == etag:
+        # 本体は読まない(オブジェクトストレージで原本を丸ごと取りに行かないため)。
+        # ファイルが無ければ、これまでどおり 304 ではなく 404。
+        if not store.content_exists(asset.blob_key, asset.sha256, variant):
+            raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
         return Response(status_code=304, headers=headers)
+
+    content = store.open_content(asset.blob_key, asset.sha256, variant)
+    if content is None:
+        raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
 
     media_type = asset.mime if variant == "original" else _DERIVED_MEDIA_TYPE
     if download:
@@ -412,12 +431,16 @@ def asset_content_response(
         headers["Content-Disposition"] = f'attachment; filename="{asset.id}-{variant}.{ext}"'
 
     if embed_meta:
-        data = store.read(asset.blob_key)
+        data = content.read_all()
+        assert viewer is not None
         meta = build_lineage_meta(db, asset, viewer=viewer)
         embedded = embed_gakei_chunk(data, meta)
         return Response(content=embedded, media_type=media_type, headers=headers)
 
-    return FileResponse(path, media_type=media_type, headers=headers)
+    if content.path is not None:
+        return FileResponse(content.path, media_type=media_type, headers=headers)
+    headers["Content-Length"] = str(content.size)
+    return StreamingResponse(content.chunks, media_type=media_type, headers=headers)
 
 
 @router.get(
@@ -542,3 +565,47 @@ def annotate_asset(
     db.commit()
     annotator.notify()
     return annotations_domain.annotation_response(db, asset_id)
+
+
+# -- 埋め込み(ADR-0033) ----------------------------------------------------------
+
+
+@router.post(
+    "/{asset_id}/embedding",
+    response_model=AssetEmbeddingStatus,
+    operation_id="request_asset_embedding",
+)
+def request_asset_embedding(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    embedder: Embedder = Depends(get_embedder),
+) -> AssetEmbeddingStatus:
+    """この Asset の埋め込みを、使うモデルで計算し直す(待ち行列に入れる)。見えなければ 404、
+    マスクと削除済み、埋め込みが無効・使えないときは 409。既に待ち行列にあれば何もしない。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    if asset.kind == AssetKind.MASK:
+        raise HTTPException(status_code=409, detail=t("embeddings.maskNotSupported"))
+    if asset.deleted_at is not None:
+        raise HTTPException(status_code=409, detail=t("embeddings.assetDeleted"))
+    config = embedding_settings.load(db)
+    if not embedding_settings.usable(config, settings):
+        raise HTTPException(status_code=409, detail=t("embeddings.notUsable"))
+    model_key = embedding_settings.active_model_key(config, settings)
+    assert model_key is not None
+    embeddings_domain.request_embedding(db, asset, model_key)
+    db.commit()
+    embedder.notify()
+    row = embeddings_domain.embedding_status(db, asset_id, model_key)
+    assert row is not None
+    return AssetEmbeddingStatus(
+        asset_id=asset_id,
+        model_key=model_key,
+        status=row.status,  # type: ignore[arg-type]
+        error=row.error,
+        requested_at=row.requested_at,
+        finished_at=row.finished_at,
+    )

@@ -89,12 +89,12 @@ jobs:
         run: |
           docker run -d --name gakei-release-test -e FAKE_PROVIDER=1 -p 127.0.0.1:8798:8000 gakei:release-test
 
-      - name: /api/capabilities が応答するまで待つ
+      - name: /api/health が応答するまで待つ(HEALTHCHECK と同じ生存確認)
         run: |
           set -euo pipefail
           ok=0
           for _ in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8798/api/capabilities >/dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:8798/api/health >/dev/null 2>&1; then
               ok=1
               break
             fi
@@ -104,6 +104,9 @@ jobs:
             echo "コンテナが時間内に起動しませんでした" >&2
             exit 1
           fi
+
+      - name: /api/capabilities が応答することを確認
+        run: curl -sf http://127.0.0.1:8798/api/capabilities >/dev/null
 
       - name: / が SPA の index.html を返すことを確認
         run: |

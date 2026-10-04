@@ -1,0 +1,392 @@
+/* 重複の候補(ADR-0033 8章)。検索ページと同じ幅と余白で揃える。 */
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.backLink {
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.backLink:hover {
+  color: var(--color-text);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.intro,
+.help {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.placeholder {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+/* ---------- しきい値 ---------- */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.thresholdLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.thresholdRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.slider {
+  flex: 1 1 220px;
+  max-width: 420px;
+  accent-color: var(--color-accent);
+}
+
+.thresholdValue {
+  min-width: 3.5em;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.linkButton {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-accent);
+  font-size: 12px;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summaryText {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+/* しきい値を変えて取り直している間は、前の結果を薄く出す。 */
+.summary[data-stale='true'],
+.groupList[data-stale='true'] {
+  opacity: 0.6;
+}
+
+/* ---------- グループ ---------- */
+
+.groupList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.groupHeading {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.groupMeta {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: var(--color-text-faint);
+}
+
+.groupActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.button {
+  height: 30px;
+  padding: 0 12px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.button:disabled {
+  opacity: 0.5;
+}
+
+.tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.tile {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.thumbWrap {
+  position: relative;
+}
+
+.thumbButton {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+.thumbButton:hover .thumb,
+.thumbButton:focus-visible .thumb {
+  border-color: var(--color-accent);
+}
+
+.tile[data-selected='true'] .thumb {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.firstBadge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  background: rgba(23, 24, 27, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+/* 比べる画像の選択。当たり判定を広げるため、右上の角をラベルごと押せるようにする。 */
+.selectBox {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selectBox input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.tileTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.tileMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.tileFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.tileScore {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+.deleteButton {
+  height: 26px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  font-size: 11px;
+}
+
+.deleteButton:hover:not(:disabled) {
+  border-color: var(--color-danger);
+}
+
+/* ---------- 比べる(ダイアログ) ---------- */
+
+.compareBody {
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compareToolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.compareCanvas {
+  position: relative;
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* ---------- 狭い画面(ADR-0009: タップ 44px 以上) ---------- */
+
+@media (max-width: 767px) {
+  .page {
+    padding: 14px;
+  }
+
+  .backLink {
+    min-height: 44px;
+  }
+
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .button,
+  .deleteButton {
+    height: 40px;
+  }
+
+  .selectBox {
+    width: 44px;
+    height: 44px;
+  }
+
+  .selectBox input {
+    width: 22px;
+    height: 22px;
+  }
+
+  .linkButton {
+    min-height: 44px;
+  }
+}
+
+/* 知覚ハッシュが無く、CLIP だけで判定した画像の印。 */
+.hashMissing {
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}

@@ -48,6 +48,9 @@ Issue [#4](https://github.com/zolgear/gakei/issues/4)。
   - **失敗後のトランザクション:** PostgreSQL では、一意制約違反などの後はロールバックするまで同じトランザクションを使えない。例外を捕まえて続ける箇所は、`begin_nested()`(SAVEPOINT)で囲む。
   - **並び順:** `NULL` の位置(SQLite は昇順で先頭、PostgreSQL は末尾)と文字列の照合順が違う。画面に出る並びが変わる箇所は、`nulls_last()` などで明示するか、同順位の場合の並べ方を id などで決める。
   - **大文字小文字:** 部分一致は今の `lower(...) LIKE ... ESCAPE '\'` のままにする(両方で同じ結果になる)。
+- **NUL 文字(2026-10-01 追記):** PostgreSQL は NUL(`\u0000`)を含む文字列を `TEXT` / `JSONB` に保存できず、問い合わせの引数にあっても失敗する(SQLite は通す)。両方の DB で同じ振る舞いにするため、入口で次のように揃える(共通の関数は `domain/text_safety.py`)。
+  - **利用者のリクエスト**(REST の本文・パス・クエリ・フォーム、MCP のツール引数)は、どこかの文字列(入れ子の値と dict のキーを含む)に NUL があれば 422(MCP はツールのエラー)で拒む。黙って消すと、利用者が送ったものと違う値が保存される(ComfyUI のテンプレートは書き換えない。ADR-0013)。REST はアプリ全体の依存(`api/request_text.py`)で全ルートに掛け、個々のスキーマには書かない。
+  - **外部から来るテキスト**(アップロードした画像の埋め込みメタ情報、プロバイダーの応答とエラー、自動タイトル・タグの推定結果とエラー、IdP のクレーム)は、NUL を取り除き、UTF-8 にできない文字(対になっていないサロゲート)を置き換えてから保存する。拒むと Run の記録や取り込みが失敗するため。
 
 ### 3. ジョブの実行
 
@@ -77,11 +80,13 @@ uv run python -m app.tools.migrate_to_postgres --to postgresql://user:pass@host/
 - PostgreSQL のポートはホストに公開しない。
 - **これまで Compose で使ってきた人への影響:** 更新後にそのまま `docker compose up` すると、空の PostgreSQL につながり、今までのデータが見えなくなる(SQLite のファイルはボリューム `gakei-data` に残っていて消えない)。移行ツール(4章)で移すか、コメントアウトで SQLite のまま使う。リポジトリの Compose をそのまま使っている利用者はほぼいないと見込み、この案内はリリースノートに書くだけにする(同日のユーザーの判断)。
 - GHCR のイメージを使う README の `docker run` の例は、SQLite のまま変えない。外部の PostgreSQL につなぐ場合は `DATABASE_URL` を渡すだけでよい。
+- 2026-10-03 追記(ADR-0033): 画像の埋め込みの検索に pgvector を使うため、同梱のイメージを `pgvector/pgvector:pg17` に替える。同じメジャーバージョンなので、既存のボリュームはそのまま使える。外部の PostgreSQL で拡張 `vector` を使えない場合も、GAKEI は動く(埋め込みの検索は numpy の全件比較になる)。
 
 ### 6. テストと CI
 
 - テストは、環境変数 `GAKEI_TEST_DATABASE_URL`(PostgreSQL のサーバーへの接続)があれば、テストごとに一時的な DB を作って PostgreSQL で走る。無ければこれまでどおり SQLite。既定の `uv run pytest` は変わらない。
 - CI に PostgreSQL のジョブを足す(Ubuntu、`services` で `postgres:17`、PR でも走らせる)。バックエンドのテストを全部 PostgreSQL で回す。
+  - 2026-10-03 追記(ADR-0033): `services` のイメージを `pgvector/pgvector:pg17` に替える。拡張が無い場合に numpy に切り替わることも、テストで確かめる。
 - マイグレーションのテストは、両方の DB で `upgrade head` と `downgrade` を通す。
 
 ### 7. バックアップ

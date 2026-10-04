@@ -1,6 +1,6 @@
 /**
  * 管理者設定の「MCP」とユーザー設定の「アクセストークン」(ADR-0023 6章)が使う、表示・検証の
- * 純粋関数。API 呼び出しや状態管理は `McpSettingsSection.tsx` / `ApiTokensSection.tsx` が行う。
+ * 純粋関数。API 呼び出しや状態管理は `pages/McpSettingsPage.tsx` / `ApiTokensSection.tsx` が行う。
  */
 import { formatDateTime } from '../../lib/format'
 

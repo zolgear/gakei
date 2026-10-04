@@ -15,6 +15,7 @@ import { useIsMobileViewport } from '../../lib/viewport'
 import { useResourcePanel } from '../../context/useResourcePanel'
 import { useI18n } from '../../i18n'
 import { CompareCanvas } from './CompareCanvas'
+import { CompareModeSwitch } from './CompareModeSwitch'
 import {
   buildComparePath,
   compareInputCandidates,
@@ -117,36 +118,7 @@ export function CompareView() {
           {t.compare.back}
         </button>
         <h1 className={styles.title}>{t.compare.title}</h1>
-        {!isMobile && (
-          <div className={styles.modeSwitch} role="group" aria-label={t.compare.modeGroupLabel}>
-            <button
-              type="button"
-              className={styles.modeButton}
-              data-active={effectiveMode === 'side'}
-              aria-label={t.compare.sideBySide}
-              title={t.compare.sideBySideTitle}
-              onClick={() => selectMode('side')}
-            >
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <rect x="1.5" y="2.5" width="5.5" height="11" rx="1" stroke="currentColor" strokeWidth="1.3" />
-                <rect x="9" y="2.5" width="5.5" height="11" rx="1" stroke="currentColor" strokeWidth="1.3" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              className={styles.modeButton}
-              data-active={effectiveMode === 'slider'}
-              aria-label={t.compare.slider}
-              title={t.compare.sliderTitle}
-              onClick={() => selectMode('slider')}
-            >
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <rect x="1.5" y="2.5" width="13" height="11" rx="1" stroke="currentColor" strokeWidth="1.3" />
-                <path d="M8 2.5v11" stroke="currentColor" strokeWidth="1.3" />
-              </svg>
-            </button>
-          </div>
-        )}
+        {!isMobile && <CompareModeSwitch mode={effectiveMode} onChange={selectMode} />}
       </div>
 
       {runQuery.isError && <p className={styles.placeholder}>{t.compare.runLoadError}</p>}

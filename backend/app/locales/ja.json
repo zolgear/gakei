@@ -4,16 +4,38 @@
     "legacyProviderIgnored": "環境変数 PROVIDER=openai は無視します(この設定はもう使いません)。",
     "legacyProviderAborted": "環境変数 PROVIDER={value} が設定されていますが、この設定は廃止されました。ダミー画像で確認したい場合は FAKE_PROVIDER=1 を使ってください。実 API に接続する場合は PROVIDER を削除してください。",
     "authConfigMissing": "AUTH_MODE=oidc ですが、必須の環境変数が設定されていません: {missing}",
+    "authConfigMissingFromSettings": "画面の設定で認証モードが oidc ですが、必須の値が設定されていません: {missing}。認証を一時的に無効にして起動するには、.env に AUTH_MODE=none を書いて再起動してください(画面の設定は消えません)。",
     "authUrlInvalid": "{name} の形式が不正です(http または https で、ホストを含む URL である必要があります): {value}",
     "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。",
-    "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}"
+    "authEmergencyDisable": "認証を一時的に無効にして起動するには、.env に AUTH_MODE=none を書いて再起動してください(画面の設定は消えません)。",
+    "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}",
+    "storageConfigMissing": "STORAGE_BACKEND に必要な環境変数が設定されていません: {missing}",
+    "storageAzureBothConnections": "AZURE_STORAGE_CONNECTION_STRING と AZURE_STORAGE_ACCOUNT_URL の両方が設定されています。どちらか一方だけを設定してください。",
+    "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING の形式が不正です。Azure portal の「アクセスキー」にある接続文字列をそのまま設定してください。",
+    "storageUnavailable": "画像の保存先({storage})に接続できないか、読み書きできません。コンテナ(バケット)が作成済みか、接続先と資格情報、読み書きの権限を確認してください。詳細: {error}",
+    "storageS3LookupForbidden": "存在しないかもしれないオブジェクトの確認が 403(AccessDenied)で拒否されました(キー: {key})。AWS S3 は、s3:ListBucket の権限が無いと、存在しないキーに 404 ではなく 403 を返します。IAM ポリシーで、バケット(arn:aws:s3:::バケット名)に対する s3:ListBucket を許可してください。",
+    "storageConditionalWriteRejected": "保存先が条件付きの書き込み(If-None-Match: *)を受け付けません(HTTP {status} {code})。このままでは画像の原本を保存できません。条件付きの書き込みに対応した S3 互換ストレージを使ってください。",
+    "storageConditionalWriteIgnored": "画像の保存先が条件付きの書き込み(If-None-Match: *)の条件を無視しました。同じ名前の原本は上書きされえますが、名前に Asset の id の先頭 8 文字が入るので、実際に同名になることはまずありません。",
+    "nulInRequest": "入力に NUL 文字(\\u0000)が含まれているため受け付けられません(場所: {location})。NUL 文字を取り除いてから送ってください。"
   },
   "auth": {
     "required": "ログインが必要です。",
     "adminRequired": "この操作には管理者権限が必要です。",
     "disabled": "個人モード(AUTH_MODE=none)ではログイン機能を使えません。",
-    "idpUnavailable": "認証サーバー(IdP)に接続できません。OIDC_ISSUER の設定と IdP の状態を確認してください。",
-    "callbackFailed": "ログインの処理に失敗しました。もう一度お試しください。"
+    "idpUnavailable": "認証サーバー(IdP)に接続できません。管理者設定の「認証」の発行者(または OIDC_ISSUER)と IdP の状態を確認してください。",
+    "callbackFailed": "ログインの処理に失敗しました。もう一度お試しください。",
+    "testLogin": {
+      "title": "テストログイン",
+      "success": "テストログインに成功しました。このウィンドウを閉じて、設定画面に戻ってください。",
+      "errors": {
+        "no_connection": "接続が登録されていません。設定画面で接続を登録してください。",
+        "callback_failed": "ログインの処理に失敗しました。発行者、クライアント ID、シークレット、IdP に登録したリダイレクト URI を確認してください。",
+        "email_missing": "IdP からメールアドレスを受け取れませんでした。スコープに email を含め、IdP のアカウントにメールアドレスを設定してください。",
+        "email_unverified": "IdP のメールアドレスが確認済みではありません。IdP でメールアドレスを確認してから、もう一度お試しください。",
+        "email_not_admin": "ログインしたメールアドレスが管理者のメールに含まれていません。管理者のメールを保存してから、もう一度お試しください。",
+        "config_changed": "テストの途中で接続の設定が変わりました。もう一度テストしてください。"
+      }
+    }
   },
   "provider": {
     "unknown": "未知のプロバイダーです: {name}"
@@ -47,6 +69,7 @@
       "bindingInputMissing": "{label}: ノード {node} に入力 {input} がありません",
       "bindingDuplicate": "差し込み先が重複しています: ノード {node} の入力 {input}",
       "outputNodeMissing": "出力ノード {node} が存在しません",
+      "finalPromptNodeMissing": "最終プロンプトのノード {node} が存在しません",
       "editRequiresImage": "edit には image の差し込み先が必要です",
       "generateCannotHaveImageOrMask": "generate には image と mask の差し込み先を指定できません(edit として登録してください)",
       "exposedParamDuplicate": "公開パラメータ名が重複しています: {name}",
@@ -64,7 +87,8 @@
       "promptBindingCandidates": "プロンプトの差し込み先を特定できませんでした。次の候補から手動で選択してください: {candidates}",
       "moreCandidatesSuffix": "、ほか {count} 件",
       "imageBindingNotFound": "入力画像(LoadImage)の差し込み先が見つかりませんでした。",
-      "maskMethodUnsupported": "このワークフローのマスクは GAKEI から渡せない方式です。"
+      "maskMethodUnsupported": "このワークフローのマスクは GAKEI から渡せない方式です。",
+      "secretValueFound": "ノード {node}({class_type})の入力 {input} に、API キーなどの秘密の値が書かれているようです。共有のページでは値を伏せ、このワークフローで作った画像の原本は出しません。"
     },
     "client": {
       "genericError": "エラー",
@@ -162,14 +186,69 @@
     "annotation": {
       "invalidBool": "{name} は true か false である必要があります",
       "invalidModel": "モデル名は1〜{max}文字で指定してください",
-      "invalidApiStyle": "API 形式は responses か chat である必要があります",
       "invalidLanguage": "言語は ja か en である必要があります",
       "invalidTagLanguage": "タグの言語は native か localized である必要があります",
       "invalidHourlyLimit": "1時間あたりの上限は{min}〜{max}の整数である必要があります",
       "invalidOnnxModel": "ONNX タガーのモデルは wd-vit-tagger-v3、wd-swinv2-tagger-v3、wd-eva02-large-tagger-v3 のいずれかです",
       "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",
       "unknownOnnxModel": "未知の ONNX タガーのモデルです",
-      "onnxDownloading": "ダウンロード中のモデルは削除できません"
+      "onnxDownloading": "ダウンロード中のモデルは削除できません",
+      "invalidTarget": "接続先とモデル名の組の形が正しくありません",
+      "unknownConnection": "指定した接続先がありません",
+      "migratedConnectionName": "推定専用"
+    },
+    "llmConnections": {
+      "invalidName": "接続先の名前は1〜{max}文字で指定してください",
+      "invalidApiStyle": "API 形式は responses か chat である必要があります",
+      "tooMany": "接続先は{max}件までです",
+      "notFound": "指定した接続先がありません",
+      "builtinName": "OpenAI の設定",
+      "builtinReadOnly": "「OpenAI の設定」は編集・削除できません(API 形式だけ変えられます。キーと Base URL は OpenAI の設定で変えてください)",
+      "inUse": "この接続先は{features}で使っているため削除できません",
+      "featureSeparator": "、",
+      "features": {
+        "annotation": "自動タイトル・タグ",
+        "embedding": "埋め込み"
+      }
+    },
+    "share": {
+      "invalidEnabled": "enabled は true か false である必要があります"
+    },
+    "embedding": {
+      "invalidBool": "{name} は true か false である必要があります",
+      "invalidNull": "{name} は null にできません",
+      "invalidEngine": "エンジンは onnx か remote である必要があります",
+      "invalidOnnxModel": "埋め込みのモデルは {models} のいずれかです",
+      "unknownOnnxModel": "未知の埋め込みのモデルです",
+      "onnxDownloading": "ダウンロード中のモデルは削除できません",
+      "unknownConnection": "指定した接続先がありません",
+      "builtinConnection": "OpenAI の設定は埋め込みの接続先に使えません。推論サーバーの接続先を追加して選んでください",
+      "invalidModel": "モデル名は1〜{max}文字で指定してください",
+      "invalidApiFormat": "形式は infinity である必要があります",
+      "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",
+      "vectorsNotFound": "このモデルのベクトルはありません"
+    },
+    "auth": {
+      "invalid": {
+        "issuer": "発行者は http または https で、ホストを含む URL である必要があります",
+        "public_base_url": "PUBLIC_BASE_URL は http または https で、ホストを含む URL である必要があります",
+        "client_id": "クライアント ID を入力してください",
+        "scopes": "スコープは空白区切りで、openid を含める必要があります",
+        "client_secret": "クライアントシークレットが長すぎます",
+        "admin_emails": "管理者のメールに、メールアドレスの形でない値があります",
+        "allowed_email_domains": "許可ドメインに、ドメインの形でない値があります(例: example.com)",
+        "session_hours": "セッションの長さは{min}〜{max}時間の整数である必要があります"
+      },
+      "discoveryFailed": "Discovery 文書({url})を取得できませんでした。発行者の URL と、IdP に接続できるかを確認してください。詳細: {reason}",
+      "discoveryInvalid": "Discovery 文書({url})が OpenID Connect の形ではありません。発行者の URL を確認してください。詳細: {reason}",
+      "conflict": {
+        "env_locked": ".env の AUTH_MODE が優先されるため、画面から認証モードを変えられません。.env の値を変更して再起動してください。",
+        "no_connection": "接続が登録されていないため、oidc にできません。先に接続を登録してテストログインをしてください。",
+        "not_verified": "今の接続でのテストログインが済んでいないため、oidc にできません。先にテストログインをしてください。",
+        "admin_emails_empty": "oidc では管理者のメールが1件以上必要です。",
+        "verified_email_not_admin": "テストログインをしたメールアドレスが、管理者のメールに含まれていません。",
+        "self_not_admin": "操作しているあなたのメールアドレスを管理者のメールから外すことはできません。"
+      }
     }
   },
   "runValidation": {
@@ -300,14 +379,11 @@
     "noEngine": "使える推定エンジンがありません。管理者設定の「自動タイトル・タグ」で LLM、VLM、ONNX タガーのいずれかを有効にしてください(ONNX タガーはモデルのダウンロードも必要です)",
     "tagNotFound": "このタグは付いていません",
     "invalidVlmResponse": "VLM の応答を JSON として読めませんでした",
-    "apiKeyMissing": "推定に使う API キーがありません。OpenAI の API キーか、推定専用のキーを設定してください",
+    "apiKeyMissing": "推定に使う API キーがありません。OpenAI の API キーを設定するか、別の接続先を選んでください",
     "emptyTitle": "LLM がタイトルを返しませんでした",
     "onnxModelMissing": "ONNX タガーのモデルが見つかりません。管理者設定からダウンロードしてください",
     "onnxInsufficientMemory": "空きメモリが足りないため、ONNX タガーのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)。管理者設定で小さいモデルを選ぶか、メモリを増やしてください",
-    "download": {
-      "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
-      "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
-    }
+    "connectionMissing": "推定に使う接続先が見つかりません。管理者設定の「自動タイトル・タグ」で使い方の接続先を選び直してください"
   },
   "uploads": {
     "notFound": "このアップロード URL は存在しません。",
@@ -348,5 +424,70 @@
       "one": "移行が完了しました({tables} テーブル、合計 {count} 行)。DATABASE_URL を設定して GAKEI を起動してください(DATA_DIR は今までと同じものを使います)。",
       "other": "移行が完了しました({tables} テーブル、合計 {count} 行)。DATABASE_URL を設定して GAKEI を起動してください(DATA_DIR は今までと同じものを使います)。"
     }
+  },
+  "migrateStorage": {
+    "description": "ローカル(DATA_DIR)の画像の原本と派生を、Azure Blob Storage か S3 互換ストレージに同じキーでコピーします(ADR-0028)。GAKEI を止めてから実行してください。DB は書き換えず、ローカルのファイルは消しません。",
+    "toHelp": "移行先の種類。接続先は AZURE_STORAGE_* / S3_* の環境変数で指定します",
+    "dryRunHelp": "移行先に接続せず、コピーする対象の件数と合計サイズを表示するだけにする",
+    "invalidTarget": "移行先の種類が不正です: {target}(azure_blob か s3 を指定してください)",
+    "databaseMissing": "DB のファイルが見つかりません: {source}",
+    "sizeMismatch": "移行先に同じキーで大きさの違うオブジェクトがあるため、中止しました(上書きしません): {key}(ローカル {local} バイト、移行先 {remote} バイト)",
+    "copyFailed": "{key} のコピーに失敗したため、中止しました。もう一度実行すると続きからコピーします。詳細: {error}",
+    "derivedSizeMismatch": "注意: 移行先に同じキーで大きさの違う派生があったので、上書きしました(派生は原本から作り直せるため): {key}(ローカル {local} バイト、移行先 {remote} バイト)",
+    "source": "移行元: {source}",
+    "target": "移行先: {target}",
+    "originals": {
+      "one": "  原本: {count} 件({mb} MB)",
+      "other": "  原本: {count} 件({mb} MB)"
+    },
+    "derived": {
+      "one": "  派生: {count} 件({mb} MB)",
+      "other": "  派生: {count} 件({mb} MB)"
+    },
+    "missing": {
+      "one": "注意: DB にあってローカルに無い原本が {count} 件あります(コピーしません): {keys}",
+      "other": "注意: DB にあってローカルに無い原本が {count} 件あります(コピーしません): {keys}"
+    },
+    "dryRunDone": {
+      "one": "--dry-run: 合計 {count} 件({mb} MB)。移行先には接続していません。",
+      "other": "--dry-run: 合計 {count} 件({mb} MB)。移行先には接続していません。"
+    },
+    "done": {
+      "one": "移行が完了しました(合計 {count} 件。コピー {copied} 件、移行先にあったので飛ばした {skipped} 件)。STORAGE_BACKEND ほかの環境変数を設定して GAKEI を起動してください。",
+      "other": "移行が完了しました(合計 {count} 件。コピー {copied} 件、移行先にあったので飛ばした {skipped} 件)。STORAGE_BACKEND ほかの環境変数を設定して GAKEI を起動してください。"
+    }
+  },
+  "shares": {
+    "disabled": "共有リンクは管理者設定で無効になっています",
+    "notFound": "共有リンクが見つかりません",
+    "publicNotFound": "このリンクは無効です"
+  },
+  "modelStore": {
+    "download": {
+      "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
+      "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
+    }
+  },
+  "embeddings": {
+    "notUsable": "埋め込みを使えません。管理者設定の「埋め込み」で有効にし、モデルを用意してください(ローカルのモデルはダウンロードが必要です)",
+    "notConfigured": "埋め込みのモデルが設定されていません",
+    "connectionMissing": "埋め込みに使う接続先が見つかりません。管理者設定の「埋め込み」で接続先を選び直してください",
+    "modelMissing": "埋め込みのモデル {model} が見つかりません。管理者設定からダウンロードしてください",
+    "insufficientMemory": "空きメモリが足りないため、埋め込みのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)",
+    "remoteUnavailable": "推論サーバーに接続できませんでした({error})",
+    "remoteHttpError": "推論サーバーがエラーを返しました(HTTP {status}): {body}",
+    "remoteInvalidResponse": "推論サーバーの応答を埋め込みとして読めませんでした",
+    "assetDeleted": "削除された画像の埋め込みは計算しません",
+    "maskNotSupported": "マスクの埋め込みは計算しません",
+    "imageUnreadable": "画像を読み込めませんでした",
+    "modelUnreadable": "埋め込みのモデル {model} のファイルを読み込めませんでした。管理者設定でモデルを削除し、ダウンロードし直してください",
+    "queryTooLong": "検索の文章が長すぎます({max} 文字まで)",
+    "vectorPending": "この画像の埋め込みを計算中です。しばらくしてから開き直してください",
+    "vectorFailed": "この画像の埋め込みの計算に失敗しました。画像の詳細から計算し直せます",
+    "vectorMissing": "この画像の埋め込みはまだ計算していません。画像の詳細から計算できます",
+    "queryFailed": "検索の文章の埋め込みを計算できませんでした: {error}",
+    "queryImageEmpty": "画像ファイルが空です",
+    "queryImageTooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
+    "queryImageFailed": "画像の埋め込みを計算できませんでした: {error}"
   }
 }

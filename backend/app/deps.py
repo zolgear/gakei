@@ -10,10 +10,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.annotation.wd_models import WdModelDownloader
 from app.config import Settings
+from app.domain.semantic_search import QueryVectorCache
 from app.domain.storage import AssetStore
+from app.domain.vector_index import VectorIndex
+from app.embedding.catalog import ClipModelDownloader
 from app.providers.base import ImageProvider
 from app.providers.registry import ProviderRegistry
 from app.worker.annotator import Annotator
+from app.worker.embedder import Embedder
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
 
@@ -80,3 +84,28 @@ def get_annotator(request: Request) -> Annotator:
 def get_wd_downloader(request: Request) -> WdModelDownloader:
     """ADR-0024: ONNX タガーのモデルのダウンロード。"""
     return request.app.state.wd_downloader
+
+
+def get_embedder(request: Request) -> Embedder:
+    """ADR-0033: 画像の埋め込みの worker。"""
+    return request.app.state.embedder
+
+
+def get_clip_downloader(request: Request) -> ClipModelDownloader:
+    """ADR-0033: 埋め込みのモデルのダウンロード。"""
+    return request.app.state.clip_downloader
+
+
+def get_embedding_index_backend(request: Request) -> str:
+    """ADR-0033 4章: 検索の方式(`pgvector` / `numpy`)。起動時に決める。"""
+    return request.app.state.embedding_index_backend
+
+
+def get_vector_index(request: Request) -> VectorIndex:
+    """ADR-0033 6章: 埋め込みの近傍検索(方式は起動時に決める)。"""
+    return request.app.state.vector_index
+
+
+def get_query_vector_cache(request: Request) -> QueryVectorCache:
+    """ADR-0033 6章: 検索の文章のベクトルの LRU。"""
+    return request.app.state.query_vector_cache

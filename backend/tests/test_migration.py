@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect
 
 from tests.conftest import requires_postgresql
+
+pytestmark = pytest.mark.windows
 
 
 def test_migration_creates_expected_tables(client: TestClient) -> None:
@@ -28,6 +31,8 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "asset_tag",
         "upload_ticket",
         "download_ticket",
+        "share",
+        "share_asset",
         "alembic_version",
     } <= tables
 
@@ -840,7 +845,8 @@ def test_migration_0020_is_noop_on_sqlite(tmp_path) -> None:  # noqa: ANN001
     engine = create_engine(url)
     before = {c["name"]: str(c["type"]) for c in sa_inspect(engine).get_columns("run")}
     engine.dispose()
-    command.upgrade(cfg, "head")
+    # 後のマイグレーション(0023 の run.text_outputs など)の列を混ぜないよう 0020 で止める。
+    command.upgrade(cfg, "0020")
     engine = create_engine(url)
     after = {c["name"]: str(c["type"]) for c in sa_inspect(engine).get_columns("run")}
     engine.dispose()
@@ -899,4 +905,92 @@ def test_migration_upgrades_from_0020_to_0021_adds_download_ticket(
     command.downgrade(cfg, "0020")
     engine = create_engine(db_url)
     assert "download_ticket" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_upgrades_from_0021_to_0022_adds_share_tables(empty_database_url: str) -> None:
+    """0021 適用済みの DB に 0022(share / share_asset。ADR-0029)が当たり、downgrade も通ること。"""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import _MIGRATIONS_DIR
+
+    db_url = empty_database_url
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+
+    command.upgrade(cfg, "0021")
+    engine = create_engine(db_url)
+    assert "share" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(db_url)
+    inspector = sa_inspect(engine)
+    assert {"share", "share_asset"} <= set(inspector.get_table_names())
+    assert {c["name"] for c in inspector.get_columns("share")} == {
+        "id",
+        "token",
+        "root_asset_id",
+        "scope",
+        "allow_original",
+        "created_by_user_id",
+        "created_at",
+        "revoked_at",
+        "last_accessed_at",
+        "access_count",
+    }
+    assert {c["name"] for c in inspector.get_columns("share_asset")} == {
+        "share_id",
+        "asset_id",
+        "depth",
+    }
+    uniques = inspector.get_unique_constraints("share")
+    assert any(u["column_names"] == ["token"] for u in uniques)
+    engine.dispose()
+
+    command.downgrade(cfg, "0021")
+    engine = create_engine(db_url)
+    tables = set(sa_inspect(engine).get_table_names())
+    assert "share" not in tables and "share_asset" not in tables
+    engine.dispose()
+
+
+def test_migration_0023_adds_run_text_outputs(tmp_path) -> None:  # noqa: ANN001
+    """ADR-0030: 0023 で run.text_outputs(JSON、null 可)を足す。既存の Run は null のまま。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    url = f"sqlite:///{tmp_path / 'text_outputs.db'}"
+    cfg = alembic_config(url)
+    command.upgrade(cfg, "0022")
+    engine = create_engine(url)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO run (id, provider, model, operation, prompt, params, status, "
+                "queued_at) VALUES ('00000000000000000000000000000001', 'openai', 'm', "
+                "'generate', 'p', '{}', 'succeeded', '2026-09-30 00:00:00')"
+            )
+        )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(url)
+    columns = {c["name"]: c for c in sa_inspect(engine).get_columns("run")}
+    assert "text_outputs" in columns
+    assert columns["text_outputs"]["nullable"] is True
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT text_outputs FROM run")).scalar_one() is None
+    engine.dispose()
+
+    command.downgrade(cfg, "0022")
+    engine = create_engine(url)
+    assert "text_outputs" not in {c["name"] for c in sa_inspect(engine).get_columns("run")}
     engine.dispose()

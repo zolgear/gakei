@@ -22,23 +22,43 @@ from sqlalchemy.orm import Session
 from app.annotation.wd_models import WD_MODELS, WdModelDownloader, is_downloaded
 from app.auth.deps import require_admin, require_user
 from app.auth.identity import CurrentUser
+from app.auth.runtime import public_base_for
 from app.config import Settings
 from app.deps import (
     get_annotator,
+    get_clip_downloader,
+    get_embedder,
+    get_embedding_index_backend,
     get_provider,
     get_session,
     get_settings,
     get_wd_downloader,
 )
-from app.domain import annotation_settings, general_settings, mcp_settings
+from app.domain import (
+    annotation_settings,
+    embedding_settings,
+    general_settings,
+    mcp_settings,
+    share_settings,
+)
 from app.domain import annotations as annotations_domain
 from app.domain import api_key as api_key_domain
+from app.domain import embeddings as embeddings_domain
 from app.domain.schemas import (
-    AnnotationApiKeyUpdateRequest,
     AnnotationBackfillResponse,
+    AnnotationComfyuiProfile,
+    AnnotationConnectionCalls,
+    AnnotationDefaultProfile,
+    AnnotationProfiles,
     AnnotationSettingsResponse,
     AnnotationSettingsUpdateRequest,
+    AnnotationTarget,
     ComfyUITimeoutSetting,
+    EmbeddingBackfillResponse,
+    EmbeddingOnnxModelStatus,
+    EmbeddingSettingsResponse,
+    EmbeddingSettingsUpdateRequest,
+    EmbeddingStoredCount,
     GeneralSettingsResponse,
     GeneralSettingsUpdateRequest,
     McpSettingsResponse,
@@ -50,10 +70,15 @@ from app.domain.schemas import (
     OpenAIBaseUrlUpdateRequest,
     OpenAIKeyStatusResponse,
     OpenAIKeyUpdateRequest,
+    ShareSettingsResponse,
+    ShareSettingsUpdateRequest,
 )
+from app.embedding.catalog import CLIP_MODELS, ClipModelDownloader, onnx_model_key
+from app.embedding.catalog import is_downloaded as clip_is_downloaded
 from app.i18n import t
 from app.providers.base import ImageProvider
 from app.worker.annotator import Annotator
+from app.worker.embedder import Embedder
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -102,17 +127,13 @@ def get_key_validator() -> KeyValidator:
     return _validate_key_live
 
 
-def _status_response(
-    settings: Settings, provider: ImageProvider, user: CurrentUser
-) -> OpenAIKeyStatusResponse:
+def _status_response(settings: Settings, provider: ImageProvider) -> OpenAIKeyStatusResponse:
+    # キーは一部も返さない。設定済みかどうかと出どころだけ。
     api_key, source = api_key_domain.resolve_key(settings)
     return OpenAIKeyStatusResponse(
         required=getattr(provider, "requires_api_key", False),
         configured=api_key is not None,
         source=source,
-        # 管理者以外には末尾4文字も見せない(ADR-0019。GET 自体は非管理者の画面のバナー等
-        # からも呼ぶため許可し、この項目だけ絞る)。
-        hint=api_key_domain.hint(api_key) if api_key and user.is_admin else None,
     )
 
 
@@ -131,9 +152,9 @@ def _reject_if_env_locked(settings: Settings) -> None:
 def get_openai_key(
     settings: Settings = Depends(get_settings),
     provider: ImageProvider = Depends(get_provider),
-    user: CurrentUser = Depends(require_user),
+    _user: CurrentUser = Depends(require_user),
 ) -> OpenAIKeyStatusResponse:
-    return _status_response(settings, provider, user)
+    return _status_response(settings, provider)
 
 
 @router.put("/openai-key", response_model=OpenAIKeyStatusResponse, operation_id="set_openai_key")
@@ -142,7 +163,7 @@ async def set_openai_key(
     settings: Settings = Depends(get_settings),
     provider: ImageProvider = Depends(get_provider),
     validate_key: KeyValidator = Depends(get_key_validator),
-    user: CurrentUser = Depends(require_admin),
+    _user: CurrentUser = Depends(require_admin),
 ) -> OpenAIKeyStatusResponse:
     api_key = body.api_key.strip()
     if not api_key:
@@ -155,7 +176,7 @@ async def set_openai_key(
     await validate_key(api_key, base_url)
 
     api_key_domain.write_file_key(settings.data_dir, api_key)
-    return _status_response(settings, provider, user)
+    return _status_response(settings, provider)
 
 
 @router.delete(
@@ -164,17 +185,16 @@ async def set_openai_key(
 def delete_openai_key(
     settings: Settings = Depends(get_settings),
     provider: ImageProvider = Depends(get_provider),
-    user: CurrentUser = Depends(require_admin),
+    _user: CurrentUser = Depends(require_admin),
 ) -> OpenAIKeyStatusResponse:
     _reject_if_env_locked(settings)
     api_key_domain.delete_file_key(settings.data_dir)
-    return _status_response(settings, provider, user)
+    return _status_response(settings, provider)
 
 
 # -- OpenAI の接続先(Base URL。ADR-0017) --------------------------------------
 # キーと同じ扱い: 環境変数 / `.env` が画面で保存した値より優先し、環境変数が有効な間は
-# 画面から変更・削除できない。値は秘密ではないので全文を返す(キーの `hint` に相当する
-# 省略はしない)。
+# 画面から変更・削除できない。値は秘密ではないので全文を返す(キーは一部も返さない)。
 
 
 def _base_url_status_response(settings: Settings) -> OpenAIBaseUrlStatusResponse:
@@ -307,10 +327,8 @@ def update_general_settings(
 # (画面の表示用)、更新は管理者だけ。
 
 
-def _mcp_settings_response(
-    db: Session, settings: Settings, request: Request
-) -> McpSettingsResponse:
-    base = mcp_settings.resolve_public_base(settings.public_base_url, str(request.base_url))
+def _mcp_settings_response(db: Session, request: Request) -> McpSettingsResponse:
+    base = public_base_for(request)
     return McpSettingsResponse(
         enabled=mcp_settings.is_enabled(db),
         hourly_run_limit=mcp_settings.hourly_run_limit(db),
@@ -325,9 +343,8 @@ def _mcp_settings_response(
 def get_mcp_settings(
     request: Request,
     db: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings),
 ) -> McpSettingsResponse:
-    return _mcp_settings_response(db, settings, request)
+    return _mcp_settings_response(db, request)
 
 
 @router.patch("/mcp", response_model=McpSettingsResponse, operation_id="update_mcp_settings")
@@ -335,7 +352,6 @@ def update_mcp_settings(
     body: McpSettingsUpdateRequest,
     request: Request,
     db: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings),
     _user: CurrentUser = Depends(require_admin),
 ) -> McpSettingsResponse:
     fields_set = body.model_fields_set
@@ -354,12 +370,37 @@ def update_mcp_settings(
     if "hourly_run_limit" in fields_set:
         assert body.hourly_run_limit is not None
         mcp_settings.save_hourly_run_limit(db, body.hourly_run_limit)
-    return _mcp_settings_response(db, settings, request)
+    return _mcp_settings_response(db, request)
+
+
+# -- 共有リンク(ADR-0029) ----------------------------------------------------------
+# 有効/無効(既定は無効)。GET は全ログイン者(共有の操作を画面に出すかの判断)、更新は管理者だけ。
+
+
+@router.get("/share", response_model=ShareSettingsResponse, operation_id="get_share_settings")
+def get_share_settings(db: Session = Depends(get_session)) -> ShareSettingsResponse:
+    return ShareSettingsResponse(enabled=share_settings.is_enabled(db))
+
+
+@router.patch("/share", response_model=ShareSettingsResponse, operation_id="update_share_settings")
+def update_share_settings(
+    body: ShareSettingsUpdateRequest,
+    db: Session = Depends(get_session),
+    _user: CurrentUser = Depends(require_admin),
+) -> ShareSettingsResponse:
+    if "enabled" in body.model_fields_set:
+        try:
+            share_settings.validate_enabled(body.enabled)
+        except share_settings.ShareSettingsValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        assert body.enabled is not None
+        share_settings.save_enabled(db, body.enabled)
+    return ShareSettingsResponse(enabled=share_settings.is_enabled(db))
 
 
 # -- 自動タイトル・タグ(ADR-0024) ------------------------------------------------
-# GET は全ログイン者(画面の表示用)、更新・推定専用キー・モデルのダウンロード・一括実行は
-# 管理者だけ。
+# GET は全ログイン者(画面の表示用)、更新・モデルのダウンロード・一括実行は管理者だけ。
+# 接続先は LLM の接続先(`app/api/llm_connections.py`。ADR-0032)にある。
 
 
 def _onnx_model_statuses(
@@ -382,17 +423,52 @@ def _onnx_model_statuses(
     return statuses
 
 
+def _connection_calls(
+    config: annotation_settings.AnnotationConfig, annotator: Annotator
+) -> list[AnnotationConnectionCalls]:
+    return [
+        AnnotationConnectionCalls(
+            connection_id=connection.id,
+            calls_last_hour=annotator.calls_last_hour(connection.id),
+        )
+        for connection in config.all_connections()
+    ]
+
+
+def _target_view(value: annotation_settings.TargetChoice | None) -> AnnotationTarget | None:
+    if value is None:
+        return None
+    return AnnotationTarget(connection_id=value.connection_id, model=value.model)
+
+
+def _profiles_view(profiles: annotation_settings.Profiles) -> AnnotationProfiles:
+    return AnnotationProfiles(
+        default=AnnotationDefaultProfile(
+            llm=_target_view(profiles.default_llm),  # type: ignore[arg-type]
+            vlm=_target_view(profiles.default_vlm),  # type: ignore[arg-type]
+        ),
+        comfyui=AnnotationComfyuiProfile(
+            llm=_target_view(profiles.comfyui_llm),
+            vlm=_target_view(profiles.comfyui_vlm),
+        ),
+    )
+
+
 def _annotation_settings_response(
-    db: Session, settings: Settings, annotator: Annotator, downloader: WdModelDownloader
+    db: Session,
+    settings: Settings,
+    annotator: Annotator,
+    downloader: WdModelDownloader,
 ) -> AnnotationSettingsResponse:
     config = annotation_settings.load(db)
     return AnnotationSettingsResponse(
-        **config.__dict__,
-        api_key_set=annotation_settings.read_api_key(settings.data_dir) is not None,
+        **{name: getattr(config, name) for name in annotation_settings.SCALAR_FIELDS},
+        profiles=_profiles_view(config.profiles),
         onnx_models=_onnx_model_statuses(settings, downloader),
         pending_count=annotations_domain.pending_count(db),
         queued_count=annotations_domain.queued_count(db),
         calls_last_hour=annotator.calls_last_hour(),
+        connection_calls=_connection_calls(config, annotator),
         usable_engines=annotations_domain.usable_engines(config, settings),  # type: ignore[arg-type]
     )
 
@@ -407,6 +483,7 @@ def get_annotation_settings(
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
     downloader: WdModelDownloader = Depends(get_wd_downloader),
+    _user: CurrentUser = Depends(require_user),
 ) -> AnnotationSettingsResponse:
     return _annotation_settings_response(db, settings, annotator, downloader)
 
@@ -424,51 +501,28 @@ def update_annotation_settings(
     downloader: WdModelDownloader = Depends(get_wd_downloader),
     _user: CurrentUser = Depends(require_admin),
 ) -> AnnotationSettingsResponse:
-    updates = {name: getattr(body, name) for name in body.model_fields_set}
-    # base_url 以外は null を「変更しない」ではなく不正な値として扱う(検証で 422)。
+    updates = {name: getattr(body, name) for name in body.model_fields_set if name != "profiles"}
+    # null を「変更しない」ではなく不正な値として扱う(検証で 422)。組(`profiles`)は書いた
+    # マスだけ変える。先に全部を検証してから保存する(一部だけ保存される事態を避ける)。
     try:
+        for name, value in updates.items():
+            annotation_settings.normalize_value(name, value)
+        profiles = None
+        if "profiles" in body.model_fields_set:
+            if body.profiles is None:
+                raise annotation_settings.AnnotationSettingsValidationError(
+                    t("settings.annotation.invalidTarget")
+                )
+            profiles = annotation_settings.validate_profile_updates(
+                annotation_settings.load(db),
+                body.profiles.model_dump(exclude_unset=True),
+            )
         annotation_settings.save(db, updates)
+        if profiles is not None:
+            annotation_settings.save_profiles(db, profiles)
     except annotation_settings.AnnotationSettingsValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     annotator.notify()
-    return _annotation_settings_response(db, settings, annotator, downloader)
-
-
-@router.put(
-    "/annotation/api-key",
-    response_model=AnnotationSettingsResponse,
-    operation_id="set_annotation_api_key",
-)
-def set_annotation_api_key(
-    body: AnnotationApiKeyUpdateRequest,
-    db: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings),
-    annotator: Annotator = Depends(get_annotator),
-    downloader: WdModelDownloader = Depends(get_wd_downloader),
-    _user: CurrentUser = Depends(require_admin),
-) -> AnnotationSettingsResponse:
-    """推定専用の API キーを保存する(`secrets.json`。値は返さない)。手元のサーバー向けに
-    任意の文字列を受け付けるため、有効性の確認はしない。"""
-    value = body.api_key.strip()
-    if not value:
-        raise HTTPException(status_code=400, detail=t("openai.keyEmpty"))
-    annotation_settings.write_api_key(settings.data_dir, value)
-    return _annotation_settings_response(db, settings, annotator, downloader)
-
-
-@router.delete(
-    "/annotation/api-key",
-    response_model=AnnotationSettingsResponse,
-    operation_id="delete_annotation_api_key",
-)
-def delete_annotation_api_key(
-    db: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings),
-    annotator: Annotator = Depends(get_annotator),
-    downloader: WdModelDownloader = Depends(get_wd_downloader),
-    _user: CurrentUser = Depends(require_admin),
-) -> AnnotationSettingsResponse:
-    annotation_settings.delete_api_key(settings.data_dir)
     return _annotation_settings_response(db, settings, annotator, downloader)
 
 
@@ -539,3 +593,219 @@ def backfill_annotations(
     db.commit()
     annotator.notify()
     return AnnotationBackfillResponse(queued=count)
+
+
+# -- 画像の埋め込み(ADR-0033) ---------------------------------------------------
+# GET は全ログイン者(画面の表示用)、更新・モデルのダウンロードと削除・一括実行・ベクトルの
+# 削除は管理者だけ。リモートの接続先は LLM の接続先(ADR-0032)から選ぶ。
+
+
+def _embedding_model_statuses(
+    settings: Settings, downloader: ClipModelDownloader
+) -> list[EmbeddingOnnxModelStatus]:
+    statuses: list[EmbeddingOnnxModelStatus] = []
+    for name, model in CLIP_MODELS.items():
+        state = downloader.state(name)
+        statuses.append(
+            EmbeddingOnnxModelStatus(
+                name=name,  # type: ignore[arg-type]
+                model_key=onnx_model_key(model),
+                languages=list(model.languages),  # type: ignore[arg-type]
+                dim=model.dim,
+                size_bytes=model.size_bytes,
+                memory_bytes=model.memory_bytes,
+                memory_text_bytes=model.memory_text_bytes,
+                license=model.license,
+                downloaded=clip_is_downloaded(settings.data_dir, name),
+                download_status=state.status,  # type: ignore[arg-type]
+                download_progress=state.progress,
+                download_error=state.error if state.status == "failed" else None,
+            )
+        )
+    return statuses
+
+
+def _embedding_settings_response(
+    db: Session,
+    settings: Settings,
+    downloader: ClipModelDownloader,
+    index_backend: str,
+) -> EmbeddingSettingsResponse:
+    config = embedding_settings.load(db)
+    active_key = embedding_settings.active_model_key(config, settings)
+    languages = None
+    if config.engine == "onnx" and config.onnx_model in CLIP_MODELS:
+        languages = list(CLIP_MODELS[config.onnx_model].languages)
+    pending = queued = failed = 0
+    if active_key is not None:
+        pending = embeddings_domain.pending_count(db, active_key)
+        queued = embeddings_domain.status_count(
+            db,
+            active_key,
+            (embeddings_domain.STATUS_QUEUED, embeddings_domain.STATUS_RUNNING),
+        )
+        failed = embeddings_domain.status_count(db, active_key, (embeddings_domain.STATUS_FAILED,))
+    return EmbeddingSettingsResponse(
+        **{name: getattr(config, name) for name in embedding_settings.FIELDS},
+        active_model_key=active_key,
+        active_languages=languages,  # type: ignore[arg-type]
+        usable=embedding_settings.usable(config, settings),
+        index_backend=index_backend,  # type: ignore[arg-type]
+        onnx_models=_embedding_model_statuses(settings, downloader),
+        stored=[
+            EmbeddingStoredCount(model_key=key, count=count, dim=dim, active=key == active_key)
+            for key, count, dim in embeddings_domain.stored_counts(db)
+        ],
+        pending_count=pending,
+        queued_count=queued,
+        failed_count=failed,
+    )
+
+
+@router.get(
+    "/embeddings",
+    response_model=EmbeddingSettingsResponse,
+    operation_id="get_embedding_settings",
+)
+def get_embedding_settings(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    _user: CurrentUser = Depends(require_user),
+) -> EmbeddingSettingsResponse:
+    return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+_NULLABLE_EMBEDDING_FIELDS = ("remote_connection_id", "remote_model")
+
+
+@router.patch(
+    "/embeddings",
+    response_model=EmbeddingSettingsResponse,
+    operation_id="update_embedding_settings",
+)
+def update_embedding_settings(
+    body: EmbeddingSettingsUpdateRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    embedder: Embedder = Depends(get_embedder),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingSettingsResponse:
+    updates = {name: getattr(body, name) for name in body.model_fields_set}
+    # `remote_connection_id` と `remote_model` のほかは、null を「変更しない」ではなく不正な値と
+    # して扱う(検証で 422)。先に全部を検証してから保存する(一部だけ保存される事態を避ける)。
+    try:
+        for name, value in updates.items():
+            if value is None and name not in _NULLABLE_EMBEDDING_FIELDS:
+                raise embedding_settings.EmbeddingSettingsValidationError(
+                    t("settings.embedding.invalidNull", name=name)
+                )
+        embedding_settings.save(db, updates)
+    except embedding_settings.EmbeddingSettingsValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if embedder.pgvector:
+        # 使うモデルの索引(ADR-0033 4章)。
+        embedder.ensure_active_index()
+    embedder.notify()
+    return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+def _known_embedding_model(name: str) -> str:
+    if name not in CLIP_MODELS:
+        raise HTTPException(status_code=404, detail=t("settings.embedding.unknownOnnxModel"))
+    return name
+
+
+@router.post(
+    "/embeddings/onnx/download",
+    response_model=EmbeddingSettingsResponse,
+    status_code=202,
+    operation_id="download_embedding_model",
+)
+async def download_embedding_model(
+    body: OnnxDownloadRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingSettingsResponse:
+    """モデルを Hugging Face からバックグラウンドで取得する。進み具合は GET の `onnx_models`
+    で見る。既にダウンロード中なら何もしない。"""
+    name = _known_embedding_model(body.model)
+    downloader.start(name)
+    return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+@router.delete(
+    "/embeddings/onnx/{model}",
+    response_model=EmbeddingSettingsResponse,
+    operation_id="delete_embedding_model",
+)
+def delete_embedding_model(
+    model: str,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingSettingsResponse:
+    """モデルのファイルを消す(保存済みのベクトルは消さない)。"""
+    name = _known_embedding_model(model)
+    if downloader.is_downloading(name):
+        raise HTTPException(status_code=409, detail=t("settings.embedding.onnxDownloading"))
+    downloader.delete(name)
+    return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+@router.post(
+    "/embeddings/backfill",
+    response_model=EmbeddingBackfillResponse,
+    operation_id="backfill_embeddings",
+)
+def backfill_embeddings(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    embedder: Embedder = Depends(get_embedder),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingBackfillResponse:
+    """使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)をまとめて
+    待ち行列に入れる。埋め込みが無効、またはモデルが使えなければ 409。"""
+    config = embedding_settings.load(db)
+    if not embedding_settings.usable(config, settings):
+        raise HTTPException(status_code=409, detail=t("embeddings.notUsable"))
+    model_key = embedding_settings.active_model_key(config, settings)
+    assert model_key is not None
+    count = embeddings_domain.backfill(db, model_key)
+    db.commit()
+    embedder.notify()
+    return EmbeddingBackfillResponse(queued=count)
+
+
+@router.delete(
+    "/embeddings/vectors/{model_key:path}",
+    response_model=EmbeddingSettingsResponse,
+    operation_id="delete_embedding_vectors",
+)
+def delete_embedding_vectors(
+    model_key: str,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    downloader: ClipModelDownloader = Depends(get_clip_downloader),
+    index_backend: str = Depends(get_embedding_index_backend),
+    embedder: Embedder = Depends(get_embedder),
+    _user: CurrentUser = Depends(require_admin),
+) -> EmbeddingSettingsResponse:
+    """そのモデルのベクトルと計算の状態をすべて消す(使っているモデルも消せる。画像の取り込み時や
+    一括実行で計算し直す)。無ければ 404。"""
+    count = embeddings_domain.delete_vectors(db, model_key)
+    if count == 0:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=t("settings.embedding.vectorsNotFound"))
+    db.commit()
+    embedder.bump(model_key)
+    return _embedding_settings_response(db, settings, downloader, index_backend)

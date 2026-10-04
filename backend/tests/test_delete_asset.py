@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.conftest import make_png_bytes
+
+pytestmark = pytest.mark.windows
 
 
 def _upload(client: TestClient) -> str:

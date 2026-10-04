@@ -5,11 +5,28 @@
  */
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { listAssetGroups } from '../../../api/client'
+import { stockKindsKey, type StockAssetKind } from '../stockQueryKey'
 
+/**
+ * 種類を問わない一覧のキー。種類で数えた一覧(`assetGroupsQueryKey(kinds)`)もこれを接頭辞に持つので、
+ * `invalidateQueries` / `setQueriesData` にこのキーを渡すと両方に効く。
+ */
 export const ASSET_GROUPS_QUERY_KEY = ['asset-groups'] as const
 
-export function useAssetGroups() {
-  return useQuery({ queryKey: ASSET_GROUPS_QUERY_KEY, queryFn: listAssetGroups })
+/** `kinds` を渡すと、件数と表紙をその種類だけで数えた一覧のキー(ADR-0035)。 */
+export function assetGroupsQueryKey(kinds: readonly StockAssetKind[] | null = null) {
+  return kinds && kinds.length > 0 ? ([...ASSET_GROUPS_QUERY_KEY, 'kinds', stockKindsKey(kinds)] as const) : ASSET_GROUPS_QUERY_KEY
+}
+
+/**
+ * グループの一覧。`kinds` を渡すと `member_count` / `cover_asset_id` をその種類だけで数える
+ * (ストックのパネルが、出しているタイルと件数を合わせるために使う。ADR-0035)。並びと名前は同じ。
+ */
+export function useAssetGroups(kinds: readonly StockAssetKind[] | null = null) {
+  return useQuery({
+    queryKey: assetGroupsQueryKey(kinds),
+    queryFn: () => listAssetGroups(kinds && kinds.length > 0 ? { kind: [...kinds] } : {}),
+  })
 }
 
 /**

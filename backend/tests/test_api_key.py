@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 
 from app.config import Settings
-from app.domain.api_key import delete_file_key, hint, read_file_key, resolve_key, write_file_key
+from app.domain.api_key import delete_file_key, read_file_key, resolve_key, write_file_key
+
+pytestmark = pytest.mark.windows
 
 
 def test_read_file_key_missing_file_returns_none(tmp_path: Path) -> None:
@@ -72,14 +74,6 @@ def test_read_file_key_ignores_corrupted_json(tmp_path: Path) -> None:
     assert read_file_key(tmp_path) is None
 
 
-def test_hint_shows_only_last_four_chars() -> None:
-    assert hint("sk-abcdefgh1234") == "…1234"
-
-
-def test_hint_on_short_key_returns_whole_key() -> None:
-    assert hint("ab") == "…ab"
-
-
 def _settings(*, data_dir: Path, openai_api_key: str | None) -> Settings:
     # env_file を無効化し、明示した値だけで Settings を組み立てる(実物の .env を読まない)。
     return Settings(_env_file=None, data_dir=data_dir, openai_api_key=openai_api_key)
@@ -125,3 +119,32 @@ if sys.platform != "win32":
         for entry in tmp_path.iterdir():
             mode = entry.stat().st_mode & 0o777
             assert mode == 0o600, f"{entry} の権限が 0600 ではありません: {oct(mode)}"
+
+
+def test_concurrent_writes_of_different_fields_keep_all(tmp_path: Path) -> None:
+    """接続先ごとのキーを同時に保存しても、どれも失われない(読み取り→書き込みを鍵で囲む)。"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.domain.api_key import read_secret_field, write_secret_field
+
+    names = [f"field_{i}" for i in range(40)]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda name: write_secret_field(tmp_path, name, f"v-{name}"), names))
+    for name in names:
+        assert read_secret_field(tmp_path, name) == f"v-{name}"
+
+
+def test_write_to_corrupted_file_backs_it_up(tmp_path: Path) -> None:
+    (tmp_path / "secrets.json").write_text("{not json", encoding="utf-8")
+    write_file_key(tmp_path, "sk-new")
+    assert read_file_key(tmp_path) == "sk-new"
+    backups = [p for p in tmp_path.iterdir() if p.name.startswith("secrets.json.broken-")]
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == "{not json"
+
+
+def test_delete_on_corrupted_file_leaves_it_untouched(tmp_path: Path) -> None:
+    (tmp_path / "secrets.json").write_text("{not json", encoding="utf-8")
+    delete_file_key(tmp_path)
+    assert {p.name for p in tmp_path.iterdir()} == {"secrets.json"}
+    assert (tmp_path / "secrets.json").read_text(encoding="utf-8") == "{not json"

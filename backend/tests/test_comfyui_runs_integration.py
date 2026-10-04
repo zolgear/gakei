@@ -299,3 +299,159 @@ def test_comfyui_output_is_saved_under_workflow_name_folder(
     assert re.fullmatch(
         r"assets/comfyui/Anime_v2_final/\d{4}-\d{2}/\d{8}-\d{6}_[0-9a-f]{8}\.png", key
     ), key
+
+
+# -- 最終プロンプト(PE の出力。ADR-0030) --------------------------------------------
+
+
+def _create_pe_workflow(client: TestClient) -> dict:
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {"class_type": "PreviewAny", "inputs": {"source": ["6", 0]}}
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "PE 付き",
+            "operation": "generate",
+            "template": graph,
+            "bindings": {**_t2i_bindings_body(), "final_prompt": "20"},
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["bindings"]["final_prompt"] == "20"
+    return response.json()
+
+
+def _post_comfy_run(client: TestClient, workflow: dict, params: dict | None = None):  # noqa: ANN202
+    return client.post(
+        "/api/runs",
+        json={
+            "operation": "generate",
+            "model": workflow["id"],
+            "prompt": "a cat",
+            "provider": "comfyui",
+            "params": params or {},
+        },
+    )
+
+
+def test_workflow_rejects_missing_final_prompt_node(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    response = client_with_comfyui.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "bad",
+            "operation": "generate",
+            "template": clone(T2I_GRAPH),
+            "bindings": {**_t2i_bindings_body(), "final_prompt": "999"},
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_successful_run_records_text_outputs(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    workflow = _create_pe_workflow(client_with_comfyui)
+    fake = FakeComfyUI()
+    fake.set_history(
+        "prompt-1",
+        {
+            "outputs": {
+                "9": {"images": [{"filename": "out.png", "subfolder": "", "type": "output"}]},
+                "20": {"text": ["A warm, cozy room"]},
+            },
+            "status": {"status_str": "success", "completed": True},
+        },
+    )
+    fake.add_output_file("out.png", "", "output", make_png_bytes())
+    _install_fake_comfyui(client_with_comfyui, fake)
+
+    response = _post_comfy_run(client_with_comfyui, workflow)
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client_with_comfyui, response.json()["id"])
+    assert detail["status"] == "succeeded", detail
+    assert detail["params"]["comfyui_final_prompt"] == "20"
+    expected = [
+        {
+            "role": "final_prompt",
+            "node_id": "20",
+            "class_type": "PreviewAny",
+            "title": None,
+            "text": "A warm, cozy room",
+            "truncated": False,
+        }
+    ]
+    assert detail["text_outputs"] == expected
+
+    listed = client_with_comfyui.get("/api/runs").json()["items"]
+    assert {item["id"]: item["text_outputs"] for item in listed}[detail["id"]] == expected
+
+    asset_id = detail["outputs"][0]["asset_id"]
+    asset = client_with_comfyui.get(f"/api/assets/{asset_id}").json()
+    assert asset["produced_by_run"]["text_outputs"] == expected
+
+
+def test_final_prompt_with_nul_still_succeeds(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0030 2026-10-01 改訂: NUL を含む出力でも、完了時の commit が失敗せず
+    (PostgreSQL の JSONB は `\\u0000` を受け付けない)Run は成功になる。"""
+    _mark_available(monkeypatch)
+    workflow = _create_pe_workflow(client_with_comfyui)
+    fake = FakeComfyUI()
+    fake.set_history(
+        "prompt-1",
+        {
+            "outputs": {
+                "9": {"images": [{"filename": "out.png", "subfolder": "", "type": "output"}]},
+                "20": {"text": ["A warm\x00, cozy room"]},
+            },
+            "status": {"status_str": "success", "completed": True},
+        },
+    )
+    fake.add_output_file("out.png", "", "output", make_png_bytes())
+    _install_fake_comfyui(client_with_comfyui, fake)
+
+    response = _post_comfy_run(client_with_comfyui, workflow)
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client_with_comfyui, response.json()["id"])
+    assert detail["status"] == "succeeded", detail
+    assert detail["text_outputs"][0]["text"] == "A warm, cozy room"
+
+
+def test_failed_run_has_null_text_outputs(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    workflow = _create_pe_workflow(client_with_comfyui)
+    fake = FakeComfyUI()
+    # 画像が無くテキストだけ → comfyuiNoOutput で失敗し、テキストも書かない。
+    fake.set_history(
+        "prompt-1",
+        {
+            "outputs": {"20": {"text": ["only text"]}},
+            "status": {"status_str": "success", "completed": True},
+        },
+    )
+    _install_fake_comfyui(client_with_comfyui, fake)
+
+    response = _post_comfy_run(client_with_comfyui, workflow)
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client_with_comfyui, response.json()["id"])
+    assert detail["status"] == "failed", detail
+    assert detail["error_code"] == "comfyuiNoOutput"
+    assert detail["text_outputs"] is None
+
+
+def test_run_rejects_client_supplied_comfyui_final_prompt_param(
+    client_with_comfyui: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_available(monkeypatch)
+    workflow = _create_pe_workflow(client_with_comfyui)
+    response = _post_comfy_run(client_with_comfyui, workflow, {"comfyui_final_prompt": "20"})
+    assert response.status_code == 422

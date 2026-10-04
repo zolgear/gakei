@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
@@ -18,6 +19,8 @@ from sqlalchemy import text
 from app.domain.models import Asset
 from app.tools.backfill_embedded_meta import run_backfill
 from tests.conftest import make_png_bytes
+
+pytestmark = pytest.mark.windows
 
 _A1111_TEXT = "masterpiece, 1girl\nNegative prompt: lowres\nSteps: 20, Sampler: Euler, CFG scale: 7"
 
@@ -104,7 +107,7 @@ def test_backfill_reports_missing_blob(client: TestClient) -> None:
     with session_factory() as session:
         asset = session.get(Asset, uuid.UUID(uploaded["id"]))
         assert asset is not None
-        blob_path = store.content_path(asset.blob_key, asset.sha256, "original")
+        blob_path = store.local_path(asset.blob_key, asset.sha256, "original")
     blob_path.unlink()
 
     stats = run_backfill(session_factory, store)

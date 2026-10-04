@@ -1,0 +1,440 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-bg);
+}
+
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.headerNote {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.message {
+  margin: 24px 16px;
+  color: var(--color-text-muted);
+}
+
+.invalid {
+  margin: 64px auto;
+  padding: 0 16px;
+  max-width: 480px;
+  text-align: center;
+}
+
+.invalidTitle {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.invalidDetail {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.viewer {
+  min-width: 0;
+  min-height: 0;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-bg-raised);
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.title[data-untitled='true'] {
+  color: var(--color-text-muted);
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.meta dt {
+  color: var(--color-text-faint);
+}
+
+.meta dd {
+  margin: 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 最終プロンプト(ADR-0030)。見出しの上の余白は .subheading と揃える。 */
+.finalPrompt {
+  margin-top: 8px;
+}
+
+.subheading {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.prompt {
+  margin: 0;
+  padding: 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.params {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.paramRow {
+  display: grid;
+  grid-template-columns: minmax(0, 40%) 1fr;
+  gap: 8px;
+}
+
+.paramRow dt {
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+
+.paramRow dd {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.downloadButton {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.thumbButton {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.thumbButton[aria-current='true'] {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.thumbImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.graph {
+  flex-shrink: 0;
+  display: flex;
+  height: 360px;
+}
+
+/* 見出しと、その右の操作(「Generated 詳細を見る」「編集前と比較する」)。 */
+.subheadingRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.linkButton {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.backButton {
+  align-self: flex-start;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Run の詳細の入力・出力のサムネイル(通常の画面の Run の詳細の compact と同じ大きさ)。 */
+.runThumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runThumbButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.runThumbImg {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.runThumbButton[aria-current='true'] .runThumbImg {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.runThumbLabel {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+/* 編集前との比較(ビューアの場所に出す)。 */
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.compareHeader {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.compareTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.compareEnd {
+  height: 28px;
+  padding: 0 10px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.compareActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compareCanvas {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* 全画面の系列グラフ(`/s/:token/lineage`。ADR-0029 3章、2026-10-01 追記)。 */
+.lineageFull {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 16px;
+  box-sizing: border-box;
+}
+
+.lineageFullHeader {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lineageFullTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* ノードを大きく描く(通常は幅 128px・サムネイルの高さ 82px。LineageNodes.module.css)。
+   レイアウトの間隔は PublicLineageGraph.tsx の FULL_LAYOUT で合わせる。 */
+.fullGraph {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  --lineage-node-width: 240px;
+  --lineage-thumb-height: 200px;
+}
+
+@media (max-width: 767px) {
+  .page {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .main {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .viewer {
+    height: 60dvh;
+    flex-shrink: 0;
+  }
+
+  .side {
+    overflow: visible;
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .downloadButton,
+  .backButton,
+  .compareEnd {
+    min-height: 44px;
+  }
+
+  /* ページは縦に伸びる(height: auto)ので、全画面の系列グラフは画面の高さに合わせる
+     (ヘッダー 44px + 境界線 1px を除く)。 */
+  .lineageFull {
+    flex: none;
+    height: calc(100dvh - 45px);
+    padding: 10px;
+  }
+
+  .linkButton {
+    min-height: 32px;
+  }
+}
+
+.paramJson {
+  font-size: 12px;
+}
+
+.paramJson summary {
+  cursor: pointer;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.paramJsonBlock {
+  margin: 4px 0 0;
+  padding: 8px;
+  max-height: 480px;
+  overflow: auto;
+  background: var(--color-bg-sunken);
+  border-radius: var(--radius);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}

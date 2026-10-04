@@ -2,7 +2,7 @@
 
 URL は MCP の `create_download_url` が発行する。Cookie やアクセストークンによる認証は行わず、
 URL に含むトークン自体を認可とする(そのため `main.py` の `require_user` の括りに入れない)。
-エージェント(モデル)がトークンを知らなくても、手元で動く道具(curl など)で原本を取れる
+エージェント(モデル)がトークンを知らなくても、ローカルで動く道具(curl など)で原本を取れる
 ようにするため。
 
 取得の時点でも次を確かめ、どれかが満たされなければ 404(理由は区別しない):
@@ -21,9 +21,9 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.assets import asset_content_response
+from app.auth.runtime import AuthRuntime, get_auth_runtime
 from app.auth.sessions import viewer_for_issuer
-from app.config import Settings
-from app.deps import get_session, get_settings, get_store
+from app.deps import get_session, get_store
 from app.domain import download_tickets as download_tickets_domain
 from app.domain import mcp_settings
 from app.domain.storage import AssetStore
@@ -46,7 +46,7 @@ def download_by_url(
     token: str,
     db: Session = Depends(get_session),
     store: AssetStore = Depends(get_store),
-    settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
 ) -> Response:
     """MCP の `create_download_url` で発行した URL から原本を取得する。URL は10分間・1回限り
     有効。不明・使用済み・期限切れ・見えなくなった Asset は、どれも 404。"""
@@ -58,15 +58,15 @@ def download_by_url(
     viewer = viewer_for_issuer(
         db,
         ticket.user_id,
-        auth_mode=settings.auth_mode,
-        admin_emails=settings.admin_email_set(),
+        auth_mode=runtime.mode,
+        admin_emails=runtime.admin_email_set(),
     )
     if viewer is None:
         raise _not_found()
     asset = get_visible_asset(db, viewer, ticket.asset_id)
     if asset is None:
         raise _not_found()
-    if not store.content_path(asset.blob_key, asset.sha256, "original").exists():
+    if not store.content_exists(asset.blob_key, asset.sha256, "original"):
         raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
     # 同時に取得されても片方だけが通る。使用済みを確定してから配信する。
     if not download_tickets_domain.mark_used(db, ticket):

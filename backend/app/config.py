@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -40,6 +39,24 @@ class Settings(BaseSettings):
     # のドライバ名に読み替える)。PostgreSQL でも画像などは `DATA_DIR` に置く。
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
+    # ADR-0028: 画像の原本と派生の保存先。`local`(既定。`DATA_DIR`)、`azure_blob`、`s3`。
+    # 他の保存先でも、アバター・secrets.json・モデル・SQLite などは `DATA_DIR` に置く。
+    storage_backend: Literal["local", "azure_blob", "s3"] = Field(
+        default="local", alias="STORAGE_BACKEND"
+    )
+    # Azure Blob Storage。接続は接続文字列か、アカウントの URL(`DefaultAzureCredential`)の
+    # どちらか一方。接続文字列は鍵を含むので、ログや画面に出さない。
+    azure_storage_container: str | None = Field(default=None, alias="AZURE_STORAGE_CONTAINER")
+    azure_storage_connection_string: str | None = Field(
+        default=None, alias="AZURE_STORAGE_CONNECTION_STRING"
+    )
+    azure_storage_account_url: str | None = Field(default=None, alias="AZURE_STORAGE_ACCOUNT_URL")
+    # S3 互換ストレージ。資格情報は boto3 の標準の探し方(AWS_ACCESS_KEY_ID など)に任せる。
+    s3_bucket: str | None = Field(default=None, alias="S3_BUCKET")
+    s3_region: str | None = Field(default=None, alias="S3_REGION")
+    s3_endpoint_url: str | None = Field(default=None, alias="S3_ENDPOINT_URL")
+    s3_force_path_style: bool = Field(default=False, alias="S3_FORCE_PATH_STYLE")
+
     # ADR-0017: 主プロバイダーは常に openai。FAKE_PROVIDER=1 のときだけ fake に切り替える
     # (開発・CI・確認用の内部フラグ。利用者向けの設定一覧には載せない)。
     fake_provider: bool = Field(default=False, alias="FAKE_PROVIDER")
@@ -67,8 +84,10 @@ class Settings(BaseSettings):
     comfyui_url: str = Field(default="", alias="COMFYUI_URL")
     comfyui_timeout_seconds: float = Field(default=1800.0, alias="COMFYUI_TIMEOUT_SECONDS")
 
-    # ADR-0019: 個人モード(none、既定)か OIDC(Keycloak・Entra ID 等)か。
-    auth_mode: Literal["none", "oidc"] = Field(default="none", alias="AUTH_MODE")
+    # ADR-0019: 個人モード(none)か OIDC(Keycloak・Entra ID 等)か。ADR-0034 1章: 明示した
+    # ときだけ DB(画面の設定)より優先し、画面のモード切り替えをロックする(緊急の無効化にも
+    # 使う)。未指定(None)なら DB → 既定 none。実効のモードは `app.auth.runtime` から読む。
+    auth_mode: Literal["none", "oidc"] | None = Field(default=None, alias="AUTH_MODE")
 
     # OIDC の発行者(例 https://keycloak.example.com/realms/gakei)。discovery は
     # `{issuer}/.well-known/openid-configuration` から行う(初回ログイン時、Authlib がキャッシュ)。
@@ -93,8 +112,8 @@ class Settings(BaseSettings):
     auth_allowed_email_domains: str = Field(default="", alias="AUTH_ALLOWED_EMAIL_DOMAINS")
 
     # ログインセッション(`auth_session`)の有効期間(時間)。1時間〜30日(720時間)の範囲
-    # (I-10、2026-09-27 追記)。
-    auth_session_hours: int = Field(default=12, ge=1, le=24 * 30, alias="AUTH_SESSION_HOURS")
+    # (I-10、2026-09-27 追記)。既定は 30日(2026-10-01 改訂。ADR-0019 2章)。
+    auth_session_hours: int = Field(default=24 * 30, ge=1, le=24 * 30, alias="AUTH_SESSION_HOURS")
 
     # `gakei_oidc` Cookie(state/nonce/PKCE の一時保存)の署名鍵。未指定なら生成して
     # `DATA_DIR/secrets.json` の `auth_secret` に保存する(auth/secret.py)。
@@ -105,23 +124,16 @@ class Settings(BaseSettings):
     # で動かす場合は未設定のままでよい(`app.version.get_commit` が None を返す)。
     gakei_commit: str | None = Field(default=None, alias="GAKEI_COMMIT")
 
-    def admin_email_set(self) -> set[str]:
-        """`AUTH_ADMIN_EMAILS` を小文字化・trim して集合にする。"""
-        return {part.strip().lower() for part in self.auth_admin_emails.split(",") if part.strip()}
+    # ADR-0034: 以下の `.env` の認証の値は、DB(画面の設定)に値が無い項目の初期値として
+    # `app.domain.auth_settings` が読む。リクエストの処理からは直接読まない。
 
-    def allowed_email_domain_set(self) -> set[str]:
-        """`AUTH_ALLOWED_EMAIL_DOMAINS` を小文字化・trim して集合にする(先頭の `@` は取る)。"""
-        return {
-            part.strip().lower().lstrip("@")
-            for part in self.auth_allowed_email_domains.split(",")
-            if part.strip()
-        }
+    def admin_email_list(self) -> list[str]:
+        """`AUTH_ADMIN_EMAILS` を小文字化・trim した一覧(重複は除き、順序は保つ)。"""
+        return _split_csv(self.auth_admin_emails)
 
-    @property
-    def public_base_is_https(self) -> bool:
-        if not self.public_base_url:
-            return False
-        return urlparse(self.public_base_url).scheme == "https"
+    def allowed_email_domain_list(self) -> list[str]:
+        """`AUTH_ALLOWED_EMAIL_DOMAINS` を小文字化・trim した一覧(先頭の `@` は取る)。"""
+        return _split_csv(self.auth_allowed_email_domains, strip_at=True)
 
     @property
     def db_path(self) -> Path:
@@ -153,6 +165,17 @@ class Settings(BaseSettings):
     @property
     def tmp_partial_dir(self) -> Path:
         return self.data_dir / "tmp" / "partial"
+
+
+def _split_csv(raw: str, *, strip_at: bool = False) -> list[str]:
+    result: list[str] = []
+    for part in raw.split(","):
+        value = part.strip().lower()
+        if strip_at:
+            value = value.lstrip("@")
+        if value and value not in result:
+            result.append(value)
+    return result
 
 
 def sqlite_url(db_path: Path) -> str:

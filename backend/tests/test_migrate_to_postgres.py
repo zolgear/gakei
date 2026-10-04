@@ -9,16 +9,20 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 import pytest
 from sqlalchemy import create_engine, inspect, select, text
 
 from app.config import sqlite_url
 from app.db import make_engine, make_session_factory
+from app.domain import embedding_index
 from app.domain.models import (
     AppSetting,
     AppUser,
     Asset,
+    AssetEmbedding,
     AssetKind,
+    AssetPerceptualHash,
     AssetTag,
     PromptSet,
     PromptSetItem,
@@ -29,6 +33,7 @@ from app.domain.models import (
     RunStatus,
     Tag,
 )
+from app.embedding.base import blob_to_vector, vector_to_blob
 from app.main import alembic_config, run_migrations
 from app.tools.migrate_to_postgres import MigrationAbortedError, main, migrate
 from tests.conftest import requires_postgresql
@@ -40,6 +45,8 @@ _SKETCH_ID = uuid.UUID("00000000-0000-4000-8000-000000000002")
 _RUN_ID = uuid.uuid4()
 _USER_ID = uuid.uuid4()
 _CREATED = datetime(2026, 9, 1, 12, 34, 56, 789000, tzinfo=UTC)
+_VECTOR = np.array([0.5, -0.5, 0.5, 0.5], dtype=np.float32)
+_DHASH = bytes.fromhex("ff00a5c3e7180f81")
 
 
 def _asset(asset_id: uuid.UUID, kind: AssetKind, **kwargs: object) -> Asset:
@@ -114,6 +121,27 @@ def source_db(tmp_path: Path) -> Path:
         db.add(tag)
         db.flush()
         db.add(AssetTag(asset_id=_BASE_ID, tag_id=tag.id, source="user", removed=True))
+        # ADR-0033: 埋め込みのベクトル(BLOB)。
+        db.add(
+            AssetEmbedding(
+                asset_id=_BASE_ID,
+                model_key="onnx:clip-vit-b32-u8@rev",
+                status="succeeded",
+                dim=4,
+                vector=vector_to_blob(_VECTOR),
+                updated_at=_CREATED,
+            )
+        )
+        # ADR-0033 12章: 知覚ハッシュ。
+        db.add(
+            AssetPerceptualHash(
+                asset_id=_BASE_ID,
+                dhash=_DHASH,
+                color=bytes(range(64)),
+                version=1,
+                created_at=_CREATED,
+            )
+        )
         prompt_set = PromptSet(name="セット")
         db.add(prompt_set)
         db.flush()
@@ -182,10 +210,25 @@ def test_copies_all_tables_and_row_counts_match(
             select(Asset.id).where(Asset.embedded_meta["prompt"].as_string() == "埋め込み")
         ).scalar_one()
         assert hit == _SKETCH_ID
+        embedding = db.execute(select(AssetEmbedding)).scalar_one()
+        assert np.array_equal(blob_to_vector(embedding.vector), _VECTOR)
+        # 64 ビット全部を使う値(最上位ビットが立つ)もそのまま移る。
+        phash = db.execute(select(AssetPerceptualHash)).scalar_one()
+        assert phash.dhash == _DHASH
+        assert phash.color == bytes(range(64))
+        assert phash.version == 1
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        # pgvector を使えるなら、`embedding` 列も BLOB から作っている(ADR-0033 4章)。
+        if embedding_index.has_embedding_column(conn):
+            text_value = conn.execute(
+                text("SELECT embedding::text FROM asset_embedding")
+            ).scalar_one()
+            assert text_value == embedding_index.vector_literal(_VECTOR).replace(" ", "")
     engine.dispose()
-    assert version == "0021"
+    assert counts["asset_embedding"] == (1, 1)
+    assert counts["asset_perceptual_hash"] == (1, 1)
+    assert version == "0025"
 
     # 元の SQLite は消さない(戻したい場合は DATABASE_URL を外せば元の状態で動く)。
     assert source_db.is_file()

@@ -2,7 +2,7 @@
 無ければタイトルも)、ONNX タガー(WD Tagger v3)。
 
 LLM と VLM は OpenAI 互換 API を OpenAI Python SDK で呼ぶ。Responses API(既定)と Chat
-Completions の両方に対応する(手元のサーバーには Chat Completions しか持たないものがあるため)。
+Completions の両方に対応する(ローカルのサーバーには Chat Completions しか持たないものがあるため)。
 応答の JSON は `response_format` に頼らず、指示で JSON を求めて本文から取り出す(互換
 サーバーの対応がまちまちなため)。
 
@@ -23,9 +23,11 @@ VLM には ONNX のタグ(`known_tags`)を渡し、同じ意味のタグを付�
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -35,8 +37,10 @@ from openai import AsyncOpenAI
 from PIL import Image
 
 from app.annotation.wd_tagger import InsufficientMemoryError, WdTagger
-from app.domain.annotation_settings import AnnotationConfig, Connection
+from app.domain.annotation_settings import AnnotationConfig, Target
 from app.i18n import t
+
+logger = logging.getLogger(__name__)
 
 VLM_MAX_SIDE = 1024
 VLM_MAX_TAGS = 10
@@ -134,8 +138,13 @@ class AnnotationEngineError(Exception):
 
 @dataclass
 class EngineContext:
+    """推定1件の設定と送り先。`llm` はタイトルとタグの訳(6章)、`vlm` はタグに使う
+    (ADR-0024 8章。画像ごとに「既定」か「ComfyUI の画像」の組から決める)。"""
+
     config: AnnotationConfig
-    connection: Connection
+    # 使わない用途(無効なエンジン)は None。
+    llm: Target | None = None
+    vlm: Target | None = None
 
 
 @dataclass
@@ -315,39 +324,74 @@ def _safe_api_message(e: openai.APIError) -> str:
 
 
 class OpenAIEngines:
+    # 接続先ごとのクライアントを持つ上限(設定を何度も変えたときに増え続けないように)。
+    _CLIENTS_MAX = 8
+
     def __init__(self, tagger: WdTagger) -> None:
         self.tagger = tagger
-        self._client: AsyncOpenAI | None = None
-        self._client_key: tuple[str, str | None] | None = None
+        # (キー, Base URL) ごとのクライアント。LLM と VLM で接続先が異なりうる(ADR-0024 8章)。
+        # 使った順に並べ(最後が最新)、上限を超えたら最も古いものから捨てる。
+        self._clients: dict[tuple[str, str | None], AsyncOpenAI] = {}
+        # 捨てたクライアントを閉じるタスク(終わるまで参照を持っておく)。
+        self._closing: set[asyncio.Task[None]] = set()
 
-    def _client_for(self, connection: Connection) -> AsyncOpenAI:
-        if not connection.api_key:
+    def _discard_client(self, client: AsyncOpenAI) -> None:
+        """捨てたクライアントを閉じる(接続を残さないように)。`AsyncOpenAI.close()` は
+        コルーチンなので、イベントループの上ではタスクにして閉じる。ループの外なら閉じずに
+        ガベージコレクションに任せる。"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self._close_quietly(client))
+        self._closing.add(task)
+        task.add_done_callback(self._closing.discard)
+
+    @staticmethod
+    async def _close_quietly(client: AsyncOpenAI) -> None:
+        try:
+            await client.close()
+        except Exception:  # noqa: BLE001 - 捨てるクライアントの後始末の失敗は無視する
+            logger.debug("推定のクライアントを閉じられませんでした", exc_info=True)
+
+    def _client_for(self, target: Target) -> AsyncOpenAI:
+        if not target.api_key:
             raise AnnotationEngineError(t("annotations.apiKeyMissing"))
-        key = (connection.api_key, connection.base_url)
-        if self._client is None or self._client_key != key:
-            self._client = AsyncOpenAI(
-                api_key=connection.api_key,
-                base_url=connection.base_url,
+        key = (target.api_key, target.base_url)
+        client = self._clients.pop(key, None)
+        if client is None:
+            # 最も長く使っていないものから捨てる(worker は1件ずつ処理し、1件で使うのは
+            # 高々2つなので、使用中のクライアントを捨てることは無い)。
+            while len(self._clients) >= self._CLIENTS_MAX:
+                oldest = next(iter(self._clients))
+                self._discard_client(self._clients.pop(oldest))
+            client = AsyncOpenAI(
+                api_key=target.api_key,
+                base_url=target.base_url,
                 max_retries=2,
                 timeout=_TIMEOUT_SECONDS,
             )
-            self._client_key = key
-        return self._client
+        # 最新として末尾に入れ直す。
+        self._clients[key] = client
+        return client
 
     async def _complete(
         self,
-        ctx: EngineContext,
-        model: str,
+        target: Target | None,
         instructions: str,
         text: str,
         image_jpeg: bytes | None = None,
     ) -> str:
-        client = self._client_for(ctx.connection)
+        """`target` の接続先の `target.model` を呼ぶ。"""
+        if target is None:
+            raise AnnotationEngineError(t("annotations.connectionMissing"))
+        client = self._client_for(target)
+        model = target.model
         data_url = None
         if image_jpeg is not None:
             data_url = "data:image/jpeg;base64," + base64.b64encode(image_jpeg).decode("ascii")
         try:
-            if ctx.config.api_style == "chat":
+            if target.api_style == "chat":
                 content: Any = text
                 if data_url is not None:
                     content = [
@@ -376,9 +420,7 @@ class OpenAIEngines:
 
     async def title_from_prompt(self, prompt: str, ctx: EngineContext) -> str:
         language = ctx.config.language
-        raw = await self._complete(
-            ctx, ctx.config.llm_model, _TITLE_INSTRUCTIONS[language], prompt[:4000]
-        )
+        raw = await self._complete(ctx.llm, _TITLE_INSTRUCTIONS[language], prompt[:4000])
         title = clean_title(raw)
         if title is None:
             raise AnnotationEngineError(t("annotations.emptyTitle"))
@@ -395,7 +437,7 @@ class OpenAIEngines:
         language = ctx.config.language
         instructions = build_vlm_instructions(ctx.config, want_title, known_tags)
         text = _VLM_HINT[language].format(prompt=prompt[:4000]) if prompt else "-"
-        raw = await self._complete(ctx, ctx.config.vlm_model, instructions, text, image_jpeg)
+        raw = await self._complete(ctx.vlm, instructions, text, image_jpeg)
         result = parse_vlm_json(raw)
         if not want_title:
             result.title = None
@@ -405,8 +447,7 @@ class OpenAIEngines:
 
     async def translate_tags(self, tags: list[str], ctx: EngineContext) -> dict[str, str]:
         raw = await self._complete(
-            ctx,
-            ctx.config.llm_model,
+            ctx.llm,
             _TRANSLATE_INSTRUCTIONS[ctx.config.language],
             "\n".join(tags),
         )

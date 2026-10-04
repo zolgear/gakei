@@ -53,6 +53,7 @@
       "workspaceNav": "ワークスペース",
       "historyTab": "履歴",
       "studioTab": "生成",
+      "mapTab": "マップ",
       "queueStatus": "実行中 {running}、待機 {queued}",
       "running": "実行中 {count}",
       "queued": "待機 {count}",
@@ -186,7 +187,11 @@
     "hint": "実行・画像・プロンプトセットを横断して検索します",
     "openRun": "この Run を表示",
     "showImage": "画像を表示",
-    "loadPrompt": "プロンプト欄に読み込む"
+    "loadPrompt": "プロンプト欄に読み込む",
+    "imageSearch": "画像で探す",
+    "imageSearchTitle": "手元の画像に似た画像を、検索ページで探します(画像は保存しません)",
+    "semanticHint": "探したい画像を文章で入力します",
+    "dropOverlay": "落として、検索ページで似た画像を探す"
   },
   "search": {
     "ariaLabel": "検索",
@@ -211,17 +216,73 @@
       "submit": "検索",
       "enterQuery": "検索語を入力してください。",
       "countSuffix": "{count} 件",
-      "truncatedNote": "上位 {limit} 件のみ表示しています"
+      "truncatedNote": "上位 {limit} 件のみ表示しています",
+      "modeLabel": "検索の方式",
+      "modeKeyword": "キーワード",
+      "modeSemantic": "意味",
+      "semanticPlaceholder": "探したい画像を文章で",
+      "semanticEnterQuery": "探したい画像を文章で入力するか、画像で探してください。",
+      "semanticNoResults": "見つかりません。",
+      "semanticHeading": "近い順",
+      "showMore": "さらに表示",
+      "englishOnlyHint": "使っているモデルは英語向けです。日本語ではほとんど当たらないので、英語で検索してください。",
+      "similarHeading": "この画像に似た画像",
+      "similarOriginLabel": "起点の画像を開く",
+      "searchFailed": "検索に失敗しました。",
+      "imageSearch": "画像で探す",
+      "imageSearchChoose": "画像を選ぶ",
+      "imageSearchDropHint": "画像をこの画面に落とすか、貼り付け(Ctrl+V / ⌘V)でも探せます。",
+      "imageSearchNotStored": "画像は保存しません。手元の画像なので URL には残らず、再読み込みすると消えます。",
+      "imageSearchRemote": "画像は、設定された推論サーバーに送られます。",
+      "imageSearchClear": "画像を外す",
+      "imageSearchHeading": "この画像に近い順",
+      "imageSearchQueryLabel": "探す元の画像(保存しません)",
+      "imageSearchDropOverlay": "落として、この画像に似た画像を探す",
+      "imageSearchNotImage": "画像のファイルを選んでください。"
     }
   },
   "settings": {
     "title": "設定",
     "userHeading": "ユーザー設定",
     "adminHeading": "管理者設定",
-    "adminOnly": "管理者だけが変更できます。",
+    "pages": {
+      "profile": "プロフィール",
+      "display": "表示",
+      "shares": "共有リンク",
+      "accessTokens": "アクセストークン",
+      "openai": "OpenAI",
+      "llmConnections": "LLM の接続先",
+      "annotation": "自動タイトル・タグ",
+      "embeddings": "埋め込み",
+      "comfyui": "ComfyUI",
+      "mcp": "MCP",
+      "shareLinks": "共有リンクの公開",
+      "about": "GAKEI について",
+      "authentication": "認証"
+    },
+    "frame": {
+      "changeCount": {
+        "one": "{count} 件の変更",
+        "other": "{count} 件の変更"
+      },
+      "discard": "変更を取り消す",
+      "save": "保存",
+      "saving": "保存中…",
+      "savedToast": "保存しました",
+      "saveFailed": "保存に失敗しました",
+      "unsavedMark": "保存していない変更があります",
+      "tocLabel": "設定の目次"
+    },
+    "leave": {
+      "message": "保存していない変更があります",
+      "discard": "変更を破棄して移動",
+      "stay": "このページに残る"
+    },
+    "openai": {
+      "connectionHeading": "接続",
+      "generationHeading": "生成"
+    },
     "profile": {
-      "heading": "プロフィール",
-      "avatarLabel": "アバター",
       "upload": "画像をアップロード",
       "chooseFromStock": "ストックから選ぶ",
       "delete": "削除",
@@ -237,7 +298,7 @@
       "help": "自分の生成画像やアップロードした画像をアバターに使えます(PNG/JPEG/WebP、20MB以下)。切り出す範囲を選べます。"
     },
     "display": {
-      "heading": "表示",
+      "intro": "このページの項目は、変えるとすぐに反映されます。このブラウザにだけ保存されます。",
       "faviconProgress": {
         "label": "タブのアイコンで進捗を示す",
         "help": "生成の待機中・実行中に、ブラウザのタブのアイコンで状態を示します。オフにしてもアプリ内のロゴの動きは変わりません。"
@@ -247,10 +308,22 @@
         "optionBottom": "下段に入力欄 (既定)",
         "optionSidebar": "左に入力欄 (サイドバー)",
         "help": "狭い幅(768px 未満)では、どちらを選んでも結果の下に入力欄が並びます。生成画面の結果エリア右上のボタンでも切り替えられます。"
+      },
+      "stockShowSketchMask": {
+        "label": "スケッチとマスクをストックに出す",
+        "help": "オフのときは、系列グラフと Run の詳細から開けます。"
+      },
+      "browserStorage": {
+        "heading": "ブラウザに保存した設定",
+        "label": "このブラウザの設定を既定に戻す",
+        "help": "このページの表示の設定、パネルの幅や開閉、マップの値、生成フォームの下書きなどは、このブラウザにだけ保存されています。まとめて消すと既定に戻ります。",
+        "clear": "まとめて消す",
+        "confirmMessage": "このブラウザに保存した GAKEI の設定をまとめて消し、ページを読み込み直します。\n\n消えるもの: 表示言語(ブラウザの言語に戻ります)、タブのアイコンの進捗表示、生成画面のレイアウトと入力欄の幅・高さ、サイドバーの幅と開いていたパネル、ストックとビューアの節の開閉、マップの値(タブ・近傍の数・上限・しきい値・系列の辺)、スケッチのペン、シードのモード、最後に選んだグループ。\n\nサーバーに保存した設定・画像・履歴と、ログインの状態は変わりません。",
+        "confirmWarning": "生成フォームに書きかけのプロンプト・パラメーター・入力画像の指定も消えます。",
+        "confirmLabel": "消して読み込み直す"
       }
     },
     "accessTokens": {
-      "heading": "アクセストークン",
       "intro": "AI エージェントを MCP で GAKEI に接続するときに使います。トークンはあなたの権限で動くので、他の人と共有しないでください。",
       "loading": "読み込み中...",
       "loadFailed": "アクセストークンを取得できませんでした。",
@@ -280,7 +353,7 @@
       "revokedToast": "トークンを失効させました"
     },
     "apiKey": {
-      "heading": "OpenAI API キー",
+      "heading": "API キー",
       "loading": "読み込み中...",
       "loadFailed": "キーの状態を取得できませんでした。サーバーを更新した直後なら、サーバーを起動し直してください。",
       "retry": "再読み込み",
@@ -288,8 +361,7 @@
       "notRequired": "現在のプロバイダーは API キーを使いません(確認用のダミー画像を返します)。ただし、キーの登録・削除はここから行えます。",
       "inputPlaceholder": "sk-...",
       "verifying": "確認中...",
-      "save": "保存",
-      "delete": "削除",
+      "delete": "キーを削除",
       "communicationFailed": "通信に失敗しました",
       "helpTextBefore": "画面から登録したキーは、この PC のデータディレクトリ(secrets.json)に保存されます。キーは",
       "helpTextLink": "OpenAI の管理画面",
@@ -312,10 +384,9 @@
         "loadFailed": "接続先の状態を取得できませんでした。サーバーを更新した直後なら、サーバーを起動し直してください。",
         "retry": "再読み込み",
         "envLocked": "環境変数(.env)の値が優先されるため、ここでは変更できません。",
-        "inputPlaceholder": "空欄なら OpenAI 本体(https://api.openai.com/v1)を使います",
+        "inputPlaceholder": "例: http://127.0.0.1:4000/v1",
         "helpText": "LiteLLM などの OpenAI 互換プロキシを使うときに指定します。モデル名はそのまま送るため、プロキシ側で GAKEI と同じモデル名を用意してください。表示される価格の目安は OpenAI の価格のままです。",
         "verifying": "確認中...",
-        "save": "保存",
         "clear": "既定に戻す",
         "communicationFailed": "通信に失敗しました",
         "savedToast": "接続先を保存しました",
@@ -328,35 +399,105 @@
           "default": "OpenAI 本体",
           "sourceEnv": "環境変数(.env)",
           "sourceFile": "画面で保存(secrets.json)"
-        }
-      }
+        },
+        "customStatus": "OpenAI 互換の接続先",
+        "urlLabel": "URL",
+        "defaultUrl": "https://api.openai.com/v1",
+        "sourceLabel": "出どころ",
+        "change": "接続先を変更",
+        "dialogTitle": "接続先を変更",
+        "verifyHelp": "登録する前にこの接続先につないで、使えるか確かめます(15 秒ほどかかることがあります)。OpenAI 本体に戻すときは「既定に戻す」を使います。",
+        "verifyAndRegister": "確かめて登録"
+      },
+      "sourceLabel": "出どころ",
+      "register": "キーを登録",
+      "replace": "キーを差し替える",
+      "registerDialogTitle": "API キーを登録",
+      "replaceDialogTitle": "API キーを差し替える",
+      "inputLabel": "API キー",
+      "verifyHelp": "登録する前に OpenAI に接続して、このキーが使えるか確かめます(15 秒ほどかかることがあります)。",
+      "verifyAndRegister": "確かめて登録"
     },
     "general": {
-      "heading": "生成",
       "loading": "読み込み中...",
       "loadFailed": "設定を取得できませんでした。",
       "retry": "再読み込み",
-      "saveFailed": "保存に失敗しました",
       "envNote": "環境変数(.env)の値を使用中です。ここで保存すると、以降は画面の設定が優先されます。",
       "moderation": {
         "label": "moderation",
         "optionLow": "low",
         "optionAuto": "auto",
         "help": "入力画像を使わない生成(Generate API)にだけ適用されます。編集(Edit)には影響しません。low は auto より制限が緩く、auto は OpenAI の標準のフィルタリングです。",
-        "savedToast": "moderation を保存しました",
         "resetToDefault": "既定値({default})に戻す"
-      }
+      },
+      "resetPending": "保存すると既定値({default})に戻ります"
+    },
+    "llmConnections": {
+      "intro": "LLM と VLM(画像を読むモデル)の送り先です。自動タイトル・タグなど、LLM を使う機能はここに登録した接続先から選びます。Ollama や LM Studio、LiteLLM など、OpenAI 互換のサーバーを登録できます。",
+      "loading": "読み込み中...",
+      "loadFailed": "LLM の接続先を取得できませんでした。",
+      "retry": "再読み込み",
+      "communicationFailed": "通信に失敗しました",
+      "builtinName": "OpenAI の設定",
+      "builtinBadge": "組み込み",
+      "builtinHelp": "名前、Base URL、キーは OpenAI の設定を使います。変えられるのは API の形式だけです。",
+      "openAiSettingsLink": "OpenAI の設定を開く",
+      "baseUrlLabel": "Base URL",
+      "baseUrlOpenAiDefault": "OpenAI(既定)",
+      "apiStyleLabel": "API の形式",
+      "apiStyleResponses": "Responses API",
+      "apiStyleChat": "Chat Completions",
+      "apiStyleHelp": "Responses API に対応していなければ Chat Completions を選びます。",
+      "apiKeyLabel": "キー",
+      "apiKeySet": "設定済み",
+      "apiKeyNotSet": "未設定(ダミーのキーを送ります)",
+      "builtinApiKeyNotSet": "未設定",
+      "edit": "編集",
+      "editHeading": "接続先を編集",
+      "editSubmit": "変更を反映",
+      "delete": "削除",
+      "cancel": "キャンセル",
+      "deleteConfirm": {
+        "message": "接続先「{name}」を削除します。保存したキーも削除します。",
+        "confirmLabel": "削除する"
+      },
+      "deletedToast": "接続先を削除しました",
+      "updatedToast": "接続先を更新しました",
+      "add": "接続先を追加",
+      "addHeading": "接続先を追加",
+      "addSubmit": "追加",
+      "addedToast": "接続先を追加しました",
+      "limitReached": "接続先は {max} 件まで登録できます。",
+      "nameLabel": "名前",
+      "namePlaceholder": "例: Ollama",
+      "nameInvalid": "1〜{max} 文字で入力してください",
+      "baseUrlPlaceholder": "例: http://127.0.0.1:11434/v1",
+      "baseUrlInvalid": "http:// か https:// で始まる URL を入力してください",
+      "apiKeyPlaceholder": "キーを入力",
+      "apiKeyOptionalHelp": "任意です。キーの要らないサーバーでは空のままにします(ダミーのキーを送ります)。",
+      "apiKeySave": "キーを設定",
+      "apiKeyDelete": "キーを削除",
+      "apiKeySavedToast": "キーを設定しました",
+      "apiKeyDeletedToast": "キーを削除しました",
+      "apiKeyDeleteConfirm": {
+        "message": "接続先「{name}」のキーを削除します。以後はダミーのキーを送ります。",
+        "confirmLabel": "削除する"
+      },
+      "usedByLabel": "使っている機能",
+      "usedByNone": "なし",
+      "featureSeparator": "、",
+      "features": {
+        "annotation": "自動タイトル・タグ",
+        "embedding": "埋め込み"
+      },
+      "deleteDisabledInUse": "使っている機能があるため削除できません。"
     },
     "annotation": {
-      "heading": "自動タイトル・タグ",
       "intro": "画像にタイトルとタグを自動で付けます。タイトルはプロンプトから LLM で推測し、タグは画像から VLM や ONNX タガーで推定します。人が付けたタイトルとタグは上書きしません。どのエンジンも既定では無効です。",
       "loading": "読み込み中...",
       "loadFailed": "自動タイトル・タグの設定を取得できませんでした。",
       "retry": "再読み込み",
-      "saveFailed": "保存に失敗しました",
-      "savedToast": "設定を保存しました",
-      "save": "保存",
-      "unsavedChanges": "保存していない変更があります",
+      "communicationFailed": "通信に失敗しました",
       "autoOnIngestLabel": "取り込み時に自動で推定する",
       "autoOnIngestHelp": "生成の出力、アップロード、スケッチを取り込むたびに推定の待ち行列に入れます。",
       "usableEnginesLabel": "使えるエンジン",
@@ -366,46 +507,60 @@
         "vlm": "VLM(タグ)",
         "onnx": "ONNX タガー(タグ)"
       },
-      "api": {
-        "heading": "LLM・VLM(外部の API)",
-        "externalNotice": "有効にすると、プロンプト(LLM、VLM)と 1024px 以内に縮めた画像(VLM)が下の接続先の API に送られます。OpenAI を使う場合は呼び出しごとに課金されます。",
+      "enable": {
+        "heading": "有効化と実行",
         "llmEnabledLabel": "プロンプトからタイトルを推測する(LLM)",
-        "llmModelLabel": "LLM のモデル",
         "vlmEnabledLabel": "画像からタグを推定する(VLM)",
         "vlmHelp": "プロンプトが無い画像には、タイトルも画像から付けます。",
-        "vlmModelLabel": "VLM のモデル",
+        "targetHelp": "LLM と VLM の送り先とモデルは、下の「使い方」で選びます。"
+      },
+      "usage": {
+        "heading": "使い方",
+        "intro": "タイトル(LLM)とタグ(VLM)のそれぞれで、接続先とモデル名を選びます。",
+        "externalNotice": "LLM と VLM を有効にすると、プロンプト(LLM、VLM)と 1024px 以内に縮めた画像(VLM)が、ここで選んだ接続先に送られます。OpenAI を使う場合は呼び出しごとに課金されます。",
+        "llmLabel": "タイトル(LLM)",
+        "vlmLabel": "タグ(VLM)",
+        "defaultLabel": "既定",
+        "defaultHelp": "すべての画像に使います。",
+        "comfyuiLabel": "ComfyUI の画像",
+        "comfyuiHelp": "ComfyUI で生成した画像にだけ使います。ComfyUI を接続していなくても設定できます。",
+        "connectionLabel": "接続先",
+        "modelLabel": "モデル名",
+        "sameAsDefault": "既定と同じ",
+        "sameAsDefaultSummary": "{connection} / {model}",
         "modelInvalid": "1〜{max} 文字で入力してください",
-        "baseUrlLabel": "接続先(Base URL)",
-        "baseUrlPlaceholder": "空なら OpenAI の設定を使う",
-        "baseUrlHelp": "Ollama や LM Studio など、手元の OpenAI 互換サーバーを使うときに指定します。空にすると OpenAI の設定(キーと接続先)を使います。LLM と VLM で共通です。",
-        "apiStyleLabel": "API の形式",
-        "apiStyleResponses": "Responses API",
-        "apiStyleChat": "Chat Completions",
-        "apiStyleHelp": "手元のサーバーが Responses API に対応していなければ Chat Completions を選びます。",
+        "connectionInvalid": "接続先を選んでください",
+        "vlmModelHelp": "タグのモデルは画像入力に対応している必要があります。",
+        "examplesHeading": "選び方の例",
+        "liteLlmExample": "LiteLLM などの中継サーバー: 接続先は同じものを選び、モデル名だけを変えます。",
+        "ollamaExample": "Ollama など: 「ComfyUI の画像」でその接続先とモデルを選ぶと、ComfyUI で作った画像はそこで、ほかの画像は既定の接続先で推定します。",
+        "comfyuiIsolation": "「ComfyUI の画像」で別の接続先を選ぶと、その画像は既定の接続先には送りません。失敗しても既定には切り替えません。",
+        "connectionsHelp": "接続先の追加・編集とキーは「LLM の接続先」で行います。",
+        "connectionsLink": "LLM の接続先を開く"
+      },
+      "language": {
+        "heading": "言語",
         "languageLabel": "タイトルとタグの言語",
         "languageJa": "日本語",
         "languageEn": "英語",
         "tagLanguageLabel": "タグの言語",
         "tagLanguageLocalized": "タイトルとタグの言語に合わせる",
         "tagLanguageNative": "エンジン任せ",
-        "tagLanguageHelp": "「合わせる」では、VLM のタグを上の言語で付け、ONNX タガーの英語のタグには訳を足します(英語のときは訳しません)。訳は VLM が有効なら同じ呼び出しで、無効なら LLM で作ります。「エンジン任せ」では、各エンジンがそれぞれの言語でタグを付け、訳しません。",
-        "apiKeyLabel": "推定専用の API キー",
-        "apiKeySet": "設定済み",
-        "apiKeyNotSet": "未設定(OpenAI のキーを使う)",
-        "apiKeyPlaceholder": "キーを入力",
-        "apiKeySave": "設定",
-        "apiKeyDelete": "削除",
-        "apiKeySavedToast": "推定専用のキーを設定しました",
-        "apiKeyDeletedToast": "推定専用のキーを削除しました",
-        "apiKeyDeleteConfirm": {
-          "message": "推定専用の API キーを削除します。以後は OpenAI のキーを使います。",
-          "confirmLabel": "削除する"
-        },
+        "tagLanguageHelp": "「合わせる」では、VLM のタグを上の言語で付け、ONNX タガーの英語のタグには訳を足します(英語のときは訳しません)。訳は VLM が有効なら同じ呼び出しで、無効なら LLM で作ります。「エンジン任せ」では、各エンジンがそれぞれの言語でタグを付け、訳しません。"
+      },
+      "limit": {
+        "heading": "1 時間の上限",
         "hourlyLimitLabel": "1 時間あたりの上限",
-        "hourlyLimitHelp": "LLM と VLM の呼び出しの数です({min}〜{max})。上限に達すると失敗にはせず、次の枠まで待ちます。",
+        "hourlyLimitHelp": "LLM と VLM の呼び出しの数です({min}〜{max})。回数は接続先ごとに数え、上限の値はすべての接続先で共通です。上限に達すると失敗にはせず、その接続先の枠が空くまで待ちます。",
         "hourlyLimitInvalid": "{min}〜{max} の整数を入力してください",
-        "callsLastHourLabel": "直近 1 時間の呼び出し",
-        "callsLastHourValue": "{count} / {limit}"
+        "callsLastHourLabel": "直近 1 時間の呼び出し(全接続先の合計)",
+        "callsLastHourValue": {
+          "one": "{count} 回",
+          "other": "{count} 回"
+        },
+        "perConnectionLabel": "直近 1 時間の呼び出し(接続先ごと)",
+        "perConnectionHelp": "自動タイトル・タグで選んでいる接続先と、直近 1 時間に呼び出した接続先を出します。",
+        "perConnectionValue": "{name}: {count} / {limit}"
       },
       "onnx": {
         "heading": "ONNX タガー(このサーバー内で実行)",
@@ -434,7 +589,6 @@
         "thresholdInvalid": "{min}〜{max} の数を入力してください"
       },
       "backfill": {
-        "heading": "未実行の画像",
         "pendingLabel": "推定をまだ実行していない画像",
         "pendingValue": {
           "one": "{count} 枚",
@@ -447,6 +601,7 @@
         },
         "run": "まとめて推定する",
         "noEngines": "使えるエンジンがないため実行できません。",
+        "unsavedBlocked": "保存していない変更があります。保存してから実行できます。",
         "confirm": {
           "message": {
             "one": "推定をまだ実行していない {count} 枚の画像を、推定の待ち行列に入れます。",
@@ -461,36 +616,157 @@
         }
       }
     },
+    "embeddings": {
+      "intro": "画像を CLIP 系のモデルでベクトルにし、文章での検索、似た画像、重複の候補に使います。",
+      "loading": "読み込み中…",
+      "loadFailed": "設定を読み込めませんでした。",
+      "retry": "再読み込み",
+      "communicationFailed": "通信に失敗しました。",
+      "enable": {
+        "heading": "有効化",
+        "enabledLabel": "埋め込みを使う",
+        "enabledHelp": "無効の間は、検索の「意味」、ビューアの「似た画像」、重複の候補を画面に出しません。",
+        "engineLabel": "エンジン",
+        "engineOnnx": "ローカル(このサーバー内で実行)",
+        "engineRemote": "リモート(推論サーバー)",
+        "notUsable": "有効ですが、まだ使えません。モデルをダウンロードするか、接続先とモデル名を設定してください。"
+      },
+      "onnx": {
+        "heading": "ローカルのモデル",
+        "notice": "画像は外部に送りません。モデルは Hugging Face からダウンロードします。",
+        "modelLabel": "モデル",
+        "memoryEstimate": "メモリ目安 約 {size} GB",
+        "languagesValue": "対応言語: {languages}",
+        "languageSeparator": "・",
+        "languageNames": {
+          "ja": "日本語",
+          "en": "英語"
+        },
+        "englishOnlyNote": "英語向けのモデルです。日本語で検索してもほとんど当たりません。",
+        "modelHelp": "日本語で検索するなら clip-japanese-base を選んでください。clip-vit-b32-u8 は軽くて速い英語向けのモデルです。",
+        "modelNotDownloaded": "選んだモデルをダウンロードするまで使えません。",
+        "downloaded": "ダウンロード済み",
+        "notDownloaded": "未ダウンロード",
+        "downloading": "ダウンロード中…",
+        "downloadingPercent": "ダウンロード中… {percent}%",
+        "downloadFailed": "ダウンロードに失敗しました: {error}",
+        "downloadFailedNoReason": "ダウンロードに失敗しました",
+        "download": "ダウンロード",
+        "delete": "削除",
+        "downloadStartedToast": "ダウンロードを始めました",
+        "deletedToast": "モデルを削除しました",
+        "deleteConfirm": {
+          "message": "モデル「{name}」のファイルを削除します。保存済みのベクトルは残ります。使うにはもう一度ダウンロードが要ります。",
+          "confirmLabel": "削除する"
+        }
+      },
+      "remote": {
+        "heading": "リモートの推論サーバー",
+        "notice": "選んだ接続先に、画像(512px に縮めたもの)と検索の文章を送ります。",
+        "connectionLabel": "接続先",
+        "connectionHelp": "接続先の追加・編集・キーは次のページで行います:",
+        "connectionsLink": "LLM の接続先",
+        "connectionPlaceholder": "選んでください",
+        "noConnections": "選べる接続先がありません。先に「LLM の接続先」で追加してください。",
+        "modelLabel": "モデル名",
+        "modelHelp": "推論サーバーで動かしているモデルの名前。",
+        "formatLabel": "形式",
+        "formatInfinity": "Infinity",
+        "sameSpaceNote": "接続先の Base URL を変えても、同じ接続先なら同じモデルとみなします。中身のモデルが変わったときは、「保存済みのベクトル」で削除してから計算し直してください。",
+        "errors": {
+          "connectionRequired": "接続先を選んでください",
+          "connectionUnknown": "この接続先はもうありません。選び直してください",
+          "modelRequired": "モデル名を入力してください",
+          "modelTooLong": "{max} 文字以内で入力してください"
+        }
+      },
+      "run": {
+        "heading": "計算",
+        "autoOnIngestLabel": "取り込み時に計算する",
+        "autoOnIngestHelp": "生成・アップロード・スケッチのたびに、使うモデルでベクトルを計算します。",
+        "pendingLabel": "未計算の画像",
+        "pendingValue": {
+          "one": "{count} 枚",
+          "other": "{count} 枚"
+        },
+        "queuedLabel": "待ち行列",
+        "queuedValue": {
+          "one": "{count} 件",
+          "other": "{count} 件"
+        },
+        "failedLabel": "失敗",
+        "failedValue": {
+          "one": "{count} 件",
+          "other": "{count} 件"
+        },
+        "run": "まとめて計算する",
+        "unsavedBlocked": "保存していない変更があります。保存してから実行できます。",
+        "notUsable": "使えるモデルが無いため実行できません。",
+        "switchedHint": "モデルを切り替えたら、まとめて計算してください。",
+        "confirm": {
+          "message": {
+            "one": "ベクトルが無い {count} 枚の画像を、計算の待ち行列に入れます。",
+            "other": "ベクトルが無い {count} 枚の画像を、計算の待ち行列に入れます。"
+          },
+          "confirmLabel": "待ち行列に入れる"
+        },
+        "queuedToast": {
+          "one": "{count} 件を待ち行列に入れました",
+          "other": "{count} 件を待ち行列に入れました"
+        }
+      },
+      "duplicates": {
+        "heading": "重複の候補",
+        "thresholdLabel": "しきい値の既定",
+        "thresholdHelp": "重複の候補のページで最初に使う類似度のしきい値({min}〜{max})。ページの中では一時的に変えられます。",
+        "thresholdInvalid": "{min}〜{max} の数を入力してください"
+      },
+      "stored": {
+        "heading": "保存済みのベクトル",
+        "help": "モデルを切り替えても、前のモデルのベクトルは残ります。戻したときは計算し直さずに使えます。",
+        "empty": "まだありません。",
+        "activeBadge": "使用中",
+        "fakeMarker": "(ダミー)",
+        "countValue": {
+          "one": "{count} 件",
+          "other": "{count} 件"
+        },
+        "delete": "削除",
+        "deleteConfirm": {
+          "message": {
+            "one": "「{name}」のベクトル {count} 件を削除します。使うには計算し直しが要ります。",
+            "other": "「{name}」のベクトル {count} 件を削除します。使うには計算し直しが要ります。"
+          },
+          "confirmLabel": "削除する"
+        },
+        "deletedToast": "ベクトルを削除しました"
+      }
+    },
     "comfyui": {
-      "heading": "ComfyUI",
       "intro": "同じ PC で動く ComfyUI に接続すると、登録したワークフローをモデルとして選べます(実験的機能)。",
-      "manageWorkflows": "ワークフローを管理する",
       "notConnectedHint": "接続していなくてもワークフローの登録はできますが、実行するには接続が必要です。",
       "timeout": {
         "label": "タイムアウト(分)",
         "help": "1回の ComfyUI 実行を待つ上限です。次に始まる実行から反映されます(実行中・待機中の Generated には影響しません)。",
-        "save": "保存",
-        "savedToast": "タイムアウトを保存しました",
         "invalid": "1〜180の整数を入力してください",
-        "resetToDefault": "既定値({default}分)に戻す"
-      }
+        "resetToDefault": "既定値({default}分)に戻す",
+        "resetPending": "保存すると既定値({default}分)に戻ります"
+      },
+      "connectionHeading": "接続",
+      "runHeading": "実行",
+      "workflowsHeading": "ワークフロー",
+      "workflowsHelp": "ComfyUI の「Export (API)」で書き出したワークフローを登録すると、モデルとして選べます。"
     },
     "mcp": {
-      "heading": "MCP",
       "intro": "Claude Code などの AI エージェントから、MCP(Model Context Protocol)で GAKEI の生成とストックを使えるようにします。エージェント経由の生成も、画面からの生成と同じく系列と証跡に残ります。",
       "loading": "読み込み中...",
       "loadFailed": "MCP の設定を取得できませんでした。",
       "retry": "再読み込み",
-      "saveFailed": "保存に失敗しました",
       "enabledLabel": "MCP サーバーを有効にする",
       "enabledTooltip": "無効の間は、エージェントから接続できません。既定は無効です。",
-      "enabledToast": "MCP を有効にしました",
-      "disabledToast": "MCP を無効にしました",
       "limitLabel": "1 時間あたりの上限",
       "limitTooltip": "直近 1 時間に MCP 経由で作れる Run の数です(0〜{max})。0 にすると MCP 経由の生成を止めます。ストックの閲覧など、読み取りのツールは引き続き使えます。",
-      "limitSave": "保存",
       "limitInvalid": "0〜{max} の整数を入力してください",
-      "limitSavedToast": "上限を保存しました",
       "limitStopped": "上限が 0 のため、MCP 経由の生成は止まっています。",
       "resetToDefault": "既定値({default})に戻す",
       "runsLastHourLabel": "直近 1 時間の MCP 経由の Run",
@@ -503,10 +779,10 @@
       "commandTokenNote": "<トークン> は、各自がユーザー設定の「アクセストークン」で発行した値に置き換えます。",
       "copy": "コピー",
       "copiedToast": "コピーしました",
-      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。"
+      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+      "connectHeading": "接続のしかた"
     },
     "about": {
-      "heading": "GAKEI について",
       "versionLabel": "バージョン",
       "licenseLabel": "ライセンス",
       "repositoryLink": "GitHub リポジトリ",
@@ -516,6 +792,176 @@
       "missingKey": "OpenAI の API キーが未設定です。",
       "openSettings": "設定を開く",
       "missingKeyContactAdmin": "OpenAI の API キーが未設定です。管理者に連絡してください。"
+    },
+    "shares": {
+      "intro": "自分が作った共有リンクです。リンクを知っている人は、ログインしなくても見られます。取り消すと、そのリンクは開けなくなります(元に戻せません)。",
+      "loading": "読み込み中...",
+      "loadFailed": "共有リンクの一覧を取得できませんでした。",
+      "retry": "再読み込み",
+      "empty": "共有リンクはありません。ビューアの「共有」から作れます。",
+      "count": {
+        "one": "{count} 件",
+        "other": "{count} 件"
+      },
+      "original": "原本",
+      "originalAllowed": "許可",
+      "originalDenied": "プレビューまで",
+      "imageCount": {
+        "one": "{count} 枚",
+        "other": "{count} 枚"
+      },
+      "createdAt": "作成",
+      "lastAccessedAt": "最後に開かれた日時",
+      "neverAccessed": "まだ開かれていません",
+      "accessCount": "開かれた回数",
+      "rootDeleted": "起点の画像が削除されたため、このリンクは開けません。",
+      "copy": "リンクをコピー",
+      "copiedToast": "リンクをコピーしました",
+      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+      "revoke": "取り消す",
+      "revokeConfirm": {
+        "message": "この共有リンクを取り消しますか? リンクは開けなくなり、元に戻せません。",
+        "confirmLabel": "取り消す"
+      },
+      "revokedToast": "共有リンクを取り消しました",
+      "revokeFailed": "取り消せませんでした",
+      "openRoot": "起点の画像を開く"
+    },
+    "shareAdmin": {
+      "intro": "利用者が、ログイン不要のリンクで画像を共有できるようにします。リンクでは、画像とプロンプト・パラメーターが見えます(実行者、タグ、料金は見えません)。",
+      "enabledLabel": "共有リンクを有効にする",
+      "enabledTooltip": "無効の間は共有リンクを作れず、既存のリンクもすべて開けなくなります(記録は残り、有効に戻せばまた開けます)。既定は無効です。",
+      "loading": "読み込み中...",
+      "loadFailed": "共有リンクの設定を取得できませんでした。",
+      "retry": "再読み込み"
+    },
+    "authentication": {
+      "intro": "ログインを必須にし、OpenID Connect(OIDC)の IdP で利用者を確かめます。有効にするには、接続を登録し、管理者のメールを保存してから、テストログインに成功する必要があります。",
+      "loading": "読み込み中...",
+      "loadFailed": "認証の設定を取得できませんでした。",
+      "retry": "再読み込み",
+      "communicationFailed": "通信に失敗しました。",
+      "connectionHeading": "OIDC の接続",
+      "loginHeading": "ログイン",
+      "copy": "コピー",
+      "copiedToast": "コピーしました",
+      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+      "redirectUriHelp": "IdP のクライアントに、このリダイレクト URI を登録します。",
+      "envNote": ".env の値を使用中です。ここで保存すると、以降は画面の設定が優先されます。",
+      "defaultNote": "既定値を使用中です。",
+      "resetToEnv": ".env・既定の値に戻す",
+      "resetPending": "保存すると .env・既定の値に戻ります。",
+      "undoReset": "戻さない",
+      "source": {
+        "setting": "画面",
+        "env": ".env",
+        "default": "既定"
+      },
+      "fields": {
+        "issuer": "発行者(Issuer)",
+        "clientId": "クライアント ID",
+        "clientSecret": "クライアントシークレット",
+        "scopes": "スコープ",
+        "publicBaseUrl": "PUBLIC_BASE_URL",
+        "redirectUri": "リダイレクト URI",
+        "verified": "テストログイン",
+        "createdAt": "仮登録した日時"
+      },
+      "card": {
+        "title": "接続",
+        "statusVerified": "テスト済み",
+        "statusNeedsTest": "テストが必要",
+        "statusNotConfigured": "未設定",
+        "notSet": "未設定",
+        "secretConfigured": "設定済み",
+        "secretNone": "なし(public client)",
+        "verifiedValue": "{email}({at})",
+        "verifiedNone": "まだ成功していません",
+        "notConfiguredHelp": "IdP に GAKEI のクライアントを作り、発行者・クライアント ID などを登録します。",
+        "verifiedStale": "接続の設定が変わったため、もう一度テストログインが必要です。",
+        "configure": "接続を設定",
+        "replace": "接続を差し替える"
+      },
+      "pending": {
+        "title": "仮登録の接続",
+        "status": "テストログイン待ち",
+        "help": "テストログインに成功すると、この接続が本登録になります。成功するまでは、今の接続がそのまま使われます。",
+        "discard": "仮登録を取り消す",
+        "discardedToast": "仮登録を取り消しました"
+      },
+      "test": {
+        "button": "テストログイン",
+        "waiting": "テストログイン中…",
+        "waitingHelp": "ポップアップで IdP にログインしてください。閉じると、結果を読み直します。",
+        "help": "ポップアップで IdP にログインします。保存済みの管理者のメールに含まれるアカウントでログインしてください。",
+        "unsavedAdminEmails": "管理者のメールの変更を先に保存してください(テストログインは保存済みの管理者のメールで判定します)。",
+        "noAdminEmails": "先に管理者のメールを入力して保存してください。",
+        "otherOrigin": "PUBLIC_BASE_URL({url})が今開いている画面のアドレスと違うため、結果がこの画面に届きません。ポップアップを閉じたあとで状態を読み直します。",
+        "popupBlocked": "ポップアップを開けませんでした。ブラウザでこのサイトのポップアップを許可してから、もう一度押してください。",
+        "successToast": "テストログインに成功しました",
+        "errors": {
+          "no_connection": "テストする接続がありません。先に接続を設定してください。",
+          "callback_failed": "IdP からの戻りを確かめられませんでした。リダイレクト URI の登録と、クライアント ID・シークレットを確認してください。",
+          "email_missing": "IdP からメールアドレスを受け取れませんでした。スコープに email が含まれているか確認してください。",
+          "email_unverified": "IdP でメールアドレスが確認済みになっていません。",
+          "email_not_admin": "ログインしたアカウントのメールが、保存済みの管理者のメールに含まれていません。",
+          "config_changed": "テストの途中で接続の設定が変わりました。もう一度テストログインしてください。",
+          "unknown": "テストログインに失敗しました。"
+        }
+      },
+      "dialog": {
+        "title": "OIDC の接続を設定",
+        "intro": "入力した接続は仮登録になります。テストログインに成功するまで、今の接続は変わりません。",
+        "issuerHelp": "発行者の URL に /.well-known/openid-configuration を付けて取得し、確かめます。",
+        "issuerChangeWarning": "発行者を変えると、既存のユーザーは別人として扱われます(画像などの付け替えはしません)。",
+        "secretPlaceholderKeep": "空欄なら今のシークレットを引き継ぐ",
+        "secretPlaceholderEmpty": "空欄ならシークレットなし",
+        "noSecret": "シークレットを使わない(public client)",
+        "secretHelp": "シークレットは保存後も画面に表示しません。",
+        "scopesHelp": "空白区切り。openid を含めます。既定は {default}。",
+        "publicBaseUrlHelp": "利用者がブラウザで開く GAKEI のアドレスです。リダイレクト URI はここから作ります。",
+        "submit": "確かめて仮登録",
+        "submitting": "確かめています…",
+        "registered": "仮登録しました。IdP にリダイレクト URI を登録してから、テストログインしてください。"
+      },
+      "mode": {
+        "label": "ログインを必須にする(OIDC)",
+        "help": "有効にすると、IdP でログインした人だけが使えます。無効(個人モード)では、ログインなしで誰でも使えます。",
+        "stateOidc": "OIDC でログインが必要",
+        "stateNone": "個人モード(ログインなし)",
+        "locked": ".env の AUTH_MODE で固定されているため、画面からは変えられません(緊急の無効化はこれを使います)。",
+        "blockedSave": "有効にする条件を満たしていません。",
+        "blockersHeading": "有効にするには:",
+        "blockers": {
+          "env_locked": ".env の AUTH_MODE を外して再起動する",
+          "no_connection": "OIDC の接続を設定する",
+          "not_verified": "今の接続でテストログインに成功する",
+          "admin_emails_empty": "管理者のメールを入力する",
+          "verified_email_not_admin": "テストログインしたメール({email})を管理者のメールに含める",
+          "pending_test": "仮登録の接続でテストログインに成功する"
+        }
+      },
+      "adminEmails": {
+        "label": "管理者のメール",
+        "help": "1行に1件(カンマ区切りも可)。このメールでログインした人が管理者になります。",
+        "empty": "管理者のメールを1件以上入力してください。",
+        "selfMissing": "自分のメール({email})を含めないと保存できません。"
+      },
+      "allowedDomains": {
+        "label": "ログインを許すドメイン",
+        "help": "1行に1件(例: example.com)。Google のように誰でもアカウントを作れる IdP では、必ず指定してください。管理者のメールは、ここに無くてもログインできます。",
+        "emptyNote": "空の間は、IdP でログインできる人は誰でも使えます。"
+      },
+      "sessionHours": {
+        "label": "セッションの長さ(時間)",
+        "help": "ログインしてから、もう一度ログインが必要になるまでの時間です({min}〜{max})。",
+        "invalid": "{min}〜{max} の整数を入力してください"
+      },
+      "disableConfirm": {
+        "message": "認証を無効にすると、ログインなしで誰でも使えるようになります。",
+        "warning": "サーバーを LAN やインターネットに公開しているなら危険です。",
+        "confirmLabel": "無効にして保存"
+      }
     }
   },
   "promptSets": {
@@ -1022,6 +1468,10 @@
       "reannotateTooltip": "タイトルとタグを推定し直します。人が付けたタイトルとタグ、人が外したタグはそのまま保ちます。",
       "saveFailed": "保存に失敗しました",
       "annotateFailed": "推定を始められませんでした"
+    },
+    "similar": {
+      "heading": "似た画像",
+      "showMore": "検索ページでもっと見る"
     }
   },
   "compare": {
@@ -1208,14 +1658,13 @@
       },
       "clear": "選択を解除",
       "toggleTile": "選択を切り替える"
-    }
+    },
+    "duplicatesLink": "重複の候補"
   },
   "comfyui": {
-    "experimentalBadge": "実験的",
     "connection": {
       "checking": "接続状態を確認中...",
       "loadError": "接続状態を取得できませんでした。",
-      "settingsLink": "接続の設定",
       "testFailed": "接続テストに失敗しました",
       "saveFailed": "保存に失敗しました",
       "connected": "接続しました",
@@ -1234,53 +1683,51 @@
       "testConnection": "接続テスト",
       "changeUrl": "URL を変更",
       "detach": "切り離す",
-      "urlIntroPrefix": "接続先の URL を入力して保存すると、ComfyUI が使えるようになります。ComfyUI のポータブル版の既定は",
+      "urlIntroPrefix": "ComfyUI の URL を入力して接続すると、ComfyUI が使えるようになります。ComfyUI のポータブル版の既定は",
       "urlIntroSuffix": "です。",
       "nonLoopbackWarning": "ループバック(このPC自身)以外のアドレスです。認証のない ComfyUI に入力画像とプロンプトを送信することになります。",
-      "confirmNonLoopback": "内容を確認したうえで保存します",
+      "confirmNonLoopback": "内容を確認したうえで接続します",
       "connecting": "接続中...",
-      "save": "保存",
-      "saveAndConnect": "保存して接続",
       "cancel": "キャンセル",
       "detachConfirmMessage": "ComfyUI を切り離します。",
       "detachConfirmWarning": "モデルの選択肢から ComfyUI が消えます。登録済みのワークフローと過去の Run は消えず、再び接続すればそのまま使えます。この選択は設定として保存されるため、環境変数 COMFYUI_URL が指定されていても、再起動で自動的には戻りません。",
       "detachConfirmLabel": "切り離す",
-      "testResultHeadlineAvailable": "接続テスト: 接続できます",
-      "testResultHeadlineUnavailable": "接続テスト: 接続できません",
-      "disconnectedLabel": "未接続",
-      "connectedLabel": "接続済み: {url}",
-      "unavailableLabel": "接続できません",
       "envNote": "この接続は環境変数 COMFYUI_URL の既定値です。ここで保存または切り離すと、再起動しても以降はこの画面の設定が優先されます。",
       "lockedSave": "ComfyUI の Run が実行中または待機中のため、今は接続設定を変更できません。実行が終わってから試してください。",
       "lockedDetach": "ComfyUI の Run が実行中または待機中のため、今は切り離せません。実行が終わってから試してください。",
-      "testSuccessSaveNotice": "接続テストに成功しました。まだ保存されていません。「保存」を押すと、この URL に切り替わります。",
-      "testSuccessSaveAndConnectNotice": "接続テストに成功しました。まだ保存されていません。「保存して接続」を押すと、ComfyUI がモデルの選択肢に加わります。",
-      "testSuccessNonLoopbackSuffix": " ループバック以外のアドレスのため、保存するには確認チェックにもチェックが必要です。",
-      "disconnectedNotice": "ComfyUI が未接続のため、登録したワークフローはモデルの選択肢に出ません。設定画面で接続先を保存してください。",
-      "disconnectedNoticeFormSuffix": " 未接続の間は、選択肢や範囲の補完(/object_info)が効きません。"
+      "testSuccessSaveNotice": "接続テストに成功しました。まだ切り替わっていません。「この URL に切り替える」を押すと、この URL に切り替わります。",
+      "testSuccessSaveAndConnectNotice": "接続テストに成功しました。まだ接続していません。「接続する」を押すと、ComfyUI がモデルの選択肢に加わります。",
+      "testSuccessNonLoopbackSuffix": " ループバック以外のアドレスのため、接続するには確認チェックにもチェックが必要です。",
+      "disconnectedNotice": "ComfyUI が未接続のため、登録したワークフローはモデルの選択肢に出ません。設定の ComfyUI のページで接続してください。",
+      "disconnectedNoticeFormSuffix": " 未接続の間は、選択肢や範囲の補完(/object_info)が効きません。",
+      "cardTitle": "ComfyUI",
+      "connect": "接続する",
+      "switchUrl": "この URL に切り替える",
+      "connectDialogTitle": "ComfyUI に接続",
+      "changeDialogTitle": "接続先の URL を変更",
+      "testResultTitle": "接続テストの結果"
     },
     "operationLabels": {
       "generate": "生成",
       "edit": "編集"
     },
     "form": {
-      "back": "← 戻る",
       "editTitle": "ComfyUI ワークフローの編集",
       "newTitle": "ComfyUI ワークフローの登録",
       "workflowLoadError": "ワークフローを取得できませんでした。",
+      "connectionPageLink": "ComfyUI のページへ",
       "templateParseFailed": "テンプレートの解析に失敗しました",
       "jsonParseFailed": "JSON として読み込めませんでした。",
       "clearedFieldsNotice": "新しいファイルに存在しない差し込み先を未設定に戻しました: {cleared}",
       "listSeparator": "、",
       "analyzeFailed": "解析に失敗しました。",
       "fileReadFailed": "ファイルを読み込めませんでした。",
-      "updated": "更新しました",
-      "created": "登録しました",
-      "saveFailedGeneric": "保存に失敗しました。",
       "loading": "読み込み中...",
       "fileSectionHeading": "ファイル",
       "dropZoneText": "ComfyUI の「Export (API)」で書き出した JSON をここにドロップ、または選択してください。",
       "chooseFile": "ファイルを選択",
+      "replaceFile": "別のファイルに差し替える",
+      "analyzing": "ファイルを解析中…",
       "templateLoaded": "テンプレートを読み込み済み(ノード数: {nodeCount})",
       "basicInfoHeading": "基本情報",
       "nameLabel": "名前",
@@ -1310,19 +1757,18 @@
       "maskModeImageAlpha": "入力画像の透明度",
       "maskRefLabel": "マスクのノード・入力",
       "outputsLabel": "出力ノード(必須、複数可)",
+      "finalPromptLabel": "最終プロンプト",
+      "finalPromptHelp": "Prompt Enhancer などが実行時に作った最終プロンプトを出すノード(PreviewAny など)を選ぶと、そのテキストを Run に記録し、ビューアなどに「最終プロンプト」として表示します。使わないときは「なし」のままにします。",
       "exposedParamsHeading": "公開パラメーター",
-      "saving": "保存中...",
-      "update": "更新する",
-      "register": "登録する"
+      "cannotSaveYet": "次の点を直すと保存できます。"
     },
     "list": {
-      "title": "ComfyUI ワークフロー",
-      "newButton": "+ 新規登録",
-      "disconnectedSettingsLink": "設定画面へ",
+      "newButton": "+ ワークフローを登録",
       "loading": "読み込み中...",
       "loadError": "一覧の取得に失敗しました。",
       "empty": "まだワークフローが登録されていません。",
-      "updated": "更新: {date}",
+      "updatedAt": "更新",
+      "templateSha": "テンプレート",
       "edit": "編集",
       "delete": "削除",
       "deleted": "削除しました",
@@ -1382,7 +1828,8 @@
         "negativePrompt": "ネガティブプロンプト",
         "width": "幅",
         "height": "高さ",
-        "batchSize": "枚数"
+        "batchSize": "枚数",
+        "finalPrompt": "最終プロンプト"
       }
     },
     "exposedParamValidation": {
@@ -1398,5 +1845,196 @@
       "nameRequired": "名前を入力してください",
       "templateRequired": "ワークフローの JSON ファイルを選択してください"
     }
+  },
+  "share": {
+    "button": "共有",
+    "buttonTooltip": "ログインしていない人にも見られるリンクを作ります",
+    "dialogTitle": "共有リンクを作る",
+    "intro": "リンクを知っている人は、ログインしなくても見られます。含まれる画像と、それを作ったときのプロンプト・パラメーターが見えます。実行者、タグ、料金は見えません。",
+    "scopeLabel": "範囲",
+    "scopes": {
+      "single": "この1枚",
+      "ancestors": "祖先まで",
+      "lineage": "祖先と子孫"
+    },
+    "scopeHelp": {
+      "single": "この画像だけを共有します。",
+      "ancestors": "この画像と、Edit の元になった画像をさかのぼって共有します。",
+      "lineage": "祖先に加えて、この画像から作った画像も共有します。"
+    },
+    "allowOriginalLabel": "原本の表示とダウンロードを許す",
+    "allowOriginalHelp": "オフにすると、プレビュー(長辺 2048px)までになります。",
+    "previewLoading": "含まれる画像を確かめています...",
+    "previewFailed": "含まれる画像を取得できませんでした。",
+    "previewCount": {
+      "one": "{count} 枚の画像が含まれます",
+      "other": "{count} 枚の画像が含まれます"
+    },
+    "previewFixedNote": "範囲は今の時点で固定します。あとで作った画像は、自動では載りません。",
+    "previewTruncated": "系列が大きいため、一部だけを含めます。",
+    "create": "リンクを作る",
+    "creating": "作成中...",
+    "createFailed": "共有リンクを作れませんでした",
+    "createdHeading": "共有リンクを作りました",
+    "createdNote": "取り消すまで有効です。一覧と取り消しは、設定の「共有リンク」から行えます。",
+    "copy": "コピー",
+    "copiedToast": "リンクをコピーしました",
+    "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+    "close": "閉じる"
+  },
+  "publicShare": {
+    "loading": "読み込み中...",
+    "invalid": "このリンクは無効です",
+    "invalidDetail": "リンクが取り消されたか、共有が無効になっているか、URL が間違っています。",
+    "sharedBy": "GAKEI で共有された画像",
+    "images": {
+      "one": "{count} 枚",
+      "other": "{count} 枚"
+    },
+    "lineageHeading": "系列",
+    "promptHeading": "プロンプト",
+    "paramsHeading": "パラメーター",
+    "paramJsonSummary": "{key}(JSON)",
+    "model": "モデル",
+    "operation": "操作",
+    "operations": {
+      "generate": "生成",
+      "edit": "編集"
+    },
+    "created": "作成日時",
+    "dimensions": "大きさ",
+    "noRun": "この画像はアップロードされたもので、プロンプトの記録はありません。",
+    "downloadOriginal": "原本をダウンロード",
+    "originalNotAllowed": "この共有では、原本は公開されていません。",
+    "originalNotAllowedForImage": "この画像の原本は公開されていません。",
+    "untitled": "無題",
+    "imageListLabel": "含まれる画像",
+    "viewRunDetail": "Generated 詳細を見る",
+    "runDetailTitle": "Generated 詳細",
+    "backToImage": "← 画像の情報に戻る",
+    "outputsHeading": "出力",
+    "primaryParentHeading": "主たる親",
+    "referencesHeading": "参照",
+    "compareWithOriginal": "編集前と比較する",
+    "endCompare": "比較を終える",
+    "backToViewer": "ビューアに戻る",
+    "expandLineageLabel": "系列グラフを全画面に広げる"
+  },
+  "finalPrompt": {
+    "heading": "最終プロンプト",
+    "truncated": "長すぎるため途中までを保存しています",
+    "expand": "すべて表示",
+    "collapse": "折り畳む",
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "copyFailed": "コピーできませんでした"
+  },
+  "embeddings": {
+    "pending": "この画像のベクトルを計算中です…",
+    "missing": "この画像のベクトルはまだありません。",
+    "failed": "この画像のベクトルの計算に失敗しました。",
+    "compute": "計算する",
+    "recompute": "計算し直す",
+    "requestFailed": "計算を頼めませんでした。",
+    "loadFailed": "似た画像を読み込めませんでした。",
+    "unavailable": "埋め込みは今は使えません。",
+    "noSimilar": "似た画像はありません。",
+    "score": "類似度 {score}"
+  },
+  "duplicates": {
+    "title": "重複の候補",
+    "intro": "似た画像をグループにまとめて並べます。比べて、要らないものを削除できます(削除は元に戻せます)。",
+    "thresholdLabel": "しきい値",
+    "thresholdHelp": "類似度がこの値以上の画像をまとめます。",
+    "resetThreshold": "既定に戻す",
+    "summary": {
+      "one": "{groups} グループ・{scanned} 枚を比べました",
+      "other": "{groups} グループ・{scanned} 枚を比べました"
+    },
+    "hashMissing": "簡易",
+    "hashMissingTitle": "知覚ハッシュがまだ無いため、似ているかどうかだけで判定しました(色違いなどの別の画像が入ることがあります)",
+    "truncatedNote": "画像が多いため、新しい {scanned} 枚だけを比べています。",
+    "groupsTruncatedNote": "グループが多いため、大きいものから表示しています。",
+    "empty": "しきい値以上の組は見つかりませんでした。",
+    "loading": "読み込み中…",
+    "loadFailed": "重複の候補を読み込めませんでした。",
+    "groupHeading": "グループ {index}",
+    "groupCount": {
+      "one": "{count} 枚",
+      "other": "{count} 枚"
+    },
+    "groupMaxScore": "最大 {score}",
+    "firstBadge": "最初",
+    "firstBadgeTitle": "グループでいちばん古い画像",
+    "compare": "比べる",
+    "compareHint": "比べる 2 枚を選んでください",
+    "selectForCompare": "比べる画像に選ぶ",
+    "compareTitle": "比べる",
+    "compareOlder": "古い · {width}×{height}",
+    "compareNewer": "新しい · {width}×{height}",
+    "open": "ビューアで開く",
+    "delete": "削除",
+    "deleteConfirmMessage": "この画像をストックから削除します。",
+    "deletedToast": "削除しました",
+    "undo": "元に戻す",
+    "deleteFailed": "削除できませんでした。",
+    "restoreFailed": "元に戻せませんでした。"
+  },
+  "map": {
+    "title": "マップ",
+    "viewLabel": "表示",
+    "tabMap": "地図",
+    "tabNetwork": "ネットワーク",
+    "loading": "読み込み中…",
+    "loadFailed": "マップの元データを読み込めませんでした。",
+    "filters": "絞り込み",
+    "filtersWithCount": "絞り込み({count})",
+    "groupLabel": "グループ",
+    "groupAll": "すべて",
+    "groupUnknown": "(見つからないグループ)",
+    "tagLabel": "タグ",
+    "tagAddMore": "タグを足す",
+    "tagHelp": "選んだタグがすべて付いた画像だけを並べます。",
+    "limitLabel": "上限",
+    "limitOption": "{count} 枚",
+    "kLabel": "近傍の数",
+    "kHelp": "1枚ごとに、似た画像を何枚まで見て並べるか。多いほど全体の形が、少ないほど近くの似かたが効きます。",
+    "thresholdLabel": "類似度のしきい値",
+    "edgeCount": {
+      "one": "辺 {count} 本",
+      "other": "辺 {count} 本"
+    },
+    "edgeCountCapped": "辺 {count} 本(全 {total} 本のうち類似度の高いもの)",
+    "showLineage": "系列の辺を重ねる",
+    "truncated": "全 {total} 枚のうち、新しい {count} 枚だけを並べています。グループやタグで絞り込むか、上限を上げてください。",
+    "truncatedAtMax": "全 {total} 枚のうち、新しい {count} 枚だけを並べています。グループやタグで絞り込んでください。",
+    "empty": "並べられる画像がありません。埋め込みを計算した画像だけが並びます。",
+    "emptyFiltered": "この絞り込みで並べられる画像がありません。",
+    "tooFew": "画像が少ないため、地図を作れません({min} 枚以上で作れます)。",
+    "layoutPreparing": "配置を準備中…",
+    "layoutProgress": "配置を計算中 {percent}%",
+    "layoutFailed": "配置を計算できませんでした。",
+    "networkRunning": "配置を調整中…",
+    "umapAriaLabel": "似た画像が近くに並ぶ地図({count} 枚)",
+    "networkAriaLabel": "似た画像を線で結んだネットワーク({count} 枚、辺 {edges} 本)",
+    "zoomGroup": "表示の拡大縮小",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "fit": "全体を表示",
+    "untitled": "(無題)",
+    "selectionLabel": "選んだ画像",
+    "neighborsHighlighted": {
+      "one": "似た画像 {count} 枚を強調しています",
+      "other": "似た画像 {count} 枚を強調しています"
+    },
+    "openInViewer": "ビューアで開く",
+    "lineageGraph": "系列グラフ",
+    "similarInSearch": "似た画像を検索で見る",
+    "expandPreview": "大きく表示",
+    "collapsePreview": "小さく戻す",
+    "previewLabel": "選んだ画像の詳細",
+    "previewLoadFailed": "画像の情報を読み込めませんでした。",
+    "kindLabel": "種類",
+    "embeddedPromptHeading": "プロンプト(画像に埋め込まれた情報、未検証)"
   }
 }

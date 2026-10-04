@@ -46,6 +46,12 @@ def test_all_non_auth_endpoints_require_login(client_oidc: TestClient) -> None:
         # tests/test_mcp_feedback.py と tests/test_mcp_image_access.py で確かめる。
         if path.startswith(("/api/uploads/", "/api/downloads/")):
             continue
+        # ログイン不要の共有リンク(ADR-0029 6章)。見せる範囲は tests/test_shares.py で確かめる。
+        if path.startswith("/api/public/"):
+            continue
+        # 生存確認(Issue #43)。ログイン不要で、応答は tests/test_health_api.py で確かめる。
+        if path == "/api/health":
+            continue
         filled = _fill_path_params(path)
         response = client_oidc.request(method, filled)
         if response.status_code != 401:

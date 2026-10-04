@@ -38,7 +38,7 @@ MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_MASK_BYTES = 4 * 1024 * 1024
 
 # Pillow の format 名 -> (mime, 拡張子)
-_ALLOWED_FORMATS = {
+ALLOWED_UPLOAD_FORMATS = {
     "PNG": ("image/png", "png"),
     "JPEG": ("image/jpeg", "jpg"),
     "WEBP": ("image/webp", "webp"),
@@ -106,14 +106,14 @@ def ingest(
         raise IngestError(t("assets.cannotReadImage")) from e
 
     fmt = image.format
-    if fmt not in _ALLOWED_FORMATS:
+    if fmt not in ALLOWED_UPLOAD_FORMATS:
         raise IngestError(t("assets.unsupportedFormat", format=fmt))
     if kind == AssetKind.MASK and fmt != "PNG":
         raise IngestError(t("assets.maskMustBePng"))
     if kind == AssetKind.SKETCH and fmt != "PNG":
         raise IngestError(t("assets.sketchMustBePng"))
 
-    mime, ext = _ALLOWED_FORMATS[fmt]
+    mime, ext = ALLOWED_UPLOAD_FORMATS[fmt]
     sha256 = hashlib.sha256(data).hexdigest()
     # ADR-0026: ファイル名に Asset の id と作成時刻を使うので、保存の前に決めておく。
     asset_id = uuid.uuid4()

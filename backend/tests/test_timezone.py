@@ -7,11 +7,14 @@ SQLite は tz を保持しないため、`UtcDateTime` TypeDecorator で読み�
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 from app.domain.models import Run, RunStatus
 from tests.conftest import wait_for_run_terminal
+
+pytestmark = pytest.mark.windows
 
 
 def test_run_queued_at_roundtrips_as_utc_aware(db_session_factory: sessionmaker) -> None:

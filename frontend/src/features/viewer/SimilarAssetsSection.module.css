@@ -1,0 +1,109 @@
+/* AssetGroupsSection と同じ大きさ感で揃える(ビューアの詳細パネルの節)。 */
+.section {
+  margin: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+/* 見出しの行ごと押して開閉する。 */
+.header {
+  width: calc(100% + 12px);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  text-align: left;
+}
+
+.header:hover {
+  color: var(--color-text);
+}
+
+.chevron {
+  display: inline-block;
+  width: 10px;
+  font-size: 13px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+.heading {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: inherit;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.tile {
+  display: block;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.tile:hover,
+.tile:focus-visible {
+  border-color: var(--color-accent);
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.more {
+  font-size: 12px;
+}
+
+@media (max-width: 767px) {
+  .header {
+    min-height: 44px;
+  }
+}

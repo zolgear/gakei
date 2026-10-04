@@ -9,6 +9,13 @@
 Windows ではユーザープロファイルのアクセス制御に任せ、chmod は行わない。Base URL は秘密では
 ないが、社内のホスト名を含みうるためキーと同じファイル・同じ権限で守る(ADR-0017 2章)。
 
+読み取り→書き込みは、プロセス内の鍵(`_payload_lock`)で囲む(接続先ごとのキーなど書き手が
+複数あり、同時に保存すると片方の変更が失われうるため)。GAKEI は1プロセスで動かす前提で、
+複数のプロセスが同じ `DATA_DIR` に書く場合は守れない。
+
+書き込みの前に読んだファイルが壊れていたら、上書きで中身を失わないよう
+`secrets.json.broken-{日時}` に退避し、警告をログに出してから空の状態に書く。
+
 キーの全文はここでもログに出さない・例外メッセージに含めない。
 """
 
@@ -18,6 +25,9 @@ import json
 import logging
 import os
 import tempfile
+import threading
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
@@ -34,6 +44,9 @@ Source = Literal["env", "file"]
 
 _SECRETS_FILENAME = "secrets.json"
 
+# `secrets.json` の読み取り→書き込みを囲む鍵(単一プロセス前提。モジュールの docstring)。
+_payload_lock = threading.Lock()
+
 
 def _secrets_path(data_dir: Path) -> Path:
     return data_dir / _SECRETS_FILENAME
@@ -49,6 +62,63 @@ def _read_payload(data_dir: Path) -> dict:
         # 壊れたファイルは「未設定」として扱う(起動やAPIを壊さないため)。
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _read_payload_for_update(data_dir: Path) -> tuple[dict, bool]:
+    """書き込みの前に読む(`_payload_lock` の中で呼ぶ)。壊れたファイルなら `({}, True)`。"""
+    path = _secrets_path(data_dir)
+    if not path.is_file():
+        return {}, False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        payload = None
+    if isinstance(payload, dict):
+        return payload, False
+    return {}, True
+
+
+def _back_up_broken(data_dir: Path) -> None:
+    """壊れた `secrets.json` を上書きせず退避する(`_payload_lock` の中で呼ぶ)。"""
+    path = _secrets_path(data_dir)
+    backup = path.with_name(
+        f"{_SECRETS_FILENAME}.broken-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}"
+    )
+    os.replace(path, backup)
+    logger.warning(
+        "%s を読めなかったので %s に退避し、空の状態から書き直します。",
+        path,
+        backup.name,
+    )
+
+
+def _update_payload(data_dir: Path, change: Callable[[dict], bool]) -> None:
+    """鍵の中で読み、`change` で書き換え、変わったら書く。`change` は変えたら True を返す。"""
+    with _payload_lock:
+        payload, broken = _read_payload_for_update(data_dir)
+        if not change(payload):
+            return
+        if broken:
+            _back_up_broken(data_dir)
+        _write_payload_atomic(data_dir, payload)
+
+
+def _set_field(data_dir: Path, key: str, value: str) -> None:
+    def change(payload: dict) -> bool:
+        payload[key] = value
+        return True
+
+    _update_payload(data_dir, change)
+
+
+def _delete_field(data_dir: Path, key: str) -> None:
+    def change(payload: dict) -> bool:
+        if key not in payload:
+            return False
+        del payload[key]
+        return True
+
+    _update_payload(data_dir, change)
 
 
 def _write_payload_atomic(data_dir: Path, payload: dict) -> None:
@@ -87,18 +157,12 @@ def read_file_key(data_dir: Path) -> str | None:
 
 def write_file_key(data_dir: Path, api_key: str) -> None:
     """ファイルにキーを保存する(既存の他フィールドは保持する)。"""
-    payload = _read_payload(data_dir)
-    payload["openai_api_key"] = api_key
-    _write_payload_atomic(data_dir, payload)
+    _set_field(data_dir, "openai_api_key", api_key)
 
 
 def delete_file_key(data_dir: Path) -> None:
     """ファイル保存のキーを削除する。他に残るものが無ければファイル自体を消す。"""
-    payload = _read_payload(data_dir)
-    if "openai_api_key" not in payload:
-        return
-    del payload["openai_api_key"]
-    _write_payload_atomic(data_dir, payload)
+    _delete_field(data_dir, "openai_api_key")
 
 
 def read_secret_field(data_dir: Path, key: str) -> str | None:
@@ -114,18 +178,12 @@ def read_secret_field(data_dir: Path, key: str) -> str | None:
 
 def write_secret_field(data_dir: Path, key: str, value: str) -> None:
     """`secrets.json` の任意フィールドを保存する(既存の他フィールドは保持する)。"""
-    payload = _read_payload(data_dir)
-    payload[key] = value
-    _write_payload_atomic(data_dir, payload)
+    _set_field(data_dir, key, value)
 
 
 def delete_secret_field(data_dir: Path, key: str) -> None:
     """`secrets.json` の任意フィールドを削除する。他に残るものが無ければファイル自体を消す。"""
-    payload = _read_payload(data_dir)
-    if key not in payload:
-        return
-    del payload[key]
-    _write_payload_atomic(data_dir, payload)
+    _delete_field(data_dir, key)
 
 
 def resolve_key(settings: Settings) -> tuple[str | None, Source | None]:
@@ -138,14 +196,8 @@ def resolve_key(settings: Settings) -> tuple[str | None, Source | None]:
     return None, None
 
 
-def hint(api_key: str) -> str:
-    """画面に見せてよい表示用の断片(末尾4文字のみ)。"""
-    tail = api_key[-4:] if len(api_key) >= 4 else api_key
-    return f"…{tail}"
-
-
 # -- Base URL(ADR-0017) ---------------------------------------------------
-# 値は秘密ではないので、画面には全文を返してよい(`hint` に相当する処理は無い)。
+# 値は秘密ではないので、画面には全文を返してよい(キーは一部も返さない)。
 
 
 class BaseUrlValidationError(Exception):
@@ -160,18 +212,12 @@ def read_file_base_url(data_dir: Path) -> str | None:
 
 def write_file_base_url(data_dir: Path, base_url: str) -> None:
     """ファイルに Base URL を保存する(既存の他フィールドは保持する)。"""
-    payload = _read_payload(data_dir)
-    payload["openai_base_url"] = base_url
-    _write_payload_atomic(data_dir, payload)
+    _set_field(data_dir, "openai_base_url", base_url)
 
 
 def delete_file_base_url(data_dir: Path) -> None:
     """ファイル保存の Base URL を削除する。他に残るものが無ければファイル自体を消す。"""
-    payload = _read_payload(data_dir)
-    if "openai_base_url" not in payload:
-        return
-    del payload["openai_base_url"]
-    _write_payload_atomic(data_dir, payload)
+    _delete_field(data_dir, "openai_base_url")
 
 
 def resolve_base_url(settings: Settings) -> tuple[str | None, Source | None]:

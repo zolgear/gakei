@@ -53,6 +53,7 @@
       "workspaceNav": "Workspace",
       "historyTab": "History",
       "studioTab": "Studio",
+      "mapTab": "Map",
       "queueStatus": "Running {running}, queued {queued}",
       "running": "Running {count}",
       "queued": "Queued {count}",
@@ -186,7 +187,11 @@
     "hint": "Search across runs, images and prompt sets",
     "openRun": "Show this run",
     "showImage": "Show image",
-    "loadPrompt": "Load into the prompt"
+    "loadPrompt": "Load into the prompt",
+    "imageSearch": "Search by image",
+    "imageSearchTitle": "Find images similar to a local image on the search page (the image is not saved)",
+    "semanticHint": "Describe the image you are looking for",
+    "dropOverlay": "Drop to find similar images on the search page"
   },
   "search": {
     "ariaLabel": "Search",
@@ -211,17 +216,73 @@
       "submit": "Search",
       "enterQuery": "Enter a search term.",
       "countSuffix": "{count}",
-      "truncatedNote": "Showing the top {limit} results"
+      "truncatedNote": "Showing the top {limit} results",
+      "modeLabel": "Search method",
+      "modeKeyword": "Keyword",
+      "modeSemantic": "Semantic",
+      "semanticPlaceholder": "Describe the image you want",
+      "semanticEnterQuery": "Describe the image you are looking for, or search by an image.",
+      "semanticNoResults": "Nothing found.",
+      "semanticHeading": "Closest first",
+      "showMore": "Show more",
+      "englishOnlyHint": "The active model is for English. Japanese queries rarely match, so search in English.",
+      "similarHeading": "Images similar to this one",
+      "similarOriginLabel": "Open the source image",
+      "searchFailed": "Search failed.",
+      "imageSearch": "Search by image",
+      "imageSearchChoose": "Choose an image",
+      "imageSearchDropHint": "You can also drop an image on this page or paste one (Ctrl+V / ⌘V).",
+      "imageSearchNotStored": "The image is not saved. It is a local file, so it is not kept in the URL and disappears when you reload.",
+      "imageSearchRemote": "The image is sent to the configured inference server.",
+      "imageSearchClear": "Remove the image",
+      "imageSearchHeading": "Closest to this image",
+      "imageSearchQueryLabel": "Image to search with (not saved)",
+      "imageSearchDropOverlay": "Drop to find images similar to this one",
+      "imageSearchNotImage": "Choose an image file."
     }
   },
   "settings": {
     "title": "Settings",
     "userHeading": "User settings",
     "adminHeading": "Admin settings",
-    "adminOnly": "Only an admin can change this.",
+    "pages": {
+      "profile": "Profile",
+      "display": "Display",
+      "shares": "Share links",
+      "accessTokens": "Access tokens",
+      "openai": "OpenAI",
+      "llmConnections": "LLM connections",
+      "annotation": "Auto titles and tags",
+      "embeddings": "Embeddings",
+      "comfyui": "ComfyUI",
+      "mcp": "MCP",
+      "shareLinks": "Public share links",
+      "about": "About GAKEI",
+      "authentication": "Authentication"
+    },
+    "frame": {
+      "changeCount": {
+        "one": "{count} change",
+        "other": "{count} changes"
+      },
+      "discard": "Discard changes",
+      "save": "Save",
+      "saving": "Saving…",
+      "savedToast": "Saved.",
+      "saveFailed": "Save failed.",
+      "unsavedMark": "Unsaved changes",
+      "tocLabel": "Settings contents"
+    },
+    "leave": {
+      "message": "You have unsaved changes.",
+      "discard": "Discard changes and leave",
+      "stay": "Stay on this page"
+    },
+    "openai": {
+      "connectionHeading": "Connection",
+      "generationHeading": "Generation"
+    },
     "profile": {
-      "heading": "Profile",
-      "avatarLabel": "Avatar",
       "upload": "Upload image",
       "chooseFromStock": "Choose from stock",
       "delete": "Remove",
@@ -237,7 +298,7 @@
       "help": "You can use your own generated or uploaded images as your avatar (PNG/JPEG/WebP, up to 20MB). You can choose the area to crop."
     },
     "display": {
-      "heading": "Display",
+      "intro": "Changes on this page take effect immediately. They are stored only in this browser.",
       "faviconProgress": {
         "label": "Show progress in the tab icon",
         "help": "Shows the run status in the browser tab icon while a run is queued or running. Turning this off does not change the animated logo in the app bar."
@@ -247,10 +308,22 @@
         "optionBottom": "Input pane at the bottom (default)",
         "optionSidebar": "Input pane on the left (sidebar)",
         "help": "On narrow screens (under 768px) the input pane always sits below the result. You can also switch from the button at the top right of the result area."
+      },
+      "stockShowSketchMask": {
+        "label": "Show sketches and masks in Stock",
+        "help": "When off, you can open them from the lineage graph and the run details."
+      },
+      "browserStorage": {
+        "heading": "Settings stored in this browser",
+        "label": "Reset this browser's settings to defaults",
+        "help": "The settings on this page, panel sizes and open/closed states, map values, the generation form draft and similar are stored only in this browser. Clearing them restores the defaults.",
+        "clear": "Clear all",
+        "confirmMessage": "This clears all GAKEI settings stored in this browser and reloads the page.\n\nCleared: display language (falls back to the browser's language), tab icon progress, generation screen layout and input size, sidebar width and open panel, open/closed states in the stock and the viewer, map values (tab, neighbors, limit, threshold, lineage edges), sketch pen, seed mode, and the last selected group.\n\nSettings stored on the server, images, history and your login are not affected.",
+        "confirmWarning": "The unsent prompt, parameters and input images in the generation form will also be cleared.",
+        "confirmLabel": "Clear and reload"
       }
     },
     "accessTokens": {
-      "heading": "Access tokens",
       "intro": "Used to connect AI agents to GAKEI over MCP. A token acts with your permissions, so do not share it with anyone.",
       "loading": "Loading...",
       "loadFailed": "Could not load access tokens.",
@@ -280,7 +353,7 @@
       "revokedToast": "Token revoked"
     },
     "apiKey": {
-      "heading": "OpenAI API key",
+      "heading": "API key",
       "loading": "Loading...",
       "loadFailed": "Could not load the key status. If the server was just updated, try restarting it.",
       "retry": "Retry",
@@ -288,8 +361,7 @@
       "notRequired": "The current provider does not use an API key (it returns a dummy image for testing). You can still add or remove a key here.",
       "inputPlaceholder": "sk-...",
       "verifying": "Verifying...",
-      "save": "Save",
-      "delete": "Delete",
+      "delete": "Delete key",
       "communicationFailed": "Communication failed.",
       "helpTextBefore": "A key you save here is stored in this PC's data directory (secrets.json). You can get one from",
       "helpTextLink": "OpenAI's dashboard",
@@ -312,10 +384,9 @@
         "loadFailed": "Could not load the base URL status. If the server was just updated, try restarting it.",
         "retry": "Retry",
         "envLocked": "The environment variable (.env) value takes priority, so it cannot be changed here.",
-        "inputPlaceholder": "Leave empty to use OpenAI directly (https://api.openai.com/v1)",
+        "inputPlaceholder": "e.g. http://127.0.0.1:4000/v1",
         "helpText": "Set this to use an OpenAI-compatible proxy such as LiteLLM. GAKEI sends its model names as-is, so the proxy must offer the same model names. Prices shown are still OpenAI's list prices.",
         "verifying": "Verifying...",
-        "save": "Save",
         "clear": "Reset to default",
         "communicationFailed": "Communication failed.",
         "savedToast": "Base URL saved.",
@@ -328,35 +399,105 @@
           "default": "OpenAI directly",
           "sourceEnv": "Environment variable (.env)",
           "sourceFile": "Saved in app (secrets.json)"
-        }
-      }
+        },
+        "customStatus": "OpenAI-compatible endpoint",
+        "urlLabel": "URL",
+        "defaultUrl": "https://api.openai.com/v1",
+        "sourceLabel": "Source",
+        "change": "Change base URL",
+        "dialogTitle": "Change base URL",
+        "verifyHelp": "Before registering, GAKEI connects to this URL to check that it works (this can take about 15 seconds). To go back to OpenAI itself, use \"Reset to default\".",
+        "verifyAndRegister": "Verify and register"
+      },
+      "sourceLabel": "Source",
+      "register": "Register key",
+      "replace": "Replace key",
+      "registerDialogTitle": "Register API key",
+      "replaceDialogTitle": "Replace API key",
+      "inputLabel": "API key",
+      "verifyHelp": "Before registering, GAKEI connects to OpenAI to check that the key works (this can take about 15 seconds).",
+      "verifyAndRegister": "Verify and register"
     },
     "general": {
-      "heading": "Generation",
       "loading": "Loading...",
       "loadFailed": "Could not load the settings.",
       "retry": "Retry",
-      "saveFailed": "Save failed",
       "envNote": "Using the environment variable (.env) value. Saving here makes the screen setting take priority from now on.",
       "moderation": {
         "label": "moderation",
         "optionLow": "low",
         "optionAuto": "auto",
         "help": "Applies only to generation without input images (Generate API); it has no effect on editing (Edit). low is less restrictive than auto, and auto is OpenAI's standard filtering.",
-        "savedToast": "moderation saved.",
         "resetToDefault": "Reset to default ({default})"
-      }
+      },
+      "resetPending": "Saving will reset this to the default ({default})."
+    },
+    "llmConnections": {
+      "intro": "Where LLM and VLM (models that read images) requests are sent. Features that use an LLM, such as auto titles and tags, choose from the endpoints registered here. You can register OpenAI-compatible servers such as Ollama, LM Studio, or LiteLLM.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the LLM connections.",
+      "retry": "Reload",
+      "communicationFailed": "Communication failed",
+      "builtinName": "OpenAI settings",
+      "builtinBadge": "Built-in",
+      "builtinHelp": "Uses the name, Base URL, and key from the OpenAI settings. Only the API style can be changed.",
+      "openAiSettingsLink": "Open the OpenAI settings",
+      "baseUrlLabel": "Base URL",
+      "baseUrlOpenAiDefault": "OpenAI (default)",
+      "apiStyleLabel": "API style",
+      "apiStyleResponses": "Responses API",
+      "apiStyleChat": "Chat Completions",
+      "apiStyleHelp": "Choose Chat Completions if the server does not support the Responses API.",
+      "apiKeyLabel": "Key",
+      "apiKeySet": "Set",
+      "apiKeyNotSet": "Not set (a dummy key is sent)",
+      "builtinApiKeyNotSet": "Not set",
+      "edit": "Edit",
+      "editHeading": "Edit endpoint",
+      "editSubmit": "Apply changes",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "deleteConfirm": {
+        "message": "Deletes the endpoint “{name}” and its saved key.",
+        "confirmLabel": "Delete"
+      },
+      "deletedToast": "Endpoint deleted",
+      "updatedToast": "Endpoint updated",
+      "add": "Add endpoint",
+      "addHeading": "Add endpoint",
+      "addSubmit": "Add",
+      "addedToast": "Endpoint added",
+      "limitReached": "You can register up to {max} endpoints.",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Ollama",
+      "nameInvalid": "Enter 1 to {max} characters",
+      "baseUrlPlaceholder": "e.g. http://127.0.0.1:11434/v1",
+      "baseUrlInvalid": "Enter a URL starting with http:// or https://",
+      "apiKeyPlaceholder": "Enter a key",
+      "apiKeyOptionalHelp": "Optional. Leave empty for servers that need no key (a dummy key is sent).",
+      "apiKeySave": "Set key",
+      "apiKeyDelete": "Delete key",
+      "apiKeySavedToast": "Key set",
+      "apiKeyDeletedToast": "Key deleted",
+      "apiKeyDeleteConfirm": {
+        "message": "Deletes the key for the endpoint “{name}”. A dummy key will be sent instead.",
+        "confirmLabel": "Delete"
+      },
+      "usedByLabel": "Used by",
+      "usedByNone": "None",
+      "featureSeparator": ", ",
+      "features": {
+        "annotation": "Auto titles and tags",
+        "embedding": "Embeddings"
+      },
+      "deleteDisabledInUse": "Cannot be deleted while a feature uses it."
     },
     "annotation": {
-      "heading": "Automatic titles and tags",
       "intro": "Adds titles and tags to images automatically. Titles are inferred from the prompt with an LLM, and tags from the image with a VLM or the ONNX tagger. Titles and tags set by people are never overwritten. All engines are disabled by default.",
       "loading": "Loading...",
       "loadFailed": "Could not load the automatic title and tag settings.",
       "retry": "Reload",
-      "saveFailed": "Could not save",
-      "savedToast": "Settings saved",
-      "save": "Save",
-      "unsavedChanges": "You have unsaved changes",
+      "communicationFailed": "Communication failed",
       "autoOnIngestLabel": "Infer automatically when images are added",
       "autoOnIngestHelp": "Queues inference for every generated output, upload, and sketch.",
       "usableEnginesLabel": "Available engines",
@@ -366,46 +507,60 @@
         "vlm": "VLM (tags)",
         "onnx": "ONNX tagger (tags)"
       },
-      "api": {
-        "heading": "LLM and VLM (external API)",
-        "externalNotice": "When enabled, prompts (LLM, VLM) and images downscaled to 1024px or less (VLM) are sent to the API endpoint below. With OpenAI, each call is billed.",
+      "enable": {
+        "heading": "Enable and run",
         "llmEnabledLabel": "Infer titles from prompts (LLM)",
-        "llmModelLabel": "LLM model",
         "vlmEnabledLabel": "Infer tags from images (VLM)",
         "vlmHelp": "For images without a prompt, the title is also inferred from the image.",
-        "vlmModelLabel": "VLM model",
+        "targetHelp": "Choose where the LLM and VLM are sent, and which models, under “Usage” below."
+      },
+      "usage": {
+        "heading": "Usage",
+        "intro": "For titles (LLM) and tags (VLM), choose an endpoint and a model name.",
+        "externalNotice": "When the LLM and VLM are enabled, prompts (LLM, VLM) and images downscaled to 1024px or less (VLM) are sent to the endpoints chosen here. With OpenAI, each call is billed.",
+        "llmLabel": "Titles (LLM)",
+        "vlmLabel": "Tags (VLM)",
+        "defaultLabel": "Default",
+        "defaultHelp": "Used for all images.",
+        "comfyuiLabel": "ComfyUI images",
+        "comfyuiHelp": "Used only for images generated with ComfyUI. Can be set even when ComfyUI is not connected.",
+        "connectionLabel": "Endpoint",
+        "modelLabel": "Model name",
+        "sameAsDefault": "Same as default",
+        "sameAsDefaultSummary": "{connection} / {model}",
         "modelInvalid": "Enter 1 to {max} characters",
-        "baseUrlLabel": "Endpoint (Base URL)",
-        "baseUrlPlaceholder": "Leave empty to use the OpenAI settings",
-        "baseUrlHelp": "Set this to use a local OpenAI-compatible server such as Ollama or LM Studio. When empty, the OpenAI settings (key and endpoint) are used. Shared by the LLM and VLM.",
-        "apiStyleLabel": "API style",
-        "apiStyleResponses": "Responses API",
-        "apiStyleChat": "Chat Completions",
-        "apiStyleHelp": "Choose Chat Completions if your local server does not support the Responses API.",
+        "connectionInvalid": "Choose an endpoint",
+        "vlmModelHelp": "The tag model must accept image input.",
+        "examplesHeading": "Examples",
+        "liteLlmExample": "Relay servers such as LiteLLM: choose the same endpoint and change only the model name.",
+        "ollamaExample": "Ollama and similar: choose that endpoint and model under “ComfyUI images” so images made with ComfyUI are inferred there and other images use the default endpoint.",
+        "comfyuiIsolation": "When “ComfyUI images” uses a different endpoint, those images are never sent to the default endpoint, and failures do not fall back to the default.",
+        "connectionsHelp": "Add and edit endpoints and their keys under “LLM connections”.",
+        "connectionsLink": "Open LLM connections"
+      },
+      "language": {
+        "heading": "Language",
         "languageLabel": "Language of titles and tags",
         "languageJa": "Japanese",
         "languageEn": "English",
         "tagLanguageLabel": "Tag language",
         "tagLanguageLocalized": "Match the language of titles and tags",
         "tagLanguageNative": "Leave it to each engine",
-        "tagLanguageHelp": "When matching, the VLM writes tags in the language above and translations are added for the ONNX tagger's English tags (not when the language is English). Translations come from the same VLM call when the VLM is on, otherwise from the LLM. When left to each engine, every engine tags in its own language and nothing is translated.",
-        "apiKeyLabel": "API key for inference",
-        "apiKeySet": "Set",
-        "apiKeyNotSet": "Not set (uses the OpenAI key)",
-        "apiKeyPlaceholder": "Enter a key",
-        "apiKeySave": "Set",
-        "apiKeyDelete": "Delete",
-        "apiKeySavedToast": "API key for inference set",
-        "apiKeyDeletedToast": "API key for inference deleted",
-        "apiKeyDeleteConfirm": {
-          "message": "Deletes the API key for inference. The OpenAI key will be used instead.",
-          "confirmLabel": "Delete"
-        },
+        "tagLanguageHelp": "When matching, the VLM writes tags in the language above and translations are added for the ONNX tagger's English tags (not when the language is English). Translations come from the same VLM call when the VLM is on, otherwise from the LLM. When left to each engine, every engine tags in its own language and nothing is translated."
+      },
+      "limit": {
+        "heading": "Hourly limit",
         "hourlyLimitLabel": "Hourly limit",
-        "hourlyLimitHelp": "Number of LLM and VLM calls ({min} to {max}). When the limit is reached, inference waits for the next slot instead of failing.",
+        "hourlyLimitHelp": "Number of LLM and VLM calls ({min} to {max}). Calls are counted per endpoint, and the same limit applies to every endpoint. When the limit is reached, inference waits until that endpoint has room instead of failing.",
         "hourlyLimitInvalid": "Enter a whole number from {min} to {max}",
-        "callsLastHourLabel": "Calls in the last hour",
-        "callsLastHourValue": "{count} / {limit}"
+        "callsLastHourLabel": "Calls in the last hour (all endpoints)",
+        "callsLastHourValue": {
+          "one": "{count} call",
+          "other": "{count} calls"
+        },
+        "perConnectionLabel": "Calls in the last hour (per endpoint)",
+        "perConnectionHelp": "Shows the endpoints selected for auto titles and tags, and those called in the last hour.",
+        "perConnectionValue": "{name}: {count} / {limit}"
       },
       "onnx": {
         "heading": "ONNX tagger (runs on this server)",
@@ -434,7 +589,6 @@
         "thresholdInvalid": "Enter a number from {min} to {max}"
       },
       "backfill": {
-        "heading": "Images not yet inferred",
         "pendingLabel": "Images never inferred",
         "pendingValue": {
           "one": "{count} image",
@@ -447,6 +601,7 @@
         },
         "run": "Infer all",
         "noEngines": "Cannot run because no engine is available.",
+        "unsavedBlocked": "You have unsaved changes. Save them before running.",
         "confirm": {
           "message": {
             "one": "Queues inference for {count} image that has never been inferred.",
@@ -461,36 +616,157 @@
         }
       }
     },
+    "embeddings": {
+      "intro": "Turns images into vectors with a CLIP-style model for text search, similar images, and duplicate candidates.",
+      "loading": "Loading…",
+      "loadFailed": "Couldn't load the settings.",
+      "retry": "Reload",
+      "communicationFailed": "Communication failed.",
+      "enable": {
+        "heading": "Enable",
+        "enabledLabel": "Use embeddings",
+        "enabledHelp": "While disabled, semantic search, \"Similar images\" in the viewer, and duplicate candidates are hidden.",
+        "engineLabel": "Engine",
+        "engineOnnx": "Local (runs on this server)",
+        "engineRemote": "Remote (inference server)",
+        "notUsable": "Enabled, but not usable yet. Download the model, or set the connection and model name."
+      },
+      "onnx": {
+        "heading": "Local model",
+        "notice": "Images are not sent outside. Models are downloaded from Hugging Face.",
+        "modelLabel": "Model",
+        "memoryEstimate": "Memory approx. {size} GB",
+        "languagesValue": "Languages: {languages}",
+        "languageSeparator": ", ",
+        "languageNames": {
+          "ja": "Japanese",
+          "en": "English"
+        },
+        "englishOnlyNote": "English-only model. Searching in Japanese rarely finds anything.",
+        "modelHelp": "To search in Japanese, choose clip-japanese-base. clip-vit-b32-u8 is a light, fast model for English.",
+        "modelNotDownloaded": "The selected model can't be used until it is downloaded.",
+        "downloaded": "Downloaded",
+        "notDownloaded": "Not downloaded",
+        "downloading": "Downloading…",
+        "downloadingPercent": "Downloading… {percent}%",
+        "downloadFailed": "Download failed: {error}",
+        "downloadFailedNoReason": "Download failed",
+        "download": "Download",
+        "delete": "Delete",
+        "downloadStartedToast": "Download started",
+        "deletedToast": "Model deleted",
+        "deleteConfirm": {
+          "message": "Delete the files of model \"{name}\". Stored vectors are kept. You'll need to download it again to use it.",
+          "confirmLabel": "Delete"
+        }
+      },
+      "remote": {
+        "heading": "Remote inference server",
+        "notice": "Images (shrunk to 512px) and search text are sent to the selected connection.",
+        "connectionLabel": "Connection",
+        "connectionHelp": "Add, edit, and set keys for connections on this page:",
+        "connectionsLink": "LLM connections",
+        "connectionPlaceholder": "Choose one",
+        "noConnections": "No connection to choose. Add one in \"LLM connections\" first.",
+        "modelLabel": "Model name",
+        "modelHelp": "The name of the model running on the inference server.",
+        "formatLabel": "Format",
+        "formatInfinity": "Infinity",
+        "sameSpaceNote": "Changing the connection's Base URL keeps it as the same model. If the model behind it changes, delete its vectors under \"Stored vectors\" and compute them again.",
+        "errors": {
+          "connectionRequired": "Choose a connection",
+          "connectionUnknown": "This connection no longer exists. Choose again",
+          "modelRequired": "Enter a model name",
+          "modelTooLong": "Enter up to {max} characters"
+        }
+      },
+      "run": {
+        "heading": "Computing",
+        "autoOnIngestLabel": "Compute on import",
+        "autoOnIngestHelp": "Computes vectors with the active model for every generation, upload, and sketch.",
+        "pendingLabel": "Images without vectors",
+        "pendingValue": {
+          "one": "{count} image",
+          "other": "{count} images"
+        },
+        "queuedLabel": "Queue",
+        "queuedValue": {
+          "one": "{count} item",
+          "other": "{count} items"
+        },
+        "failedLabel": "Failed",
+        "failedValue": {
+          "one": "{count} item",
+          "other": "{count} items"
+        },
+        "run": "Compute all",
+        "unsavedBlocked": "You have unsaved changes. Save them before running.",
+        "notUsable": "Can't run because no model is usable.",
+        "switchedHint": "After switching models, compute all.",
+        "confirm": {
+          "message": {
+            "one": "Add {count} image without vectors to the queue.",
+            "other": "Add {count} images without vectors to the queue."
+          },
+          "confirmLabel": "Add to queue"
+        },
+        "queuedToast": {
+          "one": "Added {count} item to the queue",
+          "other": "Added {count} items to the queue"
+        }
+      },
+      "duplicates": {
+        "heading": "Duplicate candidates",
+        "thresholdLabel": "Default threshold",
+        "thresholdHelp": "The similarity threshold first used on the duplicate candidates page ({min}–{max}). It can be changed temporarily on that page.",
+        "thresholdInvalid": "Enter a number from {min} to {max}"
+      },
+      "stored": {
+        "heading": "Stored vectors",
+        "help": "Switching models keeps the previous model's vectors, so switching back needs no recomputing.",
+        "empty": "None yet.",
+        "activeBadge": "In use",
+        "fakeMarker": "(dummy)",
+        "countValue": {
+          "one": "{count} vector",
+          "other": "{count} vectors"
+        },
+        "delete": "Delete",
+        "deleteConfirm": {
+          "message": {
+            "one": "Delete {count} vector of \"{name}\". Using it again requires recomputing.",
+            "other": "Delete {count} vectors of \"{name}\". Using it again requires recomputing."
+          },
+          "confirmLabel": "Delete"
+        },
+        "deletedToast": "Vectors deleted"
+      }
+    },
     "comfyui": {
-      "heading": "ComfyUI",
       "intro": "Connecting to ComfyUI running on the same PC lets you pick registered workflows as a model (experimental).",
-      "manageWorkflows": "Manage workflows",
       "notConnectedHint": "You can register workflows without connecting, but running them requires a connection.",
       "timeout": {
         "label": "Timeout (minutes)",
         "help": "The upper limit on waiting for one ComfyUI run. It applies from the next run that starts (running or queued Generated items are unaffected).",
-        "save": "Save",
-        "savedToast": "Timeout saved.",
         "invalid": "Enter an integer between 1 and 180",
-        "resetToDefault": "Reset to default ({default} min)"
-      }
+        "resetToDefault": "Reset to default ({default} min)",
+        "resetPending": "Saving will reset this to the default ({default} min)."
+      },
+      "connectionHeading": "Connection",
+      "runHeading": "Runs",
+      "workflowsHeading": "Workflows",
+      "workflowsHelp": "Register workflows exported with \"Export (API)\" in ComfyUI to choose them as models."
     },
     "mcp": {
-      "heading": "MCP",
       "intro": "Lets AI agents such as Claude Code use GAKEI generation and stock over MCP (Model Context Protocol). Runs created by agents are recorded in lineage and history just like runs created from this UI.",
       "loading": "Loading...",
       "loadFailed": "Could not load the MCP settings.",
       "retry": "Reload",
-      "saveFailed": "Failed to save",
       "enabledLabel": "Enable the MCP server",
       "enabledTooltip": "While disabled, agents cannot connect. Disabled by default.",
-      "enabledToast": "MCP enabled",
-      "disabledToast": "MCP disabled",
       "limitLabel": "Hourly limit",
       "limitTooltip": "The number of runs that can be created through MCP in the last hour (0-{max}). Set it to 0 to stop generation through MCP. Read-only tools, such as browsing stock, remain available.",
-      "limitSave": "Save",
       "limitInvalid": "Enter a whole number from 0 to {max}",
-      "limitSavedToast": "Limit saved",
       "limitStopped": "The limit is 0, so generation through MCP is stopped.",
       "resetToDefault": "Reset to default ({default})",
       "runsLastHourLabel": "Runs through MCP in the last hour",
@@ -503,10 +779,10 @@
       "commandTokenNote": "Replace <TOKEN> with a value each user issues under User settings > Access tokens.",
       "copy": "Copy",
       "copiedToast": "Copied",
-      "copyFailed": "Could not copy. Select the text and copy it manually."
+      "copyFailed": "Could not copy. Select the text and copy it manually.",
+      "connectHeading": "How to connect"
     },
     "about": {
-      "heading": "About GAKEI",
       "versionLabel": "Version",
       "licenseLabel": "License",
       "repositoryLink": "GitHub repository",
@@ -516,6 +792,176 @@
       "missingKey": "No OpenAI API key is set.",
       "openSettings": "Open settings",
       "missingKeyContactAdmin": "No OpenAI API key is set. Please contact an admin."
+    },
+    "shares": {
+      "intro": "Share links you created. Anyone with a link can view it without signing in. Revoking a link stops it from opening (this cannot be undone).",
+      "loading": "Loading...",
+      "loadFailed": "Could not load your share links.",
+      "retry": "Reload",
+      "empty": "You have no share links. Create one with Share in the viewer.",
+      "count": {
+        "one": "{count} share link",
+        "other": "{count} share links"
+      },
+      "original": "Original",
+      "originalAllowed": "Allowed",
+      "originalDenied": "Preview only",
+      "imageCount": {
+        "one": "{count} image",
+        "other": "{count} images"
+      },
+      "createdAt": "Created",
+      "lastAccessedAt": "Last opened",
+      "neverAccessed": "Not opened yet",
+      "accessCount": "Times opened",
+      "rootDeleted": "The starting image was deleted, so this link does not open.",
+      "copy": "Copy link",
+      "copiedToast": "Link copied",
+      "copyFailed": "Could not copy. Select the text and copy it by hand.",
+      "revoke": "Revoke",
+      "revokeConfirm": {
+        "message": "Revoke this share link? The link will stop opening, and this cannot be undone.",
+        "confirmLabel": "Revoke"
+      },
+      "revokedToast": "Share link revoked",
+      "revokeFailed": "Could not revoke the link",
+      "openRoot": "Open the starting image"
+    },
+    "shareAdmin": {
+      "intro": "Let users share images with links that need no sign-in. A link shows the images and their prompts and parameters (not who ran them, tags, or cost).",
+      "enabledLabel": "Enable share links",
+      "enabledTooltip": "While off, nobody can create share links and all existing links stop opening (the records stay, and links open again when you turn this back on). Off by default.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the share link settings.",
+      "retry": "Reload"
+    },
+    "authentication": {
+      "intro": "Require sign-in and verify users with an OpenID Connect (OIDC) IdP. To turn it on, register a connection, save the admin emails, and then complete a test sign-in.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the authentication settings.",
+      "retry": "Reload",
+      "communicationFailed": "Communication failed.",
+      "connectionHeading": "OIDC connection",
+      "loginHeading": "Sign-in",
+      "copy": "Copy",
+      "copiedToast": "Copied",
+      "copyFailed": "Could not copy. Select the text and copy it manually.",
+      "redirectUriHelp": "Register this redirect URI on the client in your IdP.",
+      "envNote": "Using the value from .env. Once you save here, the setting on this screen takes precedence.",
+      "defaultNote": "Using the default value.",
+      "resetToEnv": "Revert to the .env / default value",
+      "resetPending": "Saving reverts this to the .env / default value.",
+      "undoReset": "Keep the current value",
+      "source": {
+        "setting": "screen",
+        "env": ".env",
+        "default": "default"
+      },
+      "fields": {
+        "issuer": "Issuer",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "scopes": "Scopes",
+        "publicBaseUrl": "PUBLIC_BASE_URL",
+        "redirectUri": "Redirect URI",
+        "verified": "Test sign-in",
+        "createdAt": "Registered at"
+      },
+      "card": {
+        "title": "Connection",
+        "statusVerified": "Tested",
+        "statusNeedsTest": "Test required",
+        "statusNotConfigured": "Not configured",
+        "notSet": "Not set",
+        "secretConfigured": "Configured",
+        "secretNone": "None (public client)",
+        "verifiedValue": "{email} ({at})",
+        "verifiedNone": "Not yet successful",
+        "notConfiguredHelp": "Create a client for GAKEI in your IdP, then register the issuer, client ID, and so on.",
+        "verifiedStale": "The connection settings have changed. Run the test sign-in again.",
+        "configure": "Set up connection",
+        "replace": "Replace connection"
+      },
+      "pending": {
+        "title": "Pending connection",
+        "status": "Waiting for test sign-in",
+        "help": "When the test sign-in succeeds, this connection becomes active. Until then, the current connection stays in use.",
+        "discard": "Discard pending connection",
+        "discardedToast": "Discarded the pending connection"
+      },
+      "test": {
+        "button": "Test sign-in",
+        "waiting": "Testing sign-in…",
+        "waitingHelp": "Sign in to your IdP in the popup. When it closes, the status is reloaded.",
+        "help": "Signs in to your IdP in a popup. Use an account whose email is in the saved admin emails.",
+        "unsavedAdminEmails": "Save your changes to the admin emails first (the test sign-in checks against the saved admin emails).",
+        "noAdminEmails": "Enter and save the admin emails first.",
+        "otherOrigin": "PUBLIC_BASE_URL ({url}) differs from the address of this page, so the result cannot reach this page. The status is reloaded after the popup closes.",
+        "popupBlocked": "Could not open the popup. Allow popups for this site in your browser and try again.",
+        "successToast": "Test sign-in succeeded",
+        "errors": {
+          "no_connection": "There is no connection to test. Set up a connection first.",
+          "callback_failed": "Could not verify the response from the IdP. Check the registered redirect URI, client ID, and secret.",
+          "email_missing": "The IdP did not return an email address. Check that the scopes include email.",
+          "email_unverified": "The email address is not verified at the IdP.",
+          "email_not_admin": "The signed-in account's email is not in the saved admin emails.",
+          "config_changed": "The connection settings changed during the test. Run the test sign-in again.",
+          "unknown": "The test sign-in failed."
+        }
+      },
+      "dialog": {
+        "title": "Set up OIDC connection",
+        "intro": "The connection you enter is registered as pending. The current connection does not change until the test sign-in succeeds.",
+        "issuerHelp": "Verified by fetching /.well-known/openid-configuration under the issuer URL.",
+        "issuerChangeWarning": "Changing the issuer makes existing users count as different people (their images and other data are not reassigned).",
+        "secretPlaceholderKeep": "Leave blank to keep the current secret",
+        "secretPlaceholderEmpty": "Leave blank for no secret",
+        "noSecret": "Do not use a secret (public client)",
+        "secretHelp": "The secret is never shown on screen, even after saving.",
+        "scopesHelp": "Space-separated. Must include openid. Default: {default}.",
+        "publicBaseUrlHelp": "The address users open GAKEI at in their browser. The redirect URI is built from it.",
+        "submit": "Verify and register",
+        "submitting": "Verifying…",
+        "registered": "Registered as pending. Register the redirect URI in your IdP, then run the test sign-in."
+      },
+      "mode": {
+        "label": "Require sign-in (OIDC)",
+        "help": "When on, only people who signed in with the IdP can use GAKEI. When off (personal mode), anyone can use it without signing in.",
+        "stateOidc": "Sign-in with OIDC required",
+        "stateNone": "Personal mode (no sign-in)",
+        "locked": "Fixed by AUTH_MODE in .env and cannot be changed here (use it for emergency disabling).",
+        "blockedSave": "The conditions for turning this on are not met.",
+        "blockersHeading": "To turn this on:",
+        "blockers": {
+          "env_locked": "Remove AUTH_MODE from .env and restart",
+          "no_connection": "Set up the OIDC connection",
+          "not_verified": "Complete a test sign-in with the current connection",
+          "admin_emails_empty": "Enter the admin emails",
+          "verified_email_not_admin": "Include the test sign-in email ({email}) in the admin emails",
+          "pending_test": "Complete a test sign-in with the pending connection"
+        }
+      },
+      "adminEmails": {
+        "label": "Admin emails",
+        "help": "One per line (commas also work). People who sign in with these emails become admins.",
+        "empty": "Enter at least one admin email.",
+        "selfMissing": "You cannot save without your own email ({email})."
+      },
+      "allowedDomains": {
+        "label": "Allowed sign-in domains",
+        "help": "One per line (e.g. example.com). Always set this for IdPs where anyone can create an account, such as Google. Admin emails can sign in even if their domain is not listed.",
+        "emptyNote": "While empty, anyone who can sign in to the IdP can use GAKEI."
+      },
+      "sessionHours": {
+        "label": "Session length (hours)",
+        "help": "How long until users need to sign in again ({min}–{max}).",
+        "invalid": "Enter an integer from {min} to {max}"
+      },
+      "disableConfirm": {
+        "message": "Turning off authentication lets anyone use GAKEI without signing in.",
+        "warning": "This is dangerous if the server is exposed to your LAN or the internet.",
+        "confirmLabel": "Turn off and save"
+      }
     }
   },
   "promptSets": {
@@ -1022,6 +1468,10 @@
       "reannotateTooltip": "Infers the title and tags again. Titles and tags set by people, and tags people removed, are kept.",
       "saveFailed": "Could not save",
       "annotateFailed": "Could not start inference"
+    },
+    "similar": {
+      "heading": "Similar images",
+      "showMore": "See more on the search page"
     }
   },
   "compare": {
@@ -1208,14 +1658,13 @@
       },
       "clear": "Clear selection",
       "toggleTile": "Toggle selection"
-    }
+    },
+    "duplicatesLink": "Duplicates"
   },
   "comfyui": {
-    "experimentalBadge": "Experimental",
     "connection": {
       "checking": "Checking connection...",
       "loadError": "Could not get the connection status.",
-      "settingsLink": "Connection settings",
       "testFailed": "Connection test failed.",
       "saveFailed": "Failed to save.",
       "connected": "Connected.",
@@ -1234,53 +1683,51 @@
       "testConnection": "Test connection",
       "changeUrl": "Change URL",
       "detach": "Disconnect",
-      "urlIntroPrefix": "Enter the connection URL and save to start using ComfyUI. The default for the ComfyUI portable build is",
+      "urlIntroPrefix": "Enter the ComfyUI URL and connect to start using ComfyUI. The default for the ComfyUI portable build is",
       "urlIntroSuffix": ".",
       "nonLoopbackWarning": "This address is not a loopback (this machine itself). Input images and prompts will be sent to a ComfyUI instance with no authentication.",
-      "confirmNonLoopback": "I have reviewed this and want to save anyway",
+      "confirmNonLoopback": "I have reviewed this and want to connect anyway",
       "connecting": "Connecting...",
-      "save": "Save",
-      "saveAndConnect": "Save and connect",
       "cancel": "Cancel",
       "detachConfirmMessage": "This disconnects ComfyUI.",
       "detachConfirmWarning": "ComfyUI will disappear from the model choices. Registered workflows and past Runs stay as they are, and reconnecting brings them back. This choice is saved, so even if the COMFYUI_URL environment variable is set, restarting will not bring it back automatically.",
       "detachConfirmLabel": "Disconnect",
-      "testResultHeadlineAvailable": "Connection test: can connect",
-      "testResultHeadlineUnavailable": "Connection test: cannot connect",
-      "disconnectedLabel": "Not connected",
-      "connectedLabel": "Connected: {url}",
-      "unavailableLabel": "Cannot connect",
       "envNote": "This connection is the default from the COMFYUI_URL environment variable. Saving or disconnecting here makes this screen’s setting take priority from now on, even after a restart.",
       "lockedSave": "A ComfyUI Run is running or queued, so connection settings cannot be changed right now. Try again once it finishes.",
       "lockedDetach": "A ComfyUI Run is running or queued, so you cannot disconnect right now. Try again once it finishes.",
-      "testSuccessSaveNotice": "Connection test succeeded. Not saved yet. Press \"Save\" to switch to this URL.",
-      "testSuccessSaveAndConnectNotice": "Connection test succeeded. Not saved yet. Press \"Save and connect\" to add ComfyUI to the model choices.",
-      "testSuccessNonLoopbackSuffix": " This is a non-loopback address, so you must also check the confirmation box to save.",
-      "disconnectedNotice": "ComfyUI is not connected, so registered workflows do not appear in the model choices. Save a connection on the settings screen.",
-      "disconnectedNoticeFormSuffix": " While disconnected, choices and range autofill (/object_info) do not work."
+      "testSuccessSaveNotice": "Connection test succeeded. Nothing has changed yet. Press \"Switch to this URL\" to switch to this URL.",
+      "testSuccessSaveAndConnectNotice": "Connection test succeeded. Not connected yet. Press \"Connect\" to add ComfyUI to the model choices.",
+      "testSuccessNonLoopbackSuffix": " This is a non-loopback address, so you must also check the confirmation box to connect.",
+      "disconnectedNotice": "ComfyUI is not connected, so registered workflows do not appear in the model choices. Connect on the ComfyUI settings page.",
+      "disconnectedNoticeFormSuffix": " While disconnected, choices and range autofill (/object_info) do not work.",
+      "cardTitle": "ComfyUI",
+      "connect": "Connect",
+      "switchUrl": "Switch to this URL",
+      "connectDialogTitle": "Connect to ComfyUI",
+      "changeDialogTitle": "Change the ComfyUI URL",
+      "testResultTitle": "Connection test result"
     },
     "operationLabels": {
       "generate": "Generate",
       "edit": "Edit"
     },
     "form": {
-      "back": "← Back",
       "editTitle": "Edit ComfyUI workflow",
       "newTitle": "Register ComfyUI workflow",
       "workflowLoadError": "Could not get the workflow.",
+      "connectionPageLink": "Go to the ComfyUI page",
       "templateParseFailed": "Failed to analyze the template.",
       "jsonParseFailed": "Could not read this as JSON.",
       "clearedFieldsNotice": "Cleared bindings that no longer exist in the new file: {cleared}",
       "listSeparator": ", ",
       "analyzeFailed": "Failed to analyze.",
       "fileReadFailed": "Could not read the file.",
-      "updated": "Updated.",
-      "created": "Registered.",
-      "saveFailedGeneric": "Failed to save.",
       "loading": "Loading...",
       "fileSectionHeading": "File",
       "dropZoneText": "Drop the JSON exported from ComfyUI’s \"Export (API)\" here, or choose a file.",
       "chooseFile": "Choose file",
+      "replaceFile": "Replace with another file",
+      "analyzing": "Analyzing the file…",
       "templateLoaded": "Template loaded (nodes: {nodeCount})",
       "basicInfoHeading": "Basic info",
       "nameLabel": "Name",
@@ -1310,19 +1757,18 @@
       "maskModeImageAlpha": "Input image transparency",
       "maskRefLabel": "Mask node / input",
       "outputsLabel": "Output nodes (required, multiple allowed)",
+      "finalPromptLabel": "Final prompt",
+      "finalPromptHelp": "Choose the node that outputs the final prompt built at run time by a Prompt Enhancer or similar (such as PreviewAny). Its text is saved with the run and shown as \"Final prompt\" in the viewer and elsewhere. Leave it as \"None\" if you don't use one.",
       "exposedParamsHeading": "Exposed parameters",
-      "saving": "Saving...",
-      "update": "Update",
-      "register": "Register"
+      "cannotSaveYet": "Fix the following to save."
     },
     "list": {
-      "title": "ComfyUI workflows",
-      "newButton": "+ New workflow",
-      "disconnectedSettingsLink": "Go to settings",
+      "newButton": "+ Register workflow",
       "loading": "Loading...",
       "loadError": "Failed to load the list.",
       "empty": "No workflows registered yet.",
-      "updated": "Updated: {date}",
+      "updatedAt": "Updated",
+      "templateSha": "Template",
       "edit": "Edit",
       "delete": "Delete",
       "deleted": "Deleted.",
@@ -1382,7 +1828,8 @@
         "negativePrompt": "Negative prompt",
         "width": "Width",
         "height": "Height",
-        "batchSize": "Count"
+        "batchSize": "Count",
+        "finalPrompt": "Final prompt"
       }
     },
     "exposedParamValidation": {
@@ -1398,5 +1845,196 @@
       "nameRequired": "Please enter a name.",
       "templateRequired": "Please choose the workflow JSON file."
     }
+  },
+  "share": {
+    "button": "Share",
+    "buttonTooltip": "Create a link that people can open without signing in",
+    "dialogTitle": "Create a share link",
+    "intro": "Anyone with the link can view it without signing in. They see the included images and the prompts and parameters used to make them. They do not see who ran them, tags, or cost.",
+    "scopeLabel": "Scope",
+    "scopes": {
+      "single": "This image",
+      "ancestors": "With ancestors",
+      "lineage": "Ancestors and descendants"
+    },
+    "scopeHelp": {
+      "single": "Share only this image.",
+      "ancestors": "Share this image and the images it was edited from.",
+      "lineage": "Also share the images made from this image."
+    },
+    "allowOriginalLabel": "Allow viewing and downloading the original",
+    "allowOriginalHelp": "When off, viewers get the preview only (2048px on the long edge).",
+    "previewLoading": "Checking the included images...",
+    "previewFailed": "Could not load the included images.",
+    "previewCount": {
+      "one": "{count} image is included",
+      "other": "{count} images are included"
+    },
+    "previewFixedNote": "The scope is fixed now. Images you make later are not added automatically.",
+    "previewTruncated": "The lineage is large, so only part of it is included.",
+    "create": "Create link",
+    "creating": "Creating...",
+    "createFailed": "Could not create the share link",
+    "createdHeading": "Share link created",
+    "createdNote": "It stays valid until you revoke it. You can list and revoke links under Share links in Settings.",
+    "copy": "Copy",
+    "copiedToast": "Link copied",
+    "copyFailed": "Could not copy. Select the text and copy it by hand.",
+    "close": "Close"
+  },
+  "publicShare": {
+    "loading": "Loading...",
+    "invalid": "This link is not valid",
+    "invalidDetail": "The link was revoked, sharing is turned off, or the URL is wrong.",
+    "sharedBy": "Images shared from GAKEI",
+    "images": {
+      "one": "{count} image",
+      "other": "{count} images"
+    },
+    "lineageHeading": "Lineage",
+    "promptHeading": "Prompt",
+    "paramsHeading": "Parameters",
+    "paramJsonSummary": "{key} (JSON)",
+    "model": "Model",
+    "operation": "Operation",
+    "operations": {
+      "generate": "Generate",
+      "edit": "Edit"
+    },
+    "created": "Created",
+    "dimensions": "Size",
+    "noRun": "This image was uploaded, so there is no prompt on record.",
+    "downloadOriginal": "Download original",
+    "originalNotAllowed": "The original is not shared by this link.",
+    "originalNotAllowedForImage": "The original of this image is not shared.",
+    "untitled": "Untitled",
+    "imageListLabel": "Included images",
+    "viewRunDetail": "View Generated details",
+    "runDetailTitle": "Generated details",
+    "backToImage": "← Back to image details",
+    "outputsHeading": "Outputs",
+    "primaryParentHeading": "Primary parent",
+    "referencesHeading": "References",
+    "compareWithOriginal": "Compare with original",
+    "endCompare": "End comparison",
+    "backToViewer": "Back to viewer",
+    "expandLineageLabel": "Expand the lineage graph to full screen"
+  },
+  "finalPrompt": {
+    "heading": "Final prompt",
+    "truncated": "Too long; only the beginning is saved.",
+    "expand": "Show all",
+    "collapse": "Collapse",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Couldn't copy"
+  },
+  "embeddings": {
+    "pending": "Computing this image's vector…",
+    "missing": "This image has no vector yet.",
+    "failed": "Computing this image's vector failed.",
+    "compute": "Compute",
+    "recompute": "Compute again",
+    "requestFailed": "Couldn't request the computation.",
+    "loadFailed": "Couldn't load similar images.",
+    "unavailable": "Embeddings are not available now.",
+    "noSimilar": "No similar images.",
+    "score": "Similarity {score}"
+  },
+  "duplicates": {
+    "title": "Duplicate candidates",
+    "intro": "Groups similar images together. Compare them and delete the ones you don't need (deletion can be undone).",
+    "thresholdLabel": "Threshold",
+    "thresholdHelp": "Images with similarity at or above this value are grouped.",
+    "resetThreshold": "Reset to default",
+    "summary": {
+      "one": "{groups} group, compared {scanned} images",
+      "other": "{groups} groups, compared {scanned} images"
+    },
+    "hashMissing": "Approx.",
+    "hashMissingTitle": "No perceptual hash yet, so this was judged by similarity alone (different images such as color variants may be included)",
+    "truncatedNote": "There are many images, so only the newest {scanned} were compared.",
+    "groupsTruncatedNote": "There are many groups, so the largest are shown first.",
+    "empty": "No pairs at or above the threshold.",
+    "loading": "Loading…",
+    "loadFailed": "Couldn't load duplicate candidates.",
+    "groupHeading": "Group {index}",
+    "groupCount": {
+      "one": "{count} image",
+      "other": "{count} images"
+    },
+    "groupMaxScore": "Max {score}",
+    "firstBadge": "First",
+    "firstBadgeTitle": "The oldest image in the group",
+    "compare": "Compare",
+    "compareHint": "Choose 2 images to compare",
+    "selectForCompare": "Select for comparison",
+    "compareTitle": "Compare",
+    "compareOlder": "Older · {width}×{height}",
+    "compareNewer": "Newer · {width}×{height}",
+    "open": "Open in viewer",
+    "delete": "Delete",
+    "deleteConfirmMessage": "Delete this image from the stock.",
+    "deletedToast": "Deleted",
+    "undo": "Undo",
+    "deleteFailed": "Couldn't delete.",
+    "restoreFailed": "Couldn't undo."
+  },
+  "map": {
+    "title": "Map",
+    "viewLabel": "View",
+    "tabMap": "Map",
+    "tabNetwork": "Network",
+    "loading": "Loading…",
+    "loadFailed": "Couldn't load the map data.",
+    "filters": "Filters",
+    "filtersWithCount": "Filters ({count})",
+    "groupLabel": "Group",
+    "groupAll": "All",
+    "groupUnknown": "(Group not found)",
+    "tagLabel": "Tags",
+    "tagAddMore": "Add another tag",
+    "tagHelp": "Shows only images that have all of the selected tags.",
+    "limitLabel": "Limit",
+    "limitOption": "{count} images",
+    "kLabel": "Neighbors",
+    "kHelp": "How many similar images each image looks at. More emphasizes the overall shape; fewer emphasizes local similarity.",
+    "thresholdLabel": "Similarity threshold",
+    "edgeCount": {
+      "one": "{count} edge",
+      "other": "{count} edges"
+    },
+    "edgeCountCapped": "{count} edges (the most similar of {total})",
+    "showLineage": "Overlay lineage edges",
+    "truncated": "Showing only the newest {count} of {total} images. Narrow down by group or tag, or raise the limit.",
+    "truncatedAtMax": "Showing only the newest {count} of {total} images. Narrow down by group or tag.",
+    "empty": "No images to show. Only images with computed embeddings appear here.",
+    "emptyFiltered": "No images to show with these filters.",
+    "tooFew": "Not enough images to build a map (needs at least {min}).",
+    "layoutPreparing": "Preparing layout…",
+    "layoutProgress": "Computing layout {percent}%",
+    "layoutFailed": "Couldn't compute the layout.",
+    "networkRunning": "Settling layout…",
+    "umapAriaLabel": "Map placing similar images close together ({count} images)",
+    "networkAriaLabel": "Network linking similar images ({count} images, {edges} edges)",
+    "zoomGroup": "Zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to view",
+    "untitled": "(Untitled)",
+    "selectionLabel": "Selected image",
+    "neighborsHighlighted": {
+      "one": "Highlighting {count} similar image",
+      "other": "Highlighting {count} similar images"
+    },
+    "openInViewer": "Open in viewer",
+    "lineageGraph": "Lineage graph",
+    "similarInSearch": "See similar images in search",
+    "expandPreview": "Show larger",
+    "collapsePreview": "Back to card",
+    "previewLabel": "Selected image details",
+    "previewLoadFailed": "Could not load the image details.",
+    "kindLabel": "Kind",
+    "embeddedPromptHeading": "Prompt (embedded in the image, unverified)"
   }
 }

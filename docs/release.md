@@ -16,7 +16,7 @@ GAKEI のバージョン付けとリリースの自動化は ADR-0021 で決め�
 - **`main`(既定ブランチ):** リリース済みの状態だけを指す。利用者が `git clone` や起動スクリプトで手にするのはこちら。`dev` からの PR でしか更新しない。タグは main にだけ打つ。
 - **`dev`:** 開発の集約先。機能や修正は Issue に積み、`dev` から切った作業ブランチで作って PR を `dev` に出す(`gh pr create --base dev ...`。GitHub の PR 作成画面の既定は `main` なので、向き先を `dev` に変える)。
 - `main` と `dev` はルールセットで守られている: PR 経由のみ(承認数は 0)、CI(`test (ubuntu-latest)` と `docker build & smoke test`)の成功が必須、force push と削除は禁止。`v*` のタグは削除・上書きが禁止(管理者はバイパス可)。
-- CI は PR と、`main` / `dev` への push で走る。Windows のテストは push のときだけ。
+- CI は PR と、`main` / `dev` への push と、週1回の定期実行と手動実行で走る。Windows のテストは、作業ブランチの PR(base が `main` 以外)では走らない。`dev` への push では OS の違いが出るテスト(pytest のマーカー `windows`)だけを回し、リリースの PR(`dev` → `main`)、`main` への push、定期実行、手動実行では全部回す(ADR-0012)。
 
 ## リリース手順
 
@@ -56,8 +56,26 @@ GAKEI のバージョン付けとリリースの自動化は ADR-0021 で決め�
   git push origin :refs/tags/vX.Y.Z
   ```
 
-- **起動確認(`linux/amd64` のビルドと `/api/capabilities` の確認)で失敗:** GHCR への push より前なので、この時点でも何も公開されていない。原因を直す PR をマージしてから、同じ手順でタグを打ち直す。
+- **起動確認(`linux/amd64` のビルドと `/api/health`・`/api/capabilities`・`/` の確認)で失敗:** GHCR への push より前なので、この時点でも何も公開されていない。原因を直す PR をマージしてから、同じ手順でタグを打ち直す。
 - **GHCR への push は終わったが、その後に問題が見つかった:** 一度公開したタグは上書きしない(`latest` や `X.Y` を含め、動かしたタグを消したり差し替えたりしない)。修正して次のパッチ版(`vX.Y.(Z+1)`)を出す。
+
+## dev 版のイメージ
+
+リリース前の dev の状態をサーバーで試すときは、dev 版のイメージを作る(ADR-0021 2a 章)。
+
+```bash
+git fetch origin
+git push -f origin origin/dev:dev-image   # dev の今のコミットを dev-image ブランチに送ると、イメージが作られる
+gh run watch "$(gh run list --workflow dev-image.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+```
+
+- `dev-image` ブランチは作るきっかけにだけ使う。dev に含まれていないコミットを送ると失敗する。
+- ワークフローが `main` に入った後(次のリリース以降)は、Actions → Dev image → Run workflow(Branch は `dev`)からも作れる。
+
+- できるタグは `ghcr.io/zolgear/gakei:dev`(実行のたびに最新の dev 版に動く)と `ghcr.io/zolgear/gakei:dev-<SHA の先頭 7 文字>`。`latest` や番号のタグは動かない。
+- `/api/about`(設定画面の「GAKEI について」)の `commit` で、どのコミットかを確かめられる。`version` は直前のリリースの番号のまま。
+- dev 版は起動時に DB を `upgrade head` する。リリース版に戻すことがあるなら、切り替える前に DB をバックアップする。
+- 古い `dev-<SHA>` のタグは自動では消さない。増えたらパッケージのページで消す。
 
 ## GHCR のパッケージの公開範囲
 

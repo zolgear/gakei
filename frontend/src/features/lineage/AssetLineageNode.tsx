@@ -26,6 +26,8 @@ export interface AssetNodeData {
   instance?: string | null
   /** 埋め込みノードに対応する、取り込み済みのローカル Asset id(あれば)。 */
   resolvedAssetId?: string | null
+  /** サムネイルの URL を差し替える(共有のページは公開の URL を使う。ADR-0029)。 */
+  thumbUrlFor?: (assetId: string) => string
   [key: string]: unknown
 }
 
@@ -39,6 +41,7 @@ export function AssetLineageNode({ id, data }: NodeProps) {
     embedded = false,
     instance = null,
     resolvedAssetId = null,
+    thumbUrlFor,
   } = data as AssetNodeData
 
   const embeddedTitle = embedded
@@ -74,7 +77,7 @@ export function AssetLineageNode({ id, data }: NodeProps) {
       ) : thumbAssetId ? (
         <img
           className={`${styles.thumb} checkerboard`}
-          src={assetUrl(thumbAssetId, 'thumb')}
+          src={thumbUrlFor ? thumbUrlFor(thumbAssetId) : assetUrl(thumbAssetId, 'thumb')}
           alt=""
           draggable={false}
         />

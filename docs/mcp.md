@@ -6,7 +6,7 @@ GAKEI は MCP(Model Context Protocol)のサーバーとして動き、Claude Cod
 
 ## 1. 有効にする
 
-既定では無効になっている。管理者が設定画面の「管理者設定」→「MCP」で有効にする。
+既定では無効になっている。管理者が設定画面の「管理者設定」→「MCP」(`/settings/mcp`)で有効にし、ページ上部の「保存」を押す。
 
 - **1 時間あたりの上限:** MCP 経由で作れる Run の数。既定は 30 件で、0 にすると生成を止め、検索などの参照だけ使える。エージェントは人より速く繰り返し呼ぶので、課金の暴走を防ぐために使う。
 - 接続先の URL と登録コマンドの例も、この画面に出る。
@@ -27,7 +27,7 @@ claude mcp add --transport http gakei http://127.0.0.1:8000/mcp
 
 エージェントはブラウザのログインを使えないので、アクセストークンで接続する。
 
-1. 画面の「ユーザー設定」→「アクセストークン」で、名前を付けてトークンを発行する。値は発行したときに 1 回だけ表示されるので、その場でコピーする。
+1. 画面の「ユーザー設定」→「アクセストークン」(`/settings/access-tokens`)で、名前を付けてトークンを発行する。値は発行したときに 1 回だけ表示されるので、その場でコピーする。
 2. トークンをヘッダーに付けて登録する。
 
 ```bash
@@ -58,17 +58,18 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 
 | ツール | 内容 |
 |---|---|
-| `get_capabilities` | 使えるプロバイダー、モデル、パラメーター、サイズ |
+| `get_capabilities` | 使えるプロバイダー、モデル、パラメーター、サイズ。画像の埋め込み(文章での検索、似た画像)が使えるか(`embeddings`) |
 | `estimate_cost` | 生成する前に料金の目安(USD)を出す。Run は作らない |
 | `generate_image` | Generate / Edit を実行する(**課金を伴う**)。入力画像とマスクは Asset ID で渡す。Run を登録したらすぐ `run_id` を返す |
 | `get_run` | Run の状態、出力、料金の目安、1 時間の上限の残り、系列グラフ(`lineage_mermaid`)。完了まで待つこともできる(1 回最大 25 秒) |
 | `list_runs` | 自分の最近の Run の一覧(実行元、作成時刻、状態で絞り込み) |
 | `cancel_run` | 待機中の Run を取り消す |
-| `search_assets` | ストックを検索する(キーワード、種類、グループ) |
+| `search_assets` | ストックを検索する(キーワード、種類、グループ、タグ)。`mode="semantic"` で文章での検索(意味の近い順) |
+| `find_similar_assets` | 1 枚の画像に似た画像を、似ている順に返す |
 | `get_asset` | Asset の情報、主たる親、生成した Run、系列グラフ(`lineage_mermaid`) |
 | `get_image` | 画像を見る。長辺 1568px(既定)か 512px の JPEG / PNG を応答の本文に載せて返す |
 | `create_download_url` | 原本を取り出すための、10 分間・1 回限りのダウンロード URL を発行する |
-| `create_upload_url` | 手元の画像ファイルを送るための、10 分間・1 回限りのアップロード URL を発行する |
+| `create_upload_url` | ローカルの画像ファイルを送るための、10 分間・1 回限りのアップロード URL を発行する |
 | `upload_image` | 画像(base64)を取り込む。小さい画像向け。大きい画像は `create_upload_url` を使う |
 | `list_prompt_sets` | プロンプトセットの一覧 |
 | `list_groups` / `create_group` / `move_to_group` | グループの一覧、作成、Asset の移動 |
@@ -80,6 +81,15 @@ Streamable HTTP に対応したクライアントなら、URL(と認証モード
 - 出力は Asset ID、原本の URL、画面で開く URL で返る。本文に載る画像はサムネイル(512px の JPEG / PNG)だけ。エージェントが画像を細かく見るには `get_image`、加工のために原本が要るときは `create_download_url` を使う(「4. 画像の受け渡し」)。結果の URL は利用者がブラウザで開くためのもの。
 - `get_asset` は、原本から数えた透過の情報を返す。`has_alpha`(アルファチャンネルがあるか)と `transparent_ratio`(alpha < 255 のピクセルの割合。0〜1)。サムネイルでは透過かどうか分かりにくいので、背景を透過にしたかの確認に使う。
 - MCP 経由で作った Run は、Run の詳細に「実行元: MCP」と出る。
+
+### 文章での検索と似た画像
+
+管理者設定の「埋め込み」を有効にしていると(ADR-0033)、次の2つが使える。使えるかは `get_capabilities` の `embeddings.available` で分かる。無効のときはエラーを返す。
+
+- `search_assets(query="夕暮れの海辺", mode="semantic")`: 画像の埋め込みで、文章の意味に近い順に返す。プロンプトやタグの無い画像も見つかる。各結果の `score` はコサイン類似度。`kind`・`group_id`・`tag`・`limit` で絞り込める。`mode` を省くと、これまでどおりのキーワード検索(新しい順)。
+- `find_similar_assets(asset_id=..., limit=12)`: その画像に似た画像を返す(その画像自身は含めない)。その画像の埋め込みをまだ計算していなければエラーになる。
+
+`embeddings.multilingual` が `false` のモデル(既定の OpenAI CLIP など)は英語だけを理解するので、文章は英語で書く。見える範囲は他のツールと同じで、他人の画像は結果に出ない。
 
 ### 生成の流れ
 
@@ -144,13 +154,13 @@ GAKEI にある画像(前の生成結果、ストックの画像)を続けて編
 
 - 転送が要らず、原本の画質のまま編集できる。
 - 系列(どの画像を元に作ったか)が GAKEI に残る。アップロードし直すと、別の画像として取り込まれて系列がつながらない。
-- アップロードは、GAKEI にまだ無い画像(手元のファイル、GAKEI の外で作った・加工した画像)だけに使う。
+- アップロードは、GAKEI にまだ無い画像(ローカルのファイル、GAKEI の外で作った・加工した画像)だけに使う。
 
 MCP の説明とツールの説明にもこの使い方を書いてあるので、エージェントは通常こちらを選ぶ。
 
-### 手元の画像を送る(アップロード URL)
+### ローカルの画像を送る(アップロード URL)
 
-`upload_image` は画像を base64 でツールの引数に書くので、数 MB の画像ではエージェントのトークンを大量に使う。手元のファイルは、`create_upload_url` で URL を発行し、curl などで本文をそのまま送る。
+`upload_image` は画像を base64 でツールの引数に書くので、数 MB の画像ではエージェントのトークンを大量に使う。ローカルのファイルは、`create_upload_url` で URL を発行し、curl などで本文をそのまま送る。
 
 ```bash
 # create_upload_url の結果の upload_url に送る(10 分間・1 回限り有効)
@@ -177,7 +187,7 @@ curl --fail-with-body -F file=@image.png 'http://127.0.0.1:8000/api/uploads/<tok
 
 ### 原本を取り出す(`create_download_url`)
 
-加工のために原本が要るときは、`create_download_url(asset_id)` で URL を発行し、手元で動く道具(curl など)で取る。
+加工のために原本が要るときは、`create_download_url(asset_id)` で URL を発行し、ローカルで動く道具(curl など)で取る。
 
 ```bash
 # create_download_url の結果の download_url から取る(10 分間・1 回限り有効)
@@ -194,7 +204,7 @@ curl --fail -o image.png 'http://127.0.0.1:8000/api/downloads/<token>'
 結果の `url`・`viewer_url`、アップロード URL、ダウンロード URL は、どれも GAKEI のサーバーを指す。GAKEI が LAN の中(や `127.0.0.1`)にある限り、エージェントがクラウド側で動く道具(Web の取得、クラウドのコード実行など)で取りに行っても届かない。
 
 - 画像を**見る**だけなら `get_image` を使う(MCP の応答に載るので、どこでも届く)。
-- 原本を**加工する**なら `create_download_url` で URL を得て、利用者の PC で動く道具(Claude Code の Bash、手元の curl など)で取る。
+- 原本を**加工する**なら `create_download_url` で URL を得て、利用者の PC で動く道具(Claude Code の Bash、ローカルの curl など)で取る。
 - クラウドで動くコード実行に原本を渡す方法はない。MCP の応答には大きさの上限があり、原本は本文に載せられないため。
 
 ### 原寸の画像を取る(アクセストークン)

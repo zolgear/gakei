@@ -324,7 +324,7 @@ export function ResultPane({
 
   const recentOutputsQuery = useQuery({
     queryKey: ['assets', 'generated', 'recent-for-studio'],
-    queryFn: () => listAssets({ kind: 'generated', limit: RECENT_OUTPUTS_FETCH_LIMIT }),
+    queryFn: () => listAssets({ kind: ['generated'], limit: RECENT_OUTPUTS_FETCH_LIMIT }),
     enabled: effectiveAssetId !== null,
   })
 

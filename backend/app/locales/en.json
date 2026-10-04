@@ -4,16 +4,38 @@
     "legacyProviderIgnored": "Ignoring PROVIDER=openai (this setting is no longer used).",
     "legacyProviderAborted": "PROVIDER={value} is set, but this setting has been removed. Use FAKE_PROVIDER=1 to try it with dummy images, or remove PROVIDER to connect to the real API.",
     "authConfigMissing": "AUTH_MODE=oidc but required environment variable(s) are missing: {missing}",
+    "authConfigMissingFromSettings": "The authentication mode is set to oidc in the settings, but required values are missing: {missing}. To start with authentication temporarily disabled, add AUTH_MODE=none to .env and restart (the saved settings are kept).",
     "authUrlInvalid": "{name} is not a valid URL (it must be http or https and include a host): {value}",
     "authUrlInsecure": "{name} points to http (not https) on a non-loopback address ({value}). Authentication traffic would be sent in plain text.",
-    "databaseUnavailable": "Cannot connect to the database ({url}). Check DATABASE_URL and that PostgreSQL is running and accepting connections. Details: {error}"
+    "authEmergencyDisable": "To start with authentication temporarily disabled, add AUTH_MODE=none to .env and restart (the saved settings are kept).",
+    "databaseUnavailable": "Cannot connect to the database ({url}). Check DATABASE_URL and that PostgreSQL is running and accepting connections. Details: {error}",
+    "storageConfigMissing": "Required environment variables for STORAGE_BACKEND are not set: {missing}",
+    "storageAzureBothConnections": "Both AZURE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_ACCOUNT_URL are set. Set only one of them.",
+    "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING is malformed. Paste the connection string from \"Access keys\" in the Azure portal as is.",
+    "storageUnavailable": "Cannot connect to, or read and write, the image storage ({storage}). Check that the container (bucket) exists, and check the endpoint, credentials, and read/write permissions. Details: {error}",
+    "storageS3LookupForbidden": "Checking for an object that may not exist was denied with 403 (AccessDenied) (key: {key}). Without the s3:ListBucket permission, AWS S3 returns 403 instead of 404 for keys that do not exist. Allow s3:ListBucket on the bucket (arn:aws:s3:::bucket-name) in the IAM policy.",
+    "storageConditionalWriteRejected": "The storage does not accept conditional writes (If-None-Match: *) (HTTP {status} {code}). Original images cannot be saved as is. Use an S3-compatible storage that supports conditional writes.",
+    "storageConditionalWriteIgnored": "The image storage ignored the condition of a conditional write (If-None-Match: *). Originals with the same name could be overwritten, but this is unlikely in practice because names include the first 8 characters of the asset ID.",
+    "nulInRequest": "The request contains a NUL character (\\u0000) and cannot be accepted (at: {location}). Remove the NUL character and try again."
   },
   "auth": {
     "required": "Login required.",
     "adminRequired": "This action requires administrator privileges.",
     "disabled": "Login is not available in personal mode (AUTH_MODE=none).",
-    "idpUnavailable": "Cannot reach the identity provider. Check OIDC_ISSUER and the IdP's status.",
-    "callbackFailed": "Login could not be completed. Please try again."
+    "idpUnavailable": "Cannot reach the identity provider. Check the issuer in Admin settings > Authentication (or OIDC_ISSUER) and the IdP's status.",
+    "callbackFailed": "Login could not be completed. Please try again.",
+    "testLogin": {
+      "title": "Test sign-in",
+      "success": "Test sign-in succeeded. Close this window and return to the settings page.",
+      "errors": {
+        "no_connection": "No connection is registered. Register a connection on the settings page.",
+        "callback_failed": "Sign-in failed. Check the issuer, client ID, secret, and the redirect URI registered with the IdP.",
+        "email_missing": "No email address was received from the IdP. Include email in the scopes and set an email address on the IdP account.",
+        "email_unverified": "The email address at the IdP is not verified. Verify it at the IdP and try again.",
+        "email_not_admin": "The signed-in email address is not in the admin emails. Save the admin emails and try again.",
+        "config_changed": "The connection settings changed during the test. Please test again."
+      }
+    }
   },
   "provider": {
     "unknown": "Unknown provider: {name}"
@@ -47,6 +69,7 @@
       "bindingInputMissing": "{label}: node {node} has no input {input}",
       "bindingDuplicate": "Duplicate binding: node {node} input {input}",
       "outputNodeMissing": "Output node {node} does not exist",
+      "finalPromptNodeMissing": "Final prompt node {node} does not exist",
       "editRequiresImage": "edit requires an image binding",
       "generateCannotHaveImageOrMask": "generate cannot have image or mask bindings (register it as edit instead)",
       "exposedParamDuplicate": "Duplicate exposed parameter name: {name}",
@@ -64,7 +87,8 @@
       "promptBindingCandidates": "Could not determine the prompt binding. Choose one of these candidates manually: {candidates}",
       "moreCandidatesSuffix": ", and {count} more",
       "imageBindingNotFound": "Could not find an input image (LoadImage) binding.",
-      "maskMethodUnsupported": "This workflow's mask method cannot be passed from GAKEI."
+      "maskMethodUnsupported": "This workflow's mask method cannot be passed from GAKEI.",
+      "secretValueFound": "Input {input} of node {node} ({class_type}) seems to contain a secret such as an API key. Share pages hide the value and do not serve the originals of images made with this workflow."
     },
     "client": {
       "genericError": "Error",
@@ -162,14 +186,69 @@
     "annotation": {
       "invalidBool": "{name} must be true or false",
       "invalidModel": "The model name must be 1 to {max} characters",
-      "invalidApiStyle": "The API style must be responses or chat",
       "invalidLanguage": "The language must be ja or en",
       "invalidTagLanguage": "The tag language must be native or localized",
       "invalidHourlyLimit": "The hourly limit must be an integer from {min} to {max}",
       "invalidOnnxModel": "The ONNX tagger model must be wd-vit-tagger-v3, wd-swinv2-tagger-v3 or wd-eva02-large-tagger-v3",
       "invalidThreshold": "The threshold must be a number from {min} to {max}",
       "unknownOnnxModel": "Unknown ONNX tagger model",
-      "onnxDownloading": "A model cannot be deleted while it is downloading"
+      "onnxDownloading": "A model cannot be deleted while it is downloading",
+      "invalidTarget": "Invalid connection and model pair",
+      "unknownConnection": "The specified connection does not exist",
+      "migratedConnectionName": "Annotation only"
+    },
+    "llmConnections": {
+      "invalidName": "Connection name must be 1-{max} characters",
+      "invalidApiStyle": "The API style must be responses or chat",
+      "tooMany": "You can add up to {max} connections",
+      "notFound": "The specified connection does not exist",
+      "builtinName": "OpenAI settings",
+      "builtinReadOnly": "\"OpenAI settings\" cannot be edited or deleted (only the API style can be changed; change the key and Base URL in the OpenAI settings)",
+      "inUse": "This connection is used by {features} and cannot be deleted",
+      "featureSeparator": ", ",
+      "features": {
+        "annotation": "Auto titles and tags",
+        "embedding": "Embeddings"
+      }
+    },
+    "share": {
+      "invalidEnabled": "enabled must be true or false"
+    },
+    "embedding": {
+      "invalidBool": "{name} must be true or false",
+      "invalidNull": "{name} cannot be null",
+      "invalidEngine": "The engine must be onnx or remote",
+      "invalidOnnxModel": "The embedding model must be one of {models}",
+      "unknownOnnxModel": "Unknown embedding model",
+      "onnxDownloading": "A model cannot be deleted while it is downloading",
+      "unknownConnection": "The specified connection does not exist",
+      "builtinConnection": "The OpenAI settings cannot be used for embeddings. Add a connection for your inference server and select it",
+      "invalidModel": "The model name must be 1 to {max} characters",
+      "invalidApiFormat": "The format must be infinity",
+      "invalidThreshold": "The threshold must be a number between {min} and {max}",
+      "vectorsNotFound": "There are no vectors for this model"
+    },
+    "auth": {
+      "invalid": {
+        "issuer": "The issuer must be an http or https URL with a host",
+        "public_base_url": "PUBLIC_BASE_URL must be an http or https URL with a host",
+        "client_id": "Enter a client ID",
+        "scopes": "Scopes must be space-separated and include openid",
+        "client_secret": "The client secret is too long",
+        "admin_emails": "The admin emails contain a value that is not an email address",
+        "allowed_email_domains": "The allowed domains contain a value that is not a domain (e.g. example.com)",
+        "session_hours": "The session length must be an integer from {min} to {max} hours"
+      },
+      "discoveryFailed": "Could not fetch the discovery document ({url}). Check the issuer URL and that the IdP is reachable. Details: {reason}",
+      "discoveryInvalid": "The discovery document ({url}) is not an OpenID Connect document. Check the issuer URL. Details: {reason}",
+      "conflict": {
+        "env_locked": "AUTH_MODE in .env takes precedence, so the authentication mode cannot be changed here. Change .env and restart.",
+        "no_connection": "No connection is registered, so oidc cannot be enabled. Register a connection and run a test sign-in first.",
+        "not_verified": "A test sign-in with the current connection has not succeeded, so oidc cannot be enabled. Run a test sign-in first.",
+        "admin_emails_empty": "oidc requires at least one admin email.",
+        "verified_email_not_admin": "The email address used for the test sign-in is not in the admin emails.",
+        "self_not_admin": "You cannot remove your own email address from the admin emails."
+      }
     }
   },
   "runValidation": {
@@ -300,14 +379,11 @@
     "noEngine": "No estimation engine is available. Enable the LLM, the VLM or the ONNX tagger in Admin settings > Auto titles and tags (the ONNX tagger also needs its model downloaded)",
     "tagNotFound": "This tag is not on the image",
     "invalidVlmResponse": "Could not read the VLM response as JSON",
-    "apiKeyMissing": "No API key for estimation. Set the OpenAI API key or a dedicated key for estimation",
+    "apiKeyMissing": "No API key for annotation. Set the OpenAI API key or choose another connection",
     "emptyTitle": "The LLM did not return a title",
     "onnxModelMissing": "The ONNX tagger model was not found. Download it from Admin settings",
     "onnxInsufficientMemory": "The ONNX tagger model {model} was not loaded because there is not enough free memory (needs about {needed} GB, about {available} GB free). Choose a smaller model in Admin settings or add memory",
-    "download": {
-      "httpError": "Failed to download {file} (HTTP {status})",
-      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
-    }
+    "connectionMissing": "The connection used for annotation was not found. Choose the connections again in Admin settings > Auto titles and tags"
   },
   "uploads": {
     "notFound": "This upload URL does not exist.",
@@ -348,5 +424,70 @@
       "one": "Migration complete ({tables} tables, {count} row in total). Set DATABASE_URL and start GAKEI (keep using the same DATA_DIR).",
       "other": "Migration complete ({tables} tables, {count} rows in total). Set DATABASE_URL and start GAKEI (keep using the same DATA_DIR)."
     }
+  },
+  "migrateStorage": {
+    "description": "Copy the original and derived images in local storage (DATA_DIR) to Azure Blob Storage or S3-compatible storage under the same keys (ADR-0028). Stop GAKEI before running this. The database is not modified and local files are not deleted.",
+    "toHelp": "Destination type. The connection is set with the AZURE_STORAGE_* / S3_* environment variables",
+    "dryRunHelp": "Do not connect to the destination; only show the number and total size of the objects to copy",
+    "invalidTarget": "Invalid destination type: {target} (specify azure_blob or s3)",
+    "databaseMissing": "Database file not found: {source}",
+    "sizeMismatch": "Aborted because the destination has an object with the same key but a different size (it will not be overwritten): {key} (local {local} bytes, destination {remote} bytes)",
+    "copyFailed": "Aborted because copying {key} failed. Run the tool again to continue from where it stopped. Details: {error}",
+    "derivedSizeMismatch": "Note: The destination had a derived image with the same key but a different size, so it was overwritten (derived images can be recreated from the originals): {key} (local {local} bytes, destination {remote} bytes)",
+    "source": "Source: {source}",
+    "target": "Destination: {target}",
+    "originals": {
+      "one": "  Originals: {count} object ({mb} MB)",
+      "other": "  Originals: {count} objects ({mb} MB)"
+    },
+    "derived": {
+      "one": "  Derived: {count} object ({mb} MB)",
+      "other": "  Derived: {count} objects ({mb} MB)"
+    },
+    "missing": {
+      "one": "Note: {count} original is in the database but not on local storage (not copied): {keys}",
+      "other": "Note: {count} originals are in the database but not on local storage (not copied): {keys}"
+    },
+    "dryRunDone": {
+      "one": "--dry-run: {count} object in total ({mb} MB). Did not connect to the destination.",
+      "other": "--dry-run: {count} objects in total ({mb} MB). Did not connect to the destination."
+    },
+    "done": {
+      "one": "Migration finished ({count} object in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI.",
+      "other": "Migration finished ({count} objects in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI."
+    }
+  },
+  "shares": {
+    "disabled": "Share links are disabled in the admin settings",
+    "notFound": "Share link not found",
+    "publicNotFound": "This link is not valid"
+  },
+  "modelStore": {
+    "download": {
+      "httpError": "Failed to download {file} (HTTP {status})",
+      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
+    }
+  },
+  "embeddings": {
+    "notUsable": "Embeddings are not available. Enable them under Admin settings > Embeddings and prepare a model (local models must be downloaded)",
+    "notConfigured": "No embedding model is configured",
+    "connectionMissing": "The connection used for embeddings was not found. Choose it again under Admin settings > Embeddings",
+    "modelMissing": "The embedding model {model} was not found. Download it from the admin settings",
+    "insufficientMemory": "Did not load the embedding model {model} because there is not enough free memory (needs about {needed} GB, about {available} GB free)",
+    "remoteUnavailable": "Could not connect to the inference server ({error})",
+    "remoteHttpError": "The inference server returned an error (HTTP {status}): {body}",
+    "remoteInvalidResponse": "Could not read the inference server's response as embeddings",
+    "assetDeleted": "Embeddings are not computed for deleted images",
+    "maskNotSupported": "Embeddings are not computed for masks",
+    "imageUnreadable": "Could not read the image",
+    "modelUnreadable": "Could not read the files of the embedding model {model}. Delete the model in the admin settings and download it again",
+    "queryTooLong": "The search text is too long (up to {max} characters)",
+    "vectorPending": "The embedding of this image is being computed. Reopen this in a moment",
+    "vectorFailed": "Computing the embedding of this image failed. You can recompute it from the image details",
+    "vectorMissing": "The embedding of this image has not been computed yet. You can compute it from the image details",
+    "queryFailed": "Could not compute the embedding of the search text: {error}",
+    "queryImageEmpty": "The image file is empty",
+    "queryImageTooManyPixels": "The image is too large (up to {max} pixels)",
+    "queryImageFailed": "Could not compute the embedding of the image: {error}"
   }
 }

@@ -27,7 +27,7 @@
 `v*` のタグが push されたら動く。手順は次のとおりで、途中で失敗したらそこで止まる。
 
 1. **タグとバージョンの一致を確かめる。** `pyproject.toml` の `version` が `X.Y.Z` で、タグが `vX.Y.Z` でなければ失敗する(タグの打ち間違いと、バージョンを上げ忘れたタグを防ぐ)。プレリリース `vX.Y.Z-rc.N` は「これから出す `X.Y.Z` の候補」なので、`-` の前の `vX.Y.Z` だけを比べる(`pyproject.toml` は PEP 440 で `-rc.N` の形を書けず、候補のたびに版を書き換えたくもない)。
-2. **イメージを `linux/amd64` で作り、起動確認する。** CI の docker ジョブと同じく `FAKE_PROVIDER=1` で起動し、`/api/capabilities` と `/`(`<title>GAKEI</title>`)を確かめる。push より前に行い、壊れたイメージを公開しない。
+2. **イメージを `linux/amd64` で作り、起動確認する。** CI の docker ジョブと同じく `FAKE_PROVIDER=1` で起動し、`/api/capabilities` と `/`(`<title>GAKEI</title>`)を確かめる。push より前に行い、壊れたイメージを公開しない。(2026-09-30 追記、Issue #43: 起動待ちはログイン不要の生存確認 `GET /api/health` で行い、その後に `/api/capabilities` と `/` を確かめる。イメージの `HEALTHCHECK` も `/api/health` を叩く。`/api/capabilities` は oidc モードではログインが要り、ヘルスチェックが 401 で unhealthy になるため)
 3. **`linux/amd64` と `linux/arm64` のマルチアーキテクチャでビルドして GHCR に push する。** イメージ名は `ghcr.io/<owner>/gakei`(`github.repository` から取る。public リポジトリでは `ghcr.io/zolgear/gakei`)。
    - タグ: `X.Y.Z`、`X.Y`、`latest`。プレリリース(`-rc.N` など)には `X.Y.Z-rc.N` だけを付け、`X.Y` と `latest` は動かさない。
    - OCI のラベル(`org.opencontainers.image.source` / `version` / `revision` / `licenses`)を付ける。`source` により GHCR のパッケージがリポジトリに紐づき、README がパッケージのページに出る。
@@ -42,6 +42,18 @@
 - GHCR のパッケージの公開範囲はリポジトリに従う。public リポジトリの Actions から push すれば自動で public になる(2026-09-27 の `v0.1.0` で確認。当初は手で切り替える想定だったが不要だった)。private リポジトリから push した場合だけ、設定画面で手で public にする(`docs/release.md`)。
 - private リポジトリのうちに `v0.1.0-rc.1` のようなプレリリースのタグで一度動かして確かめる。その際に作られたパッケージと Release は、公開リポジトリでの最初のリリースより前に削除する(名前が同じ `ghcr.io/zolgear/gakei` になり、旧リポジトリに紐づいたパッケージが残ると混乱する)。
 - CI(`ci.yml`)の docker ジョブは変えない(単一アーキテクチャのビルドと起動確認のまま)。マルチアーキテクチャのビルドは時間がかかるので、リリース時だけ行う。
+
+### 2a. dev 版のイメージ(2026-10-01 追記)
+
+リリース前の dev の状態をサーバーで試すため、dev 版のイメージも公開する(ユーザーの判断)。
+
+- **作ると決めたときだけ作る**(`.github/workflows/dev-image.yml`)。dev への push や PR のたびには作らない(マルチアーキテクチャのビルドに時間がかかるため)。きっかけは次の2つ。
+  - `dev-image` ブランチへの push(`git push -f origin origin/dev:dev-image`)。このブランチは作るきっかけにだけ使い、開発には使わない。push したコミットが dev に含まれていなければ失敗させる(レビューを経ていない変更を公開しない)。
+  - 手動実行(`workflow_dispatch`)。dev ブランチ以外で実行したら失敗させる。ただし `workflow_dispatch` は、ワークフローのファイルが既定ブランチ(`main`)にないと実行できない。`main` はリリースのときしか動かないので、主に push のほうを使う。
+- 手順は2章の 2・3 と同じ(`linux/amd64` で起動確認してから、`linux/amd64` と `linux/arm64` で push する)。`GAKEI_COMMIT` を渡すので、`/api/about` と設定画面の「GAKEI について」でコミットが分かる。
+- タグは `dev`(最新の dev 版。実行のたびに動く)と `dev-<コミットの SHA の先頭 7 文字>`。`latest`・`X.Y.Z`・`X.Y` は動かさず、GitHub Release も作らない。
+- パッケージは public なので、dev 版も誰でも pull できる。利用者向けの案内(README)には載せず、`docs/release.md` にだけ書く。dev 版はリリース前の状態で、起動時の `upgrade head`(ADR-0008)で DB が先に進むと、リリース版に戻すには DB のバックアップが要る。
+- 古い `dev-<SHA>` のタグは自動では消さない。増えすぎたら GHCR のパッケージの画面で消す。
 
 ### 3. バージョンと第三者ライセンス表記を画面と API に出す
 
@@ -70,7 +82,7 @@
 |---|---|
 | A: `backend/pyproject.toml` の1か所(採用) | 変更は1か所。Python 側は `tomllib` で読むだけ。フロントは API から受け取る |
 | B: `pyproject.toml` と `package.json` の両方を同期 | 2か所を揃えるテストが要る。`package.json` の版は誰も使わない |
-| C: タグから導出(ビルド時に埋め込む) | 起動スクリプトで動かす場合はタグが手元に無いことがある(zip でダウンロードした場合など)。ファイルに書いてあるほうが確実 |
+| C: タグから導出(ビルド時に埋め込む) | 起動スクリプトで動かす場合はタグがローカルに無いことがある(zip でダウンロードした場合など)。ファイルに書いてあるほうが確実 |
 
 | 第三者ライセンス表記の作り方 | 評価 |
 |---|---|
@@ -96,6 +108,7 @@
 - 依存が増えたときに何もしなくても表記に載る。
 - `docs/release.md` にリリースの手順(バージョンを上げる PR → タグ → 確認 → 失敗したときの対処、GHCR を public にする手順、private での予行演習)を置く。
 - 開発者向けの環境(`run.sh`)でも設定画面にバージョンが出るので、不具合の報告に版を書いてもらえる。
+- (2026-09-30 追記、Issue #43)イメージの `HEALTHCHECK` と CI の起動待ちは `GET /api/health`(ログイン不要。`{"status":"ok"}` だけを返す)を使う。`AUTH_MODE=oidc` でもコンテナが healthy になる。
 
 ## Action Items
 
@@ -104,3 +117,4 @@
 3. [x] `Dockerfile`(`$BUILDPLATFORM`、`GAKEI_COMMIT`、LICENSE / NOTICE のコピー、OCI ラベル)、`.github/workflows/release.yml`
 4. [x] `docs/release.md`、README(日英)の Docker の節、`docs/configuration.md`(`GAKEI_COMMIT` は利用者が設定するものではないので載せない)、CLAUDE.md、ADR-0016 / ADR-0011 への追記
 5. [x] private リポジトリで `v0.1.0-rc.1` を打ってワークフローを一度動かし、パッケージと Release を消す(2026-09-27。同日に public で `v0.1.0` をリリース)
+6. [x] dev 版のイメージ(2a 章。`dev-image.yml`、`docs/release.md`。2026-10-01)

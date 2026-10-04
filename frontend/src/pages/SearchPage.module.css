@@ -8,6 +8,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  /* 画像を落とす受け口を、結果が少なくても画面の下まで広げる。 */
+  min-height: 100%;
 }
 
 .backLink {
@@ -30,6 +32,8 @@
 
 .searchInput {
   flex: 1;
+  /* 狭い幅でも「検索」のボタンを押し出さない。 */
+  min-width: 0;
   height: 40px;
   padding: 0 12px;
   background: var(--color-bg-sunken);
@@ -45,6 +49,8 @@
 }
 
 .searchButton {
+  flex: 0 0 auto;
+  white-space: nowrap;
   height: 40px;
   padding: 0 16px;
   background: var(--color-accent);
@@ -239,4 +245,222 @@
   content: '#';
   margin-right: 2px;
   color: var(--color-text-faint);
+}
+
+/* ---------- 埋め込み(ADR-0033 8章) ---------- */
+
+/* 「キーワード / 意味」の切り替え。比較ビューの表示モードの切り替えと同じ見た目。 */
+.modeSwitch {
+  align-self: flex-start;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: -10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.modeButton {
+  height: 28px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.modeButton[data-active='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+}
+
+.modeButton:hover {
+  color: var(--color-text);
+}
+
+/* 英語向けのモデルで日本語を検索したときの注記。 */
+.hint {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+.assetScore {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+.similarHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.similarOrigin {
+  flex: 0 0 auto;
+  width: 72px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.similarOrigin:hover .assetThumb {
+  border-color: var(--color-accent);
+}
+
+/* 意味での検索の「もっと見る」。 */
+.showMore {
+  align-self: center;
+  height: 32px;
+  padding: 0 16px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.showMore:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.showMore:disabled {
+  opacity: 0.6;
+}
+
+@media (max-width: 767px) {
+  .modeButton {
+    height: 40px;
+    padding: 0 16px;
+  }
+
+  .showMore {
+    height: 44px;
+  }
+}
+
+/* 画像で探す(ADR-0033 8章、2026-10-04)。手元の画像の縮小と、選ぶ・落とす・貼り付けの案内。 */
+.imageSearch {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: -8px;
+  padding: 10px 12px;
+  background: var(--color-bg-sunken);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+}
+
+.imageSearchBody {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.imageSearchButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12.5px;
+}
+
+.imageSearchButton:hover {
+  border-color: var(--color-accent);
+}
+
+.imageSearchNote {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.queryImage {
+  position: relative;
+  flex: 0 0 auto;
+  width: 88px;
+}
+
+.queryImageClear {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  color: var(--color-text);
+}
+
+.queryImageClear:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* 画像をドラッグしている間の受け口(画面全体)。 */
+.dropOverlay {
+  position: fixed;
+  inset: 12px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--color-text);
+  background: var(--color-bg-raised);
+  opacity: 0.94;
+  border: 2px dashed var(--color-accent);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+@media (max-width: 767px) {
+  .imageSearchButton {
+    height: 40px;
+  }
+
+  .queryImage {
+    width: 72px;
+  }
+
+  /* タッチの端末ではドラッグも貼り付けもまず使わないので、案内を出さない。 */
+  .imageSearchDropHint {
+    display: none;
+  }
+
+  .queryImageClear {
+    width: 32px;
+    height: 32px;
+    top: -10px;
+    right: -10px;
+  }
+}
+
+.queryImage .assetThumb {
+  object-fit: contain;
+  display: block;
 }

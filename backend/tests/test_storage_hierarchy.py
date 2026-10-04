@@ -20,6 +20,8 @@ from app.domain.models import Asset, AssetKind
 from app.domain.storage import LocalFsStore, OriginalKeyInfo, normalize_segment
 from tests.conftest import make_png_bytes, wait_for_run_terminal
 
+pytestmark = pytest.mark.windows
+
 _NAME = r"\d{8}-\d{6}_[0-9a-f]{8}(-\d+)?"
 _MONTH = r"\d{4}-\d{2}"
 
@@ -72,6 +74,9 @@ def test_normalize_segment_truncates_to_64_chars_and_strips_again() -> None:
 # -- キー規則(ADR-0026 1章) --------------------------------------------------------
 
 
+# time.tzset() は Unix にしかない。TZ で切り替わるのは Docker(Linux)での話なので、
+# Windows ではこのテストを飛ばす。
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset() は Unix のみ")
 def test_generated_key_uses_provider_model_month_and_local_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

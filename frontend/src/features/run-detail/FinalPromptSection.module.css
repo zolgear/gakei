@@ -1,0 +1,131 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.headingRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.headingRow > :first-child {
+  margin: 0;
+}
+
+.heading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.nodeLabel {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+
+.textBox {
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 折り畳み中は先頭の数行だけ(finalPrompt.ts の FINAL_PROMPT_COLLAPSED_LINES と揃える)。 */
+.text[data-collapsed='true'] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+.note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 差し込まれた操作(RunPromptActions の行)の枠を外し、コピーと同じ並びで折り返す。 */
+.toolbar > div {
+  display: contents;
+}
+
+.linkButton {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 文字ラベルは置かず、アイコン + title(ツールチップ)で説明する(RunPromptActions と揃える)。 */
+.iconButton {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+}
+
+.iconButton:hover {
+  border-color: var(--color-accent);
+}
+
+.iconButton[data-state='copied'] {
+  color: var(--color-success);
+}
+
+.iconButton[data-state='failed'] {
+  color: var(--color-danger);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .linkButton {
+    min-height: 36px;
+  }
+
+  .iconButton {
+    width: 44px;
+    height: 44px;
+  }
+}

@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import io
 import itertools
+import logging
 import secrets
 import time
 import uuid
@@ -60,11 +61,17 @@ from app.providers.comfyui.client import (
     WsPreview,
     check_available,
     collect_output_images,
+    collect_output_texts,
+    sanitize_text,
 )
+
+logger = logging.getLogger(__name__)
 
 _AVAILABILITY_CACHE_SECONDS = 5.0
 _PREVIEW_MIN_INTERVAL_SECONDS = 0.5
 _HISTORY_POLL_INTERVAL_SECONDS = 1.0
+# 最終プロンプトの1件あたりの上限(ADR-0030 2章)。超えた分は切り詰めて `truncated` を付ける。
+TEXT_OUTPUT_MAX_CHARS = 100_000
 
 # `InputImage.mime` -> ComfyUI にアップロードするときの拡張子。
 _EXT_FROM_MIME = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
@@ -209,6 +216,10 @@ class ComfyUIProvider:
         result["comfyui_uploads"] = uploads
         result["comfyui_prompt"] = graph
         result["comfyui_outputs"] = list(bindings.outputs)
+        if bindings.final_prompt is not None:
+            # 実行時にワークフローのテーブルを読まないため、ノード id を params に残す
+            # (ADR-0013 4章、ADR-0030 2章)。
+            result["comfyui_final_prompt"] = bindings.final_prompt
         if bindings.mask is not None:
             result["comfyui_mask_mode"] = bindings.mask.mode
         return result
@@ -328,10 +339,16 @@ class ComfyUIProvider:
             )
 
         outputs = [await self._fetch_output(client, ref) for ref in refs]
+        text_outputs = _collect_final_prompt(entry, params, prompt_graph, prompt_id)
 
         duration_ms = int((time.monotonic() - started_at) * 1000)
         usage = {"prompt_id": prompt_id, "duration_ms": duration_ms}
-        return RunResult(outputs=outputs, usage=usage, provider_request_id=prompt_id)
+        return RunResult(
+            outputs=outputs,
+            usage=usage,
+            provider_request_id=prompt_id,
+            text_outputs=text_outputs,
+        )
 
     @staticmethod
     async def _fetch_output(client: ComfyUIClient, ref: OutputImageRef) -> RunOutputImage:
@@ -496,6 +513,46 @@ class ComfyUIProvider:
                     request_id=prompt_id,
                 )
             await asyncio.sleep(min(_HISTORY_POLL_INTERVAL_SECONDS, remaining))
+
+
+def _collect_final_prompt(
+    entry: dict[str, Any],
+    params: dict[str, Any],
+    prompt_graph: dict[str, Any],
+    prompt_id: str,
+) -> list[dict[str, Any]] | None:
+    """最終プロンプト(`params["comfyui_final_prompt"]` のノード)の `text` を記録の形にする
+    (ADR-0030 2章)。ノード id・class_type・title は送ったグラフから取る。ノードを登録して
+    いない、または `text` が無いときは None(後者はログに警告を出す。Run は成功のまま)。
+    """
+    node_id = params.get("comfyui_final_prompt")
+    if node_id is None:
+        return None
+    node_id = str(node_id)
+    text = collect_output_texts(entry, node_id)
+    if text is None:
+        logger.warning(
+            "ComfyUI の最終プロンプトのノード %s に text がありません(prompt_id=%s)",
+            node_id,
+            prompt_id,
+        )
+        return None
+    node = prompt_graph.get(node_id)
+    node = node if isinstance(node, dict) else {}
+    class_type = node.get("class_type")
+    meta = node.get("_meta")
+    title = meta.get("title") if isinstance(meta, dict) else None
+    item: dict[str, Any] = {
+        "role": "final_prompt",
+        "node_id": node_id,
+        "class_type": sanitize_text(class_type) if isinstance(class_type, str) else None,
+        "title": sanitize_text(title) if isinstance(title, str) else None,
+        "text": text,
+    }
+    if len(text) > TEXT_OUTPUT_MAX_CHARS:
+        item["text"] = text[:TEXT_OUTPUT_MAX_CHARS]
+        item["truncated"] = True
+    return [item]
 
 
 def _find_input_meta(inputs: list[RunInputMeta], role: str) -> RunInputMeta:

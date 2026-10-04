@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router'
+import { Navigate, Route, Routes, useParams } from 'react-router'
 import { AppShell } from './shell/AppShell'
 import { HistoryPage } from './pages/HistoryPage'
 import { StudioWorkspace } from './features/workspace/StudioWorkspace'
@@ -7,10 +7,9 @@ import { RunDetailPage } from './pages/RunDetailPage'
 import { ComparePage } from './pages/ComparePage'
 import { LineagePage } from './pages/LineagePage'
 import { SearchPage } from './pages/SearchPage'
+import { DuplicatesPage } from './pages/DuplicatesPage'
+import { MapPage } from './pages/MapPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { ComfyUIWorkflowsListPage } from './features/comfyui-workflows/ComfyUIWorkflowsListPage'
-import { ComfyUIWorkflowFormPage } from './features/comfyui-workflows/ComfyUIWorkflowFormPage'
-import { RequireAdmin } from './features/auth/RequireAdmin'
 
 export function App() {
   return (
@@ -26,33 +25,34 @@ export function App() {
         <Route path="/assets/:id" element={<AssetViewerPage />} />
         <Route path="/lineage/:assetId" element={<LineagePage />} />
         <Route path="/search" element={<SearchPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        {/* ワークフローの登録は管理者設定(ADR-0019 5章)。非管理者は /settings に戻す。 */}
-        <Route
-          path="/settings/comfyui"
-          element={
-            <RequireAdmin>
-              <ComfyUIWorkflowsListPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/settings/comfyui/new"
-          element={
-            <RequireAdmin>
-              <ComfyUIWorkflowFormPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/settings/comfyui/:id"
-          element={
-            <RequireAdmin>
-              <ComfyUIWorkflowFormPage />
-            </RequireAdmin>
-          }
-        />
+        {/* 重複の候補(ADR-0033 8章)。ストックのパネルからたどる。 */}
+        <Route path="/stock/duplicates" element={<DuplicatesPage />} />
+        {/* マップ(ADR-0033 8章)。アイコンレールからたどる。 */}
+        <Route path="/map" element={<MapPage />} />
+        {/*
+          設定はページに分ける(ADR-0031)。`/settings` は目次(広いときは「表示」も)。
+          ComfyUI のワークフローの登録・編集も設定の枠の中で開く(目次は ComfyUI を選んだ状態)。
+          どれも `SettingsPage` が描き分ける(子のルートの間を移っても枠とトーストを作り直さない)。
+          管理者設定のページを非管理者が開いたときは、`SettingsPage` が `/settings` に戻す(ADR-0019 5章)。
+        */}
+        <Route path="/settings" element={<SettingsPage />}>
+          <Route index element={null} />
+          <Route path=":page" element={null} />
+          <Route path="comfyui/workflows/new" element={null} />
+          <Route path="comfyui/workflows/:id" element={null} />
+        </Route>
+        {/* ワークフローの一覧は ComfyUI のページの一節になった(ADR-0031 1章の 2026-10-01 追記)。 */}
+        <Route path="/settings/comfyui/workflows" element={<Navigate to="/settings/comfyui" replace />} />
+        {/* ADR-0031 より前のパス。ブックマーク等のため新しいパスへ転送する。 */}
+        <Route path="/settings/comfyui/new" element={<Navigate to="/settings/comfyui/workflows/new" replace />} />
+        <Route path="/settings/comfyui/:id" element={<LegacyWorkflowRedirect />} />
       </Route>
     </Routes>
   )
+}
+
+/** `/settings/comfyui/:id`(ADR-0031 より前のワークフロー編集のパス)を新しいパスへ転送する。 */
+function LegacyWorkflowRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/settings/comfyui/workflows/${id ?? ''}`} replace />
 }

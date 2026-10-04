@@ -7,7 +7,8 @@ ComfyUI の実行が、OpenAI の実行を待たせないようにするため�
 
 状態遷移は queued → running → succeeded | failed | canceled。
 更新してよいのは run.status / started_at / finished_at /
-error_* / usage / provider_request_id のみ。
+error_* / usage / provider_request_id / text_outputs のみ(text_outputs は成功時の1回だけ。
+ADR-0030)。
 """
 
 from __future__ import annotations
@@ -36,6 +37,11 @@ from app.domain.models import (
     RunStatus,
 )
 from app.domain.storage import AssetStore
+from app.domain.text_safety import (
+    sanitize_external,
+    sanitize_external_text,
+    sanitize_external_text_or_none,
+)
 from app.i18n import t
 from app.providers.base import (
     ImageProvider,
@@ -50,6 +56,7 @@ from app.worker.progress import ProgressBus
 
 if TYPE_CHECKING:
     from app.worker.annotator import Annotator
+    from app.worker.embedder import Embedder
 
 logger = logging.getLogger(__name__)
 
@@ -196,12 +203,14 @@ def _finish_run_succeeded(
     run_id: uuid.UUID,
     result,
     annotator: Annotator | None = None,
+    embedder: Embedder | None = None,
 ) -> list[uuid.UUID]:
     """出力を取り込んで Run を成功にする。`annotator` があれば、取り込み時の自動推定
-    (ADR-0024 4章。設定がオンのときだけ)を同じトランザクションで待ち行列に入れる。"""
-    from app.domain import annotations as annotations_domain
+    (ADR-0024 4章)と埋め込み(ADR-0033 5章)を、設定がオンのときだけ同じトランザクションで
+    待ち行列に入れる。"""
+    from app.domain import ingest_hooks
 
-    annotation_queued = False
+    queued = ingest_hooks.IngestQueued()
     with session_factory() as session:
         run = session.get(Run, run_id)
         assert run is not None
@@ -222,9 +231,8 @@ def _finish_run_succeeded(
             )
             output_ids.append(asset.id)
             if annotator is not None:
-                annotation_queued = (
-                    annotations_domain.enqueue_on_ingest(session, asset, annotator.settings)
-                    or annotation_queued
+                queued = queued | ingest_hooks.enqueue_after_ingest(
+                    session, asset, annotator.settings
                 )
 
         # ADR-0022: 生成時にグループが指定されていれば、取り込んだ出力を同じトランザクションで
@@ -238,11 +246,14 @@ def _finish_run_succeeded(
 
         run.status = RunStatus.SUCCEEDED
         run.finished_at = _utcnow()
-        run.usage = result.usage
-        run.provider_request_id = result.provider_request_id
+        # プロバイダーの応答から来る値は外部由来なので、NUL などを除いてから保存する(ADR-0027)。
+        run.usage = sanitize_external(result.usage)
+        if result.text_outputs is not None:
+            # None を代入すると JSON の null が入るので、無いときは触れない(SQL の NULL のまま)。
+            run.text_outputs = sanitize_external(result.text_outputs)
+        run.provider_request_id = sanitize_external_text_or_none(result.provider_request_id)
         session.commit()
-    if annotation_queued and annotator is not None:
-        annotator.notify()
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder)
     return output_ids
 
 
@@ -258,10 +269,11 @@ def _finish_run_failed(
         assert run is not None
         run.status = RunStatus.FAILED
         run.finished_at = _utcnow()
-        run.error_code = error_code
-        run.error_message = error_message[:2000]
+        # プロバイダーのエラーの文言は外部由来。NUL などを除いてから保存する(ADR-0027)。
+        run.error_code = sanitize_external_text(error_code)
+        run.error_message = sanitize_external_text(error_message)[:2000]
         if provider_request_id:
-            run.provider_request_id = provider_request_id
+            run.provider_request_id = sanitize_external_text(provider_request_id)
         session.commit()
 
 
@@ -277,9 +289,11 @@ class Runner:
         data_dir: Path,
         *,
         annotator: Annotator | None = None,
+        embedder: Embedder | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.annotator = annotator
+        self.embedder = embedder
         self.store = store
         self.registry = registry
         self.progress_bus = progress_bus
@@ -421,6 +435,7 @@ class Runner:
                 run.id,
                 result,
                 self.annotator,
+                self.embedder,
             )
         except ProviderError as e:
             await self._mark_failed(run.id, e.code, e.message, e.request_id)
@@ -447,6 +462,9 @@ class Runner:
         provider_request_id: str | None,
     ) -> None:
         """Run を failed として記録する。記録自体に失敗してもループは止めない。"""
+        # SSE で送る値も、保存する値(`_finish_run_failed`)と揃える。
+        error_code = sanitize_external_text(error_code)
+        error_message = sanitize_external_text(error_message)
         try:
             await asyncio.to_thread(
                 _finish_run_failed,

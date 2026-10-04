@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router'
-import { ApiError, deleteAsset, getAsset, getRun, restoreAsset } from '../../api/client'
+import { ApiError, deleteAsset, getAsset, getRun, getShareSettings, restoreAsset } from '../../api/client'
 import {
   comfyUiSeedTooltip,
   describeComfyUiSeed,
@@ -18,6 +18,7 @@ import { isMobileViewport } from '../../lib/viewport'
 import { useAddToInputs } from '../run-form/useAddToInputs'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { AddToInputIcon, DownloadIcon, LineageIcon, ShareLinkIcon, TrashIcon } from '../../components/icons'
 import { ToastHost, useToast } from '../../components/Toast'
 import { formatBytes, formatDateTime } from '../../lib/format'
 import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/assetRestore'
@@ -25,10 +26,17 @@ import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from '../lineage/EmbeddedMetaSection'
 import { OriginRecipeSection } from '../lineage/OriginRecipeSection'
 import { AssetGroupsSection } from './AssetGroupsSection'
+import { SimilarAssetsSection } from './SimilarAssetsSection'
+import { supportsSimilar } from '../embeddings/similarAssets'
+import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
 import { AssetTagsSection, AssetTitleSection } from './AssetAnnotationSection'
 import { annotationPollInterval, supportsAnnotation } from '../annotations/annotationStatus'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
+import { ShareDialog } from '../share/ShareDialog'
+import { FinalPromptSection } from '../run-detail/FinalPromptSection'
+import { StudioPromptActions } from '../workspace/StudioPromptActions'
+import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import styles from './Viewer.module.css'
 
 interface ViewerProps {
@@ -72,7 +80,13 @@ export function Viewer({ assetId }: ViewerProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
   const toast = useToast()
+  // 共有リンク(ADR-0029)は管理者設定で有効なときだけ「共有」を出す。
+  const shareSettingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
+  const shareEnabled = shareSettingsQuery.data?.enabled === true
+  // 似た画像(ADR-0033)は埋め込みが使えるときだけ出す。
+  const embeddingCaps = useEmbeddingCapabilities()
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteAsset(assetId),
@@ -135,7 +149,7 @@ export function Viewer({ assetId }: ViewerProps) {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-      if (deleteConfirmOpen || addToInputs.isPending) return
+      if (deleteConfirmOpen || addToInputs.isPending || shareOpen) return
       if (isEditableTarget(document.activeElement)) return
       const targetAssetId = e.key === 'ArrowLeft' ? nav.previousAssetId : nav.nextAssetId
       if (!targetAssetId) return
@@ -144,7 +158,7 @@ export function Viewer({ assetId }: ViewerProps) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [outputNav, deleteConfirmOpen, addToInputs.isPending, navigate])
+  }, [outputNav, deleteConfirmOpen, addToInputs.isPending, shareOpen, navigate])
 
   const isReady = !assetQuery.isLoading && !assetQuery.isError && asset !== undefined
 
@@ -201,7 +215,58 @@ export function Viewer({ assetId }: ViewerProps) {
                 {restoreError && <p className={styles.deleteErrorText}>{restoreError}</p>}
               </div>
             )}
-            <h2 className={styles.heading}>Asset</h2>
+            {/* 見出しの行はパネルの上端に固定し、よく使う操作をアイコンで並べる(削除だけは末尾)。 */}
+            <div className={styles.headerRow}>
+              <h2 className={styles.heading}>Asset</h2>
+              <div className={styles.headerActions}>
+                <a
+                  className={styles.iconButton}
+                  href={assetUrl(asset.id, 'original', { download: true })}
+                  aria-label={t.viewer.downloadOriginal}
+                  title={t.viewer.downloadOriginal}
+                >
+                  <DownloadIcon />
+                </a>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={t.viewer.useAsInput}
+                  title={t.viewer.useAsInput}
+                  onClick={() => addToInputs.request(asset.id)}
+                  disabled={Boolean(asset.deleted_at)}
+                >
+                  <AddToInputIcon />
+                </button>
+                <Link
+                  to={`/lineage/${asset.id}`}
+                  className={styles.iconButton}
+                  aria-label={t.viewer.viewLineageGraph}
+                  title={t.viewer.viewLineageGraph}
+                  onClick={(e) => {
+                    // デスクトップでサイドバーの系列パネルが既に同じ起点で開いているなら、
+                    // 同じグラフが二重に出るだけなので `/lineage` へは遷移せず、サイドバー側を
+                    // (既に開いているのでほぼ無害な)フォーカスに留める。
+                    if (!isMobileViewport() && selectedPanel === 'graph' && originAssetId === asset.id) {
+                      e.preventDefault()
+                      openPanel('graph')
+                    }
+                  }}
+                >
+                  <LineageIcon />
+                </Link>
+                {shareEnabled && !asset.deleted_at && (
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t.share.button}
+                    title={t.share.buttonTooltip}
+                    onClick={() => setShareOpen(true)}
+                  >
+                    <ShareLinkIcon />
+                  </button>
+                )}
+              </div>
+            </div>
             {outputNav && (
               <div className={styles.outputNav}>
                 <div className={styles.outputNavHeader}>
@@ -310,6 +375,13 @@ export function Viewer({ assetId }: ViewerProps) {
                     </Link>
                   </p>
                 )}
+                {/* 最終プロンプト(ADR-0030 3章)。挿入・置き換えはスタジオへ移って反映する。 */}
+                <FinalPromptSection
+                  className={styles.finalPrompt}
+                  textOutputs={asset.produced_by_run.text_outputs}
+                  headingClassName={styles.subheading}
+                  renderActions={(text) => <StudioPromptActions prompt={text} />}
+                />
               </>
             )}
 
@@ -319,48 +391,21 @@ export function Viewer({ assetId }: ViewerProps) {
             {asset.origin && <OriginRecipeSection origin={asset.origin} />}
             {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
             <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
+            {embeddingCaps && supportsSimilar(asset) && <SimilarAssetsSection key={asset.id} assetId={asset.id} />}
 
-            <div className={styles.actions}>
-              <a
-                className={styles.actionButton}
-                href={assetUrl(asset.id, 'original', { download: true })}
-              >
-                {t.viewer.downloadOriginal}
-              </a>
-              <button
-                type="button"
-                className={styles.actionButton}
-                onClick={() => addToInputs.request(asset.id)}
-                disabled={Boolean(asset.deleted_at)}
-              >
-                {t.viewer.useAsInput}
-              </button>
-              <Link
-                to={`/lineage/${asset.id}`}
-                className={styles.actionButton}
-                onClick={(e) => {
-                  // デスクトップでサイドバーの系列パネルが既に同じ起点で開いているなら、
-                  // 同じグラフが二重に出るだけなので `/lineage` へは遷移せず、サイドバー側を
-                  // (既に開いているのでほぼ無害な)フォーカスに留める。
-                  if (!isMobileViewport() && selectedPanel === 'graph' && originAssetId === asset.id) {
-                    e.preventDefault()
-                    openPanel('graph')
-                  }
-                }}
-              >
-                {t.viewer.viewLineageGraph}
-              </Link>
-              {!asset.deleted_at && (
+            {!asset.deleted_at && (
+              <div className={styles.actions}>
                 <button
                   type="button"
-                  className={`${styles.actionButton} ${styles.deleteButton}`}
+                  className={styles.deleteButton}
                   onClick={() => setDeleteConfirmOpen(true)}
                   disabled={deleteMutation.isPending}
                 >
+                  <TrashIcon />
                   {t.viewer.delete}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
             {deleteError && <p className={styles.deleteErrorText}>{deleteError}</p>}
           </>
         )}
@@ -382,6 +427,7 @@ export function Viewer({ assetId }: ViewerProps) {
           onCancel={() => setDeleteConfirmOpen(false)}
         />
       )}
+      <ShareDialog open={shareOpen} assetId={assetId} onClose={() => setShareOpen(false)} toast={toast} />
       <ToastHost toast={toast.toast} onDismiss={toast.dismiss} />
     </div>
   )

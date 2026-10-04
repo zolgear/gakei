@@ -15,10 +15,11 @@ All it needs is an OpenAI API key. Images are stored in a local directory and me
 - **History:** every run is recorded, including failures and cancellations. Re-running with the same settings is kept as a new run.
 - **Viewer:** zoom images up to 3840px, download the original, and compare an Edit's inputs and outputs.
 - **Stock / prompt sets / lineage graph:** open saved images, named prompts, and image parent-child relationships from the sidebar. Type `@` in the prompt field to insert a prompt set.
+- **Text search, similar images, duplicate candidates, map:** turn images into vectors with a CLIP-family model to find images by natural-language text, list similar or near-duplicate images, and show a map where similar images cluster together. Disabled by default; enable it in admin settings → Embeddings. The model runs locally on the CPU or on your own inference server. See [docs/embeddings.md](docs/embeddings.md) (Japanese).
 - **Embedded lineage:** PNGs downloaded at full resolution carry their lineage. Uploading such a PNG back to the same GAKEI treats it as the original image.
 - **Display language:** Japanese and English. Follows the browser's language by default and can be switched from Settings.
 - **Layout:** The input pane of the studio can sit at the bottom (default) or in a left sidebar. Switch from Settings → Display or the button in the result area.
-- **Local ComfyUI (preview):** connect to ComfyUI running on the same machine and use workflows exported with "Export (API)" alongside the OpenAI models. GAKEI only injects values such as prompt, seed, input images, and masks; it does not modify the graph. Disabled by default; connect from Settings → ComfyUI.
+- **Local ComfyUI (preview):** connect to ComfyUI running on the same machine and use workflows exported with "Export (API)" alongside the OpenAI models. GAKEI only injects values such as prompt, seed, input images, and masks; it does not modify the graph. Disabled by default; connect from Settings → ComfyUI, then register workflows with "+ Register workflow" in the "Workflows" section of the same page (`/settings/comfyui`; the register/edit screen also opens inside Settings and is saved with "Save" at the top). If a node input seems to contain an API key or similar secret, registration shows a warning (share links hide the value and do not serve the originals of those images).
 
 ## Screenshots
 
@@ -29,6 +30,8 @@ All it needs is an OpenAI API key. Images are stored in a local directory and me
 | ![Lineage graph](docs/images/lineage-en.webp) | ![Compare before and after an edit](docs/images/compare-en.webp) |
 | **Run details with the lineage sidebar** | **Drawing a sketch to use as input** |
 | ![Run details with the lineage sidebar](docs/images/detail-en.webp) | ![Drawing a sketch to use as input](docs/images/sketch-en.webp) |
+| **Map (network of similar images with lineage)** | **Semantic search ("Japanese woodblock print")** |
+| ![Map (network of similar images with lineage)](docs/images/map-en.webp) | ![Semantic search ("Japanese woodblock print")](docs/images/semantic-en.webp) |
 
 Except for the hand-drawn sketches, all images in the screenshots are samples generated with GPT Image 2.5.
 
@@ -53,8 +56,9 @@ The first run takes a few minutes to fetch dependencies and build the UI. Once s
 - **Updating:** run `git pull`, then `./run.sh` (`run.bat`) again. The UI is rebuilt automatically if its source has changed.
 - **Startup options:** `--port 8001`, `--data-dir <absolute path>`, `--no-browser` (don't open a browser), `--host`.
 - **Data:** generated images, SQLite, and the API key saved from Settings (`secrets.json`) live under `data/`. Back up or delete that directory as a whole. Don't delete or move image files inside it directly — the images will stop displaying. Delete images from the UI instead ([docs/configuration.md](docs/configuration.md), Japanese).
-- **Using it from AI agents:** register GAKEI as an MCP server in an AI agent such as Claude Code to generate images and search your stock from the agent. Enable it in Settings first. See [docs/mcp.md](docs/mcp.md) (Japanese).
-- **Using a proxy such as LiteLLM:** change the connection through Settings (or the `OPENAI_BASE_URL` environment variable). The proxy must offer the same model names GAKEI sends (GAKEI does not remap model names). Prices shown in the UI are still OpenAI's list prices and may not match the actual bill through a proxy.
+- **Share links:** show one image, or its lineage (with ancestors, or ancestors and descendants), through a link that needs no sign-in. Viewers see the images and the prompts and parameters used to make them. Enable it in the admin settings under "Public share links" and press "Save" at the top of the page first. In personal mode, expose only the share page's paths through a reverse proxy. See [docs/sharing.md](docs/sharing.md) (Japanese).
+- **Using it from AI agents:** register GAKEI as an MCP server in an AI agent such as Claude Code to generate images and search your stock from the agent. Enable it in Settings → MCP and press "Save" at the top of the page first. See [docs/mcp.md](docs/mcp.md) (Japanese).
+- **Using a proxy such as LiteLLM:** change the connection through Settings → OpenAI (Base URL), or the `OPENAI_BASE_URL` environment variable. The proxy must offer the same model names GAKEI sends (GAKEI does not remap model names). Prices shown in the UI are still OpenAI's list prices and may not match the actual bill through a proxy.
 
 Configuration through environment variables (API key, base URL, data directory, timeouts, and so on) is described in [docs/configuration.md](docs/configuration.md) (Japanese). It is not usually needed.
 

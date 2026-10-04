@@ -23,16 +23,16 @@ from __future__ import annotations
 import base64
 import io
 import math
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
-from functools import lru_cache
-from pathlib import Path
 from typing import Literal
 
 from PIL import Image
 
 from app.domain.derivatives import PREVIEW_LONG_EDGE, THUMB_LONG_EDGE
 from app.domain.models import Asset
-from app.domain.storage import AssetStore
+from app.domain.storage import AssetStore, Variant
 
 ImageSize = Literal["large", "small"]
 
@@ -154,49 +154,73 @@ def encode_for_agent(
     return _fit_jpeg(resized, limit)
 
 
-def _source_path(store: AssetStore, asset: Asset, long_edge: int) -> Path:
-    """元にする画像のファイル(ADR-0004 の派生画像を使えるときは使う)。"""
-    original = store.content_path(asset.blob_key, asset.sha256, "original")
+def _source_variant(store: AssetStore, asset: Asset, long_edge: int) -> Variant | None:
+    """元にする画像(ADR-0004 の派生画像を使えるときは使う)。原本も無ければ None。"""
     original_long = max(asset.width or 0, asset.height or 0)
-    if original_long and original_long <= long_edge:
-        # 縮めないので、劣化のない原本を使う。
-        return original
-    if long_edge <= THUMB_LONG_EDGE:
-        thumb = store.content_path(asset.blob_key, asset.sha256, "thumb")
-        if thumb.is_file():
-            return thumb
-    if long_edge <= PREVIEW_LONG_EDGE:
-        preview = store.content_path(asset.blob_key, asset.sha256, "preview")
-        if preview.is_file():
-            return preview
-    return original
+    # 縮めないときは、劣化のない原本を使う。
+    if not (original_long and original_long <= long_edge):
+        if long_edge <= THUMB_LONG_EDGE and store.content_exists(
+            asset.blob_key, asset.sha256, "thumb"
+        ):
+            return "thumb"
+        if long_edge <= PREVIEW_LONG_EDGE and store.content_exists(
+            asset.blob_key, asset.sha256, "preview"
+        ):
+            return "preview"
+    if store.content_exists(asset.blob_key, asset.sha256, "original"):
+        return "original"
+    return None
 
 
-def _render(path: Path, long_edge: int, transparent: bool | None) -> AgentImage:
-    with Image.open(path) as image:
+def _render(
+    store: AssetStore, asset: Asset, variant: Variant, long_edge: int, transparent: bool | None
+) -> AgentImage:
+    content = store.open_content(asset.blob_key, asset.sha256, variant)
+    if content is None:
+        raise FileNotFoundError(f"{asset.blob_key} ({variant})")
+    with Image.open(io.BytesIO(content.read_all())) as image:
         if image.format == "JPEG":
             # JPEG はデコードの段階で縮められる(4K の原本でも速い)。
             image.draft("RGB", (long_edge, long_edge))
         return encode_for_agent(image, long_edge, transparent=transparent)
 
 
-@lru_cache(maxsize=256)
-def _cached_small(
-    sha256: str, path_str: str, long_edge: int, transparent: bool | None
-) -> AgentImage:
-    return _render(Path(path_str), long_edge, transparent)
+# キャッシュのキーは (sha256, variant, 長辺, 透過)。同じ内容・同じ元画像なら結果は変わらない。
+# `store` と `asset` はキーに含めず、見つからなかったとき(読めなかったとき)だけ読みに行く。
+_small_cache: OrderedDict[tuple, AgentImage] = OrderedDict()
+_large_cache: OrderedDict[tuple, AgentImage] = OrderedDict()
+_SMALL_CACHE_SIZE = 256
+_LARGE_CACHE_SIZE = 8
+_cache_lock = threading.Lock()
 
 
-@lru_cache(maxsize=8)
-def _cached_large(
-    sha256: str, path_str: str, long_edge: int, transparent: bool | None
+def _cached_render(
+    cache: OrderedDict[tuple, AgentImage],
+    max_size: int,
+    store: AssetStore,
+    asset: Asset,
+    variant: Variant,
+    long_edge: int,
+    transparent: bool | None,
 ) -> AgentImage:
-    return _render(Path(path_str), long_edge, transparent)
+    key = (asset.sha256, variant, long_edge, transparent)
+    with _cache_lock:
+        if key in cache:
+            cache.move_to_end(key)
+            return cache[key]
+    image = _render(store, asset, variant, long_edge, transparent)
+    with _cache_lock:
+        cache[key] = image
+        cache.move_to_end(key)
+        while len(cache) > max_size:
+            cache.popitem(last=False)
+    return image
 
 
 def clear_cache() -> None:
-    _cached_small.cache_clear()
-    _cached_large.cache_clear()
+    with _cache_lock:
+        _small_cache.clear()
+        _large_cache.clear()
 
 
 def render_asset(
@@ -212,8 +236,13 @@ def render_asset(
     判定する。
     """
     long_edge = LONG_EDGES[size]
-    path = _source_path(store, asset, long_edge)
-    if not path.is_file():
+    variant = _source_variant(store, asset, long_edge)
+    if variant is None:
         return None
-    cached = _cached_small if long_edge <= SMALL_LONG_EDGE else _cached_large
-    return cached(asset.sha256, str(path), long_edge, transparent)
+    if long_edge <= SMALL_LONG_EDGE:
+        return _cached_render(
+            _small_cache, _SMALL_CACHE_SIZE, store, asset, variant, long_edge, transparent
+        )
+    return _cached_render(
+        _large_cache, _LARGE_CACHE_SIZE, store, asset, variant, long_edge, transparent
+    )

@@ -12,20 +12,22 @@
  *
  * 入出力で寸法が違う場合、両方を「枠」(出力の縦横比を基準にしたサイズ)に contain で収め、
  * 枠を TransformWrapper の content として扱うことで、パン/ズームの座標系を共有する
- * (= 枠内の同じ相対位置が常に一致する)。
+ * (= 枠内の同じ相対位置が常に一致する)。重複の候補(`frameBasis='larger'`)は面積の大きい方を
+ * 枠にし、小さい方を同じ大きさまで拡大して重ねる。
  */
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { TransformComponent, TransformWrapper, type ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
-import type { AssetDetail } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
 import { computeFitScale } from '../../lib/geometry'
 import { useElementSize } from '../../lib/useElementSize'
 import { useI18n } from '../../i18n'
 import { shouldUseOriginal } from '../viewer/viewerScale'
+import type { CanvasImage } from '../viewer/AssetCanvas'
 import {
   clampSplitPercent,
   computeContainRect,
   computeFrameSize,
+  computeSharedFrameSize,
   computeSplitClipPath,
   splitPercentFromPointer,
   transformsEqual,
@@ -42,13 +44,25 @@ const ZOOM_STEP = 0.1
 type Variant = 'preview' | 'original'
 
 interface CompareCanvasProps {
-  before: AssetDetail
-  after: AssetDetail
+  before: CanvasImage
+  after: CanvasImage
   mode: CompareMode
+  /** 画像の URL。既定は本人向けの配信 URL。共有のページは公開の URL を渡す(ADR-0029)。 */
+  urlFor?: (assetId: string, variant: Variant) => string
+  /** false なら拡大しても original に差し替えない(共有で原本を許していないとき。ADR-0029 4章)。 */
+  allowOriginal?: boolean
+  /** 左(before)・右(after)の見出し。既定は「編集前」「編集後」。重複の候補は「古い」「新しい」を渡す。 */
+  beforeLabel?: string
+  afterLabel?: string
+  /**
+   * 表示枠の決め方。'after'(既定)は出力の縦横比の枠(ADR-0009)。'larger' は面積の大きい方の
+   * 寸法の枠にし、解像度の違う2枚を同じ大きさに揃えて重ねる(重複の候補。`computeSharedFrameSize`)。
+   */
+  frameBasis?: 'after' | 'larger'
 }
 
-function nextVariant(current: Variant, effectiveScale: number, image: AssetDetail): Variant {
-  if (current === 'original') return current
+function nextVariant(current: Variant, effectiveScale: number, image: CanvasImage, allowOriginal: boolean): Variant {
+  if (current === 'original' || !allowOriginal) return current
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
   return shouldUseOriginal(effectiveScale, image, PREVIEW_LONG_EDGE, dpr) ? 'original' : 'preview'
 }
@@ -60,20 +74,23 @@ function FrameImage({
   frame,
   rect,
   label,
+  urlFor,
 }: {
-  asset: AssetDetail
+  asset: CanvasImage
   variant: Variant
   frame: { width: number; height: number }
   rect: ContainRect
   label: string
+  urlFor: (assetId: string, variant: Variant) => string
 }) {
   return (
     <div style={{ position: 'relative', width: frame.width, height: frame.height }}>
       <img
-        src={assetUrl(asset.id, variant)}
+        src={urlFor(asset.id, variant)}
         alt={label}
         draggable={false}
-        style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+        // object-fit は寸法の記録と実際の画素の縦横比がずれたときの保険(合っていれば何もしない)。
+        style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height, objectFit: 'contain' }}
       />
     </div>
   )
@@ -210,8 +227,19 @@ function SplitHandle({
   )
 }
 
-export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
+export function CompareCanvas({
+  before,
+  after,
+  mode,
+  urlFor = assetUrl,
+  allowOriginal = true,
+  beforeLabel,
+  afterLabel,
+  frameBasis = 'after',
+}: CompareCanvasProps) {
   const { t } = useI18n()
+  const labelBefore = beforeLabel ?? t.compare.before
+  const labelAfter = afterLabel ?? t.compare.after
   const pairKey = `${before.id}:${after.id}`
 
   // 分割バー位置(%)。before/after の組が変わったら中央に戻す(AssetCanvas の
@@ -239,7 +267,7 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
   const afterRef = useRef<ReactZoomPanPinchRef | null>(null)
   const isSyncingRef = useRef(false)
 
-  const frame = computeFrameSize(after, before)
+  const frame = frameBasis === 'larger' ? computeSharedFrameSize(before, after) : computeFrameSize(after, before)
   const beforeRect = computeContainRect(frame, before)
   const afterRect = computeContainRect(frame, after)
 
@@ -247,10 +275,10 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
   const [leftPaneRef, , leftPaneSize] = useElementSize<HTMLDivElement>()
   const [rightPaneRef, , rightPaneSize] = useElementSize<HTMLDivElement>()
 
-  function updateVariant(layer: 'before' | 'after', scale: number, fitScale: number, asset: AssetDetail) {
+  function updateVariant(layer: 'before' | 'after', scale: number, fitScale: number, asset: CanvasImage) {
     setVariantState((s) => {
       const current = s[layer]
-      const next = nextVariant(current, scale * fitScale, asset)
+      const next = nextVariant(current, scale * fitScale, asset, allowOriginal)
       if (next === current) return s
       return { ...s, [layer]: next }
     })
@@ -261,7 +289,7 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
    * ref は引数で受け取らず、レイヤーからクロージャで解決する(`.current` の読み取りは
    * このハンドラが実際に呼ばれる時=イベント時だけに限る)。
    */
-  function makeInteractiveHandler(layer: 'before' | 'after', fitScale: number, asset: AssetDetail) {
+  function makeInteractiveHandler(layer: 'before' | 'after', fitScale: number, asset: CanvasImage) {
     return (_ref: ReactZoomPanPinchRef, state: { scale: number; positionX: number; positionY: number }) => {
       setScalePercent(Math.round(state.scale * 100))
       updateVariant(layer, state.scale, fitScale, asset)
@@ -280,7 +308,7 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
   }
 
   /** 非interactive な側(スライダーの上のレイヤー)。variant 表示だけ更新し、複製はしない。 */
-  function makePassiveHandler(layer: 'before' | 'after', fitScale: number, asset: AssetDetail) {
+  function makePassiveHandler(layer: 'before' | 'after', fitScale: number, asset: CanvasImage) {
     return (_ref: ReactZoomPanPinchRef, state: { scale: number }) => {
       // 複製を受け取った印を下ろす(残ると下のレイヤーの次の操作が複製されない)。
       isSyncingRef.current = false
@@ -336,7 +364,7 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
                   wrapperStyle={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
                   contentClass={styles.layerContent}
                 >
-                  <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={t.compare.before} />
+                  <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={labelBefore} urlFor={urlFor} />
                 </TransformComponent>
               </TransformWrapper>
 
@@ -373,16 +401,16 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
                   }}
                   contentClass={styles.layerContent}
                 >
-                  <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={t.compare.after} />
+                  <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={labelAfter} urlFor={urlFor} />
                 </TransformComponent>
               </TransformWrapper>
 
               <SplitHandle splitPercent={splitPercent} onChange={setSplitPercent} stageEl={sliderStageEl} />
               <span className={styles.sideTag} data-side="left">
-                {t.compare.before}
+                {labelBefore}
               </span>
               <span className={styles.sideTag} data-side="right">
-                {t.compare.after}
+                {labelAfter}
               </span>
             </>
           )}
@@ -400,7 +428,7 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
       <div className={styles.sideBySideStage} data-mode="side">
         <div ref={leftPaneRef} className={styles.pane}>
           <span className={styles.sideTag} data-side="left">
-            {t.compare.before}
+            {labelBefore}
           </span>
           {leftPaneSize && (
             <TransformWrapper
@@ -419,14 +447,14 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
                 wrapperStyle={{ width: '100%', height: '100%' }}
                 contentClass={styles.layerContent}
               >
-                <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={t.compare.before} />
+                <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={labelBefore} urlFor={urlFor} />
               </TransformComponent>
             </TransformWrapper>
           )}
         </div>
         <div ref={rightPaneRef} className={styles.pane}>
           <span className={styles.sideTag} data-side="right">
-            {t.compare.after}
+            {labelAfter}
           </span>
           {rightPaneSize && (
             <TransformWrapper
@@ -445,7 +473,7 @@ export function CompareCanvas({ before, after, mode }: CompareCanvasProps) {
                 wrapperStyle={{ width: '100%', height: '100%' }}
                 contentClass={styles.layerContent}
               >
-                <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={t.compare.after} />
+                <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={labelAfter} urlFor={urlFor} />
               </TransformComponent>
             </TransformWrapper>
           )}

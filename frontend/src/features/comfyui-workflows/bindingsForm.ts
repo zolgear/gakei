@@ -30,6 +30,11 @@ export interface BindingsFormState {
   maskMode: MaskMode
   maskRef: InputRefValue | null
   outputs: string[]
+  /**
+   * 最終プロンプト(PE の出力)を記録するノード(ADR-0030 1章)。null は「なし」。
+   * 種類で絞らず、テンプレートのどのノードでも選べる。
+   */
+  finalPrompt: string | null
 }
 
 export const EMPTY_BINDINGS_FORM: BindingsFormState = {
@@ -43,6 +48,7 @@ export const EMPTY_BINDINGS_FORM: BindingsFormState = {
   maskMode: 'none',
   maskRef: null,
   outputs: [],
+  finalPrompt: null,
 }
 
 export function bindingsFormFromApi(bindings: ComfyBindings): BindingsFormState {
@@ -60,6 +66,8 @@ export function bindingsFormFromApi(bindings: ComfyBindings): BindingsFormState 
       ? { node: mask.node, input: mask.input }
       : null,
     outputs: bindings.outputs ?? [],
+    // 旧形式の bindings(final_prompt なし)は「なし」として読む(ADR-0030 1章)。
+    finalPrompt: bindings.final_prompt ?? null,
   }
 }
 
@@ -88,6 +96,7 @@ export function bindingsFormFromSuggestion(
         ? { node: mask.node, input: mask.input }
         : null,
     outputs: suggested.outputs ?? [],
+    finalPrompt: suggested.final_prompt ?? null,
   }
 }
 
@@ -129,6 +138,9 @@ export function bindingsFormToApi(form: BindingsFormState): ComfyBindings {
             ? { mode: 'load_image_mask', node: form.maskRef.node, input: form.maskRef.input }
             : null,
     outputs: form.outputs,
+    // bindings は丸ごと送り直すので、「なし」も null として必ず含める(省くと保存済みの値の
+    // 扱いがサーバー任せになる)。
+    final_prompt: form.finalPrompt,
   }
 }
 
@@ -244,6 +256,12 @@ export function reconcileBindingsWithNodes(
     return false
   })
 
+  let nextFinalPrompt = form.finalPrompt
+  if (nextFinalPrompt !== null && !nodeExists(nextFinalPrompt, nodes)) {
+    cleared.push(labels.finalPrompt)
+    nextFinalPrompt = null
+  }
+
   const nextMaskRef = form.maskMode === 'load_image_mask' ? check(form.maskRef, labels.mask) : form.maskRef
   const maskCleared = form.maskMode === 'load_image_mask' && form.maskRef !== null && nextMaskRef === null
 
@@ -259,6 +277,7 @@ export function reconcileBindingsWithNodes(
       maskMode: maskCleared ? 'none' : form.maskMode,
       maskRef: nextMaskRef,
       outputs: nextOutputs,
+      finalPrompt: nextFinalPrompt,
     },
     clearedFields: cleared,
   }

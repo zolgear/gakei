@@ -35,6 +35,7 @@ export type RunListResponse = components['schemas']['RunListResponse']
 export type RunInputCreate = components['schemas']['RunInputCreate']
 export type RunEvent = components['schemas']['RunEvent']
 export type RunOutputRef = components['schemas']['RunOutputRef']
+export type RunTextOutput = components['schemas']['RunTextOutput']
 export type RunStatus = RunSummary['status']
 
 export type AssetDetail = components['schemas']['AssetDetail']
@@ -90,9 +91,21 @@ export type TagListResponse = components['schemas']['TagListResponse']
 export type AnnotationSettingsResponse = components['schemas']['AnnotationSettingsResponse']
 export type AnnotationSettingsUpdateRequest = components['schemas']['AnnotationSettingsUpdateRequest']
 export type AnnotationBackfillResponse = components['schemas']['AnnotationBackfillResponse']
+export type AnnotationConnectionCalls = components['schemas']['AnnotationConnectionCalls']
+export type AnnotationTarget = components['schemas']['AnnotationTarget']
+export type AnnotationProfiles = components['schemas']['AnnotationProfiles']
+export type AnnotationProfilesUpdate = components['schemas']['AnnotationProfilesUpdate']
 export type OnnxModelStatus = components['schemas']['OnnxModelStatus']
 export type OnnxModelName = OnnxModelStatus['name']
 export type AnnotationEngine = NonNullable<AnnotationSettingsResponse['usable_engines']>[number]
+
+// -- LLM の接続先(ADR-0032) ----------------------------------------------------
+export type LlmConnectionsResponse = components['schemas']['LlmConnectionsResponse']
+export type LlmConnectionView = components['schemas']['LlmConnectionView']
+export type LlmConnectionCreateRequest = components['schemas']['LlmConnectionCreateRequest']
+export type LlmConnectionUpdateRequest = components['schemas']['LlmConnectionUpdateRequest']
+export type LlmApiStyle = LlmConnectionView['api_style']
+export type LlmConnectionFeature = NonNullable<LlmConnectionView['used_by']>[number]
 
 // -- MCP サーバーとアクセストークン(ADR-0023) ----------------------------------
 
@@ -138,6 +151,105 @@ export function revokeApiToken(tokenId: string): Promise<void> {
   return request(`/api/users/me/api-tokens/${tokenId}`, { method: 'DELETE' })
 }
 
+// -- 認証の設定(ADR-0034。管理者のみ) -------------------------------------------
+
+export type AuthSettingsResponse = components['schemas']['AuthSettingsResponse']
+export type AuthSettingsUpdateRequest = components['schemas']['AuthSettingsUpdateRequest']
+export type AuthConnectionRequest = components['schemas']['AuthConnectionRequest']
+export type AuthConnectionView = components['schemas']['AuthConnectionView']
+export type AuthPendingConnectionView = components['schemas']['AuthPendingConnectionView']
+export type AuthEnableBlocker = AuthSettingsResponse['enable_blockers'][number]
+export type AuthSettingSource = AuthSettingsResponse['admin_emails']['source']
+
+export function getAuthSettings(): Promise<AuthSettingsResponse> {
+  return request('/api/settings/auth')
+}
+
+/**
+ * 接続の仮登録(形式の検査と Discovery 文書の取得まで)。`client_secret` は省略で引き継ぎ、
+ * 空文字で public client、値で差し替え。テストログインに成功するまで実効の設定は変わらない。
+ */
+export function setAuthConnection(body: AuthConnectionRequest): Promise<AuthSettingsResponse> {
+  return request('/api/settings/auth/connection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function discardAuthPendingConnection(): Promise<AuthSettingsResponse> {
+  return request('/api/settings/auth/connection/pending', { method: 'DELETE' })
+}
+
+/** 省略した項目は変えない。null は保存済みの値を消して .env・既定に戻す。 */
+export function updateAuthSettings(body: AuthSettingsUpdateRequest): Promise<AuthSettingsResponse> {
+  return request('/api/settings/auth', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+// -- 共有リンク(ADR-0029) -------------------------------------------------------
+
+export type ShareScope = components['schemas']['SharePreviewRequest']['scope']
+export type ShareSettingsResponse = components['schemas']['ShareSettingsResponse']
+export type SharePreviewResponse = components['schemas']['SharePreviewResponse']
+export type SharePreviewAsset = components['schemas']['SharePreviewAsset']
+export type ShareCreateRequest = components['schemas']['ShareCreateRequest']
+export type ShareRow = components['schemas']['ShareRow']
+export type ShareListResponse = components['schemas']['ShareListResponse']
+export type PublicShareResponse = components['schemas']['PublicShareResponse']
+export type PublicShareAsset = components['schemas']['PublicShareAsset']
+export type PublicShareRun = components['schemas']['PublicShareRun']
+export type PublicShareEdge = components['schemas']['PublicShareEdge']
+
+/** 全ログイン者が読める(共有の操作を画面に出すかの判断)。既定は無効。 */
+export function getShareSettings(): Promise<ShareSettingsResponse> {
+  return request('/api/settings/share')
+}
+
+/** 管理者のみ。 */
+export function updateShareSettings(enabled: boolean): Promise<ShareSettingsResponse> {
+  return request('/api/settings/share', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+/** 作る前の確認(範囲に含まれる画像)。何も書き込まない。機能が無効なら 409。 */
+export function previewShare(assetId: string, scope: ShareScope): Promise<SharePreviewResponse> {
+  return request('/api/shares/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ asset_id: assetId, scope }),
+  })
+}
+
+export function createShare(body: ShareCreateRequest): Promise<ShareRow> {
+  return request('/api/shares', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 自分の、取り消していない共有(新しい順)。 */
+export function listShares(): Promise<ShareListResponse> {
+  return request('/api/shares')
+}
+
+/** 取り消す(元に戻せない)。 */
+export function revokeShare(shareId: string): Promise<void> {
+  return request(`/api/shares/${shareId}`, { method: 'DELETE' })
+}
+
+/** 共有のページの内容(ログイン不要)。無効・取り消し済み・不明はどれも 404。 */
+export function getPublicShare(token: string): Promise<PublicShareResponse> {
+  return request(`/api/public/shares/${encodeURIComponent(token)}`)
+}
+
 // -- ComfyUI ワークフロー(ADR-0013) ------------------------------------------
 
 export type ComfyUIStatus = components['schemas']['ComfyUIStatusResponse']
@@ -165,17 +277,27 @@ export type PriceEstimateUnavailableReason = NonNullable<PriceEstimateResponse['
 
 export class ApiError extends Error {
   readonly status: number
+  /** `detail` が `{code, message}` の形のときの `code`(埋め込みの API の 409 など。ADR-0033)。 */
+  readonly code: string | null
+  /** `detail` が `{code, message, field}` の形のときの `field`(どの入力欄が原因か。認証の設定。ADR-0034)。 */
+  readonly field: string | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null, field: string | null = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
+    this.field = field
   }
 }
 
 /** FastAPI の 422/4xx が返す `detail` を人が読める1つの文字列にする。 */
 function formatDetail(detail: unknown): string | null {
   if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object' && 'message' in detail) {
+    const message = (detail as { message: unknown }).message
+    if (typeof message === 'string') return message
+  }
   if (Array.isArray(detail)) {
     const messages = detail
       .map((item) => (item && typeof item === 'object' && 'msg' in item ? String(item.msg) : null))
@@ -197,15 +319,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       markUnauthenticated()
     }
     let message = res.statusText || `HTTP ${res.status}`
+    let code: string | null = null
+    let field: string | null = null
     try {
       const body: unknown = await res.json()
       if (body && typeof body === 'object' && 'detail' in body) {
-        message = formatDetail((body as { detail: unknown }).detail) ?? message
+        const detail = (body as { detail: unknown }).detail
+        message = formatDetail(detail) ?? message
+        if (detail && typeof detail === 'object' && 'code' in detail) {
+          const value = (detail as { code: unknown }).code
+          code = typeof value === 'string' ? value : null
+        }
+        if (detail && typeof detail === 'object' && 'field' in detail) {
+          const value = (detail as { field: unknown }).field
+          field = typeof value === 'string' ? value : null
+        }
       }
     } catch {
       // レスポンスが JSON でない場合はそのまま statusText を使う。
     }
-    throw new ApiError(res.status, message)
+    throw new ApiError(res.status, message, code, field)
   }
   if (res.status === 204) {
     return undefined as T
@@ -213,9 +346,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
-function toQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+function toQuery(
+  params: Record<string, string | number | boolean | readonly string[] | undefined | null>,
+): string {
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
+    // 配列は同じキーを繰り返す(`tag=a&tag=b`)。空の要素は送らない。
+    if (Array.isArray(value)) {
+      for (const item of value as readonly string[]) if (item !== '') qs.append(key, item)
+      continue
+    }
     // 真偽値のフラグ(`ungrouped` など)は true のときだけ送る(false は既定と同じなので省く)。
     if (value === undefined || value === null || value === '' || value === false) continue
     qs.set(key, String(value))
@@ -324,7 +464,10 @@ export function restoreAsset(assetId: string): Promise<AssetDetail> {
   return request(`/api/assets/${assetId}/restore`, { method: 'POST' })
 }
 
-/** `params.group_id` を渡すと、そのグループのメンバーだけに絞る(ADR-0022)。`kind` と併用できる。 */
+/**
+ * `params.group_id` を渡すと、そのグループのメンバーだけに絞る(ADR-0022)。`kind` と併用できる。
+ * `kind` は配列で、繰り返して送る(指定した種類のどれか。省くと全種類。ADR-0035)。
+ */
 export function listAssets(
   params: operations['list_assets']['parameters']['query'] = {},
 ): Promise<components['schemas']['AssetListResponse']> {
@@ -370,9 +513,14 @@ export function getAssetLineage(
 // -- グループ(ADR-0022) ------------------------------------------------------
 // 階層なしのフラットなグループ。証跡ではないので更新・削除は自由(ADR-0003 の対象外)。
 
-/** 削除済みでないグループを利用者が決めた順(`position` 昇順)で全件。ページングなし(prompt-sets と同じ)。 */
-export function listAssetGroups(): Promise<AssetGroupListResponse> {
-  return request('/api/asset-groups')
+/**
+ * 削除済みでないグループを利用者が決めた順(`position` 昇順)で全件。ページングなし(prompt-sets と同じ)。
+ * `params.kind` を渡すと、`member_count` と `cover_asset_id` をその種類だけで数える(ADR-0035)。
+ */
+export function listAssetGroups(
+  params: operations['list_asset_groups']['parameters']['query'] = {},
+): Promise<AssetGroupListResponse> {
+  return request(`/api/asset-groups${toQuery(params)}`)
 }
 
 export function createAssetGroup(name: string): Promise<AssetGroupRow> {
@@ -695,26 +843,16 @@ export function getAnnotationSettings(): Promise<AnnotationSettingsResponse> {
   return request('/api/settings/annotation')
 }
 
-/** 管理者のみ。省略した項目は変更しない。`base_url` は null か空文字で「OpenAI の設定を流用」に戻す。 */
+/**
+ * 管理者のみ。省略した項目は変更しない。`profiles` は書いたマスだけ変わる(ComfyUI の画像の
+ * マスに null を送ると「既定と同じ」に戻す。ADR-0024 8章)。
+ */
 export function updateAnnotationSettings(body: AnnotationSettingsUpdateRequest): Promise<AnnotationSettingsResponse> {
   return request('/api/settings/annotation', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-}
-
-/** 推定専用のキー(管理者のみ)。値は応答に載らない(`api_key_set` だけ)。 */
-export function setAnnotationApiKey(apiKey: string): Promise<AnnotationSettingsResponse> {
-  return request('/api/settings/annotation/api-key', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ api_key: apiKey }),
-  })
-}
-
-export function deleteAnnotationApiKey(): Promise<AnnotationSettingsResponse> {
-  return request('/api/settings/annotation/api-key', { method: 'DELETE' })
 }
 
 /** ONNX タガーのモデルのダウンロードを始める(202)。進捗は `getAnnotationSettings` をポーリングして見る。 */
@@ -733,4 +871,164 @@ export function deleteOnnxModel(model: OnnxModelName): Promise<AnnotationSetting
 /** 推定を一度も実行していない画像(削除済みを除く)をまとめて待ち行列に入れる。 */
 export function backfillAnnotations(): Promise<AnnotationBackfillResponse> {
   return request('/api/settings/annotation/backfill', { method: 'POST' })
+}
+
+// -- LLM の接続先(ADR-0032) ----------------------------------------------------
+
+/** 接続先の一覧(全ログイン者)。先頭は組み込みの「OpenAI の設定」。キーは設定済みかどうかだけ。 */
+export function listLlmConnections(): Promise<LlmConnectionsResponse> {
+  return request('/api/settings/llm-connections')
+}
+
+/** 接続先を足す(管理者のみ)。キーは任意。 */
+export function createLlmConnection(body: LlmConnectionCreateRequest): Promise<LlmConnectionsResponse> {
+  return request('/api/settings/llm-connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 接続先を変える。組み込みの `openai` は `api_style` だけ変えられる(ほかは 409)。 */
+export function updateLlmConnection(
+  connectionId: string,
+  body: LlmConnectionUpdateRequest,
+): Promise<LlmConnectionsResponse> {
+  return request(`/api/settings/llm-connections/${encodeURIComponent(connectionId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 接続先を消す。組み込みと、どこかの機能で使っている接続先は 409。 */
+export function deleteLlmConnection(connectionId: string): Promise<LlmConnectionsResponse> {
+  return request(`/api/settings/llm-connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' })
+}
+
+/** 接続先のキー(管理者のみ)。値は応答に載らない(設定済みかどうかだけ)。 */
+export function setLlmConnectionApiKey(connectionId: string, apiKey: string): Promise<LlmConnectionsResponse> {
+  return request(`/api/settings/llm-connections/${encodeURIComponent(connectionId)}/api-key`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey }),
+  })
+}
+
+export function deleteLlmConnectionApiKey(connectionId: string): Promise<LlmConnectionsResponse> {
+  return request(`/api/settings/llm-connections/${encodeURIComponent(connectionId)}/api-key`, {
+    method: 'DELETE',
+  })
+}
+
+// -- 画像の埋め込み(ADR-0033) --------------------------------------------------
+// 検索系(文章での検索、似た画像、重複の候補)は、埋め込みが無効・使えないと 409
+// (`ApiError.code === 'embeddings_unavailable'`)。似た画像は起点のベクトルの状態でも 409
+// (`embedding_pending` / `embedding_failed` / `embedding_missing` / `embedding_not_supported`)。
+
+export type EmbeddingCapabilities = components['schemas']['EmbeddingCapabilities']
+export type EmbeddingSettingsResponse = components['schemas']['EmbeddingSettingsResponse']
+export type EmbeddingSettingsUpdateRequest = components['schemas']['EmbeddingSettingsUpdateRequest']
+export type EmbeddingOnnxModelStatus = components['schemas']['EmbeddingOnnxModelStatus']
+export type EmbeddingOnnxModelName = EmbeddingOnnxModelStatus['name']
+export type EmbeddingStoredCount = components['schemas']['EmbeddingStoredCount']
+export type EmbeddingBackfillResponse = components['schemas']['EmbeddingBackfillResponse']
+export type EmbeddingLanguage = EmbeddingOnnxModelStatus['languages'][number]
+export type EmbeddingErrorCode = components['schemas']['EmbeddingErrorDetail']['code']
+export type AssetEmbeddingStatus = components['schemas']['AssetEmbeddingStatus']
+export type SemanticSearchResponse = components['schemas']['SemanticSearchResponse']
+export type SemanticAssetHit = components['schemas']['SemanticAssetHit']
+export type SimilarAssetsResponse = components['schemas']['SimilarAssetsResponse']
+export type SimilarImageSearchResponse = components['schemas']['SimilarImageSearchResponse']
+export type DuplicatesResponse = components['schemas']['DuplicatesResponse']
+export type EmbeddingGraphResponse = components['schemas']['EmbeddingGraphResponse']
+export type EmbeddingGraphNode = components['schemas']['EmbeddingGraphNode']
+export type DuplicateGroup = components['schemas']['DuplicateGroup']
+export type DuplicateAsset = components['schemas']['DuplicateAsset']
+
+/** 全ログイン者が読める(重複の候補のしきい値の既定などに使う)。 */
+export function getEmbeddingSettings(): Promise<EmbeddingSettingsResponse> {
+  return request('/api/settings/embeddings')
+}
+
+/** 管理者のみ。省略した項目は変更しない。`remote_connection_id` と `remote_model` は null で未設定に戻す。 */
+export function updateEmbeddingSettings(body: EmbeddingSettingsUpdateRequest): Promise<EmbeddingSettingsResponse> {
+  return request('/api/settings/embeddings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** モデルのダウンロードを始める(202)。進捗は `getEmbeddingSettings` をポーリングして見る。 */
+export function downloadEmbeddingModel(model: EmbeddingOnnxModelName): Promise<EmbeddingSettingsResponse> {
+  return request('/api/settings/embeddings/onnx/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+}
+
+/** モデルのファイルを消す(保存済みのベクトルは消さない)。 */
+export function deleteEmbeddingModel(model: EmbeddingOnnxModelName): Promise<EmbeddingSettingsResponse> {
+  return request(`/api/settings/embeddings/onnx/${encodeURIComponent(model)}`, { method: 'DELETE' })
+}
+
+/** 使うモデルのベクトルが無い画像をまとめて待ち行列に入れる。 */
+export function backfillEmbeddings(): Promise<EmbeddingBackfillResponse> {
+  return request('/api/settings/embeddings/backfill', { method: 'POST' })
+}
+
+/** そのモデル(`model_key`)のベクトルをすべて消す。 */
+export function deleteEmbeddingVectors(modelKey: string): Promise<EmbeddingSettingsResponse> {
+  return request(`/api/settings/embeddings/vectors/${encodeURIComponent(modelKey)}`, { method: 'DELETE' })
+}
+
+/** 1枚の埋め込みを、使うモデルで計算し直す(待ち行列に入れる)。 */
+export function requestAssetEmbedding(assetId: string): Promise<AssetEmbeddingStatus> {
+  return request(`/api/assets/${assetId}/embedding`, { method: 'POST' })
+}
+
+/** 文章での検索(類似度の高い順)。 */
+export function semanticSearch(
+  params: operations['semantic_search']['parameters']['query'],
+): Promise<SemanticSearchResponse> {
+  return request(`/api/search/semantic${toQuery(params)}`)
+}
+
+/**
+ * 手元の画像に似た画像(`POST /api/search/similar-image`、multipart)。画像は Asset にせず、
+ * サーバーは画像もベクトルも保存しない。大きすぎれば 413、画像として読めなければ 422、
+ * 推論できなければ 503。
+ */
+export function searchByImage(
+  file: Blob,
+  params: NonNullable<operations['search_by_image']['parameters']['query']> = {},
+  signal?: AbortSignal,
+): Promise<SimilarImageSearchResponse> {
+  const form = new FormData()
+  form.append('file', file, file instanceof File ? file.name : 'image')
+  return request(`/api/search/similar-image${toQuery(params)}`, { method: 'POST', body: form, signal })
+}
+
+/** 似た画像(起点の画像自身は含めない)。 */
+export function similarAssets(assetId: string, limit?: number): Promise<SimilarAssetsResponse> {
+  return request(`/api/assets/${assetId}/similar${toQuery({ limit })}`)
+}
+
+/** 重複の候補。`threshold` を省くと管理者設定の値。 */
+export function embeddingDuplicates(
+  params: NonNullable<operations['embedding_duplicates']['parameters']['query']> = {},
+): Promise<DuplicatesResponse> {
+  return request(`/api/embeddings/duplicates${toQuery(params)}`)
+}
+
+/**
+ * マップの元データ(ノードと k 近傍。ADR-0033 7章)。各行の先頭は自分自身。
+ * `include_lineage` を付けると系列の主たる親の辺(`[親, 子]` の位置)も返す。
+ */
+export function embeddingGraph(
+  params: NonNullable<operations['embedding_graph']['parameters']['query']> = {},
+): Promise<EmbeddingGraphResponse> {
+  return request(`/api/embeddings/graph${toQuery(params)}`)
 }

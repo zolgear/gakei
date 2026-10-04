@@ -1,8 +1,10 @@
 /**
- * App バー(高さ48px)。ロゴ、ワークスペースのタブ(履歴/生成)、検索ボタン(サイドバーの検索
+ * App バー(高さ48px)。ロゴ、ワークスペースのタブ(生成/履歴/マップ)、検索ボタン(サイドバーの検索
  * パネルを開く)、キュー状態、「新規生成」。モバイル(狭い幅)ではハンバーガーボタンでサイドバーのドロワーを開閉する。
  * 「新規生成」は Alt+N(Mac は Option+N)でも起動できる(ADR-0009「『新規生成』の
  * ショートカット」2026-09-24)。
+ * 「マップ」(`/map`、ADR-0033 8章)は埋め込みが使えるときだけ出す(2026-10-04 にアイコンレールから
+ * ここへ移し、タブの順を「生成」「履歴」「マップ」にした)。
  */
 import { useCallback, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -14,6 +16,7 @@ import { loadLastAssetGroupId } from '../context/lastAssetGroupStorage'
 import { SearchLauncher } from '../features/search/SearchLauncher'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { GakeiMark } from '../components/GakeiMark'
+import { useEmbeddingCapabilities } from '../features/embeddings/useEmbeddingCapabilities'
 import { useFaviconIconState } from '../features/favicon/useFaviconProgress'
 import { fmt, useI18n } from '../i18n'
 import { useQueueStatus } from './useQueueStatus'
@@ -36,6 +39,7 @@ export function AppBar({ onToggleDrawer, drawerOpen }: AppBarProps) {
   // (モデル選択欄が既にプロバイダーを表示している)。useRunFormLogic 側の同じ queryKey の
   // クエリとキャッシュを共有するので、通常は追加のリクエストにならない。
   const capsQuery = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities })
+  const embeddings = useEmbeddingCapabilities()
   const { formState, setFormState } = useRunFormContext()
   const [newRunConfirmOpen, setNewRunConfirmOpen] = useState(false)
 
@@ -93,18 +97,26 @@ export function AppBar({ onToggleDrawer, drawerOpen }: AppBarProps) {
 
       <nav aria-label={t.shell.appBar.workspaceNav} className={styles.tabs}>
         <NavLink
+          to="/studio"
+          className={({ isActive }) => `${styles.tab} ${isActive ? styles.tabActive : ''}`}
+        >
+          {t.shell.appBar.studioTab}
+        </NavLink>
+        <NavLink
           to="/"
           end
           className={({ isActive }) => `${styles.tab} ${isActive ? styles.tabActive : ''}`}
         >
           {t.shell.appBar.historyTab}
         </NavLink>
-        <NavLink
-          to="/studio"
-          className={({ isActive }) => `${styles.tab} ${isActive ? styles.tabActive : ''}`}
-        >
-          {t.shell.appBar.studioTab}
-        </NavLink>
+        {embeddings && (
+          <NavLink
+            to="/map"
+            className={({ isActive }) => `${styles.tab} ${isActive ? styles.tabActive : ''}`}
+          >
+            {t.shell.appBar.mapTab}
+          </NavLink>
+        )}
       </nav>
 
       <SearchLauncher />

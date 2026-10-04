@@ -28,10 +28,10 @@ from app.annotation.engines import (
     build_vlm_instructions,
 )
 from app.annotation.wd_tagger import WdTagger
-from app.domain.annotation_settings import AnnotationConfig, Connection
+from app.domain.annotation_settings import AnnotationConfig
 from app.domain.models import AssetTag, Tag
 from app.worker.annotator import translated_tags
-from tests.test_annotation_engines import _engines_with, _FakeClient
+from tests.test_annotation_engines import _engines_with, _FakeClient, make_ctx
 from tests.test_annotations import _generate, _patch_settings, _upload, _wait_annotation
 
 
@@ -313,7 +313,7 @@ def test_openai_vlm_receives_onnx_tags_and_returns_translations(tmp_path: Path) 
         '{"tags": ["お菓子の家"], "translations": {"candy": "キャンディ", "x": 1}}'
     )
     engines = _engines_with(client, tmp_path)
-    ctx = EngineContext(AnnotationConfig(language="ja"), Connection("k", None))
+    ctx = make_ctx(AnnotationConfig(language="ja"))
     result = asyncio.run(engines.describe_image(b"jpeg", None, False, ctx, ["candy"]))
     assert result.tags == ["お菓子の家"]
     assert result.translations == {"candy": "キャンディ"}
@@ -324,7 +324,7 @@ def test_openai_vlm_receives_onnx_tags_and_returns_translations(tmp_path: Path) 
 def test_openai_vlm_drops_translations_when_native(tmp_path: Path) -> None:
     client = _FakeClient('{"tags": ["cat"], "translations": {"candy": "キャンディ"}}')
     engines = _engines_with(client, tmp_path)
-    ctx = EngineContext(AnnotationConfig(tag_language="native"), Connection("k", None))
+    ctx = make_ctx(AnnotationConfig(tag_language="native"))
     result = asyncio.run(engines.describe_image(b"jpeg", None, False, ctx, ["candy"]))
     assert result.translations == {}
 
@@ -332,7 +332,7 @@ def test_openai_vlm_drops_translations_when_native(tmp_path: Path) -> None:
 def test_openai_translate_tags_uses_llm_model(tmp_path: Path) -> None:
     client = _FakeClient('```json\n{"translations": {"candy": "キャンディ"}}\n```')
     engines = _engines_with(client, tmp_path)
-    ctx = EngineContext(AnnotationConfig(llm_model="llm-x"), Connection("k", None))
+    ctx = make_ctx(llm_model="llm-x")
     assert asyncio.run(engines.translate_tags(["candy", "long hair"], ctx)) == {
         "candy": "キャンディ"
     }
@@ -345,8 +345,7 @@ def test_openai_translate_tags_uses_llm_model(tmp_path: Path) -> None:
 def test_openai_title_instructions_forbid_symbols(tmp_path: Path) -> None:
     client = _FakeClient("**夜の港**。")
     engines = OpenAIEngines(WdTagger(tmp_path))
-    engines._client = client  # type: ignore[assignment]
-    engines._client_key = ("k", None)
-    ctx = EngineContext(AnnotationConfig(), Connection("k", None))
+    engines._client_for = lambda target: client  # type: ignore[assignment,method-assign]
+    ctx = make_ctx()
     assert asyncio.run(engines.title_from_prompt("harbor", ctx)) == "夜の港"
     assert "引用符" in client.calls[0][1]["instructions"]

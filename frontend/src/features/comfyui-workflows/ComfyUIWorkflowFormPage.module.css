@@ -1,68 +1,7 @@
-.page {
-  max-width: 860px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 20px;
-  padding-bottom: max(20px, env(safe-area-inset-bottom));
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.backLink {
-  align-self: flex-start;
-  padding: 0;
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
-
-.backLink:hover {
-  color: var(--color-text);
-}
-
-.title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.experimentalBadge {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 10.5px;
-  font-weight: 600;
-  background: var(--color-header-band);
-  color: var(--color-text-muted);
-}
-
-.placeholder {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--color-bg-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
-.sectionHeading {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
+/*
+ * ワークフローの登録・編集画面(`ComfyUIWorkflowFormPage`)にしか無いもの。ページの枠・セクション・
+ * ボタン・文言の色などは設定の共通のスタイル(`settings.module.css`)を使う(ADR-0031 5章)。
+ */
 
 .dropZone {
   display: flex;
@@ -75,24 +14,15 @@
   background: var(--color-bg-sunken);
 }
 
+/* ファイルを差し替えた(保存していない)とき */
+.dropZone[data-changed='true'] {
+  border-color: var(--color-accent);
+}
+
 .dropZoneText {
   margin: 0;
   font-size: 12px;
   color: var(--color-text-muted);
-}
-
-.fileButton {
-  height: 32px;
-  padding: 0 14px;
-  background: transparent;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-  font-size: 12px;
-}
-
-.fileButton:hover {
-  border-color: var(--color-accent);
 }
 
 .hiddenFileInput {
@@ -103,12 +33,6 @@
   margin: 0;
   font-size: 11px;
   color: var(--color-success);
-}
-
-.errorText {
-  margin: 0;
-  font-size: 12px;
-  color: var(--color-danger);
 }
 
 .warningList,
@@ -123,18 +47,20 @@
   color: var(--color-danger);
 }
 
-.noticeText {
-  margin: 0;
-  font-size: 12px;
-  color: var(--color-text-muted);
+.validation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.basicGrid {
+.basicGrid,
+.bindingsGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
+/* ラベルを上に置く欄(差し込み先のノード選択と同じ見た目) */
 .field {
   display: flex;
   flex-direction: column;
@@ -142,27 +68,19 @@
   min-width: 0;
 }
 
-.field label {
+.fieldLabel {
   font-size: 11px;
   color: var(--color-text-faint);
 }
 
-.field input,
-.field select {
-  height: 34px;
-  box-sizing: border-box;
-  background: var(--color-bg-sunken);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  padding: 0 10px;
-  color: var(--color-text);
-  font-size: 13px;
+.fullWidth {
+  max-width: none;
 }
 
-.bindingsGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+/* 変えた欄は縁をアクセント色にする(ADR-0031 3章) */
+.field[data-changed='true'] .fullWidth {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .subField {
@@ -171,11 +89,6 @@
   gap: 6px;
   padding-top: 8px;
   border-top: 1px solid var(--color-border);
-}
-
-.subFieldLabel {
-  font-size: 11px;
-  color: var(--color-text-faint);
 }
 
 .seedList {
@@ -190,10 +103,9 @@
   gap: 8px;
 }
 
-.helpText {
-  margin: 0;
-  font-size: 11px;
-  color: var(--color-text-faint);
+.seedRow > :first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .reorderButtons {
@@ -221,16 +133,6 @@
 
 .reorderButtons button:disabled {
   opacity: 0.4;
-}
-
-.smallRemoveButton {
-  height: 32px;
-  padding: 0 10px;
-  background: transparent;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--color-danger);
-  font-size: 11px;
 }
 
 .addButton {
@@ -262,40 +164,11 @@
   gap: 6px;
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.saveButton {
-  height: 38px;
-  padding: 0 20px;
-  background: var(--color-accent);
-  color: #17181b;
-  border: 0;
-  border-radius: var(--radius);
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.saveButton:disabled {
-  opacity: 0.5;
-}
-
-@media (max-width: 767px) {
-  .page {
-    padding: 14px;
-  }
-
+/* 設定ページの本文の幅で判定する(右のリソースのパネルで狭くなったときも1列にする) */
+@container settings-page (max-width: 559px) {
   .basicGrid,
   .bindingsGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .field input,
-  .field select {
-    min-height: 40px;
-    font-size: 16px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .seedRow {
@@ -303,15 +176,26 @@
     align-items: stretch;
   }
 
-  .fileButton,
-  .smallRemoveButton,
-  .addButton,
-  .saveButton,
-  .backLink {
-    min-height: 44px;
+  .seedRow > button {
+    align-self: flex-start;
   }
 
-  .saveButton {
-    width: 100%;
+  .reorderButtons {
+    flex-direction: row;
+    gap: 6px;
+  }
+
+  .reorderButtons button {
+    width: 44px;
+    height: 32px;
+    font-size: 11px;
+  }
+}
+
+/* ADR-0009 5章: タップ 44px 以上 */
+@media (max-width: 767px) {
+  .addButton,
+  .reorderButtons button {
+    min-height: 44px;
   }
 }

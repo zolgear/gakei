@@ -9,39 +9,45 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import LOCAL_ADMIN, CurrentUser
 from app.auth.oidc import OidcClient
+from app.auth.runtime import AuthRuntime, OidcClientFactory, build_authlib_client, get_auth_runtime
 from app.auth.sessions import find_user_for_token
-from app.config import Settings
-from app.deps import get_session, get_settings
+from app.deps import get_session
 from app.domain import api_tokens as api_tokens_domain
 from app.domain import mcp_settings
 from app.i18n import t
 
 
-def get_oidc_client(request: Request) -> OidcClient | None:
-    """`app.state.oidc_client`(oidc モードのみ lifespan が設定する)を返す。
+def get_oidc_client(runtime: AuthRuntime = Depends(get_auth_runtime)) -> OidcClient | None:
+    """実効の設定(ADR-0034)の OIDC クライアント(`AuthRuntime.oidc_client`)を返す。
 
     テストではこの Depends を `tests/oidc_fake.py::FakeOidcClient` に差し替える
-    (`api/settings.py::get_key_validator` と同じ流儀)。`none` モードでは未設定のため
-    None(呼び出し側の `/api/auth/login`・`/callback` は先に `auth_mode` を見て 404 にする)。
+    (`api/settings.py::get_key_validator` と同じ流儀)。`none` モードでは None(呼び出し側の
+    `/api/auth/login`・`/callback` は先にモードを見て 404 にする)。
     """
-    return getattr(request.app.state, "oidc_client", None)
+    return runtime.oidc_client
+
+
+def get_oidc_client_factory() -> OidcClientFactory:
+    """接続1組から OIDC クライアントを作る関数(ADR-0034 のテストログイン用)。テストでは
+    `FakeOidcClient` を返す関数に差し替える。"""
+    return build_authlib_client
 
 
 def get_current_user(
-    settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     gakei_session: str | None = Cookie(default=None),
 ) -> CurrentUser | None:
     """`none` モードは常に `LOCAL_ADMIN`。`oidc` モードは Cookie `gakei_session` のセッション
     から解決する(Cookie が無い・期限切れ・不明なトークンは None = 未ログイン)。
     """
-    if settings.auth_mode == "none":
+    if not runtime.is_oidc:
         return LOCAL_ADMIN
     if gakei_session is None:
         return None
     # L-3: 管理者一覧・許可ドメインは DB のセッションではなく、現在の設定から毎回評価する。
     return find_user_for_token(
-        db, gakei_session, settings.admin_email_set(), settings.allowed_email_domain_set()
+        db, gakei_session, runtime.admin_email_set(), runtime.allowed_email_domain_set()
     )
 
 
@@ -69,7 +75,7 @@ def bearer_token(request: Request) -> str | None:
 
 def require_user_or_api_token(
     request: Request,
-    settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     user: CurrentUser | None = Depends(get_current_user),
 ) -> CurrentUser:
@@ -85,7 +91,7 @@ def require_user_or_api_token(
     if raw is None or not mcp_settings.is_enabled(db):
         raise HTTPException(status_code=401, detail=t("auth.required"))
     principal = api_tokens_domain.authenticate(
-        db, raw, settings.admin_email_set(), settings.allowed_email_domain_set()
+        db, raw, runtime.admin_email_set(), runtime.allowed_email_domain_set()
     )
     if principal is None:
         db.rollback()

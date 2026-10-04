@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator
 
 from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
 from app.providers.base import ProviderCapabilities
@@ -23,9 +23,28 @@ class ProviderEntry(ProviderCapabilities):
     supports_pricing: bool
 
 
+class EmbeddingCapabilities(BaseModel):
+    """画像の埋め込み(ADR-0033 7章)。画面の出し分けに使う。"""
+
+    # 有効で、いま使えるか(文章での検索、似た画像、重複の候補、マップ)。
+    available: bool
+    # 使うモデルの識別子。使えないときは null。
+    model_key: str | None = None
+    # 使うモデルの対応言語(ローカルのモデルだけ分かる。リモートは null)。
+    languages: list[Literal["ja", "en"]] | None = None
+    # 日本語に対応するか(リモートは分からないので null)。
+    multilingual: bool | None = None
+    # 検索の方式(起動時に決める)。
+    index_backend: Literal["pgvector", "numpy"]
+    # 使うエンジン(使えないときは null)。リモートなら、画像で探す画像と検索の文章が推論
+    # サーバーに送られることを画面に書く(ADR-0033 2章)。
+    engine: Literal["onnx", "remote"] | None = None
+
+
 class CapabilitiesResponse(BaseModel):
     default_provider: str
     providers: list[ProviderEntry] = Field(default_factory=list)
+    embeddings: EmbeddingCapabilities
 
 
 # -- Auth (ADR-0019) ------------------------------------------------------
@@ -54,6 +73,138 @@ class AuthLogoutResponse(BaseModel):
     """`POST /api/auth/logout`。SPA はこの URL に `window.location.assign()` で遷移する。"""
 
     redirect_url: str
+
+
+# -- 認証の設定 (ADR-0034) ---------------------------------------------------
+# 管理者だけが見る。クライアントシークレットは一部も返さない(設定済みかと出どころだけ)。
+
+AuthSettingSource = Literal["setting", "env", "default"]
+
+
+class AuthModeSetting(BaseModel):
+    value: Literal["none", "oidc"]
+    source: AuthSettingSource
+    # `.env` に AUTH_MODE が明示されていて、画面から変えられない。
+    locked: bool
+
+
+class AuthTextSetting(BaseModel):
+    value: str | None
+    source: AuthSettingSource
+
+
+class AuthListSetting(BaseModel):
+    value: list[str]
+    source: AuthSettingSource
+
+
+class AuthSessionHoursSetting(BaseModel):
+    value: int
+    source: AuthSettingSource
+    min: int
+    max: int
+
+
+class AuthClientSecretStatus(BaseModel):
+    configured: bool
+    source: Literal["file", "env"] | None = None
+
+
+class AuthConnectionView(BaseModel):
+    """本登録の接続。`configured` は発行者・クライアント ID・`PUBLIC_BASE_URL` が揃っているか。"""
+
+    configured: bool
+    issuer: AuthTextSetting
+    client_id: AuthTextSetting
+    scopes: AuthTextSetting
+    public_base_url: AuthTextSetting
+    client_secret: AuthClientSecretStatus
+    # IdP に登録するリダイレクト URI。`PUBLIC_BASE_URL` が無ければ null。
+    redirect_uri: str | None = None
+
+
+class AuthPendingConnectionView(BaseModel):
+    """仮登録の接続(テストログインに成功するまで使われない)。"""
+
+    issuer: str
+    client_id: str
+    scopes: str
+    public_base_url: str
+    client_secret: AuthClientSecretStatus
+    redirect_uri: str
+    created_at: datetime | None = None
+
+
+class AuthVerifiedView(BaseModel):
+    """テストログインに成功した記録。`matches_current` は今の本登録の接続でのテストか。"""
+
+    email: str
+    verified_at: datetime
+    matches_current: bool
+
+
+AuthEnableBlocker = Literal[
+    "env_locked",
+    "no_connection",
+    "not_verified",
+    "admin_emails_empty",
+    "verified_email_not_admin",
+]
+
+
+class AuthSettingsResponse(BaseModel):
+    """`GET /api/settings/auth`(管理者だけ)。"""
+
+    mode: AuthModeSetting
+    connection: AuthConnectionView
+    pending: AuthPendingConnectionView | None = None
+    verified: AuthVerifiedView | None = None
+    admin_emails: AuthListSetting
+    allowed_email_domains: AuthListSetting
+    session_hours: AuthSessionHoursSetting
+    # 今の設定のまま oidc にできない理由(画面のスイッチの近くに出す)。空なら有効にできる。
+    enable_blockers: list[AuthEnableBlocker]
+
+
+class AuthSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/auth` の本文。省略した項目は変更せず、明示的な `null` は保存済みの
+    値を消して `.env`・既定値に戻す(`model_fields_set` で区別する)。値の妥当性は
+    `app/domain/auth_settings.py` が検証し、i18n 対応のメッセージで 422 にする。
+    """
+
+    mode: Literal["none", "oidc"] | None = None
+    admin_emails: list[str] | None = None
+    allowed_email_domains: list[str] | None = None
+    # `true` を 1 として受けないよう厳密にする。
+    session_hours: StrictInt | None = None
+
+
+class AuthConnectionRequest(BaseModel):
+    """`PUT /api/settings/auth/connection`(仮登録)の本文。
+
+    `client_secret` は、省略すると今のもの(仮登録があればそのもの、無ければ本登録のもの)を
+    引き継ぎ、空文字なら public client(シークレットなし)、値があれば差し替える。
+    """
+
+    issuer: str
+    client_id: str
+    scopes: str
+    public_base_url: str
+    client_secret: str | None = None
+
+
+class AuthSettingsErrorDetail(BaseModel):
+    """認証の設定の 409・422・502 の `detail`。`code` で画面の案内を出し分ける。
+
+    - 409: `env_locked` / `no_connection` / `not_verified` / `admin_emails_empty` /
+      `verified_email_not_admin` / `self_not_admin`
+    - 422: `invalid_value`(入力の形)/ `discovery_invalid`(Discovery 文書の中身)
+    - 502: `discovery_failed`(Discovery 文書を取得できない)
+    """
+
+    code: str
+    message: str
+    field: str | None = None
 
 
 # -- Users / avatar (ADR-0020) ---------------------------------------------
@@ -219,12 +370,28 @@ class TagListResponse(BaseModel):
     items: list[TagCount] = Field(default_factory=list)
 
 
+class RunTextOutput(BaseModel):
+    """実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
+    (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った
+    グラフ(`run.params.comfyui_prompt`)から取った値。"""
+
+    role: str
+    node_id: str | None = None
+    class_type: str | None = None
+    title: str | None = None
+    text: str
+    # 100,000 文字を超えて切り詰めたとき true。
+    truncated: bool = False
+
+
 class ProducedByRunSummary(BaseModel):
     id: uuid.UUID
     operation: Literal["generate", "edit"]
     model: str
     status: Literal["queued", "running", "succeeded", "failed", "canceled"]
     prompt: str
+    # 最終プロンプトなど(ADR-0030)。無ければ null。
+    text_outputs: list[RunTextOutput] | None = None
 
 
 class AssetOrigin(BaseModel):
@@ -385,6 +552,9 @@ class RunSummary(BaseModel):
     asset_group: AssetGroupRef | None = None
     # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツールから作った Run。
     origin: str | None = None
+    # 実行時にワークフローが作ったテキスト(ADR-0030。ComfyUI の最終プロンプト)。
+    # 成功した Run のうち、記録があるものだけ。それ以外は null。
+    text_outputs: list[RunTextOutput] | None = None
 
 
 class RunDetail(RunSummary):
@@ -623,7 +793,7 @@ class SearchResponse(BaseModel):
 
 
 # -- Settings (ADR-0012 Decision 4) --------------------------------------
-# 画面から OpenAI の API キーを設定する。キーの全文は返さない(末尾4文字のみ)。
+# 画面から OpenAI の API キーを設定する。キーは一部も返さない(設定済みかどうかと出どころだけ)。
 
 
 class OpenAIKeyStatusResponse(BaseModel):
@@ -631,8 +801,6 @@ class OpenAIKeyStatusResponse(BaseModel):
     required: bool
     configured: bool
     source: Literal["env", "file"] | None = None
-    # 例: "…abcd"。未設定なら null。
-    hint: str | None = None
 
 
 class OpenAIKeyUpdateRequest(BaseModel):
@@ -799,6 +967,12 @@ class ComfyWorkflowListResponse(BaseModel):
 # -- About (ADR-0021 3章) ---------------------------------------------------
 
 
+class HealthResponse(BaseModel):
+    """`GET /api/health`(Issue #43)。ログインなしで呼べるので、これ以外の情報は出さない。"""
+
+    status: Literal["ok"] = "ok"
+
+
 class AboutResponse(BaseModel):
     """`GET /api/about`。バージョンの正は `backend/pyproject.toml`(`app.version.get_version`)。"""
 
@@ -875,17 +1049,45 @@ class OnnxModelStatus(BaseModel):
     download_error: str | None = None
 
 
+class AnnotationConnectionCalls(BaseModel):
+    """接続先1つへの、自動タイトル・タグの直近1時間の LLM・VLM の呼び出し回数(上限は接続先
+    ごと。ADR-0024 8章)。"""
+
+    connection_id: str
+    calls_last_hour: int
+
+
+class AnnotationTarget(BaseModel):
+    """用途1つの「接続先 + モデル名」の組。"""
+
+    connection_id: str
+    model: str
+
+
+class AnnotationDefaultProfile(BaseModel):
+    llm: AnnotationTarget
+    vlm: AnnotationTarget
+
+
+class AnnotationComfyuiProfile(BaseModel):
+    # null なら「既定と同じ」。
+    llm: AnnotationTarget | None = None
+    vlm: AnnotationTarget | None = None
+
+
+class AnnotationProfiles(BaseModel):
+    """用途ごとの組(ADR-0024 8章)。`comfyui` は ComfyUI の Run の出力にだけ使う。"""
+
+    default: AnnotationDefaultProfile
+    comfyui: AnnotationComfyuiProfile
+
+
 class AnnotationSettingsResponse(BaseModel):
     """`GET /api/settings/annotation`。"""
 
     auto_on_ingest: bool
     llm_enabled: bool
-    llm_model: str
     vlm_enabled: bool
-    vlm_model: str
-    # 推定専用の接続先。null なら OpenAI の設定(キー、Base URL)を流用する。
-    base_url: str | None = None
-    api_style: Literal["responses", "chat"]
     language: Literal["ja", "en"]
     # タグの言語(ADR-0024 6章)。native はエンジン任せ、localized は `language` に合わせる。
     tag_language: Literal["native", "localized"]
@@ -893,40 +1095,109 @@ class AnnotationSettingsResponse(BaseModel):
     onnx_enabled: bool
     onnx_model: Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
     onnx_threshold: float
-    # 推定専用の API キーを保存しているか(値は返さない)。
-    api_key_set: bool
+    profiles: AnnotationProfiles
     onnx_models: list[OnnxModelStatus] = Field(default_factory=list)
     # 一度も推定していない Asset(削除済み・マスクを除く)の件数。一括実行の対象。
     pending_count: int
     # 待ち行列にある件数(queued と running)。
     queued_count: int
-    # 直近1時間の LLM・VLM の呼び出し回数(プロセス内で数える。再起動で 0 に戻る)。
+    # 直近1時間の LLM・VLM の呼び出し回数の全接続先の合計(プロセス内で数える。再起動で 0 に
+    # 戻る)。
     calls_last_hour: int
+    # 接続先ごとの直近1時間の呼び出し回数。LLM の接続先の一覧と同じ順(先頭は組み込みの
+    # `openai`)。接続先そのものは `GET /api/settings/llm-connections`。
+    connection_calls: list[AnnotationConnectionCalls] = Field(default_factory=list)
     # いま使えるエンジン(有効かつ、ONNX はモデルをダウンロード済み)。空なら推定できない。
     usable_engines: list[Literal["llm", "vlm", "onnx"]] = Field(default_factory=list)
 
 
+class AnnotationDefaultProfileUpdate(BaseModel):
+    """省略した用途は変更しない。null にはできない。"""
+
+    llm: AnnotationTarget | None = None
+    vlm: AnnotationTarget | None = None
+
+
+class AnnotationComfyuiProfileUpdate(BaseModel):
+    """省略した用途は変更しない。null を送ると「既定と同じ」に戻す。"""
+
+    llm: AnnotationTarget | None = None
+    vlm: AnnotationTarget | None = None
+
+
+class AnnotationProfilesUpdate(BaseModel):
+    default: AnnotationDefaultProfileUpdate | None = None
+    comfyui: AnnotationComfyuiProfileUpdate | None = None
+
+
 class AnnotationSettingsUpdateRequest(BaseModel):
-    """`PATCH /api/settings/annotation`。省略した項目は変更しない。`base_url` は null か空文字で
-    「OpenAI の設定を流用」に戻す。値の妥当性は `app/domain/annotation_settings.py` が検証する。
+    """`PATCH /api/settings/annotation`。省略した項目は変更しない。値の妥当性は
+    `app/domain/annotation_settings.py` が検証する。`profiles` は書いたマスだけ変える。
     """
 
     auto_on_ingest: bool | None = None
     llm_enabled: bool | None = None
-    llm_model: str | None = None
     vlm_enabled: bool | None = None
-    vlm_model: str | None = None
-    base_url: str | None = None
-    api_style: str | None = None
     language: str | None = None
     tag_language: str | None = None
     hourly_limit: int | None = None
     onnx_enabled: bool | None = None
     onnx_model: str | None = None
     onnx_threshold: float | None = None
+    profiles: AnnotationProfilesUpdate | None = None
 
 
-class AnnotationApiKeyUpdateRequest(BaseModel):
+# -- LLM の接続先(ADR-0032) --------------------------------------------------
+
+# 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
+LlmConnectionFeature = Literal["annotation", "embedding"]
+
+
+class LlmConnectionView(BaseModel):
+    """LLM・VLM の接続先1つ(ADR-0032、ADR-0024 8章)。キーの値は一部も返さない。"""
+
+    id: str
+    # 組み込みの接続先(`openai`、OpenAI の設定)の名前は画面の言語で表示する(サーバーの言語の
+    # 文言を入れて返すが、画面は `builtin` を見て自分の言語で出してよい)。
+    name: str
+    # 組み込みの接続先(OpenAI の設定。ADR-0017)なら true。名前・Base URL・キーは変えられず、
+    # 削除もできない(API 形式だけは変えられる)。
+    builtin: bool
+    # 組み込みの接続先は OpenAI の設定の Base URL(未設定なら null = OpenAI 本体)。
+    base_url: str | None = None
+    api_style: Literal["responses", "chat"]
+    # キーを設定しているか(組み込みの接続先は OpenAI のキーの有無)。
+    api_key_set: bool
+    # この接続先を使っている機能。空でなければ削除できない。
+    used_by: list[LlmConnectionFeature] = Field(default_factory=list)
+
+
+class LlmConnectionsResponse(BaseModel):
+    """`GET /api/settings/llm-connections` と、接続先を変える API の応答。"""
+
+    # 先頭は常に組み込みの `openai`。追加した接続先は追加した順に並ぶ。
+    connections: list[LlmConnectionView]
+
+
+class LlmConnectionCreateRequest(BaseModel):
+    """`POST /api/settings/llm-connections`。キーは任意(省略・空ならキーなし)。"""
+
+    name: str
+    base_url: str
+    api_style: str = "responses"
+    api_key: str | None = None
+
+
+class LlmConnectionUpdateRequest(BaseModel):
+    """`PATCH /api/settings/llm-connections/{id}`。省略した項目は変更しない。
+    組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。"""
+
+    name: str | None = None
+    base_url: str | None = None
+    api_style: str | None = None
+
+
+class LlmConnectionApiKeyUpdateRequest(BaseModel):
     api_key: str
 
 
@@ -937,3 +1208,358 @@ class OnnxDownloadRequest(BaseModel):
 class AnnotationBackfillResponse(BaseModel):
     # 待ち行列に入れた件数。
     queued: int
+
+
+# -- 画像の埋め込み(ADR-0033) -------------------------------------------------------
+
+EmbeddingOnnxModelName = Literal["clip-vit-b32-u8", "clip-vit-b32", "clip-japanese-base"]
+
+
+class EmbeddingOnnxModelStatus(BaseModel):
+    """埋め込みのローカルの ONNX モデル1つの状態。"""
+
+    name: EmbeddingOnnxModelName
+    # このモデルのベクトルの `model_key`(`onnx:<モデル>@<リビジョン>`)。
+    model_key: str
+    # 対応する言語。英語だけのモデルでは、日本語で検索してもほとんど当たらない。
+    languages: list[Literal["ja", "en"]]
+    dim: int
+    # 取得するファイルの合計の大きさ。
+    size_bytes: int
+    # 読み込みと推論に要るメモリの目安(バイト)。画像側と文章側の両方を読み込んだとき。
+    memory_bytes: int
+    # 文章での検索だけのとき(文章側だけを読み込む)のメモリの目安(バイト)。
+    memory_text_bytes: int
+    license: str
+    downloaded: bool
+    download_status: Literal["idle", "downloading", "failed"]
+    # 0〜1。ダウンロード中だけ値が入る。
+    download_progress: float | None = None
+    download_error: str | None = None
+
+
+class EmbeddingStoredCount(BaseModel):
+    """モデル(`model_key`)ごとの保存済みのベクトルの件数。"""
+
+    model_key: str
+    count: int
+    dim: int | None = None
+    # 今使っているモデルか。
+    active: bool
+
+
+class EmbeddingSettingsResponse(BaseModel):
+    """`GET /api/settings/embeddings`。"""
+
+    enabled: bool
+    engine: Literal["onnx", "remote"]
+    onnx_model: EmbeddingOnnxModelName
+    # リモートの接続先(LLM の接続先の id。ADR-0032)。未設定なら null。
+    remote_connection_id: str | None = None
+    remote_model: str | None = None
+    remote_api_format: Literal["infinity"]
+    auto_on_ingest: bool
+    duplicate_threshold: float
+    # 使うモデルの `model_key`。リモートで接続先かモデル名が未設定なら null。
+    active_model_key: str | None = None
+    # 使うモデルの対応言語(ローカルのモデルだけ分かる。リモートは null)。
+    active_languages: list[Literal["ja", "en"]] | None = None
+    # 有効で、いま計算できるか(ローカルはモデルをダウンロード済み)。
+    usable: bool
+    # 検索の方式(ADR-0033 4章)。起動時に決める。
+    index_backend: Literal["pgvector", "numpy"]
+    onnx_models: list[EmbeddingOnnxModelStatus] = Field(default_factory=list)
+    stored: list[EmbeddingStoredCount] = Field(default_factory=list)
+    # 使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)の件数。
+    # 一括実行の対象。
+    pending_count: int
+    # 使うモデルの待ち行列にある件数(queued と running)。
+    queued_count: int
+    # 使うモデルで計算に失敗した件数。
+    failed_count: int
+
+
+class EmbeddingSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/embeddings`。省略した項目は変更しない。値の妥当性は
+    `app/domain/embedding_settings.py` が検証する。`remote_connection_id` と `remote_model` は
+    null で未設定に戻す(ほかの項目の null は 422)。
+    """
+
+    enabled: bool | None = None
+    engine: str | None = None
+    onnx_model: str | None = None
+    remote_connection_id: str | None = None
+    remote_model: str | None = None
+    remote_api_format: str | None = None
+    auto_on_ingest: bool | None = None
+    duplicate_threshold: float | None = None
+
+
+class EmbeddingBackfillResponse(BaseModel):
+    # 待ち行列に入れた件数。
+    queued: int
+
+
+class AssetEmbeddingStatus(BaseModel):
+    """1枚の埋め込みの状態(`POST /api/assets/{id}/embedding` の応答)。"""
+
+    asset_id: uuid.UUID
+    model_key: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    error: str | None = None
+    requested_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+# -- 埋め込みでの検索(ADR-0033 6章・7章) --------------------------------------------
+# 埋め込みを無効にしている(または使えるモデルが無い)間は、どれも 409 を返す。
+
+
+class SemanticAssetHit(AssetSummary):
+    """文章での検索・似た画像の1件。`score` はコサイン類似度(-1〜1、大きいほど近い)。"""
+
+    score: float
+
+
+class SemanticSearchResponse(BaseModel):
+    """`GET /api/search/semantic`。類似度の高い順。"""
+
+    query: str
+    # 使ったモデル(ベクトル空間)の識別子。
+    model_key: str
+    # 使うモデルの対応言語(ローカルのモデルだけ分かる。リモートは null)。
+    languages: list[Literal["ja", "en"]] | None = None
+    # 日本語に対応するか。英語だけのモデルでは日本語で検索してもほとんど当たらない。
+    # リモートは分からないので null。
+    multilingual: bool | None = None
+    assets: list[SemanticAssetHit] = Field(default_factory=list)
+
+
+class SimilarAssetsResponse(BaseModel):
+    """`GET /api/assets/{id}/similar`。起点の画像自身は含めない。"""
+
+    asset_id: uuid.UUID
+    model_key: str
+    assets: list[SemanticAssetHit] = Field(default_factory=list)
+
+
+class SimilarImageSearchResponse(BaseModel):
+    """`POST /api/search/similar-image`。手元の画像に似た画像(類似度の高い順)。送った画像は
+    保存しないので、起点の id は無い。"""
+
+    model_key: str
+    assets: list[SemanticAssetHit] = Field(default_factory=list)
+
+
+class EmbeddingErrorDetail(BaseModel):
+    """埋め込みの API の 409 の `detail`。`code` で画面の出し分けをする。
+
+    - `embeddings_unavailable`: 埋め込みが無効、または使えるモデルが無い
+    - `embedding_pending`: その画像のベクトルを計算中(待ち行列にある)
+    - `embedding_failed`: その画像のベクトルの計算に失敗した
+    - `embedding_missing`: その画像のベクトルがまだ無い(計算を頼んでいない)
+    - `embedding_not_supported`: マスクは対象外
+    """
+
+    code: Literal[
+        "embeddings_unavailable",
+        "embedding_pending",
+        "embedding_failed",
+        "embedding_missing",
+        "embedding_not_supported",
+    ]
+    message: str
+
+
+class DuplicateAsset(AssetSummary):
+    # 代表(グループでいちばん古い画像)との類似度。代表自身は、メンバーとの類似度の最大値
+    # (ADR-0033 12章)。
+    max_score: float
+    # この画像に知覚ハッシュが無い(まだ作っていない)ので、代表との組を CLIP の類似度だけで
+    # 判定した(代表なら、メンバーとの組すべて)。サーバーは常に true / false を返す(省略可能に
+    # しているのは、生成する TypeScript の型で必須にしないため)。
+    hash_missing: bool | None = None
+
+
+class DuplicateGroup(BaseModel):
+    # 古い順(最初に作った画像が先頭)。
+    assets: list[DuplicateAsset]
+    # 代表との類似度の最大値。
+    max_score: float
+    # 知覚ハッシュが無い画像を含む(その組は CLIP の類似度だけで判定した)。常に true / false。
+    hash_missing: bool | None = None
+
+
+class DuplicatesResponse(BaseModel):
+    """`GET /api/embeddings/duplicates`。類似度がしきい値以上で知覚ハッシュも近い組を、
+    代表(いちばん古い画像)との類似度でまとめたグループ(大きい順。ADR-0033 12章)。
+    見るのは新しい順に `scanned` 件まで。それより多ければ `truncated`。"""
+
+    model_key: str
+    threshold: float
+    groups: list[DuplicateGroup] = Field(default_factory=list)
+    # 比べた画像の数(ベクトルのある、見える画像。新しい順に上限まで)。
+    scanned: int
+    # 上限を超えたので、古い画像を比べていない。
+    truncated: bool
+    # グループの数が `limit` を超えたので、小さいグループを返していない。
+    groups_truncated: bool
+
+
+class EmbeddingGraphNode(BaseModel):
+    id: uuid.UUID
+    kind: Literal["upload", "generated", "sketch"]
+    width: int
+    height: int
+    title: str | None = None
+
+
+class EmbeddingGraphResponse(BaseModel):
+    """`GET /api/embeddings/graph`。マップ(2D の地図と類似度のネットワーク)の元データ。
+
+    ノードは新しい順。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
+    (`nodes` の位置と、コサイン類似度)で、先頭は必ず自分自身(類似度 1 = 距離 0)、続いて
+    ほかのノードを最大 `k` 件、類似度の高い順に並べる。どの行も同じ長さ
+    (`1 + min(k, ノード数 - 1)`)なので、umap-js の `setPrecomputedKNN` にそのまま渡せる
+    (距離は `1 - 類似度`)。
+    """
+
+    model_key: str
+    k: int
+    nodes: list[EmbeddingGraphNode] = Field(default_factory=list)
+    neighbor_indices: list[list[int]] = Field(default_factory=list)
+    neighbor_similarities: list[list[float]] = Field(default_factory=list)
+    # 系列(ADR-0003)の主たる親の辺 `[親の位置, 子の位置]`。両方が `nodes` にあるものだけ。
+    # `include_lineage` を指定したときだけ入る。
+    lineage_edges: list[list[int]] | None = None
+    # 絞り込みに合う、ベクトルのある画像の数。
+    total: int
+    # `limit` を超えたので、古い画像を返していない。
+    truncated: bool
+
+
+# -- 共有リンク(ADR-0029) ---------------------------------------------------------
+# 本人向け(`/api/shares`、ログインが要る)と、ログイン不要の公開(`/api/public/shares`)。
+# 公開の応答は、ほかの画面の型(AssetDetail、RunSummary、LineageNode など)を使い回さず、
+# 見せてよい項目だけを持つ専用の型にする(ほかの型に項目が増えても、公開には載らないように)。
+
+ShareScope = Literal["single", "ancestors", "lineage"]
+
+
+class ShareSettingsResponse(BaseModel):
+    """`GET /api/settings/share`。有効/無効(既定は無効)。"""
+
+    enabled: bool
+
+
+class ShareSettingsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/share` の本文。省略した項目は変更しない。"""
+
+    enabled: bool | None = None
+
+
+class SharePreviewRequest(BaseModel):
+    asset_id: uuid.UUID
+    scope: ShareScope
+
+
+class ShareCreateRequest(SharePreviewRequest):
+    # 原本の表示とダウンロードを許すか(ADR-0029 4章。既定は許す)。
+    allow_original: bool = True
+
+
+class SharePreviewAsset(BaseModel):
+    """共有に含まれる画像1件(作る前の確認用。サムネイルは本人向けの配信 URL で出す)。"""
+
+    id: uuid.UUID
+    kind: Literal["upload", "generated", "mask", "sketch"]
+    width: int
+    height: int
+    title: str | None = None
+
+
+class SharePreviewResponse(BaseModel):
+    scope: ShareScope
+    asset_count: int
+    assets: list[SharePreviewAsset] = Field(default_factory=list)
+    # 系列グラフのノード数の上限で、たどり切れなかった(ADR-0009)。
+    truncated: bool = False
+
+
+class ShareRow(BaseModel):
+    """自分の共有リンクの1件(ADR-0029 7章)。"""
+
+    id: uuid.UUID
+    url: str
+    root_asset_id: uuid.UUID
+    # 起点の画像が削除されている(共有のページは 404 になっている)。
+    root_deleted: bool = False
+    root_title: str | None = None
+    scope: ShareScope
+    allow_original: bool
+    asset_count: int
+    created_at: datetime
+    last_accessed_at: datetime | None = None
+    access_count: int = 0
+
+
+class ShareListResponse(BaseModel):
+    items: list[ShareRow] = Field(default_factory=list)
+
+
+class PublicShareAsset(BaseModel):
+    id: uuid.UUID
+    kind: Literal["upload", "generated", "mask", "sketch"]
+    mime: str
+    width: int
+    height: int
+    created_at: datetime
+    title: str | None = None
+    # この画像を作った Run(共有に含まれるときだけ)。
+    run_id: uuid.UUID | None = None
+    # 作成時の系列グラフでの深さ(起点 0、祖先が負、子孫が正)。
+    depth: int = 0
+    # この画像の原本を出せるか(ADR-0029 4章)。共有が原本を許していても、秘密に見える値を含む
+    # ComfyUI の Run の画像は false(2026-10-01 追記)。false ならプレビューまで。
+    allow_original: bool
+
+
+class PublicShareRun(BaseModel):
+    """画像を作った Run のうち、見せてよい項目だけ(ADR-0029 3章)。実行者、料金・usage、
+    エラー、入力の Asset の id は含めない。`params` は `shares.public_params` の値(ComfyUI の
+    Run は `run.params` の写しで入れ子を含み、秘密に見える値は `***` に伏せる。ADR-0029 3章、
+    2026-10-01 改訂・追記)。"""
+
+    id: uuid.UUID
+    operation: Literal["generate", "edit"]
+    # モデル名(ComfyUI はワークフローの名前)。
+    model: str
+    prompt: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    # 最終プロンプト(PE の出力。ADR-0030 4章)。無ければ null。
+    text_outputs: list[RunTextOutput] | None = None
+
+
+class PublicShareEdge(BaseModel):
+    """共有に含まれるノードどうしの辺だけ(範囲外のノードへの辺は含めない)。"""
+
+    source: uuid.UUID
+    target: uuid.UUID
+    kind: Literal["input", "output", "sketch_source", "origin"]
+    role: Literal["image", "mask", "reference"] | None = None
+    position: int | None = None
+    output_index: int | None = None
+    primary: bool = False
+
+
+class PublicShareResponse(BaseModel):
+    """`GET /api/public/shares/{token}`(ログイン不要)。"""
+
+    root_asset_id: uuid.UUID
+    scope: ShareScope
+    allow_original: bool
+    created_at: datetime
+    assets: list[PublicShareAsset] = Field(default_factory=list)
+    runs: list[PublicShareRun] = Field(default_factory=list)
+    edges: list[PublicShareEdge] = Field(default_factory=list)

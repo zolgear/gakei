@@ -33,6 +33,9 @@ import { formatUsd } from '../workspace/priceEstimateText'
 import { buildStudioPath } from '../workspace/assetQueryParam'
 import { nodeTargetPath } from '../lineage/nodeTargetPath'
 import { fmt, useI18n } from '../../i18n'
+import { StudioPromptActions } from '../workspace/StudioPromptActions'
+import { FinalPromptSection } from './FinalPromptSection'
+import { findFinalPrompt } from './finalPrompt'
 import styles from './RunDetailContent.module.css'
 
 export interface RunDetailContentProps {
@@ -109,6 +112,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
   const comfyuiWorkflow = extractComfyUiWorkflowInfo(rawParams)
   const comfyuiPrompt = extractComfyUiPrompt(rawParams)
   const comfyuiSeed = extractComfyUiSeed(rawParams)
+  const finalPrompt = findFinalPrompt(run.text_outputs)
 
   const thumbAssetDetails = new Map<string, AssetDetail>()
   thumbAssetIds.forEach((assetId, index) => {
@@ -183,6 +187,19 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
         <p className={styles.prompt}>{run.prompt}</p>
         {promptActions?.(run.prompt)}
       </section>
+
+      {/* 最終プロンプト(ADR-0030 3章)。スタジオ内では呼び出し側の挿入・置き換え(promptActions)を
+          そのまま使い、スタジオの外ではリクエストを積んでスタジオへ移る(StudioPromptActions)。 */}
+      {finalPrompt && (
+        <section className={styles.section}>
+          <FinalPromptSection
+            textOutputs={run.text_outputs}
+            headingLevel="h2"
+            headingClassName={styles.heading}
+            renderActions={(text) => (promptActions ? promptActions(text) : <StudioPromptActions prompt={text} />)}
+          />
+        </section>
+      )}
 
       {/* 出力はパラメーター等より前に置く。ユーザーは「サムネイルを押したら画像が見たい」
           と期待するため、スクロールせずに辿れる位置にする。 */}

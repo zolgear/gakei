@@ -18,6 +18,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.models import ComfyWorkflow
+from app.domain.secret_values import find_secret_inputs
 from app.i18n import t
 from app.providers.base import ModelCapabilities, OperationCapabilities, ParamDef, ParamType
 
@@ -107,6 +108,9 @@ class Bindings(BaseModel):
     images: list[InputRef] = Field(default_factory=list)
     mask: MaskBinding | None = None
     outputs: list[str] = Field(min_length=1)
+    # 最終プロンプト(PE の出力)を読むノードの id(ADR-0030 1章)。実行後に
+    # `outputs[id].text` を `run.text_outputs` に記録する。旧形式(キー無し)は None。
+    final_prompt: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -129,6 +133,7 @@ class SuggestedBindings(BaseModel):
     images: list[InputRef] = Field(default_factory=list)
     mask: MaskBinding | None = None
     outputs: list[str] = Field(default_factory=list)
+    final_prompt: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -262,6 +267,13 @@ def validate_workflow(
     for node_id in bindings.outputs:
         if not isinstance(template.get(node_id), dict):
             raise WorkflowValidationError(t("comfyui.workflow.outputNodeMissing", node=node_id))
+    # 最終プロンプトのノードは種類で絞らない。存在だけを確かめる(ADR-0030 1章)。
+    if bindings.final_prompt is not None and not isinstance(
+        template.get(bindings.final_prompt), dict
+    ):
+        raise WorkflowValidationError(
+            t("comfyui.workflow.finalPromptNodeMissing", node=bindings.final_prompt)
+        )
 
     if operation == "edit" and not bindings.images:
         raise WorkflowValidationError(t("comfyui.workflow.editRequiresImage"))
@@ -488,6 +500,7 @@ _TITLE_SLOTS = {
     "gakei:seed",
     "gakei:mask",
     "gakei:output",
+    "gakei:final_prompt",
 }
 
 # 画像の枠のタイトル規約: `gakei:image`(単数、枠1つだけの場合)、または
@@ -973,6 +986,94 @@ def _find_output_ids_fallback(template: dict[str, Any]) -> list[str]:
     return _filter_output_candidates(candidates)
 
 
+# -- 最終プロンプト(PE の出力)のノードの推定(ADR-0030 1章) ---------------------------
+
+# テキストを表示する出力ノードの class_type(`/object_info` が無いときの推定に使う)。
+# ComfyUI 本体の `PreviewAny` と、よく使われるカスタムノードの表示ノード。
+_TEXT_DISPLAY_CLASS_TYPES = frozenset({"PreviewAny", "PreviewText", "ShowText|pysssss", "ShowText"})
+# `/object_info` の `output_node: true` でも、画像・動画・音声などを扱うものは除く。
+_NON_TEXT_OUTPUT_MARKERS = ("Image", "Video", "Audio", "Mesh", "Save", "Compare", "Latent")
+_FINAL_PROMPT_MAX_DEPTH = 12
+
+
+def _is_text_display_node(node: dict[str, Any], object_info: dict[str, Any] | None) -> bool:
+    class_type = node.get("class_type")
+    if not isinstance(class_type, str):
+        return False
+    if class_type in _TEXT_DISPLAY_CLASS_TYPES:
+        return True
+    if object_info is None:
+        return False
+    node_info = object_info.get(class_type)
+    if not isinstance(node_info, dict) or node_info.get("output_node") is not True:
+        return False
+    return not any(marker in class_type for marker in _NON_TEXT_OUTPUT_MARKERS)
+
+
+def _find_encoder_text_wires(
+    template: dict[str, Any], object_info: dict[str, Any] | None
+) -> list[Any]:
+    """サンプラーの positive 側のエンコーダーの、プロンプト入力につながる配線を集める。
+    素通りノード(`FluxGuidance`、`ReferenceLatent` など)は `_resolve_prompt_ref` と同じく
+    conditioning 系の入力を辿って跨ぐ(深さの上限 4)。直値のプロンプトには配線が無いので
+    何も返さない。
+    """
+    sampler_info = _find_sampler_node_id(template)
+    if sampler_info is None:
+        return []
+    sampler_id, positive_input_name, _ = sampler_info
+    wire = (template[sampler_id].get("inputs") or {}).get(positive_input_name)
+    wires: list[Any] = []
+    depth = 0
+    while _is_wire(wire) and depth <= _PASS_THROUGH_MAX_DEPTH:
+        node = template.get(wire[0])
+        if not isinstance(node, dict):
+            break
+        class_type = node.get("class_type")
+        text_name = _select_text_input(node, class_type, object_info)
+        if text_name is not None:
+            value = (node.get("inputs") or {}).get(text_name)
+            if _is_wire(value):
+                wires.append(value)
+        wire = _find_conditioning_wire(node, class_type, object_info)
+        depth += 1
+    return wires
+
+
+def _find_final_prompt_node(
+    template: dict[str, Any], object_info: dict[str, Any] | None
+) -> str | None:
+    """最終プロンプトのノードの初期値を推定する(ADR-0030 1章)。
+
+    1. タイトルが `gakei:final_prompt` のノード
+    2. エンコーダーのプロンプト入力から配線を幅優先でさかのぼり、最初に見つかる
+       テキストを表示する出力ノード(`PreviewAny` など。`/object_info` があれば
+       `output_node: true` のものも)
+    見つからなければ None(PE の無いワークフローが普通なので警告は出さない)。
+    """
+    for node_id, node in template.items():
+        if _node_title(node) == "gakei:final_prompt":
+            return node_id
+
+    for start in _find_encoder_text_wires(template, object_info):
+        visited: set[str] = {start[0]}
+        queue: list[tuple[str, int]] = [(start[0], 0)]
+        while queue:
+            node_id, depth = queue.pop(0)
+            node = template.get(node_id)
+            if not isinstance(node, dict):
+                continue
+            if _is_text_display_node(node, object_info):
+                return node_id
+            if depth >= _FINAL_PROMPT_MAX_DEPTH:
+                continue
+            for value in (node.get("inputs") or {}).values():
+                if _is_wire(value) and value[0] not in visited:
+                    visited.add(value[0])
+                    queue.append((value[0], depth + 1))
+    return None
+
+
 def _build_analyze_nodes(template: dict[str, Any]) -> list[dict[str, Any]]:
     nodes: list[dict[str, Any]] = []
     for node_id, node in template.items():
@@ -1327,6 +1428,18 @@ def analyze_workflow(
                 warnings.append(t("comfyui.workflow.maskMethodUnsupported"))
                 break
 
+    # 秘密に見える値(API キーなど)が書かれた入力。値そのものは出さない。登録は止めない
+    # (判定は推測のため。ADR-0013 8章、2026-10-01 追記)。
+    for found in find_secret_inputs(template):
+        warnings.append(
+            t(
+                "comfyui.workflow.secretValueFound",
+                node=found.node_id,
+                class_type=found.class_type or "?",
+                input=found.input,
+            )
+        )
+
     # 見つからなかった必須項目(prompt、edit の image)は上の warnings に書いてあるが、
     # 見つかった他の提案(seed、出力ノードなど)は捨てずに返す(ADR-0013 フォローアップ)。
     # 画像の枠が複数あること自体は警告しない(ADR-0013 3節: 枠の数だけ入力を要求すればよい)。
@@ -1340,6 +1453,7 @@ def analyze_workflow(
         images=image_refs,
         mask=mask_binding,
         outputs=output_ids,
+        final_prompt=_find_final_prompt_node(template, object_info),
     )
 
     used: set[tuple[str, str]] = set()

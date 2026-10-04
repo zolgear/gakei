@@ -17,7 +17,6 @@ from authlib.integrations.starlette_client.apps import StarletteOAuth2App
 from fastapi import HTTPException, Request
 from starlette.responses import Response
 
-from app.config import Settings
 from app.i18n import t
 
 logger = logging.getLogger(__name__)
@@ -49,8 +48,8 @@ class OidcIdentity:
 
 class OidcClient(Protocol):
     """テストでは `tests/oidc_fake.py::FakeOidcClient` に差し替える
-    (`auth/deps.py::get_oidc_client` の Depends を上書きする。`api/settings.py` の
-    `get_key_validator` と同じ流儀)。
+    (`auth/deps.py::get_oidc_client` / `get_oidc_client_factory` の Depends を上書きする。
+    `api/settings.py` の `get_key_validator` と同じ流儀)。
     """
 
     async def authorize_redirect(self, request: Request, redirect_uri: str) -> Response: ...
@@ -61,32 +60,41 @@ class OidcClient(Protocol):
 
 
 class AuthlibOidcClient:
-    """Authlib による実装。oidc モードのときだけ lifespan が `app.state.oidc_client` に置く。"""
+    """Authlib による実装。実効の設定(ADR-0034)の接続1組から作る。oidc モードの接続は
+    `app/auth/runtime.py::AuthRuntime` が持ち、テストログインのときは仮登録の接続からも作る。
+    """
 
-    def __init__(self, settings: Settings) -> None:
-        if not settings.oidc_issuer or not settings.oidc_client_id:
-            raise ValueError("oidc_issuer と oidc_client_id が必要です")
+    def __init__(
+        self,
+        *,
+        issuer: str,
+        client_id: str,
+        client_secret: str | None,
+        scopes: str,
+    ) -> None:
+        if not issuer or not client_id:
+            raise ValueError("issuer と client_id が必要です")
 
-        self._issuer = settings.oidc_issuer
-        self._client_id = settings.oidc_client_id
+        self._issuer = issuer
+        self._client_id = client_id
         # I-5: discovery の issuer と OIDC_ISSUER の食い違いは起動ごとに一度だけ警告する
         # (毎リクエストのログを埋めないため)。
         self._issuer_mismatch_warned = False
         self._oauth = OAuth()
 
         client_kwargs: dict[str, object] = {
-            "scope": settings.oidc_scopes,
+            "scope": scopes,
             "code_challenge_method": "S256",
         }
         # public client(secret 無し)は Authlib の既定(client_secret_basic)ではコード交換に
         # 失敗するため、明示的に none を指定する。
-        if not settings.oidc_client_secret:
+        if not client_secret:
             client_kwargs["token_endpoint_auth_method"] = "none"
 
         self._oauth.register(
             name=_CLIENT_NAME,
-            client_id=settings.oidc_client_id,
-            client_secret=settings.oidc_client_secret or None,
+            client_id=client_id,
+            client_secret=client_secret or None,
             server_metadata_url=urljoin(
                 self._issuer.rstrip("/") + "/", ".well-known/openid-configuration"
             ),

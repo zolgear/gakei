@@ -211,6 +211,39 @@ def collect_output_images(
     return refs
 
 
+def sanitize_text(text: str) -> str:
+    """DB に書けない文字を取り除く(ADR-0030 2026-10-01 改訂)。PostgreSQL の JSONB は
+    `\u0000` を受け付けず、対になっていないサロゲートは UTF-8 にできない。どちらも
+    完了時の commit を失敗させ、画像はできているのに Run が failed になるので、NUL は
+    取り除き、対になっていないサロゲートは置き換える。"""
+    return text.replace("\x00", "").encode("utf-8", "replace").decode("utf-8")
+
+
+def collect_output_texts(history_entry: dict[str, Any], node_id: str) -> str | None:
+    """`outputs[node_id]["text"]` を1つの文字列にする(ADR-0030 2章)。
+
+    `text` は文字列のリスト(`PreviewAny` など)。文字列単体でも受ける。リストの要素は
+    改行でつなぐ。NUL などの DB に書けない文字は `sanitize_text` で除く。ノードの出力が
+    無い、`text` が無い、空白を除くと空になるときは None(空文字は記録しない)。
+    """
+    outputs = history_entry.get("outputs")
+    if not isinstance(outputs, dict):
+        return None
+    node_output = outputs.get(node_id)
+    if not isinstance(node_output, dict):
+        return None
+    text = node_output.get("text")
+    if isinstance(text, list):
+        parts = [item for item in text if isinstance(item, str)]
+        text = "\n".join(parts) if parts else None
+    if not isinstance(text, str):
+        return None
+    text = sanitize_text(text)
+    if not text.strip():
+        return None
+    return text
+
+
 def check_available(
     base_url: str, timeout: float = 1.0
 ) -> tuple[bool, str | None, dict[str, Any] | None]:

@@ -31,5 +31,13 @@
 | ADR-0025 | [0025-owner-only-visibility.md](0025-owner-only-visibility.md) | 認証モードでは本人のものだけを見せる(他人のプライバシーを守る) | Proposed |
 | ADR-0026 | [0026-storage-directory-hierarchy.md](0026-storage-directory-hierarchy.md) | 原本をプロバイダー・モデル別のフォルダに保存する(ローカルFS) | Proposed |
 | ADR-0027 | [0027-postgresql-option.md](0027-postgresql-option.md) | メタデータの DB に PostgreSQL も選べるようにする | Proposed |
+| ADR-0028 | [0028-object-storage-option.md](0028-object-storage-option.md) | 画像の保存先に Azure Blob Storage と S3 互換ストレージも選べるようにする | Proposed |
+| ADR-0029 | [0029-public-share-links.md](0029-public-share-links.md) | ログイン不要の共有リンク(画像1枚、または系列) | Proposed |
+| ADR-0030 | [0030-comfyui-final-prompt.md](0030-comfyui-final-prompt.md) | ComfyUI の最終プロンプト(PE の出力)を Run に記録する | Proposed |
+| ADR-0031 | [0031-settings-pages-and-save-rules.md](0031-settings-pages-and-save-rules.md) | 設定画面をページに分け、保存のしかたをページ単位で揃える | Proposed |
+| ADR-0032 | [0032-llm-connections.md](0032-llm-connections.md) | LLM の接続先を、自動タイトル・タグから独立させる | Proposed |
+| ADR-0033 | [0033-image-embeddings.md](0033-image-embeddings.md) | 画像の埋め込み(CLIP 系)で、文章での検索、似た画像、重複の検出、マップを作る | Proposed |
+| ADR-0034 | [0034-auth-settings-in-admin-ui.md](0034-auth-settings-in-admin-ui.md) | 認証の設定を管理者設定の画面から行う | Proposed |
+| ADR-0035 | [0035-hide-sketch-mask-in-stock.md](0035-hide-sketch-mask-in-stock.md) | スケッチとマスクをストックに出すかを選べるようにする(既定は出さない) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

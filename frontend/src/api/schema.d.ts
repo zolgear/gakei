@@ -38,6 +38,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/test-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Test Login
+         * @description 管理者のテストログイン(ADR-0034 2章の3)。設定画面がポップアップで開く。
+         *
+         *     仮登録の接続(無ければ本登録)で IdP へリダイレクトする。結果は `/callback` が
+         *     `window.opener.postMessage` で設定画面に返す。
+         */
+        get: operations["auth_test_login"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/callback": {
         parameters: {
             query?: never;
@@ -66,6 +89,23 @@ export interface paths {
         put?: never;
         /** Logout */
         post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Health */
+        get: operations["get_health"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -404,6 +444,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/embedding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Asset Embedding
+         * @description この Asset の埋め込みを、使うモデルで計算し直す(待ち行列に入れる)。見えなければ 404、
+         *     マスクと削除済み、埋め込みが無効・使えないときは 409。既に待ち行列にあれば何もしない。
+         */
+        post: operations["request_asset_embedding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/asset-groups": {
         parameters: {
             query?: never;
@@ -678,6 +739,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search/semantic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Semantic Search Endpoint
+         * @description 文章で画像を探す(類似度の高い順)。キーワード検索(`GET /api/search`)とは別。
+         */
+        get: operations["semantic_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search/similar-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search By Image Endpoint
+         * @description 手元の画像に似た画像(類似度の高い順)。画像は Asset にせず、画像もベクトルも保存しない
+         *     (メモリの中だけで扱う)。大きさの上限と形式は画像の取り込み(`POST /api/assets`)と同じ。
+         */
+        post: operations["search_by_image"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Similar Assets Endpoint
+         * @description 似た画像(起点の画像自身は含めない)。起点のベクトルがまだ無ければ 409
+         *     (`detail.code` が `embedding_pending` / `embedding_failed` / `embedding_missing` /
+         *     `embedding_not_supported`)。
+         */
+        get: operations["similar_assets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/embeddings/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Duplicates Endpoint
+         * @description 重複の候補(類似度がしきい値以上で知覚ハッシュも近い組を、代表との類似度でまとめた
+         *     グループ、大きい順)。
+         */
+        get: operations["embedding_duplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/embeddings/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Graph Endpoint
+         * @description マップの元データ。ノード(新しい順に `limit` 件まで)と、各ノードの k 近傍
+         *     (先頭は自分自身)。
+         */
+        get: operations["embedding_graph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tags": {
         parameters: {
             query?: never;
@@ -790,6 +956,24 @@ export interface paths {
         patch: operations["update_mcp_settings"];
         trace?: never;
     };
+    "/api/settings/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Share Settings */
+        get: operations["get_share_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Share Settings */
+        patch: operations["update_share_settings"];
+        trace?: never;
+    };
     "/api/settings/annotation": {
         parameters: {
             query?: never;
@@ -806,28 +990,6 @@ export interface paths {
         head?: never;
         /** Update Annotation Settings */
         patch: operations["update_annotation_settings"];
-        trace?: never;
-    };
-    "/api/settings/annotation/api-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Annotation Api Key
-         * @description 推定専用の API キーを保存する(`secrets.json`。値は返さない)。手元のサーバー向けに
-         *     任意の文字列を受け付けるため、有効性の確認はしない。
-         */
-        put: operations["set_annotation_api_key"];
-        post?: never;
-        /** Delete Annotation Api Key */
-        delete: operations["delete_annotation_api_key"];
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/settings/annotation/onnx/download": {
@@ -884,6 +1046,233 @@ export interface paths {
          */
         post: operations["backfill_annotations"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/embeddings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Embedding Settings */
+        get: operations["get_embedding_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Embedding Settings */
+        patch: operations["update_embedding_settings"];
+        trace?: never;
+    };
+    "/api/settings/embeddings/onnx/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download Embedding Model
+         * @description モデルを Hugging Face からバックグラウンドで取得する。進み具合は GET の `onnx_models`
+         *     で見る。既にダウンロード中なら何もしない。
+         */
+        post: operations["download_embedding_model"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/embeddings/onnx/{model}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Embedding Model
+         * @description モデルのファイルを消す(保存済みのベクトルは消さない)。
+         */
+        delete: operations["delete_embedding_model"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/embeddings/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backfill Embeddings
+         * @description 使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)をまとめて
+         *     待ち行列に入れる。埋め込みが無効、またはモデルが使えなければ 409。
+         */
+        post: operations["backfill_embeddings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/embeddings/vectors/{model_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Embedding Vectors
+         * @description そのモデルのベクトルと計算の状態をすべて消す(使っているモデルも消せる。画像の取り込み時や
+         *     一括実行で計算し直す)。無ければ 404。
+         */
+        delete: operations["delete_embedding_vectors"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Auth Settings */
+        get: operations["get_auth_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Auth Settings
+         * @description ADR-0031 3章の規則どおり、全項目を検査してから保存する(途中まで保存しない)。
+         */
+        patch: operations["update_auth_settings"];
+        trace?: never;
+    };
+    "/api/settings/auth/connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Auth Connection
+         * @description 仮登録(ADR-0034 2章の1)。テストログインに成功するまで、実効の設定は変わらない。
+         */
+        put: operations["set_auth_connection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/auth/connection/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Discard Auth Pending Connection */
+        delete: operations["discard_auth_pending_connection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Llm Connections
+         * @description 接続先の一覧。先頭は組み込みの「OpenAI の設定」。
+         */
+        get: operations["list_llm_connections"];
+        put?: never;
+        /**
+         * Create Llm Connection
+         * @description 接続先を足す。足した接続先は一覧の末尾に入る。キーは任意(ローカルのサーバー向けに任意の
+         *     文字列を受け付けるため、有効性の確認はしない)。
+         */
+        post: operations["create_llm_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm-connections/{connection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Llm Connection
+         * @description 接続先を消す(キーも消す)。組み込みの接続先と、どこかの機能で使っている接続先は 409。
+         */
+        delete: operations["delete_llm_connection"];
+        options?: never;
+        head?: never;
+        /** Update Llm Connection */
+        patch: operations["update_llm_connection"];
+        trace?: never;
+    };
+    "/api/settings/llm-connections/{connection_id}/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Llm Connection Api Key
+         * @description 接続先のキーを保存する(`secrets.json`。値は返さない)。有効性の確認はしない。組み込みの
+         *     接続先のキーは OpenAI の設定で変える(409)。
+         */
+        put: operations["set_llm_connection_api_key"];
+        post?: never;
+        /** Delete Llm Connection Api Key */
+        delete: operations["delete_llm_connection_api_key"];
         options?: never;
         head?: never;
         patch?: never;
@@ -979,6 +1368,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/shares/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Share
+         * @description 共有を作る前に、範囲に含まれる画像を確かめる(ADR-0029 2章)。何も書き込まない。
+         */
+        post: operations["preview_share"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Shares
+         * @description 自分の、取り消していない共有(新しい順)。機能が無効のあいだも見られる(取り消せるように)。
+         */
+        get: operations["list_shares"];
+        put?: never;
+        /**
+         * Create Share
+         * @description 共有を作る。作れるのは起点の Asset を見られる人だけ(見えなければ 404)。
+         */
+        post: operations["create_share"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Share
+         * @description 取り消す(元に戻せない)。他人の共有・取り消し済みは 404。
+         */
+        delete: operations["revoke_share"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/content": {
         parameters: {
             query?: never;
@@ -1042,6 +1495,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/shares/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Share
+         * @description 共有のページの内容(画像、タイトル、Run のプロンプトとパラメーター、範囲内の系列)。
+         */
+        get: operations["get_public_share"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/shares/{token}/assets/{asset_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Share Asset Content
+         * @description 共有に含まれる画像の配信。原本は、共有が許していて、その画像が秘密に見える値を含む
+         *     ComfyUI の Run の画像でないときだけ(判定は `resolve_public_share`。ADR-0029 4章)。
+         *     ダウンロードする PNG にも系列情報(ADR-0014)は埋め込まない。
+         */
+        get: operations["get_public_share_asset_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1056,15 +1551,60 @@ export interface components {
             /** Commit */
             commit?: string | null;
         };
-        /** AnnotationApiKeyUpdateRequest */
-        AnnotationApiKeyUpdateRequest: {
-            /** Api Key */
-            api_key: string;
-        };
         /** AnnotationBackfillResponse */
         AnnotationBackfillResponse: {
             /** Queued */
             queued: number;
+        };
+        /** AnnotationComfyuiProfile */
+        AnnotationComfyuiProfile: {
+            llm?: components["schemas"]["AnnotationTarget"] | null;
+            vlm?: components["schemas"]["AnnotationTarget"] | null;
+        };
+        /**
+         * AnnotationComfyuiProfileUpdate
+         * @description 省略した用途は変更しない。null を送ると「既定と同じ」に戻す。
+         */
+        AnnotationComfyuiProfileUpdate: {
+            llm?: components["schemas"]["AnnotationTarget"] | null;
+            vlm?: components["schemas"]["AnnotationTarget"] | null;
+        };
+        /**
+         * AnnotationConnectionCalls
+         * @description 接続先1つへの、自動タイトル・タグの直近1時間の LLM・VLM の呼び出し回数(上限は接続先
+         *     ごと。ADR-0024 8章)。
+         */
+        AnnotationConnectionCalls: {
+            /** Connection Id */
+            connection_id: string;
+            /** Calls Last Hour */
+            calls_last_hour: number;
+        };
+        /** AnnotationDefaultProfile */
+        AnnotationDefaultProfile: {
+            llm: components["schemas"]["AnnotationTarget"];
+            vlm: components["schemas"]["AnnotationTarget"];
+        };
+        /**
+         * AnnotationDefaultProfileUpdate
+         * @description 省略した用途は変更しない。null にはできない。
+         */
+        AnnotationDefaultProfileUpdate: {
+            llm?: components["schemas"]["AnnotationTarget"] | null;
+            vlm?: components["schemas"]["AnnotationTarget"] | null;
+        };
+        /**
+         * AnnotationProfiles
+         * @description 用途ごとの組(ADR-0024 8章)。`comfyui` は ComfyUI の Run の出力にだけ使う。
+         */
+        AnnotationProfiles: {
+            default: components["schemas"]["AnnotationDefaultProfile"];
+            comfyui: components["schemas"]["AnnotationComfyuiProfile"];
+        };
+        /** AnnotationProfilesUpdate */
+        AnnotationProfilesUpdate: {
+            default?: components["schemas"]["AnnotationDefaultProfileUpdate"] | null;
+            comfyui?: components["schemas"]["AnnotationComfyuiProfileUpdate"] | null;
         };
         /**
          * AnnotationSettingsResponse
@@ -1075,19 +1615,8 @@ export interface components {
             auto_on_ingest: boolean;
             /** Llm Enabled */
             llm_enabled: boolean;
-            /** Llm Model */
-            llm_model: string;
             /** Vlm Enabled */
             vlm_enabled: boolean;
-            /** Vlm Model */
-            vlm_model: string;
-            /** Base Url */
-            base_url?: string | null;
-            /**
-             * Api Style
-             * @enum {string}
-             */
-            api_style: "responses" | "chat";
             /**
              * Language
              * @enum {string}
@@ -1109,8 +1638,7 @@ export interface components {
             onnx_model: "wd-vit-tagger-v3" | "wd-swinv2-tagger-v3" | "wd-eva02-large-tagger-v3";
             /** Onnx Threshold */
             onnx_threshold: number;
-            /** Api Key Set */
-            api_key_set: boolean;
+            profiles: components["schemas"]["AnnotationProfiles"];
             /** Onnx Models */
             onnx_models?: components["schemas"]["OnnxModelStatus"][];
             /** Pending Count */
@@ -1119,29 +1647,23 @@ export interface components {
             queued_count: number;
             /** Calls Last Hour */
             calls_last_hour: number;
+            /** Connection Calls */
+            connection_calls?: components["schemas"]["AnnotationConnectionCalls"][];
             /** Usable Engines */
             usable_engines?: ("llm" | "vlm" | "onnx")[];
         };
         /**
          * AnnotationSettingsUpdateRequest
-         * @description `PATCH /api/settings/annotation`。省略した項目は変更しない。`base_url` は null か空文字で
-         *     「OpenAI の設定を流用」に戻す。値の妥当性は `app/domain/annotation_settings.py` が検証する。
+         * @description `PATCH /api/settings/annotation`。省略した項目は変更しない。値の妥当性は
+         *     `app/domain/annotation_settings.py` が検証する。`profiles` は書いたマスだけ変える。
          */
         AnnotationSettingsUpdateRequest: {
             /** Auto On Ingest */
             auto_on_ingest?: boolean | null;
             /** Llm Enabled */
             llm_enabled?: boolean | null;
-            /** Llm Model */
-            llm_model?: string | null;
             /** Vlm Enabled */
             vlm_enabled?: boolean | null;
-            /** Vlm Model */
-            vlm_model?: string | null;
-            /** Base Url */
-            base_url?: string | null;
-            /** Api Style */
-            api_style?: string | null;
             /** Language */
             language?: string | null;
             /** Tag Language */
@@ -1154,6 +1676,7 @@ export interface components {
             onnx_model?: string | null;
             /** Onnx Threshold */
             onnx_threshold?: number | null;
+            profiles?: components["schemas"]["AnnotationProfilesUpdate"] | null;
         };
         /**
          * AnnotationStatusView
@@ -1171,6 +1694,16 @@ export interface components {
             requested_at?: string | null;
             /** Finished At */
             finished_at?: string | null;
+        };
+        /**
+         * AnnotationTarget
+         * @description 用途1つの「接続先 + モデル名」の組。
+         */
+        AnnotationTarget: {
+            /** Connection Id */
+            connection_id: string;
+            /** Model */
+            model: string;
         };
         /**
          * ApiTokenCreateRequest
@@ -1297,6 +1830,30 @@ export interface components {
             /** Tags */
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
+        };
+        /**
+         * AssetEmbeddingStatus
+         * @description 1枚の埋め込みの状態(`POST /api/assets/{id}/embedding` の応答)。
+         */
+        AssetEmbeddingStatus: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Model Key */
+            model_key: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /** Error */
+            error?: string | null;
+            /** Requested At */
+            requested_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
         };
         /** AssetGroupCreate */
         AssetGroupCreate: {
@@ -1545,6 +2102,57 @@ export interface components {
              */
             ingest_outcome: "created" | "matched_existing";
         };
+        /** AuthClientSecretStatus */
+        AuthClientSecretStatus: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source?: ("file" | "env") | null;
+        };
+        /**
+         * AuthConnectionRequest
+         * @description `PUT /api/settings/auth/connection`(仮登録)の本文。
+         *
+         *     `client_secret` は、省略すると今のもの(仮登録があればそのもの、無ければ本登録のもの)を
+         *     引き継ぎ、空文字なら public client(シークレットなし)、値があれば差し替える。
+         */
+        AuthConnectionRequest: {
+            /** Issuer */
+            issuer: string;
+            /** Client Id */
+            client_id: string;
+            /** Scopes */
+            scopes: string;
+            /** Public Base Url */
+            public_base_url: string;
+            /** Client Secret */
+            client_secret?: string | null;
+        };
+        /**
+         * AuthConnectionView
+         * @description 本登録の接続。`configured` は発行者・クライアント ID・`PUBLIC_BASE_URL` が揃っているか。
+         */
+        AuthConnectionView: {
+            /** Configured */
+            configured: boolean;
+            issuer: components["schemas"]["AuthTextSetting"];
+            client_id: components["schemas"]["AuthTextSetting"];
+            scopes: components["schemas"]["AuthTextSetting"];
+            public_base_url: components["schemas"]["AuthTextSetting"];
+            client_secret: components["schemas"]["AuthClientSecretStatus"];
+            /** Redirect Uri */
+            redirect_uri?: string | null;
+        };
+        /** AuthListSetting */
+        AuthListSetting: {
+            /** Value */
+            value: string[];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+        };
         /**
          * AuthLogoutResponse
          * @description `POST /api/auth/logout`。SPA はこの URL に `window.location.assign()` で遷移する。
@@ -1566,6 +2174,95 @@ export interface components {
             mode: "none" | "oidc";
             user?: components["schemas"]["AuthUser"] | null;
         };
+        /** AuthModeSetting */
+        AuthModeSetting: {
+            /**
+             * Value
+             * @enum {string}
+             */
+            value: "none" | "oidc";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+            /** Locked */
+            locked: boolean;
+        };
+        /**
+         * AuthPendingConnectionView
+         * @description 仮登録の接続(テストログインに成功するまで使われない)。
+         */
+        AuthPendingConnectionView: {
+            /** Issuer */
+            issuer: string;
+            /** Client Id */
+            client_id: string;
+            /** Scopes */
+            scopes: string;
+            /** Public Base Url */
+            public_base_url: string;
+            client_secret: components["schemas"]["AuthClientSecretStatus"];
+            /** Redirect Uri */
+            redirect_uri: string;
+            /** Created At */
+            created_at?: string | null;
+        };
+        /** AuthSessionHoursSetting */
+        AuthSessionHoursSetting: {
+            /** Value */
+            value: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+            /** Min */
+            min: number;
+            /** Max */
+            max: number;
+        };
+        /**
+         * AuthSettingsResponse
+         * @description `GET /api/settings/auth`(管理者だけ)。
+         */
+        AuthSettingsResponse: {
+            mode: components["schemas"]["AuthModeSetting"];
+            connection: components["schemas"]["AuthConnectionView"];
+            pending?: components["schemas"]["AuthPendingConnectionView"] | null;
+            verified?: components["schemas"]["AuthVerifiedView"] | null;
+            admin_emails: components["schemas"]["AuthListSetting"];
+            allowed_email_domains: components["schemas"]["AuthListSetting"];
+            session_hours: components["schemas"]["AuthSessionHoursSetting"];
+            /** Enable Blockers */
+            enable_blockers: ("env_locked" | "no_connection" | "not_verified" | "admin_emails_empty" | "verified_email_not_admin")[];
+        };
+        /**
+         * AuthSettingsUpdateRequest
+         * @description `PATCH /api/settings/auth` の本文。省略した項目は変更せず、明示的な `null` は保存済みの
+         *     値を消して `.env`・既定値に戻す(`model_fields_set` で区別する)。値の妥当性は
+         *     `app/domain/auth_settings.py` が検証し、i18n 対応のメッセージで 422 にする。
+         */
+        AuthSettingsUpdateRequest: {
+            /** Mode */
+            mode?: ("none" | "oidc") | null;
+            /** Admin Emails */
+            admin_emails?: string[] | null;
+            /** Allowed Email Domains */
+            allowed_email_domains?: string[] | null;
+            /** Session Hours */
+            session_hours?: number | null;
+        };
+        /** AuthTextSetting */
+        AuthTextSetting: {
+            /** Value */
+            value: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+        };
         /** AuthUser */
         AuthUser: {
             /**
@@ -1584,6 +2281,21 @@ export interface components {
             role: "user" | "admin";
             /** Avatar Url */
             avatar_url?: string | null;
+        };
+        /**
+         * AuthVerifiedView
+         * @description テストログインに成功した記録。`matches_current` は今の本登録の接続でのテストか。
+         */
+        AuthVerifiedView: {
+            /** Email */
+            email: string;
+            /**
+             * Verified At
+             * Format: date-time
+             */
+            verified_at: string;
+            /** Matches Current */
+            matches_current: boolean;
         };
         /**
          * AvatarFromAssetRequest
@@ -1615,6 +2327,8 @@ export interface components {
             mask?: components["schemas"]["MaskBinding"] | null;
             /** Outputs */
             outputs: string[];
+            /** Final Prompt */
+            final_prompt?: string | null;
         };
         /** Body_create_asset */
         Body_create_asset: {
@@ -1636,6 +2350,14 @@ export interface components {
              */
             replaces_asset_id?: string | null;
         };
+        /** Body_search_by_image */
+        Body_search_by_image: {
+            /**
+             * File
+             * @description 探す元の画像(PNG / JPEG / WebP)。保存しない
+             */
+            file: string;
+        };
         /** Body_upload_avatar */
         Body_upload_avatar: {
             /** File */
@@ -1649,6 +2371,7 @@ export interface components {
             default_provider: string;
             /** Providers */
             providers?: components["schemas"]["ProviderEntry"][];
+            embeddings: components["schemas"]["EmbeddingCapabilities"];
         };
         /** ComfyAnalyzeRequest */
         ComfyAnalyzeRequest: {
@@ -1909,6 +2632,67 @@ export interface components {
             /** Height */
             height: number;
         };
+        /** DuplicateAsset */
+        DuplicateAsset: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "mask" | "sketch";
+            /** Mime */
+            mime: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Bytes */
+            bytes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Title */
+            title?: string | null;
+            /** Max Score */
+            max_score: number;
+            /** Hash Missing */
+            hash_missing?: boolean | null;
+        };
+        /** DuplicateGroup */
+        DuplicateGroup: {
+            /** Assets */
+            assets: components["schemas"]["DuplicateAsset"][];
+            /** Max Score */
+            max_score: number;
+            /** Hash Missing */
+            hash_missing?: boolean | null;
+        };
+        /**
+         * DuplicatesResponse
+         * @description `GET /api/embeddings/duplicates`。類似度がしきい値以上で知覚ハッシュも近い組を、
+         *     代表(いちばん古い画像)との類似度でまとめたグループ(大きい順。ADR-0033 12章)。
+         *     見るのは新しい順に `scanned` 件まで。それより多ければ `truncated`。
+         */
+        DuplicatesResponse: {
+            /** Model Key */
+            model_key: string;
+            /** Threshold */
+            threshold: number;
+            /** Groups */
+            groups?: components["schemas"]["DuplicateGroup"][];
+            /** Scanned */
+            scanned: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Groups Truncated */
+            groups_truncated: boolean;
+        };
         /**
          * EmbeddedGenerationMeta
          * @description 他の画像生成ツールや C2PA が画像に埋め込んだ生成メタ情報(ADR-0018、2026-09-26 追記)。
@@ -1950,6 +2734,224 @@ export interface components {
              * @constant
              */
             verified: false;
+        };
+        /** EmbeddingBackfillResponse */
+        EmbeddingBackfillResponse: {
+            /** Queued */
+            queued: number;
+        };
+        /**
+         * EmbeddingCapabilities
+         * @description 画像の埋め込み(ADR-0033 7章)。画面の出し分けに使う。
+         */
+        EmbeddingCapabilities: {
+            /** Available */
+            available: boolean;
+            /** Model Key */
+            model_key?: string | null;
+            /** Languages */
+            languages?: ("ja" | "en")[] | null;
+            /** Multilingual */
+            multilingual?: boolean | null;
+            /**
+             * Index Backend
+             * @enum {string}
+             */
+            index_backend: "pgvector" | "numpy";
+            /** Engine */
+            engine?: ("onnx" | "remote") | null;
+        };
+        /**
+         * EmbeddingErrorDetail
+         * @description 埋め込みの API の 409 の `detail`。`code` で画面の出し分けをする。
+         *
+         *     - `embeddings_unavailable`: 埋め込みが無効、または使えるモデルが無い
+         *     - `embedding_pending`: その画像のベクトルを計算中(待ち行列にある)
+         *     - `embedding_failed`: その画像のベクトルの計算に失敗した
+         *     - `embedding_missing`: その画像のベクトルがまだ無い(計算を頼んでいない)
+         *     - `embedding_not_supported`: マスクは対象外
+         */
+        EmbeddingErrorDetail: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "embeddings_unavailable" | "embedding_pending" | "embedding_failed" | "embedding_missing" | "embedding_not_supported";
+            /** Message */
+            message: string;
+        };
+        /** EmbeddingGraphNode */
+        EmbeddingGraphNode: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "sketch";
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * EmbeddingGraphResponse
+         * @description `GET /api/embeddings/graph`。マップ(2D の地図と類似度のネットワーク)の元データ。
+         *
+         *     ノードは新しい順。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
+         *     (`nodes` の位置と、コサイン類似度)で、先頭は必ず自分自身(類似度 1 = 距離 0)、続いて
+         *     ほかのノードを最大 `k` 件、類似度の高い順に並べる。どの行も同じ長さ
+         *     (`1 + min(k, ノード数 - 1)`)なので、umap-js の `setPrecomputedKNN` にそのまま渡せる
+         *     (距離は `1 - 類似度`)。
+         */
+        EmbeddingGraphResponse: {
+            /** Model Key */
+            model_key: string;
+            /** K */
+            k: number;
+            /** Nodes */
+            nodes?: components["schemas"]["EmbeddingGraphNode"][];
+            /** Neighbor Indices */
+            neighbor_indices?: number[][];
+            /** Neighbor Similarities */
+            neighbor_similarities?: number[][];
+            /** Lineage Edges */
+            lineage_edges?: number[][] | null;
+            /** Total */
+            total: number;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /**
+         * EmbeddingOnnxModelStatus
+         * @description 埋め込みのローカルの ONNX モデル1つの状態。
+         */
+        EmbeddingOnnxModelStatus: {
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "clip-vit-b32-u8" | "clip-vit-b32" | "clip-japanese-base";
+            /** Model Key */
+            model_key: string;
+            /** Languages */
+            languages: ("ja" | "en")[];
+            /** Dim */
+            dim: number;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Memory Bytes */
+            memory_bytes: number;
+            /** Memory Text Bytes */
+            memory_text_bytes: number;
+            /** License */
+            license: string;
+            /** Downloaded */
+            downloaded: boolean;
+            /**
+             * Download Status
+             * @enum {string}
+             */
+            download_status: "idle" | "downloading" | "failed";
+            /** Download Progress */
+            download_progress?: number | null;
+            /** Download Error */
+            download_error?: string | null;
+        };
+        /**
+         * EmbeddingSettingsResponse
+         * @description `GET /api/settings/embeddings`。
+         */
+        EmbeddingSettingsResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Engine
+             * @enum {string}
+             */
+            engine: "onnx" | "remote";
+            /**
+             * Onnx Model
+             * @enum {string}
+             */
+            onnx_model: "clip-vit-b32-u8" | "clip-vit-b32" | "clip-japanese-base";
+            /** Remote Connection Id */
+            remote_connection_id?: string | null;
+            /** Remote Model */
+            remote_model?: string | null;
+            /**
+             * Remote Api Format
+             * @constant
+             */
+            remote_api_format: "infinity";
+            /** Auto On Ingest */
+            auto_on_ingest: boolean;
+            /** Duplicate Threshold */
+            duplicate_threshold: number;
+            /** Active Model Key */
+            active_model_key?: string | null;
+            /** Active Languages */
+            active_languages?: ("ja" | "en")[] | null;
+            /** Usable */
+            usable: boolean;
+            /**
+             * Index Backend
+             * @enum {string}
+             */
+            index_backend: "pgvector" | "numpy";
+            /** Onnx Models */
+            onnx_models?: components["schemas"]["EmbeddingOnnxModelStatus"][];
+            /** Stored */
+            stored?: components["schemas"]["EmbeddingStoredCount"][];
+            /** Pending Count */
+            pending_count: number;
+            /** Queued Count */
+            queued_count: number;
+            /** Failed Count */
+            failed_count: number;
+        };
+        /**
+         * EmbeddingSettingsUpdateRequest
+         * @description `PATCH /api/settings/embeddings`。省略した項目は変更しない。値の妥当性は
+         *     `app/domain/embedding_settings.py` が検証する。`remote_connection_id` と `remote_model` は
+         *     null で未設定に戻す(ほかの項目の null は 422)。
+         */
+        EmbeddingSettingsUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Engine */
+            engine?: string | null;
+            /** Onnx Model */
+            onnx_model?: string | null;
+            /** Remote Connection Id */
+            remote_connection_id?: string | null;
+            /** Remote Model */
+            remote_model?: string | null;
+            /** Remote Api Format */
+            remote_api_format?: string | null;
+            /** Auto On Ingest */
+            auto_on_ingest?: boolean | null;
+            /** Duplicate Threshold */
+            duplicate_threshold?: number | null;
+        };
+        /**
+         * EmbeddingStoredCount
+         * @description モデル(`model_key`)ごとの保存済みのベクトルの件数。
+         */
+        EmbeddingStoredCount: {
+            /** Model Key */
+            model_key: string;
+            /** Count */
+            count: number;
+            /** Dim */
+            dim?: number | null;
+            /** Active */
+            active: boolean;
         };
         /**
          * ExposedParam
@@ -2006,6 +3008,18 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HealthResponse
+         * @description `GET /api/health`(Issue #43)。ログインなしで呼べるので、これ以外の情報は出さない。
+         */
+        HealthResponse: {
+            /**
+             * Status
+             * @default ok
+             * @constant
+             */
+            status: "ok";
         };
         /**
          * IncompatiblePair
@@ -2170,6 +3184,72 @@ export interface components {
             /** Queued At */
             queued_at?: string | null;
         };
+        /** LlmConnectionApiKeyUpdateRequest */
+        LlmConnectionApiKeyUpdateRequest: {
+            /** Api Key */
+            api_key: string;
+        };
+        /**
+         * LlmConnectionCreateRequest
+         * @description `POST /api/settings/llm-connections`。キーは任意(省略・空ならキーなし)。
+         */
+        LlmConnectionCreateRequest: {
+            /** Name */
+            name: string;
+            /** Base Url */
+            base_url: string;
+            /**
+             * Api Style
+             * @default responses
+             */
+            api_style: string;
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /**
+         * LlmConnectionUpdateRequest
+         * @description `PATCH /api/settings/llm-connections/{id}`。省略した項目は変更しない。
+         *     組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。
+         */
+        LlmConnectionUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Api Style */
+            api_style?: string | null;
+        };
+        /**
+         * LlmConnectionView
+         * @description LLM・VLM の接続先1つ(ADR-0032、ADR-0024 8章)。キーの値は一部も返さない。
+         */
+        LlmConnectionView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Builtin */
+            builtin: boolean;
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Api Style
+             * @enum {string}
+             */
+            api_style: "responses" | "chat";
+            /** Api Key Set */
+            api_key_set: boolean;
+            /** Used By */
+            used_by?: ("annotation" | "embedding")[];
+        };
+        /**
+         * LlmConnectionsResponse
+         * @description `GET /api/settings/llm-connections` と、接続先を変える API の応答。
+         */
+        LlmConnectionsResponse: {
+            /** Connections */
+            connections: components["schemas"]["LlmConnectionView"][];
+        };
         /**
          * MaskBinding
          * @description マスクの渡し方。`load_image_mask` はマスク PNG をそのまま渡す先、`image_alpha` は
@@ -2287,7 +3367,7 @@ export interface components {
             /** Value */
             value?: string | null;
             /** Source */
-            source?: ("env" | "file") | null;
+            source?: ("file" | "env") | null;
         };
         /** OpenAIBaseUrlUpdateRequest */
         OpenAIBaseUrlUpdateRequest: {
@@ -2301,9 +3381,7 @@ export interface components {
             /** Configured */
             configured: boolean;
             /** Source */
-            source?: ("env" | "file") | null;
-            /** Hint */
-            hint?: string | null;
+            source?: ("file" | "env") | null;
         };
         /** OpenAIKeyUpdateRequest */
         OpenAIKeyUpdateRequest: {
@@ -2443,6 +3521,8 @@ export interface components {
             status: "queued" | "running" | "succeeded" | "failed" | "canceled";
             /** Prompt */
             prompt: string;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
         };
         /** PromptSetCreateRequest */
         PromptSetCreateRequest: {
@@ -2599,6 +3679,136 @@ export interface components {
             /** Supports Pricing */
             supports_pricing: boolean;
         };
+        /** PublicShareAsset */
+        PublicShareAsset: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "mask" | "sketch";
+            /** Mime */
+            mime: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Title */
+            title?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Depth
+             * @default 0
+             */
+            depth: number;
+            /** Allow Original */
+            allow_original: boolean;
+        };
+        /**
+         * PublicShareEdge
+         * @description 共有に含まれるノードどうしの辺だけ(範囲外のノードへの辺は含めない)。
+         */
+        PublicShareEdge: {
+            /**
+             * Source
+             * Format: uuid
+             */
+            source: string;
+            /**
+             * Target
+             * Format: uuid
+             */
+            target: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "output" | "sketch_source" | "origin";
+            /** Role */
+            role?: ("image" | "mask" | "reference") | null;
+            /** Position */
+            position?: number | null;
+            /** Output Index */
+            output_index?: number | null;
+            /**
+             * Primary
+             * @default false
+             */
+            primary: boolean;
+        };
+        /**
+         * PublicShareResponse
+         * @description `GET /api/public/shares/{token}`(ログイン不要)。
+         */
+        PublicShareResponse: {
+            /**
+             * Root Asset Id
+             * Format: uuid
+             */
+            root_asset_id: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+            /** Allow Original */
+            allow_original: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Assets */
+            assets?: components["schemas"]["PublicShareAsset"][];
+            /** Runs */
+            runs?: components["schemas"]["PublicShareRun"][];
+            /** Edges */
+            edges?: components["schemas"]["PublicShareEdge"][];
+        };
+        /**
+         * PublicShareRun
+         * @description 画像を作った Run のうち、見せてよい項目だけ(ADR-0029 3章)。実行者、料金・usage、
+         *     エラー、入力の Asset の id は含めない。`params` は `shares.public_params` の値(ComfyUI の
+         *     Run は `run.params` の写しで入れ子を含み、秘密に見える値は `***` に伏せる。ADR-0029 3章、
+         *     2026-10-01 改訂・追記)。
+         */
+        PublicShareRun: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "generate" | "edit";
+            /** Model */
+            model: string;
+            /** Prompt */
+            prompt: string;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
+        };
         /** RunCancelResponse */
         RunCancelResponse: {
             /**
@@ -2715,6 +3925,8 @@ export interface components {
             asset_group?: components["schemas"]["AssetGroupRef"] | null;
             /** Origin */
             origin?: string | null;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
             /** Deployment */
             deployment?: string | null;
             /** Provider Request Id */
@@ -2876,6 +4088,31 @@ export interface components {
             asset_group?: components["schemas"]["AssetGroupRef"] | null;
             /** Origin */
             origin?: string | null;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
+        };
+        /**
+         * RunTextOutput
+         * @description 実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
+         *     (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った
+         *     グラフ(`run.params.comfyui_prompt`)から取った値。
+         */
+        RunTextOutput: {
+            /** Role */
+            role: string;
+            /** Node Id */
+            node_id?: string | null;
+            /** Class Type */
+            class_type?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Text */
+            text: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /**
          * SearchAssetHit
@@ -3027,6 +4264,8 @@ export interface components {
             asset_group?: components["schemas"]["AssetGroupRef"] | null;
             /** Origin */
             origin?: string | null;
+            /** Text Outputs */
+            text_outputs?: components["schemas"]["RunTextOutput"][] | null;
             /** Snippet */
             snippet: string;
         };
@@ -3047,6 +4286,218 @@ export interface components {
              * @default false
              */
             prompt_sets: boolean;
+        };
+        /**
+         * SemanticAssetHit
+         * @description 文章での検索・似た画像の1件。`score` はコサイン類似度(-1〜1、大きいほど近い)。
+         */
+        SemanticAssetHit: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "mask" | "sketch";
+            /** Mime */
+            mime: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Bytes */
+            bytes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Title */
+            title?: string | null;
+            /** Score */
+            score: number;
+        };
+        /**
+         * SemanticSearchResponse
+         * @description `GET /api/search/semantic`。類似度の高い順。
+         */
+        SemanticSearchResponse: {
+            /** Query */
+            query: string;
+            /** Model Key */
+            model_key: string;
+            /** Languages */
+            languages?: ("ja" | "en")[] | null;
+            /** Multilingual */
+            multilingual?: boolean | null;
+            /** Assets */
+            assets?: components["schemas"]["SemanticAssetHit"][];
+        };
+        /** ShareCreateRequest */
+        ShareCreateRequest: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+            /**
+             * Allow Original
+             * @default true
+             */
+            allow_original: boolean;
+        };
+        /** ShareListResponse */
+        ShareListResponse: {
+            /** Items */
+            items?: components["schemas"]["ShareRow"][];
+        };
+        /**
+         * SharePreviewAsset
+         * @description 共有に含まれる画像1件(作る前の確認用。サムネイルは本人向けの配信 URL で出す)。
+         */
+        SharePreviewAsset: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upload" | "generated" | "mask" | "sketch";
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Title */
+            title?: string | null;
+        };
+        /** SharePreviewRequest */
+        SharePreviewRequest: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+        };
+        /** SharePreviewResponse */
+        SharePreviewResponse: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+            /** Asset Count */
+            asset_count: number;
+            /** Assets */
+            assets?: components["schemas"]["SharePreviewAsset"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * ShareRow
+         * @description 自分の共有リンクの1件(ADR-0029 7章)。
+         */
+        ShareRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Url */
+            url: string;
+            /**
+             * Root Asset Id
+             * Format: uuid
+             */
+            root_asset_id: string;
+            /**
+             * Root Deleted
+             * @default false
+             */
+            root_deleted: boolean;
+            /** Root Title */
+            root_title?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "single" | "ancestors" | "lineage";
+            /** Allow Original */
+            allow_original: boolean;
+            /** Asset Count */
+            asset_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Accessed At */
+            last_accessed_at?: string | null;
+            /**
+             * Access Count
+             * @default 0
+             */
+            access_count: number;
+        };
+        /**
+         * ShareSettingsResponse
+         * @description `GET /api/settings/share`。有効/無効(既定は無効)。
+         */
+        ShareSettingsResponse: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /**
+         * ShareSettingsUpdateRequest
+         * @description `PATCH /api/settings/share` の本文。省略した項目は変更しない。
+         */
+        ShareSettingsUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+        };
+        /**
+         * SimilarAssetsResponse
+         * @description `GET /api/assets/{id}/similar`。起点の画像自身は含めない。
+         */
+        SimilarAssetsResponse: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Model Key */
+            model_key: string;
+            /** Assets */
+            assets?: components["schemas"]["SemanticAssetHit"][];
+        };
+        /**
+         * SimilarImageSearchResponse
+         * @description `POST /api/search/similar-image`。手元の画像に似た画像(類似度の高い順)。送った画像は
+         *     保存しないので、起点の id は無い。
+         */
+        SimilarImageSearchResponse: {
+            /** Model Key */
+            model_key: string;
+            /** Assets */
+            assets?: components["schemas"]["SemanticAssetHit"][];
         };
         /** SizeConstraints */
         SizeConstraints: {
@@ -3087,6 +4538,8 @@ export interface components {
             mask?: components["schemas"]["MaskBinding"] | null;
             /** Outputs */
             outputs?: string[];
+            /** Final Prompt */
+            final_prompt?: string | null;
         };
         /** TagCount */
         TagCount: {
@@ -3216,6 +4669,37 @@ export interface operations {
             };
         };
     };
+    auth_test_login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     auth_callback: {
         parameters: {
             query?: never;
@@ -3263,6 +4747,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_health: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
         };
@@ -3697,7 +5201,8 @@ export interface operations {
     list_assets: {
         parameters: {
             query?: {
-                kind?: ("upload" | "generated" | "mask" | "sketch") | null;
+                /** @description 繰り返して指定できる(`?kind=generated&kind=upload`)。指定した種類のどれかに当たる Asset に絞る。省くと全種類(ADR-0035)。 */
+                kind?: ("upload" | "generated" | "mask" | "sketch")[] | null;
                 /** @description 指定すると、そのグループのメンバーだけに絞る(ADR-0022)。 */
                 group_id?: string | null;
                 /** @description true なら、削除済みでないどのグループにも入っていない Asset だけに絞る(ストックの「グループなし」の節。ADR-0022)。`group_id` と同時には指定できない。 */
@@ -4046,9 +5551,45 @@ export interface operations {
             };
         };
     };
-    list_asset_groups: {
+    request_asset_embedding: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetEmbeddingStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_asset_groups: {
+        parameters: {
+            query?: {
+                /** @description 繰り返して指定できる。指定すると、`member_count` と `cover_asset_id` をその種類の Asset だけで数える(ADR-0035)。省くと種類を問わない。 */
+                kind?: ("upload" | "generated" | "mask" | "sketch")[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -4804,6 +6345,259 @@ export interface operations {
             };
         };
     };
+    semantic_search: {
+        parameters: {
+            query: {
+                /** @description 検索の文章(自然文) */
+                q: string;
+                limit?: number;
+                /** @description このグループの画像に絞る */
+                group_id?: string | null;
+                /** @description このタグが付いた画像に絞る */
+                tag?: string | null;
+                /** @description この種類の画像に絞る */
+                kind?: ("upload" | "generated" | "sketch") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticSearchResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_by_image: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description このグループの画像に絞る */
+                group_id?: string | null;
+                /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
+                tag?: string[] | null;
+                /** @description この種類の画像に絞る */
+                kind?: ("upload" | "generated" | "sketch") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_search_by_image"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarImageSearchResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description 画像が大きすぎる(バイト数か画素数) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description 画像の埋め込みを計算できない(メモリ不足、推論サーバーに届かない) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    similar_assets: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarAssetsResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    embedding_duplicates: {
+        parameters: {
+            query?: {
+                /** @description 類似度のしきい値。省略時は管理者設定の値 */
+                threshold?: number | null;
+                /** @description 返すグループの数の上限 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatesResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    embedding_graph: {
+        parameters: {
+            query?: {
+                k?: number;
+                limit?: number;
+                group_id?: string | null;
+                /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
+                tag?: string[] | null;
+                /** @description 系列の主たる親の辺も返す */
+                include_lineage?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingGraphResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tags: {
         parameters: {
             query?: {
@@ -5204,6 +6998,72 @@ export interface operations {
             };
         };
     };
+    get_share_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_share_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_annotation_settings: {
         parameters: {
             query?: never;
@@ -5249,72 +7109,6 @@ export interface operations {
                 "application/json": components["schemas"]["AnnotationSettingsUpdateRequest"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_annotation_api_key: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnnotationApiKeyUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_annotation_api_key: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                gakei_session?: string | null;
-            };
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -5422,6 +7216,542 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnnotationBackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_embedding_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_embedding_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmbeddingSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_embedding_model: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnnxDownloadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_embedding_model: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backfill_embeddings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingBackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_embedding_vectors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_key: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_auth_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_auth_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_auth_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_auth_pending_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_llm_connections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_llm_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmConnectionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_llm_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_llm_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmConnectionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_llm_connection_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmConnectionApiKeyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_llm_connection_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5666,6 +7996,138 @@ export interface operations {
             };
         };
     };
+    preview_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SharePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_asset_content: {
         parameters: {
             query?: {
@@ -5788,6 +8250,73 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 原本の画像ファイル */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "image/*": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicShareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_share_asset_content: {
+        parameters: {
+            query?: {
+                variant?: "thumb" | "preview" | "original";
+                download?: number;
+            };
+            header?: never;
+            path: {
+                token: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 画像 */
             200: {
                 headers: {
                     [name: string]: unknown;
