@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.auth.deps import require_user
@@ -50,9 +51,15 @@ def _get_active_group(db: Session, group_id: uuid.UUID, user: CurrentUser) -> As
 
 @router.get("", response_model=AssetGroupListResponse, operation_id="list_asset_groups")
 def list_asset_groups(
-    db: Session = Depends(get_session), user: CurrentUser = Depends(require_user)
+    kind: list[Literal["upload", "generated", "mask", "sketch"]] | None = Query(
+        default=None,
+        description="繰り返して指定できる。指定すると、`member_count` と `cover_asset_id` を"
+        "その種類の Asset だけで数える(ADR-0035)。省くと種類を問わない。",
+    ),
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
 ) -> AssetGroupListResponse:
-    return AssetGroupListResponse(items=list_groups(db, user))
+    return AssetGroupListResponse(items=list_groups(db, user, list(kind) if kind else None))
 
 
 @router.post("", response_model=AssetGroupRow, status_code=201, operation_id="create_asset_group")

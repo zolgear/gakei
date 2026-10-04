@@ -1,6 +1,6 @@
 /**
  * `/settings/display`(ADR-0031 1章)。表示言語、タブのアイコンで進捗を示すか、生成画面の入力欄の配置
- * (ADR-0009 1章・2026-09-26 追記)。どれも「即時」の項目(ブラウザに保存し、その場で反映する)
+ * (ADR-0009 1章・2026-09-26 追記)、スケッチとマスクをストックに出すか(ADR-0035)。どれも「即時」の項目(ブラウザに保存し、その場で反映する)
  * なので、このページには保存のボタンを出さない。
  *
  * 末尾の「ブラウザに保存した設定」(2026-10-04)は、GAKEI がこのブラウザに置いたキー(`lib/browserStorage.ts`)
@@ -15,6 +15,7 @@ import {
   setFaviconProgressEnabled,
   subscribeFaviconProgressEnabled,
 } from '../../favicon/faviconPrefs'
+import { setStockShowSketchMask, useStockShowSketchMask } from '../../stock/stockPrefs'
 import { isStudioLayout, setStudioLayout } from '../../workspace/studioLayout'
 import { useStudioLayout } from '../../workspace/useStudioLayout'
 import { SettingsPageFrame } from '../SettingsPageFrame'
@@ -30,6 +31,7 @@ export function DisplaySettingsPage() {
     getFaviconProgressEnabled,
   )
   const studioLayout = useStudioLayout()
+  const stockShowSketchMask = useStockShowSketchMask()
   const [confirmClearOpen, setConfirmClearOpen] = useState(false)
   const b = d.browserStorage
 
@@ -73,6 +75,18 @@ export function DisplaySettingsPage() {
             <option value="bottom">{d.studioLayout.optionBottom}</option>
             <option value="sidebar">{d.studioLayout.optionSidebar}</option>
           </select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={d.stockShowSketchMask.label}
+          htmlFor="gakei-stock-show-sketch-mask"
+          description={d.stockShowSketchMask.help}
+        >
+          <SettingsSwitch
+            id="gakei-stock-show-sketch-mask"
+            checked={stockShowSketchMask}
+            onChange={setStockShowSketchMask}
+          />
         </SettingsRow>
       </SettingsSection>
 

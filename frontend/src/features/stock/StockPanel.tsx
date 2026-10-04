@@ -12,6 +12,10 @@
  * 「画像を追加」と種別チップはパネル上部の sticky ヘッダーに常時表示する(生成を続けても
  * グリッドに押し流されないように)。種別の下に「タグで絞り込む」(ADR-0024 5章)を置き、選んだ
  * タグは種別と同じく全節に共通の絞り込みになる。
+ *
+ * スケッチとマスクは、「表示」の設定(`stockPrefs.ts`。既定はオフ)でオンのときだけ出す(ADR-0035)。
+ * オフのときは種別のチップから外し、「すべて」と各節の取得、グループの件数・表紙を生成画像と
+ * アップロードに絞る(サーバーの `kind` で絞るので、ページングは崩れない)。
  */
 import { useId, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -49,7 +53,15 @@ import {
 } from './groups/groupOpenStorage'
 import { GroupSection, type StockTileActions } from './GroupSection'
 import { UNGROUPED_SECTION_KEY, selectedByGroup, toggleSelection, withoutSection } from './stockSelection'
-import type { StockKindFilter } from './stockQueryKey'
+import {
+  normalizeStockKindFilter,
+  stockGroupCountKinds,
+  stockKindChoices,
+  stockKindsKey,
+  stockListKinds,
+  type StockKindFilter,
+} from './stockQueryKey'
+import { useStockShowSketchMask } from './stockPrefs'
 import { StockTagFilter } from './StockTagFilter'
 import { useStockTagFilter } from './stockTagFilterStore'
 import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
@@ -57,14 +69,19 @@ import styles from './StockPanel.module.css'
 
 type KindFilter = StockKindFilter
 
-function kindLabels(t: Messages): { id: KindFilter; label: string }[] {
-  return [
-    { id: 'all', label: t.stock.kindAll },
-    { id: 'generated', label: t.stock.kindGenerated },
-    { id: 'upload', label: t.stock.kindUpload },
-    { id: 'sketch', label: t.stock.kindSketch },
-    { id: 'mask', label: t.stock.kindMask },
-  ]
+function kindLabel(t: Messages, kind: KindFilter): string {
+  switch (kind) {
+    case 'all':
+      return t.stock.kindAll
+    case 'generated':
+      return t.stock.kindGenerated
+    case 'upload':
+      return t.stock.kindUpload
+    case 'sketch':
+      return t.stock.kindSketch
+    case 'mask':
+      return t.stock.kindMask
+  }
 }
 
 export function StockPanel() {
@@ -80,6 +97,13 @@ export function StockPanel() {
   const panelRef = useRef<HTMLDivElement | null>(null)
 
   const [kind, setKind] = useState<KindFilter>('all')
+  // スケッチとマスクを出すか(ADR-0035)。スケッチ・マスクのチップを選んだままオフにしたら「すべて」に戻す
+  // (レンダー中に直す。下の選択のリセットと同じパターン)。
+  const showSketchMask = useStockShowSketchMask()
+  if (normalizeStockKindFilter(kind, showSketchMask) !== kind) {
+    setKind('all')
+  }
+  const listKinds = stockListKinds(kind, showSketchMask)
   // タグの絞り込み(ADR-0024 5章)。ビューアのタグのチップからも設定されるので外部ストアに置く。
   const tag = useStockTagFilter()
   const kindHeadingId = useId()
@@ -102,16 +126,18 @@ export function StockPanel() {
   const maxInputImageBytes =
     findProvider(capsQuery.data, formState.provider)?.max_input_image_bytes ?? 50 * 1024 * 1024
 
-  const groupsQuery = useAssetGroups()
+  // 件数と表紙は、この設定で出す種類の合計に合わせる(チップの選択では変わらない。ADR-0035)。
+  const groupsQuery = useAssetGroups(stockGroupCountKinds(showSketchMask))
   const groups = groupsQuery.data?.items ?? []
   const groupReorder = useGroupReorder(groups, setMessage)
 
-  // 種別の絞り込みが変わったら選択をリセットする(レンダー中に前回値と比較する。React 公式の
-  // 「prop の変化に応じて state をリセットする」パターンで、useEffect を使わない)。
-  const [selectionKind, setSelectionKind] = useState(kind)
+  // 種別の絞り込み(「表示」の設定で変わる取得の種類を含む)が変わったら選択をリセットする(レンダー中に
+  // 前回値と比較する。React 公式の「prop の変化に応じて state をリセットする」パターンで、useEffect を使わない)。
+  const listKindsKey = stockKindsKey(listKinds)
+  const [selectionKind, setSelectionKind] = useState(listKindsKey)
   const [selectionTag, setSelectionTag] = useState(tag)
-  if (selectionKind !== kind || selectionTag !== tag) {
-    setSelectionKind(kind)
+  if (selectionKind !== listKindsKey || selectionTag !== tag) {
+    setSelectionKind(listKindsKey)
     setSelectionTag(tag)
     setSelected(new Map())
   }
@@ -311,15 +337,15 @@ export function StockPanel() {
             {t.stock.kindHeading}
           </span>
           <div className={styles.chips}>
-            {kindLabels(t).map((item) => (
+            {stockKindChoices(showSketchMask).map((id) => (
               <button
-                key={item.id}
+                key={id}
                 type="button"
                 className={styles.chip}
-                data-active={kind === item.id}
-                onClick={() => setKind(item.id)}
+                data-active={kind === id}
+                onClick={() => setKind(id)}
               >
-                {item.label}
+                {kindLabel(t, id)}
               </button>
             ))}
           </div>
@@ -362,7 +388,7 @@ export function StockPanel() {
       {/* 「グループなし」を先頭に置き、その見出し行の「+」で作ったグループが直後に並ぶ。 */}
       <GroupSection
         group={null}
-        kind={kind}
+        kinds={listKinds}
         tag={tag}
         open={isSectionOpen(openMap, UNGROUPED_SECTION_KEY)}
         onToggleOpen={() => toggleSectionOpen(UNGROUPED_SECTION_KEY)}
@@ -375,7 +401,7 @@ export function StockPanel() {
         <GroupSection
           key={group.id}
           group={group}
-          kind={kind}
+          kinds={listKinds}
           tag={tag}
           open={isSectionOpen(openMap, group.id)}
           onToggleOpen={() => toggleSectionOpen(group.id)}

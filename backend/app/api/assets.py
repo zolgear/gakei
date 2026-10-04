@@ -223,7 +223,11 @@ def create_asset(
 
 @router.get("", response_model=AssetListResponse, operation_id="list_assets")
 def list_assets(
-    kind: Literal["upload", "generated", "mask", "sketch"] | None = Query(default=None),
+    kind: list[Literal["upload", "generated", "mask", "sketch"]] | None = Query(
+        default=None,
+        description="繰り返して指定できる(`?kind=generated&kind=upload`)。指定した種類の"
+        "どれかに当たる Asset に絞る。省くと全種類(ADR-0035)。",
+    ),
     group_id: uuid.UUID | None = Query(
         default=None, description="指定すると、そのグループのメンバーだけに絞る(ADR-0022)。"
     ),
@@ -249,8 +253,8 @@ def list_assets(
 
     # ADR-0025: 見える Asset だけ(ページングの件数・カーソルも同じ条件の上で数える)。
     query = select(Asset).where(Asset.deleted_at.is_(None), asset_visible(user))
-    if kind is not None:
-        query = query.where(Asset.kind == kind)
+    if kind:
+        query = query.where(Asset.kind.in_(kind))
     if tag is not None and tag.strip():
         try:
             query = query.where(annotations_domain.tag_filter(tag))

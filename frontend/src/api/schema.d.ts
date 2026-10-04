@@ -5201,7 +5201,8 @@ export interface operations {
     list_assets: {
         parameters: {
             query?: {
-                kind?: ("upload" | "generated" | "mask" | "sketch") | null;
+                /** @description 繰り返して指定できる(`?kind=generated&kind=upload`)。指定した種類のどれかに当たる Asset に絞る。省くと全種類(ADR-0035)。 */
+                kind?: ("upload" | "generated" | "mask" | "sketch")[] | null;
                 /** @description 指定すると、そのグループのメンバーだけに絞る(ADR-0022)。 */
                 group_id?: string | null;
                 /** @description true なら、削除済みでないどのグループにも入っていない Asset だけに絞る(ストックの「グループなし」の節。ADR-0022)。`group_id` と同時には指定できない。 */
@@ -5585,7 +5586,10 @@ export interface operations {
     };
     list_asset_groups: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 繰り返して指定できる。指定すると、`member_count` と `cover_asset_id` をその種類の Asset だけで数える(ADR-0035)。省くと種類を問わない。 */
+                kind?: ("upload" | "generated" | "mask" | "sketch")[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: {

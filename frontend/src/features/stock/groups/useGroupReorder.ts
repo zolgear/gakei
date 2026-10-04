@@ -55,17 +55,15 @@ export function useGroupReorder(
     mutationFn: (ids: string[]) => reorderAssetGroups(ids),
     onMutate: async (ids) => {
       await queryClient.cancelQueries({ queryKey: ASSET_GROUPS_QUERY_KEY })
-      const previous = queryClient.getQueryData<AssetGroupListResponse>(ASSET_GROUPS_QUERY_KEY)
-      if (previous) {
-        queryClient.setQueryData<AssetGroupListResponse>(ASSET_GROUPS_QUERY_KEY, {
-          ...previous,
-          items: applyGroupOrder(previous.items ?? [], ids),
-        })
-      }
+      // 種類で数えた一覧(ADR-0035)も同じ並びなので、接頭辞の一致で全部並べ直す。
+      const previous = queryClient.getQueriesData<AssetGroupListResponse>({ queryKey: ASSET_GROUPS_QUERY_KEY })
+      queryClient.setQueriesData<AssetGroupListResponse>({ queryKey: ASSET_GROUPS_QUERY_KEY }, (old) =>
+        old ? { ...old, items: applyGroupOrder(old.items ?? [], ids) } : old,
+      )
       return { previous }
     },
     onError: (err: unknown, _ids, context) => {
-      if (context?.previous) queryClient.setQueryData(ASSET_GROUPS_QUERY_KEY, context.previous)
+      for (const [key, data] of context?.previous ?? []) queryClient.setQueryData(key, data)
       onError(err instanceof ApiError ? err.message : t.stock.groups.reorderFailed)
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ASSET_GROUPS_QUERY_KEY }),

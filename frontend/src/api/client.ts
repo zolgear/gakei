@@ -464,7 +464,10 @@ export function restoreAsset(assetId: string): Promise<AssetDetail> {
   return request(`/api/assets/${assetId}/restore`, { method: 'POST' })
 }
 
-/** `params.group_id` を渡すと、そのグループのメンバーだけに絞る(ADR-0022)。`kind` と併用できる。 */
+/**
+ * `params.group_id` を渡すと、そのグループのメンバーだけに絞る(ADR-0022)。`kind` と併用できる。
+ * `kind` は配列で、繰り返して送る(指定した種類のどれか。省くと全種類。ADR-0035)。
+ */
 export function listAssets(
   params: operations['list_assets']['parameters']['query'] = {},
 ): Promise<components['schemas']['AssetListResponse']> {
@@ -510,9 +513,14 @@ export function getAssetLineage(
 // -- グループ(ADR-0022) ------------------------------------------------------
 // 階層なしのフラットなグループ。証跡ではないので更新・削除は自由(ADR-0003 の対象外)。
 
-/** 削除済みでないグループを利用者が決めた順(`position` 昇順)で全件。ページングなし(prompt-sets と同じ)。 */
-export function listAssetGroups(): Promise<AssetGroupListResponse> {
-  return request('/api/asset-groups')
+/**
+ * 削除済みでないグループを利用者が決めた順(`position` 昇順)で全件。ページングなし(prompt-sets と同じ)。
+ * `params.kind` を渡すと、`member_count` と `cover_asset_id` をその種類だけで数える(ADR-0035)。
+ */
+export function listAssetGroups(
+  params: operations['list_asset_groups']['parameters']['query'] = {},
+): Promise<AssetGroupListResponse> {
+  return request(`/api/asset-groups${toQuery(params)}`)
 }
 
 export function createAssetGroup(name: string): Promise<AssetGroupRow> {

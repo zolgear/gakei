@@ -60,10 +60,14 @@ def get_active_group_or_none(db: Session, group_id: uuid.UUID) -> AssetGroup | N
 
 
 def _member_stats(
-    db: Session, group_ids: list[uuid.UUID], viewer: CurrentUser | None
+    db: Session,
+    group_ids: list[uuid.UUID],
+    viewer: CurrentUser | None,
+    kinds: list[str] | None = None,
 ) -> dict[uuid.UUID, tuple[int, uuid.UUID | None]]:
     """各グループの (member_count, cover_asset_id) をまとめて求める
-    (削除済みでなく、`viewer` に見える Asset だけを対象にする)。"""
+    (削除済みでなく、`viewer` に見える Asset だけを対象にする)。
+    `kinds` を渡したときは、その種類の Asset だけで数える(ADR-0035)。"""
     counts: dict[uuid.UUID, int] = dict.fromkeys(group_ids, 0)
     cover: dict[uuid.UUID, uuid.UUID | None] = dict.fromkeys(group_ids, None)
     if not group_ids:
@@ -79,6 +83,7 @@ def _member_stats(
             AssetGroupMember.asset_group_id.in_(group_ids),
             Asset.deleted_at.is_(None),
             _asset_cond(viewer),
+            Asset.kind.in_(kinds) if kinds else true(),
         )
     ).all()
     for group_id, asset_id, added_at in rows:
@@ -121,15 +126,21 @@ def _active_groups_in_order(db: Session, viewer: CurrentUser) -> list[AssetGroup
 
 
 def _rows_for_groups(
-    db: Session, groups: list[AssetGroup], viewer: CurrentUser
+    db: Session,
+    groups: list[AssetGroup],
+    viewer: CurrentUser,
+    kinds: list[str] | None = None,
 ) -> list[AssetGroupRow]:
-    stats = _member_stats(db, [g.id for g in groups], viewer)
+    stats = _member_stats(db, [g.id for g in groups], viewer, kinds)
     return [_to_row(g, *stats.get(g.id, (0, None))) for g in groups]
 
 
-def list_groups(db: Session, viewer: CurrentUser) -> list[AssetGroupRow]:
-    """`viewer` に見える、削除されていないグループ(ADR-0025)。"""
-    return _rows_for_groups(db, _active_groups_in_order(db, viewer), viewer)
+def list_groups(
+    db: Session, viewer: CurrentUser, kinds: list[str] | None = None
+) -> list[AssetGroupRow]:
+    """`viewer` に見える、削除されていないグループ(ADR-0025)。
+    `kinds` を渡すと、`member_count` / `cover_asset_id` をその種類だけで数える(ADR-0035)。"""
+    return _rows_for_groups(db, _active_groups_in_order(db, viewer), viewer, kinds)
 
 
 def create_group(db: Session, name: str, viewer: CurrentUser) -> AssetGroupRow:

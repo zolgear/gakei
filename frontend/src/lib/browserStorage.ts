@@ -27,6 +27,7 @@ export const GAKEI_STORAGE_KEYS = {
   'gakei:selected-panel': 'サイドバーで開いているパネル',
   'gakei:stock-group-open': 'ストックの各グループの開閉',
   'gakei:stock-groups-open': '(旧)ストックのグループの開閉',
+  'gakei:stock-show-sketch-mask': 'スケッチとマスクをストックに出すか',
   'gakei:viewer-similar-open': 'ビューアの「似た画像」の開閉',
   'gakei:search-panel-mode': 'サイドバーの検索パネルの方式(キーワード / 意味)',
   'gakei:map-prefs': 'マップの表示・近傍の数・上限・しきい値・系列の辺・詳細パネルの開閉',
