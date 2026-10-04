@@ -508,3 +508,92 @@ def test_created_by_user_id_is_null_in_none_mode(client: TestClient) -> None:
             select(AssetGroup).where(AssetGroup.id == uuid.UUID(group["id"]))
         ).scalar_one()
         assert row.created_by_user_id is None
+
+
+# --- kind の複数指定(ADR-0035) ---
+
+
+def _upload_kind(client: TestClient, kind: str, color: tuple[int, int, int]) -> str:
+    response = client.post(
+        "/api/assets",
+        files={"file": ("k.png", make_png_bytes(color=color), "image/png")},
+        data={"kind": kind},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def _four_kinds(client: TestClient) -> dict[str, str]:
+    # generated は POST /api/assets で作れないので、upload / sketch / mask を使う。
+    return {
+        "upload": _upload_kind(client, "upload", (1, 2, 3)),
+        "sketch": _upload_kind(client, "sketch", (4, 5, 6)),
+        "mask": _upload_kind(client, "mask", (7, 8, 9)),
+    }
+
+
+def test_list_assets_accepts_multiple_kinds(client: TestClient) -> None:
+    ids = _four_kinds(client)
+
+    response = client.get("/api/assets", params=[("kind", "upload"), ("kind", "sketch")])
+    assert response.status_code == 200, response.text
+    assert {a["id"] for a in response.json()["items"]} == {ids["upload"], ids["sketch"]}
+
+    assert _asset_ids_in(client, kind="mask") == {ids["mask"]}
+    assert _asset_ids_in(client) == set(ids.values())
+
+    generated_and_upload = client.get(
+        "/api/assets", params=[("kind", "generated"), ("kind", "upload")]
+    )
+    assert {a["id"] for a in generated_and_upload.json()["items"]} == {ids["upload"]}
+
+
+def test_list_assets_rejects_unknown_kind(client: TestClient) -> None:
+    response = client.get("/api/assets", params=[("kind", "upload"), ("kind", "nope")])
+    assert response.status_code == 422
+
+
+def test_list_assets_multiple_kinds_with_group_id(client: TestClient) -> None:
+    group = _create_group(client)
+    ids = _four_kinds(client)
+    _add(client, group["id"], list(ids.values()))
+
+    response = client.get(
+        "/api/assets",
+        params=[("group_id", group["id"]), ("kind", "generated"), ("kind", "upload")],
+    )
+    assert response.status_code == 200, response.text
+    assert [a["id"] for a in response.json()["items"]] == [ids["upload"]]
+
+
+def test_list_groups_counts_only_given_kinds(client: TestClient) -> None:
+    group = _create_group(client)
+    ids = _four_kinds(client)
+    # upload を先に入れ、sketch・mask を後に入れる(種類を問わなければ表紙は mask)。
+    _add(client, group["id"], [ids["upload"]])
+    _add(client, group["id"], [ids["sketch"]])
+    _add(client, group["id"], [ids["mask"]])
+
+    unfiltered = _group_row(client, group["id"])
+    assert unfiltered["member_count"] == 3
+    assert unfiltered["cover_asset_id"] == ids["mask"]
+
+    response = client.get("/api/asset-groups", params=[("kind", "generated"), ("kind", "upload")])
+    assert response.status_code == 200, response.text
+    row = next(g for g in response.json()["items"] if g["id"] == group["id"])
+    assert row["member_count"] == 1
+    assert row["cover_asset_id"] == ids["upload"]
+
+    only_sketch = client.get("/api/asset-groups", params={"kind": "sketch"}).json()["items"]
+    row = next(g for g in only_sketch if g["id"] == group["id"])
+    assert row["member_count"] == 1
+    assert row["cover_asset_id"] == ids["sketch"]
+
+    only_generated = client.get("/api/asset-groups", params={"kind": "generated"}).json()["items"]
+    row = next(g for g in only_generated if g["id"] == group["id"])
+    assert row["member_count"] == 0
+    assert row["cover_asset_id"] is None
+
+
+def test_list_groups_rejects_unknown_kind(client: TestClient) -> None:
+    assert client.get("/api/asset-groups", params={"kind": "nope"}).status_code == 422

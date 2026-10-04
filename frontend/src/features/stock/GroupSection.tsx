@@ -42,7 +42,7 @@ import { groupIdToRemove } from './groups/ungroupDrop'
 import { shouldAutoFetchNextPage } from './sentinel'
 import { StockTile } from './StockTile'
 import { UNGROUPED_SECTION_KEY } from './stockSelection'
-import { stockAssetsQueryKey, type StockKindFilter, type StockSectionScope } from './stockQueryKey'
+import { stockAssetsQueryKey, type StockAssetKind, type StockSectionScope } from './stockQueryKey'
 import styles from './GroupSection.module.css'
 
 const PAGE_SIZE = 30
@@ -69,7 +69,8 @@ export interface StockTileActions {
 interface GroupSectionProps {
   /** グループの節ならその行。「グループなし」の節は null。 */
   group: AssetGroupRow | null
-  kind: StockKindFilter
+  /** `GET /api/assets` に渡す種類(null は省いて全種類)。チップと「表示」の設定から決まる(ADR-0035)。 */
+  kinds: readonly StockAssetKind[] | null
   /** タグの絞り込み(ADR-0024 5章)。絞っていなければ null。 */
   tag: string | null
   open: boolean
@@ -130,7 +131,7 @@ function useAssetDropZone(enabled: boolean, onDropAsset: (assetId: string) => vo
 
 export function GroupSection({
   group,
-  kind,
+  kinds,
   tag,
   open,
   onToggleOpen,
@@ -409,7 +410,7 @@ export function GroupSection({
         <div id={bodyId} className={styles.body}>
           <SectionAssets
             scope={group ? { groupId: group.id } : { ungrouped: true }}
-            kind={kind}
+            kinds={kinds}
             tag={tag}
             scrollRootRef={scrollRootRef}
             tileActions={tileActions}
@@ -435,7 +436,7 @@ export function GroupSection({
 
 interface SectionAssetsProps {
   scope: StockSectionScope
-  kind: StockKindFilter
+  kinds: readonly StockAssetKind[] | null
   tag: string | null
   scrollRootRef: RefObject<HTMLDivElement | null>
   tileActions: StockTileActions
@@ -447,7 +448,7 @@ interface SectionAssetsProps {
 /** 節の本体。開いている間だけマウントされるので、畳んだ節は取得しない。 */
 function SectionAssets({
   scope,
-  kind,
+  kinds,
   tag,
   scrollRootRef,
   tileActions,
@@ -462,13 +463,13 @@ function SectionAssets({
   const sectionKey = groupId ?? UNGROUPED_SECTION_KEY
 
   const assetsQuery = useInfiniteQuery({
-    queryKey: stockAssetsQueryKey(kind, scope, tag),
+    queryKey: stockAssetsQueryKey(kinds, scope, tag),
     queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
       try {
         return await listAssets({
           limit: PAGE_SIZE,
           cursor: pageParam,
-          kind: kind === 'all' ? undefined : kind,
+          kind: kinds ? [...kinds] : undefined,
           tag: tag ?? undefined,
           ...(groupId ? { group_id: groupId } : { ungrouped: true }),
         })

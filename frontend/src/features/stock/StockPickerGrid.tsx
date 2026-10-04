@@ -10,6 +10,9 @@
  * DOM から外れれば(`Modal` は `open=false` で子ごと描画をやめる)、kind・検索欄はこの
  * コンポーネント自身が持つ state なので自然にリセットされる。選択状態(`selectedIds`)だけは
  * 呼び出し側の state なので、呼び出し側が閉じるときに明示的に戻すこと。
+ *
+ * マスクは選ぶ対象にしないので常に出さない。スケッチは「表示」の設定(`stockPrefs.ts`)でオンのときだけ
+ * 出す(ADR-0035)。どちらも一覧はサーバーの `kind` で除き、検索の結果はクライアントで同じ種類に絞る。
  */
 import { useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
@@ -18,9 +21,11 @@ import { assetUrl } from '../../api/assetUrl'
 import { useI18n, type Messages } from '../../i18n'
 import { useDebouncedValue } from '../search/useDebouncedValue'
 import { isTileSelectable } from './stockTileSelection'
+import { stockPickerKindChoices, stockPickerKinds, stockPickerQueryKey, type StockPickerKindFilter } from './stockQueryKey'
+import { useStockShowSketchMask } from './stockPrefs'
 import styles from './StockPickerGrid.module.css'
 
-type KindFilter = 'all' | 'generated' | 'upload' | 'sketch'
+type KindFilter = StockPickerKindFilter
 
 /** ストック一覧の要素の型。検索結果のときだけ `prompt_source` が付く(ADR-0018)。 */
 type StockAsset = AssetSummary & { prompt_source?: 'run' | 'embedded' }
@@ -28,13 +33,8 @@ type StockAsset = AssetSummary & { prompt_source?: 'run' | 'embedded' }
 /** 検索欄に入力があるときに使う、グローバル検索の画像の結果の上限(API の上限は 50、`search.py` の MAX_LIMIT)。 */
 const SEARCH_LIMIT = 50
 
-function kindChips(t: Messages): { id: KindFilter; label: string }[] {
-  return [
-    { id: 'all', label: t.stock.kindAll },
-    { id: 'generated', label: t.stock.kindGenerated },
-    { id: 'upload', label: t.stock.kindUpload },
-    { id: 'sketch', label: t.stock.kindSketch },
-  ]
+function kindChipLabel(t: Messages, kind: KindFilter): string {
+  return kind === 'all' ? t.stock.kindAll : kindLabel(t, kind)
 }
 
 function kindLabel(t: Messages, kind: AssetSummary['kind']): string {
@@ -81,14 +81,17 @@ export function StockPickerGrid({
 }: StockPickerGridProps) {
   const { t } = useI18n()
   const [kind, setKind] = useState<KindFilter>('all')
+  const showSketchMask = useStockShowSketchMask()
+  // 出せないチップ(設定がオフのスケッチ)を選んでいたら「すべて」として扱う。
+  const activeKind: KindFilter = stockPickerKindChoices(showSketchMask).includes(kind) ? kind : 'all'
+  const kinds = stockPickerKinds(activeKind, showSketchMask)
   const [queryText, setQueryText] = useState('')
   const debouncedQuery = useDebouncedValue(queryText.trim(), 250)
   const searching = debouncedQuery.length > 0
 
   const assetsQuery = useInfiniteQuery({
-    queryKey: ['assets', kind],
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      listAssets({ limit: 30, cursor: pageParam, kind: kind === 'all' ? undefined : kind }),
+    queryKey: stockPickerQueryKey(kinds),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) => listAssets({ limit: 30, cursor: pageParam, kind: kinds }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: open && !searching,
@@ -99,11 +102,10 @@ export function StockPickerGrid({
     queryFn: () => search({ q: debouncedQuery, limit: SEARCH_LIMIT }),
     enabled: open && searching,
   })
-  const listed: StockAsset[] = searching
-    ? (searchQuery.data?.assets ?? []).filter((a) => kind === 'all' || a.kind === kind)
+  // 一覧はサーバーが `kinds` で絞って返す。検索の結果は種類を問わないので、同じ種類にここで絞る。
+  const assets: StockAsset[] = searching
+    ? (searchQuery.data?.assets ?? []).filter((a) => kinds.includes(a.kind))
     : (assetsQuery.data?.pages.flatMap((page) => page.items) ?? [])
-  // mask は選ぶ対象にしないので、絞り込みチップは出さず「all」からも除く。
-  const assets = listed.filter((asset) => asset.kind !== 'mask')
   const isLoading = searching ? searchQuery.isLoading : assetsQuery.isLoading
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = assetsQuery
 
@@ -111,15 +113,15 @@ export function StockPickerGrid({
     <>
       <div className={styles.filterRow}>
         <div className={styles.chips}>
-          {kindChips(t).map((item) => (
+          {stockPickerKindChoices(showSketchMask).map((id) => (
             <button
-              key={item.id}
+              key={id}
               type="button"
               className={styles.chip}
-              data-active={kind === item.id}
-              onClick={() => setKind(item.id)}
+              data-active={activeKind === id}
+              onClick={() => setKind(id)}
             >
-              {item.label}
+              {kindChipLabel(t, id)}
             </button>
           ))}
         </div>

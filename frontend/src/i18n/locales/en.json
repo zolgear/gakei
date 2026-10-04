@@ -309,6 +309,10 @@
         "optionSidebar": "Input pane on the left (sidebar)",
         "help": "On narrow screens (under 768px) the input pane always sits below the result. You can also switch from the button at the top right of the result area."
       },
+      "stockShowSketchMask": {
+        "label": "Show sketches and masks in Stock",
+        "help": "When off, you can open them from the lineage graph and the run details."
+      },
       "browserStorage": {
         "heading": "Settings stored in this browser",
         "label": "Reset this browser's settings to defaults",

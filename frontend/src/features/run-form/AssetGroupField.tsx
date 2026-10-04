@@ -29,7 +29,8 @@ export function AssetGroupField({ value, groups, onChange, className }: AssetGro
   const queryClient = useQueryClient()
   const newGroup = useNewGroupInline((group) => {
     // 再取得を待たずに選択を解決できるよう、一覧のキャッシュへ先に差し込む(作り直しは共通部品が行う)。
-    queryClient.setQueryData<AssetGroupListResponse>(ASSET_GROUPS_QUERY_KEY, (old) =>
+    // 種類で数えた一覧(ADR-0035)にも同じく差し込む(新しいグループは空なので件数は 0 のまま正しい)。
+    queryClient.setQueriesData<AssetGroupListResponse>({ queryKey: ASSET_GROUPS_QUERY_KEY }, (old) =>
       old ? { ...old, items: prependAssetGroup(old.items ?? [], group) } : old,
     )
     onChange(group.id)
