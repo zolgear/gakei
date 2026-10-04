@@ -9,7 +9,7 @@ import json
 import sys
 from pathlib import Path
 
-from app.main import app
+from app.main import create_app
 
 
 def main() -> None:
@@ -20,7 +20,7 @@ def main() -> None:
     output_path = Path(sys.argv[1])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        json.dumps(app.openapi(), ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(create_app().openapi(), ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"OpenAPI を書き出しました: {output_path}")
 

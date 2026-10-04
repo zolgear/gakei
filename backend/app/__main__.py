@@ -196,7 +196,9 @@ def main(argv: list[str] | None = None) -> None:
             daemon=True,
         ).start()
 
-    uvicorn.run("app.main:app", host=settings.host, port=settings.port)
+    # import しただけでアプリを作らない(DATA_DIR への書き込みなどの副作用がある)ので、
+    # uvicorn には工場関数を渡す。
+    uvicorn.run("app.main:create_app", factory=True, host=settings.host, port=settings.port)
 
 
 if __name__ == "__main__":

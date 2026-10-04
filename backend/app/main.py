@@ -576,6 +576,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return FileResponse(index_html, headers={"Cache-Control": "no-cache"})
 
     return app
-
-
-app = create_app()
