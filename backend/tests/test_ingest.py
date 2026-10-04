@@ -13,6 +13,8 @@ from app.domain.models import Asset, AssetKind
 from app.domain.storage import LocalFsStore
 from tests.conftest import make_png_bytes
 
+pytestmark = pytest.mark.windows
+
 
 def test_same_content_shares_blob_but_creates_separate_assets(
     db_session_factory: sessionmaker, local_store: LocalFsStore

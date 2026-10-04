@@ -66,3 +66,8 @@ extend-immutable-calls = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 登録していないマーカー(綴りの誤りなど)をエラーにする。
+addopts = ["--strict-markers"]
+markers = [
+    "windows: OS の違いが出るテスト。Windows の CI で dev への push ごとに回す(ADR-0012)",
+]

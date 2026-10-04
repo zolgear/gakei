@@ -16,7 +16,7 @@ GAKEI のバージョン付けとリリースの自動化は ADR-0021 で決め�
 - **`main`(既定ブランチ):** リリース済みの状態だけを指す。利用者が `git clone` や起動スクリプトで手にするのはこちら。`dev` からの PR でしか更新しない。タグは main にだけ打つ。
 - **`dev`:** 開発の集約先。機能や修正は Issue に積み、`dev` から切った作業ブランチで作って PR を `dev` に出す(`gh pr create --base dev ...`。GitHub の PR 作成画面の既定は `main` なので、向き先を `dev` に変える)。
 - `main` と `dev` はルールセットで守られている: PR 経由のみ(承認数は 0)、CI(`test (ubuntu-latest)` と `docker build & smoke test`)の成功が必須、force push と削除は禁止。`v*` のタグは削除・上書きが禁止(管理者はバイパス可)。
-- CI は PR と、`main` / `dev` への push で走る。Windows のテストは push のときだけ。
+- CI は PR と、`main` / `dev` への push と、週1回の定期実行と手動実行で走る。Windows のテストは、作業ブランチの PR(base が `main` 以外)では走らない。`dev` への push では OS の違いが出るテスト(pytest のマーカー `windows`)だけを回し、リリースの PR(`dev` → `main`)、`main` への push、定期実行、手動実行では全部回す(ADR-0012)。
 
 ## リリース手順
 

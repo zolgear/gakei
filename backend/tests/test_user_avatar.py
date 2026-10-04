@@ -14,6 +14,8 @@ from app.domain.avatars import MAX_AVATAR_BYTES, CropError, crop_image
 from app.domain.schemas import CropRect
 from tests.conftest import login_as, make_png_bytes, wait_for_run_terminal
 
+pytestmark = pytest.mark.windows
+
 
 def _upload_avatar(client: TestClient, data: bytes, filename: str = "avatar.png"):
     return client.post(

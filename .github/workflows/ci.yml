@@ -5,14 +5,21 @@ name: CI
 
 # 文書だけの変更でも CI を走らせる。main / dev のルールセットが CI の成功を必須にしており、
 # paths-ignore で CI が走らない PR は「チェック待ち」のままマージできなくなるため(ADR-0021)。
+# 週1回の定期実行と手動実行では、Windows でもテストを全部回す(ADR-0012)。
 on:
   push:
     branches: [main, dev]
   pull_request:
+  schedule:
+    # 月曜 18:00 UTC(日本時間の火曜 3:00)
+    - cron: "0 18 * * 1"
+  workflow_dispatch:
 
-# PR に push を重ねたとき、走りかけの古い実行を打ち切る(main への push は打ち切らない)。
+# PR に push を重ねたとき、走りかけの古い実行を打ち切る(main / dev への push は打ち切らない)。
+# 定期実行と手動実行は実行ごとに別のグループにし、push の実行を打ち切ったり待たせたりしない
+# (同じグループだと、待機中の実行は後から来た実行に置き換えられるため)。
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -26,11 +33,15 @@ jobs:
       fail-fast: false
       matrix:
         # Windows は pytest が Linux の5倍以上遅い(I/O とプロセス起動が遅い)ので、
-        # PR は Linux だけで速く回し、Windows は main へのマージ後にだけ確認する。
-        # Windows 固有の面(run.bat、ランチャー)が壊れてもマージ後に気づけば直せる。
-        os: ${{ github.event_name == 'push' && fromJSON('["ubuntu-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+        # 作業ブランチの PR(base が main 以外)は Linux だけで速く回す。
+        # それ以外(main / dev への push、リリースの PR(base が main)、定期実行、手動実行)は
+        # Windows でも回す。Windows でテストを絞るかどうかは pytest のステップで決める(ADR-0012)。
+        os: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "windows-latest"]') }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
+          ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       - name: Node.js のセットアップ
         uses: actions/setup-node@v7
@@ -58,7 +69,18 @@ jobs:
         working-directory: backend
         # -n auto(pytest-xdist): テストは tmp_path ごとに独立しているので並列で走らせる。
         # 特に Windows ランナーで効く。
-        run: uv run --frozen pytest -q -n auto
+        # Windows で dev への push のときだけ、OS の違いが出るテスト(マーカー windows)に絞る。
+        # Windows でも全部回すのは、main への push、リリースの PR、定期実行、手動実行のとき。
+        # Linux は常に全部回す(ADR-0012)。
+        shell: bash
+        env:
+          PYTEST_MARKER: ${{ (runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/dev') && 'windows' || '' }}
+        run: |
+          if [ -n "$PYTEST_MARKER" ]; then
+            uv run --frozen pytest -q -n auto -m "$PYTEST_MARKER"
+          else
+            uv run --frozen pytest -q -n auto
+          fi
 
       - name: frontend npm ci
         working-directory: frontend
@@ -228,6 +250,9 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v5
+        with:
+          # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
+          ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
       - name: uv のセットアップ
@@ -255,6 +280,9 @@ jobs:
           - 10000:10000
     steps:
       - uses: actions/checkout@v5
+        with:
+          # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
+          ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
       - name: uv のセットアップ
@@ -279,6 +307,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
+          ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       - name: イメージのビルド
         run: docker build -t gakei:ci .
