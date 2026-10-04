@@ -21,6 +21,7 @@ export type SettingsPageId =
   | 'comfyui'
   | 'mcp'
   | 'shareLinks'
+  | 'authentication'
   | 'about'
 
 /** ページ → パスの最後の区切り(`/settings/{slug}`)。旧いハッシュ(`#slug`)も同じ綴り。 */
@@ -36,6 +37,7 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   comfyui: 'comfyui',
   mcp: 'mcp',
   shareLinks: 'share-links',
+  authentication: 'authentication',
   about: 'about',
 }
 
@@ -48,6 +50,7 @@ export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
   'comfyui',
   'mcp',
   'shareLinks',
+  'authentication',
 ]
 
 /** 幅が十分なとき、`/settings` で本文に出すページ。 */

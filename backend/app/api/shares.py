@@ -21,12 +21,11 @@ from sqlalchemy.orm import Session
 from app.api.assets import asset_content_response
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
-from app.config import Settings
-from app.deps import get_session, get_settings, get_store
+from app.auth.runtime import public_base_for
+from app.deps import get_session, get_store
 from app.domain import annotations as annotations_domain
 from app.domain import share_settings
 from app.domain import shares as shares_domain
-from app.domain.mcp_settings import resolve_public_base
 from app.domain.models import Asset, Share
 from app.domain.schemas import (
     PublicShareResponse,
@@ -48,8 +47,8 @@ public_router = APIRouter(prefix="/api/public/shares", tags=["public-shares"])
 PUBLIC_IMAGE_CACHE_CONTROL = "private, max-age=300"
 
 
-def _public_base(settings: Settings, request: Request) -> str:
-    return resolve_public_base(settings.public_base_url, str(request.base_url))
+def _public_base(request: Request) -> str:
+    return public_base_for(request)
 
 
 def _to_row(
@@ -106,7 +105,6 @@ def create_share(
     body: ShareCreateRequest,
     request: Request,
     db: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings),
     user: CurrentUser = Depends(require_user),
 ) -> ShareRow:
     """共有を作る。作れるのは起点の Asset を見られる人だけ(見えなければ 404)。"""
@@ -122,23 +120,20 @@ def create_share(
         raise HTTPException(status_code=404, detail=t("assets.notFound")) from e
     db.commit()
     titles = annotations_domain.bulk_titles(db, [share.root_asset_id])
-    return _to_row(
-        db, share, _public_base(settings, request), count, titles.get(share.root_asset_id)
-    )
+    return _to_row(db, share, _public_base(request), count, titles.get(share.root_asset_id))
 
 
 @router.get("", response_model=ShareListResponse, operation_id="list_shares")
 def list_shares(
     request: Request,
     db: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings),
     user: CurrentUser = Depends(require_user),
 ) -> ShareListResponse:
     """自分の、取り消していない共有(新しい順)。機能が無効のあいだも見られる(取り消せるように)。"""
     shares = shares_domain.list_shares(db, user)
     counts = shares_domain.asset_counts(db, [s.id for s in shares])
     titles = annotations_domain.bulk_titles(db, [s.root_asset_id for s in shares])
-    base = _public_base(settings, request)
+    base = _public_base(request)
     return ShareListResponse(
         items=[
             _to_row(db, s, base, counts.get(s.id, 0), titles.get(s.root_asset_id)) for s in shares

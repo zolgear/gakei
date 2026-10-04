@@ -116,7 +116,7 @@ docker compose up -d --build
   ```bash
   docker run --rm -v gakei-data:/data -v "$PWD":/backup busybox tar czf /backup/gakei-data.tgz -C /data .
   ```
-- **公開範囲:** 既定は `127.0.0.1` のみ。`docker run` の場合は `-p` の指定を変え、リポジトリの `compose.yaml` の場合は `GAKEI_BIND=0.0.0.0`(と `GAKEI_PORT`)で LAN やインターネットに公開できるが、既定では認証がないので、公開する場合は `AUTH_MODE=oidc` で認証を有効にする([docs/auth.md](docs/auth.md))か、認証付きのリバースプロキシを前段に置く。
+- **公開範囲:** 既定は `127.0.0.1` のみ。`docker run` の場合は `-p` の指定を変え、リポジトリの `compose.yaml` の場合は `GAKEI_BIND=0.0.0.0`(と `GAKEI_PORT`)で LAN やインターネットに公開できるが、既定では認証がないので、公開する場合は管理者設定の「認証」で OIDC の認証を有効にする([docs/auth.md](docs/auth.md))か、認証付きのリバースプロキシを前段に置く。
 - **ComfyUI:** 同じホストで動く ComfyUI には `http://host.docker.internal:8188` で接続する(設定 → ComfyUI)。Docker で `host.docker.internal` を使うには `docker run` に `--add-host=host.docker.internal:host-gateway` を足す(リポジトリの `compose.yaml` は設定済み)。
 - **画像を Azure Blob Storage / S3 互換ストレージに置ける(ADR-0028)。** `STORAGE_BACKEND` ほかの環境変数で切り替える。アバターや `secrets.json` のために、ボリューム(`DATA_DIR`)は引き続き要る。設定例と移行手順は [docs/object-storage.md](docs/object-storage.md)。
 - **レプリカは1つだけ。** ジョブの実行が api プロセス内で行われるため、DB が SQLite・PostgreSQL のどちらでも、同じ DB / ボリュームを複数のコンテナで共有しない。
@@ -125,7 +125,7 @@ docker compose up -d --build
 
 ## 注意事項
 
-- **既定では認証がない。** 既定では `127.0.0.1` だけで待ち受け、同じ PC からしか開けない。複数人で使う場合は、`.env` に `AUTH_MODE=oidc` と OIDC の設定(Google、Keycloak など)を書くとログインが必要になり、`AUTH_ADMIN_EMAILS` に載せた人だけが API キーなどの管理者設定を変えられる。手順は [docs/auth.md](docs/auth.md)。
+- **既定では認証がない。** 既定では `127.0.0.1` だけで待ち受け、同じ PC からしか開けない。複数人で使う場合は、管理者設定の「認証」で OIDC の接続(Google、Keycloak など)と管理者のメールを設定し、テストログインに成功してから認証を有効にすると、ログインが必要になる(再起動は要らない)。管理者のメールに載せた人だけが API キーなどの管理者設定を変えられる。`.env` で設定することもでき、誰もログインできなくなったときは `.env` に `AUTH_MODE=none` を書いて再起動すれば一時的に無効にできる。手順は [docs/auth.md](docs/auth.md)。
 - **別の端末から使う場合は、SSH のポートフォワードを使う。** 例: `ssh -L 8000:127.0.0.1:8000 <サーバー>`。`--host 0.0.0.0` で LAN に公開すると、同じネットワークの誰でも、登録したキーで画像を生成したり、キーを差し替えたりできる。
 - **API キーは `data/secrets.json` に平文で保存される。** `data/` を他人と共有しない。
 - **ComfyUI Desktop の既定のポートは 8000 で、GAKEI と重なる。** 両方を使うときは、GAKEI を `--port 8792` などで起動する。

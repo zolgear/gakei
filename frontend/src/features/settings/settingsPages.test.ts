@@ -16,7 +16,7 @@ const ALL = { isAdmin: true, isOidc: true, sharingEnabled: true }
 
 describe('settingsToc / visibleSettingsPages', () => {
   it('管理者には管理者設定のページを ADR-0031 1章の順で出す', () => {
-    expect(settingsToc(ALL).admin).toEqual(['openai', 'llmConnections', 'annotation', 'embeddings', 'comfyui', 'mcp', 'shareLinks'])
+    expect(settingsToc(ALL).admin).toEqual(['openai', 'llmConnections', 'annotation', 'embeddings', 'comfyui', 'mcp', 'shareLinks', 'authentication'])
   })
 
   it('非管理者には管理者設定のページを出さない(見出しごと隠せるよう空にする)', () => {
@@ -45,6 +45,12 @@ describe('settingsToc / visibleSettingsPages', () => {
     }
   })
 
+  it('「認証」は個人モードでは常に、oidc では管理者にだけ出す(ADR-0034 5章)', () => {
+    expect(visibleSettingsPages({ isAdmin: true, isOidc: false, sharingEnabled: false })).toContain('authentication')
+    expect(visibleSettingsPages({ isAdmin: true, isOidc: true, sharingEnabled: false })).toContain('authentication')
+    expect(visibleSettingsPages({ isAdmin: false, isOidc: true, sharingEnabled: false })).not.toContain('authentication')
+  })
+
   it('「GAKEI について」はどの区分にも属さず、常に末尾', () => {
     for (const isAdmin of [true, false]) {
       const pages = visibleSettingsPages({ ...ALL, isAdmin })
@@ -68,6 +74,7 @@ describe('settingsPagePath / settingsPageFromSlug', () => {
     expect(settingsPagePath('shareLinks')).toBe('/settings/share-links')
     expect(settingsPagePath('comfyui')).toBe('/settings/comfyui')
     expect(settingsPagePath('llmConnections')).toBe('/settings/llm-connections')
+    expect(settingsPagePath('authentication')).toBe('/settings/authentication')
   })
 
   it('知らない区切りは null', () => {

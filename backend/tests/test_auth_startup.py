@@ -104,3 +104,30 @@ def test_oidc_mode_https_url_does_not_warn(
     with caplog.at_level("WARNING"):
         check_auth_env(settings)
     assert not any("idp.example.com" in record.message for record in caplog.records)
+
+
+# -- ADR-0034: 画面の設定(DB)で oidc にしたときの検査 ---------------------------------
+
+
+def test_db_mode_missing_values_message_guides_emergency_disable(data_dir: Path) -> None:
+    from dataclasses import replace
+
+    from app.domain.auth_settings import resolve_auth_config
+
+    config = replace(
+        resolve_auth_config(None, Settings(_env_file=None, data_dir=data_dir)),
+        mode="oidc",
+        mode_source="setting",
+    )
+    with pytest.raises(AuthConfigError) as exc_info:
+        check_auth_env(config)
+    message = str(exc_info.value)
+    assert "OIDC_ISSUER" in message
+    assert "AUTH_MODE=none" in message
+
+
+def test_env_mode_missing_values_message_is_unchanged(data_dir: Path) -> None:
+    settings = _settings(data_dir, oidc_issuer=None)
+    with pytest.raises(AuthConfigError) as exc_info:
+        check_auth_env(settings)
+    assert "AUTH_MODE=none" not in str(exc_info.value)

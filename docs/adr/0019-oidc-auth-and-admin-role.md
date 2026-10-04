@@ -13,6 +13,8 @@
 
 ### 1. 認証モードは `.env` で切り替え、既定は個人モード
 
+> **2026-10-04 追記(ADR-0034):** 認証モードと OIDC の各項目は、管理者設定の「認証」ページから設定し、再起動なしで切り替えるようにした。`.env` の値は、DB に値が無い項目の初期値になる。`AUTH_MODE` を `.env` に明示したときだけ、DB より優先する(緊急の無効化は `AUTH_MODE=none` で再起動)。oidc を有効にするには、画面からの管理者のテストログインの成功が要る。
+
 - `AUTH_MODE=none`(既定): これまでどおり認証なし。暗黙の利用者1人が管理者として扱われ、設定はすべて操作できる。
 - `AUTH_MODE=oidc`: OIDC の発行者(Keycloak、Entra ID など OpenID Connect Discovery に対応するもの)でログインしないと `/api/*` を使えない。SPA の `index.html` と `/static/*` は公開のままで、画面側がログイン画面を出す。
 - oidc モードで `OIDC_ISSUER`、`OIDC_CLIENT_ID`、`PUBLIC_BASE_URL` のいずれかが無ければ起動を中止する(ADR-0017 の `PROVIDER` の移行安全策と同じ扱い)。Discovery 文書は初回ログイン時に取得してキャッシュし、IdP が落ちていても起動はできる。
@@ -32,6 +34,8 @@
 - ログアウトは `POST /api/auth/logout`。セッションを消したうえで、IdP の `end_session_endpoint` に `post_logout_redirect_uri` と `client_id` を付けた URL を返し、画面がそこへ遷移する(Keycloak は `id_token_hint` が無くても `client_id` で受ける。ID トークンはサーバーに保存しない)。`end_session_endpoint` が無い IdP では `/` に戻るだけにする。
 
 ### 3. ロールは `user` と `admin` の2つ。Admin は `.env` のメール一覧で決める
+
+> **2026-10-04 追記(ADR-0034):** 管理者のメールと許可ドメインも、画面で設定できるようにした(DB が優先し、無ければ `.env`)。メールの一覧で決め、リクエストのたびに再評価する規則は変えない。
 
 - `AUTH_ADMIN_EMAILS`(カンマ区切り、大文字小文字は無視)に載っているメールアドレスのユーザーが `admin`、それ以外は `user`。
 - ログインのたびに再評価して `app_user.role` を更新する(表示用。ログイン一覧・Run の実行者表示などが使う)。

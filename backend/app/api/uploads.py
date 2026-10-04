@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from app.auth.runtime import get_auth_runtime, public_base_for
 from app.auth.sessions import viewer_for_issuer
 from app.config import Settings
 from app.deps import get_session, get_settings, get_store
@@ -113,6 +114,8 @@ async def _upload(
     if not data:
         raise HTTPException(status_code=422, detail=t("uploads.empty"))
 
+    runtime = get_auth_runtime(request)
+
     def _ingest() -> UploadByUrlResponse:
         claim = upload_tickets_domain.claim_ticket(db, token)
         if claim.ticket is None:
@@ -124,8 +127,8 @@ async def _upload(
         viewer = viewer_for_issuer(
             db,
             ticket.user_id,
-            auth_mode=settings.auth_mode,
-            admin_emails=settings.admin_email_set(),
+            auth_mode=runtime.mode,
+            admin_emails=runtime.admin_email_set(),
         )
         if viewer is None:
             db.rollback()
@@ -149,7 +152,7 @@ async def _upload(
             embedder=getattr(request.app.state, "embedder", None),
         )
         asset = result.asset
-        base = mcp_settings.resolve_public_base(settings.public_base_url, str(request.base_url))
+        base = public_base_for(request)
         return UploadByUrlResponse(
             asset_id=str(asset.id),
             kind=str(asset.kind),

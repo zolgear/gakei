@@ -38,6 +38,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/test-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Test Login
+         * @description 管理者のテストログイン(ADR-0034 2章の3)。設定画面がポップアップで開く。
+         *
+         *     仮登録の接続(無ければ本登録)で IdP へリダイレクトする。結果は `/callback` が
+         *     `window.opener.postMessage` で設定画面に返す。
+         */
+        get: operations["auth_test_login"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/callback": {
         parameters: {
             query?: never;
@@ -1129,6 +1152,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Auth Settings */
+        get: operations["get_auth_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Auth Settings
+         * @description ADR-0031 3章の規則どおり、全項目を検査してから保存する(途中まで保存しない)。
+         */
+        patch: operations["update_auth_settings"];
+        trace?: never;
+    };
+    "/api/settings/auth/connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Auth Connection
+         * @description 仮登録(ADR-0034 2章の1)。テストログインに成功するまで、実効の設定は変わらない。
+         */
+        put: operations["set_auth_connection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/auth/connection/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Discard Auth Pending Connection */
+        delete: operations["discard_auth_pending_connection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/llm-connections": {
         parameters: {
             query?: never;
@@ -2021,6 +2102,57 @@ export interface components {
              */
             ingest_outcome: "created" | "matched_existing";
         };
+        /** AuthClientSecretStatus */
+        AuthClientSecretStatus: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source?: ("file" | "env") | null;
+        };
+        /**
+         * AuthConnectionRequest
+         * @description `PUT /api/settings/auth/connection`(仮登録)の本文。
+         *
+         *     `client_secret` は、省略すると今のもの(仮登録があればそのもの、無ければ本登録のもの)を
+         *     引き継ぎ、空文字なら public client(シークレットなし)、値があれば差し替える。
+         */
+        AuthConnectionRequest: {
+            /** Issuer */
+            issuer: string;
+            /** Client Id */
+            client_id: string;
+            /** Scopes */
+            scopes: string;
+            /** Public Base Url */
+            public_base_url: string;
+            /** Client Secret */
+            client_secret?: string | null;
+        };
+        /**
+         * AuthConnectionView
+         * @description 本登録の接続。`configured` は発行者・クライアント ID・`PUBLIC_BASE_URL` が揃っているか。
+         */
+        AuthConnectionView: {
+            /** Configured */
+            configured: boolean;
+            issuer: components["schemas"]["AuthTextSetting"];
+            client_id: components["schemas"]["AuthTextSetting"];
+            scopes: components["schemas"]["AuthTextSetting"];
+            public_base_url: components["schemas"]["AuthTextSetting"];
+            client_secret: components["schemas"]["AuthClientSecretStatus"];
+            /** Redirect Uri */
+            redirect_uri?: string | null;
+        };
+        /** AuthListSetting */
+        AuthListSetting: {
+            /** Value */
+            value: string[];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+        };
         /**
          * AuthLogoutResponse
          * @description `POST /api/auth/logout`。SPA はこの URL に `window.location.assign()` で遷移する。
@@ -2042,6 +2174,95 @@ export interface components {
             mode: "none" | "oidc";
             user?: components["schemas"]["AuthUser"] | null;
         };
+        /** AuthModeSetting */
+        AuthModeSetting: {
+            /**
+             * Value
+             * @enum {string}
+             */
+            value: "none" | "oidc";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+            /** Locked */
+            locked: boolean;
+        };
+        /**
+         * AuthPendingConnectionView
+         * @description 仮登録の接続(テストログインに成功するまで使われない)。
+         */
+        AuthPendingConnectionView: {
+            /** Issuer */
+            issuer: string;
+            /** Client Id */
+            client_id: string;
+            /** Scopes */
+            scopes: string;
+            /** Public Base Url */
+            public_base_url: string;
+            client_secret: components["schemas"]["AuthClientSecretStatus"];
+            /** Redirect Uri */
+            redirect_uri: string;
+            /** Created At */
+            created_at?: string | null;
+        };
+        /** AuthSessionHoursSetting */
+        AuthSessionHoursSetting: {
+            /** Value */
+            value: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+            /** Min */
+            min: number;
+            /** Max */
+            max: number;
+        };
+        /**
+         * AuthSettingsResponse
+         * @description `GET /api/settings/auth`(管理者だけ)。
+         */
+        AuthSettingsResponse: {
+            mode: components["schemas"]["AuthModeSetting"];
+            connection: components["schemas"]["AuthConnectionView"];
+            pending?: components["schemas"]["AuthPendingConnectionView"] | null;
+            verified?: components["schemas"]["AuthVerifiedView"] | null;
+            admin_emails: components["schemas"]["AuthListSetting"];
+            allowed_email_domains: components["schemas"]["AuthListSetting"];
+            session_hours: components["schemas"]["AuthSessionHoursSetting"];
+            /** Enable Blockers */
+            enable_blockers: ("env_locked" | "no_connection" | "not_verified" | "admin_emails_empty" | "verified_email_not_admin")[];
+        };
+        /**
+         * AuthSettingsUpdateRequest
+         * @description `PATCH /api/settings/auth` の本文。省略した項目は変更せず、明示的な `null` は保存済みの
+         *     値を消して `.env`・既定値に戻す(`model_fields_set` で区別する)。値の妥当性は
+         *     `app/domain/auth_settings.py` が検証し、i18n 対応のメッセージで 422 にする。
+         */
+        AuthSettingsUpdateRequest: {
+            /** Mode */
+            mode?: ("none" | "oidc") | null;
+            /** Admin Emails */
+            admin_emails?: string[] | null;
+            /** Allowed Email Domains */
+            allowed_email_domains?: string[] | null;
+            /** Session Hours */
+            session_hours?: number | null;
+        };
+        /** AuthTextSetting */
+        AuthTextSetting: {
+            /** Value */
+            value: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+        };
         /** AuthUser */
         AuthUser: {
             /**
@@ -2060,6 +2281,21 @@ export interface components {
             role: "user" | "admin";
             /** Avatar Url */
             avatar_url?: string | null;
+        };
+        /**
+         * AuthVerifiedView
+         * @description テストログインに成功した記録。`matches_current` は今の本登録の接続でのテストか。
+         */
+        AuthVerifiedView: {
+            /** Email */
+            email: string;
+            /**
+             * Verified At
+             * Format: date-time
+             */
+            verified_at: string;
+            /** Matches Current */
+            matches_current: boolean;
         };
         /**
          * AvatarFromAssetRequest
@@ -3131,7 +3367,7 @@ export interface components {
             /** Value */
             value?: string | null;
             /** Source */
-            source?: ("env" | "file") | null;
+            source?: ("file" | "env") | null;
         };
         /** OpenAIBaseUrlUpdateRequest */
         OpenAIBaseUrlUpdateRequest: {
@@ -3145,7 +3381,7 @@ export interface components {
             /** Configured */
             configured: boolean;
             /** Source */
-            source?: ("env" | "file") | null;
+            source?: ("file" | "env") | null;
         };
         /** OpenAIKeyUpdateRequest */
         OpenAIKeyUpdateRequest: {
@@ -4410,6 +4646,37 @@ export interface operations {
             header?: never;
             path?: never;
             cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auth_test_login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -7143,6 +7410,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_auth_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_auth_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_auth_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_auth_pending_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSettingsResponse"];
                 };
             };
             /** @description Validation Error */

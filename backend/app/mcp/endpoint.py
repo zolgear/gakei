@@ -21,7 +21,7 @@ from starlette.types import Receive, Scope, Send
 
 from app.auth.deps import bearer_token
 from app.auth.identity import LOCAL_ADMIN
-from app.config import Settings
+from app.auth.runtime import AuthRuntime
 from app.domain import api_tokens as api_tokens_domain
 from app.domain import mcp_settings
 from app.i18n import t
@@ -79,7 +79,7 @@ class McpEndpoint:
             return
         request = Request(scope, receive)
         state = request.app.state
-        settings: Settings = state.settings
+        runtime: AuthRuntime = state.auth_runtime
         session_factory = state.session_factory
 
         def _is_enabled() -> bool:
@@ -91,14 +91,14 @@ class McpEndpoint:
             return
 
         if not origin_allowed(
-            request.headers.get("origin"), request.headers.get("host"), settings.public_base_url
+            request.headers.get("origin"), request.headers.get("host"), runtime.public_base_url
         ):
             await JSONResponse({"detail": t("mcp.originForbidden")}, status_code=403)(
                 scope, receive, send
             )
             return
 
-        if settings.auth_mode == "none":
+        if not runtime.is_oidc:
             user = LOCAL_ADMIN
             token_id = None
         else:
@@ -110,7 +110,7 @@ class McpEndpoint:
             def _authenticate() -> api_tokens_domain.TokenPrincipal | None:
                 with session_factory() as db:
                     principal = api_tokens_domain.authenticate(
-                        db, raw, settings.admin_email_set(), settings.allowed_email_domain_set()
+                        db, raw, runtime.admin_email_set(), runtime.allowed_email_domain_set()
                     )
                     db.commit()
                     return principal
@@ -126,7 +126,7 @@ class McpEndpoint:
             user=user,
             api_token_id=token_id,
             base_url=mcp_settings.resolve_public_base(
-                settings.public_base_url, str(request.base_url)
+                runtime.public_base_url, str(request.base_url)
             ),
             state=state,
         )

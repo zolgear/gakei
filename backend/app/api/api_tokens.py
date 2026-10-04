@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
-from app.config import Settings
-from app.deps import get_session, get_settings
+from app.auth.runtime import AuthRuntime, get_auth_runtime
+from app.deps import get_session
 from app.domain import api_tokens as api_tokens_domain
 from app.domain.models import ApiToken
 from app.domain.schemas import (
@@ -29,8 +29,8 @@ from app.i18n import t
 router = APIRouter(prefix="/api/users/me/api-tokens", tags=["api-tokens"])
 
 
-def _require_oidc_user(settings: Settings, user: CurrentUser) -> uuid.UUID:
-    if settings.auth_mode != "oidc" or user.id is None:
+def _require_oidc_user(runtime: AuthRuntime, user: CurrentUser) -> uuid.UUID:
+    if not runtime.is_oidc or user.id is None:
         raise HTTPException(status_code=404, detail=t("auth.disabled"))
     return user.id
 
@@ -46,11 +46,11 @@ def _to_row(token: ApiToken) -> ApiTokenRow:
 
 @router.get("", response_model=ApiTokenListResponse, operation_id="list_api_tokens")
 def list_api_tokens(
-    settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> ApiTokenListResponse:
-    user_id = _require_oidc_user(settings, user)
+    user_id = _require_oidc_user(runtime, user)
     tokens = api_tokens_domain.list_active_tokens(db, user_id)
     return ApiTokenListResponse(items=[_to_row(tok) for tok in tokens])
 
@@ -60,11 +60,11 @@ def list_api_tokens(
 )
 def create_api_token(
     body: ApiTokenCreateRequest,
-    settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> ApiTokenCreateResponse:
-    user_id = _require_oidc_user(settings, user)
+    user_id = _require_oidc_user(runtime, user)
     try:
         token, raw = api_tokens_domain.issue_token(db, user_id, body.name)
     except api_tokens_domain.ApiTokenNameError as e:
@@ -77,12 +77,12 @@ def create_api_token(
 @router.delete("/{token_id}", status_code=204, operation_id="revoke_api_token")
 def revoke_api_token(
     token_id: uuid.UUID,
-    settings: Settings = Depends(get_settings),
+    runtime: AuthRuntime = Depends(get_auth_runtime),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> None:
     """失効させる(行は消さない。Run の `api_token_id` から参照されるため)。"""
-    user_id = _require_oidc_user(settings, user)
+    user_id = _require_oidc_user(runtime, user)
     if not api_tokens_domain.revoke_token(db, user_id, token_id):
         raise HTTPException(status_code=404, detail=t("apiTokens.notFound"))
     db.commit()
