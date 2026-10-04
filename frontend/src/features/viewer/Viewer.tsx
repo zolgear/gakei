@@ -18,6 +18,7 @@ import { isMobileViewport } from '../../lib/viewport'
 import { useAddToInputs } from '../run-form/useAddToInputs'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { AddToInputIcon, DownloadIcon, LineageIcon, ShareLinkIcon, TrashIcon } from '../../components/icons'
 import { ToastHost, useToast } from '../../components/Toast'
 import { formatBytes, formatDateTime } from '../../lib/format'
 import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/assetRestore'
@@ -214,7 +215,58 @@ export function Viewer({ assetId }: ViewerProps) {
                 {restoreError && <p className={styles.deleteErrorText}>{restoreError}</p>}
               </div>
             )}
-            <h2 className={styles.heading}>Asset</h2>
+            {/* 見出しの行はパネルの上端に固定し、よく使う操作をアイコンで並べる(削除だけは末尾)。 */}
+            <div className={styles.headerRow}>
+              <h2 className={styles.heading}>Asset</h2>
+              <div className={styles.headerActions}>
+                <a
+                  className={styles.iconButton}
+                  href={assetUrl(asset.id, 'original', { download: true })}
+                  aria-label={t.viewer.downloadOriginal}
+                  title={t.viewer.downloadOriginal}
+                >
+                  <DownloadIcon />
+                </a>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={t.viewer.useAsInput}
+                  title={t.viewer.useAsInput}
+                  onClick={() => addToInputs.request(asset.id)}
+                  disabled={Boolean(asset.deleted_at)}
+                >
+                  <AddToInputIcon />
+                </button>
+                <Link
+                  to={`/lineage/${asset.id}`}
+                  className={styles.iconButton}
+                  aria-label={t.viewer.viewLineageGraph}
+                  title={t.viewer.viewLineageGraph}
+                  onClick={(e) => {
+                    // デスクトップでサイドバーの系列パネルが既に同じ起点で開いているなら、
+                    // 同じグラフが二重に出るだけなので `/lineage` へは遷移せず、サイドバー側を
+                    // (既に開いているのでほぼ無害な)フォーカスに留める。
+                    if (!isMobileViewport() && selectedPanel === 'graph' && originAssetId === asset.id) {
+                      e.preventDefault()
+                      openPanel('graph')
+                    }
+                  }}
+                >
+                  <LineageIcon />
+                </Link>
+                {shareEnabled && !asset.deleted_at && (
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t.share.button}
+                    title={t.share.buttonTooltip}
+                    onClick={() => setShareOpen(true)}
+                  >
+                    <ShareLinkIcon />
+                  </button>
+                )}
+              </div>
+            </div>
             {outputNav && (
               <div className={styles.outputNav}>
                 <div className={styles.outputNavHeader}>
@@ -341,57 +393,19 @@ export function Viewer({ assetId }: ViewerProps) {
             <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
             {embeddingCaps && supportsSimilar(asset) && <SimilarAssetsSection key={asset.id} assetId={asset.id} />}
 
-            <div className={styles.actions}>
-              <a
-                className={styles.actionButton}
-                href={assetUrl(asset.id, 'original', { download: true })}
-              >
-                {t.viewer.downloadOriginal}
-              </a>
-              <button
-                type="button"
-                className={styles.actionButton}
-                onClick={() => addToInputs.request(asset.id)}
-                disabled={Boolean(asset.deleted_at)}
-              >
-                {t.viewer.useAsInput}
-              </button>
-              <Link
-                to={`/lineage/${asset.id}`}
-                className={styles.actionButton}
-                onClick={(e) => {
-                  // デスクトップでサイドバーの系列パネルが既に同じ起点で開いているなら、
-                  // 同じグラフが二重に出るだけなので `/lineage` へは遷移せず、サイドバー側を
-                  // (既に開いているのでほぼ無害な)フォーカスに留める。
-                  if (!isMobileViewport() && selectedPanel === 'graph' && originAssetId === asset.id) {
-                    e.preventDefault()
-                    openPanel('graph')
-                  }
-                }}
-              >
-                {t.viewer.viewLineageGraph}
-              </Link>
-              {shareEnabled && !asset.deleted_at && (
+            {!asset.deleted_at && (
+              <div className={styles.actions}>
                 <button
                   type="button"
-                  className={styles.actionButton}
-                  title={t.share.buttonTooltip}
-                  onClick={() => setShareOpen(true)}
-                >
-                  {t.share.button}
-                </button>
-              )}
-              {!asset.deleted_at && (
-                <button
-                  type="button"
-                  className={`${styles.actionButton} ${styles.deleteButton}`}
+                  className={styles.deleteButton}
                   onClick={() => setDeleteConfirmOpen(true)}
                   disabled={deleteMutation.isPending}
                 >
+                  <TrashIcon />
                   {t.viewer.delete}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
             {deleteError && <p className={styles.deleteErrorText}>{deleteError}</p>}
           </>
         )}
