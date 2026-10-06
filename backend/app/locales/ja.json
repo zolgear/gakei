@@ -368,6 +368,7 @@
     "disabled": "MCP サーバーは無効です。管理者設定の「MCP」で有効にしてください。",
     "tokenRequired": "アクセストークンが必要です(Authorization: Bearer <token>)。",
     "tokenInvalid": "アクセストークンが無効か、失効しています。",
+    "tokenExpired": "アクセストークンの有効期限が切れています。ユーザー設定の「アクセストークン」で新しいトークンを発行してください。",
     "originForbidden": "この Origin からの MCP の呼び出しは許可されていません。"
   },
   "annotations": {

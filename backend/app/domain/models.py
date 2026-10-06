@@ -154,6 +154,10 @@ class ApiToken(Base):
     """MCP 用のアクセストークン(ADR-0023 2章。認証モードのみ)。DB には SHA-256 のハッシュだけを
     保存し、値そのものは発行時に1回だけ返す。証跡ではないので失効(`revoked_at`)と最終使用日時
     (`last_used_at`)は更新してよい。行は消さない(Run の `api_token_id` から参照されるため)。
+
+    有効期限(`expires_at`。null は無期限)と権限(`scope`。`full` = すべて、`read` = 読み取り
+    のみ)は発行のときに1回だけ書き、後から変えない(ADR-0023 11章)。11章より前に発行した
+    トークンは無期限・`full`。
     """
 
     __tablename__ = "api_token"
@@ -167,6 +171,10 @@ class ApiToken(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     last_used_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    scope: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="full", server_default="full"
+    )
 
 
 class UploadTicket(Base):

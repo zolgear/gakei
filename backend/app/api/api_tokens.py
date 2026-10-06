@@ -2,7 +2,8 @@
 全エンドポイントを 404(`t("auth.disabled")`)にする(`api/users.py` と同じ扱い)。
 
 自分のトークンだけを発行・一覧・失効できる。値は発行時の応答でだけ返し、DB には SHA-256 の
-ハッシュだけを保存する。
+ハッシュだけを保存する。発行のときに有効期限と権限を選ぶ(ADR-0023 11章)。期限は後から
+延ばさない(延ばしたいときは新しいトークンを発行する)。
 """
 
 from __future__ import annotations
@@ -41,6 +42,9 @@ def _to_row(token: ApiToken) -> ApiTokenRow:
         name=token.name,
         created_at=token.created_at,
         last_used_at=token.last_used_at,
+        expires_at=token.expires_at,
+        scope="read" if token.scope == api_tokens_domain.SCOPE_READ else "full",
+        expired=api_tokens_domain.is_expired(token),
     )
 
 
@@ -66,7 +70,9 @@ def create_api_token(
 ) -> ApiTokenCreateResponse:
     user_id = _require_oidc_user(runtime, user)
     try:
-        token, raw = api_tokens_domain.issue_token(db, user_id, body.name)
+        token, raw = api_tokens_domain.issue_token(
+            db, user_id, body.name, expires_in_days=body.expires_in_days, scope=body.scope
+        )
     except api_tokens_domain.ApiTokenNameError as e:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e)) from e
