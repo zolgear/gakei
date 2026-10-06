@@ -45,6 +45,11 @@ VALID_TYPES = frozenset({"run", "asset", "prompt_set"})
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 50
 SNIPPET_CONTEXT = 60
+# 検索語の上限。語ごとに LIKE を作るので、長すぎる語は SQLite の LIKE の上限(パターン
+# 50000 バイト)に、多すぎる語は式の深さの上限(1000)に当たって DB のエラーになる。
+# 人が打つ・貼る検索語には十分な大きさにして、超えたら入力の誤りとして断る。
+MAX_QUERY_TERMS = 50
+MAX_TERM_LENGTH = 1000
 
 _LIKE_ESCAPE_CHAR = "\\"
 
@@ -54,11 +59,17 @@ class InvalidSearchQueryError(ValueError):
 
 
 def parse_query_terms(q: str) -> list[str]:
-    """前後の空白を除き、空白区切りで単語に分ける。空なら InvalidSearchQueryError。"""
+    """前後の空白を除き、空白区切りで単語に分ける。空か、語が多すぎる・長すぎるなら
+    InvalidSearchQueryError。"""
     stripped = q.strip()
     if not stripped:
         raise InvalidSearchQueryError(t("search.emptyQuery"))
-    return stripped.split()
+    terms = stripped.split()
+    if len(terms) > MAX_QUERY_TERMS:
+        raise InvalidSearchQueryError(t("search.tooManyTerms", max=MAX_QUERY_TERMS))
+    if any(len(term) > MAX_TERM_LENGTH for term in terms):
+        raise InvalidSearchQueryError(t("search.termTooLong", max=MAX_TERM_LENGTH))
+    return terms
 
 
 def parse_types(raw: str | None) -> set[str]:

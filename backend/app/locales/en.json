@@ -45,6 +45,8 @@
   },
   "search": {
     "emptyQuery": "q cannot be empty",
+    "tooManyTerms": "Too many words in q (maximum {max})",
+    "termTooLong": "A word in q is too long (maximum {max} characters per word)",
     "unknownTypes": "Unknown value(s) in types: {types} (valid values: {validTypes})"
   },
   "comfyui": {

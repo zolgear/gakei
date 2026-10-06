@@ -102,7 +102,8 @@ def ingest(
     try:
         image = Image.open(io.BytesIO(data))
         image.load()  # ヘッダーだけでなく実際にデコードして検証する
-    except (PillowUnidentifiedImageError, OSError) as e:
+    except (PillowUnidentifiedImageError, OSError, Image.DecompressionBombError) as e:
+        # 寸法が Pillow の上限(`Image.MAX_IMAGE_PIXELS` の2倍)を超える画像は開く時点で断られる。
         raise IngestError(t("assets.cannotReadImage")) from e
 
     fmt = image.format

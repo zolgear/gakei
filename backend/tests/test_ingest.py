@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import struct
+import zlib
 
 import pytest
 from PIL import Image
@@ -31,6 +33,23 @@ def test_same_content_shares_blob_but_creates_separate_assets(
 
         rows = session.query(Asset).all()
         assert len(rows) == 2
+
+
+def png_with_declared_size(width: int, height: int) -> bytes:
+    """IHDR の寸法だけを書き換えた PNG(展開爆弾の形。中身は 1x1)。"""
+    data = bytearray(make_png_bytes(1, 1, (1, 2, 3)))
+    # シグネチャ 8 バイト + 長さ 4 + "IHDR" 4 の後ろが幅・高さ。CRC は "IHDR" から数える。
+    data[16:24] = struct.pack(">II", width, height)
+    data[29:33] = struct.pack(">I", zlib.crc32(bytes(data[12:29])) & 0xFFFFFFFF)
+    return bytes(data)
+
+
+def test_ingest_rejects_decompression_bomb(
+    db_session_factory: sessionmaker, local_store: LocalFsStore
+) -> None:
+    """Pillow の上限を超える寸法は、想定外の例外ではなく IngestError にする(Issue #82)。"""
+    with db_session_factory() as session, pytest.raises(IngestError):
+        ingest(session, local_store, png_with_declared_size(60_000, 60_000), AssetKind.UPLOAD)
 
 
 def test_ingest_rejects_non_image_bytes(

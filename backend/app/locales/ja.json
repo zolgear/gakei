@@ -45,6 +45,8 @@
   },
   "search": {
     "emptyQuery": "q は空にできません",
+    "tooManyTerms": "q の語が多すぎます(最大 {max} 語)",
+    "termTooLong": "q に長すぎる語があります(1語あたり最大 {max} 文字)",
     "unknownTypes": "types に未知の値があります: {types}(有効な値: {validTypes})"
   },
   "comfyui": {

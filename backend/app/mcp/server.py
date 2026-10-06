@@ -1585,12 +1585,44 @@ def _reject_nul_args[F: Callable[..., Any]](fn: F) -> F:
     return cast(F, wrapper)
 
 
+# ツールのエラーの文言の上限(文字数)。引数の値(未知のモデル名など)をそのまま含む文言が
+# あるので、巨大な引数がそのまま返ってエージェントの文脈を埋めないよう、中ほどを省く。
+ERROR_MESSAGE_MAX_CHARS = 1000
+
+
+def clip_error_message(message: str, limit: int = ERROR_MESSAGE_MAX_CHARS) -> str:
+    """長すぎる文言の中ほどを省く(先頭と末尾は残す。末尾に直し方の案内があることが多い)。"""
+    if len(message) <= limit:
+        return message
+    head = limit * 2 // 3
+    tail = limit - head
+    omitted = len(message) - head - tail
+    return f"{message[:head]}... ({omitted} characters omitted) ...{message[-tail:]}"
+
+
+def _clip_tool_errors[F: Callable[..., Any]](fn: F) -> F:
+    """ツールが出す `ToolError` の文言を `clip_error_message` で切り詰める。"""
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await fn(*args, **kwargs)
+        except ToolError as e:
+            clipped = clip_error_message(str(e))
+            if clipped == str(e):
+                raise
+            raise ToolError(clipped) from e
+
+    return cast(F, wrapper)
+
+
 def build_mcp_server() -> MCPServer:
     server = MCPServer(name="gakei", version=get_version(), instructions=_INSTRUCTIONS)
 
     def add_tool(fn: Callable[..., Any], **kwargs: Any) -> None:
-        # すべてのツールの引数に NUL の検査を掛ける(`_reject_nul_args`)。
-        server.add_tool(_reject_nul_args(fn), **kwargs)
+        # すべてのツールの引数に NUL の検査を掛け(`_reject_nul_args`)、エラーの文言の長さを
+        # 抑える(`_clip_tool_errors`)。
+        server.add_tool(_clip_tool_errors(_reject_nul_args(fn)), **kwargs)
 
     add_tool(get_capabilities, title="Get capabilities", annotations=_READ_ONLY)
     add_tool(
