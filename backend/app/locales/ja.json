@@ -526,5 +526,27 @@
     "queryImageEmpty": "画像ファイルが空です",
     "queryImageTooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
     "queryImageFailed": "画像の埋め込みを計算できませんでした: {error}"
+  },
+  "lineageExport": {
+    "contentMissing": "系列に含まれる画像の原本が保存先に見つからないため、書き出せません"
+  },
+  "lineageImport": {
+    "zipTooLarge": "ZIP が大きすぎます(上限 1 GiB)",
+    "notZip": "ZIP として読めません",
+    "corrupted": "ZIP が壊れているか、暗号化されています",
+    "encrypted": "暗号化された ZIP は取り込めません",
+    "tooManyEntries": "ZIP に含まれるファイルが多すぎます(画像は {limit} 枚まで)",
+    "duplicateEntries": "ZIP に同じ名前のファイルが複数あります",
+    "suspiciousCompression": "ZIP の圧縮率が異常なため取り込めません",
+    "tooLarge": "ZIP を展開した大きさが上限を超えています",
+    "fileTooLarge": "ZIP の中に大きすぎるファイルがあります(1 ファイル 50 MB 未満)",
+    "manifestMissing": "GAKEI の系列の ZIP ではありません(manifest.json がありません)",
+    "manifestTooLarge": "manifest.json が大きすぎます",
+    "unsupportedFormat": "この形式・版の ZIP は取り込めません: {format}",
+    "invalidManifest": "manifest.json の内容が正しくありません({reason})",
+    "fileMissing": "ZIP に画像がありません: {name}",
+    "fileMismatch": "画像の内容が manifest.json と一致しません(書き換えられた可能性があります): {name}",
+    "conflictsWithEarlierImport": "以前に取り込んだ同じ Run の出力と内容が違います",
+    "invalidImage": "画像を取り込めません: {reason}"
   }
 }

@@ -33,6 +33,7 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "download_ticket",
         "share",
         "share_asset",
+        "run_import",
         "alembic_version",
     } <= tables
 
@@ -1046,4 +1047,36 @@ def test_migration_0026_adds_api_token_expiry_and_scope(empty_database_url: str)
     columns = {c["name"] for c in sa_inspect(engine).get_columns("api_token")}
     assert "expires_at" not in columns
     assert "scope" not in columns
+    engine.dispose()
+
+
+def test_migration_0027_adds_run_import(empty_database_url: str) -> None:
+    """ADR-0037: 0026 の DB に upgrade head で run_import が加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0026")
+    engine = create_engine(empty_database_url)
+    assert "run_import" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "run_import" in set(inspector.get_table_names())
+    columns = {c["name"]: c for c in inspector.get_columns("run_import")}
+    assert columns["source_run_id"]["nullable"] is False
+    assert columns["imported_at"]["nullable"] is False
+    assert columns["source_creator_name"]["nullable"] is True
+    indexes = {i["name"] for i in inspector.get_indexes("run_import")}
+    assert "ix_run_import_source_run_id" in indexes
+    engine.dispose()
+
+    command.downgrade(cfg, "0026")
+    engine = create_engine(empty_database_url)
+    assert "run_import" not in set(sa_inspect(engine).get_table_names())
     engine.dispose()

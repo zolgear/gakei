@@ -526,5 +526,27 @@
     "queryImageEmpty": "The image file is empty",
     "queryImageTooManyPixels": "The image is too large (up to {max} pixels)",
     "queryImageFailed": "Could not compute the embedding of the image: {error}"
+  },
+  "lineageExport": {
+    "contentMissing": "Cannot export: an original image in this lineage is missing from storage"
+  },
+  "lineageImport": {
+    "zipTooLarge": "The ZIP is too large (limit: 1 GiB)",
+    "notZip": "The file cannot be read as a ZIP",
+    "corrupted": "The ZIP is corrupted or encrypted",
+    "encrypted": "Encrypted ZIP files cannot be imported",
+    "tooManyEntries": "The ZIP contains too many files (up to {limit} images)",
+    "duplicateEntries": "The ZIP contains several files with the same name",
+    "suspiciousCompression": "The ZIP has an abnormal compression ratio and cannot be imported",
+    "tooLarge": "The uncompressed size of the ZIP exceeds the limit",
+    "fileTooLarge": "The ZIP contains a file that is too large (each file must be under 50 MB)",
+    "manifestMissing": "This is not a GAKEI lineage ZIP (manifest.json is missing)",
+    "manifestTooLarge": "manifest.json is too large",
+    "unsupportedFormat": "This ZIP format or version cannot be imported: {format}",
+    "invalidManifest": "manifest.json is invalid ({reason})",
+    "fileMissing": "An image is missing from the ZIP: {name}",
+    "fileMismatch": "An image does not match manifest.json (it may have been modified): {name}",
+    "conflictsWithEarlierImport": "An output differs from the one imported earlier for the same run",
+    "invalidImage": "Cannot import an image: {reason}"
   }
 }

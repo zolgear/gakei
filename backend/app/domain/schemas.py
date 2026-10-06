@@ -557,10 +557,24 @@ class RunSummary(BaseModel):
     text_outputs: list[RunTextOutput] | None = None
 
 
+class RunImportInfo(BaseModel):
+    """系列の ZIP から取り込んだ Run の、書き出し元での記録(ADR-0037 2章)。ZIP の自己申告で
+    検証していない。"""
+
+    source_run_id: uuid.UUID
+    source_creator_name: str | None = None
+    source_created_at: datetime | None = None
+    source_finished_at: datetime | None = None
+    source_gakei_version: str | None = None
+    imported_at: datetime
+
+
 class RunDetail(RunSummary):
     deployment: str | None = None
     provider_request_id: str | None = None
     inputs: list[RunInputRef] = Field(default_factory=list)
+    # 系列の ZIP から取り込んだ Run(`origin = 'import'`)だけ。それ以外は null(ADR-0037)。
+    imported: RunImportInfo | None = None
 
 
 class RunListResponse(BaseModel):
@@ -623,6 +637,8 @@ class LineageRunInfo(BaseModel):
     error_code: str | None = None
     # 埋め込み(未検証)ノードには無いので null(ADR-0014 6章)。
     queued_at: datetime | None = None
+    # 系列の ZIP から取り込んだ Run(`origin = 'import'`。ADR-0037)。グラフで印を付ける。
+    imported: bool = False
 
 
 class LineageNode(BaseModel):
@@ -688,6 +704,31 @@ class RunLineageResponse(BaseModel):
     nodes: list[LineageNode] = Field(default_factory=list)
     edges: list[LineageEdge] = Field(default_factory=list)
     truncated: bool = False
+
+
+# -- 系列の持ち出しと取り込み(ADR-0037) -----------------------------------
+
+
+class LineageExportPreviewResponse(BaseModel):
+    """書き出す前の確認。範囲に含まれる画像と Run の数、原本の合計バイト数。"""
+
+    scope: Literal["ancestors", "lineage"]
+    asset_count: int
+    run_count: int
+    total_bytes: int
+    # 系列グラフのノード数の上限(1000)で打ち切ったか(共有リンクと同じ)。
+    truncated: bool = False
+
+
+class LineageImportResponse(BaseModel):
+    """取り込みの結果。`root_asset_id` は取り込んだ側(この GAKEI)の起点の Asset。"""
+
+    root_asset_id: uuid.UUID
+    asset_count: int
+    run_count: int
+    # 新しく作った Asset と Run の数(既にあったものを使った分は含まない)。
+    created_asset_count: int
+    created_run_count: int
 
 
 # -- Prompt sets (ADR-0009) ----------------------------------------------

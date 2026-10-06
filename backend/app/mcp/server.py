@@ -68,6 +68,7 @@ from app.domain.lineage import (
 )
 from app.domain.lineage_mermaid import LineageGraph, MermaidOptions, render_lineage_mermaid
 from app.domain.models import (
+    RUN_ORIGIN_IMPORT,
     Asset,
     AssetGroupMember,
     AssetKind,
@@ -442,7 +443,10 @@ def _run_cost(
     mc: McpRequestContext, db: Session, run: Run, inputs: list[RunInput]
 ) -> dict[str, Any] | None:
     """Run の料金の目安(分かる場合だけ)。成功した Run は実際の usage × 単価、それ以外の
-    実行前・実行中の Run はパラメーターからの見積もり。失敗・取り消しは null。"""
+    実行前・実行中の Run はパラメーターからの見積もり。失敗・取り消しは null。系列の ZIP から
+    取り込んだ Run(ADR-0037)は、この GAKEI で料金が掛かっていないので null。"""
+    if run.origin == RUN_ORIGIN_IMPORT:
+        return None
     if not _supports_pricing(mc, run.provider):
         return None
     if run.usage:
