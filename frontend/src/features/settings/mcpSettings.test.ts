@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  API_TOKEN_EXPIRY_OPTIONS,
+  DEFAULT_API_TOKEN_EXPIRY,
+  DEFAULT_API_TOKEN_SCOPE,
+  apiTokenExpiryDays,
   buildClaudeMcpAddCommand,
   formatLastUsed,
+  formatTokenExpiry,
+  isApiTokenExpiryOption,
+  isApiTokenScope,
   isValidApiTokenName,
   isValidHourlyLimitInput,
 } from './mcpSettings'
@@ -60,5 +67,32 @@ describe('formatLastUsed', () => {
     const label = formatLastUsed('2026-09-28T01:02:03Z', '未使用')
     expect(label).not.toBe('未使用')
     expect(label).not.toBe('-')
+  })
+})
+
+describe('アクセストークンの有効期限と権限(ADR-0023 11章)', () => {
+  it('既定は 90 日・すべて', () => {
+    expect(DEFAULT_API_TOKEN_EXPIRY).toBe('90')
+    expect(apiTokenExpiryDays(DEFAULT_API_TOKEN_EXPIRY)).toBe(90)
+    expect(DEFAULT_API_TOKEN_SCOPE).toBe('full')
+  })
+
+  it('選択肢を API の日数に変換する(無期限は null)', () => {
+    expect(API_TOKEN_EXPIRY_OPTIONS.map(apiTokenExpiryDays)).toEqual([30, 90, 365, null])
+  })
+
+  it('select の値を検証する', () => {
+    expect(isApiTokenExpiryOption('365')).toBe(true)
+    expect(isApiTokenExpiryOption('none')).toBe(true)
+    expect(isApiTokenExpiryOption('7')).toBe(false)
+    expect(isApiTokenScope('read')).toBe(true)
+    expect(isApiTokenScope('full')).toBe(true)
+    expect(isApiTokenScope('admin')).toBe(false)
+  })
+
+  it('期限が無ければ「無期限」の表記を返す', () => {
+    expect(formatTokenExpiry(null, '無期限')).toBe('無期限')
+    expect(formatTokenExpiry(undefined, '無期限')).toBe('無期限')
+    expect(formatTokenExpiry('2026-12-31T00:00:00Z', '無期限')).not.toBe('無期限')
   })
 })

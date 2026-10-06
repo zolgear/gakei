@@ -332,6 +332,24 @@
       "nameLabel": "Name",
       "nameTooltip": "A name that tells you which agent or PC uses it (up to 100 characters).",
       "namePlaceholder": "e.g. Claude Code on my PC",
+      "expiryLabel": "Expires in",
+      "expiryTooltip": "An expired token can no longer be used. The expiry cannot be extended later; issue a new token instead.",
+      "expiryOptions": {
+        "30": "30 days",
+        "90": "90 days",
+        "365": "1 year",
+        "none": "Never"
+      },
+      "scopeLabel": "Access",
+      "scopeTooltip": "A read-only token can only search, view and download images and runs.",
+      "scopeOptions": {
+        "full": "Full",
+        "read": "Read-only"
+      },
+      "scopeHelp": "Read-only tokens can only search, view and download. They cannot generate images, upload, or change groups.",
+      "expiresAt": "Expires",
+      "noExpiry": "Never",
+      "expiredBadge": "Expired",
       "create": "Issue",
       "creating": "Issuing...",
       "createdToast": "Token issued",

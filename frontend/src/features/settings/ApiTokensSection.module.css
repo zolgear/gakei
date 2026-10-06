@@ -11,14 +11,44 @@
   color: var(--color-text-muted);
 }
 
-.row {
-  display: flex;
-  gap: 8px;
+.nameInput {
+  max-width: none;
 }
 
-.row input {
-  flex: 1;
-  max-width: none;
+/* 有効期限・権限の選択と発行ボタン(ADR-0023 11章)。ボタンは選択欄の下端にそろえる。 */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin-top: 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 140px;
+}
+
+/* 名前と「期限切れ」の印を1行に並べる。 */
+.nameLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.expiredBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--color-danger);
+  border-radius: 9px;
+  font-size: 11px;
+  color: var(--color-danger);
+  white-space: nowrap;
 }
 
 /* 発行直後の値。今だけ表示される旨が目に入るよう、警告色の枠で囲む。 */
@@ -47,5 +77,9 @@
 
   .row > button {
     align-self: stretch;
+  }
+
+  .field {
+    min-width: 0;
   }
 }
