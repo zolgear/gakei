@@ -25,7 +25,7 @@
 - ZIP の中身:
   - `manifest.json`: 形式名と版(`gakei.lineage-export/1`)、書き出した日時、GAKEI の版、範囲、起点の Asset ID、Asset の一覧、Run の一覧。
     - Asset: ID、sha256、種類(upload / generated / mask / sketch)、MIME、寸法、バイト数、作成日時、生んだ Run の ID と出力の順番、スケッチの下地(`source_asset_id`)、ZIP の中のファイル名。
-    - Run: ID、プロバイダー、モデル、操作、プロンプト、`params`(API に送った値そのまま)、状態、エラー、usage、作成・終了日時、実行者の表示名、入力(Asset ID、役割、位置)。
+    - Run: ID、プロバイダー、モデル、操作、プロンプト、`params`(API に送った値そのまま。ただし ComfyUI の Run は、共有リンク(ADR-0029)と同じく秘密に見える値を `***` に置き換える。2026-10-07 実装時に決定)、状態、エラー、usage、作成・終了日時、実行者の表示名、入力(Asset ID、役割、位置)。
   - `assets/{asset_id}.{拡張子}`: 原本。**保存しているバイト列のまま**(系列情報を埋め込まない。sha256 で照合できるように)。
 - 失敗した Run も、範囲の Asset に関わるものは含める(失敗も証跡。ADR-0005)。範囲の Asset を生んでいない失敗の Run は含めない。
 - タイトル・タグ・グループ・埋め込みベクトルは含めない(証跡ではなく、取り込んだ側で付け直せる)。

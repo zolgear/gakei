@@ -687,3 +687,30 @@ def test_export_and_import_with_object_storage(s3_client: TestClient) -> None:
     assert content.status_code == 200
     root_item = next(a for a in manifest["assets"] if a["id"] == _out(r1))
     assert hashlib.sha256(content.content).hexdigest() == root_item["sha256"]
+
+
+def test_export_redacts_comfyui_secret_params(client: TestClient) -> None:
+    """ComfyUI の Run の秘密に見える値は、共有リンクと同じく `***` にして書き出す(ZIP は他人に
+    渡すもの)。DB の `params` は変えない。"""
+    r0, _r1, _r2 = _chain(client)
+    graph = {
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "a cat"}},
+        "12": {"class_type": "SomeApiNode", "inputs": {"api_key": "plain-secret", "n": 1}},
+    }
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(r0["id"]))
+        assert run is not None
+        run.provider = "comfyui"
+        run.params = {"comfyui_prompt": graph, "negative_prompt": "blurry"}
+        db.commit()
+
+    manifest = _manifest(_export(client, _out(r0)))
+    exported = next(r for r in manifest["runs"] if r["id"] == r0["id"])
+    assert exported["params"]["comfyui_prompt"]["12"]["inputs"]["api_key"] == "***"
+    assert exported["params"]["comfyui_prompt"]["12"]["inputs"]["n"] == 1
+    assert exported["params"]["comfyui_prompt"]["6"] == graph["6"]
+    assert exported["params"]["negative_prompt"] == "blurry"
+    with client.app.state.session_factory() as db:
+        run = db.get(Run, uuid.UUID(r0["id"]))
+        assert run is not None
+        assert run.params["comfyui_prompt"]["12"]["inputs"]["api_key"] == "plain-secret"

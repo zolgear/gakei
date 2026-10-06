@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain.models import AppUser, Run, RunInput
+from app.domain.secret_values import redact_comfyui_params
 from app.domain.shares import collect_scope
 from app.domain.storage import AssetStore
 
@@ -57,6 +58,16 @@ class ExportTargetNotFoundError(Exception):
 
 class ExportContentMissingError(Exception):
     """範囲の Asset の原本が保存先に無い(API 層で 409)。"""
+
+
+def _export_params(run: Run) -> dict[str, Any]:
+    """書き出す `params`。ComfyUI の Run は、共有リンクと同じく秘密に見える値を `***` に
+    置き換える(ZIP は他人に渡すものなので。キーは残す。ADR-0029 4章、ADR-0037 1章)。
+    ほかのプロバイダーは API に送った値そのまま。"""
+    params = run.params if isinstance(run.params, dict) else {}
+    if run.provider == "comfyui":
+        return redact_comfyui_params({k: v for k, v in params.items() if isinstance(k, str)})
+    return params
 
 
 def asset_file_name(asset_id: uuid.UUID | str, mime: str) -> str:
@@ -188,7 +199,7 @@ def build_export(
                 "model": run.model,
                 "operation": str(run.operation),
                 "prompt": run.prompt,
-                "params": run.params or {},
+                "params": _export_params(run),
                 "status": str(run.status),
                 "error_code": run.error_code,
                 "error_message": run.error_message,
