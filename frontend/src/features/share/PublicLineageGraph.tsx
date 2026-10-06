@@ -9,15 +9,21 @@
  * - `compact`: 右のパネルの小さい表示。「全体を表示」と「広げる」を右下に出す(通常の画面の
  *   サイドバーの系列グラフと同じ)。
  * - `full`: 全画面の表示(`/s/{トークン}/lineage`)。ノードを大きく描き(CSS 変数でノードの
- *   大きさを上書きし、レイアウトの間隔も合わせる)、開いたときは系列全体が収まる倍率にする。
+ *   大きさを上書きし、レイアウトの間隔も合わせる)。
+ *
+ * 開いたときの倍率は通常の画面の系列グラフと同じ決め方(`lineageViewport.ts`。2026-10-07):
+ * 全体が読める倍率で収まれば全体を収め、収まらなければ読める倍率で止めて強調しているノードを
+ * 中央に置く。「全体を表示」は手動の最小倍率まで下げて全体を収める。
  */
-import { useEffect, useMemo, useRef } from 'react'
-import { Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
+import { useMemo, useRef } from 'react'
+import { Background, Controls, ReactFlow, ReactFlowProvider } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { PublicShareResponse } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { buildFlowGraph, lineageNodeTypes } from '../lineage/lineageFlow'
 import type { LineageLayoutOptions } from '../lineage/lineageLayout'
+import { LINEAGE_MANUAL_MIN_ZOOM, type LineageFitOptions } from '../lineage/lineageViewport'
+import { useLineageViewport } from '../lineage/useLineageViewport'
 import { toLineageResponse } from './publicShareGraph'
 import lineageStyles from '../lineage/LineageGraph.module.css'
 import styles from './PublicSharePage.module.css'
@@ -29,9 +35,8 @@ import styles from './PublicSharePage.module.css'
  */
 const FULL_LAYOUT: LineageLayoutOptions = { columnWidth: 290, rowHeight: 280 }
 
-/** 長い系列でも全体が収まるよう、最小の倍率を React Flow の既定(0.5)より下げる。 */
-const FULL_MIN_ZOOM = 0.05
-const FULL_FIT_VIEW_OPTIONS = { padding: 0.08, maxZoom: 1.25 }
+/** 全画面では余白を詰め、大きいノードを拡大しすぎない。 */
+const FULL_FIT_OPTIONS: LineageFitOptions = { padding: 0.08, maxZoom: 1.25 }
 
 interface PublicLineageGraphProps {
   data: PublicShareResponse
@@ -67,7 +72,6 @@ function PublicLineageGraphInner({
 }: PublicLineageGraphProps) {
   const { t } = useI18n()
   const full = variant === 'full'
-  const { fitView } = useReactFlow()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const { nodes, edges } = useMemo(
     () =>
@@ -80,18 +84,14 @@ function PublicLineageGraphInner({
       ),
     [data, highlightedNodeId, thumbUrlFor, full],
   )
-  const fitViewOptions = full ? FULL_FIT_VIEW_OPTIONS : undefined
-
-  // キャンバスの大きさが決まってから(狭い幅で縦に並べ替わったときも)全体を収める。
-  useEffect(() => {
-    const el = canvasRef.current
-    if (!el) return
-    const observer = new ResizeObserver(() => {
-      void fitView({ ...fitViewOptions, duration: 0 })
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [fitView, fitViewOptions, nodes.length])
+  // キャンバスの大きさが決まってから(狭い幅で縦に並べ替わったときも)表示を決め直す。
+  const { fitAll } = useLineageViewport({
+    canvasRef,
+    fitKey: `${data.root_asset_id}:${nodes.length}`,
+    nodeCount: nodes.length,
+    focusNodeId: highlightedNodeId,
+    options: full ? FULL_FIT_OPTIONS : undefined,
+  })
 
   function handleClick(id: string, type: string | undefined) {
     if (type === 'asset') {
@@ -107,9 +107,7 @@ function PublicLineageGraphInner({
         nodes={nodes}
         edges={edges}
         nodeTypes={lineageNodeTypes}
-        fitView
-        fitViewOptions={fitViewOptions}
-        minZoom={full ? FULL_MIN_ZOOM : undefined}
+        minZoom={LINEAGE_MANUAL_MIN_ZOOM}
         nodesDraggable={false}
         nodesConnectable={false}
         edgesReconnectable={false}
@@ -128,7 +126,7 @@ function PublicLineageGraphInner({
           <button
             type="button"
             className={lineageStyles.toolbarButton}
-            onClick={() => void fitView({ ...fitViewOptions, duration: 200 })}
+            onClick={() => fitAll()}
           >
             {t.lineage.viewAll}
           </button>
