@@ -45,6 +45,8 @@
   },
   "search": {
     "emptyQuery": "q cannot be empty",
+    "tooManyTerms": "Too many words in q (maximum {max})",
+    "termTooLong": "A word in q is too long (maximum {max} characters per word)",
     "unknownTypes": "Unknown value(s) in types: {types} (valid values: {validTypes})"
   },
   "comfyui": {
@@ -368,6 +370,7 @@
     "disabled": "The MCP server is disabled. Enable it under Admin settings → MCP.",
     "tokenRequired": "An access token is required (Authorization: Bearer <token>).",
     "tokenInvalid": "The access token is invalid or has been revoked.",
+    "tokenExpired": "The access token has expired. Issue a new token under Access tokens in User settings.",
     "originForbidden": "MCP requests from this Origin are not allowed."
   },
   "annotations": {

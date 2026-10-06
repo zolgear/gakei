@@ -20,6 +20,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.auth.sessions import hash_token
+from app.domain import api_tokens as api_tokens_domain
 from app.domain.models import ApiToken, DownloadTicket
 
 TICKET_TTL = timedelta(minutes=10)
@@ -60,7 +61,8 @@ def issue_ticket(
 
 
 def find_usable_ticket(db: Session, raw: str, now: datetime | None = None) -> DownloadTicket | None:
-    """期限内・未使用で、発行に使ったアクセストークンが失効していないチケット。無ければ None。"""
+    """期限内・未使用で、発行に使ったアクセストークンが失効も期限切れもしていないチケット。
+    無ければ None。"""
     now = now or _utcnow()
     ticket = db.execute(
         select(DownloadTicket).where(DownloadTicket.token_hash == hash_token(raw))
@@ -68,8 +70,8 @@ def find_usable_ticket(db: Session, raw: str, now: datetime | None = None) -> Do
     if ticket is None or ticket.used_at is not None or ticket.expires_at <= now:
         return None
     if ticket.api_token_id is not None:
-        token = db.get(ApiToken, ticket.api_token_id)
-        if token is None or token.revoked_at is not None:
+        # 発行に使ったトークンが失効・期限切れなら使えない(ADR-0023 11章 3)。
+        if not api_tokens_domain.is_usable(db.get(ApiToken, ticket.api_token_id), now):
             return None
     return ticket
 

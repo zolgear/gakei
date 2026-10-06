@@ -83,16 +83,25 @@ def require_user_or_api_token(
 
     ADR-0023 7章 3: 使うのは画像の本体を取る `GET /api/assets/{id}/content` だけ。他の REST
     API には広げない(そちらは `require_user` のまま)。トークンは MCP のためのものなので、
-    MCP が無効のときは受け付けない。失効済み・不明なトークンは 401。
+    MCP が無効のときは受け付けない。失効済み・不明・期限切れのトークンは 401(期限切れは
+    文言を分ける。ADR-0023 11章 1)。読み取りのみのトークンでも使える(11章 2)。
     """
     if user is not None:
         return user
     raw = bearer_token(request)
     if raw is None or not mcp_settings.is_enabled(db):
         raise HTTPException(status_code=401, detail=t("auth.required"))
-    principal = api_tokens_domain.authenticate(
-        db, raw, runtime.admin_email_set(), runtime.allowed_email_domain_set()
-    )
+    try:
+        principal = api_tokens_domain.authenticate(
+            db, raw, runtime.admin_email_set(), runtime.allowed_email_domain_set()
+        )
+    except api_tokens_domain.ApiTokenExpiredError:
+        db.rollback()
+        raise HTTPException(
+            status_code=401,
+            detail=t("mcp.tokenExpired"),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
     if principal is None:
         db.rollback()
         raise HTTPException(

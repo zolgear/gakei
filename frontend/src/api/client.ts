@@ -114,6 +114,7 @@ export type McpSettingsUpdateRequest = components['schemas']['McpSettingsUpdateR
 export type ApiTokenRow = components['schemas']['ApiTokenRow']
 export type ApiTokenListResponse = components['schemas']['ApiTokenListResponse']
 export type ApiTokenCreateResponse = components['schemas']['ApiTokenCreateResponse']
+export type ApiTokenCreateRequest = components['schemas']['ApiTokenCreateRequest']
 
 // -- MCP サーバー(ADR-0023) ---------------------------------------------------
 
@@ -138,12 +139,15 @@ export function listApiTokens(): Promise<ApiTokenListResponse> {
   return request('/api/users/me/api-tokens')
 }
 
-/** 発行する。トークンの値(`token`)はこの応答にだけ載り、以降は取得できない。 */
-export function createApiToken(name: string): Promise<ApiTokenCreateResponse> {
+/**
+ * 発行する。トークンの値(`token`)はこの応答にだけ載り、以降は取得できない。
+ * 有効期限(`expires_in_days`。null は無期限)と権限(`scope`)は発行のときだけ選べる(ADR-0023 11章)。
+ */
+export function createApiToken(body: ApiTokenCreateRequest): Promise<ApiTokenCreateResponse> {
   return request('/api/users/me/api-tokens', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(body),
   })
 }
 

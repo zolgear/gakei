@@ -332,6 +332,24 @@
       "nameLabel": "名前",
       "nameTooltip": "どのエージェントや PC で使うかが分かる名前にします(100 文字まで)。",
       "namePlaceholder": "例: 自分の PC の Claude Code",
+      "expiryLabel": "有効期限",
+      "expiryTooltip": "期限を過ぎたトークンは使えなくなります。期限は後から延ばせないので、延ばしたいときは新しいトークンを発行します。",
+      "expiryOptions": {
+        "30": "30日",
+        "90": "90日",
+        "365": "1年",
+        "none": "無期限"
+      },
+      "scopeLabel": "権限",
+      "scopeTooltip": "読み取りのみのトークンは、画像や実行履歴の検索・閲覧とダウンロードだけができます。",
+      "scopeOptions": {
+        "full": "すべて",
+        "read": "読み取りのみ"
+      },
+      "scopeHelp": "「読み取りのみ」は、検索・閲覧・ダウンロードだけができます。生成、アップロード、グループの変更はできません。",
+      "expiresAt": "期限",
+      "noExpiry": "無期限",
+      "expiredBadge": "期限切れ",
       "create": "発行",
       "creating": "発行中...",
       "createdToast": "トークンを発行しました",

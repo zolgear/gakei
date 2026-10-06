@@ -3,7 +3,9 @@
 1. 管理者設定で無効なら 404。
 2. `Origin` ヘッダーがあり、GAKEI 自身の origin でなければ 403(DNS リバインディング対策)。
 3. 認証。個人モードは認証なしで `LOCAL_ADMIN`。認証モードは `Authorization: Bearer <token>`
-   のアクセストークンだけを受け付ける(Cookie では受けない)。無い・不明・失効は 401。
+   のアクセストークンだけを受け付ける(Cookie では受けない)。無い・不明・失効・期限切れは 401
+   (期限切れは文言を分ける。ADR-0023 11章 1)。トークンの権限(`scope`)は文脈に入れ、
+   読み取りのみのトークンで使えないツールは `server.GakeiMcpServer` が隠し、拒否する。
 
 SDK の transport security(Host/Origin の許可リスト)は使わない。待ち受けのホスト名を事前に
 列挙できない(LAN の IP で開く使い方がある)ため、Origin の判定をここで行う。
@@ -101,6 +103,8 @@ class McpEndpoint:
         if not runtime.is_oidc:
             user = LOCAL_ADMIN
             token_id = None
+            # 個人モードはトークンを使わないので、権限の制限も無い(ADR-0023 11章 4)。
+            token_scope = api_tokens_domain.SCOPE_FULL
         else:
             raw = bearer_token(request)
             if raw is None:
@@ -115,16 +119,22 @@ class McpEndpoint:
                     db.commit()
                     return principal
 
-            principal = await anyio.to_thread.run_sync(_authenticate)
+            try:
+                principal = await anyio.to_thread.run_sync(_authenticate)
+            except api_tokens_domain.ApiTokenExpiredError:
+                await self._unauthorized(scope, receive, send, t("mcp.tokenExpired"))
+                return
             if principal is None:
                 await self._unauthorized(scope, receive, send, t("mcp.tokenInvalid"))
                 return
             user = principal.user
             token_id = principal.token_id
+            token_scope = principal.scope
 
         context = McpRequestContext(
             user=user,
             api_token_id=token_id,
+            token_scope=token_scope,
             base_url=mcp_settings.resolve_public_base(
                 runtime.public_base_url, str(request.base_url)
             ),
