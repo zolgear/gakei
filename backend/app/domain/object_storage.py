@@ -1,8 +1,8 @@
 """オブジェクトストレージのストア(ADR-0028)。Azure Blob Storage と S3 互換ストレージ。
 
 - キーはローカルFS(`LocalFsStore`)と同じ(ADR-0026。`original_key_base` を共用)。派生は
-  `derived/{sha256}/thumb.webp` など。そのため、ローカルFSから移しても `asset.blob_key` を
-  書き換えずに済む。
+  `derived/{sha256}/thumb.webp` など(版 2 以降は `thumb.v{N}.webp`。ADR-0036)。そのため、
+  ローカルFSから移しても `asset.blob_key` を書き換えずに済む。
 - 原本は上書きしない条件付きの書き込み(`If-None-Match: *`)で名前を確保し、同名があれば
   `-2`、`-3` を付ける(ADR-0028 3章)。派生は内容から作り直せるので上書きしてよい。
 - SDK(azure-storage-blob / azure-identity / boto3)は使うときだけ import する(起動時間と、
@@ -204,6 +204,23 @@ class AzureBlobStore:
         except _azure_errors() as e:
             raise _io_error(e) from None
 
+    def list_keys(self, prefix: str) -> Iterator[str]:
+        try:
+            for name in self._container.list_blob_names(name_starts_with=self.prefix + prefix):
+                yield name[len(self.prefix) :]
+        except _azure_errors() as e:
+            raise _io_error(e) from None
+
+    def delete(self, blob_key: str) -> None:
+        from azure.core.exceptions import ResourceNotFoundError
+
+        try:
+            self._blob(blob_key).delete_blob()
+        except ResourceNotFoundError:
+            return
+        except _azure_errors() as e:
+            raise _io_error(e) from None
+
     def content_exists(self, blob_key: str, sha256: str, variant: Variant) -> bool:
         return self.exists(content_key(blob_key, sha256, variant))
 
@@ -372,6 +389,22 @@ class S3Store:
                 return False
             raise self._lookup_error(e, blob_key) from None
         return True
+
+    def list_keys(self, prefix: str) -> Iterator[str]:
+        try:
+            paginator = self._client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=self.prefix + prefix):
+                for obj in page.get("Contents", []):
+                    yield obj["Key"][len(self.prefix) :]
+        except _s3_errors() as e:
+            raise _io_error(e) from None
+
+    def delete(self, blob_key: str) -> None:
+        # S3 の DeleteObject は、無いキーでも成功する。
+        try:
+            self._client.delete_object(Bucket=self.bucket, Key=self.prefix + blob_key)
+        except _s3_errors() as e:
+            raise _io_error(e) from None
 
     def content_exists(self, blob_key: str, sha256: str, variant: Variant) -> bool:
         return self.exists(content_key(blob_key, sha256, variant))

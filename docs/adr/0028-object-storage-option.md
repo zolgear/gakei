@@ -51,7 +51,7 @@ Issue [#35](https://github.com/zolgear/gakei/issues/35)。
 
 ### 3. キーの規則
 
-- オブジェクトストレージでも、ローカル FS と同じキーを使う(ADR-0026 1章。例: `assets/openai/gpt-image-2.5-sunburst/2026-09/20260929-093015_1a2b3c4d.png`)。派生も `derived/{sha256}/thumb.webp` のまま。ADR-0004 の「本線の Blob のキー規則は本線の着手時に決める」を、この ADR で決める。
+- オブジェクトストレージでも、ローカル FS と同じキーを使う(ADR-0026 1章。例: `assets/openai/gpt-image-2.5-sunburst/2026-09/20260929-093015_1a2b3c4d.png`)。派生も `derived/{sha256}/thumb.webp` のまま(注記 2026-10-06: [ADR-0036](0036-derived-image-version.md) で、版 2 以降の派生は `thumb.v{N}.webp`。どのストアでも同じキー)。ADR-0004 の「本線の Blob のキー規則は本線の着手時に決める」を、この ADR で決める。
 - 同じキーなので、ローカル FS から移すときに `asset.blob_key` を書き換えずに済む(6章)。古いキー(`assets/{2文字}/{sha256}.{拡張子}`)の Asset も、そのキーのまま読める。
 - 同じ内容の原本の共有(ADR-0026 3章)は、DB で探す今の仕組みのまま、どのストアでも働く。
 - 同名のときの連番(`-2`、`-3`)は、上書きしない条件付きの書き込みで確保する。Azure Blob は `If-None-Match: *`(`overwrite=False`)、S3 は `PutObject` の `If-None-Match: *`。条件付きの書き込みに対応していない S3 互換ストレージでは上書きが起こりうるが、キーに Asset の id の先頭 8 文字が入るので、実際に同名になることはまずない。

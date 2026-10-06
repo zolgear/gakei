@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { assetUrl } from '../../api/assetUrl'
 import {
   GAKEI_ASSET_ID_DATA_TYPE,
   extractAssetIdFromContentUrl,
@@ -20,6 +21,13 @@ describe('extractAssetIdFromContentUrl', () => {
     expect(
       extractAssetIdFromContentUrl(`http://localhost:5173/api/assets/${ASSET_ID}/content?variant=thumb`),
     ).toBe(ASSET_ID)
+  })
+
+  it('派生の版(dv)付きの URL(assetUrl が作るもの)からも取り出す(ADR-0036)', () => {
+    expect(extractAssetIdFromContentUrl(`/api/assets/${ASSET_ID}/content?variant=thumb&dv=1`)).toBe(
+      ASSET_ID,
+    )
+    expect(extractAssetIdFromContentUrl(assetUrl(ASSET_ID, 'preview'))).toBe(ASSET_ID)
   })
 
   it('クエリなしの URL でも取り出す', () => {

@@ -20,6 +20,7 @@
    - サムネイル: 長辺 512px, WebP(ギャラリー用)
    - プレビュー: 長辺 2048px, WebP(詳細画面の初期表示用)
    - 原本: ズーム時とダウンロード時のみ読み込む
+   - 注記(2026-10-06): [ADR-0036](0036-derived-image-version.md) で、派生の作り方に版を持たせた。版ごとにキーを分け(版 1 は今のキー)、今の版の派生が無ければ読むときに原本から作る。配信の `ETag` と画面の URL にも版を含める。
 5. 配信は API 経由のストリーミングとする(`GET /api/assets/{id}/content?variant=thumb|preview|original`)。認可チェックを通し、`ETag` と `Cache-Control: private, immutable` を付ける。
 6. ビューアは通常の `<img>` とパン/ズームで実装する。タイル分割(Deep Zoom)は行わない。
 7. アップロードは API に multipart で送る。上限は 50MB(API の入力上限に合わせる)。

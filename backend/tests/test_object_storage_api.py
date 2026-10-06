@@ -80,7 +80,8 @@ def test_content_variants_are_served_from_object_storage(
         response = object_client.get(f"/api/assets/{asset_id}/content?variant={variant}")
         assert response.status_code == 200, (variant, response.text)
         assert response.headers["content-type"] == media_type
-        assert response.headers["etag"] == f'"{asset.sha256}-{variant}"'
+        suffix = "" if variant == "original" else "-d1"  # 派生は版を含む(ADR-0036)
+        assert response.headers["etag"] == f'"{asset.sha256}-{variant}{suffix}"'
         assert response.headers["content-length"] == str(len(response.content))
         key = asset.blob_key if variant == "original" else f"derived/{asset.sha256}/{variant}.webp"
         assert response.content == store.read(key)
@@ -128,14 +129,25 @@ def test_missing_content_is_404(object_client: TestClient) -> None:
     assert uploaded.status_code == 201, uploaded.text
     asset_id = uploaded.json()["id"]
     asset = _asset(object_client, asset_id)
-    _delete_object(object_client.app.state.store, f"derived/{asset.sha256}/thumb.webp")
+    store = object_client.app.state.store
+    thumb_key = f"derived/{asset.sha256}/thumb.webp"
+    expected = store.read(thumb_key)
+    _delete_object(store, thumb_key)
 
+    # ADR-0036: 派生が無くても、原本があれば作り直して返す(保存もする)。
+    regenerated = object_client.get(f"/api/assets/{asset_id}/content?variant=thumb")
+    assert regenerated.status_code == 200
+    assert regenerated.content == expected
+    assert store.read(thumb_key) == expected
+
+    # 原本も派生も無ければ 404。If-None-Match が合っていても 304 ではなく 404。
+    _delete_object(store, thumb_key)
+    _delete_object(store, asset.blob_key)
     missing = object_client.get(f"/api/assets/{asset_id}/content?variant=thumb")
     assert missing.status_code == 404
-    # If-None-Match が合っていても、無ければ 304 ではなく 404
     missing_cached = object_client.get(
         f"/api/assets/{asset_id}/content?variant=thumb",
-        headers={"If-None-Match": f'"{asset.sha256}-thumb"'},
+        headers={"If-None-Match": f'"{asset.sha256}-thumb-d1"'},
     )
     assert missing_cached.status_code == 404
     assert object_client.get(f"/api/assets/{asset_id}/content?variant=preview").status_code == 200

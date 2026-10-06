@@ -45,7 +45,7 @@ from PIL import Image
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import sessionmaker
 
-from app.domain import embedding_index, embedding_settings
+from app.domain import derivatives, embedding_index, embedding_settings
 from app.domain import embeddings as embeddings_domain
 from app.domain import perceptual_hash as perceptual_hash_domain
 from app.domain.models import Asset, AssetEmbedding, AssetKind, AssetPerceptualHash
@@ -418,7 +418,8 @@ class Embedder:
         return self._read_thumb_by_key(asset.blob_key, asset.sha256)
 
     def _read_thumb_by_key(self, blob_key: str, sha256: str) -> bytes:
-        thumb = self.store.open_content(blob_key, sha256, "thumb")
+        # 今の版の thumb が無ければ原本から作る(ADR-0036 2章)。
+        thumb = derivatives.ensure_derived(self.store, blob_key, sha256, "thumb")
         return thumb.read_all() if thumb is not None else self.store.read(blob_key)
 
     def _store_hashes(self, images: list[tuple[uuid.UUID, Image.Image]]) -> int:

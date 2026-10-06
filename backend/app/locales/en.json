@@ -460,6 +460,39 @@
       "other": "Migration finished ({count} objects in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI."
     }
   },
+  "regenerateDerivatives": {
+    "description": "Create the current version of the derived images (thumbnails and previews) from the originals for images that do not have them (ADR-0036). Logically deleted images are included. You can run this while GAKEI is running. The database is not modified and the originals are not touched.",
+    "dryRunHelp": "Only count what would be created (and, with --prune, deleted); write and delete nothing",
+    "pruneHelp": "Delete derived images of other versions (the originals and the current version are never touched)",
+    "databaseMissing": "Database file not found: {source}",
+    "failed": "Aborted because reading from or writing to the storage failed. Run the tool again to continue from where it stopped. Details: {error}",
+    "version": "Derived image version: {version}",
+    "images": {
+      "one": "  Images: {count} (identical contents count as one)",
+      "other": "  Images: {count} (identical contents count as one)"
+    },
+    "dryRunMissing": {
+      "one": "  Missing current-version derived images: {count}",
+      "other": "  Missing current-version derived images: {count}"
+    },
+    "dryRunStale": {
+      "one": "  Derived images of other versions: {count}",
+      "other": "  Derived images of other versions: {count}"
+    },
+    "dryRunDone": "--dry-run: Nothing was written.",
+    "generated": {
+      "one": "Created {count} current-version derived image.",
+      "other": "Created {count} current-version derived images."
+    },
+    "originalUnavailable": {
+      "one": "Note: {count} image could not get derived images because its original is missing or unreadable (sha256): {keys}",
+      "other": "Note: {count} images could not get derived images because their originals are missing or unreadable (sha256): {keys}"
+    },
+    "pruned": {
+      "one": "Deleted {count} derived image of another version.",
+      "other": "Deleted {count} derived images of other versions."
+    }
+  },
   "shares": {
     "disabled": "Share links are disabled in the admin settings",
     "notFound": "Share link not found",
