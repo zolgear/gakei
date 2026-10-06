@@ -9,6 +9,7 @@
     "authUrlInsecure": "{name} points to http (not https) on a non-loopback address ({value}). Authentication traffic would be sent in plain text.",
     "authEmergencyDisable": "To start with authentication temporarily disabled, add AUTH_MODE=none to .env and restart (the saved settings are kept).",
     "databaseUnavailable": "Cannot connect to the database ({url}). Check DATABASE_URL and that PostgreSQL is running and accepting connections. Details: {error}",
+    "databaseTooNew": "This database ({url}) has been used by a newer version of GAKEI (database revision: {revision}; this GAKEI {version} knows revisions up to {head}). Start it with the newer version of GAKEI, or restore a backup taken before upgrading. The database has not been changed.",
     "storageConfigMissing": "Required environment variables for STORAGE_BACKEND are not set: {missing}",
     "storageAzureBothConnections": "Both AZURE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_ACCOUNT_URL are set. Set only one of them.",
     "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING is malformed. Paste the connection string from \"Access keys\" in the Azure portal as is.",

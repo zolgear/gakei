@@ -94,6 +94,7 @@ volumes:
 ```
 
 - **Updating:** `docker pull ghcr.io/zolgear/gakei:latest`, then recreate the container (`docker rm -f gakei`, then run the `docker run` command again). With Compose, `docker compose pull && docker compose up -d`. **Back up `data/` before updating** — startup runs a database migration automatically, and you'll need a backup to roll back (see the backup example below).
+- **Rolling back:** when you go back to an older image tag, also restore `data/` (and the database, if you use PostgreSQL) from the backup taken before updating. If you start an older version on a database already used by a newer one, it stops with "has been used by a newer version of GAKEI" and leaves the database unchanged (a database can't be migrated back to an older version).
 - **Tags:** `latest` (the newest stable release), plus `0.y` and `0.y.z`. See the full list under [Releases](https://github.com/zolgear/gakei/releases) on GitHub.
 
 ### Build it yourself (if you want to make changes)

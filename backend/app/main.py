@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from alembic import command
@@ -59,6 +60,9 @@ from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Connection
 
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
 _MIGRATIONS_DIR = _BACKEND_DIR / "migrations"
@@ -191,12 +195,82 @@ def _first_line(exc: BaseException) -> str:
     return lines[0] if lines else type(exc).__name__
 
 
+class DatabaseTooNewError(RuntimeError):
+    """ADR-0027 1章(Issue #84): DB がこの版より新しい GAKEI で移行されている場合。
+
+    DB のリビジョンがこの版のマイグレーションに無いので、`upgrade head` を実行せず、DB にも
+    触れずに止める。
+    """
+
+
+def unknown_revisions(connection: Connection) -> list[str]:
+    """DB の `alembic_version` にあるリビジョンのうち、この版のマイグレーションに無いもの。
+
+    空の DB(`alembic_version` が無い)と、この版が知っている古いリビジョンなら空のリスト。
+    読むだけで、DB には何も書かない。
+    """
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    heads = MigrationContext.configure(connection).get_current_heads()
+    if not heads:
+        return []
+    # URL は使わない(スクリプトの置き場所だけを見る)。
+    script = ScriptDirectory.from_config(alembic_config("sqlite://"))
+    known = {revision.revision for revision in script.walk_revisions()}
+    return sorted(head for head in heads if head not in known)
+
+
+def database_too_new_message(label: str, revisions: list[str]) -> str:
+    """`DatabaseTooNewError` などの文言。`label` は DB を示す表示用の文字列(接続 URL なら
+    `display_database_url` でパスワードを伏せたもの、SQLite ならファイルのパスでもよい)。"""
+    from alembic.script import ScriptDirectory
+
+    from app.version import get_version
+
+    head = ScriptDirectory.from_config(alembic_config("sqlite://")).get_current_head()
+    return console_t(
+        "app.databaseTooNew",
+        url=label,
+        revision=", ".join(revisions),
+        version=get_version(),
+        head=head or "-",
+    )
+
+
+def check_database_revision(url: str) -> None:
+    """DB のリビジョンがこの版のマイグレーションに含まれるかを確かめる(読むだけ)。
+
+    含まれなければ `DatabaseTooNewError`。SQLite のファイルがまだ無ければ(初回の起動)何も
+    しない(つなぐとファイルができてしまうため)。
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import make_url
+
+    parsed = make_url(url)
+    if parsed.get_backend_name() == "sqlite":
+        database = parsed.database
+        if not database or database == ":memory:" or not Path(database).is_file():
+            return
+    # 読むだけなので、PRAGMA(WAL への切り替えなど)を付けずに開く。
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            revisions = unknown_revisions(connection)
+    finally:
+        engine.dispose()
+    if revisions:
+        raise DatabaseTooNewError(database_too_new_message(display_database_url(url), revisions))
+
+
 def run_migrations(url: str) -> None:
     """Alembic の `upgrade head` を実行する。起動時のほか、`app.tools.backfill_embedded_meta`
     のようにサーバーを立てずに DB だけ用意したいツールからも呼べるよう公開する。
 
-    `url` は `Settings.sqlalchemy_url`(SQLite / PostgreSQL。ADR-0027)。
+    `url` は `Settings.sqlalchemy_url`(SQLite / PostgreSQL。ADR-0027)。DB がより新しい
+    GAKEI で移行されていれば、何も変えずに `DatabaseTooNewError` を送出する(Issue #84)。
     """
+    check_database_revision(url)
     command.upgrade(alembic_config(url), "head")
 
 

@@ -26,7 +26,7 @@ from app.db import make_engine, make_session_factory
 from app.domain.generation_meta import extract_generation_meta
 from app.domain.models import Asset, AssetKind
 from app.domain.storage import AssetStore, StorageUnavailableError, open_store
-from app.main import run_migrations
+from app.main import DatabaseTooNewError, run_migrations
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,12 @@ def main() -> None:
     except StorageUnavailableError as exc:
         print(exc, file=sys.stderr, flush=True)
         raise SystemExit(1) from None
-    run_migrations(settings.sqlalchemy_url)
+    # Issue #84: DB がより新しい GAKEI で移行されていれば、何も変えずに止める。
+    try:
+        run_migrations(settings.sqlalchemy_url)
+    except DatabaseTooNewError as exc:
+        print(exc, file=sys.stderr, flush=True)
+        raise SystemExit(1) from None
     engine = make_engine(settings.sqlalchemy_url)
     try:
         session_factory = make_session_factory(engine)
