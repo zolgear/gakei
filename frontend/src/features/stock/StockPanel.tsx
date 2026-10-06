@@ -65,6 +65,7 @@ import { useStockShowSketchMask } from './stockPrefs'
 import { StockTagFilter } from './StockTagFilter'
 import { useStockTagFilter } from './stockTagFilterStore'
 import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
+import { ImportLineageButton } from '../lineage-transfer/ImportLineageButton'
 import styles from './StockPanel.module.css'
 
 type KindFilter = StockKindFilter
@@ -383,6 +384,8 @@ export function StockPanel() {
             e.target.value = ''
           }}
         />
+        {/* 系列の ZIP の取り込み(ADR-0037)。画像の追加のすぐ下に置く。 */}
+        <ImportLineageButton />
       </div>
 
       {/* 「グループなし」を先頭に置き、その見出し行の「+」で作ったグループが直後に並ぶ。 */}

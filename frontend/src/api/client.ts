@@ -254,6 +254,68 @@ export function getPublicShare(token: string): Promise<PublicShareResponse> {
   return request(`/api/public/shares/${encodeURIComponent(token)}`)
 }
 
+// -- 系列の持ち出しと取り込み(ADR-0037) ---------------------------------------
+
+export type LineageExportPreviewResponse = components['schemas']['LineageExportPreviewResponse']
+export type LineageExportScope = LineageExportPreviewResponse['scope']
+export type LineageImportResponse = components['schemas']['LineageImportResponse']
+export type RunImportInfo = components['schemas']['RunImportInfo']
+
+/** 書き出す前の確認(範囲に含まれる画像と Run の数、原本の合計)。何も書き込まない。 */
+export function previewLineageExport(
+  assetId: string,
+  scope: LineageExportScope,
+): Promise<LineageExportPreviewResponse> {
+  return request(`/api/assets/${assetId}/export/preview?${new URLSearchParams({ scope })}`)
+}
+
+/** 系列の ZIP をダウンロードする URL(`<a href download>` に渡す。Cookie の認証がそのまま効く)。 */
+export function lineageExportUrl(assetId: string, scope: LineageExportScope): string {
+  return `/api/assets/${assetId}/export?${new URLSearchParams({ scope })}`
+}
+
+/**
+ * 系列の ZIP を取り込む。大きなファイルを送るので、送信の進み具合(0〜1)を `onProgress` で
+ * 知らせる(fetch では取れないため XMLHttpRequest を使う)。エラーは `request` と同じく
+ * `ApiError`(サーバーの `detail` の文言)にする。
+ */
+export function importLineage(
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<LineageImportResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/imports/lineage')
+    xhr.setRequestHeader('Accept-Language', getLocale())
+    xhr.responseType = 'text'
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) onProgress(Math.min(1, e.loaded / e.total))
+      }
+    }
+    xhr.onload = () => {
+      let body: unknown = null
+      try {
+        body = xhr.responseText ? JSON.parse(xhr.responseText) : null
+      } catch {
+        body = null
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body as LineageImportResponse)
+        return
+      }
+      if (xhr.status === 401) markUnauthenticated()
+      const detail = body && typeof body === 'object' && 'detail' in body ? (body as { detail: unknown }).detail : null
+      reject(new ApiError(xhr.status, formatDetail(detail) ?? (xhr.statusText || `HTTP ${xhr.status}`)))
+    }
+    // 通信の失敗は ApiError にしない(画面は自分の文言を出す)。
+    xhr.onerror = () => reject(new Error('network error'))
+    const form = new FormData()
+    form.append('file', file)
+    xhr.send(form)
+  })
+}
+
 // -- ComfyUI ワークフロー(ADR-0013) ------------------------------------------
 
 export type ComfyUIStatus = components['schemas']['ComfyUIStatusResponse']

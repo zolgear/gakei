@@ -47,6 +47,8 @@ export function toLineageResponse(data: PublicShareResponse): AssetLineageRespon
             status: 'succeeded',
             prompt: r.prompt,
             queued_at: r.created_at,
+            // 共有のページは取り込みの印を出さない(公開の応答に持たない)。
+            imported: false,
           },
         }),
       ),

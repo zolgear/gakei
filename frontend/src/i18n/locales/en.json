@@ -1602,7 +1602,10 @@
     "openIngestedAsset": "Open the ingested image",
     "statusLabel": "Status",
     "finishedAtLabel": "Finished",
-    "paramsHeading": "Parameters"
+    "paramsHeading": "Parameters",
+    "importedBadge": "Imported",
+    "importedNodeTitle": "Record imported from a ZIP (unverified)",
+    "exportLineage": "Export lineage"
   },
   "stock": {
     "heading": "Stock",
@@ -2054,5 +2057,64 @@
     "previewLoadFailed": "Could not load the image details.",
     "kindLabel": "Kind",
     "embeddedPromptHeading": "Prompt (embedded in the image, unverified)"
+  },
+  "lineageTransfer": {
+    "export": {
+      "button": "Export lineage",
+      "buttonTooltip": "Download this image's lineage (originals and Generated records) as a ZIP",
+      "dialogTitle": "Export lineage",
+      "intro": "Packs the original images in the lineage and the records of the Generated runs that made them (prompt, parameters, status, the creator's display name) into a ZIP. The recipient can import it into their own GAKEI and keep editing.",
+      "scopeLabel": "Scope",
+      "scopes": {
+        "ancestors": "This image and ancestors",
+        "lineage": "Whole lineage"
+      },
+      "scopeHelp": {
+        "ancestors": "Includes this image and the images it was edited from.",
+        "lineage": "Also includes images made from this image."
+      },
+      "previewLoading": "Checking the included images...",
+      "previewFailed": "Could not get the included images.",
+      "previewCount": {
+        "one": "{count} image",
+        "other": "{count} images"
+      },
+      "previewRuns": {
+        "one": "{count} Generated",
+        "other": "{count} Generated"
+      },
+      "previewTruncated": "The lineage is large, so only part of it is included.",
+      "notIncluded": "Titles, tags and groups are not included. Deleted images and other people's images are not included either.",
+      "download": "Download ZIP",
+      "startedToast": "Export started"
+    },
+    "import": {
+      "button": "Import lineage",
+      "tooltip": "Import a lineage ZIP exported from GAKEI",
+      "uploadingStart": "Uploading...",
+      "uploading": "Uploading... {percent}%",
+      "processing": "Importing...",
+      "successToast": {
+        "one": "Imported the lineage ({count} image)",
+        "other": "Imported the lineage ({count} images)"
+      },
+      "alreadyImportedToast": "This lineage has already been imported",
+      "failed": "Could not import",
+      "notZip": "Choose a ZIP file",
+      "empty": "An empty file cannot be imported",
+      "tooLarge": "The ZIP is too large (limit: 1 GiB)"
+    },
+    "importedRun": {
+      "badge": "Imported",
+      "heading": "Record imported from a ZIP",
+      "unverifiedNote": "This Generated record was imported from a ZIP exported by another GAKEI (or another person); it was not run on this GAKEI. ZIP files can be modified, so its contents are unverified. It is not counted in costs.",
+      "sourceCreator": "Original creator",
+      "sourceCreatedAt": "Originally created",
+      "sourceFinishedAt": "Originally finished",
+      "sourceVersion": "Exported by GAKEI version",
+      "importedAt": "Imported at",
+      "sourceRunId": "Original ID",
+      "unknown": "Unknown"
+    }
   }
 }

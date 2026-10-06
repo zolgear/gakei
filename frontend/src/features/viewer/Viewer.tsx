@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { ApiError, deleteAsset, getAsset, getRun, getShareSettings, restoreAsset } from '../../api/client'
 import {
   comfyUiSeedTooltip,
@@ -18,7 +18,14 @@ import { isMobileViewport } from '../../lib/viewport'
 import { useAddToInputs } from '../run-form/useAddToInputs'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
-import { AddToInputIcon, DownloadIcon, LineageIcon, ShareLinkIcon, TrashIcon } from '../../components/icons'
+import {
+  AddToInputIcon,
+  DownloadIcon,
+  ExportArchiveIcon,
+  LineageIcon,
+  ShareLinkIcon,
+  TrashIcon,
+} from '../../components/icons'
 import { ToastHost, useToast } from '../../components/Toast'
 import { formatBytes, formatDateTime } from '../../lib/format'
 import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/assetRestore'
@@ -34,6 +41,8 @@ import { annotationPollInterval, supportsAnnotation } from '../annotations/annot
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
 import { ShareDialog } from '../share/ShareDialog'
+import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
+import { importToastFromState } from '../lineage-transfer/lineageTransfer'
 import { FinalPromptSection } from '../run-detail/FinalPromptSection'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
@@ -81,6 +90,7 @@ export function Viewer({ assetId }: ViewerProps) {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const toast = useToast()
   // 共有リンク(ADR-0029)は管理者設定で有効なときだけ「共有」を出す。
   const shareSettingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
@@ -119,6 +129,17 @@ export function Viewer({ assetId }: ViewerProps) {
     },
   })
 
+  // 系列の取り込み(ADR-0037)から移ってきたときのトースト。一度出したら state を消し、
+  // 戻る・再読み込みで出し直さない。
+  const location = useLocation()
+  useEffect(() => {
+    const message = importToastFromState(location.state)
+    if (!message) return
+    toast.show({ message })
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key])
+
   // 系列グラフの起点(a): ビューアで開いている Asset を自動的に起点にする。
   useEffect(() => {
     setOriginAssetId(assetId)
@@ -149,7 +170,7 @@ export function Viewer({ assetId }: ViewerProps) {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-      if (deleteConfirmOpen || addToInputs.isPending || shareOpen) return
+      if (deleteConfirmOpen || addToInputs.isPending || shareOpen || exportOpen) return
       if (isEditableTarget(document.activeElement)) return
       const targetAssetId = e.key === 'ArrowLeft' ? nav.previousAssetId : nav.nextAssetId
       if (!targetAssetId) return
@@ -158,7 +179,7 @@ export function Viewer({ assetId }: ViewerProps) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [outputNav, deleteConfirmOpen, addToInputs.isPending, shareOpen, navigate])
+  }, [outputNav, deleteConfirmOpen, addToInputs.isPending, shareOpen, exportOpen, navigate])
 
   const isReady = !assetQuery.isLoading && !assetQuery.isError && asset !== undefined
 
@@ -254,6 +275,18 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <LineageIcon />
                 </Link>
+                {/* 系列を ZIP に書き出す(ADR-0037)。共有リンクと違い管理者設定は無い。 */}
+                {!asset.deleted_at && (
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t.lineageTransfer.export.button}
+                    title={t.lineageTransfer.export.buttonTooltip}
+                    onClick={() => setExportOpen(true)}
+                  >
+                    <ExportArchiveIcon />
+                  </button>
+                )}
                 {shareEnabled && !asset.deleted_at && (
                   <button
                     type="button"
@@ -428,6 +461,12 @@ export function Viewer({ assetId }: ViewerProps) {
         />
       )}
       <ShareDialog open={shareOpen} assetId={assetId} onClose={() => setShareOpen(false)} toast={toast} />
+      <ExportLineageDialog
+        open={exportOpen}
+        assetId={assetId}
+        onClose={() => setExportOpen(false)}
+        toast={toast}
+      />
       <ToastHost toast={toast.toast} onDismiss={toast.dismiss} />
     </div>
   )

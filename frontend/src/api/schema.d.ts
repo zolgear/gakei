@@ -1432,6 +1432,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/export/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Lineage Export
+         * @description 書き出す前に、範囲に含まれる画像と Run の数、原本の合計を確かめる。何も書き込まない。
+         */
+        get: operations["preview_lineage_export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Lineage
+         * @description 系列を ZIP で書き出す(ADR-0037 1章)。範囲の計算は共有リンクと同じ。
+         */
+        get: operations["export_lineage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/lineage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Lineage
+         * @description 系列の ZIP を取り込む(ADR-0037 2章)。検証に1つでも当たれば ZIP 全体を断り、DB には
+         *     何も書かない。取り込んだ Asset と Run の持ち主は、取り込んだ利用者。
+         */
+        post: operations["import_lineage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/content": {
         parameters: {
             query?: never;
@@ -2379,6 +2440,11 @@ export interface components {
              */
             replaces_asset_id?: string | null;
         };
+        /** Body_import_lineage */
+        Body_import_lineage: {
+            /** File */
+            file: string;
+        };
         /** Body_search_by_image */
         Body_search_by_image: {
             /**
@@ -3141,6 +3207,47 @@ export interface components {
             primary: boolean;
         };
         /**
+         * LineageExportPreviewResponse
+         * @description 書き出す前の確認。範囲に含まれる画像と Run の数、原本の合計バイト数。
+         */
+        LineageExportPreviewResponse: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "ancestors" | "lineage";
+            /** Asset Count */
+            asset_count: number;
+            /** Run Count */
+            run_count: number;
+            /** Total Bytes */
+            total_bytes: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * LineageImportResponse
+         * @description 取り込みの結果。`root_asset_id` は取り込んだ側(この GAKEI)の起点の Asset。
+         */
+        LineageImportResponse: {
+            /**
+             * Root Asset Id
+             * Format: uuid
+             */
+            root_asset_id: string;
+            /** Asset Count */
+            asset_count: number;
+            /** Run Count */
+            run_count: number;
+            /** Created Asset Count */
+            created_asset_count: number;
+            /** Created Run Count */
+            created_run_count: number;
+        };
+        /**
          * LineageNode
          * @description asset / run のどちらかを表す1ノード。`depth` は起点=0、祖先は負、子孫は正。
          *
@@ -3212,6 +3319,11 @@ export interface components {
             error_code?: string | null;
             /** Queued At */
             queued_at?: string | null;
+            /**
+             * Imported
+             * @default false
+             */
+            imported: boolean;
         };
         /** LlmConnectionApiKeyUpdateRequest */
         LlmConnectionApiKeyUpdateRequest: {
@@ -3962,6 +4074,7 @@ export interface components {
             provider_request_id?: string | null;
             /** Inputs */
             inputs?: components["schemas"]["RunInputRef"][];
+            imported?: components["schemas"]["RunImportInfo"] | null;
         };
         /**
          * RunEvent
@@ -3996,6 +4109,31 @@ export interface components {
             max?: number | null;
             /** Node */
             node?: string | null;
+        };
+        /**
+         * RunImportInfo
+         * @description 系列の ZIP から取り込んだ Run の、書き出し元での記録(ADR-0037 2章)。ZIP の自己申告で
+         *     検証していない。
+         */
+        RunImportInfo: {
+            /**
+             * Source Run Id
+             * Format: uuid
+             */
+            source_run_id: string;
+            /** Source Creator Name */
+            source_creator_name?: string | null;
+            /** Source Created At */
+            source_created_at?: string | null;
+            /** Source Finished At */
+            source_finished_at?: string | null;
+            /** Source Gakei Version */
+            source_gakei_version?: string | null;
+            /**
+             * Imported At
+             * Format: date-time
+             */
+            imported_at: string;
         };
         /** RunInputCreate */
         RunInputCreate: {
@@ -8145,6 +8283,111 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_lineage_export: {
+        parameters: {
+            query?: {
+                scope?: "ancestors" | "lineage";
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineageExportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_lineage: {
+        parameters: {
+            query?: {
+                scope?: "ancestors" | "lineage";
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_lineage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_lineage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineageImportResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
