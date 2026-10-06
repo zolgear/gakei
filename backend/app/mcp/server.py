@@ -285,6 +285,7 @@ def _run_payload(
         "prompt": run.prompt,
         "params": run.params or {},
         "error_code": run.error_code,
+        "deleted": run.deleted_at is not None,
         "error_message": run.error_message,
         "queued_at": run.queued_at.isoformat(),
         "started_at": run.started_at.isoformat() if run.started_at else None,
@@ -323,7 +324,9 @@ def _load_run_result(
 ) -> tuple[dict[str, Any], list[ImageContent]] | None:
     with _session(mc) as db:
         run = get_visible_run(db, mc.user, run_id)
-        if run is None or run.deleted_at is not None:
+        # 削除済みの Run も、REST の `GET /api/runs/{id}` と同じく返す(`deleted: true`)。
+        # 失敗や削除も証跡として残す(ADR-0003)。`get_asset` の扱いとも揃える。
+        if run is None:
             return None
         return _run_payload(mc, db, run, include_thumbnails, include_lineage)
 
@@ -697,7 +700,7 @@ async def get_run(
     Optionally wait (up to 25 s per call) for it to finish. lineage_mermaid is a Mermaid
     flowchart of the inputs' ancestry -> this run -> its outputs. text_outputs holds text the
     workflow produced at run time (role "final_prompt": the prompt rewritten by a ComfyUI
-    prompt enhancer), or null."""
+    prompt enhancer), or null. A deleted run is still returned, with deleted: true."""
     mc = get_mcp_context(ctx)
     if wait_seconds > 0:
         await _wait_for_terminal(mc, run_id, wait_seconds)

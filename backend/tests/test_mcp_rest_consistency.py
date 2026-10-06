@@ -594,20 +594,23 @@ def test_deleted_run_disappears_from_lists(world: World) -> None:
 
 
 def test_deleted_run_detail_matches(world: World) -> None:
-    """削除済みの Run の詳細。REST は論理削除済みでも 200 で返す(ADR-0008)が、MCP の
-    `get_run` は「無い」とする。どちらに揃えるかは設計の判断が要る。"""
+    """削除済みの Run の詳細。REST は論理削除済みでも 200(`deleted_at` 付き)で返し、MCP の
+    `get_run` も `deleted: true` で返す(ADR-0003。`get_asset` の扱いとも同じ)。他人には
+    どちらでも見えない。"""
     w = world
     run_id = w.ids["a_run"]
     assert w.rest("A", "DELETE", f"/api/runs/{run_id}").status_code == 204
     rest = w.rest("A", "GET", f"/api/runs/{run_id}")
     assert rest.status_code == 200 and rest.json()["deleted_at"] is not None
     mcp = w.mcp("A", "get_run", {"run_id": run_id, "include_thumbnails": False})
-    if _is_error(mcp):
-        pytest.xfail(
-            "削除済みの Run: REST の GET /api/runs/{id} は 200(deleted_at 付き)、MCP の "
-            "get_run は not found。get_asset は削除済みでも返す(deleted: true)ので、Run だけ"
-            "扱いが違う。どちらに揃えるかは設計の判断が要る"
-        )
+    assert not _is_error(mcp), mcp
+    payload = mcp["structuredContent"]
+    assert payload["run_id"] == run_id
+    assert payload["deleted"] is True
+    assert _comparable_run(rest.json()) == _comparable_mcp_run(payload)
+    # 削除済みでも、他人には REST でも MCP でも見えない(ADR-0025)。
+    assert w.rest("B", "GET", f"/api/runs/{run_id}").status_code == 404
+    assert _is_error(w.mcp("B", "get_run", {"run_id": run_id, "include_thumbnails": False}))
 
 
 # -- 生成の検証(ADR-0023 1章: 検証は同じドメイン関数) -------------------------------
