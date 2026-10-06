@@ -607,3 +607,28 @@ def test_mcp_degrades_when_storage_is_unreachable(client: Any) -> None:
 
     result = _call(client, "get_image", {"asset_id": asset_id})
     assert "could not be read" in _error_text(result)
+
+
+def test_list_keys_and_delete(any_store: Any) -> None:
+    """派生の掃除(ADR-0036 4章)で使う、接頭辞での一覧と削除。"""
+    sha = "cd" * 32
+    any_store.write_derived(sha, "thumb", b"t")
+    any_store.write_derived(sha, "preview", b"p")
+    _put_raw(any_store, f"derived/{sha}/thumb.v2.webp", b"t2")
+    _put_raw(any_store, "derivedx/other.webp", b"o")
+
+    assert sorted(any_store.list_keys("derived/")) == [
+        f"derived/{sha}/preview.webp",
+        f"derived/{sha}/thumb.v2.webp",
+        f"derived/{sha}/thumb.webp",
+    ]
+    assert sorted(any_store.list_keys(f"derived/{sha}/thumb")) == [
+        f"derived/{sha}/thumb.v2.webp",
+        f"derived/{sha}/thumb.webp",
+    ]
+    assert list(any_store.list_keys("nothing/")) == []
+
+    any_store.delete(f"derived/{sha}/thumb.webp")
+    any_store.delete(f"derived/{sha}/thumb.webp")  # 無くても失敗しない
+    assert not any_store.exists(f"derived/{sha}/thumb.webp")
+    assert any_store.read(f"derived/{sha}/thumb.v2.webp") == b"t2"

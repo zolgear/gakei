@@ -12,7 +12,7 @@ MCP の応答の本文(`ImageContent`)に載せる画像を作る。
 元にする画像は、原本(4K まである)をそのままデコードすると遅いので、派生画像を使えるときは
 使う。512px は派生のサムネイル(512px WebP、品質 90)、1568px はプレビュー(2048px WebP、
 品質 90)を縮める。元の画像が目標以下のとき(縮めないとき)だけ原本を使い、WebP を経由した
-劣化を避ける。派生が無ければ原本を使う。
+劣化を避ける。今の版の派生が無ければ、`derivatives.ensure_derived` が原本から作る(ADR-0036)。
 
 同じ内容(sha256)・同じ大きさの結果は変わらないので、小さな LRU キャッシュに覚えておく
 (サムネイルは検索結果などで何枚も作るため)。
@@ -30,6 +30,7 @@ from typing import Literal
 
 from PIL import Image
 
+from app.domain import derivatives
 from app.domain.derivatives import PREVIEW_LONG_EDGE, THUMB_LONG_EDGE
 from app.domain.models import Asset
 from app.domain.storage import AssetStore, Variant
@@ -154,30 +155,32 @@ def encode_for_agent(
     return _fit_jpeg(resized, limit)
 
 
-def _source_variant(store: AssetStore, asset: Asset, long_edge: int) -> Variant | None:
-    """元にする画像(ADR-0004 の派生画像を使えるときは使う)。原本も無ければ None。"""
+def _source_variant(asset: Asset, long_edge: int) -> Variant:
+    """元にする画像(ADR-0004 の派生画像を使えるときは使う)。
+
+    派生は `derivatives.ensure_derived` で開くので、今の版の派生が無ければ原本から作る
+    (ADR-0036 2章)。原本も無ければ `_render` が None を返す。
+    """
     original_long = max(asset.width or 0, asset.height or 0)
     # 縮めないときは、劣化のない原本を使う。
     if not (original_long and original_long <= long_edge):
-        if long_edge <= THUMB_LONG_EDGE and store.content_exists(
-            asset.blob_key, asset.sha256, "thumb"
-        ):
+        if long_edge <= THUMB_LONG_EDGE:
             return "thumb"
-        if long_edge <= PREVIEW_LONG_EDGE and store.content_exists(
-            asset.blob_key, asset.sha256, "preview"
-        ):
+        if long_edge <= PREVIEW_LONG_EDGE:
             return "preview"
-    if store.content_exists(asset.blob_key, asset.sha256, "original"):
-        return "original"
-    return None
+    return "original"
 
 
 def _render(
     store: AssetStore, asset: Asset, variant: Variant, long_edge: int, transparent: bool | None
-) -> AgentImage:
-    content = store.open_content(asset.blob_key, asset.sha256, variant)
+) -> AgentImage | None:
+    """画像を作る。元にする画像(派生なら原本も)が無ければ None。"""
+    if variant == "original":
+        content = store.open_content(asset.blob_key, asset.sha256, variant)
+    else:
+        content = derivatives.ensure_derived(store, asset.blob_key, asset.sha256, variant)
     if content is None:
-        raise FileNotFoundError(f"{asset.blob_key} ({variant})")
+        return None
     with Image.open(io.BytesIO(content.read_all())) as image:
         if image.format == "JPEG":
             # JPEG はデコードの段階で縮められる(4K の原本でも速い)。
@@ -185,7 +188,8 @@ def _render(
         return encode_for_agent(image, long_edge, transparent=transparent)
 
 
-# キャッシュのキーは (sha256, variant, 長辺, 透過)。同じ内容・同じ元画像なら結果は変わらない。
+# キャッシュのキーは (sha256, variant, 派生の版, 長辺, 透過)。同じ内容・同じ元画像なら結果は
+# 変わらない(派生の作り方が変われば元画像も変わるので、版もキーに含める。ADR-0036)。
 # `store` と `asset` はキーに含めず、見つからなかったとき(読めなかったとき)だけ読みに行く。
 _small_cache: OrderedDict[tuple, AgentImage] = OrderedDict()
 _large_cache: OrderedDict[tuple, AgentImage] = OrderedDict()
@@ -202,13 +206,16 @@ def _cached_render(
     variant: Variant,
     long_edge: int,
     transparent: bool | None,
-) -> AgentImage:
-    key = (asset.sha256, variant, long_edge, transparent)
+) -> AgentImage | None:
+    version = None if variant == "original" else derivatives.DERIVED_VERSION
+    key = (asset.sha256, variant, version, long_edge, transparent)
     with _cache_lock:
         if key in cache:
             cache.move_to_end(key)
             return cache[key]
     image = _render(store, asset, variant, long_edge, transparent)
+    if image is None:
+        return None
     with _cache_lock:
         cache[key] = image
         cache.move_to_end(key)
@@ -236,9 +243,7 @@ def render_asset(
     判定する。
     """
     long_edge = LONG_EDGES[size]
-    variant = _source_variant(store, asset, long_edge)
-    if variant is None:
-        return None
+    variant = _source_variant(asset, long_edge)
     if long_edge <= SMALL_LONG_EDGE:
         return _cached_render(
             _small_cache, _SMALL_CACHE_SIZE, store, asset, variant, long_edge, transparent

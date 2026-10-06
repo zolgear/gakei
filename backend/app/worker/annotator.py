@@ -53,7 +53,7 @@ from app.annotation.engines import (
     wants_translation,
 )
 from app.annotation.wd_tagger import WdTagger
-from app.domain import annotation_settings, llm_connections
+from app.domain import annotation_settings, derivatives, llm_connections
 from app.domain import annotations as annotations_domain
 from app.domain.models import Asset, AssetAnnotation, AssetKind, Run
 from app.domain.storage import AssetStore
@@ -449,7 +449,11 @@ class Annotator:
 
             image_bytes = None
             if will_read_image:
-                preview = self.store.open_content(asset.blob_key, asset.sha256, "preview")
+                # 今の版の preview が無ければ原本から作る(ADR-0036 2章)。原本も読めなければ、
+                # これまでどおり原本を読みに行って失敗させる。
+                preview = derivatives.ensure_derived(
+                    self.store, asset.blob_key, asset.sha256, "preview"
+                )
                 image_bytes = (
                     preview.read_all() if preview is not None else self.store.read(asset.blob_key)
                 )

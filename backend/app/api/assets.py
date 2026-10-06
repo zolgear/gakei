@@ -18,7 +18,7 @@ from app.auth.deps import require_user, require_user_or_api_token
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_annotator, get_embedder, get_session, get_settings, get_store
-from app.domain import annotation_settings, embedding_settings, ingest_hooks
+from app.domain import annotation_settings, derivatives, embedding_settings, ingest_hooks
 from app.domain import annotations as annotations_domain
 from app.domain import embeddings as embeddings_domain
 from app.domain.asset_groups import group_for_asset
@@ -411,17 +411,33 @@ def asset_content_response(
     embed_meta = (
         viewer is not None and variant == "original" and download and asset.mime == "image/png"
     )
-    etag = f'"{asset.sha256}-original-gakei1"' if embed_meta else f'"{asset.sha256}-{variant}"'
+    if embed_meta:
+        etag = f'"{asset.sha256}-original-gakei1"'
+    elif variant == "original":
+        etag = f'"{asset.sha256}-original"'
+    else:
+        # 派生は作り方の版を含める(ADR-0036 3章)。版が変われば別の ETag になる。
+        etag = f'"{asset.sha256}-{variant}-d{derivatives.DERIVED_VERSION}"'
     headers = {"ETag": etag, "Cache-Control": cache_control}
 
     if if_none_match == etag:
         # 本体は読まない(オブジェクトストレージで原本を丸ごと取りに行かないため)。
-        # ファイルが無ければ、これまでどおり 304 ではなく 404。
-        if not store.content_exists(asset.blob_key, asset.sha256, variant):
+        # 派生の ETag は版を含むので、一致すればブラウザは今の版の中身を持っている。今の版の
+        # 派生が消えていても、原本があれば同じ中身を作り直せるので 304 でよい(ここでは
+        # 作り直さず、次に本体を要求されたときに `ensure_derived` が作る)。原本も無ければ、
+        # これまでどおり 304 ではなく 404。
+        if not store.content_exists(asset.blob_key, asset.sha256, variant) and (
+            variant == "original"
+            or not store.content_exists(asset.blob_key, asset.sha256, "original")
+        ):
             raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
         return Response(status_code=304, headers=headers)
 
-    content = store.open_content(asset.blob_key, asset.sha256, variant)
+    if variant == "original":
+        content = store.open_content(asset.blob_key, asset.sha256, variant)
+    else:
+        # 今の版の派生が無ければ原本から作る(ADR-0036 2章)。
+        content = derivatives.ensure_derived(store, asset.blob_key, asset.sha256, variant)
     if content is None:
         raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
 
