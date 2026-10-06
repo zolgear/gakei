@@ -22,7 +22,11 @@ import type { PublicShareResponse } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { buildFlowGraph, lineageNodeTypes } from '../lineage/lineageFlow'
 import type { LineageLayoutOptions } from '../lineage/lineageLayout'
-import { LINEAGE_MANUAL_MIN_ZOOM, type LineageFitOptions } from '../lineage/lineageViewport'
+import {
+  LINEAGE_COMPACT_FIT_OPTIONS,
+  LINEAGE_MANUAL_MIN_ZOOM,
+  type LineageFitOptions,
+} from '../lineage/lineageViewport'
 import { useLineageViewport } from '../lineage/useLineageViewport'
 import { toLineageResponse } from './publicShareGraph'
 import lineageStyles from '../lineage/LineageGraph.module.css'
@@ -90,7 +94,7 @@ function PublicLineageGraphInner({
     fitKey: `${data.root_asset_id}:${nodes.length}`,
     nodeCount: nodes.length,
     focusNodeId: highlightedNodeId,
-    options: full ? FULL_FIT_OPTIONS : undefined,
+    options: full ? FULL_FIT_OPTIONS : LINEAGE_COMPACT_FIT_OPTIONS,
   })
 
   function handleClick(id: string, type: string | undefined) {

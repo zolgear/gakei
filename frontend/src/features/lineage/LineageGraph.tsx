@@ -27,6 +27,7 @@ import { useI18n } from '../../i18n'
 import { buildFlowGraph, lineageNodeTypes } from './lineageFlow'
 import { computeViewportXAdjustment } from './inspectorPlacement'
 import { LINEAGE_MANUAL_MIN_ZOOM } from './lineageViewport'
+import { LINEAGE_COMPACT_FIT_OPTIONS } from './lineageViewport'
 import { useLineageViewport } from './useLineageViewport'
 import { nodeTargetPath } from './nodeTargetPath'
 import styles from './LineageGraph.module.css'
@@ -81,6 +82,8 @@ function LineageGraphInner({
     nodeCount: nodes.length,
     focusNodeId: highlightedNodeId ?? assetId,
     inspectorWidthPx,
+    // 小さい表示は枠が低いので、全体が見えることを優先して下限を下げる。
+    options: compact ? LINEAGE_COMPACT_FIT_OPTIONS : undefined,
   })
 
   // インスペクターの幅(開く/閉じる/リサイズで変わる)に合わせて、ズームは変えずグラフだけを

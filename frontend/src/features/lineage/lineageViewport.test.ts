@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  LINEAGE_COMPACT_FIT_OPTIONS,
+  LINEAGE_COMPACT_READABLE_MIN_ZOOM,
   LINEAGE_MANUAL_MIN_ZOOM,
   LINEAGE_READABLE_MIN_ZOOM,
   computeAutoFitViewport,
@@ -59,6 +61,31 @@ describe('computeAutoFitViewport', () => {
       focusBounds: focus,
     })
     expect(auto.zoom).toBe(LINEAGE_READABLE_MIN_ZOOM)
+  })
+})
+
+describe('computeAutoFitViewport(小さい表示)', () => {
+  // サイドバーの系列パネル(高さ約 340px)。0.75 倍では収まらないが 0.5 倍なら収まる系列。
+  const panel = { width: 258, height: 340 }
+
+  it('0.5 倍で収まる小さい系列は全体を収める', () => {
+    const input = { graphBounds: small, ...panel, options: LINEAGE_COMPACT_FIT_OPTIONS }
+    const auto = computeAutoFitViewport({ ...input, focusBounds: focus })
+    expect(auto.zoom).toBeLessThan(LINEAGE_READABLE_MIN_ZOOM)
+    expect(auto.zoom).toBeGreaterThanOrEqual(LINEAGE_COMPACT_READABLE_MIN_ZOOM)
+    expect(auto).toEqual(computeFullFitViewport(input))
+  })
+
+  it('大きい系列は 0.5 倍で止めて注目するノードを中央に置く', () => {
+    const auto = computeAutoFitViewport({
+      graphBounds: large,
+      ...panel,
+      focusBounds: focus,
+      options: LINEAGE_COMPACT_FIT_OPTIONS,
+    })
+    expect(auto.zoom).toBe(LINEAGE_COMPACT_READABLE_MIN_ZOOM)
+    expect(auto.x).toBeCloseTo(panel.width / 2)
+    expect(60 * auto.zoom + auto.y).toBeCloseTo(panel.height / 2)
   })
 })
 
