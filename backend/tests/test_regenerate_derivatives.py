@@ -155,7 +155,10 @@ def test_prune_keeps_unknown_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     ]
 
 
-def test_empty_database(tmp_path: Path) -> None:
+def test_empty_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # SQLite のファイルが無い場合の確認なので、PostgreSQL で回すとき(ADR-0027 6章)の
+    # DATABASE_URL は外す。
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     data_dir = tmp_path / "empty"
     with pytest.raises(tool.RegenerateAbortedError):
         tool.regenerate(_settings(data_dir), dry_run=True)
