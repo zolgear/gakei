@@ -370,6 +370,7 @@
     "disabled": "The MCP server is disabled. Enable it under Admin settings → MCP.",
     "tokenRequired": "An access token is required (Authorization: Bearer <token>).",
     "tokenInvalid": "The access token is invalid or has been revoked.",
+    "tokenExpired": "The access token has expired. Issue a new token under Access tokens in User settings.",
     "originForbidden": "MCP requests from this Origin are not allowed."
   },
   "annotations": {

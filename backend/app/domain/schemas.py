@@ -1014,6 +1014,11 @@ class ApiTokenRow(BaseModel):
     name: str
     created_at: datetime
     last_used_at: datetime | None = None
+    # 有効期限(null は無期限)と権限(ADR-0023 11章)。
+    expires_at: datetime | None = None
+    scope: Literal["full", "read"]
+    # 期限を過ぎているか(サーバーの時刻で判定する)。期限切れでも失効させるまで一覧に残る。
+    expired: bool
 
 
 class ApiTokenListResponse(BaseModel):
@@ -1024,6 +1029,10 @@ class ApiTokenCreateRequest(BaseModel):
     """名前の妥当性(空でない、100文字以内)は `app/domain/api_tokens.py` が検証する。"""
 
     name: str
+    # 有効期限の日数。30 / 90 / 365 か、null で無期限。省くと 90 日(ADR-0023 11章 1)。
+    expires_in_days: Literal[30, 90, 365] | None = 90
+    # 権限。`full`(すべて)か `read`(読み取りのみ)。省くと `full`(11章 2)。
+    scope: Literal["full", "read"] = "full"
 
 
 class ApiTokenCreateResponse(ApiTokenRow):

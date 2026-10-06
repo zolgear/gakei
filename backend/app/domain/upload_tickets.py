@@ -21,6 +21,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.auth.sessions import hash_token
+from app.domain import api_tokens as api_tokens_domain
 from app.domain.models import ApiToken, UploadTicket
 
 TICKET_TTL = timedelta(minutes=10)
@@ -72,7 +73,7 @@ def claim_ticket(db: Session, raw: str, now: datetime | None = None) -> ClaimRes
     未使用に戻る)。
 
     - 不明なトークン: `not_found`
-    - 使用済み・期限切れ・発行に使ったアクセストークンが失効済み: `gone`
+    - 使用済み・期限切れ・発行に使ったアクセストークンが失効済みか期限切れ: `gone`
     """
     now = now or _utcnow()
     ticket = db.execute(
@@ -83,8 +84,8 @@ def claim_ticket(db: Session, raw: str, now: datetime | None = None) -> ClaimRes
     if ticket.used_at is not None or ticket.expires_at <= now:
         return ClaimResult(None, "gone")
     if ticket.api_token_id is not None:
-        token = db.get(ApiToken, ticket.api_token_id)
-        if token is None or token.revoked_at is not None:
+        # 発行に使ったトークンが失効・期限切れなら使えない(ADR-0023 11章 3)。
+        if not api_tokens_domain.is_usable(db.get(ApiToken, ticket.api_token_id), now):
             return ClaimResult(None, "gone")
     # 同時に送られても片方だけが通るよう、未使用であることを条件に書き換える。
     result = db.execute(

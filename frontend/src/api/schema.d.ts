@@ -1712,6 +1712,17 @@ export interface components {
         ApiTokenCreateRequest: {
             /** Name */
             name: string;
+            /**
+             * Expires In Days
+             * @default 90
+             */
+            expires_in_days: (30 | 90 | 365) | null;
+            /**
+             * Scope
+             * @default full
+             * @enum {string}
+             */
+            scope: "full" | "read";
         };
         /** ApiTokenCreateResponse */
         ApiTokenCreateResponse: {
@@ -1729,6 +1740,15 @@ export interface components {
             created_at: string;
             /** Last Used At */
             last_used_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "full" | "read";
+            /** Expired */
+            expired: boolean;
             /** Token */
             token: string;
         };
@@ -1756,6 +1776,15 @@ export interface components {
             created_at: string;
             /** Last Used At */
             last_used_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "full" | "read";
+            /** Expired */
+            expired: boolean;
         };
         /**
          * AssetAnnotationResponse

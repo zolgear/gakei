@@ -2,9 +2,11 @@
  * 設定 →「ユーザー設定」の「アクセストークン」(ADR-0023 6章)。AI エージェントを MCP で接続する
  * ときに `Authorization: Bearer` で渡すトークンを、各自が発行・失効させる。oidc モードのときだけ
  * 描画される(設定画面の `settingsToc` が制御する。none モードは API も 404)。
- * - 発行: 名前を付けて発行し、値はその応答にだけ載るので、この部品の state にだけ置いて1回だけ
- *   見せる(コピーボタン付き)。画面を離れると消え、再表示できない。
- * - 一覧: 名前、作成日時、最終使用日時(未使用なら「未使用」)。
+ * - 発行: 名前・有効期限・権限を選んで発行し(期限と権限は ADR-0023 11章)、値はその応答にだけ
+ *   載るので、この部品の state にだけ置いて1回だけ見せる(コピーボタン付き)。画面を離れると消え、
+ *   再表示できない。
+ * - 一覧: 名前、権限、期限(無期限なら「無期限」)、作成日時、最終使用日時(未使用なら「未使用」)。
+ *   期限を過ぎたトークンも失効させるまで残り、名前の横に「期限切れ」と出す。
  * - 失効: 取り消せない操作なので、既存の削除と同じく `ConfirmDialog` で確認してから行う。
  */
 import { useState } from 'react'
@@ -23,7 +25,21 @@ import { formatDateTime } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
 import { CopyableValue } from './CopyableValue'
 import { API_TOKENS_QUERY_KEY } from './queryKeys'
-import { API_TOKEN_NAME_MAX_LENGTH, formatLastUsed, isValidApiTokenName } from './mcpSettings'
+import {
+  API_TOKEN_EXPIRY_OPTIONS,
+  API_TOKEN_NAME_MAX_LENGTH,
+  API_TOKEN_SCOPES,
+  DEFAULT_API_TOKEN_EXPIRY,
+  DEFAULT_API_TOKEN_SCOPE,
+  apiTokenExpiryDays,
+  formatLastUsed,
+  formatTokenExpiry,
+  isApiTokenExpiryOption,
+  isApiTokenScope,
+  isValidApiTokenName,
+  type ApiTokenExpiryOption,
+  type ApiTokenScope,
+} from './mcpSettings'
 import styles from './ApiTokensSection.module.css'
 import common from './settings.module.css'
 
@@ -37,6 +53,8 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
   const queryClient = useQueryClient()
   const query = useQuery({ queryKey: API_TOKENS_QUERY_KEY, queryFn: listApiTokens })
   const [nameInput, setNameInput] = useState('')
+  const [expiry, setExpiry] = useState<ApiTokenExpiryOption>(DEFAULT_API_TOKEN_EXPIRY)
+  const [scope, setScope] = useState<ApiTokenScope>(DEFAULT_API_TOKEN_SCOPE)
   const [created, setCreated] = useState<ApiTokenCreateResponse | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<ApiTokenRow | null>(null)
 
@@ -45,6 +63,8 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
     onSuccess: (data) => {
       setCreated(data)
       setNameInput('')
+      setExpiry(DEFAULT_API_TOKEN_EXPIRY)
+      setScope(DEFAULT_API_TOKEN_SCOPE)
       void queryClient.invalidateQueries({ queryKey: API_TOKENS_QUERY_KEY })
       toast.show({ message: a.createdToast })
     },
@@ -67,7 +87,7 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
 
   function handleCreate() {
     if (!nameValid) return
-    createMutation.mutate(nameInput.trim())
+    createMutation.mutate({ name: nameInput.trim(), expires_in_days: apiTokenExpiryDays(expiry), scope })
   }
 
   const items = query.data?.items ?? []
@@ -85,23 +105,69 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
         <label htmlFor="gakei-api-token-name" title={a.nameTooltip}>
           {a.nameLabel}
         </label>
+        <input
+          id="gakei-api-token-name"
+          type="text"
+          className={`${common.input} ${styles.nameInput}`}
+          value={nameInput}
+          maxLength={API_TOKEN_NAME_MAX_LENGTH}
+          placeholder={a.namePlaceholder}
+          title={a.nameTooltip}
+          autoComplete="off"
+          disabled={createMutation.isPending}
+          onChange={(e) => setNameInput(e.target.value)}
+        />
         <div className={styles.row}>
-          <input
-            id="gakei-api-token-name"
-            type="text"
-            className={common.input}
-            value={nameInput}
-            maxLength={API_TOKEN_NAME_MAX_LENGTH}
-            placeholder={a.namePlaceholder}
-            title={a.nameTooltip}
-            autoComplete="off"
-            disabled={createMutation.isPending}
-            onChange={(e) => setNameInput(e.target.value)}
-          />
+          <div className={styles.field}>
+            <label htmlFor="gakei-api-token-expiry" title={a.expiryTooltip}>
+              {a.expiryLabel}
+            </label>
+            <select
+              id="gakei-api-token-expiry"
+              className={common.select}
+              value={expiry}
+              title={a.expiryTooltip}
+              disabled={createMutation.isPending}
+              onChange={(e) => {
+                if (isApiTokenExpiryOption(e.target.value)) setExpiry(e.target.value)
+              }}
+            >
+              {API_TOKEN_EXPIRY_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {a.expiryOptions[option]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label htmlFor="gakei-api-token-scope" title={a.scopeTooltip}>
+              {a.scopeLabel}
+            </label>
+            <select
+              id="gakei-api-token-scope"
+              className={common.select}
+              value={scope}
+              title={a.scopeTooltip}
+              aria-describedby="gakei-api-token-scope-help"
+              disabled={createMutation.isPending}
+              onChange={(e) => {
+                if (isApiTokenScope(e.target.value)) setScope(e.target.value)
+              }}
+            >
+              {API_TOKEN_SCOPES.map((option) => (
+                <option key={option} value={option}>
+                  {a.scopeOptions[option]}
+                </option>
+              ))}
+            </select>
+          </div>
           <button type="submit" className={common.primaryButton} disabled={!nameValid || createMutation.isPending}>
             {createMutation.isPending ? a.creating : a.create}
           </button>
         </div>
+        <p id="gakei-api-token-scope-help" className={common.helpText}>
+          {a.scopeHelp}
+        </p>
       </form>
 
       {created && (
@@ -141,8 +207,17 @@ export function ApiTokensSection({ toast }: ApiTokensSectionProps) {
           {items.map((item) => (
             <li key={item.id} className={common.item}>
               <div className={common.itemText}>
-                <span className={common.itemName}>{item.name}</span>
+                <div className={styles.nameLine}>
+                  <span className={common.itemName}>{item.name}</span>
+                  {item.expired && <span className={styles.expiredBadge}>{a.expiredBadge}</span>}
+                </div>
                 <dl className={common.itemMeta}>
+                  <dt>{a.scopeLabel}</dt>
+                  <dd>{a.scopeOptions[item.scope]}</dd>
+                  <dt>{a.expiresAt}</dt>
+                  <dd data-never={item.expires_at ? undefined : 'true'}>
+                    {formatTokenExpiry(item.expires_at, a.noExpiry)}
+                  </dd>
                   <dt>{a.createdAt}</dt>
                   <dd>{formatDateTime(item.created_at)}</dd>
                   <dt>{a.lastUsedAt}</dt>
