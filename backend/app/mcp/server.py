@@ -781,6 +781,12 @@ async def search_assets(
             if mode == "semantic":
                 if not query or not query.strip():
                     raise ToolError("semantic mode needs a query (a description of the image).")
+                if kind == "mask":
+                    # REST(`GET /api/search/semantic`)と同じく、マスクは種類に指定できない
+                    # (マスクには埋め込みが無い。ADR-0033)。
+                    raise ToolError(
+                        "Masks have no embeddings: kind 'mask' cannot be used in semantic mode."
+                    )
                 try:
                     response = semantic_domain.semantic_search(
                         db,
