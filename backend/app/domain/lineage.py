@@ -44,11 +44,12 @@ from app.domain.schemas import (
 from app.domain.visibility import VisibilityChecker, asset_visible
 
 # 世代の上限は実質的に設けない(1世代 = Asset→Run→Asset の2ホップ)。探索の量は
-# MAX_NODES で抑える(ADR-0014 6章、2026-09-24 追記)。
+# MAX_NODES で抑える(ADR-0014 6章、2026-09-24 追記)。子孫の方向も同じ扱い
+# (2026-10-07 追記。以前は既定 3 ホップで、深い系列の子孫が途中で切れていた)。
 MAX_DEPTH = 255
 MAX_NODES = 1000
 DEFAULT_UP = MAX_DEPTH
-DEFAULT_DOWN = 3
+DEFAULT_DOWN = MAX_DEPTH
 
 _PROMPT_PREVIEW_LENGTH = 200
 

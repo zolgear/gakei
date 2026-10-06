@@ -26,7 +26,13 @@ from app.domain.assets import IngestError, asset_is_used_as_input, is_restorable
 from app.domain.assets import ingest_upload as ingest_asset
 from app.domain.avatars import avatar_url
 from app.domain.embedded_meta import build_lineage_meta, embed_gakei_chunk, get_instance_id
-from app.domain.lineage import DEFAULT_UP, MAX_DEPTH, LineageNotFoundError, build_asset_lineage
+from app.domain.lineage import (
+    DEFAULT_DOWN,
+    DEFAULT_UP,
+    MAX_DEPTH,
+    LineageNotFoundError,
+    build_asset_lineage,
+)
 from app.domain.models import AppUser, Asset, AssetGroup, AssetGroupMember, AssetKind, Run
 from app.domain.run_views import run_text_outputs
 from app.domain.schemas import (
@@ -465,7 +471,7 @@ def asset_content_response(
 def get_asset_lineage(
     asset_id: uuid.UUID,
     up: int = Query(default=DEFAULT_UP, ge=0, le=MAX_DEPTH, description="祖先方向の深さ上限"),
-    down: int = Query(default=3, ge=0, le=MAX_DEPTH, description="子孫方向の深さ上限"),
+    down: int = Query(default=DEFAULT_DOWN, ge=0, le=MAX_DEPTH, description="子孫方向の深さ上限"),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> AssetLineageResponse:
