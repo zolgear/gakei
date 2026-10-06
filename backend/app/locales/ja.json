@@ -9,6 +9,7 @@
     "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。",
     "authEmergencyDisable": "認証を一時的に無効にして起動するには、.env に AUTH_MODE=none を書いて再起動してください(画面の設定は消えません)。",
     "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}",
+    "databaseTooNew": "このデータベース({url})は、より新しい版の GAKEI で使われています(データベースのリビジョン: {revision}。この GAKEI {version} が知っているのは {head} までです)。より新しい版の GAKEI で起動するか、更新する前に取ったバックアップから戻してください。データベースは変更していません。",
     "storageConfigMissing": "STORAGE_BACKEND に必要な環境変数が設定されていません: {missing}",
     "storageAzureBothConnections": "AZURE_STORAGE_CONNECTION_STRING と AZURE_STORAGE_ACCOUNT_URL の両方が設定されています。どちらか一方だけを設定してください。",
     "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING の形式が不正です。Azure portal の「アクセスキー」にある接続文字列をそのまま設定してください。",

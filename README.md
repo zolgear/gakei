@@ -94,6 +94,7 @@ volumes:
 ```
 
 - **更新:** `docker pull ghcr.io/zolgear/gakei:latest` してコンテナを作り直す(`docker rm -f gakei` してから上の `docker run` をもう一度)。compose なら `docker compose pull && docker compose up -d`。**更新の前に `data/` のバックアップを取る**(起動時に DB のマイグレーションが自動で走り、戻すにはバックアップが要る。下のバックアップ例を参照)。
+- **古い版に戻す:** イメージのタグを戻すときは、更新前に取ったバックアップから `data/`(PostgreSQL なら DB も)を戻す。新しい版で使った DB のまま古い版を起動すると、「より新しい版の GAKEI で使われています」と出して、DB を変えずに起動を中止する(DB は古い版に戻せないため)。
 - **タグ:** `latest`(最新の安定版)のほか、`0.y`、`0.y.z` がある。一覧は GitHub の [Releases](https://github.com/zolgear/gakei/releases)。
 
 ### 自分でビルドする(変更を加えたい場合)

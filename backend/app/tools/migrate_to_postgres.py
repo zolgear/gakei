@@ -50,7 +50,7 @@ from app.config import display_database_url, get_settings, normalize_database_ur
 from app.domain import embedding_index
 from app.domain.models import Base
 from app.i18n import console_t
-from app.main import alembic_config
+from app.main import alembic_config, database_too_new_message, unknown_revisions
 
 _BATCH_SIZE = 500
 
@@ -88,6 +88,10 @@ def _head_revision() -> str | None:
 
 
 def _check_source(connection: Connection, source_label: str) -> None:
+    # Issue #84: より新しい GAKEI で移行された DB は、この版のスキーマでは写せない。
+    revisions = unknown_revisions(connection)
+    if revisions:
+        raise MigrationAbortedError(database_too_new_message(source_label, revisions))
     current = MigrationContext.configure(connection).get_current_revision()
     head = _head_revision()
     if current != head:

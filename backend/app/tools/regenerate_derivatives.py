@@ -14,6 +14,8 @@
 - 保存先はサーバーと同じ(`STORAGE_BACKEND`。ローカルFS / Azure Blob / S3)。
 - サーバーを止めずに動かせる。DB は読むだけで、派生の書き込みは配信の途中で作り直すのと同じ
   内容の上書きにしかならないため(ADR-0036 2章)。
+- DB がより新しい GAKEI で移行されていれば、何もせずに中止する(Issue #84。新しい版の派生を
+  `--prune` で消さないため)。
 - 原本が無い・読めない画像は、数えて知らせるだけで中止しない。保存先との通信の失敗などは、
   トレースバックではなく文言を出して中止する(もう一度実行すれば続きから作る)。
 """
@@ -40,6 +42,7 @@ from app.domain.storage import (
     parse_derived_key,
 )
 from app.i18n import console_t
+from app.main import database_too_new_message, unknown_revisions
 
 DERIVED_PREFIX = "derived/"
 
@@ -80,6 +83,13 @@ def _asset_sources(settings: Settings) -> dict[str, list[str]]:
     engine = create_engine(url)
     try:
         with engine.connect() as connection:
+            # Issue #84: より新しい GAKEI で移行された DB なら止める。新しい版は派生の版も
+            # 新しいことがあり、この版の `--prune` がそれを「今の版以外」として消してしまうため。
+            revisions = unknown_revisions(connection)
+            if revisions:
+                raise RegenerateAbortedError(
+                    database_too_new_message(display_database_url(url), revisions)
+                )
             if not inspect(connection).has_table(Asset.__tablename__):
                 return {}
             rows = connection.execute(
