@@ -460,6 +460,39 @@
       "other": "移行が完了しました(合計 {count} 件。コピー {copied} 件、移行先にあったので飛ばした {skipped} 件)。STORAGE_BACKEND ほかの環境変数を設定して GAKEI を起動してください。"
     }
   },
+  "regenerateDerivatives": {
+    "description": "今の版の派生画像(サムネイル・プレビュー)が無い画像について、原本から作ります(ADR-0036)。論理削除済みの画像も含みます。GAKEI を止めずに実行できます。DB は書き換えず、原本には触れません。",
+    "dryRunHelp": "作る件数(--prune なら消す件数も)を数えるだけで、何も書かない・消さない",
+    "pruneHelp": "今の版以外の派生を消す(原本と、今の版の派生には触れない)",
+    "databaseMissing": "DB のファイルが見つかりません: {source}",
+    "failed": "保存先の読み書きに失敗したため、中止しました。もう一度実行すると続きから作ります。詳細: {error}",
+    "version": "派生の版: {version}",
+    "images": {
+      "one": "  画像: {count} 件(同じ内容は1件と数えます)",
+      "other": "  画像: {count} 件(同じ内容は1件と数えます)"
+    },
+    "dryRunMissing": {
+      "one": "  今の版の派生が無い: {count} 件",
+      "other": "  今の版の派生が無い: {count} 件"
+    },
+    "dryRunStale": {
+      "one": "  今の版以外の派生: {count} 件",
+      "other": "  今の版以外の派生: {count} 件"
+    },
+    "dryRunDone": "--dry-run: 何も書き込んでいません。",
+    "generated": {
+      "one": "今の版の派生を {count} 件作りました。",
+      "other": "今の版の派生を {count} 件作りました。"
+    },
+    "originalUnavailable": {
+      "one": "注意: 原本が無いか読めないため、派生を作れなかった画像が {count} 件あります(sha256): {keys}",
+      "other": "注意: 原本が無いか読めないため、派生を作れなかった画像が {count} 件あります(sha256): {keys}"
+    },
+    "pruned": {
+      "one": "今の版以外の派生を {count} 件消しました。",
+      "other": "今の版以外の派生を {count} 件消しました。"
+    }
+  },
   "shares": {
     "disabled": "共有リンクは管理者設定で無効になっています",
     "notFound": "共有リンクが見つかりません",

@@ -62,7 +62,7 @@ storytold の lightcraft(Apache-2.0 / MIT)は、プレビューのキャッシ�
 
 ## Action Items
 
-1. [ ] `DERIVED_VERSION`、版付きのキー、`ensure_derived`、配信・共有・埋め込み・自動タグ・MCP の読み出しの置き換え、ETag
-2. [ ] フロントの `dv` と、版の一致のテスト
-3. [ ] `app.tools.regenerate_derivatives`(`--dry-run`、`--prune`)と、`docs/` への手順の追記
-4. [ ] ADR-0004 4章・ADR-0026・ADR-0028 に、この ADR への注記
+1. [x] `DERIVED_VERSION`、版付きのキー、`ensure_derived`、配信・共有・埋め込み・自動タグ・MCP の読み出しの置き換え、ETag
+2. [x] フロントの `dv` と、版の一致のテスト
+3. [x] `app.tools.regenerate_derivatives`(`--dry-run`、`--prune`)と、`docs/` への手順の追記
+4. [x] ADR-0004 4章・ADR-0026・ADR-0028 に、この ADR への注記
