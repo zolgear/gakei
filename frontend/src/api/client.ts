@@ -506,7 +506,7 @@ export function createAsset(
   return request('/api/assets', { method: 'POST', body: form })
 }
 
-/** up/down は 0〜10。省略時はサーバー既定(up=10, down=3)。 */
+/** up/down は 0〜255 ホップ。省略時はサーバー既定(どちらも 255。量はノード数の上限 1000 で抑える。ADR-0014 6章)。 */
 export function getAssetLineage(
   assetId: string,
   params: operations['get_asset_lineage']['parameters']['query'] = {},
