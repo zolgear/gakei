@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { lineageExportQuery } from '../../api/client'
 import {
+  LINEAGE_EXPORT_MODES,
   LINEAGE_EXPORT_SCOPES,
   MAX_LINEAGE_ZIP_BYTES,
   checkLineageZipFile,
@@ -63,5 +65,50 @@ describe('importToastFromState', () => {
     expect(importToastFromState({ other: 1 })).toBeNull()
     expect(importToastFromState({ lineageImportToast: '' })).toBeNull()
     expect(importToastFromState({ lineageImportToast: 3 })).toBeNull()
+  })
+})
+
+describe('LINEAGE_EXPORT_MODES', () => {
+  it('「GAKEI に取り込む」「納品用」の順', () => {
+    expect(LINEAGE_EXPORT_MODES).toEqual(['import', 'delivery'])
+  })
+})
+
+describe('lineageExportQuery', () => {
+  it('取り込み用は範囲と用途だけ(名前は既定で含めない)', () => {
+    const query = lineageExportQuery({
+      scope: 'ancestors',
+      mode: 'import',
+      includeCreatorNames: false,
+      lang: 'en',
+      timeZone: 'Asia/Tokyo',
+    })
+    expect(query.toString()).toBe('scope=ancestors&mode=import')
+  })
+
+  it('納品用は言語とタイムゾーンを送り、選んだときだけ名前を含める', () => {
+    const query = lineageExportQuery({
+      scope: 'lineage',
+      mode: 'delivery',
+      includeCreatorNames: true,
+      lang: 'ja',
+      timeZone: 'Asia/Tokyo',
+    })
+    expect(query.get('scope')).toBe('lineage')
+    expect(query.get('mode')).toBe('delivery')
+    expect(query.get('include_creator_names')).toBe('true')
+    expect(query.get('lang')).toBe('ja')
+    expect(query.get('tz')).toBe('Asia/Tokyo')
+  })
+
+  it('タイムゾーンが分からなければ省く', () => {
+    const query = lineageExportQuery({
+      scope: 'ancestors',
+      mode: 'delivery',
+      includeCreatorNames: false,
+      lang: 'en',
+    })
+    expect(query.has('tz')).toBe(false)
+    expect(query.has('include_creator_names')).toBe(false)
   })
 })

@@ -1,5 +1,6 @@
 /**
- * 「系列を書き出す」ダイアログ(ADR-0037 1章)。範囲(この画像と祖先 / 系列全体)を選ぶと、
+ * 「系列を書き出す」ダイアログ(ADR-0037 1章・4章)。用途(GAKEI に取り込む / 納品用)、
+ * 実行者の名前を含めるか(既定は含めない)、範囲(この画像と祖先 / 系列全体)を選ぶと、
  * 含まれる画像と Generated の数、原本の合計を先に見せ(`previewLineageExport`)、
  * ダウンロードのリンクで ZIP を受け取る。ビューアと系列グラフのインスペクターから開く。
  */
@@ -9,13 +10,14 @@ import {
   ApiError,
   lineageExportUrl,
   previewLineageExport,
+  type LineageExportMode,
   type LineageExportScope,
 } from '../../api/client'
 import { Modal } from '../../components/Modal'
 import type { UseToastResult } from '../../components/Toast'
 import { formatBytes } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
-import { LINEAGE_EXPORT_SCOPES } from './lineageTransfer'
+import { LINEAGE_EXPORT_MODES, LINEAGE_EXPORT_SCOPES } from './lineageTransfer'
 import styles from './LineageTransfer.module.css'
 
 interface ExportLineageDialogProps {
@@ -38,7 +40,9 @@ export function ExportLineageDialog({ open, assetId, onClose, toast }: ExportLin
 function ExportLineageDialogBody({ assetId, onClose, toast }: Omit<ExportLineageDialogProps, 'open'>) {
   const { t } = useI18n()
   const s = t.lineageTransfer.export
+  const [mode, setMode] = useState<LineageExportMode>('import')
   const [scope, setScope] = useState<LineageExportScope>('ancestors')
+  const [includeCreatorNames, setIncludeCreatorNames] = useState(false)
 
   const preview = useQuery({
     queryKey: ['lineage-export-preview', assetId, scope],
@@ -49,6 +53,25 @@ function ExportLineageDialogBody({ assetId, onClose, toast }: Omit<ExportLineage
   return (
     <div className={styles.body}>
       <p className={styles.helpText}>{s.intro}</p>
+
+      <fieldset className={styles.fieldset}>
+        <legend className={styles.legend}>{s.purposeLabel}</legend>
+        <div className={styles.scopeOptions}>
+          {LINEAGE_EXPORT_MODES.map((value) => (
+            <label key={value} className={styles.scopeOption} data-checked={mode === value}>
+              <input
+                type="radio"
+                name="gakei-lineage-export-mode"
+                value={value}
+                checked={mode === value}
+                onChange={() => setMode(value)}
+              />
+              <span className={styles.scopeName}>{s.purposes[value]}</span>
+              <span className={styles.scopeHelp}>{s.purposeHelp[value]}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <fieldset className={styles.fieldset}>
         <legend className={styles.legend}>{s.scopeLabel}</legend>
@@ -91,6 +114,18 @@ function ExportLineageDialogBody({ assetId, onClose, toast }: Omit<ExportLineage
         <p className={styles.helpText}>{s.notIncluded}</p>
       </div>
 
+      <label className={styles.checkOption}>
+        <input
+          type="checkbox"
+          checked={includeCreatorNames}
+          onChange={(event) => setIncludeCreatorNames(event.target.checked)}
+        />
+        <span className={styles.checkText}>
+          <span className={styles.scopeName}>{s.includeCreatorNames}</span>
+          <span className={styles.scopeHelp}>{s.includeCreatorNamesHelp}</span>
+        </span>
+      </label>
+
       <div className={styles.actions}>
         <button type="button" className={styles.secondaryButton} onClick={onClose}>
           {t.common.cancel}
@@ -98,7 +133,7 @@ function ExportLineageDialogBody({ assetId, onClose, toast }: Omit<ExportLineage
         {ready ? (
           <a
             className={styles.primaryButton}
-            href={lineageExportUrl(assetId, scope)}
+            href={lineageExportUrl(assetId, { scope, mode, includeCreatorNames })}
             download
             onClick={() => {
               toast?.show({ message: s.startedToast })

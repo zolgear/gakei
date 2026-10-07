@@ -80,6 +80,25 @@
   color: var(--color-text-muted);
 }
 
+.checkOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkOption input {
+  margin: 3px 0 0;
+  flex: none;
+}
+
+.checkText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .previewBox {
   display: flex;
   flex-direction: column;
@@ -179,6 +198,15 @@
 @media (max-width: 767px) {
   .scopeOptions {
     grid-template-columns: 1fr;
+  }
+
+  .checkOption {
+    min-height: 44px;
+  }
+
+  .checkOption input {
+    width: 18px;
+    height: 18px;
   }
 
   .primaryButton,

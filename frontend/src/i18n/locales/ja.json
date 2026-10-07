@@ -2063,7 +2063,16 @@
       "button": "系列を書き出す",
       "buttonTooltip": "この画像の系列(原本と Generated の記録)を ZIP にまとめてダウンロードします",
       "dialogTitle": "系列を書き出す",
-      "intro": "系列の画像の原本と、それを作った Generated の記録(プロンプト、パラメーター、状態、実行者の表示名)を ZIP にまとめます。受け取った人は自分の GAKEI に取り込んで、続きの Edit ができます。",
+      "intro": "系列の画像の原本と、それを作った Generated の記録(プロンプト、パラメーター、状態)を ZIP にまとめます。",
+      "purposeLabel": "用途",
+      "purposes": {
+        "import": "GAKEI に取り込む",
+        "delivery": "納品用"
+      },
+      "purposeHelp": {
+        "import": "受け取った人が自分の GAKEI に取り込んで、続きの Edit ができます。",
+        "delivery": "GAKEI を使わない相手に渡す証跡です。ブラウザで開ける記録(index.html)と説明(README.txt)を加えます。GAKEI にも取り込めます。"
+      },
       "scopeLabel": "範囲",
       "scopes": {
         "ancestors": "この画像と祖先",
@@ -2085,6 +2094,8 @@
       },
       "previewTruncated": "系列が大きいため、一部だけを含めます。",
       "notIncluded": "タイトル、タグ、グループは含めません。削除した画像と、ほかの人の画像も含めません。",
+      "includeCreatorNames": "実行者の名前を含める",
+      "includeCreatorNamesHelp": "オンにすると、Generated ごとに実行した人の表示名が ZIP に入ります。メールアドレスは入りません。",
       "download": "ZIP をダウンロード",
       "startedToast": "書き出しを始めました"
     },

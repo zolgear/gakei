@@ -1461,7 +1461,10 @@ export interface paths {
         };
         /**
          * Export Lineage
-         * @description 系列を ZIP で書き出す(ADR-0037 1章)。範囲の計算は共有リンクと同じ。
+         * @description 系列を ZIP で書き出す(ADR-0037 1章・4章)。範囲の計算は共有リンクと同じ。
+         *
+         *     納品用の index.html の言語は、画面の表示言語(`lang`。ダウンロードはリンクで行うので
+         *     `Accept-Language` が画面の言語と一致するとは限らない)、無ければ `Accept-Language`。
          */
         get: operations["export_lineage"];
         put?: never;
@@ -8334,6 +8337,12 @@ export interface operations {
         parameters: {
             query?: {
                 scope?: "ancestors" | "lineage";
+                mode?: "import" | "delivery";
+                include_creator_names?: boolean;
+                /** @description 納品用の index.html の言語 */
+                lang?: ("ja" | "en") | null;
+                /** @description 納品用の index.html の日時のタイムゾーン(IANA) */
+                tz?: string | null;
             };
             header?: never;
             path: {

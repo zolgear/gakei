@@ -2063,7 +2063,16 @@
       "button": "Export lineage",
       "buttonTooltip": "Download this image's lineage (originals and Generated records) as a ZIP",
       "dialogTitle": "Export lineage",
-      "intro": "Packs the original images in the lineage and the records of the Generated runs that made them (prompt, parameters, status, the creator's display name) into a ZIP. The recipient can import it into their own GAKEI and keep editing.",
+      "intro": "Packs the original images in the lineage and the records of the Generated runs that made them (prompt, parameters, status) into a ZIP.",
+      "purposeLabel": "Purpose",
+      "purposes": {
+        "import": "Import into GAKEI",
+        "delivery": "For delivery"
+      },
+      "purposeHelp": {
+        "import": "The recipient can import it into their own GAKEI and keep editing.",
+        "delivery": "A record for someone who does not use GAKEI. Adds a page viewable in a browser (index.html) and a README.txt. It can still be imported into GAKEI."
+      },
       "scopeLabel": "Scope",
       "scopes": {
         "ancestors": "This image and ancestors",
@@ -2085,6 +2094,8 @@
       },
       "previewTruncated": "The lineage is large, so only part of it is included.",
       "notIncluded": "Titles, tags and groups are not included. Deleted images and other people's images are not included either.",
+      "includeCreatorNames": "Include who ran each Generated",
+      "includeCreatorNamesHelp": "When on, the display name of the person who ran each Generated is included in the ZIP. Email addresses are never included.",
       "download": "Download ZIP",
       "startedToast": "Export started"
     },

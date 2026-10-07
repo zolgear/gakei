@@ -1,10 +1,13 @@
 /**
  * 系列の持ち出しと取り込み(ADR-0037)の、画面に依存しない小さな関数。
  */
-import type { LineageExportScope } from '../../api/client'
+import type { LineageExportMode, LineageExportScope } from '../../api/client'
 
 /** 書き出しの範囲の並び(共有リンクの「祖先まで」「祖先と子孫」と同じ計算)。 */
 export const LINEAGE_EXPORT_SCOPES: readonly LineageExportScope[] = ['ancestors', 'lineage']
+
+/** 書き出しの用途の並び(GAKEI に取り込む / 納品用。ADR-0037 4章)。 */
+export const LINEAGE_EXPORT_MODES: readonly LineageExportMode[] = ['import', 'delivery']
 
 /** 取り込める ZIP の大きさの上限(サーバーの `lineage_import.MAX_ZIP_BYTES` と同じ 1 GiB)。 */
 export const MAX_LINEAGE_ZIP_BYTES = 1024 * 1024 * 1024

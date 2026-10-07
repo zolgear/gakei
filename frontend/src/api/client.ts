@@ -269,9 +269,46 @@ export function previewLineageExport(
   return request(`/api/assets/${assetId}/export/preview?${new URLSearchParams({ scope })}`)
 }
 
+export type LineageExportMode = NonNullable<
+  NonNullable<operations['export_lineage']['parameters']['query']>['mode']
+>
+
+export interface LineageExportOptions {
+  scope: LineageExportScope
+  /** `import`(GAKEI に取り込む)/ `delivery`(納品用。index.html と README.txt を加える)。 */
+  mode: LineageExportMode
+  /** 実行者の表示名を含める(既定は含めない。ADR-0037 4章)。 */
+  includeCreatorNames: boolean
+  /** 納品用の index.html の言語(画面の表示言語)。 */
+  lang: 'ja' | 'en'
+  /** 納品用の index.html の日時のタイムゾーン(IANA。分からなければ省く)。 */
+  timeZone?: string
+}
+
+/** 書き出しの URL の query。取り込み用のときは index.html の言語・タイムゾーンを送らない。 */
+export function lineageExportQuery(options: LineageExportOptions): URLSearchParams {
+  const query = new URLSearchParams({ scope: options.scope, mode: options.mode })
+  if (options.includeCreatorNames) query.set('include_creator_names', 'true')
+  if (options.mode === 'delivery') {
+    query.set('lang', options.lang)
+    if (options.timeZone) query.set('tz', options.timeZone)
+  }
+  return query
+}
+
 /** 系列の ZIP をダウンロードする URL(`<a href download>` に渡す。Cookie の認証がそのまま効く)。 */
-export function lineageExportUrl(assetId: string, scope: LineageExportScope): string {
-  return `/api/assets/${assetId}/export?${new URLSearchParams({ scope })}`
+export function lineageExportUrl(
+  assetId: string,
+  options: Omit<LineageExportOptions, 'lang' | 'timeZone'>,
+): string {
+  let timeZone: string | undefined
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+  } catch {
+    timeZone = undefined
+  }
+  const query = lineageExportQuery({ ...options, lang: getLocale(), timeZone })
+  return `/api/assets/${assetId}/export?${query}`
 }
 
 /**
