@@ -22,7 +22,7 @@ function runNode(id: string, depth: number): LineageNode {
     deleted: false,
     embedded: false,
     local_hidden: false,
-    run: { operation: 'edit', model: 'gpt-image-2.5-sunburst', status: 'succeeded', prompt: 'p', queued_at: '2026-01-01T00:00:00Z' },
+    run: { operation: 'edit', model: 'gpt-image-2.5-sunburst', status: 'succeeded', prompt: 'p', queued_at: '2026-01-01T00:00:00Z', imported: false },
   }
 }
 

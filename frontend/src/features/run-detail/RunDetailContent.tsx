@@ -35,6 +35,7 @@ import { nodeTargetPath } from '../lineage/nodeTargetPath'
 import { fmt, useI18n } from '../../i18n'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { FinalPromptSection } from './FinalPromptSection'
+import { ImportedRunSection } from '../lineage-transfer/ImportedRunSection'
 import { findFinalPrompt } from './finalPrompt'
 import styles from './RunDetailContent.module.css'
 
@@ -159,6 +160,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
           {statusLabel(run.status)}
         </span>
         <span className={styles.modelTag}>{run.model_label ?? run.model}</span>
+        {run.imported && <span className={styles.importedBadge}>{t.lineageTransfer.importedRun.badge}</span>}
         <button type="button" className={styles.rerunButton} onClick={handleRerun}>
           {t.runDetail.rerun}
         </button>
@@ -178,6 +180,9 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
           </Link>
         )}
       </div>
+
+      {/* 系列の ZIP から取り込んだ記録(ADR-0037)。元の実行者と日時、未検証であること。 */}
+      {run.imported && <ImportedRunSection info={run.imported} />}
 
       <section className={styles.section}>
         <div className={styles.sectionHeaderRow}>
@@ -308,6 +313,12 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
             <>
               <dt>{t.runDetail.origin}</dt>
               <dd>{t.runDetail.originMcp}</dd>
+            </>
+          )}
+          {run.origin === 'import' && (
+            <>
+              <dt>{t.runDetail.origin}</dt>
+              <dd>{t.lineageTransfer.importedRun.badge}</dd>
             </>
           )}
           <dt>API</dt>

@@ -70,6 +70,16 @@ export function ShareLinkIcon(props: IconProps) {
   )
 }
 
+/** 箱と下向きの矢印: 系列を ZIP に書き出す(ADR-0037)。 */
+export function ExportArchiveIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 6h11v7.5h-11zM3.5 3.5h9L13.5 6h-11z" />
+      <path d="M8 7.5v4M6.3 9.8L8 11.5l1.7-1.7" />
+    </Icon>
+  )
+}
+
 /** ゴミ箱: 削除。 */
 export function TrashIcon(props: IconProps) {
   return (

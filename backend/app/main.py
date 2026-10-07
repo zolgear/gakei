@@ -29,6 +29,7 @@ from app.api import downloads as downloads_api
 from app.api import embeddings as embeddings_api
 from app.api import events as events_api
 from app.api import health as health_api
+from app.api import lineage_transfer as lineage_transfer_api
 from app.api import llm_connections as llm_connections_api
 from app.api import pricing as pricing_api
 from app.api import prompt_sets as prompt_sets_api
@@ -593,6 +594,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
     app.include_router(shares_api.router, dependencies=auth_dep)
+    # 系列の持ち出しと取り込み(ADR-0037)。
+    app.include_router(lineage_transfer_api.router, dependencies=auth_dep)
 
     # ADR-0023 7章: 画像の本体の配信(Cookie かアクセストークン。ルーター自身が認可を掛ける)と、
     # 1回限りのアップロード URL の受け口(URL のトークン自体が認可)。いずれも `require_user`

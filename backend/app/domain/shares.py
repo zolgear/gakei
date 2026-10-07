@@ -47,6 +47,10 @@ from app.domain.visibility import get_visible_asset, share_visible
 
 ScopeName = Literal["single", "ancestors", "lineage"]
 SCOPES: tuple[str, ...] = ("single", "ancestors", "lineage")
+# 範囲の計算が受け付ける範囲。共有リンクの範囲(`ScopeName`)に、系列の書き出しだけが使う
+# `descendants`(起点と子孫。祖先は含めない。ADR-0037 1章)を足したもの。共有リンクには
+# 足さない(ADR-0029 の範囲は変えない)。
+CollectScope = Literal["single", "ancestors", "lineage", "descendants"]
 
 Variant = Literal["thumb", "preview", "original"]
 
@@ -98,12 +102,13 @@ def _reachable(start: uuid.UUID, adjacency: dict[uuid.UUID, list[uuid.UUID]]) ->
 
 
 def collect_scope(
-    db: Session, viewer: CurrentUser, root_asset_id: uuid.UUID, scope: ScopeName
+    db: Session, viewer: CurrentUser, root_asset_id: uuid.UUID, scope: CollectScope
 ) -> ScopeResult:
     """共有に含める Asset を集める。起点が `viewer` に見えない・削除済みなら
     `ShareTargetNotFoundError`。
 
     `ancestors` は起点から親の方向に、`lineage` はそれに加えて子の方向にたどって現れる Asset。
+    `descendants`(書き出しだけが使う)は起点から子の方向にだけたどって現れる Asset。
     系列グラフ(`build_asset_lineage`)は `viewer` に見えるノードだけで作られる(ADR-0025)。
     そこから埋め込み(未検証)ノードを除き、残った辺だけで起点との到達関係を見る。削除済みの
     Asset は含めない(あとで復元しても、作った時点で確かめていないものは載せない)。
@@ -114,10 +119,11 @@ def collect_scope(
     if scope == "single":
         return ScopeResult(assets=[(root, 0)])
 
-    down = MAX_DEPTH if scope == "lineage" else 0
+    up = 0 if scope == "descendants" else MAX_DEPTH
+    down = MAX_DEPTH if scope in ("lineage", "descendants") else 0
     try:
         lineage = build_asset_lineage(
-            db, root.id, viewer=viewer, up=MAX_DEPTH, down=down, max_nodes=MAX_NODES
+            db, root.id, viewer=viewer, up=up, down=down, max_nodes=MAX_NODES
         )
     except LineageNotFoundError as e:
         raise ShareTargetNotFoundError(root_asset_id) from e
@@ -131,8 +137,10 @@ def collect_scope(
         parents.setdefault(edge.target, []).append(edge.source)
         children.setdefault(edge.source, []).append(edge.target)
 
-    included = _reachable(root.id, parents)
-    if scope == "lineage":
+    included: set[uuid.UUID] = set()
+    if scope in ("ancestors", "lineage"):
+        included |= _reachable(root.id, parents)
+    if scope in ("lineage", "descendants"):
         included |= _reachable(root.id, children)
     included.add(root.id)
 

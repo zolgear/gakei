@@ -1,0 +1,249 @@
+/* 系列の書き出しダイアログと取り込みの操作(ADR-0037)。共有リンクのダイアログ(ADR-0029)と
+   同じ見た目にそろえる。 */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.helpText {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.placeholder {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.warningText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-warning);
+}
+
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.scopeOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scopeOption {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.scopeOption[data-checked='true'] {
+  border-color: var(--color-accent);
+}
+
+.scopeName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.scopeHelp {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.checkOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkOption input {
+  margin: 3px 0 0;
+  flex: none;
+}
+
+.checkText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.previewBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.previewCount {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 16px;
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.primaryButton:disabled {
+  opacity: 0.5;
+}
+
+.secondaryButton {
+  height: 34px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+/* ストックの「系列を取り込む」(画像の追加の下に置く、控えめな行)。 */
+.importBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 32px;
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.importBar:disabled {
+  opacity: 0.8;
+}
+
+.progressTrack {
+  width: 100%;
+  height: 4px;
+  background: var(--color-bg-sunken);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.15s linear;
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.importError {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+/* 範囲は3つ。広い幅では横に3つ並べる。 */
+.scopeOptionsThree {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 書き出し前の系列のプレビュー(ADR-0037 1章、2026-10-07 追記)。 */
+.previewGraphSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.previewGraph {
+  display: flex;
+  height: 420px;
+}
+
+/* 読み取り専用なので、ノードを押せるように見せない。 */
+.previewGraph :global(.react-flow__node),
+.previewGraph :global(.react-flow__node) * {
+  cursor: default;
+}
+
+@media (max-width: 767px) {
+  .previewGraph {
+    height: 50vh;
+  }
+
+  .scopeOptions,
+  .scopeOptionsThree {
+    grid-template-columns: 1fr;
+  }
+
+  .checkOption {
+    min-height: 44px;
+  }
+
+  .checkOption input {
+    width: 18px;
+    height: 18px;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    min-height: 44px;
+  }
+
+  .importBar {
+    height: 44px;
+    font-size: 13px;
+  }
+}

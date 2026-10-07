@@ -103,6 +103,11 @@ class RunStatus(enum.StrEnum):
     CANCELED = "canceled"
 
 
+# `run.origin` の値(ADR-0023 5章、ADR-0037 2章)。null は画面、`mcp` は MCP のツール。
+# `import` は、系列の ZIP から取り込んだ記録(この GAKEI では実行していない。ADR-0037)。
+RUN_ORIGIN_IMPORT = "import"
+
+
 class RunInputRole(enum.StrEnum):
     IMAGE = "image"
     MASK = "mask"
@@ -336,7 +341,8 @@ class Run(Base):
         Uuid, ForeignKey("asset_group.id"), nullable=True, index=True
     )
 
-    # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツール。`api_token_id` は MCP を
+    # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツール、`import` は系列の ZIP から
+    # 取り込んだ記録(ADR-0037。実行していない。元の記録は `run_import`)。`api_token_id` は MCP を
     # アクセストークンで呼んだとき(認証モード)だけ入る。いずれも作成時に一度だけ書き、UPDATE
     # しない(ADR-0003 の追記のみの規則に反しない)。
     origin: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -391,6 +397,29 @@ class RunInput(Base):
 
 
 Index("ix_run_input_run_role_position", RunInput.run_id, RunInput.role, RunInput.position)
+
+
+class RunImport(Base):
+    """系列の ZIP から取り込んだ Run(`run.origin = 'import'`)の、書き出し元での記録(ADR-0037 2章)。
+
+    この GAKEI で実行していない Run なので、元の Run の ID・実行者の表示名・日時は Run の列には
+    入れず、ここに置く。ZIP の自己申告で検証していない(画面でもそう示す)。来歴の列なので
+    追記のみ(取り込んだときに1回だけ書き、UPDATE しない。ADR-0003)。
+
+    同じ利用者が同じ書き出し元の Run をもう一度取り込んだときは、`source_run_id` で見つけて
+    新しい Run を作らない(二重取り込みの扱い)。
+    """
+
+    __tablename__ = "run_import"
+
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("run.id"), primary_key=True)
+    # 書き出し元の Run の ID(別インスタンスのこともあるので外部キーは張らない)。
+    source_run_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
+    source_creator_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_created_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    source_finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    source_gakei_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    imported_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class PromptSet(Base):

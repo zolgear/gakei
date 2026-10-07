@@ -284,6 +284,14 @@ _KNOWN_DYNAMIC_KEY_SITES: dict[str, frozenset[str]] = {
 }
 
 
+# 文言の部分木をまとめて引くところ(キーを `t(f"{接頭辞}.{key}")` で組み立てる)。その接頭辞の
+# 下のキーはすべて使うものとみなす。呼び出し側のキーそのものは、各モジュールのテストで確かめる
+# (`lineage_delivery.py` は `test_lineage_delivery.py` が `_d("...")` を走査する)。
+_KNOWN_DYNAMIC_PREFIX_SITES: dict[str, str] = {
+    "app/domain/lineage_delivery.py": "lineageExport.delivery.",
+}
+
+
 def _literal_t_keys() -> set[str]:
     """`app/` 以下の `.py` を ast で走査し、`t("...")` / `console_t("...")` の
     最初の引数がリテラルであるものをすべて集める。"""
@@ -306,6 +314,9 @@ def _literal_t_keys() -> set[str]:
                     keys.add(first.value)
                 elif rel in _KNOWN_DYNAMIC_KEY_SITES:
                     keys.update(_KNOWN_DYNAMIC_KEY_SITES[rel])
+                elif rel in _KNOWN_DYNAMIC_PREFIX_SITES:
+                    prefix = _KNOWN_DYNAMIC_PREFIX_SITES[rel]
+                    keys.update(k for k in _flatten(_load("ja")) if k.startswith(prefix))
                 else:
                     non_literal.append(f"{path}:{node.lineno}")
     assert not non_literal, f"t()/console_t() の最初の引数がリテラルではありません: {non_literal}"

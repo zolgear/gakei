@@ -49,6 +49,20 @@
   color: var(--color-text-muted);
 }
 
+/* 系列の ZIP から取り込んだ記録(ADR-0037)。 */
+.importedBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--color-edit);
+  border-radius: 10px;
+  color: var(--color-edit);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .rerunButton {
   margin-left: auto;
   padding: 8px 12px;

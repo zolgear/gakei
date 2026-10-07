@@ -31,7 +31,7 @@ from app.auth.identity import CurrentUser
 from app.domain.assets import asset_is_used_as_input, is_restorable
 from app.domain.embedded_meta import get_instance_id, normalize_lineage_meta
 from app.domain.lineage_mermaid import LineageGraph
-from app.domain.models import Asset, Run, RunInput, RunInputRole
+from app.domain.models import RUN_ORIGIN_IMPORT, Asset, Run, RunInput, RunInputRole
 from app.domain.run_views import model_label_from_params
 from app.domain.schemas import (
     AssetLineageResponse,
@@ -103,6 +103,7 @@ def _run_node(run: Run, depth: int) -> LineageNode:
             prompt=run.prompt[:_PROMPT_PREVIEW_LENGTH],
             error_code=run.error_code,
             queued_at=run.queued_at,
+            imported=run.origin == RUN_ORIGIN_IMPORT,
         ),
     )
 

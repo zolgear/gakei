@@ -254,6 +254,111 @@ export function getPublicShare(token: string): Promise<PublicShareResponse> {
   return request(`/api/public/shares/${encodeURIComponent(token)}`)
 }
 
+// -- 系列の持ち出しと取り込み(ADR-0037) ---------------------------------------
+
+export type LineageExportPreviewResponse = components['schemas']['LineageExportPreviewResponse']
+export type LineageExportScope = LineageExportPreviewResponse['scope']
+export type LineageImportResponse = components['schemas']['LineageImportResponse']
+export type RunImportInfo = components['schemas']['RunImportInfo']
+
+/**
+ * 書き出す前の確認(範囲に含まれる画像と Run の数、原本の合計)。何も書き込まない。
+ * `includeGraph` なら、ZIP に入る Asset と Run だけの系列グラフ(`graph`)も受け取る。
+ */
+export function previewLineageExport(
+  assetId: string,
+  scope: LineageExportScope,
+  options: { includeGraph?: boolean } = {},
+): Promise<LineageExportPreviewResponse> {
+  const query = new URLSearchParams({ scope })
+  if (options.includeGraph) query.set('include_graph', 'true')
+  return request(`/api/assets/${assetId}/export/preview?${query}`)
+}
+
+export type LineageExportMode = NonNullable<
+  NonNullable<operations['export_lineage']['parameters']['query']>['mode']
+>
+
+export interface LineageExportOptions {
+  scope: LineageExportScope
+  /** `import`(GAKEI に取り込む)/ `delivery`(納品用。index.html と README.txt を加える)。 */
+  mode: LineageExportMode
+  /** 実行者の表示名を含める(既定は含めない。ADR-0037 4章)。 */
+  includeCreatorNames: boolean
+  /** 納品用の index.html の言語(画面の表示言語)。 */
+  lang: 'ja' | 'en'
+  /** 納品用の index.html の日時のタイムゾーン(IANA。分からなければ省く)。 */
+  timeZone?: string
+}
+
+/** 書き出しの URL の query。取り込み用のときは index.html の言語・タイムゾーンを送らない。 */
+export function lineageExportQuery(options: LineageExportOptions): URLSearchParams {
+  const query = new URLSearchParams({ scope: options.scope, mode: options.mode })
+  if (options.includeCreatorNames) query.set('include_creator_names', 'true')
+  if (options.mode === 'delivery') {
+    query.set('lang', options.lang)
+    if (options.timeZone) query.set('tz', options.timeZone)
+  }
+  return query
+}
+
+/** 系列の ZIP をダウンロードする URL(`<a href download>` に渡す。Cookie の認証がそのまま効く)。 */
+export function lineageExportUrl(
+  assetId: string,
+  options: Omit<LineageExportOptions, 'lang' | 'timeZone'>,
+): string {
+  let timeZone: string | undefined
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+  } catch {
+    timeZone = undefined
+  }
+  const query = lineageExportQuery({ ...options, lang: getLocale(), timeZone })
+  return `/api/assets/${assetId}/export?${query}`
+}
+
+/**
+ * 系列の ZIP を取り込む。大きなファイルを送るので、送信の進み具合(0〜1)を `onProgress` で
+ * 知らせる(fetch では取れないため XMLHttpRequest を使う)。エラーは `request` と同じく
+ * `ApiError`(サーバーの `detail` の文言)にする。
+ */
+export function importLineage(
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<LineageImportResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/imports/lineage')
+    xhr.setRequestHeader('Accept-Language', getLocale())
+    xhr.responseType = 'text'
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) onProgress(Math.min(1, e.loaded / e.total))
+      }
+    }
+    xhr.onload = () => {
+      let body: unknown = null
+      try {
+        body = xhr.responseText ? JSON.parse(xhr.responseText) : null
+      } catch {
+        body = null
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body as LineageImportResponse)
+        return
+      }
+      if (xhr.status === 401) markUnauthenticated()
+      const detail = body && typeof body === 'object' && 'detail' in body ? (body as { detail: unknown }).detail : null
+      reject(new ApiError(xhr.status, formatDetail(detail) ?? (xhr.statusText || `HTTP ${xhr.status}`)))
+    }
+    // 通信の失敗は ApiError にしない(画面は自分の文言を出す)。
+    xhr.onerror = () => reject(new Error('network error'))
+    const form = new FormData()
+    form.append('file', file)
+    xhr.send(form)
+  })
+}
+
 // -- ComfyUI ワークフロー(ADR-0013) ------------------------------------------
 
 export type ComfyUIStatus = components['schemas']['ComfyUIStatusResponse']

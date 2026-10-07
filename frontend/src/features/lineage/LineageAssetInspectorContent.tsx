@@ -21,6 +21,7 @@ import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/
 import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from './EmbeddedMetaSection'
 import { OriginRecipeSection } from './OriginRecipeSection'
+import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import styles from './LineageAssetInspectorContent.module.css'
 
 export interface LineageAssetInspectorContentProps {
@@ -40,6 +41,7 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
   const addToInputs = useAddToInputs()
   const queryClient = useQueryClient()
   const [restoreError, setRestoreError] = useState<string | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
 
   const restoreMutation = useMutation({
     mutationFn: () => restoreAsset(assetId),
@@ -138,7 +140,15 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
         <a className={styles.actionButton} href={assetUrl(asset.id, 'original', { download: true })}>
           {t.lineage.download}
         </a>
+        {/* 系列を ZIP に書き出す(ADR-0037)。 */}
+        {!asset.deleted_at && (
+          <button type="button" className={styles.actionButton} onClick={() => setExportOpen(true)}>
+            {t.lineage.exportLineage}
+          </button>
+        )}
       </div>
+
+      <ExportLineageDialog open={exportOpen} assetId={asset.id} onClose={() => setExportOpen(false)} />
 
       <AddToInputsDialog
         open={addToInputs.isPending}
