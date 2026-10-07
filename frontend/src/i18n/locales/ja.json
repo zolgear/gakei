@@ -2095,6 +2095,15 @@
         "other": "Generated {count} 件"
       },
       "previewTruncated": "系列が大きいため、一部だけを含めます。",
+      "showGraph": "系列をプレビュー",
+      "hideGraph": "プレビューを閉じる",
+      "graphLoading": "系列を読み込んでいます...",
+      "graphFailed": "系列を読み込めませんでした。",
+      "graphCaption": "この ZIP に入る{images}と {runs}です。",
+      "graphOmittedInputs": {
+        "one": "範囲の外の入力 {count} 件は含まれません。",
+        "other": "範囲の外の入力 {count} 件は含まれません。"
+      },
       "notIncluded": "タイトル、タグ、グループは含めません。削除した画像と、ほかの人の画像も含めません。",
       "includeCreatorNames": "実行者の名前を含める",
       "includeCreatorNamesHelp": "オンにすると、Generated ごとに実行した人の表示名が ZIP に入ります。メールアドレスは入りません。",

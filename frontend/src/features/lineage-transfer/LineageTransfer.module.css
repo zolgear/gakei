@@ -200,7 +200,29 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* 書き出し前の系列のプレビュー(ADR-0037 1章、2026-10-07 追記)。 */
+.previewGraphSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.previewGraph {
+  display: flex;
+  height: 420px;
+}
+
+/* 読み取り専用なので、ノードを押せるように見せない。 */
+.previewGraph :global(.react-flow__node),
+.previewGraph :global(.react-flow__node) * {
+  cursor: default;
+}
+
 @media (max-width: 767px) {
+  .previewGraph {
+    height: 50vh;
+  }
+
   .scopeOptions,
   .scopeOptionsThree {
     grid-template-columns: 1fr;

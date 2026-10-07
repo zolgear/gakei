@@ -261,12 +261,18 @@ export type LineageExportScope = LineageExportPreviewResponse['scope']
 export type LineageImportResponse = components['schemas']['LineageImportResponse']
 export type RunImportInfo = components['schemas']['RunImportInfo']
 
-/** 書き出す前の確認(範囲に含まれる画像と Run の数、原本の合計)。何も書き込まない。 */
+/**
+ * 書き出す前の確認(範囲に含まれる画像と Run の数、原本の合計)。何も書き込まない。
+ * `includeGraph` なら、ZIP に入る Asset と Run だけの系列グラフ(`graph`)も受け取る。
+ */
 export function previewLineageExport(
   assetId: string,
   scope: LineageExportScope,
+  options: { includeGraph?: boolean } = {},
 ): Promise<LineageExportPreviewResponse> {
-  return request(`/api/assets/${assetId}/export/preview?${new URLSearchParams({ scope })}`)
+  const query = new URLSearchParams({ scope })
+  if (options.includeGraph) query.set('include_graph', 'true')
+  return request(`/api/assets/${assetId}/export/preview?${query}`)
 }
 
 export type LineageExportMode = NonNullable<

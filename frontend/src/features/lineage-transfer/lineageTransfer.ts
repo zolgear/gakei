@@ -1,7 +1,11 @@
 /**
  * 系列の持ち出しと取り込み(ADR-0037)の、画面に依存しない小さな関数。
  */
-import type { LineageExportMode, LineageExportScope } from '../../api/client'
+import type {
+  LineageExportMode,
+  LineageExportPreviewResponse,
+  LineageExportScope,
+} from '../../api/client'
 
 /**
  * 書き出しの範囲の並び。「この画像と祖先」「系列全体」は共有リンクの「祖先まで」「祖先と子孫」と
@@ -55,4 +59,34 @@ export function importToastFromState(state: unknown): string | null {
   if (!state || typeof state !== 'object') return null
   const value = (state as Record<string, unknown>).lineageImportToast
   return typeof value === 'string' && value !== '' ? value : null
+}
+
+/** 書き出し前の系列のプレビュー(ADR-0037 1章、2026-10-07 追記)の見出しに出す数。 */
+export interface ExportPreviewGraphSummary {
+  /** グラフの Asset ノードの数(= ZIP に入る画像の数)。 */
+  assetCount: number
+  /** グラフの Run ノードの数(= ZIP に入る Generated の数)。 */
+  runCount: number
+  /** 範囲の外なので含めない入力の数。 */
+  omittedInputCount: number
+  truncated: boolean
+}
+
+/**
+ * プレビューの応答から見出しの数を作る。数はグラフのノードから数える(画面に描いたものと
+ * 見出しの数を一致させる。サーバーはグラフと manifest を同じ材料から作るので、
+ * `asset_count` / `run_count` とも一致する)。グラフが無ければ null。
+ */
+export function exportPreviewGraphSummary(
+  response: LineageExportPreviewResponse | undefined,
+): ExportPreviewGraphSummary | null {
+  const graph = response?.graph
+  if (!response || !graph) return null
+  const nodes = graph.nodes ?? []
+  return {
+    assetCount: nodes.filter((n) => n.type === 'asset').length,
+    runCount: nodes.filter((n) => n.type === 'run').length,
+    omittedInputCount: response.omitted_input_count,
+    truncated: response.truncated || graph.truncated,
+  }
 }

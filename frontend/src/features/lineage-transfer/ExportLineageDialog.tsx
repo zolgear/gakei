@@ -3,6 +3,8 @@
  * 実行者の名前を含めるか(既定は含めない)、範囲(この画像と祖先 / 系列全体)を選ぶと、
  * 含まれる画像と Generated の数、原本の合計を先に見せ(`previewLineageExport`)、
  * ダウンロードのリンクで ZIP を受け取る。ビューアと系列グラフのインスペクターから開く。
+ * 「系列をプレビュー」で、選んだ範囲の ZIP に入る画像と Generated を系列グラフで見せる
+ * (`ExportPreviewGraph`。範囲を変えると描き直す。2026-10-07)。
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -17,6 +19,7 @@ import { Modal } from '../../components/Modal'
 import type { UseToastResult } from '../../components/Toast'
 import { formatBytes } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
+import { ExportPreviewGraph } from './ExportPreviewGraph'
 import { LINEAGE_EXPORT_MODES, LINEAGE_EXPORT_SCOPES } from './lineageTransfer'
 import styles from './LineageTransfer.module.css'
 
@@ -43,6 +46,7 @@ function ExportLineageDialogBody({ assetId, onClose, toast }: Omit<ExportLineage
   const [mode, setMode] = useState<LineageExportMode>('import')
   const [scope, setScope] = useState<LineageExportScope>('ancestors')
   const [includeCreatorNames, setIncludeCreatorNames] = useState(false)
+  const [showGraph, setShowGraph] = useState(false)
 
   const preview = useQuery({
     queryKey: ['lineage-export-preview', assetId, scope],
@@ -112,6 +116,17 @@ function ExportLineageDialogBody({ assetId, onClose, toast }: Omit<ExportLineage
           </>
         )}
         <p className={styles.helpText}>{s.notIncluded}</p>
+        <div>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            aria-expanded={showGraph}
+            onClick={() => setShowGraph((v) => !v)}
+          >
+            {showGraph ? s.hideGraph : s.showGraph}
+          </button>
+        </div>
+        {showGraph && <ExportPreviewGraph assetId={assetId} scope={scope} />}
       </div>
 
       <label className={styles.checkOption}>

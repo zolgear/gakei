@@ -1,7 +1,8 @@
 """系列の持ち出し(エクスポート)と取り込み(インポート)(ADR-0037)。中身は
 `app/domain/lineage_export.py` と `app/domain/lineage_import.py` にあり、ここは薄い。
 
-- `GET /api/assets/{id}/export/preview?scope=`: 書き出す前の確認(枚数と大きさ)。
+- `GET /api/assets/{id}/export/preview?scope=&include_graph=`: 書き出す前の確認(枚数と大きさ。
+  `include_graph=true` なら ZIP に入る Asset と Run の系列グラフも)。
 - `GET /api/assets/{id}/export?scope=&mode=&include_creator_names=`: ZIP(`manifest.json` +
   `assets/{asset_id}.{拡張子}`)をストリーミングで返す。`mode=delivery`(納品用。ADR-0037 4章)は
   `index.html` と `README.txt` を加える。実行者の名前は `include_creator_names` のときだけ入れる。
@@ -49,6 +50,7 @@ def _plan(
     *,
     mode: ModeParam = "import",
     include_creator_names: bool = False,
+    include_graph: bool = False,
 ) -> export_domain.ExportPlan:
     try:
         return export_domain.build_export(
@@ -59,6 +61,7 @@ def _plan(
             gakei_version=get_version(),
             mode=mode,
             include_creator_names=include_creator_names,
+            include_graph=include_graph,
         )
     except export_domain.ExportTargetNotFoundError as e:
         raise HTTPException(status_code=404, detail=t("assets.notFound")) from e
@@ -72,17 +75,21 @@ def _plan(
 def preview_lineage_export(
     asset_id: uuid.UUID,
     scope: ScopeParam = Query(default="ancestors"),
+    include_graph: bool = Query(default=False),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> LineageExportPreviewResponse:
-    """書き出す前に、範囲に含まれる画像と Run の数、原本の合計を確かめる。何も書き込まない。"""
-    plan = _plan(db, user, asset_id, scope)
+    """書き出す前に、範囲に含まれる画像と Run の数、原本の合計を確かめる。何も書き込まない。
+    `include_graph` なら、ZIP に入る Asset と Run だけの系列グラフも返す(書き出しと同じ計算)。"""
+    plan = _plan(db, user, asset_id, scope, include_graph=include_graph)
     return LineageExportPreviewResponse(
         scope=scope,
         asset_count=len(plan.files),
         run_count=plan.run_count,
         total_bytes=plan.total_bytes,
         truncated=plan.truncated,
+        omitted_input_count=plan.omitted_input_count,
+        graph=plan.graph,
     )
 
 

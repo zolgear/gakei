@@ -718,6 +718,11 @@ class LineageExportPreviewResponse(BaseModel):
     total_bytes: int
     # 系列グラフのノード数の上限(1000)で打ち切ったか(共有リンクと同じ)。
     truncated: bool = False
+    # Run の入力のうち、範囲に入らないので含めない入力の数(全 Run の合計。ID は出さない)。
+    omitted_input_count: int = 0
+    # ZIP に入る Asset と Run だけの系列グラフ(`include_graph=true` のときだけ。2026-10-07)。
+    # 形は系列グラフの応答と同じで、ノードと辺は manifest と一致する。
+    graph: AssetLineageResponse | None = None
 
 
 class LineageImportResponse(BaseModel):

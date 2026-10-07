@@ -2095,6 +2095,15 @@
         "other": "{count} Generated"
       },
       "previewTruncated": "The lineage is large, so only part of it is included.",
+      "showGraph": "Preview lineage",
+      "hideGraph": "Close preview",
+      "graphLoading": "Loading lineage...",
+      "graphFailed": "Could not load the lineage.",
+      "graphCaption": "This ZIP contains {images} and {runs}.",
+      "graphOmittedInputs": {
+        "one": "{count} input outside the scope is not included.",
+        "other": "{count} inputs outside the scope are not included."
+      },
       "notIncluded": "Titles, tags and groups are not included. Deleted images and other people's images are not included either.",
       "includeCreatorNames": "Include who ran each Generated",
       "includeCreatorNamesHelp": "When on, the display name of the person who ran each Generated is included in the ZIP. Email addresses are never included.",

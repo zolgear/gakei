@@ -1442,6 +1442,7 @@ export interface paths {
         /**
          * Preview Lineage Export
          * @description 書き出す前に、範囲に含まれる画像と Run の数、原本の合計を確かめる。何も書き込まない。
+         *     `include_graph` なら、ZIP に入る Asset と Run だけの系列グラフも返す(書き出しと同じ計算)。
          */
         get: operations["preview_lineage_export"];
         put?: never;
@@ -3230,6 +3231,12 @@ export interface components {
              * @default false
              */
             truncated: boolean;
+            /**
+             * Omitted Input Count
+             * @default 0
+             */
+            omitted_input_count: number;
+            graph?: components["schemas"]["AssetLineageResponse"] | null;
         };
         /**
          * LineageImportResponse
@@ -8302,6 +8309,7 @@ export interface operations {
         parameters: {
             query?: {
                 scope?: "ancestors" | "descendants" | "lineage";
+                include_graph?: boolean;
             };
             header?: never;
             path: {

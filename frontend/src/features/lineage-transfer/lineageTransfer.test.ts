@@ -5,6 +5,7 @@ import {
   LINEAGE_EXPORT_SCOPES,
   MAX_LINEAGE_ZIP_BYTES,
   checkLineageZipFile,
+  exportPreviewGraphSummary,
   importNavigationState,
   importToastFromState,
   progressPercent,
@@ -110,5 +111,49 @@ describe('lineageExportQuery', () => {
     })
     expect(query.has('tz')).toBe(false)
     expect(query.has('include_creator_names')).toBe(false)
+  })
+})
+
+describe('exportPreviewGraphSummary', () => {
+  const node = (id: string, type: 'asset' | 'run') => ({
+    id,
+    type,
+    depth: 0,
+    deleted: false,
+    embedded: false,
+    local_hidden: false,
+  })
+
+  it('グラフが無ければ null', () => {
+    expect(exportPreviewGraphSummary(undefined)).toBeNull()
+    expect(
+      exportPreviewGraphSummary({
+        scope: 'ancestors',
+        asset_count: 1,
+        run_count: 0,
+        total_bytes: 1,
+        truncated: false,
+        omitted_input_count: 0,
+      }),
+    ).toBeNull()
+  })
+
+  it('ノードの種類ごとに数え、範囲の外の入力と打ち切りを返す', () => {
+    expect(
+      exportPreviewGraphSummary({
+        scope: 'descendants',
+        asset_count: 2,
+        run_count: 1,
+        total_bytes: 10,
+        omitted_input_count: 1,
+        truncated: false,
+        graph: {
+          root_asset_id: 'a',
+          nodes: [node('a', 'asset'), node('r', 'run'), node('b', 'asset')],
+          edges: [],
+          truncated: true,
+        },
+      }),
+    ).toEqual({ assetCount: 2, runCount: 1, omittedInputCount: 1, truncated: true })
   })
 })

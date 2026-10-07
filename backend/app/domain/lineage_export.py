@@ -40,7 +40,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain.models import RUN_ORIGIN_IMPORT, AppUser, Run, RunImport, RunInput
+from app.domain.lineage import _asset_node, _run_node
+from app.domain.models import (
+    RUN_ORIGIN_IMPORT,
+    AppUser,
+    Asset,
+    Run,
+    RunImport,
+    RunInput,
+    RunInputRole,
+)
+from app.domain.schemas import AssetLineageResponse, LineageEdge
 from app.domain.secret_values import redact_comfyui_params
 from app.domain.shares import collect_scope
 from app.domain.storage import AssetStore
@@ -123,6 +133,10 @@ class ExportPlan:
     imported_runs: dict[str, ImportedRunInfo] = field(default_factory=dict)
     # manifest の後に入れる文書(納品用の index.html と README.txt)。名前とバイト列。
     extra_entries: list[tuple[str, bytes]] = field(default_factory=list)
+    # Run の入力のうち、範囲に入らないので含めない入力の数(全 Run の合計)。
+    omitted_input_count: int = 0
+    # ZIP に入る Asset と Run の系列グラフ(書き出し前のプレビュー用。`include_graph` のときだけ)。
+    graph: AssetLineageResponse | None = None
 
     @property
     def total_bytes(self) -> int:
@@ -154,12 +168,15 @@ def build_export(
     gakei_version: str,
     mode: ExportMode = "import",
     include_creator_names: bool = False,
+    include_graph: bool = False,
     now: datetime | None = None,
 ) -> ExportPlan:
     """書き出す内容(manifest と原本の一覧)を決める。DB を読むのはここだけ。
 
     `include_creator_names` が偽なら、実行者の表示名を読まず、manifest の `created_by_name` を
     null にする(ADR-0037 4章。既定は含めない)。
+    `include_graph` が真なら、ZIP に入る Asset と Run だけの系列グラフ(`plan.graph`)も作る
+    (書き出し前のプレビュー。2026-10-07)。
     起点が `viewer` に見えない・削除済みなら `ExportTargetNotFoundError`。
     """
     from app.domain.shares import ShareTargetNotFoundError
@@ -279,6 +296,13 @@ def build_export(
             }
         )
 
+    omitted_input_count = sum(r["omitted_input_count"] for r in manifest_runs)
+    graph = (
+        _build_graph(db, root_asset_id, result.assets, runs, inputs_by_run, result.truncated)
+        if include_graph
+        else None
+    )
+
     manifest = {
         "format": EXPORT_FORMAT,
         "exported_at": _iso(exported_at),
@@ -300,6 +324,73 @@ def build_export(
         mode=mode,
         include_creator_names=include_creator_names,
         imported_runs=imported_runs,
+        omitted_input_count=omitted_input_count,
+        graph=graph,
+    )
+
+
+def _build_graph(
+    db: Session,
+    root_asset_id: uuid.UUID,
+    scope_assets: list[tuple[Asset, int]],
+    runs: list[Run],
+    inputs_by_run: dict[uuid.UUID, list[RunInput]],
+    truncated: bool,
+) -> AssetLineageResponse:
+    """ZIP に入る Asset と Run だけで系列グラフを作る(書き出し前のプレビュー)。
+
+    ノードと辺は manifest と同じ材料(範囲の Asset、manifest の Run、範囲の中の入力)から作るので、
+    グラフに出るものと ZIP に入るものは一致する。辺は manifest に書く来歴だけ(入力・出力・
+    スケッチの下地)。範囲の外の入力はノードにしない(数は `omitted_input_count`)。
+    深さは範囲の計算(`collect_scope`)のもの。Run は、範囲の中の出力のうち最も浅いものの1つ上。
+    ノードの中身は系列グラフ(`lineage.py`)と同じ作り方にする。
+    """
+    asset_ids = {asset.id for asset, _depth in scope_assets}
+    run_ids = {r.id for r in runs}
+    run_depth: dict[uuid.UUID, int] = {}
+    for asset, depth in scope_assets:
+        run_id = asset.produced_by_run_id
+        if run_id in run_ids:
+            run_depth[run_id] = min(run_depth.get(run_id, depth - 1), depth - 1)
+
+    nodes = [_asset_node(db, asset, depth) for asset, depth in scope_assets]
+    nodes += [_run_node(run, run_depth[run.id]) for run in runs if run.id in run_depth]
+    edges: list[LineageEdge] = []
+    for run in runs:
+        for row in inputs_by_run[run.id]:
+            if row.asset_id not in asset_ids:
+                continue
+            edges.append(
+                LineageEdge(
+                    source=row.asset_id,
+                    target=run.id,
+                    kind="input",
+                    role=row.role,
+                    position=row.position,
+                    primary=row.role == RunInputRole.IMAGE and row.position == 0,
+                )
+            )
+    for asset, _depth in scope_assets:
+        if asset.produced_by_run_id in run_ids:
+            edges.append(
+                LineageEdge(
+                    source=asset.produced_by_run_id,
+                    target=asset.id,
+                    kind="output",
+                    output_index=asset.output_index,
+                )
+            )
+        if asset.source_asset_id in asset_ids:
+            edges.append(
+                LineageEdge(
+                    source=asset.source_asset_id,
+                    target=asset.id,
+                    kind="sketch_source",
+                    primary=True,
+                )
+            )
+    return AssetLineageResponse(
+        root_asset_id=root_asset_id, nodes=nodes, edges=edges, truncated=truncated
     )
 
 
