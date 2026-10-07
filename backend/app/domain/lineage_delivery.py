@@ -542,6 +542,8 @@ h4{font-size:13px;margin:14px 0 6px;color:var(--muted)}
 a{color:inherit}
 .muted{color:var(--muted)}
 .lead{margin:0 0 20px;color:var(--muted)}
+.lead:has(+.purpose){margin-bottom:6px}
+.purpose{color:var(--text);font-weight:600}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;
 background:var(--code);padding:1px 4px;border-radius:4px;overflow-wrap:anywhere}
 .summary{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:20px;
@@ -643,13 +645,16 @@ def render_index_html(
 
     root = assets.get(root_id)
     scope = str(manifest.get("scope"))
-    scope_label = (
-        _d(f"scopes.{scope}") if scope in ("ancestors", "descendants", "lineage") else scope
-    )
+    known_scope = scope in ("ancestors", "descendants", "lineage")
+    scope_label = _d(f"scopes.{scope}") if known_scope else scope
+    # 範囲ごとの目的(ADR-0037 4章): 祖先は「主画像がどう作られたか」、子孫は「主画像(素材)が
+    # 何に使われたか」、系列全体はその両方を示す。
+    purpose = f'<p class="lead purpose">{_e(_d(f"purpose.{scope}"))}</p>' if known_scope else ""
+    main_image_label = _d(f"mainImageRole.{scope}") if known_scope else _d("mainImage")
 
     summary_rows = []
     if root is not None:
-        summary_rows.append(_row(_d("mainImage"), _asset_link(root_id, labels)))
+        summary_rows.append(_row(main_image_label, _asset_link(root_id, labels)))
         summary_rows.append(_row(_d("fields.fileName"), _code(root.get("file"))))
         summary_rows.append(
             _row(_d("fields.sha256"), f'<code class="hash">{_e(root.get("sha256"))}</code>')
@@ -711,7 +716,7 @@ def render_index_html(
         f"<title>{_e(_d('title'))}</title>"
         f"<style>{_CSS}</style></head><body><main>"
         f"<header><h1>{_e(_d('title'))}</h1>"
-        f'<p class="lead">{_e(_d("lead"))}</p></header>'
+        f'<p class="lead">{_e(_d("lead"))}</p>{purpose}</header>'
         f'<section class="summary" aria-label="{_e(_d("summaryTitle"))}">'
         f"<div>{root_img}</div>"
         f'<dl class="fields">{"".join(summary_rows)}</dl></section>'

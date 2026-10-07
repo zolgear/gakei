@@ -2080,9 +2080,9 @@
         "lineage": "Whole lineage"
       },
       "scopeHelp": {
-        "ancestors": "Includes this image and the images it was edited from.",
-        "descendants": "Includes this image and the images made from it. The images it came from are not included.",
-        "lineage": "Also includes images made from this image."
+        "ancestors": "Shows how a delivered image was made. Includes this image and the images it came from.",
+        "descendants": "Shows what a source image was used for. Includes this image and the images made from it, but not the images it came from.",
+        "lineage": "Includes both ancestors and descendants."
       },
       "previewLoading": "Checking the included images...",
       "previewFailed": "Could not get the included images.",

@@ -431,3 +431,41 @@ def test_zip_documents_are_compressed(client: TestClient) -> None:
     with zipfile.ZipFile(io.BytesIO(_delivery(client, _out(r0)))) as zf:
         assert zf.getinfo("index.html").compress_type == zipfile.ZIP_DEFLATED
         assert zf.getinfo("README.txt").compress_type == zipfile.ZIP_DEFLATED
+
+
+# 範囲ごとの目的の文(日本語が正)。
+_JA_PURPOSE = {
+    "ancestors": "主画像がどのように作られたかの記録です",
+    "descendants": "主画像(素材)が何に使われたかの記録です",
+    "lineage": "主画像の元になったものと、主画像から作ったものの両方の記録です",
+}
+
+
+@pytest.mark.parametrize(
+    ("scope", "ja_role", "en_purpose"),
+    [
+        ("ancestors", "<dt>主画像</dt>", "This records how the main image was made"),
+        (
+            "descendants",
+            "<dt>主画像(素材)</dt>",
+            "what the main image (a source asset) was used for",
+        ),
+        (
+            "lineage",
+            "<dt>主画像</dt>",
+            "both what the main image came from and what was made from it",
+        ),
+    ],
+)
+def test_index_html_states_purpose_of_scope(
+    client: TestClient, scope: str, ja_role: str, en_purpose: str
+) -> None:
+    """範囲ごとに、何を示す記録かを冒頭に書く(ADR-0037 4章)。子孫では主画像を素材と呼ぶ。"""
+    _, r1, _ = _chain(client)
+    ja = _html(_delivery(client, _out(r1), scope, lang="ja"))
+    assert f'<p class="lead purpose">{_JA_PURPOSE[scope]}' in ja
+    assert ja_role in ja
+    for other in set(_JA_PURPOSE) - {scope}:
+        assert _JA_PURPOSE[other] not in ja
+    en = _html(_delivery(client, _out(r1), scope, lang="en"))
+    assert en_purpose in en

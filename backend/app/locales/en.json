@@ -533,6 +533,16 @@
       "title": "Image lineage record",
       "lead": "A record of the main image and its lineage (source images, generation runs and resulting images), exported from GAKEI. Open this page in a browser with the ZIP extracted as is.",
       "summaryTitle": "Summary",
+      "purpose": {
+        "ancestors": "This records how the main image was made (the main image, the images it came from, and the generation runs).",
+        "descendants": "This records what the main image (a source asset) was used for (the main image, the images made from it, and the generation runs).",
+        "lineage": "This records both what the main image came from and what was made from it."
+      },
+      "mainImageRole": {
+        "ancestors": "Main image",
+        "descendants": "Main image (source asset)",
+        "lineage": "Main image"
+      },
       "mainImage": "Main image",
       "exportedAt": "Exported at",
       "gakeiVersion": "GAKEI version",
