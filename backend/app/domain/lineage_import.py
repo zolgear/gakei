@@ -10,6 +10,8 @@ Asset と Run にする。
 - 各原本の大きさと sha256 が manifest と一致すること。
 
 作るもの(1つのトランザクション。途中で失敗したら rollback して何も残さない):
+- 範囲が `descendants` の起点で、作った Run が ZIP に無い生成画像は、アップロードとして作る
+  (Run はこしらえない。ADR-0037 1章)。
 - Asset: 通常の取り込み(`assets.ingest`)。持ち主は取り込んだ利用者。アップロード・マスク・
   スケッチは、取り込んだ利用者が同じ種類・同じ内容(sha256)の削除されていない Asset を
   持っていれば、それを使う(他人の Asset は使わない。ADR-0025)。生成画像は、取り込んだ Run の
@@ -133,7 +135,7 @@ class Manifest(_Model):
     format: str
     exported_at: datetime | None = None
     gakei_version: str | None = Field(default=None, max_length=64)
-    scope: Literal["ancestors", "lineage"]
+    scope: Literal["ancestors", "descendants", "lineage"]
     root_asset_id: uuid.UUID
     truncated: bool = False
     assets: list[ManifestAsset] = Field(min_length=1, max_length=MAX_ASSETS)
@@ -189,6 +191,21 @@ def _check_entries(zf: zipfile.ZipFile) -> None:
         raise _fail(t("lineageImport.tooLarge"))
 
 
+def _is_runless_root(manifest: Manifest, asset: ManifestAsset) -> bool:
+    """範囲が `descendants`(この画像と子孫)の起点で、作った Run が ZIP に無い生成画像か。
+
+    書き出し側は、起点を生んだ Run を入れず、`produced_by_run_id` と `output_index` を null に
+    する(ADR-0037 1章)。生成画像で Run が無いのは、この場合だけ認める。
+    """
+    return (
+        manifest.scope == "descendants"
+        and asset.id == manifest.root_asset_id
+        and asset.kind == "generated"
+        and asset.produced_by_run_id is None
+        and asset.output_index is None
+    )
+
+
 def _check_manifest_consistency(manifest: Manifest) -> None:
     """ID の重複、参照の整合、循環を確かめる。"""
     assets_by_id: dict[uuid.UUID, ManifestAsset] = {}
@@ -210,7 +227,10 @@ def _check_manifest_consistency(manifest: Manifest) -> None:
 
     outputs: set[tuple[uuid.UUID, int]] = set()
     for asset in manifest.assets:
-        if asset.kind == "generated":
+        if _is_runless_root(manifest, asset):
+            # 範囲が `descendants` の起点で、作った Run を ZIP に含めていない生成画像。
+            pass
+        elif asset.kind == "generated":
             if asset.produced_by_run_id not in runs_by_id or asset.output_index is None:
                 raise _fail(
                     t("lineageImport.invalidManifest", reason="generated asset without its run")
@@ -473,7 +493,14 @@ def import_archive(
     asset_map: dict[uuid.UUID, uuid.UUID] = {}
     created: list[Asset] = []
     for masset in _asset_order(manifest):
-        if masset.kind == "generated":
+        if _is_runless_root(manifest, masset):
+            # 作った Run が分からない生成画像は、外から持ち込んだ画像(アップロード)として取り込む。
+            # Run をこしらえない(証跡にないものを作らない)。生成画像のまま Run 無しにもしない
+            # (生成画像には作った Run がある、という前提を崩さない)。
+            kind = AssetKind.UPLOAD
+        else:
+            kind = AssetKind(masset.kind)
+        if kind == AssetKind.GENERATED:
             assert masset.produced_by_run_id is not None and masset.output_index is not None
             run = run_map[masset.produced_by_run_id]
             if run.id not in new_run_ids:
@@ -503,7 +530,7 @@ def import_archive(
                 model=_storage_model(mrun),
             )
         else:
-            existing = _find_own_asset(db, viewer, masset.kind, masset.sha256)
+            existing = _find_own_asset(db, viewer, kind.value, masset.sha256)
             if existing is not None:
                 asset_map[masset.id] = existing.id
                 continue
@@ -513,7 +540,7 @@ def import_archive(
                 db,
                 store,
                 data,
-                AssetKind(masset.kind),
+                kind,
                 source_asset_id=source,
                 created_by_user_id=viewer.id,
             )

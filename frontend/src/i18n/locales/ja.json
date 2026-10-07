@@ -2076,10 +2076,12 @@
       "scopeLabel": "範囲",
       "scopes": {
         "ancestors": "この画像と祖先",
+        "descendants": "この画像と子孫",
         "lineage": "系列全体"
       },
       "scopeHelp": {
         "ancestors": "この画像と、Edit の元になった画像をさかのぼって含めます。",
+        "descendants": "この画像と、この画像から作った画像を含めます。元になった画像は含めません。",
         "lineage": "祖先に加えて、この画像から作った画像も含めます。"
       },
       "previewLoading": "含まれる画像を確かめています...",

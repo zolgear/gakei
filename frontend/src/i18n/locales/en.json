@@ -2076,10 +2076,12 @@
       "scopeLabel": "Scope",
       "scopes": {
         "ancestors": "This image and ancestors",
+        "descendants": "This image and descendants",
         "lineage": "Whole lineage"
       },
       "scopeHelp": {
         "ancestors": "Includes this image and the images it was edited from.",
+        "descendants": "Includes this image and the images made from it. The images it came from are not included.",
         "lineage": "Also includes images made from this image."
       },
       "previewLoading": "Checking the included images...",

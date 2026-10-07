@@ -3218,7 +3218,7 @@ export interface components {
              * Scope
              * @enum {string}
              */
-            scope: "ancestors" | "lineage";
+            scope: "ancestors" | "descendants" | "lineage";
             /** Asset Count */
             asset_count: number;
             /** Run Count */
@@ -8301,7 +8301,7 @@ export interface operations {
     preview_lineage_export: {
         parameters: {
             query?: {
-                scope?: "ancestors" | "lineage";
+                scope?: "ancestors" | "descendants" | "lineage";
             };
             header?: never;
             path: {
@@ -8336,7 +8336,7 @@ export interface operations {
     export_lineage: {
         parameters: {
             query?: {
-                scope?: "ancestors" | "lineage";
+                scope?: "ancestors" | "descendants" | "lineage";
                 mode?: "import" | "delivery";
                 include_creator_names?: boolean;
                 /** @description 納品用の index.html の言語 */

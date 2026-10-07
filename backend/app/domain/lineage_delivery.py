@@ -415,6 +415,9 @@ def _render_asset_card(
     producer = asset.get("produced_by_run_id")
     if producer:
         rows.append(_row(_d("fields.producedBy"), _run_link(str(producer), labels)))
+    elif asset.get("kind") == "generated":
+        # 範囲が `descendants` の起点など、作った実行を ZIP に含めていない生成画像。
+        rows.append(_row(_d("fields.producedBy"), _e(_d("producerOutOfScope"))))
     source = asset.get("source_asset_id")
     if source:
         rows.append(_row(_d("fields.sketchSource"), _asset_link(str(source), labels)))
@@ -640,7 +643,9 @@ def render_index_html(
 
     root = assets.get(root_id)
     scope = str(manifest.get("scope"))
-    scope_label = _d(f"scopes.{scope}") if scope in ("ancestors", "lineage") else scope
+    scope_label = (
+        _d(f"scopes.{scope}") if scope in ("ancestors", "descendants", "lineage") else scope
+    )
 
     summary_rows = []
     if root is not None:

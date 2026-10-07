@@ -195,8 +195,14 @@
   overflow-wrap: anywhere;
 }
 
+/* 範囲は3つ。広い幅では横に3つ並べる。 */
+.scopeOptionsThree {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 @media (max-width: 767px) {
-  .scopeOptions {
+  .scopeOptions,
+  .scopeOptionsThree {
     grid-template-columns: 1fr;
   }
 

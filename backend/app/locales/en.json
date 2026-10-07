@@ -541,6 +541,7 @@
       "counts": "{assets} images, {runs} generation runs",
       "scopes": {
         "ancestors": "This image and its ancestors",
+        "descendants": "This image and its descendants",
         "lineage": "Whole lineage (ancestors and descendants)"
       },
       "truncated": "The lineage is large and was cut off at the limit (1000 items). Not every image is included.",
@@ -551,9 +552,10 @@
       "graphLegend": "Squares are images; rounded boxes are generation runs. Arrows go from input images to a run, and from a run to the images it produced. The thick gold frame is the main image; dashed frames are imported records. Click a box to jump to its detailed record below.",
       "assetsTitle": "Images",
       "runsTitle": "Generation runs",
-      "noRuns": "There are no generation runs (uploaded images only).",
+      "noRuns": "This ZIP contains no generation runs.",
       "noParams": "No parameters.",
       "none": "None",
+      "producerOutOfScope": "Not in this ZIP (outside the export scope)",
       "assetLabel": "Image {n}",
       "runLabel": "Run {n}",
       "importedShort": "Imported",

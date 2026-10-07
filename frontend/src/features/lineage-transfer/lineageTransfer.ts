@@ -3,8 +3,11 @@
  */
 import type { LineageExportMode, LineageExportScope } from '../../api/client'
 
-/** 書き出しの範囲の並び(共有リンクの「祖先まで」「祖先と子孫」と同じ計算)。 */
-export const LINEAGE_EXPORT_SCOPES: readonly LineageExportScope[] = ['ancestors', 'lineage']
+/**
+ * 書き出しの範囲の並び。「この画像と祖先」「系列全体」は共有リンクの「祖先まで」「祖先と子孫」と
+ * 同じ計算。「この画像と子孫」は書き出しだけにある(ADR-0037 1章)。
+ */
+export const LINEAGE_EXPORT_SCOPES: readonly LineageExportScope[] = ['ancestors', 'descendants', 'lineage']
 
 /** 書き出しの用途の並び(GAKEI に取り込む / 納品用。ADR-0037 4章)。 */
 export const LINEAGE_EXPORT_MODES: readonly LineageExportMode[] = ['import', 'delivery']

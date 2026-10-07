@@ -36,7 +36,7 @@ from app.worker.embedder import Embedder
 
 router = APIRouter(tags=["lineage-transfer"])
 
-ScopeParam = Literal["ancestors", "lineage"]
+ScopeParam = Literal["ancestors", "descendants", "lineage"]
 ModeParam = Literal["import", "delivery"]
 LangParam = Literal["ja", "en"]
 

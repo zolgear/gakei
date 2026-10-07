@@ -712,7 +712,7 @@ class RunLineageResponse(BaseModel):
 class LineageExportPreviewResponse(BaseModel):
     """書き出す前の確認。範囲に含まれる画像と Run の数、原本の合計バイト数。"""
 
-    scope: Literal["ancestors", "lineage"]
+    scope: Literal["ancestors", "descendants", "lineage"]
     asset_count: int
     run_count: int
     total_bytes: int

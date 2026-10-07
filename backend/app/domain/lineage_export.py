@@ -1,12 +1,15 @@
 """系列の持ち出し(ADR-0037 1章)。
 
-ある Asset を起点に、範囲(`ancestors` = この画像と祖先 / `lineage` = 系列全体)の Asset の原本と、
-それを生んだ Run の記録を1つの ZIP にまとめる。
+ある Asset を起点に、範囲(`ancestors` = この画像と祖先 / `descendants` = この画像と子孫 /
+`lineage` = 系列全体)の Asset の原本と、それを生んだ Run の記録を1つの ZIP にまとめる。
 
 - 範囲の計算は共有リンクと同じ `shares.collect_scope`(見える範囲 ADR-0025、論理削除済みを
   含めない、ノード数の上限)。
 - Run は、範囲の Asset を生んだもの(`produced_by_run_id`)だけ。状態は問わない(失敗も証跡。
   ADR-0005)。範囲の Asset を生んでいない Run(失敗して何も出さなかった Run を含む)は入れない。
+- `descendants` では、起点を生んだ Run は入れない(起点の祖先の側は範囲の外)。起点の
+  `produced_by_run_id` と `output_index` は null にする(範囲の外の ID を出さない)。起点が生成
+  画像なら、種類は `generated` のまま(取り込みでは、作った Run が分からない画像として扱う)。
 - Run の入力のうち範囲に入らない Asset(見えない、削除済み、範囲の外)は、ID を出さず数だけ
   (`omitted_input_count`)書く。スケッチの下地(`source_asset_id`)も範囲の外なら null。
 - 原本は保存しているバイト列のまま入れる(系列情報を埋め込まない。sha256 で照合できるように)。
@@ -42,8 +45,8 @@ from app.domain.secret_values import redact_comfyui_params
 from app.domain.shares import collect_scope
 from app.domain.storage import AssetStore
 
-ExportScope = Literal["ancestors", "lineage"]
-EXPORT_SCOPES: tuple[str, ...] = ("ancestors", "lineage")
+ExportScope = Literal["ancestors", "descendants", "lineage"]
+EXPORT_SCOPES: tuple[str, ...] = ("ancestors", "descendants", "lineage")
 # 書き出しの用途。`import` は GAKEI に取り込むため(manifest と原本だけ)、`delivery` は
 # GAKEI を使わない相手への納品用(加えて index.html と README.txt。ADR-0037 4章)。
 ExportMode = Literal["import", "delivery"]
@@ -170,7 +173,14 @@ def build_export(
     assets = [asset for asset, _depth in result.assets]
     asset_ids = {a.id for a in assets}
 
-    run_ids = {a.produced_by_run_id for a in assets if a.produced_by_run_id is not None}
+    # `descendants` では、起点を生んだ Run を範囲の外とする(子孫を生んだ Run が起点を生むことは
+    # ないので、子孫の側の Run は欠けない)。
+    omitted_producer_of = {root_asset_id} if scope == "descendants" else set()
+    run_ids = {
+        a.produced_by_run_id
+        for a in assets
+        if a.produced_by_run_id is not None and a.id not in omitted_producer_of
+    }
     runs: list[Run] = (
         list(db.execute(select(Run).where(Run.id.in_(run_ids))).scalars().all()) if run_ids else []
     )
@@ -225,9 +235,9 @@ def build_export(
                 "bytes": asset.bytes,
                 "created_at": _iso(asset.created_at),
                 "produced_by_run_id": (
-                    str(asset.produced_by_run_id) if asset.produced_by_run_id is not None else None
+                    str(asset.produced_by_run_id) if asset.produced_by_run_id in run_ids else None
                 ),
-                "output_index": asset.output_index,
+                "output_index": asset.output_index if asset.produced_by_run_id in run_ids else None,
                 # 範囲の外の下地は ID を出さない。
                 "source_asset_id": (
                     str(asset.source_asset_id) if asset.source_asset_id in asset_ids else None

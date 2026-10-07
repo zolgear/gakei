@@ -75,7 +75,7 @@ function ExportLineageDialogBody({ assetId, onClose, toast }: Omit<ExportLineage
 
       <fieldset className={styles.fieldset}>
         <legend className={styles.legend}>{s.scopeLabel}</legend>
-        <div className={styles.scopeOptions}>
+        <div className={`${styles.scopeOptions} ${styles.scopeOptionsThree}`}>
           {LINEAGE_EXPORT_SCOPES.map((value) => (
             <label key={value} className={styles.scopeOption} data-checked={scope === value}>
               <input

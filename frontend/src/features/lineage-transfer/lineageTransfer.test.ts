@@ -48,8 +48,8 @@ describe('progressPercent', () => {
 })
 
 describe('LINEAGE_EXPORT_SCOPES', () => {
-  it('「この画像と祖先」「系列全体」の順', () => {
-    expect(LINEAGE_EXPORT_SCOPES).toEqual(['ancestors', 'lineage'])
+  it('「この画像と祖先」「この画像と子孫」「系列全体」の順', () => {
+    expect(LINEAGE_EXPORT_SCOPES).toEqual(['ancestors', 'descendants', 'lineage'])
   })
 })
 
