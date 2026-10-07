@@ -12,8 +12,14 @@
 - 原本は保存しているバイト列のまま入れる(系列情報を埋め込まない。sha256 で照合できるように)。
 - タイトル・タグ・グループ・埋め込みベクトルは入れない。
 
+- 実行者の表示名(`created_by_name`)は、書き出すときに選んだときだけ入れる(既定は入れない。
+  ADR-0037 4章)。入れないときは null。
+
 ZIP は `iter_export_zip` が少しずつ作って返す(ストリーミング。原本を丸ごとメモリに載せない)。
 DB を読むのは `build_export` だけで、ZIP を作る間は DB に触れない。
+
+納品用(ADR-0037 4章)は、同じ中身に `index.html` と `README.txt` を加える。2つの文書は
+`lineage_delivery.py` が `plan` から作り、`plan.extra_entries` に入れておく(ZIP を流す前に作る)。
 """
 
 from __future__ import annotations
@@ -31,13 +37,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain.models import AppUser, Run, RunInput
+from app.domain.models import RUN_ORIGIN_IMPORT, AppUser, Run, RunImport, RunInput
 from app.domain.secret_values import redact_comfyui_params
 from app.domain.shares import collect_scope
 from app.domain.storage import AssetStore
 
 ExportScope = Literal["ancestors", "lineage"]
 EXPORT_SCOPES: tuple[str, ...] = ("ancestors", "lineage")
+# 書き出しの用途。`import` は GAKEI に取り込むため(manifest と原本だけ)、`delivery` は
+# GAKEI を使わない相手への納品用(加えて index.html と README.txt。ADR-0037 4章)。
+ExportMode = Literal["import", "delivery"]
 
 # manifest.json の形式名と版。版を上げるときは取り込み側(`lineage_import.py`)も合わせる。
 EXPORT_FORMAT = "gakei.lineage-export/1"
@@ -84,6 +93,18 @@ class ExportFile:
     size: int
 
 
+@dataclass(frozen=True)
+class ImportedRunInfo:
+    """範囲の Run のうち、取り込んだもの(`origin = 'import'`。ADR-0037 2章)の書き出し元での記録。
+    manifest には入れず、納品用の index.html で「取り込み・未検証」と示すためだけに使う。
+    `source_creator_name` は、実行者の名前を含めるときだけ値が入る。"""
+
+    source_creator_name: str | None
+    source_created_at: datetime | None
+    source_finished_at: datetime | None
+    source_gakei_version: str | None
+
+
 @dataclass
 class ExportPlan:
     root_asset_id: uuid.UUID
@@ -93,13 +114,20 @@ class ExportPlan:
     files: list[ExportFile] = field(default_factory=list)
     run_count: int = 0
     truncated: bool = False
+    mode: ExportMode = "import"
+    include_creator_names: bool = False
+    # 取り込んだ Run(キーは Run の ID の文字列)。
+    imported_runs: dict[str, ImportedRunInfo] = field(default_factory=dict)
+    # manifest の後に入れる文書(納品用の index.html と README.txt)。名前とバイト列。
+    extra_entries: list[tuple[str, bytes]] = field(default_factory=list)
 
     @property
     def total_bytes(self) -> int:
         return sum(f.size for f in self.files)
 
     def filename(self) -> str:
-        return f"gakei-lineage-{self.root_asset_id}-{self.exported_at:%Y%m%d}.zip"
+        prefix = "gakei-delivery" if self.mode == "delivery" else "gakei-lineage"
+        return f"{prefix}-{self.root_asset_id}-{self.exported_at:%Y%m%d}.zip"
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -121,10 +149,14 @@ def build_export(
     scope: ExportScope,
     *,
     gakei_version: str,
+    mode: ExportMode = "import",
+    include_creator_names: bool = False,
     now: datetime | None = None,
 ) -> ExportPlan:
     """書き出す内容(manifest と原本の一覧)を決める。DB を読むのはここだけ。
 
+    `include_creator_names` が偽なら、実行者の表示名を読まず、manifest の `created_by_name` を
+    null にする(ADR-0037 4章。既定は含めない)。
     起点が `viewer` に見えない・削除済みなら `ExportTargetNotFoundError`。
     """
     from app.domain.shares import ShareTargetNotFoundError
@@ -156,9 +188,27 @@ def build_export(
         )
         for row in rows:
             inputs_by_run[row.run_id].append(row)
-    names = _creator_names(
-        db, {r.created_by_user_id for r in runs if r.created_by_user_id is not None}
+    names = (
+        _creator_names(db, {r.created_by_user_id for r in runs if r.created_by_user_id is not None})
+        if include_creator_names
+        else {}
     )
+    imported_ids = [r.id for r in runs if r.origin == RUN_ORIGIN_IMPORT]
+    imported_runs: dict[str, ImportedRunInfo] = {}
+    if imported_ids:
+        import_rows = db.execute(
+            select(RunImport).where(RunImport.run_id.in_(imported_ids))
+        ).scalars()
+        for row in import_rows:
+            imported_runs[str(row.run_id)] = ImportedRunInfo(
+                source_creator_name=row.source_creator_name if include_creator_names else None,
+                source_created_at=row.source_created_at,
+                source_finished_at=row.source_finished_at,
+                source_gakei_version=row.source_gakei_version,
+            )
+        # `run_import` の行が無い取り込み Run(通常は無い)も、取り込みとして示す。
+        for run_id in imported_ids:
+            imported_runs.setdefault(str(run_id), ImportedRunInfo(None, None, None, None))
 
     manifest_assets: list[dict[str, Any]] = []
     files: list[ExportFile] = []
@@ -237,6 +287,9 @@ def build_export(
         files=files,
         run_count=len(manifest_runs),
         truncated=result.truncated,
+        mode=mode,
+        include_creator_names=include_creator_names,
+        imported_runs=imported_runs,
     )
 
 
@@ -289,6 +342,8 @@ def iter_export_zip(store: AssetStore, plan: ExportPlan) -> Iterator[bytes]:
         zf.writestr(
             _zip_info(MANIFEST_NAME, plan.exported_at, zipfile.ZIP_DEFLATED), manifest_bytes
         )
+        for name, data in plan.extra_entries:
+            zf.writestr(_zip_info(name, plan.exported_at, zipfile.ZIP_DEFLATED), data)
         yield sink.drain()
         for f in plan.files:
             content = store.open_content(f.blob_key, f.sha256, "original")

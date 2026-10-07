@@ -93,8 +93,8 @@ def _upload(client: TestClient, data: bytes, kind: str = "upload", **extra: str)
     return response.json()["id"]
 
 
-def _export(client: TestClient, asset_id: str, scope: str = "ancestors") -> bytes:
-    response = client.get(f"/api/assets/{asset_id}/export", params={"scope": scope})
+def _export(client: TestClient, asset_id: str, scope: str = "ancestors", **params: Any) -> bytes:
+    response = client.get(f"/api/assets/{asset_id}/export", params={"scope": scope, **params})
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "application/zip"
     return response.content
@@ -330,8 +330,13 @@ def test_export_respects_visibility(client_oidc: TestClient) -> None:
     run1 = next(r for r in manifest["runs"] if r["id"] == r1["id"])
     assert run1["omitted_input_count"] == 1
     assert b_upload not in json.dumps(manifest)
-    assert run1["created_by_name"] == "Alice"
-    assert "a@example.com" not in json.dumps(manifest)
+    # 実行者の名前は、選んだときだけ入る(既定は入れない。ADR-0037 4章)。
+    assert run1["created_by_name"] is None
+    assert "Alice" not in json.dumps(manifest)
+    named = _manifest(_export(client_oidc, _out(r1), include_creator_names="true"))
+    run1_named = next(r for r in named["runs"] if r["id"] == r1["id"])
+    assert run1_named["created_by_name"] == "Alice"
+    assert "a@example.com" not in json.dumps(named)
 
     # B は A の画像を書き出せない(存在しないのと同じ 404)。
     login_as(client_oidc, "b@example.com", name="B")
@@ -350,7 +355,7 @@ def test_round_trip_to_another_user_on_same_instance(client_oidc: TestClient) ->
     )
     r1 = _run(client_oidc, "edit sketch", [sketch_id])
     r2 = _run(client_oidc, "edit again", [_out(r1)])
-    zip_bytes = _export(client_oidc, _out(r2))
+    zip_bytes = _export(client_oidc, _out(r2), include_creator_names="true")
     source_manifest = _manifest(zip_bytes)
     assert len(source_manifest["assets"]) == 4
 

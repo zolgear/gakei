@@ -528,7 +528,105 @@
     "queryImageFailed": "Could not compute the embedding of the image: {error}"
   },
   "lineageExport": {
-    "contentMissing": "Cannot export: an original image in this lineage is missing from storage"
+    "contentMissing": "Cannot export: an original image in this lineage is missing from storage",
+    "delivery": {
+      "title": "Image lineage record",
+      "lead": "A record of the main image and its lineage (source images, generation runs and resulting images), exported from GAKEI. Open this page in a browser with the ZIP extracted as is.",
+      "summaryTitle": "Summary",
+      "mainImage": "Main image",
+      "exportedAt": "Exported at",
+      "gakeiVersion": "GAKEI version",
+      "scope": "Scope",
+      "contents": "Contents",
+      "counts": "{assets} images, {runs} generation runs",
+      "scopes": {
+        "ancestors": "This image and its ancestors",
+        "lineage": "Whole lineage (ancestors and descendants)"
+      },
+      "truncated": "The lineage is large and was cut off at the limit (1000 items). Not every image is included.",
+      "integrityTitle": "About tamper detection",
+      "integrityBody": "This ZIP has no tamper detection or signature. The sha256 of every image is listed on this page and in manifest.json, so you can compute an image file's sha256 and, if it matches, confirm the image has not been replaced. (Whether this page or manifest.json itself was modified cannot be guaranteed.)",
+      "importedSummary": "This lineage contains records imported from another GAKEI (marked \"Imported, unverified\"). Imported records were not run on the exporting GAKEI and their contents have not been verified.",
+      "graphTitle": "Lineage graph",
+      "graphLegend": "Squares are images; rounded boxes are generation runs. Arrows go from input images to a run, and from a run to the images it produced. The thick gold frame is the main image; dashed frames are imported records. Click a box to jump to its detailed record below.",
+      "assetsTitle": "Images",
+      "runsTitle": "Generation runs",
+      "noRuns": "There are no generation runs (uploaded images only).",
+      "noParams": "No parameters.",
+      "none": "None",
+      "assetLabel": "Image {n}",
+      "runLabel": "Run {n}",
+      "importedShort": "Imported",
+      "importedBadge": "Imported, unverified",
+      "importedNote": "This run was imported from another GAKEI; it was not run on the exporting GAKEI. Its contents (prompt, parameters, original dates, etc.) have not been verified. The dates below are the values recorded by the source GAKEI.",
+      "omittedInputs": {
+        "one": "{count} (an image not included in this ZIP, e.g. deleted)",
+        "other": "{count} (images not included in this ZIP, e.g. deleted)"
+      },
+      "bytes": {
+        "one": "{count:,} byte",
+        "other": "{count:,} bytes"
+      },
+      "kinds": {
+        "upload": "Upload",
+        "generated": "Generated",
+        "mask": "Mask",
+        "sketch": "Sketch"
+      },
+      "operations": {
+        "generate": "Generate",
+        "edit": "Edit"
+      },
+      "statuses": {
+        "queued": "Queued",
+        "running": "Running",
+        "succeeded": "Succeeded",
+        "failed": "Failed",
+        "canceled": "Canceled"
+      },
+      "edges": {
+        "primary": "source",
+        "image": "image",
+        "mask": "mask",
+        "reference": "reference",
+        "output": "output",
+        "sketch_source": "base"
+      },
+      "fields": {
+        "fileName": "File name",
+        "sha256": "sha256",
+        "dimensions": "Dimensions",
+        "format": "Format",
+        "bytes": "Size",
+        "createdAt": "Created at",
+        "kind": "Kind",
+        "producedBy": "Produced by",
+        "sketchSource": "Sketch base",
+        "id": "ID",
+        "provider": "Provider",
+        "model": "Model",
+        "operation": "Operation",
+        "status": "Status",
+        "runCreatedAt": "Started at",
+        "runFinishedAt": "Finished at",
+        "creator": "Run by",
+        "inputs": "Inputs",
+        "omittedInputs": "Inputs not included",
+        "outputs": "Outputs",
+        "error": "Error",
+        "prompt": "Prompt",
+        "params": "Parameters",
+        "sourceCreatedAt": "Original start",
+        "sourceFinishedAt": "Original finish",
+        "sourceCreator": "Original runner",
+        "sourceVersion": "Source GAKEI version"
+      },
+      "footerFiles": "assets/ holds the original images, and manifest.json holds the same record in machine-readable form. This ZIP, including manifest.json, can be imported into GAKEI with \"Import lineage\".",
+      "footerMadeWith": "Exported with GAKEI (a self-hosted image generation tool)."
+    },
+    "readme": {
+      "body": "GAKEI image lineage record (delivery ZIP)\n\nThis ZIP is a record of an image lineage exported from GAKEI.\nGAKEI is a self-hosted web tool for using image generation APIs such as OpenAI's.\nRepository: {repo_url}\n\nContents of this ZIP:\n  index.html     A page for reading this record. Extract the ZIP, then open it in a browser (no internet connection needed).\n  assets/        The original images, byte for byte as they were generated or stored.\n  manifest.json  The same record in machine-readable form ({format}). It can be imported into GAKEI with \"Import lineage\".\n  README.txt     This file.\n\nMain image ID: {root}\nExported at (UTC): {exported_at}\nGAKEI version: {version}\n\nThis ZIP has no tamper detection or signature. The sha256 of every image is listed in index.html and manifest.json; compute an image file's sha256 and compare to confirm that the image has not been replaced.\n  Windows: certutil -hashfile <file> SHA256\n  macOS / Linux: shasum -a 256 <file>"
+    }
   },
   "lineageImport": {
     "zipTooLarge": "The ZIP is too large (limit: 1 GiB)",
