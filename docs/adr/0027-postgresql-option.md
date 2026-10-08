@@ -33,6 +33,7 @@ Issue [#4](https://github.com/zolgear/gakei/issues/4)。
 - `DATABASE_URL` を使う場合でも `DATA_DIR` は要る。画像(`assets/`、`derived/`)、アバター、`secrets.json`、ONNX のモデルは、これまでどおり `DATA_DIR` に置く。
 - 接続文字列はログや画面に出さない。出す場合はパスワードを伏せる(`render_as_string(hide_password=True)`)。
 - 起動時に PostgreSQL に接続できなければ、分かる文言(日本語と英語)を出して起動を中止する。
+- 2026-10-06 追記(Issue #84): 起動時に、DB の今のリビジョン(`alembic_version`)がこの版のマイグレーションに含まれるかを確かめる。含まれなければ(より新しい版の GAKEI で移行した DB を古い版で開いた。イメージのタグを戻したときなど)、`upgrade head` を実行せず DB にも触れずに、分かる文言(日本語と英語。DB のリビジョンとこの版の番号を出し、新しい版で起動するか更新前のバックアップから戻すよう案内する)で起動を中止する。SQLite と PostgreSQL の両方が対象。検査は `run_migrations` の中に置き、`backfill_embedded_meta` も同じく止まる。`migrate_to_postgres` は移行元が新しい版の DB なら中止し、`regenerate_derivatives` も中止する(新しい版の派生を `--prune` で消さないため)。`migrate_storage` は DB の `blob_key` を読んでコピーするだけなので止めない。
 - 設定画面からは変えない(`.env` と環境変数だけ)。DB を変えるとデータの置き場所が変わるため。
 
 ### 2. 型と書き方

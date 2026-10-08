@@ -9,6 +9,7 @@
     "authUrlInsecure": "{name} points to http (not https) on a non-loopback address ({value}). Authentication traffic would be sent in plain text.",
     "authEmergencyDisable": "To start with authentication temporarily disabled, add AUTH_MODE=none to .env and restart (the saved settings are kept).",
     "databaseUnavailable": "Cannot connect to the database ({url}). Check DATABASE_URL and that PostgreSQL is running and accepting connections. Details: {error}",
+    "databaseTooNew": "This database ({url}) has been used by a newer version of GAKEI (database revision: {revision}; this GAKEI {version} knows revisions up to {head}). Start it with the newer version of GAKEI, or restore a backup taken before upgrading. The database has not been changed.",
     "storageConfigMissing": "Required environment variables for STORAGE_BACKEND are not set: {missing}",
     "storageAzureBothConnections": "Both AZURE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_ACCOUNT_URL are set. Set only one of them.",
     "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING is malformed. Paste the connection string from \"Access keys\" in the Azure portal as is.",
@@ -45,6 +46,8 @@
   },
   "search": {
     "emptyQuery": "q cannot be empty",
+    "tooManyTerms": "Too many words in q (maximum {max})",
+    "termTooLong": "A word in q is too long (maximum {max} characters per word)",
     "unknownTypes": "Unknown value(s) in types: {types} (valid values: {validTypes})"
   },
   "comfyui": {
@@ -368,6 +371,7 @@
     "disabled": "The MCP server is disabled. Enable it under Admin settings → MCP.",
     "tokenRequired": "An access token is required (Authorization: Bearer <token>).",
     "tokenInvalid": "The access token is invalid or has been revoked.",
+    "tokenExpired": "The access token has expired. Issue a new token under Access tokens in User settings.",
     "originForbidden": "MCP requests from this Origin are not allowed."
   },
   "annotations": {
@@ -457,6 +461,39 @@
       "other": "Migration finished ({count} objects in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI."
     }
   },
+  "regenerateDerivatives": {
+    "description": "Create the current version of the derived images (thumbnails and previews) from the originals for images that do not have them (ADR-0036). Logically deleted images are included. You can run this while GAKEI is running. The database is not modified and the originals are not touched.",
+    "dryRunHelp": "Only count what would be created (and, with --prune, deleted); write and delete nothing",
+    "pruneHelp": "Delete derived images of other versions (the originals and the current version are never touched)",
+    "databaseMissing": "Database file not found: {source}",
+    "failed": "Aborted because reading from or writing to the storage failed. Run the tool again to continue from where it stopped. Details: {error}",
+    "version": "Derived image version: {version}",
+    "images": {
+      "one": "  Images: {count} (identical contents count as one)",
+      "other": "  Images: {count} (identical contents count as one)"
+    },
+    "dryRunMissing": {
+      "one": "  Missing current-version derived images: {count}",
+      "other": "  Missing current-version derived images: {count}"
+    },
+    "dryRunStale": {
+      "one": "  Derived images of other versions: {count}",
+      "other": "  Derived images of other versions: {count}"
+    },
+    "dryRunDone": "--dry-run: Nothing was written.",
+    "generated": {
+      "one": "Created {count} current-version derived image.",
+      "other": "Created {count} current-version derived images."
+    },
+    "originalUnavailable": {
+      "one": "Note: {count} image could not get derived images because its original is missing or unreadable (sha256): {keys}",
+      "other": "Note: {count} images could not get derived images because their originals are missing or unreadable (sha256): {keys}"
+    },
+    "pruned": {
+      "one": "Deleted {count} derived image of another version.",
+      "other": "Deleted {count} derived images of other versions."
+    }
+  },
   "shares": {
     "disabled": "Share links are disabled in the admin settings",
     "notFound": "Share link not found",
@@ -489,5 +526,137 @@
     "queryImageEmpty": "The image file is empty",
     "queryImageTooManyPixels": "The image is too large (up to {max} pixels)",
     "queryImageFailed": "Could not compute the embedding of the image: {error}"
+  },
+  "lineageExport": {
+    "contentMissing": "Cannot export: an original image in this lineage is missing from storage",
+    "delivery": {
+      "title": "Image lineage record",
+      "lead": "A record of the main image and its lineage (source images, generation runs and resulting images), exported from GAKEI. Open this page in a browser with the ZIP extracted as is.",
+      "summaryTitle": "Summary",
+      "purpose": {
+        "ancestors": "This records how the main image was made (the main image, the images it came from, and the generation runs).",
+        "descendants": "This records what the main image (a source asset) was used for (the main image, the images made from it, and the generation runs).",
+        "lineage": "This records both what the main image came from and what was made from it."
+      },
+      "mainImageRole": {
+        "ancestors": "Main image",
+        "descendants": "Main image (source asset)",
+        "lineage": "Main image"
+      },
+      "mainImage": "Main image",
+      "exportedAt": "Exported at",
+      "gakeiVersion": "GAKEI version",
+      "scope": "Scope",
+      "contents": "Contents",
+      "counts": "{assets} images, {runs} generation runs",
+      "scopes": {
+        "ancestors": "This image and its ancestors",
+        "descendants": "This image and its descendants",
+        "lineage": "Whole lineage (ancestors and descendants)"
+      },
+      "truncated": "The lineage is large and was cut off at the limit (1000 items). Not every image is included.",
+      "integrityTitle": "About tamper detection",
+      "integrityBody": "This ZIP has no tamper detection or signature. The sha256 of every image is listed on this page and in manifest.json, so you can compute an image file's sha256 and, if it matches, confirm the image has not been replaced. (Whether this page or manifest.json itself was modified cannot be guaranteed.)",
+      "importedSummary": "This lineage contains records imported from another GAKEI (marked \"Imported, unverified\"). Imported records were not run on the exporting GAKEI and their contents have not been verified.",
+      "graphTitle": "Lineage graph",
+      "graphLegend": "Squares are images; rounded boxes are generation runs. Arrows go from input images to a run, and from a run to the images it produced. The thick gold frame is the main image; dashed frames are imported records. Click a box to jump to its detailed record below.",
+      "assetsTitle": "Images",
+      "runsTitle": "Generation runs",
+      "noRuns": "This ZIP contains no generation runs.",
+      "noParams": "No parameters.",
+      "none": "None",
+      "producerOutOfScope": "Not in this ZIP (outside the export scope)",
+      "assetLabel": "Image {n}",
+      "runLabel": "Run {n}",
+      "importedShort": "Imported",
+      "importedBadge": "Imported, unverified",
+      "importedNote": "This run was imported from another GAKEI; it was not run on the exporting GAKEI. Its contents (prompt, parameters, original dates, etc.) have not been verified. The dates below are the values recorded by the source GAKEI.",
+      "omittedInputs": {
+        "one": "{count} (an image not included in this ZIP, e.g. deleted)",
+        "other": "{count} (images not included in this ZIP, e.g. deleted)"
+      },
+      "bytes": {
+        "one": "{count:,} byte",
+        "other": "{count:,} bytes"
+      },
+      "kinds": {
+        "upload": "Upload",
+        "generated": "Generated",
+        "mask": "Mask",
+        "sketch": "Sketch"
+      },
+      "operations": {
+        "generate": "Generate",
+        "edit": "Edit"
+      },
+      "statuses": {
+        "queued": "Queued",
+        "running": "Running",
+        "succeeded": "Succeeded",
+        "failed": "Failed",
+        "canceled": "Canceled"
+      },
+      "edges": {
+        "primary": "source",
+        "image": "image",
+        "mask": "mask",
+        "reference": "reference",
+        "output": "output",
+        "sketch_source": "base"
+      },
+      "fields": {
+        "fileName": "File name",
+        "sha256": "sha256",
+        "dimensions": "Dimensions",
+        "format": "Format",
+        "bytes": "Size",
+        "createdAt": "Created at",
+        "kind": "Kind",
+        "producedBy": "Produced by",
+        "sketchSource": "Sketch base",
+        "id": "ID",
+        "provider": "Provider",
+        "model": "Model",
+        "operation": "Operation",
+        "status": "Status",
+        "runCreatedAt": "Started at",
+        "runFinishedAt": "Finished at",
+        "creator": "Run by",
+        "inputs": "Inputs",
+        "omittedInputs": "Inputs not included",
+        "outputs": "Outputs",
+        "error": "Error",
+        "prompt": "Prompt",
+        "params": "Parameters",
+        "sourceCreatedAt": "Original start",
+        "sourceFinishedAt": "Original finish",
+        "sourceCreator": "Original runner",
+        "sourceVersion": "Source GAKEI version"
+      },
+      "footerFiles": "assets/ holds the original images, and manifest.json holds the same record in machine-readable form. This ZIP, including manifest.json, can be imported into GAKEI with \"Import lineage\".",
+      "footerMadeWith": "Exported with GAKEI (a self-hosted image generation tool)."
+    },
+    "readme": {
+      "body": "GAKEI image lineage record (delivery ZIP)\n\nThis ZIP is a record of an image lineage exported from GAKEI.\nGAKEI is a self-hosted web tool for using image generation APIs such as OpenAI's.\nRepository: {repo_url}\n\nContents of this ZIP:\n  index.html     A page for reading this record. Extract the ZIP, then open it in a browser (no internet connection needed).\n  assets/        The original images, byte for byte as they were generated or stored.\n  manifest.json  The same record in machine-readable form ({format}). It can be imported into GAKEI with \"Import lineage\".\n  README.txt     This file.\n\nMain image ID: {root}\nExported at (UTC): {exported_at}\nGAKEI version: {version}\n\nThis ZIP has no tamper detection or signature. The sha256 of every image is listed in index.html and manifest.json; compute an image file's sha256 and compare to confirm that the image has not been replaced.\n  Windows: certutil -hashfile <file> SHA256\n  macOS / Linux: shasum -a 256 <file>"
+    }
+  },
+  "lineageImport": {
+    "zipTooLarge": "The ZIP is too large (limit: 1 GiB)",
+    "notZip": "The file cannot be read as a ZIP",
+    "corrupted": "The ZIP is corrupted or encrypted",
+    "encrypted": "Encrypted ZIP files cannot be imported",
+    "tooManyEntries": "The ZIP contains too many files (up to {limit} images)",
+    "duplicateEntries": "The ZIP contains several files with the same name",
+    "suspiciousCompression": "The ZIP has an abnormal compression ratio and cannot be imported",
+    "tooLarge": "The uncompressed size of the ZIP exceeds the limit",
+    "fileTooLarge": "The ZIP contains a file that is too large (each file must be under 50 MB)",
+    "manifestMissing": "This is not a GAKEI lineage ZIP (manifest.json is missing)",
+    "manifestTooLarge": "manifest.json is too large",
+    "unsupportedFormat": "This ZIP format or version cannot be imported: {format}",
+    "invalidManifest": "manifest.json is invalid ({reason})",
+    "fileMissing": "An image is missing from the ZIP: {name}",
+    "fileMismatch": "An image does not match manifest.json (it may have been modified): {name}",
+    "conflictsWithEarlierImport": "An output differs from the one imported earlier for the same run",
+    "invalidImage": "Cannot import an image: {reason}"
   }
 }

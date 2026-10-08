@@ -182,6 +182,17 @@ def test_empty_or_blank_query_returns_422(client: TestClient) -> None:
     assert client.get("/api/search", params={"q": "   "}).status_code == 422
 
 
+def test_too_many_or_too_long_words_return_422(client: TestClient) -> None:
+    """語ごとに LIKE を作るので、DB の上限に当たる前に入力の誤りとして断る(Issue #82)。"""
+    _generate(client, "needle")
+    too_many = client.get("/api/search", params={"q": "w " * 51})
+    assert too_many.status_code == 422, too_many.text
+    too_long = client.get("/api/search", params={"q": "a" * 1001})
+    assert too_long.status_code == 422, too_long.text
+    assert client.get("/api/search", params={"q": " ".join(["needle"] * 50)}).status_code == 200
+    assert client.get("/api/search", params={"q": "a" * 1000}).status_code == 200
+
+
 def test_missing_query_param_returns_422(client: TestClient) -> None:
     assert client.get("/api/search").status_code == 422
 

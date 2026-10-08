@@ -26,6 +26,9 @@ import { getAssetLineage } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { buildFlowGraph, lineageNodeTypes } from './lineageFlow'
 import { computeViewportXAdjustment } from './inspectorPlacement'
+import { LINEAGE_MANUAL_MIN_ZOOM } from './lineageViewport'
+import { LINEAGE_COMPACT_FIT_OPTIONS } from './lineageViewport'
+import { useLineageViewport } from './useLineageViewport'
 import { nodeTargetPath } from './nodeTargetPath'
 import styles from './LineageGraph.module.css'
 
@@ -57,7 +60,7 @@ function LineageGraphInner({
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
-  const { fitView, getViewport, setViewport } = useReactFlow()
+  const { getViewport, setViewport } = useReactFlow()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const prevInspectorWidthRef = useRef(0)
   const query = useQuery({
@@ -70,18 +73,18 @@ function LineageGraphInner({
     return buildFlowGraph(query.data, assetId, highlightedNodeId)
   }, [query.data, assetId, highlightedNodeId])
 
-  // キャンバスの実サイズは、上段の高さ比率のドラッグや画面幅の変化で後から変わりうる。
-  // React Flow の `fitView`(マウント時のみ)はそれを追わないため、ResizeObserver で
-  // キャンバスの寸法が変わるたびに再実行し、右・下に無駄な余白ができないようにする。
-  useEffect(() => {
-    const el = canvasRef.current
-    if (!el) return
-    const observer = new ResizeObserver(() => {
-      fitView({ duration: 0 })
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [fitView, nodes.length])
+  // 開いたとき・キャンバスの大きさが変わったときの表示と「全体を表示」(`lineageViewport.ts`)。
+  // ノードが多いと全体を収める倍率では字が読めないので、自動の表示は読める倍率で止め、
+  // 強調しているノード(無ければ起点)を中央に置く。
+  const { fitAll } = useLineageViewport({
+    canvasRef,
+    fitKey: `${assetId}:${nodes.length}`,
+    nodeCount: nodes.length,
+    focusNodeId: highlightedNodeId ?? assetId,
+    inspectorWidthPx,
+    // 小さい表示は枠が低いので、全体が見えることを優先して下限を下げる。
+    options: compact ? LINEAGE_COMPACT_FIT_OPTIONS : undefined,
+  })
 
   // インスペクターの幅(開く/閉じる/リサイズで変わる)に合わせて、ズームは変えずグラフだけを
   // 左右に動かす。パネルが増えた/減った分の半分だけ動かす(パネルに隠れない領域の中央を保つ)。
@@ -136,7 +139,7 @@ function LineageGraphInner({
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
-          fitView
+          minZoom={LINEAGE_MANUAL_MIN_ZOOM}
           nodesDraggable={false}
           nodesConnectable={false}
           edgesReconnectable={false}
@@ -163,19 +166,8 @@ function LineageGraphInner({
             <button
               type="button"
               className={styles.toolbarButton}
-              onClick={async () => {
-                await fitView({ duration: 200 })
-                // fitView は画面いっぱいに合わせるだけで、パネルに隠れる領域は考慮しない
-                // (padding オプションは全方向均等になり、右側だけを避ける用途には使えない)。
-                // 完了後に同じ補正をもう一度かけて、パネルを除いた領域に収める。
-                if (inspectorWidthPx > 0) {
-                  const current = getViewport()
-                  setViewport(
-                    { x: current.x - inspectorWidthPx / 2, y: current.y, zoom: current.zoom },
-                    { duration: 0 },
-                  )
-                }
-              }}
+              // インスペクターが重なっていれば、それを除いた左側の領域に収める。
+              onClick={() => fitAll()}
             >
               {t.lineage.viewAll}
             </button>

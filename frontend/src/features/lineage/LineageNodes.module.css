@@ -40,6 +40,18 @@
   color: var(--color-text-muted);
 }
 
+/* 系列の ZIP から取り込んだ Run(ADR-0037)。 */
+.importedBadge {
+  margin-left: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--color-edit);
+  border-radius: 7px;
+  font-weight: 400;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--color-edit);
+}
+
 .embeddedPlaceholder {
   display: flex;
   flex-direction: column;

@@ -91,7 +91,7 @@ docker run --rm -v gakei-data:/data -v "$PWD":/backup busybox \
   tar czf /backup/gakei-data.tgz -C /data .
 ```
 
-戻すときは、両方を同じタイミングで取ったものに揃える。
+戻すときは、両方を同じタイミングで取ったものに揃える。GAKEI の版を戻す(イメージのタグを戻す)ときも、更新前に取ったものに戻す。新しい版で移行した DB のまま古い版を起動すると、「より新しい版の GAKEI で使われています」と出して、DB を変えずに起動を中止する(Issue #84)。
 
 ```bash
 docker compose stop gakei

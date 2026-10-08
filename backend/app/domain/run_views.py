@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.domain.avatars import avatar_url
 from app.domain.models import (
+    RUN_ORIGIN_IMPORT,
     AppUser,
     Asset,
     AssetAnnotation,
@@ -185,6 +186,14 @@ def run_text_outputs(run: Run) -> list[RunTextOutput] | None:
     return items or None
 
 
+def run_cost_usd(run: Run) -> float | None:
+    """Run の実コスト(参考)。取り込んだ Run(ADR-0037)は、この GAKEI で料金が掛かっていない
+    ので数えない(usage は記録として残すが、料金にはしない)。"""
+    if run.origin == RUN_ORIGIN_IMPORT:
+        return None
+    return cost_from_usage(run.model, run.usage)
+
+
 def run_summary_fields(
     run: Run,
     outputs: list[RunOutputRef],
@@ -219,7 +228,7 @@ def run_summary_fields(
         "descendant_run_count": descendant_run_count,
         "deleted_at": run.deleted_at,
         # 実コスト(参考)。ADR-0009「参考価格」節。usage 無し・単価不明なら None。
-        "cost_usd": cost_from_usage(run.model, run.usage),
+        "cost_usd": run_cost_usd(run),
         "created_by": created_by,
         "asset_group": asset_group,
         "origin": run.origin,

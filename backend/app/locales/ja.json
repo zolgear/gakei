@@ -9,6 +9,7 @@
     "authUrlInsecure": "{name} がループバック(127.0.0.1 など)以外への http を指しています({value})。認証のやり取りが平文で送信されます。",
     "authEmergencyDisable": "認証を一時的に無効にして起動するには、.env に AUTH_MODE=none を書いて再起動してください(画面の設定は消えません)。",
     "databaseUnavailable": "データベースに接続できません({url})。DATABASE_URL の設定と、PostgreSQL が起動していて接続を受け付けているかを確認してください。詳細: {error}",
+    "databaseTooNew": "このデータベース({url})は、より新しい版の GAKEI で使われています(データベースのリビジョン: {revision}。この GAKEI {version} が知っているのは {head} までです)。より新しい版の GAKEI で起動するか、更新する前に取ったバックアップから戻してください。データベースは変更していません。",
     "storageConfigMissing": "STORAGE_BACKEND に必要な環境変数が設定されていません: {missing}",
     "storageAzureBothConnections": "AZURE_STORAGE_CONNECTION_STRING と AZURE_STORAGE_ACCOUNT_URL の両方が設定されています。どちらか一方だけを設定してください。",
     "storageAzureInvalidConnectionString": "AZURE_STORAGE_CONNECTION_STRING の形式が不正です。Azure portal の「アクセスキー」にある接続文字列をそのまま設定してください。",
@@ -45,6 +46,8 @@
   },
   "search": {
     "emptyQuery": "q は空にできません",
+    "tooManyTerms": "q の語が多すぎます(最大 {max} 語)",
+    "termTooLong": "q に長すぎる語があります(1語あたり最大 {max} 文字)",
     "unknownTypes": "types に未知の値があります: {types}(有効な値: {validTypes})"
   },
   "comfyui": {
@@ -368,6 +371,7 @@
     "disabled": "MCP サーバーは無効です。管理者設定の「MCP」で有効にしてください。",
     "tokenRequired": "アクセストークンが必要です(Authorization: Bearer <token>)。",
     "tokenInvalid": "アクセストークンが無効か、失効しています。",
+    "tokenExpired": "アクセストークンの有効期限が切れています。ユーザー設定の「アクセストークン」で新しいトークンを発行してください。",
     "originForbidden": "この Origin からの MCP の呼び出しは許可されていません。"
   },
   "annotations": {
@@ -457,6 +461,39 @@
       "other": "移行が完了しました(合計 {count} 件。コピー {copied} 件、移行先にあったので飛ばした {skipped} 件)。STORAGE_BACKEND ほかの環境変数を設定して GAKEI を起動してください。"
     }
   },
+  "regenerateDerivatives": {
+    "description": "今の版の派生画像(サムネイル・プレビュー)が無い画像について、原本から作ります(ADR-0036)。論理削除済みの画像も含みます。GAKEI を止めずに実行できます。DB は書き換えず、原本には触れません。",
+    "dryRunHelp": "作る件数(--prune なら消す件数も)を数えるだけで、何も書かない・消さない",
+    "pruneHelp": "今の版以外の派生を消す(原本と、今の版の派生には触れない)",
+    "databaseMissing": "DB のファイルが見つかりません: {source}",
+    "failed": "保存先の読み書きに失敗したため、中止しました。もう一度実行すると続きから作ります。詳細: {error}",
+    "version": "派生の版: {version}",
+    "images": {
+      "one": "  画像: {count} 件(同じ内容は1件と数えます)",
+      "other": "  画像: {count} 件(同じ内容は1件と数えます)"
+    },
+    "dryRunMissing": {
+      "one": "  今の版の派生が無い: {count} 件",
+      "other": "  今の版の派生が無い: {count} 件"
+    },
+    "dryRunStale": {
+      "one": "  今の版以外の派生: {count} 件",
+      "other": "  今の版以外の派生: {count} 件"
+    },
+    "dryRunDone": "--dry-run: 何も書き込んでいません。",
+    "generated": {
+      "one": "今の版の派生を {count} 件作りました。",
+      "other": "今の版の派生を {count} 件作りました。"
+    },
+    "originalUnavailable": {
+      "one": "注意: 原本が無いか読めないため、派生を作れなかった画像が {count} 件あります(sha256): {keys}",
+      "other": "注意: 原本が無いか読めないため、派生を作れなかった画像が {count} 件あります(sha256): {keys}"
+    },
+    "pruned": {
+      "one": "今の版以外の派生を {count} 件消しました。",
+      "other": "今の版以外の派生を {count} 件消しました。"
+    }
+  },
   "shares": {
     "disabled": "共有リンクは管理者設定で無効になっています",
     "notFound": "共有リンクが見つかりません",
@@ -489,5 +526,137 @@
     "queryImageEmpty": "画像ファイルが空です",
     "queryImageTooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
     "queryImageFailed": "画像の埋め込みを計算できませんでした: {error}"
+  },
+  "lineageExport": {
+    "contentMissing": "系列に含まれる画像の原本が保存先に見つからないため、書き出せません",
+    "delivery": {
+      "title": "画像の系列の記録",
+      "lead": "GAKEI で書き出した、主画像とその系列(元にした画像・生成の実行・作った画像)の記録です。この ZIP を展開したまま、ブラウザで開いてください。",
+      "summaryTitle": "概要",
+      "purpose": {
+        "ancestors": "主画像がどのように作られたかの記録です(主画像と、その元になった画像・生成の実行)。",
+        "descendants": "主画像(素材)が何に使われたかの記録です(主画像と、それを使って作った画像・生成の実行)。",
+        "lineage": "主画像の元になったものと、主画像から作ったものの両方の記録です。"
+      },
+      "mainImageRole": {
+        "ancestors": "主画像",
+        "descendants": "主画像(素材)",
+        "lineage": "主画像"
+      },
+      "mainImage": "主画像",
+      "exportedAt": "書き出した日時",
+      "gakeiVersion": "GAKEI の版",
+      "scope": "範囲",
+      "contents": "含まれるもの",
+      "counts": "画像 {assets} 枚、生成の実行 {runs} 件",
+      "scopes": {
+        "ancestors": "この画像と祖先",
+        "descendants": "この画像と子孫",
+        "lineage": "系列全体(祖先と子孫)"
+      },
+      "truncated": "系列が大きいため、上限(1000 件)で打ち切っています。すべての画像は含まれていません。",
+      "integrityTitle": "改ざんの検出について",
+      "integrityBody": "この ZIP には、改ざんを検出する仕組みや署名はありません。各画像の sha256 をこのページと manifest.json に載せているので、画像ファイルの sha256 を計算して一致すれば、画像が差し替わっていないことを確かめられます(このページや manifest.json 自体が書き換えられていないことは保証できません)。",
+      "importedSummary": "この系列には、別の GAKEI から取り込んだ記録(「取り込み・未検証」の印)が含まれます。取り込んだ記録は、書き出した GAKEI で実行したものではなく、内容は検証されていません。",
+      "graphTitle": "系列の図",
+      "graphLegend": "四角は画像、角の丸い枠は生成の実行です。矢印は、入力に使った画像から実行へ、実行から作った画像へ向かいます。太い金色の枠が主画像、破線の枠は取り込んだ記録です。図の枠を押すと、下の詳しい記録に移ります。",
+      "assetsTitle": "画像",
+      "runsTitle": "生成の実行",
+      "noRuns": "この ZIP には生成の実行の記録は含まれていません。",
+      "noParams": "パラメーターはありません。",
+      "none": "なし",
+      "producerOutOfScope": "この ZIP には含めていません(書き出しの範囲の外)",
+      "assetLabel": "画像 {n}",
+      "runLabel": "実行 {n}",
+      "importedShort": "取り込み",
+      "importedBadge": "取り込み・未検証",
+      "importedNote": "この実行は別の GAKEI から取り込んだ記録で、書き出した GAKEI で実行したものではありません。内容(プロンプト、パラメーター、元の日時など)は検証されていません。下の日時は、書き出し元の GAKEI が記録していた値です。",
+      "omittedInputs": {
+        "one": "{count} 件(削除済みなど、この ZIP に含めていない画像)",
+        "other": "{count} 件(削除済みなど、この ZIP に含めていない画像)"
+      },
+      "bytes": {
+        "one": "{count:,} バイト",
+        "other": "{count:,} バイト"
+      },
+      "kinds": {
+        "upload": "アップロード",
+        "generated": "生成",
+        "mask": "マスク",
+        "sketch": "スケッチ"
+      },
+      "operations": {
+        "generate": "生成",
+        "edit": "編集"
+      },
+      "statuses": {
+        "queued": "待機中",
+        "running": "実行中",
+        "succeeded": "成功",
+        "failed": "失敗",
+        "canceled": "中止"
+      },
+      "edges": {
+        "primary": "元画像",
+        "image": "画像",
+        "mask": "マスク",
+        "reference": "参照",
+        "output": "出力",
+        "sketch_source": "下地"
+      },
+      "fields": {
+        "fileName": "ファイル名",
+        "sha256": "sha256",
+        "dimensions": "寸法",
+        "format": "形式",
+        "bytes": "大きさ",
+        "createdAt": "作成日時",
+        "kind": "種類",
+        "producedBy": "作った実行",
+        "sketchSource": "スケッチの下地",
+        "id": "ID",
+        "provider": "プロバイダー",
+        "model": "モデル",
+        "operation": "操作",
+        "status": "状態",
+        "runCreatedAt": "開始日時",
+        "runFinishedAt": "終了日時",
+        "creator": "実行者",
+        "inputs": "入力",
+        "omittedInputs": "含めていない入力",
+        "outputs": "出力",
+        "error": "エラー",
+        "prompt": "プロンプト",
+        "params": "パラメーター",
+        "sourceCreatedAt": "元の開始日時",
+        "sourceFinishedAt": "元の終了日時",
+        "sourceCreator": "元の実行者",
+        "sourceVersion": "書き出し元の GAKEI の版"
+      },
+      "footerFiles": "assets/ に画像の原本、manifest.json に機械で読める同じ記録があります。manifest.json を含むこの ZIP は、GAKEI の「系列を取り込む」で取り込めます。",
+      "footerMadeWith": "GAKEI(セルフホストの画像生成ツール)で書き出しました。"
+    },
+    "readme": {
+      "body": "GAKEI 画像の系列の記録(納品用 ZIP)\n\nこの ZIP は、GAKEI で書き出した画像の系列の記録です。\nGAKEI は、OpenAI などの画像生成 API をセルフホストで使うための Web ツールです。\nリポジトリ: {repo_url}\n\nZIP の中身:\n  index.html     この記録を読むためのページです。ZIP を展開してから、ブラウザで開いてください(インターネットへの接続は要りません)。\n  assets/        画像の原本です。生成・保存したときのバイト列のままです。\n  manifest.json  同じ記録を機械で読める形にしたもの({format})です。GAKEI の「系列を取り込む」で取り込めます。\n  README.txt     このファイルです。\n\n主画像の ID: {root}\n書き出した日時(UTC): {exported_at}\nGAKEI の版: {version}\n\nこの ZIP には改ざんを検出する仕組みや署名はありません。各画像の sha256 は index.html と manifest.json に載せているので、画像ファイルの sha256 を計算して比べれば、画像が差し替わっていないことを確かめられます。\n  Windows: certutil -hashfile <ファイル> SHA256\n  macOS / Linux: shasum -a 256 <ファイル>"
+    }
+  },
+  "lineageImport": {
+    "zipTooLarge": "ZIP が大きすぎます(上限 1 GiB)",
+    "notZip": "ZIP として読めません",
+    "corrupted": "ZIP が壊れているか、暗号化されています",
+    "encrypted": "暗号化された ZIP は取り込めません",
+    "tooManyEntries": "ZIP に含まれるファイルが多すぎます(画像は {limit} 枚まで)",
+    "duplicateEntries": "ZIP に同じ名前のファイルが複数あります",
+    "suspiciousCompression": "ZIP の圧縮率が異常なため取り込めません",
+    "tooLarge": "ZIP を展開した大きさが上限を超えています",
+    "fileTooLarge": "ZIP の中に大きすぎるファイルがあります(1 ファイル 50 MB 未満)",
+    "manifestMissing": "GAKEI の系列の ZIP ではありません(manifest.json がありません)",
+    "manifestTooLarge": "manifest.json が大きすぎます",
+    "unsupportedFormat": "この形式・版の ZIP は取り込めません: {format}",
+    "invalidManifest": "manifest.json の内容が正しくありません({reason})",
+    "fileMissing": "ZIP に画像がありません: {name}",
+    "fileMismatch": "画像の内容が manifest.json と一致しません(書き換えられた可能性があります): {name}",
+    "conflictsWithEarlierImport": "以前に取り込んだ同じ Run の出力と内容が違います",
+    "invalidImage": "画像を取り込めません: {reason}"
   }
 }

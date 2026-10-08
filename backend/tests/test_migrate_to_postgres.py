@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, select, text
 
 from app.config import sqlite_url
@@ -228,7 +229,8 @@ def test_copies_all_tables_and_row_counts_match(
     engine.dispose()
     assert counts["asset_embedding"] == (1, 1)
     assert counts["asset_perceptual_hash"] == (1, 1)
-    assert version == "0025"
+    # 移行先は最新の版(マイグレーションを足しても直さなくて済むよう、番号を書かない)。
+    assert version == ScriptDirectory.from_config(alembic_config("sqlite://")).get_current_head()
 
     # 元の SQLite は消さない(戻したい場合は DATABASE_URL を外せば元の状態で動く)。
     assert source_db.is_file()

@@ -32,7 +32,7 @@ function embeddedRunNode(id: string): LineageNode {
     local_hidden: false,
     instance: 'other-instance',
     embedded_detail: { type: 'run', id, provider: 'openai', model: 'gpt-image-2.5', prompt: 'x' },
-    run: { operation: 'generate', model: 'gpt-image-2.5', provider: 'openai', status: 'succeeded', prompt: 'x' },
+    run: { operation: 'generate', model: 'gpt-image-2.5', provider: 'openai', status: 'succeeded', prompt: 'x', imported: false },
   }
 }
 

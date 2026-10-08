@@ -7,8 +7,13 @@ generate → edit(マスク付き) → edit という連鎖を作り、中間の
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi.testclient import TestClient
 
+from app.auth.identity import LOCAL_ADMIN
+from app.domain.lineage import build_asset_lineage
+from app.domain.shares import collect_scope
 from tests.conftest import make_png_bytes, wait_for_run_terminal
 
 _SIZE = "1024x1024"
@@ -422,3 +427,49 @@ def test_lineage_descendants_keeps_sketch_replaced_while_used(client: TestClient
     assert replacement_id in node_ids
     sketch_edge = _find_edge(body["edges"], sketch_id, replacement_id, "sketch_source")
     assert sketch_edge["primary"] is True
+
+
+# -- 子孫の深さ(2026-10-07。既定を祖先と同じ実質無制限にした。ADR-0014 6章) -------------
+
+
+def _deep_chain(client: TestClient, generations: int) -> list[str]:
+    """generate の出力から edit を `generations` 回重ねた一本の系列。Asset の ID を浅い順に返す。"""
+    _, asset_id = _generate(client, "deep chain root")
+    asset_ids = [asset_id]
+    for i in range(generations):
+        _, detail = _edit(client, asset_ids[-1], None, f"deep edit {i}")
+        assert detail["status"] == "succeeded", detail
+        asset_ids.append(detail["outputs"][0]["asset_id"])
+    return asset_ids
+
+
+def test_lineage_default_descendants_go_beyond_three_hops(client: TestClient) -> None:
+    # 5 世代 = 10 ホップ。以前の既定(down=3)では 2 世代目の Asset までで切れていた。
+    asset_ids = _deep_chain(client, 5)
+
+    body = _get_lineage(client, asset_ids[0])
+    assert body["truncated"] is False
+    nodes_by_id = {n["id"]: n for n in body["nodes"]}
+    assert set(asset_ids) <= nodes_by_id.keys()
+    assert nodes_by_id[asset_ids[-1]]["depth"] == 10
+
+
+def test_lineage_descendants_truncate_at_max_nodes(client: TestClient) -> None:
+    asset_ids = _deep_chain(client, 4)
+    with client.app.state.session_factory() as db:
+        lineage = build_asset_lineage(db, uuid.UUID(asset_ids[0]), viewer=LOCAL_ADMIN, max_nodes=4)
+    assert lineage.truncated is True
+    assert len(lineage.nodes) <= 4
+
+
+def test_share_scope_is_unchanged_by_default_descendant_depth(client: TestClient) -> None:
+    # 共有の範囲は build_asset_lineage の既定に頼らず、up/down を明示している(ADR-0029)。
+    # ancestors は子孫を含まず、lineage は深い子孫まで含む。
+    asset_ids = _deep_chain(client, 4)
+    with client.app.state.session_factory() as db:
+        ancestors = collect_scope(db, LOCAL_ADMIN, uuid.UUID(asset_ids[1]), "ancestors")
+        lineage = collect_scope(db, LOCAL_ADMIN, uuid.UUID(asset_ids[1]), "lineage")
+        ancestor_ids = {str(a.id) for a, _ in ancestors.assets}
+        lineage_ids = {str(a.id) for a, _ in lineage.assets}
+    assert ancestor_ids == {asset_ids[0], asset_ids[1]}
+    assert lineage_ids == set(asset_ids)

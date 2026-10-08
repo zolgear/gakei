@@ -102,7 +102,8 @@ def ingest(
     try:
         image = Image.open(io.BytesIO(data))
         image.load()  # ヘッダーだけでなく実際にデコードして検証する
-    except (PillowUnidentifiedImageError, OSError) as e:
+    except (PillowUnidentifiedImageError, OSError, Image.DecompressionBombError) as e:
+        # 寸法が Pillow の上限(`Image.MAX_IMAGE_PIXELS` の2倍)を超える画像は開く時点で断られる。
         raise IngestError(t("assets.cannotReadImage")) from e
 
     fmt = image.format
@@ -132,10 +133,9 @@ def ingest(
             ),
         )
 
-    thumb_bytes = derivatives.make_thumb(image)
-    preview_bytes = derivatives.make_preview(image)
-    store.write_derived(sha256, "thumb", thumb_bytes)
-    store.write_derived(sha256, "preview", preview_bytes)
+    # 今の版の派生を作る(ADR-0036 2章。作り方は `derivatives.ensure_derived` の作り直しと同じ)。
+    for variant in derivatives.DERIVED_VARIANTS:
+        store.write_derived(sha256, variant, derivatives.make_derived(image, variant))
 
     asset = Asset(
         id=asset_id,

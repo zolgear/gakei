@@ -332,6 +332,24 @@
       "nameLabel": "名前",
       "nameTooltip": "どのエージェントや PC で使うかが分かる名前にします(100 文字まで)。",
       "namePlaceholder": "例: 自分の PC の Claude Code",
+      "expiryLabel": "有効期限",
+      "expiryTooltip": "期限を過ぎたトークンは使えなくなります。期限は後から延ばせないので、延ばしたいときは新しいトークンを発行します。",
+      "expiryOptions": {
+        "30": "30日",
+        "90": "90日",
+        "365": "1年",
+        "none": "無期限"
+      },
+      "scopeLabel": "権限",
+      "scopeTooltip": "読み取りのみのトークンは、画像や実行履歴の検索・閲覧とダウンロードだけができます。",
+      "scopeOptions": {
+        "full": "すべて",
+        "read": "読み取りのみ"
+      },
+      "scopeHelp": "「読み取りのみ」は、検索・閲覧・ダウンロードだけができます。生成、アップロード、グループの変更はできません。",
+      "expiresAt": "期限",
+      "noExpiry": "無期限",
+      "expiredBadge": "期限切れ",
       "create": "発行",
       "creating": "発行中...",
       "createdToast": "トークンを発行しました",
@@ -1584,7 +1602,10 @@
     "openIngestedAsset": "取り込み済みの画像を開く",
     "statusLabel": "状態",
     "finishedAtLabel": "完了",
-    "paramsHeading": "パラメーター"
+    "paramsHeading": "パラメーター",
+    "importedBadge": "取り込み",
+    "importedNodeTitle": "ZIP から取り込んだ記録(未検証)",
+    "exportLineage": "系列を書き出す"
   },
   "stock": {
     "heading": "ストック",
@@ -2036,5 +2057,86 @@
     "previewLoadFailed": "画像の情報を読み込めませんでした。",
     "kindLabel": "種類",
     "embeddedPromptHeading": "プロンプト(画像に埋め込まれた情報、未検証)"
+  },
+  "lineageTransfer": {
+    "export": {
+      "button": "系列を書き出す",
+      "buttonTooltip": "この画像の系列(原本と Generated の記録)を ZIP にまとめてダウンロードします",
+      "dialogTitle": "系列を書き出す",
+      "intro": "系列の画像の原本と、それを作った Generated の記録(プロンプト、パラメーター、状態)を ZIP にまとめます。",
+      "purposeLabel": "用途",
+      "purposes": {
+        "import": "GAKEI に取り込む",
+        "delivery": "納品用"
+      },
+      "purposeHelp": {
+        "import": "受け取った人が自分の GAKEI に取り込んで、続きの Edit ができます。",
+        "delivery": "GAKEI を使わない相手に渡す証跡です。ブラウザで開ける記録(index.html)と説明(README.txt)を加えます。GAKEI にも取り込めます。"
+      },
+      "scopeLabel": "範囲",
+      "scopes": {
+        "ancestors": "この画像と祖先",
+        "descendants": "この画像と子孫",
+        "lineage": "系列全体"
+      },
+      "scopeHelp": {
+        "ancestors": "納品する画像がどう作られたかを示します。この画像と、元になった画像を含めます。",
+        "descendants": "素材の画像を何に使ったかを示します。この画像と、この画像から作った画像を含めます。元になった画像は含めません。",
+        "lineage": "祖先と子孫の両方を含めます。"
+      },
+      "previewLoading": "含まれる画像を確かめています...",
+      "previewFailed": "含まれる画像を取得できませんでした。",
+      "previewCount": {
+        "one": "画像 {count} 枚",
+        "other": "画像 {count} 枚"
+      },
+      "previewRuns": {
+        "one": "Generated {count} 件",
+        "other": "Generated {count} 件"
+      },
+      "previewTruncated": "系列が大きいため、一部だけを含めます。",
+      "showGraph": "系列をプレビュー",
+      "hideGraph": "プレビューを閉じる",
+      "graphLoading": "系列を読み込んでいます...",
+      "graphFailed": "系列を読み込めませんでした。",
+      "graphCaption": "この ZIP に入る{images}と {runs}です。",
+      "graphOmittedInputs": {
+        "one": "範囲の外の入力 {count} 件は含まれません。",
+        "other": "範囲の外の入力 {count} 件は含まれません。"
+      },
+      "notIncluded": "タイトル、タグ、グループは含めません。削除した画像と、ほかの人の画像も含めません。",
+      "includeCreatorNames": "実行者の名前を含める",
+      "includeCreatorNamesHelp": "オンにすると、Generated ごとに実行した人の表示名が ZIP に入ります。メールアドレスは入りません。",
+      "download": "ZIP をダウンロード",
+      "startedToast": "書き出しを始めました"
+    },
+    "import": {
+      "button": "系列を取り込む",
+      "tooltip": "GAKEI で書き出した系列の ZIP を取り込みます",
+      "uploadingStart": "送信中...",
+      "uploading": "送信中... {percent}%",
+      "processing": "取り込み中...",
+      "successToast": {
+        "one": "系列を取り込みました(画像 {count} 枚)",
+        "other": "系列を取り込みました(画像 {count} 枚)"
+      },
+      "alreadyImportedToast": "この系列はすでに取り込んであります",
+      "failed": "取り込めませんでした",
+      "notZip": "ZIP ファイルを選んでください",
+      "empty": "空のファイルは取り込めません",
+      "tooLarge": "ZIP が大きすぎます(上限 1 GiB)"
+    },
+    "importedRun": {
+      "badge": "取り込み",
+      "heading": "ZIP から取り込んだ記録",
+      "unverifiedNote": "この Generated は、ほかの GAKEI(またはほかの人)が書き出した ZIP から取り込んだ記録で、この GAKEI では実行していません。ZIP は書き換えられるため、内容は検証していません。料金にも数えません。",
+      "sourceCreator": "元の実行者",
+      "sourceCreatedAt": "元の作成日時",
+      "sourceFinishedAt": "元の終了日時",
+      "sourceVersion": "書き出した GAKEI の版",
+      "importedAt": "取り込んだ日時",
+      "sourceRunId": "元の ID",
+      "unknown": "不明"
+    }
   }
 }

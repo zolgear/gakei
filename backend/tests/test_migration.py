@@ -33,6 +33,7 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "download_ticket",
         "share",
         "share_asset",
+        "run_import",
         "alembic_version",
     } <= tables
 
@@ -549,7 +550,8 @@ def test_migration_upgrades_from_0015_to_0016_adds_api_token_and_run_origin(
         )
     engine.dispose()
 
-    command.upgrade(cfg, "head")
+    # 0026 で api_token に列が増えるので、ここでは 0016 までの形を確かめる。
+    command.upgrade(cfg, "0016")
     engine = create_engine(db_url)
     inspector = sa_inspect(engine)
     assert "api_token" in set(inspector.get_table_names())
@@ -993,4 +995,88 @@ def test_migration_0023_adds_run_text_outputs(tmp_path) -> None:  # noqa: ANN001
     command.downgrade(cfg, "0022")
     engine = create_engine(url)
     assert "text_outputs" not in {c["name"] for c in sa_inspect(engine).get_columns("run")}
+    engine.dispose()
+
+
+def test_migration_0026_adds_api_token_expiry_and_scope(empty_database_url: str) -> None:
+    """ADR-0023 11章: 0026 で api_token.expires_at(null 可)と scope(既定 'full')を足す。
+    既存のトークンは無期限・'full' のまま。downgrade もできること。"""
+    import uuid
+
+    from alembic import command
+    from sqlalchemy import Uuid, bindparam, create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0025")
+    engine = create_engine(empty_database_url)
+    user_id = uuid.uuid4()
+    token_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO app_user (id, issuer, subject, email, name, role, created_at, "
+                "last_login_at) VALUES (:id, 'https://idp.example', 'sub-1', "
+                "'old@example.com', 'Old', 'user', '2026-09-01 00:00:00', '2026-09-01 00:00:00')"
+            ).bindparams(bindparam("id", type_=Uuid())),
+            {"id": user_id},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO api_token (id, user_id, name, token_hash, created_at) "
+                "VALUES (:id, :user_id, 'old', :hash, '2026-09-01 00:00:00')"
+            ).bindparams(bindparam("id", type_=Uuid()), bindparam("user_id", type_=Uuid())),
+            {"id": token_id, "user_id": user_id, "hash": "0" * 64},
+        )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    columns = {c["name"]: c for c in sa_inspect(engine).get_columns("api_token")}
+    assert columns["expires_at"]["nullable"] is True
+    assert columns["scope"]["nullable"] is False
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT expires_at, scope FROM api_token")).one()
+    assert tuple(row) == (None, "full")
+    engine.dispose()
+
+    command.downgrade(cfg, "0025")
+    engine = create_engine(empty_database_url)
+    columns = {c["name"] for c in sa_inspect(engine).get_columns("api_token")}
+    assert "expires_at" not in columns
+    assert "scope" not in columns
+    engine.dispose()
+
+
+def test_migration_0027_adds_run_import(empty_database_url: str) -> None:
+    """ADR-0037: 0026 の DB に upgrade head で run_import が加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0026")
+    engine = create_engine(empty_database_url)
+    assert "run_import" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "run_import" in set(inspector.get_table_names())
+    columns = {c["name"]: c for c in inspector.get_columns("run_import")}
+    assert columns["source_run_id"]["nullable"] is False
+    assert columns["imported_at"]["nullable"] is False
+    assert columns["source_creator_name"]["nullable"] is True
+    indexes = {i["name"] for i in inspector.get_indexes("run_import")}
+    assert "ix_run_import_source_run_id" in indexes
+    engine.dispose()
+
+    command.downgrade(cfg, "0026")
+    engine = create_engine(empty_database_url)
+    assert "run_import" not in set(sa_inspect(engine).get_table_names())
     engine.dispose()

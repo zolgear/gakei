@@ -13,6 +13,9 @@ ADR-0028: `STORAGE_BACKEND` で Azure Blob Storage / S3 互換ストレージも
   以前の規則 `assets/{sha256の先頭2文字}/{sha256}.{拡張子}` で保存した原本は移さず、
   `asset.blob_key` のまま読み出す。
 派生: derived/{sha256}/thumb.webp, derived/{sha256}/preview.webp(内容から作り直せるので従来どおり)
+  ADR-0036: 派生の作り方の版(`derivatives.DERIVED_VERSION`)ごとにキーを分ける。版 1 は上の
+  キーのまま、版 2 以降は derived/{sha256}/thumb.v{N}.webp, derived/{sha256}/preview.v{N}.webp。
+  `content_exists` / `open_content` の thumb / preview は今の版を指す。
 
 同じ内容の原本を共有するかどうか(ADR-0026 3章)は DB を持つ側(`domain/assets.py` の
 `ingest`)が決める。ストアはキーの決定と書き込み・読み出しだけを扱う。
@@ -39,7 +42,9 @@ if TYPE_CHECKING:
 Variant = Literal["original", "thumb", "preview"]
 OriginalKind = Literal["generated", "upload", "mask", "sketch"]
 
-_DERIVED_VARIANTS = {"thumb": "thumb.webp", "preview": "preview.webp"}
+_DERIVED_VARIANTS = ("thumb", "preview")
+# 派生のファイル名(`thumb.webp` / `thumb.v2.webp` など。ADR-0036 1章)
+_DERIVED_NAME = re.compile(r"^(thumb|preview)(?:\.v([1-9][0-9]*))?\.webp$")
 
 # 生成画像以外の種類ごとのフォルダ(ADR-0026 1章)
 _KIND_FOLDERS = {"upload": "uploads", "mask": "masks", "sketch": "sketches"}
@@ -122,16 +127,43 @@ def legacy_original_key(sha256: str, ext: str) -> str:
     return f"assets/{sha256[:2]}/{sha256}.{ext}"
 
 
-def derived_key(sha256: str, variant: Literal["thumb", "preview"]) -> str:
-    return f"derived/{sha256}/{_DERIVED_VARIANTS[variant]}"
+def derived_key(
+    sha256: str, variant: Literal["thumb", "preview"], version: int | None = None
+) -> str:
+    """派生のキー(ADR-0036 1章)。`version` を省くと今の版(`DERIVED_VERSION`)。
+
+    版 1 は ADR-0036 より前からのキー(`thumb.webp`)のまま、版 2 以降は `thumb.v{N}.webp`。
+    """
+    if variant not in _DERIVED_VARIANTS:
+        raise ValueError(f"派生ではない variant です: {variant}")
+    if version is None:
+        # 版は呼ぶたびに読む(テストで版を差し替えられるように)。
+        from app.domain import derivatives
+
+        version = derivatives.DERIVED_VERSION
+    if version < 1:
+        raise ValueError(f"派生の版は 1 以上です: {version}")
+    suffix = "" if version == 1 else f".v{version}"
+    return f"derived/{sha256}/{variant}{suffix}.webp"
+
+
+def parse_derived_key(key: str) -> tuple[str, str, int] | None:
+    """派生のキーを (sha256, variant, 版) に分ける。派生のキーでなければ None。"""
+    parts = key.split("/")
+    if len(parts) != 3 or parts[0] != "derived" or not parts[1]:
+        return None
+    match = _DERIVED_NAME.match(parts[2])
+    if match is None:
+        return None
+    return parts[1], match.group(1), int(match.group(2) or 1)
 
 
 def content_key(blob_key: str, sha256: str, variant: Variant) -> str:
-    """variant に応じたキー。原本は `asset.blob_key`、派生は `derived/{sha256}/...`。"""
+    """variant に応じたキー。原本は `asset.blob_key`、派生は今の版の `derived/{sha256}/...`。"""
     if variant == "original":
         return blob_key
     if variant in _DERIVED_VARIANTS:
-        return derived_key(sha256, variant)  # type: ignore[arg-type]
+        return derived_key(sha256, variant)
     raise ValueError(f"未知の variant です: {variant}")
 
 
@@ -171,7 +203,15 @@ class AssetStore(Protocol):
         ...
 
     def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
-        """派生画像(thumb/preview)を保存する。"""
+        """派生画像(thumb/preview)を今の版のキーに保存する(上書きしてよい)。"""
+        ...
+
+    def list_keys(self, prefix: str) -> Iterator[str]:
+        """`prefix` で始まるキーを返す(派生の掃除のため。ADR-0036 4章)。"""
+        ...
+
+    def delete(self, blob_key: str) -> None:
+        """キーを消す(派生の掃除だけが使う。原本は消さない)。無ければ何もしない。"""
         ...
 
     def read(self, blob_key: str) -> bytes:
@@ -234,10 +274,34 @@ class LocalFsStore:
     def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
         path = self.root / derived_key(sha256, variant)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        # 一時ファイルに書き切ってから置き換える。配信の途中で作り直す(ADR-0036 2章)ので、
+        # 同じ派生を読んでいる別の要求に書きかけの中身を見せないため。
+        fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".webp")
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(tmp_path, path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     def read(self, blob_key: str) -> bytes:
         return (self.root / blob_key).read_bytes()
+
+    def list_keys(self, prefix: str) -> Iterator[str]:
+        # 接頭辞の最後の `/` までをフォルダとして辿り、残りで絞る。
+        folder, _, _rest = prefix.rpartition("/")
+        base = self.root / folder if folder else self.root
+        if not base.is_dir():
+            return
+        for path in sorted(base.rglob("*")):
+            if path.is_file():
+                key = path.relative_to(self.root).as_posix()
+                if key.startswith(prefix):
+                    yield key
+
+    def delete(self, blob_key: str) -> None:
+        (self.root / blob_key).unlink(missing_ok=True)
 
     def exists(self, blob_key: str) -> bool:
         return (self.root / blob_key).is_file()

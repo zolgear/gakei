@@ -57,6 +57,7 @@ The first run takes a few minutes to fetch dependencies and build the UI. Once s
 - **Startup options:** `--port 8001`, `--data-dir <absolute path>`, `--no-browser` (don't open a browser), `--host`.
 - **Data:** generated images, SQLite, and the API key saved from Settings (`secrets.json`) live under `data/`. Back up or delete that directory as a whole. Don't delete or move image files inside it directly — the images will stop displaying. Delete images from the UI instead ([docs/configuration.md](docs/configuration.md), Japanese).
 - **Share links:** show one image, or its lineage (with ancestors, or ancestors and descendants), through a link that needs no sign-in. Viewers see the images and the prompts and parameters used to make them. Enable it in the admin settings under "Public share links" and press "Save" at the top of the page first. In personal mode, expose only the share page's paths through a reverse proxy. See [docs/sharing.md](docs/sharing.md) (Japanese).
+- **Lineage export and import:** export an image's lineage (this image and its ancestors, or the whole lineage) as a ZIP with the original images and the Generated records (prompts and parameters). The recipient imports it with "Import lineage" in the stock panel into their own GAKEI (another user on the same instance, or another instance) and can keep editing. Imported records carry an "Imported" mark and are treated as unverified. See [docs/lineage-export.md](docs/lineage-export.md) (Japanese).
 - **Using it from AI agents:** register GAKEI as an MCP server in an AI agent such as Claude Code to generate images and search your stock from the agent. Enable it in Settings → MCP and press "Save" at the top of the page first. See [docs/mcp.md](docs/mcp.md) (Japanese).
 - **Using a proxy such as LiteLLM:** change the connection through Settings → OpenAI (Base URL), or the `OPENAI_BASE_URL` environment variable. The proxy must offer the same model names GAKEI sends (GAKEI does not remap model names). Prices shown in the UI are still OpenAI's list prices and may not match the actual bill through a proxy.
 
@@ -94,6 +95,7 @@ volumes:
 ```
 
 - **Updating:** `docker pull ghcr.io/zolgear/gakei:latest`, then recreate the container (`docker rm -f gakei`, then run the `docker run` command again). With Compose, `docker compose pull && docker compose up -d`. **Back up `data/` before updating** — startup runs a database migration automatically, and you'll need a backup to roll back (see the backup example below).
+- **Rolling back:** when you go back to an older image tag, also restore `data/` (and the database, if you use PostgreSQL) from the backup taken before updating. If you start an older version on a database already used by a newer one, it stops with "has been used by a newer version of GAKEI" and leaves the database unchanged (a database can't be migrated back to an older version).
 - **Tags:** `latest` (the newest stable release), plus `0.y` and `0.y.z`. See the full list under [Releases](https://github.com/zolgear/gakei/releases) on GitHub.
 
 ### Build it yourself (if you want to make changes)

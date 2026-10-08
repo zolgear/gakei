@@ -7,6 +7,9 @@
  * 自己申告(未検証)から組み立てたノード。破線の枠 + 「埋め込み」バッジで区別する。
  * provider が分かっていれば model の前に添える(ローカルの Run は常に自インスタンスの
  * provider なので出していないが、埋め込みは他インスタンス由来のこともあるため)。
+ *
+ * `runInfo.imported`(ADR-0037)は、系列の ZIP から取り込んだ記録(この GAKEI では実行して
+ * いない)。破線の枠 + 「取り込み」バッジで区別する。
  */
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { LineageRunInfo } from '../../api/client'
@@ -33,19 +36,23 @@ export function RunLineageNode({ data }: NodeProps) {
   const { runInfo, hasInputs, deleted, selected, embedded = false, instance = null } = data as RunNodeData
   const dotColor = hasInputs ? 'var(--color-edit)' : 'var(--color-accent)'
 
-  const embeddedTitle = embedded
+  const imported = !embedded && runInfo.imported === true
+  const nodeTitle = embedded
     ? instance
       ? fmt(t.lineage.embeddedNodeTitleWithInstance, { instance: instance.slice(0, 8) })
       : t.lineage.embeddedNodeTitle
-    : undefined
+    : imported
+      ? t.lineage.importedNodeTitle
+      : undefined
 
   return (
     <div
-      className={`${styles.node} ${embedded ? styles.nodeEmbedded : ''}`}
+      className={`${styles.node} ${embedded || imported ? styles.nodeEmbedded : ''}`}
       data-failed={runInfo.status === 'failed'}
       data-deleted={deleted}
       data-selected={selected === true}
-      title={embeddedTitle}
+      data-imported={imported || undefined}
+      title={nodeTitle}
     >
       <Handle type="target" position={Position.Top} className={styles.handle} />
       <div className={styles.header}>
@@ -62,6 +69,8 @@ export function RunLineageNode({ data }: NodeProps) {
         <div className={styles.runStatus} data-status={runInfo.status}>
           {statusLabel(runInfo.status)}
           {runInfo.error_code && ` · ${runInfo.error_code}`}
+          {/* 見出しの帯は狭いので、状態の行に添える。 */}
+          {imported && <span className={styles.importedBadge}>{t.lineage.importedBadge}</span>}
         </div>
       </div>
       <Handle type="source" position={Position.Bottom} className={styles.handle} />

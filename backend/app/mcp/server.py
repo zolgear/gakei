@@ -24,11 +24,20 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, cast
 
 import anyio.to_thread
+from mcp.server.context import ServerRequestContext
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
+from mcp.types import (
+    CallToolResult,
+    ImageContent,
+    InputRequiredResult,
+    ListToolsResult,
+    PaginatedRequestParams,
+    TextContent,
+    ToolAnnotations,
+)
 from pydantic import Field, ValidationError
 from sqlalchemy import and_, select, update
 from sqlalchemy.orm import Session
@@ -37,6 +46,7 @@ from app.api.capabilities import get_capabilities_endpoint
 from app.api.prompt_sets import list_prompt_sets as list_prompt_sets_rest
 from app.domain import agent_images, ingest_hooks, mcp_settings
 from app.domain import annotations as annotations_domain
+from app.domain import api_tokens as api_tokens_domain
 from app.domain import download_tickets as download_tickets_domain
 from app.domain import run_create as run_create_domain
 from app.domain import semantic_search as semantic_domain
@@ -58,6 +68,7 @@ from app.domain.lineage import (
 )
 from app.domain.lineage_mermaid import LineageGraph, MermaidOptions, render_lineage_mermaid
 from app.domain.models import (
+    RUN_ORIGIN_IMPORT,
     Asset,
     AssetGroupMember,
     AssetKind,
@@ -82,7 +93,7 @@ from app.domain.visibility import (
     run_visible,
     visible_asset_ids,
 )
-from app.mcp.context import McpRequestContext, get_mcp_context
+from app.mcp.context import McpRequestContext, find_mcp_context, get_mcp_context
 from app.providers.openai_pricing import PRICING_CHECKED_AT, PRICING_SOURCE_URL
 from app.version import get_version
 
@@ -275,6 +286,7 @@ def _run_payload(
         "prompt": run.prompt,
         "params": run.params or {},
         "error_code": run.error_code,
+        "deleted": run.deleted_at is not None,
         "error_message": run.error_message,
         "queued_at": run.queued_at.isoformat(),
         "started_at": run.started_at.isoformat() if run.started_at else None,
@@ -313,7 +325,9 @@ def _load_run_result(
 ) -> tuple[dict[str, Any], list[ImageContent]] | None:
     with _session(mc) as db:
         run = get_visible_run(db, mc.user, run_id)
-        if run is None or run.deleted_at is not None:
+        # 削除済みの Run も、REST の `GET /api/runs/{id}` と同じく返す(`deleted: true`)。
+        # 失敗や削除も証跡として残す(ADR-0003)。`get_asset` の扱いとも揃える。
+        if run is None:
             return None
         return _run_payload(mc, db, run, include_thumbnails, include_lineage)
 
@@ -429,7 +443,10 @@ def _run_cost(
     mc: McpRequestContext, db: Session, run: Run, inputs: list[RunInput]
 ) -> dict[str, Any] | None:
     """Run の料金の目安(分かる場合だけ)。成功した Run は実際の usage × 単価、それ以外の
-    実行前・実行中の Run はパラメーターからの見積もり。失敗・取り消しは null。"""
+    実行前・実行中の Run はパラメーターからの見積もり。失敗・取り消しは null。系列の ZIP から
+    取り込んだ Run(ADR-0037)は、この GAKEI で料金が掛かっていないので null。"""
+    if run.origin == RUN_ORIGIN_IMPORT:
+        return None
     if not _supports_pricing(mc, run.provider):
         return None
     if run.usage:
@@ -687,7 +704,7 @@ async def get_run(
     Optionally wait (up to 25 s per call) for it to finish. lineage_mermaid is a Mermaid
     flowchart of the inputs' ancestry -> this run -> its outputs. text_outputs holds text the
     workflow produced at run time (role "final_prompt": the prompt rewritten by a ComfyUI
-    prompt enhancer), or null."""
+    prompt enhancer), or null. A deleted run is still returned, with deleted: true."""
     mc = get_mcp_context(ctx)
     if wait_seconds > 0:
         await _wait_for_terminal(mc, run_id, wait_seconds)
@@ -781,6 +798,12 @@ async def search_assets(
             if mode == "semantic":
                 if not query or not query.strip():
                     raise ToolError("semantic mode needs a query (a description of the image).")
+                if kind == "mask":
+                    # REST(`GET /api/search/semantic`)と同じく、マスクは種類に指定できない
+                    # (マスクには埋め込みが無い。ADR-0033)。
+                    raise ToolError(
+                        "Masks have no embeddings: kind 'mask' cannot be used in semantic mode."
+                    )
                 try:
                     response = semantic_domain.semantic_search(
                         db,
@@ -1585,12 +1608,112 @@ def _reject_nul_args[F: Callable[..., Any]](fn: F) -> F:
     return cast(F, wrapper)
 
 
+# ツールのエラーの文言の上限(文字数)。引数の値(未知のモデル名など)をそのまま含む文言が
+# あるので、巨大な引数がそのまま返ってエージェントの文脈を埋めないよう、中ほどを省く。
+ERROR_MESSAGE_MAX_CHARS = 1000
+
+
+def clip_error_message(message: str, limit: int = ERROR_MESSAGE_MAX_CHARS) -> str:
+    """長すぎる文言の中ほどを省く(先頭と末尾は残す。末尾に直し方の案内があることが多い)。"""
+    if len(message) <= limit:
+        return message
+    head = limit * 2 // 3
+    tail = limit - head
+    omitted = len(message) - head - tail
+    return f"{message[:head]}... ({omitted} characters omitted) ...{message[-tail:]}"
+
+
+def _clip_tool_errors[F: Callable[..., Any]](fn: F) -> F:
+    """ツールが出す `ToolError` の文言を `clip_error_message` で切り詰める。"""
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await fn(*args, **kwargs)
+        except ToolError as e:
+            clipped = clip_error_message(str(e))
+            if clipped == str(e):
+                raise
+            raise ToolError(clipped) from e
+
+    return cast(F, wrapper)
+
+
+# 読み取りのみのトークン(ADR-0023 11章 2)で使えるツール。どれも GAKEI のデータを変えない
+# (`create_download_url` は1回限りの URL の行を作るが、原本を読み出すためのもの)。
+# ここに無いツールは「すべて」のトークンだけが使える。新しくツールを足すときは、ここに
+# 入れるかを決める(入れなければ「すべて」のトークンだけ)。
+READ_SCOPE_TOOLS: frozenset[str] = frozenset(
+    {
+        "get_capabilities",
+        "estimate_cost",
+        "get_run",
+        "list_runs",
+        "search_assets",
+        "find_similar_assets",
+        "get_asset",
+        "get_image",
+        "list_prompt_sets",
+        "list_groups",
+        "create_download_url",
+    }
+)
+
+
+def tool_allowed(mc: McpRequestContext | None, name: str) -> bool:
+    """このリクエストのトークンでツールを使えるか。文脈が無いときは狭いほうに倒す。"""
+    if mc is not None and mc.token_scope == api_tokens_domain.SCOPE_FULL:
+        return True
+    return name in READ_SCOPE_TOOLS
+
+
+class GakeiMcpServer(MCPServer):
+    """トークンの権限でツールを絞る `MCPServer`(ADR-0023 11章 2)。
+
+    SDK はツールの一覧と呼び出しに権限の仕組みを持たないので、2か所を上書きする。
+
+    - `tools/list`: SDK の `_handle_list_tools`(低レベルの `Server` に渡すハンドラー。
+      `__init__` で `self._handle_list_tools` を渡すので、上書きが使われる)で、リクエストの
+      文脈(`McpEndpoint` が ASGI の scope に入れたもの)を見て、使えないツールを外す。
+    - `tools/call`: 公開の `call_tool` で、使えないツールを `ToolError` にする。SDK がこれを
+      `isError` の結果にする。一覧から外すのは案内のためで、拒否はこちらで必ず行う。
+    """
+
+    async def _handle_list_tools(
+        self, ctx: ServerRequestContext[Any], params: PaginatedRequestParams | None
+    ) -> ListToolsResult:
+        mc = find_mcp_context(ctx.request)
+        tools = await self.list_tools()
+        return ListToolsResult(tools=[tool for tool in tools if tool_allowed(mc, tool.name)])
+
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any], context: Context[Any, Any] | None = None
+    ) -> CallToolResult | InputRequiredResult:
+        request = None
+        if context is not None:
+            try:
+                request = context.request_context.request
+            except ValueError:
+                request = None
+        mc = find_mcp_context(request)
+        # 存在しないツールは SDK の「不明なツール」のエラーに任せる。
+        if not tool_allowed(mc, name) and self._tool_manager.get_tool(name) is not None:
+            raise ToolError(
+                f"The tool {name} is not available with a read-only access token. "
+                "Read-only tokens can only use tools that do not change GAKEI data "
+                f"({', '.join(sorted(READ_SCOPE_TOOLS))}). Ask the user for an access token "
+                "with full access to use this tool."
+            )
+        return await super().call_tool(name, arguments, context)
+
+
 def build_mcp_server() -> MCPServer:
-    server = MCPServer(name="gakei", version=get_version(), instructions=_INSTRUCTIONS)
+    server = GakeiMcpServer(name="gakei", version=get_version(), instructions=_INSTRUCTIONS)
 
     def add_tool(fn: Callable[..., Any], **kwargs: Any) -> None:
-        # すべてのツールの引数に NUL の検査を掛ける(`_reject_nul_args`)。
-        server.add_tool(_reject_nul_args(fn), **kwargs)
+        # すべてのツールの引数に NUL の検査を掛け(`_reject_nul_args`)、エラーの文言の長さを
+        # 抑える(`_clip_tool_errors`)。
+        server.add_tool(_clip_tool_errors(_reject_nul_args(fn)), **kwargs)
 
     add_tool(get_capabilities, title="Get capabilities", annotations=_READ_ONLY)
     add_tool(

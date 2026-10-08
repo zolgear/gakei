@@ -74,7 +74,7 @@ gh run watch "$(gh run list --workflow dev-image.yml --limit 1 --json databaseId
 
 - できるタグは `ghcr.io/zolgear/gakei:dev`(実行のたびに最新の dev 版に動く)と `ghcr.io/zolgear/gakei:dev-<SHA の先頭 7 文字>`。`latest` や番号のタグは動かない。
 - `/api/about`(設定画面の「GAKEI について」)の `commit` で、どのコミットかを確かめられる。`version` は直前のリリースの番号のまま。
-- dev 版は起動時に DB を `upgrade head` する。リリース版に戻すことがあるなら、切り替える前に DB をバックアップする。
+- dev 版は起動時に DB を `upgrade head` する。リリース版に戻すことがあるなら、切り替える前に DB をバックアップする。dev 版で移行した DB をリリース版で開くと、「より新しい版の GAKEI で使われています」と出して、DB を変えずに起動を中止する(Issue #84)。そのときはバックアップから戻す。
 - 古い `dev-<SHA>` のタグは自動では消さない。増えたらパッケージのページで消す。
 
 ## GHCR のパッケージの公開範囲

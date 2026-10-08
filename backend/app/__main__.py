@@ -131,10 +131,12 @@ def main(argv: list[str] | None = None) -> None:
     # lifespan 側にも同じ検査があるが、そちらは uvicorn のトレースバックに埋もれるため。
     from app.main import (
         AuthConfigError,
+        DatabaseTooNewError,
         DatabaseUnavailableError,
         LegacyProviderAbortedError,
         check_auth_env,
         check_database_connection,
+        check_database_revision,
         check_legacy_provider_env,
     )
 
@@ -159,6 +161,15 @@ def main(argv: list[str] | None = None) -> None:
     try:
         check_database_connection(settings)
     except DatabaseUnavailableError as exc:
+        print(exc, file=sys.stderr, flush=True)
+        raise SystemExit(1) from None
+
+    # Issue #84: DB がより新しい GAKEI で移行されていれば、マイグレーションを実行せず(DB に
+    # 触れず)、同じくトレースバックを出さずに案内だけして止める。lifespan 側の
+    # `run_migrations` にも同じ検査があるが、そちらは uvicorn のトレースバックに埋もれる。
+    try:
+        check_database_revision(settings.sqlalchemy_url)
+    except DatabaseTooNewError as exc:
         print(exc, file=sys.stderr, flush=True)
         raise SystemExit(1) from None
 

@@ -42,3 +42,43 @@ export function isValidApiTokenName(name: string): boolean {
 export function formatLastUsed(lastUsedAt: string | null | undefined, neverLabel: string): string {
   return lastUsedAt ? formatDateTime(lastUsedAt) : neverLabel
 }
+
+/**
+ * 発行のときに選ぶ有効期限(ADR-0023 11章 1)。select の値は文字列なので、無期限を 'none' で表す。
+ * API の `expires_in_days`(30 / 90 / 365 / null)とは `apiTokenExpiryDays` で変換する。
+ */
+export const API_TOKEN_EXPIRY_OPTIONS = ['30', '90', '365', 'none'] as const
+export type ApiTokenExpiryOption = (typeof API_TOKEN_EXPIRY_OPTIONS)[number]
+export const DEFAULT_API_TOKEN_EXPIRY: ApiTokenExpiryOption = '90'
+
+/** 発行のときに選ぶ権限(11章 2)。既定は「すべて」。 */
+export const API_TOKEN_SCOPES = ['full', 'read'] as const
+export type ApiTokenScope = (typeof API_TOKEN_SCOPES)[number]
+export const DEFAULT_API_TOKEN_SCOPE: ApiTokenScope = 'full'
+
+export function isApiTokenExpiryOption(value: string): value is ApiTokenExpiryOption {
+  return (API_TOKEN_EXPIRY_OPTIONS as readonly string[]).includes(value)
+}
+
+export function isApiTokenScope(value: string): value is ApiTokenScope {
+  return (API_TOKEN_SCOPES as readonly string[]).includes(value)
+}
+
+/** select の値を API の `expires_in_days` にする('none' は null = 無期限)。 */
+export function apiTokenExpiryDays(option: ApiTokenExpiryOption): 30 | 90 | 365 | null {
+  switch (option) {
+    case '30':
+      return 30
+    case '90':
+      return 90
+    case '365':
+      return 365
+    case 'none':
+      return null
+  }
+}
+
+/** 一覧の期限の表示。無期限なら `noExpiryLabel`(「無期限」)。 */
+export function formatTokenExpiry(expiresAt: string | null | undefined, noExpiryLabel: string): string {
+  return expiresAt ? formatDateTime(expiresAt) : noExpiryLabel
+}

@@ -17,7 +17,15 @@ from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_progress_bus, get_registry, get_runner, get_session, get_settings
 from app.domain import run_create as run_create_domain
-from app.domain.models import Asset, Run, RunInput, RunInputRole, RunStatus
+from app.domain.models import (
+    RUN_ORIGIN_IMPORT,
+    Asset,
+    Run,
+    RunImport,
+    RunInput,
+    RunInputRole,
+    RunStatus,
+)
 from app.domain.run_views import (
     bulk_asset_groups,
     bulk_descendant_run_counts,
@@ -31,6 +39,7 @@ from app.domain.schemas import (
     RunCreateRequest,
     RunCreateResponse,
     RunDetail,
+    RunImportInfo,
     RunInputRef,
     RunListResponse,
     RunSummary,
@@ -79,6 +88,24 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
         deployment=run.deployment,
         provider_request_id=run.provider_request_id,
         inputs=[RunInputRef(asset_id=i.asset_id, role=i.role, position=i.position) for i in inputs],
+        imported=_import_info(db, run),
+    )
+
+
+def _import_info(db: Session, run: Run) -> RunImportInfo | None:
+    """取り込んだ Run(ADR-0037)の、書き出し元での記録。それ以外の Run は None。"""
+    if run.origin != RUN_ORIGIN_IMPORT:
+        return None
+    row = db.get(RunImport, run.id)
+    if row is None:
+        return None
+    return RunImportInfo(
+        source_run_id=row.source_run_id,
+        source_creator_name=row.source_creator_name,
+        source_created_at=row.source_created_at,
+        source_finished_at=row.source_finished_at,
+        source_gakei_version=row.source_gakei_version,
+        imported_at=row.imported_at,
     )
 
 
