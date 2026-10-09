@@ -1364,6 +1364,7 @@
       "exceedsLimitNotAdded": "Input image limit ({max}) exceeded; not added"
     },
     "dependencies": {
+      "combinatorialCount": "Makes one image per combination (up to {limit})",
       "incompatiblePair": "{fieldA}={valueA} and {fieldB}={valueB} cannot be set at the same time"
     },
     "runFormLogic": {
@@ -2058,6 +2059,10 @@
     "expandLineageLabel": "Expand the lineage graph to full screen"
   },
   "finalPrompt": {
+    "expandedHeading": "Expanded prompt",
+    "expandedNegativeHeading": "Expanded negative prompt",
+    "outputLabel": "Output #{index}",
+    "outputNegativeLabel": "Output #{index} · negative",
     "heading": "Final prompt",
     "truncated": "Too long; only the beginning is saved.",
     "expand": "Show all",

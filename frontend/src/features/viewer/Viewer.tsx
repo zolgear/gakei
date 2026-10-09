@@ -40,6 +40,7 @@ import { ShareDialog } from '../share/ShareDialog'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import { importToastFromState } from '../lineage-transfer/lineageTransfer'
 import { FinalPromptSection } from '../run-detail/FinalPromptSection'
+import { baselineNegativePrompt } from '../run-detail/finalPrompt'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import styles from './Viewer.module.css'
@@ -399,10 +400,14 @@ export function Viewer({ assetId }: ViewerProps) {
                     </Link>
                   </p>
                 )}
-                {/* 最終プロンプト(ADR-0030 3章)。挿入・置き換えはスタジオへ移って反映する。 */}
+                {/* 最終プロンプト(ADR-0030 3章)と、この画像の展開後のプロンプト(ADR-0038 7章)。
+                    挿入・置き換えはスタジオへ移って反映する。 */}
                 <FinalPromptSection
                   className={styles.finalPrompt}
                   textOutputs={asset.produced_by_run.text_outputs}
+                  outputIndex={asset.output_index ?? null}
+                  prompt={asset.produced_by_run.prompt}
+                  negativePrompt={runQuery.data ? baselineNegativePrompt(runQuery.data.params) : undefined}
                   headingClassName={styles.subheading}
                   renderActions={(text) => <StudioPromptActions prompt={text} />}
                 />

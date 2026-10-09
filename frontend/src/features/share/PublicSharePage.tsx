@@ -33,6 +33,7 @@ import { CompareCanvas } from '../compare/CompareCanvas'
 import { CompareModeSwitch } from '../compare/CompareModeSwitch'
 import { resolveEffectiveMode, type CompareMode } from '../compare/compareState'
 import { FinalPromptSection } from '../run-detail/FinalPromptSection'
+import { baselineNegativePrompt } from '../run-detail/finalPrompt'
 import { PublicLineageGraph } from './PublicLineageGraph'
 import { PublicRunDetailPanel } from './PublicRunDetailPanel'
 import {
@@ -41,6 +42,7 @@ import {
   compareAllowsOriginal,
   originalAvailability,
   publicCompareTargets,
+  publicOutputIndex,
 } from './publicRunDetail'
 import {
   closeLineageView,
@@ -322,6 +324,9 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
                 <FinalPromptSection
                   className={styles.finalPrompt}
                   textOutputs={run.text_outputs}
+                  outputIndex={publicOutputIndex(data, run.id, selected.id)}
+                  prompt={run.prompt}
+                  negativePrompt={baselineNegativePrompt(run.params)}
                   headingLevel="h2"
                   headingClassName={styles.subheading}
                 />

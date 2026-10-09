@@ -298,3 +298,16 @@ describe('findDroppedParamNames', () => {
     expect(findDroppedParamNames(prev, next)).toEqual(['background', 'n'])
   })
 })
+
+describe('同じ設定で開くときの、capabilities に無いパラメーター', () => {
+  it('Dynamic Prompts の無い接続先では dynamic_prompts を送らない', () => {
+    // Dynamic Prompts のある接続先で作った Run の params
+    const runParams = { n: 2, dynamic_prompts: true, dynamic_prompts_combinatorial: false, sdwebui_seed: 5 }
+    const prefill = paramsForRerun(runParams) as Record<string, string | number | boolean>
+    const raw = sanitizeRawValues(defs, toRawParamValues(defs, prefill))
+    expect(raw).not.toHaveProperty('dynamic_prompts')
+    expect(raw).not.toHaveProperty('dynamic_prompts_combinatorial')
+    const sent = buildParams(defs, raw)
+    expect(sent).toEqual({ n: 2 })
+  })
+})

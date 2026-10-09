@@ -27,6 +27,8 @@ interface ParamFieldProps {
   def: ParamDef
   value: string
   enabled: boolean
+  /** 無効のときに「使用不可」のかわりに出す説明(例: 組み合わせ生成のときの枚数)。 */
+  disabledNote?: string | null
   onChange: (name: string, value: string) => void
 }
 
@@ -100,7 +102,7 @@ interface PromptParamFieldProps extends ParamFieldProps {
  * プロンプトに当たる文章のパラメーター(SD WebUI の `negative_prompt` など)。プロンプト欄と同じく
  * 「テキスト / タグ」を切り替えられる(ADR-0039 2章。モードは(プロバイダー, モデル, 欄)ごとに覚える)。
  */
-function PromptParamField({ def, value, enabled, onChange, scope }: PromptParamFieldProps) {
+function PromptParamField({ def, value, enabled, disabledNote, onChange, scope }: PromptParamFieldProps) {
   const { t } = useI18n()
   const pf = t.runForm.paramField
   const id = `param-${def.name}`
@@ -138,15 +140,15 @@ function PromptParamField({ def, value, enabled, onChange, scope }: PromptParamF
         />
       )}
       {!enabled && (
-        <p className={styles.disabledNote} title={pf.disabledTitle}>
-          {pf.disabledNote}
+        <p className={styles.disabledNote} title={disabledNote ?? pf.disabledTitle}>
+          {disabledNote ?? pf.disabledNote}
         </p>
       )}
     </div>
   )
 }
 
-export function ParamField({ def, value, enabled, onChange }: ParamFieldProps) {
+export function ParamField({ def, value, enabled, disabledNote, onChange }: ParamFieldProps) {
   const { t } = useI18n()
   const pf = t.runForm.paramField
   const id = `param-${def.name}`
@@ -159,7 +161,16 @@ export function ParamField({ def, value, enabled, onChange }: ParamFieldProps) {
   }
 
   if (def.type === 'text' && promptScope && isPromptLikeParam(def.name)) {
-    return <PromptParamField def={def} value={value} enabled={enabled} onChange={onChange} scope={promptScope} />
+    return (
+      <PromptParamField
+        def={def}
+        value={value}
+        enabled={enabled}
+        disabledNote={disabledNote}
+        onChange={onChange}
+        scope={promptScope}
+      />
+    )
   }
 
   return (
@@ -224,8 +235,8 @@ export function ParamField({ def, value, enabled, onChange }: ParamFieldProps) {
       )}
 
       {!enabled && (
-        <p className={styles.disabledNote} title={pf.disabledTitle}>
-          {pf.disabledNote}
+        <p className={styles.disabledNote} title={disabledNote ?? pf.disabledTitle}>
+          {disabledNote ?? pf.disabledNote}
         </p>
       )}
     </div>

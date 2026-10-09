@@ -5,7 +5,7 @@
  */
 import type { ConditionalParam, ParamDef, SizeConstraints } from '../../api/client'
 import { useI18n } from '../../i18n'
-import { isFieldEnabled } from '../run-form/dependencies'
+import { fieldDisabledNote, isFieldEnabled } from '../run-form/dependencies'
 import { ParamField } from '../run-form/ParamField'
 import type { RawParamValues } from '../run-form/paramsBuilder'
 import { unspecifiedRawValue } from '../run-form/paramsBuilder'
@@ -54,6 +54,7 @@ export function PrimaryParamFields({
             def={def}
             value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
             enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name)}
+            disabledNote={fieldDisabledNote(defs, rawParams, def.name)}
             onChange={onParamChange}
           />
         )
@@ -94,6 +95,7 @@ export function OtherParamsDetails({ other, defs, rawParams, conditionalParams, 
             def={def}
             value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
             enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name)}
+            disabledNote={fieldDisabledNote(defs, rawParams, def.name)}
             onChange={onParamChange}
           />
         ))}
