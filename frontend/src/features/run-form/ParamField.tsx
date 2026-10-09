@@ -22,6 +22,8 @@ interface ParamFieldProps {
   def: ParamDef
   value: string
   enabled: boolean
+  /** 無効のときに「使用不可」のかわりに出す説明(例: 組み合わせ生成のときの枚数)。 */
+  disabledNote?: string | null
   onChange: (name: string, value: string) => void
 }
 
@@ -87,7 +89,7 @@ function NumberParamInput({ def, id, value, enabled, title, onChange }: NumberPa
   )
 }
 
-export function ParamField({ def, value, enabled, onChange }: ParamFieldProps) {
+export function ParamField({ def, value, enabled, disabledNote, onChange }: ParamFieldProps) {
   const { t } = useI18n()
   const pf = t.runForm.paramField
   const id = `param-${def.name}`
@@ -160,8 +162,8 @@ export function ParamField({ def, value, enabled, onChange }: ParamFieldProps) {
       )}
 
       {!enabled && (
-        <p className={styles.disabledNote} title={pf.disabledTitle}>
-          {pf.disabledNote}
+        <p className={styles.disabledNote} title={disabledNote ?? pf.disabledTitle}>
+          {disabledNote ?? pf.disabledNote}
         </p>
       )}
     </div>

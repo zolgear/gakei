@@ -44,7 +44,7 @@ import { fmt, useI18n } from '../../i18n'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { FinalPromptSection } from './FinalPromptSection'
 import { ImportedRunSection } from '../lineage-transfer/ImportedRunSection'
-import { findFinalPrompt } from './finalPrompt'
+import { baselineNegativePrompt, selectFinalPromptEntries } from './finalPrompt'
 import styles from './RunDetailContent.module.css'
 
 export interface RunDetailContentProps {
@@ -126,7 +126,13 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
   const sdwebuiSeed = extractSdWebuiSeed(rawParams) !== null ? runSeedDisplay(run) : null
   const usage = (run.usage ?? null) as Record<string, unknown> | null
   const sdwebuiInfotext = extractSdWebuiInfotext(usage)
-  const finalPrompt = findFinalPrompt(run.text_outputs)
+  // 最終プロンプト(ADR-0030)と、Run のプロンプトと違う出力ごとの展開後のプロンプト(ADR-0038 7章)。
+  const finalPromptProps = {
+    textOutputs: run.text_outputs,
+    prompt: run.prompt,
+    negativePrompt: baselineNegativePrompt(rawParams),
+  }
+  const hasFinalPrompt = selectFinalPromptEntries(finalPromptProps).length > 0
 
   const thumbAssetDetails = new Map<string, AssetDetail>()
   thumbAssetIds.forEach((assetId, index) => {
@@ -220,10 +226,10 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
 
       {/* 最終プロンプト(ADR-0030 3章)。スタジオ内では呼び出し側の挿入・置き換え(promptActions)を
           そのまま使い、スタジオの外ではリクエストを積んでスタジオへ移る(StudioPromptActions)。 */}
-      {finalPrompt && (
+      {hasFinalPrompt && (
         <section className={styles.section}>
           <FinalPromptSection
-            textOutputs={run.text_outputs}
+            {...finalPromptProps}
             headingLevel="h2"
             headingClassName={styles.heading}
             renderActions={(text) => (promptActions ? promptActions(text) : <StudioPromptActions prompt={text} />)}

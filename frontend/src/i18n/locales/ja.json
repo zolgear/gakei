@@ -1364,6 +1364,7 @@
       "exceedsLimitNotAdded": "入力画像の上限({max}枚)を超えるため追加しませんでした"
     },
     "dependencies": {
+      "combinatorialCount": "組み合わせの数だけ作る(上限 {limit} 枚)",
       "incompatiblePair": "{fieldA}={valueA} と {fieldB}={valueB} は同時に指定できません"
     },
     "runFormLogic": {
@@ -2058,6 +2059,10 @@
     "expandLineageLabel": "系列グラフを全画面に広げる"
   },
   "finalPrompt": {
+    "expandedHeading": "展開後のプロンプト",
+    "expandedNegativeHeading": "展開後のネガティブプロンプト",
+    "outputLabel": "出力 #{index}",
+    "outputNegativeLabel": "出力 #{index}・ネガティブ",
     "heading": "最終プロンプト",
     "truncated": "長すぎるため途中までを保存しています",
     "expand": "すべて表示",

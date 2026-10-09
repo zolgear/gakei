@@ -17,6 +17,9 @@ import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/
 import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from './EmbeddedMetaSection'
 import { OriginRecipeSection } from './OriginRecipeSection'
+import { FinalPromptSection } from '../run-detail/FinalPromptSection'
+import { baselineNegativePrompt } from '../run-detail/finalPrompt'
+import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import styles from './LineageAssetInspectorContent.module.css'
 
@@ -113,6 +116,16 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
           <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>
             {t.lineage.viewRunDetail}
           </Link>
+          {/* 最終プロンプト(ADR-0030)と、この画像の展開後のプロンプト(ADR-0038 7章)。ビューアと同じ。 */}
+          <FinalPromptSection
+            className={styles.finalPrompt}
+            textOutputs={asset.produced_by_run.text_outputs}
+            outputIndex={asset.output_index ?? null}
+            prompt={asset.produced_by_run.prompt}
+            negativePrompt={runQuery.data ? baselineNegativePrompt(runQuery.data.params) : undefined}
+            headingClassName={styles.subheading}
+            renderActions={(text) => <StudioPromptActions prompt={text} />}
+          />
         </>
       )}
 
