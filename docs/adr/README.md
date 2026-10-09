@@ -41,5 +41,6 @@
 | ADR-0035 | [0035-hide-sketch-mask-in-stock.md](0035-hide-sketch-mask-in-stock.md) | スケッチとマスクをストックに出すかを選べるようにする(既定は出さない) | Proposed |
 | ADR-0036 | [0036-derived-image-version.md](0036-derived-image-version.md) | 派生画像(サムネイル・プレビュー)に版を持たせ、無ければその場で作る | Proposed |
 | ADR-0037 | [0037-lineage-export-import.md](0037-lineage-export-import.md) | 系列の持ち出し(ZIP)と、別の利用者・インスタンスへの取り込み | Proposed |
+| ADR-0038 | [0038-sd-webui-provider.md](0038-sd-webui-provider.md) | Stable Diffusion WebUI(A1111 互換の API)をプロバイダーに加える | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。
