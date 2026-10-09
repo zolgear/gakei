@@ -232,6 +232,12 @@
   color: var(--color-text-faint);
 }
 
+/* モデルが多いときだけ出す絞り込みの欄(ModelSelect)。ParamField の `.field input` より控えめにする。 */
+.spanTwo input.modelFilter {
+  height: 28px;
+  font-size: 12px;
+}
+
 .comfyWorkflowLink:hover {
   color: var(--color-accent);
 }

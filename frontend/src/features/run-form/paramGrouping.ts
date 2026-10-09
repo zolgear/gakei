@@ -29,10 +29,13 @@ export function splitPrimaryParams(
 }
 
 /**
- * プロバイダーに応じて振り分ける。ComfyUI のパラメーターは、利用者がワークフローの登録時に
- * フォームへ出すと選んだものだけなので、畳まずに登録順のまま全部を主に出す。
+ * プロバイダーに応じて振り分ける。
+ * - ComfyUI のパラメーターは、利用者がワークフローの登録時にフォームへ出すと選んだものだけなので、
+ *   畳まずに登録順のまま全部を主に出す。
+ * - SD WebUI(ADR-0038)のパラメーターは8つほどで、ネガティブプロンプト・サンプラー・ステップ数・
+ *   CFG・seed・VAE のどれも毎回のように見て変えるものなので、畳まずにサーバーの順のまま全部を主に出す。
  */
 export function groupParamsForProvider(provider: string | undefined, defs: ParamDef[]): GroupedParams {
-  if (provider === 'comfyui') return { primary: [...defs], other: [] }
+  if (provider === 'comfyui' || provider === 'sdwebui') return { primary: [...defs], other: [] }
   return splitPrimaryParams(defs)
 }

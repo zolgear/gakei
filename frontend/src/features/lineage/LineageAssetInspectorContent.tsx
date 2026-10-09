@@ -8,11 +8,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { ApiError, getAsset, getRun, restoreAsset } from '../../api/client'
-import {
-  comfyUiSeedTooltip,
-  describeComfyUiSeed,
-  extractComfyUiSeed,
-} from '../run-detail/comfyuiPromptDisplay'
+import { runSeedDisplay } from '../run-detail/runSeedDisplay'
 import { assetUrl } from '../../api/assetUrl'
 import { useAddToInputs } from '../run-form/useAddToInputs'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
@@ -57,6 +53,8 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
 
   const asset = assetQuery.data
   const isReady = !assetQuery.isLoading && !assetQuery.isError && asset !== undefined
+  // ComfyUI / SD WebUI の Run だけ、実際に使った seed を出す(runSeedDisplay.ts)。
+  const seed = runQuery.data ? runSeedDisplay(runQuery.data, asset?.output_index) : null
 
   if (assetQuery.isLoading) return <p className={styles.placeholder}>{t.lineage.loading}</p>
   if (assetQuery.isError || !isReady) return <p className={styles.placeholder}>{t.lineage.assetLoadError}</p>
@@ -107,13 +105,9 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
         <>
           <h3 className={styles.subheading}>{t.lineage.promptHeading}</h3>
           <p className={styles.runPrompt}>{asset.produced_by_run.prompt.slice(0, 80)}</p>
-          {runQuery.data && extractComfyUiSeed((runQuery.data.params ?? {}) as Record<string, unknown>) !== null && (
-            <p className={styles.runMeta} title={comfyUiSeedTooltip(runQuery.data.outputs?.length ?? 0)}>
-              {describeComfyUiSeed(
-                extractComfyUiSeed((runQuery.data.params ?? {}) as Record<string, unknown>),
-                runQuery.data.outputs?.length ?? 0,
-                asset.output_index,
-              )}
+          {seed && (
+            <p className={styles.runMeta} title={seed.tooltip}>
+              {seed.text}
             </p>
           )}
           <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>

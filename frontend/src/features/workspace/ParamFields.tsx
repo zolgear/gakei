@@ -47,17 +47,32 @@ export function PrimaryParamFields({
         </div>
       )}
 
-      {primary.map((def) => (
-        <ParamField
-          key={def.name}
-          def={def}
-          value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
-          enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name)}
-          onChange={onParamChange}
-        />
-      ))}
+      {primary.map((def) => {
+        const field = (
+          <ParamField
+            key={def.name}
+            def={def}
+            value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
+            enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name)}
+            onChange={onParamChange}
+          />
+        )
+        // 文章(ネガティブプロンプトなど)と seed の欄は、1マスでは狭いので2マス分を使う。
+        return isWideParam(def) ? (
+          <div key={def.name} className={styles.spanTwo}>
+            {field}
+          </div>
+        ) : (
+          field
+        )
+      })}
     </>
   )
+}
+
+/** 設定グリッドで2マス分を使うパラメーター(文章の欄と seed の欄)。 */
+function isWideParam(def: ParamDef): boolean {
+  return def.type === 'text' || def.widget === 'seed'
 }
 
 interface OtherParamsDetailsProps extends ParamFieldsCommonProps {

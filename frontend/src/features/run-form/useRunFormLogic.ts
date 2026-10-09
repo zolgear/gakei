@@ -40,6 +40,7 @@ import {
 import {
   paramToSizeState,
   roundSizeStateToMultiple,
+  sizeStateForProvider,
   sizeToParam,
   validateSizeState,
   type SizeState,
@@ -420,6 +421,16 @@ export function useRunFormLogic(
   }
 
   function selectModel(nextProvider: string, nextModel: string) {
+    // プロバイダーをまたいで切り替えたとき、今のサイズが新しいプロバイダーで使えなければ
+    // (OpenAI の auto や 4K を、auto を受け付けず長辺 2048px の SD WebUI へ持ち込むなど)、
+    // そのプロバイダーの既定のサイズに戻す。
+    if (nextProvider !== provider) {
+      const nextEntry = findProvider(caps, nextProvider)
+      if (nextEntry?.size) {
+        const constraints = nextEntry.size
+        setSizeState((prev) => sizeStateForProvider(constraints, nextEntry.default_size, prev))
+      }
+    }
     setProvider(nextProvider)
     setModel(nextModel)
   }

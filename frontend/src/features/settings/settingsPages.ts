@@ -19,6 +19,7 @@ export type SettingsPageId =
   | 'annotation'
   | 'embeddings'
   | 'comfyui'
+  | 'sdwebui'
   | 'mcp'
   | 'shareLinks'
   | 'authentication'
@@ -35,6 +36,7 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   annotation: 'annotation',
   embeddings: 'embeddings',
   comfyui: 'comfyui',
+  sdwebui: 'sdwebui',
   mcp: 'mcp',
   shareLinks: 'share-links',
   authentication: 'authentication',
@@ -48,6 +50,7 @@ export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
   'annotation',
   'embeddings',
   'comfyui',
+  'sdwebui',
   'mcp',
   'shareLinks',
   'authentication',

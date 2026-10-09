@@ -40,6 +40,34 @@ export function sizePresets(): SizePreset[] {
   return msg().runForm.sizeInput.presets as SizePreset[]
 }
 
+/**
+ * プロバイダーの制約で選べるプリセットだけを返す。`allow_auto` でなければ auto を外し、
+ * 幅と高さが制約(長辺・総画素・縦横比など)を満たさないプリセットも外す
+ * (OpenAI 向けの 2K・4K のプリセットを、長辺 2048px の SD WebUI で出さないため)。
+ */
+export function sizePresetsFor(constraints: SizeConstraints): SizePreset[] {
+  return sizePresets().filter((preset) => {
+    const value = preset.value
+    if (value.mode === 'auto') return constraints.allow_auto
+    if (value.mode !== 'custom') return true
+    return validateSize(constraints, value.width ?? 0, value.height ?? 0).valid
+  })
+}
+
+/**
+ * プロバイダーを切り替えたときのサイズ。今のサイズが新しいプロバイダーの制約で使えなければ
+ * (auto を受け付けない、長辺の上限を超えるなど)、そのプロバイダーの既定のサイズに戻す。
+ * 丸めれば済む(倍数でないだけの)サイズはそのまま残す(送信時に丸める)。
+ */
+export function sizeStateForProvider(
+  constraints: SizeConstraints,
+  defaultSize: string | null | undefined,
+  state: SizeState,
+): SizeState {
+  if (validateSizeState(constraints, roundSizeStateToMultiple(constraints, state)).valid) return state
+  return paramToSizeState(defaultSize ?? undefined)
+}
+
 /** select の「任意の幅×高さ」オプションの表示名。値は SIZE_PRESETS に含めず custom として扱う。 */
 export function customSizeLabel(): string {
   return msg().runForm.sizeInput.customLabel
@@ -86,17 +114,34 @@ export function validateSize(
 
   const aspectRatio = width / height
   if (aspectRatio < constraints.min_aspect_ratio || aspectRatio > constraints.max_aspect_ratio) {
-    errors.push(v.aspectRatio)
+    errors.push(
+      fmt(v.aspectRatio, {
+        min: formatAspectRatio(constraints.min_aspect_ratio),
+        max: formatAspectRatio(constraints.max_aspect_ratio),
+      }),
+    )
   }
 
   return { valid: errors.length === 0, errors }
 }
 
-/** SizeState 全体を検証する(unspecified/auto は常に有効)。 */
+/** 縦横比(幅 / 高さ)を `1:3`・`4:1` の形にする。小数は2桁まで。 */
+export function formatAspectRatio(ratio: number): string {
+  const short = (n: number) => String(Math.round(n * 100) / 100)
+  return ratio >= 1 ? `${short(ratio)}:1` : `1:${short(1 / ratio)}`
+}
+
+/**
+ * SizeState 全体を検証する。unspecified は常に有効。auto は `allow_auto` のプロバイダーだけ有効
+ * (SD WebUI など、auto を受け付けないプロバイダーではサーバーが 422 にするため)。
+ */
 export function validateSizeState(
   constraints: SizeConstraints,
   state: SizeState,
 ): SizeValidationResult {
+  if (state.mode === 'auto' && !constraints.allow_auto) {
+    return { valid: false, errors: [msg().runForm.sizeValidation.autoNotSupported] }
+  }
   if (state.mode !== 'custom') {
     return { valid: true, errors: [] }
   }
@@ -135,6 +180,14 @@ export const EXPERIMENTAL_TOTAL_PIXELS_THRESHOLD = 2560 * 1440
 /** 総画素数が推奨上限(2560×1440)を超えているか(エラーではなく注記の判定に使う)。 */
 export function isExperimentalSize(width: number, height: number): boolean {
   return width * height > EXPERIMENTAL_TOTAL_PIXELS_THRESHOLD
+}
+
+/**
+ * 「実験的」の注記を出す制約か。注記は OpenAI のガイドに基づくもので、長辺が 2560px を超える
+ * サイズ(4K 系)を受け付けるプロバイダーにだけ当てはまる(長辺 2048px の SD WebUI には出さない)。
+ */
+export function hasExperimentalSizes(constraints: SizeConstraints): boolean {
+  return constraints.max_long_edge > 2560
 }
 
 /** SizeState を `params.size` に入れる値へ変換する。unspecified は undefined(=キーを作らない)。 */

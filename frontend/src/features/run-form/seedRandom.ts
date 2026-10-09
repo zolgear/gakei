@@ -26,12 +26,23 @@ function cryptoRandomUint32(length: number): Uint32Array {
 }
 
 /**
- * 0〜`SEED_MAX`(2^53-1)の一様な整数を作る。21 bit + 32 bit = 53 bit を
- * `crypto.getRandomValues` から組み立てる(テストでは `randomUint32` を注入できる)。
+ * 0〜`maximum`(既定は `SEED_MAX` = 2^53-1)の整数を作る。21 bit + 32 bit = 53 bit を
+ * `crypto.getRandomValues` から組み立て(テストでは `randomUint32` を注入できる)、上限が
+ * `SEED_MAX` より小さければ剰余で範囲に収める(SD WebUI は 2^32 未満。ADR-0038 3章。
+ * 53 bit からの剰余なので偏りは無視できる)。
  */
-export function randomSeedValue(randomUint32: RandomUint32Fn = cryptoRandomUint32): number {
+export function randomSeedValue(
+  randomUint32: RandomUint32Fn = cryptoRandomUint32,
+  maximum: number = SEED_MAX,
+): number {
   const buf = randomUint32(2)
   const high = buf[0] & 0x1fffff // 上位 21 bit
   const low = buf[1] // 下位 32 bit
-  return high * 2 ** 32 + low
+  const value = high * 2 ** 32 + low
+  return maximum >= SEED_MAX ? value : value % (Math.max(0, Math.floor(maximum)) + 1)
+}
+
+/** seed の欄の上限。capabilities の `maximum` があればそれ、無ければ `SEED_MAX`。 */
+export function seedMaximum(def: { maximum?: number | null }): number {
+  return typeof def.maximum === 'number' && def.maximum < SEED_MAX ? def.maximum : SEED_MAX
 }

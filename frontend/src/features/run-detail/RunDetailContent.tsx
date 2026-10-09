@@ -17,7 +17,7 @@ import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { describeError } from '../run-status/errorMessages'
 import { SaveToPromptSetButton } from '../prompt-sets/SaveToPromptSetButton'
 import { buildParamLabelMap } from '../run-form/paramLabels'
-import { omitComfyUiParams, paramsForRerun } from '../run-form/paramsBuilder'
+import { omitServerOnlyParams, paramsForRerun } from '../run-form/paramsBuilder'
 import { inputsFromRunInputs } from '../run-form/editInputs'
 import {
   comfyuiPromptDownloadFilename,
@@ -28,6 +28,14 @@ import {
   extractComfyUiWorkflowInfo,
   shortSha256,
 } from './comfyuiPromptDisplay'
+import {
+  extractSdWebuiInfotext,
+  extractSdWebuiRequest,
+  extractSdWebuiSeed,
+  sdwebuiRequestDownloadFilename,
+  usageWithoutInfotext,
+} from './sdwebuiRunDisplay'
+import { runSeedDisplay } from './runSeedDisplay'
 import { formatDateTime, formatDuration, statusLabel } from '../../lib/format'
 import { formatUsd } from '../workspace/priceEstimateText'
 import { buildStudioPath } from '../workspace/assetQueryParam'
@@ -106,13 +114,18 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
   const inputs = run.inputs ?? []
   const outputs = run.outputs ?? []
   const rawParams = (run.params ?? {}) as Record<string, unknown>
-  // comfyui_* (ADR-0013) は通常のパラメータ一覧・生JSONブロックには出さず、下の専用の
-  // 表示(ワークフロー名 + sha・折りたたみJSON)にまとめる。
-  const params = omitComfyUiParams(rawParams) as Record<string, string | number | boolean>
+  // comfyui_* (ADR-0013) と sdwebui_* (ADR-0038) は通常のパラメータ一覧・生JSONブロックには出さず、
+  // 下の専用の表示(ワークフロー名 + sha・seed・折りたたみJSON)にまとめる。
+  const params = omitServerOnlyParams(rawParams) as Record<string, string | number | boolean>
   const paramLabels = buildParamLabelMap(capsQuery.data, run.model)
   const comfyuiWorkflow = extractComfyUiWorkflowInfo(rawParams)
   const comfyuiPrompt = extractComfyUiPrompt(rawParams)
   const comfyuiSeed = extractComfyUiSeed(rawParams)
+  const sdwebuiRequest = extractSdWebuiRequest(rawParams)
+  // SD WebUI の seed は1枚ごとに違うので、usage.all_seeds も見て1行にする(runSeedDisplay.ts)。
+  const sdwebuiSeed = extractSdWebuiSeed(rawParams) !== null ? runSeedDisplay(run) : null
+  const usage = (run.usage ?? null) as Record<string, unknown> | null
+  const sdwebuiInfotext = extractSdWebuiInfotext(usage)
   const finalPrompt = findFinalPrompt(run.text_outputs)
 
   const thumbAssetDetails = new Map<string, AssetDetail>()
@@ -132,9 +145,21 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
     URL.revokeObjectURL(url)
   }
 
+  function handleDownloadSdwebuiRequest() {
+    if (!sdwebuiRequest) return
+    const blob = new Blob([JSON.stringify(sdwebuiRequest, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = sdwebuiRequestDownloadFilename(run.id)
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   function handleRerun() {
-    // サーバーは comfyui_* をクライアントからの入力として受け付けない(422)ので、
-    // 「同じ設定で新規作成」ではフォームへ戻す前に取り除く(seed 等の公開パラメーターは残る)。
+    // サーバーは comfyui_* / sdwebui_* をクライアントからの入力として受け付けない(422)ので、
+    // 「同じ設定で新規作成」ではフォームへ戻す前に取り除く(seed 等の公開パラメーターは残り、
+    // 実際に使った seed があれば seed に戻す)。
     setFormState({
       provider: run.provider,
       model: run.model,
@@ -257,6 +282,11 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
             {comfyuiSeed !== null && ` / ${describeComfyUiSeed(comfyuiSeed, outputs.length)}`}
           </p>
         )}
+        {sdwebuiSeed && (
+          <p className={styles.comfyuiInfo} title={sdwebuiSeed.tooltip}>
+            {sdwebuiSeed.text}
+          </p>
+        )}
         {Object.keys(params).length > 0 && (
           <ul className={styles.paramsAnnotated}>
             {Object.entries(params).map(([key, value]) => (
@@ -287,6 +317,26 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
               </button>
             </summary>
             <pre className={styles.paramsBlock}>{JSON.stringify(comfyuiPrompt, null, 2)}</pre>
+          </details>
+        )}
+        {sdwebuiRequest && (
+          <details className={styles.comfyuiDetails}>
+            <summary>
+              {t.runDetail.sdwebuiRequestSummary}
+              <button
+                type="button"
+                className={styles.comfyuiDownloadLink}
+                onClick={(e) => {
+                  // <summary> の既定動作(開閉のトグル)を親に持たせない。
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleDownloadSdwebuiRequest()
+                }}
+              >
+                {t.runDetail.downloadJson}
+              </button>
+            </summary>
+            <pre className={styles.paramsBlock}>{JSON.stringify(sdwebuiRequest, null, 2)}</pre>
           </details>
         )}
       </section>
@@ -340,7 +390,15 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
             {run.cost_usd !== null && run.cost_usd !== undefined && (
               <p className={styles.costLine}>{fmt(t.runDetail.estimatedCost, { amount: formatUsd(run.cost_usd) })}</p>
             )}
-            <pre className={styles.paramsBlock}>{JSON.stringify(run.usage, null, 2)}</pre>
+            {sdwebuiInfotext && (
+              <details className={styles.comfyuiDetails}>
+                <summary>{t.runDetail.sdwebuiInfotextSummary}</summary>
+                <pre className={styles.infotextBlock}>{sdwebuiInfotext}</pre>
+              </details>
+            )}
+            <pre className={styles.paramsBlock}>
+              {JSON.stringify(usage && sdwebuiInfotext ? usageWithoutInfotext(usage) : run.usage, null, 2)}
+            </pre>
           </>
         )}
       </section>

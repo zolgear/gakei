@@ -51,7 +51,14 @@ describe('groupParamsForProvider', () => {
     expect(other).toEqual([])
   })
 
-  it('ComfyUI 以外は splitPrimaryParams と同じ', () => {
+  it('SD WebUI も畳まずに、サーバーの順のまま全部を主に出す', () => {
+    const defs = [makeDef('negative_prompt'), makeDef('sampler_name'), makeDef('steps'), makeDef('vae'), makeDef('n')]
+    const { primary, other } = groupParamsForProvider('sdwebui', defs)
+    expect(primary.map((d) => d.name)).toEqual(['negative_prompt', 'sampler_name', 'steps', 'vae', 'n'])
+    expect(other).toEqual([])
+  })
+
+  it('ComfyUI・SD WebUI 以外は splitPrimaryParams と同じ', () => {
     const defs = [makeDef('moderation'), makeDef('quality'), makeDef('n')]
     expect(groupParamsForProvider('openai', defs)).toEqual(splitPrimaryParams(defs))
     expect(groupParamsForProvider(undefined, defs)).toEqual(splitPrimaryParams(defs))
