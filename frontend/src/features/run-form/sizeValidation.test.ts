@@ -3,11 +3,15 @@ import { setLocale } from '../../i18n'
 import type { SizeConstraints } from '../../api/client'
 import {
   EXPERIMENTAL_TOTAL_PIXELS_THRESHOLD,
+  formatAspectRatio,
+  hasExperimentalSizes,
   isExperimentalSize,
   paramToSizeState,
   roundSizeStateToMultiple,
   roundToMultiple,
   sizePresets,
+  sizePresetsFor,
+  sizeStateForProvider,
   sizeToParam,
   validateSize,
   validateSizeState,
@@ -213,5 +217,69 @@ describe('paramToSizeState', () => {
     const original: import('./sizeValidation').SizeState = { mode: 'custom', width: 3840, height: 2160 }
     const param = sizeToParam(original)
     expect(paramToSizeState(param)).toEqual(original)
+  })
+})
+
+// SD WebUI(ADR-0038)の制約: 8 の倍数・長辺 2048・auto なし。
+const sdwebuiConstraints: SizeConstraints = {
+  multiple_of: 8,
+  max_long_edge: 2048,
+  min_total_pixels: 256 * 256,
+  max_total_pixels: 2048 * 2048,
+  min_aspect_ratio: 1 / 4,
+  max_aspect_ratio: 4,
+  allow_auto: false,
+}
+
+describe('auto を受け付けないプロバイダー', () => {
+  it('auto は無効、未指定は有効', () => {
+    expect(validateSizeState(sdwebuiConstraints, { mode: 'auto', width: 1024, height: 1024 }).valid).toBe(false)
+    expect(validateSizeState(sdwebuiConstraints, { mode: 'unspecified', width: 1024, height: 1024 }).valid).toBe(true)
+    expect(validateSizeState(constraints, { mode: 'auto', width: 1024, height: 1024 }).valid).toBe(true)
+  })
+
+  it('プリセットから auto と制約を超えるサイズを外す', () => {
+    const values = sizePresetsFor(sdwebuiConstraints).map((p) => p.value)
+    expect(values.some((v) => v.mode === 'auto')).toBe(false)
+    expect(values.some((v) => v.mode === 'unspecified')).toBe(true)
+    expect(values.every((v) => v.mode !== 'custom' || Math.max(v.width ?? 0, v.height ?? 0) <= 2048)).toBe(true)
+    expect(values).toContainEqual({ mode: 'custom', width: 1024, height: 1024 })
+  })
+
+  it('OpenAI の制約ではプリセットを減らさない', () => {
+    expect(sizePresetsFor(constraints)).toEqual(sizePresets())
+  })
+
+  it('切り替え先で使えないサイズは既定に戻し、使えるサイズは残す', () => {
+    expect(sizeStateForProvider(sdwebuiConstraints, '1024x1024', { mode: 'auto', width: 1024, height: 1024 })).toEqual({
+      mode: 'custom',
+      width: 1024,
+      height: 1024,
+    })
+    expect(sizeStateForProvider(sdwebuiConstraints, '1024x1024', { mode: 'custom', width: 3840, height: 2160 })).toEqual({
+      mode: 'custom',
+      width: 1024,
+      height: 1024,
+    })
+    const ok = { mode: 'custom' as const, width: 1536, height: 1024 }
+    expect(sizeStateForProvider(sdwebuiConstraints, '1024x1024', ok)).toBe(ok)
+  })
+
+  it('「実験的」の注記は 4K を受け付けるプロバイダーだけ', () => {
+    expect(hasExperimentalSizes(constraints)).toBe(true)
+    expect(hasExperimentalSizes(sdwebuiConstraints)).toBe(false)
+  })
+})
+
+describe('formatAspectRatio', () => {
+  it('1 未満は 1:n、1 以上は n:1', () => {
+    expect(formatAspectRatio(1 / 3)).toBe('1:3')
+    expect(formatAspectRatio(4)).toBe('4:1')
+    expect(formatAspectRatio(1.5)).toBe('1.5:1')
+  })
+
+  it('縦横比のエラーに制約の範囲が入る', () => {
+    const result = validateSize(sdwebuiConstraints, 2048, 256)
+    expect(result.errors.some((e) => e.includes('1:4') && e.includes('4:1'))).toBe(true)
   })
 })

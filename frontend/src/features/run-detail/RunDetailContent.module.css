@@ -191,6 +191,18 @@
   color: var(--color-text-muted);
 }
 
+/* SD WebUI の生成情報(infotext。ADR-0038)。長い1行の文章なので折り返す。 */
+.infotextBlock {
+  margin: 4px 0 8px;
+  padding: 10px;
+  background: var(--color-bg-sunken);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .comfyuiDownloadLink {
   margin-left: 8px;
   font-size: 11px;

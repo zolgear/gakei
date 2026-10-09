@@ -54,34 +54,42 @@ export function buildParams(
   return result
 }
 
+/** サーバーだけが書く `run.params` のキーの接頭辞(ComfyUI は ADR-0013、SD WebUI は ADR-0038 3章)。 */
+const SERVER_ONLY_PARAM_PREFIXES = ['comfyui_', 'sdwebui_'] as const
+
+/** 実際に使った seed を持つキー。「同じ設定で再実行」では `seed` に戻す。 */
+const SERVER_SEED_KEYS = ['comfyui_seed', 'sdwebui_seed'] as const
+
 /**
- * ComfyUI の Run が `run.params` に持つ、サーバー専有のキー(`comfyui_workflow`、
- * `comfyui_seed`、`comfyui_uploads`、`comfyui_prompt`、`comfyui_outputs`、
- * `comfyui_mask_mode`)を取り除く(ADR-0013)。サーバーは `comfyui_*` をクライアントからの
- * 入力として受け付けない(422)ため、「同じ設定で再実行」でフォームへ戻す前に必ず通す。
- * `seed`(公開パラメーターとしての素の値)は `comfyui_` で始まらないのでそのまま残る。
+ * Run が `run.params` に持つ、サーバー専有のキーを取り除く。
+ * - ComfyUI: `comfyui_workflow`、`comfyui_seed`、`comfyui_uploads`、`comfyui_prompt`、
+ *   `comfyui_outputs`、`comfyui_mask_mode`(ADR-0013)
+ * - SD WebUI: `sdwebui_seed`、`sdwebui_task_id`、`sdwebui_request`(ADR-0038 3章)
+ * サーバーはこれらをクライアントからの入力として受け付けない(422)ため、「同じ設定で再実行」で
+ * フォームへ戻す前に必ず通す。`seed`(公開パラメーターとしての素の値)はそのまま残る。
  */
-export function omitComfyUiParams(
-  params: Record<string, unknown>,
-): Record<string, unknown> {
+export function omitServerOnlyParams(params: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(params)) {
-    if (key.startsWith('comfyui_')) continue
+    if (SERVER_ONLY_PARAM_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     result[key] = value
   }
   return result
 }
 
 /**
- * 「同じ設定で再実行」用に、`run.params` から comfyui_* を取り除いた上で、実際に使った
- * seed(`comfyui_seed`)があれば `seed` として固定する(同じ画像を再現できるように。
+ * 「同じ設定で再実行」用に、`run.params` からサーバー専有のキーを取り除いた上で、実際に使った
+ * seed(`comfyui_seed` / `sdwebui_seed`)があれば `seed` として固定する(同じ画像を再現できるように。
  * ランダムに戻すのは seed の専用欄のトグル1つ。ADR-0013 フォローアップ)。
  */
 export function paramsForRerun(params: Record<string, unknown>): Record<string, unknown> {
-  const result = omitComfyUiParams(params)
-  const seed = params.comfyui_seed
-  if (typeof seed === 'number') {
-    result.seed = seed
+  const result = omitServerOnlyParams(params)
+  for (const key of SERVER_SEED_KEYS) {
+    const seed = params[key]
+    if (typeof seed === 'number') {
+      result.seed = seed
+      break
+    }
   }
   return result
 }

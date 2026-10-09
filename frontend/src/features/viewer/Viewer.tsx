@@ -5,11 +5,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { ApiError, deleteAsset, getAsset, getRun, getShareSettings, restoreAsset } from '../../api/client'
-import {
-  comfyUiSeedTooltip,
-  describeComfyUiSeed,
-  extractComfyUiSeed,
-} from '../run-detail/comfyuiPromptDisplay'
+import { runSeedDisplay } from '../run-detail/runSeedDisplay'
 import { assetUrl } from '../../api/assetUrl'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { useResourcePanel } from '../../context/useResourcePanel'
@@ -147,13 +143,8 @@ export function Viewer({ assetId }: ViewerProps) {
 
   const asset = assetQuery.data
   const runQuery = useRun(asset?.produced_by_run?.id)
-  const seedText = runQuery.data
-    ? describeComfyUiSeed(
-        extractComfyUiSeed((runQuery.data.params ?? {}) as Record<string, unknown>),
-        runQuery.data.outputs?.length ?? 0,
-        asset?.output_index,
-      )
-    : null
+  // ComfyUI / SD WebUI の Run だけ、実際に使った seed を出す(runSeedDisplay.ts)。
+  const seed = runQuery.data ? runSeedDisplay(runQuery.data, asset?.output_index) : null
   const primaryParentAssetId = runQuery.data?.inputs?.find(
     (i) => i.role === 'image' && i.position === 0,
   )?.asset_id
@@ -385,9 +376,9 @@ export function Viewer({ assetId }: ViewerProps) {
                 <p className={styles.runMeta}>
                   {runQuery.data?.model_label ?? asset.produced_by_run.model} ・ {asset.produced_by_run.operation}
                 </p>
-                {seedText && (
-                  <p className={styles.runMeta} title={comfyUiSeedTooltip(runQuery.data?.outputs?.length ?? 0)}>
-                    {seedText}
+                {seed && (
+                  <p className={styles.runMeta} title={seed.tooltip}>
+                    {seed.text}
                   </p>
                 )}
                 <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>

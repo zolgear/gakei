@@ -51,3 +51,9 @@ export const AUTH_ME_QUERY_KEY = ['auth-me'] as const
 
 /** `GET /api/settings/auth`(ADR-0034)。管理者設定の「認証」だけが読む。 */
 export const AUTH_SETTINGS_QUERY_KEY = ['auth-settings'] as const
+
+/**
+ * `GET /api/sdwebui/status`(ADR-0038)。管理者設定の「SD WebUI」が読む。接続・資格情報・一覧の
+ * 読み直しのあとは応答でこのキャッシュを置き換え、capabilities も取り直す。
+ */
+export const SDWEBUI_STATUS_QUERY_KEY = ['sdwebui-status'] as const

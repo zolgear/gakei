@@ -8,10 +8,11 @@ import type { SizeConstraints } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import {
   customSizeLabel,
+  hasExperimentalSizes,
   isExperimentalSize,
   roundSizeStateToMultiple,
   roundToMultiple,
-  sizePresets,
+  sizePresetsFor,
   validateSizeState,
   type SizeState,
 } from './sizeValidation'
@@ -33,7 +34,7 @@ interface RoundNote {
 // 一時的な注記を消すまでの時間(ミリ秒)。
 const ROUND_NOTE_TIMEOUT_MS = 4000
 
-function findPresetIndex(presets: ReturnType<typeof sizePresets>, value: SizeState): number {
+function findPresetIndex(presets: ReturnType<typeof sizePresetsFor>, value: SizeState): number {
   return presets.findIndex((p) => {
     if (p.value.mode !== value.mode) return false
     if (p.value.mode !== 'custom') return true
@@ -44,7 +45,8 @@ function findPresetIndex(presets: ReturnType<typeof sizePresets>, value: SizeSta
 export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
   const { t } = useI18n()
   const si = t.runForm.sizeInput
-  const presets = sizePresets()
+  // プロバイダーの制約で選べるものだけ(auto を受け付けない・長辺が短いプロバイダーなど)。
+  const presets = sizePresetsFor(constraints)
   const presetIndex = findPresetIndex(presets, value)
   const selectValue = presetIndex >= 0 ? String(presetIndex) : 'custom'
 
@@ -53,7 +55,9 @@ export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
   const effectiveState = roundSizeStateToMultiple(constraints, value)
   const validation = validateSizeState(constraints, effectiveState)
   const experimental =
-    value.mode === 'custom' && isExperimentalSize(effectiveState.width, effectiveState.height)
+    value.mode === 'custom' &&
+    hasExperimentalSizes(constraints) &&
+    isExperimentalSize(effectiveState.width, effectiveState.height)
 
   const [roundNote, setRoundNote] = useState<RoundNote | null>(null)
   const noteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)

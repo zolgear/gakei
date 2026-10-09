@@ -7,7 +7,7 @@ const seedDef: ParamDef = {
   type: 'int',
   label: 'シード',
   minimum: 0,
-  maximum: 100,
+  maximum: 1000,
   required: false,
   description: '',
   widget: 'seed',
@@ -39,6 +39,16 @@ describe('fillSeedDefaults', () => {
   it('固定モードで既に値があれば変更しない(同じ設定で再実行・下書き復元)', () => {
     const result = fillSeedDefaults(defs, { seed: '123' }, 'fixed', () => 999)
     expect(result.seed).toBe('123')
+  })
+
+  it('固定モードで上限を超える値(別のプロバイダーから持ち込んだもの)は、範囲内の乱数に置き換える', () => {
+    const received: number[] = []
+    const result = fillSeedDefaults(defs, { seed: '5000' }, 'fixed', (max) => {
+      received.push(max)
+      return 7
+    })
+    expect(result.seed).toBe('7')
+    expect(received).toEqual([1000])
   })
 
   it('ランダムモードでは何もしない(空文字列のまま)', () => {

@@ -10,7 +10,7 @@
  */
 import type { ParamDef } from '../../api/client'
 import { useI18n } from '../../i18n'
-import { isSeedRandom, randomSeedValue } from './seedRandom'
+import { isSeedRandom, randomSeedValue, seedMaximum } from './seedRandom'
 import { saveSeedMode } from './seedModePrefs'
 import fieldStyles from './ParamField.module.css'
 import styles from './SeedField.module.css'
@@ -43,7 +43,7 @@ export function SeedField({ def, value, enabled, onChange }: SeedFieldProps) {
 
   function handleModeChange(nextRandom: boolean) {
     saveSeedMode(nextRandom ? 'random' : 'fixed')
-    onChange(def.name, nextRandom ? '' : String(randomSeedValue()))
+    onChange(def.name, nextRandom ? '' : String(randomSeedValue(undefined, seedMaximum(def))))
   }
 
   return (
@@ -90,7 +90,7 @@ export function SeedField({ def, value, enabled, onChange }: SeedFieldProps) {
               title={sf.reroll}
               aria-label={sf.reroll}
               disabled={!enabled}
-              onClick={() => onChange(def.name, String(randomSeedValue()))}
+              onClick={() => onChange(def.name, String(randomSeedValue(undefined, seedMaximum(def))))}
             >
               <DiceIcon />
             </button>

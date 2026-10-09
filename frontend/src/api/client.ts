@@ -911,6 +911,66 @@ export function deleteComfyWorkflow(workflowId: string): Promise<void> {
   return request(`/api/comfyui/workflows/${workflowId}`, { method: 'DELETE' })
 }
 
+// -- SD WebUI(A1111 互換の API。ADR-0038) ------------------------------------
+
+export type SdWebuiStatus = components['schemas']['SdWebuiStatusResponse']
+export type SdWebuiConnectionTestResponse = components['schemas']['SdWebuiConnectionTestResponse']
+export type SdWebuiTimeoutSetting = components['schemas']['SdWebuiTimeoutSetting']
+
+export function getSdWebuiStatus(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/status')
+}
+
+/**
+ * 設定は変えない。`url` を省くとサーバーが今の有効な URL で試す。資格情報は両方そろえて渡すと
+ * その値で試し(保存しない)、省くと保存済みの資格情報を使う。
+ */
+export function testSdWebuiConnection(params: {
+  url?: string
+  credentials?: { username: string; password: string }
+}): Promise<SdWebuiConnectionTestResponse> {
+  return request('/api/sdwebui/connection/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: params.url ?? null,
+      ...(params.credentials ?? {}),
+    }),
+  })
+}
+
+/** 接続・URL の変更。ループバック以外は `allowNonLoopback` が要る(422)。SD WebUI の Run が待機中・実行中なら 409。 */
+export function setSdWebuiConnection(url: string, allowNonLoopback = false): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/connection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, allow_non_loopback: allowNonLoopback }),
+  })
+}
+
+/** 切り離す。過去の Run と資格情報は消えない。 */
+export function detachSdWebuiConnection(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/connection', { method: 'DELETE' })
+}
+
+/** Basic 認証の資格情報を保存する。応答に値は含まれない(`credentials_set` だけ)。 */
+export function setSdWebuiCredentials(username: string, password: string): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/credentials', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+}
+
+export function deleteSdWebuiCredentials(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/credentials', { method: 'DELETE' })
+}
+
+/** WebUI にチェックポイントの一覧を読み直させ、GAKEI の一覧のキャッシュも捨てる。 */
+export function refreshSdWebui(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/refresh', { method: 'POST' })
+}
+
 // -- タイトルとタグ(ADR-0024) --------------------------------------------------
 // 編集はログイン者全員。マスクと削除済みの Asset は 409(detail に理由)。いずれも更新後の注釈を返す。
 
