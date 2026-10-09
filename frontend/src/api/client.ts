@@ -969,9 +969,19 @@ export function deleteSdWebuiCredentials(): Promise<SdWebuiStatus> {
   return request('/api/sdwebui/credentials', { method: 'DELETE' })
 }
 
-/** WebUI にチェックポイントの一覧を読み直させ、GAKEI の一覧のキャッシュも捨てる。 */
+/** WebUI にチェックポイントと LoRA の一覧を読み直させ、GAKEI の一覧のキャッシュも捨てる(管理者だけ)。 */
 export function refreshSdWebui(): Promise<SdWebuiStatus> {
   return request('/api/sdwebui/refresh', { method: 'POST' })
+}
+
+export type SdWebuiLora = components['schemas']['SdWebuiLora']
+
+/**
+ * 接続先の LoRA の一覧(ADR-0038 8章)。name・alias・ベースモデル・トリガーの候補だけ。
+ * 接続していない・接続先から取れないときは 409。
+ */
+export function listSdWebuiLoras(): Promise<{ items: SdWebuiLora[] }> {
+  return request('/api/sdwebui/loras')
 }
 
 // -- タイトルとタグ(ADR-0024) --------------------------------------------------

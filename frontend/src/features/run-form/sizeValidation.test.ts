@@ -11,6 +11,7 @@ import {
   roundToMultiple,
   sizePresets,
   sizePresetsFor,
+  sizeStateForEditInputs,
   sizeStateForProvider,
   sizeToParam,
   validateSize,
@@ -281,5 +282,26 @@ describe('formatAspectRatio', () => {
   it('縦横比のエラーに制約の範囲が入る', () => {
     const result = validateSize(sdwebuiConstraints, 2048, 256)
     expect(result.errors.some((e) => e.includes('1:4') && e.includes('4:1'))).toBe(true)
+  })
+})
+
+describe('sizeStateForEditInputs(入力画像を足したとき)', () => {
+  const square = { mode: 'custom' as const, width: 1024, height: 1024 }
+
+  it('auto を受け付けないプロバイダーで、利用者が変えていなければ未指定にする', () => {
+    expect(sizeStateForEditInputs(sdwebuiConstraints, square, false)).toEqual({ ...square, mode: 'unspecified' })
+  })
+
+  it('利用者が変えた後は上書きしない', () => {
+    expect(sizeStateForEditInputs(sdwebuiConstraints, square, true)).toBeNull()
+  })
+
+  it('既に未指定なら何もしない', () => {
+    expect(sizeStateForEditInputs(sdwebuiConstraints, { ...square, mode: 'unspecified' }, false)).toBeNull()
+  })
+
+  it('auto を受け付けるプロバイダー(OpenAI)やサイズの無いプロバイダーでは何もしない', () => {
+    expect(sizeStateForEditInputs(constraints, square, false)).toBeNull()
+    expect(sizeStateForEditInputs(undefined, square, false)).toBeNull()
   })
 })

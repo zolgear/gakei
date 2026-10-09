@@ -1983,6 +1983,41 @@
       "deleteConfirmMessage": "Basic 認証の資格情報を削除します。",
       "deleteConfirmWarning": "WebUI に --api-auth が掛かっていると、接続できなくなります。",
       "deleteConfirmLabel": "削除する"
+    },
+    "lora": {
+      "trigger": "LoRA",
+      "triggerTitle": "接続先の LoRA を選んでプロンプトに入れる",
+      "dialogTitle": "LoRA を選ぶ",
+      "searchLabel": "LoRA を探す",
+      "searchPlaceholder": "名前で探す",
+      "count": "{shown} / {total} 件",
+      "noMatch": "一致する LoRA はありません。",
+      "loading": "LoRA の一覧を読み込み中...",
+      "loadFailed": "LoRA の一覧を取得できませんでした。",
+      "loadFailedWithReason": "LoRA の一覧を取得できませんでした: {reason}",
+      "retry": "もう一度試す",
+      "empty": "LoRA が見つかりません",
+      "emptyHelpAdmin": "WebUI に LoRA を足したばかりのときは、一覧を読み直します。",
+      "emptyHelpUser": "WebUI に LoRA を足したばかりのときは、管理者に一覧の読み直しを頼んでください。",
+      "refresh": "一覧を読み直す",
+      "refreshing": "読み直し中...",
+      "refreshFailed": "一覧を読み直せませんでした。",
+      "inPrompt": "入力済み",
+      "back": "← 一覧に戻る",
+      "aliasLabel": "別名: {alias}",
+      "weight": "重み",
+      "insert": "プロンプトに入れる",
+      "inserted": "プロンプトに入っています",
+      "triggerTags": "トリガーワードの候補",
+      "triggerTagsHelp": "学習データのタグの多い順です。タップでプロンプトに足します。",
+      "noTriggerTags": "この LoRA には学習データのタグの記録がありません。",
+      "addTrigger": "「{tag}」をプロンプトに足す",
+      "triggerAdded": "「{tag}」はプロンプトに入っています",
+      "baseModels": {
+        "sdxl": "SDXL",
+        "sd1": "SD1.5",
+        "unknown": "不明"
+      }
     }
   },
   "share": {

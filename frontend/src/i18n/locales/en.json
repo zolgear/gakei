@@ -1983,6 +1983,41 @@
       "deleteConfirmMessage": "This deletes the Basic authentication credentials.",
       "deleteConfirmWarning": "If the WebUI uses --api-auth, GAKEI will no longer be able to connect.",
       "deleteConfirmLabel": "Delete"
+    },
+    "lora": {
+      "trigger": "LoRA",
+      "triggerTitle": "Pick a LoRA from the server and add it to the prompt",
+      "dialogTitle": "Choose a LoRA",
+      "searchLabel": "Search LoRAs",
+      "searchPlaceholder": "Search by name",
+      "count": "{shown} / {total}",
+      "noMatch": "No matching LoRAs.",
+      "loading": "Loading LoRAs...",
+      "loadFailed": "Could not load the LoRA list.",
+      "loadFailedWithReason": "Could not load the LoRA list: {reason}",
+      "retry": "Try again",
+      "empty": "No LoRAs found",
+      "emptyHelpAdmin": "If you just added LoRAs to the WebUI, reload the list.",
+      "emptyHelpUser": "If LoRAs were just added to the WebUI, ask an administrator to reload the list.",
+      "refresh": "Reload lists",
+      "refreshing": "Reloading...",
+      "refreshFailed": "Could not reload the lists.",
+      "inPrompt": "In prompt",
+      "back": "← Back to list",
+      "aliasLabel": "Alias: {alias}",
+      "weight": "Weight",
+      "insert": "Add to prompt",
+      "inserted": "Already in the prompt",
+      "triggerTags": "Suggested trigger words",
+      "triggerTagsHelp": "Most frequent training tags first. Tap to add to the prompt.",
+      "noTriggerTags": "This LoRA has no record of its training tags.",
+      "addTrigger": "Add \"{tag}\" to the prompt",
+      "triggerAdded": "\"{tag}\" is already in the prompt",
+      "baseModels": {
+        "sdxl": "SDXL",
+        "sd1": "SD1.5",
+        "unknown": "Unknown"
+      }
     }
   },
   "share": {

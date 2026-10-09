@@ -40,6 +40,7 @@ import {
 import {
   paramToSizeState,
   roundSizeStateToMultiple,
+  sizeStateForEditInputs,
   sizeStateForProvider,
   sizeToParam,
   validateSizeState,
@@ -112,6 +113,7 @@ export interface RunFormLogic {
   isFieldEnabledFor: (name: string) => boolean
 
   sizeState: SizeState
+  /** 利用者がサイズ欄で変えたとき用(以後、入力画像を足してもサイズを自動では変えない)。 */
   setSizeState: (state: SizeState) => void
 
   /**
@@ -188,6 +190,13 @@ export function useRunFormLogic(
   const [sizeState, setSizeState] = useState<SizeState>(() =>
     paramToSizeState(initialRef.current.params.size),
   )
+  // 利用者がサイズ欄で自分で変えたか。変えた後は、入力画像を足したときの自動の切り替え
+  // (`sizeStateForEditInputs`)をしない。「新規生成」で戻す。
+  const [sizeTouchedByUser, setSizeTouchedByUser] = useState(false)
+  const setSizeStateByUser = useCallback((state: SizeState) => {
+    setSizeTouchedByUser(true)
+    setSizeState(state)
+  }, [])
   // ADR-0022: 覚えているグループ id(削除済みかもしれない)。表示・送信には一覧で解決した
   // resolvedAssetGroupId を使い、ここは書き換えない(effect で掃除すると setState-in-effect になる)。
   const [assetGroupId, setAssetGroupId] = useState<string | null>(initialRef.current.assetGroupId ?? null)
@@ -323,6 +332,19 @@ export function useRunFormLogic(
   const promptValid = prompt.length > 0 && prompt.length <= promptMax
 
   const imageInputCount = formState.inputs.filter((i) => i.role === 'image').length
+  // 入力画像を足した(0 枚 → 1 枚以上)とき、auto を受け付けないプロバイダー(SD WebUI)で
+  // サイズが既定の幅×高さのままなら「未指定」にし、サーバーに入力画像の寸法から決めさせる
+  // (ADR-0038 2章)。描画中に前回の値と比べる(effect で setState しない)。初期表示の入力画像
+  // (「同じ設定で再実行」など)は「足した」に当たらないので、記録のサイズを変えない。
+  const hasImageInputs = imageInputCount > 0
+  const [prevHasImageInputs, setPrevHasImageInputs] = useState(hasImageInputs)
+  if (hasImageInputs !== prevHasImageInputs) {
+    setPrevHasImageInputs(hasImageInputs)
+    if (hasImageInputs) {
+      const next = sizeStateForEditInputs(providerEntry?.size, sizeState, sizeTouchedByUser)
+      if (next) setSizeState(next)
+    }
+  }
   const editInputsValid = imageInputCount <= maxInputImages
   const inputCountRequirementReason = inputCountRequirementMessage(opCaps, operation, imageInputCount)
   const deletedInputAssetIds = useDeletedInputAssetIds(formState.inputs)
@@ -386,6 +408,7 @@ export function useRunFormLogic(
     setProvider(initial.provider)
     setModel(initial.model)
     setSizeState(paramToSizeState(initial.params.size))
+    setSizeTouchedByUser(false)
     setRawParams(fillSeedDefaults(initialGenerateDefs, initialRaw, loadSeedMode()))
   }
 
@@ -430,7 +453,12 @@ export function useRunFormLogic(
       const nextEntry = findProvider(caps, nextProvider)
       if (nextEntry?.size) {
         const constraints = nextEntry.size
-        setSizeState((prev) => sizeStateForProvider(constraints, nextEntry.default_size, prev))
+        setSizeState((prev) => {
+          const next = sizeStateForProvider(constraints, nextEntry.default_size, prev)
+          // 入力画像があるまま SD WebUI へ切り替えたときも、入力画像を足したときと同じにする。
+          if (imageInputCount === 0) return next
+          return sizeStateForEditInputs(constraints, next, sizeTouchedByUser) ?? next
+        })
       }
     }
     setProvider(nextProvider)
@@ -492,7 +520,7 @@ export function useRunFormLogic(
     isFieldEnabledFor: (name: string) =>
       isFieldEnabled(defs, rawParams, providerEntry?.conditional_params ?? [], name, { hasMask }),
     sizeState,
-    setSizeState,
+    setSizeState: setSizeStateByUser,
     assetGroupId: resolvedAssetGroupId,
     setAssetGroupId,
     assetGroups,

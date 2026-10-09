@@ -23,6 +23,10 @@
   `/sdapi/v1/scripts` と `/sdapi/v1/script-info` に足す。`{a|b}` を1枚ずつ展開し、
   `info.all_prompts` に入れる(組み合わせ生成では組み合わせの数だけ描く)。既定は拡張機能なし。
 - `scripts_status`: `/sdapi/v1/scripts` と `/script-info` の応答の状態(500 などで失敗を試す)。
+- `GET /sdapi/v1/loras`: `loras`(実物と同じ `name`・`alias`・`path`・`metadata`)を返す。既定は
+  架空の LoRA(`style-a`、`character-b` など)で、メタ情報には学習した人の環境の情報に当たる
+  `ss_dataset_dirs` などの秘密の値(`LORA_SECRET_MARKERS`)を入れてある。`loras = None` で 404。
+  `POST /sdapi/v1/refresh-loras` は `lora_refresh_count` を数える。
 - `return_grid=True`: 実物の `return_grid` と同じく、先頭にグリッドを足し
   `index_of_first_image = 1` を返す(2枚以上のとき)。
 """
@@ -66,6 +70,54 @@ DYNAMIC_PROMPTS_ARGS: list[tuple[str, Any]] = [
     ("Magic prompt model", "model-x"),
     ("Magic prompt blocklist regex", ""),
 ]
+
+# LoRA のメタ情報に入れる「外に出してはいけない」値(学習した人の環境の情報の代わり)
+LORA_SECRET_MARKERS = (
+    "/opt/fake-webui/training/secret-dataset",
+    "secret-training-comment",
+    "secret-folder-name",
+    "fakehash0123456789",
+)
+
+
+def default_loras() -> list[dict[str, Any]]:
+    """架空の LoRA の一覧。メタ情報の形は実物(kohya の `ss_*`、`modelspec.*`)に合わせた。"""
+    tag_frequency = {
+        f"10_{LORA_SECRET_MARKERS[2]}": {"style_a": 12, "1girl": 10, "outdoors": 3},
+        "5_other-folder": {"1girl": 4, "long_hair": 6},
+    }
+    return [
+        {
+            "name": "style-a",
+            "alias": "style-a",
+            "path": f"{FAKE_PATH_ROOT}/Lora/style-a.safetensors",
+            "metadata": {
+                "ss_base_model_version": "sdxl_base_v1-0",
+                # 実物では JSON 文字列で入っていることがある
+                "ss_tag_frequency": json.dumps(tag_frequency),
+                "ss_dataset_dirs": json.dumps({LORA_SECRET_MARKERS[0]: {"n_repeats": 10}}),
+                "ss_training_comment": LORA_SECRET_MARKERS[1],
+                "sshs_model_hash": LORA_SECRET_MARKERS[3],
+            },
+        },
+        {
+            "name": "Character-B",
+            "alias": "character-b-alias",
+            "path": f"{FAKE_PATH_ROOT}/Lora/sub/Character-B.safetensors",
+            "metadata": {
+                "modelspec.architecture": "stable-diffusion-v1/lora",
+                "ss_tag_frequency": {"img": {"character_b": 20, "smile": 2}},
+                "ss_training_comment": LORA_SECRET_MARKERS[1],
+            },
+        },
+        {
+            "name": "detail-c",
+            "alias": "detail-c",
+            "path": f"{FAKE_PATH_ROOT}/Lora/detail-c.safetensors",
+            "metadata": {},
+        },
+    ]
+
 
 _VARIANT_GROUP = re.compile(r"\{([^{}]*)\}")
 
@@ -191,6 +243,9 @@ class FakeSdWebui:
         self.script_infos: list[dict[str, Any]] = []
         self.scripts_status = 200
         self.return_grid = False
+        # LoRA(ADR-0038 8章)。None なら /sdapi/v1/loras が 404。
+        self.loras: list[dict[str, Any]] | None = default_loras()
+        self.lora_refresh_count = 0
 
     def enable_dynamic_prompts(
         self,
@@ -307,6 +362,15 @@ class FakeSdWebui:
             )
         if name == "refresh-checkpoints" and request.method == "POST":
             self.refresh_count += 1
+            return httpx.Response(200, json=None)
+        if name == "loras" and request.method == "GET":
+            if self.loras is None:
+                return httpx.Response(404, json={"detail": "Not Found"})
+            return httpx.Response(200, json=self.loras)
+        if name == "refresh-loras" and request.method == "POST":
+            if self.loras is None:
+                return httpx.Response(404, json={"detail": "Not Found"})
+            self.lora_refresh_count += 1
             return httpx.Response(200, json=None)
         if name in ("scripts", "script-info"):
             if self.scripts_status != 200:

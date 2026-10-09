@@ -68,6 +68,23 @@ export function sizeStateForProvider(
   return paramToSizeState(defaultSize ?? undefined)
 }
 
+/**
+ * Edit の入力画像を足したとき(またはプロバイダーを切り替えたときに入力画像があるとき)の
+ * サイズ。`auto` を受け付けないプロバイダー(SD WebUI)で、利用者がまだサイズを変えておらず
+ * 幅×高さ(既定の 1024×1024 など)が入っているなら「未指定」にする。未指定ならサーバーが
+ * 入力画像の寸法から決める(ADR-0038 2章)ので、入力の縦横比が崩れない。
+ * 変えなくてよいときは null。
+ */
+export function sizeStateForEditInputs(
+  constraints: SizeConstraints | null | undefined,
+  state: SizeState,
+  touchedByUser: boolean,
+): SizeState | null {
+  if (!constraints || constraints.allow_auto) return null
+  if (touchedByUser || state.mode !== 'custom') return null
+  return { ...state, mode: 'unspecified' }
+}
+
 /** select の「任意の幅×高さ」オプションの表示名。値は SIZE_PRESETS に含めず custom として扱う。 */
 export function customSizeLabel(): string {
   return msg().runForm.sizeInput.customLabel

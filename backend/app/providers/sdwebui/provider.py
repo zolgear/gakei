@@ -68,6 +68,7 @@ from app.providers.sdwebui.extensions import (
     output_limit,
     resolve_extensions,
 )
+from app.providers.sdwebui.loras import LoraInfo
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ class SdWebuiProvider:
         self._progress_interval = progress_interval
         self._availability_cache: tuple[float, tuple[bool, str | None]] | None = None
         self._catalog_cache: tuple[float, Catalog | None] | None = None
+        self._lora_cache: tuple[float, list[LoraInfo]] | None = None
 
     @classmethod
     def from_settings(
@@ -191,9 +193,11 @@ class SdWebuiProvider:
         )
 
     def invalidate_cache(self) -> None:
-        """一覧と到達性のキャッシュを捨てる(`POST /api/sdwebui/refresh`、資格情報の変更)。"""
+        """一覧(LoRA を含む)と到達性のキャッシュを捨てる(`POST /api/sdwebui/refresh`、
+        資格情報の変更)。"""
         self._availability_cache = None
         self._catalog_cache = None
+        self._lora_cache = None
 
     # -- availability / 一覧 ---------------------------------------------------------
 
@@ -224,6 +228,18 @@ class SdWebuiProvider:
             catalog = None
         self._catalog_cache = (now, catalog)
         return catalog
+
+    def loras(self) -> list[LoraInfo]:
+        """LoRA の一覧(ADR-0038 8章)。チェックポイントの一覧と同じく 60 秒キャッシュする。
+        取れなければ `SdWebuiError`(失敗は覚えない)。"""
+        now = time.monotonic()
+        if self._lora_cache is not None:
+            cached_at, cached = self._lora_cache
+            if now - cached_at < _CATALOG_CACHE_SECONDS:
+                return cached
+        loras = self.client().fetch_loras()
+        self._lora_cache = (now, loras)
+        return loras
 
     # -- capabilities -------------------------------------------------------------------
 

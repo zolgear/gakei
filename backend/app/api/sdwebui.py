@@ -1,10 +1,11 @@
 """SD WebUI(A1111 互換の API)の設定の API(ADR-0038 6章)。
 
-接続先の URL、Basic 認証の資格情報、接続テスト、一覧の読み直し。実行そのもの
+接続先の URL、Basic 認証の資格情報、接続テスト、一覧の読み直し、LoRA の一覧(8章)。実行そのもの
 (`SdWebuiProvider`)はここでは扱わない。
 
 資格情報の値は応答・ログ・エラーメッセージに一部も出さない(`credentials_set` だけ)。
-接続先の `/sdapi/v1/options` の中身や、一覧の `filename`(フルパス)も返さない。
+接続先の `/sdapi/v1/options` の中身や、一覧の `filename`(フルパス)も返さない。LoRA は
+name・alias・ベースモデル・トリガーの候補だけを返し、`path` と学習時のメタ情報は返さない。
 """
 
 from __future__ import annotations
@@ -26,6 +27,8 @@ from app.domain.schemas import (
     SdWebuiConnectionTestRequest,
     SdWebuiConnectionTestResponse,
     SdWebuiCredentialsRequest,
+    SdWebuiLora,
+    SdWebuiLorasResponse,
     SdWebuiStatusResponse,
 )
 from app.i18n import t
@@ -297,7 +300,7 @@ def refresh(
     settings: Settings = Depends(get_settings),
     registry: ProviderRegistry = Depends(get_registry),
 ) -> SdWebuiStatusResponse:
-    """WebUI にチェックポイントの一覧を読み直させ、GAKEI の一覧のキャッシュを捨てる。"""
+    """WebUI にチェックポイントと LoRA の一覧を読み直させ、GAKEI の一覧のキャッシュを捨てる。"""
     _reject_if_locked(db, t("sdwebui.api.lockedRefresh"))
     url, _source = connection.resolve_effective_url(db, settings)
     if url is None:
@@ -305,9 +308,37 @@ def refresh(
     client = _make_client(url, connection.read_credentials(settings.data_dir))
     try:
         client.refresh_checkpoints()
+        client.refresh_loras()
     except SdWebuiError as exc:
         raise HTTPException(status_code=409, detail=exc.message) from exc
     provider = _registered(registry)
     if provider is not None:
         provider.invalidate_cache()
     return _build_status(db, settings, registry)
+
+
+@router.get("/loras", response_model=SdWebuiLorasResponse, operation_id="list_sdwebui_loras")
+def list_loras(registry: ProviderRegistry = Depends(get_registry)) -> SdWebuiLorasResponse:
+    """接続先の LoRA の一覧(ADR-0038 8章)。プロンプトに `<lora:name:重み>` を入れる補助に使う。
+
+    接続していない(切り離した・未設定)ときと、接続先から一覧を取れないときは 409。
+    LoRA の機能が無い接続先では空の一覧。
+    """
+    provider = _registered(registry)
+    if provider is None:
+        raise HTTPException(status_code=409, detail=t("sdwebui.api.notConnected"))
+    try:
+        loras = provider.loras()
+    except SdWebuiError as exc:
+        raise HTTPException(status_code=409, detail=exc.message) from exc
+    return SdWebuiLorasResponse(
+        items=[
+            SdWebuiLora(
+                name=lora.name,
+                alias=lora.alias,
+                base_model=lora.base_model,
+                trigger_tags=list(lora.trigger_tags),
+            )
+            for lora in loras
+        ]
+    )

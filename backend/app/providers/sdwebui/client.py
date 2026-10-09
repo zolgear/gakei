@@ -12,6 +12,8 @@ GAKEI の DB や Run には依存しない。`SdWebuiProvider` と `app/api/sdwe
 - `GET /sdapi/v1/scripts`、`/sdapi/v1/script-info`: 拡張機能(`alwayson_scripts`)の名前と引数の
   並び(ADR-0038 7章)。取れなければ拡張機能なしとして扱い、一覧の取得は止めない。
 - `POST /sdapi/v1/refresh-checkpoints`: チェックポイントの一覧を WebUI に読み直させる。
+- `GET /sdapi/v1/loras`、`POST /sdapi/v1/refresh-loras`: LoRA の一覧と読み直し(ADR-0038 8章)。
+  `path` とメタ情報は `loras.py` で読み捨て、name・alias・ベースモデル・トリガーの候補だけを持つ。
 - `POST /sdapi/v1/txt2img`: 応答 `{"images": [base64...], "info": "<JSON 文字列>"}`。
 - `POST /sdapi/v1/img2img`: 本文に `init_images`(base64 の配列)と `mask`(base64。白が描き直す
   範囲)。応答は txt2img と同じ形。
@@ -36,12 +38,15 @@ from typing import Any, Literal
 import httpx
 
 from app.i18n import t
+from app.providers.sdwebui.loras import LoraInfo, parse_loras
 
 Flavor = Literal["forge", "a1111"]
 Credentials = tuple[str, str]
 
 # 一覧の取得に使う既定のタイムアウト(秒)
 CATALOG_TIMEOUT_SECONDS = 5.0
+# LoRA の一覧(メタ情報を含むので大きくなりうる)の取得のタイムアウト(秒)
+LORA_TIMEOUT_SECONDS = 30.0
 # 失敗の要約の長さの上限
 _SUMMARY_MAX_LENGTH = 500
 
@@ -418,6 +423,41 @@ class SdWebuiClient:
         except httpx.HTTPError as exc:
             raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.connectFailed")) from exc
         if response.status_code != 200:
+            failure = _status_failure(response.status_code)
+            raise SdWebuiError("sdwebuiUnavailable", failure.message or "")
+
+    def fetch_loras(self, timeout: float = LORA_TIMEOUT_SECONDS) -> list[LoraInfo]:
+        """`GET /sdapi/v1/loras`(ADR-0038 8章)。`path` とメタ情報は `parse_loras` で読み捨てる。
+
+        LoRA の機能が無い(404)ときは空の一覧。接続できなければ `SdWebuiError`。
+        """
+        try:
+            with self._sync_client(timeout) as http:
+                response = http.get(_join(self.base_url, "/sdapi/v1/loras"))
+        except httpx.TimeoutException as exc:
+            raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.connectTimeout")) from exc
+        except httpx.HTTPError as exc:
+            raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.connectFailed")) from exc
+        if response.status_code == 404:
+            return []
+        if response.status_code != 200:
+            failure = _status_failure(response.status_code)
+            raise SdWebuiError("sdwebuiUnavailable", failure.message or "")
+        body = _safe_json(response)
+        if not isinstance(body, list):
+            raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.parseFailed"))
+        return parse_loras(body)
+
+    def refresh_loras(self, timeout: float = 30.0) -> None:
+        """`POST /sdapi/v1/refresh-loras`。LoRA の機能が無い(404)ときは何もしない。"""
+        try:
+            with self._sync_client(timeout) as http:
+                response = http.post(_join(self.base_url, "/sdapi/v1/refresh-loras"))
+        except httpx.TimeoutException as exc:
+            raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.connectTimeout")) from exc
+        except httpx.HTTPError as exc:
+            raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.connectFailed")) from exc
+        if response.status_code not in (200, 404):
             failure = _status_failure(response.status_code)
             raise SdWebuiError("sdwebuiUnavailable", failure.message or "")
 

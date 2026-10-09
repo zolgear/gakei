@@ -384,9 +384,32 @@ export interface paths {
         put?: never;
         /**
          * Refresh
-         * @description WebUI にチェックポイントの一覧を読み直させ、GAKEI の一覧のキャッシュを捨てる。
+         * @description WebUI にチェックポイントと LoRA の一覧を読み直させ、GAKEI の一覧のキャッシュを捨てる。
          */
         post: operations["refresh_sdwebui"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/loras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Loras
+         * @description 接続先の LoRA の一覧(ADR-0038 8章)。プロンプトに `<lora:name:重み>` を入れる補助に使う。
+         *
+         *     接続していない(切り離した・未設定)ときと、接続先から一覧を取れないときは 409。
+         *     LoRA の機能が無い接続先では空の一覧。
+         */
+        get: operations["list_sdwebui_loras"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4526,6 +4549,28 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * SdWebuiLora
+         * @description 接続先の LoRA 1つ(ADR-0038 8章)。`path` とその他のメタ情報は返さない。
+         */
+        SdWebuiLora: {
+            /** Name */
+            name: string;
+            /** Alias */
+            alias?: string | null;
+            /** Base Model */
+            base_model?: ("sdxl" | "sd1") | null;
+            /** Trigger Tags */
+            trigger_tags?: string[];
+        };
+        /**
+         * SdWebuiLorasResponse
+         * @description `GET /api/sdwebui/loras`。name の順(大文字小文字を無視)。
+         */
+        SdWebuiLorasResponse: {
+            /** Items */
+            items: components["schemas"]["SdWebuiLora"][];
+        };
         /** SdWebuiStatusResponse */
         SdWebuiStatusResponse: {
             /** Url */
@@ -5892,6 +5937,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sdwebui_loras: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiLorasResponse"];
                 };
             };
             /** @description Validation Error */

@@ -49,6 +49,7 @@ import { ModelSelect } from './ModelSelect'
 import { OtherParamsDetails, PrimaryParamFields } from './ParamFields'
 import { AssetGroupField } from '../run-form/AssetGroupField'
 import { PromptToolsRow } from './PromptToolsRow'
+import { LoraPickerButton } from '../sdwebui/LoraPickerButton'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
 import { InputPaneBottomLayout } from './InputPaneBottomLayout'
@@ -419,6 +420,18 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
           }}
           fieldLabel={ip.promptLabel}
         />
+      }
+      providerTools={
+        form.provider === 'sdwebui' ? (
+          <LoraPickerButton
+            prompt={form.prompt}
+            escapeParens={shouldEscapeParens(form.provider)}
+            onInsert={(text, mode, cursorPos) => {
+              setSubmittedNotice(null)
+              form.insertPrompt(text, mode, cursorPos)
+            }}
+          />
+        ) : null
       }
     />
   )

@@ -213,3 +213,4 @@ ADR-0013 で ComfyUI を加えたときと同じく、ADR-0001 の「迷った�
 6. [ ] `docs/sdwebui.md` を書く
 7. [ ] Dynamic Prompts に対応する(7章。txt2img と img2img の両方。img2img は img2img 用の script-info で組み立てる)
 8. [ ] 実物の Forge で、t2i、img2img、inpaint、チェックポイントの切り替え、Basic 認証を手動で確認する
+9. [x] LoRA の選択(8章)を作る(`GET /api/sdwebui/loras`、「一覧を読み直す」での `refresh-loras`、プロンプト欄の「LoRA」。偽の WebUI でのテストを含む)

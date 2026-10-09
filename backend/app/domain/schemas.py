@@ -1018,6 +1018,24 @@ class SdWebuiStatusResponse(BaseModel):
     checkpoint_count: int | None = None
 
 
+class SdWebuiLora(BaseModel):
+    """接続先の LoRA 1つ(ADR-0038 8章)。`path` とその他のメタ情報は返さない。"""
+
+    name: str
+    # name と違うときだけ
+    alias: str | None = None
+    # 学習時のメタ情報から分かるベースモデル。分からなければ null。
+    base_model: Literal["sdxl", "sd1"] | None = None
+    # `ss_tag_frequency` を足し合わせて多い順(最大 20。`_` は空白)。
+    trigger_tags: list[str] = Field(default_factory=list)
+
+
+class SdWebuiLorasResponse(BaseModel):
+    """`GET /api/sdwebui/loras`。name の順(大文字小文字を無視)。"""
+
+    items: list[SdWebuiLora]
+
+
 class SdWebuiConnectionTestRequest(BaseModel):
     """接続テスト(`POST /api/sdwebui/connection/test`)。
 
