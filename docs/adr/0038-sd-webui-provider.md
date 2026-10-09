@@ -72,7 +72,7 @@ ADR-0003 のルール4(`params` には API に送った値をそのまま保存�
   - `/internal/progress` が使えない実装(404 など)では、`GET /sdapi/v1/progress` に切り替える。こちらは WebUI を直接使っている人の進み具合が混ざることがあるので、目安として扱う。
   - 進捗は表示のためだけに使い、Run の結果には使わない。
 - **マスクは送るときだけ変換する。** GAKEI のマスク(alpha = 0 が編集範囲)から、白が編集範囲の白黒 PNG を作って送る。Asset の原本は変えない(ADR-0004)。
-- 出力は `images` の順に Asset にする(`output_index`)。WebUI が応答に足すことがある補助の画像(グリッドなど)は、`batch_size` を超える分を捨てる。
+- 出力は `images` の順に Asset にする(`output_index`)。WebUI が応答に足すことがある補助の画像は取り込まない。先頭のグリッドは `info.index_of_first_image` で飛ばし(`return_grid` が有効な WebUI は先頭にグリッドを足す)、残りは `batch_size` を超える分を捨てる。
 - **キャンセルは待機中(`queued`)の Run だけ。** `POST /sdapi/v1/interrupt` は、誰が始めたかに関係なく WebUI の実行中のものを止めるので使わない(ADR-0013 5章と同じ理由)。
 - 再起動で中断した Run は `failed` + `interrupted`(ADR-0008)。起動時に、有効でないプロバイダーの `queued` の Run は `failed` + `providerUnavailable`(ADR-0013 と同じ)。
 
@@ -105,12 +105,12 @@ A1111 互換の WebUI の拡張機能のうち、`alwayson_scripts` で動くも
 - **対応する拡張機能は GAKEI が1つずつ決める(アダプター)。** 接続先の `/sdapi/v1/scripts` に名前があるときだけ、その拡張機能のパラメーターをフォームに出す。任意の拡張機能の引数を汎用のフォームで出すことはしない(項目の意味が分からないため。2章の案 B と同じ理由)。
 - **引数の組み立て:** `/sdapi/v1/script-info` の引数の並び(`label` と既定の `value`)を取り、GAKEI のパラメーターに当たる引数だけを **label で探して** 値を差し替え、残りは既定値のまま送る。並び順や引数の数は拡張機能の版で変わるので、位置で決め打ちしない。必要な label が見つからなければ、その拡張機能は「対応外の版」として項目を出さない。
 - **記録:** 組み立てた `alwayson_scripts`(スクリプト名と引数の全体)を `sdwebui_request` に入れる(ADR-0003 ルール4)。対応する拡張機能が接続先にあるときは、利用者が値を変えなくても毎回明示して送る。WebUI の画面の既定値が後で変わっても、Run の記録と実際が食い違わないようにするため。
-- **出力ごとのプロンプト:** 応答の `info.all_prompts` と `all_negative_prompts` を、出力の順に記録する(`usage`)。画面では、Asset ごとに「展開後のプロンプト」として見せる(ComfyUI の最終プロンプト、ADR-0030 と同じ扱い。検索や自動タイトルの対象にするかは別に決める)。拡張機能を使わない Run でも記録してよい(プロンプトと同じなら表示しない)。
+- **出力ごとのプロンプト:** 応答の `info.all_prompts` と `all_negative_prompts` を、出力の順に `usage` と `run.text_outputs`(ADR-0030。`output_index` 付きの `final_prompt` / `final_negative_prompt`)に記録する。画面では、Asset ごとに「展開後のプロンプト」として見せる。拡張機能を使わない Run でも記録し、Run のプロンプトと同じなら表示しない。検索や自動タイトルの対象にするかは別に決める。
 
 #### Dynamic Prompts(sd-dynamic-prompts)
 
 - パラメーター: `dynamic_prompts`(有効/無効。既定は有効。WebUI の既定に合わせる)、`dynamic_prompts_combinatorial`(組み合わせをすべて作る。既定は無効)。
-- 組み合わせ生成では、WebUI は組み合わせの数だけ画像を作り、GAKEI の枚数(`batch_size`)は効かない(Forge で確認。`{red|blue|green}` で batch 1 でも 2 でも 3 枚)。GAKEI は引数「Max generations」に上限(32)を入れて送り、作られる枚数を抑える。組み合わせ生成のときは、フォームの枚数を使わない旨を示す。返った画像はすべて取り込む(4章の「batch_size を超える分を捨てる」は、組み合わせ生成のときは上限 32 に読み替える)。
+- 組み合わせ生成では、WebUI は組み合わせの数だけ画像を作り、GAKEI の枚数(`batch_size`)は効かない(Forge で確認。`{red|blue|green}` で batch 1 でも 2 でも 3 枚)。GAKEI は引数「Max generations」に上限(32)を入れて送り、作られる枚数を抑える。組み合わせ生成のときは、フォームの枚数を使わない旨を示す。画像の枚数は `info.all_prompts` の数で決め(補助の画像を混ぜないため)、上限 32 枚まで取り込む(4章の「batch_size を超える分を捨てる」は、組み合わせ生成のときはこの規則に読み替える)。捨てた枚数は `usage` に記録する。
 - 出さないもの: Magic prompt、I'm feeling lucky、Attention grabber(外部のモデルやネットワークを使う、または結果の再現が難しい)、Jinja2 テンプレート、「画像を作らない」。これらは常に無効として送る。
 - ワイルドカード(`__名前__`)は WebUI 側のファイルをそのまま使う。GAKEI は一覧を出さない。見つからないときは展開されずに残る(展開後のプロンプトで分かる)。
 - Dynamic Prompts が無い接続先では、項目を出さない。`{a|b}` はそのまま WebUI に届く。
