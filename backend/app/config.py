@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     comfyui_url: str = Field(default="", alias="COMFYUI_URL")
     comfyui_timeout_seconds: float = Field(default=1800.0, alias="COMFYUI_TIMEOUT_SECONDS")
 
+    # ADR-0038 6章: Stable Diffusion WebUI(A1111 互換の API。実験)。既定は無効(空文字)。
+    # ComfyUI と同じく、画面(設定 → SD WebUI)で一度も設定していない間だけ使う既定値。
+    sdwebui_url: str = Field(default="", alias="SDWEBUI_URL")
+    sdwebui_timeout_seconds: float = Field(default=600.0, alias="SDWEBUI_TIMEOUT_SECONDS")
+
     # ADR-0019: 個人モード(none)か OIDC(Keycloak・Entra ID 等)か。ADR-0034 1章: 明示した
     # ときだけ DB(画面の設定)より優先し、画面のモード切り替えをロックする(緊急の無効化にも
     # 使う)。未指定(None)なら DB → 既定 none。実効のモードは `app.auth.runtime` から読む。

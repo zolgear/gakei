@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.domain.models import AppSetting
 from app.i18n import t
-from app.providers.registry import _is_loopback_url
+from app.providers.registry import is_loopback_url
 
 logger = logging.getLogger(__name__)
 
@@ -95,5 +95,5 @@ def validate_connection_url(url: str, *, allow_non_loopback: bool) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ComfyUIConnectionValidationError(t("comfyui.connection.invalidUrl"))
-    if not allow_non_loopback and not _is_loopback_url(url):
+    if not allow_non_loopback and not is_loopback_url(url):
         raise ComfyUIConnectionValidationError(t("comfyui.connection.nonLoopback"))

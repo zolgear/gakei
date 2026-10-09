@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
 
 from app.i18n import t
-from app.providers.registry import _is_loopback_url
+from app.providers.registry import is_loopback_url
 
 if TYPE_CHECKING:
     from app.config import Settings
@@ -248,7 +248,7 @@ def normalize_base_url(url: str) -> str:
 
 def is_insecure_base_url(url: str) -> bool:
     """ループバック以外への `http`(TLS なし)かどうか。"""
-    return urlparse(url).scheme == "http" and not _is_loopback_url(url)
+    return urlparse(url).scheme == "http" and not is_loopback_url(url)
 
 
 def warn_if_insecure_base_url(url: str) -> None:

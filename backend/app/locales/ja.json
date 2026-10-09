@@ -128,6 +128,64 @@
       "historyErrorNoDetails": "ComfyUI の実行がエラーで終了しました(詳細不明)。"
     }
   },
+  "sdwebui": {
+    "connection": {
+      "invalidUrl": "URL は http:// または https:// で、ホストを含む形式で指定してください。",
+      "urlHasExtras": "URL にユーザー名・パスワード、クエリー(?)、フラグメント(#)は含められません。Basic 認証のユーザー名とパスワードは資格情報の欄で設定してください。",
+      "nonLoopback": "ループバック(127.0.0.1 など)以外のアドレスです。入力画像とプロンプトをネットワーク越しに送信することになるため、確認のうえチェックを入れて保存してください。"
+    },
+    "credentials": {
+      "invalid": "ユーザー名とパスワードは、それぞれ1〜256文字で、制御文字を含めずに指定してください。",
+      "usernameColon": "ユーザー名に「:」は使えません。",
+      "bothRequired": "ユーザー名とパスワードは両方を指定してください。"
+    },
+    "api": {
+      "connectionUrlMissing": "接続先の URL が指定されていません。",
+      "notConnected": "SD WebUI に接続していません。",
+      "lockedChangeConnection": "SD WebUI の Run が実行中または待機中のため、接続設定を変更できません。",
+      "lockedDetach": "SD WebUI の Run が実行中または待機中のため、切り離せません。",
+      "lockedChangeCredentials": "SD WebUI の Run が実行中または待機中のため、資格情報を変更できません。",
+      "lockedRefresh": "SD WebUI の Run が実行中または待機中のため、一覧を読み直せません。"
+    },
+    "client": {
+      "apiNotEnabled": "SD WebUI の API が見つかりません(404)。WebUI を --api を付けて起動したか、起動のログに API のエラーがないか(--api-auth の書式の誤りなど)を確かめてください。",
+      "unauthorized": "SD WebUI の API に Basic 認証が必要か、資格情報が違います(401)。WebUI の --api-auth と同じユーザー名とパスワードを設定してください。",
+      "unexpectedResponse": "SD WebUI から予期しない応答がありました(status={status})。",
+      "connectTimeout": "SD WebUI への接続がタイムアウトしました。",
+      "connectFailed": "SD WebUI に接続できません。URL と、WebUI が起動しているかを確かめてください。",
+      "requestTimeout": "SD WebUI の応答を待つ間にタイムアウトしました。",
+      "parseFailed": "SD WebUI の応答を解釈できませんでした。",
+      "rejectedNoDetails": "SD WebUI がリクエストを拒否しました(詳細不明)。",
+      "executionFailedNoDetails": "SD WebUI での実行に失敗しました(詳細不明)。"
+    },
+    "provider": {
+      "unavailable": "SD WebUI に接続できないため、チェックポイントの一覧を取得できません。",
+      "unknownCheckpoint": "チェックポイント {model} は SD WebUI の一覧にありません。",
+      "missingRequestInternal": "Run の記録に SD WebUI へ送る本文(sdwebui_request)がありません。",
+      "timeoutExecuting": "SD WebUI の実行が時間内に終わりませんでした。",
+      "modelMismatch": "指定したチェックポイント({expected})ではなく、{actual} で描かれました。WebUI でチェックポイントを読み込めなかった可能性があります。",
+      "noOutputImages": "SD WebUI から画像が返りませんでした。",
+      "unreadableOutput": "SD WebUI から返った画像を読めませんでした。"
+    },
+    "params": {
+      "negativePrompt": "ネガティブプロンプト",
+      "negativePromptDescription": "描きたくないものを書きます。",
+      "sampler": "サンプラー",
+      "samplerDescription": "接続先の WebUI にあるサンプラーから選びます。",
+      "scheduler": "スケジューラー",
+      "schedulerDescription": "接続先の WebUI にあるスケジューラーから選びます。",
+      "steps": "ステップ数",
+      "stepsDescription": "多いほど細部まで描き込みますが、時間がかかります。",
+      "cfgScale": "CFG スケール",
+      "cfgScaleDescription": "プロンプトにどれだけ従うか。大きいほど忠実ですが、崩れやすくなります。",
+      "seed": "シード",
+      "vae": "VAE",
+      "vaeBuiltin": "チェックポイントに内蔵のもの",
+      "vaeDescription": "チェックポイントの種類(SD1.5、SDXL など)に合う VAE を選びます。WebUI の設定は変えず、この実行だけに使います。",
+      "count": "枚数",
+      "countDescription": "1回の実行で描く枚数(batch_size)。"
+    }
+  },
   "openaiSpec": {
     "editingStrong": "編集に強い",
     "fast": "高速",
@@ -180,7 +238,8 @@
   "settings": {
     "general": {
       "invalidModeration": "moderation は auto または low である必要があります",
-      "invalidTimeoutSeconds": "ComfyUI のタイムアウトは{min}〜{max}秒の整数である必要があります"
+      "invalidTimeoutSeconds": "ComfyUI のタイムアウトは{min}〜{max}秒の整数である必要があります",
+      "invalidSdwebuiTimeoutSeconds": "SD WebUI のタイムアウトは{min}〜{max}秒の整数である必要があります"
     },
     "mcp": {
       "invalidEnabled": "enabled は true か false である必要があります",
@@ -288,7 +347,8 @@
     "longEdgeMax": "長辺は{maxLongEdge}px以下である必要があります",
     "totalPixelsRange": "総画素数は{min}〜{max}である必要があります",
     "aspectRatioRange": "縦横比は 1:3 〜 3:1 の範囲である必要があります",
-    "sizeFormat": "size は \"auto\" または \"WIDTHxHEIGHT\" の形式である必要があります"
+    "sizeFormat": "size は \"auto\" または \"WIDTHxHEIGHT\" の形式である必要があります",
+    "autoNotAllowed": "このプロバイダーではサイズに auto を指定できません。幅と高さを指定してください。"
   },
   "assets": {
     "sourceAssetOnlyForSketch": "source_asset_id はスケッチ(kind=sketch)にのみ指定できます",

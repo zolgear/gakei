@@ -34,6 +34,7 @@ from app.api import llm_connections as llm_connections_api
 from app.api import pricing as pricing_api
 from app.api import prompt_sets as prompt_sets_api
 from app.api import runs as runs_api
+from app.api import sdwebui as sdwebui_api
 from app.api import search as search_api
 from app.api import settings as settings_api
 from app.api import shares as shares_api
@@ -56,7 +57,7 @@ from app.embedding.catalog import ClipModelDownloader
 from app.i18n import console_t, parse_accept_language, set_locale, t
 from app.mcp.endpoint import McpEndpoint
 from app.mcp.server import build_mcp_server, build_session_manager
-from app.providers.registry import _is_loopback_url, build_registry
+from app.providers.registry import build_registry, is_loopback_url
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
 from app.worker.progress import ProgressBus
@@ -144,7 +145,7 @@ def check_auth_env(config: EffectiveAuthConfig | Settings) -> None:
             if from_settings:
                 message += " " + console_t("app.authEmergencyDisable")
             raise AuthConfigError(message)
-        if parsed.scheme == "http" and not _is_loopback_url(value):
+        if parsed.scheme == "http" and not is_loopback_url(value):
             logger.warning(console_t("app.authUrlInsecure", name=name, value=value))
 
 
@@ -578,6 +579,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(about_api.router, dependencies=auth_dep)
     app.include_router(capabilities_api.router, dependencies=auth_dep)
     app.include_router(comfyui_api.router, dependencies=auth_dep)
+    # ADR-0038: SD WebUI の設定(更新系は各ルートで `require_admin`)。
+    app.include_router(sdwebui_api.router, dependencies=auth_dep)
     app.include_router(assets_api.router, dependencies=auth_dep)
     app.include_router(asset_groups_api.router, dependencies=auth_dep)
     app.include_router(runs_api.router, dependencies=auth_dep)

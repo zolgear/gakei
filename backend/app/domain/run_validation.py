@@ -94,10 +94,14 @@ def validate_run_request(
         _validate_param_value(pdef, value)
 
     if "size" in params:
+        # 制約はプロバイダーの capabilities のもの(OpenAI は sizes の既定と同じ値。
+        # SD WebUI は 8 の倍数・長辺 2048px。ADR-0038 2章)。
         try:
-            sizes.parse_size(str(params["size"]))
+            parsed_size = sizes.parse_size(str(params["size"]), caps.size)
         except sizes.InvalidSizeError as e:
             raise RunValidationError(str(e)) from e
+        if parsed_size is None and caps.size is not None and not caps.size.allow_auto:
+            raise RunValidationError(t("sizes.autoNotAllowed"))
 
     for pair in caps.incompatible_pairs:
         if params.get(pair.field_a) == pair.value_a and params.get(pair.field_b) == pair.value_b:

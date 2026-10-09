@@ -2,7 +2,7 @@
 
 GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を読む。通常は設定しなくても動く。API キーは起動後の設定画面から登録できる。
 
-`.env` を使う場合は、[`.env.example`](../.env.example)(英語。日本語版は [`.env.example.ja`](../.env.example.ja))をリポジトリ直下に `.env` としてコピーして編集する。`.env` はコミットしない。項目は「OpenAI」「保存先とサーバー」「ComfyUI」「認証」の4つの区画に分けてあり、`#KEY=value` の行は無効な設定(値は既定値)、`# 文章` の行は説明である。
+`.env` を使う場合は、[`.env.example`](../.env.example)(英語。日本語版は [`.env.example.ja`](../.env.example.ja))をリポジトリ直下に `.env` としてコピーして編集する。`.env` はコミットしない。項目は「OpenAI」「保存先とサーバー」「ComfyUI」(SD WebUI も同じ区画)「認証」の4つの区画に分けてあり、`#KEY=value` の行は無効な設定(値は既定値)、`# 文章` の行は説明である。
 
 ## 優先順位
 
@@ -21,6 +21,8 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 - ComfyUI の接続先(`COMFYUI_URL`): 設定画面で一度でも接続または切り離しをしたとき
 - `MODERATION`: 設定 → OpenAI(`/settings/openai`)で変えて、ページ上部の「保存」を押したとき
 - `COMFYUI_TIMEOUT_SECONDS`: 設定 → ComfyUI(`/settings/comfyui`)で変えて、ページ上部の「保存」を押したとき
+- SD WebUI の接続先(`SDWEBUI_URL`): 設定画面で一度でも接続または切り離しをしたとき
+- `SDWEBUI_TIMEOUT_SECONDS`: 設定 → SD WebUI(`/settings/sdwebui`)で変えて保存したとき
 
 ## 一覧
 
@@ -45,6 +47,8 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 | `MODERATION` | `low` | Generate のときに送る表現の制限。`auto` または `low`。設定画面(設定 → OpenAI)で保存すると、そちらが優先される |
 | `COMFYUI_URL` | なし(無効) | ローカルの ComfyUI の URL(例: `http://127.0.0.1:8188`)。通常は設定画面(設定 → ComfyUI)から接続する。ループバック以外を指定すると、起動時に警告を出す |
 | `COMFYUI_TIMEOUT_SECONDS` | `1800` | ComfyUI の1回の実行を待つ上限(秒)。設定画面(設定 → ComfyUI)で保存すると、そちらが優先される |
+| `SDWEBUI_URL` | なし(無効) | Stable Diffusion WebUI(A1111 互換の API)の URL(例: `http://127.0.0.1:7860`)。通常は設定画面(設定 → SD WebUI)から接続する。ユーザー名・パスワードを URL に含めることはできない(Basic 認証は画面で設定する)。ループバック以外を指定すると、起動時に警告を出す。詳しくは [sdwebui.md](sdwebui.md) |
+| `SDWEBUI_TIMEOUT_SECONDS` | `600` | SD WebUI の1回の実行を待つ上限(秒)。設定画面(設定 → SD WebUI)で保存すると、そちらが優先される |
 | `AUTH_MODE` | なし(`none`) | `none`(個人モード。認証なし)か `oidc`(OIDC でログイン。ADR-0019)。通常は書かず、管理者設定の「認証」で切り替える(ADR-0034)。書くと画面の設定より優先し、画面では切り替えられなくなる。締め出されたときは `AUTH_MODE=none` を書いて再起動する。手順は [auth.md](auth.md) |
 | `OIDC_ISSUER` | なし | OIDC 発行者の URL(例: `https://keycloak.example.com/realms/gakei`)。末尾に `/.well-known/openid-configuration` を付けた Discovery 文書を読む。oidc のとき必須。画面の設定が優先する |
 | `OIDC_CLIENT_ID` | なし | IdP に登録したクライアント ID。oidc のとき必須。画面の設定が優先する |

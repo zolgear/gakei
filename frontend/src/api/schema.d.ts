@@ -285,6 +285,114 @@ export interface paths {
         patch: operations["update_comfy_workflow"];
         trace?: never;
     };
+    "/api/sdwebui/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Status */
+        get: operations["get_sdwebui_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/connection/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Connection
+         * @description 入力中の URL(省略時は有効な URL)への接続を試す。設定は変えない。
+         *
+         *     保存時と違い、ループバック以外でも確認チェックなしで試せる(送るのは一覧の問い合わせ
+         *     だけで、画像やプロンプトは送らないため)。
+         */
+        post: operations["test_sdwebui_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Connection
+         * @description 接続・URL の変更。再起動なしで登録簿と実行レーンに反映する。
+         *
+         *     `runner.ensure_lane` が `asyncio.create_task` を呼ぶため、async にしている
+         *     (`app/api/comfyui.py` の `set_connection` と同じ理由)。
+         */
+        put: operations["set_sdwebui_connection"];
+        post?: never;
+        /**
+         * Detach Connection
+         * @description 切り離す。過去の Run と資格情報は消さない。
+         */
+        delete: operations["detach_sdwebui"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Credentials
+         * @description Basic 認証の資格情報を `secrets.json` に保存する。値は返さない。
+         */
+        put: operations["set_sdwebui_credentials"];
+        post?: never;
+        /** Delete Credentials */
+        delete: operations["delete_sdwebui_credentials"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh
+         * @description WebUI にチェックポイントの一覧を読み直させ、GAKEI の一覧のキャッシュを捨てる。
+         */
+        post: operations["refresh_sdwebui"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets": {
         parameters: {
             query?: never;
@@ -3087,6 +3195,7 @@ export interface components {
         GeneralSettingsResponse: {
             moderation: components["schemas"]["ModerationSetting"];
             comfyui_timeout_seconds: components["schemas"]["ComfyUITimeoutSetting"];
+            sdwebui_timeout_seconds: components["schemas"]["SdWebuiTimeoutSetting"];
         };
         /**
          * GeneralSettingsUpdateRequest
@@ -3102,6 +3211,8 @@ export interface components {
             moderation?: string | null;
             /** Comfyui Timeout Seconds */
             comfyui_timeout_seconds?: number | null;
+            /** Sdwebui Timeout Seconds */
+            sdwebui_timeout_seconds?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -4292,6 +4403,104 @@ export interface components {
             truncated: boolean;
         };
         /**
+         * SdWebuiConnectionRequest
+         * @description 接続・変更(`PUT /api/sdwebui/connection`)。
+         */
+        SdWebuiConnectionRequest: {
+            /** Url */
+            url: string;
+            /**
+             * Allow Non Loopback
+             * @default false
+             */
+            allow_non_loopback: boolean;
+        };
+        /**
+         * SdWebuiConnectionTestRequest
+         * @description 接続テスト(`POST /api/sdwebui/connection/test`)。
+         *
+         *     url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
+         *     試す(保存はしない)。省くと保存済みの資格情報を使う。
+         */
+        SdWebuiConnectionTestRequest: {
+            /** Url */
+            url?: string | null;
+            /** Username */
+            username?: string | null;
+            /** Password */
+            password?: string | null;
+        };
+        /** SdWebuiConnectionTestResponse */
+        SdWebuiConnectionTestResponse: {
+            /** Url */
+            url: string;
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason?: ("apiNotEnabled" | "unauthorized" | "unreachable" | "timeout" | "unexpectedResponse" | "parseFailed") | null;
+            /** Reason Message */
+            reason_message?: string | null;
+            /** Loopback */
+            loopback: boolean;
+            /** Flavor */
+            flavor?: ("forge" | "a1111") | null;
+            /** Checkpoint Count */
+            checkpoint_count?: number | null;
+        };
+        /**
+         * SdWebuiCredentialsRequest
+         * @description Basic 認証の資格情報(`PUT /api/sdwebui/credentials`)。値は応答に含めない。
+         */
+        SdWebuiCredentialsRequest: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
+        /** SdWebuiStatusResponse */
+        SdWebuiStatusResponse: {
+            /** Url */
+            url: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason?: ("apiNotEnabled" | "unauthorized" | "unreachable" | "timeout" | "unexpectedResponse" | "parseFailed") | null;
+            /** Reason Message */
+            reason_message?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "none";
+            /** Locked */
+            locked: boolean;
+            /** Loopback */
+            loopback?: boolean | null;
+            /** Credentials Set */
+            credentials_set: boolean;
+            /** Flavor */
+            flavor?: ("forge" | "a1111") | null;
+            /** Checkpoint Count */
+            checkpoint_count?: number | null;
+        };
+        /**
+         * SdWebuiTimeoutSetting
+         * @description SD WebUI の1回の実行を待つ上限(秒。ADR-0038 6章)。
+         */
+        SdWebuiTimeoutSetting: {
+            /** Value */
+            value: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+            /** Default */
+            default: number;
+        };
+        /**
          * SearchAssetHit
          * @description `AssetSummary` と同じ項目 + 一致箇所の抜粋。
          *
@@ -5362,6 +5571,235 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComfyWorkflowDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sdwebui_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_sdwebui_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SdWebuiConnectionTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiConnectionTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_sdwebui_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SdWebuiConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detach_sdwebui: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_sdwebui_credentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SdWebuiCredentialsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_sdwebui_credentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_sdwebui: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1,11 +1,12 @@
-"""Generate の moderation と ComfyUI のタイムアウトを設定画面から変える(ADR-0009、ADR-0013 7章)。
+"""Generate の moderation と ComfyUI・SD WebUI のタイムアウトを設定画面から変える(ADR-0009、
+ADR-0013 7章、ADR-0038 6章)。
 
 優先順位は ComfyUI の接続先(`app/domain/comfyui_connection.py`)と同じ3段階。
 
 1. DB の `app_setting` に画面で保存した値があれば、常にそれが勝つ。
-2. 保存された値が無ければ、環境変数(`MODERATION` / `COMFYUI_TIMEOUT_SECONDS`。既定値としてだけ
-   起動時に読む)。
-3. どちらも無ければ組み込みの既定値(`low` / 1800秒)。
+2. 保存された値が無ければ、環境変数(`MODERATION` / `COMFYUI_TIMEOUT_SECONDS` /
+   `SDWEBUI_TIMEOUT_SECONDS`。既定値としてだけ起動時に読む)。
+3. どちらも無ければ組み込みの既定値(`low` / 1800秒 / 600秒)。
 
 環境変数の値は DB に書き込まない。変更は再起動なしで反映する。moderation は Run 作成時
 (`finalize_params`)に、タイムアウトは ComfyUI の実行開始時(`execute`)に、その都度 DB を
@@ -26,6 +27,7 @@ from app.i18n import t
 
 MODERATION_KEY = "generation.moderation"
 TIMEOUT_KEY = "comfyui.timeout_seconds"
+SDWEBUI_TIMEOUT_KEY = "sdwebui.timeout_seconds"
 
 Moderation = Literal["auto", "low"]
 _MODERATION_VALUES: tuple[Moderation, ...] = get_args(Moderation)
@@ -125,15 +127,26 @@ def default_timeout_seconds(settings: Settings) -> int:
     return int(settings.comfyui_timeout_seconds)
 
 
-def get_saved_timeout_seconds(db: Session) -> int | None:
-    """DB に保存された値を返す。無い、または壊れている(整数でない・範囲外)なら None
-    (未設定のときと同じに扱う)。"""
-    value = _get_raw_value(db, TIMEOUT_KEY)
+def _get_saved_timeout(db: Session, key: str) -> int | None:
+    value = _get_raw_value(db, key)
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     if not (TIMEOUT_MIN_SECONDS <= value <= TIMEOUT_MAX_SECONDS):
         return None
     return value
+
+
+def _timeout_in_range(value: int | None) -> bool:
+    """`value=None`(リセット)は常に有効。それ以外は60〜10800の整数のみ。"""
+    if value is None:
+        return True
+    return not isinstance(value, bool) and TIMEOUT_MIN_SECONDS <= value <= TIMEOUT_MAX_SECONDS
+
+
+def get_saved_timeout_seconds(db: Session) -> int | None:
+    """DB に保存された値を返す。無い、または壊れている(整数でない・範囲外)なら None
+    (未設定のときと同じに扱う)。"""
+    return _get_saved_timeout(db, TIMEOUT_KEY)
 
 
 def resolve_timeout_seconds(db: Session, settings: Settings) -> tuple[int, Source]:
@@ -147,9 +160,7 @@ def resolve_timeout_seconds(db: Session, settings: Settings) -> tuple[int, Sourc
 
 def validate_timeout_seconds(value: int | None) -> None:
     """`value=None`(リセット)は常に有効。それ以外は60〜10800の整数のみ。"""
-    if value is None:
-        return
-    if isinstance(value, bool) or not (TIMEOUT_MIN_SECONDS <= value <= TIMEOUT_MAX_SECONDS):
+    if not _timeout_in_range(value):
         raise GeneralSettingsValidationError(
             t(
                 "settings.general.invalidTimeoutSeconds",
@@ -170,3 +181,45 @@ def save_timeout_seconds(db: Session, value: int | None) -> None:
         _delete(db, TIMEOUT_KEY)
         return
     _save(db, TIMEOUT_KEY, value)
+
+
+# -- SD WebUI のタイムアウト(秒。ADR-0038 6章) ----------------------------------
+# 範囲と優先順位は ComfyUI と同じ。既定は 600 秒。
+
+
+def default_sdwebui_timeout_seconds(settings: Settings) -> int:
+    """画面で一度も保存していないときの既定値(環境変数 SDWEBUI_TIMEOUT_SECONDS、無ければ
+    組み込みの600秒)。"""
+    return int(settings.sdwebui_timeout_seconds)
+
+
+def get_saved_sdwebui_timeout_seconds(db: Session) -> int | None:
+    return _get_saved_timeout(db, SDWEBUI_TIMEOUT_KEY)
+
+
+def resolve_sdwebui_timeout_seconds(db: Session, settings: Settings) -> tuple[int, Source]:
+    saved = get_saved_sdwebui_timeout_seconds(db)
+    if saved is not None:
+        return saved, "setting"
+    source: Source = "env" if "sdwebui_timeout_seconds" in settings.model_fields_set else "default"
+    return default_sdwebui_timeout_seconds(settings), source
+
+
+def validate_sdwebui_timeout_seconds(value: int | None) -> None:
+    if not _timeout_in_range(value):
+        raise GeneralSettingsValidationError(
+            t(
+                "settings.general.invalidSdwebuiTimeoutSeconds",
+                min=TIMEOUT_MIN_SECONDS,
+                max=TIMEOUT_MAX_SECONDS,
+            )
+        )
+
+
+def save_sdwebui_timeout_seconds(db: Session, value: int | None) -> None:
+    """保存する。`value=None` は保存済みの行を削除する(環境変数・既定値に戻す)。"""
+    validate_sdwebui_timeout_seconds(value)
+    if value is None:
+        _delete(db, SDWEBUI_TIMEOUT_KEY)
+        return
+    _save(db, SDWEBUI_TIMEOUT_KEY, value)

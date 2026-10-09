@@ -868,7 +868,7 @@ class OpenAIBaseUrlUpdateRequest(BaseModel):
 
 
 # -- General settings (ADR-0009、ADR-0013 7章) -------------------------------
-# moderation(Generate 専用)と ComfyUI のタイムアウトを画面から変える。優先順位は
+# moderation(Generate 専用)と ComfyUI・SD WebUI のタイムアウトを画面から変える。優先順位は
 # 画面で保存した値(`app_setting`) > 環境変数 > 組み込みの既定値。
 
 
@@ -885,9 +885,18 @@ class ComfyUITimeoutSetting(BaseModel):
     default: int
 
 
+class SdWebuiTimeoutSetting(BaseModel):
+    """SD WebUI の1回の実行を待つ上限(秒。ADR-0038 6章)。"""
+
+    value: int
+    source: Literal["setting", "env", "default"]
+    default: int
+
+
 class GeneralSettingsResponse(BaseModel):
     moderation: ModerationSetting
     comfyui_timeout_seconds: ComfyUITimeoutSetting
+    sdwebui_timeout_seconds: SdWebuiTimeoutSetting
 
 
 class GeneralSettingsUpdateRequest(BaseModel):
@@ -901,6 +910,7 @@ class GeneralSettingsUpdateRequest(BaseModel):
 
     moderation: str | None = None
     comfyui_timeout_seconds: int | None = None
+    sdwebui_timeout_seconds: int | None = None
 
 
 # -- ComfyUI (ADR-0013) ----------------------------------------------------
@@ -944,6 +954,69 @@ class ComfyUIConnectionRequest(BaseModel):
     url: str
     # ループバック以外の URL を保存するための、画面での確認チェック。
     allow_non_loopback: bool = False
+
+
+# -- SD WebUI(ADR-0038) ------------------------------------------------------------
+# 資格情報(Basic 認証)の値は返さず、設定済みかだけを返す。接続先の options や一覧の
+# filename(フルパス)も返さない。
+
+
+SdWebuiReason = Literal[
+    "apiNotEnabled", "unauthorized", "unreachable", "timeout", "unexpectedResponse", "parseFailed"
+]
+
+
+class SdWebuiStatusResponse(BaseModel):
+    url: str | None
+    enabled: bool
+    available: bool
+    # 機械可読の理由(available が false のとき)。reason_message は利用者向けの文言。
+    reason: SdWebuiReason | None = None
+    reason_message: str | None = None
+    source: Literal["setting", "env", "none"]
+    # true の間は接続設定と資格情報を変更できない(SD WebUI の Run が queued/running)。
+    locked: bool
+    loopback: bool | None = None
+    credentials_set: bool
+    # 接続できたときだけ。forge は Forge 系(forge_additional_modules がある)、a1111 はそれ以外。
+    flavor: Literal["forge", "a1111"] | None = None
+    checkpoint_count: int | None = None
+
+
+class SdWebuiConnectionTestRequest(BaseModel):
+    """接続テスト(`POST /api/sdwebui/connection/test`)。
+
+    url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
+    試す(保存はしない)。省くと保存済みの資格情報を使う。
+    """
+
+    url: str | None = None
+    username: str | None = None
+    password: str | None = None
+
+
+class SdWebuiConnectionTestResponse(BaseModel):
+    url: str
+    available: bool
+    reason: SdWebuiReason | None = None
+    reason_message: str | None = None
+    loopback: bool
+    flavor: Literal["forge", "a1111"] | None = None
+    checkpoint_count: int | None = None
+
+
+class SdWebuiConnectionRequest(BaseModel):
+    """接続・変更(`PUT /api/sdwebui/connection`)。"""
+
+    url: str
+    allow_non_loopback: bool = False
+
+
+class SdWebuiCredentialsRequest(BaseModel):
+    """Basic 認証の資格情報(`PUT /api/sdwebui/credentials`)。値は応答に含めない。"""
+
+    username: str
+    password: str
 
 
 class ComfyNodeInputInfo(BaseModel):

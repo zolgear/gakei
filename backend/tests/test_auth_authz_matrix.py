@@ -60,14 +60,15 @@ def test_all_non_auth_endpoints_require_login(client_oidc: TestClient) -> None:
 
 
 def test_all_settings_and_comfyui_mutations_require_admin(client_oidc: TestClient) -> None:
-    """`/api/settings/*` と `/api/comfyui/*` の非 GET は、一般ユーザーなら全て 403 になる。"""
+    """`/api/settings/*`、`/api/comfyui/*`、`/api/sdwebui/*`(ADR-0038)の非 GET は、一般ユーザー
+    なら全て 403 になる。"""
     login_as(client_oidc, "matrix-user@example.com", "Matrix User")
 
     failures: list[str] = []
     for path, method in _iter_paths_and_methods(client_oidc.app):
         if method == "get":
             continue
-        if not (path.startswith("/api/settings/") or path.startswith("/api/comfyui/")):
+        if not path.startswith(("/api/settings/", "/api/comfyui/", "/api/sdwebui/")):
             continue
         filled = _fill_path_params(path)
         response = client_oidc.request(method, filled, json={})

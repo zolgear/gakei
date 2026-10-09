@@ -54,6 +54,8 @@ def _isolate_from_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FAKE_PROVIDER", raising=False)
     # ADR-0013: テストは実物の ComfyUI(既定 127.0.0.1:8188)に接続しない。
     monkeypatch.setenv("COMFYUI_URL", "")
+    # ADR-0038: 実物の SD WebUI にも接続しない。
+    monkeypatch.setenv("SDWEBUI_URL", "")
 
 
 # --- DB の切り替え(ADR-0027 6章) ------------------------------------------------
