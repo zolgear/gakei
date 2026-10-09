@@ -4381,13 +4381,23 @@ export interface components {
         };
         /**
          * RunTextOutput
-         * @description 実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
-         *     (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った
-         *     グラフ(`run.params.comfyui_prompt`)から取った値。
+         * @description 実行時に作られたテキスト(ADR-0030 2章)。
+         *
+         *     - `role = "final_prompt"`: モデルに渡った最終プロンプト。ComfyUI では PE の出力で、Run に
+         *       1件(`output_index` は null。すべての出力に当たる)。`node_id`・`class_type`・`title` は
+         *       送ったグラフ(`run.params.comfyui_prompt`)から取った値。SD WebUI では Dynamic Prompts
+         *       などが1枚ずつ展開したプロンプトで、出力ごとに1件(`output_index` が出力の Asset の
+         *       `output_index` に当たる。ADR-0038 7章)。
+         *     - `role = "final_negative_prompt"`: SD WebUI の、出力ごとの展開後のネガティブプロンプト。
+         *
+         *     SD WebUI では、展開しなくても(元のプロンプトと同じでも)記録する。表示する側が Run の
+         *     `prompt`(ネガティブは `params.negative_prompt`)と比べて、同じなら出さない。
          */
         RunTextOutput: {
             /** Role */
             role: string;
+            /** Output Index */
+            output_index?: number | null;
             /** Node Id */
             node_id?: string | null;
             /** Class Type */

@@ -3,6 +3,9 @@
 チェックポイントをモデルとして見せ、パラメーターは GAKEI が固定で定義する(ADR-0038 2章)。
 今は Generate(`txt2img`)だけ。Edit(`img2img`)は後の段階で足す。
 
+拡張機能(`alwayson_scripts`)は `extensions.py` のアダプターで対応を決める(ADR-0038 7章)。
+対応する拡張機能が接続先にあれば、利用者が値を変えなくても毎回引数の全体を送って記録する。
+
 `finalize_params` が WebUI に送る本文を確定して `run.params["sdwebui_request"]` に保存し
 (ADR-0003 ルール4、ADR-0038 3章)、`execute` はそれをそのまま送る。`execute` の開始時に
 一度だけ、画面で保存したタイムアウト(`app_setting`)を DB から引く。
@@ -52,6 +55,12 @@ from app.providers.sdwebui.client import (
     decode_base64_image,
     parse_info,
 )
+from app.providers.sdwebui.extensions import (
+    all_param_names,
+    build_alwayson_scripts,
+    output_limit,
+    resolve_extensions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +84,9 @@ _PROGRESS_MAX = 100
 # サンプラー・スケジューラーの初期値の候補(接続先の一覧にあるときだけ使う)
 _PREFERRED_SAMPLERS = ("Euler a", "Euler")
 _PREFERRED_SCHEDULERS = ("automatic", "Automatic")
+
+# 出力ごとのプロンプト(展開後)の1件あたりの上限(ADR-0030 2章の最終プロンプトと同じ)
+TEXT_OUTPUT_MAX_CHARS = 100_000
 
 _MIME_FROM_PILLOW_FORMAT = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
 
@@ -192,6 +204,8 @@ class SdWebuiProvider:
         models: list[ModelCapabilities] = []
         if catalog is not None:
             params = _generate_params(catalog)
+            for extension in resolve_extensions(catalog.scripts):
+                params.extend(extension.adapter.param_defs())
             for checkpoint in catalog.checkpoints:
                 models.append(
                     ModelCapabilities(
@@ -247,6 +261,13 @@ class SdWebuiProvider:
             if key.startswith("sdwebui_"):
                 raise RunValidationError(t("runValidation.unknownParam", key=key))
 
+        extensions = resolve_extensions(catalog.scripts)
+        # 接続先に無い(または対応外の版の)拡張機能の項目は断る(capabilities に出していない)。
+        available_ext_params = {name for ext in extensions for name in ext.adapter.param_names()}
+        for key in params:
+            if key in all_param_names() and key not in available_ext_params:
+                raise RunValidationError(t("runValidation.unknownParam", key=key))
+
         seed = params.get("seed")
         if seed is None:
             seed = secrets.randbelow(SEED_MAX + 1)
@@ -295,6 +316,10 @@ class SdWebuiProvider:
                 "override_settings_restore_afterwards": True,
             }
         )
+        if extensions:
+            # WebUI の画面の既定値が後で変わっても記録と実際が食い違わないよう、毎回すべての
+            # 引数を明示して送る(ADR-0038 7章)。
+            request["alwayson_scripts"] = build_alwayson_scripts(extensions, params)
 
         result: dict[str, Any] = dict(params)
         result["sdwebui_seed"] = seed
@@ -356,13 +381,27 @@ class SdWebuiProvider:
             )
 
         images = response.get("images")
+        images = images if isinstance(images, list) else []
+        # グリッドを先頭に足したときは `index_of_first_image` が 1 になる(A1111 / Forge)。
+        first = info.get("index_of_first_image")
+        first = first if isinstance(first, int) and 0 <= first < len(images) else 0
+        all_prompts = _str_list(info.get("all_prompts"))
+        limit = output_limit(body.get("alwayson_scripts"), params)
+        if limit is None:
+            # 補助の画像(グリッドなど)は batch_size を超える分を捨てる(ADR-0038 4章)。
+            expected = max(batch_size, 1)
+        else:
+            # 組み合わせ生成では、枚数は batch_size ではなく組み合わせの数で決まる(7章)。
+            # 何枚が本物かは all_prompts の数で分かる。分からなければ返った分すべて。
+            expected = len(all_prompts) if all_prompts else len(images) - first
+        candidates = images[first : first + expected]
+        discarded = 0
+        if limit is not None and len(candidates) > limit:
+            discarded = len(candidates) - limit
+            candidates = candidates[:limit]
         decoded = [
-            data
-            for data in (decode_base64_image(item) for item in (images or []))
-            if data is not None
+            data for data in (decode_base64_image(item) for item in candidates) if data is not None
         ]
-        # 補助の画像(グリッドなど)は batch_size を超える分を捨てる(ADR-0038 4章)。
-        decoded = decoded[: max(batch_size, 1)]
         if not decoded:
             raise ProviderError(
                 "sdwebuiNoOutput", t("sdwebui.provider.noOutputImages"), request_id=task_id
@@ -386,11 +425,31 @@ class SdWebuiProvider:
             usage["all_seeds"] = [s for s in all_seeds if isinstance(s, int)][: len(outputs)]
         infotexts = info.get("infotexts")
         infotext = (
-            infotexts[0] if isinstance(infotexts, list) and infotexts else info.get("infotext")
+            infotexts[first]
+            if isinstance(infotexts, list) and len(infotexts) > first
+            else info.get("infotext")
         )
         if isinstance(infotext, str):
             usage["infotext"] = infotext.replace("\x00", "")
-        return RunResult(outputs=outputs, usage=usage, provider_request_id=task_id or None)
+        if limit is not None:
+            usage["output_limit"] = limit
+        if discarded:
+            usage["discarded_outputs"] = discarded
+        # 1枚ずつの展開後のプロンプト(Dynamic Prompts など。ADR-0038 7章)。出力の順。
+        all_negative_prompts = _str_list(info.get("all_negative_prompts"))
+        if all_prompts:
+            usage["all_prompts"] = all_prompts[: len(outputs)]
+        if all_negative_prompts:
+            usage["all_negative_prompts"] = all_negative_prompts[: len(outputs)]
+        text_outputs = _per_output_prompts(
+            usage.get("all_prompts"), usage.get("all_negative_prompts")
+        )
+        return RunResult(
+            outputs=outputs,
+            usage=usage,
+            provider_request_id=task_id or None,
+            text_outputs=text_outputs,
+        )
 
     async def _watch_progress(
         self,
@@ -460,6 +519,35 @@ class SdWebuiProvider:
                         mime="image/png",
                     )
                 )
+
+
+def _str_list(value: Any) -> list[str]:
+    """文字列のリスト。形が崩れていれば(位置がずれるので)空にする。"""
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return list(value)
+    return []
+
+
+def _per_output_prompts(
+    prompts: list[str] | None, negative_prompts: list[str] | None
+) -> list[dict[str, Any]] | None:
+    """出力ごとの展開後のプロンプトを `run.text_outputs` の形にする(ADR-0030 と同じ列)。
+
+    `role` は `final_prompt`(プロンプト)と `final_negative_prompt`(ネガティブプロンプト)。
+    `output_index` で出力の Asset に対応させる。元のプロンプトと同じかどうかは記録の側では
+    判断しない(表示する側が比べる)。空のものは記録しない(ADR-0030 2026-10-01 改訂)。
+    """
+    items: list[dict[str, Any]] = []
+    for role, texts in (("final_prompt", prompts), ("final_negative_prompt", negative_prompts)):
+        for index, text in enumerate(texts or []):
+            if not text.strip():
+                continue
+            item: dict[str, Any] = {"role": role, "output_index": index, "text": text}
+            if len(text) > TEXT_OUTPUT_MAX_CHARS:
+                item["text"] = text[:TEXT_OUTPUT_MAX_CHARS]
+                item["truncated"] = True
+            items.append(item)
+    return items or None
 
 
 def _labels() -> dict[str, str]:

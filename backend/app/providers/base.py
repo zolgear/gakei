@@ -177,7 +177,8 @@ class RunResult(BaseModel):
     outputs: list[RunOutputImage]
     usage: dict[str, Any] | None = None
     provider_request_id: str | None = None
-    # 実行時にワークフローが作ったテキスト(ADR-0030。今は ComfyUI の最終プロンプトだけ)。
+    # 実行時に作られたテキスト(ADR-0030。ComfyUI の最終プロンプトと、SD WebUI の出力ごとの
+    # 展開後のプロンプト。ADR-0038 7章)。
     # `run.text_outputs` にそのまま書く。無ければ None。
     text_outputs: list[dict[str, Any]] | None = None
 

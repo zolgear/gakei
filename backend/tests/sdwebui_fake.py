@@ -16,6 +16,12 @@
   `current_model` で描いたことにする(実物と同じ)。
 - `internal_progress=False`: `/internal/progress` が 404。
 - `txt2img_delay`: 応答までの秒数(非同期のときだけ。進捗の問い合わせを試すため)。
+- `enable_dynamic_prompts()`: 拡張機能 Dynamic Prompts(架空の版 `dynamic prompts v9.9.9`)を
+  `/sdapi/v1/scripts` と `/sdapi/v1/script-info` に足す。`{a|b}` を1枚ずつ展開し、
+  `info.all_prompts` に入れる(組み合わせ生成では組み合わせの数だけ描く)。既定は拡張機能なし。
+- `scripts_status`: `/sdapi/v1/scripts` と `/script-info` の応答の状態(500 などで失敗を試す)。
+- `return_grid=True`: 実物の `return_grid` と同じく、先頭にグリッドを足し
+  `index_of_first_image = 1` を返す(2枚以上のとき)。
 """
 
 from __future__ import annotations
@@ -23,13 +29,73 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import itertools
 import json
+import re
 from typing import Any
 
 import httpx
 from PIL import Image
 
 FAKE_PATH_ROOT = "/opt/fake-webui/models"
+
+DYNAMIC_PROMPTS_NAME = "dynamic prompts v9.9.9"
+MAX_GENERATIONS_LABEL = "Max generations (0 = all combinations - the batch count value is ignored)"
+
+# Dynamic Prompts の txt2img の引数(label と既定値)。並びは実物のある版に合わせた架空のもの。
+DYNAMIC_PROMPTS_ARGS: list[tuple[str, Any]] = [
+    ("Dynamic Prompts enabled", True),
+    ("Combinatorial generation", False),
+    ("Combinatorial batches", 1),
+    ("Magic prompt", False),
+    ("I'm feeling lucky", False),
+    ("Attention grabber", False),
+    ("Minimum attention", 1.1),
+    ("Maximum attention", 1.5),
+    ("Max magic prompt length", 100),
+    ("Magic prompt creativity", 0.7),
+    ("Fixed seed", False),
+    ("Unlink seed from prompt", False),
+    ("Don't apply to negative prompts", True),
+    ("Enable Jinja2 templates", False),
+    ("Don't generate images", False),
+    (MAX_GENERATIONS_LABEL, 0),
+    ("Magic prompt model", "model-x"),
+    ("Magic prompt blocklist regex", ""),
+]
+
+_VARIANT_GROUP = re.compile(r"\{([^{}]*)\}")
+
+
+def prompt_variants(prompt: str) -> list[str]:
+    """`{a|b}` の組み合わせをすべて並べる(入れ子・重み・ワイルドカードは扱わない簡易版)。"""
+    groups = [m.group(1).split("|") for m in _VARIANT_GROUP.finditer(prompt)]
+    if not groups:
+        return [prompt]
+    result: list[str] = []
+    for combo in itertools.product(*groups):
+        parts = iter(combo)
+        result.append(_VARIANT_GROUP.sub(lambda _m, parts=parts: next(parts), prompt))
+    return result
+
+
+def _script_info_entry(name: str, args: list[tuple[str, Any]], *, is_img2img: bool) -> dict:
+    return {
+        "name": name,
+        "is_alwayson": True,
+        "is_img2img": is_img2img,
+        "args": [
+            {
+                "label": label,
+                "value": value,
+                "minimum": None,
+                "maximum": None,
+                "step": None,
+                "choices": ["model-x"] if label == "Magic prompt model" else None,
+            }
+            for label, value in args
+        ],
+    }
 
 
 def png_bytes(color: tuple[int, int, int] = (10, 20, 30), size: tuple[int, int] = (8, 8)) -> bytes:
@@ -111,6 +177,44 @@ class FakeSdWebui:
         self.progress_bodies: list[dict[str, Any]] = []
         self.refresh_count = 0
         self._progress_index = 0
+        # 拡張機能(ADR-0038 7章)。`scripts` は /sdapi/v1/scripts、`script_infos` は script-info。
+        self.scripts: dict[str, list[str]] = {"txt2img": ["refiner", "seed"], "img2img": []}
+        self.script_infos: list[dict[str, Any]] = []
+        self.scripts_status = 200
+        self.return_grid = False
+
+    def enable_dynamic_prompts(
+        self,
+        *,
+        name: str = DYNAMIC_PROMPTS_NAME,
+        args: list[tuple[str, Any]] | None = None,
+    ) -> None:
+        """Dynamic Prompts を足す。`args` で引数の並び(版の違い)を変えられる。"""
+        txt2img_args = list(DYNAMIC_PROMPTS_ARGS if args is None else args)
+        self.scripts["txt2img"].append(name)
+        self.scripts["img2img"].append(name)
+        # 実物と同じく、同じ名前で txt2img 用と img2img 用が並ぶ
+        self.script_infos.append(_script_info_entry(name, txt2img_args, is_img2img=False))
+        self.script_infos.append(_script_info_entry(name, txt2img_args, is_img2img=True))
+
+    def _dynamic_prompts_args(self, body: dict[str, Any]) -> dict[str, Any] | None:
+        """この実行での Dynamic Prompts の引数(label → 値)。拡張機能が無ければ None。"""
+        entry = next(
+            (
+                e
+                for e in self.script_infos
+                if not e["is_img2img"] and e["name"].startswith("dynamic prompts")
+            ),
+            None,
+        )
+        if entry is None:
+            return None
+        values = {a["label"]: a["value"] for a in entry["args"]}
+        sent = (body.get("alwayson_scripts") or {}).get(entry["name"])
+        if isinstance(sent, dict) and isinstance(sent.get("args"), list):
+            for arg, value in zip(entry["args"], sent["args"], strict=False):
+                values[arg["label"]] = value
+        return values
 
     def transport(self) -> httpx.MockTransport:
         return _Transport(self)
@@ -190,6 +294,12 @@ class FakeSdWebui:
         if name == "refresh-checkpoints" and request.method == "POST":
             self.refresh_count += 1
             return httpx.Response(200, json=None)
+        if name in ("scripts", "script-info"):
+            if self.scripts_status != 200:
+                return httpx.Response(self.scripts_status, json={"error": "failed"})
+            return httpx.Response(
+                200, json=self.scripts if name == "scripts" else self.script_infos
+            )
         if name == "txt2img" and request.method == "POST":
             return self._txt2img(request)
         if name == "progress":
@@ -209,6 +319,20 @@ class FakeSdWebui:
 
         batch = int(body.get("batch_size", 1))
         seed = int(body.get("seed", 0))
+        prompt = str(body.get("prompt", ""))
+        negative = str(body.get("negative_prompt", ""))
+        all_prompts = [prompt] * batch
+        dp = self._dynamic_prompts_args(body)
+        if dp is not None and dp.get("Dynamic Prompts enabled"):
+            variants = prompt_variants(prompt)
+            if dp.get("Combinatorial generation"):
+                # 組み合わせの数だけ描く(batch_size は効かない)。Max generations が上限。
+                max_generations = int(dp.get(MAX_GENERATIONS_LABEL) or 0)
+                all_prompts = variants[:max_generations] if max_generations else variants
+                batch = len(all_prompts)
+            else:
+                all_prompts = [variants[i % len(variants)] for i in range(batch)]
+        all_negative_prompts = [negative] * batch
         all_seeds = [seed + i for i in range(batch)]
         images = (
             []
@@ -216,15 +340,24 @@ class FakeSdWebui:
             else [b64(png_bytes((i * 20 % 255, 0, 0))) for i in range(batch + self.extra_images)]
         )
         infotexts = [
-            f"{body.get('prompt', '')}\nSteps: {body.get('steps')}, Seed: {s}, Model: {used_model}"
-            for s in all_seeds
+            f"{p}\nSteps: {body.get('steps')}, Seed: {s}, Model: {used_model}"
+            for p, s in zip(all_prompts, all_seeds, strict=True)
         ]
+        index_of_first_image = 0
+        if self.return_grid and len(images) > 1:
+            images.insert(0, b64(png_bytes((0, 255, 0), size=(16, 16))))
+            infotexts.insert(0, f"grid\nSeed: {seed}")
+            index_of_first_image = 1
         info = {
-            "prompt": body.get("prompt"),
+            "prompt": prompt,
+            "all_prompts": all_prompts,
+            "negative_prompt": negative,
+            "all_negative_prompts": all_negative_prompts,
             "seed": seed,
             "all_seeds": all_seeds,
             "sd_model_name": used_model,
             "infotexts": infotexts,
+            "index_of_first_image": index_of_first_image,
         }
         return httpx.Response(
             200, json={"images": images, "parameters": body, "info": json.dumps(info)}

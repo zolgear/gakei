@@ -9,6 +9,8 @@ GAKEI の DB や Run には依存しない。`SdWebuiProvider` と `app/api/sdwe
 - `GET /sdapi/v1/sd-models`、`/samplers`、`/schedulers`、VAE の一覧(Forge は
   `/sdapi/v1/sd-modules`、A1111 は `/sdapi/v1/sd-vae`)。応答の `filename`(フルパス)は
   読み捨て、名前だけを持つ。
+- `GET /sdapi/v1/scripts`、`/sdapi/v1/script-info`: 拡張機能(`alwayson_scripts`)の名前と引数の
+  並び(ADR-0038 7章)。取れなければ拡張機能なしとして扱い、一覧の取得は止めない。
 - `POST /sdapi/v1/refresh-checkpoints`: チェックポイントの一覧を WebUI に読み直させる。
 - `POST /sdapi/v1/txt2img`: 応答 `{"images": [base64...], "info": "<JSON 文字列>"}`。
 - `POST /internal/progress`(`force_task_id` を付けた実行だけの進み具合)。使えなければ
@@ -77,6 +79,27 @@ class Checkpoint:
 
 
 @dataclass(frozen=True)
+class ScriptArg:
+    """`/sdapi/v1/script-info` の引数の1つ。`value` は WebUI の画面の既定値。"""
+
+    label: str | None
+    value: Any
+
+
+@dataclass(frozen=True)
+class ScriptInfo:
+    """拡張機能などのスクリプト1つ(ADR-0038 7章)。`name` は WebUI の表記(小文字)のまま。
+
+    `/sdapi/v1/scripts` の一覧にあり、`/sdapi/v1/script-info` に引数の並びがあるものだけを持つ。
+    """
+
+    name: str
+    is_img2img: bool
+    is_alwayson: bool
+    args: tuple[ScriptArg, ...]
+
+
+@dataclass(frozen=True)
 class Catalog:
     """接続先から取った一覧。パスは持たない。"""
 
@@ -85,6 +108,8 @@ class Catalog:
     samplers: list[str] = field(default_factory=list)
     schedulers: list[str] = field(default_factory=list)
     vaes: list[str] = field(default_factory=list)
+    # 拡張機能のスクリプト(取れなければ空。ADR-0038 7章)
+    scripts: list[ScriptInfo] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -219,6 +244,63 @@ def _parse_forge_modules(body: Any) -> list[str]:
     return _names(vae_entries or entries, "model_name")
 
 
+def _parse_script_args(raw: Any) -> tuple[ScriptArg, ...] | None:
+    if not isinstance(raw, list):
+        return None
+    args: list[ScriptArg] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            # 位置をずらさないため、形の崩れた引数も「label なし・値 None」として残す。
+            args.append(ScriptArg(label=None, value=None))
+            continue
+        label = item.get("label")
+        args.append(
+            ScriptArg(label=label if isinstance(label, str) else None, value=item.get("value"))
+        )
+    return tuple(args)
+
+
+def parse_scripts(scripts_body: Any, script_info_body: Any) -> list[ScriptInfo]:
+    """`/sdapi/v1/scripts` と `/sdapi/v1/script-info` の応答を合わせる。
+
+    `scripts` は `{"txt2img": [名前...], "img2img": [名前...]}`。`script-info` は
+    `[{"name", "is_alwayson", "is_img2img", "args": [{"label", "value", ...}]}]` で、同じ名前の
+    txt2img 用と img2img 用が別の要素になる。両方にあるものだけを返す。
+    """
+    if not isinstance(scripts_body, dict) or not isinstance(script_info_body, list):
+        return []
+    listed: dict[bool, set[str]] = {}
+    for key, is_img2img in (("txt2img", False), ("img2img", True)):
+        names = scripts_body.get(key)
+        listed[is_img2img] = (
+            {n for n in names if isinstance(n, str)} if isinstance(names, list) else set()
+        )
+    result: list[ScriptInfo] = []
+    seen: set[tuple[str, bool]] = set()
+    for item in script_info_body:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        is_img2img = bool(item.get("is_img2img"))
+        if name not in listed[is_img2img] or (name, is_img2img) in seen:
+            continue
+        args = _parse_script_args(item.get("args"))
+        if args is None:
+            continue
+        seen.add((name, is_img2img))
+        result.append(
+            ScriptInfo(
+                name=name,
+                is_img2img=is_img2img,
+                is_alwayson=bool(item.get("is_alwayson")),
+                args=args,
+            )
+        )
+    return result
+
+
 def decode_base64_image(value: Any) -> bytes | None:
     """base64(`data:image/...;base64,` の接頭辞があれば除く)をバイト列にする。"""
     if not isinstance(value, str) or not value:
@@ -299,6 +381,7 @@ class SdWebuiClient:
                     vaes = _parse_forge_modules(self._get_optional(http, "/sdapi/v1/sd-modules"))
                 else:
                     vaes = _names(self._get_optional(http, "/sdapi/v1/sd-vae"), "model_name")
+                scripts = self._fetch_scripts(http)
         except httpx.TimeoutException as exc:
             raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.connectTimeout")) from exc
         except httpx.HTTPError as exc:
@@ -309,7 +392,20 @@ class SdWebuiClient:
             samplers=samplers,
             schedulers=schedulers,
             vaes=vaes,
+            scripts=scripts,
         )
+
+    def _fetch_scripts(self, http: httpx.Client) -> list[ScriptInfo]:
+        """拡張機能のスクリプトの一覧(ADR-0038 7章)。取れなければ(接続の失敗も含めて)空にし、
+        本体の生成は止めない。"""
+        try:
+            scripts_body = self._get_optional(http, "/sdapi/v1/scripts")
+            if scripts_body is None:
+                return []
+            info_body = self._get_optional(http, "/sdapi/v1/script-info")
+        except httpx.HTTPError:
+            return []
+        return parse_scripts(scripts_body, info_body)
 
     def refresh_checkpoints(self, timeout: float = 30.0) -> None:
         try:
