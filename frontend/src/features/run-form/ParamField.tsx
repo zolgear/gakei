@@ -16,6 +16,11 @@ import {
 import { UNSPECIFIED } from './paramsBuilder'
 import { SeedField } from './SeedField'
 import { unspecifiedOptionLabel, unspecifiedPlaceholder } from './unspecifiedLabel'
+import { PromptEditModeToggle } from '../prompt-tags/PromptEditModeToggle'
+import { PromptTagEditor } from '../prompt-tags/PromptTagEditor'
+import { isPromptLikeParam, usePromptEditScope, type PromptEditScopeValue } from '../prompt-tags/PromptEditScope'
+import { shouldEscapeParens } from '../prompt-tags/promptTags'
+import { usePromptEditMode } from '../prompt-tags/usePromptEditMode'
 import styles from './ParamField.module.css'
 
 interface ParamFieldProps {
@@ -87,15 +92,74 @@ function NumberParamInput({ def, id, value, enabled, title, onChange }: NumberPa
   )
 }
 
+interface PromptParamFieldProps extends ParamFieldProps {
+  scope: PromptEditScopeValue
+}
+
+/**
+ * プロンプトに当たる文章のパラメーター(SD WebUI の `negative_prompt` など)。プロンプト欄と同じく
+ * 「テキスト / タグ」を切り替えられる(ADR-0039 2章。モードは(プロバイダー, モデル, 欄)ごとに覚える)。
+ */
+function PromptParamField({ def, value, enabled, onChange, scope }: PromptParamFieldProps) {
+  const { t } = useI18n()
+  const pf = t.runForm.paramField
+  const id = `param-${def.name}`
+  const fieldTitle = def.description || undefined
+  const [mode, setMode] = usePromptEditMode(scope.provider, scope.model, def.name)
+  const tagsMode = mode === 'tags' && enabled
+
+  return (
+    <div className={styles.field} data-disabled={!enabled}>
+      <div className={styles.labelRow}>
+        <label htmlFor={id} title={def.name}>
+          {def.label}
+        </label>
+        <PromptEditModeToggle mode={mode} onChange={setMode} fieldLabel={def.label} disabled={!enabled} />
+      </div>
+      {tagsMode ? (
+        <PromptTagEditor
+          id={id}
+          className={styles.tagEditor}
+          value={value}
+          onChange={(next) => onChange(def.name, next)}
+          escapeParens={shouldEscapeParens(scope.provider)}
+          fieldLabel={def.label}
+        />
+      ) : (
+        <textarea
+          id={id}
+          className={styles.textArea}
+          maxLength={def.max_length ?? undefined}
+          placeholder={unspecifiedPlaceholder(def)}
+          value={value}
+          disabled={!enabled}
+          title={fieldTitle}
+          onChange={(e) => onChange(def.name, e.target.value)}
+        />
+      )}
+      {!enabled && (
+        <p className={styles.disabledNote} title={pf.disabledTitle}>
+          {pf.disabledNote}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function ParamField({ def, value, enabled, onChange }: ParamFieldProps) {
   const { t } = useI18n()
   const pf = t.runForm.paramField
   const id = `param-${def.name}`
   const fieldTitle = def.description || undefined
+  const promptScope = usePromptEditScope()
 
   // seed はランダム/固定の切り替えと乱数ボタンを持つ専用の欄を出す(ADR-0013 フォローアップ)。
   if (def.widget === 'seed') {
     return <SeedField def={def} value={value} enabled={enabled} onChange={onChange} />
+  }
+
+  if (def.type === 'text' && promptScope && isPromptLikeParam(def.name)) {
+    return <PromptParamField def={def} value={value} enabled={enabled} onChange={onChange} scope={promptScope} />
   }
 
   return (

@@ -33,6 +33,7 @@ export const GAKEI_STORAGE_KEYS = {
   'gakei:map-prefs': 'マップの表示・近傍の数・上限・しきい値・系列の辺・詳細パネルの開閉',
   'gakei.sketch.prefs': 'スケッチのペン色と太さ',
   'gakei.runForm.seedMode': 'シードのランダム / 固定',
+  'gakei.runForm.promptEditMode': 'プロンプト欄の「テキスト / タグ」(モデルごと)',
   'gakei.runForm.v1': '生成フォームの下書き(プロンプト・パラメーター・入力画像)',
   'gakei:last-asset-group': '生成フォームで最後に選んだグループ',
 } as const satisfies Record<string, string>

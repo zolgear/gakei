@@ -370,6 +370,30 @@ class TagListResponse(BaseModel):
     items: list[TagCount] = Field(default_factory=list)
 
 
+class TagSuggestion(BaseModel):
+    """プロンプトのタグの候補(ADR-0039 2章)。名前は `_` を空白にしたタグ名で、括弧は
+    エスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。"""
+
+    name: str
+    # vocabulary: WD Tagger の語彙(count は語彙の件数)、tag: GAKEI のタグ(count は Asset の数)
+    source: Literal["vocabulary", "tag"]
+    count: int
+
+
+class TagSuggestionResponse(BaseModel):
+    items: list[TagSuggestion] = Field(default_factory=list)
+    # WD Tagger の語彙(`selected_tags.csv`)を使えたか
+    vocabulary_available: bool
+
+
+class PromptTagsResponse(BaseModel):
+    """画像のタグをプロンプトにするときの並び(ADR-0039 1章)。エスケープ前のタグ名。"""
+
+    asset_id: uuid.UUID
+    tags: list[str] = Field(default_factory=list)
+    vocabulary_available: bool
+
+
 class RunTextOutput(BaseModel):
     """実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
     (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った

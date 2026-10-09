@@ -2254,5 +2254,32 @@
       "sourceRunId": "Original ID",
       "unknown": "Unknown"
     }
+  },
+  "promptTags": {
+    "modeGroupLabel": "How to edit {field}",
+    "modeText": "Text",
+    "modeTags": "Tags",
+    "modeTextTitle": "Edit as plain text",
+    "modeTagsTitle": "Edit as comma-separated tags (this model opens in tag mode next time)",
+    "inputPlaceholder": "Add a tag (comma or Enter to add)",
+    "inputLabel": "Add a tag to {field}",
+    "suggestions": "Tag suggestions",
+    "removeTag": "Remove \"{tag}\"",
+    "empty": "No tags yet",
+    "fromImage": {
+      "heading": "Use tags as prompt",
+      "copy": "Copy",
+      "copyTitle": "Copy the tags separated by commas (parentheses escaped)",
+      "copied": "Copied",
+      "copyFailed": "Could not copy",
+      "replace": "Replace",
+      "replaceTitle": "Replace the prompt in the generation form with these tags",
+      "append": "Append",
+      "appendTitle": "Append these tags to the prompt in the generation form",
+      "confirmReplace": "Replace the current prompt?",
+      "yes": "Replace",
+      "cancel": "Cancel",
+      "count": "{count} tags"
+    }
   }
 }

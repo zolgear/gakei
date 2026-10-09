@@ -45,6 +45,7 @@ import {
   mergeAnnotation,
 } from '../annotations/annotationStatus'
 import { TAG_NAME_MAX, TITLE_MAX, checkTagInput, isTitleTooLong, normalizeTitleInput } from '../annotations/tagInput'
+import { PromptTagsActions } from '../prompt-tags/PromptTagsActions'
 import { tagCollapseState } from './tagCollapse'
 import styles from './AssetAnnotationSection.module.css'
 
@@ -373,6 +374,9 @@ export function AssetTagsSection({ asset }: AnnotationSectionProps) {
       )}
 
       <ErrorLine error={error} />
+
+      {/* ADR-0039 1章: タグをプロンプトに使う(使えるタグが無ければ出さない)。 */}
+      <PromptTagsActions assetId={asset.id} />
     </div>
   )
 }

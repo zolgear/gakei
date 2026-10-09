@@ -66,3 +66,17 @@
     font-size: 16px;
   }
 }
+
+/* プロンプトに当たる欄(ADR-0039): ラベルの右に「テキスト / タグ」の切り替えを置く。 */
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tagEditor {
+  min-height: 60px;
+  max-height: 40vh;
+}

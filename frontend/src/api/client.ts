@@ -88,6 +88,9 @@ export type AnnotationStatusView = components['schemas']['AnnotationStatusView']
 export type AssetAnnotationResponse = components['schemas']['AssetAnnotationResponse']
 export type TagCount = components['schemas']['TagCount']
 export type TagListResponse = components['schemas']['TagListResponse']
+export type TagSuggestion = components['schemas']['TagSuggestion']
+export type TagSuggestionResponse = components['schemas']['TagSuggestionResponse']
+export type PromptTagsResponse = components['schemas']['PromptTagsResponse']
 export type AnnotationSettingsResponse = components['schemas']['AnnotationSettingsResponse']
 export type AnnotationSettingsUpdateRequest = components['schemas']['AnnotationSettingsUpdateRequest']
 export type AnnotationBackfillResponse = components['schemas']['AnnotationBackfillResponse']
@@ -1005,6 +1008,21 @@ export function annotateAsset(assetId: string): Promise<AssetAnnotationResponse>
 /** 件数の多い順。`q` は部分一致(正規化してから比べる)。 */
 export function listTags(params: operations['list_tags']['parameters']['query'] = {}): Promise<TagListResponse> {
   return request(`/api/tags${toQuery(params)}`)
+}
+
+/**
+ * プロンプトのタグ編集の候補(ADR-0039 2章)。WD Tagger の語彙と GAKEI のタグ(英数字のもの)、
+ * 前方一致が先。名前はエスケープ前(`_` は空白)。
+ */
+export function suggestPromptTags(
+  params: operations['suggest_prompt_tags']['parameters']['query'] = {},
+): Promise<TagSuggestionResponse> {
+  return request(`/api/tags/suggestions${toQuery(params)}`)
+}
+
+/** 画像のタグをプロンプトにするときの並び(ADR-0039 1章)。名前はエスケープ前。 */
+export function getAssetPromptTags(assetId: string): Promise<PromptTagsResponse> {
+  return request(`/api/assets/${assetId}/prompt-tags`)
 }
 
 /** 全ログイン者が読める(ビューアの「再推定」を出すかどうかに `usable_engines` を使う)。 */

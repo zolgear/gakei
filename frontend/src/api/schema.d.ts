@@ -973,6 +973,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tags/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggest Prompt Tags
+         * @description WD Tagger の語彙と GAKEI のタグ(英数字のもの、本人に見える Asset のタグだけ)から、
+         *     前方一致を先に、次に部分一致を、最大 20 件。
+         */
+        get: operations["suggest_prompt_tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/prompt-tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Asset Prompt Tags
+         * @description removed を除き、語彙にあるタグを score の高い順、続けて人が付けた語彙にあるタグ。
+         *     語彙が無い環境では英数字だけのタグ。名前はエスケープしない。
+         */
+        get: operations["get_asset_prompt_tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/pricing/estimate": {
         parameters: {
             query?: never;
@@ -3873,6 +3915,21 @@ export interface components {
             name: string;
         };
         /**
+         * PromptTagsResponse
+         * @description 画像のタグをプロンプトにするときの並び(ADR-0039 1章)。エスケープ前のタグ名。
+         */
+        PromptTagsResponse: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Tags */
+            tags?: string[];
+            /** Vocabulary Available */
+            vocabulary_available: boolean;
+        };
+        /**
          * ProviderEntry
          * @description `GET /api/capabilities` の `providers[]` の1件。
          */
@@ -4938,6 +4995,29 @@ export interface components {
         TagListResponse: {
             /** Items */
             items?: components["schemas"]["TagCount"][];
+        };
+        /**
+         * TagSuggestion
+         * @description プロンプトのタグの候補(ADR-0039 2章)。名前は `_` を空白にしたタグ名で、括弧は
+         *     エスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。
+         */
+        TagSuggestion: {
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "vocabulary" | "tag";
+            /** Count */
+            count: number;
+        };
+        /** TagSuggestionResponse */
+        TagSuggestionResponse: {
+            /** Items */
+            items?: components["schemas"]["TagSuggestion"][];
+            /** Vocabulary Available */
+            vocabulary_available: boolean;
         };
         /** UnitPricesPer1M */
         UnitPricesPer1M: {
@@ -7235,6 +7315,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_prompt_tags: {
+        parameters: {
+            query?: {
+                /** @description 打った文字。空なら候補なし */
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSuggestionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_asset_prompt_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTagsResponse"];
                 };
             };
             /** @description Validation Error */

@@ -281,3 +281,14 @@
     min-height: 44px;
   }
 }
+
+/* タグ編集モード(ADR-0039)の外枠。textarea と同じく欄の高さいっぱいに広げる。 */
+.promptTagEditor {
+  height: 100%;
+}
+
+.pane[data-layout='sidebar'] .promptTagEditor {
+  height: auto;
+  min-height: 160px;
+  max-height: 60vh;
+}

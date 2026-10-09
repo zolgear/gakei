@@ -57,6 +57,11 @@ import type { StudioLayout } from './studioLayout'
 import { isSubmitShortcut } from './submitShortcut'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { paramToSizeState, sizeToParam } from '../run-form/sizeValidation'
+import { usePromptEditMode } from '../prompt-tags/usePromptEditMode'
+import { PromptTagEditor } from '../prompt-tags/PromptTagEditor'
+import { PromptEditModeToggle } from '../prompt-tags/PromptEditModeToggle'
+import { PromptEditScopeContext } from '../prompt-tags/PromptEditScope'
+import { shouldEscapeParens } from '../prompt-tags/promptTags'
 import styles from './InputPane.module.css'
 
 const MENTION_POPOVER_ID = 'prompt-mention-popover'
@@ -105,6 +110,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     // (モバイルでは自動フォーカスでキーボードが出てしまうので行わない)。
     if (!isMobileViewport()) promptTextareaRef.current?.focus()
   })
+  // プロンプト欄の「テキスト / タグ」(ADR-0039 2章)。(プロバイダー, モデル)ごとに覚える。
+  const [promptEditMode, setPromptEditMode] = usePromptEditMode(form.provider, form.model, 'prompt')
   const editLogic = useEditInputsLogic(
     form.inputs,
     form.setInputs,
@@ -320,50 +327,66 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       <label htmlFor="prompt" className={styles.srOnly}>
         {ip.promptLabel}
       </label>
-      <div className={styles.textareaWrap}>
-        <textarea
-          id="prompt"
-          ref={promptTextareaRef}
-          className={styles.promptTextarea}
-          value={form.prompt}
-          maxLength={form.promptMax}
-          role="combobox"
-          aria-expanded={mention !== null}
-          aria-controls={mention !== null ? MENTION_POPOVER_ID : undefined}
-          aria-activedescendant={
-            mention !== null && mentionCandidates.length > 0
-              ? `${MENTION_POPOVER_ID}-option-${mentionActiveIndex}`
-              : undefined
-          }
-          onChange={(e) => {
-            setSubmittedNotice(null)
-            form.setPrompt(e.target.value)
-            updateMentionFromCursor(e.target)
-          }}
-          onKeyDown={handlePromptKeyDown}
-          onKeyUp={(e) => {
-            if (mention && MENTION_NAV_KEYS.has(e.key)) return
-            if (suppressMentionRescanRef.current) {
-              suppressMentionRescanRef.current = false
-              return
-            }
-            updateMentionFromCursor(e.currentTarget)
-          }}
-          onClick={(e) => updateMentionFromCursor(e.currentTarget)}
-          onPaste={editLogic.handlePaste}
-          placeholder={ip.promptPlaceholder}
-        />
-        {mention !== null && (
-          <MentionPopover
-            id={MENTION_POPOVER_ID}
-            candidates={mentionCandidates}
-            activeIndex={mentionActiveIndex}
-            placement={mentionPlacement}
-            onSelect={confirmMention}
-            onHoverIndex={setMentionActiveIndex}
+      {promptEditMode === 'tags' ? (
+        <div className={styles.textareaWrap}>
+          <PromptTagEditor
+            id="prompt"
+            className={styles.promptTagEditor}
+            value={form.prompt}
+            onChange={(next) => {
+              setSubmittedNotice(null)
+              form.setPrompt(next)
+            }}
+            escapeParens={shouldEscapeParens(form.provider)}
+            fieldLabel={ip.promptLabel}
           />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className={styles.textareaWrap}>
+          <textarea
+            id="prompt"
+            ref={promptTextareaRef}
+            className={styles.promptTextarea}
+            value={form.prompt}
+            maxLength={form.promptMax}
+            role="combobox"
+            aria-expanded={mention !== null}
+            aria-controls={mention !== null ? MENTION_POPOVER_ID : undefined}
+            aria-activedescendant={
+              mention !== null && mentionCandidates.length > 0
+                ? `${MENTION_POPOVER_ID}-option-${mentionActiveIndex}`
+                : undefined
+            }
+            onChange={(e) => {
+              setSubmittedNotice(null)
+              form.setPrompt(e.target.value)
+              updateMentionFromCursor(e.target)
+            }}
+            onKeyDown={handlePromptKeyDown}
+            onKeyUp={(e) => {
+              if (mention && MENTION_NAV_KEYS.has(e.key)) return
+              if (suppressMentionRescanRef.current) {
+                suppressMentionRescanRef.current = false
+                return
+              }
+              updateMentionFromCursor(e.currentTarget)
+            }}
+            onClick={(e) => updateMentionFromCursor(e.currentTarget)}
+            onPaste={editLogic.handlePaste}
+            placeholder={ip.promptPlaceholder}
+          />
+          {mention !== null && (
+            <MentionPopover
+              id={MENTION_POPOVER_ID}
+              candidates={mentionCandidates}
+              activeIndex={mentionActiveIndex}
+              placement={mentionPlacement}
+              onSelect={confirmMention}
+              onHoverIndex={setMentionActiveIndex}
+            />
+          )}
+        </div>
+      )}
     </>
   )
 
@@ -387,6 +410,16 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       promptText={form.prompt}
       promptLength={form.promptLength}
       promptMax={form.promptMax}
+      editModeToggle={
+        <PromptEditModeToggle
+          mode={promptEditMode}
+          onChange={(mode) => {
+            setMention(null)
+            setPromptEditMode(mode)
+          }}
+          fieldLabel={ip.promptLabel}
+        />
+      }
     />
   )
 
@@ -480,7 +513,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       onDrop={handlePaneDrop}
       onDragOver={handlePaneDragOver}
     >
-      {layout === 'sidebar' ? <InputPaneSidebarLayout {...slots} /> : <InputPaneBottomLayout {...slots} />}
+      <PromptEditScopeContext.Provider value={{ provider: form.provider, model: form.model }}>
+        {layout === 'sidebar' ? <InputPaneSidebarLayout {...slots} /> : <InputPaneBottomLayout {...slots} />}
+      </PromptEditScopeContext.Provider>
 
       <AddInputImagesDialog
         open={addDialogOpen}

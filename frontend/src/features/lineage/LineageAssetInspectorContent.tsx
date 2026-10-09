@@ -17,6 +17,7 @@ import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/
 import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from './EmbeddedMetaSection'
 import { OriginRecipeSection } from './OriginRecipeSection'
+import { PromptTagsActions } from '../prompt-tags/PromptTagsActions'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import styles from './LineageAssetInspectorContent.module.css'
 
@@ -118,6 +119,9 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
 
       {asset.origin && <OriginRecipeSection origin={asset.origin} />}
       {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
+
+      {/* ADR-0039 1章: タグをプロンプトに使う(使えるタグが無ければ出さない)。 */}
+      <PromptTagsActions assetId={asset.id} />
 
       <div className={styles.actions}>
         <button

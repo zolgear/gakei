@@ -2254,5 +2254,32 @@
       "sourceRunId": "元の ID",
       "unknown": "不明"
     }
+  },
+  "promptTags": {
+    "modeGroupLabel": "{field}の入力のしかた",
+    "modeText": "テキスト",
+    "modeTags": "タグ",
+    "modeTextTitle": "文章のまま編集する",
+    "modeTagsTitle": "カンマで区切ったタグとして編集する(このモデルでは次からもタグで開く)",
+    "inputPlaceholder": "タグを追加(カンマか Enter で確定)",
+    "inputLabel": "{field}にタグを追加",
+    "suggestions": "タグの候補",
+    "removeTag": "「{tag}」を消す",
+    "empty": "タグはまだありません",
+    "fromImage": {
+      "heading": "タグをプロンプトに使う",
+      "copy": "コピー",
+      "copyTitle": "タグをカンマ区切りでコピーする(括弧はエスケープする)",
+      "copied": "コピーしました",
+      "copyFailed": "コピーできませんでした",
+      "replace": "置き換え",
+      "replaceTitle": "生成のフォームのプロンプトをこのタグで置き換える",
+      "append": "後ろに足す",
+      "appendTitle": "生成のフォームのプロンプトの後ろにこのタグを足す",
+      "confirmReplace": "今のプロンプトを置き換えますか?",
+      "yes": "置き換える",
+      "cancel": "やめる",
+      "count": "{count} 個"
+    }
   }
 }
