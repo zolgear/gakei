@@ -183,7 +183,11 @@
       "vaeBuiltin": "チェックポイントに内蔵のもの",
       "vaeDescription": "チェックポイントの種類(SD1.5、SDXL など)に合う VAE を選びます。WebUI の設定は変えず、この実行だけに使います。",
       "count": "枚数",
-      "countDescription": "1回の実行で描く枚数(batch_size)。"
+      "countDescription": "1回の実行で描く枚数(batch_size)。",
+      "dynamicPrompts": "Dynamic Prompts",
+      "dynamicPromptsDescription": "{{red|blue|green}} のような書き方や、WebUI 側のワイルドカード(__名前__)を1枚ずつ展開します。無効にすると、プロンプトをそのまま送ります。",
+      "dynamicPromptsCombinatorial": "組み合わせをすべて作る",
+      "dynamicPromptsCombinatorialDescription": "プロンプトの書き方から作れる組み合わせをすべて描きます。枚数の指定は使われず、組み合わせの数だけ作ります(上限 {limit} 枚)。"
     }
   },
   "openaiSpec": {

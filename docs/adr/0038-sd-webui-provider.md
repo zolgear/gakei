@@ -51,7 +51,7 @@ A1111 互換の API で使うもの(2026-10-10 時点。実装時に Forge と A
   - `sampler_name` と `scheduler` の選択肢は接続先から補う。取れなければ自由入力にはせず、項目を出さない(WebUI の既定に任せる)。
   - サイズは 8 の倍数、上限は長辺 2048px にする(大きいサイズは WebUI 側で VRAM が足りなくなりやすいため。ADR-0004 の 3840px とは別)。
 - `save_images` は false のまま送る。原本は GAKEI が持つ(ADR-0004)。
-- **送らないもの:** `distilled_cfg_scale`(Forge だけの項目)、`alwayson_scripts`(ControlNet などの拡張)、hires fix、refiner、`script_name`。LoRA は、プロンプトに `<lora:名前:重み>` と書けば、そのまま WebUI に届く(GAKEI は解釈も管理もしない。ADR-0001 の非ゴール「LoRA 管理」は変えない)。
+- **送らないもの:** `distilled_cfg_scale`(Forge だけの項目)、7章で対応を決めた拡張機能以外の `alwayson_scripts`(ControlNet などの拡張)、hires fix、refiner、`script_name`。LoRA は、プロンプトに `<lora:名前:重み>` と書けば、そのまま WebUI に届く(GAKEI は解釈も管理もしない。ADR-0001 の非ゴール「LoRA 管理」は変えない)。
 
 ### 3. Run の記録(`run.params`)
 
@@ -59,7 +59,7 @@ ADR-0003 のルール4(`params` には API に送った値をそのまま保存�
 
 - 利用者が指定した値に加えて、サーバーが次の値を付け足す。
   - `sdwebui_seed`: 指定がなければサーバーが決める(2^32 未満。WebUI の seed の範囲)。`-1`(WebUI 側で乱数)は送らない。記録と実際が食い違うため。
-  - `sdwebui_task_id`: `force_task_id` に送る ID(`gakei-` + Run の ID)。
+  - `sdwebui_task_id`: `force_task_id` に送る ID(`gakei-` + 新しい UUID。`finalize_params` の時点では Run の ID がまだ無いため)。
   - `sdwebui_request`: 送る本文そのもの。ただし `init_images` と `mask` は base64 を入れず、`{"asset_sha256": ...}` に置き換える。入力画像は `run_input` に記録されているので、実行時にそこから組み立てる。
 - `sdwebui_` で始まる項目はサーバーだけが書く。クライアントから送られたら 422 にする。
 - 応答の `info` から `all_seeds` と `infotext`(1枚目)を `usage` に入れる。`provider_request_id` には `sdwebui_task_id` を入れる。料金は表示しない。
@@ -72,7 +72,7 @@ ADR-0003 のルール4(`params` には API に送った値をそのまま保存�
   - `/internal/progress` が使えない実装(404 など)では、`GET /sdapi/v1/progress` に切り替える。こちらは WebUI を直接使っている人の進み具合が混ざることがあるので、目安として扱う。
   - 進捗は表示のためだけに使い、Run の結果には使わない。
 - **マスクは送るときだけ変換する。** GAKEI のマスク(alpha = 0 が編集範囲)から、白が編集範囲の白黒 PNG を作って送る。Asset の原本は変えない(ADR-0004)。
-- 出力は `images` の順に Asset にする(`output_index`)。WebUI が応答に足すことがある補助の画像(グリッドなど)は、`batch_size` を超える分を捨てる。
+- 出力は `images` の順に Asset にする(`output_index`)。WebUI が応答に足すことがある補助の画像は取り込まない。先頭のグリッドは `info.index_of_first_image` で飛ばし(`return_grid` が有効な WebUI は先頭にグリッドを足す)、残りは `batch_size` を超える分を捨てる。
 - **キャンセルは待機中(`queued`)の Run だけ。** `POST /sdapi/v1/interrupt` は、誰が始めたかに関係なく WebUI の実行中のものを止めるので使わない(ADR-0013 5章と同じ理由)。
 - 再起動で中断した Run は `failed` + `interrupted`(ADR-0008)。起動時に、有効でないプロバイダーの `queued` の Run は `failed` + `providerUnavailable`(ADR-0013 と同じ)。
 
@@ -92,16 +92,37 @@ ADR-0003 のルール4(`params` には API に送った値をそのまま保存�
 
 ComfyUI の設定(ADR-0013 7章、ADR-0031)と同じ形にする。
 
-- 管理者設定に「SD WebUI」のページ(`/settings/sdwebui`)を足す。接続先の URL、接続テスト(バージョン情報とチェックポイントの数を表示する)、切り離し、1回の実行を待つ上限(既定 600 秒)を置く。保存先は `app_setting`。変更は再起動なしで反映し、`sdwebui` の Run が `queued` か `running` の間は 409 で断る。
+- 管理者設定に「SD WebUI」のページ(`/settings/sdwebui`)を足す。接続先の URL、接続テスト(Forge か A1111 かと、チェックポイントの数を表示する。バージョンは、安全に取れる API が無いので出さない。`/internal/sysinfo` は環境変数やパスを大量に含むので使わない)、切り離し、1回の実行を待つ上限(既定 600 秒)を置く。保存先は `app_setting`。変更は再起動なしで反映し、`sdwebui` の Run が `queued` か `running` の間は 409 で断る。
 - 環境変数 `SDWEBUI_URL` と `SDWEBUI_TIMEOUT_SECONDS` は、画面で一度も設定していないときの既定値としてだけ使う(ComfyUI と同じ優先順位)。
 - URL は `http` / `https` だけ。ループバック以外のアドレスは、画面で警告を出し、確認のチェックを入れないと保存できない。サーバーのログにも警告を出す。LAN の別の PC で WebUI を動かす使い方(GPU の PC と GAKEI の PC を分ける)は、ComfyUI と違って正式に対象にする。
 - **Basic 認証(`--api-auth`)に対応する。** ユーザー名とパスワードを入れられるようにし、`DATA_DIR/secrets.json` に保存する。画面にも API の応答にも値を一部も出さず、「設定済み」だけを示す。URL に `user:pass@` を含めることは受け付けない(ADR-0017 と同じ)。
 - 本線(Azure)での扱いは、ComfyUI と同じく本線に着手するときに決める。
 
+### 7. 拡張機能(2026-10-10 追記。最初は Dynamic Prompts)
+
+A1111 互換の WebUI の拡張機能のうち、`alwayson_scripts` で動くものは、API の本文で指定しなければ **WebUI の画面の既定値のまま動く**(Forge と sd-dynamic-prompts で確認。Dynamic Prompts は既定で有効で、`{a|b}` を 1 枚ずつ展開する)。そのため、GAKEI が何もしなくても拡張機能の効果は出るが、Run には何で動いたかが残らない。拡張機能ごとに次の形で対応する。
+
+- **対応する拡張機能は GAKEI が1つずつ決める(アダプター)。** 接続先の `/sdapi/v1/scripts` に名前があるときだけ、その拡張機能のパラメーターをフォームに出す。任意の拡張機能の引数を汎用のフォームで出すことはしない(項目の意味が分からないため。2章の案 B と同じ理由)。
+- **引数の組み立て:** `/sdapi/v1/script-info` の引数の並び(`label` と既定の `value`)を取り、GAKEI のパラメーターに当たる引数だけを **label で探して** 値を差し替え、残りは既定値のまま送る。並び順や引数の数は拡張機能の版で変わるので、位置で決め打ちしない。必要な label が見つからなければ、その拡張機能は「対応外の版」として項目を出さない。
+- **記録:** 組み立てた `alwayson_scripts`(スクリプト名と引数の全体)を `sdwebui_request` に入れる(ADR-0003 ルール4)。対応する拡張機能が接続先にあるときは、利用者が値を変えなくても毎回明示して送る。WebUI の画面の既定値が後で変わっても、Run の記録と実際が食い違わないようにするため。
+- **出力ごとのプロンプト:** 応答の `info.all_prompts` と `all_negative_prompts` を、出力の順に `usage` と `run.text_outputs`(ADR-0030。`output_index` 付きの `final_prompt` / `final_negative_prompt`)に記録する。画面では、Asset ごとに「展開後のプロンプト」として見せる。拡張機能を使わない Run でも記録し、Run のプロンプトと同じなら表示しない。検索や自動タイトルの対象にするかは別に決める。
+
+#### Dynamic Prompts(sd-dynamic-prompts)
+
+- パラメーター: `dynamic_prompts`(有効/無効。既定は有効。WebUI の既定に合わせる)、`dynamic_prompts_combinatorial`(組み合わせをすべて作る。既定は無効)。
+- 組み合わせ生成では、WebUI は組み合わせの数だけ画像を作り、GAKEI の枚数(`batch_size`)は効かない(Forge で確認。`{red|blue|green}` で batch 1 でも 2 でも 3 枚)。GAKEI は引数「Max generations」に上限(32)を入れて送り、作られる枚数を抑える。組み合わせ生成のときは、フォームの枚数を使わない旨を示す。画像の枚数は `info.all_prompts` の数で決め(補助の画像を混ぜないため)、上限 32 枚まで取り込む(4章の「batch_size を超える分を捨てる」は、組み合わせ生成のときはこの規則に読み替える)。捨てた枚数は `usage` に記録する。
+- 出さないもの: Magic prompt、I'm feeling lucky、Attention grabber(外部のモデルやネットワークを使う、または結果の再現が難しい)、Jinja2 テンプレート、「画像を作らない」。これらは常に無効として送る。
+- ワイルドカード(`__名前__`)は WebUI 側のファイルをそのまま使う。GAKEI は一覧を出さない。見つからないときは展開されずに残る(展開後のプロンプトで分かる)。
+- Dynamic Prompts が無い接続先では、項目を出さない。`{a|b}` はそのまま WebUI に届く。
+
+#### 他の拡張機能の検討(この ADR では作らない)
+
+候補は、同じアダプターの形に収まるか(引数が label で特定でき、値が単純な型か)と、ADR-0001 の非ゴールに当たらないかで選ぶ。ControlNet(入力画像が要る)、ADetailer(検出モデルとの組)、hires fix(本体の機能)などは、個別に検討する。
+
 ### 作らないもの
 
 - InvokeAI、Fooocus、SwarmUI など、A1111 互換でない API
-- 拡張機能(ControlNet、ADetailer など)の項目、`alwayson_scripts`、`script_name`
+- 7章で対応を決めた拡張機能(今は Dynamic Prompts)以外の拡張機能の項目、`script_name`
 - hires fix、refiner、アップスケール(`extra-single-image`)
 - チェックポイント・LoRA・VAE のダウンロードや管理、WebUI の設定(`/options`)の変更
 - 実行中の Run のキャンセル(`/interrupt`)
@@ -169,4 +190,5 @@ ADR-0013 で ComfyUI を加えたときと同じく、ADR-0001 の「迷った�
 4. [ ] SD WebUI のクライアントとプロバイダーを作る(偽の WebUI でのテストを含む)
 5. [ ] 管理者設定のページと、フォームの細部を作る
 6. [ ] `docs/sdwebui.md` を書く
-7. [ ] 実物の Forge で、t2i、img2img、inpaint、チェックポイントの切り替え、Basic 認証を手動で確認する
+7. [ ] Dynamic Prompts に対応する(7章)
+8. [ ] 実物の Forge で、t2i、img2img、inpaint、チェックポイントの切り替え、Basic 認証を手動で確認する

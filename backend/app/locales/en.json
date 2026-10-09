@@ -183,7 +183,11 @@
       "vaeBuiltin": "Built into the checkpoint",
       "vaeDescription": "Choose a VAE that matches the checkpoint type (SD1.5, SDXL, etc.). It is used for this run only; the WebUI settings are not changed.",
       "count": "Count",
-      "countDescription": "Number of images per run (batch_size)."
+      "countDescription": "Number of images per run (batch_size).",
+      "dynamicPrompts": "Dynamic Prompts",
+      "dynamicPromptsDescription": "Expands syntax such as {{red|blue|green}} and WebUI wildcards (__name__) once per image. When off, the prompt is sent as written.",
+      "dynamicPromptsCombinatorial": "Generate all combinations",
+      "dynamicPromptsCombinatorialDescription": "Generates every combination the prompt syntax allows. The count setting is not used; one image is made per combination (up to {limit})."
     }
   },
   "openaiSpec": {
