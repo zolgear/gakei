@@ -120,12 +120,32 @@ A1111 互換の WebUI の拡張機能のうち、`alwayson_scripts` で動くも
 
 候補は、同じアダプターの形に収まるか(引数が label で特定でき、値が単純な型か)と、ADR-0001 の非ゴールに当たらないかで選ぶ。ControlNet(入力画像が要る)、ADetailer(検出モデルとの組)、hires fix(本体の機能)などは、個別に検討する。
 
+### 8. LoRA の選択(2026-10-10 追記)
+
+LoRA は、プロンプトに `<lora:名前:重み>` と書けば WebUI が読み込む(2章)。名前を覚えて打つのは難しいので、**接続先の LoRA の一覧から選んでプロンプトに入れる** 補助を作る。LoRA のファイルの管理(ダウンロード、削除、名前の変更)はしない(ADR-0001 の非ゴール「LoRA 管理」は変えない)。
+
+A1111 互換の API で使うもの(Forge で確認):
+
+- `GET /sdapi/v1/loras` → `[{name, alias, path, metadata}]`。`metadata` は学習時の情報(kohya の `ss_*`、`modelspec.*`)で、無いものもある。
+  - ベースモデルは `ss_base_model_version`(`sdxl_base_v1-0`、`sd_v1` など)か `modelspec.architecture` で分かるが、分からない LoRA も多い(確認した環境では約 4 割)。
+  - `ss_tag_frequency` は学習データのタグの出現数で、トリガーワードの手がかりになる。
+  - `ss_dataset_dirs` や `ss_training_comment` など、学習した人の環境の情報(パスを含む)も入っている。
+- `POST /sdapi/v1/refresh-loras` で一覧を読み直す。
+
+決めたこと:
+
+- **API:** `GET /api/sdwebui/loras`(`require_user`)。1件ごとに `name`、`alias`(name と違うときだけ)、`base_model`(`sdxl` / `sd1` / `null`)、`trigger_tags`(`ss_tag_frequency` を足し合わせて多い順に最大 20 個。`_` は空白に)だけを返す。**`path` とその他のメタ情報は返さない。** 一覧はチェックポイントの一覧と同じくキャッシュし、「一覧を読み直す」で LoRA も読み直す。
+- **画面:** プロンプト欄の操作に「LoRA」を置く(SD WebUI のモデルを選んでいるときだけ)。検索できる一覧から選ぶと、重み(既定 1.0、0.1 刻み)を決めて `<lora:名前:重み>` をプロンプトに足す。トリガーワードの候補はチップで出し、タップでプロンプトに足す。タグモード(ADR-0039)では LoRA は1つのチップになる。
+- **ベースモデルの目印:** 一覧に SDXL / SD1.5 / 不明を出す。チェックポイントのベースモデルは API から分からないので、合わない LoRA を隠したり警告したりはしない。
+- **記録:** LoRA はプロンプトの一部として Run に残る(ADR-0003)。WebUI が infotext に入れる `Lora hashes` も、これまでどおり `usage` に残る。
+- 作らないもの: LoRA のプレビュー画像(`/sd_extra_networks/thumb` は WebUI の画面用の内部の API)、ブロックごとの重み、LoRA のファイルの管理、ComfyUI での LoRA の選択。
+
 ### 作らないもの
 
 - InvokeAI、Fooocus、SwarmUI など、A1111 互換でない API
 - 7章で対応を決めた拡張機能(今は Dynamic Prompts)以外の拡張機能の項目、`script_name`
 - hires fix、refiner、アップスケール(`extra-single-image`)
-- チェックポイント・LoRA・VAE のダウンロードや管理、WebUI の設定(`/options`)の変更
+- チェックポイント・LoRA・VAE のダウンロードや管理、WebUI の設定(`/options`)の変更(LoRA を一覧から選んでプロンプトに入れる補助は8章で作る)
 - 実行中の Run のキャンセル(`/interrupt`)
 - 複数の WebUI サーバー
 - 入力画像が2枚以上の Edit
