@@ -16,13 +16,35 @@ function effectiveValue(defs: ParamDef[], raw: RawParamValues, fieldName: string
   return String(def.default)
 }
 
+/**
+ * パラメーターの外にあるフォームの状態。`hasMask` を渡したときだけ、マスクがあるときだけ
+ * 意味を持つ項目(`ParamDef.mask_only`。SD WebUI の inpaint の項目。ADR-0038 2章)を判定する。
+ * 渡さなければ判定しない(値を未指定に戻す処理では、マスクを外しただけで値を消さないため)。
+ */
+export interface FieldContext {
+  hasMask?: boolean
+}
+
+/** マスクが無いために無効になっているか(`context.hasMask` を渡したときだけ判定する)。 */
+function isDisabledForMissingMask(defs: ParamDef[], fieldName: string, context: FieldContext | undefined): boolean {
+  if (context?.hasMask !== false) return false
+  return defs.find((d) => d.name === fieldName)?.mask_only === true
+}
+
+/** マスクが無いときに送らない項目を除いた定義(送信とフォームの状態の書き込みに使う)。 */
+export function defsForMask(defs: ParamDef[], hasMask: boolean): ParamDef[] {
+  return hasMask ? defs : defs.filter((d) => d.mask_only !== true)
+}
+
 /** conditional_params: 依存先の実効値が depends_on_values に含まれなければ無効。 */
 export function isFieldEnabled(
   defs: ParamDef[],
   raw: RawParamValues,
   conditionalParams: ConditionalParam[],
   fieldName: string,
+  context?: FieldContext,
 ): boolean {
+  if (isDisabledForMissingMask(defs, fieldName, context)) return false
   if (clientDisableRuleFor(defs, raw, fieldName) !== null) return false
   const relevant = conditionalParams.filter((c) => c.field === fieldName)
   if (relevant.length === 0) return true
@@ -95,6 +117,12 @@ function clientDisableRuleFor(defs: ParamDef[], raw: RawParamValues, fieldName: 
 }
 
 /** フロントの規則で無効になっているとき、その理由の説明(無ければ null。既定の「使用不可」を出す)。 */
-export function fieldDisabledNote(defs: ParamDef[], raw: RawParamValues, fieldName: string): string | null {
+export function fieldDisabledNote(
+  defs: ParamDef[],
+  raw: RawParamValues,
+  fieldName: string,
+  context?: FieldContext,
+): string | null {
+  if (isDisabledForMissingMask(defs, fieldName, context)) return msg().runForm.dependencies.maskOnly
   return clientDisableRuleFor(defs, raw, fieldName)?.note?.() ?? null
 }

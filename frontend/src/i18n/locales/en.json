@@ -1365,7 +1365,8 @@
     },
     "dependencies": {
       "combinatorialCount": "Makes one image per combination (up to {limit})",
-      "incompatiblePair": "{fieldA}={valueA} and {fieldB}={valueB} cannot be set at the same time"
+      "incompatiblePair": "{fieldA}={valueA} and {fieldB}={valueB} cannot be set at the same time",
+      "maskOnly": "Used only when a mask is drawn"
     },
     "runFormLogic": {
       "droppedParamsSettings": "{names} are not usable with the current settings and were reset to unspecified",

@@ -165,7 +165,9 @@
       "timeoutExecuting": "SD WebUI did not finish within the time limit.",
       "modelMismatch": "The image was drawn with {actual} instead of the selected checkpoint ({expected}). The WebUI may have failed to load the checkpoint.",
       "noOutputImages": "SD WebUI returned no images.",
-      "unreadableOutput": "Could not read the images returned by SD WebUI."
+      "unreadableOutput": "Could not read the images returned by SD WebUI.",
+      "inputImageMissingInternal": "The run has no source image among its inputs.",
+      "unreadableInput": "Could not read the input image or the mask."
     },
     "params": {
       "negativePrompt": "Negative prompt",
@@ -187,7 +189,27 @@
       "dynamicPrompts": "Dynamic Prompts",
       "dynamicPromptsDescription": "Expands syntax such as {{red|blue|green}} and WebUI wildcards (__name__) once per image. When off, the prompt is sent as written.",
       "dynamicPromptsCombinatorial": "Generate all combinations",
-      "dynamicPromptsCombinatorialDescription": "Generates every combination the prompt syntax allows. The count setting is not used; one image is made per combination (up to {limit})."
+      "dynamicPromptsCombinatorialDescription": "Generates every combination the prompt syntax allows. The count setting is not used; one image is made per combination (up to {limit}).",
+      "denoisingStrength": "Denoising strength",
+      "denoisingStrengthDescription": "How much of the source image to redraw. Near 0 keeps it as is; near 1 changes it a lot (roughly 0.3–0.5 for touch-ups, 0.6–0.8 for a redraw).",
+      "resizeMode": "Resize mode",
+      "resizeModeDescription": "How to fit the input image when its size (aspect ratio) differs from the output.",
+      "resizeModeJustResize": "Just resize",
+      "resizeModeCropAndResize": "Crop and resize",
+      "resizeModeResizeAndFill": "Resize and fill",
+      "resizeModeLatentUpscale": "Just resize (latent upscale)",
+      "maskBlur": "Mask blur",
+      "maskBlurDescription": "Width (in pixels) to blur the mask edge. Larger values blend the redrawn area better.",
+      "inpaintingFill": "Masked content",
+      "inpaintingFillDescription": "What the masked area starts from. Choose \"Original\" to build on the source image.",
+      "inpaintingFillFill": "Fill",
+      "inpaintingFillOriginal": "Original",
+      "inpaintingFillLatentNoise": "Latent noise",
+      "inpaintingFillLatentNothing": "Latent nothing",
+      "inpaintFullRes": "Inpaint only the masked area",
+      "inpaintFullResDescription": "Crop the masked area (plus padding), draw it at the output size, then paste it back. Use it to redraw small areas in detail.",
+      "inpaintFullResPadding": "Padding for masked area",
+      "inpaintFullResPaddingDescription": "Pixels around the mask to include when \"Inpaint only the masked area\" is on."
     }
   },
   "openaiSpec": {
@@ -343,7 +365,8 @@
     "maskNotSupported": "The selected model does not support masks",
     "maskRequired": "mask is required",
     "maskRequiresPosition0": "Using mask requires an image input at position=0",
-    "maskSizeMismatch": "mask must be the same size as the image at position=0"
+    "maskSizeMismatch": "mask must be the same size as the image at position=0",
+    "maskOnlyParam": "{key} can only be specified when a mask is given"
   },
   "sizes": {
     "positiveIntegersRequired": "width and height must be positive integers",

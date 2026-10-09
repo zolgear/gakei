@@ -1365,7 +1365,8 @@
     },
     "dependencies": {
       "combinatorialCount": "組み合わせの数だけ作る(上限 {limit} 枚)",
-      "incompatiblePair": "{fieldA}={valueA} と {fieldB}={valueB} は同時に指定できません"
+      "incompatiblePair": "{fieldA}={valueA} と {fieldB}={valueB} は同時に指定できません",
+      "maskOnly": "マスクを描いたときだけ使います"
     },
     "runFormLogic": {
       "droppedParamsSettings": "{names} は現在の設定では使えないため未指定に戻しました",

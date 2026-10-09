@@ -469,6 +469,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       defs={form.defs}
       rawParams={form.rawParams}
       conditionalParams={form.conditionalParams}
+      hasMask={form.hasMask}
       onParamChange={form.handleParamChange}
       primary={primary}
     />
@@ -489,6 +490,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       defs={form.defs}
       rawParams={form.rawParams}
       conditionalParams={form.conditionalParams}
+      hasMask={form.hasMask}
       onParamChange={form.handleParamChange}
     />
   )

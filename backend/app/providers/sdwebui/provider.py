@@ -1,7 +1,11 @@
 """ADR-0038: Stable Diffusion WebUI(A1111 互換の API)を呼ぶ `ImageProvider` 実装。
 
 チェックポイントをモデルとして見せ、パラメーターは GAKEI が固定で定義する(ADR-0038 2章)。
-今は Generate(`txt2img`)だけ。Edit(`img2img`)は後の段階で足す。
+操作は Generate(`txt2img`)と Edit(`img2img`。入力画像は1枚、マスクは任意で1枚)。
+
+Edit の入力画像とマスクは、`sdwebui_request` には base64 を入れず `{"asset_sha256": ...}` で
+記録し(ADR-0038 3章)、`execute` で `run_input` の原本から組み立てて送る。マスクは送るときだけ、
+GAKEI の規約(alpha = 0 が編集範囲)から WebUI の規約(白が描き直す範囲)へ変換する(4章)。
 
 拡張機能(`alwayson_scripts`)は `extensions.py` のアダプターで対応を決める(ADR-0038 7章)。
 対応する拡張機能が接続先にあれば、利用者が値を変えなくても毎回引数の全体を送って記録する。
@@ -14,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import copy
 import io
 import itertools
@@ -24,7 +29,7 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageOps
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
@@ -32,6 +37,7 @@ from app.domain import general_settings, sizes
 from app.domain.run_validation import RunValidationError
 from app.i18n import t
 from app.providers.base import (
+    InputImage,
     ModelCapabilities,
     OperationCapabilities,
     ParamDef,
@@ -41,6 +47,7 @@ from app.providers.base import (
     ProviderError,
     ProviderUnavailableError,
     RunDraft,
+    RunInputMeta,
     RunOutputImage,
     RunRequest,
     RunResult,
@@ -89,6 +96,27 @@ _PREFERRED_SCHEDULERS = ("automatic", "Automatic")
 TEXT_OUTPUT_MAX_CHARS = 100_000
 
 _MIME_FROM_PILLOW_FORMAT = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
+# img2img の入力画像としてそのまま送る形式(それ以外は PNG に変換して送る)
+_INIT_IMAGE_MIMES = frozenset(_MIME_FROM_PILLOW_FORMAT.values())
+
+# Edit(img2img)の項目(ADR-0038 2章)。選択肢の値 → WebUI に送る整数。
+RESIZE_MODES: dict[str, int] = {
+    "just_resize": 0,
+    "crop_and_resize": 1,
+    "resize_and_fill": 2,
+    "latent_upscale": 3,
+}
+INPAINTING_FILLS: dict[str, int] = {
+    "fill": 0,
+    "original": 1,
+    "latent_noise": 2,
+    "latent_nothing": 3,
+}
+DEFAULT_DENOISING_STRENGTH = 0.75
+DEFAULT_RESIZE_MODE = "just_resize"
+DEFAULT_MASK_BLUR = 4
+DEFAULT_INPAINTING_FILL = "original"
+DEFAULT_INPAINT_FULL_RES_PADDING = 32
 
 SIZE_CONSTRAINTS = SizeConstraints(
     multiple_of=8,
@@ -203,9 +231,13 @@ class SdWebuiProvider:
         catalog = self.catalog()
         models: list[ModelCapabilities] = []
         if catalog is not None:
-            params = _generate_params(catalog)
+            generate_params = _generate_params(catalog)
             for extension in resolve_extensions(catalog.scripts):
-                params.extend(extension.adapter.param_defs())
+                generate_params.extend(extension.adapter.param_defs())
+            # Edit の拡張機能の項目は img2img 用のスクリプトから決める(txt2img 用とは別にある)。
+            edit_params = _edit_params(catalog)
+            for extension in resolve_extensions(catalog.scripts, is_img2img=True):
+                edit_params.extend(extension.adapter.param_defs())
             for checkpoint in catalog.checkpoints:
                 models.append(
                     ModelCapabilities(
@@ -215,11 +247,19 @@ class SdWebuiProvider:
                         operations=[
                             OperationCapabilities(
                                 operation="generate",
-                                params=params,
+                                params=generate_params,
                                 max_input_images=0,
                                 min_input_images=0,
                                 supports_mask=False,
-                            )
+                            ),
+                            # 入力画像は1枚、マスクは任意(ADR-0038 1章)
+                            OperationCapabilities(
+                                operation="edit",
+                                params=edit_params,
+                                max_input_images=1,
+                                min_input_images=1,
+                                supports_mask=True,
+                            ),
                         ],
                     )
                 )
@@ -235,7 +275,7 @@ class SdWebuiProvider:
             n_max=N_MAX,
             partial_images_min=0,
             partial_images_max=0,
-            max_input_images=0,
+            max_input_images=1,
         )
 
     # -- finalize_params ---------------------------------------------------------------
@@ -246,7 +286,7 @@ class SdWebuiProvider:
             raise ProviderUnavailableError(t("sdwebui.provider.unavailable"))
         if draft.model not in {c.model_name for c in catalog.checkpoints}:
             raise RunValidationError(t("sdwebui.provider.unknownCheckpoint", model=draft.model))
-        if draft.operation != "generate":
+        if draft.operation not in ("generate", "edit"):
             raise RunValidationError(
                 t(
                     "runValidation.operationNotSupported",
@@ -254,6 +294,8 @@ class SdWebuiProvider:
                     operation=draft.operation,
                 )
             )
+        is_edit = draft.operation == "edit"
+        image_meta, mask_meta = _edit_inputs(draft.inputs) if is_edit else (None, None)
 
         params = draft.params
         for key in params:
@@ -261,7 +303,7 @@ class SdWebuiProvider:
             if key.startswith("sdwebui_"):
                 raise RunValidationError(t("runValidation.unknownParam", key=key))
 
-        extensions = resolve_extensions(catalog.scripts)
+        extensions = resolve_extensions(catalog.scripts, is_img2img=is_edit)
         # 接続先に無い(または対応外の版の)拡張機能の項目は断る(capabilities に出していない)。
         available_ext_params = {name for ext in extensions for name in ext.adapter.param_names()}
         for key in params:
@@ -272,11 +314,18 @@ class SdWebuiProvider:
         if seed is None:
             seed = secrets.randbelow(SEED_MAX + 1)
 
-        size_text = str(params.get("size") or DEFAULT_SIZE)
-        parsed = sizes.parse_size(size_text, SIZE_CONSTRAINTS)
-        if parsed is None:
-            raise RunValidationError(t("sizes.autoNotAllowed"))
-        width, height = parsed
+        if params.get("size"):
+            parsed = sizes.parse_size(str(params["size"]), SIZE_CONSTRAINTS)
+            if parsed is None:
+                raise RunValidationError(t("sizes.autoNotAllowed"))
+            width, height = parsed
+        elif image_meta is not None:
+            # Edit でサイズの指定が無ければ、入力画像の寸法に合わせる(ADR-0038 2章)。
+            width, height = size_from_input(image_meta.width, image_meta.height)
+        else:
+            parsed = sizes.parse_size(DEFAULT_SIZE, SIZE_CONSTRAINTS)
+            assert parsed is not None
+            width, height = parsed
 
         vae = params.get("vae") or VAE_BUILTIN
         if vae != VAE_BUILTIN and vae not in catalog.vaes:
@@ -307,6 +356,8 @@ class SdWebuiProvider:
             request["sampler_name"] = params["sampler_name"]
         if "scheduler" in params:
             request["scheduler"] = params["scheduler"]
+        if image_meta is not None:
+            request.update(_img2img_fields(params, image_meta, mask_meta))
         request.update(
             {
                 "save_images": False,
@@ -339,12 +390,16 @@ class SdWebuiProvider:
         request = params.get("sdwebui_request")
         if not isinstance(request, dict):
             raise ProviderError("internalError", t("sdwebui.provider.missingRequestInternal"))
-        if run.operation != "generate":
+        if run.operation not in ("generate", "edit"):
             raise ProviderError(
                 "internalError",
                 t("runValidation.operationNotSupported", model=run.model, operation=run.operation),
             )
+        is_edit = run.operation == "edit"
         body = copy.deepcopy(request)
+        if is_edit:
+            # 記録の `{"asset_sha256": ...}` を、run_input の原本から作った base64 に差し替える。
+            body = await asyncio.to_thread(_attach_edit_inputs, body, run.inputs)
         task_id = str(params.get("sdwebui_task_id") or body.get("force_task_id") or "")
         batch_size = body.get("batch_size") if isinstance(body.get("batch_size"), int) else 1
 
@@ -357,8 +412,9 @@ class SdWebuiProvider:
             try:
                 # 全体の締め切りは画面設定のタイムアウト。httpx の読み取りの待ちはそれより
                 # 少し長くし、締め切りは wait_for で決める。
+                call = client.img2img if is_edit else client.txt2img
                 response = await asyncio.wait_for(
-                    client.txt2img(http, body, timeout=timeout + 5.0), timeout=timeout
+                    call(http, body, timeout=timeout + 5.0), timeout=timeout
                 )
             except TimeoutError as exc:
                 raise ProviderError(
@@ -386,7 +442,7 @@ class SdWebuiProvider:
         first = info.get("index_of_first_image")
         first = first if isinstance(first, int) and 0 <= first < len(images) else 0
         all_prompts = _str_list(info.get("all_prompts"))
-        limit = output_limit(body.get("alwayson_scripts"), params)
+        limit = output_limit(body.get("alwayson_scripts"), params, is_img2img=is_edit)
         if limit is None:
             # 補助の画像(グリッドなど)は batch_size を超える分を捨てる(ADR-0038 4章)。
             expected = max(batch_size, 1)
@@ -550,6 +606,111 @@ def _per_output_prompts(
     return items or None
 
 
+def size_from_input(width: int, height: int) -> tuple[int, int]:
+    """Edit でサイズの指定が無いときの出力の寸法。入力画像の寸法を、縦横比を保って長辺
+    2048px に収め、8 の倍数に丸める(ADR-0038 2章)。"""
+    multiple = SIZE_CONSTRAINTS.multiple_of
+    scale = min(1.0, SIZE_CONSTRAINTS.max_long_edge / max(width, height, 1))
+
+    def _round(value: float) -> int:
+        return max(multiple, round(value / multiple) * multiple)
+
+    return _round(width * scale), _round(height * scale)
+
+
+def _edit_inputs(inputs: list[RunInputMeta]) -> tuple[RunInputMeta, RunInputMeta | None]:
+    """Edit の入力画像(1枚)とマスク(任意)。枚数は capabilities の検証で確かめ済みだが、
+    念のためここでも断る。"""
+    images = [i for i in inputs if i.role == "image"]
+    masks = [i for i in inputs if i.role == "mask"]
+    if len(images) != 1:
+        raise RunValidationError(t("runValidation.exactImageCount", count=1, current=len(images)))
+    if len(masks) > 1:
+        raise RunValidationError(t("runValidation.maskAtMostOne"))
+    return images[0], (masks[0] if masks else None)
+
+
+def _img2img_fields(
+    params: dict[str, Any], image: RunInputMeta, mask: RunInputMeta | None
+) -> dict[str, Any]:
+    """img2img だけの項目。入力画像とマスクは base64 ではなく sha256 で記録する(ADR-0038 3章)。"""
+    fields: dict[str, Any] = {
+        "init_images": [{"asset_sha256": image.sha256}],
+        "denoising_strength": params.get("denoising_strength", DEFAULT_DENOISING_STRENGTH),
+        "resize_mode": RESIZE_MODES[params.get("resize_mode", DEFAULT_RESIZE_MODE)],
+    }
+    if mask is None:
+        # マスクに関する項目はマスクが無ければ意味を持たないので送らない(検証で 422 にしている)。
+        return fields
+    fields.update(
+        {
+            "mask": {"asset_sha256": mask.sha256},
+            "mask_blur": params.get("mask_blur", DEFAULT_MASK_BLUR),
+            "inpainting_fill": INPAINTING_FILLS[
+                params.get("inpainting_fill", DEFAULT_INPAINTING_FILL)
+            ],
+            "inpaint_full_res": params.get("inpaint_full_res", False),
+            "inpaint_full_res_padding": params.get(
+                "inpaint_full_res_padding", DEFAULT_INPAINT_FULL_RES_PADDING
+            ),
+            # 白が描き直す範囲(送るマスクはそうなるように変換する)
+            "inpainting_mask_invert": 0,
+        }
+    )
+    return fields
+
+
+def _attach_edit_inputs(body: dict[str, Any], inputs: list[InputImage]) -> dict[str, Any]:
+    """送る本文の `init_images` と `mask` を、入力の原本から作った base64 に差し替える。"""
+    image = next((i for i in inputs if i.role == "image"), None)
+    if image is None:
+        raise ProviderError("internalError", t("sdwebui.provider.inputImageMissingInternal"))
+    mask = next((i for i in inputs if i.role == "mask"), None)
+    try:
+        body["init_images"] = [_b64(_init_image_bytes(image.data, image.mime))]
+        if "mask" in body:
+            if mask is None:
+                raise ProviderError(
+                    "internalError", t("sdwebui.provider.inputImageMissingInternal")
+                )
+            with Image.open(io.BytesIO(image.data)) as opened:
+                size = opened.size
+            body["mask"] = _b64(mask_to_webui_png(mask.data, size))
+    except ProviderError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - 読めない入力は実行の失敗にする
+        raise ProviderError("internalError", t("sdwebui.provider.unreadableInput")) from exc
+    return body
+
+
+def _b64(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def _init_image_bytes(data: bytes, mime: str) -> bytes:
+    """入力画像の原本。PNG・JPEG・WebP はそのまま、それ以外は PNG に変換する。"""
+    if mime in _INIT_IMAGE_MIMES:
+        return data
+    return _to_png_bytes(data)
+
+
+def mask_to_webui_png(mask_bytes: bytes, size: tuple[int, int]) -> bytes:
+    """GAKEI のマスク(alpha = 0 が編集範囲)を、WebUI のマスク(白が描き直す範囲)にする。
+
+    白黒(L)の PNG で、値は `255 - alpha`(半透明の柔らかい境目を保つ)。寸法が入力画像と
+    違えば入力画像に合わせる。Asset の原本は変えない(ADR-0004)。
+    """
+    with Image.open(io.BytesIO(mask_bytes)) as mask:
+        mask.load()
+        alpha = mask.convert("RGBA").getchannel("A")
+    converted = ImageOps.invert(alpha)
+    if converted.size != size:
+        converted = converted.resize(size, Image.Resampling.BILINEAR)
+    buffer = io.BytesIO()
+    converted.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def _labels() -> dict[str, str]:
     return {
         "negative_prompt": t("sdwebui.params.negativePrompt"),
@@ -662,6 +823,85 @@ def _generate_params(catalog: Catalog) -> list[ParamDef]:
         ]
     )
     return params
+
+
+def _edit_params(catalog: Catalog) -> list[ParamDef]:
+    """Edit(img2img)のパラメーター。Generate の項目のネガティブプロンプトの後に、img2img と
+    inpaint(マスクがあるときだけ)の項目を挟む(ADR-0038 2章)。初期値(form_default)は
+    持たせず、未指定ならサーバーの既定で送る(フォームは「既定値 (X)」と出す)。"""
+    common = _generate_params(catalog)
+    edit_only: list[ParamDef] = [
+        ParamDef(
+            name="denoising_strength",
+            type="float",
+            label=t("sdwebui.params.denoisingStrength"),
+            minimum=0,
+            maximum=1,
+            step=0.05,
+            default=DEFAULT_DENOISING_STRENGTH,
+            description=t("sdwebui.params.denoisingStrengthDescription"),
+        ),
+        ParamDef(
+            name="resize_mode",
+            type="enum",
+            label=t("sdwebui.params.resizeMode"),
+            choices=list(RESIZE_MODES),
+            choice_labels={
+                "just_resize": t("sdwebui.params.resizeModeJustResize"),
+                "crop_and_resize": t("sdwebui.params.resizeModeCropAndResize"),
+                "resize_and_fill": t("sdwebui.params.resizeModeResizeAndFill"),
+                "latent_upscale": t("sdwebui.params.resizeModeLatentUpscale"),
+            },
+            default=DEFAULT_RESIZE_MODE,
+            description=t("sdwebui.params.resizeModeDescription"),
+        ),
+        ParamDef(
+            name="mask_blur",
+            type="int",
+            label=t("sdwebui.params.maskBlur"),
+            minimum=0,
+            maximum=64,
+            default=DEFAULT_MASK_BLUR,
+            description=t("sdwebui.params.maskBlurDescription"),
+            mask_only=True,
+        ),
+        ParamDef(
+            name="inpainting_fill",
+            type="enum",
+            label=t("sdwebui.params.inpaintingFill"),
+            choices=list(INPAINTING_FILLS),
+            choice_labels={
+                "fill": t("sdwebui.params.inpaintingFillFill"),
+                "original": t("sdwebui.params.inpaintingFillOriginal"),
+                "latent_noise": t("sdwebui.params.inpaintingFillLatentNoise"),
+                "latent_nothing": t("sdwebui.params.inpaintingFillLatentNothing"),
+            },
+            default=DEFAULT_INPAINTING_FILL,
+            description=t("sdwebui.params.inpaintingFillDescription"),
+            mask_only=True,
+        ),
+        ParamDef(
+            name="inpaint_full_res",
+            type="bool",
+            label=t("sdwebui.params.inpaintFullRes"),
+            default=False,
+            description=t("sdwebui.params.inpaintFullResDescription"),
+            mask_only=True,
+        ),
+        ParamDef(
+            name="inpaint_full_res_padding",
+            type="int",
+            label=t("sdwebui.params.inpaintFullResPadding"),
+            minimum=0,
+            maximum=256,
+            default=DEFAULT_INPAINT_FULL_RES_PADDING,
+            description=t("sdwebui.params.inpaintFullResPaddingDescription"),
+            mask_only=True,
+        ),
+    ]
+    head = [p for p in common if p.name == "negative_prompt"]
+    rest = [p for p in common if p.name != "negative_prompt"]
+    return [*head, *edit_only, *rest]
 
 
 def _to_png_bytes(data: bytes) -> bytes:

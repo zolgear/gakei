@@ -1,4 +1,5 @@
-"""SD WebUI プロバイダーを使った `POST /api/runs` の通しテスト(ADR-0038)。今は Generate だけ。
+"""SD WebUI プロバイダーを使った `POST /api/runs` の通しテスト(ADR-0038)。Generate。
+Edit(img2img)の通しテストは `test_sdwebui_img2img.py`。
 
 画面と同じく `PUT /api/sdwebui/connection` で接続し(実行レーンもそこで起動する)、
 プロバイダーの通信先だけを偽の WebUI(`tests/sdwebui_fake.py`)に差し替える。
@@ -167,21 +168,6 @@ def test_small_sizes_are_allowed(client: TestClient, monkeypatch: pytest.MonkeyP
     _connect(client, monkeypatch, FakeSdWebui())
     response = _post_run(client, size="512x512")
     assert response.status_code == 202, response.text
-
-
-def test_edit_is_not_supported_yet(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    _connect(client, monkeypatch, FakeSdWebui())
-    response = client.post(
-        "/api/runs",
-        json={
-            "operation": "edit",
-            "provider": "sdwebui",
-            "model": "model-a",
-            "prompt": "a cat",
-            "params": {},
-        },
-    )
-    assert response.status_code == 422
 
 
 def test_unavailable_is_409(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

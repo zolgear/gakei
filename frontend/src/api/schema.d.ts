@@ -3769,6 +3769,8 @@ export interface components {
             description: string;
             /** Widget */
             widget?: "seed" | null;
+            /** Mask Only */
+            mask_only?: boolean | null;
         };
         /** PriceEstimate */
         PriceEstimate: {

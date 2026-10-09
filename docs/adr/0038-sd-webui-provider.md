@@ -47,7 +47,8 @@ A1111 互換の API で使うもの(2026-10-10 時点。実装時に Forge と A
   - 一覧は接続先から取るので、接続できないときはモデルの選択肢を出さない(プロバイダーごと選べなくする)。一覧は短い時間だけキャッシュし、設定画面に「一覧を読み直す」を置く。
 - パラメーターは **GAKEI が固定で定義する**(ComfyUI のような登録はしない)。
   - 共通: `negative_prompt`、`sampler_name`、`scheduler`、`steps`、`cfg_scale`、`seed`(ADR-0013 8章と同じ seed の欄)、`width` / `height`、`batch_size`(GAKEI の枚数 `n`)。
-  - Edit だけ: `denoising_strength`、`resize_mode`。マスクがあるときは `mask_blur`、`inpainting_fill`、`inpaint_full_res`、`inpaint_full_res_padding`。
+  - Edit だけ: `denoising_strength`、`resize_mode`。マスクがあるときは `mask_blur`、`inpainting_fill`、`inpaint_full_res`、`inpaint_full_res_padding`。マスクの無い Run でこれらを指定したら、黙って捨てずに 422 にする(capabilities では `mask_only` の印を付け、フォームはマスクが無い間は無効にする)。
+  - Edit でサイズを指定しなければ、入力画像の寸法を、縦横比を保って長辺 2048px に収め、8 の倍数に丸めて使う。
   - `sampler_name` と `scheduler` の選択肢は接続先から補う。取れなければ自由入力にはせず、項目を出さない(WebUI の既定に任せる)。
   - サイズは 8 の倍数、上限は長辺 2048px にする(大きいサイズは WebUI 側で VRAM が足りなくなりやすいため。ADR-0004 の 3840px とは別)。
 - `save_images` は false のまま送る。原本は GAKEI が持つ(ADR-0004)。
@@ -187,8 +188,8 @@ ADR-0013 で ComfyUI を加えたときと同じく、ADR-0001 の「迷った�
 1. [ ] ADR-0001 の非ゴールと、ADR-0013 の「作らないもの」を改訂する
 2. [x] 実物の Forge で、2026-10-10 時点の API を確かめる(txt2img、inpaint、`/internal/progress`、チェックポイントと VAE の切り替えと復元、一覧に無いチェックポイント、`--api-auth`)
 3. [ ] 接続設定の仕組みを、ComfyUI と共通にできる形に切り出す
-4. [ ] SD WebUI のクライアントとプロバイダーを作る(偽の WebUI でのテストを含む)
+4. [x] SD WebUI のクライアントとプロバイダーを作る(偽の WebUI でのテストを含む。Generate と Edit(img2img・inpaint))
 5. [ ] 管理者設定のページと、フォームの細部を作る
 6. [ ] `docs/sdwebui.md` を書く
-7. [ ] Dynamic Prompts に対応する(7章)
+7. [ ] Dynamic Prompts に対応する(7章。txt2img と img2img の両方。img2img は img2img 用の script-info で組み立てる)
 8. [ ] 実物の Forge で、t2i、img2img、inpaint、チェックポイントの切り替え、Basic 認証を手動で確認する

@@ -15,7 +15,10 @@
 - 一覧に無いチェックポイントを `override_settings` で指定されたら、今読み込んでいる
   `current_model` で描いたことにする(実物と同じ)。
 - `internal_progress=False`: `/internal/progress` が 404。
-- `txt2img_delay`: 応答までの秒数(非同期のときだけ。進捗の問い合わせを試すため)。
+- `txt2img_delay`: 応答までの秒数(非同期のときだけ。進捗の問い合わせを試すため)。img2img にも効く。
+- `POST /sdapi/v1/img2img`: 受け取った本文を `img2img_bodies` に、base64 を読んだ入力画像と
+  マスクを `img2img_init_images` / `img2img_masks` に残す(テストから検査するため)。応答は
+  txt2img と同じ形(Dynamic Prompts は img2img 用の引数で展開する)。
 - `enable_dynamic_prompts()`: 拡張機能 Dynamic Prompts(架空の版 `dynamic prompts v9.9.9`)を
   `/sdapi/v1/scripts` と `/sdapi/v1/script-info` に足す。`{a|b}` を1枚ずつ展開し、
   `info.all_prompts` に入れる(組み合わせ生成では組み合わせの数だけ描く)。既定は拡張機能なし。
@@ -122,7 +125,10 @@ class _Transport(httpx.MockTransport):
         self._fake = fake
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/sdapi/v1/txt2img" and self._fake.txt2img_delay:
+        if (
+            request.url.path in ("/sdapi/v1/txt2img", "/sdapi/v1/img2img")
+            and self._fake.txt2img_delay
+        ):
             self._fake.txt2img_started = True
             await asyncio.sleep(self._fake.txt2img_delay)
         return await super().handle_async_request(request)
@@ -174,6 +180,9 @@ class FakeSdWebui:
         self.return_no_images = False
         self.requests: list[httpx.Request] = []
         self.txt2img_bodies: list[dict[str, Any]] = []
+        self.img2img_bodies: list[dict[str, Any]] = []
+        self.img2img_init_images: list[list[bytes]] = []
+        self.img2img_masks: list[bytes | None] = []
         self.progress_bodies: list[dict[str, Any]] = []
         self.refresh_count = 0
         self._progress_index = 0
@@ -188,22 +197,27 @@ class FakeSdWebui:
         *,
         name: str = DYNAMIC_PROMPTS_NAME,
         args: list[tuple[str, Any]] | None = None,
+        img2img_args: list[tuple[str, Any]] | None = None,
     ) -> None:
-        """Dynamic Prompts を足す。`args` で引数の並び(版の違い)を変えられる。"""
+        """Dynamic Prompts を足す。`args` で引数の並び(版の違い)を変えられる。
+        `img2img_args` は img2img 用の並び(省けば `args` と同じ)。"""
         txt2img_args = list(DYNAMIC_PROMPTS_ARGS if args is None else args)
+        i2i_args = txt2img_args if img2img_args is None else list(img2img_args)
         self.scripts["txt2img"].append(name)
         self.scripts["img2img"].append(name)
         # 実物と同じく、同じ名前で txt2img 用と img2img 用が並ぶ
         self.script_infos.append(_script_info_entry(name, txt2img_args, is_img2img=False))
-        self.script_infos.append(_script_info_entry(name, txt2img_args, is_img2img=True))
+        self.script_infos.append(_script_info_entry(name, i2i_args, is_img2img=True))
 
-    def _dynamic_prompts_args(self, body: dict[str, Any]) -> dict[str, Any] | None:
+    def _dynamic_prompts_args(
+        self, body: dict[str, Any], *, is_img2img: bool = False
+    ) -> dict[str, Any] | None:
         """この実行での Dynamic Prompts の引数(label → 値)。拡張機能が無ければ None。"""
         entry = next(
             (
                 e
                 for e in self.script_infos
-                if not e["is_img2img"] and e["name"].startswith("dynamic prompts")
+                if e["is_img2img"] == is_img2img and e["name"].startswith("dynamic prompts")
             ),
             None,
         )
@@ -302,6 +316,8 @@ class FakeSdWebui:
             )
         if name == "txt2img" and request.method == "POST":
             return self._txt2img(request)
+        if name == "img2img" and request.method == "POST":
+            return self._img2img(request)
         if name == "progress":
             return self._public_progress()
         return httpx.Response(404, json={"detail": "Not Found"})
@@ -309,6 +325,19 @@ class FakeSdWebui:
     def _txt2img(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         self.txt2img_bodies.append(body)
+        return self._generate(body, is_img2img=False)
+
+    def _img2img(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        self.img2img_bodies.append(body)
+        self.img2img_init_images.append(
+            [base64.b64decode(item) for item in body.get("init_images") or []]
+        )
+        mask = body.get("mask")
+        self.img2img_masks.append(base64.b64decode(mask) if isinstance(mask, str) else None)
+        return self._generate(body, is_img2img=True)
+
+    def _generate(self, body: dict[str, Any], *, is_img2img: bool) -> httpx.Response:
         if self.txt2img_status != 200:
             return httpx.Response(self.txt2img_status, json=self.txt2img_error_body)
 
@@ -322,7 +351,7 @@ class FakeSdWebui:
         prompt = str(body.get("prompt", ""))
         negative = str(body.get("negative_prompt", ""))
         all_prompts = [prompt] * batch
-        dp = self._dynamic_prompts_args(body)
+        dp = self._dynamic_prompts_args(body, is_img2img=is_img2img)
         if dp is not None and dp.get("Dynamic Prompts enabled"):
             variants = prompt_variants(prompt)
             if dp.get("Combinatorial generation"):

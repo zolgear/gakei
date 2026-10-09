@@ -165,7 +165,9 @@
       "timeoutExecuting": "SD WebUI の実行が時間内に終わりませんでした。",
       "modelMismatch": "指定したチェックポイント({expected})ではなく、{actual} で描かれました。WebUI でチェックポイントを読み込めなかった可能性があります。",
       "noOutputImages": "SD WebUI から画像が返りませんでした。",
-      "unreadableOutput": "SD WebUI から返った画像を読めませんでした。"
+      "unreadableOutput": "SD WebUI から返った画像を読めませんでした。",
+      "inputImageMissingInternal": "Run の入力に元の画像がありません。",
+      "unreadableInput": "入力画像またはマスクを読めませんでした。"
     },
     "params": {
       "negativePrompt": "ネガティブプロンプト",
@@ -187,7 +189,27 @@
       "dynamicPrompts": "Dynamic Prompts",
       "dynamicPromptsDescription": "{{red|blue|green}} のような書き方や、WebUI 側のワイルドカード(__名前__)を1枚ずつ展開します。無効にすると、プロンプトをそのまま送ります。",
       "dynamicPromptsCombinatorial": "組み合わせをすべて作る",
-      "dynamicPromptsCombinatorialDescription": "プロンプトの書き方から作れる組み合わせをすべて描きます。枚数の指定は使われず、組み合わせの数だけ作ります(上限 {limit} 枚)。"
+      "dynamicPromptsCombinatorialDescription": "プロンプトの書き方から作れる組み合わせをすべて描きます。枚数の指定は使われず、組み合わせの数だけ作ります(上限 {limit} 枚)。",
+      "denoisingStrength": "ノイズ除去強度",
+      "denoisingStrengthDescription": "元の画像をどれだけ描き直すか。0 に近いほど元のまま、1 に近いほど大きく変わります(目安: 0.3〜0.5 で手直し、0.6〜0.8 で描き直し)。",
+      "resizeMode": "サイズの合わせ方",
+      "resizeModeDescription": "入力画像と出力のサイズ(縦横比)が違うときの合わせ方。",
+      "resizeModeJustResize": "引き伸ばす",
+      "resizeModeCropAndResize": "切り抜いて合わせる",
+      "resizeModeResizeAndFill": "合わせて余白を埋める",
+      "resizeModeLatentUpscale": "引き伸ばす(潜在空間で拡大)",
+      "maskBlur": "マスクのぼかし",
+      "maskBlurDescription": "マスクの境目をぼかす幅(ピクセル)。大きいほど描き直した部分がなじみます。",
+      "inpaintingFill": "マスク内の初期値",
+      "inpaintingFillDescription": "描き直す範囲を、何から描き始めるか。元の画像を活かすなら「元の画像」。",
+      "inpaintingFillFill": "周りの色で埋める",
+      "inpaintingFillOriginal": "元の画像",
+      "inpaintingFillLatentNoise": "ノイズ",
+      "inpaintingFillLatentNothing": "空(潜在空間で 0)",
+      "inpaintFullRes": "マスク部分だけを拡大して描く",
+      "inpaintFullResDescription": "マスクの範囲(と周りの余白)を切り出し、出力のサイズまで拡大して描いてから戻します。小さな範囲を細かく描き直すときに使います。",
+      "inpaintFullResPadding": "拡大するときの余白",
+      "inpaintFullResPaddingDescription": "「マスク部分だけを拡大して描く」で、マスクの周りに含める余白(ピクセル)。"
     }
   },
   "openaiSpec": {
@@ -343,7 +365,8 @@
     "maskNotSupported": "選んだモデルはマスクに対応していません",
     "maskRequired": "mask が必要です",
     "maskRequiresPosition0": "mask を使う場合は position=0 の image 入力が必要です",
-    "maskSizeMismatch": "mask は position=0 の画像と同寸である必要があります"
+    "maskSizeMismatch": "mask は position=0 の画像と同寸である必要があります",
+    "maskOnlyParam": "{key} はマスクがあるときだけ指定できます"
   },
   "sizes": {
     "positiveIntegersRequired": "width と height は正の整数である必要があります",

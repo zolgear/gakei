@@ -3,6 +3,7 @@ import type { ParamDef } from '../../api/client'
 import { fmt, msg } from '../../i18n'
 import {
   DYNAMIC_PROMPTS_COMBINATORIAL_LIMIT,
+  defsForMask,
   fieldDisabledNote,
   isFieldEnabled,
 } from './dependencies'
@@ -57,5 +58,54 @@ describe('Dynamic Prompts の依存関係(フロントの規則)', () => {
   it('Dynamic Prompts の無い接続先(defs に無い)では、枚数の欄に影響しない', () => {
     const raw = { n: '2', dynamic_prompts_combinatorial: 'true' }
     expect(isFieldEnabled([nDef], raw, [], 'n')).toBe(true)
+  })
+})
+
+// SD WebUI の inpaint の項目(ADR-0038 2章): マスクがあるときだけ意味を持つ。
+describe('マスクがあるときだけ使う項目(mask_only)', () => {
+  const maskBlur: ParamDef = {
+    name: 'mask_blur',
+    type: 'int',
+    label: 'マスクのぼかし',
+    minimum: 0,
+    maximum: 64,
+    default: 4,
+    required: false,
+    description: '',
+    mask_only: true,
+  }
+  const denoise: ParamDef = {
+    name: 'denoising_strength',
+    type: 'float',
+    label: 'ノイズ除去強度',
+    minimum: 0,
+    maximum: 1,
+    default: 0.75,
+    required: false,
+    description: '',
+  }
+  const defs = [denoise, maskBlur]
+  const raw = { denoising_strength: '0.5', mask_blur: '8' }
+
+  it('マスクが無ければ無効にし、理由を示す', () => {
+    expect(isFieldEnabled(defs, raw, [], 'mask_blur', { hasMask: false })).toBe(false)
+    expect(fieldDisabledNote(defs, raw, 'mask_blur', { hasMask: false })).toBe(msg().runForm.dependencies.maskOnly)
+    // mask_only でない項目は変わらない
+    expect(isFieldEnabled(defs, raw, [], 'denoising_strength', { hasMask: false })).toBe(true)
+    expect(fieldDisabledNote(defs, raw, 'denoising_strength', { hasMask: false })).toBeNull()
+  })
+
+  it('マスクがあれば使える', () => {
+    expect(isFieldEnabled(defs, raw, [], 'mask_blur', { hasMask: true })).toBe(true)
+    expect(fieldDisabledNote(defs, raw, 'mask_blur', { hasMask: true })).toBeNull()
+  })
+
+  it('context を渡さなければ判定しない(値を未指定に戻す処理で、マスクを外しただけで消さない)', () => {
+    expect(isFieldEnabled(defs, raw, [], 'mask_blur')).toBe(true)
+  })
+
+  it('defsForMask はマスクが無いときだけ mask_only を除く', () => {
+    expect(defsForMask(defs, false).map((d) => d.name)).toEqual(['denoising_strength'])
+    expect(defsForMask(defs, true).map((d) => d.name)).toEqual(['denoising_strength', 'mask_blur'])
   })
 })

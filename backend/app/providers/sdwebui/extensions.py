@@ -103,12 +103,16 @@ PARAM_DYNAMIC_PROMPTS_COMBINATORIAL = "dynamic_prompts_combinatorial"
 
 
 class DynamicPromptsAdapter(ExtensionAdapter):
-    """Dynamic Prompts(ADR-0038 7章)。txt2img だけ(img2img は Edit を作るときに足す)。"""
+    """Dynamic Prompts(ADR-0038 7章)。txt2img と img2img の両方。
+
+    script-info には同じ名前で txt2img 用と img2img 用が別にある(`is_img2img`)。引数は
+    それぞれの並びから label で探すので、どちらも同じ規則で組み立てられる。
+    """
 
     key = "dynamic_prompts"
 
     def matches_script(self, name: str, *, is_img2img: bool) -> bool:
-        return not is_img2img and name.lower().startswith("dynamic prompts")
+        return name.lower().startswith("dynamic prompts")
 
     def rules(self) -> tuple[LabelRule, ...]:
         return (

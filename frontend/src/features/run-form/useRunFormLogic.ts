@@ -45,7 +45,7 @@ import {
   validateSizeState,
   type SizeState,
 } from './sizeValidation'
-import { findIncompatibleViolations, isFieldEnabled } from './dependencies'
+import { defsForMask, findIncompatibleViolations, isFieldEnabled } from './dependencies'
 import { fillSeedDefaults } from './seedDefaults'
 import { loadSeedMode } from './seedModePrefs'
 import {
@@ -202,6 +202,7 @@ export function useRunFormLogic(
 
   // operation は入力画像の枚数から導出する(利用者には選ばせない)。
   const operation = deriveOperation(formState.inputs)
+  const hasMask = formState.inputs.some((i) => i.role === 'mask')
 
   // ADR-0013: capabilities はプロバイダーの一覧になった。まず今選んでいる provider の
   // capabilities(providerEntry)を引き、その中からモデルを探す。
@@ -298,12 +299,14 @@ export function useRunFormLogic(
 
   // ローカルの状態を context へ書き込む(他ページから読める最新値にしておく)。inputs は
   // このフックでは触らず、setInputs 経由で呼び出し側が直接 context に書き込む。
+  // マスクが無いときは、マスクがあるときだけ意味を持つ項目(mask_only)を送らない。値は rawParams に
+  // 残すので、マスクを描き直せば元の値に戻る。
   useEffect(() => {
-    const params = withSizeParam(buildParams(defs, rawParams), sizeToParam(sizeState))
+    const params = withSizeParam(buildParams(defsForMask(defs, hasMask), rawParams), sizeToParam(sizeState))
     setFormState({ provider, model, prompt, params, inputs: formState.inputs, assetGroupId })
     // formState.inputs はここでは変更しないので依存に含めない(無限ループ回避)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, model, prompt, rawParams, sizeState, defs, assetGroupId])
+  }, [provider, model, prompt, rawParams, sizeState, defs, assetGroupId, hasMask])
 
   const incompatibleErrors = providerEntry
     ? findIncompatibleViolations(defs, rawParams, providerEntry.incompatible_pairs ?? [])
@@ -325,7 +328,6 @@ export function useRunFormLogic(
   const deletedInputAssetIds = useDeletedInputAssetIds(formState.inputs)
   const hasDeletedInputs = deletedInputAssetIds.length > 0
 
-  const hasMask = formState.inputs.some((i) => i.role === 'mask')
   const operationSupported = isOperationSupported(opCaps)
   const maskRequired = opCaps?.requires_mask ?? false
   // opCaps 未解決(読み込み中)の間は妨げない(operationSupported 側で別途止まる)。
@@ -458,7 +460,7 @@ export function useRunFormLogic(
       ? roundSizeStateToMultiple(providerEntry.size, sizeState)
       : sizeState
     const sizeParam = providerEntry?.size ? sizeToParam(roundedSizeState) : undefined
-    const params = withSizeParam(buildParams(defs, rawParams), sizeParam)
+    const params = withSizeParam(buildParams(defsForMask(defs, hasMask), rawParams), sizeParam)
     const inputs =
       operation === 'edit'
         ? formState.inputs.map((i) => ({ asset_id: i.assetId, role: i.role, position: i.position }))
@@ -488,7 +490,7 @@ export function useRunFormLogic(
     defs,
     conditionalParams: providerEntry?.conditional_params ?? [],
     isFieldEnabledFor: (name: string) =>
-      isFieldEnabled(defs, rawParams, providerEntry?.conditional_params ?? [], name),
+      isFieldEnabled(defs, rawParams, providerEntry?.conditional_params ?? [], name, { hasMask }),
     sizeState,
     setSizeState,
     assetGroupId: resolvedAssetGroupId,

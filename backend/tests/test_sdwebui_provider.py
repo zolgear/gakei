@@ -1,4 +1,5 @@
-"""`SdWebuiProvider` のテスト(ADR-0038)。偽の WebUI だけを使う。今は Generate だけ。"""
+"""`SdWebuiProvider` のテスト(ADR-0038)。偽の WebUI だけを使う。Edit(img2img)は
+`test_sdwebui_img2img.py`。"""
 
 from __future__ import annotations
 
@@ -76,7 +77,7 @@ def test_capabilities_lists_checkpoints_as_models(db_session_factory: sessionmak
     assert caps.partial_images_max == 0
 
     model = caps.models[0]
-    assert [o.operation for o in model.operations] == ["generate"]
+    assert [o.operation for o in model.operations] == ["generate", "edit"]
     params = {p.name: p for p in model.operations[0].params}
     assert set(params) == {
         "negative_prompt",

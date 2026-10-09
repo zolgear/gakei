@@ -17,6 +17,8 @@ interface ParamFieldsCommonProps {
   defs: ParamDef[]
   rawParams: RawParamValues
   conditionalParams: ConditionalParam[]
+  /** 入力にマスクがあるか。無ければ `mask_only` の項目を無効にして理由を示す。 */
+  hasMask: boolean
   onParamChange: (name: string, value: string) => void
 }
 
@@ -36,6 +38,7 @@ export function PrimaryParamFields({
   defs,
   rawParams,
   conditionalParams,
+  hasMask,
   onParamChange,
   primary,
 }: PrimaryParamFieldsProps) {
@@ -53,8 +56,8 @@ export function PrimaryParamFields({
             key={def.name}
             def={def}
             value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
-            enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name)}
-            disabledNote={fieldDisabledNote(defs, rawParams, def.name)}
+            enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name, { hasMask })}
+            disabledNote={fieldDisabledNote(defs, rawParams, def.name, { hasMask })}
             onChange={onParamChange}
           />
         )
@@ -81,7 +84,14 @@ interface OtherParamsDetailsProps extends ParamFieldsCommonProps {
 }
 
 /** 「その他」に畳むパラメーター。無いときは `<details>` ごと出さない。 */
-export function OtherParamsDetails({ other, defs, rawParams, conditionalParams, onParamChange }: OtherParamsDetailsProps) {
+export function OtherParamsDetails({
+  other,
+  defs,
+  rawParams,
+  conditionalParams,
+  hasMask,
+  onParamChange,
+}: OtherParamsDetailsProps) {
   const { t } = useI18n()
   const ip = t.workspace.inputPane
   if (other.length === 0) return null
@@ -94,8 +104,8 @@ export function OtherParamsDetails({ other, defs, rawParams, conditionalParams, 
             key={def.name}
             def={def}
             value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
-            enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name)}
-            disabledNote={fieldDisabledNote(defs, rawParams, def.name)}
+            enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name, { hasMask })}
+            disabledNote={fieldDisabledNote(defs, rawParams, def.name, { hasMask })}
             onChange={onParamChange}
           />
         ))}

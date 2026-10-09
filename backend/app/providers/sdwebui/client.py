@@ -13,6 +13,8 @@ GAKEI の DB や Run には依存しない。`SdWebuiProvider` と `app/api/sdwe
   並び(ADR-0038 7章)。取れなければ拡張機能なしとして扱い、一覧の取得は止めない。
 - `POST /sdapi/v1/refresh-checkpoints`: チェックポイントの一覧を WebUI に読み直させる。
 - `POST /sdapi/v1/txt2img`: 応答 `{"images": [base64...], "info": "<JSON 文字列>"}`。
+- `POST /sdapi/v1/img2img`: 本文に `init_images`(base64 の配列)と `mask`(base64。白が描き直す
+  範囲)。応答は txt2img と同じ形。
 - `POST /internal/progress`(`force_task_id` を付けた実行だけの進み具合)。使えなければ
   `GET /sdapi/v1/progress` に切り替える。
 
@@ -20,7 +22,7 @@ GAKEI の DB や Run には依存しない。`SdWebuiProvider` と `app/api/sdwe
 資格情報はログ・例外のメッセージに含めない。
 
 同期の呼び出し(`check_available`、`fetch_catalog`、`refresh_checkpoints`)は、
-capabilities と設定画面の API から使う。実行(`txt2img`、`progress`)は非同期。
+capabilities と設定画面の API から使う。実行(`txt2img`、`img2img`、`progress`)は非同期。
 """
 
 from __future__ import annotations
@@ -451,10 +453,19 @@ class SdWebuiClient:
         self, http: httpx.AsyncClient, body: dict[str, Any], *, timeout: float | None
     ) -> dict[str, Any]:
         """`POST /sdapi/v1/txt2img`。応答の JSON(`images`、`info` など)を返す。"""
+        return await self._post_generation(http, "/sdapi/v1/txt2img", body, timeout=timeout)
+
+    async def img2img(
+        self, http: httpx.AsyncClient, body: dict[str, Any], *, timeout: float | None
+    ) -> dict[str, Any]:
+        """`POST /sdapi/v1/img2img`(`init_images` と `mask` は base64)。応答は txt2img と同じ形。"""
+        return await self._post_generation(http, "/sdapi/v1/img2img", body, timeout=timeout)
+
+    async def _post_generation(
+        self, http: httpx.AsyncClient, path: str, body: dict[str, Any], *, timeout: float | None
+    ) -> dict[str, Any]:
         try:
-            response = await http.post(
-                _join(self.base_url, "/sdapi/v1/txt2img"), json=body, timeout=timeout
-            )
+            response = await http.post(_join(self.base_url, path), json=body, timeout=timeout)
         except httpx.TimeoutException as exc:
             raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.requestTimeout")) from exc
         except httpx.HTTPError as exc:

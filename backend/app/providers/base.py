@@ -40,6 +40,10 @@ class ParamDef(BaseModel):
     description: str = ""
     # UI に専用の入力欄を出す目印(seed: ランダム/固定の切り替えと乱数ボタン。ADR-0013)。
     widget: Literal["seed"] | None = None
+    # True: マスクがあるときだけ意味を持つ(SD WebUI の inpaint の項目。ADR-0038 2章)。マスクの
+    # 無い Run で指定されたら 422。フォームはマスクが無い間は無効にする。None は False と同じ
+    # (`widget` と同じく、使わないプロバイダーの定義に項目を増やさないため)。
+    mask_only: bool | None = None
 
 
 class IncompatiblePair(BaseModel):
