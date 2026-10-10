@@ -74,6 +74,7 @@ CLIP 系のモデルは、画像と文章を同じ空間のベクトルにする
 | `clip-japanese-base` | `line-corporation/clip-japanese-base` の `onnx/clyp_visual.onnx`、`onnx/clyp_textual.onnx`、`onnx/spiece.model` | 約 790MB | 日本語 | Apache-2.0 |
 
 - 次元はどれも 512。
+- 2026-10-11 追記: 多言語の `embeddinggemma-2-q8`(768 次元)を候補に加えた。画像の計算に文章側も要るなど、作りの違いは ADR-0044 に書く。
 - 画像とテキストのエンコーダーは、別々のセッションで持つ。
 - ONNX のセッションの作り方は WD Tagger と揃える(ADR-0024 6章、7章)。
   - 推論のスレッド数は CPU コア数の半分。
