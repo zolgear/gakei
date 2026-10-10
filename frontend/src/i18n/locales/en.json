@@ -72,6 +72,7 @@
       "resourceNav": "Resources",
       "stock": "Stock",
       "prompts": "Prompt sets",
+      "parameterSets": "Parameter sets",
       "graph": "Lineage graph",
       "history": "History",
       "search": "Search"
@@ -1075,6 +1076,74 @@
       "textRequired": "Enter a prompt.",
       "textTooLong": "Prompt must be {max} characters or fewer.",
       "labelTooLong": "Label must be {max} characters or fewer."
+    }
+  },
+  "parameterSets": {
+    "form": {
+      "saveButton": "Save settings",
+      "saveButtonTitle": "Save the current provider, model, parameters and prompt as a parameter set",
+      "loadButton": "Load settings",
+      "loadButtonTitle": "Load a saved parameter set into the form"
+    },
+    "save": {
+      "dialogTitle": "Save as parameter set",
+      "runButton": "Save as parameter set",
+      "runButtonTitle": "Save this run's provider, model, parameters and prompt as a parameter set",
+      "targetLabel": "Save to",
+      "targetNew": "New set",
+      "targetExisting": "Overwrite an existing set",
+      "selectPlaceholder": "Choose a set to overwrite",
+      "noExisting": "There are no sets to overwrite",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Sunset, with hires fix",
+      "includeLabel": "Include",
+      "includeModel": "Model",
+      "includePrompt": "Prompt",
+      "includeSeed": "Seed",
+      "seedUnavailableForm": "The seed is random, so it can't be saved (set it to fixed to save it)",
+      "seedUnavailableRun": "This run has no recorded seed",
+      "summaryProvider": "Provider: {provider}",
+      "summaryModel": "Model: {model}",
+      "summaryModelOmitted": "Model: not saved (loading keeps the current model)",
+      "summaryParams": "Parameters: {count}",
+      "summaryPromptOmitted": "Prompt: not saved (loading keeps the current prompt)",
+      "save": "Save",
+      "saving": "Saving...",
+      "saved": "Saved to \"{name}\"",
+      "saveFailed": "Failed to save",
+      "targetRequired": "Choose a set to overwrite"
+    },
+    "load": {
+      "dialogTitle": "Load a parameter set",
+      "searchLabel": "Filter",
+      "searchPlaceholder": "Filter by name, model or prompt",
+      "loading": "Loading...",
+      "loadFailed": "Failed to load parameter sets",
+      "empty": "No parameter sets yet. Save one with \"Save settings\" in the form or from a run's details.",
+      "noMatch": "No matching sets",
+      "apply": "Load",
+      "modelOmitted": "Model not saved",
+      "promptOmitted": "Prompt not saved",
+      "paramsCount": "{count} parameters",
+      "withSeed": "With seed",
+      "providerDisabled": "Can't load: the provider \"{provider}\" is not enabled",
+      "providerNoModels": "Can't load: the model list for {provider} is unavailable",
+      "modelNotFound": "The model \"{model}\" was not found, so {current} is used",
+      "noticeTitle": "Loaded the parameter set \"{name}\"",
+      "confirmTitle": "Replace the current prompt?",
+      "confirmMessage": "The provider, model, parameters and prompt will be replaced with the parameter set \"{name}\". Input images stay as they are.",
+      "confirmReplace": "Replace"
+    },
+    "panel": {
+      "heading": "Parameter sets",
+      "hint": "\"Load\" replaces the form's provider, model, parameters and prompt. Input images stay as they are.",
+      "rename": "Rename",
+      "delete": "Delete",
+      "save": "Save",
+      "cancel": "Cancel",
+      "renameFailed": "Failed to rename",
+      "deleteFailed": "Failed to delete",
+      "deleteConfirm": "Delete the parameter set \"{name}\". This can't be undone."
     }
   },
   "workspace": {

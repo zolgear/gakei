@@ -1,5 +1,6 @@
 /**
  * 画像の生成情報を読み込んだ後の通知(ADR-0038 9章)。フォームの上部に出し、閉じられる。
+ * パラメーターセットの読み込み(ADR-0040)でも同じ部品を使う(見出しだけ `notice.title` で変える)。
  * 読み込み元(WebUI の版)と注意(チェックポイントが見つからない、など)は常に見せ、
  * 「読み込めなかった項目」(拡大後の寸法の指定、ADetailer など)は数が多くなりがちなので畳んで出す。
  */
@@ -18,7 +19,7 @@ export function ImportNoticePanel({ notice, onDismiss }: ImportNoticePanelProps)
   return (
     <div className={styles.notice} role="status">
       <div className={styles.noticeHeader}>
-        <p className={styles.noticeTitle}>{ip.noticeTitle}</p>
+        <p className={styles.noticeTitle}>{notice.title ?? ip.noticeTitle}</p>
         <button
           type="button"
           className={styles.dismiss}

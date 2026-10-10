@@ -72,6 +72,7 @@
       "resourceNav": "リソース",
       "stock": "ストック",
       "prompts": "プロンプトセット",
+      "parameterSets": "パラメーターセット",
       "graph": "系列グラフ",
       "history": "履歴",
       "search": "検索"
@@ -1075,6 +1076,74 @@
       "textRequired": "プロンプトを入力してください",
       "textTooLong": "プロンプトは{max}文字までです",
       "labelTooLong": "ラベルは{max}文字までです"
+    }
+  },
+  "parameterSets": {
+    "form": {
+      "saveButton": "設定を保存",
+      "saveButtonTitle": "今のプロバイダー・モデル・パラメーター・プロンプトを、パラメーターセットとして保存します",
+      "loadButton": "設定を読み込む",
+      "loadButtonTitle": "保存したパラメーターセットを、フォームに読み込みます"
+    },
+    "save": {
+      "dialogTitle": "パラメーターセットに保存",
+      "runButton": "パラメーターセットに保存",
+      "runButtonTitle": "この Run のプロバイダー・モデル・パラメーター・プロンプトを、パラメーターセットとして保存します",
+      "targetLabel": "保存先",
+      "targetNew": "新しいセット",
+      "targetExisting": "既存のセットに上書き",
+      "selectPlaceholder": "上書きするセットを選んでください",
+      "noExisting": "上書きできるセットがありません",
+      "nameLabel": "名前",
+      "namePlaceholder": "例: 夕景・高解像度補助あり",
+      "includeLabel": "含めるもの",
+      "includeModel": "モデル",
+      "includePrompt": "プロンプト",
+      "includeSeed": "seed",
+      "seedUnavailableForm": "seed がランダムのため保存できません(固定にすると保存できます)",
+      "seedUnavailableRun": "この Run には seed の記録がありません",
+      "summaryProvider": "プロバイダー: {provider}",
+      "summaryModel": "モデル: {model}",
+      "summaryModelOmitted": "モデル: 保存しない(読み込み時は今のモデルのまま)",
+      "summaryParams": "パラメーター: {count} 項目",
+      "summaryPromptOmitted": "プロンプト: 保存しない(読み込み時は今のプロンプトのまま)",
+      "save": "保存",
+      "saving": "保存中...",
+      "saved": "「{name}」に保存しました",
+      "saveFailed": "保存に失敗しました",
+      "targetRequired": "上書きするセットを選んでください"
+    },
+    "load": {
+      "dialogTitle": "パラメーターセットを読み込む",
+      "searchLabel": "絞り込み",
+      "searchPlaceholder": "名前・モデル・プロンプトで絞り込む",
+      "loading": "読み込み中...",
+      "loadFailed": "パラメーターセットの取得に失敗しました",
+      "empty": "まだパラメーターセットがありません。フォームの「設定を保存」か、Run の詳細から保存できます。",
+      "noMatch": "一致するセットがありません",
+      "apply": "読み込む",
+      "modelOmitted": "モデルは保存していません",
+      "promptOmitted": "プロンプトは保存していません",
+      "paramsCount": "パラメーター {count} 項目",
+      "withSeed": "seed あり",
+      "providerDisabled": "プロバイダー「{provider}」が有効でないため読み込めません",
+      "providerNoModels": "{provider} のモデルの一覧を取得できないため読み込めません",
+      "modelNotFound": "モデル「{model}」が見つからないため、{current} にしました",
+      "noticeTitle": "パラメーターセット「{name}」を読み込みました",
+      "confirmTitle": "今のプロンプトを置き換えますか?",
+      "confirmMessage": "プロバイダー・モデル・パラメーターとプロンプトを、パラメーターセット「{name}」で置き換えます。入力画像は変わりません。",
+      "confirmReplace": "置き換える"
+    },
+    "panel": {
+      "heading": "パラメーターセット",
+      "hint": "「読み込む」で、生成のフォームのプロバイダー・モデル・パラメーター・プロンプトを置き換えます。入力画像は変わりません。",
+      "rename": "名前変更",
+      "delete": "削除",
+      "save": "保存",
+      "cancel": "取消",
+      "renameFailed": "名前の変更に失敗しました",
+      "deleteFailed": "削除に失敗しました",
+      "deleteConfirm": "パラメーターセット「{name}」を削除します。元に戻せません。"
     }
   },
   "workspace": {

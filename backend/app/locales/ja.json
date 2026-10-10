@@ -448,6 +448,10 @@
     "notFound": "プロンプトセットが見つかりません",
     "itemNotFound": "プロンプトセットの項目が見つかりません"
   },
+  "parameterSets": {
+    "notFound": "パラメーターセットが見つかりません",
+    "serverOnlyParam": "サーバーだけが書く項目はパラメーターセットに保存できません: {name}"
+  },
   "assetGroups": {
     "notFound": "グループが見つかりません",
     "assetNotFound": "対象の画像が見つかりません: {ids}",

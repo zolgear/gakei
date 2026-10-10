@@ -16,6 +16,9 @@ import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { describeError } from '../run-status/errorMessages'
 import { SaveToPromptSetButton } from '../prompt-sets/SaveToPromptSetButton'
+import { SaveParameterSetButton } from '../parameter-sets/SaveParameterSetButton'
+import { suggestSetNameFromPrompt } from '../prompt-sets/promptSetNaming'
+import { allOperationDefs, buildRunSavePayload, runHasSeed } from '../parameter-sets/parameterSets'
 import { buildParamLabelMap } from '../run-form/paramLabels'
 import { omitServerOnlyParams, paramsForRerun } from '../run-form/paramsBuilder'
 import { inputsFromRunInputs } from '../run-form/editInputs'
@@ -195,6 +198,23 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
         <button type="button" className={styles.rerunButton} onClick={handleRerun}>
           {t.runDetail.rerun}
         </button>
+        {/* パラメーターセットに保存(ADR-0040 3章)。サーバーだけが書く項目は除き、seed は「含める」の
+            選択に従って実際に使った seed から戻す。プロンプトは Run のもの(Dynamic Prompts はテンプレート)。 */}
+        <SaveParameterSetButton
+          label={t.parameterSets.save.runButton}
+          title={t.parameterSets.save.runButtonTitle}
+          triggerClassName={styles.paramSetButton}
+          buildPayload={(include) =>
+            buildRunSavePayload(
+              { provider: run.provider, model: run.model, prompt: run.prompt, params: rawParams },
+              include,
+              allOperationDefs(capsQuery.data, run.provider, run.model),
+            )
+          }
+          seedAvailable={runHasSeed(rawParams)}
+          seedUnavailableMessage={t.parameterSets.save.seedUnavailableRun}
+          defaultName={suggestSetNameFromPrompt(run.prompt)}
+        />
         {(run.status === 'queued' || run.status === 'running') && (
           <Link to={buildStudioPath(null, null, run.id)} className={styles.lineageLink}>
             {t.runDetail.watchProgress}

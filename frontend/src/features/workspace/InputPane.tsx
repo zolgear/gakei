@@ -53,6 +53,7 @@ import { LoraPickerButton } from '../sdwebui/LoraPickerButton'
 import { ImportParamsButton } from '../sdwebui/ImportParamsButton'
 import { ImportNoticePanel } from '../sdwebui/ImportNoticePanel'
 import { isSdWebuiEnabled } from '../sdwebui/importParams'
+import { FormParameterSetButtons } from '../parameter-sets/FormParameterSetButtons'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
 import { InputPaneBottomLayout } from './InputPaneBottomLayout'
@@ -439,6 +440,17 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
           {/* 画像の生成情報から読み込む(ADR-0038 9章)。SD WebUI が有効なら、どのプロバイダーを
               選んでいても出す(読み込むと SD WebUI に切り替わる)。 */}
           {isSdWebuiEnabled(caps) && <ImportParamsButton currentPrompt={form.prompt} />}
+          {/* パラメーターセットの保存と読み込み(ADR-0040)。プロバイダーに依らず出す。 */}
+          <FormParameterSetButtons
+            provider={form.provider}
+            model={form.model}
+            prompt={form.prompt}
+            defs={form.defs}
+            rawParams={form.rawParams}
+            sizeState={form.sizeState}
+            hasSize={Boolean(form.providerEntry?.size)}
+            hasMask={form.hasMask}
+          />
         </>
       }
     />

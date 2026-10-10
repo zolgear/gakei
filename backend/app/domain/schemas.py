@@ -6,7 +6,15 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, StrictInt, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    field_validator,
+)
 
 from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
 from app.providers.base import ProviderCapabilities
@@ -819,6 +827,100 @@ class PromptSetResponse(BaseModel):
 
 class PromptSetListResponse(BaseModel):
     items: list[PromptSetResponse] = Field(default_factory=list)
+
+
+# -- パラメーターセット(ADR-0040) -----------------------------------------
+# 生成のフォームの設定一式。`params` はフォームの値(型変換済み)で、入れ子は持たない。
+# サーバーだけが書く項目(`comfyui_*`、`sdwebui_*`)は API で 422 にする。
+
+PARAMETER_SET_NAME_MAX = 100
+PARAMETER_SET_PROVIDER_MAX = 32
+PARAMETER_SET_MODEL_MAX = 512
+PARAMETER_SET_PROMPT_MAX = 32_000
+PARAMETER_SET_PARAMS_MAX_KEYS = 200
+PARAMETER_SET_PARAM_KEY_MAX = 100
+
+# bool を int より先に置く(Strict なので 1 と true は取り違えない)。
+ParameterSetValue = StrictBool | StrictInt | StrictFloat | StrictStr
+
+
+def _validate_parameter_set_params(
+    value: dict[str, ParameterSetValue] | None,
+) -> dict[str, ParameterSetValue] | None:
+    if value is None:
+        return None
+    if len(value) > PARAMETER_SET_PARAMS_MAX_KEYS:
+        raise ValueError(f"params must have at most {PARAMETER_SET_PARAMS_MAX_KEYS} keys")
+    for key, item in value.items():
+        if not key or len(key) > PARAMETER_SET_PARAM_KEY_MAX:
+            raise ValueError(f"param name must be 1-{PARAMETER_SET_PARAM_KEY_MAX} characters")
+        if isinstance(item, str) and len(item) > PARAMETER_SET_PROMPT_MAX:
+            raise ValueError(f"param {key} must be at most {PARAMETER_SET_PROMPT_MAX} characters")
+    return value
+
+
+class ParameterSetCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=PARAMETER_SET_NAME_MAX)
+    # 登録簿にあるかは問わない(後で無効になることもあるため)。長さだけを確かめる。
+    provider: str = Field(min_length=1, max_length=PARAMETER_SET_PROVIDER_MAX)
+    model: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_MODEL_MAX)
+    prompt: str | None = Field(default=None, max_length=PARAMETER_SET_PROMPT_MAX)
+    params: dict[str, ParameterSetValue] = Field(default_factory=dict)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+    @field_validator("params")
+    @classmethod
+    def _check_params(cls, value: dict[str, ParameterSetValue]) -> dict[str, ParameterSetValue]:
+        return _validate_parameter_set_params(value) or {}
+
+
+class ParameterSetUpdateRequest(BaseModel):
+    """送った項目だけを変える。`model` と `prompt` は null を送ると「保存しない」に戻す。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_NAME_MAX)
+    provider: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_PROVIDER_MAX)
+    model: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_MODEL_MAX)
+    prompt: str | None = Field(default=None, max_length=PARAMETER_SET_PROMPT_MAX)
+    params: dict[str, ParameterSetValue] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+    @field_validator("params")
+    @classmethod
+    def _check_params(
+        cls, value: dict[str, ParameterSetValue] | None
+    ) -> dict[str, ParameterSetValue] | None:
+        return _validate_parameter_set_params(value)
+
+
+class ParameterSetResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    provider: str
+    model: str | None
+    prompt: str | None
+    params: dict[str, ParameterSetValue]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ParameterSetListResponse(BaseModel):
+    items: list[ParameterSetResponse] = Field(default_factory=list)
 
 
 # -- Global search (ADR-0009 6章) ----------------------------------------

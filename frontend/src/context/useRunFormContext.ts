@@ -1,8 +1,15 @@
 /** RunFormContext のコンテキストオブジェクトと読み出し用フック。 */
 import { createContext, useContext } from 'react'
-import type { SdWebuiImportParamsResponse } from '../api/client'
+import type { ParameterSetResponse, SdWebuiImportParamsResponse } from '../api/client'
 import type { PromptInsertMode } from '../features/run-form/promptInsertion'
 import type { RunFormState } from '../features/run-form/types'
+
+/**
+ * フォームへの読み込みのリクエスト。画像の生成情報(ADR-0038 9章)と、パラメーターセット(ADR-0040)。
+ */
+export type FormLoadRequest =
+  | { kind: 'sdwebui'; response: SdWebuiImportParamsResponse }
+  | { kind: 'parameterSet'; set: ParameterSetResponse }
 
 export interface RunFormContextValue {
   formState: RunFormState
@@ -20,13 +27,14 @@ export interface RunFormContextValue {
   requestPromptInsert: (text: string, mode?: PromptInsertMode) => void
   clearPendingPromptInsert: () => void
   /**
-   * 画像の生成情報から SD WebUI のフォームへ読み込むリクエスト(ADR-0038 9章)。ビューアの
-   * 「SD WebUI のフォームに読み込む」とスタジオの「画像から設定を読み込む」が積み、スタジオ
-   * (useRunFormLogic)が capabilities に照らして消費する。プロンプトの置き換えの確認は積む側で
-   * 済ませる。nonce は二重消費を防ぐ通し番号。localStorage には保存しない。
+   * フォームへの読み込みのリクエスト。画像の生成情報から SD WebUI のフォームへ(ADR-0038 9章。
+   * ビューアの「SD WebUI のフォームに読み込む」とスタジオの「画像から設定を読み込む」)と、
+   * パラメーターセットから(ADR-0040。フォームの「設定を読み込む」とサイドバーのパネル)。
+   * スタジオ(useRunFormLogic)が capabilities に照らして消費する。プロンプトの置き換えの確認は
+   * 積む側で済ませる。nonce は二重消費を防ぐ通し番号。localStorage には保存しない。
    */
-  pendingFormLoad: { response: SdWebuiImportParamsResponse; nonce: number } | null
-  requestFormLoad: (response: SdWebuiImportParamsResponse) => void
+  pendingFormLoad: { request: FormLoadRequest; nonce: number } | null
+  requestFormLoad: (request: FormLoadRequest) => void
   clearPendingFormLoad: () => void
 }
 

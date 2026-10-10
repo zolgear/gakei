@@ -50,7 +50,7 @@ export function ImportParamsButton({ currentPrompt }: ImportParamsButtonProps) {
 
   const apply = useCallback(
     (response: SdWebuiImportParamsResponse) => {
-      requestFormLoad(response)
+      requestFormLoad({ kind: 'sdwebui', response })
       close()
     },
     [requestFormLoad, close],

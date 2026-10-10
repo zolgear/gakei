@@ -81,6 +81,20 @@
   font-size: 12px;
 }
 
+/* 「パラメーターセットに保存」(ADR-0040)。「同じ設定で新規作成」の隣に、控えめな見た目で置く。 */
+.paramSetButton {
+  padding: 7px 12px;
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.paramSetButton:hover {
+  border-color: var(--color-accent);
+}
+
 .section {
   padding: 14px;
   background: var(--color-bg-raised);
@@ -300,7 +314,8 @@
 }
 
 @media (max-width: 767px) {
-  .rerunButton {
+  .rerunButton,
+  .paramSetButton {
     min-height: 44px;
   }
 }

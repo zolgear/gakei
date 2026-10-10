@@ -34,7 +34,7 @@ export function ImportFromAssetButton({ assetId }: { assetId: string }) {
 
   function apply(response: SdWebuiImportParamsResponse) {
     setPending(null)
-    requestFormLoad(response)
+    requestFormLoad({ kind: 'sdwebui', response })
     if (location.pathname !== '/studio') navigate('/studio')
   }
 

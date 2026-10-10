@@ -72,6 +72,7 @@ import {
   toImportNotice,
   type ImportNotice,
 } from '../sdwebui/importParams'
+import { buildParameterSetRawParams, resolveParameterSetLoad } from '../parameter-sets/parameterSets'
 
 export interface RunFormLogic {
   caps: CapabilitiesResponse | undefined
@@ -207,6 +208,9 @@ export function useRunFormLogic(
   promptRef.current = prompt
   const [pendingCursor, setPendingCursor] = useState<number | null>(null)
   const [rawParams, setRawParams] = useState<RawParamValues>({})
+  // パラメーターセットの読み込み(ADR-0040)で、今の seed の欄の値を引き継ぐために最新値を読む。
+  const rawParamsRef = useRef(rawParams)
+  rawParamsRef.current = rawParams
   const [sizeState, setSizeState] = useState<SizeState>(() =>
     paramToSizeState(initialRef.current.params.size),
   )
@@ -448,40 +452,85 @@ export function useRunFormLogic(
     clearPendingPromptInsert()
   }, [pendingPromptInsert, insertPrompt, clearPendingPromptInsert])
 
-  // 画像の生成情報から SD WebUI のフォームへの読み込み(ADR-0038 9章)。プロンプトの置き換えの
-  // 確認は積む側(読み込みのダイアログ、ビューア)で済んでいる。capabilities が揃うまで待つ。
-  // パラメーターは、入れる先のモデル・操作の定義でここで作る(同じモデルのままでは defs の
-  // effect が走らないため。「新規生成」の resetForm と同じやり方)。入力画像は変えない。
+  // フォームへの読み込み。画像の生成情報から SD WebUI のフォームへ(ADR-0038 9章)と、
+  // パラメーターセットから(ADR-0040)。プロンプトの置き換えの確認は積む側(読み込みのダイアログ、
+  // ビューア、サイドバー)で済んでいる。capabilities が揃うまで待つ。パラメーターは、入れる先の
+  // モデル・操作の定義でここで作る(同じモデルのままでは defs の effect が走らないため。
+  // 「新規生成」の resetForm と同じやり方)。入力画像は変えない。
   const consumedFormLoadNonceRef = useRef<number | null>(null)
   useEffect(() => {
     if (!pendingFormLoad || !caps) return
     if (consumedFormLoadNonceRef.current === pendingFormLoad.nonce) return
     consumedFormLoadNonceRef.current = pendingFormLoad.nonce
     clearPendingFormLoad()
-    const values = resolveImportedFormValues(pendingFormLoad.response, caps, { provider, model })
-    if (!values) {
-      setSubmitError(msg().sdwebui.importParams.noModels)
-      return
+    const request = pendingFormLoad.request
+
+    let next: {
+      provider: string
+      model: string
+      prompt: string | null
+      sizeState: SizeState
+      rawParams: RawParamValues
+      params: Record<string, string | number | boolean>
+      notice: ImportNotice
     }
-    const targetDefs = importTargetDefs(caps, values, operation)
+    if (request.kind === 'sdwebui') {
+      const values = resolveImportedFormValues(request.response, caps, { provider, model })
+      if (!values) {
+        setSubmitError(msg().sdwebui.importParams.noModels)
+        return
+      }
+      const targetDefs = importTargetDefs(caps, values, operation)
+      next = {
+        provider: values.provider,
+        model: values.model,
+        prompt: values.prompt,
+        sizeState: paramToSizeState(values.size),
+        rawParams: buildImportedRawParams(targetDefs, values.params, loadSeedMode()),
+        params: values.params,
+        notice: toImportNotice(request.response),
+      }
+    } else {
+      const resolved = resolveParameterSetLoad(request.set, caps, { provider, model }, operation)
+      if (!resolved.ok) {
+        setSubmitError(resolved.reason)
+        return
+      }
+      next = {
+        provider: resolved.provider,
+        model: resolved.model,
+        prompt: resolved.prompt,
+        sizeState: resolved.sizeState,
+        rawParams: buildParameterSetRawParams(
+          resolved.targetDefs,
+          resolved.params,
+          rawParamsRef.current,
+          loadSeedMode(),
+        ),
+        params: resolved.params,
+        notice: resolved.notice,
+      }
+    }
+
     initialRef.current = {
       ...initialRef.current,
-      provider: values.provider,
-      model: values.model,
-      prompt: values.prompt,
-      params: values.params,
+      provider: next.provider,
+      model: next.model,
+      prompt: next.prompt ?? initialRef.current.prompt,
+      params: next.params,
     }
     didInitParamsRef.current = true
-    setProvider(values.provider)
-    setModel(values.model)
-    setPrompt(values.prompt)
-    setSizeState(paramToSizeState(values.size))
+    setProvider(next.provider)
+    setModel(next.model)
+    // null はプロンプトを保存していないパラメーターセット(今のプロンプトのまま)。
+    if (next.prompt !== null) setPrompt(next.prompt)
+    setSizeState(next.sizeState)
     // 読み込んだサイズは意図したものなので、入力画像を足しても自動では変えない。
     setSizeTouchedByUser(true)
-    setRawParams(buildImportedRawParams(targetDefs, values.params, loadSeedMode()))
+    setRawParams(next.rawParams)
     setSubmitError(null)
     setDroppedParamsNotice(null)
-    setImportNotice(toImportNotice(pendingFormLoad.response))
+    setImportNotice(next.notice)
     // provider・model・operation は消費した時点の値だけを使う(変わるたびに走らせない)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFormLoad, caps, clearPendingFormLoad])

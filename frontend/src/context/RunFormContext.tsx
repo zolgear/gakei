@@ -14,13 +14,12 @@
  * 初期化では、この値を既定のグループにする。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { SdWebuiImportParamsResponse } from '../api/client'
 import { ensureInputIds } from '../features/run-form/editInputs'
 import type { PromptInsertMode } from '../features/run-form/promptInsertion'
 import { createEmptyFormState, type RunFormState } from '../features/run-form/types'
 import { loadLastAssetGroupId, saveLastAssetGroupId } from './lastAssetGroupStorage'
 import { loadRunFormState, saveRunFormState } from './runFormStorage'
-import { RunFormContext } from './useRunFormContext'
+import { RunFormContext, type FormLoadRequest } from './useRunFormContext'
 
 const SAVE_DEBOUNCE_MS = 300
 
@@ -38,7 +37,7 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
   >(null)
   const insertNonceRef = useRef(0)
   const [pendingFormLoad, setPendingFormLoad] = useState<
-    { response: SdWebuiImportParamsResponse; nonce: number } | null
+    { request: FormLoadRequest; nonce: number } | null
   >(null)
 
   function flushSave() {
@@ -71,9 +70,9 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
 
   const clearPendingPromptInsert = useCallback(() => setPendingPromptInsert(null), [])
 
-  const requestFormLoad = useCallback((response: SdWebuiImportParamsResponse) => {
+  const requestFormLoad = useCallback((request: FormLoadRequest) => {
     insertNonceRef.current += 1
-    setPendingFormLoad({ response, nonce: insertNonceRef.current })
+    setPendingFormLoad({ request, nonce: insertNonceRef.current })
   }, [])
 
   const clearPendingFormLoad = useCallback(() => setPendingFormLoad(null), [])

@@ -34,6 +34,7 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "share",
         "share_asset",
         "run_import",
+        "parameter_set",
         "alembic_version",
     } <= tables
 
@@ -1079,4 +1080,42 @@ def test_migration_0027_adds_run_import(empty_database_url: str) -> None:
     command.downgrade(cfg, "0026")
     engine = create_engine(empty_database_url)
     assert "run_import" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0028_adds_parameter_set(empty_database_url: str) -> None:
+    """ADR-0040: 0027 の DB に upgrade head で parameter_set が加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0027")
+    engine = create_engine(empty_database_url)
+    assert "parameter_set" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "parameter_set" in set(inspector.get_table_names())
+    columns = {c["name"]: c for c in inspector.get_columns("parameter_set")}
+    assert columns["name"]["nullable"] is False
+    assert columns["provider"]["nullable"] is False
+    assert columns["params"]["nullable"] is False
+    assert columns["model"]["nullable"] is True
+    assert columns["prompt"]["nullable"] is True
+    assert columns["created_by_user_id"]["nullable"] is True
+    assert columns["deleted_at"]["nullable"] is True
+    indexes = {i["name"] for i in inspector.get_indexes("parameter_set")}
+    assert {"ix_parameter_set_created_by_user_id", "ix_parameter_set_updated_at"} <= indexes
+    foreign_keys = inspector.get_foreign_keys("parameter_set")
+    assert [fk["referred_table"] for fk in foreign_keys] == ["app_user"]
+    engine.dispose()
+
+    command.downgrade(cfg, "0027")
+    engine = create_engine(empty_database_url)
+    assert "parameter_set" not in set(sa_inspect(engine).get_table_names())
     engine.dispose()

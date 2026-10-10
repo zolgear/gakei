@@ -63,6 +63,10 @@ export type PromptSetCreateRequest = components['schemas']['PromptSetCreateReque
 export type PromptSetUpdateRequest = components['schemas']['PromptSetUpdateRequest']
 export type PromptSetItemAppendRequest = components['schemas']['PromptSetItemAppendRequest']
 export type PromptSetItemUpdateRequest = components['schemas']['PromptSetItemUpdateRequest']
+export type ParameterSetResponse = components['schemas']['ParameterSetResponse']
+export type ParameterSetListResponse = components['schemas']['ParameterSetListResponse']
+export type ParameterSetCreateRequest = components['schemas']['ParameterSetCreateRequest']
+export type ParameterSetUpdateRequest = components['schemas']['ParameterSetUpdateRequest']
 
 export type SearchResponse = components['schemas']['SearchResponse']
 export type SearchRunHit = components['schemas']['SearchRunHit']
@@ -751,6 +755,38 @@ export function updatePromptSetItem(
 
 export function deletePromptSetItem(promptSetId: string, itemId: string): Promise<void> {
   return request(`/api/prompt-sets/${promptSetId}/items/${itemId}`, { method: 'DELETE' })
+}
+
+// -- パラメーターセット(ADR-0040) -----------------------------------------
+
+export function listParameterSets(): Promise<ParameterSetListResponse> {
+  return request('/api/parameter-sets')
+}
+
+export function createParameterSet(body: ParameterSetCreateRequest): Promise<ParameterSetResponse> {
+  return request('/api/parameter-sets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/**
+ * body に含めたキーだけが更新される(`model`・`prompt` を明示的に `null` にすると「保存しない」に戻る)。
+ */
+export function updateParameterSet(
+  parameterSetId: string,
+  body: ParameterSetUpdateRequest,
+): Promise<ParameterSetResponse> {
+  return request(`/api/parameter-sets/${parameterSetId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteParameterSet(parameterSetId: string): Promise<void> {
+  return request(`/api/parameter-sets/${parameterSetId}`, { method: 'DELETE' })
 }
 
 // -- 参考価格 ----------------------------------------------------------------

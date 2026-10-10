@@ -466,6 +466,37 @@ class PromptSetItem(Base):
     prompt_set: Mapped[PromptSet] = relationship("PromptSet", back_populates="items")
 
 
+class ParameterSet(Base):
+    """パラメーターセット(生成のフォームの設定一式に名前を付けたもの。ADR-0040)。
+
+    証跡ではないので名前と中身を更新でき、削除は論理削除。`run` とは外部キーを張らない
+    (Run には実行時の値がこれまでどおり残る。ADR-0003)。`params` にはフォームの値だけを入れ、
+    サーバーだけが書く項目(`comfyui_*`、`sdwebui_*`)は入れない(API で 422)。
+    `provider` は登録簿にあるかを保存時には問わない(後で無効になることもあるため。読み込む側で
+    判定する)。
+    """
+
+    __tablename__ = "parameter_set"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 保存しなければ null(読み込み時は今のモデル・プロンプトのまま)。
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    params: Mapped[dict] = mapped_column(JsonType, nullable=False, default=dict)
+    # 作成したユーザー(ADR-0025)。`none` モードでは null。追記のみ(INSERT 時に設定し、
+    # UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime(), nullable=False, default=_utcnow, index=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
 class AssetGroup(Base):
     """グループ(ストックの手動整理。ADR-0022)。証跡ではないので更新・論理削除ができる。
 

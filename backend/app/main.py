@@ -31,6 +31,7 @@ from app.api import events as events_api
 from app.api import health as health_api
 from app.api import lineage_transfer as lineage_transfer_api
 from app.api import llm_connections as llm_connections_api
+from app.api import parameter_sets as parameter_sets_api
 from app.api import pricing as pricing_api
 from app.api import prompt_sets as prompt_sets_api
 from app.api import runs as runs_api
@@ -586,6 +587,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(runs_api.router, dependencies=auth_dep)
     app.include_router(events_api.router, dependencies=auth_dep)
     app.include_router(prompt_sets_api.router, dependencies=auth_dep)
+    # ADR-0040: パラメーターセット(本人のものだけ)。
+    app.include_router(parameter_sets_api.router, dependencies=auth_dep)
     app.include_router(search_api.router, dependencies=auth_dep)
     app.include_router(embeddings_api.router, dependencies=auth_dep)
     app.include_router(tags_api.router, dependencies=auth_dep)

@@ -41,6 +41,8 @@ export interface ImportNotice {
   notes: { code: string; message: string }[]
   /** 読み込み元(生成情報の `Version`。WebUI の版)。無ければ null。 */
   software: string | null
+  /** 見出し。無ければ「画像の生成情報を読み込みました」(パラメーターセットの読み込みは名前を出す)。 */
+  title?: string
 }
 
 /** SD WebUI が有効(capabilities にプロバイダーがある)か。無効なら読み込みの入口を出さない。 */
