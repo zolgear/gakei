@@ -10,9 +10,16 @@
  * それをそのまま渡す。
  *
  * Esc で閉じる。sheet 配置はバックドロップのタップでも閉じる。
+ *
+ * Asset を表示中で、その Asset を生んだ Run があるときは、見出しの行に「Generated の詳細を開く」
+ * (「i」のアイコン)を出す。`onOpenRun` が渡されていれば呼び出し側に任せ(同じグラフにその Run の
+ * ノードがあればインスペクターをその Run に切り替える)、無ければ Run 詳細ページへ移る。
  */
 import { useEffect, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
+import { getAsset } from '../../api/client'
+import { RunDetailIcon } from '../../components/icons'
 import { RunDetailContent } from '../run-detail/RunDetailContent'
 import { useI18n } from '../../i18n'
 import { LineageAssetInspectorContent } from './LineageAssetInspectorContent'
@@ -34,6 +41,45 @@ export interface LineageInspectorPanelProps {
    * `/lineage` からは渡さない(下段の textarea が無いため意味を持たない)。
    */
   renderPromptActions?: (prompt: string) => ReactNode
+  /**
+   * Asset の「Generated の詳細を開く」を押したときの処理(引数は生成元の Run の id)。
+   * 省略時は Run 詳細ページ(`/runs/:id`)へのリンクにする。
+   */
+  onOpenRun?: (runId: string) => void
+}
+
+/** 表示中の Asset の生成元 Run を開くアイコン。生成元の Run が無い Asset(アップロードなど)では出さない。 */
+function OpenProducingRunButton({
+  assetId,
+  onOpenRun,
+}: {
+  assetId: string
+  onOpenRun?: (runId: string) => void
+}) {
+  const { t } = useI18n()
+  // queryKey は `LineageAssetInspectorContent` と同じなので、取得は1回で済む。
+  const assetQuery = useQuery({ queryKey: ['asset', assetId], queryFn: () => getAsset(assetId) })
+  const runId = assetQuery.data?.produced_by_run?.id
+  if (!runId) return null
+  const label = t.common.openGeneratedDetail
+  if (onOpenRun) {
+    return (
+      <button
+        type="button"
+        className={styles.iconButton}
+        aria-label={label}
+        title={label}
+        onClick={() => onOpenRun(runId)}
+      >
+        <RunDetailIcon />
+      </button>
+    )
+  }
+  return (
+    <Link to={`/runs/${runId}`} className={styles.iconButton} aria-label={label} title={label}>
+      <RunDetailIcon />
+    </Link>
+  )
 }
 
 export function LineageInspectorPanel({
@@ -42,6 +88,7 @@ export function LineageInspectorPanel({
   placement = 'auto',
   mainRightTop,
   renderPromptActions,
+  onOpenRun,
 }: LineageInspectorPanelProps) {
   const { t } = useI18n()
   const open = content.kind !== 'none'
@@ -96,6 +143,7 @@ export function LineageInspectorPanel({
               {t.lineage.openDetailPage}
             </Link>
           )}
+          {content.kind === 'asset' && <OpenProducingRunButton assetId={content.id} onOpenRun={onOpenRun} />}
           <button type="button" className={styles.closeButton} aria-label={t.lineage.close} onClick={onClose}>
             ×
           </button>

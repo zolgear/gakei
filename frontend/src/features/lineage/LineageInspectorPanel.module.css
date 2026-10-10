@@ -38,6 +38,7 @@
   font-size: 12px;
 }
 
+.iconButton,
 .closeButton {
   flex-shrink: 0;
   width: 26px;
@@ -53,6 +54,7 @@
   line-height: 1;
 }
 
+.iconButton:hover,
 .closeButton:hover {
   border-color: var(--color-accent);
   color: var(--color-text);
@@ -119,6 +121,7 @@
   background: var(--color-border-strong);
 }
 
+.panel[data-placement='sheet'] .iconButton,
 .panel[data-placement='sheet'] .closeButton {
   width: 44px;
   height: 44px;
@@ -169,6 +172,7 @@
     background: var(--color-border-strong);
   }
 
+  .iconButton,
   .closeButton {
     width: 44px;
     height: 44px;

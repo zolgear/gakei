@@ -43,7 +43,7 @@ import { LineageGraph } from '../lineage/LineageGraph'
 import { LineageInspectorPanel } from '../lineage/LineageInspectorPanel'
 import { StudioLayoutToggleButton } from './StudioLayoutToggleButton'
 import type { StudioLayout } from './studioLayout'
-import { resolveInspectorContent } from '../lineage/inspectorContent'
+import { resolveInspectorContent, resolveOpenRunTarget } from '../lineage/inspectorContent'
 import { computeInspectorWidthPx, resolveInspectorPlacement } from '../lineage/inspectorPlacement'
 import { parseNodeIdFromSearch } from '../lineage/nodeQueryParam'
 import type { InsertPromptFn } from '../run-form/promptInsertion'
@@ -301,6 +301,14 @@ export function ResultPane({
 
   function selectNode(id: string | null) {
     navigate(buildStudioPath(displayedAssetId, id))
+  }
+
+  // 系列モードのインスペクターの「Generated の詳細を開く」: グラフにある Run なら、スタジオを
+  // 離れずインスペクターをその Run に切り替える(無ければ Run 詳細ページへ)。
+  function openRunFromInspector(runId: string) {
+    const target = resolveOpenRunTarget(runId, lineageQuery.data?.nodes ?? [])
+    if (target.kind === 'select') selectNode(target.nodeId)
+    else navigate(target.path)
   }
 
   // 「入力の主たる親」を表示しているときは、その Asset に生成元 Run があっても Run の情報
@@ -561,6 +569,7 @@ export function ResultPane({
               <LineageInspectorPanel
                 content={inspectorContent}
                 onClose={() => selectNode(null)}
+                onOpenRun={openRunFromInspector}
                 placement={inspectorPlacement}
                 mainRightTop={inspectorPlacement === 'main-right' ? paneMetrics.top : undefined}
                 renderPromptActions={(prompt) => (

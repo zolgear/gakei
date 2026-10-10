@@ -27,6 +27,7 @@
     "save": "Save",
     "retry": "Retry",
     "back": "← Back",
+    "openGeneratedDetail": "Open Generated details",
     "statusLabels": {
       "queued": "Queued",
       "running": "Running",

@@ -9,6 +9,7 @@ import { Link, useNavigate } from 'react-router'
 import { ApiError, cancelRun, deleteRun, getRun, type RunSummary } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
 import { UserAvatar } from '../../components/UserAvatar'
+import { RunDetailIcon } from '../../components/icons'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { useResourcePanel } from '../../context/useResourcePanel'
@@ -342,6 +343,16 @@ export function HistoryCard({ run }: HistoryCardProps) {
             </button>
           )}
           <span className={styles.actionsSpacer} />
+          {/* プロンプトの文字のリンクと同じ遷移先(Run 詳細)を、アイコンからも開けるようにする。
+              状態によらず出す(失敗・中止・実行中の Run にも詳細はある)。 */}
+          <Link
+            to={nav.runHref}
+            className={styles.iconButton}
+            aria-label={t.common.openGeneratedDetail}
+            title={t.common.openGeneratedDetail}
+          >
+            <RunDetailIcon size={15} />
+          </Link>
           {nav.showLineageButton && (
             <button
               type="button"

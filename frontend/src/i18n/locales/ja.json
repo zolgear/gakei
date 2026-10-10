@@ -27,6 +27,7 @@
     "save": "保存",
     "retry": "再読み込み",
     "back": "← 戻る",
+    "openGeneratedDetail": "Generated の詳細を開く",
     "statusLabels": {
       "queued": "待機中",
       "running": "実行中",

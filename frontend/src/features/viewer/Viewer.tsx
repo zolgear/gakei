@@ -19,6 +19,7 @@ import {
   DownloadIcon,
   ExportArchiveIcon,
   LineageIcon,
+  RunDetailIcon,
   ShareLinkIcon,
   TrashIcon,
 } from '../../components/icons'
@@ -250,6 +251,17 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <AddToInputIcon />
                 </button>
+                {/* 生成元の Run があるときだけ、その詳細へ直接移る(下の文字のリンクと同じ遷移先)。 */}
+                {asset.produced_by_run && (
+                  <Link
+                    to={`/runs/${asset.produced_by_run.id}`}
+                    className={styles.iconButton}
+                    aria-label={t.common.openGeneratedDetail}
+                    title={t.common.openGeneratedDetail}
+                  >
+                    <RunDetailIcon />
+                  </Link>
+                )}
                 <Link
                   to={`/lineage/${asset.id}`}
                   className={styles.iconButton}

@@ -353,6 +353,13 @@
   /* パネルが画像の下に回り、ページ全体がスクロールするので見出しの行は固定しない。 */
   .headerRow {
     position: static;
+    gap: 8px;
+  }
+
+  /* アイコンが 44px になると 6 個(共有を有効にしたとき)で1行に収まらないので、折り返して右に寄せる。 */
+  .headerActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .iconButton {
