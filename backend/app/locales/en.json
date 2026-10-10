@@ -594,6 +594,38 @@
       "other": "Migration finished ({count} objects in total: {copied} copied, {skipped} skipped because they already exist). Set STORAGE_BACKEND and the related environment variables, then start GAKEI."
     }
   },
+  "backfillFocalPoints": {
+    "description": "Computes the thumbnail focal point (face position) from the original for images that have none or were computed by an older detector version (ADR-0043). Masks are excluded; soft-deleted images are included. Safe to run while GAKEI is running. Originals are not modified.",
+    "dryRunHelp": "Only count the target images; write nothing",
+    "limitHelp": "Maximum number of images to process (default: no limit)",
+    "recomputeHelp": "Also recompute images that already have a current focal point",
+    "invalidLimit": "--limit must be an integer of 1 or more.",
+    "databaseMissing": "Database file not found: {source}",
+    "tableMissing": "The focal point table does not exist. Start this version of GAKEI once to migrate the database, then run this again.",
+    "failed": "Stopped because reading from storage failed. Run again to continue where it left off. Details: {error}",
+    "targets": {
+      "one": "Target images: {count}",
+      "other": "Target images: {count}"
+    },
+    "dryRunDone": "--dry-run: nothing was written.",
+    "found": {
+      "one": "  Face found: {count}",
+      "other": "  Face found: {count}"
+    },
+    "notFound": {
+      "one": "  No face found (kept centered): {count}",
+      "other": "  No face found (kept centered): {count}"
+    },
+    "unreadable": {
+      "one": "Note: {count} image's original is missing or unreadable (kept centered)",
+      "other": "Note: {count} images' originals are missing or unreadable (kept centered)"
+    },
+    "skipped": {
+      "one": "  Skipped (already computed by another process, etc.): {count}",
+      "other": "  Skipped (already computed by another process, etc.): {count}"
+    },
+    "elapsed": "Elapsed: {seconds} s"
+  },
   "regenerateDerivatives": {
     "description": "Create the current version of the derived images (thumbnails and previews) from the originals for images that do not have them (ADR-0036). Logically deleted images are included. You can run this while GAKEI is running. The database is not modified and the originals are not touched.",
     "dryRunHelp": "Only count what would be created (and, with --prune, deleted); write and delete nothing",

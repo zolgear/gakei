@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
-from app.domain import share_settings
+from app.domain import focal_points, share_settings
 from app.domain.lineage import MAX_DEPTH, MAX_NODES, LineageNotFoundError, build_asset_lineage
 from app.domain.models import (
     Asset,
@@ -447,6 +447,7 @@ def build_public_response(db: Session, share: Share) -> PublicShareResponse:
             )
 
     titles = annotations_domain.bulk_titles(db, asset_ids)
+    focals = focal_points.bulk_get(db, asset_ids)
     assets.sort(key=lambda a: (depth_by_id[a.id], a.created_at, str(a.id)))
     public_assets = [
         PublicShareAsset(
@@ -459,6 +460,7 @@ def build_public_response(db: Session, share: Share) -> PublicShareResponse:
             title=titles.get(a.id),
             run_id=a.produced_by_run_id if a.produced_by_run_id in runs_by_id else None,
             depth=depth_by_id[a.id],
+            focal_point=focals.get(a.id),
             allow_original=original_allowed(
                 db,
                 share,

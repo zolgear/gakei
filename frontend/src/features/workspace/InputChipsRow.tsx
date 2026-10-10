@@ -16,6 +16,7 @@ import type { EditInputsLogic } from '../run-form/useEditInputsLogic'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import styles from './InputChipsRow.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 /**
  * 入力画像の一覧を渡す props。下段の `InputChipsRow` とサイドバー配置の `InputImageTiles`
@@ -109,7 +110,13 @@ export function InputChipsRow({
                     title={c.showInPreview}
                     onClick={() => onPreviewAsset(item.assetId)}
                   >
-                    <img className={styles.thumb} src={assetUrl(item.assetId, 'thumb')} alt="" draggable={false} />
+                    <img
+                      className={styles.thumb}
+                      src={assetUrl(item.assetId, 'thumb')}
+                      style={focalStyle(detail?.focal_point)}
+                      alt=""
+                      draggable={false}
+                    />
                   </button>
                   <span className={styles.indexTag} title={isPrimary ? c.primaryTitle : undefined}>
                     {index + 1}

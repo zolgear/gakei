@@ -45,6 +45,7 @@ import { baselineNegativePrompt } from '../run-detail/finalPrompt'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import styles from './Viewer.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 interface ViewerProps {
   assetId: string
@@ -357,6 +358,7 @@ export function Viewer({ assetId }: ViewerProps) {
                     >
                       <img
                         src={assetUrl(output.asset_id, 'thumb')}
+                        style={focalStyle(output.focal_point)}
                         alt=""
                         loading="lazy"
                         className={styles.outputThumbImg}
@@ -463,6 +465,7 @@ export function Viewer({ assetId }: ViewerProps) {
           open={deleteConfirmOpen}
           message={t.viewer.deleteConfirmMessage}
           previewImageUrl={assetUrl(asset.id, 'thumb')}
+          previewFocalPoint={asset.focal_point}
           previewDetail={`${asset.width} × ${asset.height}`}
           onConfirm={() => deleteMutation.mutate()}
           onCancel={() => setDeleteConfirmOpen(false)}

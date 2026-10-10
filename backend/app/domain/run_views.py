@@ -18,19 +18,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
+from app.domain import focal_points
 from app.domain.avatars import avatar_url
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
     AppUser,
     Asset,
     AssetAnnotation,
+    AssetFocalPoint,
     AssetGroup,
     Run,
     RunInput,
     RunInputRole,
 )
 from app.domain.pricing import cost_from_usage
-from app.domain.schemas import AssetGroupRef, CreatedBy, RunOutputRef, RunTextOutput
+from app.domain.schemas import AssetGroupRef, CreatedBy, FocalPoint, RunOutputRef, RunTextOutput
 from app.domain.visibility import asset_visible, group_visible, run_visible
 
 
@@ -40,16 +42,37 @@ def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, l
     if not run_ids:
         return result
     rows = db.execute(
-        select(Asset.produced_by_run_id, Asset.id, Asset.output_index, AssetAnnotation.title)
+        select(
+            Asset.produced_by_run_id,
+            Asset.id,
+            Asset.output_index,
+            AssetAnnotation.title,
+            AssetFocalPoint.x,
+            AssetFocalPoint.y,
+        )
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
+        # サムネイルの焦点(ADR-0043)も同じ問い合わせで引く。
+        .outerjoin(AssetFocalPoint, AssetFocalPoint.asset_id == Asset.id)
         .where(Asset.produced_by_run_id.in_(run_ids))
         .order_by(Asset.output_index)
     ).all()
-    for produced_by_run_id, asset_id, output_index, title in rows:
+    for produced_by_run_id, asset_id, output_index, title, x, y in rows:
         result[produced_by_run_id].append(
-            RunOutputRef(asset_id=asset_id, output_index=output_index, title=title)
+            RunOutputRef(
+                asset_id=asset_id,
+                output_index=output_index,
+                title=title,
+                focal_point=focal_points.to_schema(x, y),
+            )
         )
     return result
+
+
+def bulk_parent_focal_points(
+    db: Session, inputs_map: dict[uuid.UUID, tuple[int, uuid.UUID | None]]
+) -> dict[uuid.UUID, FocalPoint]:
+    """`bulk_input_summary` の主たる親の焦点(ADR-0043)。親の asset_id ごと。"""
+    return focal_points.bulk_get(db, [p for _count, p in inputs_map.values() if p is not None])
 
 
 def bulk_input_summary(
@@ -202,6 +225,8 @@ def run_summary_fields(
     descendant_run_count: int = 0,
     created_by: CreatedBy | None = None,
     asset_group: AssetGroupRef | None = None,
+    *,
+    primary_parent_focal_point: FocalPoint | None = None,
 ) -> dict[str, Any]:
     """`RunSummary(**...)` にそのまま渡せる辞書を作る。`created_by` は呼び出し側が
     `bulk_users()` で、`asset_group` は `bulk_asset_groups()` で引いた値を渡す
@@ -224,6 +249,7 @@ def run_summary_fields(
         "finished_at": run.finished_at,
         "outputs": outputs,
         "primary_parent_asset_id": primary_parent_asset_id,
+        "primary_parent_focal_point": primary_parent_focal_point,
         "input_count": input_count,
         "descendant_run_count": descendant_run_count,
         "deleted_at": run.deleted_at,

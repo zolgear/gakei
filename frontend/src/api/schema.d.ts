@@ -2189,6 +2189,7 @@ export interface components {
             created_at: string;
             /** Title */
             title?: string | null;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -2395,6 +2396,7 @@ export interface components {
             created_at: string;
             /** Title */
             title?: string | null;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
         };
         /**
          * AssetTagAddRequest
@@ -2455,6 +2457,7 @@ export interface components {
             created_at: string;
             /** Title */
             title?: string | null;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -3051,6 +3054,7 @@ export interface components {
             created_at: string;
             /** Title */
             title?: string | null;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Max Score */
             max_score: number;
             /** Hash Missing */
@@ -3190,6 +3194,7 @@ export interface components {
             height: number;
             /** Title */
             title?: string | null;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
         };
         /**
          * EmbeddingGraphResponse
@@ -3376,6 +3381,17 @@ export interface components {
             /** Max Length */
             max_length?: number | null;
         };
+        /**
+         * FocalPoint
+         * @description サムネイルの焦点(ADR-0043)。画像の幅・高さに対する 0〜1 の位置。画面は
+         *     `object-fit: cover` の画像に `object-position: x% y%` を付ける。
+         */
+        FocalPoint: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** GeneralSettingsResponse */
         GeneralSettingsResponse: {
             moderation: components["schemas"]["ModerationSetting"];
@@ -3470,6 +3486,7 @@ export interface components {
              * @default false
              */
             restorable: boolean;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
         };
         /**
          * LineageEdge
@@ -4245,6 +4262,7 @@ export interface components {
             depth: number;
             /** Allow Original */
             allow_original: boolean;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
         };
         /**
          * PublicShareEdge
@@ -4459,6 +4477,7 @@ export interface components {
             outputs?: components["schemas"]["RunOutputRef"][];
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
+            primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
             /**
              * Input Count
              * @default 0
@@ -4575,6 +4594,7 @@ export interface components {
             role: "image" | "mask" | "reference";
             /** Position */
             position: number;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
         };
         /** RunListResponse */
         RunListResponse: {
@@ -4594,6 +4614,7 @@ export interface components {
             output_index: number | null;
             /** Title */
             title?: string | null;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
         };
         /**
          * RunSummary
@@ -4648,6 +4669,7 @@ export interface components {
             outputs?: components["schemas"]["RunOutputRef"][];
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
+            primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
             /**
              * Input Count
              * @default 0
@@ -4907,6 +4929,7 @@ export interface components {
             created_at: string;
             /** Title */
             title?: string | null;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Produced By Run Id */
             produced_by_run_id: string | null;
             /**
@@ -5006,6 +5029,7 @@ export interface components {
             outputs?: components["schemas"]["RunOutputRef"][];
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
+            primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
             /**
              * Input Count
              * @default 0
@@ -5077,6 +5101,7 @@ export interface components {
             created_at: string;
             /** Title */
             title?: string | null;
+            focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Score */
             score: number;
         };

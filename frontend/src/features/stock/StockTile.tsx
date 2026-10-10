@@ -11,6 +11,7 @@ import type { AssetSummary } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import styles from './StockTile.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 function TrashIcon() {
   return (
@@ -82,6 +83,7 @@ export function StockTile({
         <img
           className={`${styles.tileImage} checkerboard`}
           src={assetUrl(asset.id, 'thumb')}
+          style={focalStyle(asset.focal_point)}
           alt=""
           draggable={draggable}
           onDragStart={

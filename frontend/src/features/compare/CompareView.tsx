@@ -26,6 +26,7 @@ import {
   type CompareMode,
 } from './compareState'
 import styles from './CompareView.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 export function CompareView() {
   const { t } = useI18n()
@@ -146,7 +147,7 @@ export function CompareView() {
                         title={`${c.role} #${c.position}`}
                         onClick={() => selectBefore(c.assetId)}
                       >
-                        <img src={assetUrl(c.assetId, 'thumb')} alt="" draggable={false} />
+                        <img src={assetUrl(c.assetId, 'thumb')} style={focalStyle(c.focalPoint)} alt="" draggable={false} />
                       </button>
                     ))}
                   </div>
@@ -165,7 +166,7 @@ export function CompareView() {
                         title={c.outputIndex !== null ? `#${c.outputIndex}` : undefined}
                         onClick={() => selectAfter(c.assetId)}
                       >
-                        <img src={assetUrl(c.assetId, 'thumb')} alt="" draggable={false} />
+                        <img src={assetUrl(c.assetId, 'thumb')} style={focalStyle(c.focalPoint)} alt="" draggable={false} />
                       </button>
                     ))}
                   </div>

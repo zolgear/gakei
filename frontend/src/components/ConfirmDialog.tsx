@@ -6,6 +6,7 @@
  * 何が消えるのか分からない、という問題への対応)。
  */
 import { useI18n } from '../i18n'
+import { type FocalPointValue, focalStyle } from '../lib/focalPoint'
 import styles from './ConfirmDialog.module.css'
 
 interface ConfirmDialogProps {
@@ -17,6 +18,8 @@ interface ConfirmDialogProps {
   onCancel: () => void
   previewImageUrl?: string
   previewImageAlt?: string
+  /** サムネイルの焦点(ADR-0043)。あれば顔の位置に寄せて切り取る。 */
+  previewFocalPoint?: FocalPointValue | null
   previewDetail?: string
   /** 確認文の下に警告色で出す補足(例: 他の実行の元画像になっている旨)。 */
   warning?: string
@@ -31,6 +34,7 @@ export function ConfirmDialog({
   onCancel,
   previewImageUrl,
   previewImageAlt,
+  previewFocalPoint,
   previewDetail,
   warning,
 }: ConfirmDialogProps) {
@@ -45,6 +49,7 @@ export function ConfirmDialog({
             <img
               className={`${styles.previewThumb} checkerboard`}
               src={previewImageUrl}
+              style={focalStyle(previewFocalPoint)}
               alt={previewImageAlt ?? ''}
             />
             {previewDetail && <span className={styles.previewDetail}>{previewDetail}</span>}

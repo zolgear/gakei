@@ -21,12 +21,14 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
+from app.domain import focal_points
 from app.domain.models import Asset, AssetAnnotation, AssetKind, PromptSet, PromptSetItem, Run
 from app.domain.run_views import (
     bulk_asset_groups,
     bulk_descendant_run_counts,
     bulk_input_summary,
     bulk_output_refs,
+    bulk_parent_focal_points,
     bulk_users,
     run_summary_fields,
 )
@@ -146,6 +148,7 @@ def _search_runs(
     descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], viewer)
+    parent_focals = bulk_parent_focal_points(db, inputs_map)
 
     hits = [
         SearchRunHit(
@@ -156,6 +159,7 @@ def _search_runs(
                 descendant_map[run.id],
                 users_map.get(run.created_by_user_id),
                 groups_map.get(run.asset_group_id),
+                primary_parent_focal_point=parent_focals.get(inputs_map[run.id][1]),
             ),
             snippet=build_snippet(run.prompt, terms),
         )
@@ -217,6 +221,7 @@ def _search_assets(
     truncated = len(rows) > limit
     rows = rows[:limit]
     tags_map = annotations_domain.bulk_tags(db, [asset.id for asset, *_ in rows])
+    focals = focal_points.bulk_get(db, [asset.id for asset, *_ in rows])
 
     def contains_all(text: str | None) -> bool:
         return bool(text) and all(term in text.lower() for term in lowered_terms)
@@ -262,6 +267,7 @@ def _search_assets(
                 bytes=asset.bytes,
                 created_at=asset.created_at,
                 title=title,
+                focal_point=focals.get(asset.id),
                 produced_by_run_id=asset.produced_by_run_id,
                 prompt_source=prompt_source,
                 prompt_snippet=build_snippet(snippet_text or "", terms),

@@ -43,6 +43,7 @@ import {
   type Viewport,
 } from './viewport'
 import styles from './MapCanvas.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 /** 選んだ画像を大きく見るパネルの開閉。 */
 export interface MapPreviewState {
@@ -659,7 +660,12 @@ export function MapCanvas({
           }}
           aria-hidden="true"
         >
-          <img src={assetUrl(hoverNode.id, 'thumb')} alt="" className={styles.hoverThumb} />
+          <img
+            src={assetUrl(hoverNode.id, 'thumb')}
+            style={focalStyle(hoverNode.focal_point)}
+            alt=""
+            className={styles.hoverThumb}
+          />
           <span className={styles.hoverTitle}>{hoverNode.title || m.untitled}</span>
         </div>
       )}
@@ -692,7 +698,12 @@ export function MapCanvas({
             aria-label={m.openInViewer}
             title={m.openInViewer}
           >
-            <img src={assetUrl(selectedNode.id, 'thumb')} alt="" className={styles.selectionThumb} />
+            <img
+              src={assetUrl(selectedNode.id, 'thumb')}
+              style={focalStyle(selectedNode.focal_point)}
+              alt=""
+              className={styles.selectionThumb}
+            />
           </Link>
           <div className={styles.selectionBody}>
             <span className={styles.selectionTitle}>{selectedNode.title || m.untitled}</span>

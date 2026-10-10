@@ -33,6 +33,7 @@ uv run python -m app.tools.migrate_to_postgres --to postgresql://... --dry-run  
 GAKEI_TEST_DATABASE_URL=postgresql://... uv run pytest -q   # 同じテストを PostgreSQL でも回す(既定は SQLite のまま)
 uv run python -m app.tools.migrate_storage --to azure_blob|s3 --dry-run   # ローカルの画像をオブジェクトストレージへ移す(ADR-0028。docs/object-storage.md)
 uv run python -m app.tools.regenerate_derivatives --dry-run [--prune]   # 今の版の派生画像を前もって作る・古い版を消す(ADR-0036。サーバーを止めずに。docs/object-storage.md)
+uv run python -m app.tools.backfill_focal_points --dry-run [--limit N] [--recompute]   # 既存の Asset のサムネイルの焦点(顔の位置)を求める(ADR-0043。サーバーを止めずに。docs/thumbnail-focal-point.md)
 GAKEI_TEST_LY_SPIECE=<spiece.model のパス> uv run pytest -q tests/test_embedding_tokenization.py   # LY clip-japanese-base のトークナイザーを本物の spiece.model でも照合する(ADR-0033。既定は飛ばす)
 GAKEI_TEST_AZURE_BLOB_CONNECTION_STRING=... uv run pytest -q tests/test_object_storage.py   # Azure Blob(Azurite)でも保存先のテストを回す。S3 は既定で moto が回る。GAKEI_TEST_S3_* で実機にもつなげる
 ```

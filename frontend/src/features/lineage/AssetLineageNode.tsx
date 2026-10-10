@@ -12,6 +12,7 @@ import { assetUrl } from '../../api/assetUrl'
 import type { LineageAssetInfo } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { assetKindLabel } from '../../lib/format'
+import { focalStyle } from '../../lib/focalPoint'
 import styles from './LineageNodes.module.css'
 
 export interface AssetNodeData {
@@ -78,6 +79,7 @@ export function AssetLineageNode({ id, data }: NodeProps) {
         <img
           className={`${styles.thumb} checkerboard`}
           src={thumbUrlFor ? thumbUrlFor(thumbAssetId) : assetUrl(thumbAssetId, 'thumb')}
+          style={focalStyle(assetInfo.focal_point)}
           alt=""
           draggable={false}
         />

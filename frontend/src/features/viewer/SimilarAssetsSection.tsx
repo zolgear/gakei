@@ -22,6 +22,7 @@ import { VIEWER_SIMILAR_LIMIT, similarAssetsQueryKey } from '../embeddings/simil
 import { buildSimilarSearchPath } from '../search/searchQuerySync'
 import { loadSimilarOpen, saveSimilarOpen } from './similarOpenStorage'
 import styles from './SimilarAssetsSection.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 export function SimilarAssetsSection({ assetId }: { assetId: string }) {
   const { t } = useI18n()
@@ -92,6 +93,7 @@ export function SimilarAssetsSection({ assetId }: { assetId: string }) {
                       <Link to={`/assets/${hit.id}`} className={styles.tile} title={label} aria-label={label}>
                         <img
                           src={assetUrl(hit.id, 'thumb')}
+                          style={focalStyle(hit.focal_point)}
                           alt=""
                           draggable={false}
                           className={`${styles.thumb} checkerboard`}

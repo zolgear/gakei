@@ -17,8 +17,21 @@ from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user, require_user_or_api_token
 from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_annotator, get_embedder, get_session, get_settings, get_store
-from app.domain import annotation_settings, derivatives, embedding_settings, ingest_hooks
+from app.deps import (
+    get_annotator,
+    get_embedder,
+    get_focal_worker,
+    get_session,
+    get_settings,
+    get_store,
+)
+from app.domain import (
+    annotation_settings,
+    derivatives,
+    embedding_settings,
+    focal_points,
+    ingest_hooks,
+)
 from app.domain import annotations as annotations_domain
 from app.domain import embeddings as embeddings_domain
 from app.domain.asset_groups import group_for_asset
@@ -48,6 +61,7 @@ from app.domain.schemas import (
     AssetUploadResponse,
     CreatedBy,
     EmbeddedGenerationMeta,
+    FocalPoint,
     ProducedByRunSummary,
 )
 from app.domain.storage import AssetStore
@@ -60,6 +74,7 @@ from app.domain.visibility import (
 from app.i18n import t
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
+from app.worker.focal import FocalPointWorker
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +92,9 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _to_summary(asset: Asset, title: str | None = None) -> AssetSummary:
+def _to_summary(
+    asset: Asset, title: str | None = None, focal_point: FocalPoint | None = None
+) -> AssetSummary:
     return AssetSummary(
         id=asset.id,
         kind=asset.kind,
@@ -87,6 +104,7 @@ def _to_summary(asset: Asset, title: str | None = None) -> AssetSummary:
         bytes=asset.bytes,
         created_at=asset.created_at,
         title=title,
+        focal_point=focal_point,
     )
 
 
@@ -175,6 +193,7 @@ def _to_detail(
         used_as_input=asset_is_used_as_input(db, asset.id),
         created_by=_to_created_by(db, asset.created_by_user_id),
         group=group_for_asset(db, asset.id, user),
+        focal_point=focal_points.get(db, asset.id),
         **annotations_domain.annotation_fields(db, asset.id),
     )
 
@@ -201,6 +220,7 @@ def create_asset(
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
     embedder: Embedder = Depends(get_embedder),
+    focal_worker: FocalPointWorker | None = Depends(get_focal_worker),
 ) -> AssetUploadResponse:
     data = file.file.read()
     try:
@@ -222,7 +242,7 @@ def create_asset(
     if result.outcome == "created":
         queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
     db.commit()
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder)
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
     detail = _to_detail(db, result.asset, produced_by_run=None, user=user)
     return AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
 
@@ -300,8 +320,10 @@ def list_assets(
     rows = rows[:limit]
     next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id) if has_more and rows else None
     titles = annotations_domain.bulk_titles(db, [a.id for a in rows])
+    focals = focal_points.bulk_get(db, [a.id for a in rows])
     return AssetListResponse(
-        items=[_to_summary(a, titles.get(a.id)) for a in rows], next_cursor=next_cursor
+        items=[_to_summary(a, titles.get(a.id), focals.get(a.id)) for a in rows],
+        next_cursor=next_cursor,
     )
 
 

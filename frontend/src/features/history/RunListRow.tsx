@@ -15,6 +15,7 @@ import { nodeTargetPath } from '../lineage/nodeTargetPath'
 import { formatDateTime, shortenModelName, statusLabel } from '../../lib/format'
 import { useI18n } from '../../i18n'
 import styles from './RunListRow.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 interface RunListRowProps {
   run: RunSummary
@@ -42,6 +43,7 @@ export function RunListRow({ run, ariaLabel }: RunListRowProps) {
             <img
               className={`${styles.thumb} checkerboard`}
               src={assetUrl(firstOutput.asset_id, 'thumb')}
+              style={focalStyle(firstOutput.focal_point)}
               alt=""
               draggable={false}
             />
