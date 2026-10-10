@@ -81,3 +81,4 @@
 - **カスケードの読み込み:** opencv は Windows で ASCII 以外の文字を含むパスを開けないことがあるため、XML は Python で読んで sha256 を確かめ、メモリから読み込ませる(`cv2.FileStorage` の `FILE_STORAGE_MEMORY`)。`detectMultiScale` は同じインスタンスを同時に呼ばないよう鍵を持つ。
 - **保存:** 顔が見つからなかったときも `method='none'` の行を作り、同じ版では探し直さない。
 - **応答:** `AssetSummary`(と、それを継ぐ検索・似た画像・重複の結果、`AssetDetail`)、`RunInputRef`、`RunOutputRef`、`RunSummary.primary_parent_focal_point`、`LineageAssetInfo`、`EmbeddingGraphNode`、`PublicShareAsset` に `focal_point` を足した。一覧は `IN` でまとめて引く。
+- **マップ:** マップのノードは canvas に描くため `object-position` は効かない。サムネイルを読んだときに1度だけ正方形に切り抜く位置を、焦点に合わせる(`features/map/thumbCache.ts`。余る幅・高さに焦点の割合を掛ける、`object-position` と同じ計算)。切り抜くのは今までどおり1枚につき1回なので、描く負荷は変わらない。

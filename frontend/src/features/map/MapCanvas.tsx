@@ -24,7 +24,7 @@ import { buildSimilarSearchPath } from '../search/searchQuerySync'
 import { neighborsOf, type SimilarityEdge } from './edges'
 import { hitTest } from './hitTest'
 import { MapPreviewPanel } from './MapPreviewPanel'
-import { thumbCache } from './thumbCache'
+import { thumbCache, type ThumbRequest } from './thumbCache'
 import {
   DOT_RADIUS,
   THUMB_MIN_PX,
@@ -241,7 +241,7 @@ export function MapCanvas({
       ctx.restore()
     }
 
-    const wanted: string[] = []
+    const wanted: ThumbRequest[] = []
     const drawNode = (i: number) => {
       if (thumbMode) {
         const id = p.nodes[i].id
@@ -253,7 +253,7 @@ export function MapCanvas({
         } else {
           ctx.fillStyle = colors.tileBg
           ctx.fillRect(x, y, tilePx, tilePx)
-          if (wanted.length < MAX_WANTED) wanted.push(id)
+          if (wanted.length < MAX_WANTED) wanted.push({ id, focal: p.nodes[i].focal_point })
         }
       } else {
         ctx.moveTo(sx[i] + DOT_RADIUS, sy[i])
