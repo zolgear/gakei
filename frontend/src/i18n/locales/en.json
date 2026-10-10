@@ -269,6 +269,7 @@
       "embeddings": "Embeddings",
       "comfyui": "ComfyUI",
       "sdwebui": "SD WebUI",
+      "tagDictionary": "Tag dictionaries",
       "mcp": "MCP",
       "shareLinks": "Public share links",
       "about": "About GAKEI",
@@ -327,12 +328,23 @@
         "label": "Show sketches and masks in Stock",
         "help": "When off, you can open them from the lineage graph and the run details."
       },
+      "tagCompletion": {
+        "label": "Tag completion in prompts",
+        "help": "Suggests tags for the word at the cursor while you write a prompt as text. The tag-mode input always shows suggestions regardless of this setting.",
+        "optionTagProviders": "Only for SD WebUI and ComfyUI (default)",
+        "optionAlways": "Always",
+        "optionOff": "Off"
+      },
+      "tagTranslations": {
+        "label": "Show Japanese translations of tags",
+        "help": "Shows the translation from the tag dictionary next to tag suggestions and chips. Only shown when the display language is Japanese."
+      },
       "browserStorage": {
         "heading": "Settings stored in this browser",
         "label": "Reset this browser's settings to defaults",
         "help": "The settings on this page, panel sizes and open/closed states, map values, the generation form draft and similar are stored only in this browser. Clearing them restores the defaults.",
         "clear": "Clear all",
-        "confirmMessage": "This clears all GAKEI settings stored in this browser and reloads the page.\n\nCleared: display language (falls back to the browser's language), tab icon progress, generation screen layout and input size, sidebar width and open panel, open/closed states in the stock and the viewer, map values (tab, neighbors, limit, threshold, lineage edges), sketch pen, seed mode, and the last selected group.\n\nSettings stored on the server, images, history and your login are not affected.",
+        "confirmMessage": "This clears all GAKEI settings stored in this browser and reloads the page.\n\nCleared: display language (falls back to the browser's language), tab icon progress, generation screen layout and input size, sidebar width and open panel, open/closed states in the stock and the viewer, map values (tab, neighbors, limit, threshold, lineage edges), sketch pen, seed mode, prompt tag completion and tag translations, and the last selected group.\n\nSettings stored on the server, images, history and your login are not affected.",
         "confirmWarning": "The unsent prompt, parameters and input images in the generation form will also be cleared.",
         "confirmLabel": "Clear and reload"
       }
@@ -801,6 +813,55 @@
         "resetToDefault": "Reset to default ({default} min)",
         "resetPending": "Saving will reset this to the default ({default} min)."
       }
+    },
+    "tagDictionary": {
+      "intro": "Register CSV files of tags or translations to power prompt tag suggestions and tag translations. Dictionaries are shared by all users.",
+      "uploadHeading": "Register a dictionary",
+      "schemeLabel": "Category scheme",
+      "schemeHelp": "What the category numbers in a tag list mean. Choose \"Danbooru\" for Danbooru dictionaries and \"Other\" for dictionaries from other sites (numbers are kept as is).",
+      "schemes": {
+        "danbooru": "Danbooru",
+        "other": "Other"
+      },
+      "dropLabel": "Choose a CSV or zip",
+      "dropHint": "You can also drop a file here. A CSV without a header (4 columns for a tag list, 2 for translations) or a zip of CSV files. Up to 100MB.",
+      "uploading": "Uploading...",
+      "uploaded": {
+        "one": "Registered {count} dictionary. Until the import finishes, the previous dictionaries stay in use.",
+        "other": "Registered {count} dictionaries. Until the import finishes, the previous dictionaries stay in use."
+      },
+      "uploadFailed": "Could not register the dictionary.",
+      "listHeading": "Registered dictionaries",
+      "empty": "No dictionaries yet.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the tag dictionaries.",
+      "retry": "Reload",
+      "kinds": {
+        "tags": "Tag list",
+        "translations": "Translations"
+      },
+      "status": {
+        "importing": "Importing...",
+        "ready": "Ready",
+        "failed": "Failed"
+      },
+      "rows": {
+        "one": "{rows} row",
+        "other": "{rows} rows"
+      },
+      "rowCountLabel": "Rows",
+      "createdAtLabel": "Registered",
+      "statusLabel": "Status",
+      "schemeShortLabel": "Scheme",
+      "enabledShort": "Enabled",
+      "enabledLabel": "Use \"{name}\"",
+      "delete": "Delete",
+      "deleteTitle": "Delete \"{name}\"",
+      "deleteBlocked": "Cannot delete while importing",
+      "confirmDelete": "Delete \"{name}\"? The imported entries are removed too.",
+      "confirmDeleteLabel": "Delete",
+      "deleted": "Dictionary deleted",
+      "updateFailed": "Could not apply the change."
     },
     "mcp": {
       "intro": "Lets AI agents such as Claude Code use GAKEI generation and stock over MCP (Model Context Protocol). Runs created by agents are recorded in lineage and history just like runs created from this UI.",
@@ -2423,6 +2484,20 @@
       "yes": "Replace",
       "cancel": "Cancel",
       "count": "{count} tags"
+    }
+  },
+  "tagDictionary": {
+    "categories": {
+      "general": "General",
+      "artist": "Artist",
+      "copyright": "Copyright",
+      "character": "Character",
+      "meta": "Meta",
+      "other": "Category {number}"
+    },
+    "assist": {
+      "ariaLabel": "Tag suggestions",
+      "loraAriaLabel": "LoRA suggestions"
     }
   }
 }

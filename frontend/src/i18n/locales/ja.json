@@ -269,6 +269,7 @@
       "embeddings": "埋め込み",
       "comfyui": "ComfyUI",
       "sdwebui": "SD WebUI",
+      "tagDictionary": "タグ辞書",
       "mcp": "MCP",
       "shareLinks": "共有リンクの公開",
       "about": "GAKEI について",
@@ -327,12 +328,23 @@
         "label": "スケッチとマスクをストックに出す",
         "help": "オフのときは、系列グラフと Run の詳細から開けます。"
       },
+      "tagCompletion": {
+        "label": "プロンプトのタグ補完",
+        "help": "テキストで書いているプロンプト欄で、カーソルの位置の語にタグの候補を出します。タグモードの入力欄では、この設定に関わらず候補を出します。",
+        "optionTagProviders": "SD WebUI と ComfyUI のときだけ (既定)",
+        "optionAlways": "常に",
+        "optionOff": "使わない"
+      },
+      "tagTranslations": {
+        "label": "タグの日本語訳を表示",
+        "help": "タグ辞書に訳があれば、タグの候補とチップに小さく添えます。画面の言語が日本語のときだけ出ます。"
+      },
       "browserStorage": {
         "heading": "ブラウザに保存した設定",
         "label": "このブラウザの設定を既定に戻す",
         "help": "このページの表示の設定、パネルの幅や開閉、マップの値、生成フォームの下書きなどは、このブラウザにだけ保存されています。まとめて消すと既定に戻ります。",
         "clear": "まとめて消す",
-        "confirmMessage": "このブラウザに保存した GAKEI の設定をまとめて消し、ページを読み込み直します。\n\n消えるもの: 表示言語(ブラウザの言語に戻ります)、タブのアイコンの進捗表示、生成画面のレイアウトと入力欄の幅・高さ、サイドバーの幅と開いていたパネル、ストックとビューアの節の開閉、マップの値(タブ・近傍の数・上限・しきい値・系列の辺)、スケッチのペン、シードのモード、最後に選んだグループ。\n\nサーバーに保存した設定・画像・履歴と、ログインの状態は変わりません。",
+        "confirmMessage": "このブラウザに保存した GAKEI の設定をまとめて消し、ページを読み込み直します。\n\n消えるもの: 表示言語(ブラウザの言語に戻ります)、タブのアイコンの進捗表示、生成画面のレイアウトと入力欄の幅・高さ、サイドバーの幅と開いていたパネル、ストックとビューアの節の開閉、マップの値(タブ・近傍の数・上限・しきい値・系列の辺)、スケッチのペン、シードのモード、プロンプトのタグ補完とタグの訳の表示、最後に選んだグループ。\n\nサーバーに保存した設定・画像・履歴と、ログインの状態は変わりません。",
         "confirmWarning": "生成フォームに書きかけのプロンプト・パラメーター・入力画像の指定も消えます。",
         "confirmLabel": "消して読み込み直す"
       }
@@ -801,6 +813,55 @@
         "resetToDefault": "既定値({default}分)に戻す",
         "resetPending": "保存すると既定値({default}分)に戻ります"
       }
+    },
+    "tagDictionary": {
+      "intro": "タグの一覧や訳の CSV を登録すると、プロンプトのタグの候補と、タグの日本語訳に使います。辞書はすべての利用者で共有します。",
+      "uploadHeading": "辞書を登録する",
+      "schemeLabel": "カテゴリーの体系",
+      "schemeHelp": "タグの一覧の、カテゴリーの番号の意味。Danbooru の辞書なら「Danbooru」、ほかのサイトの辞書なら「その他」(番号のまま扱います)。",
+      "schemes": {
+        "danbooru": "Danbooru",
+        "other": "その他"
+      },
+      "dropLabel": "CSV か zip を選ぶ",
+      "dropHint": "ここにドロップしても登録できます。ヘッダーなしの CSV(4 列ならタグの一覧、2 列なら訳)か、CSV を含む zip。100MB まで。",
+      "uploading": "アップロード中…",
+      "uploaded": {
+        "one": "{count} 件の辞書を登録しました。取り込みが終わるまで、前の辞書のまま動きます。",
+        "other": "{count} 件の辞書を登録しました。取り込みが終わるまで、前の辞書のまま動きます。"
+      },
+      "uploadFailed": "登録できませんでした。",
+      "listHeading": "登録した辞書",
+      "empty": "辞書はまだ登録されていません。",
+      "loading": "読み込み中…",
+      "loadFailed": "タグ辞書の一覧を読み込めませんでした。",
+      "retry": "再読み込み",
+      "kinds": {
+        "tags": "タグの一覧",
+        "translations": "訳"
+      },
+      "status": {
+        "importing": "取り込み中…",
+        "ready": "完了",
+        "failed": "失敗"
+      },
+      "rows": {
+        "one": "{rows} 行",
+        "other": "{rows} 行"
+      },
+      "rowCountLabel": "行数",
+      "createdAtLabel": "登録日時",
+      "statusLabel": "状態",
+      "schemeShortLabel": "体系",
+      "enabledShort": "有効",
+      "enabledLabel": "「{name}」を使う",
+      "delete": "削除",
+      "deleteTitle": "「{name}」を削除する",
+      "deleteBlocked": "取り込み中は削除できません",
+      "confirmDelete": "「{name}」を削除しますか?取り込んだ中身も消えます。",
+      "confirmDeleteLabel": "削除する",
+      "deleted": "辞書を削除しました",
+      "updateFailed": "変更できませんでした。"
     },
     "mcp": {
       "intro": "Claude Code などの AI エージェントから、MCP(Model Context Protocol)で GAKEI の生成とストックを使えるようにします。エージェント経由の生成も、画面からの生成と同じく系列と証跡に残ります。",
@@ -2423,6 +2484,20 @@
       "yes": "置き換える",
       "cancel": "やめる",
       "count": "{count} 個"
+    }
+  },
+  "tagDictionary": {
+    "categories": {
+      "general": "一般",
+      "artist": "作者",
+      "copyright": "作品",
+      "character": "キャラクター",
+      "meta": "メタ",
+      "other": "カテゴリー {number}"
+    },
+    "assist": {
+      "ariaLabel": "タグの候補",
+      "loraAriaLabel": "LoRA の候補"
     }
   }
 }

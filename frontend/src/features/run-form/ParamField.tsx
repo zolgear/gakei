@@ -5,6 +5,7 @@
  * ラベルの `title`(ツールチップ)に、説明文(`description`)は入力欄自体の `title` に移す
  * (画面上に説明文の行は置かない)。
  */
+import { useRef } from 'react'
 import type { ParamDef } from '../../api/client'
 import { useI18n } from '../../i18n'
 import {
@@ -22,6 +23,8 @@ import { PromptTagEditor } from '../prompt-tags/PromptTagEditor'
 import { isPromptLikeParam, usePromptEditScope, type PromptEditScopeValue } from '../prompt-tags/PromptEditScope'
 import { shouldEscapeParens } from '../prompt-tags/promptTags'
 import { usePromptEditMode } from '../prompt-tags/usePromptEditMode'
+import { shouldAssistTextPrompt, useTagCompletionMode } from '../tag-dictionary/tagCompletionPrefs'
+import { useTextTagAssist } from '../tag-dictionary/useTextTagAssist'
 import styles from './ParamField.module.css'
 
 interface ParamFieldProps {
@@ -136,6 +139,9 @@ function BoolSwitch({ def, id, value, enabled, title, onChange }: BoolSwitchProp
   )
 }
 
+/** 入力アシストの候補の操作として奪うキー(離したときに語を探し直さない)。 */
+const TAG_ASSIST_NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'])
+
 interface PromptParamFieldProps extends ParamFieldProps {
   scope: PromptEditScopeValue
 }
@@ -143,6 +149,7 @@ interface PromptParamFieldProps extends ParamFieldProps {
 /**
  * プロンプトに当たる文章のパラメーター(SD WebUI の `negative_prompt` など)。プロンプト欄と同じく
  * 「テキスト / タグ」を切り替えられる(ADR-0039 2章。モードは(プロバイダー, モデル, 欄)ごとに覚える)。
+ * テキストモードでも、プロンプト欄と同じタグの入力アシストを出す(ADR-0041 3章)。
  */
 function PromptParamField({ def, value, enabled, disabledNote, onChange, scope }: PromptParamFieldProps) {
   const { t } = useI18n()
@@ -151,6 +158,17 @@ function PromptParamField({ def, value, enabled, disabledNote, onChange, scope }
   const fieldTitle = def.description || undefined
   const [mode, setMode] = usePromptEditMode(scope.provider, scope.model, def.name)
   const tagsMode = mode === 'tags' && enabled
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const completionMode = useTagCompletionMode()
+  const tagAssist = useTextTagAssist({
+    textareaRef,
+    value,
+    onChange: (next) => onChange(def.name, next),
+    enabled: enabled && !tagsMode && shouldAssistTextPrompt(completionMode, scope.provider),
+    loraEnabled: scope.provider === 'sdwebui',
+    escapeParens: shouldEscapeParens(scope.provider),
+    popoverId: `${id}-tag-assist`,
+  })
 
   return (
     <div className={styles.field} data-disabled={!enabled}>
@@ -170,16 +188,36 @@ function PromptParamField({ def, value, enabled, disabledNote, onChange, scope }
           fieldLabel={def.label}
         />
       ) : (
-        <textarea
-          id={id}
-          className={styles.textArea}
-          maxLength={def.max_length ?? undefined}
-          placeholder={unspecifiedPlaceholder(def)}
-          value={value}
-          disabled={!enabled}
-          title={fieldTitle}
-          onChange={(e) => onChange(def.name, e.target.value)}
-        />
+        <>
+          <textarea
+            id={id}
+            ref={textareaRef}
+            className={styles.textArea}
+            maxLength={def.max_length ?? undefined}
+            placeholder={unspecifiedPlaceholder(def)}
+            value={value}
+            disabled={!enabled}
+            title={fieldTitle}
+            role="combobox"
+            aria-expanded={tagAssist.open}
+            aria-controls={tagAssist.open ? `${id}-tag-assist` : undefined}
+            aria-activedescendant={tagAssist.activeDescendant}
+            {...tagAssist.textareaProps}
+            onChange={(e) => {
+              onChange(def.name, e.target.value)
+              tagAssist.refresh(e.target)
+            }}
+            onKeyDown={(e) => {
+              tagAssist.handleKeyDown(e)
+            }}
+            onKeyUp={(e) => {
+              if (tagAssist.open && TAG_ASSIST_NAV_KEYS.has(e.key)) return
+              tagAssist.refresh(e.currentTarget)
+            }}
+            onClick={(e) => tagAssist.refresh(e.currentTarget)}
+          />
+          {tagAssist.popover}
+        </>
       )}
       {!enabled && (
         <p className={styles.disabledNote} title={disabledNote ?? pf.disabledTitle}>

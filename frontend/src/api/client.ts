@@ -95,6 +95,10 @@ export type TagListResponse = components['schemas']['TagListResponse']
 export type TagSuggestion = components['schemas']['TagSuggestion']
 export type TagSuggestionResponse = components['schemas']['TagSuggestionResponse']
 export type PromptTagsResponse = components['schemas']['PromptTagsResponse']
+export type TagDictionaryItem = components['schemas']['TagDictionaryItem']
+export type TagDictionaryListResponse = components['schemas']['TagDictionaryListResponse']
+export type TagDictionaryUpdateRequest = components['schemas']['TagDictionaryUpdateRequest']
+export type TagCategoryScheme = NonNullable<TagDictionaryUpdateRequest['category_scheme']>
 export type AnnotationSettingsResponse = components['schemas']['AnnotationSettingsResponse']
 export type AnnotationSettingsUpdateRequest = components['schemas']['AnnotationSettingsUpdateRequest']
 export type AnnotationBackfillResponse = components['schemas']['AnnotationBackfillResponse']
@@ -1086,6 +1090,48 @@ export function suggestPromptTags(
   params: operations['suggest_prompt_tags']['parameters']['query'] = {},
 ): Promise<TagSuggestionResponse> {
   return request(`/api/tags/suggestions${toQuery(params)}`)
+}
+
+/**
+ * タグ名 → 辞書の代表の訳(ADR-0041 4章)。訳の無いタグは含めない。キーは渡した名前のまま。
+ * 1回に送れるのは 200 件まで。
+ */
+export function getTagTranslations(names: readonly string[]): Promise<{ translations?: Record<string, string> }> {
+  return request('/api/tags/translations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ names }),
+  })
+}
+
+// -- タグ辞書(ADR-0041 1章。管理者だけ) -------------------------------------------
+
+export function listTagDictionaries(): Promise<TagDictionaryListResponse> {
+  return request('/api/settings/tag-dictionaries')
+}
+
+/**
+ * CSV か、CSV を含む zip を登録する(202。取り込みはサーバーの中で続き、完了は一覧の取得で確かめる)。
+ * 100MB を超えると 413、種類を判定できない・zip が不正などは 422(`detail` は翻訳済み)。
+ */
+export function uploadTagDictionary(file: File, categoryScheme?: TagCategoryScheme): Promise<TagDictionaryListResponse> {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  if (categoryScheme) form.append('category_scheme', categoryScheme)
+  return request('/api/settings/tag-dictionaries', { method: 'POST', body: form })
+}
+
+export function updateTagDictionary(id: string, body: TagDictionaryUpdateRequest): Promise<TagDictionaryItem> {
+  return request(`/api/settings/tag-dictionaries/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 取り込み中は 409。 */
+export function deleteTagDictionary(id: string): Promise<void> {
+  return request(`/api/settings/tag-dictionaries/${id}`, { method: 'DELETE' })
 }
 
 /** 画像のタグをプロンプトにするときの並び(ADR-0039 1章)。名前はエスケープ前。 */

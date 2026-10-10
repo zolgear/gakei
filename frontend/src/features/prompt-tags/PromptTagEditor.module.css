@@ -65,6 +65,13 @@
   white-space: pre-wrap;
 }
 
+/* 辞書の訳(ADR-0041 4章)。タグの後ろに小さく添える(表示だけ。タグそのものは変えない)。 */
+.chipTranslation {
+  margin-left: 6px;
+  font-size: 0.82em;
+  color: var(--color-text-faint);
+}
+
 .chipRemove {
   flex-shrink: 0;
   width: 26px;
@@ -141,19 +148,7 @@
   background: var(--color-header-band);
 }
 
-.optionName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.optionCount {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--color-text-faint);
-}
 
 /* 「テキスト / タグ」の切り替え */
 .modeToggle {

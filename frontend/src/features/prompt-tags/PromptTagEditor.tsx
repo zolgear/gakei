@@ -10,6 +10,10 @@
  * 重みの調整や並べ替えは作らない(テキストモードで直す)。
  *
  * 候補のリストは文書の流れのまま出す(`TagAutocomplete` と同じ。スクロール領域の下端で切れない)。
+ *
+ * タグ辞書(ADR-0041)があれば、候補にカテゴリーの色・件数の短い表記・訳・一致した別名を出し
+ * (`TagSuggestionLabel`)、チップにも訳を小さく添える(画面の言語が日本語で、設定がオンのとき)。
+ * 日本語で打つと、訳から英語のタグが候補に出る。選ぶと英語のタグが入る。
  */
 import { useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -26,6 +30,9 @@ import {
   tagCompareKey,
   tagNameToPrompt,
 } from './promptTags'
+import { TagSuggestionLabel } from '../tag-dictionary/TagSuggestionLabel'
+import { translationLookupName } from '../tag-dictionary/translationLookup'
+import { useTagTranslations, useTagTranslationsEnabled } from '../tag-dictionary/useTagTranslations'
 import styles from './PromptTagEditor.module.css'
 
 const SUGGESTION_LIMIT = 8
@@ -56,6 +63,9 @@ export function PromptTagEditor({ id, value, onChange, escapeParens, fieldLabel,
   const [activeIndex, setActiveIndex] = useState(-1)
 
   const tags = splitPromptTags(value)
+  const showTranslations = useTagTranslationsEnabled()
+  const lookupNames = tags.map(translationLookupName)
+  const translations = useTagTranslations(lookupNames.filter((name): name is string => name !== null))
   const typed = text.trim()
   // 括弧などで始まる入力(重み・LoRA・Dynamic Prompts)は候補を引かない。
   const wantsSuggestions = typed.length > 0 && !/^[([{<]/.test(typed)
@@ -148,10 +158,14 @@ export function PromptTagEditor({ id, value, onChange, escapeParens, fieldLabel,
     >
       {tags.length > 0 ? (
         <ul className={styles.chips}>
-          {tags.map((tag, index) => (
+          {tags.map((tag, index) => {
+            const lookup = lookupNames[index]
+            const translation = lookup ? translations[lookup] : undefined
+            return (
             <li key={`${index}:${tag}`} className={styles.chip} data-kind={promptTagKind(tag)}>
-              <span className={styles.chipLabel} title={tag}>
+              <span className={styles.chipLabel} title={translation ? `${tag}(${translation})` : tag}>
                 {tag}
+                {translation && <span className={styles.chipTranslation}>{translation}</span>}
               </span>
               <button
                 type="button"
@@ -167,7 +181,8 @@ export function PromptTagEditor({ id, value, onChange, escapeParens, fieldLabel,
                 </svg>
               </button>
             </li>
-          ))}
+            )
+          })}
         </ul>
       ) : (
         <p className={styles.empty}>{pt.empty}</p>
@@ -212,8 +227,7 @@ export function PromptTagEditor({ id, value, onChange, escapeParens, fieldLabel,
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pickSuggestion(item.name)}
             >
-              <span className={styles.optionName}>{item.name}</span>
-              <span className={styles.optionCount}>{item.count.toLocaleString()}</span>
+              <TagSuggestionLabel item={item} showTranslation={showTranslations} />
             </li>
           ))}
         </ul>

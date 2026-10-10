@@ -67,9 +67,12 @@ import { PromptTagEditor } from '../prompt-tags/PromptTagEditor'
 import { PromptEditModeToggle } from '../prompt-tags/PromptEditModeToggle'
 import { PromptEditScopeContext } from '../prompt-tags/PromptEditScope'
 import { shouldEscapeParens } from '../prompt-tags/promptTags'
+import { shouldAssistTextPrompt, useTagCompletionMode } from '../tag-dictionary/tagCompletionPrefs'
+import { useTextTagAssist } from '../tag-dictionary/useTextTagAssist'
 import styles from './InputPane.module.css'
 
 const MENTION_POPOVER_ID = 'prompt-mention-popover'
+const TAG_ASSIST_POPOVER_ID = 'prompt-tag-assist-popover'
 /** ↑↓ Enter Tab Esc のうち、メンション候補の操作として奪うキー(Ctrl/Cmd+Enter の送信は除く)。 */
 const MENTION_NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'])
 // caret 行の上に開くため上方向の空きに余裕ができることが多く、1件2行だった頃の 8 件より
@@ -138,6 +141,21 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     : []
   const mentionPlacement = useMentionPlacement(promptTextareaRef, mention?.start ?? null, mentionCandidates.length)
 
+  // テキストモードのタグの入力アシスト(ADR-0041 3章)。`@` の呼び出しが開いている間は使わない。
+  const tagCompletionMode = useTagCompletionMode()
+  const tagAssist = useTextTagAssist({
+    textareaRef: promptTextareaRef,
+    value: form.prompt,
+    onChange: (next) => {
+      setSubmittedNotice(null)
+      form.setPrompt(next)
+    },
+    enabled: promptEditMode === 'text' && shouldAssistTextPrompt(tagCompletionMode, form.provider),
+    loraEnabled: form.provider === 'sdwebui',
+    escapeParens: shouldEscapeParens(form.provider),
+    popoverId: TAG_ASSIST_POPOVER_ID,
+  })
+
   // 「新規生成」(resetAt の変化)でフォーム全体(prompt・model・パラメーター)を初期値に戻し、
   // 案内も空にする。マウント時の値では動かさない(location.state は履歴に残るので、
   // 「新規生成」後に書いたプロンプトがリロードや戻る/進むで消えてしまう。他ページからの
@@ -159,7 +177,11 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   }, [mention])
 
   function updateMentionFromCursor(el: HTMLTextAreaElement) {
-    setMention(findMentionAtCursor(el.value, el.selectionStart))
+    const found = findMentionAtCursor(el.value, el.selectionStart)
+    setMention(found)
+    // `@` の呼び出しが優先。開いていなければタグの入力アシストを見る。
+    if (found) tagAssist.close()
+    else tagAssist.refresh(el)
   }
 
   function confirmMention(candidate: MentionCandidate) {
@@ -180,7 +202,11 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   }
 
   function handlePromptKeyDown(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    if (!mention || isSubmitShortcut(e)) return
+    if (!mention) {
+      tagAssist.handleKeyDown(e)
+      return
+    }
+    if (isSubmitShortcut(e)) return
     if (!MENTION_NAV_KEYS.has(e.key)) return
     if (mentionCandidates.length === 0) {
       if (e.key === 'Escape') {
@@ -355,13 +381,16 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
             value={form.prompt}
             maxLength={form.promptMax}
             role="combobox"
-            aria-expanded={mention !== null}
-            aria-controls={mention !== null ? MENTION_POPOVER_ID : undefined}
+            aria-expanded={mention !== null || tagAssist.open}
+            aria-controls={mention !== null ? MENTION_POPOVER_ID : tagAssist.open ? TAG_ASSIST_POPOVER_ID : undefined}
             aria-activedescendant={
-              mention !== null && mentionCandidates.length > 0
-                ? `${MENTION_POPOVER_ID}-option-${mentionActiveIndex}`
-                : undefined
+              mention !== null
+                ? mentionCandidates.length > 0
+                  ? `${MENTION_POPOVER_ID}-option-${mentionActiveIndex}`
+                  : undefined
+                : tagAssist.activeDescendant
             }
+            {...tagAssist.textareaProps}
             onChange={(e) => {
               setSubmittedNotice(null)
               form.setPrompt(e.target.value)
@@ -369,7 +398,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
             }}
             onKeyDown={handlePromptKeyDown}
             onKeyUp={(e) => {
-              if (mention && MENTION_NAV_KEYS.has(e.key)) return
+              if ((mention || tagAssist.open) && MENTION_NAV_KEYS.has(e.key)) return
               if (suppressMentionRescanRef.current) {
                 suppressMentionRescanRef.current = false
                 return
@@ -380,6 +409,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
             onPaste={editLogic.handlePaste}
             placeholder={ip.promptPlaceholder}
           />
+          {mention === null && tagAssist.popover}
           {mention !== null && (
             <MentionPopover
               id={MENTION_POPOVER_ID}
@@ -420,6 +450,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
           mode={promptEditMode}
           onChange={(mode) => {
             setMention(null)
+            tagAssist.close()
             setPromptEditMode(mode)
           }}
           fieldLabel={ip.promptLabel}

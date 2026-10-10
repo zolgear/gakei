@@ -1,0 +1,95 @@
+/*
+ * タグの候補1件(ADR-0041 2章)。カテゴリーの色は Tag Autocomplete の配色に近いもの
+ * (一般=青、作者=赤、作品=紫、キャラクター=緑、メタ=橙)。明るい地でも暗い地でも見分けられる
+ * 中くらいの明るさにし、印の縁で地との境を付ける。
+ */
+.label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dot,
+.dotSpacer {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot {
+  background: var(--tag-category-color, #8a8f98);
+  box-shadow: 0 0 0 1px rgba(127, 127, 127, 0.45);
+}
+
+.dot[data-tone='general'] {
+  --tag-category-color: #4a90e2;
+}
+
+.dot[data-tone='artist'] {
+  --tag-category-color: #e05252;
+}
+
+.dot[data-tone='copyright'] {
+  --tag-category-color: #a46ee0;
+}
+
+.dot[data-tone='character'] {
+  --tag-category-color: #3fae63;
+}
+
+.dot[data-tone='meta'] {
+  --tag-category-color: #e8902a;
+}
+
+.dot[data-tone='other'] {
+  --tag-category-color: #8a8f98;
+}
+
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.matched {
+  flex-shrink: 3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-muted);
+}
+
+.arrow {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+}
+
+.name {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.translation {
+  flex-shrink: 6;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.85em;
+  color: var(--color-text-faint);
+}
+
+.count {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-faint);
+}

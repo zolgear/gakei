@@ -10,6 +10,7 @@
  */
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { SDWEBUI_LORAS_QUERY_KEY } from './loraQuery'
 import { ApiError, listSdWebuiLoras, refreshSdWebui, type SdWebuiLora } from '../../api/client'
 import { Modal } from '../../components/Modal'
 import { fmt, useI18n } from '../../i18n'
@@ -29,8 +30,6 @@ import {
 } from './loraPrompt'
 import { tagCompareKey } from '../prompt-tags/promptTags'
 import styles from './LoraPickerButton.module.css'
-
-const SDWEBUI_LORAS_QUERY_KEY = ['sdwebui-loras'] as const
 
 interface LoraPickerButtonProps {
   /** 今のプロンプト(既に入っている LoRA とトリガーワードの目印に使う)。 */
