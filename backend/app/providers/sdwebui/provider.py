@@ -119,6 +119,29 @@ DEFAULT_MASK_BLUR = 4
 DEFAULT_INPAINTING_FILL = "original"
 DEFAULT_INPAINT_FULL_RES_PADDING = 32
 
+# 高解像度補助(hires fix。ADR-0038 10章)。Generate(txt2img)だけ。
+PARAM_HIRES = "hires"
+HIRES_DEPENDENT_PARAMS = (
+    "hr_scale",
+    "hr_upscaler",
+    "hr_second_pass_steps",
+    "hr_denoising_strength",
+    "hr_cfg",
+)
+HIRES_PARAM_NAMES = frozenset((PARAM_HIRES, *HIRES_DEPENDENT_PARAMS))
+DEFAULT_HR_SCALE = 2.0
+HR_SCALE_MIN, HR_SCALE_MAX = 1.0, 4.0
+DEFAULT_HR_SECOND_PASS_STEPS = 0
+HR_SECOND_PASS_STEPS_MAX = 150
+DEFAULT_HR_DENOISING_STRENGTH = 0.5
+HR_CFG_MIN, HR_CFG_MAX = 1.0, 30.0
+# 一覧にあれば既定にするアップスケーラー(WebUI の画面の既定と同じ)
+PREFERRED_HR_UPSCALER = "Latent"
+# 拡大後の長辺の上限(1回目は SIZE_CONSTRAINTS の長辺 2048)
+HIRES_MAX_LONG_EDGE = 4096
+# Forge: 2回目も1回目と同じモジュール(VAE など)を使う。送らないと 500 になる。
+FORGE_HR_ADDITIONAL_MODULES = ["Use same choices"]
+
 SIZE_CONSTRAINTS = SizeConstraints(
     multiple_of=8,
     max_long_edge=2048,
@@ -248,6 +271,8 @@ class SdWebuiProvider:
         models: list[ModelCapabilities] = []
         if catalog is not None:
             generate_params = _generate_params(catalog)
+            # 高解像度補助は本体の項目のあと、拡張機能の前(ADR-0038 10章)
+            generate_params.extend(_hires_params(catalog))
             for extension in resolve_extensions(catalog.scripts):
                 generate_params.extend(extension.adapter.param_defs())
             # Edit の拡張機能の項目は img2img 用のスクリプトから決める(txt2img 用とは別にある)。
@@ -326,6 +351,8 @@ class SdWebuiProvider:
             if key in all_param_names() and key not in available_ext_params:
                 raise RunValidationError(t("runValidation.unknownParam", key=key))
 
+        hires = _resolve_hires(catalog, params, is_edit=is_edit)
+
         seed = params.get("seed")
         if seed is None:
             seed = secrets.randbelow(SEED_MAX + 1)
@@ -374,6 +401,8 @@ class SdWebuiProvider:
             request["scheduler"] = params["scheduler"]
         if image_meta is not None:
             request.update(_img2img_fields(params, image_meta, mask_meta))
+        if hires:
+            request.update(_hires_fields(catalog, params, width, height, request["cfg_scale"]))
         request.update(
             {
                 "save_images": False,
@@ -634,6 +663,76 @@ def size_from_input(width: int, height: int) -> tuple[int, int]:
     return _round(width * scale), _round(height * scale)
 
 
+def default_hr_upscaler(upscalers: list[str]) -> str | None:
+    """アップスケーラーの既定(一覧に `Latent` があればそれ、無ければ先頭)。"""
+    if not upscalers:
+        return None
+    return PREFERRED_HR_UPSCALER if PREFERRED_HR_UPSCALER in upscalers else upscalers[0]
+
+
+def hires_target_size(width: int, height: int, scale: float) -> tuple[int, int]:
+    """拡大後の寸法。WebUI と同じく、倍率を掛けて切り捨てる(`int(width * hr_scale)`)。"""
+    return int(width * scale), int(height * scale)
+
+
+def _resolve_hires(catalog: Catalog, params: dict[str, Any], *, is_edit: bool) -> bool:
+    """高解像度補助を使うか(ADR-0038 10章)。使えない指定は黙って捨てずに 422 にする。
+
+    - img2img(Edit)には無い。接続先のアップスケーラーの一覧が取れないときは項目を出していない。
+    - `hr_cfg` は Forge だけ。
+    - `hires` が無効なのに他の項目を指定したら 422(マスクの無い Run の inpaint の項目と同じ考え方)。
+    """
+    names = [key for key in params if key in HIRES_PARAM_NAMES]
+    if not names:
+        return False
+    if is_edit or not catalog.upscalers:
+        raise RunValidationError(t("runValidation.unknownParam", key=names[0]))
+    if "hr_cfg" in params and catalog.flavor != "forge":
+        raise RunValidationError(t("runValidation.unknownParam", key="hr_cfg"))
+    enabled = params.get(PARAM_HIRES) is True
+    if not enabled:
+        dependent = [key for key in names if key != PARAM_HIRES]
+        if dependent:
+            raise RunValidationError(t("sdwebui.provider.hiresDisabled", key=dependent[0]))
+    return enabled
+
+
+def _hires_fields(
+    catalog: Catalog, params: dict[str, Any], width: int, height: int, cfg_scale: Any
+) -> dict[str, Any]:
+    """txt2img の高解像度補助の項目(ADR-0038 10章)。倍率だけで指定し、2回目のチェックポイント・
+    サンプラー・プロンプトは1回目と同じ(送らない)。"""
+    upscaler = params.get("hr_upscaler") or default_hr_upscaler(catalog.upscalers)
+    if upscaler not in catalog.upscalers:
+        raise RunValidationError(
+            t("runValidation.enumInvalid", name="hr_upscaler", choices=catalog.upscalers)
+        )
+    scale = params.get("hr_scale", DEFAULT_HR_SCALE)
+    target_w, target_h = hires_target_size(width, height, float(scale))
+    if max(target_w, target_h) > HIRES_MAX_LONG_EDGE:
+        raise RunValidationError(
+            t(
+                "sdwebui.provider.hiresTooLarge",
+                width=target_w,
+                height=target_h,
+                max=HIRES_MAX_LONG_EDGE,
+            )
+        )
+    fields: dict[str, Any] = {
+        "enable_hr": True,
+        "hr_scale": scale,
+        "hr_upscaler": upscaler,
+        "hr_second_pass_steps": params.get("hr_second_pass_steps", DEFAULT_HR_SECOND_PASS_STEPS),
+        # 2回目の描き直しの強さ。txt2img では本文の denoising_strength がこれに当たる。
+        "denoising_strength": params.get("hr_denoising_strength", DEFAULT_HR_DENOISING_STRENGTH),
+    }
+    if catalog.flavor == "forge":
+        fields["hr_additional_modules"] = list(FORGE_HR_ADDITIONAL_MODULES)
+        # Forge の hr_cfg の既定は 1.0 なので、指定が無ければ本体の CFG と同じ値を送る。
+        fields["hr_cfg"] = params.get("hr_cfg", cfg_scale)
+    return fields
+
+
 def _edit_inputs(inputs: list[RunInputMeta]) -> tuple[RunInputMeta, RunInputMeta | None]:
     """Edit の入力画像(1枚)とマスク(任意)。枚数は capabilities の検証で確かめ済みだが、
     念のためここでも断る。"""
@@ -838,6 +937,76 @@ def _generate_params(catalog: Catalog) -> list[ParamDef]:
             ),
         ]
     )
+    return params
+
+
+def _hires_params(catalog: Catalog) -> list[ParamDef]:
+    """高解像度補助の項目(Generate だけ。ADR-0038 10章)。アップスケーラーの一覧が取れなければ
+    項目ごと出さない(実行できるか分からないため)。`hires` が無効のあいだ、フォームは他の項目を
+    無効にする(`dependencies.ts`)。初期値(form_default)は持たせず、未指定ならサーバーの既定。"""
+    if not catalog.upscalers:
+        return []
+    upscaler_default = default_hr_upscaler(catalog.upscalers)
+    params: list[ParamDef] = [
+        ParamDef(
+            name=PARAM_HIRES,
+            type="bool",
+            label=t("sdwebui.params.hires"),
+            default=False,
+            form_default=False,
+            description=t("sdwebui.params.hiresDescription", max=HIRES_MAX_LONG_EDGE),
+        ),
+        ParamDef(
+            name="hr_upscaler",
+            type="enum",
+            label=t("sdwebui.params.hrUpscaler"),
+            choices=list(catalog.upscalers),
+            default=upscaler_default,
+            description=t("sdwebui.params.hrUpscalerDescription"),
+        ),
+        ParamDef(
+            name="hr_scale",
+            type="float",
+            label=t("sdwebui.params.hrScale"),
+            minimum=HR_SCALE_MIN,
+            maximum=HR_SCALE_MAX,
+            step=0.05,
+            default=DEFAULT_HR_SCALE,
+            description=t("sdwebui.params.hrScaleDescription", max=HIRES_MAX_LONG_EDGE),
+        ),
+        ParamDef(
+            name="hr_second_pass_steps",
+            type="int",
+            label=t("sdwebui.params.hrSecondPassSteps"),
+            minimum=0,
+            maximum=HR_SECOND_PASS_STEPS_MAX,
+            default=DEFAULT_HR_SECOND_PASS_STEPS,
+            description=t("sdwebui.params.hrSecondPassStepsDescription"),
+        ),
+        ParamDef(
+            name="hr_denoising_strength",
+            type="float",
+            label=t("sdwebui.params.hrDenoisingStrength"),
+            minimum=0,
+            maximum=1,
+            step=0.05,
+            default=DEFAULT_HR_DENOISING_STRENGTH,
+            description=t("sdwebui.params.hrDenoisingStrengthDescription"),
+        ),
+    ]
+    if catalog.flavor == "forge":
+        params.append(
+            ParamDef(
+                name="hr_cfg",
+                type="float",
+                label=t("sdwebui.params.hrCfg"),
+                minimum=HR_CFG_MIN,
+                maximum=HR_CFG_MAX,
+                step=0.5,
+                default=None,
+                description=t("sdwebui.params.hrCfgDescription"),
+            )
+        )
     return params
 
 

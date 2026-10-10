@@ -4,8 +4,8 @@
  * `paramGrouping.ts`)。どちらも状態を持たず、値とハンドラを props で受ける。
  */
 import type { ConditionalParam, ParamDef, SizeConstraints } from '../../api/client'
-import { useI18n } from '../../i18n'
-import { fieldDisabledNote, isFieldEnabled } from '../run-form/dependencies'
+import { fmt, useI18n } from '../../i18n'
+import { HIRES_MAX_LONG_EDGE, fieldDisabledNote, hiresTargetSize, isFieldEnabled } from '../run-form/dependencies'
 import { ParamField } from '../run-form/ParamField'
 import type { RawParamValues } from '../run-form/paramsBuilder'
 import { unspecifiedRawValue } from '../run-form/paramsBuilder'
@@ -42,6 +42,19 @@ export function PrimaryParamFields({
   onParamChange,
   primary,
 }: PrimaryParamFieldsProps) {
+  const { t } = useI18n()
+  // 高解像度補助(ADR-0038 10章)の拡大後の寸法は、倍率の欄の下に出す
+  const hiresTarget = hiresTargetSize(defs, rawParams, sizeState)
+  const hiresHint = hiresTarget
+    ? {
+        text: fmt(hiresTarget.tooLarge ? t.runForm.paramField.hiresTargetTooLarge : t.runForm.paramField.hiresTarget, {
+          width: hiresTarget.width,
+          height: hiresTarget.height,
+          max: HIRES_MAX_LONG_EDGE,
+        }),
+        warning: hiresTarget.tooLarge,
+      }
+    : null
   return (
     <>
       {sizeConstraints && (
@@ -58,6 +71,7 @@ export function PrimaryParamFields({
             value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
             enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name, { hasMask })}
             disabledNote={fieldDisabledNote(defs, rawParams, def.name, { hasMask })}
+            hint={def.name === 'hr_scale' ? hiresHint : null}
             onChange={onParamChange}
           />
         )

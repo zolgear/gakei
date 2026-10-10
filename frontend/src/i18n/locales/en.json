@@ -1231,7 +1231,9 @@
     },
     "paramField": {
       "disabledTitle": "Not available with the current settings",
-      "disabledNote": "Unavailable"
+      "disabledNote": "Unavailable",
+      "hiresTarget": "Upscaled to {width}×{height}",
+      "hiresTargetTooLarge": "Upscaled to {width}×{height} (exceeds the {max}px long-edge limit, so it cannot run)"
     },
     "seedField": {
       "random": "Random",
@@ -1366,7 +1368,8 @@
     "dependencies": {
       "combinatorialCount": "Makes one image per combination (up to {limit})",
       "incompatiblePair": "{fieldA}={valueA} and {fieldB}={valueB} cannot be set at the same time",
-      "maskOnly": "Used only when a mask is drawn"
+      "maskOnly": "Used only when a mask is drawn",
+      "hiresOff": "Available when hires fix is enabled"
     },
     "runFormLogic": {
       "droppedParamsSettings": "{names} are not usable with the current settings and were reset to unspecified",

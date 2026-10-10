@@ -1231,7 +1231,9 @@
     },
     "paramField": {
       "disabledTitle": "現在の設定では使えません",
-      "disabledNote": "使用不可"
+      "disabledNote": "使用不可",
+      "hiresTarget": "拡大後 {width}×{height}",
+      "hiresTargetTooLarge": "拡大後 {width}×{height}(長辺 {max}px を超えるため実行できません)"
     },
     "seedField": {
       "random": "ランダム",
@@ -1366,7 +1368,8 @@
     "dependencies": {
       "combinatorialCount": "組み合わせの数だけ作る(上限 {limit} 枚)",
       "incompatiblePair": "{fieldA}={valueA} と {fieldB}={valueB} は同時に指定できません",
-      "maskOnly": "マスクを描いたときだけ使います"
+      "maskOnly": "マスクを描いたときだけ使います",
+      "hiresOff": "高解像度補助を有効にすると使えます"
     },
     "runFormLogic": {
       "droppedParamsSettings": "{names} は現在の設定では使えないため未指定に戻しました",

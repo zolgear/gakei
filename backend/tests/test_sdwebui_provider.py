@@ -88,6 +88,13 @@ def test_capabilities_lists_checkpoints_as_models(db_session_factory: sessionmak
         "seed",
         "vae",
         "n",
+        # 高解像度補助(ADR-0038 10章。test_sdwebui_hires.py)
+        "hires",
+        "hr_scale",
+        "hr_upscaler",
+        "hr_second_pass_steps",
+        "hr_denoising_strength",
+        "hr_cfg",
     }
     assert params["sampler_name"].choices == ["Euler a", "Euler", "DPM++ 2M"]
     assert params["sampler_name"].form_default == "Euler a"

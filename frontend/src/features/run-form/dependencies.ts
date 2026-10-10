@@ -6,6 +6,7 @@
 import { fmt, msg } from '../../i18n'
 import type { ConditionalParam, IncompatiblePair, ParamDef } from '../../api/client'
 import { UNSPECIFIED, type RawParamValues } from './paramsBuilder'
+import type { SizeState } from './sizeValidation'
 
 /** フォームの生値から「実効値」を求める。未指定なら ParamDef.default を使う。 */
 function effectiveValue(defs: ParamDef[], raw: RawParamValues, fieldName: string): string | null {
@@ -93,7 +94,27 @@ interface ClientDisableRule {
   note?: () => string
 }
 
+/** 高解像度補助(SD WebUI の hires fix。ADR-0038 10章)の項目のうち、`hires` が有効のときだけ使うもの。 */
+export const HIRES_DEPENDENT_PARAMS = [
+  'hr_scale',
+  'hr_upscaler',
+  'hr_second_pass_steps',
+  'hr_denoising_strength',
+  'hr_cfg',
+] as const
+
+/** 拡大後の長辺の上限(ADR-0038 10章。サーバーと同じ値)。 */
+export const HIRES_MAX_LONG_EDGE = 4096
+
 const CLIENT_DISABLE_RULES: ClientDisableRule[] = [
+  // 高解像度補助(ADR-0038 10章): 無効のあいだは、ほかの hires の項目を使わない。
+  ...HIRES_DEPENDENT_PARAMS.map(
+    (field): ClientDisableRule => ({
+      field,
+      when: [{ field: 'hires', value: 'false' }],
+      note: () => msg().runForm.dependencies.hiresOff,
+    }),
+  ),
   // Dynamic Prompts(ADR-0038 7章): 無効にしたら、組み合わせ生成は意味を持たない。
   { field: 'dynamic_prompts_combinatorial', when: [{ field: 'dynamic_prompts', value: 'false' }] },
   // 組み合わせ生成では、枚数の指定は使われず、組み合わせの数だけ作る。
@@ -125,4 +146,26 @@ export function fieldDisabledNote(
 ): string | null {
   if (isDisabledForMissingMask(defs, fieldName, context)) return msg().runForm.dependencies.maskOnly
   return clientDisableRuleFor(defs, raw, fieldName)?.note?.() ?? null
+}
+
+export interface HiresTargetSize {
+  width: number
+  height: number
+  /** 拡大後の長辺が上限(`HIRES_MAX_LONG_EDGE`)を超える(サーバーは 422 にする)。 */
+  tooLarge: boolean
+}
+
+/**
+ * 高解像度補助の拡大後の寸法(ADR-0038 10章)。`hires` が有効で、寸法と倍率が分かるときだけ。
+ * WebUI と同じく、倍率を掛けて切り捨てる(`int(width * hr_scale)`)。
+ */
+export function hiresTargetSize(defs: ParamDef[], raw: RawParamValues, size: SizeState): HiresTargetSize | null {
+  if (effectiveValue(defs, raw, 'hires') !== 'true') return null
+  if (size.mode !== 'custom') return null
+  const scale = Number(effectiveValue(defs, raw, 'hr_scale'))
+  if (!Number.isFinite(scale) || scale <= 0) return null
+  // 浮動小数点の誤差も WebUI(Python の int())と同じに出る(760 × 1.15 → 873)
+  const width = Math.floor(size.width * scale)
+  const height = Math.floor(size.height * scale)
+  return { width, height, tooLarge: Math.max(width, height) > HIRES_MAX_LONG_EDGE }
 }

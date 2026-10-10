@@ -43,7 +43,7 @@ INFOTEXT = (
     "Size: 760x1024, Model hash: 0123456789, Model: model-a, Denoising strength: 0.33, "
     "Clip skip: 2, Hires Module 1: Use same choices, "
     'Hires prompt: "1girl, ...\\nmore", Hires CFG Scale: 5, Hires upscale: 1.5, '
-    "Hires steps: 20, Hires upscaler: upscaler-x, Version: f9.9.9-fake"
+    "Hires steps: 20, Hires upscaler: Latent, Version: f9.9.9-fake"
 )
 
 
@@ -90,25 +90,118 @@ def test_maps_full_example() -> None:
         "sampler_name": "Euler a",
         "scheduler": "automatic",
         "size": "760x1024",
+        # 高解像度補助(ADR-0038 10章)。Denoising strength は hires の2回目の強さ
+        "hires": True,
+        "hr_scale": 1.5,
+        "hr_second_pass_steps": 20,
+        "hr_upscaler": "Latent",
+        "hr_cfg": 5,
+        "hr_denoising_strength": 0.33,
     }
     names = unapplied_names(result)
-    assert names == [
-        "Model hash",
-        "Denoising strength",
-        "Clip skip",
-        "Hires Module 1",
-        "Hires prompt",
-        "Hires CFG Scale",
-        "Hires upscale",
-        "Hires steps",
-        "Hires upscaler",
-        "Version",
-    ]
+    # Hires Module 1: Use same choices は GAKEI が常に送る値なので並べない
+    assert names == ["Model hash", "Clip skip", "Hires prompt", "Version"]
     assert len(names) == len(set(names))
     # 引用された値は JSON として読んだもの(改行を含む)
     assert dict(result.unapplied)["Hires prompt"] == "1girl, ...\nmore"
     assert result.notes == []
     assert result.software == "f9.9.9-fake"
+
+
+HIRES_TEXT = "p\nSteps: 20, Seed: 1, Size: 512x768, Model: model-a"
+
+
+def test_hires_mapping_a1111_ignores_hires_cfg() -> None:
+    text = (
+        HIRES_TEXT + ", Denoising strength: 0.5, Hires upscale: 2, Hires steps: 6, "
+        "Hires upscaler: lanczos, Hires CFG Scale: 4.5"
+    )
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui(flavor="a1111")))
+    assert result.params["hires"] is True
+    assert result.params["hr_scale"] == 2
+    assert result.params["hr_second_pass_steps"] == 6
+    # 大文字小文字を無視して一覧の名前にする
+    assert result.params["hr_upscaler"] == "Lanczos"
+    assert result.params["hr_denoising_strength"] == 0.5
+    # A1111 には Hires CFG Scale の送り先が無い
+    assert "hr_cfg" not in result.params
+    assert unapplied_names(result) == ["Hires CFG Scale"]
+    assert result.notes == []
+
+
+def test_hires_unknown_upscaler_keeps_hires_with_note() -> None:
+    text = HIRES_TEXT + ", Hires upscale: 1.5, Hires upscaler: upscaler-x"
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert result.params["hires"] is True
+    assert "hr_upscaler" not in result.params
+    assert note_codes(result) == ["hiresUpscalerNotFound"]
+    assert "upscaler-x" in result.notes[0].message
+    assert unapplied_names(result) == ["Hires upscaler"]
+
+
+def test_hires_resize_and_second_pass_overrides_are_unapplied() -> None:
+    # 拡大後の寸法の指定(Hires resize)では倍率が無いので、hires を有効にしない
+    text = (
+        HIRES_TEXT + ", Denoising strength: 0.4, Hires resize: 1024x1536, Hires steps: 10, "
+        "Hires upscaler: Latent, Hires checkpoint: model-b, Hires sampler: Euler, "
+        "Hires negative prompt: bad, Hires Module 1: vae-b"
+    )
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert "hires" not in result.params
+    assert not any(name.startswith("hr_") for name in result.params)
+    assert unapplied_names(result) == [
+        "Denoising strength",
+        "Hires resize",
+        "Hires steps",
+        "Hires upscaler",
+        "Hires checkpoint",
+        "Hires sampler",
+        "Hires negative prompt",
+        "Hires Module 1",
+    ]
+
+
+def test_hires_with_overrides_keeps_them_unapplied() -> None:
+    text = (
+        HIRES_TEXT + ", Hires upscale: 2, Hires checkpoint: model-b, Hires sampler: Euler, "
+        "Hires Module 1: vae-b"
+    )
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert result.params["hires"] is True
+    assert unapplied_names(result) == ["Hires checkpoint", "Hires sampler", "Hires Module 1"]
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "Hires upscale: 4.5",  # 倍率の範囲外
+        "Hires upscale: 0.5",
+        "Hires upscale: x",
+    ],
+)
+def test_hires_invalid_scale(extra: str) -> None:
+    result = build_form_values(meta_of(f"{HIRES_TEXT}, {extra}"), catalog_of(FakeSdWebui()))
+    assert "hires" not in result.params
+    assert note_codes(result) == ["invalidValue"]
+    assert "Hires upscale" in unapplied_names(result)
+
+
+def test_hires_too_large_after_upscale() -> None:
+    # 倍率は範囲内でも、拡大後の長辺(2048 × 2.5 = 5120)が 4096 を超える
+    text = "p\nSteps: 20, Seed: 1, Size: 2048x1024, Hires upscale: 2.5"
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert "hires" not in result.params
+    assert note_codes(result) == ["invalidValue"]
+
+
+def test_hires_not_available_on_server() -> None:
+    fake = FakeSdWebui()
+    fake.upscalers = None
+    fake.latent_upscale_modes = None
+    text = HIRES_TEXT + ", Denoising strength: 0.5, Hires upscale: 2"
+    result = build_form_values(meta_of(text), catalog_of(fake))
+    assert "hires" not in result.params
+    assert unapplied_names(result) == ["Denoising strength", "Hires upscale"]
 
 
 def test_model_by_hash_when_name_differs() -> None:

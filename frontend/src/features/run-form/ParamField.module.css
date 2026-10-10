@@ -54,6 +54,13 @@
   line-height: 1.4;
 }
 
+/* 欄の下の補足が、送ると断られる値を示すとき(例: 拡大後の寸法が上限を超える) */
+.hintWarning {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
 .disabledNote {
   margin: 0;
   font-size: 10px;

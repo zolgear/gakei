@@ -27,6 +27,11 @@
   架空の LoRA(`style-a`、`character-b` など)で、メタ情報には学習した人の環境の情報に当たる
   `ss_dataset_dirs` などの秘密の値(`LORA_SECRET_MARKERS`)を入れてある。`loras = None` で 404。
   `POST /sdapi/v1/refresh-loras` は `lora_refresh_count` を数える。
+- 高解像度補助(ADR-0038 10章): `GET /sdapi/v1/upscalers`(`upscalers`。実物と同じく先頭に
+  `None`)と `GET /sdapi/v1/latent-upscale-modes`(`latent_upscale_modes`)。どちらも None で 404。
+  txt2img の本文が `enable_hr` なら、拡大後の寸法(`int(width * hr_scale)`)の画像を返し、infotext に
+  `Hires upscale` などを足す(`info` の width / height は1回目のまま。実物と同じ)。Forge 風
+  (`flavor="forge"`)では、`hr_additional_modules` が無いと実物と同じく 500 を返す。
 - `return_grid=True`: 実物の `return_grid` と同じく、先頭にグリッドを足し
   `index_of_first_image = 1` を返す(2枚以上のとき)。
 """
@@ -246,6 +251,9 @@ class FakeSdWebui:
         # LoRA(ADR-0038 8章)。None なら /sdapi/v1/loras が 404。
         self.loras: list[dict[str, Any]] | None = default_loras()
         self.lora_refresh_count = 0
+        # 高解像度補助(ADR-0038 10章)。None なら 404。
+        self.upscalers: list[str] | None = ["None", "Lanczos", "ESRGAN-a"]
+        self.latent_upscale_modes: list[str] | None = ["Latent", "Latent (antialiased)"]
 
     def enable_dynamic_prompts(
         self,
@@ -372,6 +380,11 @@ class FakeSdWebui:
                 return httpx.Response(404, json={"detail": "Not Found"})
             self.lora_refresh_count += 1
             return httpx.Response(200, json=None)
+        if name in ("upscalers", "latent-upscale-modes") and request.method == "GET":
+            names = self.upscalers if name == "upscalers" else self.latent_upscale_modes
+            if names is None:
+                return httpx.Response(404, json={"detail": "Not Found"})
+            return httpx.Response(200, json=[{"name": n} for n in names])
         if name in ("scripts", "script-info"):
             if self.scripts_status != 200:
                 return httpx.Response(self.scripts_status, json={"error": "failed"})
@@ -379,6 +392,23 @@ class FakeSdWebui:
                 200, json=self.scripts if name == "scripts" else self.script_infos
             )
         if name == "txt2img" and request.method == "POST":
+            body = json.loads(request.content)
+            if (
+                self.flavor == "forge"
+                and body.get("enable_hr")
+                and not isinstance(body.get("hr_additional_modules"), list)
+            ):
+                # 実物の Forge と同じ(`argument of type 'NoneType' is not iterable`)
+                self.txt2img_bodies.append(body)
+                return httpx.Response(
+                    500,
+                    json={
+                        "error": "TypeError",
+                        "detail": "",
+                        "body": "",
+                        "errors": "argument of type 'NoneType' is not iterable",
+                    },
+                )
             return self._txt2img(request)
         if name == "img2img" and request.method == "POST":
             return self._img2img(request)
@@ -427,13 +457,29 @@ class FakeSdWebui:
                 all_prompts = [variants[i % len(variants)] for i in range(batch)]
         all_negative_prompts = [negative] * batch
         all_seeds = [seed + i for i in range(batch)]
+        image_size = (8, 8)
+        hires_text = ""
+        if not is_img2img and body.get("enable_hr"):
+            scale = float(body.get("hr_scale", 2.0))
+            image_size = (int(body["width"] * scale), int(body["height"] * scale))
+            hires_text = (
+                f", Denoising strength: {body.get('denoising_strength')}"
+                f", Hires upscale: {body.get('hr_scale')}"
+                f", Hires steps: {body.get('hr_second_pass_steps')}"
+                f", Hires upscaler: {body.get('hr_upscaler')}"
+            )
+            if "hr_cfg" in body:
+                hires_text += f", Hires CFG Scale: {body['hr_cfg']}"
         images = (
             []
             if self.return_no_images
-            else [b64(png_bytes((i * 20 % 255, 0, 0))) for i in range(batch + self.extra_images)]
+            else [
+                b64(png_bytes((i * 20 % 255, 0, 0), size=image_size))
+                for i in range(batch + self.extra_images)
+            ]
         )
         infotexts = [
-            f"{p}\nSteps: {body.get('steps')}, Seed: {s}, Model: {used_model}"
+            f"{p}\nSteps: {body.get('steps')}, Seed: {s}, Model: {used_model}{hires_text}"
             for p, s in zip(all_prompts, all_seeds, strict=True)
         ]
         index_of_first_image = 0
@@ -451,6 +497,9 @@ class FakeSdWebui:
             "sd_model_name": used_model,
             "infotexts": infotexts,
             "index_of_first_image": index_of_first_image,
+            # 1回目の寸法(高解像度補助を使っても拡大前のまま。実物と同じ)
+            "width": body.get("width"),
+            "height": body.get("height"),
         }
         return httpx.Response(
             200, json={"images": images, "parameters": body, "info": json.dumps(info)}

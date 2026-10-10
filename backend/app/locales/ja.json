@@ -167,7 +167,9 @@
       "noOutputImages": "SD WebUI から画像が返りませんでした。",
       "unreadableOutput": "SD WebUI から返った画像を読めませんでした。",
       "inputImageMissingInternal": "Run の入力に元の画像がありません。",
-      "unreadableInput": "入力画像またはマスクを読めませんでした。"
+      "unreadableInput": "入力画像またはマスクを読めませんでした。",
+      "hiresDisabled": "{key} は高解像度補助を有効にしたときだけ指定できます。",
+      "hiresTooLarge": "拡大後の寸法 {width}×{height} が大きすぎます(長辺は {max}px まで)。アップスケール倍率か寸法を小さくしてください。"
     },
     "params": {
       "negativePrompt": "ネガティブプロンプト",
@@ -209,7 +211,19 @@
       "inpaintFullRes": "マスク部分だけを拡大して描く",
       "inpaintFullResDescription": "マスクの範囲(と周りの余白)を切り出し、出力のサイズまで拡大して描いてから戻します。小さな範囲を細かく描き直すときに使います。",
       "inpaintFullResPadding": "拡大するときの余白",
-      "inpaintFullResPaddingDescription": "「マスク部分だけを拡大して描く」で、マスクの周りに含める余白(ピクセル)。"
+      "inpaintFullResPaddingDescription": "「マスク部分だけを拡大して描く」で、マスクの周りに含める余白(ピクセル)。",
+      "hires": "高解像度補助",
+      "hiresDescription": "低めの解像度で描いてから拡大し、もう一度描き直します(hires fix)。拡大後の長辺は {max}px まで。",
+      "hrUpscaler": "アップスケーラー",
+      "hrUpscalerDescription": "拡大の方式。Latent 系は潜在空間で拡大し、ノイズ除去強度を高め(0.5 以上)にするのが目安です。",
+      "hrScale": "アップスケール倍率",
+      "hrScaleDescription": "1回目の寸法に掛ける倍率。拡大後の長辺は {max}px まで。",
+      "hrSecondPassSteps": "高解像度でのステップ数",
+      "hrSecondPassStepsDescription": "拡大後に描き直すステップ数。0 なら本体のステップ数と同じ。",
+      "hrDenoisingStrength": "ノイズ除去強度",
+      "hrDenoisingStrengthDescription": "拡大後にどれだけ描き直すか。0 に近いほど拡大しただけに近く、1 に近いほど大きく変わります。",
+      "hrCfg": "Hires CFG Scale",
+      "hrCfgDescription": "拡大後の描き直しの CFG スケール。未指定なら本体の CFG スケールと同じ値を送ります。"
     },
     "importParams": {
       "inputMissing": "画像のファイルか、ストックの画像(asset_id)を指定してください。",
@@ -225,7 +239,8 @@
         "schedulerNotFound": "スケジューラー「{value}」が接続先に見つからないため、入れていません。",
         "vaeNotFound": "VAE「{value}」が接続先に見つからないため、入れていません。",
         "dynamicPromptsUnavailable": "接続先に Dynamic Prompts が無いため、展開前のプロンプト(Template)ではなく、展開後のプロンプトを入れました。",
-        "truncated": "生成情報が長すぎるため、一部が切り詰められています。"
+        "truncated": "生成情報が長すぎるため、一部が切り詰められています。",
+        "hiresUpscalerNotFound": "アップスケーラー「{value}」が接続先に見つからないため、既定のアップスケーラーにしました。"
       }
     }
   },

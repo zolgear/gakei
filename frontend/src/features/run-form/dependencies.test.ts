@@ -3,8 +3,10 @@ import type { ParamDef } from '../../api/client'
 import { fmt, msg } from '../../i18n'
 import {
   DYNAMIC_PROMPTS_COMBINATORIAL_LIMIT,
+  HIRES_DEPENDENT_PARAMS,
   defsForMask,
   fieldDisabledNote,
+  hiresTargetSize,
   isFieldEnabled,
 } from './dependencies'
 import { UNSPECIFIED } from './paramsBuilder'
@@ -107,5 +109,81 @@ describe('マスクがあるときだけ使う項目(mask_only)', () => {
   it('defsForMask はマスクが無いときだけ mask_only を除く', () => {
     expect(defsForMask(defs, false).map((d) => d.name)).toEqual(['denoising_strength'])
     expect(defsForMask(defs, true).map((d) => d.name)).toEqual(['denoising_strength', 'mask_blur'])
+  })
+})
+
+// 高解像度補助のある SD WebUI の接続先(ADR-0038 10章)。
+function floatDef(name: string, defaultValue: number | null): ParamDef {
+  return { name, type: 'float', label: name, default: defaultValue, required: false, description: '' }
+}
+
+const hiresDefs: ParamDef[] = [
+  nDef,
+  boolDef('hires', false),
+  { name: 'hr_upscaler', type: 'enum', label: 'hr_upscaler', choices: ['Latent', 'Lanczos'], default: 'Latent', required: false, description: '' },
+  floatDef('hr_scale', 2),
+  { ...nDef, name: 'hr_second_pass_steps', minimum: 0, maximum: 150, default: 0 },
+  floatDef('hr_denoising_strength', 0.5),
+  floatDef('hr_cfg', null),
+]
+
+describe('高解像度補助の依存関係(フロントの規則)', () => {
+  it('無効(未指定は既定の無効)のあいだは hr_ の項目をすべて無効にし、理由を示す', () => {
+    for (const hires of ['false', UNSPECIFIED]) {
+      const raw = { hires, hr_scale: '1.5' }
+      for (const name of HIRES_DEPENDENT_PARAMS) {
+        expect(isFieldEnabled(hiresDefs, raw, [], name)).toBe(false)
+        expect(fieldDisabledNote(hiresDefs, raw, name)).toBe(msg().runForm.dependencies.hiresOff)
+      }
+      // hires 自体と、本体の項目は使える
+      expect(isFieldEnabled(hiresDefs, raw, [], 'hires')).toBe(true)
+      expect(isFieldEnabled(hiresDefs, raw, [], 'n')).toBe(true)
+    }
+  })
+
+  it('有効なら hr_ の項目を使える', () => {
+    const raw = { hires: 'true' }
+    for (const name of HIRES_DEPENDENT_PARAMS) {
+      expect(isFieldEnabled(hiresDefs, raw, [], name)).toBe(true)
+      expect(fieldDisabledNote(hiresDefs, raw, name)).toBeNull()
+    }
+  })
+
+  it('高解像度補助の無い定義(Edit や一覧の取れない接続先)では影響しない', () => {
+    const defs = [nDef, floatDef('hr_scale', 2)]
+    expect(isFieldEnabled(defs, { hr_scale: '2' }, [], 'hr_scale')).toBe(true)
+  })
+})
+
+describe('hiresTargetSize(拡大後の寸法)', () => {
+  const size = { mode: 'custom' as const, width: 512, height: 768 }
+
+  it('倍率を掛けて切り捨てる(未指定の倍率は既定の 2)', () => {
+    expect(hiresTargetSize(hiresDefs, { hires: 'true' }, size)).toEqual({ width: 1024, height: 1536, tooLarge: false })
+    expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '1.5' }, size)).toEqual({
+      width: 768,
+      height: 1152,
+      tooLarge: false,
+    })
+    // WebUI(Python の int())と同じ丸め
+    expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '1.15' }, { mode: 'custom', width: 760, height: 1024 })).toEqual({
+      width: 873,
+      height: 1177,
+      tooLarge: false,
+    })
+  })
+
+  it('拡大後の長辺が 4096 を超えるときは tooLarge', () => {
+    const big = { mode: 'custom' as const, width: 2048, height: 1024 }
+    expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '2' }, big)?.tooLarge).toBe(false)
+    expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '2.05' }, big)?.tooLarge).toBe(true)
+  })
+
+  it('無効、寸法が未指定、倍率が読めないときは null', () => {
+    expect(hiresTargetSize(hiresDefs, { hires: 'false' }, size)).toBeNull()
+    expect(hiresTargetSize(hiresDefs, {}, size)).toBeNull()
+    expect(hiresTargetSize(hiresDefs, { hires: 'true' }, { mode: 'unspecified', width: 1024, height: 1024 })).toBeNull()
+    expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: 'x' }, size)).toBeNull()
+    expect(hiresTargetSize([nDef], { hires: 'true' }, size)).toBeNull()
   })
 })

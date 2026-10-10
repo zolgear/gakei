@@ -29,6 +29,8 @@ interface ParamFieldProps {
   enabled: boolean
   /** 無効のときに「使用不可」のかわりに出す説明(例: 組み合わせ生成のときの枚数)。 */
   disabledNote?: string | null
+  /** 有効のときに欄の下に出す補足(例: 高解像度補助の拡大後の寸法)。`warning` は目立たせる。 */
+  hint?: { text: string; warning?: boolean } | null
   onChange: (name: string, value: string) => void
 }
 
@@ -148,7 +150,7 @@ function PromptParamField({ def, value, enabled, disabledNote, onChange, scope }
   )
 }
 
-export function ParamField({ def, value, enabled, disabledNote, onChange }: ParamFieldProps) {
+export function ParamField({ def, value, enabled, disabledNote, hint, onChange }: ParamFieldProps) {
   const { t } = useI18n()
   const pf = t.runForm.paramField
   const id = `param-${def.name}`
@@ -232,6 +234,12 @@ export function ParamField({ def, value, enabled, disabledNote, onChange }: Para
           <option value="true">true</option>
           <option value="false">false</option>
         </select>
+      )}
+
+      {enabled && hint && (
+        <p className={hint.warning ? styles.hintWarning : styles.hint} role={hint.warning ? 'alert' : undefined}>
+          {hint.text}
+        </p>
       )}
 
       {!enabled && (

@@ -252,3 +252,4 @@ ADR-0013 で ComfyUI を加えたときと同じく、ADR-0001 の「迷った�
 8. [ ] 実物の Forge で、t2i、img2img、inpaint、チェックポイントの切り替え、Basic 認証を手動で確認する
 9. [x] LoRA の選択(8章)を作る(`GET /api/sdwebui/loras`、「一覧を読み直す」での `refresh-loras`、プロンプト欄の「LoRA」。偽の WebUI でのテストを含む)
 10. [x] 画像の生成情報をフォームに読み込む(9章)を作る(`POST /api/sdwebui/import-params`、スタジオの「画像から設定を読み込む」、ビューアの「SD WebUI のフォームに読み込む」。偽の WebUI でのテストと、画像を保存しないことのテストを含む。実物の WebUI の画像での確認は別に行う)
+11. [x] 高解像度補助(10章)を作る(Generate の `hires` と `hr_*`、アップスケーラーの一覧、Forge の `hr_additional_modules` と `hr_cfg`、拡大後の長辺 4096 の上限、9章の読み込みの対応付け。偽の WebUI でのテストを含む。実物の Forge での確認は別に行う)

@@ -125,6 +125,9 @@ class Catalog:
     vaes: list[str] = field(default_factory=list)
     # 拡張機能のスクリプト(取れなければ空。ADR-0038 7章)
     scripts: list[ScriptInfo] = field(default_factory=list)
+    # 高解像度補助のアップスケーラー(latent の方式 → `/upscalers` の順。`None` は除く。
+    # 取れなければ空で、高解像度補助の項目を出さない。ADR-0038 10章)
+    upscalers: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -215,6 +218,23 @@ def _names(body: Any, key: str) -> list[str]:
             value = item.get(key)
             if isinstance(value, str) and value and value not in result:
                 result.append(value)
+    return result
+
+
+# `/sdapi/v1/upscalers` の「拡大しない」。高解像度補助の選択肢には出さない(ADR-0038 10章)
+_UPSCALER_NONE = "None"
+
+
+def _merge_upscalers(latent_body: Any, upscalers_body: Any) -> list[str]:
+    """高解像度補助のアップスケーラーの選択肢。WebUI の画面と同じく latent の方式を先に並べる。
+
+    `None`(拡大の処理をしない)は、高解像度補助の選択肢としては意味が分かりにくく、WebUI でも
+    単純な拡大(Lanczos 相当)になるだけなので除く。
+    """
+    result: list[str] = []
+    for name in [*_names(latent_body, "name"), *_names(upscalers_body, "name")]:
+        if name != _UPSCALER_NONE and name not in result:
+            result.append(name)
     return result
 
 
@@ -427,6 +447,10 @@ class SdWebuiClient:
                 else:
                     vaes = _names(self._get_optional(http, "/sdapi/v1/sd-vae"), "model_name")
                 scripts = self._fetch_scripts(http)
+                upscalers = _merge_upscalers(
+                    self._get_optional(http, "/sdapi/v1/latent-upscale-modes"),
+                    self._get_optional(http, "/sdapi/v1/upscalers"),
+                )
         except httpx.TimeoutException as exc:
             raise SdWebuiError("sdwebuiUnavailable", t("sdwebui.client.connectTimeout")) from exc
         except httpx.HTTPError as exc:
@@ -439,6 +463,7 @@ class SdWebuiClient:
             scheduler_labels=scheduler_labels,
             vaes=vaes,
             scripts=scripts,
+            upscalers=upscalers,
         )
 
     def _fetch_scripts(self, http: httpx.Client) -> list[ScriptInfo]:

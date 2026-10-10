@@ -167,7 +167,9 @@
       "noOutputImages": "SD WebUI returned no images.",
       "unreadableOutput": "Could not read the images returned by SD WebUI.",
       "inputImageMissingInternal": "The run has no source image among its inputs.",
-      "unreadableInput": "Could not read the input image or the mask."
+      "unreadableInput": "Could not read the input image or the mask.",
+      "hiresDisabled": "{key} can only be set when hires fix is enabled.",
+      "hiresTooLarge": "The upscaled size {width}×{height} is too large (long edge up to {max}px). Lower the upscale factor or the size."
     },
     "params": {
       "negativePrompt": "Negative prompt",
@@ -209,7 +211,19 @@
       "inpaintFullRes": "Inpaint only the masked area",
       "inpaintFullResDescription": "Crop the masked area (plus padding), draw it at the output size, then paste it back. Use it to redraw small areas in detail.",
       "inpaintFullResPadding": "Padding for masked area",
-      "inpaintFullResPaddingDescription": "Pixels around the mask to include when \"Inpaint only the masked area\" is on."
+      "inpaintFullResPaddingDescription": "Pixels around the mask to include when \"Inpaint only the masked area\" is on.",
+      "hires": "Hires fix",
+      "hiresDescription": "Draws at a lower resolution, upscales, and then redraws (hires fix). The upscaled long edge can be up to {max}px.",
+      "hrUpscaler": "Upscaler",
+      "hrUpscalerDescription": "How to upscale. Latent upscalers work in latent space; a higher denoising strength (0.5 or more) is recommended.",
+      "hrScale": "Upscale by",
+      "hrScaleDescription": "Factor applied to the first-pass size. The upscaled long edge can be up to {max}px.",
+      "hrSecondPassSteps": "Hires steps",
+      "hrSecondPassStepsDescription": "Steps for the redraw after upscaling. 0 uses the same number as the main steps.",
+      "hrDenoisingStrength": "Denoising strength",
+      "hrDenoisingStrengthDescription": "How much to redraw after upscaling. Near 0 is close to a plain upscale; near 1 changes more.",
+      "hrCfg": "Hires CFG Scale",
+      "hrCfgDescription": "CFG scale for the redraw after upscaling. If not set, the main CFG scale is sent."
     },
     "importParams": {
       "inputMissing": "Specify an image file or an image in your stock (asset_id).",
@@ -225,7 +239,8 @@
         "schedulerNotFound": "Scheduler \"{value}\" was not found on the server, so it was not applied.",
         "vaeNotFound": "VAE \"{value}\" was not found on the server, so it was not applied.",
         "dynamicPromptsUnavailable": "The server has no Dynamic Prompts, so the expanded prompt was used instead of the template.",
-        "truncated": "The generation info was too long and has been partly truncated."
+        "truncated": "The generation info was too long and has been partly truncated.",
+        "hiresUpscalerNotFound": "Upscaler \"{value}\" was not found on the server, so the default upscaler is used."
       }
     }
   },

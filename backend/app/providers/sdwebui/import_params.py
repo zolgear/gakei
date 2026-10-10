@@ -18,6 +18,11 @@
   短いハッシュと照合する。見つからなければ `model` は None(フォームのモデルを変えない)。
 - VAE(A1111 の `VAE`、Forge の `Module 1` など): 接続先の VAE の一覧にあれば入れる。Forge は
   拡張子なしで書くので、一覧の拡張子を除いた名前とも照合する。
+- 高解像度補助(ADR-0038 10章): `Hires upscale` があり、接続先で高解像度補助を使えれば `hires` を
+  有効にして倍率を入れる。`Hires steps`、`Hires upscaler`(一覧にあれば)、`Hires CFG Scale`
+  (Forge のときだけ)、`Denoising strength`(hires の画像のときだけ。2回目の描き直しの強さ)も入れる。
+  `Hires Module 1: Use same choices` は GAKEI が常に送る値なので、入れたものとして扱う。
+  拡大後の寸法の指定(`Hires resize`)、別のチェックポイント・サンプラー・プロンプトは入れない。
 
 フォームに入れなかった項目は、名前と値を `unapplied` に並べる(重複せず、入れたものは含めない)。
 `Model hash` や `VAE hash` など照合にだけ使う項目も、フォームには入らないので並べる。
@@ -33,7 +38,19 @@ from app.domain import sizes
 from app.i18n import t
 from app.providers.sdwebui.client import Catalog, Checkpoint
 from app.providers.sdwebui.extensions import PARAM_DYNAMIC_PROMPTS, resolve_extensions
-from app.providers.sdwebui.provider import SEED_MAX, SIZE_CONSTRAINTS
+from app.providers.sdwebui.provider import (
+    FORGE_HR_ADDITIONAL_MODULES,
+    HIRES_MAX_LONG_EDGE,
+    HR_CFG_MAX,
+    HR_CFG_MIN,
+    HR_SCALE_MAX,
+    HR_SCALE_MIN,
+    HR_SECOND_PASS_STEPS_MAX,
+    PARAM_HIRES,
+    SEED_MAX,
+    SIZE_CONSTRAINTS,
+    hires_target_size,
+)
 
 # capabilities のパラメーターの範囲(provider.py の `_generate_params` と同じ)
 STEPS_MIN, STEPS_MAX = 1, 150
@@ -51,6 +68,13 @@ KEY_SEED = "Seed"
 KEY_VAE = "VAE"
 KEY_TEMPLATE = "Template"
 KEY_NEGATIVE_TEMPLATE = "Negative Template"
+KEY_DENOISING = "Denoising strength"
+KEY_HIRES_UPSCALE = "Hires upscale"
+KEY_HIRES_STEPS = "Hires steps"
+KEY_HIRES_UPSCALER = "Hires upscaler"
+KEY_HIRES_CFG = "Hires CFG Scale"
+# Forge の2回目のモジュール(`Hires Module 1` …)
+_HIRES_MODULE_PREFIX = "Hires Module "
 # Forge は VAE やテキストエンコーダーを `Module 1`、`Module 2` … と書く
 _FORGE_MODULE_PREFIX = "Module "
 
@@ -340,6 +364,9 @@ def build_form_values(meta: dict[str, Any], catalog: Catalog) -> ImportResult:
     if module_keys and not vae_applied and KEY_VAE not in infotext:
         note("vaeNotFound", value=", ".join(_value_text(infotext[k]) for k in module_keys))
 
+    # -- 高解像度補助 -------------------------------------------------------------------
+    _apply_hires(infotext, catalog, result, consumed, note)
+
     # -- 入れなかった項目 -----------------------------------------------------------------
     seen: set[str] = set()
     for key, value in infotext.items():
@@ -351,6 +378,75 @@ def build_form_values(meta: dict[str, Any], catalog: Catalog) -> ImportResult:
     if meta.get("truncated"):
         note("truncated")
     return result
+
+
+def _apply_hires(
+    infotext: dict[str, Any],
+    catalog: Catalog,
+    result: ImportResult,
+    consumed: set[str],
+    note: Any,
+) -> None:
+    """高解像度補助の項目(ADR-0038 10章)。`Hires upscale` を入れられたときだけ `hires` を有効にし、
+    ほかの hires の項目と `Denoising strength` を入れる。入れなければ、どれも
+    「読み込めなかった項目」。
+    接続先で高解像度補助を使えない(アップスケーラーの一覧が無い)ときも入れない。"""
+    if KEY_HIRES_UPSCALE not in infotext or not catalog.upscalers:
+        return
+    scale = _parse_float(infotext[KEY_HIRES_UPSCALE])
+    if scale is None or not HR_SCALE_MIN <= scale <= HR_SCALE_MAX:
+        note("invalidValue", name=KEY_HIRES_UPSCALE)
+        return
+    size = result.params.get("size")
+    if isinstance(size, str):
+        width, height = (int(v) for v in size.split("x"))
+        if max(hires_target_size(width, height, scale)) > HIRES_MAX_LONG_EDGE:
+            note("invalidValue", name=KEY_HIRES_UPSCALE)
+            return
+    result.params[PARAM_HIRES] = True
+    result.params["hr_scale"] = int(scale) if scale.is_integer() else scale
+    consumed.add(KEY_HIRES_UPSCALE)
+
+    if KEY_HIRES_STEPS in infotext:
+        steps = _parse_int(infotext[KEY_HIRES_STEPS])
+        if steps is not None and 0 <= steps <= HR_SECOND_PASS_STEPS_MAX:
+            result.params["hr_second_pass_steps"] = steps
+            consumed.add(KEY_HIRES_STEPS)
+        else:
+            note("invalidValue", name=KEY_HIRES_STEPS)
+
+    if KEY_HIRES_UPSCALER in infotext:
+        value = _value_text(infotext[KEY_HIRES_UPSCALER])
+        upscaler = _find_ci(catalog.upscalers, value)
+        if upscaler is not None:
+            result.params["hr_upscaler"] = upscaler
+            consumed.add(KEY_HIRES_UPSCALER)
+        else:
+            note("hiresUpscalerNotFound", value=value)
+
+    # `Hires CFG Scale` は Forge だけの項目(A1111 には送り先が無い)
+    if KEY_HIRES_CFG in infotext and catalog.flavor == "forge":
+        cfg = _parse_float(infotext[KEY_HIRES_CFG])
+        if cfg is not None and HR_CFG_MIN <= cfg <= HR_CFG_MAX:
+            result.params["hr_cfg"] = int(cfg) if cfg.is_integer() else cfg
+            consumed.add(KEY_HIRES_CFG)
+        else:
+            note("invalidValue", name=KEY_HIRES_CFG)
+
+    # txt2img の `Denoising strength` は、hires の2回目の描き直しの強さ
+    if KEY_DENOISING in infotext:
+        strength = _parse_float(infotext[KEY_DENOISING])
+        if strength is not None and 0 <= strength <= 1:
+            result.params["hr_denoising_strength"] = strength
+            consumed.add(KEY_DENOISING)
+        else:
+            note("invalidValue", name=KEY_DENOISING)
+
+    # 2回目も1回目と同じモジュールを使う指定は、GAKEI が常に送る値と同じ
+    same_choices = FORGE_HR_ADDITIONAL_MODULES[0]
+    for key, value in infotext.items():
+        if key.startswith(_HIRES_MODULE_PREFIX) and _value_text(value).strip() == same_choices:
+            consumed.add(key)
 
 
 def _note_message(code: str, **kwargs: Any) -> str:
@@ -371,6 +467,8 @@ def _note_message(code: str, **kwargs: Any) -> str:
         return t("sdwebui.importParams.notes.vaeNotFound", **kwargs)
     if code == "dynamicPromptsUnavailable":
         return t("sdwebui.importParams.notes.dynamicPromptsUnavailable", **kwargs)
+    if code == "hiresUpscalerNotFound":
+        return t("sdwebui.importParams.notes.hiresUpscalerNotFound", **kwargs)
     if code == "truncated":
         return t("sdwebui.importParams.notes.truncated", **kwargs)
     raise ValueError(code)
