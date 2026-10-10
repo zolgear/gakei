@@ -275,9 +275,16 @@ class OnnxClipEngine:
     def _create_session(self, path: Path) -> Any:
         import onnxruntime
 
+        options = session_options(onnxruntime)
+        if self.model.family == "embeddinggemma2":
+            # EG2 は計算ごとに中間の大きさが変わる(画像のソフトトークン数、文章の長さ)。CPU の
+            # メモリアリーナは一度取った分を返さないので、画像と長い文章を交互に計算すると
+            # 約 1.0GB まで膨らむ。切っても速さは変わらず、ピークは約 0.75GB に収まる
+            # (2026-10-11 に実測。ADR-0044 4章)。
+            options.enable_cpu_mem_arena = False
         return onnxruntime.InferenceSession(
             str(path),
-            sess_options=session_options(onnxruntime),
+            sess_options=options,
             providers=["CPUExecutionProvider"],
         )
 

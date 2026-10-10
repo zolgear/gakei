@@ -224,9 +224,9 @@ CLIP_MODELS: dict[str, ClipModel] = {
         license="Apache-2.0",
     ),
     # ADR-0044。画像は画像側 → 文章側の2段で計算する。メモリの目安は、計算中のピークを測った
-    # 値から: 画像1枚(画像側+文章側)で約 0.75GB、文章 1,024 トークン(文章側だけ)で約 0.56GB、
-    # 画像側を読み込んだまま 1,024 トークンの文章で約 1.0GB。重みは `.onnx_data` を mmap で
-    # 読むので、読み込み直後は小さい。`memory_bytes` は両方を読み込んだときのいちばん重い場合。
+    # 値から(CPU のメモリアリーナは切る。`onnx_engine`): 画像と 1,024 トークンの文章を交互に
+    # 計算して約 0.75GB、文章 1,024 トークン(文章側だけ)で約 0.56GB。重みは `.onnx_data` を
+    # mmap で読むので、読み込み直後は小さい。
     "embeddinggemma-2-q8": ClipModel(
         name="embeddinggemma-2-q8",
         family="embeddinggemma2",
@@ -269,9 +269,9 @@ CLIP_MODELS: dict[str, ClipModel] = {
         text_file="model_quantized.onnx",
         languages=("ja", "en"),
         dim=768,
-        memory_vision_bytes=750 * _MB,
+        memory_vision_bytes=800 * _MB,
         memory_text_bytes=600 * _MB,
-        memory_bytes=1000 * _MB,
+        memory_bytes=800 * _MB,
         license="Apache-2.0",
         quantized_vision=True,
         duplicate_threshold=EG2_DUPLICATE_THRESHOLD,

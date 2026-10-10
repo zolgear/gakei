@@ -35,9 +35,8 @@ def test_pinned_catalog_is_complete() -> None:
         assert {model.vision_file, model.text_file} <= names
         assert model.memory_text_bytes < model.memory_bytes
         if model.vision_needs_text:
-            # 画像の計算には文章側も読み込む(ADR-0044 3章)。`memory_bytes` は、両方を読み込んだ
-            # まま長い文章を計算するいちばん重い場合(4章)。
-            assert model.memory_vision_bytes <= model.memory_bytes
+            # 画像の計算には文章側も読み込む(ADR-0044 3章)。
+            assert model.memory_vision_bytes == model.memory_bytes
         else:
             assert model.dim == 512
             assert model.memory_vision_bytes < model.memory_bytes
@@ -191,8 +190,8 @@ def test_embeddinggemma2_catalog() -> None:
     assert model.languages == ("ja", "en")
     assert model.license == "Apache-2.0"
     assert (model.memory_bytes, model.memory_vision_bytes, model.memory_text_bytes) == (
-        1_000_000_000,
-        750_000_000,
+        800_000_000,
+        800_000_000,
         600_000_000,
     )
     assert model.image_batch_size == 1

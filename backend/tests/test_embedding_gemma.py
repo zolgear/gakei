@@ -15,6 +15,7 @@ transformers のトークナイザーから出した値。
 from __future__ import annotations
 
 import os
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -310,8 +311,8 @@ def test_eg2_engine_rejects_mismatched_soft_tokens(eg2_dir: Path) -> None:
     ("available", "texts_ok", "images_ok"),
     [
         (590 * _MB, False, False),
-        (610 * _MB, True, True),  # 文章側(600MB)を読み込んだあとの画像側は差の 400MB
-        (390 * _MB, False, False),
+        (610 * _MB, True, True),  # 文章側(600MB)を読み込んだあとの画像側は差の 200MB
+        (190 * _MB, False, False),
     ],
 )
 def test_eg2_engine_memory_estimates(
@@ -330,6 +331,28 @@ def test_eg2_engine_memory_estimates(
 
     assert run("text") is texts_ok
     assert run("image") is images_ok
+
+
+def test_eg2_sessions_disable_cpu_memory_arena(
+    eg2_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """EG2 は CPU のメモリアリーナを切る(画像と長い文章を交互に計算すると膨らむため)。"""
+    import onnxruntime
+
+    created: list[Any] = []
+
+    def fake_session(path: str, sess_options: Any, providers: list[str]) -> object:
+        created.append(sess_options)
+        return object()
+
+    monkeypatch.setattr(onnxruntime, "InferenceSession", fake_session)
+    engine = OnnxClipEngine(eg2_dir, EG2, residency=ModelResidency())
+    engine._create_session(Path("model_quantized.onnx"))
+    assert created[0].enable_cpu_mem_arena is False
+
+    clip = OnnxClipEngine(eg2_dir, CLIP_MODELS["clip-vit-b32-u8"], residency=ModelResidency())
+    clip._create_session(Path("model.onnx"))
+    assert created[1].enable_cpu_mem_arena is True
 
 
 def test_eg2_engine_releases_both_sessions_when_idle(eg2_dir: Path) -> None:
@@ -391,7 +414,17 @@ def real_eg2_data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     data_dir = tmp_path_factory.mktemp("eg2-data")
     directory = model_dir(data_dir, EG2.name)
     directory.parent.mkdir(parents=True)
-    directory.symlink_to(Path(_EG2_DIR).resolve(), target_is_directory=True)
+    target = Path(_EG2_DIR).resolve()
+    try:
+        directory.symlink_to(target, target_is_directory=True)
+    except OSError:
+        # Windows では、開発者モードか管理者権限が無いと symlink を作れない。ジャンクションは
+        # 権限なしで作れる。
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(directory), str(target)],
+            check=True,
+            capture_output=True,
+        )
     return data_dir
 
 
