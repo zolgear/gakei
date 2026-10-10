@@ -48,9 +48,9 @@ A1111 互換の API で使うもの(2026-10-10 時点。実装時に Forge と A
 - パラメーターは **GAKEI が固定で定義する**(ComfyUI のような登録はしない)。
   - 共通: `negative_prompt`、`sampler_name`、`scheduler`、`steps`、`cfg_scale`、`seed`(ADR-0013 8章と同じ seed の欄)、`width` / `height`、`batch_size`(GAKEI の枚数 `n`)。
   - Edit だけ: `denoising_strength`、`resize_mode`。マスクがあるときは `mask_blur`、`inpainting_fill`、`inpaint_full_res`、`inpaint_full_res_padding`。マスクの無い Run でこれらを指定したら、黙って捨てずに 422 にする(capabilities では `mask_only` の印を付け、フォームはマスクが無い間は無効にする)。
-  - Edit でサイズを指定しなければ、入力画像の寸法を、縦横比を保って長辺 2048px に収めて使う(8 の倍数には丸めない)。
+  - Edit でサイズを指定しなければ、入力画像の寸法を、縦横比を保って長辺 2048px に収め、8 の倍数に切り捨てて使う。
   - `sampler_name` と `scheduler` の選択肢は接続先から補う。取れなければ自由入力にはせず、項目を出さない(WebUI の既定に任せる)。
-  - サイズの上限は長辺 2048px にする(大きいサイズは WebUI 側で VRAM が足りなくなりやすいため。ADR-0004 の 3840px とは別)。幅と高さは 8 の倍数でなくてよく、そのまま送る(2026-10-10 改訂。当初は 8 の倍数に限っていたが、他のツールの画像の生成情報(9章)に 8 の倍数でないサイズがあり、ユーザーの指示でそのまま設定できるようにした)。WebUI は内部で 8 の倍数に切り捨てて描き(Forge で確認。803×601 を送ると 800×600 の画像になり、infotext には 803x601 と残る)、Asset は返った画像の寸法になる。Run には送った値が残る。
+  - サイズは 8 の倍数、上限は長辺 2048px にする(大きいサイズは WebUI 側で VRAM が足りなくなりやすいため。ADR-0004 の 3840px とは別)。WebUI は 8 の倍数でない寸法を受け付けるが、内部で 8 の倍数に切り捨てて描く(Forge で確認。803×601 を送ると 800×600 の画像になり、infotext には 803x601 と残る)。そのため GAKEI は **8 の倍数に切り捨ててから送る**(2026-10-10 改訂。いったん「そのまま送る」としたが、送った値・Run の記録・画像の寸法を一致させるため、ユーザーの判断で API の動きに合わせた)。フォームの入力、9章の読み込み、Edit の自動サイズのいずれも切り捨てる。サーバーは 8 の倍数でないサイズを 422 にする。
   - **Clip skip:** パラメーター `clip_skip`(1〜12、既定 1)を `override_settings.CLIP_stop_at_last_layers` で毎回送る(2026-10-10 追記)。VAE と同じく、WebUI の設定に任せると Run の記録と実際が食い違うため。
 - `save_images` は false のまま送る。原本は GAKEI が持つ(ADR-0004)。
 - **送らないもの:** `distilled_cfg_scale`(Forge だけの項目)、7章で対応を決めた拡張機能以外の `alwayson_scripts`(ControlNet などの拡張)、refiner、`script_name`(hires fix は10章で対応する)。LoRA は、プロンプトに `<lora:名前:重み>` と書けば、そのまま WebUI に届く(GAKEI は解釈も管理もしない。ADR-0001 の非ゴール「LoRA 管理」は変えない)。
