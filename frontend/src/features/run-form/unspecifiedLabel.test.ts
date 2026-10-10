@@ -39,6 +39,7 @@ describe('unspecifiedOptionLabel', () => {
   })
 
   it('bool', () => {
-    expect(unspecifiedOptionLabel(makeDef({ type: 'bool', default: false }))).toBe('既定値 (false)')
+    expect(unspecifiedOptionLabel(makeDef({ type: 'bool', default: false }))).toBe('既定値 (オフ)')
+    expect(unspecifiedOptionLabel(makeDef({ type: 'bool', default: true }))).toBe('既定値 (オン)')
   })
 })

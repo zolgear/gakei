@@ -1233,7 +1233,9 @@
       "disabledTitle": "Not available with the current settings",
       "disabledNote": "Unavailable",
       "hiresTarget": "Upscaled to {width}×{height}",
-      "hiresTargetTooLarge": "Upscaled to {width}×{height} (exceeds the {max}px long-edge limit, so it cannot run)"
+      "hiresTargetTooLarge": "Upscaled to {width}×{height} (exceeds the {max}px long-edge limit, so it cannot run)",
+      "boolOn": "On",
+      "boolOff": "Off"
     },
     "seedField": {
       "random": "Random",

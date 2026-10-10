@@ -15,7 +15,10 @@ function formatDefault(def: ParamDef): string | null {
     return String(rounded)
   }
   if (typeof value === 'string') return def.choice_labels?.[value] ?? value
-  if (typeof value === 'boolean') return String(value)
+  if (typeof value === 'boolean') {
+    const pf = msg().runForm.paramField
+    return value ? pf.boolOn : pf.boolOff
+  }
   return null
 }
 

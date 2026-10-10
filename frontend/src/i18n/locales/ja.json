@@ -1233,7 +1233,9 @@
       "disabledTitle": "現在の設定では使えません",
       "disabledNote": "使用不可",
       "hiresTarget": "拡大後 {width}×{height}",
-      "hiresTargetTooLarge": "拡大後 {width}×{height}(長辺 {max}px を超えるため実行できません)"
+      "hiresTargetTooLarge": "拡大後 {width}×{height}(長辺 {max}px を超えるため実行できません)",
+      "boolOn": "オン",
+      "boolOff": "オフ"
     },
     "seedField": {
       "random": "ランダム",

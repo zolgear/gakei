@@ -231,8 +231,8 @@ export function ParamField({ def, value, enabled, disabledNote, hint, onChange }
           onChange={(e) => onChange(def.name, e.target.value)}
         >
           <option value={UNSPECIFIED}>{unspecifiedOptionLabel(def)}</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
+          <option value="true">{pf.boolOn}</option>
+          <option value="false">{pf.boolOff}</option>
         </select>
       )}
 
