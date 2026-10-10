@@ -83,7 +83,9 @@
     padding: 0;
   }
 
-  .panel {
+  /* size="large" の指定(詳細度が高い)にも勝つよう、両方を並べて全画面にする */
+  .panel,
+  .panel[data-size='large'] {
     width: 100%;
     height: 100dvh;
     max-height: 100dvh;
