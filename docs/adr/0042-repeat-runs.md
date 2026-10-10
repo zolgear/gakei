@@ -64,6 +64,6 @@ SD WebUI では、Run ごとに API を呼ぶので、WebUI の画面で選ん�
 
 ## Action Items
 
-1. [ ] API(`repeat`、seed の進め方、まとめての作成)とテスト
-2. [ ] フォームの繰り返し回数、合計と参考料金、生成ボタンの文言
-3. [ ] docs(バッチ回数との使い分け)
+1. [x] API(`repeat`、seed の進め方、まとめての作成)とテスト(2026-10-10。seed の進め方は各プロバイダーの `repeat_seed`。`backend/tests/test_runs_repeat.py`)
+2. [x] フォームの繰り返し回数、合計と参考料金、生成ボタンの文言(2026-10-10。結果エリアは積んだ Run を1つずつ追い、終わったら次へ進める)
+3. [x] docs(バッチ回数との使い分け。`docs/sdwebui.md`)

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Literal
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
@@ -55,7 +56,27 @@ def create_run(
     viewer: CurrentUser,
     origin: RunOrigin | None = None,
 ) -> Run:
-    """検証してから Run を挿入してコミットし、runner を起こす。作った Run を返す。
+    """Run を1つ作る(MCP 用。繰り返し回数は見ない。ADR-0042 3章)。"""
+    runs = create_runs(db, registry, runner, settings, body, viewer=viewer, origin=origin)
+    return runs[0]
+
+
+def create_runs(
+    db: Session,
+    registry: ProviderRegistry,
+    runner: Runner,
+    settings: Settings,
+    body: RunCreateRequest,
+    *,
+    viewer: CurrentUser,
+    origin: RunOrigin | None = None,
+    repeat: int = 1,
+) -> list[Run]:
+    """検証してから同じ設定の Run を `repeat` 個挿入してコミットし、runner を起こす。
+
+    作った Run を積んだ順に返す。検証は1回だけ行い、Run ごとの確定(`finalize_params`)の
+    どれかが断れば1つも作らない(1つのトランザクション。ADR-0042 3章)。runner への通知は
+    最後に1回。
 
     実行者は `viewer`(`created_by_user_id = viewer.id`。個人モードは null)。入力画像・マスク・
     出力先のグループは `viewer` に見えるものだけを指定でき、見えないものは存在しない場合と
@@ -120,43 +141,66 @@ def create_run(
     except RunValidationError as e:
         raise RunCreateError("invalid", str(e)) from e
 
-    draft = RunDraft(
-        operation=body.operation,
-        model=body.model,
-        prompt=body.prompt,
-        params=body.params,
-        inputs=input_metas,
-    )
-    try:
-        params = provider.finalize_params(db, draft)
-    except RunValidationError as e:
-        raise RunCreateError("invalid", str(e)) from e
-    except ProviderUnavailableError as e:
-        raise RunCreateError("conflict", str(e)) from e
+    if repeat < 1:
+        raise ValueError("repeat must be >= 1")
 
-    run = Run(
-        # レジストリのキー(provider_name)を記録する。runner はこのキーで実行レーンを選ぶ
-        # ため、provider.name(自己申告の属性)ではなくこちらを正とする。
-        provider=provider_name,
-        model=body.model,
-        deployment=None,
-        operation=body.operation,
-        prompt=body.prompt,
-        params=params,
-        status=RunStatus.QUEUED,
-        created_by_user_id=viewer.id,
-        asset_group_id=body.asset_group_id,
-        origin=origin.origin,
-        api_token_id=origin.api_token_id,
-    )
-    db.add(run)
-    db.flush()
+    # 利用者が seed を指定したときだけ、2つ目以降の seed を進める(ADR-0042 2章)。指定が
+    # 無ければ、各 Run でプロバイダーがそれぞれ決める(今と同じ)。
+    user_seed = body.params.get("seed")
+    repeat_seed = getattr(provider, "repeat_seed", None)
 
-    for item in body.inputs:
-        db.add(
-            RunInput(run_id=run.id, asset_id=item.asset_id, role=item.role, position=item.position)
+    finalized: list[dict[str, Any]] = []
+    for index in range(repeat):
+        params = body.params
+        if index > 0 and user_seed is not None and repeat_seed is not None:
+            seed = repeat_seed(finalized[0], index)
+            if seed is not None:
+                params = {**body.params, "seed": seed}
+        draft = RunDraft(
+            operation=body.operation,
+            model=body.model,
+            prompt=body.prompt,
+            params=params,
+            inputs=input_metas,
         )
+        try:
+            finalized.append(provider.finalize_params(db, draft))
+        except RunValidationError as e:
+            raise RunCreateError("invalid", str(e)) from e
+        except ProviderUnavailableError as e:
+            raise RunCreateError("conflict", str(e)) from e
+
+    # 積んだ順を queued_at で保つ(runner も履歴も queued_at 順。同じ時刻だと id の順になり、
+    # 順番が崩れる)。時計の分解能が粗い環境でも並ぶよう、1マイクロ秒ずつずらす。
+    queued_base = datetime.now(UTC)
+    runs: list[Run] = []
+    for index, params in enumerate(finalized):
+        run = Run(
+            # レジストリのキー(provider_name)を記録する。runner はこのキーで実行レーンを選ぶ
+            # ため、provider.name(自己申告の属性)ではなくこちらを正とする。
+            provider=provider_name,
+            model=body.model,
+            deployment=None,
+            operation=body.operation,
+            prompt=body.prompt,
+            params=params,
+            status=RunStatus.QUEUED,
+            queued_at=queued_base + timedelta(microseconds=index),
+            created_by_user_id=viewer.id,
+            asset_group_id=body.asset_group_id,
+            origin=origin.origin,
+            api_token_id=origin.api_token_id,
+        )
+        db.add(run)
+        db.flush()
+        for item in body.inputs:
+            db.add(
+                RunInput(
+                    run_id=run.id, asset_id=item.asset_id, role=item.role, position=item.position
+                )
+            )
+        runs.append(run)
 
     db.commit()
     runner.notify()
-    return run
+    return runs

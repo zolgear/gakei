@@ -71,6 +71,7 @@ import {
 } from '../sdwebui/importParams'
 import { buildParameterSetRawParams, resolveParameterSetLoad } from '../parameter-sets/parameterSets'
 import { resolveRunFormLoad } from './runFormLoad'
+import { loadRepeatRaw, parseRepeat, saveRepeatRaw } from './repeat'
 
 export interface RunFormLogic {
   caps: CapabilitiesResponse | undefined
@@ -133,6 +134,15 @@ export interface RunFormLogic {
   /** グループ一覧(`updated_at` の新しい順。未取得の間は空)。 */
   assetGroups: AssetGroupRow[]
 
+  /**
+   * 繰り返し回数(ADR-0042)の欄の生の値(空欄は 1)。パラメーターセットや「同じ設定で開く」には
+   * 入れず、ブラウザのフォームの状態としてだけ覚える(`repeat.ts`)。
+   */
+  repeatRaw: string
+  setRepeatRaw: (raw: string) => void
+  /** 送る繰り返し回数。欄の値が範囲外・整数でなければ null(送信できない)。 */
+  repeat: number | null
+
   droppedParamsNotice: string | null
   /**
    * 画像の生成情報を読み込んだ後の「読み込めなかった項目」と注意(ADR-0038 9章)。閉じるか
@@ -180,7 +190,8 @@ export interface RunFormLogic {
 }
 
 export function useRunFormLogic(
-  onRunCreated: (runId: string) => void,
+  /** 作った Run の id(積んだ順。繰り返し回数が 1 なら1件)。 */
+  onRunCreated: (runIds: string[]) => void,
   onSubmitSuccess?: () => void,
 ): RunFormLogic {
   const queryClient = useQueryClient()
@@ -229,6 +240,12 @@ export function useRunFormLogic(
   const loadedAssetGroups = assetGroupsQuery.data ? (assetGroupsQuery.data.items ?? []) : undefined
   const assetGroups = loadedAssetGroups ?? []
   const resolvedAssetGroupId = resolveAssetGroupId(assetGroupId, loadedAssetGroups)
+  const [repeatRaw, setRepeatRawState] = useState<string>(loadRepeatRaw)
+  const setRepeatRaw = useCallback((raw: string) => {
+    setRepeatRawState(raw)
+    saveRepeatRaw(raw)
+  }, [])
+  const repeat = parseRepeat(repeatRaw)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [droppedParamsNotice, setDroppedParamsNotice] = useState<string | null>(null)
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null)
@@ -409,6 +426,8 @@ export function useRunFormLogic(
     setSubmitError(null)
     setDroppedParamsNotice(null)
     setImportNotice(null)
+    // 繰り返し回数も初期値(1)に戻す。
+    setRepeatRaw('')
     if (!caps) return
     const initial = computeInitialFormValues(caps)
     const initialProviderEntry = findProvider(caps, initial.provider)
@@ -562,7 +581,7 @@ export function useRunFormLogic(
       // 送信してもフォームは何も変えない(ADR-0009「送信後のフォーム」2026-09-24 改訂)。
       // prompt・inputs(マスク含む)・provider・model・params はそのまま残す。
       queryClient.invalidateQueries({ queryKey: ['runs'] })
-      onRunCreated(res.id)
+      onRunCreated(res.runs.length > 0 ? res.runs.map((r) => r.id) : [res.id])
       onSubmitSuccess?.()
     },
     onError: (err: unknown) => {
@@ -607,6 +626,7 @@ export function useRunFormLogic(
     isMaskSatisfied(opCaps, hasMask) &&
     isMaskSupported(opCaps, hasMask) &&
     providerAvailable &&
+    repeat !== null &&
     !mutation.isPending
 
   function submit() {
@@ -622,7 +642,12 @@ export function useRunFormLogic(
       operation === 'edit'
         ? formState.inputs.map((i) => ({ asset_id: i.assetId, role: i.role, position: i.position }))
         : []
-    mutation.mutate(withAssetGroupId({ operation, model, prompt, provider, params, inputs }, resolvedAssetGroupId))
+    mutation.mutate(
+      withAssetGroupId(
+        { operation, model, prompt, provider, params, inputs, repeat: repeat ?? 1 },
+        resolvedAssetGroupId,
+      ),
+    )
   }
 
   return {
@@ -653,6 +678,9 @@ export function useRunFormLogic(
     assetGroupId: resolvedAssetGroupId,
     setAssetGroupId,
     assetGroups,
+    repeatRaw,
+    setRepeatRaw,
+    repeat,
     droppedParamsNotice,
     importNotice,
     dismissImportNotice: () => setImportNotice(null),

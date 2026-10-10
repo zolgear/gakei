@@ -252,4 +252,13 @@ class ImageProvider(Protocol):
         """
         ...
 
+    def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
+        """繰り返し回数(ADR-0042 2章)で、`index` 番目(0 始まり)の Run に使う seed。
+
+        利用者が seed を指定したときだけ呼ぶ。`first_params` は1つ目の Run の
+        `finalize_params` の戻り値。1回の枚数ぶん進め、範囲の上限を超えたら 0 から回す。
+        seed を持たないプロバイダーは None を返す(`params` をそのまま使う)。
+        """
+        ...
+
     async def execute(self, run: RunRequest, on_progress: ProgressCallback) -> RunResult: ...

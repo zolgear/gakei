@@ -236,3 +236,18 @@ export function totalOutputCount(defs: ParamDef[], raw: RawParamValues): TotalOu
   const total = Math.trunc(n) * Math.trunc(nIter)
   return { total, tooMany: total > SDWEBUI_MAX_TOTAL_OUTPUTS }
 }
+
+/**
+ * 1回(1つの Run)の枚数(繰り返し回数の合計の表示に使う。ADR-0042 4章)。SD WebUI は
+ * 枚数 × バッチ回数(組み合わせ生成で枚数が決まらないときは null)、それ以外は枚数の項目
+ * (OpenAI の `n`、ComfyUI の `batch_size`)、どちらも無ければ 1。`raw` は送る値を渡す。
+ */
+export function perRunOutputCount(defs: ParamDef[], raw: RawParamValues): number | null {
+  if (defs.some((d) => d.name === 'n_iter')) return totalOutputCount(defs, raw)?.total ?? null
+  const countName = ['n', 'batch_size'].find((name) => defs.some((d) => d.name === name))
+  if (countName === undefined) return 1
+  if (clientDisableRuleFor(defs, raw, countName) !== null) return null
+  const count = Number(effectiveValue(defs, raw, countName) ?? 1)
+  if (!Number.isFinite(count) || count < 1) return null
+  return Math.trunc(count)
+}

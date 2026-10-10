@@ -198,12 +198,16 @@
   min-width: 0;
 }
 
-/* SD WebUI の枚数とバッチ回数(ADR-0038 2章)。狭い幅でも横に並べる。 */
+/* SD WebUI の枚数とバッチ回数(ADR-0038 2章)と繰り返し回数(ADR-0042)。狭い幅でも横に並べる。 */
 .aboveSizeRow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 10px;
   align-items: start;
+}
+
+.aboveSizeRow[data-columns='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .totalCount,

@@ -224,6 +224,10 @@ class ComfyUIProvider:
             result["comfyui_mask_mode"] = bindings.mask.mode
         return result
 
+    def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
+        # ComfyUI は1つの seed でバッチ全体を作るので、Run ごとに 1 ずつ進める(ADR-0042 2章)。
+        return (int(first_params["comfyui_seed"]) + index) % (SEED_MAX + 1)
+
     @staticmethod
     def _resolve_upload_names(
         bindings: Bindings, inputs: list[RunInputMeta]

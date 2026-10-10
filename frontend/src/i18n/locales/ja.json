@@ -1260,6 +1260,7 @@
       "promptPlaceholder": "生成したい画像。Ctrl+Enter で実行。@ でプロンプトセットを呼び出せます",
       "submitting": "実行を開始しています...",
       "generate": "生成",
+      "generateRepeat": "生成 ×{count}",
       "submittedNotice": "生成を開始しました。進み具合は上の結果エリアに出ます",
       "openSettings": "設定を開く",
       "modelLabel": "モデル",
@@ -1276,7 +1277,8 @@
       "maxInputImagesExceeded": "入力画像は最大{max}枚までです",
       "operationUnsupported": "選んだモデルは、この操作(生成/編集)に対応していません",
       "maskRequired": "このモデルの実行にはマスクが必要です",
-      "maskUnsupported": "選んだモデルはマスクに対応していません。マスクを外すか、マスク対応のモデルを選んでください"
+      "maskUnsupported": "選んだモデルはマスクに対応していません。マスクを外すか、マスク対応のモデルを選んでください",
+      "repeatInvalid": "繰り返し回数は {min}〜{max} の整数にしてください"
     },
     "resultPane": {
       "viewModeGroup": "表示",
@@ -1315,7 +1317,8 @@
       "restoreFailedDefault": "復元に失敗しました",
       "deletedToast": "画像を削除しました",
       "undoAction": "元に戻す",
-      "inputPrefix": "入力 · {width} × {height}"
+      "inputPrefix": "入力 · {width} × {height}",
+      "repeatProgress": "繰り返し {index} / {total}"
     },
     "runPromptActions": {
       "insertIntoPrompt": "プロンプトに挿入",
@@ -1349,7 +1352,8 @@
       "reasonQualityAuto": "画質が「自動」のため計算できません(画質を指定すると出ます)",
       "reasonSizeAuto": "サイズが「自動」のため計算できません",
       "reasonSizeInvalid": "サイズが条件外です",
-      "reasonUnknownModel": "このモデルの単価が未登録です"
+      "reasonUnknownModel": "このモデルの単価が未登録です",
+      "repeatLine": "繰り返し {count} 回分(1回 {amount})"
     }
   },
   "runForm": {
@@ -1368,6 +1372,11 @@
       "totalCountTooMany": "合計 {total} 枚({max} 枚を超えるため実行できません)",
       "boolOn": "オン",
       "boolOff": "オフ"
+    },
+    "repeat": {
+      "label": "繰り返し",
+      "description": "同じ設定の生成を何回くり返すか。1回ずつ別の記録になり、終わったものから結果が出ます。待機中のものは取り消せます。seed が固定なら、2回目以降は1回の枚数ぶん進めます(最大 {max} 回)",
+      "total": "合計 {total} 枚(1回 {perRun} 枚 × {count} 回)"
     },
     "seedField": {
       "random": "ランダム",

@@ -4375,9 +4375,29 @@ export interface components {
             inputs?: components["schemas"]["RunInputCreate"][];
             /** Asset Group Id */
             asset_group_id?: string | null;
+            /**
+             * Repeat
+             * @default 1
+             */
+            repeat: number;
         };
         /** RunCreateResponse */
         RunCreateResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed" | "canceled";
+            /** Runs */
+            runs: components["schemas"]["RunCreatedRef"][];
+        };
+        /** RunCreatedRef */
+        RunCreatedRef: {
             /**
              * Id
              * Format: uuid

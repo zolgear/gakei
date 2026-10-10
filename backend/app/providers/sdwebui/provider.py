@@ -460,6 +460,13 @@ class SdWebuiProvider:
         result["sdwebui_request"] = request
         return result
 
+    def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
+        # WebUI は seed を1枚ごとに 1 ずつ増やすので、次の Run は1回の枚数(枚数 × バッチ回数)
+        # ぶん先から始める(ADR-0042 2章)。実際に送る値(組み合わせ生成ではバッチ回数 1)で数える。
+        request = first_params["sdwebui_request"]
+        step = int(request["batch_size"]) * int(request["n_iter"])
+        return (int(first_params["sdwebui_seed"]) + index * step) % (SEED_MAX + 1)
+
     # -- execute ---------------------------------------------------------------------
 
     def _effective_timeout_seconds(self) -> float:

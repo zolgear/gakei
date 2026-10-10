@@ -578,6 +578,10 @@ class RunInputCreate(BaseModel):
     position: int = Field(ge=0)
 
 
+# 繰り返し回数の上限(ADR-0042 1章)。
+REPEAT_MAX = 20
+
+
 class RunCreateRequest(BaseModel):
     operation: Literal["generate", "edit"]
     model: str
@@ -588,11 +592,22 @@ class RunCreateRequest(BaseModel):
     inputs: list[RunInputCreate] = Field(default_factory=list)
     # 出力を入れるグループ(ADR-0022)。存在しない・削除済みなら 404。
     asset_group_id: uuid.UUID | None = None
+    # 繰り返し回数(ADR-0042)。同じ設定の Run をこの数だけまとめて積む。API に送る値では
+    # ないので `run.params` には入れない(ADR-0003 ルール4)。
+    repeat: int = Field(default=1, ge=1, le=REPEAT_MAX)
+
+
+class RunCreatedRef(BaseModel):
+    id: uuid.UUID
+    status: Literal["queued", "running", "succeeded", "failed", "canceled"]
 
 
 class RunCreateResponse(BaseModel):
+    # 1件目の Run(繰り返し回数を足す前からの形。ADR-0042 3章)。
     id: uuid.UUID
     status: Literal["queued", "running", "succeeded", "failed", "canceled"]
+    # 作った Run の全体(積んだ順)。繰り返し回数が 1 なら1件。
+    runs: list[RunCreatedRef]
 
 
 class RunInputRef(BaseModel):

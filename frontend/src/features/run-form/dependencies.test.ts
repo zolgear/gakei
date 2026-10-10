@@ -10,6 +10,7 @@ import {
   fieldDisabledNote,
   hiresTargetSize,
   isFieldEnabled,
+  perRunOutputCount,
   totalOutputCount,
 } from './dependencies'
 import { UNSPECIFIED } from './paramsBuilder'
@@ -327,5 +328,32 @@ describe('バッチ回数(n_iter)と合計の枚数', () => {
     expect(totalOutputCount(defs, raw)).toBeNull()
     // 送る値からも外す
     expect(buildEnabledParams(defs, raw, [], false)).not.toHaveProperty('n_iter')
+  })
+})
+
+// 繰り返し回数(ADR-0042)の合計に使う1回の枚数。
+describe('perRunOutputCount', () => {
+  const nIterDef: ParamDef = { ...nDef, name: 'n_iter', label: 'バッチ回数', maximum: 16 }
+
+  it('SD WebUI は枚数 × バッチ回数', () => {
+    expect(perRunOutputCount([...dpDefs, nIterDef], { n: '2', n_iter: '3' })).toBe(6)
+  })
+
+  it('組み合わせ生成で枚数が決まらなければ null', () => {
+    const raw = { n: '2', n_iter: '4', dynamic_prompts: 'true', dynamic_prompts_combinatorial: 'true' }
+    expect(perRunOutputCount([...dpDefs, nIterDef], raw)).toBeNull()
+  })
+
+  it('OpenAI は n(未指定は既定値)', () => {
+    const openaiN: ParamDef = { name: 'n', type: 'int', label: '枚数', minimum: 1, maximum: 10, default: 1, required: false, description: '' }
+    expect(perRunOutputCount([openaiN], { n: '4' })).toBe(4)
+    expect(perRunOutputCount([openaiN], { n: '' })).toBe(1)
+  })
+
+  it('ComfyUI は batch_size、枚数の項目が無ければ 1', () => {
+    const batch: ParamDef = { name: 'batch_size', type: 'int', label: '枚数', minimum: 1, maximum: 8, default: 2, required: false, description: '' }
+    expect(perRunOutputCount([batch], {})).toBe(2)
+    expect(perRunOutputCount([batch], { batch_size: '3' })).toBe(3)
+    expect(perRunOutputCount([], {})).toBe(1)
   })
 })

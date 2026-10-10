@@ -80,6 +80,18 @@ interface ResultPaneProps {
    * 出さない(「入力に使う」は画像下の操作バーにある。2026-09-26)。
    */
   layout: StudioLayout
+  /**
+   * 繰り返し回数(ADR-0042)でまとめて積んだ Run を追っているとき、今の Run が何番目か。
+   * 追っている Run は(終わった後に開いた場合も)この画面で見届けたものとして扱い、成功すれば
+   * 出力へ切り替える。まとめて積んでいなければ null。
+   */
+  repeatProgress?: { index: number; total: number } | null
+  /**
+   * 追っている Run が終わり、結果エリアでの扱い(成功なら先頭の出力への切り替え)が済んだときに
+   * 1回だけ呼ぶ。`keepAssetId` は表示に残す出力(成功したとき)。まとめて積んだ次の Run へ
+   * 進めるのに使う。
+   */
+  onPendingRunSettled?: (runId: string, keepAssetId: string | null) => void
 }
 
 function formatSize(size: unknown): string | null {
@@ -92,6 +104,8 @@ export function ResultPane({
   onSelectAsset,
   insertPrompt,
   layout,
+  repeatProgress = null,
+  onPendingRunSettled,
 }: ResultPaneProps) {
   const { t } = useI18n()
   const rp = t.workspace.resultPane
@@ -179,7 +193,7 @@ export function ResultPane({
       setWatchedRun(null)
       return
     }
-    if (pendingStatus === 'queued' || pendingStatus === 'running') {
+    if (pendingStatus === 'queued' || pendingStatus === 'running' || repeatProgress !== null) {
       observedActiveRunIdRef.current = pendingRunId
     }
     const watchedProgress =
@@ -195,7 +209,7 @@ export function ResultPane({
       expectedPartials: computeExpectedPartials(pendingRunQuery.data?.params),
       observedActive: observedActiveRunIdRef.current === pendingRunId,
     })
-  }, [pendingRunId, pendingStatus, connection, progress, partials.length, pendingRunQuery.data?.params])
+  }, [pendingRunId, pendingStatus, connection, progress, partials.length, pendingRunQuery.data?.params, repeatProgress])
 
   // アンマウント時だけ null に戻す(上の effect は依存の変化のたびに走るので、そちらに
   // クリーンアップを持たせると更新のたびに一瞬 null を挟んでしまう)。
@@ -237,6 +251,8 @@ export function ResultPane({
   // 完了済みの Run を `/studio?run=` で開いた場合(系列パネルで Generated を選んだ等)は
   // 切り替えず、下の showRunDetail で Run 詳細を結果エリアに出す。
   const autoSelectedRunIdRef = useRef<string | null>(null)
+  // 終わったことを知らせ済みの Run(`onPendingRunSettled` は Run ごとに1回だけ)。
+  const settledRunIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (pendingStatus !== 'succeeded' || pendingRunQuery.data?.status !== 'succeeded') return
     if (observedActiveRunIdRef.current !== pendingRunQuery.data.id) return
@@ -247,8 +263,25 @@ export function ResultPane({
     if (first.asset_id !== displayedAssetId) {
       onSelectAsset(first.asset_id, { replace: true })
     }
+    settledRunIdRef.current = pendingRunQuery.data.id
+    onPendingRunSettled?.(pendingRunQuery.data.id, first.asset_id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingStatus, pendingRunQuery.data, displayedAssetId])
+
+  // 失敗・中止(と出力の無い成功)で終わったときも、終わったことを1回だけ知らせる(まとめて積んだ
+  // 次の Run へ進めるため。ADR-0042)。成功して出力があるときは上の切り替えの後に知らせる。
+  useEffect(() => {
+    if (!pendingRunId || settledRunIdRef.current === pendingRunId) return
+    const succeededWithoutOutputs =
+      pendingStatus === 'succeeded' &&
+      pendingRunQuery.data?.id === pendingRunId &&
+      pendingRunQuery.data.status === 'succeeded' &&
+      (pendingRunQuery.data.outputs?.length ?? 0) === 0
+    if (pendingStatus !== 'failed' && pendingStatus !== 'canceled' && !succeededWithoutOutputs) return
+    settledRunIdRef.current = pendingRunId
+    onPendingRunSettled?.(pendingRunId, null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRunId, pendingStatus, pendingRunQuery.data])
 
   const cancelMutation = useMutation({
     mutationFn: () => cancelRun(pendingRunId as string),
@@ -759,6 +792,11 @@ export function ResultPane({
                           ? fmt(rp.generatingWithProgress, { value: progress.value ?? 0, max: progress.max ?? 0 })
                           : rp.generating
                         : rp.queued}
+                    </p>
+                  )}
+                  {repeatProgress && (
+                    <p className={styles.repeatProgress}>
+                      {fmt(rp.repeatProgress, { index: repeatProgress.index, total: repeatProgress.total })}
                     </p>
                   )}
                   {pendingStatus === 'queued' && (

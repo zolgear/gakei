@@ -80,7 +80,8 @@ const MENTION_NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escap
 const MENTION_CANDIDATE_LIMIT = 20
 
 interface InputPaneProps {
-  onRunCreated: (runId: string) => void
+  /** 作った Run の id(積んだ順。繰り返し回数が 1 なら1件。ADR-0042)。 */
+  onRunCreated: (runIds: string[]) => void
   /**
    * `form.insertPrompt` をスタジオの `ResultPane`(系列インスペクター)へ渡すための窓口。
    * `StudioWorkspace` がこれを受け取り、そのまま `ResultPane` へ渡す(兄弟コンポーネント間の
@@ -500,6 +501,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         promptLength: form.promptLength,
         inputAssetIds,
       }}
+      repeat={form.repeat}
       canSubmit={form.canSubmit}
       isSubmitting={form.isSubmitting}
       onSubmit={() => form.submit()}
@@ -538,6 +540,12 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       onParamChange={form.handleParamChange}
       primary={primary}
       aboveSize={aboveSize}
+      repeatRaw={form.repeatRaw}
+      repeat={form.repeat}
+      onRepeatChange={(raw) => {
+        setSubmittedNotice(null)
+        form.setRepeatRaw(raw)
+      }}
     />
   )
 

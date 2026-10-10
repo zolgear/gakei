@@ -1260,6 +1260,7 @@
       "promptPlaceholder": "Describe the image to generate. Ctrl+Enter to run. @ to call up a prompt set",
       "submitting": "Starting run...",
       "generate": "Generate",
+      "generateRepeat": "Generate ×{count}",
       "submittedNotice": "Generation started. Progress appears in the result area above",
       "openSettings": "Open settings",
       "modelLabel": "Model",
@@ -1276,7 +1277,8 @@
       "maxInputImagesExceeded": "Input images are limited to {max}",
       "operationUnsupported": "The selected model does not support this operation (generate/edit)",
       "maskRequired": "This model requires a mask to run",
-      "maskUnsupported": "The selected model does not support masks. Remove the mask or choose a model that supports masks."
+      "maskUnsupported": "The selected model does not support masks. Remove the mask or choose a model that supports masks.",
+      "repeatInvalid": "Repeat must be a whole number from {min} to {max}"
     },
     "resultPane": {
       "viewModeGroup": "View",
@@ -1315,7 +1317,8 @@
       "restoreFailedDefault": "Restore failed",
       "deletedToast": "Image deleted",
       "undoAction": "Undo",
-      "inputPrefix": "Input · {width} × {height}"
+      "inputPrefix": "Input · {width} × {height}",
+      "repeatProgress": "Repeat {index} / {total}"
     },
     "runPromptActions": {
       "insertIntoPrompt": "Insert into prompt",
@@ -1349,7 +1352,8 @@
       "reasonQualityAuto": "Cannot calculate while quality is \"auto\" (set a quality to see it)",
       "reasonSizeAuto": "Cannot calculate while size is \"auto\"",
       "reasonSizeInvalid": "Size is out of range",
-      "reasonUnknownModel": "No unit price registered for this model"
+      "reasonUnknownModel": "No unit price registered for this model",
+      "repeatLine": "{count} repeats ({amount} each)"
     }
   },
   "runForm": {
@@ -1368,6 +1372,11 @@
       "totalCountTooMany": "{total} images in total (over the limit of {max}; cannot run)",
       "boolOn": "On",
       "boolOff": "Off"
+    },
+    "repeat": {
+      "label": "Repeat",
+      "description": "How many times to run the same settings. Each repeat is a separate run whose results appear as it finishes, and queued ones can be canceled. With a fixed seed, each later repeat starts after the previous one's images (up to {max} times).",
+      "total": "{total} images in total ({perRun} per run × {count})"
     },
     "seedField": {
       "random": "Random",
