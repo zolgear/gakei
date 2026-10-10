@@ -157,7 +157,7 @@ export function LineageInspectorPanel({
               promptActions={renderPromptActions}
             />
           )}
-          {content.kind === 'asset' && <LineageAssetInspectorContent key={content.id} assetId={content.id} />}
+          {content.kind === 'asset' && <LineageAssetInspectorContent key={content.id} assetId={content.id} onOpenRun={onOpenRun} />}
           {content.kind === 'embedded' && (
             <EmbeddedNodeInspector
               key={content.node.id}

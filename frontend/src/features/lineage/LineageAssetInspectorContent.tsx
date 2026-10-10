@@ -26,9 +26,14 @@ import styles from './LineageAssetInspectorContent.module.css'
 
 export interface LineageAssetInspectorContentProps {
   assetId: string
+  /**
+   * 生成元の Run を開く処理。見出しの「i」のアイコンと同じ動きにする(同じグラフにその Run の
+   * ノードがあればインスペクターを切り替える)。省略時は Run 詳細ページ(`/runs/:id`)へのリンク。
+   */
+  onOpenRun?: (runId: string) => void
 }
 
-export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorContentProps) {
+export function LineageAssetInspectorContent({ assetId, onOpenRun }: LineageAssetInspectorContentProps) {
   const { t } = useI18n()
   const assetQuery = useQuery({ queryKey: ['asset', assetId], queryFn: () => getAsset(assetId) })
   const runId = assetQuery.data?.produced_by_run?.id
@@ -114,9 +119,19 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
               {seed.text}
             </p>
           )}
-          <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>
-            {t.lineage.viewRunDetail}
-          </Link>
+          {onOpenRun ? (
+            <button
+              type="button"
+              className={styles.runLink}
+              onClick={() => asset.produced_by_run && onOpenRun(asset.produced_by_run.id)}
+            >
+              {t.lineage.viewRunDetail}
+            </button>
+          ) : (
+            <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>
+              {t.lineage.viewRunDetail}
+            </Link>
+          )}
           {/* 最終プロンプト(ADR-0030)と、この画像の展開後のプロンプト(ADR-0038 7章)。ビューアと同じ。 */}
           <FinalPromptSection
             className={styles.finalPrompt}
