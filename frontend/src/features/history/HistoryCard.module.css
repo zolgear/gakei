@@ -345,12 +345,22 @@
     height: 44px;
   }
 
-  /* 2列のカードでは 44px のボタンが1行に収まらないので、折り返して右に寄せる
-     (はみ出したボタンが切れて押せなくならないように)。 */
+  /* 2列のカードでは 44px のボタンが1行に収まらないので、カードの幅いっぱいの格子に並べる
+     (入る列数だけ並べ、ボタンは列の幅まで広げる。右寄せの折り返しだと左に空きが出る)。 */
   .actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+    gap: 4px;
     height: auto;
     min-height: 44px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  }
+
+  .actions .iconButton,
+  .actions .textButton {
+    width: 100%;
+  }
+
+  .actionsSpacer {
+    display: none;
   }
 }
