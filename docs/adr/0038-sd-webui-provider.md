@@ -48,9 +48,10 @@ A1111 互換の API で使うもの(2026-10-10 時点。実装時に Forge と A
 - パラメーターは **GAKEI が固定で定義する**(ComfyUI のような登録はしない)。
   - 共通: `negative_prompt`、`sampler_name`、`scheduler`、`steps`、`cfg_scale`、`seed`(ADR-0013 8章と同じ seed の欄)、`width` / `height`、`batch_size`(GAKEI の枚数 `n`)。
   - Edit だけ: `denoising_strength`、`resize_mode`。マスクがあるときは `mask_blur`、`inpainting_fill`、`inpaint_full_res`、`inpaint_full_res_padding`。マスクの無い Run でこれらを指定したら、黙って捨てずに 422 にする(capabilities では `mask_only` の印を付け、フォームはマスクが無い間は無効にする)。
-  - Edit でサイズを指定しなければ、入力画像の寸法を、縦横比を保って長辺 2048px に収め、8 の倍数に丸めて使う。
+  - Edit でサイズを指定しなければ、入力画像の寸法を、縦横比を保って長辺 2048px に収めて使う(8 の倍数には丸めない)。
   - `sampler_name` と `scheduler` の選択肢は接続先から補う。取れなければ自由入力にはせず、項目を出さない(WebUI の既定に任せる)。
-  - サイズは 8 の倍数、上限は長辺 2048px にする(大きいサイズは WebUI 側で VRAM が足りなくなりやすいため。ADR-0004 の 3840px とは別)。
+  - サイズの上限は長辺 2048px にする(大きいサイズは WebUI 側で VRAM が足りなくなりやすいため。ADR-0004 の 3840px とは別)。幅と高さは 8 の倍数でなくてよく、そのまま送る(2026-10-10 改訂。当初は 8 の倍数に限っていたが、他のツールの画像の生成情報(9章)に 8 の倍数でないサイズがあり、ユーザーの指示でそのまま設定できるようにした)。WebUI は内部で 8 の倍数に切り捨てて描き(Forge で確認。803×601 を送ると 800×600 の画像になり、infotext には 803x601 と残る)、Asset は返った画像の寸法になる。Run には送った値が残る。
+  - **Clip skip:** パラメーター `clip_skip`(1〜12、既定 1)を `override_settings.CLIP_stop_at_last_layers` で毎回送る(2026-10-10 追記)。VAE と同じく、WebUI の設定に任せると Run の記録と実際が食い違うため。
 - `save_images` は false のまま送る。原本は GAKEI が持つ(ADR-0004)。
 - **送らないもの:** `distilled_cfg_scale`(Forge だけの項目)、7章で対応を決めた拡張機能以外の `alwayson_scripts`(ControlNet などの拡張)、refiner、`script_name`(hires fix は10章で対応する)。LoRA は、プロンプトに `<lora:名前:重み>` と書けば、そのまま WebUI に届く(GAKEI は解釈も管理もしない。ADR-0001 の非ゴール「LoRA 管理」は変えない)。
 
@@ -153,7 +154,8 @@ WebUI の「PNG 内の情報を表示 → txt2img に転送」に当たる操作
   - `Steps`、`Sampler`、`Schedule type`(表示名から WebUI のスケジューラーの名前へ。大文字小文字を無視)、`CFG scale`、`Seed`、`Size`(サイズの制約に収まらなければ入れない)。
   - `Model` は接続先のチェックポイントの `model_name` と照合し、無ければ `Model hash` を `/sdapi/v1/sd-models` のハッシュと照合する。見つからなければモデルは変えず、注意を返す。
   - VAE(`VAE` または Forge の `Module 1` など)は、接続先の VAE の一覧にあれば入れる。
-  - 入れられないもの(拡大後の寸法の指定など10章で作らない hires fix の項目、`Clip skip`、hires でない画像の `Denoising strength`、ADetailer や ControlNet の項目、`Version` など)は `unapplied` に並べ、画面で「読み込めなかった項目」として見せる。LoRA はプロンプトの `<lora:…>` としてそのまま入る。
+  - `Clip skip` は `clip_skip` に入れる。`Model hash` と `VAE hash` は照合に使えたら「読み込めなかった項目」に出さない。`Version` は読み込み元として別に見せる。
+  - 入れられないもの(拡大後の寸法の指定など10章で作らない hires fix の項目、hires でない画像の `Denoising strength`、ADetailer や ControlNet の項目、`Version` など)は `unapplied` に並べ、画面で「読み込めなかった項目」として見せる。LoRA はプロンプトの `<lora:…>` としてそのまま入る。
 - **フォームへの反映:** プロバイダーを SD WebUI、操作を Generate にし、プロンプトとパラメーターを置き換える(入力画像は変えない)。今のプロンプトが空でなければ確かめてから置き換える。SD WebUI が有効でないときは、どちらの入口も出さない。
 - 作らないもの: A1111 形式以外(ComfyUI、NovelAI など)の生成情報からの読み込み、img2img への読み込み(WebUI の「img2img に転送」に当たるもの)。
 
@@ -174,7 +176,8 @@ A1111 互換の API で使うもの(Forge で確認):
 - **パラメーター(Generate だけ):** `hires`(有効/無効、既定は無効)、`hr_scale`(1〜4、0.05 刻み、既定 2)、`hr_upscaler`(接続先の一覧。既定は一覧に `Latent` があればそれ)、`hr_second_pass_steps`(0〜150、既定 0 = 本体と同じ)、`hr_denoising_strength`(0〜1、既定 0.5。本文では `denoising_strength` として送る)、`hr_cfg`(Forge のときだけ。1〜30。指定がなければ本体の `cfg_scale` と同じ値を送る)。`hires` が無効のときは、ほかの項目を無効にする。
 - アップスケーラーの選択肢は latent の方式 → `/upscalers` の順で、`None` は出さない(単純な拡大で、`Lanczos` で足りる)。2つの一覧がどちらも取れなければ、hires の項目を出さない。
 - `hires` が無効のときは `enable_hr` も hr の値も送らない。無効なのに hr の項目を指定したら 422(マスクの無い Run のマスクの項目と同じ考え方)。Edit での hr の項目、A1111 での `hr_cfg` も 422。
-- 拡大後の寸法を指定する方式(`hr_resize_x` / `hr_resize_y`)、2回目だけ別のチェックポイント・サンプラー・プロンプトにする項目は作らない(倍率だけにする)。
+- 拡大後の寸法を指定する方式(`hr_resize_x` / `hr_resize_y`)、2回目だけ別のチェックポイント・サンプラーにする項目は作らない(倍率だけにする)。
+- **2回目のプロンプト:** `hr_prompt`、`hr_negative_prompt`(空なら本体と同じ。送らない)を足す(2026-10-10 追記。9章の読み込みで `Hires prompt` / `Hires negative prompt` もフォームに入れる)。
 - **Forge では `hr_additional_modules: ["Use same choices"]` を常に送る。** VAE は1回目の指定(2章)がそのまま使われる。
 - **寸法の上限:** 1回目の寸法は2章の制約(長辺 2048)。拡大後の長辺は 4096 まで(超える倍率は 422)。
 - 送った値はこれまでどおり `sdwebui_request` に残る。9章の読み込みでも、`Hires upscale`、`Hires steps`、`Hires upscaler`、`Hires CFG Scale`、`Denoising strength`(hires の画像のとき)をフォームに入れる(拡大後の寸法の指定 `Hires resize` や、別のチェックポイント・プロンプトは「読み込めなかった項目」)。
