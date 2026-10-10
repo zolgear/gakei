@@ -154,7 +154,7 @@ WebUI の「PNG 内の情報を表示 → txt2img に転送」に当たる操作
   - `Steps`、`Sampler`、`Schedule type`(表示名から WebUI のスケジューラーの名前へ。大文字小文字を無視)、`CFG scale`、`Seed`、`Size`(サイズの制約に収まらなければ入れない)。
   - `Model` は接続先のチェックポイントの `model_name` と照合し、無ければ `Model hash` を `/sdapi/v1/sd-models` のハッシュと照合する。見つからなければモデルは変えず、注意を返す。
   - VAE(`VAE` または Forge の `Module 1` など)は、接続先の VAE の一覧にあれば入れる。
-  - `Clip skip` は `clip_skip` に入れる。`Model hash` と `VAE hash` は照合に使えたら「読み込めなかった項目」に出さない。`Version` は読み込み元として別に見せる。
+  - `Clip skip` は `clip_skip` に入れる。`Model hash` と `VAE hash` は照合にだけ使い、「読み込めなかった項目」には出さない(チェックポイントが見つからないときは注意で知らせる)。`Version` は読み込み元として別に見せる。
   - 入れられないもの(拡大後の寸法の指定など10章で作らない hires fix の項目、hires でない画像の `Denoising strength`、ADetailer や ControlNet の項目、`Version` など)は `unapplied` に並べ、画面で「読み込めなかった項目」として見せる。LoRA はプロンプトの `<lora:…>` としてそのまま入る。
 - **フォームへの反映:** プロバイダーを SD WebUI、操作を Generate にし、プロンプトとパラメーターを置き換える(入力画像は変えない)。今のプロンプトが空でなければ確かめてから置き換える。SD WebUI が有効でないときは、どちらの入口も出さない。
 - 作らないもの: A1111 形式以外(ComfyUI、NovelAI など)の生成情報からの読み込み、img2img への読み込み(WebUI の「img2img に転送」に当たるもの)。
@@ -177,7 +177,7 @@ A1111 互換の API で使うもの(Forge で確認):
 - アップスケーラーの選択肢は latent の方式 → `/upscalers` の順で、`None` は出さない(単純な拡大で、`Lanczos` で足りる)。2つの一覧がどちらも取れなければ、hires の項目を出さない。
 - `hires` が無効のときは `enable_hr` も hr の値も送らない。無効なのに hr の項目を指定したら 422(マスクの無い Run のマスクの項目と同じ考え方)。Edit での hr の項目、A1111 での `hr_cfg` も 422。
 - 拡大後の寸法を指定する方式(`hr_resize_x` / `hr_resize_y`)、2回目だけ別のチェックポイント・サンプラーにする項目は作らない(倍率だけにする)。
-- **2回目のプロンプト:** `hr_prompt`、`hr_negative_prompt`(空なら本体と同じ。送らない)を足す(2026-10-10 追記。9章の読み込みで `Hires prompt` / `Hires negative prompt` もフォームに入れる)。
+- **2回目のプロンプト:** `hr_prompt`、`hr_negative_prompt`(空なら本体と同じ。送らない)を足す(2026-10-10 追記)。基本は本体と同じでよいので空のままにし、9章の読み込みでは `Hires prompt` / `Hires negative prompt` が本体と違うときだけ入れる。
 - **Forge では `hr_additional_modules: ["Use same choices"]` を常に送る。** VAE は1回目の指定(2章)がそのまま使われる。
 - **寸法の上限:** 1回目の寸法は2章の制約(長辺 2048)。拡大後の長辺は 4096 まで(超える倍率は 422)。
 - 送った値はこれまでどおり `sdwebui_request` に残る。9章の読み込みでも、`Hires upscale`、`Hires steps`、`Hires upscaler`、`Hires CFG Scale`、`Denoising strength`(hires の画像のとき)をフォームに入れる(拡大後の寸法の指定 `Hires resize` や、別のチェックポイント・プロンプトは「読み込めなかった項目」)。
