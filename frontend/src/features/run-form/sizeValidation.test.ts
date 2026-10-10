@@ -221,9 +221,9 @@ describe('paramToSizeState', () => {
   })
 })
 
-// SD WebUI(ADR-0038)の制約: 8 の倍数・長辺 2048・auto なし。
+// SD WebUI(ADR-0038)の制約: 倍数の制約なし(2026-10-10 改訂)・長辺 2048・auto なし。
 const sdwebuiConstraints: SizeConstraints = {
-  multiple_of: 8,
+  multiple_of: 1,
   max_long_edge: 2048,
   min_total_pixels: 256 * 256,
   max_total_pixels: 2048 * 2048,
@@ -264,6 +264,28 @@ describe('auto を受け付けないプロバイダー', () => {
     })
     const ok = { mode: 'custom' as const, width: 1536, height: 1024 }
     expect(sizeStateForProvider(sdwebuiConstraints, '1024x1024', ok)).toBe(ok)
+  })
+
+  it('8 の倍数でないサイズもそのまま有効で、丸めない(ADR-0038 2章)', () => {
+    for (const [width, height] of [
+      [803, 601],
+      [800, 600],
+      [1001, 603],
+    ]) {
+      const state = { mode: 'custom' as const, width, height }
+      expect(validateSize(sdwebuiConstraints, width, height)).toEqual({ valid: true, errors: [] })
+      expect(roundSizeStateToMultiple(sdwebuiConstraints, state)).toEqual(state)
+      expect(sizeToParam(roundSizeStateToMultiple(sdwebuiConstraints, state))).toBe(`${width}x${height}`)
+      // プロバイダーを切り替えても残す
+      expect(sizeStateForProvider(sdwebuiConstraints, '1024x1024', state)).toBe(state)
+    }
+    expect(roundToMultiple(803, sdwebuiConstraints.multiple_of)).toBe(803)
+  })
+
+  it('倍数以外の制約(下限・縦横比)は残る', () => {
+    expect(validateSize(sdwebuiConstraints, 255, 255).valid).toBe(false)
+    expect(validateSize(sdwebuiConstraints, 2049, 1024).valid).toBe(false)
+    expect(validateSize(sdwebuiConstraints, 2048, 511).valid).toBe(false)
   })
 
   it('「実験的」の注記は 4K を受け付けるプロバイダーだけ', () => {

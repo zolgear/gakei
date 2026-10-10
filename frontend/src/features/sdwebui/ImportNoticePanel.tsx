@@ -1,7 +1,7 @@
 /**
  * 画像の生成情報を読み込んだ後の通知(ADR-0038 9章)。フォームの上部に出し、閉じられる。
- * 注意(チェックポイントが見つからない、など)は常に見せ、「読み込めなかった項目」(hires fix、
- * Clip skip など)は数が多くなりがちなので畳んで出す。
+ * 読み込み元(WebUI の版)と注意(チェックポイントが見つからない、など)は常に見せ、
+ * 「読み込めなかった項目」(拡大後の寸法の指定、ADetailer など)は数が多くなりがちなので畳んで出す。
  */
 import { fmt, useI18n } from '../../i18n'
 import type { ImportNotice } from './importParams'
@@ -29,6 +29,7 @@ export function ImportNoticePanel({ notice, onDismiss }: ImportNoticePanelProps)
           ×
         </button>
       </div>
+      {notice.software && <p className={styles.noticeSource}>{fmt(ip.sourceSoftware, { software: notice.software })}</p>}
       {notice.notes.length > 0 && (
         <ul className={styles.noteList}>
           {notice.notes.map((note, index) => (

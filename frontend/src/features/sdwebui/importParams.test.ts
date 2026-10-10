@@ -100,7 +100,7 @@ function response(overrides: Partial<SdWebuiImportParamsResponse> = {}): SdWebui
     model: 'model-b',
     prompt: '1girl, smile',
     params: { negative_prompt: 'text', steps: 30, cfg_scale: 6.5, seed: 1234, sampler_name: 'Euler', size: '760x1024' },
-    unapplied: [{ name: 'Clip skip', value: '2' }],
+    unapplied: [{ name: 'Hires resize', value: '1024x1536' }],
     notes: [],
     source: { software: null },
     ...overrides,
@@ -196,8 +196,13 @@ describe('importTargetDefs', () => {
 describe('toImportNotice', () => {
   it('読み込めなかった項目と注意をそのまま持つ', () => {
     const notice = toImportNotice(response({ notes: [{ code: 'modelNotFound', message: 'm' }] }))
-    expect(notice.unapplied).toEqual([{ name: 'Clip skip', value: '2' }])
+    expect(notice.unapplied).toEqual([{ name: 'Hires resize', value: '1024x1536' }])
     expect(notice.notes).toEqual([{ code: 'modelNotFound', message: 'm' }])
+    expect(notice.software).toBeNull()
+  })
+
+  it('読み込み元(WebUI の版)を持つ', () => {
+    expect(toImportNotice(response({ source: { software: 'v9.9.9-fake' } })).software).toBe('v9.9.9-fake')
   })
 })
 

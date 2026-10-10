@@ -1347,7 +1347,9 @@
     "unspecifiedLabel": {
       "unspecified": "Unspecified",
       "unspecifiedAuto": "Unspecified (auto)",
-      "defaultValue": "Default ({formatted})"
+      "defaultValue": "Default ({formatted})",
+      "sameAsMainPrompt": "If empty, the main prompt is used",
+      "sameAsMainNegativePrompt": "If empty, the main negative prompt is used"
     },
     "paramLabels": {
       "moderation": "Content moderation"
@@ -2045,6 +2047,7 @@
       "noModels": "Could not load the settings because the SD WebUI checkpoint list is unavailable.",
       "noticeTitle": "Loaded the image's generation info",
       "unappliedSummary": "Items not loaded ({count})",
+      "sourceSoftware": "Source: {software}",
       "dismiss": "Dismiss"
     }
   },

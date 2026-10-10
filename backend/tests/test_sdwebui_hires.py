@@ -36,6 +36,8 @@ HIRES_NAMES = {
     "hr_second_pass_steps",
     "hr_denoising_strength",
     "hr_cfg",
+    "hr_prompt",
+    "hr_negative_prompt",
 }
 
 
@@ -116,6 +118,11 @@ def test_capabilities_forge(db_session_factory: sessionmaker) -> None:
     # hr_ の項目は初期値を持たない(hires が無効のあいだはフォームが未指定に戻すため)
     assert all(params[n].form_default is None for n in HIRES_NAMES - {"hires"})
     assert params["hires"].label == "高解像度補助"
+    # 2回目のプロンプトは text(タグモードの切り替えの対象になる名前)。空なら本体と同じ
+    for name in ("hr_prompt", "hr_negative_prompt"):
+        assert params[name].type == "text"
+        assert params[name].default == ""
+        assert "空なら本体" in (params[name].description or "")
     assert params["hr_scale"].label == "アップスケール倍率"
 
 
@@ -225,12 +232,56 @@ def test_finalize_hires_off_sends_nothing(db_session_factory: sessionmaker) -> N
         assert "denoising_strength" not in request
 
 
-@pytest.mark.parametrize("key", ["hr_scale", "hr_upscaler", "hr_cfg"])
+def test_finalize_hires_prompts(db_session_factory: sessionmaker) -> None:
+    provider = _provider(FakeSdWebui(flavor="forge"), db_session_factory)
+    request = _finalize(
+        provider,
+        db_session_factory,
+        hires=True,
+        hr_prompt="a cat, detailed",
+        hr_negative_prompt="blurry",
+    )["sdwebui_request"]
+    assert request["hr_prompt"] == "a cat, detailed"
+    assert request["hr_negative_prompt"] == "blurry"
+    assert request["prompt"] == "a cat"
+
+    # 空なら送らない(本体と同じ)
+    request = _finalize(
+        provider, db_session_factory, hires=True, hr_prompt="", hr_negative_prompt=""
+    )["sdwebui_request"]
+    assert "hr_prompt" not in request
+    assert "hr_negative_prompt" not in request
+
+
+def test_finalize_empty_hires_prompt_without_hires_is_allowed(
+    db_session_factory: sessionmaker,
+) -> None:
+    """空の2回目のプロンプトは未指定と同じなので、hires が無効でも断らない。"""
+    provider = _provider(FakeSdWebui(), db_session_factory)
+    request = _finalize(provider, db_session_factory, hires=False, hr_prompt="")["sdwebui_request"]
+    assert not any(k.startswith("hr_") or k == "enable_hr" for k in request)
+
+
+def test_finalize_edit_rejects_hires_prompt(db_session_factory: sessionmaker) -> None:
+    provider = _provider(FakeSdWebui(), db_session_factory)
+    with db_session_factory() as db, pytest.raises(RunValidationError):
+        provider.finalize_params(db, _draft("edit", hr_prompt="x"))
+
+
+@pytest.mark.parametrize(
+    "key", ["hr_scale", "hr_upscaler", "hr_cfg", "hr_prompt", "hr_negative_prompt"]
+)
 def test_finalize_hires_params_without_hires_is_422(
     db_session_factory: sessionmaker, key: str
 ) -> None:
     provider = _provider(FakeSdWebui(), db_session_factory)
-    value = {"hr_scale": 1.5, "hr_upscaler": "Latent", "hr_cfg": 5.0}[key]
+    value = {
+        "hr_scale": 1.5,
+        "hr_upscaler": "Latent",
+        "hr_cfg": 5.0,
+        "hr_prompt": "x",
+        "hr_negative_prompt": "y",
+    }[key]
     with db_session_factory() as db, pytest.raises(RunValidationError) as excinfo:
         provider.finalize_params(db, _draft(hires=False, **{key: value}))
     assert key in str(excinfo.value)
@@ -351,6 +402,15 @@ def test_runs_api_hires(client: TestClient, monkeypatch: pytest.MonkeyPatch, fla
     # 拡大後の長辺が 4096 を超えるものと、範囲外の倍率は Run を作らずに 422
     assert post(hires=True, hr_scale=2.5, size="2048x1024").status_code == 422
     assert post(hires=True, hr_scale=4.5).status_code == 422
+    # 2回目のプロンプトは送られ、hires が無効なら Run を作らずに 422
+    response = post(hires=True, hr_prompt="a cat, detailed")
+    assert response.status_code == 202, response.text
+    assert wait_for_run_terminal(client, response.json()["id"])["status"] == "succeeded"
+    assert fake.txt2img_bodies[-1]["hr_prompt"] == "a cat, detailed"
+    count = len(fake.txt2img_bodies)
+    assert post(hires=False, hr_prompt="a cat, detailed").status_code == 422
+    assert post(hr_negative_prompt="blurry").status_code == 422
+    assert len(fake.txt2img_bodies) == count
     # A1111 には hr_cfg が無い
     response = post(hires=True, hr_cfg=5)
     assert response.status_code == (202 if flavor == "forge" else 422)

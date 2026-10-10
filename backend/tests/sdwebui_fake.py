@@ -32,6 +32,8 @@
   txt2img の本文が `enable_hr` なら、拡大後の寸法(`int(width * hr_scale)`)の画像を返し、infotext に
   `Hires upscale` などを足す(`info` の width / height は1回目のまま。実物と同じ)。Forge 風
   (`flavor="forge"`)では、`hr_additional_modules` が無いと実物と同じく 500 を返す。
+- `honor_size=True`: 実物と同じく、幅と高さを 8 の倍数に切り捨てた寸法の画像を返す(803×601 を
+  送ると 800×600)。infotext の `Size` は送られた値のまま。既定は 8×8 の画像。
 - `return_grid=True`: 実物の `return_grid` と同じく、先頭にグリッドを足し
   `index_of_first_image = 1` を返す(2枚以上のとき)。
 """
@@ -235,6 +237,9 @@ class FakeSdWebui:
         self.txt2img_error_body: Any = None
         self.extra_images = 0
         self.return_no_images = False
+        # True なら、実物と同じく幅と高さを 8 の倍数に切り捨てた寸法の画像を返し、infotext に
+        # 送られた `Size`(切り捨てる前)を残す。既定は 8×8 の小さな画像(テストを軽くするため)。
+        self.honor_size = False
         self.requests: list[httpx.Request] = []
         self.txt2img_bodies: list[dict[str, Any]] = []
         self.img2img_bodies: list[dict[str, Any]] = []
@@ -458,6 +463,11 @@ class FakeSdWebui:
         all_negative_prompts = [negative] * batch
         all_seeds = [seed + i for i in range(batch)]
         image_size = (8, 8)
+        size_text = ""
+        if self.honor_size:
+            width, height = int(body["width"]), int(body["height"])
+            image_size = (width // 8 * 8, height // 8 * 8)
+            size_text = f", Size: {width}x{height}"
         hires_text = ""
         if not is_img2img and body.get("enable_hr"):
             scale = float(body.get("hr_scale", 2.0))
@@ -479,7 +489,8 @@ class FakeSdWebui:
             ]
         )
         infotexts = [
-            f"{p}\nSteps: {body.get('steps')}, Seed: {s}, Model: {used_model}{hires_text}"
+            f"{p}\nSteps: {body.get('steps')}, Seed: {s}{size_text}, Model: {used_model}"
+            f"{hires_text}"
             for p, s in zip(all_prompts, all_seeds, strict=True)
         ]
         index_of_first_image = 0

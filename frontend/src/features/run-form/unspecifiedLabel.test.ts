@@ -26,6 +26,17 @@ describe('unspecifiedPlaceholder', () => {
   })
 })
 
+describe('unspecifiedPlaceholder(空なら本体と同じ項目)', () => {
+  it('SD WebUI の2回目のプロンプトは、空なら何が使われるかを出す', () => {
+    expect(unspecifiedPlaceholder(makeDef({ name: 'hr_prompt', type: 'text', default: '' }))).toBe(
+      '空なら本体のプロンプトと同じ',
+    )
+    expect(unspecifiedPlaceholder(makeDef({ name: 'hr_negative_prompt', type: 'text', default: '' }))).toBe(
+      '空なら本体のネガティブプロンプトと同じ',
+    )
+  })
+})
+
 describe('unspecifiedOptionLabel', () => {
   it('既定値が無ければ「未指定(自動)」', () => {
     expect(unspecifiedOptionLabel(makeDef({ type: 'enum', default: null }))).toBe('未指定(自動)')

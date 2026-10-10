@@ -1347,7 +1347,9 @@
     "unspecifiedLabel": {
       "unspecified": "未指定",
       "unspecifiedAuto": "未指定(自動)",
-      "defaultValue": "既定値 ({formatted})"
+      "defaultValue": "既定値 ({formatted})",
+      "sameAsMainPrompt": "空なら本体のプロンプトと同じ",
+      "sameAsMainNegativePrompt": "空なら本体のネガティブプロンプトと同じ"
     },
     "paramLabels": {
       "moderation": "表現の制限"
@@ -2045,6 +2047,7 @@
       "noModels": "SD WebUI のチェックポイントの一覧を取得できないため、読み込めませんでした。",
       "noticeTitle": "画像の生成情報を読み込みました",
       "unappliedSummary": "読み込めなかった項目({count})",
+      "sourceSoftware": "読み込み元: {software}",
       "dismiss": "閉じる"
     }
   },

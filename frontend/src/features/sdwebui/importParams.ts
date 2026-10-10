@@ -39,6 +39,8 @@ export interface ImportedFormValues {
 export interface ImportNotice {
   unapplied: { name: string; value: string }[]
   notes: { code: string; message: string }[]
+  /** 読み込み元(生成情報の `Version`。WebUI の版)。無ければ null。 */
+  software: string | null
 }
 
 /** SD WebUI が有効(capabilities にプロバイダーがある)か。無効なら読み込みの入口を出さない。 */
@@ -103,7 +105,11 @@ export function buildImportedRawParams(
 }
 
 export function toImportNotice(response: SdWebuiImportParamsResponse): ImportNotice {
-  return { unapplied: response.unapplied ?? [], notes: response.notes ?? [] }
+  return {
+    unapplied: response.unapplied ?? [],
+    notes: response.notes ?? [],
+    software: response.source?.software ?? null,
+  }
 }
 
 /** クリップボード・ドロップの中身から、最初の画像ファイルを取り出す。 */

@@ -101,6 +101,8 @@ export const HIRES_DEPENDENT_PARAMS = [
   'hr_second_pass_steps',
   'hr_denoising_strength',
   'hr_cfg',
+  'hr_prompt',
+  'hr_negative_prompt',
 ] as const
 
 /** 拡大後の長辺の上限(ADR-0038 10章。サーバーと同じ値)。 */

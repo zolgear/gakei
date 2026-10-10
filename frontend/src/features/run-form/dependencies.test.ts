@@ -125,6 +125,8 @@ const hiresDefs: ParamDef[] = [
   { ...nDef, name: 'hr_second_pass_steps', minimum: 0, maximum: 150, default: 0 },
   floatDef('hr_denoising_strength', 0.5),
   floatDef('hr_cfg', null),
+  { name: 'hr_prompt', type: 'text', label: 'hr_prompt', default: '', required: false, description: '' },
+  { name: 'hr_negative_prompt', type: 'text', label: 'hr_negative_prompt', default: '', required: false, description: '' },
 ]
 
 describe('高解像度補助の依存関係(フロントの規則)', () => {
@@ -163,6 +165,12 @@ describe('hiresTargetSize(拡大後の寸法)', () => {
     expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '1.5' }, size)).toEqual({
       width: 768,
       height: 1152,
+      tooLarge: false,
+    })
+    // 8 の倍数でない寸法もそのまま掛ける(ADR-0038 2章 2026-10-10 改訂)
+    expect(hiresTargetSize(hiresDefs, { hires: 'true' }, { mode: 'custom', width: 803, height: 601 })).toEqual({
+      width: 1606,
+      height: 1202,
       tooLarge: false,
     })
     // WebUI(Python の int())と同じ丸め

@@ -180,6 +180,12 @@
   color: var(--color-text);
 }
 
+.noticeSource {
+  margin: 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
 .noteList {
   margin: 0;
   padding-left: 18px;

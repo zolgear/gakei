@@ -70,7 +70,8 @@ def test_capabilities_lists_checkpoints_as_models(db_session_factory: sessionmak
     assert caps.default_model == "model-a"
     assert caps.default_size == "1024x1024"
     assert caps.size is not None
-    assert caps.size.multiple_of == 8
+    # 8 の倍数に限らない(ADR-0038 2章 2026-10-10 改訂)
+    assert caps.size.multiple_of == 1
     assert caps.size.max_long_edge == 2048
     assert caps.size.allow_auto is False
     assert (caps.n_min, caps.n_max) == (1, 8)
@@ -87,6 +88,7 @@ def test_capabilities_lists_checkpoints_as_models(db_session_factory: sessionmak
         "cfg_scale",
         "seed",
         "vae",
+        "clip_skip",
         "n",
         # 高解像度補助(ADR-0038 10章。test_sdwebui_hires.py)
         "hires",
@@ -95,7 +97,16 @@ def test_capabilities_lists_checkpoints_as_models(db_session_factory: sessionmak
         "hr_second_pass_steps",
         "hr_denoising_strength",
         "hr_cfg",
+        "hr_prompt",
+        "hr_negative_prompt",
     }
+    clip_skip = params["clip_skip"]
+    assert (clip_skip.type, clip_skip.minimum, clip_skip.maximum) == ("int", 1, 12)
+    assert (clip_skip.default, clip_skip.form_default) == (1, 1)
+    # Edit にも Clip skip がある
+    edit_names = {p.name for p in model.operations[1].params}
+    assert "clip_skip" in edit_names
+    assert not {"hr_prompt", "hr_negative_prompt"} & edit_names
     assert params["sampler_name"].choices == ["Euler a", "Euler", "DPM++ 2M"]
     assert params["sampler_name"].form_default == "Euler a"
     assert params["scheduler"].form_default == "automatic"
@@ -194,6 +205,7 @@ def test_finalize_params_forge(db_session_factory: sessionmaker) -> None:
         "force_task_id": task_id,
         "override_settings": {
             "sd_model_checkpoint": "model-a",
+            "CLIP_stop_at_last_layers": 1,
             "forge_additional_modules": ["vae-a.safetensors"],
         },
         "override_settings_restore_afterwards": True,
@@ -209,10 +221,12 @@ def test_finalize_params_builtin_vae(db_session_factory: sessionmaker) -> None:
         a1111_vae = a1111.finalize_params(db, _draft(vae="vae-b.safetensors"))
     assert forge_params["sdwebui_request"]["override_settings"] == {
         "sd_model_checkpoint": "model-a",
+        "CLIP_stop_at_last_layers": 1,
         "forge_additional_modules": [],
     }
     assert a1111_params["sdwebui_request"]["override_settings"] == {
         "sd_model_checkpoint": "model-a",
+        "CLIP_stop_at_last_layers": 1,
         "sd_vae": "None",
     }
     assert a1111_vae["sdwebui_request"]["override_settings"]["sd_vae"] == "vae-b.safetensors"

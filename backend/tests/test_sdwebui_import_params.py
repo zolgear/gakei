@@ -97,18 +97,90 @@ def test_maps_full_example() -> None:
         "hr_upscaler": "Latent",
         "hr_cfg": 5,
         "hr_denoising_strength": 0.33,
+        "clip_skip": 2,
+        # 引用された値は JSON として読んだもの(改行を含む)。本体と違うので入れる
+        "hr_prompt": "1girl, ...\nmore",
     }
-    names = unapplied_names(result)
-    # Hires Module 1: Use same choices は GAKEI が常に送る値なので並べない
-    assert names == ["Model hash", "Clip skip", "Hires prompt", "Version"]
-    assert len(names) == len(set(names))
-    # 引用された値は JSON として読んだもの(改行を含む)
-    assert dict(result.unapplied)["Hires prompt"] == "1girl, ...\nmore"
+    # Hires Module 1: Use same choices は GAKEI が常に送る値、Model hash は照合にだけ使う項目、
+    # Version は読み込み元(software)なので、どれも並べない
+    assert result.unapplied == []
     assert result.notes == []
     assert result.software == "f9.9.9-fake"
 
 
 HIRES_TEXT = "p\nSteps: 20, Seed: 1, Size: 512x768, Model: model-a"
+
+
+def test_size_not_multiple_of_8_is_applied() -> None:
+    """8 の倍数でないサイズもそのまま入れる(ADR-0038 2章 2026-10-10 改訂)。"""
+    for size in ("803x601", "800x600"):
+        text = f"p\nSteps: 20, Seed: 1, Size: {size}, Model: model-a"
+        result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+        assert result.params["size"] == size
+        assert result.notes == []
+        assert result.unapplied == []
+
+
+def test_clip_skip() -> None:
+    text = "p\nSteps: 20, Seed: 1, Model: model-a, Clip skip: 12"
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert result.params["clip_skip"] == 12
+    assert result.unapplied == []
+    for value in ("0", "13", "abc"):
+        text = f"p\nSteps: 20, Seed: 1, Model: model-a, Clip skip: {value}"
+        result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+        assert "clip_skip" not in result.params
+        assert note_codes(result) == ["invalidValue"]
+        assert ("Clip skip", value) in result.unapplied
+
+
+def test_hires_prompts_only_when_different_from_main() -> None:
+    text = (
+        "1girl, smile\nNegative prompt: blurry\n"
+        "Steps: 20, Seed: 1, Size: 512x768, Model: model-a, Hires upscale: 2, "
+        'Hires prompt: " 1girl, smile ", Hires negative prompt: "blurry,\\nlowres"'
+    )
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    # 本体と同じ(前後の空白を無視)なら入れない(空 = 本体と同じ)が、読み込めた項目として扱う
+    assert "hr_prompt" not in result.params
+    # 本体と違えばそのまま入れる(引用の中の改行も解く)
+    assert result.params["hr_negative_prompt"] == "blurry,\nlowres"
+    assert result.unapplied == []
+
+
+def test_hires_prompt_same_as_template_is_not_applied() -> None:
+    """Dynamic Prompts の展開後のプロンプトと同じなら、本体と同じとみなす。"""
+    fake = FakeSdWebui()
+    fake.enable_dynamic_prompts()
+    text = (
+        "red hat, 1girl\n"
+        'Steps: 20, Seed: 5, Model: model-a, Template: "{red|blue} hat, 1girl", '
+        'Hires upscale: 2, Hires prompt: "red hat, 1girl"'
+    )
+    result = build_form_values(meta_of(text), catalog_of(fake))
+    assert result.prompt == "{red|blue} hat, 1girl"
+    assert "hr_prompt" not in result.params
+    assert result.unapplied == []
+
+
+def test_hires_prompt_without_hires_is_unapplied() -> None:
+    text = 'p\nSteps: 20, Seed: 1, Model: model-a, Hires prompt: "q"'
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert "hr_prompt" not in result.params
+    assert result.unapplied == [("Hires prompt", "q")]
+
+
+def test_version_and_hashes_are_never_unapplied() -> None:
+    text = (
+        "p\nSteps: 20, Seed: 1, Model hash: 9999999999, Model: model-zzz, "
+        "VAE hash: 0011223344, VAE: vae-z.safetensors, Version: v9.9.9-fake"
+    )
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui(flavor="a1111")))
+    assert result.software == "v9.9.9-fake"
+    names = unapplied_names(result)
+    assert not {"Model hash", "VAE hash", "Version"} & set(names)
+    # 見つからなかったものは注意で知らせる
+    assert note_codes(result) == ["modelNotFound", "vaeNotFound"]
 
 
 def test_hires_mapping_a1111_ignores_hires_cfg() -> None:
@@ -210,7 +282,8 @@ def test_model_by_hash_when_name_differs() -> None:
     assert result.model == "model-a"
     assert note_codes(result) == ["modelMatchedByHash"]
     assert "Model" not in unapplied_names(result)
-    assert "Model hash" in unapplied_names(result)
+    # 照合にだけ使う項目は並べない
+    assert "Model hash" not in unapplied_names(result)
 
 
 def test_model_hash_from_sha256_and_short_hash() -> None:
@@ -245,7 +318,9 @@ def test_model_not_found() -> None:
     assert result.model is None
     assert note_codes(result) == ["modelNotFound"]
     assert "model-zzz" in result.notes[0].message
-    assert {"Model", "Model hash"} <= set(unapplied_names(result))
+    assert "Model" in unapplied_names(result)
+    # 見つからなくても Model hash は並べない(注意で知らせる)
+    assert "Model hash" not in unapplied_names(result)
 
 
 def test_model_name_case_and_extension() -> None:
@@ -279,7 +354,7 @@ def test_template_without_dynamic_prompts_uses_expanded_prompt() -> None:
 
 
 def test_size_out_of_range() -> None:
-    for size in ("4096x4096", "100x100", "761x1024", "abc"):
+    for size in ("4096x4096", "100x100", "2048x256", "abc"):
         text = f"p\nSteps: 20, Seed: 1, Size: {size}, Model: model-a"
         result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
         assert "size" not in result.params, size
@@ -343,7 +418,8 @@ def test_vae_a1111_with_extension() -> None:
     text = "p\nSteps: 20, Seed: 1, Model: model-a, VAE hash: 0011223344, VAE: vae-b.safetensors"
     result = build_form_values(meta_of(text), catalog_of(fake))
     assert result.params["vae"] == "vae-b.safetensors"
-    assert unapplied_names(result) == ["VAE hash"]
+    # VAE hash は照合にだけ使う項目なので並べない
+    assert unapplied_names(result) == []
 
 
 def test_vae_forge_module_without_extension() -> None:
@@ -461,7 +537,8 @@ def test_file_import_does_not_store_anything(
     assert body["model"] == "model-a"
     assert body["params"]["size"] == "760x1024"
     assert body["source"] == {"software": "f9.9.9-fake"}
-    assert {"name": "Clip skip", "value": "2"} in body["unapplied"]
+    assert body["params"]["clip_skip"] == 2
+    assert body["unapplied"] == []
 
     assert _asset_count(connected) == before_assets
     assert _files(data_dir) == before_files

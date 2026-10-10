@@ -186,6 +186,8 @@
       "vae": "VAE",
       "vaeBuiltin": "チェックポイントに内蔵のもの",
       "vaeDescription": "チェックポイントの種類(SD1.5、SDXL など)に合う VAE を選びます。WebUI の設定は変えず、この実行だけに使います。",
+      "clipSkip": "Clip skip",
+      "clipSkipDescription": "テキストエンコーダーの最後の何層を飛ばすか。1 は飛ばさない(通常)。アニメ系のモデルでは 2 を勧めるものがあります。WebUI の設定は変えず、この実行だけに使います。",
       "count": "枚数",
       "countDescription": "1回の実行で描く枚数(batch_size)。",
       "dynamicPrompts": "Dynamic Prompts",
@@ -223,7 +225,11 @@
       "hrDenoisingStrength": "ノイズ除去強度",
       "hrDenoisingStrengthDescription": "拡大後にどれだけ描き直すか。0 に近いほど拡大しただけに近く、1 に近いほど大きく変わります。",
       "hrCfg": "Hires CFG Scale",
-      "hrCfgDescription": "拡大後の描き直しの CFG スケール。未指定なら本体の CFG スケールと同じ値を送ります。"
+      "hrCfgDescription": "拡大後の描き直しの CFG スケール。未指定なら本体の CFG スケールと同じ値を送ります。",
+      "hrPrompt": "拡大後のプロンプト",
+      "hrPromptDescription": "拡大後の描き直しにだけ使うプロンプト。空なら本体のプロンプトと同じ。",
+      "hrNegativePrompt": "拡大後のネガティブプロンプト",
+      "hrNegativePromptDescription": "拡大後の描き直しにだけ使うネガティブプロンプト。空なら本体のネガティブプロンプトと同じ。"
     },
     "importParams": {
       "inputMissing": "画像のファイルか、ストックの画像(asset_id)を指定してください。",

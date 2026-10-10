@@ -22,9 +22,22 @@ function formatDefault(def: ParamDef): string | null {
   return null
 }
 
+/**
+ * 空なら別の欄の値を使うテキストの項目(SD WebUI の hires の2回目のプロンプト。ADR-0038 10章)。
+ * 「未指定」のかわりに、何が使われるかを placeholder に出す。
+ */
+function sameAsMainPlaceholder(def: ParamDef): string | null {
+  const t = msg().runForm.unspecifiedLabel
+  if (def.name === 'hr_prompt') return t.sameAsMainPrompt
+  if (def.name === 'hr_negative_prompt') return t.sameAsMainNegativePrompt
+  return null
+}
+
 /** 数値・テキスト入力の placeholder。 */
 export function unspecifiedPlaceholder(def: ParamDef): string {
   const t = msg().runForm.unspecifiedLabel
+  const sameAsMain = sameAsMainPlaceholder(def)
+  if (sameAsMain !== null) return sameAsMain
   const formatted = formatDefault(def)
   return formatted === null ? t.unspecified : fmt(t.defaultValue, { formatted })
 }

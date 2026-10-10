@@ -21,11 +21,15 @@
 - 高解像度補助(ADR-0038 10章): `Hires upscale` があり、接続先で高解像度補助を使えれば `hires` を
   有効にして倍率を入れる。`Hires steps`、`Hires upscaler`(一覧にあれば)、`Hires CFG Scale`
   (Forge のときだけ)、`Denoising strength`(hires の画像のときだけ。2回目の描き直しの強さ)も入れる。
+  `Hires prompt` / `Hires negative prompt` は、本体のプロンプトと違うときだけ `hr_prompt` /
+  `hr_negative_prompt` に入れる(同じなら空のまま = 本体と同じ)。
   `Hires Module 1: Use same choices` は GAKEI が常に送る値なので、入れたものとして扱う。
-  拡大後の寸法の指定(`Hires resize`)、別のチェックポイント・サンプラー・プロンプトは入れない。
+  拡大後の寸法の指定(`Hires resize`)、別のチェックポイント・サンプラーは入れない。
+- `Clip skip`: 範囲に収まれば `clip_skip` に入れる。
 
 フォームに入れなかった項目は、名前と値を `unapplied` に並べる(重複せず、入れたものは含めない)。
-`Model hash` や `VAE hash` など照合にだけ使う項目も、フォームには入らないので並べる。
+照合にだけ使う `Model hash` と `VAE hash` は、照合の成否にかかわらず並べない(チェックポイントが
+見つからなければ注意で知らせる)。`Version` も並べない(読み込み元として `software` で返す)。
 """
 
 from __future__ import annotations
@@ -39,6 +43,8 @@ from app.i18n import t
 from app.providers.sdwebui.client import Catalog, Checkpoint
 from app.providers.sdwebui.extensions import PARAM_DYNAMIC_PROMPTS, resolve_extensions
 from app.providers.sdwebui.provider import (
+    CLIP_SKIP_MAX,
+    CLIP_SKIP_MIN,
     FORGE_HR_ADDITIONAL_MODULES,
     HIRES_MAX_LONG_EDGE,
     HR_CFG_MAX,
@@ -66,6 +72,9 @@ KEY_MODEL = "Model"
 KEY_MODEL_HASH = "Model hash"
 KEY_SEED = "Seed"
 KEY_VAE = "VAE"
+KEY_VAE_HASH = "VAE hash"
+KEY_VERSION = "Version"
+KEY_CLIP_SKIP = "Clip skip"
 KEY_TEMPLATE = "Template"
 KEY_NEGATIVE_TEMPLATE = "Negative Template"
 KEY_DENOISING = "Denoising strength"
@@ -73,6 +82,8 @@ KEY_HIRES_UPSCALE = "Hires upscale"
 KEY_HIRES_STEPS = "Hires steps"
 KEY_HIRES_UPSCALER = "Hires upscaler"
 KEY_HIRES_CFG = "Hires CFG Scale"
+KEY_HIRES_PROMPT = "Hires prompt"
+KEY_HIRES_NEGATIVE_PROMPT = "Hires negative prompt"
 # Forge の2回目のモジュール(`Hires Module 1` …)
 _HIRES_MODULE_PREFIX = "Hires Module "
 # Forge は VAE やテキストエンコーダーを `Module 1`、`Module 2` … と書く
@@ -236,7 +247,8 @@ def build_form_values(meta: dict[str, Any], catalog: Catalog) -> ImportResult:
         prompt="",
         software=software if isinstance(software, str) and software else None,
     )
-    consumed: set[str] = set()
+    # 照合にだけ使う項目と、読み込み元(`software` で返す)は「読み込めなかった項目」に並べない。
+    consumed: set[str] = {KEY_MODEL_HASH, KEY_VAE_HASH, KEY_VERSION}
 
     def note(code: str, **kwargs: Any) -> None:
         result.notes.append(Note(code=code, message=_note_message(code, **kwargs)))
@@ -277,6 +289,14 @@ def build_form_values(meta: dict[str, Any], catalog: Catalog) -> ImportResult:
             consumed.add(KEY_CFG)
         else:
             note("invalidValue", name=KEY_CFG)
+
+    if KEY_CLIP_SKIP in infotext:
+        clip_skip = _parse_int(infotext[KEY_CLIP_SKIP])
+        if clip_skip is not None and CLIP_SKIP_MIN <= clip_skip <= CLIP_SKIP_MAX:
+            result.params["clip_skip"] = clip_skip
+            consumed.add(KEY_CLIP_SKIP)
+        else:
+            note("invalidValue", name=KEY_CLIP_SKIP)
 
     if KEY_SEED in infotext:
         seed = _parse_int(infotext[KEY_SEED])
@@ -365,7 +385,16 @@ def build_form_values(meta: dict[str, Any], catalog: Catalog) -> ImportResult:
         note("vaeNotFound", value=", ".join(_value_text(infotext[k]) for k in module_keys))
 
     # -- 高解像度補助 -------------------------------------------------------------------
-    _apply_hires(infotext, catalog, result, consumed, note)
+    # 2回目のプロンプトは、展開後(画像に残った)と展開前(Template)の
+    # どちらと同じでも本体と同じとみなす。
+    main_prompts = {
+        "hr_prompt": {result.prompt, meta.get("prompt") or ""},
+        "hr_negative_prompt": {
+            result.params.get("negative_prompt") or "",
+            meta.get("negative_prompt") or "",
+        },
+    }
+    _apply_hires(infotext, catalog, result, consumed, note, main_prompts)
 
     # -- 入れなかった項目 -----------------------------------------------------------------
     seen: set[str] = set()
@@ -386,6 +415,7 @@ def _apply_hires(
     result: ImportResult,
     consumed: set[str],
     note: Any,
+    main_prompts: dict[str, set[str]],
 ) -> None:
     """高解像度補助の項目(ADR-0038 10章)。`Hires upscale` を入れられたときだけ `hires` を有効にし、
     ほかの hires の項目と `Denoising strength` を入れる。入れなければ、どれも
@@ -441,6 +471,18 @@ def _apply_hires(
             consumed.add(KEY_DENOISING)
         else:
             note("invalidValue", name=KEY_DENOISING)
+
+    # 2回目のプロンプト。本体と同じ(前後の空白を無視)なら入れない(空 = 本体と同じ)。
+    for key, param in (
+        (KEY_HIRES_PROMPT, "hr_prompt"),
+        (KEY_HIRES_NEGATIVE_PROMPT, "hr_negative_prompt"),
+    ):
+        if key not in infotext:
+            continue
+        text = _value_text(infotext[key])
+        if text.strip() not in {p.strip() for p in main_prompts[param]}:
+            result.params[param] = text
+        consumed.add(key)
 
     # 2回目も1回目と同じモジュールを使う指定は、GAKEI が常に送る値と同じ
     same_choices = FORGE_HR_ADDITIONAL_MODULES[0]

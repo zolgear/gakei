@@ -127,7 +127,11 @@ HIRES_DEPENDENT_PARAMS = (
     "hr_second_pass_steps",
     "hr_denoising_strength",
     "hr_cfg",
+    "hr_prompt",
+    "hr_negative_prompt",
 )
+# 2回目のプロンプト(空なら本体と同じ。送らない)
+HIRES_PROMPT_PARAMS = ("hr_prompt", "hr_negative_prompt")
 HIRES_PARAM_NAMES = frozenset((PARAM_HIRES, *HIRES_DEPENDENT_PARAMS))
 DEFAULT_HR_SCALE = 2.0
 HR_SCALE_MIN, HR_SCALE_MAX = 1.0, 4.0
@@ -142,8 +146,14 @@ HIRES_MAX_LONG_EDGE = 4096
 # Forge: 2回目も1回目と同じモジュール(VAE など)を使う。送らないと 500 になる。
 FORGE_HR_ADDITIONAL_MODULES = ["Use same choices"]
 
+# Clip skip(ADR-0038 2章)。`override_settings.CLIP_stop_at_last_layers` で毎回送る。
+DEFAULT_CLIP_SKIP = 1
+CLIP_SKIP_MIN, CLIP_SKIP_MAX = 1, 12
+
+# 幅と高さは 8 の倍数でなくてよい(ADR-0038 2章 2026-10-10 改訂)。WebUI は内部で 8 の倍数に
+# 切り捨てて描き、Asset は返った画像の寸法になる。
 SIZE_CONSTRAINTS = SizeConstraints(
-    multiple_of=8,
+    multiple_of=1,
     max_long_edge=2048,
     min_total_pixels=256 * 256,
     max_total_pixels=2048 * 2048,
@@ -377,7 +387,11 @@ class SdWebuiProvider:
             )
 
         task_id = f"gakei-{uuid.uuid4().hex}"
-        override_settings: dict[str, Any] = {"sd_model_checkpoint": draft.model}
+        override_settings: dict[str, Any] = {
+            "sd_model_checkpoint": draft.model,
+            # WebUI の設定に任せると Run の記録と実際が食い違うので、毎回送る(ADR-0038 2章)。
+            "CLIP_stop_at_last_layers": params.get("clip_skip", DEFAULT_CLIP_SKIP),
+        }
         if catalog.flavor == "forge":
             # Forge: ファイル名だけで通る。[] はチェックポイント内蔵の VAE。
             override_settings["forge_additional_modules"] = [] if vae == VAE_BUILTIN else [vae]
@@ -653,14 +667,9 @@ def _per_output_prompts(
 
 def size_from_input(width: int, height: int) -> tuple[int, int]:
     """Edit でサイズの指定が無いときの出力の寸法。入力画像の寸法を、縦横比を保って長辺
-    2048px に収め、8 の倍数に丸める(ADR-0038 2章)。"""
-    multiple = SIZE_CONSTRAINTS.multiple_of
+    2048px に収める(ADR-0038 2章。8 の倍数には丸めない)。"""
     scale = min(1.0, SIZE_CONSTRAINTS.max_long_edge / max(width, height, 1))
-
-    def _round(value: float) -> int:
-        return max(multiple, round(value / multiple) * multiple)
-
-    return _round(width * scale), _round(height * scale)
+    return max(1, round(width * scale)), max(1, round(height * scale))
 
 
 def default_hr_upscaler(upscalers: list[str]) -> str | None:
@@ -682,7 +691,12 @@ def _resolve_hires(catalog: Catalog, params: dict[str, Any], *, is_edit: bool) -
     - `hr_cfg` は Forge だけ。
     - `hires` が無効なのに他の項目を指定したら 422(マスクの無い Run の inpaint の項目と同じ考え方)。
     """
-    names = [key for key in params if key in HIRES_PARAM_NAMES]
+    # 2回目のプロンプトの空文字は未指定と同じ(本体と同じ。送らない)
+    names = [
+        key
+        for key in params
+        if key in HIRES_PARAM_NAMES and not (key in HIRES_PROMPT_PARAMS and params[key] == "")
+    ]
     if not names:
         return False
     if is_edit or not catalog.upscalers:
@@ -701,7 +715,8 @@ def _hires_fields(
     catalog: Catalog, params: dict[str, Any], width: int, height: int, cfg_scale: Any
 ) -> dict[str, Any]:
     """txt2img の高解像度補助の項目(ADR-0038 10章)。倍率だけで指定し、2回目のチェックポイント・
-    サンプラー・プロンプトは1回目と同じ(送らない)。"""
+    サンプラーは1回目と同じ(送らない)。2回目のプロンプトは指定があるときだけ送る(空なら本体と
+    同じ)。"""
     upscaler = params.get("hr_upscaler") or default_hr_upscaler(catalog.upscalers)
     if upscaler not in catalog.upscalers:
         raise RunValidationError(
@@ -726,6 +741,10 @@ def _hires_fields(
         # 2回目の描き直しの強さ。txt2img では本文の denoising_strength がこれに当たる。
         "denoising_strength": params.get("hr_denoising_strength", DEFAULT_HR_DENOISING_STRENGTH),
     }
+    for name in HIRES_PROMPT_PARAMS:
+        value = params.get(name)
+        if isinstance(value, str) and value:
+            fields[name] = value
     if catalog.flavor == "forge":
         fields["hr_additional_modules"] = list(FORGE_HR_ADDITIONAL_MODULES)
         # Forge の hr_cfg の既定は 1.0 なので、指定が無ければ本体の CFG と同じ値を送る。
@@ -926,6 +945,16 @@ def _generate_params(catalog: Catalog) -> list[ParamDef]:
                 description=t("sdwebui.params.vaeDescription"),
             ),
             ParamDef(
+                name="clip_skip",
+                type="int",
+                label=t("sdwebui.params.clipSkip"),
+                minimum=CLIP_SKIP_MIN,
+                maximum=CLIP_SKIP_MAX,
+                default=DEFAULT_CLIP_SKIP,
+                form_default=DEFAULT_CLIP_SKIP,
+                description=t("sdwebui.params.clipSkipDescription"),
+            ),
+            ParamDef(
                 name="n",
                 type="int",
                 label=labels["n"],
@@ -1007,6 +1036,27 @@ def _hires_params(catalog: Catalog) -> list[ParamDef]:
                 description=t("sdwebui.params.hrCfgDescription"),
             )
         )
+    # 2回目のプロンプト(空なら本体と同じ。ADR-0038 10章 2026-10-10 追記)
+    params.extend(
+        [
+            ParamDef(
+                name="hr_prompt",
+                type="text",
+                label=t("sdwebui.params.hrPrompt"),
+                max_length=sizes.PROMPT_MAX_LENGTH,
+                default="",
+                description=t("sdwebui.params.hrPromptDescription"),
+            ),
+            ParamDef(
+                name="hr_negative_prompt",
+                type="text",
+                label=t("sdwebui.params.hrNegativePrompt"),
+                max_length=sizes.PROMPT_MAX_LENGTH,
+                default="",
+                description=t("sdwebui.params.hrNegativePromptDescription"),
+            ),
+        ]
+    )
     return params
 
 

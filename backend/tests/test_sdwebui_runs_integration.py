@@ -102,6 +102,7 @@ def test_vae_is_sent_per_flavor(
     assert detail["status"] == "succeeded", detail
     assert fake.txt2img_bodies[0]["override_settings"] == {
         "sd_model_checkpoint": "model-a",
+        "CLIP_stop_at_last_layers": 1,
         **expected,
     }
 
@@ -144,7 +145,7 @@ def test_unknown_checkpoint_is_422(client: TestClient, monkeypatch: pytest.Monke
         {"sdwebui_request": {"prompt": "x"}},
         {"sdwebui_task_id": "gakei-x"},
         {"size": "auto"},
-        {"size": "1020x1024"},  # 8 の倍数でない
+        {"size": "2048x256"},  # 縦横比が 4:1 を超える
         {"size": "2056x1024"},  # 長辺 2048 を超える
         {"n": 9},
         {"steps": 0},
@@ -168,6 +169,46 @@ def test_small_sizes_are_allowed(client: TestClient, monkeypatch: pytest.MonkeyP
     _connect(client, monkeypatch, FakeSdWebui())
     response = _post_run(client, size="512x512")
     assert response.status_code == 202, response.text
+
+
+@pytest.mark.parametrize(("size", "expected"), [("803x601", (800, 600)), ("800x600", (800, 600))])
+def test_sizes_not_multiple_of_8_are_sent_as_is(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, size: str, expected: tuple[int, int]
+) -> None:
+    """8 の倍数でないサイズもそのまま送る(ADR-0038 2章 2026-10-10 改訂)。WebUI は 8 の倍数に
+    切り捨てて描き、Asset は返った画像の寸法になる。Run には送った値が残る。"""
+    fake = FakeSdWebui()
+    fake.honor_size = True
+    _connect(client, monkeypatch, fake)
+    response = _post_run(client, size=size)
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client, response.json()["id"])
+    assert detail["status"] == "succeeded", detail
+    width, height = (int(v) for v in size.split("x"))
+    assert detail["params"]["size"] == size
+    request = detail["params"]["sdwebui_request"]
+    assert (request["width"], request["height"]) == (width, height)
+    assert f"Size: {size}" in detail["usage"]["infotext"]
+    with client.app.state.session_factory() as db:
+        sizes = db.execute(
+            select(Asset.width, Asset.height).where(Asset.produced_by_run_id.isnot(None))
+        ).all()
+    assert [tuple(s) for s in sizes] == [expected]
+
+
+def test_clip_skip_is_sent_every_time(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeSdWebui()
+    _connect(client, monkeypatch, fake)
+    response = _post_run(client, clip_skip=2)
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client, response.json()["id"])
+    assert detail["status"] == "succeeded", detail
+    assert fake.txt2img_bodies[-1]["override_settings"]["CLIP_stop_at_last_layers"] == 2
+    assert fake.txt2img_bodies[-1]["override_settings_restore_afterwards"] is True
+    # 範囲外は Run を作らずに 422
+    for value in (0, 13):
+        assert _post_run(client, clip_skip=value).status_code == 422
+    assert len(fake.txt2img_bodies) == 1
 
 
 def test_unavailable_is_409(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -186,6 +186,8 @@
       "vae": "VAE",
       "vaeBuiltin": "Built into the checkpoint",
       "vaeDescription": "Choose a VAE that matches the checkpoint type (SD1.5, SDXL, etc.). It is used for this run only; the WebUI settings are not changed.",
+      "clipSkip": "Clip skip",
+      "clipSkipDescription": "How many of the last text encoder layers to skip. 1 skips none (usual). Some anime-style models recommend 2. It is used for this run only; the WebUI settings are not changed.",
       "count": "Count",
       "countDescription": "Number of images per run (batch_size).",
       "dynamicPrompts": "Dynamic Prompts",
@@ -223,7 +225,11 @@
       "hrDenoisingStrength": "Denoising strength",
       "hrDenoisingStrengthDescription": "How much to redraw after upscaling. Near 0 is close to a plain upscale; near 1 changes more.",
       "hrCfg": "Hires CFG Scale",
-      "hrCfgDescription": "CFG scale for the redraw after upscaling. If not set, the main CFG scale is sent."
+      "hrCfgDescription": "CFG scale for the redraw after upscaling. If not set, the main CFG scale is sent.",
+      "hrPrompt": "Hires prompt",
+      "hrPromptDescription": "Prompt used only for the redraw after upscaling. If empty, the main prompt is used.",
+      "hrNegativePrompt": "Hires negative prompt",
+      "hrNegativePromptDescription": "Negative prompt used only for the redraw after upscaling. If empty, the main negative prompt is used."
     },
     "importParams": {
       "inputMissing": "Specify an image file or an image in your stock (asset_id).",
