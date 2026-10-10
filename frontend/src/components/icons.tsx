@@ -60,6 +60,17 @@ export function LineageIcon(props: IconProps) {
   )
 }
 
+/** 丸に「i」: Generated(Run)の詳細を開く。 */
+export function RunDetailIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 7.25v4" />
+      <path d="M8 4.75v.01" strokeWidth="2" />
+    </Icon>
+  )
+}
+
 /** 鎖の輪: 共有リンク。 */
 export function ShareLinkIcon(props: IconProps) {
   return (

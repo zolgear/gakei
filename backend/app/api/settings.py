@@ -70,6 +70,7 @@ from app.domain.schemas import (
     OpenAIBaseUrlUpdateRequest,
     OpenAIKeyStatusResponse,
     OpenAIKeyUpdateRequest,
+    SdWebuiTimeoutSetting,
     ShareSettingsResponse,
     ShareSettingsUpdateRequest,
 )
@@ -268,12 +269,15 @@ def delete_openai_base_url(
 
 
 # -- 全般設定(ADR-0009、ADR-0013 7章) ------------------------------------------
-# moderation(Generate 専用)と ComfyUI のタイムアウトを画面から変える。
+# moderation(Generate 専用)と ComfyUI・SD WebUI のタイムアウトを画面から変える。
 
 
 def _general_settings_response(db: Session, settings: Settings) -> GeneralSettingsResponse:
     moderation_value, moderation_source = general_settings.resolve_moderation(db, settings)
     timeout_value, timeout_source = general_settings.resolve_timeout_seconds(db, settings)
+    sdwebui_timeout_value, sdwebui_timeout_source = (
+        general_settings.resolve_sdwebui_timeout_seconds(db, settings)
+    )
     return GeneralSettingsResponse(
         moderation=ModerationSetting(
             value=moderation_value,
@@ -284,6 +288,11 @@ def _general_settings_response(db: Session, settings: Settings) -> GeneralSettin
             value=timeout_value,
             source=timeout_source,
             default=general_settings.default_timeout_seconds(settings),
+        ),
+        sdwebui_timeout_seconds=SdWebuiTimeoutSetting(
+            value=sdwebui_timeout_value,
+            source=sdwebui_timeout_source,
+            default=general_settings.default_sdwebui_timeout_seconds(settings),
         ),
     )
 
@@ -312,6 +321,8 @@ def update_general_settings(
             general_settings.validate_moderation(body.moderation)
         if "comfyui_timeout_seconds" in fields_set:
             general_settings.validate_timeout_seconds(body.comfyui_timeout_seconds)
+        if "sdwebui_timeout_seconds" in fields_set:
+            general_settings.validate_sdwebui_timeout_seconds(body.sdwebui_timeout_seconds)
     except general_settings.GeneralSettingsValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -319,6 +330,8 @@ def update_general_settings(
         general_settings.save_moderation(db, body.moderation)
     if "comfyui_timeout_seconds" in fields_set:
         general_settings.save_timeout_seconds(db, body.comfyui_timeout_seconds)
+    if "sdwebui_timeout_seconds" in fields_set:
+        general_settings.save_sdwebui_timeout_seconds(db, body.sdwebui_timeout_seconds)
     return _general_settings_response(db, settings)
 
 

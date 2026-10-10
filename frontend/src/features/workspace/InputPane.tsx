@@ -49,6 +49,11 @@ import { ModelSelect } from './ModelSelect'
 import { OtherParamsDetails, PrimaryParamFields } from './ParamFields'
 import { AssetGroupField } from '../run-form/AssetGroupField'
 import { PromptToolsRow } from './PromptToolsRow'
+import { LoraPickerButton } from '../sdwebui/LoraPickerButton'
+import { ImportParamsButton } from '../sdwebui/ImportParamsButton'
+import { ImportNoticePanel } from '../sdwebui/ImportNoticePanel'
+import { isSdWebuiEnabled } from '../sdwebui/importParams'
+import { FormParameterSetButtons } from '../parameter-sets/FormParameterSetButtons'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
 import { InputPaneBottomLayout } from './InputPaneBottomLayout'
@@ -57,9 +62,17 @@ import type { StudioLayout } from './studioLayout'
 import { isSubmitShortcut } from './submitShortcut'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { paramToSizeState, sizeToParam } from '../run-form/sizeValidation'
+import { usePromptEditMode } from '../prompt-tags/usePromptEditMode'
+import { PromptTagEditor } from '../prompt-tags/PromptTagEditor'
+import { PromptEditModeToggle } from '../prompt-tags/PromptEditModeToggle'
+import { PromptEditScopeContext } from '../prompt-tags/PromptEditScope'
+import { shouldEscapeParens } from '../prompt-tags/promptTags'
+import { shouldAssistTextPrompt, useTagCompletionMode } from '../tag-dictionary/tagCompletionPrefs'
+import { useTextTagAssist } from '../tag-dictionary/useTextTagAssist'
 import styles from './InputPane.module.css'
 
 const MENTION_POPOVER_ID = 'prompt-mention-popover'
+const TAG_ASSIST_POPOVER_ID = 'prompt-tag-assist-popover'
 /** ↑↓ Enter Tab Esc のうち、メンション候補の操作として奪うキー(Ctrl/Cmd+Enter の送信は除く)。 */
 const MENTION_NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'])
 // caret 行の上に開くため上方向の空きに余裕ができることが多く、1件2行だった頃の 8 件より
@@ -67,7 +80,8 @@ const MENTION_NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escap
 const MENTION_CANDIDATE_LIMIT = 20
 
 interface InputPaneProps {
-  onRunCreated: (runId: string) => void
+  /** 作った Run の id(積んだ順。繰り返し回数が 1 なら1件。ADR-0042)。 */
+  onRunCreated: (runIds: string[]) => void
   /**
    * `form.insertPrompt` をスタジオの `ResultPane`(系列インスペクター)へ渡すための窓口。
    * `StudioWorkspace` がこれを受け取り、そのまま `ResultPane` へ渡す(兄弟コンポーネント間の
@@ -105,6 +119,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     // (モバイルでは自動フォーカスでキーボードが出てしまうので行わない)。
     if (!isMobileViewport()) promptTextareaRef.current?.focus()
   })
+  // プロンプト欄の「テキスト / タグ」(ADR-0039 2章)。(プロバイダー, モデル)ごとに覚える。
+  const [promptEditMode, setPromptEditMode] = usePromptEditMode(form.provider, form.model, 'prompt')
   const editLogic = useEditInputsLogic(
     form.inputs,
     form.setInputs,
@@ -125,6 +141,21 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     ? filterPromptSetItems(promptSetsQuery.data?.items ?? [], mention.query, MENTION_CANDIDATE_LIMIT)
     : []
   const mentionPlacement = useMentionPlacement(promptTextareaRef, mention?.start ?? null, mentionCandidates.length)
+
+  // テキストモードのタグの入力アシスト(ADR-0041 3章)。`@` の呼び出しが開いている間は使わない。
+  const tagCompletionMode = useTagCompletionMode()
+  const tagAssist = useTextTagAssist({
+    textareaRef: promptTextareaRef,
+    value: form.prompt,
+    onChange: (next) => {
+      setSubmittedNotice(null)
+      form.setPrompt(next)
+    },
+    enabled: promptEditMode === 'text' && shouldAssistTextPrompt(tagCompletionMode, form.provider),
+    loraEnabled: form.provider === 'sdwebui',
+    escapeParens: shouldEscapeParens(form.provider),
+    popoverId: TAG_ASSIST_POPOVER_ID,
+  })
 
   // 「新規生成」(resetAt の変化)でフォーム全体(prompt・model・パラメーター)を初期値に戻し、
   // 案内も空にする。マウント時の値では動かさない(location.state は履歴に残るので、
@@ -147,7 +178,11 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   }, [mention])
 
   function updateMentionFromCursor(el: HTMLTextAreaElement) {
-    setMention(findMentionAtCursor(el.value, el.selectionStart))
+    const found = findMentionAtCursor(el.value, el.selectionStart)
+    setMention(found)
+    // `@` の呼び出しが優先。開いていなければタグの入力アシストを見る。
+    if (found) tagAssist.close()
+    else tagAssist.refresh(el)
   }
 
   function confirmMention(candidate: MentionCandidate) {
@@ -168,7 +203,11 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   }
 
   function handlePromptKeyDown(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    if (!mention || isSubmitShortcut(e)) return
+    if (!mention) {
+      tagAssist.handleKeyDown(e)
+      return
+    }
+    if (isSubmitShortcut(e)) return
     if (!MENTION_NAV_KEYS.has(e.key)) return
     if (mentionCandidates.length === 0) {
       if (e.key === 'Escape') {
@@ -250,13 +289,13 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   }
 
   const caps = form.caps
-  const { primary, other } = groupParamsForProvider(form.provider, form.defs)
+  const { primary, other, aboveSize } = groupParamsForProvider(form.provider, form.defs)
   const selectedModel = form.providerEntry?.models.find((m) => m.model === form.model)
 
   // 参考価格(PriceEstimate)に渡す値。API の契約に合わせ、未指定はそれぞれ既定値にする。
-  const qualityRaw = form.rawParams.quality
+  const qualityRaw = form.activeRawParams.quality
   const priceQuality = qualityRaw && qualityRaw !== UNSPECIFIED ? qualityRaw : 'auto'
-  const nRaw = form.rawParams.n
+  const nRaw = form.activeRawParams.n
   const priceN = nRaw && nRaw !== UNSPECIFIED && nRaw !== '' ? Number(nRaw) : 1
   const priceSize = sizeToParam(form.sizeState) ?? 'auto'
 
@@ -320,50 +359,70 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       <label htmlFor="prompt" className={styles.srOnly}>
         {ip.promptLabel}
       </label>
-      <div className={styles.textareaWrap}>
-        <textarea
-          id="prompt"
-          ref={promptTextareaRef}
-          className={styles.promptTextarea}
-          value={form.prompt}
-          maxLength={form.promptMax}
-          role="combobox"
-          aria-expanded={mention !== null}
-          aria-controls={mention !== null ? MENTION_POPOVER_ID : undefined}
-          aria-activedescendant={
-            mention !== null && mentionCandidates.length > 0
-              ? `${MENTION_POPOVER_ID}-option-${mentionActiveIndex}`
-              : undefined
-          }
-          onChange={(e) => {
-            setSubmittedNotice(null)
-            form.setPrompt(e.target.value)
-            updateMentionFromCursor(e.target)
-          }}
-          onKeyDown={handlePromptKeyDown}
-          onKeyUp={(e) => {
-            if (mention && MENTION_NAV_KEYS.has(e.key)) return
-            if (suppressMentionRescanRef.current) {
-              suppressMentionRescanRef.current = false
-              return
-            }
-            updateMentionFromCursor(e.currentTarget)
-          }}
-          onClick={(e) => updateMentionFromCursor(e.currentTarget)}
-          onPaste={editLogic.handlePaste}
-          placeholder={ip.promptPlaceholder}
-        />
-        {mention !== null && (
-          <MentionPopover
-            id={MENTION_POPOVER_ID}
-            candidates={mentionCandidates}
-            activeIndex={mentionActiveIndex}
-            placement={mentionPlacement}
-            onSelect={confirmMention}
-            onHoverIndex={setMentionActiveIndex}
+      {promptEditMode === 'tags' ? (
+        <div className={styles.textareaWrap}>
+          <PromptTagEditor
+            id="prompt"
+            className={styles.promptTagEditor}
+            value={form.prompt}
+            onChange={(next) => {
+              setSubmittedNotice(null)
+              form.setPrompt(next)
+            }}
+            escapeParens={shouldEscapeParens(form.provider)}
+            fieldLabel={ip.promptLabel}
           />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className={styles.textareaWrap}>
+          <textarea
+            id="prompt"
+            ref={promptTextareaRef}
+            className={styles.promptTextarea}
+            value={form.prompt}
+            maxLength={form.promptMax}
+            role="combobox"
+            aria-expanded={mention !== null || tagAssist.open}
+            aria-controls={mention !== null ? MENTION_POPOVER_ID : tagAssist.open ? TAG_ASSIST_POPOVER_ID : undefined}
+            aria-activedescendant={
+              mention !== null
+                ? mentionCandidates.length > 0
+                  ? `${MENTION_POPOVER_ID}-option-${mentionActiveIndex}`
+                  : undefined
+                : tagAssist.activeDescendant
+            }
+            {...tagAssist.textareaProps}
+            onChange={(e) => {
+              setSubmittedNotice(null)
+              form.setPrompt(e.target.value)
+              updateMentionFromCursor(e.target)
+            }}
+            onKeyDown={handlePromptKeyDown}
+            onKeyUp={(e) => {
+              if ((mention || tagAssist.open) && MENTION_NAV_KEYS.has(e.key)) return
+              if (suppressMentionRescanRef.current) {
+                suppressMentionRescanRef.current = false
+                return
+              }
+              updateMentionFromCursor(e.currentTarget)
+            }}
+            onClick={(e) => updateMentionFromCursor(e.currentTarget)}
+            onPaste={editLogic.handlePaste}
+            placeholder={ip.promptPlaceholder}
+          />
+          {mention === null && tagAssist.popover}
+          {mention !== null && (
+            <MentionPopover
+              id={MENTION_POPOVER_ID}
+              candidates={mentionCandidates}
+              activeIndex={mentionActiveIndex}
+              placement={mentionPlacement}
+              onSelect={confirmMention}
+              onHoverIndex={setMentionActiveIndex}
+            />
+          )}
+        </div>
+      )}
     </>
   )
 
@@ -387,6 +446,46 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       promptText={form.prompt}
       promptLength={form.promptLength}
       promptMax={form.promptMax}
+      editModeToggle={
+        <PromptEditModeToggle
+          mode={promptEditMode}
+          onChange={(mode) => {
+            setMention(null)
+            tagAssist.close()
+            setPromptEditMode(mode)
+          }}
+          fieldLabel={ip.promptLabel}
+        />
+      }
+      providerTools={
+        <>
+          {form.provider === 'sdwebui' && (
+            <LoraPickerButton
+              prompt={form.prompt}
+              escapeParens={shouldEscapeParens(form.provider)}
+              onInsert={(text, mode, cursorPos) => {
+                setSubmittedNotice(null)
+                form.insertPrompt(text, mode, cursorPos)
+              }}
+            />
+          )}
+          {/* 画像の生成情報から読み込む(ADR-0038 9章)。SD WebUI が有効なら、どのプロバイダーを
+              選んでいても出す(読み込むと SD WebUI に切り替わる)。 */}
+          {isSdWebuiEnabled(caps) && <ImportParamsButton currentPrompt={form.prompt} />}
+          {/* パラメーターセットの保存と読み込み(ADR-0040)。プロバイダーに依らず出す。 */}
+          <FormParameterSetButtons
+            provider={form.provider}
+            model={form.model}
+            prompt={form.prompt}
+            defs={form.defs}
+            rawParams={form.rawParams}
+            conditionalParams={form.conditionalParams}
+            sizeState={form.sizeState}
+            hasSize={Boolean(form.providerEntry?.size)}
+            hasMask={form.hasMask}
+          />
+        </>
+      }
     />
   )
 
@@ -402,6 +501,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         promptLength: form.promptLength,
         inputAssetIds,
       }}
+      repeat={form.repeat}
       canSubmit={form.canSubmit}
       isSubmitting={form.isSubmitting}
       onSubmit={() => form.submit()}
@@ -436,8 +536,16 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       defs={form.defs}
       rawParams={form.rawParams}
       conditionalParams={form.conditionalParams}
+      hasMask={form.hasMask}
       onParamChange={form.handleParamChange}
       primary={primary}
+      aboveSize={aboveSize}
+      repeatRaw={form.repeatRaw}
+      repeat={form.repeat}
+      onRepeatChange={(raw) => {
+        setSubmittedNotice(null)
+        form.setRepeatRaw(raw)
+      }}
     />
   )
 
@@ -456,6 +564,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       defs={form.defs}
       rawParams={form.rawParams}
       conditionalParams={form.conditionalParams}
+      hasMask={form.hasMask}
       onParamChange={form.handleParamChange}
     />
   )
@@ -470,6 +579,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     paramFields,
     groupField,
     otherParams,
+    importNotice: form.importNotice ? (
+      <ImportNoticePanel notice={form.importNotice} onDismiss={form.dismissImportNotice} />
+    ) : null,
   }
 
   return (
@@ -480,7 +592,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       onDrop={handlePaneDrop}
       onDragOver={handlePaneDragOver}
     >
-      {layout === 'sidebar' ? <InputPaneSidebarLayout {...slots} /> : <InputPaneBottomLayout {...slots} />}
+      <PromptEditScopeContext.Provider value={{ provider: form.provider, model: form.model }}>
+        {layout === 'sidebar' ? <InputPaneSidebarLayout {...slots} /> : <InputPaneBottomLayout {...slots} />}
+      </PromptEditScopeContext.Provider>
 
       <AddInputImagesDialog
         open={addDialogOpen}

@@ -1477,7 +1477,9 @@ _UNAVAILABLE_MESSAGES = {
     "size_auto": "size is 'auto' (or not set); set params.size (e.g. '1024x1024').",
     "size_invalid": "params.size is not a valid size for this model.",
     "unknown_model": "No price table for this model.",
-    "provider_not_supported": "This provider has no reference prices (e.g. a local ComfyUI).",
+    "provider_not_supported": (
+        "This provider has no reference prices (e.g. a local ComfyUI or SD WebUI)."
+    ),
 }
 
 

@@ -16,8 +16,11 @@ import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { describeError } from '../run-status/errorMessages'
 import { SaveToPromptSetButton } from '../prompt-sets/SaveToPromptSetButton'
+import { SaveParameterSetButton } from '../parameter-sets/SaveParameterSetButton'
+import { suggestSetNameFromPrompt } from '../prompt-sets/promptSetNaming'
+import { allOperationDefs, buildRunSavePayload, runHasSeed } from '../parameter-sets/parameterSets'
 import { buildParamLabelMap } from '../run-form/paramLabels'
-import { omitComfyUiParams, paramsForRerun } from '../run-form/paramsBuilder'
+import { omitServerOnlyParams, paramsForRerun } from '../run-form/paramsBuilder'
 import { inputsFromRunInputs } from '../run-form/editInputs'
 import {
   comfyuiPromptDownloadFilename,
@@ -28,6 +31,14 @@ import {
   extractComfyUiWorkflowInfo,
   shortSha256,
 } from './comfyuiPromptDisplay'
+import {
+  extractSdWebuiInfotext,
+  extractSdWebuiRequest,
+  extractSdWebuiSeed,
+  sdwebuiRequestDownloadFilename,
+  usageWithoutInfotext,
+} from './sdwebuiRunDisplay'
+import { runSeedDisplay } from './runSeedDisplay'
 import { formatDateTime, formatDuration, statusLabel } from '../../lib/format'
 import { formatUsd } from '../workspace/priceEstimateText'
 import { buildStudioPath } from '../workspace/assetQueryParam'
@@ -36,7 +47,7 @@ import { fmt, useI18n } from '../../i18n'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { FinalPromptSection } from './FinalPromptSection'
 import { ImportedRunSection } from '../lineage-transfer/ImportedRunSection'
-import { findFinalPrompt } from './finalPrompt'
+import { baselineNegativePrompt, selectFinalPromptEntries } from './finalPrompt'
 import styles from './RunDetailContent.module.css'
 
 export interface RunDetailContentProps {
@@ -57,7 +68,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
   // スタジオにいる間(結果エリアやインスペクターに埋め込まれている間)は、入出力の
   // サムネイルもページを離れず結果エリアに表示する(nodeTargetPath.ts)。
   const location = useLocation()
-  const { setFormState } = useRunFormContext()
+  const { setFormState, requestFormLoad } = useRunFormContext()
   const { setOriginAssetId } = useLineageOrigin()
 
   const query = useQuery({
@@ -106,14 +117,25 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
   const inputs = run.inputs ?? []
   const outputs = run.outputs ?? []
   const rawParams = (run.params ?? {}) as Record<string, unknown>
-  // comfyui_* (ADR-0013) は通常のパラメータ一覧・生JSONブロックには出さず、下の専用の
-  // 表示(ワークフロー名 + sha・折りたたみJSON)にまとめる。
-  const params = omitComfyUiParams(rawParams) as Record<string, string | number | boolean>
+  // comfyui_* (ADR-0013) と sdwebui_* (ADR-0038) は通常のパラメータ一覧・生JSONブロックには出さず、
+  // 下の専用の表示(ワークフロー名 + sha・seed・折りたたみJSON)にまとめる。
+  const params = omitServerOnlyParams(rawParams) as Record<string, string | number | boolean>
   const paramLabels = buildParamLabelMap(capsQuery.data, run.model)
   const comfyuiWorkflow = extractComfyUiWorkflowInfo(rawParams)
   const comfyuiPrompt = extractComfyUiPrompt(rawParams)
   const comfyuiSeed = extractComfyUiSeed(rawParams)
-  const finalPrompt = findFinalPrompt(run.text_outputs)
+  const sdwebuiRequest = extractSdWebuiRequest(rawParams)
+  // SD WebUI の seed は1枚ごとに違うので、usage.all_seeds も見て1行にする(runSeedDisplay.ts)。
+  const sdwebuiSeed = extractSdWebuiSeed(rawParams) !== null ? runSeedDisplay(run) : null
+  const usage = (run.usage ?? null) as Record<string, unknown> | null
+  const sdwebuiInfotext = extractSdWebuiInfotext(usage)
+  // 最終プロンプト(ADR-0030)と、Run のプロンプトと違う出力ごとの展開後のプロンプト(ADR-0038 7章)。
+  const finalPromptProps = {
+    textOutputs: run.text_outputs,
+    prompt: run.prompt,
+    negativePrompt: baselineNegativePrompt(rawParams),
+  }
+  const hasFinalPrompt = selectFinalPromptEntries(finalPromptProps).length > 0
 
   const thumbAssetDetails = new Map<string, AssetDetail>()
   thumbAssetIds.forEach((assetId, index) => {
@@ -132,10 +154,22 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
     URL.revokeObjectURL(url)
   }
 
+  function handleDownloadSdwebuiRequest() {
+    if (!sdwebuiRequest) return
+    const blob = new Blob([JSON.stringify(sdwebuiRequest, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = sdwebuiRequestDownloadFilename(run.id)
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   function handleRerun() {
-    // サーバーは comfyui_* をクライアントからの入力として受け付けない(422)ので、
-    // 「同じ設定で新規作成」ではフォームへ戻す前に取り除く(seed 等の公開パラメーターは残る)。
-    setFormState({
+    // サーバーは comfyui_* / sdwebui_* をクライアントからの入力として受け付けない(422)ので、
+    // 「同じ設定で新規作成」ではフォームへ戻す前に取り除く(seed 等の公開パラメーターは残り、
+    // 実際に使った seed があれば seed に戻す)。
+    const state = {
       provider: run.provider,
       model: run.model,
       prompt: run.prompt,
@@ -143,7 +177,12 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
       inputs: inputsFromRunInputs(inputs),
       // 削除済みのグループなら null(=「なし」)で返ってくる。
       assetGroupId: run.asset_group?.id ?? null,
-    })
+    }
+    // context へ書くのは入力画像と、スタジオがまだマウントされていないときの初期値のため。
+    // スタジオのフォームは context をマウント時にしか読まないので、結果エリアの Run 詳細
+    // (フォームはマウントされたまま)からでも入るよう、読み込みのリクエストにも積む。
+    setFormState(state)
+    requestFormLoad({ kind: 'run', state })
     navigate('/studio')
   }
 
@@ -164,6 +203,23 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
         <button type="button" className={styles.rerunButton} onClick={handleRerun}>
           {t.runDetail.rerun}
         </button>
+        {/* パラメーターセットに保存(ADR-0040 3章)。サーバーだけが書く項目は除き、seed は「含める」の
+            選択に従って実際に使った seed から戻す。プロンプトは Run のもの(Dynamic Prompts はテンプレート)。 */}
+        <SaveParameterSetButton
+          label={t.parameterSets.save.runButton}
+          title={t.parameterSets.save.runButtonTitle}
+          triggerClassName={styles.paramSetButton}
+          buildPayload={(include) =>
+            buildRunSavePayload(
+              { provider: run.provider, model: run.model, prompt: run.prompt, params: rawParams },
+              include,
+              allOperationDefs(capsQuery.data, run.provider, run.model),
+            )
+          }
+          seedAvailable={runHasSeed(rawParams)}
+          seedUnavailableMessage={t.parameterSets.save.seedUnavailableRun}
+          defaultName={suggestSetNameFromPrompt(run.prompt)}
+        />
         {(run.status === 'queued' || run.status === 'running') && (
           <Link to={buildStudioPath(null, null, run.id)} className={styles.lineageLink}>
             {t.runDetail.watchProgress}
@@ -195,10 +251,10 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
 
       {/* 最終プロンプト(ADR-0030 3章)。スタジオ内では呼び出し側の挿入・置き換え(promptActions)を
           そのまま使い、スタジオの外ではリクエストを積んでスタジオへ移る(StudioPromptActions)。 */}
-      {finalPrompt && (
+      {hasFinalPrompt && (
         <section className={styles.section}>
           <FinalPromptSection
-            textOutputs={run.text_outputs}
+            {...finalPromptProps}
             headingLevel="h2"
             headingClassName={styles.heading}
             renderActions={(text) => (promptActions ? promptActions(text) : <StudioPromptActions prompt={text} />)}
@@ -257,6 +313,11 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
             {comfyuiSeed !== null && ` / ${describeComfyUiSeed(comfyuiSeed, outputs.length)}`}
           </p>
         )}
+        {sdwebuiSeed && (
+          <p className={styles.comfyuiInfo} title={sdwebuiSeed.tooltip}>
+            {sdwebuiSeed.text}
+          </p>
+        )}
         {Object.keys(params).length > 0 && (
           <ul className={styles.paramsAnnotated}>
             {Object.entries(params).map(([key, value]) => (
@@ -287,6 +348,26 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
               </button>
             </summary>
             <pre className={styles.paramsBlock}>{JSON.stringify(comfyuiPrompt, null, 2)}</pre>
+          </details>
+        )}
+        {sdwebuiRequest && (
+          <details className={styles.comfyuiDetails}>
+            <summary>
+              {t.runDetail.sdwebuiRequestSummary}
+              <button
+                type="button"
+                className={styles.comfyuiDownloadLink}
+                onClick={(e) => {
+                  // <summary> の既定動作(開閉のトグル)を親に持たせない。
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleDownloadSdwebuiRequest()
+                }}
+              >
+                {t.runDetail.downloadJson}
+              </button>
+            </summary>
+            <pre className={styles.paramsBlock}>{JSON.stringify(sdwebuiRequest, null, 2)}</pre>
           </details>
         )}
       </section>
@@ -340,7 +421,15 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
             {run.cost_usd !== null && run.cost_usd !== undefined && (
               <p className={styles.costLine}>{fmt(t.runDetail.estimatedCost, { amount: formatUsd(run.cost_usd) })}</p>
             )}
-            <pre className={styles.paramsBlock}>{JSON.stringify(run.usage, null, 2)}</pre>
+            {sdwebuiInfotext && (
+              <details className={styles.comfyuiDetails}>
+                <summary>{t.runDetail.sdwebuiInfotextSummary}</summary>
+                <pre className={styles.infotextBlock}>{sdwebuiInfotext}</pre>
+              </details>
+            )}
+            <pre className={styles.paramsBlock}>
+              {JSON.stringify(usage && sdwebuiInfotext ? usageWithoutInfotext(usage) : run.usage, null, 2)}
+            </pre>
           </>
         )}
       </section>

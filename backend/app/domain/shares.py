@@ -316,6 +316,13 @@ _UUID_RE = re.compile(
 _SHA256_RE = re.compile(r"[0-9a-fA-F]{64}")
 
 
+# 内部の記録で、共有のページの公開パラメーターには出さないもの(ADR-0038 3章)。
+# sdwebui_request: WebUI に送った本文そのもの(入れ子なので上の規則でも出ないが、明示する)。
+# sdwebui_task_id: 進捗の問い合わせに使う ID。利用者には意味が無い。
+# sdwebui_seed は実際に使った seed なので出す。
+_INTERNAL_PARAM_KEYS = {"sdwebui_request", "sdwebui_task_id"}
+
+
 def _public_scalar(value: Any) -> bool:
     if value is None or isinstance(value, bool | int | float):
         return True
@@ -334,8 +341,9 @@ def public_params(params: dict[str, Any] | None, provider: str | None = None) ->
       各ノードの入力と公開パラメーターのうち、秘密に見える値は `***` に置き換える(キーは
       残す。元の `params` は変えない。2026-10-01 追記)。
     - ほかのプロバイダーの Run は、値が文字列・数値・真偽値・null のものだけ(入れ子の値は
-      出さない)。値に UUID や sha256 の形の文字列を含むものは出さない(範囲外の Asset・Run を
-      指しうるため)。
+      出さない。SD WebUI の `sdwebui_request` と `sdwebui_task_id` も出さない。ADR-0038)。
+      値に UUID や sha256 の形の文字列を含むものは出さない(範囲外の Asset・Run を指しうる
+      ため)。
     """
     if not isinstance(params, dict):
         return {}
@@ -346,6 +354,8 @@ def public_params(params: dict[str, Any] | None, provider: str | None = None) ->
     result: dict[str, Any] = {}
     for key, value in params.items():
         if not isinstance(key, str) or key.startswith("comfyui_"):
+            continue
+        if key in _INTERNAL_PARAM_KEYS:
             continue
         if _public_scalar(value):
             result[key] = value

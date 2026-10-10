@@ -1,10 +1,11 @@
 /**
- * capabilities の ParamDef 1つ分のフォーム部品。enum は select、int は数値入力、bool は select。
+ * capabilities の ParamDef 1つ分のフォーム部品。enum は select、int は数値入力、bool はスイッチ。
  * スタジオの設定グリッド(ADR-0009 1章・2026-09-22 承認分)向けにコンパクト化:
  * 見出しは `label`(日本語、等幅・薄い色)だけを表示し、API のパラメーター名は
  * ラベルの `title`(ツールチップ)に、説明文(`description`)は入力欄自体の `title` に移す
  * (画面上に説明文の行は置かない)。
  */
+import { useRef } from 'react'
 import type { ParamDef } from '../../api/client'
 import { useI18n } from '../../i18n'
 import {
@@ -15,13 +16,25 @@ import {
 } from './emptySpin'
 import { UNSPECIFIED } from './paramsBuilder'
 import { SeedField } from './SeedField'
+import { boolDisplayValue } from './boolSwitch'
 import { unspecifiedOptionLabel, unspecifiedPlaceholder } from './unspecifiedLabel'
+import { PromptEditModeToggle } from '../prompt-tags/PromptEditModeToggle'
+import { PromptTagEditor } from '../prompt-tags/PromptTagEditor'
+import { isPromptLikeParam, usePromptEditScope, type PromptEditScopeValue } from '../prompt-tags/PromptEditScope'
+import { shouldEscapeParens } from '../prompt-tags/promptTags'
+import { usePromptEditMode } from '../prompt-tags/usePromptEditMode'
+import { shouldAssistTextPrompt, useTagCompletionMode } from '../tag-dictionary/tagCompletionPrefs'
+import { useTextTagAssist } from '../tag-dictionary/useTextTagAssist'
 import styles from './ParamField.module.css'
 
 interface ParamFieldProps {
   def: ParamDef
   value: string
   enabled: boolean
+  /** 無効のときに「使用不可」のかわりに出す説明(例: 組み合わせ生成のときの枚数)。 */
+  disabledNote?: string | null
+  /** 有効のときに欄の下に出す補足(例: 高解像度補助の拡大後の寸法)。`warning` は目立たせる。 */
+  hint?: { text: string; warning?: boolean } | null
   onChange: (name: string, value: string) => void
 }
 
@@ -87,15 +100,157 @@ function NumberParamInput({ def, id, value, enabled, title, onChange }: NumberPa
   )
 }
 
-export function ParamField({ def, value, enabled, onChange }: ParamFieldProps) {
+interface BoolSwitchProps {
+  def: ParamDef
+  id: string
+  value: string
+  enabled: boolean
+  title: string | undefined
+  onChange: (name: string, value: string) => void
+}
+
+/**
+ * bool の項目のスイッチ(オン/オフ)。未指定のあいだは、指定しなかったときに使われる状態
+ * (`boolDisplayValue`)を出し、触ったら明示の値('true' / 'false')にする。見出しの `<label>` と
+ * `id` で結び付ける(ラベルを押しても切り替わる)。Space / Enter はボタンの既定の動きで切り替わる。
+ */
+function BoolSwitch({ def, id, value, enabled, title, onChange }: BoolSwitchProps) {
+  const { t } = useI18n()
+  const pf = t.runForm.paramField
+  const checked = boolDisplayValue(def, value)
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      className={styles.switch}
+      disabled={!enabled}
+      title={title}
+      onClick={() => onChange(def.name, checked ? 'false' : 'true')}
+    >
+      <span className={styles.switchTrack} aria-hidden="true">
+        <span className={styles.switchThumb} />
+      </span>
+      <span className={styles.switchText} aria-hidden="true">
+        {checked ? pf.boolOn : pf.boolOff}
+      </span>
+    </button>
+  )
+}
+
+/** 入力アシストの候補の操作として奪うキー(離したときに語を探し直さない)。 */
+const TAG_ASSIST_NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'])
+
+interface PromptParamFieldProps extends ParamFieldProps {
+  scope: PromptEditScopeValue
+}
+
+/**
+ * プロンプトに当たる文章のパラメーター(SD WebUI の `negative_prompt` など)。プロンプト欄と同じく
+ * 「テキスト / タグ」を切り替えられる(ADR-0039 2章。モードは(プロバイダー, モデル, 欄)ごとに覚える)。
+ * テキストモードでも、プロンプト欄と同じタグの入力アシストを出す(ADR-0041 3章)。
+ */
+function PromptParamField({ def, value, enabled, disabledNote, onChange, scope }: PromptParamFieldProps) {
   const { t } = useI18n()
   const pf = t.runForm.paramField
   const id = `param-${def.name}`
   const fieldTitle = def.description || undefined
+  const [mode, setMode] = usePromptEditMode(scope.provider, scope.model, def.name)
+  const tagsMode = mode === 'tags' && enabled
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const completionMode = useTagCompletionMode()
+  const tagAssist = useTextTagAssist({
+    textareaRef,
+    value,
+    onChange: (next) => onChange(def.name, next),
+    enabled: enabled && !tagsMode && shouldAssistTextPrompt(completionMode, scope.provider),
+    loraEnabled: scope.provider === 'sdwebui',
+    escapeParens: shouldEscapeParens(scope.provider),
+    popoverId: `${id}-tag-assist`,
+  })
+
+  return (
+    <div className={styles.field} data-disabled={!enabled}>
+      <div className={styles.labelRow}>
+        <label htmlFor={id} title={def.name}>
+          {def.label}
+        </label>
+        <PromptEditModeToggle mode={mode} onChange={setMode} fieldLabel={def.label} disabled={!enabled} />
+      </div>
+      {tagsMode ? (
+        <PromptTagEditor
+          id={id}
+          className={styles.tagEditor}
+          value={value}
+          onChange={(next) => onChange(def.name, next)}
+          escapeParens={shouldEscapeParens(scope.provider)}
+          fieldLabel={def.label}
+        />
+      ) : (
+        <>
+          <textarea
+            id={id}
+            ref={textareaRef}
+            className={styles.textArea}
+            maxLength={def.max_length ?? undefined}
+            placeholder={unspecifiedPlaceholder(def)}
+            value={value}
+            disabled={!enabled}
+            title={fieldTitle}
+            role="combobox"
+            aria-expanded={tagAssist.open}
+            aria-controls={tagAssist.open ? `${id}-tag-assist` : undefined}
+            aria-activedescendant={tagAssist.activeDescendant}
+            {...tagAssist.textareaProps}
+            onChange={(e) => {
+              onChange(def.name, e.target.value)
+              tagAssist.refresh(e.target)
+            }}
+            onKeyDown={(e) => {
+              tagAssist.handleKeyDown(e)
+            }}
+            onKeyUp={(e) => {
+              if (tagAssist.open && TAG_ASSIST_NAV_KEYS.has(e.key)) return
+              tagAssist.refresh(e.currentTarget)
+            }}
+            onClick={(e) => tagAssist.refresh(e.currentTarget)}
+          />
+          {tagAssist.popover}
+        </>
+      )}
+      {!enabled && (
+        <p className={styles.disabledNote} title={disabledNote ?? pf.disabledTitle}>
+          {disabledNote ?? pf.disabledNote}
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function ParamField({ def, value, enabled, disabledNote, hint, onChange }: ParamFieldProps) {
+  const { t } = useI18n()
+  const pf = t.runForm.paramField
+  const id = `param-${def.name}`
+  const fieldTitle = def.description || undefined
+  const promptScope = usePromptEditScope()
 
   // seed はランダム/固定の切り替えと乱数ボタンを持つ専用の欄を出す(ADR-0013 フォローアップ)。
   if (def.widget === 'seed') {
     return <SeedField def={def} value={value} enabled={enabled} onChange={onChange} />
+  }
+
+  if (def.type === 'text' && promptScope && isPromptLikeParam(def.name)) {
+    return (
+      <PromptParamField
+        def={def}
+        value={value}
+        enabled={enabled}
+        disabledNote={disabledNote}
+        onChange={onChange}
+        scope={promptScope}
+      />
+    )
   }
 
   return (
@@ -146,22 +301,18 @@ export function ParamField({ def, value, enabled, onChange }: ParamFieldProps) {
       )}
 
       {def.type === 'bool' && (
-        <select
-          id={id}
-          value={value}
-          disabled={!enabled}
-          title={fieldTitle}
-          onChange={(e) => onChange(def.name, e.target.value)}
-        >
-          <option value={UNSPECIFIED}>{unspecifiedOptionLabel(def)}</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+        <BoolSwitch def={def} id={id} value={value} enabled={enabled} title={fieldTitle} onChange={onChange} />
+      )}
+
+      {enabled && hint && (
+        <p className={hint.warning ? styles.hintWarning : styles.hint} role={hint.warning ? 'alert' : undefined}>
+          {hint.text}
+        </p>
       )}
 
       {!enabled && (
-        <p className={styles.disabledNote} title={pf.disabledTitle}>
-          {pf.disabledNote}
+        <p className={styles.disabledNote} title={disabledNote ?? pf.disabledTitle}>
+          {disabledNote ?? pf.disabledNote}
         </p>
       )}
     </div>

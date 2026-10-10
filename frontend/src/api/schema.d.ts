@@ -285,6 +285,158 @@ export interface paths {
         patch: operations["update_comfy_workflow"];
         trace?: never;
     };
+    "/api/sdwebui/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Status */
+        get: operations["get_sdwebui_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/connection/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Connection
+         * @description 入力中の URL(省略時は有効な URL)への接続を試す。設定は変えない。
+         *
+         *     保存時と違い、ループバック以外でも確認チェックなしで試せる(送るのは一覧の問い合わせ
+         *     だけで、画像やプロンプトは送らないため)。
+         */
+        post: operations["test_sdwebui_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Connection
+         * @description 接続・URL の変更。再起動なしで登録簿と実行レーンに反映する。
+         *
+         *     `runner.ensure_lane` が `asyncio.create_task` を呼ぶため、async にしている
+         *     (`app/api/comfyui.py` の `set_connection` と同じ理由)。
+         */
+        put: operations["set_sdwebui_connection"];
+        post?: never;
+        /**
+         * Detach Connection
+         * @description 切り離す。過去の Run と資格情報は消さない。
+         */
+        delete: operations["detach_sdwebui"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Credentials
+         * @description Basic 認証の資格情報を `secrets.json` に保存する。値は返さない。
+         */
+        put: operations["set_sdwebui_credentials"];
+        post?: never;
+        /** Delete Credentials */
+        delete: operations["delete_sdwebui_credentials"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh
+         * @description WebUI にチェックポイントと LoRA の一覧を読み直させ、GAKEI の一覧のキャッシュを捨てる。
+         */
+        post: operations["refresh_sdwebui"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/loras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Loras
+         * @description 接続先の LoRA の一覧(ADR-0038 8章)。プロンプトに `<lora:name:重み>` を入れる補助に使う。
+         *
+         *     接続していない(切り離した・未設定)ときと、接続先から一覧を取れないときは 409。
+         *     LoRA の機能が無い接続先では空の一覧。
+         */
+        get: operations["list_sdwebui_loras"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/import-params": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Params
+         * @description 画像に埋め込まれた A1111 形式の生成情報から、SD WebUI の生成フォームの値を作る
+         *     (ADR-0038 9章)。画像は保存しない(メモリの上で生成情報だけを読む)。
+         */
+        post: operations["import_sdwebui_params"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets": {
         parameters: {
             query?: never;
@@ -722,6 +874,43 @@ export interface paths {
         patch: operations["update_prompt_set_item"];
         trace?: never;
     };
+    "/api/parameter-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Parameter Sets */
+        get: operations["list_parameter_sets"];
+        put?: never;
+        /** Create Parameter Set */
+        post: operations["create_parameter_set"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parameter-sets/{parameter_set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Parameter Set */
+        get: operations["get_parameter_set"];
+        put?: never;
+        post?: never;
+        /** Delete Parameter Set */
+        delete: operations["delete_parameter_set"];
+        options?: never;
+        head?: never;
+        /** Update Parameter Set */
+        patch: operations["update_parameter_set"];
+        trace?: never;
+    };
     "/api/search": {
         parameters: {
             query?: never;
@@ -857,6 +1046,71 @@ export interface paths {
          *     件数の多い順、同数は名前順。
          */
         get: operations["list_tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggest Prompt Tags
+         * @description 有効なタグ辞書(タグの一覧)があれば辞書で答える(ADR-0041 2章。タグ名の前方一致 → 別名の
+         *     前方一致 → 訳の前方一致 → 訳の部分一致、各段は件数の多い順)。無ければ WD Tagger の語彙と
+         *     GAKEI のタグ(英数字のもの、本人に見える Asset のタグだけ)から、前方一致を先に、次に部分一致を。
+         *     どちらも最大 20 件。訳の辞書があれば、候補に代表の訳を添える。
+         */
+        get: operations["suggest_prompt_tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Tag Translations
+         * @description タグ名(空白でも `_` でもよい、括弧のエスケープも可)→ 代表の訳。訳の辞書が無い、または
+         *     訳の無いタグは含めない。表示だけの補助で、タグそのものは変えない(ADR-0041 4章)。
+         */
+        post: operations["get_tag_translations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/prompt-tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Asset Prompt Tags
+         * @description removed を除き、語彙にあるタグを score の高い順、続けて人が付けた語彙にあるタグ。
+         *     語彙が無い環境では英数字だけのタグ。名前はエスケープしない。
+         */
+        get: operations["get_asset_prompt_tags"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1150,6 +1404,45 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/settings/tag-dictionaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tag Dictionaries */
+        get: operations["list_tag_dictionaries"];
+        put?: never;
+        /**
+         * Upload Tag Dictionary
+         * @description 種類を判定して辞書(取り込み中)を作り、取り込みを始める。応答は作った辞書。
+         */
+        post: operations["upload_tag_dictionary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/tag-dictionaries/{dictionary_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Tag Dictionary */
+        delete: operations["delete_tag_dictionary"];
+        options?: never;
+        head?: never;
+        /** Update Tag Dictionary */
+        patch: operations["update_tag_dictionary"];
         trace?: never;
     };
     "/api/settings/auth": {
@@ -3087,6 +3380,7 @@ export interface components {
         GeneralSettingsResponse: {
             moderation: components["schemas"]["ModerationSetting"];
             comfyui_timeout_seconds: components["schemas"]["ComfyUITimeoutSetting"];
+            sdwebui_timeout_seconds: components["schemas"]["SdWebuiTimeoutSetting"];
         };
         /**
          * GeneralSettingsUpdateRequest
@@ -3102,6 +3396,8 @@ export interface components {
             moderation?: string | null;
             /** Comfyui Timeout Seconds */
             comfyui_timeout_seconds?: number | null;
+            /** Sdwebui Timeout Seconds */
+            sdwebui_timeout_seconds?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3616,6 +3912,76 @@ export interface components {
             description: string;
             /** Widget */
             widget?: "seed" | null;
+            /** Mask Only */
+            mask_only?: boolean | null;
+        };
+        /** ParameterSetCreateRequest */
+        ParameterSetCreateRequest: {
+            /** Name */
+            name: string;
+            /** Provider */
+            provider: string;
+            /** Model */
+            model?: string | null;
+            /** Prompt */
+            prompt?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: boolean | number | string;
+            };
+        };
+        /** ParameterSetListResponse */
+        ParameterSetListResponse: {
+            /** Items */
+            items?: components["schemas"]["ParameterSetResponse"][];
+        };
+        /** ParameterSetResponse */
+        ParameterSetResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string | null;
+            /** Prompt */
+            prompt: string | null;
+            /** Params */
+            params: {
+                [key: string]: boolean | number | string;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ParameterSetUpdateRequest
+         * @description 送った項目だけを変える。`model` と `prompt` は null を送ると「保存しない」に戻す。
+         */
+        ParameterSetUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Prompt */
+            prompt?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: boolean | number | string;
+            } | null;
         };
         /** PriceEstimate */
         PriceEstimate: {
@@ -3760,6 +4126,21 @@ export interface components {
         PromptSetUpdateRequest: {
             /** Name */
             name: string;
+        };
+        /**
+         * PromptTagsResponse
+         * @description 画像のタグをプロンプトにするときの並び(ADR-0039 1章)。エスケープ前のタグ名。
+         */
+        PromptTagsResponse: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Tags */
+            tags?: string[];
+            /** Vocabulary Available */
+            vocabulary_available: boolean;
         };
         /**
          * ProviderEntry
@@ -3994,9 +4375,29 @@ export interface components {
             inputs?: components["schemas"]["RunInputCreate"][];
             /** Asset Group Id */
             asset_group_id?: string | null;
+            /**
+             * Repeat
+             * @default 1
+             */
+            repeat: number;
         };
         /** RunCreateResponse */
         RunCreateResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed" | "canceled";
+            /** Runs */
+            runs: components["schemas"]["RunCreatedRef"][];
+        };
+        /** RunCreatedRef */
+        RunCreatedRef: {
             /**
              * Id
              * Format: uuid
@@ -4270,13 +4671,23 @@ export interface components {
         };
         /**
          * RunTextOutput
-         * @description 実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
-         *     (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った
-         *     グラフ(`run.params.comfyui_prompt`)から取った値。
+         * @description 実行時に作られたテキスト(ADR-0030 2章)。
+         *
+         *     - `role = "final_prompt"`: モデルに渡った最終プロンプト。ComfyUI では PE の出力で、Run に
+         *       1件(`output_index` は null。すべての出力に当たる)。`node_id`・`class_type`・`title` は
+         *       送ったグラフ(`run.params.comfyui_prompt`)から取った値。SD WebUI では Dynamic Prompts
+         *       などが1枚ずつ展開したプロンプトで、出力ごとに1件(`output_index` が出力の Asset の
+         *       `output_index` に当たる。ADR-0038 7章)。
+         *     - `role = "final_negative_prompt"`: SD WebUI の、出力ごとの展開後のネガティブプロンプト。
+         *
+         *     SD WebUI では、展開しなくても(元のプロンプトと同じでも)記録する。表示する側が Run の
+         *     `prompt`(ネガティブは `params.negative_prompt`)と比べて、同じなら出さない。
          */
         RunTextOutput: {
             /** Role */
             role: string;
+            /** Output Index */
+            output_index?: number | null;
             /** Node Id */
             node_id?: string | null;
             /** Class Type */
@@ -4290,6 +4701,178 @@ export interface components {
              * @default false
              */
             truncated: boolean;
+        };
+        /**
+         * SdWebuiConnectionRequest
+         * @description 接続・変更(`PUT /api/sdwebui/connection`)。
+         */
+        SdWebuiConnectionRequest: {
+            /** Url */
+            url: string;
+            /**
+             * Allow Non Loopback
+             * @default false
+             */
+            allow_non_loopback: boolean;
+        };
+        /**
+         * SdWebuiConnectionTestRequest
+         * @description 接続テスト(`POST /api/sdwebui/connection/test`)。
+         *
+         *     url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
+         *     試す(保存はしない)。省くと保存済みの資格情報を使う。
+         */
+        SdWebuiConnectionTestRequest: {
+            /** Url */
+            url?: string | null;
+            /** Username */
+            username?: string | null;
+            /** Password */
+            password?: string | null;
+        };
+        /** SdWebuiConnectionTestResponse */
+        SdWebuiConnectionTestResponse: {
+            /** Url */
+            url: string;
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason?: ("apiNotEnabled" | "unauthorized" | "unreachable" | "timeout" | "unexpectedResponse" | "parseFailed") | null;
+            /** Reason Message */
+            reason_message?: string | null;
+            /** Loopback */
+            loopback: boolean;
+            /** Flavor */
+            flavor?: ("forge" | "a1111") | null;
+            /** Checkpoint Count */
+            checkpoint_count?: number | null;
+        };
+        /**
+         * SdWebuiCredentialsRequest
+         * @description Basic 認証の資格情報(`PUT /api/sdwebui/credentials`)。値は応答に含めない。
+         */
+        SdWebuiCredentialsRequest: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
+        /**
+         * SdWebuiImportNote
+         * @description 読み込みの注意。`code` は機械可読(modelNotFound、modelMatchedByHash、sizeOutOfRange、
+         *     invalidValue、samplerNotFound、schedulerNotFound、vaeNotFound、dynamicPromptsUnavailable、
+         *     truncated)、`message` は利用者向けの文言。
+         */
+        SdWebuiImportNote: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * SdWebuiImportParamsResponse
+         * @description `POST /api/sdwebui/import-params`(ADR-0038 9章)。フォームに入れる値。
+         *
+         *     `model` はチェックポイントの `model_name`(見つからなければ null。フォームのモデルを変えない)。
+         *     `params` は SD WebUI の Generate のパラメーター名(capabilities と同じ)と `size`(`WxH`)。
+         */
+        SdWebuiImportParamsResponse: {
+            /** Model */
+            model: string | null;
+            /** Prompt */
+            prompt: string;
+            /** Params */
+            params: {
+                [key: string]: string | number | boolean;
+            };
+            /** Unapplied */
+            unapplied: components["schemas"]["SdWebuiImportUnapplied"][];
+            /** Notes */
+            notes: components["schemas"]["SdWebuiImportNote"][];
+            source: components["schemas"]["SdWebuiImportSource"];
+        };
+        /**
+         * SdWebuiImportSource
+         * @description 読み込んだ生成情報の出どころ(infotext の `Version`。無ければ null)。
+         */
+        SdWebuiImportSource: {
+            /** Software */
+            software?: string | null;
+        };
+        /**
+         * SdWebuiImportUnapplied
+         * @description フォームに入れなかった生成情報の項目(infotext の名前と値のまま)。
+         */
+        SdWebuiImportUnapplied: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * SdWebuiLora
+         * @description 接続先の LoRA 1つ(ADR-0038 8章)。`path` とその他のメタ情報は返さない。
+         */
+        SdWebuiLora: {
+            /** Name */
+            name: string;
+            /** Alias */
+            alias?: string | null;
+            /** Base Model */
+            base_model?: ("sdxl" | "sd1") | null;
+            /** Trigger Tags */
+            trigger_tags?: string[];
+        };
+        /**
+         * SdWebuiLorasResponse
+         * @description `GET /api/sdwebui/loras`。name の順(大文字小文字を無視)。
+         */
+        SdWebuiLorasResponse: {
+            /** Items */
+            items: components["schemas"]["SdWebuiLora"][];
+        };
+        /** SdWebuiStatusResponse */
+        SdWebuiStatusResponse: {
+            /** Url */
+            url: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason?: ("apiNotEnabled" | "unauthorized" | "unreachable" | "timeout" | "unexpectedResponse" | "parseFailed") | null;
+            /** Reason Message */
+            reason_message?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "none";
+            /** Locked */
+            locked: boolean;
+            /** Loopback */
+            loopback?: boolean | null;
+            /** Credentials Set */
+            credentials_set: boolean;
+            /** Flavor */
+            flavor?: ("forge" | "a1111") | null;
+            /** Checkpoint Count */
+            checkpoint_count?: number | null;
+        };
+        /**
+         * SdWebuiTimeoutSetting
+         * @description SD WebUI の1回の実行を待つ上限(秒。ADR-0038 6章)。
+         */
+        SdWebuiTimeoutSetting: {
+            /** Value */
+            value: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "env" | "default";
+            /** Default */
+            default: number;
         };
         /**
          * SearchAssetHit
@@ -4695,6 +5278,11 @@ export interface components {
              * @default true
              */
             allow_auto: boolean;
+            /**
+             * Round Down
+             * @default false
+             */
+            round_down: boolean;
         };
         /**
          * SuggestedBindings
@@ -4725,10 +5313,117 @@ export interface components {
             /** Count */
             count: number;
         };
+        /**
+         * TagDictionaryItem
+         * @description 登録したタグ辞書(ADR-0041 1章)。
+         */
+        TagDictionaryItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tags" | "translations";
+            /** Category Scheme */
+            category_scheme: string | null;
+            /** Row Count */
+            row_count: number;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "importing" | "ready" | "failed";
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at?: string | null;
+        };
+        /** TagDictionaryListResponse */
+        TagDictionaryListResponse: {
+            /** Items */
+            items?: components["schemas"]["TagDictionaryItem"][];
+            /** Category Schemes */
+            category_schemes?: string[];
+        };
+        /** TagDictionaryUpdateRequest */
+        TagDictionaryUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Category Scheme */
+            category_scheme?: ("danbooru" | "other") | null;
+        };
         /** TagListResponse */
         TagListResponse: {
             /** Items */
             items?: components["schemas"]["TagCount"][];
+        };
+        /**
+         * TagSuggestion
+         * @description プロンプトのタグの候補(ADR-0039 2章、ADR-0041 2章)。名前は `_` を空白にしたタグ名で、
+         *     括弧はエスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。
+         */
+        TagSuggestion: {
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "vocabulary" | "tag" | "dictionary";
+            /** Count */
+            count: number;
+            /** Category */
+            category?: number | null;
+            /** Category Scheme */
+            category_scheme?: string | null;
+            /** Translation */
+            translation?: string | null;
+            /** Match */
+            match?: ("name" | "alias" | "translation") | null;
+            /** Matched */
+            matched?: string | null;
+        };
+        /** TagSuggestionResponse */
+        TagSuggestionResponse: {
+            /** Items */
+            items?: components["schemas"]["TagSuggestion"][];
+            /** Vocabulary Available */
+            vocabulary_available: boolean;
+            /**
+             * Dictionary Available
+             * @default false
+             */
+            dictionary_available: boolean;
+        };
+        /**
+         * TagTranslationsRequest
+         * @description 訳を引くタグ名(空白でも `_` でもよい。ADR-0041 4章)。
+         */
+        TagTranslationsRequest: {
+            /** Names */
+            names: string[];
+        };
+        /** TagTranslationsResponse */
+        TagTranslationsResponse: {
+            /** Translations */
+            translations?: {
+                [key: string]: string;
+            };
         };
         /** UnitPricesPer1M */
         UnitPricesPer1M: {
@@ -5372,6 +6067,330 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_sdwebui_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_sdwebui_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SdWebuiConnectionTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiConnectionTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_sdwebui_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SdWebuiConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detach_sdwebui: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_sdwebui_credentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SdWebuiCredentialsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_sdwebui_credentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_sdwebui: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sdwebui_loras: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiLorasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_sdwebui_params: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        /** @description 画像のファイル(multipart の `file`。保存しない)か、ストックの画像の `asset_id`(JSON か multipart のフィールド)。 */
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file?: string;
+                    /** Format: uuid */
+                    asset_id?: string;
+                };
+                "application/json": {
+                    /** Format: uuid */
+                    asset_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiImportParamsResponse"];
+                };
+            };
+            /** @description Asset が無い、または本人に見えない */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SD WebUI に接続していない、または一覧を取れない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 画像が大きすぎる */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A1111 形式の生成情報が無い、または本文が不正 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6482,6 +7501,173 @@ export interface operations {
             };
         };
     };
+    list_parameter_sets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterSetListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_parameter_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParameterSetCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterSetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_parameter_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                parameter_set_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterSetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_parameter_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                parameter_set_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_parameter_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                parameter_set_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParameterSetUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterSetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search: {
         parameters: {
             query: {
@@ -6797,6 +7983,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_prompt_tags: {
+        parameters: {
+            query?: {
+                /** @description 打った文字。空なら候補なし */
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSuggestionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tag_translations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagTranslationsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagTranslationsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_asset_prompt_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTagsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7592,6 +8881,172 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EmbeddingSettingsResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tag_dictionaries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagDictionaryListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_tag_dictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        /** @description 辞書の CSV か、CSV を含む zip(`file`。保存しない)と、カテゴリーの体系。 */
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    /** @enum {string} */
+                    category_scheme?: "danbooru" | "other";
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagDictionaryListResponse"];
+                };
+            };
+            /** @description ファイル、または zip を展開した合計が大きすぎる */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ファイルが無い、種類を判定できない、文字コードや zip が不正 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_tag_dictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dictionary_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 辞書が無い */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 取り込み中 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_tag_dictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dictionary_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagDictionaryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagDictionaryItem"];
+                };
+            };
+            /** @description 辞書が無い */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

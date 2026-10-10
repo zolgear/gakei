@@ -1,0 +1,228 @@
+/* 画像から設定を読み込む(ADR-0038 9章)のダイアログと、反映後の通知。 */
+
+/* ダイアログへのドロップを止めるための入れ物。レイアウトには関わらない。 */
+.dropGuard {
+  display: contents;
+}
+
+.dialogBody,
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.dropZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 160px;
+  padding: 16px;
+  border: 2px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.dropZone[data-active] {
+  border-color: var(--color-accent);
+  background: var(--color-bg-sunken);
+}
+
+.dropText {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.previewMeta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.previewPrompt {
+  margin: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.primary,
+.secondary {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.primary {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: #17181b;
+  font-weight: 600;
+}
+
+.primary:disabled {
+  opacity: 0.55;
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.secondary:hover {
+  border-color: var(--color-accent);
+}
+
+/* ビューアの「SD WebUI のフォームに読み込む」 */
+.assetAction {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.assetButton {
+  min-height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.assetButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.assetButton:disabled {
+  opacity: 0.55;
+}
+
+/* 反映後の通知(フォームの上部。閉じられる) */
+.notice {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.noticeHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.noticeTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.dismiss {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.dismiss:hover {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.noticeSource {
+  margin: 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.noteList {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-warning);
+}
+
+.unapplied summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.unappliedList {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.unappliedList li {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.unappliedName {
+  flex-shrink: 0;
+  max-width: 40%;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.unappliedValue {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

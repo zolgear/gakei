@@ -128,6 +128,132 @@
       "historyErrorNoDetails": "Execution on ComfyUI ended with an error (no details available)."
     }
   },
+  "sdwebui": {
+    "connection": {
+      "invalidUrl": "Specify a URL that starts with http:// or https:// and includes a host.",
+      "urlHasExtras": "The URL cannot contain a user name, password, query (?) or fragment (#). Set the Basic authentication user name and password in the credentials fields.",
+      "nonLoopback": "This is not a loopback address (such as 127.0.0.1). Input images and prompts will be sent over the network, so check the confirmation box before saving."
+    },
+    "credentials": {
+      "invalid": "The user name and password must each be 1–256 characters long and contain no control characters.",
+      "usernameColon": "The user name cannot contain \":\".",
+      "bothRequired": "Specify both the user name and the password."
+    },
+    "api": {
+      "connectionUrlMissing": "No connection URL was specified.",
+      "notConnected": "SD WebUI is not connected.",
+      "lockedChangeConnection": "An SD WebUI run is running or queued, so the connection settings cannot be changed.",
+      "lockedDetach": "An SD WebUI run is running or queued, so it cannot be detached.",
+      "lockedChangeCredentials": "An SD WebUI run is running or queued, so the credentials cannot be changed.",
+      "lockedRefresh": "An SD WebUI run is running or queued, so the lists cannot be reloaded."
+    },
+    "client": {
+      "apiNotEnabled": "The SD WebUI API was not found (404). Check that the WebUI was started with --api and that its startup log shows no API errors (such as a malformed --api-auth).",
+      "unauthorized": "The SD WebUI API requires Basic authentication, or the credentials are wrong (401). Set the same user name and password as the WebUI's --api-auth.",
+      "unexpectedResponse": "Unexpected response from SD WebUI (status={status}).",
+      "connectTimeout": "Connecting to SD WebUI timed out.",
+      "connectFailed": "Cannot connect to SD WebUI. Check the URL and that the WebUI is running.",
+      "requestTimeout": "Timed out while waiting for SD WebUI to respond.",
+      "parseFailed": "Could not parse the response from SD WebUI.",
+      "rejectedNoDetails": "SD WebUI rejected the request (no details).",
+      "executionFailedNoDetails": "Execution failed in SD WebUI (no details)."
+    },
+    "provider": {
+      "unavailable": "Cannot connect to SD WebUI, so the checkpoint list is unavailable.",
+      "unknownCheckpoint": "Checkpoint {model} is not in the SD WebUI list.",
+      "missingRequestInternal": "The run record has no request body for SD WebUI (sdwebui_request).",
+      "timeoutExecuting": "SD WebUI did not finish within the time limit.",
+      "modelMismatch": "The image was drawn with {actual} instead of the selected checkpoint ({expected}). The WebUI may have failed to load the checkpoint.",
+      "noOutputImages": "SD WebUI returned no images.",
+      "unreadableOutput": "Could not read the images returned by SD WebUI.",
+      "inputImageMissingInternal": "The run has no source image among its inputs.",
+      "unreadableInput": "Could not read the input image or the mask.",
+      "hiresDisabled": "{key} can only be set when hires fix is enabled.",
+      "hiresTooLarge": "The upscaled size {width}×{height} is too large (long edge up to {max}px). Lower the upscale factor or the size.",
+      "tooManyOutputs": "Count {n} × batch count {n_iter} = {total} images is too many (up to {max}). Reduce the count or the batch count."
+    },
+    "params": {
+      "negativePrompt": "Negative prompt",
+      "negativePromptDescription": "Describe what you do not want in the image.",
+      "sampler": "Sampler",
+      "samplerDescription": "Choose from the samplers available on the connected WebUI.",
+      "scheduler": "Scheduler",
+      "schedulerDescription": "Choose from the schedulers available on the connected WebUI.",
+      "steps": "Steps",
+      "stepsDescription": "More steps add detail but take longer.",
+      "cfgScale": "CFG scale",
+      "cfgScaleDescription": "How closely to follow the prompt. Higher values are more faithful but break down more easily.",
+      "seed": "Seed",
+      "vae": "VAE",
+      "vaeBuiltin": "Built into the checkpoint",
+      "vaeDescription": "Choose a VAE that matches the checkpoint type (SD1.5, SDXL, etc.). It is used for this run only; the WebUI settings are not changed.",
+      "clipSkip": "Clip skip",
+      "clipSkipDescription": "How many of the last text encoder layers to skip. 1 skips none (usual). Some anime-style models recommend 2. It is used for this run only; the WebUI settings are not changed.",
+      "count": "Count",
+      "countDescription": "Number of images per run (batch_size).",
+      "batchCount": "Batch count",
+      "batchCountDescription": "How many times to repeat a batch of the given count (n_iter). A run produces count × batch count images, up to {max}. The seed increases by 1 for each image.",
+      "dynamicPrompts": "Dynamic Prompts",
+      "dynamicPromptsDescription": "Expands syntax such as {{red|blue|green}} and WebUI wildcards (__name__) once per image. When off, the prompt is sent as written.",
+      "dynamicPromptsCombinatorial": "Generate all combinations",
+      "dynamicPromptsCombinatorialDescription": "Generates every combination the prompt syntax allows. The count setting is not used; one image is made per combination (up to {limit}).",
+      "denoisingStrength": "Denoising strength",
+      "denoisingStrengthDescription": "How much of the source image to redraw. Near 0 keeps it as is; near 1 changes it a lot (roughly 0.3–0.5 for touch-ups, 0.6–0.8 for a redraw).",
+      "resizeMode": "Resize mode",
+      "resizeModeDescription": "How to fit the input image when its size (aspect ratio) differs from the output.",
+      "resizeModeJustResize": "Just resize",
+      "resizeModeCropAndResize": "Crop and resize",
+      "resizeModeResizeAndFill": "Resize and fill",
+      "resizeModeLatentUpscale": "Just resize (latent upscale)",
+      "maskBlur": "Mask blur",
+      "maskBlurDescription": "Width (in pixels) to blur the mask edge. Larger values blend the redrawn area better.",
+      "inpaintingFill": "Masked content",
+      "inpaintingFillDescription": "What the masked area starts from. Choose \"Original\" to build on the source image.",
+      "inpaintingFillFill": "Fill",
+      "inpaintingFillOriginal": "Original",
+      "inpaintingFillLatentNoise": "Latent noise",
+      "inpaintingFillLatentNothing": "Latent nothing",
+      "inpaintFullRes": "Inpaint only the masked area",
+      "inpaintFullResDescription": "Crop the masked area (plus padding), draw it at the output size, then paste it back. Use it to redraw small areas in detail.",
+      "inpaintFullResPadding": "Padding for masked area",
+      "inpaintFullResPaddingDescription": "Pixels around the mask to include when \"Inpaint only the masked area\" is on.",
+      "hires": "Hires fix",
+      "hiresDescription": "Draws at a lower resolution, upscales, and then redraws (hires fix). The upscaled long edge can be up to {max}px.",
+      "hrUpscaler": "Upscaler",
+      "hrUpscalerDescription": "How to upscale. Latent upscalers work in latent space; a higher denoising strength (0.5 or more) is recommended.",
+      "hrScale": "Upscale by",
+      "hrScaleDescription": "Factor applied to the first-pass size. The upscaled long edge can be up to {max}px.",
+      "hrSecondPassSteps": "Hires steps",
+      "hrSecondPassStepsDescription": "Steps for the redraw after upscaling. 0 uses the same number as the main steps.",
+      "hrDenoisingStrength": "Denoising strength",
+      "hrDenoisingStrengthDescription": "How much to redraw after upscaling. Near 0 is close to a plain upscale; near 1 changes more.",
+      "hrCfg": "Hires CFG Scale",
+      "hrCfgDescription": "CFG scale for the redraw after upscaling. If not set, the main CFG scale is sent.",
+      "hrPrompt": "Hires prompt",
+      "hrPromptDescription": "Prompt used only for the redraw after upscaling. If empty, the main prompt is used.",
+      "hrNegativePrompt": "Hires negative prompt",
+      "hrNegativePromptDescription": "Negative prompt used only for the redraw after upscaling. If empty, the main negative prompt is used."
+    },
+    "importParams": {
+      "inputMissing": "Specify an image file or an image in your stock (asset_id).",
+      "invalidAssetId": "asset_id is not in a valid format.",
+      "noMetadata": "This image has no embedded generation info.",
+      "notA1111": "This image's generation info is not from SD WebUI (A1111 format), so it cannot be loaded.",
+      "notes": {
+        "modelNotFound": "Checkpoint \"{name}\" was not found on the server, so the model was not changed.",
+        "modelMatchedByHash": "Checkpoint \"{name}\" was not found by name; used \"{model}\", whose hash matches.",
+        "sizeFloored": "Size {value} was rounded down to a multiple of 8: {size}.",
+        "sizeOutOfRange": "Size {value} does not fit SD WebUI's size limits, so it was not applied ({reason}).",
+        "invalidValue": "The value of {name} is out of range or unreadable, so it was not applied.",
+        "samplerNotFound": "Sampler \"{value}\" was not found on the server, so it was not applied.",
+        "schedulerNotFound": "Scheduler \"{value}\" was not found on the server, so it was not applied.",
+        "vaeNotFound": "VAE \"{value}\" was not found on the server, so it was not applied.",
+        "dynamicPromptsUnavailable": "The server has no Dynamic Prompts, so the expanded prompt was used instead of the template.",
+        "truncated": "The generation info was too long and has been partly truncated.",
+        "hiresUpscalerNotFound": "Upscaler \"{value}\" was not found on the server, so the default upscaler is used."
+      }
+    }
+  },
   "openaiSpec": {
     "editingStrong": "Strong at editing",
     "fast": "Fast",
@@ -180,7 +306,8 @@
   "settings": {
     "general": {
       "invalidModeration": "moderation must be auto or low",
-      "invalidTimeoutSeconds": "The ComfyUI timeout must be an integer between {min} and {max} seconds"
+      "invalidTimeoutSeconds": "The ComfyUI timeout must be an integer between {min} and {max} seconds",
+      "invalidSdwebuiTimeoutSeconds": "The SD WebUI timeout must be an integer from {min} to {max} seconds"
     },
     "mcp": {
       "invalidEnabled": "enabled must be true or false",
@@ -280,7 +407,8 @@
     "maskNotSupported": "The selected model does not support masks",
     "maskRequired": "mask is required",
     "maskRequiresPosition0": "Using mask requires an image input at position=0",
-    "maskSizeMismatch": "mask must be the same size as the image at position=0"
+    "maskSizeMismatch": "mask must be the same size as the image at position=0",
+    "maskOnlyParam": "{key} can only be specified when a mask is given"
   },
   "sizes": {
     "positiveIntegersRequired": "width and height must be positive integers",
@@ -288,7 +416,8 @@
     "longEdgeMax": "The long edge must be at most {maxLongEdge}px",
     "totalPixelsRange": "Total pixel count must be {min}-{max}",
     "aspectRatioRange": "Aspect ratio must be between 1:3 and 3:1",
-    "sizeFormat": "size must be \"auto\" or \"WIDTHxHEIGHT\""
+    "sizeFormat": "size must be \"auto\" or \"WIDTHxHEIGHT\"",
+    "autoNotAllowed": "This provider does not accept auto as the size. Specify a width and height."
   },
   "assets": {
     "sourceAssetOnlyForSketch": "source_asset_id can only be set for a sketch (kind=sketch)",
@@ -321,6 +450,10 @@
   "promptSets": {
     "notFound": "Prompt set not found",
     "itemNotFound": "Prompt set item not found"
+  },
+  "parameterSets": {
+    "notFound": "Parameter set not found",
+    "serverOnlyParam": "Server-only parameters cannot be saved in a parameter set: {name}"
   },
   "assetGroups": {
     "notFound": "Group not found",
@@ -658,5 +791,25 @@
     "fileMismatch": "An image does not match manifest.json (it may have been modified): {name}",
     "conflictsWithEarlierImport": "An output differs from the one imported earlier for the same run",
     "invalidImage": "Cannot import an image: {reason}"
+  },
+  "tagDictionaries": {
+    "tooLarge": "Dictionary files must be {mb}MB or smaller",
+    "noFile": "The multipart body has no dictionary file (file)",
+    "invalidScheme": "Invalid category scheme",
+    "notFound": "This tag dictionary does not exist",
+    "importing": "A tag dictionary cannot be deleted while it is being imported. Delete it after the import finishes",
+    "emptyFile": "{file} has no rows",
+    "invalidZip": "Could not read the zip file",
+    "zipTooManyFiles": "The zip contains too many files (limit {max})",
+    "zipNoCsv": "The zip contains no CSV files",
+    "zipEncrypted": "Password-protected zip files are not supported",
+    "extractedTooLarge": "The extracted contents of the zip are too large (limit {mb}MB)",
+    "invalidEncoding": "Could not read {file} as UTF-8",
+    "undetermined": "Could not determine the kind of {file}. Use a CSV without a header, with 4 columns (tag, category, count, aliases) or 2 columns (tag, translation)",
+    "errors": {
+      "interrupted": "The server stopped during the import. Register the dictionary again",
+      "importFailed": "The import failed. Register the dictionary again",
+      "noRows": "There were no rows to import"
+    }
   }
 }

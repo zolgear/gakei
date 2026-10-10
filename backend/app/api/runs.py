@@ -36,6 +36,7 @@ from app.domain.run_views import (
 )
 from app.domain.schemas import (
     RunCancelResponse,
+    RunCreatedRef,
     RunCreateRequest,
     RunCreateResponse,
     RunDetail,
@@ -122,11 +123,18 @@ def create_run(
     user: CurrentUser = Depends(require_user),
 ) -> RunCreateResponse:
     # 検証〜挿入〜runner への投入は MCP と共通のドメイン関数に任せる(ADR-0023 1章)。
+    # 繰り返し回数(ADR-0042)は REST だけが受ける。
     try:
-        run = run_create_domain.create_run(db, registry, runner, settings, body, viewer=user)
+        runs = run_create_domain.create_runs(
+            db, registry, runner, settings, body, viewer=user, repeat=body.repeat
+        )
     except run_create_domain.RunCreateError as e:
         raise HTTPException(status_code=_ERROR_STATUS[e.kind], detail=str(e)) from e
-    return RunCreateResponse(id=run.id, status=run.status)
+    return RunCreateResponse(
+        id=runs[0].id,
+        status=runs[0].status,
+        runs=[RunCreatedRef(id=r.id, status=r.status) for r in runs],
+    )
 
 
 @router.get("", response_model=RunListResponse, operation_id="list_runs")

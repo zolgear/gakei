@@ -27,6 +27,7 @@
     "save": "保存",
     "retry": "再読み込み",
     "back": "← 戻る",
+    "openGeneratedDetail": "Generated の詳細を開く",
     "statusLabels": {
       "queued": "待機中",
       "running": "実行中",
@@ -72,6 +73,7 @@
       "resourceNav": "リソース",
       "stock": "ストック",
       "prompts": "プロンプトセット",
+      "parameterSets": "パラメーターセット",
       "graph": "系列グラフ",
       "history": "履歴",
       "search": "検索"
@@ -141,6 +143,13 @@
     "workflowLine": "ワークフロー: {name} ({sha})",
     "downloadJson": "JSON をダウンロード",
     "comfyuiPromptSummary": "ComfyUI に送ったグラフ(JSON)",
+    "sdwebuiRequestSummary": "SD WebUI に送った内容(JSON)",
+    "sdwebuiInfotextSummary": "SD WebUI の生成情報(infotext)",
+    "sdwebuiSeed": {
+      "batch": "seed {seeds}(1枚ごとに別の seed)",
+      "indexed": "seed {seed}({outputCount} 枚中 {outputIndex} 枚目)",
+      "tooltip": "SD WebUI は1枚ごとに別の seed を使います。同じ設定でこの seed を指定して1枚だけ生成すると、この画像を再現できます(環境によって細部が変わることがあります)。"
+    },
     "timingHeading": "時刻・実行状況",
     "createdBy": "実行者",
     "origin": "実行元",
@@ -172,6 +181,10 @@
       "providerUnavailable": "プロバイダーが利用できません",
       "comfyuiUnavailable": "ComfyUI に接続できません",
       "comfyuiValidation": "ComfyUI がワークフローを検証できませんでした",
+      "sdwebuiUnavailable": "SD WebUI に接続できません",
+      "sdwebuiValidation": "SD WebUI がリクエストを受け付けませんでした",
+      "sdwebuiNoOutput": "SD WebUI から画像が返りませんでした",
+      "sdwebuiModelMismatch": "指定したチェックポイントで描かれませんでした",
       "internalError": "内部エラーが発生しました"
     }
   },
@@ -255,6 +268,8 @@
       "annotation": "自動タイトル・タグ",
       "embeddings": "埋め込み",
       "comfyui": "ComfyUI",
+      "sdwebui": "SD WebUI",
+      "tagDictionary": "タグ辞書",
       "mcp": "MCP",
       "shareLinks": "共有リンクの公開",
       "about": "GAKEI について",
@@ -313,12 +328,23 @@
         "label": "スケッチとマスクをストックに出す",
         "help": "オフのときは、系列グラフと Run の詳細から開けます。"
       },
+      "tagCompletion": {
+        "label": "プロンプトのタグ補完",
+        "help": "テキストで書いているプロンプト欄で、カーソルの位置の語にタグの候補を出します。タグモードの入力欄では、この設定に関わらず候補を出します。",
+        "optionTagProviders": "SD WebUI と ComfyUI のときだけ (既定)",
+        "optionAlways": "常に",
+        "optionOff": "使わない"
+      },
+      "tagTranslations": {
+        "label": "タグの日本語訳を表示",
+        "help": "タグ辞書に訳があれば、タグの候補とチップに小さく添えます。画面の言語が日本語のときだけ出ます。"
+      },
       "browserStorage": {
         "heading": "ブラウザに保存した設定",
         "label": "このブラウザの設定を既定に戻す",
         "help": "このページの表示の設定、パネルの幅や開閉、マップの値、生成フォームの下書きなどは、このブラウザにだけ保存されています。まとめて消すと既定に戻ります。",
         "clear": "まとめて消す",
-        "confirmMessage": "このブラウザに保存した GAKEI の設定をまとめて消し、ページを読み込み直します。\n\n消えるもの: 表示言語(ブラウザの言語に戻ります)、タブのアイコンの進捗表示、生成画面のレイアウトと入力欄の幅・高さ、サイドバーの幅と開いていたパネル、ストックとビューアの節の開閉、マップの値(タブ・近傍の数・上限・しきい値・系列の辺)、スケッチのペン、シードのモード、最後に選んだグループ。\n\nサーバーに保存した設定・画像・履歴と、ログインの状態は変わりません。",
+        "confirmMessage": "このブラウザに保存した GAKEI の設定をまとめて消し、ページを読み込み直します。\n\n消えるもの: 表示言語(ブラウザの言語に戻ります)、タブのアイコンの進捗表示、生成画面のレイアウトと入力欄の幅・高さ、サイドバーの幅と開いていたパネル、ストックとビューアの節の開閉、マップの値(タブ・近傍の数・上限・しきい値・系列の辺)、スケッチのペン、シードのモード、プロンプトのタグ補完とタグの訳の表示、最後に選んだグループ。\n\nサーバーに保存した設定・画像・履歴と、ログインの状態は変わりません。",
         "confirmWarning": "生成フォームに書きかけのプロンプト・パラメーター・入力画像の指定も消えます。",
         "confirmLabel": "消して読み込み直す"
       }
@@ -775,6 +801,68 @@
       "workflowsHeading": "ワークフロー",
       "workflowsHelp": "ComfyUI の「Export (API)」で書き出したワークフローを登録すると、モデルとして選べます。"
     },
+    "sdwebui": {
+      "intro": "Stable Diffusion WebUI(AUTOMATIC1111、Forge など)の API に接続すると、そのチェックポイントをモデルとして選べます(実験的機能)。今は生成(txt2img)だけです。",
+      "connectionHeading": "接続",
+      "credentialsHeading": "Basic 認証",
+      "runHeading": "実行",
+      "timeout": {
+        "label": "タイムアウト(分)",
+        "help": "1回の SD WebUI 実行を待つ上限です。次に始まる実行から反映されます(実行中・待機中の Generated には影響しません)。",
+        "invalid": "1〜180の整数を入力してください",
+        "resetToDefault": "既定値({default}分)に戻す",
+        "resetPending": "保存すると既定値({default}分)に戻ります"
+      }
+    },
+    "tagDictionary": {
+      "intro": "タグの一覧や訳の CSV を登録すると、プロンプトのタグの候補と、タグの日本語訳に使います。辞書はすべての利用者で共有します。",
+      "uploadHeading": "辞書を登録する",
+      "schemeLabel": "カテゴリーの体系",
+      "schemeHelp": "タグの一覧の、カテゴリーの番号の意味。Danbooru の辞書なら「Danbooru」、ほかのサイトの辞書なら「その他」(番号のまま扱います)。",
+      "schemes": {
+        "danbooru": "Danbooru",
+        "other": "その他"
+      },
+      "dropLabel": "CSV か zip を選ぶ",
+      "dropHint": "ここにドロップしても登録できます。ヘッダーなしの CSV(4 列ならタグの一覧、2 列なら訳)か、CSV を含む zip。100MB まで。",
+      "uploading": "アップロード中…",
+      "uploaded": {
+        "one": "{count} 件の辞書を登録しました。取り込みが終わるまで、前の辞書のまま動きます。",
+        "other": "{count} 件の辞書を登録しました。取り込みが終わるまで、前の辞書のまま動きます。"
+      },
+      "uploadFailed": "登録できませんでした。",
+      "listHeading": "登録した辞書",
+      "empty": "辞書はまだ登録されていません。",
+      "loading": "読み込み中…",
+      "loadFailed": "タグ辞書の一覧を読み込めませんでした。",
+      "retry": "再読み込み",
+      "kinds": {
+        "tags": "タグの一覧",
+        "translations": "訳"
+      },
+      "status": {
+        "importing": "取り込み中…",
+        "ready": "完了",
+        "failed": "失敗"
+      },
+      "rows": {
+        "one": "{rows} 行",
+        "other": "{rows} 行"
+      },
+      "rowCountLabel": "行数",
+      "createdAtLabel": "登録日時",
+      "statusLabel": "状態",
+      "schemeShortLabel": "体系",
+      "enabledShort": "有効",
+      "enabledLabel": "「{name}」を使う",
+      "delete": "削除",
+      "deleteTitle": "「{name}」を削除する",
+      "deleteBlocked": "取り込み中は削除できません",
+      "confirmDelete": "「{name}」を削除しますか?取り込んだ中身も消えます。",
+      "confirmDeleteLabel": "削除する",
+      "deleted": "辞書を削除しました",
+      "updateFailed": "変更できませんでした。"
+    },
     "mcp": {
       "intro": "Claude Code などの AI エージェントから、MCP(Model Context Protocol)で GAKEI の生成とストックを使えるようにします。エージェント経由の生成も、画面からの生成と同じく系列と証跡に残ります。",
       "loading": "読み込み中...",
@@ -1052,6 +1140,74 @@
       "labelTooLong": "ラベルは{max}文字までです"
     }
   },
+  "parameterSets": {
+    "form": {
+      "saveButton": "設定を保存",
+      "saveButtonTitle": "今のプロバイダー・モデル・パラメーター・プロンプトを、パラメーターセットとして保存します",
+      "loadButton": "設定を読み込む",
+      "loadButtonTitle": "保存したパラメーターセットを、フォームに読み込みます"
+    },
+    "save": {
+      "dialogTitle": "パラメーターセットに保存",
+      "runButton": "パラメーターセットに保存",
+      "runButtonTitle": "この Run のプロバイダー・モデル・パラメーター・プロンプトを、パラメーターセットとして保存します",
+      "targetLabel": "保存先",
+      "targetNew": "新しいセット",
+      "targetExisting": "既存のセットに上書き",
+      "selectPlaceholder": "上書きするセットを選んでください",
+      "noExisting": "上書きできるセットがありません",
+      "nameLabel": "名前",
+      "namePlaceholder": "例: 夕景・高解像度補助あり",
+      "includeLabel": "含めるもの",
+      "includeModel": "モデル",
+      "includePrompt": "プロンプト",
+      "includeSeed": "seed",
+      "seedUnavailableForm": "seed がランダムのため保存できません(固定にすると保存できます)",
+      "seedUnavailableRun": "この Run には seed の記録がありません",
+      "summaryProvider": "プロバイダー: {provider}",
+      "summaryModel": "モデル: {model}",
+      "summaryModelOmitted": "モデル: 保存しない(読み込み時は今のモデルのまま)",
+      "summaryParams": "パラメーター: {count} 項目",
+      "summaryPromptOmitted": "プロンプト: 保存しない(読み込み時は今のプロンプトのまま)",
+      "save": "保存",
+      "saving": "保存中...",
+      "saved": "「{name}」に保存しました",
+      "saveFailed": "保存に失敗しました",
+      "targetRequired": "上書きするセットを選んでください"
+    },
+    "load": {
+      "dialogTitle": "パラメーターセットを読み込む",
+      "searchLabel": "絞り込み",
+      "searchPlaceholder": "名前・モデル・プロンプトで絞り込む",
+      "loading": "読み込み中...",
+      "loadFailed": "パラメーターセットの取得に失敗しました",
+      "empty": "まだパラメーターセットがありません。フォームの「設定を保存」か、Run の詳細から保存できます。",
+      "noMatch": "一致するセットがありません",
+      "apply": "読み込む",
+      "modelOmitted": "モデルは保存していません",
+      "promptOmitted": "プロンプトは保存していません",
+      "paramsCount": "パラメーター {count} 項目",
+      "withSeed": "seed あり",
+      "providerDisabled": "プロバイダー「{provider}」が有効でないため読み込めません",
+      "providerNoModels": "{provider} のモデルの一覧を取得できないため読み込めません",
+      "modelNotFound": "モデル「{model}」が見つからないため、{current} にしました",
+      "noticeTitle": "パラメーターセット「{name}」を読み込みました",
+      "confirmTitle": "今のプロンプトを置き換えますか?",
+      "confirmMessage": "プロバイダー・モデル・パラメーターとプロンプトを、パラメーターセット「{name}」で置き換えます。入力画像は変わりません。",
+      "confirmReplace": "置き換える"
+    },
+    "panel": {
+      "heading": "パラメーターセット",
+      "hint": "「読み込む」で、生成のフォームのプロバイダー・モデル・パラメーター・プロンプトを置き換えます。入力画像は変わりません。",
+      "rename": "名前変更",
+      "delete": "削除",
+      "save": "保存",
+      "cancel": "取消",
+      "renameFailed": "名前の変更に失敗しました",
+      "deleteFailed": "削除に失敗しました",
+      "deleteConfirm": "パラメーターセット「{name}」を削除します。元に戻せません。"
+    }
+  },
   "workspace": {
     "addInputsDialog": {
       "title": "入力画像を追加",
@@ -1104,19 +1260,25 @@
       "promptPlaceholder": "生成したい画像。Ctrl+Enter で実行。@ でプロンプトセットを呼び出せます",
       "submitting": "実行を開始しています...",
       "generate": "生成",
+      "generateRepeat": "生成 ×{count}",
       "submittedNotice": "生成を開始しました。進み具合は上の結果エリアに出ます",
       "openSettings": "設定を開く",
       "modelLabel": "モデル",
       "providerUnavailableSuffix": "(接続できません)",
       "noWorkflowRegistered": "ワークフロー未登録",
       "registerComfyWorkflow": "ComfyUI ワークフローを登録する",
+      "noModelsAvailable": "選べるモデルがありません",
+      "checkSdWebuiConnection": "SD WebUI の接続を確かめる",
+      "modelFilterPlaceholder": "モデルを絞り込む",
+      "modelFilterAria": "モデルの一覧を名前で絞り込む",
       "otherParams": "その他",
       "promptRequired": "プロンプトを入力してください",
       "deletedInputsPresent": "削除済みの入力画像があります。取り除いてください",
       "maxInputImagesExceeded": "入力画像は最大{max}枚までです",
       "operationUnsupported": "選んだモデルは、この操作(生成/編集)に対応していません",
       "maskRequired": "このモデルの実行にはマスクが必要です",
-      "maskUnsupported": "選んだモデルはマスクに対応していません。マスクを外すか、マスク対応のモデルを選んでください"
+      "maskUnsupported": "選んだモデルはマスクに対応していません。マスクを外すか、マスク対応のモデルを選んでください",
+      "repeatInvalid": "繰り返し回数は {min}〜{max} の整数にしてください"
     },
     "resultPane": {
       "viewModeGroup": "表示",
@@ -1125,7 +1287,6 @@
       "deletedBadge": "削除済み",
       "restore": "復元",
       "notRestorable": "復元できません",
-      "generatedDetail": "Generated 詳細",
       "downloadOriginal": "原寸をダウンロード",
       "deleteCurrentAsset": "表示中の画像を削除",
       "lineageEmptyState": "系列を表示するには、まず画像を表示してください。",
@@ -1156,7 +1317,8 @@
       "restoreFailedDefault": "復元に失敗しました",
       "deletedToast": "画像を削除しました",
       "undoAction": "元に戻す",
-      "inputPrefix": "入力 · {width} × {height}"
+      "inputPrefix": "入力 · {width} × {height}",
+      "repeatProgress": "繰り返し {index} / {total}"
     },
     "runPromptActions": {
       "insertIntoPrompt": "プロンプトに挿入",
@@ -1190,7 +1352,8 @@
       "reasonQualityAuto": "画質が「自動」のため計算できません(画質を指定すると出ます)",
       "reasonSizeAuto": "サイズが「自動」のため計算できません",
       "reasonSizeInvalid": "サイズが条件外です",
-      "reasonUnknownModel": "このモデルの単価が未登録です"
+      "reasonUnknownModel": "このモデルの単価が未登録です",
+      "repeatLine": "繰り返し {count} 回分(1回 {amount})"
     }
   },
   "runForm": {
@@ -1202,7 +1365,18 @@
     },
     "paramField": {
       "disabledTitle": "現在の設定では使えません",
-      "disabledNote": "使用不可"
+      "disabledNote": "使用不可",
+      "hiresTarget": "拡大後 {width}×{height}",
+      "hiresTargetTooLarge": "拡大後 {width}×{height}(長辺 {max}px を超えるため実行できません)",
+      "totalCount": "合計 {total} 枚",
+      "totalCountTooMany": "合計 {total} 枚({max} 枚を超えるため実行できません)",
+      "boolOn": "オン",
+      "boolOff": "オフ"
+    },
+    "repeat": {
+      "label": "繰り返し",
+      "description": "同じ設定の生成を何回くり返すか。1回ずつ別の記録になり、終わったものから結果が出ます。待機中のものは取り消せます。seed が固定なら、2回目以降は1回の枚数ぶん進めます(最大 {max} 回)",
+      "total": "合計 {total} 枚(1回 {perRun} 枚 × {count} 回)"
     },
     "seedField": {
       "random": "ランダム",
@@ -1216,7 +1390,9 @@
       "fieldWidth": "幅",
       "fieldHeight": "高さ",
       "roundedNote": "{multipleOf}の倍数に丸めました: {field} {from} → {to}",
+      "roundedDownNote": "{multipleOf}の倍数に切り捨てました: {field} {from} → {to}",
       "experimentalNote": "2560 × 1440 を超えるサイズは実験的で、結果が不安定になることがあります",
+      "swapLabel": "幅と高さを入れ替える",
       "customLabel": "任意の幅 × 高さ",
       "presets": [
         {
@@ -1302,7 +1478,8 @@
       "multipleOf": "width と height は{n}の倍数である必要があります",
       "maxLongEdge": "長辺は{n}px以下である必要があります",
       "totalPixelsRange": "総画素数は{min}〜{max}である必要があります",
-      "aspectRatio": "縦横比は 1:3 〜 3:1 の範囲である必要があります"
+      "aspectRatio": "縦横比は {min} 〜 {max} の範囲である必要があります",
+      "autoNotSupported": "このモデルは自動(auto)のサイズに対応していません。幅と高さを指定してください"
     },
     "submitChecks": {
       "operationUnsupportedReason": "選んだモデルは、この操作(生成/編集)に対応していません",
@@ -1313,7 +1490,9 @@
     "unspecifiedLabel": {
       "unspecified": "未指定",
       "unspecifiedAuto": "未指定(自動)",
-      "defaultValue": "既定値 ({formatted})"
+      "defaultValue": "既定値 ({formatted})",
+      "sameAsMainPrompt": "空なら本体のプロンプトと同じ",
+      "sameAsMainNegativePrompt": "空なら本体のネガティブプロンプトと同じ"
     },
     "paramLabels": {
       "moderation": "表現の制限"
@@ -1334,7 +1513,10 @@
       "exceedsLimitNotAdded": "入力画像の上限({max}枚)を超えるため追加しませんでした"
     },
     "dependencies": {
-      "incompatiblePair": "{fieldA}={valueA} と {fieldB}={valueB} は同時に指定できません"
+      "combinatorialCount": "組み合わせの数だけ作る(上限 {limit} 枚)",
+      "incompatiblePair": "{fieldA}={valueA} と {fieldB}={valueB} は同時に指定できません",
+      "maskOnly": "マスクを描いたときだけ使います",
+      "hiresOff": "高解像度補助を有効にすると使えます"
     },
     "runFormLogic": {
       "droppedParamsSettings": "{names} は現在の設定では使えないため未指定に戻しました",
@@ -1555,7 +1737,7 @@
       "rawSummary": "元のデータを表示",
       "truncatedNote": "サイズの上限により一部を省略しています",
       "c2paUnknown": "C2PA のマニフェストがありますが、内容は読み取れませんでした",
-      "unverifiedNote": "画像に書かれていた自己申告の情報で、GAKEI では検証していません。フォームには読み込めません。",
+      "unverifiedNote": "画像に書かれていた自己申告の情報で、GAKEI では検証していません。",
       "tools": {
         "a1111": "Stable Diffusion WebUI(AUTOMATIC1111 / Forge)",
         "comfyui": "ComfyUI",
@@ -1867,6 +2049,151 @@
       "templateRequired": "ワークフローの JSON ファイルを選択してください"
     }
   },
+  "sdwebui": {
+    "connection": {
+      "cardTitle": "SD WebUI",
+      "checking": "接続状態を確認中...",
+      "loadError": "接続状態を取得できませんでした。",
+      "testFailed": "接続テストに失敗しました",
+      "saveFailed": "保存に失敗しました",
+      "connected": "接続しました",
+      "detached": "切り離しました",
+      "detachFailed": "切り離しに失敗しました",
+      "refreshed": "一覧を読み直しました",
+      "refreshFailed": "一覧を読み直せませんでした",
+      "disabledHeadline": "SD WebUI は無効です",
+      "disabledHelp": "WebUI を --api を付けて起動し、その URL で接続します。",
+      "availableHeadline": "接続できます",
+      "unavailableHeadline": "接続できません",
+      "urlLabel": "URL",
+      "reasonLabel": "理由",
+      "flavorLabel": "種類",
+      "flavors": {
+        "forge": "Forge",
+        "a1111": "AUTOMATIC1111"
+      },
+      "checkpointsLabel": "チェックポイント",
+      "checkpointCount": "{count} 件",
+      "connectionLabel": "接続",
+      "nonLoopbackValue": "ループバック以外(LAN 等)",
+      "unauthorizedSetHint": "資格情報は、下の「Basic 認証」で設定できます。",
+      "unauthorizedReplaceHint": "資格情報は、下の「Basic 認証」で差し替えられます。",
+      "testing": "確認中...",
+      "testConnection": "接続テスト",
+      "refresh": "一覧を読み直す",
+      "refreshing": "読み直し中...",
+      "refreshHelp": "WebUI にチェックポイントや VAE を足したり、名前を変えたりしたときは「一覧を読み直す」を押します。",
+      "changeUrl": "URL を変更",
+      "detach": "切り離す",
+      "connect": "接続する",
+      "switchUrl": "この URL に切り替える",
+      "connecting": "接続中...",
+      "cancel": "キャンセル",
+      "connectDialogTitle": "SD WebUI に接続",
+      "changeDialogTitle": "接続先の URL を変更",
+      "urlIntroPrefix": "WebUI を --api を付けて起動し、その URL を入力します。既定は",
+      "urlIntroSuffix": "です。",
+      "nonLoopbackWarning": "ループバック(この PC 自身)以外のアドレスです。入力したプロンプトをネットワーク越しに送信することになります。WebUI を LAN に出すときは、--api-auth で Basic 認証を掛けてください。",
+      "confirmNonLoopback": "内容を確認したうえで接続します",
+      "dialogCredentialsHeading": "Basic 認証(任意)",
+      "dialogCredentialsHelp": "WebUI を --api-auth 付きで起動したときだけ入力します。入力すると、接続テストはこの値で試し、接続するときに資格情報も保存します。",
+      "dialogCredentialsHelpSet": "資格情報は設定済みです。空のままなら保存済みの資格情報を使い、入力するとその値に差し替えます。",
+      "detachConfirmMessage": "SD WebUI を切り離します。",
+      "detachConfirmWarning": "モデルの選択肢から SD WebUI が消えます。過去の Run と資格情報は消えず、再び接続すればそのまま使えます。この選択は設定として保存されるため、環境変数 SDWEBUI_URL が指定されていても、再起動で自動的には戻りません。",
+      "detachConfirmLabel": "切り離す",
+      "envNote": "この接続は環境変数 SDWEBUI_URL の既定値です。ここで保存または切り離すと、再起動しても以降はこの画面の設定が優先されます。",
+      "locked": "SD WebUI の Run が実行中または待機中のため、今は接続先と資格情報の変更、一覧の読み直しができません。実行が終わってから試してください。",
+      "testSuccessSaveNotice": "接続テストに成功しました。まだ切り替わっていません。「この URL に切り替える」を押すと、この URL に切り替わります。",
+      "testSuccessSaveAndConnectNotice": "接続テストに成功しました。まだ接続していません。「接続する」を押すと、SD WebUI のチェックポイントがモデルの選択肢に加わります。",
+      "testSuccessNonLoopbackSuffix": " ループバック以外のアドレスのため、接続するには確認チェックにもチェックが必要です。",
+      "testResultTitle": "接続テストの結果"
+    },
+    "credentials": {
+      "cardTitle": "資格情報(--api-auth)",
+      "setStatus": "設定済み",
+      "unauthorizedStatus": "認証に失敗しています",
+      "unsetHelp": "WebUI を --api-auth 付きで起動したときだけ設定します。",
+      "setHelp": "保存した値は表示しません。変えるときは差し替えます。",
+      "set": "資格情報を設定",
+      "replace": "差し替える",
+      "delete": "削除",
+      "dialogTitle": "Basic 認証の資格情報",
+      "dialogHelp": "WebUI の --api-auth に指定した「ユーザー名:パスワード」と同じものを入力します。保存した値は画面に表示しません。",
+      "usernameLabel": "ユーザー名",
+      "passwordLabel": "パスワード",
+      "partial": "ユーザー名とパスワードは両方を入力してください。",
+      "plainHttpWarning": "http の接続では、資格情報が平文で流れます。信頼できるネットワークでだけ使ってください。",
+      "testWithThese": "この資格情報で接続テスト",
+      "testNeedsUrl": "接続先が未設定のため、接続テストはできません。資格情報の登録はできます。",
+      "submit": "登録する",
+      "saving": "登録中...",
+      "saved": "資格情報を登録しました",
+      "deleted": "資格情報を削除しました",
+      "deleteFailed": "資格情報を削除できませんでした",
+      "deleteConfirmMessage": "Basic 認証の資格情報を削除します。",
+      "deleteConfirmWarning": "WebUI に --api-auth が掛かっていると、接続できなくなります。",
+      "deleteConfirmLabel": "削除する"
+    },
+    "lora": {
+      "trigger": "LoRA",
+      "triggerTitle": "接続先の LoRA を選んでプロンプトに入れる",
+      "dialogTitle": "LoRA を選ぶ",
+      "searchLabel": "LoRA を探す",
+      "searchPlaceholder": "名前で探す",
+      "count": "{shown} / {total} 件",
+      "noMatch": "一致する LoRA はありません。",
+      "loading": "LoRA の一覧を読み込み中...",
+      "loadFailed": "LoRA の一覧を取得できませんでした。",
+      "loadFailedWithReason": "LoRA の一覧を取得できませんでした: {reason}",
+      "retry": "もう一度試す",
+      "empty": "LoRA が見つかりません",
+      "emptyHelpAdmin": "WebUI に LoRA を足したばかりのときは、一覧を読み直します。",
+      "emptyHelpUser": "WebUI に LoRA を足したばかりのときは、管理者に一覧の読み直しを頼んでください。",
+      "refresh": "一覧を読み直す",
+      "refreshing": "読み直し中...",
+      "refreshFailed": "一覧を読み直せませんでした。",
+      "inPrompt": "入力済み",
+      "back": "← 一覧に戻る",
+      "aliasLabel": "別名: {alias}",
+      "weight": "重み",
+      "insert": "プロンプトに入れる",
+      "inserted": "プロンプトに入っています",
+      "triggerTags": "トリガーワードの候補",
+      "triggerTagsHelp": "学習データのタグの多い順です。タップでプロンプトに足します。",
+      "noTriggerTags": "この LoRA には学習データのタグの記録がありません。",
+      "addTrigger": "「{tag}」をプロンプトに足す",
+      "triggerAdded": "「{tag}」はプロンプトに入っています",
+      "baseModels": {
+        "sdxl": "SDXL",
+        "sd1": "SD1.5",
+        "unknown": "不明"
+      }
+    },
+    "importParams": {
+      "openDialog": "画像から設定を読み込む",
+      "openDialogTitle": "SD WebUI で作った画像に埋め込まれた生成情報を、フォームに読み込みます",
+      "dialogTitle": "画像から設定を読み込む",
+      "dialogLead": "SD WebUI(A1111 形式)で作った画像を選ぶか、ここにドロップ・貼り付けしてください。画像は保存しません。",
+      "dropZone": "画像をここにドロップ、または貼り付け(Ctrl+V)",
+      "chooseFile": "ファイルを選ぶ",
+      "reading": "生成情報を読み込み中...",
+      "notImage": "画像のファイルを選んでください。",
+      "failed": "読み込めませんでした。",
+      "confirmTitle": "今のプロンプトを置き換えますか?",
+      "confirmMessage": "プロンプトとパラメーターを、画像の生成情報で置き換えます。入力画像は変わりません。",
+      "confirmReplace": "置き換える",
+      "previewModel": "モデル: {model}",
+      "previewModelUnchanged": "モデル: 見つからないため変えません",
+      "fromAsset": "SD WebUI のフォームに読み込む",
+      "fromAssetTitle": "この画像の生成情報を、スタジオの SD WebUI のフォームに読み込みます",
+      "fromAssetReading": "読み込み中...",
+      "noModels": "SD WebUI のチェックポイントの一覧を取得できないため、読み込めませんでした。",
+      "noticeTitle": "画像の生成情報を読み込みました",
+      "unappliedSummary": "読み込めなかった項目({count})",
+      "sourceSoftware": "読み込み元: {software}",
+      "dismiss": "閉じる"
+    }
+  },
   "share": {
     "button": "共有",
     "buttonTooltip": "ログインしていない人にも見られるリンクを作ります",
@@ -1942,6 +2269,10 @@
     "expandLineageLabel": "系列グラフを全画面に広げる"
   },
   "finalPrompt": {
+    "expandedHeading": "展開後のプロンプト",
+    "expandedNegativeHeading": "展開後のネガティブプロンプト",
+    "outputLabel": "出力 #{index}",
+    "outputNegativeLabel": "出力 #{index}・ネガティブ",
     "heading": "最終プロンプト",
     "truncated": "長すぎるため途中までを保存しています",
     "expand": "すべて表示",
@@ -2137,6 +2468,47 @@
       "importedAt": "取り込んだ日時",
       "sourceRunId": "元の ID",
       "unknown": "不明"
+    }
+  },
+  "promptTags": {
+    "modeGroupLabel": "{field}の入力のしかた",
+    "modeText": "テキスト",
+    "modeTags": "タグ",
+    "modeTextTitle": "文章のまま編集する",
+    "modeTagsTitle": "カンマで区切ったタグとして編集する(このモデルでは次からもタグで開く)",
+    "inputPlaceholder": "タグを追加(カンマか Enter で確定)",
+    "inputLabel": "{field}にタグを追加",
+    "suggestions": "タグの候補",
+    "removeTag": "「{tag}」を消す",
+    "empty": "タグはまだありません",
+    "fromImage": {
+      "heading": "タグをプロンプトに使う",
+      "copy": "コピー",
+      "copyTitle": "タグをカンマ区切りでコピーする(括弧はエスケープする)",
+      "copied": "コピーしました",
+      "copyFailed": "コピーできませんでした",
+      "replace": "置き換え",
+      "replaceTitle": "生成のフォームのプロンプトをこのタグで置き換える",
+      "append": "後ろに足す",
+      "appendTitle": "生成のフォームのプロンプトの後ろにこのタグを足す",
+      "confirmReplace": "今のプロンプトを置き換えますか?",
+      "yes": "置き換える",
+      "cancel": "やめる",
+      "count": "{count} 個"
+    }
+  },
+  "tagDictionary": {
+    "categories": {
+      "general": "一般",
+      "artist": "作者",
+      "copyright": "作品",
+      "character": "キャラクター",
+      "meta": "メタ",
+      "other": "カテゴリー {number}"
+    },
+    "assist": {
+      "ariaLabel": "タグの候補",
+      "loraAriaLabel": "LoRA の候補"
     }
   }
 }

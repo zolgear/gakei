@@ -34,6 +34,11 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "share",
         "share_asset",
         "run_import",
+        "parameter_set",
+        "tag_dictionary",
+        "tag_dictionary_entry",
+        "tag_dictionary_alias",
+        "tag_dictionary_translation",
         "alembic_version",
     } <= tables
 
@@ -1079,4 +1084,94 @@ def test_migration_0027_adds_run_import(empty_database_url: str) -> None:
     command.downgrade(cfg, "0026")
     engine = create_engine(empty_database_url)
     assert "run_import" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0028_adds_parameter_set(empty_database_url: str) -> None:
+    """ADR-0040: 0027 の DB に upgrade head で parameter_set が加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0027")
+    engine = create_engine(empty_database_url)
+    assert "parameter_set" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "parameter_set" in set(inspector.get_table_names())
+    columns = {c["name"]: c for c in inspector.get_columns("parameter_set")}
+    assert columns["name"]["nullable"] is False
+    assert columns["provider"]["nullable"] is False
+    assert columns["params"]["nullable"] is False
+    assert columns["model"]["nullable"] is True
+    assert columns["prompt"]["nullable"] is True
+    assert columns["created_by_user_id"]["nullable"] is True
+    assert columns["deleted_at"]["nullable"] is True
+    indexes = {i["name"] for i in inspector.get_indexes("parameter_set")}
+    assert {"ix_parameter_set_created_by_user_id", "ix_parameter_set_updated_at"} <= indexes
+    foreign_keys = inspector.get_foreign_keys("parameter_set")
+    assert [fk["referred_table"] for fk in foreign_keys] == ["app_user"]
+    engine.dispose()
+
+    command.downgrade(cfg, "0027")
+    engine = create_engine(empty_database_url)
+    assert "parameter_set" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0029_adds_tag_dictionary_tables(empty_database_url: str) -> None:
+    """ADR-0041: 0028 の DB に upgrade head でタグ辞書のテーブルが加わり、downgrade で消えること。
+    前方一致の検索に使う主キー(辞書 + 検索用の列)を確かめる。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    names = {
+        "tag_dictionary",
+        "tag_dictionary_entry",
+        "tag_dictionary_alias",
+        "tag_dictionary_translation",
+    }
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0028")
+    engine = create_engine(empty_database_url)
+    assert not names & set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert names <= set(inspector.get_table_names())
+    assert inspector.get_pk_constraint("tag_dictionary_entry")["constrained_columns"] == [
+        "dictionary_id",
+        "name_key",
+    ]
+    assert inspector.get_pk_constraint("tag_dictionary_alias")["constrained_columns"] == [
+        "dictionary_id",
+        "alias_key",
+        "name_key",
+    ]
+    assert inspector.get_pk_constraint("tag_dictionary_translation")["constrained_columns"] == [
+        "dictionary_id",
+        "name_key",
+    ]
+    columns = {c["name"]: c for c in inspector.get_columns("tag_dictionary")}
+    assert columns["category_scheme"]["nullable"] is True
+    assert columns["status"]["nullable"] is False
+    for table in ("tag_dictionary_entry", "tag_dictionary_alias", "tag_dictionary_translation"):
+        foreign_keys = inspector.get_foreign_keys(table)
+        assert [fk["referred_table"] for fk in foreign_keys] == ["tag_dictionary"]
+    engine.dispose()
+
+    command.downgrade(cfg, "0028")
+    engine = create_engine(empty_database_url)
+    assert not names & set(sa_inspect(engine).get_table_names())
     engine.dispose()

@@ -57,7 +57,7 @@ from app.domain.schemas import (
 )
 from app.i18n import t
 from app.providers.comfyui.client import check_available
-from app.providers.registry import ProviderRegistry, _is_loopback_url
+from app.providers.registry import ProviderRegistry, is_loopback_url
 from app.worker.runner import Runner
 
 logger = logging.getLogger(__name__)
@@ -287,7 +287,7 @@ def _build_status(db: Session, settings: Settings) -> ComfyUIStatusResponse:
         device=device,
         source=source,
         locked=locked,
-        loopback=_is_loopback_url(url),
+        loopback=is_loopback_url(url),
     )
 
 
@@ -336,7 +336,7 @@ def test_connection(
         reason=reason,
         version=version,
         device=device,
-        loopback=_is_loopback_url(url),
+        loopback=is_loopback_url(url),
     )
 
 
@@ -371,7 +371,7 @@ async def set_connection(
     except ComfyUIConnectionValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    if not _is_loopback_url(body.url):
+    if not is_loopback_url(body.url):
         logger.warning(
             "ComfyUI の接続先にループバック以外のアドレスが設定されました(%s)。"
             "認証のない ComfyUI に入力画像とプロンプトを送信することになります。",
@@ -382,8 +382,8 @@ async def set_connection(
 
     from app.providers.comfyui.provider import ComfyUIProvider
 
-    registry.set_comfyui(
-        ComfyUIProvider(body.url, session_factory, settings.comfyui_timeout_seconds)
+    registry.set_provider(
+        "comfyui", ComfyUIProvider(body.url, session_factory, settings.comfyui_timeout_seconds)
     )
     runner.ensure_lane("comfyui")
 
@@ -410,7 +410,7 @@ def detach_connection(
         )
 
     save_detached(db)
-    registry.set_comfyui(None)
+    registry.set_provider("comfyui", None)
 
     return _build_status(db, settings)
 

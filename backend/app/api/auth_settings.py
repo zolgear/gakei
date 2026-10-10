@@ -41,7 +41,7 @@ from app.domain.schemas import (
     AuthVerifiedView,
 )
 from app.i18n import t
-from app.providers.registry import _is_loopback_url
+from app.providers.registry import is_loopback_url
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +216,7 @@ def _validated_url(value: str, field: str) -> str:
     text = _required_text(value, field)
     if not auth_settings.is_valid_url(text):
         raise _invalid(field)
-    if text.startswith("http://") and not _is_loopback_url(text):
+    if text.startswith("http://") and not is_loopback_url(text):
         logger.warning(
             "認証の %s がループバック以外への http を指しています(%s)。"
             "認証のやり取りが平文で送信されます。",

@@ -1,0 +1,40 @@
+/* テキストモードの入力アシストのポップオーバー(ADR-0041 3章)。外枠は `@` のポップオーバー
+   (`MentionPopover.module.css`)を使い、ここでは1件の中身だけを整える。 */
+.popover {
+  font-size: 13px;
+}
+
+.option {
+  align-items: center;
+  min-height: 28px;
+}
+
+.lora {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.loraName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loraAlias {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 767px) {
+  .option {
+    min-height: 40px;
+    font-size: 14px;
+  }
+}

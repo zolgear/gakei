@@ -6,7 +6,15 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, StrictInt, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    field_validator,
+)
 
 from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
 from app.providers.base import ProviderCapabilities
@@ -370,12 +378,99 @@ class TagListResponse(BaseModel):
     items: list[TagCount] = Field(default_factory=list)
 
 
+class TagSuggestion(BaseModel):
+    """プロンプトのタグの候補(ADR-0039 2章、ADR-0041 2章)。名前は `_` を空白にしたタグ名で、
+    括弧はエスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。"""
+
+    name: str
+    # vocabulary: WD Tagger の語彙(count は語彙の件数)、tag: GAKEI のタグ(count は Asset の数)、
+    # dictionary: タグ辞書(count は辞書の件数。ADR-0041)
+    source: Literal["vocabulary", "tag", "dictionary"]
+    count: int
+    # 以下はタグ辞書の候補で入る(ほかは null)。カテゴリーは辞書の番号のまま
+    # (`category_scheme` が danbooru なら 0 一般、1 作者、3 作品、4 キャラクター、5 メタ)。
+    category: int | None = None
+    category_scheme: str | None = None
+    # 代表の訳(訳の辞書に訳があるとき。語彙・GAKEI のタグの候補にも付く)
+    translation: str | None = None
+    # 一致の種類(name: タグ名、alias: 別名、translation: 訳)と、別名・訳で一致したときの語
+    match: Literal["name", "alias", "translation"] | None = None
+    matched: str | None = None
+
+
+class TagSuggestionResponse(BaseModel):
+    items: list[TagSuggestion] = Field(default_factory=list)
+    # WD Tagger の語彙(`selected_tags.csv`)を使えたか
+    vocabulary_available: bool
+    # タグ辞書(有効なタグの一覧)で答えたか(ADR-0041)
+    dictionary_available: bool = False
+
+
+class TagTranslationsRequest(BaseModel):
+    """訳を引くタグ名(空白でも `_` でもよい。ADR-0041 4章)。"""
+
+    names: list[str] = Field(max_length=200)
+
+
+class TagTranslationsResponse(BaseModel):
+    # 渡したタグ名 → 代表の訳。訳の無いタグは含めない。
+    translations: dict[str, str] = Field(default_factory=dict)
+
+
+class TagDictionaryItem(BaseModel):
+    """登録したタグ辞書(ADR-0041 1章)。"""
+
+    id: uuid.UUID
+    filename: str
+    kind: Literal["tags", "translations"]
+    # タグの一覧のカテゴリーの体系(訳の辞書では null)
+    category_scheme: str | None
+    row_count: int
+    enabled: bool
+    status: Literal["importing", "ready", "failed"]
+    # 失敗の種類(interrupted / importFailed / noRows)と、その文言
+    error_code: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    finished_at: datetime | None = None
+
+
+class TagDictionaryListResponse(BaseModel):
+    items: list[TagDictionaryItem] = Field(default_factory=list)
+    # 選べるカテゴリーの体系
+    category_schemes: list[str] = Field(default_factory=list)
+
+
+class TagDictionaryUpdateRequest(BaseModel):
+    enabled: bool | None = None
+    category_scheme: Literal["danbooru", "other"] | None = None
+
+
+class PromptTagsResponse(BaseModel):
+    """画像のタグをプロンプトにするときの並び(ADR-0039 1章)。エスケープ前のタグ名。"""
+
+    asset_id: uuid.UUID
+    tags: list[str] = Field(default_factory=list)
+    vocabulary_available: bool
+
+
 class RunTextOutput(BaseModel):
-    """実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
-    (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った
-    グラフ(`run.params.comfyui_prompt`)から取った値。"""
+    """実行時に作られたテキスト(ADR-0030 2章)。
+
+    - `role = "final_prompt"`: モデルに渡った最終プロンプト。ComfyUI では PE の出力で、Run に
+      1件(`output_index` は null。すべての出力に当たる)。`node_id`・`class_type`・`title` は
+      送ったグラフ(`run.params.comfyui_prompt`)から取った値。SD WebUI では Dynamic Prompts
+      などが1枚ずつ展開したプロンプトで、出力ごとに1件(`output_index` が出力の Asset の
+      `output_index` に当たる。ADR-0038 7章)。
+    - `role = "final_negative_prompt"`: SD WebUI の、出力ごとの展開後のネガティブプロンプト。
+
+    SD WebUI では、展開しなくても(元のプロンプトと同じでも)記録する。表示する側が Run の
+    `prompt`(ネガティブは `params.negative_prompt`)と比べて、同じなら出さない。
+    """
 
     role: str
+    # 出力ごとのテキストのとき、その出力の `output_index`。Run 全体に当たるときは null。
+    output_index: int | None = None
     node_id: str | None = None
     class_type: str | None = None
     title: str | None = None
@@ -483,6 +578,10 @@ class RunInputCreate(BaseModel):
     position: int = Field(ge=0)
 
 
+# 繰り返し回数の上限(ADR-0042 1章)。
+REPEAT_MAX = 20
+
+
 class RunCreateRequest(BaseModel):
     operation: Literal["generate", "edit"]
     model: str
@@ -493,11 +592,22 @@ class RunCreateRequest(BaseModel):
     inputs: list[RunInputCreate] = Field(default_factory=list)
     # 出力を入れるグループ(ADR-0022)。存在しない・削除済みなら 404。
     asset_group_id: uuid.UUID | None = None
+    # 繰り返し回数(ADR-0042)。同じ設定の Run をこの数だけまとめて積む。API に送る値では
+    # ないので `run.params` には入れない(ADR-0003 ルール4)。
+    repeat: int = Field(default=1, ge=1, le=REPEAT_MAX)
+
+
+class RunCreatedRef(BaseModel):
+    id: uuid.UUID
+    status: Literal["queued", "running", "succeeded", "failed", "canceled"]
 
 
 class RunCreateResponse(BaseModel):
+    # 1件目の Run(繰り返し回数を足す前からの形。ADR-0042 3章)。
     id: uuid.UUID
     status: Literal["queued", "running", "succeeded", "failed", "canceled"]
+    # 作った Run の全体(積んだ順)。繰り返し回数が 1 なら1件。
+    runs: list[RunCreatedRef]
 
 
 class RunInputRef(BaseModel):
@@ -786,6 +896,100 @@ class PromptSetListResponse(BaseModel):
     items: list[PromptSetResponse] = Field(default_factory=list)
 
 
+# -- パラメーターセット(ADR-0040) -----------------------------------------
+# 生成のフォームの設定一式。`params` はフォームの値(型変換済み)で、入れ子は持たない。
+# サーバーだけが書く項目(`comfyui_*`、`sdwebui_*`)は API で 422 にする。
+
+PARAMETER_SET_NAME_MAX = 100
+PARAMETER_SET_PROVIDER_MAX = 32
+PARAMETER_SET_MODEL_MAX = 512
+PARAMETER_SET_PROMPT_MAX = 32_000
+PARAMETER_SET_PARAMS_MAX_KEYS = 200
+PARAMETER_SET_PARAM_KEY_MAX = 100
+
+# bool を int より先に置く(Strict なので 1 と true は取り違えない)。
+ParameterSetValue = StrictBool | StrictInt | StrictFloat | StrictStr
+
+
+def _validate_parameter_set_params(
+    value: dict[str, ParameterSetValue] | None,
+) -> dict[str, ParameterSetValue] | None:
+    if value is None:
+        return None
+    if len(value) > PARAMETER_SET_PARAMS_MAX_KEYS:
+        raise ValueError(f"params must have at most {PARAMETER_SET_PARAMS_MAX_KEYS} keys")
+    for key, item in value.items():
+        if not key or len(key) > PARAMETER_SET_PARAM_KEY_MAX:
+            raise ValueError(f"param name must be 1-{PARAMETER_SET_PARAM_KEY_MAX} characters")
+        if isinstance(item, str) and len(item) > PARAMETER_SET_PROMPT_MAX:
+            raise ValueError(f"param {key} must be at most {PARAMETER_SET_PROMPT_MAX} characters")
+    return value
+
+
+class ParameterSetCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=PARAMETER_SET_NAME_MAX)
+    # 登録簿にあるかは問わない(後で無効になることもあるため)。長さだけを確かめる。
+    provider: str = Field(min_length=1, max_length=PARAMETER_SET_PROVIDER_MAX)
+    model: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_MODEL_MAX)
+    prompt: str | None = Field(default=None, max_length=PARAMETER_SET_PROMPT_MAX)
+    params: dict[str, ParameterSetValue] = Field(default_factory=dict)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+    @field_validator("params")
+    @classmethod
+    def _check_params(cls, value: dict[str, ParameterSetValue]) -> dict[str, ParameterSetValue]:
+        return _validate_parameter_set_params(value) or {}
+
+
+class ParameterSetUpdateRequest(BaseModel):
+    """送った項目だけを変える。`model` と `prompt` は null を送ると「保存しない」に戻す。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_NAME_MAX)
+    provider: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_PROVIDER_MAX)
+    model: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_MODEL_MAX)
+    prompt: str | None = Field(default=None, max_length=PARAMETER_SET_PROMPT_MAX)
+    params: dict[str, ParameterSetValue] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+    @field_validator("params")
+    @classmethod
+    def _check_params(
+        cls, value: dict[str, ParameterSetValue] | None
+    ) -> dict[str, ParameterSetValue] | None:
+        return _validate_parameter_set_params(value)
+
+
+class ParameterSetResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    provider: str
+    model: str | None
+    prompt: str | None
+    params: dict[str, ParameterSetValue]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ParameterSetListResponse(BaseModel):
+    items: list[ParameterSetResponse] = Field(default_factory=list)
+
+
 # -- Global search (ADR-0009 6章) ----------------------------------------
 # テキストの部分一致のみ。FTS・形態素解析なし。削除済みは除外。
 # 将来 embedding 検索を足すときも、この API の形はそのまま使う想定。
@@ -868,7 +1072,7 @@ class OpenAIBaseUrlUpdateRequest(BaseModel):
 
 
 # -- General settings (ADR-0009、ADR-0013 7章) -------------------------------
-# moderation(Generate 専用)と ComfyUI のタイムアウトを画面から変える。優先順位は
+# moderation(Generate 専用)と ComfyUI・SD WebUI のタイムアウトを画面から変える。優先順位は
 # 画面で保存した値(`app_setting`) > 環境変数 > 組み込みの既定値。
 
 
@@ -885,9 +1089,18 @@ class ComfyUITimeoutSetting(BaseModel):
     default: int
 
 
+class SdWebuiTimeoutSetting(BaseModel):
+    """SD WebUI の1回の実行を待つ上限(秒。ADR-0038 6章)。"""
+
+    value: int
+    source: Literal["setting", "env", "default"]
+    default: int
+
+
 class GeneralSettingsResponse(BaseModel):
     moderation: ModerationSetting
     comfyui_timeout_seconds: ComfyUITimeoutSetting
+    sdwebui_timeout_seconds: SdWebuiTimeoutSetting
 
 
 class GeneralSettingsUpdateRequest(BaseModel):
@@ -901,6 +1114,7 @@ class GeneralSettingsUpdateRequest(BaseModel):
 
     moderation: str | None = None
     comfyui_timeout_seconds: int | None = None
+    sdwebui_timeout_seconds: int | None = None
 
 
 # -- ComfyUI (ADR-0013) ----------------------------------------------------
@@ -944,6 +1158,124 @@ class ComfyUIConnectionRequest(BaseModel):
     url: str
     # ループバック以外の URL を保存するための、画面での確認チェック。
     allow_non_loopback: bool = False
+
+
+# -- SD WebUI(ADR-0038) ------------------------------------------------------------
+# 資格情報(Basic 認証)の値は返さず、設定済みかだけを返す。接続先の options や一覧の
+# filename(フルパス)も返さない。
+
+
+SdWebuiReason = Literal[
+    "apiNotEnabled", "unauthorized", "unreachable", "timeout", "unexpectedResponse", "parseFailed"
+]
+
+
+class SdWebuiStatusResponse(BaseModel):
+    url: str | None
+    enabled: bool
+    available: bool
+    # 機械可読の理由(available が false のとき)。reason_message は利用者向けの文言。
+    reason: SdWebuiReason | None = None
+    reason_message: str | None = None
+    source: Literal["setting", "env", "none"]
+    # true の間は接続設定と資格情報を変更できない(SD WebUI の Run が queued/running)。
+    locked: bool
+    loopback: bool | None = None
+    credentials_set: bool
+    # 接続できたときだけ。forge は Forge 系(forge_additional_modules がある)、a1111 はそれ以外。
+    flavor: Literal["forge", "a1111"] | None = None
+    checkpoint_count: int | None = None
+
+
+class SdWebuiLora(BaseModel):
+    """接続先の LoRA 1つ(ADR-0038 8章)。`path` とその他のメタ情報は返さない。"""
+
+    name: str
+    # name と違うときだけ
+    alias: str | None = None
+    # 学習時のメタ情報から分かるベースモデル。分からなければ null。
+    base_model: Literal["sdxl", "sd1"] | None = None
+    # `ss_tag_frequency` を足し合わせて多い順(最大 20。`_` は空白)。
+    trigger_tags: list[str] = Field(default_factory=list)
+
+
+class SdWebuiLorasResponse(BaseModel):
+    """`GET /api/sdwebui/loras`。name の順(大文字小文字を無視)。"""
+
+    items: list[SdWebuiLora]
+
+
+class SdWebuiImportUnapplied(BaseModel):
+    """フォームに入れなかった生成情報の項目(infotext の名前と値のまま)。"""
+
+    name: str
+    value: str
+
+
+class SdWebuiImportNote(BaseModel):
+    """読み込みの注意。`code` は機械可読(modelNotFound、modelMatchedByHash、sizeOutOfRange、
+    invalidValue、samplerNotFound、schedulerNotFound、vaeNotFound、dynamicPromptsUnavailable、
+    truncated)、`message` は利用者向けの文言。"""
+
+    code: str
+    message: str
+
+
+class SdWebuiImportSource(BaseModel):
+    """読み込んだ生成情報の出どころ(infotext の `Version`。無ければ null)。"""
+
+    software: str | None = None
+
+
+class SdWebuiImportParamsResponse(BaseModel):
+    """`POST /api/sdwebui/import-params`(ADR-0038 9章)。フォームに入れる値。
+
+    `model` はチェックポイントの `model_name`(見つからなければ null。フォームのモデルを変えない)。
+    `params` は SD WebUI の Generate のパラメーター名(capabilities と同じ)と `size`(`WxH`)。
+    """
+
+    model: str | None
+    prompt: str
+    params: dict[str, str | int | float | bool]
+    unapplied: list[SdWebuiImportUnapplied]
+    notes: list[SdWebuiImportNote]
+    source: SdWebuiImportSource
+
+
+class SdWebuiConnectionTestRequest(BaseModel):
+    """接続テスト(`POST /api/sdwebui/connection/test`)。
+
+    url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
+    試す(保存はしない)。省くと保存済みの資格情報を使う。
+    """
+
+    url: str | None = None
+    username: str | None = None
+    password: str | None = None
+
+
+class SdWebuiConnectionTestResponse(BaseModel):
+    url: str
+    available: bool
+    reason: SdWebuiReason | None = None
+    reason_message: str | None = None
+    loopback: bool
+    flavor: Literal["forge", "a1111"] | None = None
+    checkpoint_count: int | None = None
+
+
+class SdWebuiConnectionRequest(BaseModel):
+    """接続・変更(`PUT /api/sdwebui/connection`)。"""
+
+    url: str
+    allow_non_loopback: bool = False
+
+
+class SdWebuiCredentialsRequest(BaseModel):
+    """Basic 認証の資格情報(`PUT /api/sdwebui/credentials`)。値は応答に含めない。"""
+
+    username: str
+    password: str
 
 
 class ComfyNodeInputInfo(BaseModel):

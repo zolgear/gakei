@@ -128,6 +128,132 @@
       "historyErrorNoDetails": "ComfyUI の実行がエラーで終了しました(詳細不明)。"
     }
   },
+  "sdwebui": {
+    "connection": {
+      "invalidUrl": "URL は http:// または https:// で、ホストを含む形式で指定してください。",
+      "urlHasExtras": "URL にユーザー名・パスワード、クエリー(?)、フラグメント(#)は含められません。Basic 認証のユーザー名とパスワードは資格情報の欄で設定してください。",
+      "nonLoopback": "ループバック(127.0.0.1 など)以外のアドレスです。入力画像とプロンプトをネットワーク越しに送信することになるため、確認のうえチェックを入れて保存してください。"
+    },
+    "credentials": {
+      "invalid": "ユーザー名とパスワードは、それぞれ1〜256文字で、制御文字を含めずに指定してください。",
+      "usernameColon": "ユーザー名に「:」は使えません。",
+      "bothRequired": "ユーザー名とパスワードは両方を指定してください。"
+    },
+    "api": {
+      "connectionUrlMissing": "接続先の URL が指定されていません。",
+      "notConnected": "SD WebUI に接続していません。",
+      "lockedChangeConnection": "SD WebUI の Run が実行中または待機中のため、接続設定を変更できません。",
+      "lockedDetach": "SD WebUI の Run が実行中または待機中のため、切り離せません。",
+      "lockedChangeCredentials": "SD WebUI の Run が実行中または待機中のため、資格情報を変更できません。",
+      "lockedRefresh": "SD WebUI の Run が実行中または待機中のため、一覧を読み直せません。"
+    },
+    "client": {
+      "apiNotEnabled": "SD WebUI の API が見つかりません(404)。WebUI を --api を付けて起動したか、起動のログに API のエラーがないか(--api-auth の書式の誤りなど)を確かめてください。",
+      "unauthorized": "SD WebUI の API に Basic 認証が必要か、資格情報が違います(401)。WebUI の --api-auth と同じユーザー名とパスワードを設定してください。",
+      "unexpectedResponse": "SD WebUI から予期しない応答がありました(status={status})。",
+      "connectTimeout": "SD WebUI への接続がタイムアウトしました。",
+      "connectFailed": "SD WebUI に接続できません。URL と、WebUI が起動しているかを確かめてください。",
+      "requestTimeout": "SD WebUI の応答を待つ間にタイムアウトしました。",
+      "parseFailed": "SD WebUI の応答を解釈できませんでした。",
+      "rejectedNoDetails": "SD WebUI がリクエストを拒否しました(詳細不明)。",
+      "executionFailedNoDetails": "SD WebUI での実行に失敗しました(詳細不明)。"
+    },
+    "provider": {
+      "unavailable": "SD WebUI に接続できないため、チェックポイントの一覧を取得できません。",
+      "unknownCheckpoint": "チェックポイント {model} は SD WebUI の一覧にありません。",
+      "missingRequestInternal": "Run の記録に SD WebUI へ送る本文(sdwebui_request)がありません。",
+      "timeoutExecuting": "SD WebUI の実行が時間内に終わりませんでした。",
+      "modelMismatch": "指定したチェックポイント({expected})ではなく、{actual} で描かれました。WebUI でチェックポイントを読み込めなかった可能性があります。",
+      "noOutputImages": "SD WebUI から画像が返りませんでした。",
+      "unreadableOutput": "SD WebUI から返った画像を読めませんでした。",
+      "inputImageMissingInternal": "Run の入力に元の画像がありません。",
+      "unreadableInput": "入力画像またはマスクを読めませんでした。",
+      "hiresDisabled": "{key} は高解像度補助を有効にしたときだけ指定できます。",
+      "hiresTooLarge": "拡大後の寸法 {width}×{height} が大きすぎます(長辺は {max}px まで)。アップスケール倍率か寸法を小さくしてください。",
+      "tooManyOutputs": "枚数 {n} × バッチ回数 {n_iter} = {total} 枚は多すぎます({max} 枚まで)。枚数かバッチ回数を減らしてください。"
+    },
+    "params": {
+      "negativePrompt": "ネガティブプロンプト",
+      "negativePromptDescription": "描きたくないものを書きます。",
+      "sampler": "サンプラー",
+      "samplerDescription": "接続先の WebUI にあるサンプラーから選びます。",
+      "scheduler": "スケジューラー",
+      "schedulerDescription": "接続先の WebUI にあるスケジューラーから選びます。",
+      "steps": "ステップ数",
+      "stepsDescription": "多いほど細部まで描き込みますが、時間がかかります。",
+      "cfgScale": "CFG スケール",
+      "cfgScaleDescription": "プロンプトにどれだけ従うか。大きいほど忠実ですが、崩れやすくなります。",
+      "seed": "シード",
+      "vae": "VAE",
+      "vaeBuiltin": "チェックポイントに内蔵のもの",
+      "vaeDescription": "チェックポイントの種類(SD1.5、SDXL など)に合う VAE を選びます。WebUI の設定は変えず、この実行だけに使います。",
+      "clipSkip": "Clip skip",
+      "clipSkipDescription": "テキストエンコーダーの最後の何層を飛ばすか。1 は飛ばさない(通常)。アニメ系のモデルでは 2 を勧めるものがあります。WebUI の設定は変えず、この実行だけに使います。",
+      "count": "枚数",
+      "countDescription": "1回の実行で描く枚数(batch_size)。",
+      "batchCount": "バッチ回数",
+      "batchCountDescription": "枚数(batch_size)を1回として、それを何回くり返すか(n_iter)。1つの Run の画像は枚数 × バッチ回数で、{max} 枚まで。seed は1枚ごとに 1 ずつ増えます。",
+      "dynamicPrompts": "Dynamic Prompts",
+      "dynamicPromptsDescription": "{{red|blue|green}} のような書き方や、WebUI 側のワイルドカード(__名前__)を1枚ずつ展開します。無効にすると、プロンプトをそのまま送ります。",
+      "dynamicPromptsCombinatorial": "組み合わせをすべて作る",
+      "dynamicPromptsCombinatorialDescription": "プロンプトの書き方から作れる組み合わせをすべて描きます。枚数の指定は使われず、組み合わせの数だけ作ります(上限 {limit} 枚)。",
+      "denoisingStrength": "ノイズ除去強度",
+      "denoisingStrengthDescription": "元の画像をどれだけ描き直すか。0 に近いほど元のまま、1 に近いほど大きく変わります(目安: 0.3〜0.5 で手直し、0.6〜0.8 で描き直し)。",
+      "resizeMode": "サイズの合わせ方",
+      "resizeModeDescription": "入力画像と出力のサイズ(縦横比)が違うときの合わせ方。",
+      "resizeModeJustResize": "引き伸ばす",
+      "resizeModeCropAndResize": "切り抜いて合わせる",
+      "resizeModeResizeAndFill": "合わせて余白を埋める",
+      "resizeModeLatentUpscale": "引き伸ばす(潜在空間で拡大)",
+      "maskBlur": "マスクのぼかし",
+      "maskBlurDescription": "マスクの境目をぼかす幅(ピクセル)。大きいほど描き直した部分がなじみます。",
+      "inpaintingFill": "マスク内の初期値",
+      "inpaintingFillDescription": "描き直す範囲を、何から描き始めるか。元の画像を活かすなら「元の画像」。",
+      "inpaintingFillFill": "周りの色で埋める",
+      "inpaintingFillOriginal": "元の画像",
+      "inpaintingFillLatentNoise": "ノイズ",
+      "inpaintingFillLatentNothing": "空(潜在空間で 0)",
+      "inpaintFullRes": "マスク部分だけを拡大して描く",
+      "inpaintFullResDescription": "マスクの範囲(と周りの余白)を切り出し、出力のサイズまで拡大して描いてから戻します。小さな範囲を細かく描き直すときに使います。",
+      "inpaintFullResPadding": "拡大するときの余白",
+      "inpaintFullResPaddingDescription": "「マスク部分だけを拡大して描く」で、マスクの周りに含める余白(ピクセル)。",
+      "hires": "高解像度補助",
+      "hiresDescription": "低めの解像度で描いてから拡大し、もう一度描き直します(hires fix)。拡大後の長辺は {max}px まで。",
+      "hrUpscaler": "アップスケーラー",
+      "hrUpscalerDescription": "拡大の方式。Latent 系は潜在空間で拡大し、ノイズ除去強度を高め(0.5 以上)にするのが目安です。",
+      "hrScale": "アップスケール倍率",
+      "hrScaleDescription": "1回目の寸法に掛ける倍率。拡大後の長辺は {max}px まで。",
+      "hrSecondPassSteps": "高解像度でのステップ数",
+      "hrSecondPassStepsDescription": "拡大後に描き直すステップ数。0 なら本体のステップ数と同じ。",
+      "hrDenoisingStrength": "ノイズ除去強度",
+      "hrDenoisingStrengthDescription": "拡大後にどれだけ描き直すか。0 に近いほど拡大しただけに近く、1 に近いほど大きく変わります。",
+      "hrCfg": "Hires CFG Scale",
+      "hrCfgDescription": "拡大後の描き直しの CFG スケール。未指定なら本体の CFG スケールと同じ値を送ります。",
+      "hrPrompt": "拡大後のプロンプト",
+      "hrPromptDescription": "拡大後の描き直しにだけ使うプロンプト。空なら本体のプロンプトと同じ。",
+      "hrNegativePrompt": "拡大後のネガティブプロンプト",
+      "hrNegativePromptDescription": "拡大後の描き直しにだけ使うネガティブプロンプト。空なら本体のネガティブプロンプトと同じ。"
+    },
+    "importParams": {
+      "inputMissing": "画像のファイルか、ストックの画像(asset_id)を指定してください。",
+      "invalidAssetId": "asset_id の形式が正しくありません。",
+      "noMetadata": "この画像には生成情報が埋め込まれていません。",
+      "notA1111": "この画像の生成情報は SD WebUI(A1111 形式)のものではないため、読み込めません。",
+      "notes": {
+        "modelNotFound": "チェックポイント「{name}」が接続先に見つからないため、モデルは変えていません。",
+        "modelMatchedByHash": "チェックポイント「{name}」は名前では見つからず、ハッシュが一致した「{model}」にしました。",
+        "sizeFloored": "サイズ {value} を 8 の倍数に切り捨てて {size} にしました。",
+        "sizeOutOfRange": "サイズ {value} は SD WebUI のサイズの制約に収まらないため、入れていません({reason})。",
+        "invalidValue": "{name} の値が範囲外か読めないため、入れていません。",
+        "samplerNotFound": "サンプラー「{value}」が接続先に見つからないため、入れていません。",
+        "schedulerNotFound": "スケジューラー「{value}」が接続先に見つからないため、入れていません。",
+        "vaeNotFound": "VAE「{value}」が接続先に見つからないため、入れていません。",
+        "dynamicPromptsUnavailable": "接続先に Dynamic Prompts が無いため、展開前のプロンプト(Template)ではなく、展開後のプロンプトを入れました。",
+        "truncated": "生成情報が長すぎるため、一部が切り詰められています。",
+        "hiresUpscalerNotFound": "アップスケーラー「{value}」が接続先に見つからないため、既定のアップスケーラーにしました。"
+      }
+    }
+  },
   "openaiSpec": {
     "editingStrong": "編集に強い",
     "fast": "高速",
@@ -180,7 +306,8 @@
   "settings": {
     "general": {
       "invalidModeration": "moderation は auto または low である必要があります",
-      "invalidTimeoutSeconds": "ComfyUI のタイムアウトは{min}〜{max}秒の整数である必要があります"
+      "invalidTimeoutSeconds": "ComfyUI のタイムアウトは{min}〜{max}秒の整数である必要があります",
+      "invalidSdwebuiTimeoutSeconds": "SD WebUI のタイムアウトは{min}〜{max}秒の整数である必要があります"
     },
     "mcp": {
       "invalidEnabled": "enabled は true か false である必要があります",
@@ -280,7 +407,8 @@
     "maskNotSupported": "選んだモデルはマスクに対応していません",
     "maskRequired": "mask が必要です",
     "maskRequiresPosition0": "mask を使う場合は position=0 の image 入力が必要です",
-    "maskSizeMismatch": "mask は position=0 の画像と同寸である必要があります"
+    "maskSizeMismatch": "mask は position=0 の画像と同寸である必要があります",
+    "maskOnlyParam": "{key} はマスクがあるときだけ指定できます"
   },
   "sizes": {
     "positiveIntegersRequired": "width と height は正の整数である必要があります",
@@ -288,7 +416,8 @@
     "longEdgeMax": "長辺は{maxLongEdge}px以下である必要があります",
     "totalPixelsRange": "総画素数は{min}〜{max}である必要があります",
     "aspectRatioRange": "縦横比は 1:3 〜 3:1 の範囲である必要があります",
-    "sizeFormat": "size は \"auto\" または \"WIDTHxHEIGHT\" の形式である必要があります"
+    "sizeFormat": "size は \"auto\" または \"WIDTHxHEIGHT\" の形式である必要があります",
+    "autoNotAllowed": "このプロバイダーではサイズに auto を指定できません。幅と高さを指定してください。"
   },
   "assets": {
     "sourceAssetOnlyForSketch": "source_asset_id はスケッチ(kind=sketch)にのみ指定できます",
@@ -321,6 +450,10 @@
   "promptSets": {
     "notFound": "プロンプトセットが見つかりません",
     "itemNotFound": "プロンプトセットの項目が見つかりません"
+  },
+  "parameterSets": {
+    "notFound": "パラメーターセットが見つかりません",
+    "serverOnlyParam": "サーバーだけが書く項目はパラメーターセットに保存できません: {name}"
   },
   "assetGroups": {
     "notFound": "グループが見つかりません",
@@ -658,5 +791,25 @@
     "fileMismatch": "画像の内容が manifest.json と一致しません(書き換えられた可能性があります): {name}",
     "conflictsWithEarlierImport": "以前に取り込んだ同じ Run の出力と内容が違います",
     "invalidImage": "画像を取り込めません: {reason}"
+  },
+  "tagDictionaries": {
+    "tooLarge": "辞書のファイルは{mb}MB以下にしてください",
+    "noFile": "multipart の本文に辞書のファイル(file)がありません",
+    "invalidScheme": "カテゴリーの体系が正しくありません",
+    "notFound": "このタグ辞書は存在しません",
+    "importing": "取り込み中のタグ辞書は削除できません。取り込みが終わってから削除してください",
+    "emptyFile": "{file} に行がありません",
+    "invalidZip": "zip ファイルを読めませんでした",
+    "zipTooManyFiles": "zip の中のファイルが多すぎます(上限 {max})",
+    "zipNoCsv": "zip の中に CSV がありません",
+    "zipEncrypted": "パスワード付きの zip は読めません",
+    "extractedTooLarge": "zip を展開した合計が大きすぎます(上限 {mb}MB)",
+    "invalidEncoding": "{file} を UTF-8 として読めませんでした",
+    "undetermined": "{file} の種類を判定できませんでした。ヘッダーなしの CSV で、4 列(タグ名, カテゴリー, 件数, 別名)か 2 列(タグ名, 訳)にしてください",
+    "errors": {
+      "interrupted": "取り込みの途中でサーバーが止まりました。もう一度登録してください",
+      "importFailed": "取り込みに失敗しました。もう一度登録してください",
+      "noRows": "取り込める行がありませんでした"
+    }
   }
 }

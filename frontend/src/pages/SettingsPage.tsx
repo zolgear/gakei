@@ -37,6 +37,8 @@ import { DisplaySettingsPage } from '../features/settings/pages/DisplaySettingsP
 import { McpSettingsPage } from '../features/settings/pages/McpSettingsPage'
 import { OpenAiSettingsPage } from '../features/settings/pages/OpenAiSettingsPage'
 import { ComfyUISettingsPage } from '../features/settings/pages/ComfyUISettingsPage'
+import { SdWebuiSettingsPage } from '../features/settings/pages/SdWebuiSettingsPage'
+import { TagDictionarySettingsPage } from '../features/settings/pages/TagDictionarySettingsPage'
 import { ShareLinksSettingsPage } from '../features/settings/pages/ShareLinksSettingsPage'
 import { AnnotationSettingsPage } from '../features/settings/pages/AnnotationSettingsPage'
 import { EmbeddingSettingsPage } from '../features/settings/pages/EmbeddingSettingsPage'
@@ -61,6 +63,8 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   annotation: AnnotationSettingsPage,
   embeddings: EmbeddingSettingsPage,
   comfyui: ComfyUISettingsPage,
+  sdwebui: SdWebuiSettingsPage,
+  tagDictionary: TagDictionarySettingsPage,
   mcp: McpSettingsPage,
   shareLinks: ShareLinksSettingsPage,
   authentication: AuthSettingsPage,

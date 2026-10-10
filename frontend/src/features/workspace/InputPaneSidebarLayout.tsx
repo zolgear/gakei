@@ -19,10 +19,12 @@ export function InputPaneSidebarLayout({
   paramFields,
   groupField,
   otherParams,
+  importNotice,
 }: InputPaneSlots) {
   return (
     <div className={styles.column}>
       <div className={styles.scroll}>
+        {importNotice}
         <div className={`${styles.section} ${styles.modelGroup}`}>
           {modelField}
           {groupField}

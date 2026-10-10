@@ -63,6 +63,10 @@ export type PromptSetCreateRequest = components['schemas']['PromptSetCreateReque
 export type PromptSetUpdateRequest = components['schemas']['PromptSetUpdateRequest']
 export type PromptSetItemAppendRequest = components['schemas']['PromptSetItemAppendRequest']
 export type PromptSetItemUpdateRequest = components['schemas']['PromptSetItemUpdateRequest']
+export type ParameterSetResponse = components['schemas']['ParameterSetResponse']
+export type ParameterSetListResponse = components['schemas']['ParameterSetListResponse']
+export type ParameterSetCreateRequest = components['schemas']['ParameterSetCreateRequest']
+export type ParameterSetUpdateRequest = components['schemas']['ParameterSetUpdateRequest']
 
 export type SearchResponse = components['schemas']['SearchResponse']
 export type SearchRunHit = components['schemas']['SearchRunHit']
@@ -88,6 +92,13 @@ export type AnnotationStatusView = components['schemas']['AnnotationStatusView']
 export type AssetAnnotationResponse = components['schemas']['AssetAnnotationResponse']
 export type TagCount = components['schemas']['TagCount']
 export type TagListResponse = components['schemas']['TagListResponse']
+export type TagSuggestion = components['schemas']['TagSuggestion']
+export type TagSuggestionResponse = components['schemas']['TagSuggestionResponse']
+export type PromptTagsResponse = components['schemas']['PromptTagsResponse']
+export type TagDictionaryItem = components['schemas']['TagDictionaryItem']
+export type TagDictionaryListResponse = components['schemas']['TagDictionaryListResponse']
+export type TagDictionaryUpdateRequest = components['schemas']['TagDictionaryUpdateRequest']
+export type TagCategoryScheme = NonNullable<TagDictionaryUpdateRequest['category_scheme']>
 export type AnnotationSettingsResponse = components['schemas']['AnnotationSettingsResponse']
 export type AnnotationSettingsUpdateRequest = components['schemas']['AnnotationSettingsUpdateRequest']
 export type AnnotationBackfillResponse = components['schemas']['AnnotationBackfillResponse']
@@ -750,6 +761,38 @@ export function deletePromptSetItem(promptSetId: string, itemId: string): Promis
   return request(`/api/prompt-sets/${promptSetId}/items/${itemId}`, { method: 'DELETE' })
 }
 
+// -- パラメーターセット(ADR-0040) -----------------------------------------
+
+export function listParameterSets(): Promise<ParameterSetListResponse> {
+  return request('/api/parameter-sets')
+}
+
+export function createParameterSet(body: ParameterSetCreateRequest): Promise<ParameterSetResponse> {
+  return request('/api/parameter-sets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/**
+ * body に含めたキーだけが更新される(`model`・`prompt` を明示的に `null` にすると「保存しない」に戻る)。
+ */
+export function updateParameterSet(
+  parameterSetId: string,
+  body: ParameterSetUpdateRequest,
+): Promise<ParameterSetResponse> {
+  return request(`/api/parameter-sets/${parameterSetId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteParameterSet(parameterSetId: string): Promise<void> {
+  return request(`/api/parameter-sets/${parameterSetId}`, { method: 'DELETE' })
+}
+
 // -- 参考価格 ----------------------------------------------------------------
 
 /** `input_asset_ids` は API ではカンマ区切りの文字列だが、呼び出し側は配列で渡す。 */
@@ -911,6 +954,98 @@ export function deleteComfyWorkflow(workflowId: string): Promise<void> {
   return request(`/api/comfyui/workflows/${workflowId}`, { method: 'DELETE' })
 }
 
+// -- SD WebUI(A1111 互換の API。ADR-0038) ------------------------------------
+
+export type SdWebuiStatus = components['schemas']['SdWebuiStatusResponse']
+export type SdWebuiConnectionTestResponse = components['schemas']['SdWebuiConnectionTestResponse']
+export type SdWebuiTimeoutSetting = components['schemas']['SdWebuiTimeoutSetting']
+
+export function getSdWebuiStatus(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/status')
+}
+
+/**
+ * 設定は変えない。`url` を省くとサーバーが今の有効な URL で試す。資格情報は両方そろえて渡すと
+ * その値で試し(保存しない)、省くと保存済みの資格情報を使う。
+ */
+export function testSdWebuiConnection(params: {
+  url?: string
+  credentials?: { username: string; password: string }
+}): Promise<SdWebuiConnectionTestResponse> {
+  return request('/api/sdwebui/connection/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: params.url ?? null,
+      ...(params.credentials ?? {}),
+    }),
+  })
+}
+
+/** 接続・URL の変更。ループバック以外は `allowNonLoopback` が要る(422)。SD WebUI の Run が待機中・実行中なら 409。 */
+export function setSdWebuiConnection(url: string, allowNonLoopback = false): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/connection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, allow_non_loopback: allowNonLoopback }),
+  })
+}
+
+/** 切り離す。過去の Run と資格情報は消えない。 */
+export function detachSdWebuiConnection(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/connection', { method: 'DELETE' })
+}
+
+/** Basic 認証の資格情報を保存する。応答に値は含まれない(`credentials_set` だけ)。 */
+export function setSdWebuiCredentials(username: string, password: string): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/credentials', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+}
+
+export function deleteSdWebuiCredentials(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/credentials', { method: 'DELETE' })
+}
+
+/** WebUI にチェックポイントと LoRA の一覧を読み直させ、GAKEI の一覧のキャッシュも捨てる(管理者だけ)。 */
+export function refreshSdWebui(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/refresh', { method: 'POST' })
+}
+
+export type SdWebuiLora = components['schemas']['SdWebuiLora']
+
+/**
+ * 接続先の LoRA の一覧(ADR-0038 8章)。name・alias・ベースモデル・トリガーの候補だけ。
+ * 接続していない・接続先から取れないときは 409。
+ */
+export function listSdWebuiLoras(): Promise<{ items: SdWebuiLora[] }> {
+  return request('/api/sdwebui/loras')
+}
+
+export type SdWebuiImportParamsResponse = components['schemas']['SdWebuiImportParamsResponse']
+
+/**
+ * 画像の生成情報(A1111 形式)から SD WebUI の生成フォームの値を作る(ADR-0038 9章)。
+ * 手元のファイル(サーバーは保存しない)か、ストックの画像(asset_id)のどちらか。
+ * 未接続は 409、生成情報が無い・A1111 形式でなければ 422、見えない Asset は 404、大きすぎれば 413。
+ */
+export function importSdWebuiParams(
+  input: { file: Blob } | { assetId: string },
+): Promise<SdWebuiImportParamsResponse> {
+  if ('file' in input) {
+    const form = new FormData()
+    form.append('file', input.file, input.file instanceof File ? input.file.name : 'image')
+    return request('/api/sdwebui/import-params', { method: 'POST', body: form })
+  }
+  return request('/api/sdwebui/import-params', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ asset_id: input.assetId }),
+  })
+}
+
 // -- タイトルとタグ(ADR-0024) --------------------------------------------------
 // 編集はログイン者全員。マスクと削除済みの Asset は 409(detail に理由)。いずれも更新後の注釈を返す。
 
@@ -945,6 +1080,63 @@ export function annotateAsset(assetId: string): Promise<AssetAnnotationResponse>
 /** 件数の多い順。`q` は部分一致(正規化してから比べる)。 */
 export function listTags(params: operations['list_tags']['parameters']['query'] = {}): Promise<TagListResponse> {
   return request(`/api/tags${toQuery(params)}`)
+}
+
+/**
+ * プロンプトのタグ編集の候補(ADR-0039 2章)。WD Tagger の語彙と GAKEI のタグ(英数字のもの)、
+ * 前方一致が先。名前はエスケープ前(`_` は空白)。
+ */
+export function suggestPromptTags(
+  params: operations['suggest_prompt_tags']['parameters']['query'] = {},
+): Promise<TagSuggestionResponse> {
+  return request(`/api/tags/suggestions${toQuery(params)}`)
+}
+
+/**
+ * タグ名 → 辞書の代表の訳(ADR-0041 4章)。訳の無いタグは含めない。キーは渡した名前のまま。
+ * 1回に送れるのは 200 件まで。
+ */
+export function getTagTranslations(names: readonly string[]): Promise<{ translations?: Record<string, string> }> {
+  return request('/api/tags/translations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ names }),
+  })
+}
+
+// -- タグ辞書(ADR-0041 1章。管理者だけ) -------------------------------------------
+
+export function listTagDictionaries(): Promise<TagDictionaryListResponse> {
+  return request('/api/settings/tag-dictionaries')
+}
+
+/**
+ * CSV か、CSV を含む zip を登録する(202。取り込みはサーバーの中で続き、完了は一覧の取得で確かめる)。
+ * 100MB を超えると 413、種類を判定できない・zip が不正などは 422(`detail` は翻訳済み)。
+ */
+export function uploadTagDictionary(file: File, categoryScheme?: TagCategoryScheme): Promise<TagDictionaryListResponse> {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  if (categoryScheme) form.append('category_scheme', categoryScheme)
+  return request('/api/settings/tag-dictionaries', { method: 'POST', body: form })
+}
+
+export function updateTagDictionary(id: string, body: TagDictionaryUpdateRequest): Promise<TagDictionaryItem> {
+  return request(`/api/settings/tag-dictionaries/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 取り込み中は 409。 */
+export function deleteTagDictionary(id: string): Promise<void> {
+  return request(`/api/settings/tag-dictionaries/${id}`, { method: 'DELETE' })
+}
+
+/** 画像のタグをプロンプトにするときの並び(ADR-0039 1章)。名前はエスケープ前。 */
+export function getAssetPromptTags(assetId: string): Promise<PromptTagsResponse> {
+  return request(`/api/assets/${assetId}/prompt-tags`)
 }
 
 /** 全ログイン者が読める(ビューアの「再推定」を出すかどうかに `usable_engines` を使う)。 */

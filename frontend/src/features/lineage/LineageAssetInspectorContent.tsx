@@ -8,11 +8,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { ApiError, getAsset, getRun, restoreAsset } from '../../api/client'
-import {
-  comfyUiSeedTooltip,
-  describeComfyUiSeed,
-  extractComfyUiSeed,
-} from '../run-detail/comfyuiPromptDisplay'
+import { runSeedDisplay } from '../run-detail/runSeedDisplay'
 import { assetUrl } from '../../api/assetUrl'
 import { useAddToInputs } from '../run-form/useAddToInputs'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
@@ -21,14 +17,23 @@ import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/
 import { fmt, useI18n } from '../../i18n'
 import { EmbeddedMetaSection } from './EmbeddedMetaSection'
 import { OriginRecipeSection } from './OriginRecipeSection'
+import { PromptTagsActions } from '../prompt-tags/PromptTagsActions'
+import { FinalPromptSection } from '../run-detail/FinalPromptSection'
+import { baselineNegativePrompt } from '../run-detail/finalPrompt'
+import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import styles from './LineageAssetInspectorContent.module.css'
 
 export interface LineageAssetInspectorContentProps {
   assetId: string
+  /**
+   * 生成元の Run を開く処理。見出しの「i」のアイコンと同じ動きにする(同じグラフにその Run の
+   * ノードがあればインスペクターを切り替える)。省略時は Run 詳細ページ(`/runs/:id`)へのリンク。
+   */
+  onOpenRun?: (runId: string) => void
 }
 
-export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorContentProps) {
+export function LineageAssetInspectorContent({ assetId, onOpenRun }: LineageAssetInspectorContentProps) {
   const { t } = useI18n()
   const assetQuery = useQuery({ queryKey: ['asset', assetId], queryFn: () => getAsset(assetId) })
   const runId = assetQuery.data?.produced_by_run?.id
@@ -57,6 +62,8 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
 
   const asset = assetQuery.data
   const isReady = !assetQuery.isLoading && !assetQuery.isError && asset !== undefined
+  // ComfyUI / SD WebUI の Run だけ、実際に使った seed を出す(runSeedDisplay.ts)。
+  const seed = runQuery.data ? runSeedDisplay(runQuery.data, asset?.output_index) : null
 
   if (assetQuery.isLoading) return <p className={styles.placeholder}>{t.lineage.loading}</p>
   if (assetQuery.isError || !isReady) return <p className={styles.placeholder}>{t.lineage.assetLoadError}</p>
@@ -107,23 +114,42 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
         <>
           <h3 className={styles.subheading}>{t.lineage.promptHeading}</h3>
           <p className={styles.runPrompt}>{asset.produced_by_run.prompt.slice(0, 80)}</p>
-          {runQuery.data && extractComfyUiSeed((runQuery.data.params ?? {}) as Record<string, unknown>) !== null && (
-            <p className={styles.runMeta} title={comfyUiSeedTooltip(runQuery.data.outputs?.length ?? 0)}>
-              {describeComfyUiSeed(
-                extractComfyUiSeed((runQuery.data.params ?? {}) as Record<string, unknown>),
-                runQuery.data.outputs?.length ?? 0,
-                asset.output_index,
-              )}
+          {seed && (
+            <p className={styles.runMeta} title={seed.tooltip}>
+              {seed.text}
             </p>
           )}
-          <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>
-            {t.lineage.viewRunDetail}
-          </Link>
+          {onOpenRun ? (
+            <button
+              type="button"
+              className={styles.runLink}
+              onClick={() => asset.produced_by_run && onOpenRun(asset.produced_by_run.id)}
+            >
+              {t.lineage.viewRunDetail}
+            </button>
+          ) : (
+            <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>
+              {t.lineage.viewRunDetail}
+            </Link>
+          )}
+          {/* 最終プロンプト(ADR-0030)と、この画像の展開後のプロンプト(ADR-0038 7章)。ビューアと同じ。 */}
+          <FinalPromptSection
+            className={styles.finalPrompt}
+            textOutputs={asset.produced_by_run.text_outputs}
+            outputIndex={asset.output_index ?? null}
+            prompt={asset.produced_by_run.prompt}
+            negativePrompt={runQuery.data ? baselineNegativePrompt(runQuery.data.params) : undefined}
+            headingClassName={styles.subheading}
+            renderActions={(text) => <StudioPromptActions prompt={text} />}
+          />
         </>
       )}
 
       {asset.origin && <OriginRecipeSection origin={asset.origin} />}
-      {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
+      {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} assetId={asset.id} />}
+
+      {/* ADR-0039 1章: タグをプロンプトに使う(使えるタグが無ければ出さない)。 */}
+      <PromptTagsActions assetId={asset.id} />
 
       <div className={styles.actions}>
         <button

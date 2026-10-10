@@ -28,23 +28,22 @@ import { findProvider, isProviderModelValid } from '../../lib/capabilities'
 import { deriveOperation } from './deriveOperation'
 import { computeInitialFormValues } from './initialFormState'
 import {
-  UNSPECIFIED,
-  buildParams,
   findDroppedParamNames,
   sanitizeRawValues,
   toRawParamValues,
-  unspecifiedRawValue,
   withSizeParam,
   type RawParamValues,
 } from './paramsBuilder'
 import {
   paramToSizeState,
   roundSizeStateToMultiple,
+  sizeStateForEditInputs,
+  sizeStateForProvider,
   sizeToParam,
   validateSizeState,
   type SizeState,
 } from './sizeValidation'
-import { findIncompatibleViolations, isFieldEnabled } from './dependencies'
+import { activeRawParams, buildEnabledParams, findIncompatibleViolations, isFieldEnabled } from './dependencies'
 import { fillSeedDefaults } from './seedDefaults'
 import { loadSeedMode } from './seedModePrefs'
 import {
@@ -63,6 +62,16 @@ import { useAssetGroups } from '../stock/groups/assetGroupQueries'
 import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
 import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import type { RunInputItem } from './types'
+import {
+  buildImportedRawParams,
+  importTargetDefs,
+  resolveImportedFormValues,
+  toImportNotice,
+  type ImportNotice,
+} from '../sdwebui/importParams'
+import { buildParameterSetRawParams, resolveParameterSetLoad } from '../parameter-sets/parameterSets'
+import { resolveRunFormLoad } from './runFormLoad'
+import { loadRepeatRaw, parseRepeat, saveRepeatRaw } from './repeat'
 
 export interface RunFormLogic {
   caps: CapabilitiesResponse | undefined
@@ -108,9 +117,12 @@ export interface RunFormLogic {
   handleParamChange: (name: string, value: string) => void
   defs: import('../../api/client').ParamDef[]
   conditionalParams: import('../../api/client').ConditionalParam[]
+  /** 送る値(無効の項目を未指定にした rawParams)。表示の判定と参考価格に使う。 */
+  activeRawParams: RawParamValues
   isFieldEnabledFor: (name: string) => boolean
 
   sizeState: SizeState
+  /** 利用者がサイズ欄で変えたとき用(以後、入力画像を足してもサイズを自動では変えない)。 */
   setSizeState: (state: SizeState) => void
 
   /**
@@ -122,7 +134,22 @@ export interface RunFormLogic {
   /** グループ一覧(`updated_at` の新しい順。未取得の間は空)。 */
   assetGroups: AssetGroupRow[]
 
+  /**
+   * 繰り返し回数(ADR-0042)の欄の生の値(空欄は 1)。パラメーターセットや「同じ設定で開く」には
+   * 入れず、ブラウザのフォームの状態としてだけ覚える(`repeat.ts`)。
+   */
+  repeatRaw: string
+  setRepeatRaw: (raw: string) => void
+  /** 送る繰り返し回数。欄の値が範囲外・整数でなければ null(送信できない)。 */
+  repeat: number | null
+
   droppedParamsNotice: string | null
+  /**
+   * 画像の生成情報を読み込んだ後の「読み込めなかった項目」と注意(ADR-0038 9章)。閉じるか
+   * 「新規生成」で消える。
+   */
+  importNotice: ImportNotice | null
+  dismissImportNotice: () => void
   incompatibleErrors: string[]
   sizeValid: boolean
   sizeErrors: string[]
@@ -163,11 +190,19 @@ export interface RunFormLogic {
 }
 
 export function useRunFormLogic(
-  onRunCreated: (runId: string) => void,
+  /** 作った Run の id(積んだ順。繰り返し回数が 1 なら1件)。 */
+  onRunCreated: (runIds: string[]) => void,
   onSubmitSuccess?: () => void,
 ): RunFormLogic {
   const queryClient = useQueryClient()
-  const { formState, setFormState, pendingPromptInsert, clearPendingPromptInsert } = useRunFormContext()
+  const {
+    formState,
+    setFormState,
+    pendingPromptInsert,
+    clearPendingPromptInsert,
+    pendingFormLoad,
+    clearPendingFormLoad,
+  } = useRunFormContext()
 
   // マウント時点の値だけを初期値として使う(以降 context から読み戻さない)。
   const initialRef = useRef(formState)
@@ -184,9 +219,19 @@ export function useRunFormLogic(
   promptRef.current = prompt
   const [pendingCursor, setPendingCursor] = useState<number | null>(null)
   const [rawParams, setRawParams] = useState<RawParamValues>({})
+  // パラメーターセットの読み込み(ADR-0040)で、今の seed の欄の値を引き継ぐために最新値を読む。
+  const rawParamsRef = useRef(rawParams)
+  rawParamsRef.current = rawParams
   const [sizeState, setSizeState] = useState<SizeState>(() =>
     paramToSizeState(initialRef.current.params.size),
   )
+  // 利用者がサイズ欄で自分で変えたか。変えた後は、入力画像を足したときの自動の切り替え
+  // (`sizeStateForEditInputs`)をしない。「新規生成」で戻す。
+  const [sizeTouchedByUser, setSizeTouchedByUser] = useState(false)
+  const setSizeStateByUser = useCallback((state: SizeState) => {
+    setSizeTouchedByUser(true)
+    setSizeState(state)
+  }, [])
   // ADR-0022: 覚えているグループ id(削除済みかもしれない)。表示・送信には一覧で解決した
   // resolvedAssetGroupId を使い、ここは書き換えない(effect で掃除すると setState-in-effect になる)。
   const [assetGroupId, setAssetGroupId] = useState<string | null>(initialRef.current.assetGroupId ?? null)
@@ -195,12 +240,20 @@ export function useRunFormLogic(
   const loadedAssetGroups = assetGroupsQuery.data ? (assetGroupsQuery.data.items ?? []) : undefined
   const assetGroups = loadedAssetGroups ?? []
   const resolvedAssetGroupId = resolveAssetGroupId(assetGroupId, loadedAssetGroups)
+  const [repeatRaw, setRepeatRawState] = useState<string>(loadRepeatRaw)
+  const setRepeatRaw = useCallback((raw: string) => {
+    setRepeatRawState(raw)
+    saveRepeatRaw(raw)
+  }, [])
+  const repeat = parseRepeat(repeatRaw)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [droppedParamsNotice, setDroppedParamsNotice] = useState<string | null>(null)
+  const [importNotice, setImportNotice] = useState<ImportNotice | null>(null)
   const didInitParamsRef = useRef(false)
 
   // operation は入力画像の枚数から導出する(利用者には選ばせない)。
   const operation = deriveOperation(formState.inputs)
+  const hasMask = formState.inputs.some((i) => i.role === 'mask')
 
   // ADR-0013: capabilities はプロバイダーの一覧になった。まず今選んでいる provider の
   // capabilities(providerEntry)を引き、その中からモデルを探す。
@@ -278,34 +331,27 @@ export function useRunFormLogic(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defs])
 
-  // 依存条件(conditional_params)で無効になったフィールドは値を未指定に戻す。
-  useEffect(() => {
-    if (!providerEntry) return
-    setRawParams((prev) => {
-      let changed = false
-      const next: RawParamValues = { ...prev }
-      for (const def of defs) {
-        const enabled = isFieldEnabled(defs, prev, providerEntry.conditional_params ?? [], def.name)
-        if (!enabled && prev[def.name] !== undefined && prev[def.name] !== UNSPECIFIED && prev[def.name] !== '') {
-          next[def.name] = unspecifiedRawValue(def.type)
-          changed = true
-        }
-      }
-      return changed ? next : prev
-    })
-  }, [providerEntry, defs, rawParams])
-
   // ローカルの状態を context へ書き込む(他ページから読める最新値にしておく)。inputs は
   // このフックでは触らず、setInputs 経由で呼び出し側が直接 context に書き込む。
+  // 無効の項目(マスクが無いときの mask_only、高解像度補助がオフのときの hr_*、conditional_params
+  // など)は送らない。値は rawParams に残すので、有効に戻せば元の値で使える。
+  const conditionalParams = useMemo(() => providerEntry?.conditional_params ?? [], [providerEntry])
   useEffect(() => {
-    const params = withSizeParam(buildParams(defs, rawParams), sizeToParam(sizeState))
+    const params = withSizeParam(
+      buildEnabledParams(defs, rawParams, conditionalParams, hasMask),
+      sizeToParam(sizeState),
+    )
     setFormState({ provider, model, prompt, params, inputs: formState.inputs, assetGroupId })
     // formState.inputs はここでは変更しないので依存に含めない(無限ループ回避)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, model, prompt, rawParams, sizeState, defs, assetGroupId])
+  }, [provider, model, prompt, rawParams, sizeState, defs, assetGroupId, hasMask, conditionalParams])
 
+  const activeRaw = useMemo(
+    () => activeRawParams(defs, rawParams, conditionalParams, { hasMask }),
+    [defs, rawParams, conditionalParams, hasMask],
+  )
   const incompatibleErrors = providerEntry
-    ? findIncompatibleViolations(defs, rawParams, providerEntry.incompatible_pairs ?? [])
+    ? findIncompatibleViolations(defs, activeRaw, providerEntry.incompatible_pairs ?? [])
     : []
   // 16の倍数への丸めは blur・送信時に自動で行われるため、検証も「丸めた後」の値に対して行う
   // (丸めれば解消される「16の倍数でない」エラーを、丸める前の一時的な入力値で出さないため)。
@@ -319,12 +365,24 @@ export function useRunFormLogic(
   const promptValid = prompt.length > 0 && prompt.length <= promptMax
 
   const imageInputCount = formState.inputs.filter((i) => i.role === 'image').length
+  // 入力画像を足した(0 枚 → 1 枚以上)とき、auto を受け付けないプロバイダー(SD WebUI)で
+  // サイズが既定の幅×高さのままなら「未指定」にし、サーバーに入力画像の寸法から決めさせる
+  // (ADR-0038 2章)。描画中に前回の値と比べる(effect で setState しない)。初期表示の入力画像
+  // (「同じ設定で再実行」など)は「足した」に当たらないので、記録のサイズを変えない。
+  const hasImageInputs = imageInputCount > 0
+  const [prevHasImageInputs, setPrevHasImageInputs] = useState(hasImageInputs)
+  if (hasImageInputs !== prevHasImageInputs) {
+    setPrevHasImageInputs(hasImageInputs)
+    if (hasImageInputs) {
+      const next = sizeStateForEditInputs(providerEntry?.size, sizeState, sizeTouchedByUser)
+      if (next) setSizeState(next)
+    }
+  }
   const editInputsValid = imageInputCount <= maxInputImages
   const inputCountRequirementReason = inputCountRequirementMessage(opCaps, operation, imageInputCount)
   const deletedInputAssetIds = useDeletedInputAssetIds(formState.inputs)
   const hasDeletedInputs = deletedInputAssetIds.length > 0
 
-  const hasMask = formState.inputs.some((i) => i.role === 'mask')
   const operationSupported = isOperationSupported(opCaps)
   const maskRequired = opCaps?.requires_mask ?? false
   // opCaps 未解決(読み込み中)の間は妨げない(operationSupported 側で別途止まる)。
@@ -367,6 +425,9 @@ export function useRunFormLogic(
     setAssetGroupId(loadLastAssetGroupId())
     setSubmitError(null)
     setDroppedParamsNotice(null)
+    setImportNotice(null)
+    // 繰り返し回数も初期値(1)に戻す。
+    setRepeatRaw('')
     if (!caps) return
     const initial = computeInitialFormValues(caps)
     const initialProviderEntry = findProvider(caps, initial.provider)
@@ -383,6 +444,7 @@ export function useRunFormLogic(
     setProvider(initial.provider)
     setModel(initial.model)
     setSizeState(paramToSizeState(initial.params.size))
+    setSizeTouchedByUser(false)
     setRawParams(fillSeedDefaults(initialGenerateDefs, initialRaw, loadSeedMode()))
   }
 
@@ -400,6 +462,118 @@ export function useRunFormLogic(
     clearPendingPromptInsert()
   }, [pendingPromptInsert, insertPrompt, clearPendingPromptInsert])
 
+  // フォームへの読み込み。画像の生成情報から SD WebUI のフォームへ(ADR-0038 9章)、
+  // パラメーターセットから(ADR-0040)、Run 詳細の「同じ設定で新規作成」から。プロンプトの
+  // 置き換えの確認は積む側(読み込みのダイアログ、ビューア、サイドバー)で済んでいる。
+  // capabilities が揃うまで待つ。パラメーターは、入れる先のモデル・操作の定義でここで作る
+  // (同じモデルのままでは defs の effect が走らないため。「新規生成」の resetForm と同じやり方)。
+  // 入力画像は変えない(「同じ設定で新規作成」の入力画像は、積む側が context に書く)。
+  const consumedFormLoadNonceRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!pendingFormLoad || !caps) return
+    if (consumedFormLoadNonceRef.current === pendingFormLoad.nonce) return
+    consumedFormLoadNonceRef.current = pendingFormLoad.nonce
+    clearPendingFormLoad()
+    const request = pendingFormLoad.request
+
+    // Run 詳細の「同じ設定で新規作成」。フォームがマウントされたまま(スタジオの結果エリアの
+    // Run 詳細から押した)でも入るように、ここでローカルの状態を Run の値で作り直す。入力画像は
+    // 積む側が context に書いている。パラメーターの定義が見つからない(プロバイダーが無効、
+    // モデルが一覧に無い)ときは、マウント時と同じく上の effect が capabilities の初期値に戻す。
+    if (request.kind === 'run') {
+      const state = request.state
+      const values = resolveRunFormLoad(state, caps, loadSeedMode())
+      initialRef.current = { ...initialRef.current, ...state }
+      didInitParamsRef.current = values.rawParams !== null
+      setProvider(values.provider)
+      setModel(values.model)
+      setPrompt(values.prompt)
+      setSizeState(values.sizeState)
+      // Run のサイズは意図したものなので、入力画像があっても自動では変えない。
+      setSizeTouchedByUser(true)
+      if (values.rawParams !== null) setRawParams(values.rawParams)
+      setAssetGroupId(state.assetGroupId)
+      setSubmitError(null)
+      setImportNotice(null)
+      if (values.droppedNames.length > 0) {
+        const rf = msg().runForm.runFormLogic
+        setDroppedParamsNotice(fmt(rf.droppedParamsSettings, { names: values.droppedNames.join(rf.listSeparator) }))
+      } else {
+        setDroppedParamsNotice(null)
+      }
+      return
+    }
+
+    let next: {
+      provider: string
+      model: string
+      prompt: string | null
+      sizeState: SizeState
+      rawParams: RawParamValues
+      params: Record<string, string | number | boolean>
+      notice: ImportNotice
+    }
+    if (request.kind === 'sdwebui') {
+      const values = resolveImportedFormValues(request.response, caps, { provider, model })
+      if (!values) {
+        setSubmitError(msg().sdwebui.importParams.noModels)
+        return
+      }
+      const targetDefs = importTargetDefs(caps, values, operation)
+      next = {
+        provider: values.provider,
+        model: values.model,
+        prompt: values.prompt,
+        sizeState: paramToSizeState(values.size),
+        rawParams: buildImportedRawParams(targetDefs, values.params, loadSeedMode()),
+        params: values.params,
+        notice: toImportNotice(request.response),
+      }
+    } else {
+      const resolved = resolveParameterSetLoad(request.set, caps, { provider, model }, operation)
+      if (!resolved.ok) {
+        setSubmitError(resolved.reason)
+        return
+      }
+      next = {
+        provider: resolved.provider,
+        model: resolved.model,
+        prompt: resolved.prompt,
+        sizeState: resolved.sizeState,
+        rawParams: buildParameterSetRawParams(
+          resolved.targetDefs,
+          resolved.params,
+          rawParamsRef.current,
+          loadSeedMode(),
+        ),
+        params: resolved.params,
+        notice: resolved.notice,
+      }
+    }
+
+    initialRef.current = {
+      ...initialRef.current,
+      provider: next.provider,
+      model: next.model,
+      prompt: next.prompt ?? initialRef.current.prompt,
+      params: next.params,
+    }
+    didInitParamsRef.current = true
+    setProvider(next.provider)
+    setModel(next.model)
+    // null はプロンプトを保存していないパラメーターセット(今のプロンプトのまま)。
+    if (next.prompt !== null) setPrompt(next.prompt)
+    setSizeState(next.sizeState)
+    // 読み込んだサイズは意図したものなので、入力画像を足しても自動では変えない。
+    setSizeTouchedByUser(true)
+    setRawParams(next.rawParams)
+    setSubmitError(null)
+    setDroppedParamsNotice(null)
+    setImportNotice(next.notice)
+    // provider・model・operation は消費した時点の値だけを使う(変わるたびに走らせない)。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFormLoad, caps, clearPendingFormLoad])
+
   const mutation = useMutation({
     mutationFn: createRun,
     onSuccess: (res) => {
@@ -407,7 +581,7 @@ export function useRunFormLogic(
       // 送信してもフォームは何も変えない(ADR-0009「送信後のフォーム」2026-09-24 改訂)。
       // prompt・inputs(マスク含む)・provider・model・params はそのまま残す。
       queryClient.invalidateQueries({ queryKey: ['runs'] })
-      onRunCreated(res.id)
+      onRunCreated(res.runs.length > 0 ? res.runs.map((r) => r.id) : [res.id])
       onSubmitSuccess?.()
     },
     onError: (err: unknown) => {
@@ -420,6 +594,21 @@ export function useRunFormLogic(
   }
 
   function selectModel(nextProvider: string, nextModel: string) {
+    // プロバイダーをまたいで切り替えたとき、今のサイズが新しいプロバイダーで使えなければ
+    // (OpenAI の auto や 4K を、auto を受け付けず長辺 2048px の SD WebUI へ持ち込むなど)、
+    // そのプロバイダーの既定のサイズに戻す。
+    if (nextProvider !== provider) {
+      const nextEntry = findProvider(caps, nextProvider)
+      if (nextEntry?.size) {
+        const constraints = nextEntry.size
+        setSizeState((prev) => {
+          const next = sizeStateForProvider(constraints, nextEntry.default_size, prev)
+          // 入力画像があるまま SD WebUI へ切り替えたときも、入力画像を足したときと同じにする。
+          if (imageInputCount === 0) return next
+          return sizeStateForEditInputs(constraints, next, sizeTouchedByUser) ?? next
+        })
+      }
+    }
     setProvider(nextProvider)
     setModel(nextModel)
   }
@@ -437,6 +626,7 @@ export function useRunFormLogic(
     isMaskSatisfied(opCaps, hasMask) &&
     isMaskSupported(opCaps, hasMask) &&
     providerAvailable &&
+    repeat !== null &&
     !mutation.isPending
 
   function submit() {
@@ -447,12 +637,17 @@ export function useRunFormLogic(
       ? roundSizeStateToMultiple(providerEntry.size, sizeState)
       : sizeState
     const sizeParam = providerEntry?.size ? sizeToParam(roundedSizeState) : undefined
-    const params = withSizeParam(buildParams(defs, rawParams), sizeParam)
+    const params = withSizeParam(buildEnabledParams(defs, rawParams, conditionalParams, hasMask), sizeParam)
     const inputs =
       operation === 'edit'
         ? formState.inputs.map((i) => ({ asset_id: i.assetId, role: i.role, position: i.position }))
         : []
-    mutation.mutate(withAssetGroupId({ operation, model, prompt, provider, params, inputs }, resolvedAssetGroupId))
+    mutation.mutate(
+      withAssetGroupId(
+        { operation, model, prompt, provider, params, inputs, repeat: repeat ?? 1 },
+        resolvedAssetGroupId,
+      ),
+    )
   }
 
   return {
@@ -475,15 +670,20 @@ export function useRunFormLogic(
     rawParams,
     handleParamChange,
     defs,
-    conditionalParams: providerEntry?.conditional_params ?? [],
-    isFieldEnabledFor: (name: string) =>
-      isFieldEnabled(defs, rawParams, providerEntry?.conditional_params ?? [], name),
+    conditionalParams,
+    activeRawParams: activeRaw,
+    isFieldEnabledFor: (name: string) => isFieldEnabled(defs, activeRaw, conditionalParams, name, { hasMask }),
     sizeState,
-    setSizeState,
+    setSizeState: setSizeStateByUser,
     assetGroupId: resolvedAssetGroupId,
     setAssetGroupId,
     assetGroups,
+    repeatRaw,
+    setRepeatRaw,
+    repeat,
     droppedParamsNotice,
+    importNotice,
+    dismissImportNotice: () => setImportNotice(null),
     incompatibleErrors,
     sizeValid: sizeValidation.valid,
     sizeErrors: sizeValidation.errors,

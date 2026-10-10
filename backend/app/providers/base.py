@@ -40,6 +40,10 @@ class ParamDef(BaseModel):
     description: str = ""
     # UI に専用の入力欄を出す目印(seed: ランダム/固定の切り替えと乱数ボタン。ADR-0013)。
     widget: Literal["seed"] | None = None
+    # True: マスクがあるときだけ意味を持つ(SD WebUI の inpaint の項目。ADR-0038 2章)。マスクの
+    # 無い Run で指定されたら 422。フォームはマスクが無い間は無効にする。None は False と同じ
+    # (`widget` と同じく、使わないプロバイダーの定義に項目を増やさないため)。
+    mask_only: bool | None = None
 
 
 class IncompatiblePair(BaseModel):
@@ -91,6 +95,10 @@ class SizeConstraints(BaseModel):
     min_aspect_ratio: float
     max_aspect_ratio: float
     allow_auto: bool = True
+    # フォームが倍数でない幅・高さを倍数に合わせるとき、切り捨てるか(True)、最も近い倍数に
+    # 丸めるか(False)。SD WebUI は WebUI 自身が 8 の倍数に切り捨てて描くので、それに合わせて
+    # 切り捨てる(ADR-0038 2章)。サーバーはどちらでも倍数でなければ 422 にする。
+    round_down: bool = False
 
 
 class ProviderCapabilities(BaseModel):
@@ -177,7 +185,8 @@ class RunResult(BaseModel):
     outputs: list[RunOutputImage]
     usage: dict[str, Any] | None = None
     provider_request_id: str | None = None
-    # 実行時にワークフローが作ったテキスト(ADR-0030。今は ComfyUI の最終プロンプトだけ)。
+    # 実行時に作られたテキスト(ADR-0030。ComfyUI の最終プロンプトと、SD WebUI の出力ごとの
+    # 展開後のプロンプト。ADR-0038 7章)。
     # `run.text_outputs` にそのまま書く。無ければ None。
     text_outputs: list[dict[str, Any]] | None = None
 
@@ -240,6 +249,15 @@ class ImageProvider(Protocol):
         """検証の後、INSERT の前に呼ぶ。戻り値がそのまま `run.params` になる。
 
         `RunValidationError`(422)と `ProviderUnavailableError`(409)を投げてよい。
+        """
+        ...
+
+    def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
+        """繰り返し回数(ADR-0042 2章)で、`index` 番目(0 始まり)の Run に使う seed。
+
+        利用者が seed を指定したときだけ呼ぶ。`first_params` は1つ目の Run の
+        `finalize_params` の戻り値。1回の枚数ぶん進め、範囲の上限を超えたら 0 から回す。
+        seed を持たないプロバイダーは None を返す(`params` をそのまま使う)。
         """
         ...
 

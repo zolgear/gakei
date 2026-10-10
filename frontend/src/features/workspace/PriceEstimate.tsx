@@ -19,6 +19,8 @@ interface PriceEstimateProps {
   promptLength: number
   /** role=image の入力 Asset id(position 順)。 */
   inputAssetIds: string[]
+  /** 繰り返し回数(ADR-0042)。見積もりは1回分を取り、表示で掛ける。 */
+  repeat?: number
 }
 
 /** クエリキーだけに使う。文字入力のたびに叩かないよう、100文字単位に丸める。 */
@@ -34,6 +36,7 @@ export function PriceEstimate({
   n,
   promptLength,
   inputAssetIds,
+  repeat = 1,
 }: PriceEstimateProps) {
   const roundedPromptLength = roundPromptLength(promptLength)
   const inputAssetIdsKey = inputAssetIds.join(',')
@@ -57,7 +60,7 @@ export function PriceEstimate({
 
   if (!query.data) return null
 
-  const { text, title } = describeEstimate(query.data)
+  const { text, title } = describeEstimate(query.data, repeat)
 
   return (
     <span className={styles.price} title={title}>

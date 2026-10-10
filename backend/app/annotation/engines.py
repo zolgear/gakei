@@ -100,6 +100,18 @@ _VLM_TRANSLATIONS_PART = {
         "original tag. Do not put tags with the same meaning as a translation in tags."
     ),
 }
+# タグ辞書で訳せなかった一部のタグだけを訳してもらうとき(ADR-0041 5章)。
+_VLM_TRANSLATIONS_SUBSET_PART = {
+    "ja": (
+        "あわせて、既に付いているタグのうち次のものの日本語訳を translations に、元のタグをキー、"
+        "訳を値として入れてください: {tags}。訳と同じ意味のタグは tags に入れないでください。"
+    ),
+    "en": (
+        " Also put an English translation of each of these existing tags in translations, "
+        "keyed by the original tag: {tags}. Do not put tags with the same meaning as a "
+        "translation in tags."
+    ),
+}
 _VLM_TITLE_PART = {
     "ja": (
         "あわせて、画像の内容を表す30文字程度までのタイトルを1つ付けてください。タイトルには"
@@ -145,6 +157,18 @@ class EngineContext:
     # 使わない用途(無効なエンジン)は None。
     llm: Target | None = None
     vlm: Target | None = None
+    # VLM に訳を頼む ONNX のタグ。None なら既に付いているタグ(`known_tags`)すべて。タグ辞書
+    # (ADR-0041 5章)に訳があるタグは除いて渡す(空なら訳を頼まない)。
+    translation_targets: list[str] | None = None
+
+
+def translation_targets(ctx: EngineContext, known_tags: list[str] | None) -> list[str]:
+    """VLM に訳を頼むタグ(`wants_translation` でなければ空)。"""
+    if not known_tags or not wants_translation(ctx.config):
+        return []
+    if ctx.translation_targets is None:
+        return list(known_tags)
+    return [tag for tag in known_tags if tag in set(ctx.translation_targets)]
 
 
 @dataclass
@@ -291,11 +315,23 @@ def parse_translations(value: object) -> dict[str, str]:
 
 
 def build_vlm_instructions(
-    config: AnnotationConfig, want_title: bool, known_tags: list[str] | None
+    config: AnnotationConfig,
+    want_title: bool,
+    known_tags: list[str] | None,
+    translate_tags: list[str] | None = None,
 ) -> str:
-    """VLM への指示(タグの言語、既に付いているタグ、訳、タイトル、出力の形)。"""
+    """VLM への指示(タグの言語、既に付いているタグ、訳、タイトル、出力の形)。
+    `translate_tags` は訳を頼むタグ(None なら `known_tags` すべて。ADR-0041 5章)。"""
     language = config.language
     translate = bool(known_tags) and wants_translation(config)
+    subset: list[str] | None = None
+    if translate and translate_tags is not None:
+        known = set(known_tags or [])
+        subset = [tag for tag in translate_tags if tag in known]
+        if not subset:
+            translate = False
+        elif len(subset) == len(known):
+            subset = None
     schema_parts = []
     if want_title:
         schema_parts.append('"title": "..."')
@@ -306,7 +342,9 @@ def build_vlm_instructions(
     text += _VLM_TAG_FORM[config.tag_language][language]
     if known_tags:
         text += _VLM_KNOWN_TAGS[language].format(tags=", ".join(known_tags))
-    if translate:
+    if translate and subset is not None:
+        text += _VLM_TRANSLATIONS_SUBSET_PART[language].format(tags=", ".join(subset))
+    elif translate:
         text += _VLM_TRANSLATIONS_PART[language]
     if want_title:
         text += _VLM_TITLE_PART[language]
@@ -435,13 +473,14 @@ class OpenAIEngines:
         known_tags: list[str] | None = None,
     ) -> VlmResult:
         language = ctx.config.language
-        instructions = build_vlm_instructions(ctx.config, want_title, known_tags)
+        targets = translation_targets(ctx, known_tags)
+        instructions = build_vlm_instructions(ctx.config, want_title, known_tags, targets)
         text = _VLM_HINT[language].format(prompt=prompt[:4000]) if prompt else "-"
         raw = await self._complete(ctx.vlm, instructions, text, image_jpeg)
         result = parse_vlm_json(raw)
         if not want_title:
             result.title = None
-        if not (known_tags and wants_translation(ctx.config)):
+        if not targets:
             result.translations = {}
         return result
 
@@ -501,9 +540,9 @@ class FakeEngines:
         title = None
         if want_title:
             title = "ダミー画像" if ctx.config.language == "ja" else "Fake image"
-        translations = {}
-        if known_tags and wants_translation(ctx.config):
-            translations = {tag: _fake_translation(tag, ctx) for tag in known_tags}
+        translations = {
+            tag: _fake_translation(tag, ctx) for tag in translation_targets(ctx, known_tags)
+        }
         return VlmResult(tags=["fake vlm", orientation], title=title, translations=translations)
 
     async def translate_tags(self, tags: list[str], ctx: EngineContext) -> dict[str, str]:

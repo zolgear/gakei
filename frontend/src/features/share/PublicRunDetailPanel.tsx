@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import { formatDateTime, assetKindLabel } from '../../lib/format'
 import { useI18n } from '../../i18n'
 import { FinalPromptSection } from '../run-detail/FinalPromptSection'
+import { baselineNegativePrompt } from '../run-detail/finalPrompt'
 import type { PublicRunDetail, PublicRunInput } from './publicRunDetail'
 import { PublicParams } from './PublicParams'
 import styles from './PublicSharePage.module.css'
@@ -84,6 +85,8 @@ export function PublicRunDetailPanel({
       <FinalPromptSection
         className={styles.finalPrompt}
         textOutputs={run.text_outputs}
+        prompt={run.prompt}
+        negativePrompt={baselineNegativePrompt(run.params)}
         headingLevel="h2"
         headingClassName={styles.subheading}
       />
