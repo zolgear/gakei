@@ -172,6 +172,8 @@ A1111 互換の API で使うもの(Forge で確認):
 決めたこと:
 
 - **パラメーター(Generate だけ):** `hires`(有効/無効、既定は無効)、`hr_scale`(1〜4、0.05 刻み、既定 2)、`hr_upscaler`(接続先の一覧。既定は一覧に `Latent` があればそれ)、`hr_second_pass_steps`(0〜150、既定 0 = 本体と同じ)、`hr_denoising_strength`(0〜1、既定 0.5。本文では `denoising_strength` として送る)、`hr_cfg`(Forge のときだけ。1〜30。指定がなければ本体の `cfg_scale` と同じ値を送る)。`hires` が無効のときは、ほかの項目を無効にする。
+- アップスケーラーの選択肢は latent の方式 → `/upscalers` の順で、`None` は出さない(単純な拡大で、`Lanczos` で足りる)。2つの一覧がどちらも取れなければ、hires の項目を出さない。
+- `hires` が無効のときは `enable_hr` も hr の値も送らない。無効なのに hr の項目を指定したら 422(マスクの無い Run のマスクの項目と同じ考え方)。Edit での hr の項目、A1111 での `hr_cfg` も 422。
 - 拡大後の寸法を指定する方式(`hr_resize_x` / `hr_resize_y`)、2回目だけ別のチェックポイント・サンプラー・プロンプトにする項目は作らない(倍率だけにする)。
 - **Forge では `hr_additional_modules: ["Use same choices"]` を常に送る。** VAE は1回目の指定(2章)がそのまま使われる。
 - **寸法の上限:** 1回目の寸法は2章の制約(長辺 2048)。拡大後の長辺は 4096 まで(超える倍率は 422)。
