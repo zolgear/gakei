@@ -38,6 +38,7 @@ from app.embedding.tokenization import (
     EG2_EOI,
     EG2_EOS,
     EG2_IMAGE,
+    EG2_MULTIMODAL_PIECES,
     Eg2Tokenizer,
     eg2_image_input_ids,
 )
@@ -162,6 +163,26 @@ def test_eg2_tokenizer_adds_bos_eos_and_cuts_keeping_eos() -> None:
     assert feeds["input_ids"].dtype == np.int64
     assert feeds["attention_mask"].tolist() == [[1, 1, 1, 1]]
     assert feeds["attention_mask"].dtype == np.int64
+
+
+def test_eg2_tokenizer_splits_multimodal_markers_as_plain_text() -> None:
+    class _Markers(_FakeSentencePiece):
+        """`<|image|>` だけをユーザー定義のピースとして1つの id にする。"""
+
+        def encode(self, text: str) -> list[int]:
+            ids: list[int] = []
+            while text:
+                if text.startswith("<|image|>"):
+                    ids.append(EG2_IMAGE)
+                    text = text[len("<|image|>") :]
+                else:
+                    ids.append(ord(text[0]) + 1000)
+                    text = text[1:]
+            return ids
+
+    tokenizer = Eg2Tokenizer(processor=_Markers())
+    ids = tokenizer.ids("a<|image|>", 1024)
+    assert ids == [EG2_BOS, *[ord(ch) + 1000 for ch in "a<|image|>"], EG2_EOS]
 
 
 def test_eg2_image_input_ids() -> None:
@@ -390,7 +411,13 @@ def test_real_eg2_tokenizer_matches_reference_ids() -> None:
     assert processor.piece_to_id("<|image>") == EG2_BOI
     assert processor.piece_to_id("<|image|>") == EG2_IMAGE
     assert processor.piece_to_id("<image|>") == EG2_EOI
-    assert EG2_IMAGE not in tokenizer.ids("<|image|>", 1024)
+    # 本文中の画像などの目印の文字列は、ふつうの文字として分割する(特徴の差し込み先にしない)。
+    for text in ("<|image|>", "a <|image> b <image|>", "<|audio|><|video|>"):
+        ids = tokenizer.ids(text, 1024)
+        assert not set(ids) & set(EG2_MULTIMODAL_PIECES), (text, ids)
+    assert tokenizer.ids("<|image|>", 1024)[1:-1] == (
+        tokenizer.processor.encode("<") + tokenizer.processor.encode("|image|>")
+    )
 
 
 @requires_eg2
@@ -414,3 +441,29 @@ def test_real_eg2_engine_vectors(real_eg2_data_dir: Path) -> None:
     # 1枚ずつ計算するので、同じ画像は同じベクトル。
     np.testing.assert_allclose(engine.embed_images([red])[0], images[0], atol=1e-6)
     print(f"EG2 画像 2 枚: {elapsed:.1f} 秒")
+
+
+@requires_eg2
+@pytest.mark.parametrize("scene", ["landscape", "portrait"])
+def test_real_eg2_duplicate_threshold_keeps_degraded_copies(
+    real_eg2_data_dir: Path, scene: str
+) -> None:
+    """ADR-0033 12章の画像の組のうち、強く劣化させた重複も、EG2 の既定のしきい値以上になる
+    (ADR-0044 5章)。実際の流れと同じく preview にしてから計算する。全部の組(6 テーマ ×
+    劣化 13・色違い 7・別の画像 3)で測った値は catalog.py の `EG2_DUPLICATE_THRESHOLD` の横。"""
+    import io
+
+    from app.domain.derivatives import make_preview
+    from tests import perceptual_images as pi
+
+    def preview(image: Image.Image) -> Image.Image:
+        out = Image.open(io.BytesIO(make_preview(image)))
+        out.load()
+        return out
+
+    engine = OnnxClipEngine(real_eg2_data_dir, EG2, residency=ModelResidency())
+    base_image = pi.scene(scene, 1)
+    base = engine.embed_images([preview(base_image)])[0]
+    for label in ("s25_q25", "crop3_s25_q25", "s50_q60"):
+        other = engine.embed_images([preview(pi.DEGRADATIONS[label](base_image))])[0]
+        assert float(base @ other) >= EG2.duplicate_threshold, (scene, label, float(base @ other))

@@ -56,6 +56,16 @@ EG2_MAX_TEXT_TOKENS = 1024
 
 # 重複の候補のしきい値の既定(ADR-0033 12章、ADR-0044 5章)。モデルごとに持つ。
 CLIP_DUPLICATE_THRESHOLD = 0.90
+# EG2 の既定(仮の値。2026-10-11)。ADR-0033 12章と同じ画像の組(`tests/perceptual_images.py`。
+# 6 テーマ、preview にしてから計算)を EG2 で測った値:
+# - 劣化させた重複(13 通り × 6): 最小 0.861(縮小 25% + JPEG q25 + 3% の切り抜き)、平均 0.955
+# - 色違い(7 通り × 6): 0.862〜0.981
+# - 同じテーマの別の画像(3 組 × 6): 0.888〜0.996
+# EG2 は意味の近さを見るので、作った画像の組では、別の画像のほうが劣化した重複より近く出る
+# ことがある(類似度だけでは分けられない)。CLIP の既定(強い劣化 0.936 → 0.90)と同じく、
+# いちばん強い劣化も拾える値にし、色違いや別の画像は知覚ハッシュで外す。実際の画像で
+# 確かめてから見直す。
+EG2_DUPLICATE_THRESHOLD = 0.85
 
 _MB = 1000 * 1000
 
@@ -264,7 +274,7 @@ CLIP_MODELS: dict[str, ClipModel] = {
         memory_bytes=750 * _MB,
         license="Apache-2.0",
         quantized_vision=True,
-        duplicate_threshold=CLIP_DUPLICATE_THRESHOLD,
+        duplicate_threshold=EG2_DUPLICATE_THRESHOLD,
         input_variant="preview",
         query_prefix=EG2_SEARCH_QUERY_PREFIX,
         max_text_tokens=EG2_MAX_TEXT_TOKENS,

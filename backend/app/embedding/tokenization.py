@@ -37,7 +37,12 @@ transformers、torch、`tokenizers` は使わない。
    (transformers の切り方と同じ)。
 4. 1件ずつ計算するので詰め物は要らない。attention_mask はすべて 1。
 
-本文中の `<|image|>` などの文字列は特殊トークンにしない(`sentencepiece` がふつうに分割する)。
+本文中の画像・音声・動画の目印の文字列(`<|image|>` など)は、特殊トークンにしない。
+`tokenizer.model` はこれらを1つの id(ユーザー定義のピース)に分割するが、文章側のモデルは
+その id の位置に画像などの特徴を差し込むので、特徴を渡さない検索の文章に入ると壊れる。
+そこで、その id が出たら、先頭の1文字と残りに分けて分割し直し、ふつうの文字にする
+(ADR-0033 2章「特殊トークンの文字列も普通の文字として分割する」と同じ)。ほかのユーザー定義の
+ピース(`<|turn>` など)は、transformers と同じくそのままにする。
 タスクのプレフィックス(`SearchQuery`)は呼び出し側(エンジン)が本文の前に付ける。
 """
 
@@ -65,6 +70,16 @@ EG2_PAD = 0
 EG2_BOI = 255999  # `<|image>`(画像の開始)
 EG2_IMAGE = 258880  # `<|image|>`(画像のソフトトークン1つ)
 EG2_EOI = 258882  # `<image|>`(画像の終わり)
+# 画像・音声・動画の目印のピース(`tokenizer.model` のユーザー定義のピース。モジュールの docstring)。
+EG2_MULTIMODAL_PIECES: dict[int, str] = {
+    EG2_BOI: "<|image>",
+    256000: "<|audio>",
+    EG2_IMAGE: "<|image|>",
+    258881: "<|audio|>",
+    EG2_EOI: "<image|>",
+    258883: "<audio|>",
+    258884: "<|video|>",
+}
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPECIAL_STRINGS = ("<|startoftext|>", "<|endoftext|>")
@@ -228,8 +243,20 @@ class Eg2Tokenizer:
         """`<bos>` と `<eos>` を付け、両方を含めて `max_length` に切った id の列。"""
         if max_length < 2:
             raise ValueError("max_length は 2 以上")
-        body = [int(i) for i in self.processor.encode(text)][: max_length - 2]
+        body = self._encode_plain(text)[: max_length - 2]
         return [EG2_BOS, *body, EG2_EOS]
+
+    def _encode_plain(self, text: str) -> list[int]:
+        """画像などの目印の id を、ふつうの文字の id に置き換えて分割する。"""
+        ids: list[int] = []
+        for token in (int(i) for i in self.processor.encode(text)):
+            piece = EG2_MULTIMODAL_PIECES.get(token)
+            if piece is None:
+                ids.append(token)
+                continue
+            ids.extend(int(i) for i in self.processor.encode(piece[:1]))
+            ids.extend(self._encode_plain(piece[1:]))
+        return ids
 
     def feeds(self, text: str, max_length: int) -> dict[str, np.ndarray]:
         """文章1件の `input_ids` と `attention_mask`([1, 長さ]、int64)。"""
