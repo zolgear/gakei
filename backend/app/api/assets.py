@@ -607,8 +607,10 @@ def annotate_asset(
         raise HTTPException(status_code=409, detail=t("annotations.noEngine"))
     annotations_domain.request_annotation(db, asset)
     db.commit()
+    # 応答は worker を起こす前に作る。先に起こすと、拾われた後の running を返すことがある。
+    response = annotations_domain.annotation_response(db, asset_id)
     annotator.notify()
-    return annotations_domain.annotation_response(db, asset_id)
+    return response
 
 
 # -- 埋め込み(ADR-0033) ----------------------------------------------------------
@@ -642,10 +644,10 @@ def request_asset_embedding(
     assert model_key is not None
     embeddings_domain.request_embedding(db, asset, model_key)
     db.commit()
-    embedder.notify()
+    # 応答は worker を起こす前に作る(annotate_asset と同じ理由)。
     row = embeddings_domain.embedding_status(db, asset_id, model_key)
     assert row is not None
-    return AssetEmbeddingStatus(
+    response = AssetEmbeddingStatus(
         asset_id=asset_id,
         model_key=model_key,
         status=row.status,  # type: ignore[arg-type]
@@ -653,3 +655,5 @@ def request_asset_embedding(
         requested_at=row.requested_at,
         finished_at=row.finished_at,
     )
+    embedder.notify()
+    return response
