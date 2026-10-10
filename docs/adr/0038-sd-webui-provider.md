@@ -155,7 +155,7 @@ WebUI の「PNG 内の情報を表示 → txt2img に転送」に当たる操作
   - `Model` は接続先のチェックポイントの `model_name` と照合し、無ければ `Model hash` を `/sdapi/v1/sd-models` のハッシュと照合する。見つからなければモデルは変えず、注意を返す。
   - VAE(`VAE` または Forge の `Module 1` など)は、接続先の VAE の一覧にあれば入れる。
   - `Clip skip` は `clip_skip` に入れる。`Model hash` と `VAE hash` は照合にだけ使い、「読み込めなかった項目」には出さない(チェックポイントが見つからないときは注意で知らせる)。`Version` は読み込み元として別に見せる。
-  - 入れられないもの(拡大後の寸法の指定など10章で作らない hires fix の項目、hires でない画像の `Denoising strength`、ADetailer や ControlNet の項目、`Version` など)は `unapplied` に並べ、画面で「読み込めなかった項目」として見せる。LoRA はプロンプトの `<lora:…>` としてそのまま入る。
+  - 入れられないもの(拡大後の寸法の指定など10章で作らない hires fix の項目、hires でない画像の `Denoising strength`、ADetailer や ControlNet の項目 など)は `unapplied` に並べ、画面で「読み込めなかった項目」として見せる。LoRA はプロンプトの `<lora:…>` としてそのまま入る。
 - **フォームへの反映:** プロバイダーを SD WebUI、操作を Generate にし、プロンプトとパラメーターを置き換える(入力画像は変えない)。今のプロンプトが空でなければ確かめてから置き換える。SD WebUI が有効でないときは、どちらの入口も出さない。
 - 作らないもの: A1111 形式以外(ComfyUI、NovelAI など)の生成情報からの読み込み、img2img への読み込み(WebUI の「img2img に転送」に当たるもの)。
 
