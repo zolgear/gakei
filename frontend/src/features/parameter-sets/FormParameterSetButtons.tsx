@@ -1,11 +1,11 @@
 /**
  * 生成のフォームの「設定を保存」と「設定を読み込む」(ADR-0040)。プロバイダーに依らず出す。
- * 保存する params は今のフォームの値(送信と同じ組み立て。未指定の項目は入れない)。
+ * 保存する params は今のフォームの値(送信と同じ組み立て。未指定の項目と無効の項目は入れない)。
  */
-import type { ParamDef } from '../../api/client'
+import type { ConditionalParam, ParamDef } from '../../api/client'
 import { useI18n } from '../../i18n'
-import { defsForMask } from '../run-form/dependencies'
-import { buildParams, withSizeParam, type RawParamValues } from '../run-form/paramsBuilder'
+import { buildEnabledParams } from '../run-form/dependencies'
+import { withSizeParam, type RawParamValues } from '../run-form/paramsBuilder'
 import { sizeToParam, type SizeState } from '../run-form/sizeValidation'
 import { suggestSetNameFromPrompt } from '../prompt-sets/promptSetNaming'
 import { LoadParameterSetButton } from './LoadParameterSetButton'
@@ -18,6 +18,7 @@ interface FormParameterSetButtonsProps {
   prompt: string
   defs: ParamDef[]
   rawParams: RawParamValues
+  conditionalParams: ConditionalParam[]
   sizeState: SizeState
   /** プロバイダーがサイズを持つか(持たなければ size を保存しない)。 */
   hasSize: boolean
@@ -30,6 +31,7 @@ export function FormParameterSetButtons({
   prompt,
   defs,
   rawParams,
+  conditionalParams,
   sizeState,
   hasSize,
   hasMask,
@@ -37,7 +39,7 @@ export function FormParameterSetButtons({
   const { t } = useI18n()
   const f = t.parameterSets.form
   const params = withSizeParam(
-    buildParams(defsForMask(defs, hasMask), rawParams),
+    buildEnabledParams(defs, rawParams, conditionalParams, hasMask),
     hasSize ? sizeToParam(sizeState) : undefined,
   )
   return (

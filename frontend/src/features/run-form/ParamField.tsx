@@ -1,5 +1,5 @@
 /**
- * capabilities の ParamDef 1つ分のフォーム部品。enum は select、int は数値入力、bool は select。
+ * capabilities の ParamDef 1つ分のフォーム部品。enum は select、int は数値入力、bool はスイッチ。
  * スタジオの設定グリッド(ADR-0009 1章・2026-09-22 承認分)向けにコンパクト化:
  * 見出しは `label`(日本語、等幅・薄い色)だけを表示し、API のパラメーター名は
  * ラベルの `title`(ツールチップ)に、説明文(`description`)は入力欄自体の `title` に移す
@@ -15,6 +15,7 @@ import {
 } from './emptySpin'
 import { UNSPECIFIED } from './paramsBuilder'
 import { SeedField } from './SeedField'
+import { boolDisplayValue } from './boolSwitch'
 import { unspecifiedOptionLabel, unspecifiedPlaceholder } from './unspecifiedLabel'
 import { PromptEditModeToggle } from '../prompt-tags/PromptEditModeToggle'
 import { PromptTagEditor } from '../prompt-tags/PromptTagEditor'
@@ -93,6 +94,45 @@ function NumberParamInput({ def, id, value, enabled, title, onChange }: NumberPa
         onChange(def.name, e.target.value)
       }}
     />
+  )
+}
+
+interface BoolSwitchProps {
+  def: ParamDef
+  id: string
+  value: string
+  enabled: boolean
+  title: string | undefined
+  onChange: (name: string, value: string) => void
+}
+
+/**
+ * bool の項目のスイッチ(オン/オフ)。未指定のあいだは、指定しなかったときに使われる状態
+ * (`boolDisplayValue`)を出し、触ったら明示の値('true' / 'false')にする。見出しの `<label>` と
+ * `id` で結び付ける(ラベルを押しても切り替わる)。Space / Enter はボタンの既定の動きで切り替わる。
+ */
+function BoolSwitch({ def, id, value, enabled, title, onChange }: BoolSwitchProps) {
+  const { t } = useI18n()
+  const pf = t.runForm.paramField
+  const checked = boolDisplayValue(def, value)
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      className={styles.switch}
+      disabled={!enabled}
+      title={title}
+      onClick={() => onChange(def.name, checked ? 'false' : 'true')}
+    >
+      <span className={styles.switchTrack} aria-hidden="true">
+        <span className={styles.switchThumb} />
+      </span>
+      <span className={styles.switchText} aria-hidden="true">
+        {checked ? pf.boolOn : pf.boolOff}
+      </span>
+    </button>
   )
 }
 
@@ -223,17 +263,7 @@ export function ParamField({ def, value, enabled, disabledNote, hint, onChange }
       )}
 
       {def.type === 'bool' && (
-        <select
-          id={id}
-          value={value}
-          disabled={!enabled}
-          title={fieldTitle}
-          onChange={(e) => onChange(def.name, e.target.value)}
-        >
-          <option value={UNSPECIFIED}>{unspecifiedOptionLabel(def)}</option>
-          <option value="true">{pf.boolOn}</option>
-          <option value="false">{pf.boolOff}</option>
-        </select>
+        <BoolSwitch def={def} id={id} value={value} enabled={enabled} title={fieldTitle} onChange={onChange} />
       )}
 
       {enabled && hint && (

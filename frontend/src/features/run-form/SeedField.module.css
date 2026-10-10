@@ -11,26 +11,46 @@
   gap: 8px;
 }
 
-.modeLabel {
+/* `.field label`(見出しの小さな等幅の文字)より強くするため、`.row` を付けて指定する。 */
+.row .modeLabel {
   display: flex;
   align-items: center;
   gap: 4px;
   min-height: 44px;
+  font-family: inherit;
   font-size: 13px;
   color: var(--color-text);
   cursor: pointer;
 }
 
-.modeLabel input[type='radio'] {
+.row .modeLabel input[type='radio'] {
   width: 20px;
   height: 20px;
   margin: 0;
 }
 
+/*
+ * 固定のときの数値欄と乱数ボタン。2マス分あればラジオと同じ行に、1マス(枚数と並べるとき)なら
+ * 次の行に回る。数値欄と乱数ボタンは離さない(数値は最大 10 桁)。
+ */
+.fixedGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+/* 1マスでも 10 桁が欠けないよう、左右の余白を詰める(`.field input` より強く指定する)。 */
+.fixedGroup .numberInput {
+  padding: 0 8px;
+}
+
 .numberInput {
   height: 44px;
   min-width: 0;
-  flex: 1 1 140px;
+  width: 100%;
+  flex: 1 1 auto;
   box-sizing: border-box;
   background: var(--color-bg-sunken);
   border: 1px solid var(--color-border);

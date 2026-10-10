@@ -266,9 +266,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const selectedModel = form.providerEntry?.models.find((m) => m.model === form.model)
 
   // 参考価格(PriceEstimate)に渡す値。API の契約に合わせ、未指定はそれぞれ既定値にする。
-  const qualityRaw = form.rawParams.quality
+  const qualityRaw = form.activeRawParams.quality
   const priceQuality = qualityRaw && qualityRaw !== UNSPECIFIED ? qualityRaw : 'auto'
-  const nRaw = form.rawParams.n
+  const nRaw = form.activeRawParams.n
   const priceN = nRaw && nRaw !== UNSPECIFIED && nRaw !== '' ? Number(nRaw) : 1
   const priceSize = sizeToParam(form.sizeState) ?? 'auto'
 
@@ -447,6 +447,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
             prompt={form.prompt}
             defs={form.defs}
             rawParams={form.rawParams}
+            conditionalParams={form.conditionalParams}
             sizeState={form.sizeState}
             hasSize={Boolean(form.providerEntry?.size)}
             hasMask={form.hasMask}

@@ -73,7 +73,7 @@ export function SeedField({ def, value, enabled, onChange }: SeedFieldProps) {
           {sf.fixed}
         </label>
         {!random && (
-          <>
+          <div className={styles.fixedGroup}>
             <input
               id={id}
               className={styles.numberInput}
@@ -94,7 +94,7 @@ export function SeedField({ def, value, enabled, onChange }: SeedFieldProps) {
             >
               <DiceIcon />
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>

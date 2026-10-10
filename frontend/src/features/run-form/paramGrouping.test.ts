@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { PRIMARY_PARAMS, groupParamsForProvider, splitPrimaryParams } from './paramGrouping'
+import {
+  PRIMARY_PARAMS,
+  groupParamsForProvider,
+  isWideParam,
+  placeCountNextToSeed,
+  splitPrimaryParams,
+} from './paramGrouping'
 import type { ParamDef } from '../../api/client'
 
 function makeDef(name: string): ParamDef {
@@ -62,5 +68,41 @@ describe('groupParamsForProvider', () => {
     const defs = [makeDef('moderation'), makeDef('quality'), makeDef('n')]
     expect(groupParamsForProvider('openai', defs)).toEqual(splitPrimaryParams(defs))
     expect(groupParamsForProvider(undefined, defs)).toEqual(splitPrimaryParams(defs))
+  })
+})
+
+describe('枚数を seed の隣に(SD WebUI)', () => {
+  const seed: ParamDef = { ...makeDef('seed'), type: 'int', widget: 'seed' }
+  const names = (defs: ParamDef[]) => defs.map((d) => d.name)
+
+  it('SD WebUI では枚数を seed のすぐ後ろに移し、ほかの順は変えない', () => {
+    const defs = [makeDef('steps'), seed, makeDef('vae'), makeDef('clip_skip'), makeDef('n'), makeDef('hires')]
+    expect(names(groupParamsForProvider('sdwebui', defs).primary)).toEqual([
+      'steps',
+      'seed',
+      'n',
+      'vae',
+      'clip_skip',
+      'hires',
+    ])
+  })
+
+  it('seed か枚数が無ければ順を変えない', () => {
+    const defs = [makeDef('n'), makeDef('steps')]
+    expect(names(placeCountNextToSeed(defs))).toEqual(['n', 'steps'])
+    expect(names(placeCountNextToSeed([seed, makeDef('steps')]))).toEqual(['seed', 'steps'])
+  })
+
+  it('ComfyUI は登録順のまま(枚数を動かさない)', () => {
+    const defs = [seed, makeDef('steps'), makeDef('n')]
+    expect(names(groupParamsForProvider('comfyui', defs).primary)).toEqual(['seed', 'steps', 'n'])
+  })
+
+  it('seed は隣が枚数なら1マス、そうでなければ2マス。文章は常に2マス', () => {
+    expect(isWideParam(seed, makeDef('n'))).toBe(false)
+    expect(isWideParam(seed, makeDef('vae'))).toBe(true)
+    expect(isWideParam(seed, undefined)).toBe(true)
+    expect(isWideParam({ ...makeDef('negative_prompt'), type: 'text' })).toBe(true)
+    expect(isWideParam(makeDef('n'))).toBe(false)
   })
 })

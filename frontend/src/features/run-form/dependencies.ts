@@ -5,7 +5,7 @@
  */
 import { fmt, msg } from '../../i18n'
 import type { ConditionalParam, IncompatiblePair, ParamDef } from '../../api/client'
-import { UNSPECIFIED, type RawParamValues } from './paramsBuilder'
+import { UNSPECIFIED, buildParams, unspecifiedRawValue, type RawParamValues } from './paramsBuilder'
 import type { SizeState } from './sizeValidation'
 
 /** フォームの生値から「実効値」を求める。未指定なら ParamDef.default を使う。 */
@@ -20,7 +20,7 @@ function effectiveValue(defs: ParamDef[], raw: RawParamValues, fieldName: string
 /**
  * パラメーターの外にあるフォームの状態。`hasMask` を渡したときだけ、マスクがあるときだけ
  * 意味を持つ項目(`ParamDef.mask_only`。SD WebUI の inpaint の項目。ADR-0038 2章)を判定する。
- * 渡さなければ判定しない(値を未指定に戻す処理では、マスクを外しただけで値を消さないため)。
+ * 渡さなければ判定しない。
  */
 export interface FieldContext {
   hasMask?: boolean
@@ -32,10 +32,6 @@ function isDisabledForMissingMask(defs: ParamDef[], fieldName: string, context: 
   return defs.find((d) => d.name === fieldName)?.mask_only === true
 }
 
-/** マスクが無いときに送らない項目を除いた定義(送信とフォームの状態の書き込みに使う)。 */
-export function defsForMask(defs: ParamDef[], hasMask: boolean): ParamDef[] {
-  return hasMask ? defs : defs.filter((d) => d.mask_only !== true)
-}
 
 /** conditional_params: 依存先の実効値が depends_on_values に含まれなければ無効。 */
 export function isFieldEnabled(
@@ -53,6 +49,44 @@ export function isFieldEnabled(
     const current = effectiveValue(defs, raw, cond.depends_on_field)
     return current !== null && cond.depends_on_values.includes(current)
   })
+}
+
+/**
+ * 送る値(無効の項目を未指定にした rawParams)。無効の項目もフォームには値を残し(オンに戻せば
+ * 元の値で使える)、送信・パラメーターセットの保存・フォームの状態の書き込みからだけ外す。
+ * 無効の項目の値が別の項目の判定に効かないよう、変わらなくなるまで繰り返す
+ * (項目の数だけ回せば必ず止まる。未指定にした項目は二度と戻さないため)。
+ */
+export function activeRawParams(
+  defs: ParamDef[],
+  raw: RawParamValues,
+  conditionalParams: ConditionalParam[],
+  context?: FieldContext,
+): RawParamValues {
+  let current = raw
+  for (let i = 0; i <= defs.length; i++) {
+    let next: RawParamValues | null = null
+    for (const def of defs) {
+      const value = current[def.name]
+      if (value === undefined || value === UNSPECIFIED || value === '') continue
+      if (isFieldEnabled(defs, current, conditionalParams, def.name, context)) continue
+      next ??= { ...current }
+      next[def.name] = unspecifiedRawValue(def.type)
+    }
+    if (next === null) return current
+    current = next
+  }
+  return current
+}
+
+/** 送る params(無効の項目を除く)。送信、フォームの状態の書き込み、パラメーターセットの保存で使う。 */
+export function buildEnabledParams(
+  defs: ParamDef[],
+  raw: RawParamValues,
+  conditionalParams: ConditionalParam[],
+  hasMask: boolean,
+): Record<string, string | number | boolean> {
+  return buildParams(defs, activeRawParams(defs, raw, conditionalParams, { hasMask }))
 }
 
 /** incompatible_pairs: 現在の実効値の組み合わせで違反しているものの説明文一覧。 */

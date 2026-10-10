@@ -28,12 +28,9 @@ import { findProvider, isProviderModelValid } from '../../lib/capabilities'
 import { deriveOperation } from './deriveOperation'
 import { computeInitialFormValues } from './initialFormState'
 import {
-  UNSPECIFIED,
-  buildParams,
   findDroppedParamNames,
   sanitizeRawValues,
   toRawParamValues,
-  unspecifiedRawValue,
   withSizeParam,
   type RawParamValues,
 } from './paramsBuilder'
@@ -46,7 +43,7 @@ import {
   validateSizeState,
   type SizeState,
 } from './sizeValidation'
-import { defsForMask, findIncompatibleViolations, isFieldEnabled } from './dependencies'
+import { activeRawParams, buildEnabledParams, findIncompatibleViolations, isFieldEnabled } from './dependencies'
 import { fillSeedDefaults } from './seedDefaults'
 import { loadSeedMode } from './seedModePrefs'
 import {
@@ -118,6 +115,8 @@ export interface RunFormLogic {
   handleParamChange: (name: string, value: string) => void
   defs: import('../../api/client').ParamDef[]
   conditionalParams: import('../../api/client').ConditionalParam[]
+  /** 送る値(無効の項目を未指定にした rawParams)。表示の判定と参考価格に使う。 */
+  activeRawParams: RawParamValues
   isFieldEnabledFor: (name: string) => boolean
 
   sizeState: SizeState
@@ -314,36 +313,27 @@ export function useRunFormLogic(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defs])
 
-  // 依存条件(conditional_params)で無効になったフィールドは値を未指定に戻す。
-  useEffect(() => {
-    if (!providerEntry) return
-    setRawParams((prev) => {
-      let changed = false
-      const next: RawParamValues = { ...prev }
-      for (const def of defs) {
-        const enabled = isFieldEnabled(defs, prev, providerEntry.conditional_params ?? [], def.name)
-        if (!enabled && prev[def.name] !== undefined && prev[def.name] !== UNSPECIFIED && prev[def.name] !== '') {
-          next[def.name] = unspecifiedRawValue(def.type)
-          changed = true
-        }
-      }
-      return changed ? next : prev
-    })
-  }, [providerEntry, defs, rawParams])
-
   // ローカルの状態を context へ書き込む(他ページから読める最新値にしておく)。inputs は
   // このフックでは触らず、setInputs 経由で呼び出し側が直接 context に書き込む。
-  // マスクが無いときは、マスクがあるときだけ意味を持つ項目(mask_only)を送らない。値は rawParams に
-  // 残すので、マスクを描き直せば元の値に戻る。
+  // 無効の項目(マスクが無いときの mask_only、高解像度補助がオフのときの hr_*、conditional_params
+  // など)は送らない。値は rawParams に残すので、有効に戻せば元の値で使える。
+  const conditionalParams = useMemo(() => providerEntry?.conditional_params ?? [], [providerEntry])
   useEffect(() => {
-    const params = withSizeParam(buildParams(defsForMask(defs, hasMask), rawParams), sizeToParam(sizeState))
+    const params = withSizeParam(
+      buildEnabledParams(defs, rawParams, conditionalParams, hasMask),
+      sizeToParam(sizeState),
+    )
     setFormState({ provider, model, prompt, params, inputs: formState.inputs, assetGroupId })
     // formState.inputs はここでは変更しないので依存に含めない(無限ループ回避)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, model, prompt, rawParams, sizeState, defs, assetGroupId, hasMask])
+  }, [provider, model, prompt, rawParams, sizeState, defs, assetGroupId, hasMask, conditionalParams])
 
+  const activeRaw = useMemo(
+    () => activeRawParams(defs, rawParams, conditionalParams, { hasMask }),
+    [defs, rawParams, conditionalParams, hasMask],
+  )
   const incompatibleErrors = providerEntry
-    ? findIncompatibleViolations(defs, rawParams, providerEntry.incompatible_pairs ?? [])
+    ? findIncompatibleViolations(defs, activeRaw, providerEntry.incompatible_pairs ?? [])
     : []
   // 16の倍数への丸めは blur・送信時に自動で行われるため、検証も「丸めた後」の値に対して行う
   // (丸めれば解消される「16の倍数でない」エラーを、丸める前の一時的な入力値で出さないため)。
@@ -597,7 +587,7 @@ export function useRunFormLogic(
       ? roundSizeStateToMultiple(providerEntry.size, sizeState)
       : sizeState
     const sizeParam = providerEntry?.size ? sizeToParam(roundedSizeState) : undefined
-    const params = withSizeParam(buildParams(defsForMask(defs, hasMask), rawParams), sizeParam)
+    const params = withSizeParam(buildEnabledParams(defs, rawParams, conditionalParams, hasMask), sizeParam)
     const inputs =
       operation === 'edit'
         ? formState.inputs.map((i) => ({ asset_id: i.assetId, role: i.role, position: i.position }))
@@ -625,9 +615,9 @@ export function useRunFormLogic(
     rawParams,
     handleParamChange,
     defs,
-    conditionalParams: providerEntry?.conditional_params ?? [],
-    isFieldEnabledFor: (name: string) =>
-      isFieldEnabled(defs, rawParams, providerEntry?.conditional_params ?? [], name, { hasMask }),
+    conditionalParams,
+    activeRawParams: activeRaw,
+    isFieldEnabledFor: (name: string) => isFieldEnabled(defs, activeRaw, conditionalParams, name, { hasMask }),
     sizeState,
     setSizeState: setSizeStateByUser,
     assetGroupId: resolvedAssetGroupId,

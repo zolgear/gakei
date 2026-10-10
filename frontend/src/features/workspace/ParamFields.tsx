@@ -5,8 +5,15 @@
  */
 import type { ConditionalParam, ParamDef, SizeConstraints } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
-import { HIRES_MAX_LONG_EDGE, fieldDisabledNote, hiresTargetSize, isFieldEnabled } from '../run-form/dependencies'
+import {
+  HIRES_MAX_LONG_EDGE,
+  activeRawParams,
+  fieldDisabledNote,
+  hiresTargetSize,
+  isFieldEnabled,
+} from '../run-form/dependencies'
 import { ParamField } from '../run-form/ParamField'
+import { isWideParam } from '../run-form/paramGrouping'
 import type { RawParamValues } from '../run-form/paramsBuilder'
 import { unspecifiedRawValue } from '../run-form/paramsBuilder'
 import { SizeInput } from '../run-form/SizeInput'
@@ -43,11 +50,14 @@ export function PrimaryParamFields({
   primary,
 }: PrimaryParamFieldsProps) {
   const { t } = useI18n()
+  // 有効・無効の判定は送る値(無効の項目を未指定にした値)で行う。欄に出す値は rawParams のまま
+  // (無効のあいだも値を残し、有効に戻せば元の値で使える)。
+  const active = activeRawParams(defs, rawParams, conditionalParams, { hasMask })
   // 高解像度補助(ADR-0038 10章)の拡大後の寸法は、倍率の欄の下に出す
   // (送る値と同じく、サイズを制約の倍数に切り捨ててから計算する)
   const hiresTarget = hiresTargetSize(
     defs,
-    rawParams,
+    active,
     sizeConstraints ? roundSizeStateToMultiple(sizeConstraints, sizeState) : sizeState,
   )
   const hiresHint = hiresTarget
@@ -68,20 +78,21 @@ export function PrimaryParamFields({
         </div>
       )}
 
-      {primary.map((def) => {
+      {primary.map((def, index) => {
         const field = (
           <ParamField
             key={def.name}
             def={def}
             value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
-            enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name, { hasMask })}
-            disabledNote={fieldDisabledNote(defs, rawParams, def.name, { hasMask })}
+            enabled={isFieldEnabled(defs, active, conditionalParams, def.name, { hasMask })}
+            disabledNote={fieldDisabledNote(defs, active, def.name, { hasMask })}
             hint={def.name === 'hr_scale' ? hiresHint : null}
             onChange={onParamChange}
           />
         )
-        // 文章(ネガティブプロンプトなど)と seed の欄は、1マスでは狭いので2マス分を使う。
-        return isWideParam(def) ? (
+        // 文章(ネガティブプロンプトなど)と seed の欄は、1マスでは狭いので2マス分を使う
+        // (seed の隣に枚数が来るときは、seed を1マスにして同じ行に並べる)。
+        return isWideParam(def, primary[index + 1]) ? (
           <div key={def.name} className={styles.spanTwo}>
             {field}
           </div>
@@ -91,11 +102,6 @@ export function PrimaryParamFields({
       })}
     </>
   )
-}
-
-/** 設定グリッドで2マス分を使うパラメーター(文章の欄と seed の欄)。 */
-function isWideParam(def: ParamDef): boolean {
-  return def.type === 'text' || def.widget === 'seed'
 }
 
 interface OtherParamsDetailsProps extends ParamFieldsCommonProps {
@@ -114,6 +120,7 @@ export function OtherParamsDetails({
   const { t } = useI18n()
   const ip = t.workspace.inputPane
   if (other.length === 0) return null
+  const active = activeRawParams(defs, rawParams, conditionalParams, { hasMask })
   return (
     <details className={styles.otherDetails}>
       <summary className={styles.otherSummary}>{ip.otherParams}</summary>
@@ -123,8 +130,8 @@ export function OtherParamsDetails({
             key={def.name}
             def={def}
             value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
-            enabled={isFieldEnabled(defs, rawParams, conditionalParams, def.name, { hasMask })}
-            disabledNote={fieldDisabledNote(defs, rawParams, def.name, { hasMask })}
+            enabled={isFieldEnabled(defs, active, conditionalParams, def.name, { hasMask })}
+            disabledNote={fieldDisabledNote(defs, active, def.name, { hasMask })}
             onChange={onParamChange}
           />
         ))}
