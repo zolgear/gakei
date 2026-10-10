@@ -34,12 +34,28 @@ from app.model_store.downloader import (
     files_present,
 )
 
-ModelFamily = Literal["openai_clip", "ly_clip"]
+ModelFamily = Literal["openai_clip", "ly_clip", "embeddinggemma2"]
+# 画像の埋め込みの入力にする派生画像(ADR-0036。どちらも `ensure_derived` を通して読む)。
+InputVariant = Literal["thumb", "preview"]
 
 XENOVA_CLIP_REPO = "Xenova/clip-vit-base-patch32"
 XENOVA_CLIP_REVISION = "d15189d7028b43f1d3e65039190477f6af591c2a"
 LY_CLIP_REPO = "line-corporation/clip-japanese-base"
 LY_CLIP_REVISION = "77a62f8af977acd73ec2f927fb73fdaeb13af7d1"
+# EmbeddingGemma 2(ADR-0044)。ONNX は onnx-community、`tokenizer.model` は google の
+# リポジトリにしか無いので、別のリビジョンで取る。
+EG2_ONNX_REPO = "onnx-community/embeddinggemma-2-ONNX"
+EG2_ONNX_REVISION = "daa72c51243991dfcaf9f9137d2c573d8f7790c0"
+EG2_TOKENIZER_REPO = "google/embeddinggemma-2"
+EG2_TOKENIZER_REVISION = "914f7f89142e33e77833254d9c9b90c3cef7303b"
+# `config_sentence_transformers.json` の `prompts`(末尾の空白込み)。検索の文章にだけ付け、
+# 画像には付けない(ADR-0044 3章)。
+EG2_SEARCH_QUERY_PREFIX = "task: search result | query: "
+# 文章は `<bos>` と `<eos>` を含めてこの長さで切る(ADR-0044 3章)。
+EG2_MAX_TEXT_TOKENS = 1024
+
+# 重複の候補のしきい値の既定(ADR-0033 12章、ADR-0044 5章)。モデルごとに持つ。
+CLIP_DUPLICATE_THRESHOLD = 0.90
 
 _MB = 1000 * 1000
 
@@ -79,6 +95,18 @@ class ClipModel:
     # 画像側を量子化したモデルか。動的量子化はまとめて計算する枚数で値が変わるので、1枚ずつ
     # 計算する(ADR-0033 2章)。
     quantized_vision: bool = False
+    # 重複の候補のしきい値の既定(管理者が変えればモデルごとに保存する。ADR-0044 5章)。
+    duplicate_threshold: float = CLIP_DUPLICATE_THRESHOLD
+    # 画像の入力にする派生画像。CLIP 系は 224px に縮めるので thumb(長辺 512px)で足りる。
+    input_variant: InputVariant = "thumb"
+    # 検索の文章の前に付ける文字列と、文章のトークン数の上限(EG2 だけ。ほかは
+    # トークナイザーが 77 で切る)。
+    query_prefix: str = ""
+    max_text_tokens: int | None = None
+    # 検索の質が高い代わりに計算が重いモデル(設定画面に一言出す。ADR-0044 6章)。
+    heavy: bool = False
+    # 日本語・英語のほかにも多くの言語に対応する(画面では「多言語」と出す)。
+    many_languages: bool = False
 
     @property
     def size_bytes(self) -> int:
@@ -88,9 +116,14 @@ class ClipModel:
     def image_batch_size(self) -> int:
         """画像を1回にまとめて計算する枚数。量子化したモデルと LY の画像側は1枚ずつ
         (LY はまとめても1枚あたりが速くならない。実測)。"""
-        if self.quantized_vision or self.family == "ly_clip":
+        if self.quantized_vision or self.family in ("ly_clip", "embeddinggemma2"):
             return 1
         return 8
+
+    @property
+    def vision_needs_text(self) -> bool:
+        """画像の計算に文章側も要るか(EG2 は画像側の出力を文章側に渡す。ADR-0044 3章)。"""
+        return self.family == "embeddinggemma2"
 
 
 CLIP_MODELS: dict[str, ClipModel] = {
@@ -179,6 +212,64 @@ CLIP_MODELS: dict[str, ClipModel] = {
         memory_text_bytes=650 * _MB,
         memory_bytes=1000 * _MB,
         license="Apache-2.0",
+    ),
+    # ADR-0044。画像は画像側 → 文章側の2段で計算する。メモリの目安は、x86(4 スレッド)で
+    # 計算中のピークを測った値(画像1枚で約 718MiB、文章 1,024 トークンで約 518MiB)から。
+    # 重みは `.onnx_data` を mmap で読むので、読み込み直後は小さい。`memory_vision_bytes` は
+    # 画像を計算するとき(画像側+文章側)の目安で、`memory_bytes` と同じ。
+    "embeddinggemma-2-q8": ClipModel(
+        name="embeddinggemma-2-q8",
+        family="embeddinggemma2",
+        repo=EG2_ONNX_REPO,
+        revision=EG2_ONNX_REVISION,
+        files=(
+            RemoteFile(
+                "vision_encoder_quantized.onnx",
+                162495,
+                "bb0de2df53a2448a32dc7908a187c168c8afd514d4d6f674f7f46024875fa4e3",
+                path="onnx/vision_encoder_quantized.onnx",
+            ),
+            RemoteFile(
+                "vision_encoder_quantized.onnx_data",
+                195228672,
+                "3dabd69c0a36e9a8771ad82030dde74daa5a0e02b7047a5d3f3382b1137bab89",
+                path="onnx/vision_encoder_quantized.onnx_data",
+            ),
+            RemoteFile(
+                "model_quantized.onnx",
+                495165,
+                "d06edd601f851c633a2519304cbeb8dc6170d7ceb61b436625c17fb9b6e74953",
+                path="onnx/model_quantized.onnx",
+            ),
+            RemoteFile(
+                "model_quantized.onnx_data",
+                313724928,
+                "278a7ff1248c3618e4bd11a607fc54f7bdc7778854230f3956d3f86bd9db4f3b",
+                path="onnx/model_quantized.onnx_data",
+            ),
+            RemoteFile(
+                "tokenizer.model",
+                4689013,
+                "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03",
+                repo=EG2_TOKENIZER_REPO,
+                revision=EG2_TOKENIZER_REVISION,
+            ),
+        ),
+        vision_file="vision_encoder_quantized.onnx",
+        text_file="model_quantized.onnx",
+        languages=("ja", "en"),
+        dim=768,
+        memory_vision_bytes=750 * _MB,
+        memory_text_bytes=550 * _MB,
+        memory_bytes=750 * _MB,
+        license="Apache-2.0",
+        quantized_vision=True,
+        duplicate_threshold=CLIP_DUPLICATE_THRESHOLD,
+        input_variant="preview",
+        query_prefix=EG2_SEARCH_QUERY_PREFIX,
+        max_text_tokens=EG2_MAX_TEXT_TOKENS,
+        heavy=True,
+        many_languages=True,
     ),
 }
 

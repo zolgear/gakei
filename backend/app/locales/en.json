@@ -356,6 +356,7 @@
       "invalidModel": "The model name must be 1 to {max} characters",
       "invalidApiFormat": "The format must be infinity",
       "invalidThreshold": "The threshold must be a number between {min} and {max}",
+      "thresholdNoModel": "Set the remote connection and model name before saving the threshold",
       "vectorsNotFound": "There are no vectors for this model"
     },
     "auth": {

@@ -1,10 +1,14 @@
 """画像の埋め込みの worker(ADR-0033 5章)。自動タイトル・タグの worker とは別。
 
 待ち行列は `asset_embedding.status = 'queued'` の行そのもの。api プロセス内の asyncio タスクが、
-使うモデルの行を古い依頼から取り、thumb(512px)を読んで計算する。
+使うモデルの行を古い依頼から取り、thumb(512px)を読んで計算する。EmbeddingGemma 2 のように
+入力に大きな画像を使うモデルは、preview(2048px)を読む(カタログの `input_variant`。ADR-0044)。
 
 - 1回に取る件数は `CLAIM_LIMIT`(8)と、エンジンが1回にまとめる枚数(`image_batch_size`。
-  リモートは 32)の大きいほう。ローカルの ONNX(8 か 1)は 8 件のまま。
+  リモートは 32)の大きいほう。ローカルの ONNX(8 か 1)は 8 件のまま。preview を読むモデルは
+  `PREVIEW_CLAIM_LIMIT`(2)件にする(デコードした preview は1枚 最大 12MB で、先読みの分も
+  メモリに持つため。1枚に数秒かかるモデルなので、少なく取っても待ちは生じない)。
+- 知覚ハッシュは、どのモデルでも thumb から作る(preview を読むモデルでは thumb も読む)。
 - thumb の読み込み(オブジェクトストレージならネットワーク)とデコードは、複数のスレッドで
   並列に行う。知覚ハッシュも取ったときに作る(先読みなら推論と重なる)。
 - 推論している間に、次の分を取って thumb を読み、デコードしておく(先読みは1つだけ)。
@@ -52,6 +56,7 @@ from app.domain.models import Asset, AssetEmbedding, AssetKind, AssetPerceptualH
 from app.domain.storage import AssetStore
 from app.domain.text_safety import sanitize_external_text
 from app.embedding.base import EmbeddingEngine, EmbeddingError, vector_to_blob
+from app.embedding.catalog import InputVariant
 from app.embedding.engines import EmbeddingEngines
 from app.i18n import t
 
@@ -61,6 +66,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CLAIM_LIMIT = 8
+PREVIEW_CLAIM_LIMIT = 2
 # thumb の読み込みとデコードを並列に行うスレッドの数(控えめにする)。
 _LOAD_WORKERS = 8
 # 待ち行列が空のときに、1回で知覚ハッシュを埋める枚数。
@@ -133,6 +139,8 @@ class _Job:
     claimed: list[uuid.UUID] = field(default_factory=list)
     # 計算する行(asset_id とデコード済みの画像)
     items: list[tuple[uuid.UUID, Image.Image]] = field(default_factory=list)
+    # 入力にする派生画像。thumb でなければ、知覚ハッシュ用に thumb も読む。
+    variant: InputVariant = "thumb"
     # 計算する前に失敗が決まった行(asset_id と理由)
     failures: list[tuple[uuid.UUID, str]] = field(default_factory=list)
 
@@ -318,12 +326,15 @@ class Embedder:
                 engine = self.engines.engine_for(session, config)
             except EmbeddingError as e:
                 engine_error = str(e)
+            variant = embedding_settings.input_variant(config)
 
         limit = CLAIM_LIMIT if engine is None else max(CLAIM_LIMIT, engine.image_batch_size)
+        if variant != "thumb":
+            limit = PREVIEW_CLAIM_LIMIT
         claimed = claim(self.session_factory, model_key, limit)
         if not claimed:
             return None
-        job = _Job(model_key=model_key, engine=engine, claimed=list(claimed))
+        job = _Job(model_key=model_key, engine=engine, claimed=list(claimed), variant=variant)
         if engine_error is not None:
             # 接続先が消えたなど、設定の問題。取った行は失敗にする(自動では再試行しない)。
             job.failures = [(asset_id, engine_error) for asset_id in claimed]
@@ -340,35 +351,54 @@ class Embedder:
                     job.failures.append((asset_id, t("embeddings.maskNotSupported")))
                     continue
                 targets.append(asset)
-            loaded = self._load_images(targets)
-        for asset, image in zip(targets, loaded, strict=True):
-            if image is None:
+            loaded = self._load_images(targets, job.variant)
+        hash_items: list[tuple[uuid.UUID, Image.Image]] = []
+        for asset, pair in zip(targets, loaded, strict=True):
+            if pair is None:
                 job.failures.append((asset.id, t("embeddings.imageUnreadable")))
             else:
+                image, hash_image = pair
                 job.items.append((asset.id, image))
-        if job.items:
+                if hash_image is not None:
+                    hash_items.append((asset.id, hash_image))
+        if hash_items:
             # 先読みのときは、前の分の推論を待つ間にハッシュも作っておける。
             try:
-                self._store_hashes(job.items)
+                self._store_hashes(hash_items)
             except Exception:
                 # ハッシュが無くても重複の候補は CLIP だけで判定できる。埋め込みは続ける。
                 logger.exception("知覚ハッシュの保存に失敗しました")
         return job
 
-    def _load_images(self, assets: list[Asset]) -> list[Image.Image | None]:
-        """thumb を読んでデコードする(複数のスレッドで並列に)。読めなければ None。順序は保つ。
+    def _load_images(
+        self, assets: list[Asset], variant: InputVariant = "thumb"
+    ) -> list[tuple[Image.Image, Image.Image | None] | None]:
+        """入力の派生画像を読んでデコードする(複数のスレッドで並列に)。返すのは
+        (入力の画像、知覚ハッシュ用の thumb)。読めなければ None。順序は保つ。
+
+        `variant` が thumb でなければ、ハッシュ用に thumb も読む。thumb だけが読めないときは
+        ハッシュ用を None にする(埋め込みは続ける)。
 
         Asset の属性は読み込み済みのものだけを使う(別スレッドから遅延読み込みをしない)。
         """
         refs = [(asset.id, asset.blob_key, asset.sha256) for asset in assets]
 
-        def load(ref: tuple[uuid.UUID, str, str]) -> Image.Image | None:
+        def load(
+            ref: tuple[uuid.UUID, str, str],
+        ) -> tuple[Image.Image, Image.Image | None] | None:
             asset_id, blob_key, sha256 = ref
             try:
-                return _decode_image(self._read_thumb_by_key(blob_key, sha256))
+                image = _decode_image(self._read_derived_by_key(blob_key, sha256, variant))
             except Exception as e:  # noqa: BLE001 - 読めなければその行だけ失敗にする
                 logger.warning("asset %s の画像を読めませんでした: %s", asset_id, e)
                 return None
+            if variant == "thumb":
+                return image, image
+            try:
+                return image, _decode_image(self._read_thumb_by_key(blob_key, sha256))
+            except Exception as e:  # noqa: BLE001 - ハッシュは後で埋め戻す
+                logger.warning("asset %s の thumb を読めませんでした: %s", asset_id, e)
+                return image, None
 
         if len(refs) <= 1:
             return [load(ref) for ref in refs]
@@ -418,9 +448,12 @@ class Embedder:
         return self._read_thumb_by_key(asset.blob_key, asset.sha256)
 
     def _read_thumb_by_key(self, blob_key: str, sha256: str) -> bytes:
-        # 今の版の thumb が無ければ原本から作る(ADR-0036 2章)。
-        thumb = derivatives.ensure_derived(self.store, blob_key, sha256, "thumb")
-        return thumb.read_all() if thumb is not None else self.store.read(blob_key)
+        return self._read_derived_by_key(blob_key, sha256, "thumb")
+
+    def _read_derived_by_key(self, blob_key: str, sha256: str, variant: InputVariant) -> bytes:
+        # 今の版の派生が無ければ原本から作る(ADR-0036 2章)。作れなければ原本を読む。
+        derived = derivatives.ensure_derived(self.store, blob_key, sha256, variant)
+        return derived.read_all() if derived is not None else self.store.read(blob_key)
 
     def _store_hashes(self, images: list[tuple[uuid.UUID, Image.Image]]) -> int:
         """無いか版の古い知覚ハッシュを作って保存し、件数を返す。1枚の失敗は飛ばす。"""

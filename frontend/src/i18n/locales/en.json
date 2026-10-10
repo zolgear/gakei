@@ -687,7 +687,9 @@
           "en": "English"
         },
         "englishOnlyNote": "English-only model. Searching in Japanese rarely finds anything.",
-        "modelHelp": "To search in Japanese, choose clip-japanese-base. clip-vit-b32-u8 is a light, fast model for English.",
+        "manyLanguages": "Multilingual (including Japanese and English)",
+        "heavyNote": "Higher search quality, but heavy to compute (each image takes tens of times longer than with CLIP).",
+        "modelHelp": "clip-vit-b32-u8 is a light, fast model for English. To search in Japanese, choose clip-japanese-base or embeddinggemma-2-q8. embeddinggemma-2-q8 gives the best search quality, but computing images takes longer.",
         "modelNotDownloaded": "The selected model can't be used until it is downloaded.",
         "downloaded": "Downloaded",
         "notDownloaded": "Not downloaded",
@@ -762,7 +764,7 @@
       "duplicates": {
         "heading": "Duplicate candidates",
         "thresholdLabel": "Default threshold",
-        "thresholdHelp": "The similarity threshold first used on the duplicate candidates page ({min}–{max}). It can be changed temporarily on that page.",
+        "thresholdHelp": "The similarity threshold first used on the duplicate candidates page ({min}–{max}). Saved per model (the default for this model is {default}). It can be changed temporarily on that page.",
         "thresholdInvalid": "Enter a number from {min} to {max}"
       },
       "stored": {

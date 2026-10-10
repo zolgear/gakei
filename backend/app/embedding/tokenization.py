@@ -28,6 +28,17 @@ transformers、torch、`tokenizers` は使わない。
 
 文字列 `[CLS]` などは、小文字にしたうえで `sentencepiece` がふつうに分割する(特殊トークンに
 しない)。transformers 4.39 の T5Tokenizer とは、この1点だけが違う(意図どおり)。
+
+**EmbeddingGemma 2(`Eg2Tokenizer`。ADR-0044 3章)**: `sentencepiece` と `tokenizer.model`。
+
+1. 小文字にしない。先頭にダミーの `▁` は入らない(`tokenizer.model` の設定のまま)。
+2. `sentencepiece` で分割し、先頭に `<bos>`(=2)、末尾に `<eos>`(=1)を付ける。
+3. `<bos>` と `<eos>` を含めて上限(1,024)に切り、切った後も末尾に `<eos>` を残す
+   (transformers の切り方と同じ)。
+4. 1件ずつ計算するので詰め物は要らない。attention_mask はすべて 1。
+
+本文中の `<|image|>` などの文字列は特殊トークンにしない(`sentencepiece` がふつうに分割する)。
+タスクのプレフィックス(`SearchQuery`)は呼び出し側(エンジン)が本文の前に付ける。
 """
 
 from __future__ import annotations
@@ -46,6 +57,14 @@ CLIP_BOS = 49406
 CLIP_EOS = 49407
 
 LY_MAX_LENGTH = 77
+
+# EmbeddingGemma 2 の特殊トークン(`tokenizer.model` と `tokenizer_config.json` の値)。
+EG2_BOS = 2
+EG2_EOS = 1
+EG2_PAD = 0
+EG2_BOI = 255999  # `<|image>`(画像の開始)
+EG2_IMAGE = 258880  # `<|image|>`(画像のソフトトークン1つ)
+EG2_EOI = 258882  # `<image|>`(画像の終わり)
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPECIAL_STRINGS = ("<|startoftext|>", "<|endoftext|>")
@@ -193,3 +212,35 @@ class LyTokenizer:
             mask[index, : len(row)] = 1
         positions = np.tile(np.arange(length, dtype=np.int64), (len(rows), 1))
         return {"input0": input_ids, "input1": mask, "input2": positions}
+
+
+class Eg2Tokenizer:
+    def __init__(self, model_path: Path | None = None, processor: Any = None) -> None:
+        """`processor` はテスト用(`SentencePieceProcessor` と同じ `encode`)。"""
+        if processor is None:
+            import sentencepiece
+
+            assert model_path is not None
+            processor = sentencepiece.SentencePieceProcessor(model_file=str(model_path))
+        self.processor = processor
+
+    def ids(self, text: str, max_length: int) -> list[int]:
+        """`<bos>` と `<eos>` を付け、両方を含めて `max_length` に切った id の列。"""
+        if max_length < 2:
+            raise ValueError("max_length は 2 以上")
+        body = [int(i) for i in self.processor.encode(text)][: max_length - 2]
+        return [EG2_BOS, *body, EG2_EOS]
+
+    def feeds(self, text: str, max_length: int) -> dict[str, np.ndarray]:
+        """文章1件の `input_ids` と `attention_mask`([1, 長さ]、int64)。"""
+        input_ids = np.array([self.ids(text, max_length)], dtype=np.int64)
+        return {"input_ids": input_ids, "attention_mask": np.ones_like(input_ids)}
+
+
+def eg2_image_input_ids(num_soft_tokens: int) -> np.ndarray:
+    """画像1枚を文章側に渡すときのトークン列([1, N + 4]、int64。ADR-0044 3章)。
+    `<bos>`、画像の開始、画像のトークン × N、画像の終わり、`<eos>`。上限で切らない。"""
+    if num_soft_tokens <= 0:
+        raise ValueError("ソフトトークン数は 1 以上")
+    ids = [EG2_BOS, EG2_BOI, *([EG2_IMAGE] * num_soft_tokens), EG2_EOI, EG2_EOS]
+    return np.array([ids], dtype=np.int64)

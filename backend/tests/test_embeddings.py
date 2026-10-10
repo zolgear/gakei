@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from app.domain.models import AssetEmbedding
 from app.embedding.base import EmbeddingError, blob_to_vector
-from app.embedding.catalog import XENOVA_CLIP_REVISION
+from app.embedding.catalog import CLIP_MODELS, XENOVA_CLIP_REVISION
 from app.embedding.fake import FakeEmbeddingEngine
 from tests.conftest import login_as, make_png_bytes, wait_for_run_terminal
 
@@ -76,10 +76,27 @@ def test_settings_defaults(client: TestClient) -> None:
     assert body["usable"] is False
     assert body["index_backend"] in ("numpy", "pgvector")
     models = {m["name"]: m for m in body["onnx_models"]}
-    assert set(models) == {"clip-vit-b32-u8", "clip-vit-b32", "clip-japanese-base"}
+    assert set(models) == {
+        "clip-vit-b32-u8",
+        "clip-vit-b32",
+        "clip-japanese-base",
+        "embeddinggemma-2-q8",
+    }
     assert models["clip-japanese-base"]["languages"] == ["ja", "en"]
     assert models["clip-vit-b32-u8"]["size_bytes"] == 344094415
-    assert all(m["dim"] == 512 and not m["downloaded"] for m in models.values())
+    assert all(not m["downloaded"] for m in models.values())
+    assert {name: m["dim"] for name, m in models.items()} == {
+        "clip-vit-b32-u8": 512,
+        "clip-vit-b32": 512,
+        "clip-japanese-base": 512,
+        "embeddinggemma-2-q8": 768,
+    }
+    # 計算が重いモデルの印と、モデルごとのしきい値(ADR-0044 5章・6章)。
+    assert [name for name, m in models.items() if m["heavy"]] == ["embeddinggemma-2-q8"]
+    assert body["duplicate_threshold_default"] == 0.90
+    for name, m in models.items():
+        assert m["duplicate_threshold"] == m["duplicate_threshold_default"]
+        assert m["duplicate_threshold_default"] == CLIP_MODELS[name].duplicate_threshold
     assert body["stored"] == []
     assert (body["pending_count"], body["queued_count"], body["failed_count"]) == (0, 0, 0)
 
@@ -680,3 +697,125 @@ def test_worker_requeues_prefetched_job_on_stop(tmp_path, db_session_factory) ->
     asyncio.run(main())
     assert engine.image_calls == [8]
     assert _status_counts(factory) == {"succeeded": 8, "queued": 16}
+
+
+# -- モデルごとの重複のしきい値と、入力の派生画像(ADR-0044) ------------------------------
+
+EG2_NAME = "embeddinggemma-2-q8"
+
+
+def test_duplicate_threshold_is_per_model(client: TestClient) -> None:
+    eg2_default = CLIP_MODELS[EG2_NAME].duplicate_threshold
+    body = _patch(client, duplicate_threshold=0.95)
+    assert body["duplicate_threshold"] == 0.95
+    assert body["duplicate_threshold_default"] == 0.90
+    # モデルを変えると、そのモデルの値(保存していなければ既定)になる。
+    body = _patch(client, onnx_model=EG2_NAME)
+    assert body["duplicate_threshold"] == eg2_default
+    assert body["duplicate_threshold_default"] == eg2_default
+    models = {m["name"]: m for m in body["onnx_models"]}
+    assert models["clip-vit-b32-u8"]["duplicate_threshold"] == 0.95
+    assert models[EG2_NAME]["duplicate_threshold"] == eg2_default
+    # モデルとしきい値を一緒に変えると、変えた後のモデルの値になる。
+    body = _patch(client, onnx_model="clip-japanese-base", duplicate_threshold=0.8)
+    assert body["duplicate_threshold"] == 0.8
+    body = _patch(client, onnx_model="clip-vit-b32-u8")
+    assert body["duplicate_threshold"] == 0.95
+    models = {m["name"]: m for m in body["onnx_models"]}
+    assert models["clip-japanese-base"]["duplicate_threshold"] == 0.8
+    # 重複の候補の既定のしきい値も、使うモデルの値。
+    _patch(client, enabled=True)
+    assert client.get("/api/embeddings/duplicates").json()["threshold"] == 0.95
+
+
+def test_legacy_duplicate_threshold_moves_to_the_model_in_use(client: TestClient) -> None:
+    """モデルごとにする前の値は、そのとき使っていたモデルの値として引き継ぐ。"""
+    from app.domain.general_settings import _get_raw_value, _save
+
+    _patch(client, onnx_model="clip-japanese-base")
+    with client.app.state.session_factory() as db:
+        _save(db, "embedding.duplicate_threshold", 0.85)
+    assert client.get("/api/settings/embeddings").json()["duplicate_threshold"] == 0.85
+    # モデルを変えると、古い値は変える前のモデルに移り、古い項目は消える。
+    body = _patch(client, onnx_model=EG2_NAME)
+    assert body["duplicate_threshold"] == CLIP_MODELS[EG2_NAME].duplicate_threshold
+    with client.app.state.session_factory() as db:
+        assert _get_raw_value(db, "embedding.duplicate_threshold") is None
+        assert _get_raw_value(db, "embedding.duplicate_thresholds") == {
+            "onnx:clip-japanese-base": 0.85
+        }
+    assert _patch(client, onnx_model="clip-japanese-base")["duplicate_threshold"] == 0.85
+
+
+def test_duplicate_threshold_for_remote_needs_a_model(client: TestClient) -> None:
+    _patch(client, engine="remote")
+    response = client.patch("/api/settings/embeddings", json={"duplicate_threshold": 0.9})
+    assert response.status_code == 422
+    connection_id = _add_connection(client)
+    body = _patch(
+        client, remote_connection_id=connection_id, remote_model="clip", duplicate_threshold=0.93
+    )
+    assert body["duplicate_threshold"] == 0.93
+    assert body["duplicate_threshold_default"] == 0.90
+    assert _patch(client, remote_model="other")["duplicate_threshold"] == 0.90
+    assert _patch(client, remote_model="clip")["duplicate_threshold"] == 0.93
+
+
+def test_worker_reads_preview_for_eg2(
+    tmp_path,
+    db_session_factory,
+    monkeypatch: pytest.MonkeyPatch,  # noqa: ANN001
+) -> None:
+    """EG2 は preview から計算し、知覚ハッシュは thumb から作る。取るのは 2 件ずつ。"""
+    import asyncio
+
+    from app.config import Settings
+    from app.domain import derivatives, embedding_settings
+    from app.domain import embeddings as embeddings_domain
+    from app.domain.assets import ingest
+    from app.domain.models import AssetKind, AssetPerceptualHash
+    from app.domain.storage import LocalFsStore
+    from app.worker.embedder import PREVIEW_CLAIM_LIMIT, Embedder
+
+    factory = db_session_factory
+    settings = Settings(_env_file=None, data_dir=tmp_path / "data", fake_provider=True)
+    store = LocalFsStore(tmp_path / "store")
+    with factory() as db:
+        embedding_settings.save(db, {"enabled": True, "onnx_model": EG2_NAME})
+        config = embedding_settings.load(db)
+        assert embedding_settings.input_variant(config) == "preview"
+        model_key = embedding_settings.active_model_key(config, settings)
+        for i in range(5):
+            asset = ingest(db, store, make_png_bytes(color=(i, 9, 7)), AssetKind.UPLOAD)
+            assert embeddings_domain.enqueue_on_ingest(db, asset, settings)
+        db.commit()
+
+    variants: list[str] = []
+    original = derivatives.ensure_derived
+
+    def recording(store_, blob_key, sha256, variant):  # noqa: ANN001, ANN202
+        variants.append(variant)
+        return original(store_, blob_key, sha256, variant)
+
+    monkeypatch.setattr(derivatives, "ensure_derived", recording)
+    engine = FakeEmbeddingEngine(model_key, image_batch_size=1)
+    embedder = Embedder(factory, store, settings, _StubEngines(engine))
+    job = embedder._prepare()
+    assert job is not None and job.variant == "preview"
+    assert len(job.claimed) == PREVIEW_CLAIM_LIMIT == 2
+    assert sorted(variants) == ["preview", "preview", "thumb", "thumb"]
+    asyncio.run(embedder._process(job))
+    assert engine.image_calls == [1, 1]
+    with factory() as db:
+        assert len(db.execute(select(AssetPerceptualHash)).scalars().all()) == 2
+
+
+def test_query_image_uses_the_same_derived_size() -> None:
+    from PIL import Image
+
+    from app.domain.semantic_search import decode_query_image
+
+    data = make_png_bytes(3000, 1500, (10, 20, 30))
+    assert decode_query_image(data).size == (512, 256)
+    assert decode_query_image(data, "preview").size == (2048, 1024)
+    assert isinstance(decode_query_image(data, "preview"), Image.Image)

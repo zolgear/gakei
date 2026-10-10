@@ -59,7 +59,7 @@ from app.domain.vector_index import (
 )
 from app.domain.visibility import get_visible_asset, get_visible_group
 from app.embedding.base import EmbeddingError, composite_on_white
-from app.embedding.catalog import CLIP_MODELS
+from app.embedding.catalog import CLIP_MODELS, InputVariant
 from app.i18n import t
 
 if TYPE_CHECKING:
@@ -295,9 +295,10 @@ def semantic_search(
 # -- 画像で探す ---------------------------------------------------------------------
 
 
-def decode_query_image(data: bytes) -> Image.Image:
+def decode_query_image(data: bytes, variant: InputVariant = "thumb") -> Image.Image:
     """画像で探す画像を、取り込みと同じ規則で確かめ、thumb(長辺 512px)と同じ縮め方をした
-    RGB(透明な部分は白で合成)にする。保存はしない。
+    RGB(透明な部分は白で合成)にする。保存はしない。`variant` が preview なら、preview
+    (長辺 2048px)と同じ縮め方にする(入力に preview を使うモデル。ADR-0044)。
 
     取り込み(`assets.ingest`)と同じく、大きさの上限は `MAX_UPLOAD_BYTES`、形式は PNG / JPEG /
     WebP。中身を実際に展開して確かめる。縮め方を thumb の作り方(WebP にして読み直す)と揃える
@@ -326,7 +327,7 @@ def decode_query_image(data: bytes) -> Image.Image:
         raise EmbeddingsInvalidQueryError(t("assets.unsupportedFormat", format=image.format))
     try:
         image.load()  # ヘッダーだけでなく実際に展開して確かめる
-        thumb = Image.open(io.BytesIO(derivatives.make_thumb(image)))
+        thumb = Image.open(io.BytesIO(derivatives.make_derived(image, variant)))
         thumb.load()
     except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
         raise EmbeddingsInvalidQueryError(t("assets.cannotReadImage")) from e
@@ -369,7 +370,7 @@ def search_by_image(
     active = require_active(db, settings)
     flt = build_filter(db, viewer, group_id=group_id, tags=tags, kind=kind)
     with _QUERY_IMAGE_SLOTS:
-        image = decode_query_image(data)
+        image = decode_query_image(data, embedding_settings.input_variant(active.config))
         try:
             vector = embed_query_image(db, active, image, engines)
         finally:
