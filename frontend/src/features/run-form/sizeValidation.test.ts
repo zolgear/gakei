@@ -15,6 +15,7 @@ import {
   sizeStateForEditInputs,
   sizeStateForProvider,
   sizeToParam,
+  swapSizeState,
   validateSize,
   validateSizeState,
 } from './sizeValidation'
@@ -337,5 +338,45 @@ describe('sizeStateForEditInputs(入力画像を足したとき)', () => {
   it('auto を受け付けるプロバイダー(OpenAI)やサイズの無いプロバイダーでは何もしない', () => {
     expect(sizeStateForEditInputs(constraints, square, false)).toBeNull()
     expect(sizeStateForEditInputs(undefined, square, false)).toBeNull()
+  })
+})
+
+describe('swapSizeState', () => {
+  it('幅と高さを入れ替える', () => {
+    expect(swapSizeState(constraints, { mode: 'custom', width: 1280, height: 720 })).toEqual({
+      mode: 'custom',
+      width: 720,
+      height: 1280,
+    })
+  })
+
+  it('OpenAI では入れ替えた値を 16 の倍数に丸める(四捨五入)', () => {
+    expect(swapSizeState(constraints, { mode: 'custom', width: 1000, height: 1530 })).toEqual({
+      mode: 'custom',
+      width: 1536,
+      height: 1008,
+    })
+  })
+
+  it('SD WebUI では入れ替えた値を 8 の倍数に切り捨てる', () => {
+    expect(swapSizeState(sdwebuiConstraints, { mode: 'custom', width: 1023, height: 767 })).toEqual({
+      mode: 'custom',
+      width: 760,
+      height: 1016,
+    })
+  })
+
+  it('入れ替えた結果がプリセットの縦横を入れ替えたものと一致すれば、そのプリセットの値になる', () => {
+    // 1530×1024 は「任意」だが、入れ替えて丸めると 1024×1536(HD 縦のプリセット)になる
+    const swapped = swapSizeState(constraints, { mode: 'custom', width: 1530, height: 1024 })
+    expect(swapped).toEqual({ mode: 'custom', width: 1024, height: 1536 })
+    expect(sizePresetsFor(constraints).some((p) => p.value.width === 1024 && p.value.height === 1536)).toBe(true)
+  })
+
+  it('custom 以外(未指定・auto)はそのまま返す', () => {
+    const unspecified = { mode: 'unspecified' as const, width: 1536, height: 1024 }
+    const auto = { mode: 'auto' as const, width: 1536, height: 1024 }
+    expect(swapSizeState(constraints, unspecified)).toBe(unspecified)
+    expect(swapSizeState(constraints, auto)).toBe(auto)
   })
 })

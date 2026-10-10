@@ -13,6 +13,7 @@ import {
   roundSizeStateToMultiple,
   roundDimension,
   sizePresetsFor,
+  swapSizeState,
   validateSizeState,
   type SizeState,
 } from './sizeValidation'
@@ -83,6 +84,11 @@ export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
     onChange({ mode: preset.mode, width: preset.width ?? 1024, height: preset.height ?? 1024 })
   }
 
+  // 「×」ボタン: 幅と高さを入れ替える。丸めは swapSizeState が blur 時と同じ規則で行う。
+  function handleSwap() {
+    onChange(swapSizeState(constraints, value))
+  }
+
   function handleWidthBlur() {
     const rounded = roundDimension(constraints, value.width)
     if (rounded !== value.width) {
@@ -120,7 +126,9 @@ export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
         </select>
 
         {value.mode === 'custom' && (
-          <>
+          // 幅・×・高さは1つのまとまりにし、行に収まらないときはまとめて次の行へ折り返す
+          // (数値欄が潰れて4桁が欠けないように)。
+          <div className={sizeStyles.dimensions}>
             <input
               id="size-width"
               type="number"
@@ -131,9 +139,22 @@ export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
               onChange={(e) => onChange({ ...value, width: Number(e.target.value) })}
               onBlur={handleWidthBlur}
             />
-            <span className={sizeStyles.times} aria-hidden="true">
-              ×
-            </span>
+            {selectValue === 'custom' ? (
+              // 任意の幅×高さのときだけ、「×」を入れ替えのボタンにする(プリセット選択中は文字のまま)。
+              <button
+                type="button"
+                className={sizeStyles.swapButton}
+                aria-label={si.swapLabel}
+                title={si.swapLabel}
+                onClick={handleSwap}
+              >
+                ×
+              </button>
+            ) : (
+              <span className={sizeStyles.times} aria-hidden="true">
+                ×
+              </span>
+            )}
             <input
               id="size-height"
               type="number"
@@ -144,7 +165,7 @@ export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
               onChange={(e) => onChange({ ...value, height: Number(e.target.value) })}
               onBlur={handleHeightBlur}
             />
-          </>
+          </div>
         )}
       </div>
 

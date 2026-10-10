@@ -196,6 +196,18 @@ export function roundSizeStateToMultiple(constraints: SizeConstraints, state: Si
 }
 
 /**
+ * 幅と高さを入れ替えた SizeState(サイズ欄の「×」ボタン)。custom のときだけ入れ替え、
+ * blur・送信時と同じ丸め(`round_down` のプロバイダーでは切り捨て)を通して返す
+ * (入力途中の丸めていない値でも、制約に合った値で反映するため)。
+ * unspecified/auto はそのまま返す。入れ替えた結果がプリセットと一致すれば、select は
+ * 既存の照合(SizeInput.tsx の findPresetIndex)でそのプリセットの表示になる。
+ */
+export function swapSizeState(constraints: SizeConstraints, state: SizeState): SizeState {
+  if (state.mode !== 'custom') return state
+  return roundSizeStateToMultiple(constraints, { ...state, width: state.height, height: state.width })
+}
+
+/**
  * 2560×1440(2K、総画素 3,686,400)が OpenAI の Image gen prompting guide で言う
  * 「安定して使える上限」。これを超えるサイズ(4K 系・任意入力)は実験的扱いとして注記を出す。
  */

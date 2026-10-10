@@ -1251,6 +1251,7 @@
       "roundedNote": "Rounded to a multiple of {multipleOf}: {field} {from} → {to}",
       "roundedDownNote": "Rounded down to a multiple of {multipleOf}: {field} {from} → {to}",
       "experimentalNote": "Sizes above 2560 × 1440 are experimental and may give unstable results",
+      "swapLabel": "Swap width and height",
       "customLabel": "Custom width × height",
       "presets": [
         {

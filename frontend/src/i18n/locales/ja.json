@@ -1251,6 +1251,7 @@
       "roundedNote": "{multipleOf}の倍数に丸めました: {field} {from} → {to}",
       "roundedDownNote": "{multipleOf}の倍数に切り捨てました: {field} {from} → {to}",
       "experimentalNote": "2560 × 1440 を超えるサイズは実験的で、結果が不安定になることがあります",
+      "swapLabel": "幅と高さを入れ替える",
       "customLabel": "任意の幅 × 高さ",
       "presets": [
         {
