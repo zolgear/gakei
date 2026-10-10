@@ -309,9 +309,9 @@ def test_eg2_engine_rejects_mismatched_soft_tokens(eg2_dir: Path) -> None:
 @pytest.mark.parametrize(
     ("available", "texts_ok", "images_ok"),
     [
-        (540 * _MB, False, False),
-        (560 * _MB, True, True),  # 文章側(550MB)を読み込んだあとの画像側は差の 200MB
-        (190 * _MB, False, False),
+        (590 * _MB, False, False),
+        (610 * _MB, True, True),  # 文章側(600MB)を読み込んだあとの画像側は差の 400MB
+        (390 * _MB, False, False),
     ],
 )
 def test_eg2_engine_memory_estimates(
