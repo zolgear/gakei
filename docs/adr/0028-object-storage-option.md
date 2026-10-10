@@ -89,6 +89,7 @@ uv run python -m app.tools.migrate_storage --to azure_blob|s3 [--dry-run]
 - **Azure Blob** は Azurite(Microsoft の公式エミュレーター)で確かめる。環境変数 `GAKEI_TEST_AZURE_BLOB_CONNECTION_STRING` があるときだけ回し、無ければ飛ばす。CI には Azurite を `services` で立てるジョブを足す(Ubuntu、PR でも走らせる)。
 - 実機の S3 互換ストレージで確かめたい人のために、`GAKEI_TEST_S3_ENDPOINT_URL` ほか(バケット、資格情報)があれば、moto の代わりにそこへつないで回せるようにする。
 - 実機では、Azure Blob Storage と Cloudflare R2(S3 互換)を、メンテナーの環境で確かめる。R2 は上の `GAKEI_TEST_S3_*` でつなぐ。AWS S3 そのものは確かめられないので、`docs/` には「S3 は moto と Cloudflare R2 で確かめた」と書く。
+- 2026-10-10 改訂: Cloudflare R2 は、無料枠だけを使う場合も有効にするときに支払い方法の登録が要り、メンテナーの環境では登録できなかったため、R2 の実機での確認は見送る。`docs/` には「S3 は moto で確かめた。Cloudflare R2 と AWS S3 そのものでは確かめていない」と書く。`GAKEI_TEST_S3_*` で実機につなぐ仕組みはそのまま残す。
 - MinIO は使わない。コミュニティ版は 2025-12 にメンテナンスモードになり、2026-02 にリポジトリがアーカイブされた。以後の脆弱性は直らず、公式のコンテナイメージも取得できなくなっている。
 
 ### 8. バックアップと注意
