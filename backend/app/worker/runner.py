@@ -57,6 +57,7 @@ from app.worker.progress import ProgressBus
 if TYPE_CHECKING:
     from app.worker.annotator import Annotator
     from app.worker.embedder import Embedder
+    from app.worker.focal import FocalPointWorker
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +205,7 @@ def _finish_run_succeeded(
     result,
     annotator: Annotator | None = None,
     embedder: Embedder | None = None,
+    focal_worker: FocalPointWorker | None = None,
 ) -> list[uuid.UUID]:
     """出力を取り込んで Run を成功にする。`annotator` があれば、取り込み時の自動推定
     (ADR-0024 4章)と埋め込み(ADR-0033 5章)を、設定がオンのときだけ同じトランザクションで
@@ -234,6 +236,8 @@ def _finish_run_succeeded(
                 queued = queued | ingest_hooks.enqueue_after_ingest(
                     session, asset, annotator.settings
                 )
+            else:
+                queued = queued | ingest_hooks.focal_targets(asset)
 
         # ADR-0022: 生成時にグループが指定されていれば、取り込んだ出力を同じトランザクションで
         # そのグループに入れる(既に入っているものは無視)。実行までにグループが削除されて
@@ -253,7 +257,7 @@ def _finish_run_succeeded(
             run.text_outputs = sanitize_external(result.text_outputs)
         run.provider_request_id = sanitize_external_text_or_none(result.provider_request_id)
         session.commit()
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder)
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
     return output_ids
 
 
@@ -290,10 +294,12 @@ class Runner:
         *,
         annotator: Annotator | None = None,
         embedder: Embedder | None = None,
+        focal_worker: FocalPointWorker | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.annotator = annotator
         self.embedder = embedder
+        self.focal_worker = focal_worker
         self.store = store
         self.registry = registry
         self.progress_bus = progress_bus
@@ -436,6 +442,7 @@ class Runner:
                 result,
                 self.annotator,
                 self.embedder,
+                self.focal_worker,
             )
         except ProviderError as e:
             await self._mark_failed(run.id, e.code, e.message, e.request_id)

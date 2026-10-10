@@ -24,7 +24,7 @@ import { buildSimilarSearchPath } from '../search/searchQuerySync'
 import { neighborsOf, type SimilarityEdge } from './edges'
 import { hitTest } from './hitTest'
 import { MapPreviewPanel } from './MapPreviewPanel'
-import { thumbCache } from './thumbCache'
+import { thumbCache, type ThumbRequest } from './thumbCache'
 import {
   DOT_RADIUS,
   THUMB_MIN_PX,
@@ -43,6 +43,7 @@ import {
   type Viewport,
 } from './viewport'
 import styles from './MapCanvas.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 /** 選んだ画像を大きく見るパネルの開閉。 */
 export interface MapPreviewState {
@@ -240,7 +241,7 @@ export function MapCanvas({
       ctx.restore()
     }
 
-    const wanted: string[] = []
+    const wanted: ThumbRequest[] = []
     const drawNode = (i: number) => {
       if (thumbMode) {
         const id = p.nodes[i].id
@@ -252,7 +253,7 @@ export function MapCanvas({
         } else {
           ctx.fillStyle = colors.tileBg
           ctx.fillRect(x, y, tilePx, tilePx)
-          if (wanted.length < MAX_WANTED) wanted.push(id)
+          if (wanted.length < MAX_WANTED) wanted.push({ id, focal: p.nodes[i].focal_point })
         }
       } else {
         ctx.moveTo(sx[i] + DOT_RADIUS, sy[i])
@@ -659,7 +660,12 @@ export function MapCanvas({
           }}
           aria-hidden="true"
         >
-          <img src={assetUrl(hoverNode.id, 'thumb')} alt="" className={styles.hoverThumb} />
+          <img
+            src={assetUrl(hoverNode.id, 'thumb')}
+            style={focalStyle(hoverNode.focal_point)}
+            alt=""
+            className={styles.hoverThumb}
+          />
           <span className={styles.hoverTitle}>{hoverNode.title || m.untitled}</span>
         </div>
       )}
@@ -692,7 +698,12 @@ export function MapCanvas({
             aria-label={m.openInViewer}
             title={m.openInViewer}
           >
-            <img src={assetUrl(selectedNode.id, 'thumb')} alt="" className={styles.selectionThumb} />
+            <img
+              src={assetUrl(selectedNode.id, 'thumb')}
+              style={focalStyle(selectedNode.focal_point)}
+              alt=""
+              className={styles.selectionThumb}
+            />
           </Link>
           <div className={styles.selectionBody}>
             <span className={styles.selectionTitle}>{selectedNode.title || m.untitled}</span>

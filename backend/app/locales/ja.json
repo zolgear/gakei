@@ -594,6 +594,38 @@
       "other": "移行が完了しました(合計 {count} 件。コピー {copied} 件、移行先にあったので飛ばした {skipped} 件)。STORAGE_BACKEND ほかの環境変数を設定して GAKEI を起動してください。"
     }
   },
+  "backfillFocalPoints": {
+    "description": "サムネイルの焦点(顔の位置)が無い、または検出の版が古い画像について、原本から求めます(ADR-0043)。マスクは除き、論理削除済みの画像は含みます。GAKEI を止めずに実行できます。原本には触れません。",
+    "dryRunHelp": "対象の件数を数えるだけで、何も書かない",
+    "limitHelp": "処理する画像の件数の上限(既定は無制限)",
+    "recomputeHelp": "今の版の焦点がある画像も作り直す",
+    "invalidLimit": "--limit には 1 以上の整数を指定してください。",
+    "databaseMissing": "DB のファイルが見つかりません: {source}",
+    "tableMissing": "焦点のテーブルがありません。この版の GAKEI を一度起動して DB を移行してから実行してください。",
+    "failed": "保存先の読み込みに失敗したため、中止しました。もう一度実行すると続きから求めます。詳細: {error}",
+    "targets": {
+      "one": "対象の画像: {count} 件",
+      "other": "対象の画像: {count} 件"
+    },
+    "dryRunDone": "--dry-run: 何も書き込んでいません。",
+    "found": {
+      "one": "  顔が見つかった: {count} 件",
+      "other": "  顔が見つかった: {count} 件"
+    },
+    "notFound": {
+      "one": "  顔が見つからなかった(中央のまま): {count} 件",
+      "other": "  顔が見つからなかった(中央のまま): {count} 件"
+    },
+    "unreadable": {
+      "one": "注意: 原本が無いか読めない画像が {count} 件あります(中央のままにしました)",
+      "other": "注意: 原本が無いか読めない画像が {count} 件あります(中央のままにしました)"
+    },
+    "skipped": {
+      "one": "  ほかの処理が先に求めたなどで飛ばした: {count} 件",
+      "other": "  ほかの処理が先に求めたなどで飛ばした: {count} 件"
+    },
+    "elapsed": "かかった時間: {seconds} 秒"
+  },
   "regenerateDerivatives": {
     "description": "今の版の派生画像(サムネイル・プレビュー)が無い画像について、原本から作ります(ADR-0036)。論理削除済みの画像も含みます。GAKEI を止めずに実行できます。DB は書き換えず、原本には触れません。",
     "dryRunHelp": "作る件数(--prune なら消す件数も)を数えるだけで、何も書かない・消さない",

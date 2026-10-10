@@ -23,7 +23,14 @@ from sqlalchemy.orm import Session
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_annotator, get_embedder, get_session, get_settings, get_store
+from app.deps import (
+    get_annotator,
+    get_embedder,
+    get_focal_worker,
+    get_session,
+    get_settings,
+    get_store,
+)
 from app.domain import ingest_hooks
 from app.domain import lineage_delivery as delivery_domain
 from app.domain import lineage_export as export_domain
@@ -34,6 +41,7 @@ from app.i18n import current_locale, t
 from app.version import get_version
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
+from app.worker.focal import FocalPointWorker
 
 router = APIRouter(tags=["lineage-transfer"])
 
@@ -152,6 +160,7 @@ def import_lineage(
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
     embedder: Embedder = Depends(get_embedder),
+    focal_worker: FocalPointWorker | None = Depends(get_focal_worker),
 ) -> LineageImportResponse:
     """系列の ZIP を取り込む(ADR-0037 2章)。検証に1つでも当たれば ZIP 全体を断り、DB には
     何も書かない。取り込んだ Asset と Run の持ち主は、取り込んだ利用者。"""
@@ -176,7 +185,7 @@ def import_lineage(
         raise
     finally:
         archive.zf.close()
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder)
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
     return LineageImportResponse(
         root_asset_id=result.root_asset_id,
         asset_count=result.asset_count,

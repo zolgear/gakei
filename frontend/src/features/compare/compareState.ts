@@ -3,6 +3,7 @@
  * ADR-0009「7. 編集前との比較」参照。
  */
 import type { RunDetail } from '../../api/client'
+import type { FocalPointValue } from '../../lib/focalPoint'
 
 export type CompareMode = 'side' | 'slider'
 
@@ -40,17 +41,31 @@ export interface CompareCandidate {
 /** 比較対象として選べる入力(マスクを除く role=image/reference)。 */
 export function compareInputCandidates(
   run: Pick<RunDetail, 'inputs'>,
-): { assetId: string; role: 'image' | 'reference'; position: number }[] {
+): {
+  assetId: string
+  role: 'image' | 'reference'
+  position: number
+  focalPoint: FocalPointValue | null
+}[] {
   return (run.inputs ?? [])
     .filter((i) => i.role === 'image' || i.role === 'reference')
-    .map((i) => ({ assetId: i.asset_id, role: i.role as 'image' | 'reference', position: i.position }))
+    .map((i) => ({
+      assetId: i.asset_id,
+      role: i.role as 'image' | 'reference',
+      position: i.position,
+      focalPoint: i.focal_point ?? null,
+    }))
 }
 
 /** 比較対象として選べる出力。 */
 export function compareOutputCandidates(
   run: Pick<RunDetail, 'outputs'>,
-): { assetId: string; outputIndex: number | null }[] {
-  return (run.outputs ?? []).map((o) => ({ assetId: o.asset_id, outputIndex: o.output_index }))
+): { assetId: string; outputIndex: number | null; focalPoint: FocalPointValue | null }[] {
+  return (run.outputs ?? []).map((o) => ({
+    assetId: o.asset_id,
+    outputIndex: o.output_index,
+    focalPoint: o.focal_point ?? null,
+  }))
 }
 
 /** 既定の「主たる親」(role=image, position=0)の asset id。無ければ null。 */

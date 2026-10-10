@@ -28,7 +28,14 @@ export function toLineageResponse(data: PublicShareResponse): AssetLineageRespon
         deleted: false,
         embedded: false,
         local_hidden: false,
-        asset: { kind: a.kind, width: a.width, height: a.height, mime: a.mime, restorable: false },
+        asset: {
+          kind: a.kind,
+          width: a.width,
+          height: a.height,
+          mime: a.mime,
+          restorable: false,
+          focal_point: a.focal_point ?? null,
+        },
       }),
     ),
     ...(data.runs ?? [])

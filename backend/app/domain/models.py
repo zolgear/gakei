@@ -690,6 +690,29 @@ class AssetPerceptualHash(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
+class AssetFocalPoint(Base):
+    """Asset のサムネイルの焦点(顔の位置。ADR-0043)。画面で `object-fit: cover` の画像に
+    `object-position` を付けるのに使う。
+
+    証跡ではなく、作り直してよい派生データ(ADR-0003 の来歴の列には書かない)。顔が見つから
+    なかったときも行を作り(`method='none'`、`x`・`y` は null)、もう一度探さない。検出の手順を
+    変えたら `version` を上げ、古い行は埋め戻しのツールが作り直す。値は `app/focal/detect.py`、
+    読み書きは `app/domain/focal_points.py`。
+    """
+
+    __tablename__ = "asset_focal_point"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    # 画像の幅・高さに対する 0〜1 の位置。顔が見つからなければ null。
+    x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # `animeface-lbp`(顔を見つけた)/ `none`(見つからない・読めない)。
+    method: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 検出の版(`detect.ALGORITHM_VERSION`)。
+    version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
 class Share(Base):
     """ログイン不要の共有リンク(ADR-0029)。証跡ではないので、取り消し(`revoked_at`。論理削除)
     と、開かれた日時・回数(`last_accessed_at` / `access_count`)は更新してよい。行は消さない。

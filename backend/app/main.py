@@ -63,6 +63,7 @@ from app.mcp.server import build_mcp_server, build_session_manager
 from app.providers.registry import build_registry, is_loopback_url
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
+from app.worker.focal import FocalPointWorker
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
 from app.worker.tag_dictionary_importer import TagDictionaryImporter
@@ -350,6 +351,8 @@ def _build_lifespan(settings: Settings):
         # メモリの行列を読み直す。
         vector_index = build_vector_index(embedding_index_backend, embedder.version)
         clip_downloader = ClipModelDownloader(settings.data_dir, fake=settings.fake_provider)
+        # ADR-0043: サムネイルの焦点(顔の位置)を、取り込みの後に求める。
+        focal_worker = FocalPointWorker(session_factory, store)
         runner = Runner(
             session_factory,
             store,
@@ -358,6 +361,7 @@ def _build_lifespan(settings: Settings):
             settings.data_dir,
             annotator=annotator,
             embedder=embedder,
+            focal_worker=focal_worker,
         )
 
         app.state.settings = settings
@@ -370,6 +374,7 @@ def _build_lifespan(settings: Settings):
         app.state.annotator = annotator
         app.state.wd_downloader = wd_downloader
         app.state.embedder = embedder
+        app.state.focal_worker = focal_worker
         app.state.clip_downloader = clip_downloader
         app.state.embedding_index_backend = embedding_index_backend
         app.state.vector_index = vector_index
@@ -385,6 +390,7 @@ def _build_lifespan(settings: Settings):
         await runner.start()
         await annotator.start()
         await embedder.start()
+        await focal_worker.start()
         try:
             async with mcp_session_manager.run():
                 yield
@@ -392,6 +398,7 @@ def _build_lifespan(settings: Settings):
             await runner.stop()
             await annotator.stop()
             await embedder.stop()
+            await focal_worker.stop()
             await wd_downloader.stop()
             await clip_downloader.stop()
             await asyncio.to_thread(tag_dictionary_importer.stop)

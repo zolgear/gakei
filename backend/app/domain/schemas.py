@@ -319,6 +319,14 @@ class AssetGroupRef(BaseModel):
 # -- Asset ---------------------------------------------------------------
 
 
+class FocalPoint(BaseModel):
+    """サムネイルの焦点(ADR-0043)。画像の幅・高さに対する 0〜1 の位置。画面は
+    `object-fit: cover` の画像に `object-position: x% y%` を付ける。"""
+
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+
+
 class AssetSummary(BaseModel):
     id: uuid.UUID
     kind: Literal["upload", "generated", "mask", "sketch"]
@@ -329,6 +337,8 @@ class AssetSummary(BaseModel):
     created_at: datetime
     # タイトル(ADR-0024)。人が付けたものか自動のものかは `AssetDetail.title_source` を見る。
     title: str | None = None
+    # サムネイルの焦点(ADR-0043)。無ければ null(画面は中央)。
+    focal_point: FocalPoint | None = None
 
 
 class AssetTagRef(BaseModel):
@@ -614,6 +624,8 @@ class RunInputRef(BaseModel):
     asset_id: uuid.UUID
     role: Literal["image", "mask", "reference"]
     position: int
+    # サムネイルの焦点(ADR-0043)。マスクと焦点の無い画像は null。
+    focal_point: FocalPoint | None = None
 
 
 class RunOutputRef(BaseModel):
@@ -621,6 +633,8 @@ class RunOutputRef(BaseModel):
     output_index: int | None
     # 出力 Asset のタイトル(ADR-0024。履歴のカード用)。
     title: str | None = None
+    # サムネイルの焦点(ADR-0043)。
+    focal_point: FocalPoint | None = None
 
 
 class RunSummary(BaseModel):
@@ -646,6 +660,8 @@ class RunSummary(BaseModel):
     outputs: list[RunOutputRef] = Field(default_factory=list)
     # role=image かつ position=0 の入力(「主たる親」)。generate や入力なしの edit は None。
     primary_parent_asset_id: uuid.UUID | None = None
+    # 主たる親のサムネイルの焦点(ADR-0043。履歴のカードの親の小さな画像用)。
+    primary_parent_focal_point: FocalPoint | None = None
     # role=image の入力枚数(mask/reference は含まない)。
     input_count: int = 0
     # この Run の出力を入力に使っている、削除されていない Run の数。削除の警告に使う。
@@ -732,6 +748,8 @@ class LineageAssetInfo(BaseModel):
     height: int | None = None
     mime: str | None = None
     restorable: bool = False
+    # サムネイルの焦点(ADR-0043)。埋め込みノードは、手元の Asset に対応付いたときだけ。
+    focal_point: FocalPoint | None = None
 
 
 class LineageRunInfo(BaseModel):
@@ -1799,6 +1817,8 @@ class EmbeddingGraphNode(BaseModel):
     width: int
     height: int
     title: str | None = None
+    # サムネイルの焦点(ADR-0043)。
+    focal_point: FocalPoint | None = None
 
 
 class EmbeddingGraphResponse(BaseModel):
@@ -1909,6 +1929,8 @@ class PublicShareAsset(BaseModel):
     # この画像の原本を出せるか(ADR-0029 4章)。共有が原本を許していても、秘密に見える値を含む
     # ComfyUI の Run の画像は false(2026-10-01 追記)。false ならプレビューまで。
     allow_original: bool
+    # サムネイルの焦点(ADR-0043)。
+    focal_point: FocalPoint | None = None
 
 
 class PublicShareRun(BaseModel):

@@ -39,6 +39,7 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "tag_dictionary_entry",
         "tag_dictionary_alias",
         "tag_dictionary_translation",
+        "asset_focal_point",
         "alembic_version",
     } <= tables
 
@@ -1174,4 +1175,39 @@ def test_migration_0029_adds_tag_dictionary_tables(empty_database_url: str) -> N
     command.downgrade(cfg, "0028")
     engine = create_engine(empty_database_url)
     assert not names & set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0030_adds_asset_focal_point(empty_database_url: str) -> None:
+    """ADR-0043: 0029 の DB に upgrade head で焦点のテーブルが加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0029")
+    engine = create_engine(empty_database_url)
+    assert "asset_focal_point" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "asset_focal_point" in set(inspector.get_table_names())
+    assert inspector.get_pk_constraint("asset_focal_point")["constrained_columns"] == ["asset_id"]
+    columns = {c["name"]: c for c in inspector.get_columns("asset_focal_point")}
+    assert columns["x"]["nullable"] is True
+    assert columns["y"]["nullable"] is True
+    assert columns["method"]["nullable"] is False
+    assert columns["version"]["nullable"] is False
+    assert [fk["referred_table"] for fk in inspector.get_foreign_keys("asset_focal_point")] == [
+        "asset"
+    ]
+    engine.dispose()
+
+    command.downgrade(cfg, "0029")
+    engine = create_engine(empty_database_url)
+    assert "asset_focal_point" not in set(sa_inspect(engine).get_table_names())
     engine.dispose()

@@ -38,6 +38,7 @@ import { buildSearchPath, type SearchMode } from './searchQuerySync'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { fmt, useI18n } from '../../i18n'
 import styles from './SearchPanel.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 const PANEL_LIMIT = 20
 
@@ -248,6 +249,7 @@ export function SearchPanel() {
                       <img
                         className={`${styles.assetThumb} checkerboard`}
                         src={assetUrl(hit.id, 'thumb')}
+                        style={focalStyle(hit.focal_point)}
                         alt=""
                         draggable={false}
                       />
@@ -312,6 +314,7 @@ export function SearchPanel() {
                       <img
                         className={`${styles.assetThumb} checkerboard`}
                         src={assetUrl(hit.id, 'thumb')}
+                        style={focalStyle(hit.focal_point)}
                         alt=""
                         draggable={false}
                       />

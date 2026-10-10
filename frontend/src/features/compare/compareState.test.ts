@@ -69,8 +69,8 @@ describe('buildComparePath', () => {
 describe('compareInputCandidates', () => {
   it('マスクを除いた image/reference を返す', () => {
     expect(compareInputCandidates(makeRun())).toEqual([
-      { assetId: 'in-primary', role: 'image', position: 0 },
-      { assetId: 'in-ref', role: 'reference', position: 1 },
+      { assetId: 'in-primary', role: 'image', position: 0, focalPoint: null },
+      { assetId: 'in-ref', role: 'reference', position: 1, focalPoint: null },
     ])
   })
 
@@ -82,8 +82,8 @@ describe('compareInputCandidates', () => {
 describe('compareOutputCandidates', () => {
   it('出力一覧をそのまま返す', () => {
     expect(compareOutputCandidates(makeRun())).toEqual([
-      { assetId: 'out-1', outputIndex: 0 },
-      { assetId: 'out-2', outputIndex: 1 },
+      { assetId: 'out-1', outputIndex: 0, focalPoint: null },
+      { assetId: 'out-2', outputIndex: 1, focalPoint: null },
     ])
   })
 })

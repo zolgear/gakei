@@ -1292,6 +1292,7 @@ async def upload_image(
                 queued,
                 annotator=mc.state.annotator,
                 embedder=getattr(mc.state, "embedder", None),
+                focal=getattr(mc.state, "focal_worker", None),
             )
             return _asset_brief(mc, result.asset), result.outcome
 

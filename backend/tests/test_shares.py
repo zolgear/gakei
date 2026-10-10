@@ -349,6 +349,8 @@ _ASSET_KEYS = {
     "run_id",
     "depth",
     "allow_original",
+    # サムネイルの焦点(ADR-0043)。顔のおおよその位置で、秘密ではない。
+    "focal_point",
 }
 _RUN_KEYS = {"id", "operation", "model", "prompt", "params", "created_at", "text_outputs"}
 

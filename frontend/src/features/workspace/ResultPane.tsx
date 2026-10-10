@@ -62,6 +62,7 @@ import { resolveResultOrigin } from './resultOrigin'
 import { buildStudioPath } from './assetQueryParam'
 import { invalidateAssetGroupQueries } from '../stock/groups/assetGroupQueries'
 import styles from './ResultPane.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'canceled'])
 const FALLBACK_POLL_INTERVAL_MS = 3000
@@ -679,6 +680,7 @@ export function ResultPane({
                         <img
                           className={styles.thumbImage}
                           src={assetUrl(output.asset_id, 'thumb')}
+                          style={focalStyle(output.focal_point)}
                           alt=""
                           draggable={false}
                         />
@@ -703,7 +705,13 @@ export function ResultPane({
                         aria-label={rp.showThisOutputAria}
                         onClick={() => onSelectAsset(item.id)}
                       >
-                        <img className={styles.thumbImage} src={assetUrl(item.id, 'thumb')} alt="" draggable={false} />
+                        <img
+                          className={styles.thumbImage}
+                          src={assetUrl(item.id, 'thumb')}
+                          style={focalStyle(item.focal_point)}
+                          alt=""
+                          draggable={false}
+                        />
                       </button>
                       <button
                         type="button"
@@ -858,6 +866,7 @@ export function ResultPane({
         open={deleteConfirmOpen}
         message={rp.deleteConfirmMessage}
         previewImageUrl={asset ? assetUrl(asset.id, 'thumb') : undefined}
+        previewFocalPoint={asset?.focal_point}
         previewDetail={asset ? `${asset.width} × ${asset.height}` : undefined}
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setDeleteConfirmOpen(false)}

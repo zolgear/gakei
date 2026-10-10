@@ -33,6 +33,7 @@ import { buildRunDeleteWarning } from './runDeleteWarning'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { fmt, useI18n } from '../../i18n'
 import styles from './HistoryCard.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 interface HistoryCardProps {
   run: RunSummary
@@ -202,6 +203,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
       <img
         className={styles.parentThumb}
         src={assetUrl(parentAssetId, 'thumb')}
+        style={focalStyle(run.primary_parent_focal_point)}
         alt={t.history.card.parent}
         draggable={false}
       />
@@ -235,6 +237,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
               <img
                 className={`${styles.mediaImage} checkerboard`}
                 src={assetUrl(firstOutput.asset_id, 'thumb')}
+                style={focalStyle(firstOutput.focal_point)}
                 alt=""
                 draggable
                 onDragStart={(e) => {
@@ -411,6 +414,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
         message={fmt(t.history.card.deleteConfirm.message, { count: outputs.length })}
         warning={buildRunDeleteWarning(run.descendant_run_count)}
         previewImageUrl={firstOutput ? assetUrl(firstOutput.asset_id, 'thumb') : undefined}
+        previewFocalPoint={firstOutput?.focal_point}
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setDeleteConfirmOpen(false)}
       />

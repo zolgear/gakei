@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
-from app.domain import derivatives, embedding_settings, perceptual_hash
+from app.domain import derivatives, embedding_settings, focal_points, perceptual_hash
 from app.domain import embeddings as embeddings_domain
 from app.domain.assets import ALLOWED_UPLOAD_FORMATS, MAX_UPLOAD_BYTES
 from app.domain.models import Asset, AssetKind, AssetPerceptualHash, RunInput, RunInputRole
@@ -234,6 +234,7 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
         return []
     assets = {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_(ids))).scalars()}
     titles = annotations_domain.bulk_titles(db, ids)
+    focals = focal_points.bulk_get(db, ids)
     result: list[SemanticAssetHit] = []
     for hit in hits:
         asset = assets.get(hit.asset_id)
@@ -249,6 +250,7 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
                 bytes=asset.bytes,
                 created_at=asset.created_at,
                 title=titles.get(asset.id),
+                focal_point=focals.get(asset.id),
                 score=round(hit.score, 6),
             )
         )
@@ -534,6 +536,7 @@ def find_duplicates(
         else {}
     )
     titles = annotations_domain.bulk_titles(db, member_ids)
+    focals = focal_points.bulk_get(db, member_ids)
     groups: list[DuplicateGroup] = []
     for leader, members in raw_groups:
         # 代表は、メンバーとの類似度の最大値。メンバーは代表との類似度。
@@ -553,6 +556,7 @@ def find_duplicates(
                     bytes=asset.bytes,
                     created_at=asset.created_at,
                     title=titles.get(asset.id),
+                    focal_point=focals.get(asset.id),
                     max_score=round(score, 6),
                     hash_missing=by_position[x] is None,
                 )
@@ -643,6 +647,7 @@ def build_graph(
         else {}
     )
     titles = annotations_domain.bulk_titles(db, ordered)
+    focals = focal_points.bulk_get(db, ordered)
     nodes = [
         EmbeddingGraphNode(
             id=asset_id,
@@ -650,6 +655,7 @@ def build_graph(
             width=assets[asset_id].width,
             height=assets[asset_id].height,
             title=titles.get(asset_id),
+            focal_point=focals.get(asset_id),
         )
         for asset_id in ordered
     ]

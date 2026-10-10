@@ -49,6 +49,7 @@ import {
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { fmt, useI18n } from '../i18n'
 import styles from './SearchPage.module.css'
+import { focalStyle } from '../lib/focalPoint'
 
 const PAGE_LIMIT = 50
 // 意味での検索は全件に順位を付けるので「当たった件数」は無い。最初は少なめに出し、「もっと見る」で
@@ -214,7 +215,13 @@ export function SearchPage() {
         {hits.map((hit) => (
           <button key={hit.id} type="button" className={styles.assetTile} onClick={() => navigate(`/assets/${hit.id}`)}>
             <div className={styles.thumbWrap}>
-              <img className={`${styles.assetThumb} checkerboard`} src={assetUrl(hit.id, 'thumb')} alt="" draggable={false} />
+              <img
+                className={`${styles.assetThumb} checkerboard`}
+                src={assetUrl(hit.id, 'thumb')}
+                style={focalStyle(hit.focal_point)}
+                alt=""
+                draggable={false}
+              />
             </div>
             {hit.title && (
               <span className={styles.assetTitle} title={hit.title}>
@@ -494,6 +501,7 @@ export function SearchPage() {
                   <img
                     className={`${styles.assetThumb} checkerboard`}
                     src={assetUrl(hit.id, 'thumb')}
+                    style={focalStyle(hit.focal_point)}
                     alt=""
                     draggable={false}
                   />
