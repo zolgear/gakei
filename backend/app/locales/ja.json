@@ -788,5 +788,25 @@
     "fileMismatch": "画像の内容が manifest.json と一致しません(書き換えられた可能性があります): {name}",
     "conflictsWithEarlierImport": "以前に取り込んだ同じ Run の出力と内容が違います",
     "invalidImage": "画像を取り込めません: {reason}"
+  },
+  "tagDictionaries": {
+    "tooLarge": "辞書のファイルは{mb}MB以下にしてください",
+    "noFile": "multipart の本文に辞書のファイル(file)がありません",
+    "invalidScheme": "カテゴリーの体系が正しくありません",
+    "notFound": "このタグ辞書は存在しません",
+    "importing": "取り込み中のタグ辞書は削除できません。取り込みが終わってから削除してください",
+    "emptyFile": "{file} に行がありません",
+    "invalidZip": "zip ファイルを読めませんでした",
+    "zipTooManyFiles": "zip の中のファイルが多すぎます(上限 {max})",
+    "zipNoCsv": "zip の中に CSV がありません",
+    "zipEncrypted": "パスワード付きの zip は読めません",
+    "extractedTooLarge": "zip を展開した合計が大きすぎます(上限 {mb}MB)",
+    "invalidEncoding": "{file} を UTF-8 として読めませんでした",
+    "undetermined": "{file} の種類を判定できませんでした。ヘッダーなしの CSV で、4 列(タグ名, カテゴリー, 件数, 別名)か 2 列(タグ名, 訳)にしてください",
+    "errors": {
+      "interrupted": "取り込みの途中でサーバーが止まりました。もう一度登録してください",
+      "importFailed": "取り込みに失敗しました。もう一度登録してください",
+      "noRows": "取り込める行がありませんでした"
+    }
   }
 }

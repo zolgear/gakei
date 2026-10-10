@@ -788,5 +788,25 @@
     "fileMismatch": "An image does not match manifest.json (it may have been modified): {name}",
     "conflictsWithEarlierImport": "An output differs from the one imported earlier for the same run",
     "invalidImage": "Cannot import an image: {reason}"
+  },
+  "tagDictionaries": {
+    "tooLarge": "Dictionary files must be {mb}MB or smaller",
+    "noFile": "The multipart body has no dictionary file (file)",
+    "invalidScheme": "Invalid category scheme",
+    "notFound": "This tag dictionary does not exist",
+    "importing": "A tag dictionary cannot be deleted while it is being imported. Delete it after the import finishes",
+    "emptyFile": "{file} has no rows",
+    "invalidZip": "Could not read the zip file",
+    "zipTooManyFiles": "The zip contains too many files (limit {max})",
+    "zipNoCsv": "The zip contains no CSV files",
+    "zipEncrypted": "Password-protected zip files are not supported",
+    "extractedTooLarge": "The extracted contents of the zip are too large (limit {mb}MB)",
+    "invalidEncoding": "Could not read {file} as UTF-8",
+    "undetermined": "Could not determine the kind of {file}. Use a CSV without a header, with 4 columns (tag, category, count, aliases) or 2 columns (tag, translation)",
+    "errors": {
+      "interrupted": "The server stopped during the import. Register the dictionary again",
+      "importFailed": "The import failed. Register the dictionary again",
+      "noRows": "There were no rows to import"
+    }
   }
 }

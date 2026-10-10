@@ -734,3 +734,81 @@ class ShareAsset(Base):
         Uuid, ForeignKey("asset.id"), primary_key=True, index=True
     )
     depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+# ADR-0041 1章: タグ辞書の検索用の列(小文字にしたタグ名など)。前方一致を通常の索引の範囲検索
+# (`>= 'abc' AND < 'abd'`)で引くので、PostgreSQL では照合順序を "C"(バイト順)にする
+# (既定のロケールの照合では、記号を飛ばして並べるなどで範囲が前方一致と一致しないため)。
+# SQLite の既定(BINARY)はもともとバイト順。
+SearchKeyText = Text().with_variant(Text(collation="C"), "postgresql")
+
+
+class TagDictionary(Base):
+    """登録したタグ辞書(ADR-0041 1章)。インスタンス全体で共有し、管理者だけが登録・削除する。
+
+    証跡ではないので、有効/無効を変えられ、削除は物理削除(中身の行も消す)。アップロードした
+    ファイルそのものは保存しない。`kind` は `tags`(タグの一覧)か `translations`(訳)。
+    `status` は `importing` → `ready` | `failed`。候補と訳に使うのは `ready` で有効なものだけ。
+    """
+
+    __tablename__ = "tag_dictionary"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # タグの一覧のカテゴリーの番号の体系(`danbooru` など)。訳の辞書では null。
+    category_scheme: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class TagDictionaryEntry(Base):
+    """タグの一覧の1行。`name` は辞書の表記のまま(`_` 区切り)、`name_key` は検索用
+    (NFKC・小文字・空白を `_` に)。主キーの索引 (dictionary_id, name_key) で前方一致を引く。"""
+
+    __tablename__ = "tag_dictionary_entry"
+
+    dictionary_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tag_dictionary.id", ondelete="CASCADE"), primary_key=True
+    )
+    name_key: Mapped[str] = mapped_column(SearchKeyText, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    post_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class TagDictionaryAlias(Base):
+    """タグの一覧の別名(1行に複数ある別名を1つずつ)。`alias_key` は `name_key` と同じ正規化。"""
+
+    __tablename__ = "tag_dictionary_alias"
+
+    dictionary_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tag_dictionary.id", ondelete="CASCADE"), primary_key=True
+    )
+    alias_key: Mapped[str] = mapped_column(SearchKeyText, primary_key=True)
+    name_key: Mapped[str] = mapped_column(SearchKeyText, primary_key=True)
+    alias: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class TagDictionaryTranslation(Base):
+    """訳の1行。`translation` は代表の訳(先頭)、`translations` は欄の全体(カンマ区切り)。
+    `search_key` は訳のそれぞれを正規化して `,訳1,訳2,` の形にしたもの(訳の前方一致・部分一致に
+    使う。全件を走査するが、訳の辞書は数万行なので十分速い)。"""
+
+    __tablename__ = "tag_dictionary_translation"
+
+    dictionary_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tag_dictionary.id", ondelete="CASCADE"), primary_key=True
+    )
+    name_key: Mapped[str] = mapped_column(SearchKeyText, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    translation: Mapped[str] = mapped_column(Text, nullable=False)
+    translations: Mapped[str] = mapped_column(Text, nullable=False)
+    search_key: Mapped[str] = mapped_column(SearchKeyText, nullable=False)

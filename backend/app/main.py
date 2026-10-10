@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -39,6 +40,7 @@ from app.api import sdwebui as sdwebui_api
 from app.api import search as search_api
 from app.api import settings as settings_api
 from app.api import shares as shares_api
+from app.api import tag_dictionaries as tag_dictionaries_api
 from app.api import tags as tags_api
 from app.api import uploads as uploads_api
 from app.api import users as users_api
@@ -48,7 +50,7 @@ from app.auth.runtime import AuthRuntime
 from app.auth.secret import load_or_create_auth_secret
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
-from app.domain import annotation_settings, embedding_index
+from app.domain import annotation_settings, embedding_index, tag_dictionaries
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.auth_settings import EffectiveAuthConfig, resolve_auth_config
 from app.domain.semantic_search import QueryVectorCache
@@ -63,6 +65,7 @@ from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
+from app.worker.tag_dictionary_importer import TagDictionaryImporter
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
@@ -319,6 +322,10 @@ def _build_lifespan(settings: Settings):
         # ADR-0024 8章: 推定の接続先1組の設定を、接続先の一覧と用途ごとの組に移す(冪等)。
         with session_factory() as session:
             annotation_settings.migrate_legacy(session, settings)
+        # ADR-0041 1章: 前回の終了で取り込み中のまま残ったタグ辞書を failed にする。
+        with session_factory() as session:
+            tag_dictionaries.recover_interrupted(session)
+        tag_dictionary_importer = TagDictionaryImporter(session_factory)
         # ADR-0028 2章: 画像の保存先。接続・読み書きできなければ、分かる文言で起動を中止する
         # (`StorageUnavailableError`)。
         store = open_store(settings)
@@ -368,6 +375,7 @@ def _build_lifespan(settings: Settings):
         app.state.vector_index = vector_index
         app.state.query_vector_cache = QueryVectorCache()
         app.state.auth_runtime = auth_runtime
+        app.state.tag_dictionary_importer = tag_dictionary_importer
 
         # ADR-0023: `/mcp` のセッションマネージャー。`run()` は1インスタンスにつき1回しか
         # 呼べないので、lifespan のたびに作り直す(テストで同じアプリを複数回起動するため)。
@@ -386,6 +394,7 @@ def _build_lifespan(settings: Settings):
             await embedder.stop()
             await wd_downloader.stop()
             await clip_downloader.stop()
+            await asyncio.to_thread(tag_dictionary_importer.stop)
             engine.dispose()
 
     return lifespan
@@ -594,6 +603,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tags_api.router, dependencies=auth_dep)
     app.include_router(pricing_api.router, dependencies=auth_dep)
     app.include_router(settings_api.router, dependencies=auth_dep)
+    app.include_router(tag_dictionaries_api.router, dependencies=auth_dep)
     # ADR-0034: 認証の設定(各ルートで `require_admin`)。
     app.include_router(auth_settings_api.router, dependencies=auth_dep)
     app.include_router(llm_connections_api.router, dependencies=auth_dep)

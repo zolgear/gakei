@@ -261,6 +261,8 @@ _EXCLUDED_PREFIXES = (
     "/api/settings/embeddings/vectors/",
     # LLM の接続先(ADR-0032)。管理者設定で、利用者のデータではない。
     "/api/settings/llm-connections/",
+    # タグ辞書(ADR-0041)。インスタンス全体で共有する管理者設定で、利用者のデータではない。
+    "/api/settings/tag-dictionaries/",
 )
 
 

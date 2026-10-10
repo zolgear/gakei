@@ -379,19 +379,71 @@ class TagListResponse(BaseModel):
 
 
 class TagSuggestion(BaseModel):
-    """プロンプトのタグの候補(ADR-0039 2章)。名前は `_` を空白にしたタグ名で、括弧は
-    エスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。"""
+    """プロンプトのタグの候補(ADR-0039 2章、ADR-0041 2章)。名前は `_` を空白にしたタグ名で、
+    括弧はエスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。"""
 
     name: str
-    # vocabulary: WD Tagger の語彙(count は語彙の件数)、tag: GAKEI のタグ(count は Asset の数)
-    source: Literal["vocabulary", "tag"]
+    # vocabulary: WD Tagger の語彙(count は語彙の件数)、tag: GAKEI のタグ(count は Asset の数)、
+    # dictionary: タグ辞書(count は辞書の件数。ADR-0041)
+    source: Literal["vocabulary", "tag", "dictionary"]
     count: int
+    # 以下はタグ辞書の候補で入る(ほかは null)。カテゴリーは辞書の番号のまま
+    # (`category_scheme` が danbooru なら 0 一般、1 作者、3 作品、4 キャラクター、5 メタ)。
+    category: int | None = None
+    category_scheme: str | None = None
+    # 代表の訳(訳の辞書に訳があるとき。語彙・GAKEI のタグの候補にも付く)
+    translation: str | None = None
+    # 一致の種類(name: タグ名、alias: 別名、translation: 訳)と、別名・訳で一致したときの語
+    match: Literal["name", "alias", "translation"] | None = None
+    matched: str | None = None
 
 
 class TagSuggestionResponse(BaseModel):
     items: list[TagSuggestion] = Field(default_factory=list)
     # WD Tagger の語彙(`selected_tags.csv`)を使えたか
     vocabulary_available: bool
+    # タグ辞書(有効なタグの一覧)で答えたか(ADR-0041)
+    dictionary_available: bool = False
+
+
+class TagTranslationsRequest(BaseModel):
+    """訳を引くタグ名(空白でも `_` でもよい。ADR-0041 4章)。"""
+
+    names: list[str] = Field(max_length=200)
+
+
+class TagTranslationsResponse(BaseModel):
+    # 渡したタグ名 → 代表の訳。訳の無いタグは含めない。
+    translations: dict[str, str] = Field(default_factory=dict)
+
+
+class TagDictionaryItem(BaseModel):
+    """登録したタグ辞書(ADR-0041 1章)。"""
+
+    id: uuid.UUID
+    filename: str
+    kind: Literal["tags", "translations"]
+    # タグの一覧のカテゴリーの体系(訳の辞書では null)
+    category_scheme: str | None
+    row_count: int
+    enabled: bool
+    status: Literal["importing", "ready", "failed"]
+    # 失敗の種類(interrupted / importFailed / noRows)と、その文言
+    error_code: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    finished_at: datetime | None = None
+
+
+class TagDictionaryListResponse(BaseModel):
+    items: list[TagDictionaryItem] = Field(default_factory=list)
+    # 選べるカテゴリーの体系
+    category_schemes: list[str] = Field(default_factory=list)
+
+
+class TagDictionaryUpdateRequest(BaseModel):
+    enabled: bool | None = None
+    category_scheme: Literal["danbooru", "other"] | None = None
 
 
 class PromptTagsResponse(BaseModel):

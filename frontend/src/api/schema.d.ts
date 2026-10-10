@@ -1063,12 +1063,35 @@ export interface paths {
         };
         /**
          * Suggest Prompt Tags
-         * @description WD Tagger の語彙と GAKEI のタグ(英数字のもの、本人に見える Asset のタグだけ)から、
-         *     前方一致を先に、次に部分一致を、最大 20 件。
+         * @description 有効なタグ辞書(タグの一覧)があれば辞書で答える(ADR-0041 2章。タグ名の前方一致 → 別名の
+         *     前方一致 → 訳の前方一致 → 訳の部分一致、各段は件数の多い順)。無ければ WD Tagger の語彙と
+         *     GAKEI のタグ(英数字のもの、本人に見える Asset のタグだけ)から、前方一致を先に、次に部分一致を。
+         *     どちらも最大 20 件。訳の辞書があれば、候補に代表の訳を添える。
          */
         get: operations["suggest_prompt_tags"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Tag Translations
+         * @description タグ名(空白でも `_` でもよい、括弧のエスケープも可)→ 代表の訳。訳の辞書が無い、または
+         *     訳の無いタグは含めない。表示だけの補助で、タグそのものは変えない(ADR-0041 4章)。
+         */
+        post: operations["get_tag_translations"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1381,6 +1404,45 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/settings/tag-dictionaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tag Dictionaries */
+        get: operations["list_tag_dictionaries"];
+        put?: never;
+        /**
+         * Upload Tag Dictionary
+         * @description 種類を判定して辞書(取り込み中)を作り、取り込みを始める。応答は作った辞書。
+         */
+        post: operations["upload_tag_dictionary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/tag-dictionaries/{dictionary_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Tag Dictionary */
+        delete: operations["delete_tag_dictionary"];
+        options?: never;
+        head?: never;
+        /** Update Tag Dictionary */
+        patch: operations["update_tag_dictionary"];
         trace?: never;
     };
     "/api/settings/auth": {
@@ -5231,6 +5293,60 @@ export interface components {
             /** Count */
             count: number;
         };
+        /**
+         * TagDictionaryItem
+         * @description 登録したタグ辞書(ADR-0041 1章)。
+         */
+        TagDictionaryItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tags" | "translations";
+            /** Category Scheme */
+            category_scheme: string | null;
+            /** Row Count */
+            row_count: number;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "importing" | "ready" | "failed";
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at?: string | null;
+        };
+        /** TagDictionaryListResponse */
+        TagDictionaryListResponse: {
+            /** Items */
+            items?: components["schemas"]["TagDictionaryItem"][];
+            /** Category Schemes */
+            category_schemes?: string[];
+        };
+        /** TagDictionaryUpdateRequest */
+        TagDictionaryUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Category Scheme */
+            category_scheme?: ("danbooru" | "other") | null;
+        };
         /** TagListResponse */
         TagListResponse: {
             /** Items */
@@ -5238,8 +5354,8 @@ export interface components {
         };
         /**
          * TagSuggestion
-         * @description プロンプトのタグの候補(ADR-0039 2章)。名前は `_` を空白にしたタグ名で、括弧は
-         *     エスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。
+         * @description プロンプトのタグの候補(ADR-0039 2章、ADR-0041 2章)。名前は `_` を空白にしたタグ名で、
+         *     括弧はエスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。
          */
         TagSuggestion: {
             /** Name */
@@ -5248,9 +5364,19 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "vocabulary" | "tag";
+            source: "vocabulary" | "tag" | "dictionary";
             /** Count */
             count: number;
+            /** Category */
+            category?: number | null;
+            /** Category Scheme */
+            category_scheme?: string | null;
+            /** Translation */
+            translation?: string | null;
+            /** Match */
+            match?: ("name" | "alias" | "translation") | null;
+            /** Matched */
+            matched?: string | null;
         };
         /** TagSuggestionResponse */
         TagSuggestionResponse: {
@@ -5258,6 +5384,26 @@ export interface components {
             items?: components["schemas"]["TagSuggestion"][];
             /** Vocabulary Available */
             vocabulary_available: boolean;
+            /**
+             * Dictionary Available
+             * @default false
+             */
+            dictionary_available: boolean;
+        };
+        /**
+         * TagTranslationsRequest
+         * @description 訳を引くタグ名(空白でも `_` でもよい。ADR-0041 4章)。
+         */
+        TagTranslationsRequest: {
+            /** Names */
+            names: string[];
+        };
+        /** TagTranslationsResponse */
+        TagTranslationsResponse: {
+            /** Translations */
+            translations?: {
+                [key: string]: string;
+            };
         };
         /** UnitPricesPer1M */
         UnitPricesPer1M: {
@@ -7865,6 +8011,41 @@ export interface operations {
             };
         };
     };
+    get_tag_translations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagTranslationsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagTranslationsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_asset_prompt_tags: {
         parameters: {
             query?: never;
@@ -8680,6 +8861,172 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EmbeddingSettingsResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tag_dictionaries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagDictionaryListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_tag_dictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        /** @description 辞書の CSV か、CSV を含む zip(`file`。保存しない)と、カテゴリーの体系。 */
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    /** @enum {string} */
+                    category_scheme?: "danbooru" | "other";
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagDictionaryListResponse"];
+                };
+            };
+            /** @description ファイル、または zip を展開した合計が大きすぎる */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ファイルが無い、種類を判定できない、文字コードや zip が不正 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_tag_dictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dictionary_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 辞書が無い */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 取り込み中 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_tag_dictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dictionary_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagDictionaryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagDictionaryItem"];
+                };
+            };
+            /** @description 辞書が無い */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

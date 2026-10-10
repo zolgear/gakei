@@ -35,7 +35,7 @@ import threading
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -53,7 +53,7 @@ from app.annotation.engines import (
     wants_translation,
 )
 from app.annotation.wd_tagger import WdTagger
-from app.domain import annotation_settings, derivatives, llm_connections
+from app.domain import annotation_settings, derivatives, llm_connections, tag_dictionaries
 from app.domain import annotations as annotations_domain
 from app.domain.models import Asset, AssetAnnotation, AssetKind, Run
 from app.domain.storage import AssetStore
@@ -564,8 +564,21 @@ class Annotator:
             if title_task is not None and title_task.done():
                 title_task.result()
 
+            # ADR-0041 5章: タグ辞書に訳があるタグは辞書の代表の訳を使い、LLM・VLM には辞書に
+            # 無いタグだけを頼む。
+            dictionary_translations: dict[str, str] = {}
+            if onnx_names and wants_translation(config):
+                dictionary_translations = await asyncio.to_thread(
+                    self._dictionary_translations, onnx_names
+                )
+            untranslated = [n for n in onnx_names if n not in dictionary_translations]
+            vlm_ctx = (
+                replace(ctx, translation_targets=untranslated) if dictionary_translations else ctx
+            )
+
             vlm_tags: list[tuple[str, float | None]] | None = None
             translations: dict[str, str] = {}
+            llm_translated = False
             if use_vlm:
                 assert image is not None
                 want_title = not job.title_locked and not job.prompt
@@ -573,16 +586,22 @@ class Annotator:
                 self._record_call(vlm_id)
                 image_jpeg = await asyncio.to_thread(image_to_jpeg, image)
                 result = await self.engines.describe_image(
-                    image_jpeg, job.prompt, want_title, ctx, onnx_names or None
+                    image_jpeg, job.prompt, want_title, vlm_ctx, onnx_names or None
                 )
                 if want_title and result.title:
                     title = result.title
                 vlm_tags = [(name, None) for name in result.tags]
                 translations = result.translations
-            elif translate_by_llm and onnx_names:
+            elif translate_by_llm and untranslated:
                 assert llm_id is not None
                 self._record_call(llm_id)
-                translations = await self.engines.translate_tags(onnx_names, ctx)
+                translations = await self.engines.translate_tags(untranslated, ctx)
+                llm_translated = True
+            # 辞書の訳を優先する(VLM が辞書にあるタグまで訳して返しても使わない)。
+            translations = {
+                k: v for k, v in translations.items() if k not in dictionary_translations
+            }
+            translations.update(dictionary_translations)
 
             if title_task is not None:
                 title = await title_task
@@ -596,7 +615,7 @@ class Annotator:
             raise
 
         # 記録するモデル名は、この画像に実際に使った組のもの(ADR-0024 8章)。
-        if (use_llm_title or (translate_by_llm and onnx_names)) and job.llm is not None:
+        if (use_llm_title or llm_translated) and job.llm is not None:
             ran.append(annotations_domain.ENGINE_LLM)
             models[annotations_domain.ENGINE_LLM] = job.llm.model
 
@@ -613,6 +632,21 @@ class Annotator:
             translated = translated_tags(onnx_tags or [], translations)
             tags = (onnx_tags or []) + translated + (vlm_tags or [])
         return title, tags, ran, models
+
+    def _dictionary_translations(self, names: list[str]) -> dict[str, str]:
+        """タグ辞書の代表の訳(ADR-0041 5章)。タグの長さの上限に収まるものだけ。辞書を読めなくても
+        推定は止めない(LLM・VLM に頼む)。"""
+        try:
+            with self.session_factory() as session:
+                found = tag_dictionaries.lookup_translations(session, names)
+        except Exception:  # noqa: BLE001 - 辞書は補助。読めなければ従来どおり訳してもらう
+            logger.exception("tag dictionary lookup failed")
+            return {}
+        result: dict[str, str] = {}
+        for name, translation in found.items():
+            if annotations_domain.normalize_tag_name_or_none(translation) is not None:
+                result[name] = translation
+        return result
 
     def _requeue(self, asset_id: uuid.UUID) -> None:
         with self.session_factory() as session:
