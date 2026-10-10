@@ -140,6 +140,23 @@ A1111 互換の API で使うもの(Forge で確認):
 - **記録:** LoRA はプロンプトの一部として Run に残る(ADR-0003)。WebUI が infotext に入れる `Lora hashes` も、これまでどおり `usage` に残る。
 - 作らないもの: LoRA のプレビュー画像(`/sd_extra_networks/thumb` は WebUI の画面用の内部の API)、ブロックごとの重み、LoRA のファイルの管理、ComfyUI での LoRA の選択。
 
+### 9. 画像の生成情報をフォームに読み込む(2026-10-10 追記)
+
+WebUI の「PNG 内の情報を表示 → txt2img に転送」に当たる操作を作る。A1111 互換の WebUI が画像に埋め込んだ生成情報(`parameters`。ADR-0018 で既に読める)から、SD WebUI の生成フォームの値を組み立てる。
+
+- **入口は2つ。**
+  - **ストックの画像から:** 生成情報が A1111 形式の画像(ADR-0018 の `tool = "a1111"`)のビューアに「SD WebUI のフォームに読み込む」を置く。
+  - **ストックに入れずに:** 生成のフォームに「画像から設定を読み込む」を置き、ファイルの選択・ドロップ・貼り付けで画像を渡す。サーバーはメモリの上で生成情報だけを読み、**画像を保存しない**(ファイルにも DB にもログにも残さない。Asset にしない)。大きさの上限はアップロードと同じ。
+- **API:** `POST /api/sdwebui/import-params`(`require_user`)。本文は画像のファイル(multipart)か、`asset_id`(本人に見える Asset。ADR-0025)。応答はフォームに入れる値(`model`、`prompt`、`params`)と、入れられなかった項目の一覧(`unapplied`。名前と値)と、注意(チェックポイントが見つからない、など)。対応付けはサーバーで行う(WebUI の一覧が要るため)。
+- **対応付け:**
+  - プロンプトとネガティブプロンプト。Dynamic Prompts の `Template` / `Negative Template` があれば、展開前のそれを使う(7章)。
+  - `Steps`、`Sampler`、`Schedule type`(表示名から WebUI のスケジューラーの名前へ。大文字小文字を無視)、`CFG scale`、`Seed`、`Size`(サイズの制約に収まらなければ入れない)。
+  - `Model` は接続先のチェックポイントの `model_name` と照合し、無ければ `Model hash` を `/sdapi/v1/sd-models` のハッシュと照合する。見つからなければモデルは変えず、注意を返す。
+  - VAE(`VAE` または Forge の `Module 1` など)は、接続先の VAE の一覧にあれば入れる。
+  - 入れられないもの(hires fix の各項目、`Clip skip`、`Denoising strength`、ADetailer や ControlNet の項目、`Version` など)は `unapplied` に並べ、画面で「読み込めなかった項目」として見せる。LoRA はプロンプトの `<lora:…>` としてそのまま入る。
+- **フォームへの反映:** プロバイダーを SD WebUI、操作を Generate にし、プロンプトとパラメーターを置き換える(入力画像は変えない)。今のプロンプトが空でなければ確かめてから置き換える。SD WebUI が有効でないときは、どちらの入口も出さない。
+- 作らないもの: A1111 形式以外(ComfyUI、NovelAI など)の生成情報からの読み込み、img2img への読み込み(WebUI の「img2img に転送」に当たるもの)。
+
 ### 作らないもの
 
 - InvokeAI、Fooocus、SwarmUI など、A1111 互換でない API
