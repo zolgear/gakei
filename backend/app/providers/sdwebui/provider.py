@@ -150,16 +150,18 @@ FORGE_HR_ADDITIONAL_MODULES = ["Use same choices"]
 DEFAULT_CLIP_SKIP = 1
 CLIP_SKIP_MIN, CLIP_SKIP_MAX = 1, 12
 
-# 幅と高さは 8 の倍数でなくてよい(ADR-0038 2章 2026-10-10 改訂)。WebUI は内部で 8 の倍数に
-# 切り捨てて描き、Asset は返った画像の寸法になる。
+# 幅と高さは 8 の倍数(ADR-0038 2章 2026-10-10 改訂)。WebUI は 8 の倍数でない寸法も受け付けるが
+# 内部で 8 の倍数に切り捨てて描くので、送った値・Run の記録・画像の寸法を一致させるため、
+# フォーム・読み込み・Edit の自動サイズで切り捨ててから送る。サーバーは 8 の倍数でなければ 422。
 SIZE_CONSTRAINTS = SizeConstraints(
-    multiple_of=1,
+    multiple_of=8,
     max_long_edge=2048,
     min_total_pixels=256 * 256,
     max_total_pixels=2048 * 2048,
     min_aspect_ratio=1 / 4,
     max_aspect_ratio=4,
     allow_auto=False,
+    round_down=True,
 )
 
 CredentialsLoader = Callable[[], Credentials | None]
@@ -665,11 +667,22 @@ def _per_output_prompts(
     return items or None
 
 
+def floor_to_multiple(value: int, multiple: int = SIZE_CONSTRAINTS.multiple_of) -> int:
+    """`multiple` の倍数に切り捨てる(WebUI が内部で描く寸法と同じ。ADR-0038 2章)。"""
+    return value // multiple * multiple
+
+
 def size_from_input(width: int, height: int) -> tuple[int, int]:
     """Edit でサイズの指定が無いときの出力の寸法。入力画像の寸法を、縦横比を保って長辺
-    2048px に収める(ADR-0038 2章。8 の倍数には丸めない)。"""
+    2048px に収め、8 の倍数に切り捨てる(ADR-0038 2章)。"""
+    multiple = SIZE_CONSTRAINTS.multiple_of
     scale = min(1.0, SIZE_CONSTRAINTS.max_long_edge / max(width, height, 1))
-    return max(1, round(width * scale)), max(1, round(height * scale))
+
+    def _floor(value: float) -> int:
+        # 浮動小数の誤差で 2048 が 2047.999… にならないよう、先に整数へ丸めてから切り捨てる
+        return max(multiple, floor_to_multiple(round(value), multiple))
+
+    return _floor(width * scale), _floor(height * scale)
 
 
 def default_hr_upscaler(upscalers: list[str]) -> str | None:
@@ -680,8 +693,9 @@ def default_hr_upscaler(upscalers: list[str]) -> str | None:
 
 
 def hires_target_size(width: int, height: int, scale: float) -> tuple[int, int]:
-    """拡大後の寸法。WebUI と同じく、倍率を掛けて切り捨てる(`int(width * hr_scale)`)。"""
-    return int(width * scale), int(height * scale)
+    """拡大後の寸法(実際の出力の寸法)。WebUI と同じく倍率を掛けて切り捨て
+    (`int(width * hr_scale)`)、さらに 8 の倍数に切り捨てる(WebUI は 8 の倍数で描く)。"""
+    return floor_to_multiple(int(width * scale)), floor_to_multiple(int(height * scale))
 
 
 def _resolve_hires(catalog: Catalog, params: dict[str, Any], *, is_edit: bool) -> bool:

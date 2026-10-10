@@ -8,6 +8,7 @@ import {
   isExperimentalSize,
   paramToSizeState,
   roundSizeStateToMultiple,
+  roundDimension,
   roundToMultiple,
   sizePresets,
   sizePresetsFor,
@@ -26,6 +27,7 @@ const constraints: SizeConstraints = {
   min_aspect_ratio: 1 / 3,
   max_aspect_ratio: 3,
   allow_auto: true,
+  round_down: false,
 }
 
 describe('validateSize', () => {
@@ -221,15 +223,16 @@ describe('paramToSizeState', () => {
   })
 })
 
-// SD WebUI(ADR-0038)の制約: 倍数の制約なし(2026-10-10 改訂)・長辺 2048・auto なし。
+// SD WebUI(ADR-0038)の制約: 8 の倍数(切り捨て)・長辺 2048・auto なし。
 const sdwebuiConstraints: SizeConstraints = {
-  multiple_of: 1,
+  multiple_of: 8,
   max_long_edge: 2048,
   min_total_pixels: 256 * 256,
   max_total_pixels: 2048 * 2048,
   min_aspect_ratio: 1 / 4,
   max_aspect_ratio: 4,
   allow_auto: false,
+  round_down: true,
 }
 
 describe('auto を受け付けないプロバイダー', () => {
@@ -266,20 +269,29 @@ describe('auto を受け付けないプロバイダー', () => {
     expect(sizeStateForProvider(sdwebuiConstraints, '1024x1024', ok)).toBe(ok)
   })
 
-  it('8 の倍数でないサイズもそのまま有効で、丸めない(ADR-0038 2章)', () => {
-    for (const [width, height] of [
-      [803, 601],
-      [800, 600],
-      [1001, 603],
+  it('8 の倍数でないサイズは無効で、送る値は 8 の倍数に切り捨てる(ADR-0038 2章)', () => {
+    for (const [width, height, expectedW, expectedH] of [
+      [803, 601, 800, 600],
+      [800, 600, 800, 600],
+      [1001, 603, 1000, 600],
+      [1007, 1015, 1000, 1008], // 四捨五入ではなく切り捨て
     ]) {
       const state = { mode: 'custom' as const, width, height }
-      expect(validateSize(sdwebuiConstraints, width, height)).toEqual({ valid: true, errors: [] })
-      expect(roundSizeStateToMultiple(sdwebuiConstraints, state)).toEqual(state)
-      expect(sizeToParam(roundSizeStateToMultiple(sdwebuiConstraints, state))).toBe(`${width}x${height}`)
-      // プロバイダーを切り替えても残す
+      expect(validateSize(sdwebuiConstraints, width, height).valid).toBe(width === expectedW && height === expectedH)
+      const rounded = roundSizeStateToMultiple(sdwebuiConstraints, state)
+      expect(rounded).toEqual({ mode: 'custom', width: expectedW, height: expectedH })
+      expect(sizeToParam(rounded)).toBe(`${expectedW}x${expectedH}`)
+      // 切り捨てれば使えるので、プロバイダーを切り替えても残す(送信時に切り捨てる)
       expect(sizeStateForProvider(sdwebuiConstraints, '1024x1024', state)).toBe(state)
     }
-    expect(roundToMultiple(803, sdwebuiConstraints.multiple_of)).toBe(803)
+    expect(roundDimension(sdwebuiConstraints, 803)).toBe(800)
+    expect(roundDimension(sdwebuiConstraints, 5)).toBe(8)
+  })
+
+  it('round_down でない制約(OpenAI)は最も近い倍数に丸める', () => {
+    expect(roundDimension(constraints, 1020)).toBe(1024)
+    expect(roundDimension(constraints, 1007)).toBe(1008)
+    expect(roundToMultiple(1020, 16, true)).toBe(1008)
   })
 
   it('倍数以外の制約(下限・縦横比)は残る', () => {

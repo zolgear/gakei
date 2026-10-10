@@ -18,6 +18,7 @@ const sizeConstraints = {
   min_aspect_ratio: 1 / 3,
   max_aspect_ratio: 3,
   allow_auto: true,
+  round_down: false,
 }
 
 function model(overrides: Partial<ModelCapabilities> & Pick<ModelCapabilities, 'model' | 'label'>): ModelCapabilities {

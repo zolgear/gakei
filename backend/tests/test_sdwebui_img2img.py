@@ -184,12 +184,13 @@ def test_capabilities_offer_edit_with_one_image_and_optional_mask(
     ("size", "expected"),
     [
         ((768, 768), (768, 768)),
-        ((1001, 603), (1001, 603)),  # 8 の倍数には丸めない(ADR-0038 2章 2026-10-10 改訂)
-        ((803, 601), (803, 601)),
+        ((1001, 603), (1000, 600)),  # 8 の倍数に切り捨てる(ADR-0038 2章 2026-10-10 改訂)
+        ((803, 601), (800, 600)),
+        ((1007, 1015), (1000, 1008)),  # 四捨五入ではなく切り捨て
         ((4096, 2048), (2048, 1024)),  # 長辺 2048 に収める
         ((1500, 3000), (1024, 2048)),
-        ((3001, 2003), (2048, 1367)),  # 長辺に収めた後も丸めない
-        ((3, 5), (3, 5)),
+        ((3001, 2003), (2048, 1360)),  # 長辺に収めた後に切り捨てる(1367 → 1360)
+        ((3, 5), (8, 8)),
     ],
 )
 def test_size_from_input(size: tuple[int, int], expected: tuple[int, int]) -> None:
@@ -204,8 +205,8 @@ def test_finalize_edit_sends_clip_skip(db_session_factory: sessionmaker) -> None
         "sdwebui_request"
     ]
     assert request["override_settings"]["CLIP_stop_at_last_layers"] == 3
-    # サイズの指定が無ければ入力画像の寸法のまま(8 の倍数に丸めない)
-    assert (request["width"], request["height"]) == (803, 601)
+    # サイズの指定が無ければ入力画像の寸法を 8 の倍数に切り捨てる
+    assert (request["width"], request["height"]) == (800, 600)
     request = _finalize(provider, db_session_factory, _draft([meta]))["sdwebui_request"]
     assert request["override_settings"]["CLIP_stop_at_last_layers"] == 1
 
@@ -219,7 +220,7 @@ def test_finalize_uses_input_size_and_records_sha256(db_session_factory: session
         _draft([_meta("image", image, (1001, 603))], denoising_strength=0.4),
     )
     request = params["sdwebui_request"]
-    assert (request["width"], request["height"]) == (1001, 603)
+    assert (request["width"], request["height"]) == (1000, 600)
     assert request["init_images"] == [{"asset_sha256": _sha(image)}]
     assert request["denoising_strength"] == 0.4
     assert request["resize_mode"] == 0

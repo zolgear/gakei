@@ -107,6 +107,8 @@ export const HIRES_DEPENDENT_PARAMS = [
 
 /** 拡大後の長辺の上限(ADR-0038 10章。サーバーと同じ値)。 */
 export const HIRES_MAX_LONG_EDGE = 4096
+/** WebUI は拡大後の寸法も 8 の倍数に切り捨てて描く(実際の出力の寸法。サーバーと同じ計算)。 */
+const HIRES_OUTPUT_MULTIPLE = 8
 
 const CLIENT_DISABLE_RULES: ClientDisableRule[] = [
   // 高解像度補助(ADR-0038 10章): 無効のあいだは、ほかの hires の項目を使わない。
@@ -159,7 +161,8 @@ export interface HiresTargetSize {
 
 /**
  * 高解像度補助の拡大後の寸法(ADR-0038 10章)。`hires` が有効で、寸法と倍率が分かるときだけ。
- * WebUI と同じく、倍率を掛けて切り捨てる(`int(width * hr_scale)`)。
+ * WebUI の実際の出力と同じく、倍率を掛けて切り捨て(`int(width * hr_scale)`)、さらに 8 の倍数に
+ * 切り捨てる。`size` は送る値(8 の倍数に切り捨てた後)を渡す。
  */
 export function hiresTargetSize(defs: ParamDef[], raw: RawParamValues, size: SizeState): HiresTargetSize | null {
   if (effectiveValue(defs, raw, 'hires') !== 'true') return null
@@ -167,7 +170,9 @@ export function hiresTargetSize(defs: ParamDef[], raw: RawParamValues, size: Siz
   const scale = Number(effectiveValue(defs, raw, 'hr_scale'))
   if (!Number.isFinite(scale) || scale <= 0) return null
   // 浮動小数点の誤差も WebUI(Python の int())と同じに出る(760 × 1.15 → 873)
-  const width = Math.floor(size.width * scale)
-  const height = Math.floor(size.height * scale)
+  const floorToOutput = (value: number) =>
+    Math.floor(Math.floor(value) / HIRES_OUTPUT_MULTIPLE) * HIRES_OUTPUT_MULTIPLE
+  const width = floorToOutput(size.width * scale)
+  const height = floorToOutput(size.height * scale)
   return { width, height, tooLarge: Math.max(width, height) > HIRES_MAX_LONG_EDGE }
 }

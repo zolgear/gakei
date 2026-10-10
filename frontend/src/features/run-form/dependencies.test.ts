@@ -160,23 +160,23 @@ describe('高解像度補助の依存関係(フロントの規則)', () => {
 describe('hiresTargetSize(拡大後の寸法)', () => {
   const size = { mode: 'custom' as const, width: 512, height: 768 }
 
-  it('倍率を掛けて切り捨てる(未指定の倍率は既定の 2)', () => {
+  it('倍率を掛けて切り捨て、8 の倍数に切り捨てる(未指定の倍率は既定の 2)', () => {
     expect(hiresTargetSize(hiresDefs, { hires: 'true' }, size)).toEqual({ width: 1024, height: 1536, tooLarge: false })
     expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '1.5' }, size)).toEqual({
       width: 768,
       height: 1152,
       tooLarge: false,
     })
-    // 8 の倍数でない寸法もそのまま掛ける(ADR-0038 2章 2026-10-10 改訂)
-    expect(hiresTargetSize(hiresDefs, { hires: 'true' }, { mode: 'custom', width: 803, height: 601 })).toEqual({
-      width: 1606,
-      height: 1202,
+    // 拡大後も WebUI の実際の出力と同じく 8 の倍数に切り捨てる(1300 → 1296、780 → 776)
+    expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '1.3' }, { mode: 'custom', width: 1000, height: 600 })).toEqual({
+      width: 1296,
+      height: 776,
       tooLarge: false,
     })
-    // WebUI(Python の int())と同じ丸め
+    // 浮動小数点の誤差も WebUI(Python の int())と同じ(760 × 1.15 → 873 → 872、1024 × 1.15 → 1177 → 1176)
     expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '1.15' }, { mode: 'custom', width: 760, height: 1024 })).toEqual({
-      width: 873,
-      height: 1177,
+      width: 872,
+      height: 1176,
       tooLarge: false,
     })
   })
@@ -185,6 +185,12 @@ describe('hiresTargetSize(拡大後の寸法)', () => {
     const big = { mode: 'custom' as const, width: 2048, height: 1024 }
     expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '2' }, big)?.tooLarge).toBe(false)
     expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '2.05' }, big)?.tooLarge).toBe(true)
+    // int(2048 × 2.003) = 4102 だが、実際の出力は 8 の倍数に切り捨てた 4096 なので実行できる
+    expect(hiresTargetSize(hiresDefs, { hires: 'true', hr_scale: '2.003' }, big)).toEqual({
+      width: 4096,
+      height: 2048,
+      tooLarge: false,
+    })
   })
 
   it('無効、寸法が未指定、倍率が読めないときは null', () => {

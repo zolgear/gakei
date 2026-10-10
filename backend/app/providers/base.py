@@ -95,6 +95,10 @@ class SizeConstraints(BaseModel):
     min_aspect_ratio: float
     max_aspect_ratio: float
     allow_auto: bool = True
+    # フォームが倍数でない幅・高さを倍数に合わせるとき、切り捨てるか(True)、最も近い倍数に
+    # 丸めるか(False)。SD WebUI は WebUI 自身が 8 の倍数に切り捨てて描くので、それに合わせて
+    # 切り捨てる(ADR-0038 2章)。サーバーはどちらでも倍数でなければ 422 にする。
+    round_down: bool = False
 
 
 class ProviderCapabilities(BaseModel):

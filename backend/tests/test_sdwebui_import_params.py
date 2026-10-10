@@ -111,14 +111,35 @@ def test_maps_full_example() -> None:
 HIRES_TEXT = "p\nSteps: 20, Seed: 1, Size: 512x768, Model: model-a"
 
 
-def test_size_not_multiple_of_8_is_applied() -> None:
-    """8 の倍数でないサイズもそのまま入れる(ADR-0038 2章 2026-10-10 改訂)。"""
-    for size in ("803x601", "800x600"):
-        text = f"p\nSteps: 20, Seed: 1, Size: {size}, Model: model-a"
-        result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
-        assert result.params["size"] == size
-        assert result.notes == []
-        assert result.unapplied == []
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [("803x601", "800x600"), ("516x772", "512x768"), ("1023x1023", "1016x1016")],
+)
+def test_size_not_multiple_of_8_is_floored(size: str, expected: str) -> None:
+    """8 の倍数でないサイズは 8 の倍数に切り捨てて入れ、注意を出す(ADR-0038 2章)。"""
+    text = f"p\nSteps: 20, Seed: 1, Size: {size}, Model: model-a"
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert result.params["size"] == expected
+    assert note_codes(result) == ["sizeFloored"]
+    assert size in result.notes[0].message and expected in result.notes[0].message
+    assert result.unapplied == []
+
+
+def test_size_multiple_of_8_has_no_note() -> None:
+    text = "p\nSteps: 20, Seed: 1, Size: 800x600, Model: model-a"
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert result.params["size"] == "800x600"
+    assert result.notes == []
+
+
+@pytest.mark.parametrize("size", ["2056x1024", "260x255", "abc"])
+def test_size_out_of_range_after_floor_is_not_applied(size: str) -> None:
+    """切り捨てた後もサイズの制約(長辺・下限・縦横比)に収まらなければ入れない。"""
+    text = f"p\nSteps: 20, Seed: 1, Size: {size}, Model: model-a"
+    result = build_form_values(meta_of(text), catalog_of(FakeSdWebui()))
+    assert "size" not in result.params
+    assert note_codes(result) == ["sizeOutOfRange"]
+    assert ("Size", size) in result.unapplied
 
 
 def test_clip_skip() -> None:

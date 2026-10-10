@@ -239,6 +239,7 @@
       "notes": {
         "modelNotFound": "Checkpoint \"{name}\" was not found on the server, so the model was not changed.",
         "modelMatchedByHash": "Checkpoint \"{name}\" was not found by name; used \"{model}\", whose hash matches.",
+        "sizeFloored": "Size {value} was rounded down to a multiple of 8: {size}.",
         "sizeOutOfRange": "Size {value} does not fit SD WebUI's size limits, so it was not applied ({reason}).",
         "invalidValue": "The value of {name} is out of range or unreadable, so it was not applied.",
         "samplerNotFound": "Sampler \"{value}\" was not found on the server, so it was not applied.",

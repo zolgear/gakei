@@ -166,25 +166,32 @@ export function validateSizeState(
 }
 
 /**
- * `multipleOf` の倍数に丸める(最も近い倍数。四捨五入)。
+ * `multipleOf` の倍数に丸める。既定は最も近い倍数(四捨五入)で、`roundDown` なら切り捨てる
+ * (SD WebUI。WebUI 自身が 8 の倍数に切り捨てて描くため。ADR-0038 2章)。
  * 丸めた結果が0以下になる場合は multipleOf 自体を返す。
  */
-export function roundToMultiple(value: number, multipleOf: number): number {
+export function roundToMultiple(value: number, multipleOf: number, roundDown = false): number {
   if (multipleOf <= 0) return value
-  const rounded = Math.round(value / multipleOf) * multipleOf
+  const rounded = (roundDown ? Math.floor(value / multipleOf) : Math.round(value / multipleOf)) * multipleOf
   return Math.max(multipleOf, rounded)
 }
 
+/** プロバイダーの制約に従って、幅または高さを倍数に合わせる(`round_down` なら切り捨て)。 */
+export function roundDimension(constraints: SizeConstraints, value: number): number {
+  return roundToMultiple(value, constraints.multiple_of, constraints.round_down)
+}
+
 /**
- * custom モードの SizeState を、width/height を multiple_of の倍数に丸めたものへ変換する。
- * blur 時・送信時の自動丸めに使う(unspecified/auto はそのまま返す)。
+ * custom モードの SizeState を、width/height を multiple_of の倍数に丸めたものへ変換する
+ * (`round_down` のプロバイダーでは切り捨て)。blur 時・送信時の自動丸めに使う
+ * (unspecified/auto はそのまま返す)。
  */
 export function roundSizeStateToMultiple(constraints: SizeConstraints, state: SizeState): SizeState {
   if (state.mode !== 'custom') return state
   return {
     ...state,
-    width: roundToMultiple(state.width, constraints.multiple_of),
-    height: roundToMultiple(state.height, constraints.multiple_of),
+    width: roundDimension(constraints, state.width),
+    height: roundDimension(constraints, state.height),
   }
 }
 

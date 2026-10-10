@@ -29,9 +29,10 @@
   `POST /sdapi/v1/refresh-loras` は `lora_refresh_count` を数える。
 - 高解像度補助(ADR-0038 10章): `GET /sdapi/v1/upscalers`(`upscalers`。実物と同じく先頭に
   `None`)と `GET /sdapi/v1/latent-upscale-modes`(`latent_upscale_modes`)。どちらも None で 404。
-  txt2img の本文が `enable_hr` なら、拡大後の寸法(`int(width * hr_scale)`)の画像を返し、infotext に
-  `Hires upscale` などを足す(`info` の width / height は1回目のまま。実物と同じ)。Forge 風
-  (`flavor="forge"`)では、`hr_additional_modules` が無いと実物と同じく 500 を返す。
+  txt2img の本文が `enable_hr` なら、拡大後の寸法(`int(width * hr_scale)` を 8 の倍数に
+  切り捨てたもの)の画像を返し、infotext に `Hires upscale` などを足す(`info` の width / height
+  は1回目のまま。実物と同じ)。Forge 風(`flavor="forge"`)では、`hr_additional_modules` が無いと
+  実物と同じく 500 を返す。
 - `honor_size=True`: 実物と同じく、幅と高さを 8 の倍数に切り捨てた寸法の画像を返す(803×601 を
   送ると 800×600)。infotext の `Size` は送られた値のまま。既定は 8×8 の画像。
 - `return_grid=True`: 実物の `return_grid` と同じく、先頭にグリッドを足し
@@ -471,7 +472,11 @@ class FakeSdWebui:
         hires_text = ""
         if not is_img2img and body.get("enable_hr"):
             scale = float(body.get("hr_scale", 2.0))
-            image_size = (int(body["width"] * scale), int(body["height"] * scale))
+            # 実物と同じく、倍率を掛けて切り捨て、さらに 8 の倍数に切り捨てた寸法で描く
+            image_size = (
+                int(body["width"] * scale) // 8 * 8,
+                int(body["height"] * scale) // 8 * 8,
+            )
             hires_text = (
                 f", Denoising strength: {body.get('denoising_strength')}"
                 f", Hires upscale: {body.get('hr_scale')}"

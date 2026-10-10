@@ -70,8 +70,9 @@ def test_capabilities_lists_checkpoints_as_models(db_session_factory: sessionmak
     assert caps.default_model == "model-a"
     assert caps.default_size == "1024x1024"
     assert caps.size is not None
-    # 8 の倍数に限らない(ADR-0038 2章 2026-10-10 改訂)
-    assert caps.size.multiple_of == 1
+    # 8 の倍数(ADR-0038 2章。フォームは 8 の倍数に切り捨てて送る)
+    assert caps.size.multiple_of == 8
+    assert caps.size.round_down is True
     assert caps.size.max_long_edge == 2048
     assert caps.size.allow_auto is False
     assert (caps.n_min, caps.n_max) == (1, 8)

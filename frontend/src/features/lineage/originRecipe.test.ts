@@ -15,6 +15,7 @@ const sizeConstraints = {
   min_aspect_ratio: 1 / 3,
   max_aspect_ratio: 3,
   allow_auto: true,
+  round_down: false,
 }
 
 function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provider' | 'models'>): ProviderEntry {

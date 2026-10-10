@@ -11,7 +11,7 @@ import {
   hasExperimentalSizes,
   isExperimentalSize,
   roundSizeStateToMultiple,
-  roundToMultiple,
+  roundDimension,
   sizePresetsFor,
   validateSizeState,
   type SizeState,
@@ -84,7 +84,7 @@ export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
   }
 
   function handleWidthBlur() {
-    const rounded = roundToMultiple(value.width, constraints.multiple_of)
+    const rounded = roundDimension(constraints, value.width)
     if (rounded !== value.width) {
       showRoundNote({ field: 'width', from: value.width, to: rounded })
       onChange({ ...value, width: rounded })
@@ -92,7 +92,7 @@ export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
   }
 
   function handleHeightBlur() {
-    const rounded = roundToMultiple(value.height, constraints.multiple_of)
+    const rounded = roundDimension(constraints, value.height)
     if (rounded !== value.height) {
       showRoundNote({ field: 'height', from: value.height, to: rounded })
       onChange({ ...value, height: rounded })
@@ -150,7 +150,7 @@ export function SizeInput({ constraints, value, onChange }: SizeInputProps) {
 
       {roundNote && (
         <p className={styles.hint}>
-          {fmt(si.roundedNote, {
+          {fmt(constraints.round_down ? si.roundedDownNote : si.roundedNote, {
             multipleOf: constraints.multiple_of,
             field: roundNote.field === 'width' ? si.fieldWidth : si.fieldHeight,
             from: roundNote.from,

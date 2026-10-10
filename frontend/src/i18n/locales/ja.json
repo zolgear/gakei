@@ -1249,6 +1249,7 @@
       "fieldWidth": "幅",
       "fieldHeight": "高さ",
       "roundedNote": "{multipleOf}の倍数に丸めました: {field} {from} → {to}",
+      "roundedDownNote": "{multipleOf}の倍数に切り捨てました: {field} {from} → {to}",
       "experimentalNote": "2560 × 1440 を超えるサイズは実験的で、結果が不安定になることがあります",
       "customLabel": "任意の幅 × 高さ",
       "presets": [

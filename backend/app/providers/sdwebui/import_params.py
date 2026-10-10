@@ -13,7 +13,8 @@
 - `Sampler`: 接続先のサンプラーの名前と照合する(大文字小文字を無視)。古い A1111 の
   「DPM++ 2M Karras」のようにスケジューラーが後ろに付いたものは、`Schedule type` が無ければ分ける。
 - `Schedule type`: 表示名(`Automatic`)から名前(`automatic`)へ(大文字小文字を無視)。
-- `Size`: SD WebUI のサイズの制約に収まれば `size` に入れる。
+- `Size`: 8 の倍数に切り捨て(切り捨てたら注意を出す)、SD WebUI のサイズの制約に収まれば
+  `size` に入れる(ADR-0038 2章)。
 - `Model`: チェックポイントの `model_name` と照合し、無ければ `Model hash` をチェックポイントの
   短いハッシュと照合する。見つからなければ `model` は None(フォームのモデルを変えない)。
 - VAE(A1111 の `VAE`、Forge の `Module 1` など): 接続先の VAE の一覧にあれば入れる。Forge は
@@ -35,6 +36,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -55,6 +57,7 @@ from app.providers.sdwebui.provider import (
     PARAM_HIRES,
     SEED_MAX,
     SIZE_CONSTRAINTS,
+    floor_to_multiple,
     hires_target_size,
 )
 
@@ -84,6 +87,8 @@ KEY_HIRES_UPSCALER = "Hires upscaler"
 KEY_HIRES_CFG = "Hires CFG Scale"
 KEY_HIRES_PROMPT = "Hires prompt"
 KEY_HIRES_NEGATIVE_PROMPT = "Hires negative prompt"
+# `Size` の値(`803x601` など)
+_SIZE_PATTERN = re.compile(r"\s*(\d+)\s*[xX]\s*(\d+)\s*")
 # Forge の2回目のモジュール(`Hires Module 1` …)
 _HIRES_MODULE_PREFIX = "Hires Module "
 # Forge は VAE やテキストエンコーダーを `Module 1`、`Module 2` … と書く
@@ -335,16 +340,7 @@ def build_form_values(meta: dict[str, Any], catalog: Catalog) -> ImportResult:
     # -- サイズ ------------------------------------------------------------------------
     if KEY_SIZE in infotext:
         value = _value_text(infotext[KEY_SIZE]).strip()
-        try:
-            parsed = sizes.parse_size(value, SIZE_CONSTRAINTS)
-        except sizes.InvalidSizeError as exc:
-            note("sizeOutOfRange", value=value, reason=str(exc))
-        else:
-            if parsed is None:
-                note("sizeOutOfRange", value=value, reason=t("sizes.autoNotAllowed"))
-            else:
-                result.params["size"] = f"{parsed[0]}x{parsed[1]}"
-                consumed.add(KEY_SIZE)
+        _apply_size(value, result, consumed, note)
 
     # -- チェックポイント ----------------------------------------------------------------
     model_name = infotext.get(KEY_MODEL)
@@ -491,12 +487,35 @@ def _apply_hires(
             consumed.add(key)
 
 
+def _apply_size(value: str, result: ImportResult, consumed: set[str], note: Any) -> None:
+    """`Size` を 8 の倍数に切り捨てて入れる(ADR-0038 2章。WebUI が実際に描く寸法と同じ)。
+    切り捨てたら注意を出す。切り捨てた後でサイズの制約に収まらなければ入れない。"""
+    match = _SIZE_PATTERN.fullmatch(value)
+    if match is None:
+        note("sizeOutOfRange", value=value, reason=t("sizes.sizeFormat"))
+        return
+    width, height = int(match.group(1)), int(match.group(2))
+    floored_w, floored_h = floor_to_multiple(width), floor_to_multiple(height)
+    try:
+        sizes.validate_size(floored_w, floored_h, SIZE_CONSTRAINTS)
+    except sizes.InvalidSizeError as exc:
+        note("sizeOutOfRange", value=value, reason=str(exc))
+        return
+    floored = f"{floored_w}x{floored_h}"
+    if (floored_w, floored_h) != (width, height):
+        note("sizeFloored", value=f"{width}x{height}", size=floored)
+    result.params["size"] = floored
+    consumed.add(KEY_SIZE)
+
+
 def _note_message(code: str, **kwargs: Any) -> str:
     """注意の文言(i18n のキーはリテラルで書く。キーの欠けをテストで見つけるため)。"""
     if code == "modelNotFound":
         return t("sdwebui.importParams.notes.modelNotFound", **kwargs)
     if code == "modelMatchedByHash":
         return t("sdwebui.importParams.notes.modelMatchedByHash", **kwargs)
+    if code == "sizeFloored":
+        return t("sdwebui.importParams.notes.sizeFloored", **kwargs)
     if code == "sizeOutOfRange":
         return t("sdwebui.importParams.notes.sizeOutOfRange", **kwargs)
     if code == "invalidValue":

@@ -10,7 +10,7 @@ import { ParamField } from '../run-form/ParamField'
 import type { RawParamValues } from '../run-form/paramsBuilder'
 import { unspecifiedRawValue } from '../run-form/paramsBuilder'
 import { SizeInput } from '../run-form/SizeInput'
-import type { SizeState } from '../run-form/sizeValidation'
+import { roundSizeStateToMultiple, type SizeState } from '../run-form/sizeValidation'
 import styles from './InputPane.module.css'
 
 interface ParamFieldsCommonProps {
@@ -44,7 +44,12 @@ export function PrimaryParamFields({
 }: PrimaryParamFieldsProps) {
   const { t } = useI18n()
   // 高解像度補助(ADR-0038 10章)の拡大後の寸法は、倍率の欄の下に出す
-  const hiresTarget = hiresTargetSize(defs, rawParams, sizeState)
+  // (送る値と同じく、サイズを制約の倍数に切り捨ててから計算する)
+  const hiresTarget = hiresTargetSize(
+    defs,
+    rawParams,
+    sizeConstraints ? roundSizeStateToMultiple(sizeConstraints, sizeState) : sizeState,
+  )
   const hiresHint = hiresTarget
     ? {
         text: fmt(hiresTarget.tooLarge ? t.runForm.paramField.hiresTargetTooLarge : t.runForm.paramField.hiresTarget, {

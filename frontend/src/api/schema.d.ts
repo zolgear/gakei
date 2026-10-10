@@ -5091,6 +5091,11 @@ export interface components {
              * @default true
              */
             allow_auto: boolean;
+            /**
+             * Round Down
+             * @default false
+             */
+            round_down: boolean;
         };
         /**
          * SuggestedBindings

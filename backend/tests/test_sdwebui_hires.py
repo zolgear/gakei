@@ -24,7 +24,7 @@ from sqlalchemy.orm import sessionmaker
 from app.domain.models import Asset
 from app.domain.run_validation import RunValidationError
 from app.providers.base import ProviderError, RunDraft, RunInputMeta, RunRequest
-from app.providers.sdwebui.provider import SdWebuiProvider
+from app.providers.sdwebui.provider import SdWebuiProvider, hires_target_size
 from tests.conftest import wait_for_run_terminal
 from tests.sdwebui_fake import FakeSdWebui, install_fake_factories
 
@@ -288,10 +288,28 @@ def test_finalize_hires_params_without_hires_is_422(
 
 
 @pytest.mark.parametrize(
+    ("size", "scale", "expected"),
+    [
+        ((512, 768), 1.5, (768, 1152)),
+        ((512, 768), 2.0, (1024, 1536)),
+        ((1000, 600), 1.3, (1296, 776)),  # int(1300) と int(780) を 8 の倍数に切り捨て
+        ((2048, 1024), 2.003, (4096, 2048)),
+    ],
+)
+def test_hires_target_size_floors_to_multiple_of_8(
+    size: tuple[int, int], scale: float, expected: tuple[int, int]
+) -> None:
+    """拡大後の寸法は WebUI の実際の出力と同じく、倍率を掛けて切り捨て、8 の倍数に切り捨てる。"""
+    assert hires_target_size(*size, scale) == expected
+
+
+@pytest.mark.parametrize(
     ("size", "scale", "ok"),
     [
         ("2048x1024", 2.0, True),  # 長辺 4096 ちょうど
         ("2048x1024", 2.05, False),
+        # int(2048 * 2.003) = 4102 だが、8 の倍数に切り捨てた実際の出力は 4096
+        ("2048x1024", 2.003, True),
         ("1024x1024", 4.0, True),
         ("1032x1024", 4.0, False),
     ],

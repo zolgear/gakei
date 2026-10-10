@@ -171,29 +171,35 @@ def test_small_sizes_are_allowed(client: TestClient, monkeypatch: pytest.MonkeyP
     assert response.status_code == 202, response.text
 
 
-@pytest.mark.parametrize(("size", "expected"), [("803x601", (800, 600)), ("800x600", (800, 600))])
-def test_sizes_not_multiple_of_8_are_sent_as_is(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, size: str, expected: tuple[int, int]
-) -> None:
-    """8 の倍数でないサイズもそのまま送る(ADR-0038 2章 2026-10-10 改訂)。WebUI は 8 の倍数に
-    切り捨てて描き、Asset は返った画像の寸法になる。Run には送った値が残る。"""
+def test_size_not_multiple_of_8_is_422(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """8 の倍数でないサイズは Run を作らずに 422(ADR-0038 2章 2026-10-10 改訂。フォームは
+    切り捨ててから送る)。"""
+    fake = FakeSdWebui()
+    _connect(client, monkeypatch, fake)
+    for size in ("803x601", "800x601", "803x600"):
+        response = _post_run(client, size=size)
+        assert response.status_code == 422, response.text
+    assert fake.txt2img_bodies == []
+
+
+def test_sent_size_matches_asset_size(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """8 の倍数のサイズなら、送った値・Run の記録・画像の寸法が一致する(ADR-0038 2章)。"""
     fake = FakeSdWebui()
     fake.honor_size = True
     _connect(client, monkeypatch, fake)
-    response = _post_run(client, size=size)
+    response = _post_run(client, size="800x600")
     assert response.status_code == 202, response.text
     detail = wait_for_run_terminal(client, response.json()["id"])
     assert detail["status"] == "succeeded", detail
-    width, height = (int(v) for v in size.split("x"))
-    assert detail["params"]["size"] == size
+    assert detail["params"]["size"] == "800x600"
     request = detail["params"]["sdwebui_request"]
-    assert (request["width"], request["height"]) == (width, height)
-    assert f"Size: {size}" in detail["usage"]["infotext"]
+    assert (request["width"], request["height"]) == (800, 600)
+    assert "Size: 800x600" in detail["usage"]["infotext"]
     with client.app.state.session_factory() as db:
         sizes = db.execute(
             select(Asset.width, Asset.height).where(Asset.produced_by_run_id.isnot(None))
         ).all()
-    assert [tuple(s) for s in sizes] == [expected]
+    assert [tuple(s) for s in sizes] == [(800, 600)]
 
 
 def test_clip_skip_is_sent_every_time(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -239,6 +239,7 @@
       "notes": {
         "modelNotFound": "チェックポイント「{name}」が接続先に見つからないため、モデルは変えていません。",
         "modelMatchedByHash": "チェックポイント「{name}」は名前では見つからず、ハッシュが一致した「{model}」にしました。",
+        "sizeFloored": "サイズ {value} を 8 の倍数に切り捨てて {size} にしました。",
         "sizeOutOfRange": "サイズ {value} は SD WebUI のサイズの制約に収まらないため、入れていません({reason})。",
         "invalidValue": "{name} の値が範囲外か読めないため、入れていません。",
         "samplerNotFound": "サンプラー「{value}」が接続先に見つからないため、入れていません。",
