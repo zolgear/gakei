@@ -46,5 +46,6 @@
 | ADR-0040 | [0040-parameter-sets.md](0040-parameter-sets.md) | パラメーターセット(生成の設定一式を名前を付けて保存し、フォームに読み込む) | Proposed |
 | ADR-0041 | [0041-tag-dictionary.md](0041-tag-dictionary.md) | タグ辞書(タグの補完と日本語訳) | Proposed |
 | ADR-0042 | [0042-repeat-runs.md](0042-repeat-runs.md) | 繰り返し回数(同じ設定の Run をまとめて積む) | Proposed |
+| ADR-0043 | [0043-thumbnail-focal-point.md](0043-thumbnail-focal-point.md) | サムネイルの表示を顔の位置に寄せる(焦点の記録と object-position) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。
