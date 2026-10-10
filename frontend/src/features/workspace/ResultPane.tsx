@@ -27,6 +27,7 @@ import {
   restoreAsset,
 } from '../../api/client'
 import { assetUrl, runPartialUrl } from '../../api/assetUrl'
+import { RunDetailIcon } from '../../components/icons'
 import { fmt, useI18n } from '../../i18n'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
@@ -496,8 +497,13 @@ export function ResultPane({
         {/* スタジオ内では Run 詳細ページへ移動せず、結果エリアに Run 詳細を出す(`?run=`)。
             既に Run 詳細を表示中なら出さない。フルページの Run 詳細は履歴から開ける。 */}
         {headerRun && !showRunDetail && (
-          <Link to={buildStudioPath(null, null, headerRun.id)} className={styles.headerButton}>
-            {rp.generatedDetail}
+          <Link
+            to={buildStudioPath(null, null, headerRun.id)}
+            className={styles.headerIconButton}
+            aria-label={t.common.openGeneratedDetail}
+            title={t.common.openGeneratedDetail}
+          >
+            <RunDetailIcon />
           </Link>
         )}
         {asset && (

@@ -1224,7 +1224,6 @@
       "deletedBadge": "Deleted",
       "restore": "Restore",
       "notRestorable": "Cannot be restored",
-      "generatedDetail": "Run details",
       "downloadOriginal": "Download original",
       "deleteCurrentAsset": "Delete this image",
       "lineageEmptyState": "Show an image first to view its lineage.",
