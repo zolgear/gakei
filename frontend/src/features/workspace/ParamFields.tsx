@@ -35,9 +35,14 @@ interface PrimaryParamFieldsProps extends ParamFieldsCommonProps {
   sizeState: SizeState
   onSizeChange: (next: SizeState) => void
   primary: ParamDef[]
+  /** サイズ欄のすぐ上の段に、サイズと同じ幅で出すパラメーター(SD WebUI の枚数。`paramGrouping.ts`)。 */
+  aboveSize?: ParamDef[]
 }
 
-/** サイズ入力(あれば)と、主に出すパラメーター。フラグメントなので親のグリッドに直接並ぶ。 */
+/**
+ * サイズ入力(あれば)と、主に出すパラメーター。フラグメントなので親のグリッドに直接並ぶ。
+ * `aboveSize` の項目はサイズ入力の上の段に、サイズと同じく2マス分で置く。
+ */
 export function PrimaryParamFields({
   sizeConstraints,
   sizeState,
@@ -48,6 +53,7 @@ export function PrimaryParamFields({
   hasMask,
   onParamChange,
   primary,
+  aboveSize = [],
 }: PrimaryParamFieldsProps) {
   const { t } = useI18n()
   // 有効・無効の判定は送る値(無効の項目を未指定にした値)で行う。欄に出す値は rawParams のまま
@@ -70,36 +76,41 @@ export function PrimaryParamFields({
         warning: hiresTarget.tooLarge,
       }
     : null
+  const renderField = (def: ParamDef) => (
+    <ParamField
+      key={def.name}
+      def={def}
+      value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
+      enabled={isFieldEnabled(defs, active, conditionalParams, def.name, { hasMask })}
+      disabledNote={fieldDisabledNote(defs, active, def.name, { hasMask })}
+      hint={def.name === 'hr_scale' ? hiresHint : null}
+      onChange={onParamChange}
+    />
+  )
   return (
     <>
+      {aboveSize.map((def) => (
+        <div key={def.name} className={styles.spanTwo}>
+          {renderField(def)}
+        </div>
+      ))}
+
       {sizeConstraints && (
         <div className={styles.spanTwo}>
           <SizeInput constraints={sizeConstraints} value={sizeState} onChange={onSizeChange} />
         </div>
       )}
 
-      {primary.map((def, index) => {
-        const field = (
-          <ParamField
-            key={def.name}
-            def={def}
-            value={rawParams[def.name] ?? unspecifiedRawValue(def.type)}
-            enabled={isFieldEnabled(defs, active, conditionalParams, def.name, { hasMask })}
-            disabledNote={fieldDisabledNote(defs, active, def.name, { hasMask })}
-            hint={def.name === 'hr_scale' ? hiresHint : null}
-            onChange={onParamChange}
-          />
-        )
-        // 文章(ネガティブプロンプトなど)と seed の欄は、1マスでは狭いので2マス分を使う
-        // (seed の隣に枚数が来るときは、seed を1マスにして同じ行に並べる)。
-        return isWideParam(def, primary[index + 1]) ? (
+      {primary.map((def) =>
+        // 文章(ネガティブプロンプトなど)と seed の欄は、1マスでは狭いので2マス分を使う。
+        isWideParam(def) ? (
           <div key={def.name} className={styles.spanTwo}>
-            {field}
+            {renderField(def)}
           </div>
         ) : (
-          field
-        )
-      })}
+          renderField(def)
+        ),
+      )}
     </>
   )
 }

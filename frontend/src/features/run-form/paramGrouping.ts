@@ -28,42 +28,33 @@ export function splitPrimaryParams(
   return { primary, other }
 }
 
+/** プロバイダーごとの振り分け。`aboveSize` はサイズ欄のすぐ上の段に出す(グリッドの並びには入れない)。 */
+export interface ProviderGroupedParams extends GroupedParams {
+  aboveSize: ParamDef[]
+}
+
 /**
  * プロバイダーに応じて振り分ける。
  * - ComfyUI のパラメーターは、利用者がワークフローの登録時にフォームへ出すと選んだものだけなので、
  *   畳まずに登録順のまま全部を主に出す。
  * - SD WebUI(ADR-0038)のパラメーターは8つほどで、ネガティブプロンプト・サンプラー・ステップ数・
- *   CFG・seed・VAE のどれも毎回のように見て変えるものなので、畳まずに全部を主に出す。順はサーバーの
- *   順のまま、枚数だけを seed の隣に移す。
+ *   CFG・seed・VAE のどれも毎回のように見て変えるものなので、畳まずにサーバーの順のまま全部を主に出す。
+ *   枚数(`n`)だけはグリッドの並びから外し、サイズ欄のすぐ上の段に置く(`aboveSize`)。
+ * - それ以外(OpenAI)は `splitPrimaryParams`。
  */
-export function groupParamsForProvider(provider: string | undefined, defs: ParamDef[]): GroupedParams {
-  if (provider === 'sdwebui') return { primary: placeCountNextToSeed(defs), other: [] }
-  if (provider === 'comfyui') return { primary: [...defs], other: [] }
-  return splitPrimaryParams(defs)
-}
-
-/**
- * 枚数(`n`)を seed の欄のすぐ後ろに移す(SD WebUI。seed を1マスにして同じ行に並べるため。
- * `isWideParam`)。どちらかが無ければ順を変えない。
- */
-export function placeCountNextToSeed(defs: ParamDef[]): ParamDef[] {
-  const count = defs.find((d) => d.name === 'n')
-  if (!count || !defs.some((d) => d.widget === 'seed')) return [...defs]
-  const result: ParamDef[] = []
-  for (const def of defs) {
-    if (def === count) continue
-    result.push(def)
-    if (def.widget === 'seed') result.push(count)
+export function groupParamsForProvider(provider: string | undefined, defs: ParamDef[]): ProviderGroupedParams {
+  if (provider === 'sdwebui') {
+    return {
+      primary: defs.filter((d) => d.name !== 'n'),
+      other: [],
+      aboveSize: defs.filter((d) => d.name === 'n'),
+    }
   }
-  return result
+  if (provider === 'comfyui') return { primary: [...defs], other: [], aboveSize: [] }
+  return { ...splitPrimaryParams(defs), aboveSize: [] }
 }
 
-/**
- * 設定グリッドで2マス分を使うパラメーター(文章の欄と seed の欄)。seed のすぐ後に枚数(`n`)が
- * 来るときは、seed を1マスにして枚数と同じ行に並べる。
- */
-export function isWideParam(def: ParamDef, next?: ParamDef): boolean {
-  if (def.type === 'text') return true
-  if (def.widget === 'seed') return next?.name !== 'n'
-  return false
+/** 設定グリッドで2マス分を使うパラメーター(文章の欄と seed の欄)。 */
+export function isWideParam(def: ParamDef): boolean {
+  return def.type === 'text' || def.widget === 'seed'
 }

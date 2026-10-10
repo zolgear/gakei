@@ -262,7 +262,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   }
 
   const caps = form.caps
-  const { primary, other } = groupParamsForProvider(form.provider, form.defs)
+  const { primary, other, aboveSize } = groupParamsForProvider(form.provider, form.defs)
   const selectedModel = form.providerEntry?.models.find((m) => m.model === form.model)
 
   // 参考価格(PriceEstimate)に渡す値。API の契約に合わせ、未指定はそれぞれ既定値にする。
@@ -506,6 +506,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       hasMask={form.hasMask}
       onParamChange={form.handleParamChange}
       primary={primary}
+      aboveSize={aboveSize}
     />
   )
 
