@@ -70,6 +70,7 @@ import {
   type ImportNotice,
 } from '../sdwebui/importParams'
 import { buildParameterSetRawParams, resolveParameterSetLoad } from '../parameter-sets/parameterSets'
+import { resolveRunFormLoad } from './runFormLoad'
 
 export interface RunFormLogic {
   caps: CapabilitiesResponse | undefined
@@ -442,11 +443,12 @@ export function useRunFormLogic(
     clearPendingPromptInsert()
   }, [pendingPromptInsert, insertPrompt, clearPendingPromptInsert])
 
-  // フォームへの読み込み。画像の生成情報から SD WebUI のフォームへ(ADR-0038 9章)と、
-  // パラメーターセットから(ADR-0040)。プロンプトの置き換えの確認は積む側(読み込みのダイアログ、
-  // ビューア、サイドバー)で済んでいる。capabilities が揃うまで待つ。パラメーターは、入れる先の
-  // モデル・操作の定義でここで作る(同じモデルのままでは defs の effect が走らないため。
-  // 「新規生成」の resetForm と同じやり方)。入力画像は変えない。
+  // フォームへの読み込み。画像の生成情報から SD WebUI のフォームへ(ADR-0038 9章)、
+  // パラメーターセットから(ADR-0040)、Run 詳細の「同じ設定で新規作成」から。プロンプトの
+  // 置き換えの確認は積む側(読み込みのダイアログ、ビューア、サイドバー)で済んでいる。
+  // capabilities が揃うまで待つ。パラメーターは、入れる先のモデル・操作の定義でここで作る
+  // (同じモデルのままでは defs の effect が走らないため。「新規生成」の resetForm と同じやり方)。
+  // 入力画像は変えない(「同じ設定で新規作成」の入力画像は、積む側が context に書く)。
   const consumedFormLoadNonceRef = useRef<number | null>(null)
   useEffect(() => {
     if (!pendingFormLoad || !caps) return
@@ -454,6 +456,34 @@ export function useRunFormLogic(
     consumedFormLoadNonceRef.current = pendingFormLoad.nonce
     clearPendingFormLoad()
     const request = pendingFormLoad.request
+
+    // Run 詳細の「同じ設定で新規作成」。フォームがマウントされたまま(スタジオの結果エリアの
+    // Run 詳細から押した)でも入るように、ここでローカルの状態を Run の値で作り直す。入力画像は
+    // 積む側が context に書いている。パラメーターの定義が見つからない(プロバイダーが無効、
+    // モデルが一覧に無い)ときは、マウント時と同じく上の effect が capabilities の初期値に戻す。
+    if (request.kind === 'run') {
+      const state = request.state
+      const values = resolveRunFormLoad(state, caps, loadSeedMode())
+      initialRef.current = { ...initialRef.current, ...state }
+      didInitParamsRef.current = values.rawParams !== null
+      setProvider(values.provider)
+      setModel(values.model)
+      setPrompt(values.prompt)
+      setSizeState(values.sizeState)
+      // Run のサイズは意図したものなので、入力画像があっても自動では変えない。
+      setSizeTouchedByUser(true)
+      if (values.rawParams !== null) setRawParams(values.rawParams)
+      setAssetGroupId(state.assetGroupId)
+      setSubmitError(null)
+      setImportNotice(null)
+      if (values.droppedNames.length > 0) {
+        const rf = msg().runForm.runFormLogic
+        setDroppedParamsNotice(fmt(rf.droppedParamsSettings, { names: values.droppedNames.join(rf.listSeparator) }))
+      } else {
+        setDroppedParamsNotice(null)
+      }
+      return
+    }
 
     let next: {
       provider: string

@@ -68,7 +68,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
   // スタジオにいる間(結果エリアやインスペクターに埋め込まれている間)は、入出力の
   // サムネイルもページを離れず結果エリアに表示する(nodeTargetPath.ts)。
   const location = useLocation()
-  const { setFormState } = useRunFormContext()
+  const { setFormState, requestFormLoad } = useRunFormContext()
   const { setOriginAssetId } = useLineageOrigin()
 
   const query = useQuery({
@@ -169,7 +169,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
     // サーバーは comfyui_* / sdwebui_* をクライアントからの入力として受け付けない(422)ので、
     // 「同じ設定で新規作成」ではフォームへ戻す前に取り除く(seed 等の公開パラメーターは残り、
     // 実際に使った seed があれば seed に戻す)。
-    setFormState({
+    const state = {
       provider: run.provider,
       model: run.model,
       prompt: run.prompt,
@@ -177,7 +177,12 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
       inputs: inputsFromRunInputs(inputs),
       // 削除済みのグループなら null(=「なし」)で返ってくる。
       assetGroupId: run.asset_group?.id ?? null,
-    })
+    }
+    // context へ書くのは入力画像と、スタジオがまだマウントされていないときの初期値のため。
+    // スタジオのフォームは context をマウント時にしか読まないので、結果エリアの Run 詳細
+    // (フォームはマウントされたまま)からでも入るよう、読み込みのリクエストにも積む。
+    setFormState(state)
+    requestFormLoad({ kind: 'run', state })
     navigate('/studio')
   }
 
