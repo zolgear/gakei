@@ -20,7 +20,7 @@ from PIL import Image
 from app.domain import agent_images, derivatives
 from app.domain.models import Asset
 from app.domain.storage import LocalFsStore, derived_key, parse_derived_key
-from tests.conftest import make_png_bytes
+from tests.conftest import make_png_bytes, wait_for_background_reads
 
 pytestmark = pytest.mark.windows
 
@@ -171,6 +171,7 @@ def test_missing_derivative_is_regenerated(client: TestClient, data_dir: Path) -
     asset = _asset(client, asset_id)
     thumb = data_dir / f"derived/{asset.sha256}/thumb.webp"
     expected = thumb.read_bytes()
+    wait_for_background_reads(client)
     thumb.unlink()
 
     # 304 の確かめ: 派生が消えていても、原本があれば同じ版を作り直せるので 304。
@@ -191,6 +192,7 @@ def test_missing_original_and_derivative_is_404(client: TestClient, data_dir: Pa
     uploaded = _upload(client)
     asset_id = uploaded["id"]
     asset = _asset(client, asset_id)
+    wait_for_background_reads(client)
     (data_dir / f"derived/{asset.sha256}/thumb.webp").unlink()
     (data_dir / asset.blob_key).unlink()
 
@@ -212,6 +214,7 @@ def test_missing_original_and_derivative_is_404(client: TestClient, data_dir: Pa
 def test_unreadable_original_is_404(client: TestClient, data_dir: Path) -> None:
     uploaded = _upload(client)
     asset = _asset(client, uploaded["id"])
+    wait_for_background_reads(client)
     (data_dir / f"derived/{asset.sha256}/preview.webp").unlink()
     (data_dir / asset.blob_key).write_bytes(b"not an image")
     response = client.get(f"/api/assets/{uploaded['id']}/content?variant=preview")
@@ -275,6 +278,7 @@ def test_agent_images_regenerate_missing_derivative(
     assert (data_dir / f"derived/{asset.sha256}/thumb.v2.webp").is_file()
 
     # 原本も派生も無ければ None(MCP は画像を付けない)。
+    wait_for_background_reads(client)
     (data_dir / asset.blob_key).unlink()
     (data_dir / f"derived/{asset.sha256}/thumb.v2.webp").unlink()
     agent_images.clear_cache()

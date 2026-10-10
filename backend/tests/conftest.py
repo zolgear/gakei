@@ -352,6 +352,55 @@ def wait_for_run_terminal(
     raise TimeoutError(f"run {run_id} が時間内に終了しませんでした")
 
 
+def wait_for_background_reads(client: TestClient, timeout: float = 10.0) -> None:
+    """裏の worker が原本を読み終えるまで待つ。テストで原本・派生のファイルを動かす・消す・
+    上書きする前に呼ぶ。
+
+    取り込みの後、焦点の worker(ADR-0043)が原本を `open_content` で開いて顔を探す。
+    Windows では開いているファイルを rename・unlink できず、`PermissionError`(WinError 32)
+    になる。アップロードは応答を返す前に worker へ渡すので、worker が空(`is_idle`)になれば
+    読み終えている。生成の出力は、runner が commit してから worker へ渡すまでの間に Run の
+    完了が見えることがあるので、マスク以外の Asset に焦点の行がそろうまでも待つ(行の無い
+    Asset が残っても、worker が空のまま `grace` 秒たてば、渡されないものとみなして戻る)。
+
+    自動タイトル・タグと埋め込みの worker は、設定でオンにしない限り原本を読まない。それを
+    オンにするテストは、それぞれの状態(`auto_status` など)が終わるのを待つこと。
+    """
+    import time
+
+    from sqlalchemy import exists, select
+
+    from app.domain.models import Asset, AssetFocalPoint, AssetKind
+
+    grace = 0.3
+    worker = client.app.state.focal_worker
+    session_factory = client.app.state.session_factory
+    deadline = time.monotonic() + timeout
+    idle_since: float | None = None
+    while time.monotonic() < deadline:
+        if worker.is_idle():
+            with session_factory() as session:
+                missing = session.scalar(
+                    select(
+                        exists().where(
+                            Asset.kind != AssetKind.MASK,
+                            ~exists().where(AssetFocalPoint.asset_id == Asset.id),
+                        )
+                    )
+                )
+            if not missing:
+                return
+            now = time.monotonic()
+            if idle_since is None:
+                idle_since = now
+            elif now - idle_since >= grace:
+                return
+        else:
+            idle_since = None
+        time.sleep(0.02)
+    raise TimeoutError("焦点の worker が時間内に終わりませんでした")
+
+
 @contextmanager
 def swapped_primary_provider(client: TestClient, provider: Any) -> Iterator[None]:
     """ADR-0013: レジストリの主プロバイダーを一時的にスタブへ差し替える。

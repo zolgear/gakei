@@ -9,7 +9,12 @@ from fastapi.testclient import TestClient
 from app.domain.models import Asset
 from app.providers import openai_spec
 from app.providers.base import ProviderCapabilities, RunOutputImage, RunResult
-from tests.conftest import make_png_bytes, swapped_primary_provider, wait_for_run_terminal
+from tests.conftest import (
+    make_png_bytes,
+    swapped_primary_provider,
+    wait_for_background_reads,
+    wait_for_run_terminal,
+)
 
 
 def _create_simple_generate_run(client: TestClient, prompt: str = "simple") -> str:
@@ -42,6 +47,7 @@ def test_missing_input_file_fails_run_but_runner_keeps_processing(client: TestCl
     with session_factory() as session:
         asset = session.get(Asset, uuid.UUID(asset_id))
         blob_path = store.local_path(asset.blob_key, asset.sha256, "original")
+    wait_for_background_reads(client)
     blob_path.unlink()
 
     response = client.post(

@@ -1,3 +1,7 @@
 *.sh text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# 同梱して sha256 で照合するデータは改行を変換しない(Windows の autocrlf で CRLF になると
+# 照合に失敗する。ADR-0043)。ライセンス表記も原本のバイト列のまま配る。
+backend/app/focal/data/* -text
