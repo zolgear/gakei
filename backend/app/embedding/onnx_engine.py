@@ -11,6 +11,24 @@
 
 出力は射影済みだが L2 正規化されていないので、ここで正規化する。
 
+EmbeddingGemma 2(ADR-0044 3章。2026-10-11 に確かめた値):
+
+- 画像側 `vision_encoder_quantized.onnx`
+  - 入力: `pixel_values` [1, 2520, 768]、`pixel_position_ids` [1, 2520, 2]
+  - 出力: `image_features` [N, 512](N はソフトトークン数。詰めた分は返らない)
+- 文章側 `model_quantized.onnx`
+  - 入力: `input_ids`・`attention_mask` [1, 長さ]、`image_features`・`video_features`・
+    `audio_features` [n, 512]
+  - 出力: `sentence_embedding` [1, 768]
+
+- 画像は2段で計算する: 画像側の出力(ソフトトークン N 個の特徴)を、画像のトークン列と一緒に
+  文章側へ渡す。画像を計算するときは両方を読み込み、文章での検索だけなら文章側だけを読み込む。
+- 使わない入力(文章のときは画像・動画・音声、画像のときは動画・音声)も必須なので、[0, 512] の
+  空の配列を渡す。
+- `sentence_embedding` はプーリング・射影・L2 正規化まで済んでいるので、ここでは何もしない。
+- 画像も文章も1件ずつ計算する(q8 は動的量子化で、まとめる件数で値が変わる)。検索の文章には
+  `SearchQuery` のプレフィックスを付け、1,024 トークンで切る。
+
 - 画像側と文章側は別々のセッションにし、使うときに初めて読み込む。文章での検索だけなら
   文章側だけを読み込む。
 - セッションの作り方は WD Tagger と同じ(`app/model_store/onnx_runtime.py`)。読み込む前に
@@ -33,8 +51,13 @@ from PIL import Image
 
 from app.embedding.base import EmbeddingError, l2_normalize
 from app.embedding.catalog import ClipModel, model_dir, onnx_model_key
-from app.embedding.preprocess import preprocess_clip, preprocess_ly
-from app.embedding.tokenization import ClipBpeTokenizer, LyTokenizer
+from app.embedding.preprocess import preprocess_clip, preprocess_eg2, preprocess_ly
+from app.embedding.tokenization import (
+    ClipBpeTokenizer,
+    Eg2Tokenizer,
+    LyTokenizer,
+    eg2_image_input_ids,
+)
 from app.i18n import t
 from app.model_store.onnx_runtime import (
     InsufficientMemoryError,
@@ -52,6 +75,22 @@ _IO_NAMES: dict[str, tuple[str, str, str]] = {
     "openai_clip": ("pixel_values", "image_embeds", "text_embeds"),
     "ly_clip": ("input", "output", "output"),
 }
+
+# EmbeddingGemma 2 の入出力の名前。画像側の位置の入力は、transformers の processor のキー名
+# (`image_position_ids`)と違う。
+EG2_PIXEL_VALUES = "pixel_values"
+EG2_PIXEL_POSITIONS = "pixel_position_ids"
+EG2_IMAGE_FEATURES = "image_features"
+EG2_VIDEO_FEATURES = "video_features"
+EG2_AUDIO_FEATURES = "audio_features"
+EG2_OUTPUT = "sentence_embedding"
+EG2_FEATURE_DIM = 512
+EG2_TOKENIZER_FILE = "tokenizer.model"
+
+
+def eg2_empty_features() -> np.ndarray:
+    """使わないモダリティに渡す空の特徴([0, 512])。"""
+    return np.zeros((0, EG2_FEATURE_DIM), dtype=np.float32)
 
 
 class OnnxClipEngine:
@@ -92,6 +131,8 @@ class OnnxClipEngine:
     def embed_images(self, images: list[Image.Image], *, priority: bool = False) -> np.ndarray:
         if not images:
             return np.zeros((0, self.dim), dtype=np.float32)
+        if self.model.family == "embeddinggemma2":
+            return self._embed_images_eg2(images, priority=priority)
         preprocess = preprocess_ly if self.model.family == "ly_clip" else preprocess_clip
         input_name, output_name, _ = _IO_NAMES[self.model.family]
         batch = self.image_batch_size
@@ -111,6 +152,8 @@ class OnnxClipEngine:
     def embed_texts(self, texts: list[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
+        if self.model.family == "embeddinggemma2":
+            return self._embed_texts_eg2(texts)
         _, _, output_name = _IO_NAMES[self.model.family]
         # 文章の推論は検索のときだけ(worker は画像だけを計算する)。利用者を待たせないよう、
         # 優先の区間にする(WD Tagger の推論1回分だけを待ち、読み込まれたままの WD はすぐ
@@ -124,6 +167,56 @@ class OnnxClipEngine:
                 outputs.append(np.asarray(result, dtype=np.float32))
             self._last_used = time.monotonic()
         return l2_normalize(np.concatenate(outputs, axis=0))
+
+    # -- EmbeddingGemma 2 ----------------------------------------------------------
+
+    def _embed_images_eg2(self, images: list[Image.Image], *, priority: bool) -> np.ndarray:
+        with self._residency.use(self.RESIDENCY_OWNER, priority=priority), self._lock:
+            # 文章側を先に読み込む(画像側の目安は、文章側との差で比べる)。
+            text = self._ensure_text()
+            vision = self._ensure_vision()
+            rows: list[np.ndarray] = []
+            for image in images:
+                pixels, positions, num_soft_tokens = preprocess_eg2(image)
+                features = vision.run(
+                    [EG2_IMAGE_FEATURES],
+                    {EG2_PIXEL_VALUES: pixels, EG2_PIXEL_POSITIONS: positions},
+                )[0]
+                features = np.asarray(features, dtype=np.float32)
+                if features.ndim != 2 or features.shape[0] != num_soft_tokens:
+                    raise EmbeddingError(t("embeddings.modelUnreadable", model=self.model.name))
+                input_ids = eg2_image_input_ids(num_soft_tokens)
+                result = text.run(
+                    [EG2_OUTPUT],
+                    {
+                        "input_ids": input_ids,
+                        "attention_mask": np.ones_like(input_ids),
+                        EG2_IMAGE_FEATURES: features,
+                        EG2_VIDEO_FEATURES: eg2_empty_features(),
+                        EG2_AUDIO_FEATURES: eg2_empty_features(),
+                    },
+                )[0]
+                rows.append(np.asarray(result, dtype=np.float32).reshape(-1))
+            self._last_used = time.monotonic()
+        return np.stack(rows)
+
+    def _embed_texts_eg2(self, texts: list[str]) -> np.ndarray:
+        max_length = self.model.max_text_tokens
+        assert max_length is not None
+        with self._residency.use(self.RESIDENCY_OWNER, priority=True), self._lock:
+            session = self._ensure_text()
+            rows: list[np.ndarray] = []
+            for text in texts:
+                feeds: dict[str, np.ndarray] = self._tokenizer.feeds(
+                    self.model.query_prefix + text, max_length
+                )
+                feeds[EG2_IMAGE_FEATURES] = eg2_empty_features()
+                feeds[EG2_VIDEO_FEATURES] = eg2_empty_features()
+                feeds[EG2_AUDIO_FEATURES] = eg2_empty_features()
+                result = session.run([EG2_OUTPUT], feeds)[0]
+                rows.append(np.asarray(result, dtype=np.float32).reshape(-1))
+            self._last_used = time.monotonic()
+        return np.stack(rows)
 
     def release_idle(self, idle_seconds: float = IDLE_RELEASE_SECONDS) -> bool:
         with self._lock:
@@ -182,9 +275,16 @@ class OnnxClipEngine:
     def _create_session(self, path: Path) -> Any:
         import onnxruntime
 
+        options = session_options(onnxruntime)
+        if self.model.family == "embeddinggemma2":
+            # EG2 は計算ごとに中間の大きさが変わる(画像のソフトトークン数、文章の長さ)。CPU の
+            # メモリアリーナは一度取った分を返さないので、画像と長い文章を交互に計算すると
+            # 約 1.0GB まで膨らむ。切っても速さは変わらず、ピークは約 0.75GB に収まる
+            # (2026-10-11 に実測。ADR-0044 4章)。
+            options.enable_cpu_mem_arena = False
         return onnxruntime.InferenceSession(
             str(path),
-            sess_options=session_options(onnxruntime),
+            sess_options=options,
             providers=["CPUExecutionProvider"],
         )
 
@@ -216,6 +316,8 @@ class OnnxClipEngine:
         try:
             if self.model.family == "ly_clip":
                 return LyTokenizer(self._path("spiece.model"))
+            if self.model.family == "embeddinggemma2":
+                return Eg2Tokenizer(self._path(EG2_TOKENIZER_FILE))
             return ClipBpeTokenizer(self._path("vocab.json"), self._path("merges.txt"))
         except (OSError, RuntimeError, ValueError) as e:
             raise EmbeddingError(t("embeddings.modelUnreadable", model=self.model.name)) from e

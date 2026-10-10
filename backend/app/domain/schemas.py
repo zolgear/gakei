@@ -1617,7 +1617,9 @@ class AnnotationBackfillResponse(BaseModel):
 
 # -- 画像の埋め込み(ADR-0033) -------------------------------------------------------
 
-EmbeddingOnnxModelName = Literal["clip-vit-b32-u8", "clip-vit-b32", "clip-japanese-base"]
+EmbeddingOnnxModelName = Literal[
+    "clip-vit-b32-u8", "clip-vit-b32", "clip-japanese-base", "embeddinggemma-2-q8"
+]
 
 
 class EmbeddingOnnxModelStatus(BaseModel):
@@ -1636,6 +1638,13 @@ class EmbeddingOnnxModelStatus(BaseModel):
     # 文章での検索だけのとき(文章側だけを読み込む)のメモリの目安(バイト)。
     memory_text_bytes: int
     license: str
+    # 検索の質が高い代わりに計算が重いモデル(EmbeddingGemma 2。ADR-0044 6章)。
+    heavy: bool = False
+    # 日本語・英語のほかにも多くの言語に対応する(画面では「多言語」と出す)。
+    many_languages: bool = False
+    # このモデルの重複のしきい値(保存した値、無ければ既定)と、その既定(ADR-0044 5章)。
+    duplicate_threshold: float
+    duplicate_threshold_default: float
     downloaded: bool
     download_status: Literal["idle", "downloading", "failed"]
     # 0〜1。ダウンロード中だけ値が入る。
@@ -1664,7 +1673,9 @@ class EmbeddingSettingsResponse(BaseModel):
     remote_model: str | None = None
     remote_api_format: Literal["infinity"]
     auto_on_ingest: bool
+    # 使うモデルの重複のしきい値(モデルごと。ADR-0044 5章)と、そのモデルの既定。
     duplicate_threshold: float
+    duplicate_threshold_default: float
     # 使うモデルの `model_key`。リモートで接続先かモデル名が未設定なら null。
     active_model_key: str | None = None
     # 使うモデルの対応言語(ローカルのモデルだけ分かる。リモートは null)。
@@ -1697,6 +1708,7 @@ class EmbeddingSettingsUpdateRequest(BaseModel):
     remote_model: str | None = None
     remote_api_format: str | None = None
     auto_on_ingest: bool | None = None
+    # 使うモデル(同じ更新でモデルを変えるなら変えた後のモデル)のしきい値。
     duplicate_threshold: float | None = None
 
 

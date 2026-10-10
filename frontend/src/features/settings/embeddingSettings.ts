@@ -6,6 +6,9 @@
  * 接続先・モデル名・形式、取り込み時の自動実行、重複のしきい値)は下書き(`EmbeddingDraft`)に持ち、
  * ページ上部の「保存」で、変わった項目だけを1つの PATCH に載せて送る(`diffEmbeddingDraft`)。
  * ダウンロード・削除・一括実行・ベクトルの削除は「操作」で、その場で実行する。
+ *
+ * 重複のしきい値はモデルごと(ADR-0044 5章)。下書きのしきい値は、下書きで選んでいるモデルの値として
+ * 扱う(`thresholdBaseline`)。ローカルのモデルを選び直したら、そのモデルの保存済みの値に置き換える。
  */
 import type {
   EmbeddingLanguage,
@@ -91,8 +94,42 @@ export function validateEmbeddingDraft(
 }
 
 /**
+ * 下書きで選んでいるモデルの、保存済みのしきい値(保存していなければそのモデルの既定)。ローカルの
+ * モデルはモデルの一覧の値。リモートは保存済みの設定のモデルの値(ほかのリモートのモデルの値は
+ * 分からないので、同じ値とみなす)。
+ */
+export function thresholdBaseline(
+  draft: Pick<EmbeddingDraft, 'engine' | 'onnx_model'>,
+  settings: EmbeddingSettingsResponse,
+): number {
+  if (draft.engine === 'onnx') {
+    if (settings.engine === 'onnx' && settings.onnx_model === draft.onnx_model) return settings.duplicate_threshold
+    const model = (settings.onnx_models ?? []).find((m) => m.name === draft.onnx_model)
+    if (model) return model.duplicate_threshold
+  }
+  return settings.duplicate_threshold
+}
+
+/** 下書きで選んでいるモデルのしきい値の既定(画面の説明に出す)。 */
+export function thresholdDefault(
+  draft: Pick<EmbeddingDraft, 'engine' | 'onnx_model'>,
+  settings: EmbeddingSettingsResponse,
+): number {
+  if (draft.engine === 'onnx') {
+    const model = (settings.onnx_models ?? []).find((m) => m.name === draft.onnx_model)
+    if (model) return model.duplicate_threshold_default
+  }
+  if (draft.engine === settings.engine) return settings.duplicate_threshold_default
+  return DEFAULT_REMOTE_DUPLICATE_THRESHOLD
+}
+
+/** `backend/app/domain/embedding_settings.py` の `DEFAULT_DUPLICATE_THRESHOLD`(リモートの既定)。 */
+export const DEFAULT_REMOTE_DUPLICATE_THRESHOLD = 0.9
+
+/**
  * 下書きと保存済みの設定の差分(PATCH の本文)。変わっていない項目は載せない。接続先とモデル名は
- * 空なら null(未設定)で送る。しきい値は数に直す。
+ * 空なら null(未設定)で送る。しきい値は数に直し、下書きで選んでいるモデルの保存済みの値
+ * (`thresholdBaseline`)と違うときだけ送る。
  */
 export function diffEmbeddingDraft(
   draft: EmbeddingDraft,
@@ -109,7 +146,7 @@ export function diffEmbeddingDraft(
   if (draft.remote_api_format !== settings.remote_api_format) body.remote_api_format = draft.remote_api_format
   if (draft.auto_on_ingest !== settings.auto_on_ingest) body.auto_on_ingest = draft.auto_on_ingest
   const threshold = Number(draft.duplicate_threshold.trim())
-  if (draft.duplicate_threshold.trim() !== '' && threshold !== settings.duplicate_threshold)
+  if (draft.duplicate_threshold.trim() !== '' && threshold !== thresholdBaseline(draft, settings))
     body.duplicate_threshold = threshold
   return body
 }

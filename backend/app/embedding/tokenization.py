@@ -28,6 +28,22 @@ transformers、torch、`tokenizers` は使わない。
 
 文字列 `[CLS]` などは、小文字にしたうえで `sentencepiece` がふつうに分割する(特殊トークンに
 しない)。transformers 4.39 の T5Tokenizer とは、この1点だけが違う(意図どおり)。
+
+**EmbeddingGemma 2(`Eg2Tokenizer`。ADR-0044 3章)**: `sentencepiece` と `tokenizer.model`。
+
+1. 小文字にしない。先頭にダミーの `▁` は入らない(`tokenizer.model` の設定のまま)。
+2. `sentencepiece` で分割し、先頭に `<bos>`(=2)、末尾に `<eos>`(=1)を付ける。
+3. `<bos>` と `<eos>` を含めて上限(1,024)に切り、切った後も末尾に `<eos>` を残す
+   (transformers の切り方と同じ)。
+4. 1件ずつ計算するので詰め物は要らない。attention_mask はすべて 1。
+
+本文中の画像・音声・動画の目印の文字列(`<|image|>` など)は、特殊トークンにしない。
+`tokenizer.model` はこれらを1つの id(ユーザー定義のピース)に分割するが、文章側のモデルは
+その id の位置に画像などの特徴を差し込むので、特徴を渡さない検索の文章に入ると壊れる。
+そこで、その id が出たら、先頭の1文字と残りに分けて分割し直し、ふつうの文字にする
+(ADR-0033 2章「特殊トークンの文字列も普通の文字として分割する」と同じ)。ほかのユーザー定義の
+ピース(`<|turn>` など)は、transformers と同じくそのままにする。
+タスクのプレフィックス(`SearchQuery`)は呼び出し側(エンジン)が本文の前に付ける。
 """
 
 from __future__ import annotations
@@ -46,6 +62,24 @@ CLIP_BOS = 49406
 CLIP_EOS = 49407
 
 LY_MAX_LENGTH = 77
+
+# EmbeddingGemma 2 の特殊トークン(`tokenizer.model` と `tokenizer_config.json` の値)。
+EG2_BOS = 2
+EG2_EOS = 1
+EG2_PAD = 0
+EG2_BOI = 255999  # `<|image>`(画像の開始)
+EG2_IMAGE = 258880  # `<|image|>`(画像のソフトトークン1つ)
+EG2_EOI = 258882  # `<image|>`(画像の終わり)
+# 画像・音声・動画の目印のピース(`tokenizer.model` のユーザー定義のピース。モジュールの docstring)。
+EG2_MULTIMODAL_PIECES: dict[int, str] = {
+    EG2_BOI: "<|image>",
+    256000: "<|audio>",
+    EG2_IMAGE: "<|image|>",
+    258881: "<|audio|>",
+    EG2_EOI: "<image|>",
+    258883: "<audio|>",
+    258884: "<|video|>",
+}
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPECIAL_STRINGS = ("<|startoftext|>", "<|endoftext|>")
@@ -193,3 +227,47 @@ class LyTokenizer:
             mask[index, : len(row)] = 1
         positions = np.tile(np.arange(length, dtype=np.int64), (len(rows), 1))
         return {"input0": input_ids, "input1": mask, "input2": positions}
+
+
+class Eg2Tokenizer:
+    def __init__(self, model_path: Path | None = None, processor: Any = None) -> None:
+        """`processor` はテスト用(`SentencePieceProcessor` と同じ `encode`)。"""
+        if processor is None:
+            import sentencepiece
+
+            assert model_path is not None
+            processor = sentencepiece.SentencePieceProcessor(model_file=str(model_path))
+        self.processor = processor
+
+    def ids(self, text: str, max_length: int) -> list[int]:
+        """`<bos>` と `<eos>` を付け、両方を含めて `max_length` に切った id の列。"""
+        if max_length < 2:
+            raise ValueError("max_length は 2 以上")
+        body = self._encode_plain(text)[: max_length - 2]
+        return [EG2_BOS, *body, EG2_EOS]
+
+    def _encode_plain(self, text: str) -> list[int]:
+        """画像などの目印の id を、ふつうの文字の id に置き換えて分割する。"""
+        ids: list[int] = []
+        for token in (int(i) for i in self.processor.encode(text)):
+            piece = EG2_MULTIMODAL_PIECES.get(token)
+            if piece is None:
+                ids.append(token)
+                continue
+            ids.extend(int(i) for i in self.processor.encode(piece[:1]))
+            ids.extend(self._encode_plain(piece[1:]))
+        return ids
+
+    def feeds(self, text: str, max_length: int) -> dict[str, np.ndarray]:
+        """文章1件の `input_ids` と `attention_mask`([1, 長さ]、int64)。"""
+        input_ids = np.array([self.ids(text, max_length)], dtype=np.int64)
+        return {"input_ids": input_ids, "attention_mask": np.ones_like(input_ids)}
+
+
+def eg2_image_input_ids(num_soft_tokens: int) -> np.ndarray:
+    """画像1枚を文章側に渡すときのトークン列([1, N + 4]、int64。ADR-0044 3章)。
+    `<bos>`、画像の開始、画像のトークン × N、画像の終わり、`<eos>`。上限で切らない。"""
+    if num_soft_tokens <= 0:
+        raise ValueError("ソフトトークン数は 1 以上")
+    ids = [EG2_BOS, EG2_BOI, *([EG2_IMAGE] * num_soft_tokens), EG2_EOI, EG2_EOS]
+    return np.array([ids], dtype=np.int64)

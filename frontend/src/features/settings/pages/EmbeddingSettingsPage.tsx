@@ -8,7 +8,7 @@
  * 3. リモートの推論サーバー(エンジンがリモートのとき): 接続先(「LLM の接続先」へのリンクつき)、
  *    モデル名、形式。選んだ接続先に画像と検索の文章が送られることを書く
  * 4. 計算: 取り込み時の自動実行、未計算・待ち行列・失敗の件数と一括実行
- * 5. 重複の候補: しきい値の既定
+ * 5. 重複の候補: しきい値の既定(モデルごと。ADR-0044 5章。モデルを選び直すと、そのモデルの値にする)
  * 6. 保存済みのベクトル: モデルごとの件数と削除
  *
  * 項目の種類(ADR-0031 2章):
@@ -55,6 +55,8 @@ import {
   isAnyEmbeddingModelDownloading,
   describeStoredModelKey,
   sortLanguages,
+  thresholdBaseline,
+  thresholdDefault,
   validateEmbeddingDraft,
   type EmbeddingDraft,
 } from '../embeddingSettings'
@@ -290,7 +292,11 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
                 selected={model.name === values.onnx_model}
                 disabled={disabled}
                 busy={downloadMutation.isPending || deleteModelMutation.isPending}
-                onSelect={() => draft.set('onnx_model', model.name)}
+                onSelect={() => {
+                  draft.set('onnx_model', model.name)
+                  // しきい値はモデルごと。選んだモデルの保存済みの値にする。
+                  draft.set('duplicate_threshold', String(thresholdBaseline({ engine: 'onnx', onnx_model: model.name }, data)))
+                }}
                 onDownload={() => downloadMutation.mutate(model.name)}
                 onDelete={() => setModelToDelete(model.name)}
               />
@@ -426,7 +432,11 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
         <SettingsRow
           label={m.duplicates.thresholdLabel}
           htmlFor="gakei-embedding-threshold"
-          description={fmt(m.duplicates.thresholdHelp, { min: DUPLICATE_THRESHOLD_MIN, max: DUPLICATE_THRESHOLD_MAX })}
+          description={fmt(m.duplicates.thresholdHelp, {
+            min: DUPLICATE_THRESHOLD_MIN,
+            max: DUPLICATE_THRESHOLD_MAX,
+            default: thresholdDefault(values, data),
+          })}
           changed={draft.isChanged('duplicate_threshold')}
         >
           <input
@@ -537,9 +547,11 @@ function EmbeddingModelRow({ model, selected, disabled, busy, onSelect, onDownlo
   const m = t.settings.embeddings.onnx
   const downloading = model.download_status === 'downloading'
   const percent = downloadPercent(model.download_progress)
-  const languages = sortLanguages(model.languages)
-    .map((lang) => m.languageNames[lang])
-    .join(m.languageSeparator)
+  const languages = model.many_languages
+    ? m.manyLanguages
+    : sortLanguages(model.languages)
+        .map((lang) => m.languageNames[lang])
+        .join(m.languageSeparator)
 
   let statusText: string
   if (downloading) statusText = percent === null ? m.downloading : fmt(m.downloadingPercent, { percent })
@@ -557,6 +569,7 @@ function EmbeddingModelRow({ model, selected, disabled, busy, onSelect, onDownlo
         <span className={modelStyles.modelMemory}>{fmt(m.languagesValue, { languages })}</span>
       </label>
       {isEnglishOnlyModel(model) && <p className={own.modelNote}>{m.englishOnlyNote}</p>}
+      {model.heavy && <p className={own.modelNote}>{m.heavyNote}</p>}
       <div className={modelStyles.modelStatusRow}>
         <span
           className={modelStyles.modelStatus}
