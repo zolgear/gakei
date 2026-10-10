@@ -73,7 +73,10 @@ def _zip(files: dict[str, bytes]) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in files.items():
-            archive.writestr(name, data)
+            # 時刻を固定する(worker ごとに中身が変わると xdist の収集が食い違う)
+            info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, data)
     return buffer.getvalue()
 
 
@@ -177,6 +180,7 @@ def test_register_category_scheme(client: TestClient) -> None:
         ("bad.zip", b"PK\x03\x04garbage", 422),
         ("none.zip", _zip({"readme.txt": b"x"}), 422),
     ],
+    ids=["mixed", "empty", "blank", "sjis", "bad-zip", "none-zip"],
 )
 def test_register_rejects_bad_files(
     client: TestClient, filename: str, data: bytes, status: int
