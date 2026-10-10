@@ -79,10 +79,16 @@ class Availability:
 
 @dataclass(frozen=True)
 class Checkpoint:
-    """チェックポイント。`model_name` は拡張子なしの名前で、`info.sd_model_name` と比べる。"""
+    """チェックポイント。`model_name` は拡張子なしの名前で、`info.sd_model_name` と比べる。
+
+    `hash` は `/sdapi/v1/sd-models` の短いハッシュ(10 桁。infotext の `Model hash` と同じ)。
+    WebUI がまだ計算していなければ `sha256` の先頭 10 桁、それも無ければ None。画像の生成情報を
+    フォームに読み込むとき(ADR-0038 9章)の照合にだけ使い、応答には出さない。
+    """
 
     title: str
     model_name: str
+    hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +120,8 @@ class Catalog:
     checkpoints: list[Checkpoint]
     samplers: list[str] = field(default_factory=list)
     schedulers: list[str] = field(default_factory=list)
+    # スケジューラーの名前 → 表示名(infotext の `Schedule type` は表示名。ADR-0038 9章)
+    scheduler_labels: dict[str, str] = field(default_factory=dict)
     vaes: list[str] = field(default_factory=list)
     # 拡張機能のスクリプト(取れなければ空。ADR-0038 7章)
     scripts: list[ScriptInfo] = field(default_factory=list)
@@ -227,8 +235,36 @@ def _parse_checkpoints(body: Any) -> list[Checkpoint]:
             Checkpoint(
                 title=title if isinstance(title, str) and title else model_name,
                 model_name=model_name,
+                hash=_checkpoint_hash(item),
             )
         )
+    return result
+
+
+def _checkpoint_hash(item: dict[str, Any]) -> str | None:
+    """短いハッシュ(小文字)。`hash` が無ければ `sha256` の先頭 10 桁(WebUI の短いハッシュと
+    同じ)。"""
+    value = item.get("hash")
+    if isinstance(value, str) and value.strip():
+        return value.strip().lower()
+    sha256 = item.get("sha256")
+    if isinstance(sha256, str) and len(sha256.strip()) >= 10:
+        return sha256.strip().lower()[:10]
+    return None
+
+
+def _labels(body: Any) -> dict[str, str]:
+    """`[{name, label}, ...]` から名前 → 表示名を取り出す(表示名の無いものは除く)。"""
+    result: dict[str, str] = {}
+    if not isinstance(body, list):
+        return result
+    for item in body:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        label = item.get("label")
+        if isinstance(name, str) and name and isinstance(label, str) and label:
+            result.setdefault(name, label)
     return result
 
 
@@ -383,7 +419,9 @@ class SdWebuiClient:
                 )
                 checkpoints = _parse_checkpoints(self._get_required(http, "/sdapi/v1/sd-models"))
                 samplers = _names(self._get_optional(http, "/sdapi/v1/samplers"), "name")
-                schedulers = _names(self._get_optional(http, "/sdapi/v1/schedulers"), "name")
+                schedulers_body = self._get_optional(http, "/sdapi/v1/schedulers")
+                schedulers = _names(schedulers_body, "name")
+                scheduler_labels = _labels(schedulers_body)
                 if flavor == "forge":
                     vaes = _parse_forge_modules(self._get_optional(http, "/sdapi/v1/sd-modules"))
                 else:
@@ -398,6 +436,7 @@ class SdWebuiClient:
             checkpoints=checkpoints,
             samplers=samplers,
             schedulers=schedulers,
+            scheduler_labels=scheduler_labels,
             vaes=vaes,
             scripts=scripts,
         )

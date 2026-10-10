@@ -984,6 +984,28 @@ export function listSdWebuiLoras(): Promise<{ items: SdWebuiLora[] }> {
   return request('/api/sdwebui/loras')
 }
 
+export type SdWebuiImportParamsResponse = components['schemas']['SdWebuiImportParamsResponse']
+
+/**
+ * 画像の生成情報(A1111 形式)から SD WebUI の生成フォームの値を作る(ADR-0038 9章)。
+ * 手元のファイル(サーバーは保存しない)か、ストックの画像(asset_id)のどちらか。
+ * 未接続は 409、生成情報が無い・A1111 形式でなければ 422、見えない Asset は 404、大きすぎれば 413。
+ */
+export function importSdWebuiParams(
+  input: { file: Blob } | { assetId: string },
+): Promise<SdWebuiImportParamsResponse> {
+  if ('file' in input) {
+    const form = new FormData()
+    form.append('file', input.file, input.file instanceof File ? input.file.name : 'image')
+    return request('/api/sdwebui/import-params', { method: 'POST', body: form })
+  }
+  return request('/api/sdwebui/import-params', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ asset_id: input.assetId }),
+  })
+}
+
 // -- タイトルとタグ(ADR-0024) --------------------------------------------------
 // 編集はログイン者全員。マスクと削除済みの Asset は 409(detail に理由)。いずれも更新後の注釈を返す。
 

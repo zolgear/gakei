@@ -14,6 +14,7 @@
  * 初期化では、この値を既定のグループにする。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { SdWebuiImportParamsResponse } from '../api/client'
 import { ensureInputIds } from '../features/run-form/editInputs'
 import type { PromptInsertMode } from '../features/run-form/promptInsertion'
 import { createEmptyFormState, type RunFormState } from '../features/run-form/types'
@@ -36,6 +37,9 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
     { text: string; mode: PromptInsertMode; nonce: number } | null
   >(null)
   const insertNonceRef = useRef(0)
+  const [pendingFormLoad, setPendingFormLoad] = useState<
+    { response: SdWebuiImportParamsResponse; nonce: number } | null
+  >(null)
 
   function flushSave() {
     if (saveTimeoutRef.current) {
@@ -67,6 +71,13 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
 
   const clearPendingPromptInsert = useCallback(() => setPendingPromptInsert(null), [])
 
+  const requestFormLoad = useCallback((response: SdWebuiImportParamsResponse) => {
+    insertNonceRef.current += 1
+    setPendingFormLoad({ response, nonce: insertNonceRef.current })
+  }, [])
+
+  const clearPendingFormLoad = useCallback(() => setPendingFormLoad(null), [])
+
   useEffect(() => {
     // iOS Safari はバックグラウンドに回ったタブを破棄することがあるため、デバウンス中の
     // 保存をそのタイミングで前倒しして確定させる(取りこぼしを減らす保険)。
@@ -90,8 +101,20 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
       pendingPromptInsert,
       requestPromptInsert,
       clearPendingPromptInsert,
+      pendingFormLoad,
+      requestFormLoad,
+      clearPendingFormLoad,
     }),
-    [formState, setFormState, pendingPromptInsert, requestPromptInsert, clearPendingPromptInsert],
+    [
+      formState,
+      setFormState,
+      pendingPromptInsert,
+      requestPromptInsert,
+      clearPendingPromptInsert,
+      pendingFormLoad,
+      requestFormLoad,
+      clearPendingFormLoad,
+    ],
   )
   return <RunFormContext.Provider value={value}>{children}</RunFormContext.Provider>
 }

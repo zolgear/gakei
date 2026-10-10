@@ -131,7 +131,7 @@ export function LineageAssetInspectorContent({ assetId }: LineageAssetInspectorC
       )}
 
       {asset.origin && <OriginRecipeSection origin={asset.origin} />}
-      {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
+      {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} assetId={asset.id} />}
 
       {/* ADR-0039 1章: タグをプロンプトに使う(使えるタグが無ければ出さない)。 */}
       <PromptTagsActions assetId={asset.id} />

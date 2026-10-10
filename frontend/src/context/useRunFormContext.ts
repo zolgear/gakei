@@ -1,5 +1,6 @@
 /** RunFormContext のコンテキストオブジェクトと読み出し用フック。 */
 import { createContext, useContext } from 'react'
+import type { SdWebuiImportParamsResponse } from '../api/client'
 import type { PromptInsertMode } from '../features/run-form/promptInsertion'
 import type { RunFormState } from '../features/run-form/types'
 
@@ -18,6 +19,15 @@ export interface RunFormContextValue {
   /** mode の既定は 'insert'。 */
   requestPromptInsert: (text: string, mode?: PromptInsertMode) => void
   clearPendingPromptInsert: () => void
+  /**
+   * 画像の生成情報から SD WebUI のフォームへ読み込むリクエスト(ADR-0038 9章)。ビューアの
+   * 「SD WebUI のフォームに読み込む」とスタジオの「画像から設定を読み込む」が積み、スタジオ
+   * (useRunFormLogic)が capabilities に照らして消費する。プロンプトの置き換えの確認は積む側で
+   * 済ませる。nonce は二重消費を防ぐ通し番号。localStorage には保存しない。
+   */
+  pendingFormLoad: { response: SdWebuiImportParamsResponse; nonce: number } | null
+  requestFormLoad: (response: SdWebuiImportParamsResponse) => void
+  clearPendingFormLoad: () => void
 }
 
 export const RunFormContext = createContext<RunFormContextValue | null>(null)

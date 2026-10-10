@@ -2,20 +2,24 @@
  * 他の画像生成ツール(Stable Diffusion WebUI、ComfyUI、NovelAI、InvokeAI、SwarmUI)や C2PA が
  * 画像に埋め込んだ生成メタ情報(`AssetDetail.embedded_meta`、ADR-0018)の表示。
  * ADR-0014 の `OriginRecipeSection`(GAKEI 自身の埋め込み系列情報)とは別の自己申告であり、
- * 署名が無いため常に「未検証」と明示する。フォームへの読み込みボタンは置かない(ADR-0018 4章)。
+ * 署名が無いため常に「未検証」と明示する。フォームへの読み込みは、A1111 形式(`tool = "a1111"`)で
+ * SD WebUI が有効なときの「SD WebUI のフォームに読み込む」だけ(ADR-0038 9章。ADR-0018 4章の例外)。
  * ビューア(`Viewer.tsx`)と系列インスペクター(`LineageAssetInspectorContent.tsx`)の両方から使う。
  */
 import type { EmbeddedGenerationMeta } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { describeTool, isC2paUnknown, paramEntries, rawEntries, PROMPT_COLLAPSE_LENGTH } from './embeddedMeta'
+import { ImportFromAssetButton } from '../sdwebui/ImportFromAssetButton'
 import sharedStyles from './OriginRecipeSection.module.css'
 import styles from './EmbeddedMetaSection.module.css'
 
 export interface EmbeddedMetaSectionProps {
   meta: EmbeddedGenerationMeta
+  /** この生成情報を持つ Asset(A1111 形式なら SD WebUI のフォームに読み込める)。 */
+  assetId?: string
 }
 
-export function EmbeddedMetaSection({ meta }: EmbeddedMetaSectionProps) {
+export function EmbeddedMetaSection({ meta, assetId }: EmbeddedMetaSectionProps) {
   const { t } = useI18n()
   const mt = t.lineage.embeddedMeta
   const params = paramEntries(meta)
@@ -84,6 +88,8 @@ export function EmbeddedMetaSection({ meta }: EmbeddedMetaSectionProps) {
           ))}
         </details>
       )}
+
+      {meta.tool === 'a1111' && assetId && <ImportFromAssetButton assetId={assetId} />}
 
       {meta.truncated && <p className={sharedStyles.note}>{mt.truncatedNote}</p>}
       {isC2paUnknown(meta) && <p className={sharedStyles.note}>{mt.c2paUnknown}</p>}

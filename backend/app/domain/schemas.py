@@ -1036,6 +1036,43 @@ class SdWebuiLorasResponse(BaseModel):
     items: list[SdWebuiLora]
 
 
+class SdWebuiImportUnapplied(BaseModel):
+    """フォームに入れなかった生成情報の項目(infotext の名前と値のまま)。"""
+
+    name: str
+    value: str
+
+
+class SdWebuiImportNote(BaseModel):
+    """読み込みの注意。`code` は機械可読(modelNotFound、modelMatchedByHash、sizeOutOfRange、
+    invalidValue、samplerNotFound、schedulerNotFound、vaeNotFound、dynamicPromptsUnavailable、
+    truncated)、`message` は利用者向けの文言。"""
+
+    code: str
+    message: str
+
+
+class SdWebuiImportSource(BaseModel):
+    """読み込んだ生成情報の出どころ(infotext の `Version`。無ければ null)。"""
+
+    software: str | None = None
+
+
+class SdWebuiImportParamsResponse(BaseModel):
+    """`POST /api/sdwebui/import-params`(ADR-0038 9章)。フォームに入れる値。
+
+    `model` はチェックポイントの `model_name`(見つからなければ null。フォームのモデルを変えない)。
+    `params` は SD WebUI の Generate のパラメーター名(capabilities と同じ)と `size`(`WxH`)。
+    """
+
+    model: str | None
+    prompt: str
+    params: dict[str, str | int | float | bool]
+    unapplied: list[SdWebuiImportUnapplied]
+    notes: list[SdWebuiImportNote]
+    source: SdWebuiImportSource
+
+
 class SdWebuiConnectionTestRequest(BaseModel):
     """接続テスト(`POST /api/sdwebui/connection/test`)。
 

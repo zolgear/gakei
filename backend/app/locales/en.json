@@ -210,6 +210,23 @@
       "inpaintFullResDescription": "Crop the masked area (plus padding), draw it at the output size, then paste it back. Use it to redraw small areas in detail.",
       "inpaintFullResPadding": "Padding for masked area",
       "inpaintFullResPaddingDescription": "Pixels around the mask to include when \"Inpaint only the masked area\" is on."
+    },
+    "importParams": {
+      "inputMissing": "Specify an image file or an image in your stock (asset_id).",
+      "invalidAssetId": "asset_id is not in a valid format.",
+      "noMetadata": "This image has no embedded generation info.",
+      "notA1111": "This image's generation info is not from SD WebUI (A1111 format), so it cannot be loaded.",
+      "notes": {
+        "modelNotFound": "Checkpoint \"{name}\" was not found on the server, so the model was not changed.",
+        "modelMatchedByHash": "Checkpoint \"{name}\" was not found by name; used \"{model}\", whose hash matches.",
+        "sizeOutOfRange": "Size {value} does not fit SD WebUI's size limits, so it was not applied ({reason}).",
+        "invalidValue": "The value of {name} is out of range or unreadable, so it was not applied.",
+        "samplerNotFound": "Sampler \"{value}\" was not found on the server, so it was not applied.",
+        "schedulerNotFound": "Scheduler \"{value}\" was not found on the server, so it was not applied.",
+        "vaeNotFound": "VAE \"{value}\" was not found on the server, so it was not applied.",
+        "dynamicPromptsUnavailable": "The server has no Dynamic Prompts, so the expanded prompt was used instead of the template.",
+        "truncated": "The generation info was too long and has been partly truncated."
+      }
     }
   },
   "openaiSpec": {

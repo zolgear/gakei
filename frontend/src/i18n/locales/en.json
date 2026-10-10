@@ -1587,7 +1587,7 @@
       "rawSummary": "Show original data",
       "truncatedNote": "Some data was omitted due to a size limit.",
       "c2paUnknown": "A C2PA manifest is present, but its contents could not be read.",
-      "unverifiedNote": "This is self-reported information written into the image. GAKEI does not verify it, and it cannot be loaded into the form.",
+      "unverifiedNote": "This is self-reported information written into the image. GAKEI does not verify it.",
       "tools": {
         "a1111": "Stable Diffusion WebUI (AUTOMATIC1111 / Forge)",
         "comfyui": "ComfyUI",
@@ -2018,6 +2018,29 @@
         "sd1": "SD1.5",
         "unknown": "Unknown"
       }
+    },
+    "importParams": {
+      "openDialog": "Load settings from image",
+      "openDialogTitle": "Load the generation info embedded in an image made with SD WebUI into the form",
+      "dialogTitle": "Load settings from image",
+      "dialogLead": "Choose an image made with SD WebUI (A1111 format), or drop or paste it here. The image is not saved.",
+      "dropZone": "Drop or paste (Ctrl+V) an image here",
+      "chooseFile": "Choose file",
+      "reading": "Reading generation info...",
+      "notImage": "Choose an image file.",
+      "failed": "Could not load the settings.",
+      "confirmTitle": "Replace the current prompt?",
+      "confirmMessage": "The prompt and parameters will be replaced with the image's generation info. Input images stay as they are.",
+      "confirmReplace": "Replace",
+      "previewModel": "Model: {model}",
+      "previewModelUnchanged": "Model: not found, left unchanged",
+      "fromAsset": "Load into SD WebUI form",
+      "fromAssetTitle": "Load this image's generation info into the SD WebUI form in the studio",
+      "fromAssetReading": "Loading...",
+      "noModels": "Could not load the settings because the SD WebUI checkpoint list is unavailable.",
+      "noticeTitle": "Loaded the image's generation info",
+      "unappliedSummary": "Items not loaded ({count})",
+      "dismiss": "Dismiss"
     }
   },
   "share": {

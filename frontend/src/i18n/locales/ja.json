@@ -1587,7 +1587,7 @@
       "rawSummary": "元のデータを表示",
       "truncatedNote": "サイズの上限により一部を省略しています",
       "c2paUnknown": "C2PA のマニフェストがありますが、内容は読み取れませんでした",
-      "unverifiedNote": "画像に書かれていた自己申告の情報で、GAKEI では検証していません。フォームには読み込めません。",
+      "unverifiedNote": "画像に書かれていた自己申告の情報で、GAKEI では検証していません。",
       "tools": {
         "a1111": "Stable Diffusion WebUI(AUTOMATIC1111 / Forge)",
         "comfyui": "ComfyUI",
@@ -2018,6 +2018,29 @@
         "sd1": "SD1.5",
         "unknown": "不明"
       }
+    },
+    "importParams": {
+      "openDialog": "画像から設定を読み込む",
+      "openDialogTitle": "SD WebUI で作った画像に埋め込まれた生成情報を、フォームに読み込みます",
+      "dialogTitle": "画像から設定を読み込む",
+      "dialogLead": "SD WebUI(A1111 形式)で作った画像を選ぶか、ここにドロップ・貼り付けしてください。画像は保存しません。",
+      "dropZone": "画像をここにドロップ、または貼り付け(Ctrl+V)",
+      "chooseFile": "ファイルを選ぶ",
+      "reading": "生成情報を読み込み中...",
+      "notImage": "画像のファイルを選んでください。",
+      "failed": "読み込めませんでした。",
+      "confirmTitle": "今のプロンプトを置き換えますか?",
+      "confirmMessage": "プロンプトとパラメーターを、画像の生成情報で置き換えます。入力画像は変わりません。",
+      "confirmReplace": "置き換える",
+      "previewModel": "モデル: {model}",
+      "previewModelUnchanged": "モデル: 見つからないため変えません",
+      "fromAsset": "SD WebUI のフォームに読み込む",
+      "fromAssetTitle": "この画像の生成情報を、スタジオの SD WebUI のフォームに読み込みます",
+      "fromAssetReading": "読み込み中...",
+      "noModels": "SD WebUI のチェックポイントの一覧を取得できないため、読み込めませんでした。",
+      "noticeTitle": "画像の生成情報を読み込みました",
+      "unappliedSummary": "読み込めなかった項目({count})",
+      "dismiss": "閉じる"
     }
   },
   "share": {

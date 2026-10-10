@@ -416,6 +416,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sdwebui/import-params": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Params
+         * @description 画像に埋め込まれた A1111 形式の生成情報から、SD WebUI の生成フォームの値を作る
+         *     (ADR-0038 9章)。画像は保存しない(メモリの上で生成情報だけを読む)。
+         */
+        post: operations["import_sdwebui_params"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets": {
         parameters: {
             query?: never;
@@ -4550,6 +4571,58 @@ export interface components {
             password: string;
         };
         /**
+         * SdWebuiImportNote
+         * @description 読み込みの注意。`code` は機械可読(modelNotFound、modelMatchedByHash、sizeOutOfRange、
+         *     invalidValue、samplerNotFound、schedulerNotFound、vaeNotFound、dynamicPromptsUnavailable、
+         *     truncated)、`message` は利用者向けの文言。
+         */
+        SdWebuiImportNote: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * SdWebuiImportParamsResponse
+         * @description `POST /api/sdwebui/import-params`(ADR-0038 9章)。フォームに入れる値。
+         *
+         *     `model` はチェックポイントの `model_name`(見つからなければ null。フォームのモデルを変えない)。
+         *     `params` は SD WebUI の Generate のパラメーター名(capabilities と同じ)と `size`(`WxH`)。
+         */
+        SdWebuiImportParamsResponse: {
+            /** Model */
+            model: string | null;
+            /** Prompt */
+            prompt: string;
+            /** Params */
+            params: {
+                [key: string]: string | number | boolean;
+            };
+            /** Unapplied */
+            unapplied: components["schemas"]["SdWebuiImportUnapplied"][];
+            /** Notes */
+            notes: components["schemas"]["SdWebuiImportNote"][];
+            source: components["schemas"]["SdWebuiImportSource"];
+        };
+        /**
+         * SdWebuiImportSource
+         * @description 読み込んだ生成情報の出どころ(infotext の `Version`。無ければ null)。
+         */
+        SdWebuiImportSource: {
+            /** Software */
+            software?: string | null;
+        };
+        /**
+         * SdWebuiImportUnapplied
+         * @description フォームに入れなかった生成情報の項目(infotext の名前と値のまま)。
+         */
+        SdWebuiImportUnapplied: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /**
          * SdWebuiLora
          * @description 接続先の LoRA 1つ(ADR-0038 8章)。`path` とその他のメタ情報は返さない。
          */
@@ -5978,6 +6051,70 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    import_sdwebui_params: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        /** @description 画像のファイル(multipart の `file`。保存しない)か、ストックの画像の `asset_id`(JSON か multipart のフィールド)。 */
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file?: string;
+                    /** Format: uuid */
+                    asset_id?: string;
+                };
+                "application/json": {
+                    /** Format: uuid */
+                    asset_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiImportParamsResponse"];
+                };
+            };
+            /** @description Asset が無い、または本人に見えない */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SD WebUI に接続していない、または一覧を取れない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 画像が大きすぎる */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A1111 形式の生成情報が無い、または本文が不正 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

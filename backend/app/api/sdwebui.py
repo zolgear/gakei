@@ -6,34 +6,61 @@
 資格情報の値は応答・ログ・エラーメッセージに一部も出さない(`credentials_set` だけ)。
 接続先の `/sdapi/v1/options` の中身や、一覧の `filename`(フルパス)も返さない。LoRA は
 name・alias・ベースモデル・トリガーの候補だけを返し、`path` と学習時のメタ情報は返さない。
+
+画像の生成情報をフォームに読み込む(`POST /api/sdwebui/import-params`。9章)では、送られた画像を
+**保存しない**。本文はメモリの上だけで読み(multipart も一時ファイルに書き出さない)、生成情報を
+取り出したら捨てる。ファイルにも DB にもログにも残さず、Asset にもしない。
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import uuid
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
+from starlette.datastructures import UploadFile
+from starlette.formparsers import MultiPartException, MultiPartParser
 
-from app.auth.deps import require_admin
+from app.auth.deps import require_admin, require_user
+from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_registry, get_runner, get_session, get_session_factory, get_settings
+from app.deps import (
+    get_registry,
+    get_runner,
+    get_session,
+    get_session_factory,
+    get_settings,
+    get_store,
+)
 from app.domain import sdwebui_connection as connection
+from app.domain.assets import MAX_UPLOAD_BYTES
+from app.domain.generation_meta import extract_generation_meta
 from app.domain.models import Run, RunStatus
 from app.domain.schemas import (
     SdWebuiConnectionRequest,
     SdWebuiConnectionTestRequest,
     SdWebuiConnectionTestResponse,
     SdWebuiCredentialsRequest,
+    SdWebuiImportNote,
+    SdWebuiImportParamsResponse,
+    SdWebuiImportSource,
+    SdWebuiImportUnapplied,
     SdWebuiLora,
     SdWebuiLorasResponse,
     SdWebuiStatusResponse,
 )
+from app.domain.storage import AssetStore
+from app.domain.visibility import get_visible_asset
 from app.i18n import t
 from app.providers.registry import ProviderRegistry, is_loopback_url
 from app.providers.sdwebui.client import Availability, Credentials, SdWebuiClient, SdWebuiError
+from app.providers.sdwebui.import_params import build_form_values
 from app.providers.sdwebui.provider import PROVIDER_NAME, SdWebuiProvider
 from app.worker.runner import Runner
 
@@ -341,4 +368,208 @@ def list_loras(registry: ProviderRegistry = Depends(get_registry)) -> SdWebuiLor
             )
             for lora in loras
         ]
+    )
+
+
+# -- 画像の生成情報をフォームに読み込む(ADR-0038 9章) ---------------------------------------
+
+# multipart の境界やヘッダーの分の余裕(`app/api/uploads.py` と同じ)
+_MULTIPART_OVERHEAD = 1024 * 1024
+_BODY_LIMIT = MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD
+
+
+class _InMemoryMultiPartParser(MultiPartParser):
+    """ファイルの部分を一時ファイルに書き出さない multipart の解析。
+
+    Starlette の既定は 1MB を超えたファイルをディスクの一時ファイルに移す(`SpooledTemporaryFile`)。
+    本文全体の上限より大きくしておけば、移ることはなくメモリの上だけに置かれる。
+    """
+
+    spool_max_size = _BODY_LIMIT + 1
+
+
+def _too_large() -> HTTPException:
+    return HTTPException(
+        status_code=413, detail=t("uploads.tooLarge", mb=MAX_UPLOAD_BYTES // (1024 * 1024))
+    )
+
+
+async def _read_body_in_memory(request: Request, limit: int) -> bytes:
+    """本文をメモリに読む。`limit` 以上になった時点で読むのをやめて 413 にする。"""
+    length = request.headers.get("content-length")
+    if length and length.isdigit() and int(length) >= limit:
+        raise _too_large()
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total >= limit:
+            raise _too_large()
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def _single_chunk(body: bytes) -> AsyncGenerator[bytes, None]:
+    yield body
+
+
+def _parse_asset_id(value: Any) -> uuid.UUID:
+    if not isinstance(value, str):
+        raise HTTPException(status_code=422, detail=t("sdwebui.importParams.inputMissing"))
+    try:
+        return uuid.UUID(value.strip())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=t("sdwebui.importParams.invalidAssetId")
+        ) from exc
+
+
+async def _read_import_input(request: Request) -> tuple[bytes | None, uuid.UUID | None]:
+    """本文から画像のバイト列か `asset_id` を取り出す(どちらか一方)。"""
+    content_type = request.headers.get("content-type", "")
+    if content_type.startswith("multipart/form-data"):
+        body = await _read_body_in_memory(request, _BODY_LIMIT)
+        parser = _InMemoryMultiPartParser(
+            request.headers, _single_chunk(body), max_files=1, max_fields=10
+        )
+        try:
+            form = await parser.parse()
+        except MultiPartException as exc:
+            raise HTTPException(
+                status_code=422, detail=t("sdwebui.importParams.inputMissing")
+            ) from exc
+        finally:
+            del body
+        try:
+            file = form.get("file")
+            if isinstance(file, UploadFile):
+                data = await file.read(MAX_UPLOAD_BYTES + 1)
+                if len(data) >= MAX_UPLOAD_BYTES:
+                    raise _too_large()
+                return data, None
+            asset_id = form.get("asset_id")
+            if asset_id is not None:
+                return None, _parse_asset_id(asset_id)
+        finally:
+            await form.close()
+        raise HTTPException(status_code=422, detail=t("sdwebui.importParams.inputMissing"))
+
+    body = await _read_body_in_memory(request, 64 * 1024)
+    if content_type.startswith("application/x-www-form-urlencoded"):
+        from urllib.parse import parse_qs
+
+        values = parse_qs(body.decode("utf-8", errors="replace")).get("asset_id")
+        return None, _parse_asset_id(values[0] if values else None)
+    try:
+        payload = json.loads(body) if body else None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=t("sdwebui.importParams.inputMissing")) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail=t("sdwebui.importParams.inputMissing"))
+    return None, _parse_asset_id(payload.get("asset_id"))
+
+
+def _meta_from_asset(
+    db: Session, store: AssetStore, user: CurrentUser, asset_id: uuid.UUID
+) -> dict[str, Any] | None:
+    """本人に見える Asset の生成情報。取り込み時に読んだもの(`embedded_meta`)があればそれを、
+    無ければ原本から読む(GAKEI が SD WebUI で作った画像なども、WebUI の埋め込みを持つため)。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    if isinstance(asset.embedded_meta, dict) and asset.embedded_meta.get("tool"):
+        return asset.embedded_meta
+    content = store.open_content(asset.blob_key, asset.sha256, "original")
+    if content is None:
+        raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
+    data = content.read_all()
+    try:
+        return extract_generation_meta(data)
+    finally:
+        del data
+
+
+_IMPORT_OPENAPI: dict[str, Any] = {
+    "requestBody": {
+        "required": True,
+        "description": (
+            "画像のファイル(multipart の `file`。保存しない)か、ストックの画像の `asset_id`"
+            "(JSON か multipart のフィールド)。"
+        ),
+        "content": {
+            "multipart/form-data": {
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string", "format": "binary"},
+                        "asset_id": {"type": "string", "format": "uuid"},
+                    },
+                }
+            },
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "properties": {"asset_id": {"type": "string", "format": "uuid"}},
+                    "required": ["asset_id"],
+                }
+            },
+        },
+    }
+}
+
+
+@router.post(
+    "/import-params",
+    response_model=SdWebuiImportParamsResponse,
+    operation_id="import_sdwebui_params",
+    openapi_extra=_IMPORT_OPENAPI,
+    responses={
+        404: {"description": "Asset が無い、または本人に見えない"},
+        409: {"description": "SD WebUI に接続していない、または一覧を取れない"},
+        413: {"description": "画像が大きすぎる"},
+        422: {"description": "A1111 形式の生成情報が無い、または本文が不正"},
+    },
+)
+async def import_params(
+    request: Request,
+    db: Session = Depends(get_session),
+    store: AssetStore = Depends(get_store),
+    registry: ProviderRegistry = Depends(get_registry),
+    user: CurrentUser = Depends(require_user),
+) -> SdWebuiImportParamsResponse:
+    """画像に埋め込まれた A1111 形式の生成情報から、SD WebUI の生成フォームの値を作る
+    (ADR-0038 9章)。画像は保存しない(メモリの上で生成情報だけを読む)。"""
+    provider = _registered(registry)
+    if provider is None:
+        raise HTTPException(status_code=409, detail=t("sdwebui.api.notConnected"))
+
+    data, asset_id = await _read_import_input(request)
+    if asset_id is not None:
+        meta = await asyncio.to_thread(_meta_from_asset, db, store, user, asset_id)
+    else:
+        assert data is not None
+        if not data:
+            raise HTTPException(status_code=422, detail=t("sdwebui.importParams.inputMissing"))
+        try:
+            meta = await asyncio.to_thread(extract_generation_meta, data)
+        finally:
+            del data
+
+    if meta is None:
+        raise HTTPException(status_code=422, detail=t("sdwebui.importParams.noMetadata"))
+    if meta.get("tool") != "a1111":
+        raise HTTPException(status_code=422, detail=t("sdwebui.importParams.notA1111"))
+
+    catalog = await asyncio.to_thread(provider.catalog)
+    if catalog is None:
+        raise HTTPException(status_code=409, detail=t("sdwebui.provider.unavailable"))
+
+    result = build_form_values(meta, catalog)
+    return SdWebuiImportParamsResponse(
+        model=result.model,
+        prompt=result.prompt,
+        params=result.params,
+        unapplied=[SdWebuiImportUnapplied(name=n, value=v) for n, v in result.unapplied],
+        notes=[SdWebuiImportNote(code=n.code, message=n.message) for n in result.notes],
+        source=SdWebuiImportSource(software=result.software),
     )

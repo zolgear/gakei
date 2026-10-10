@@ -65,6 +65,13 @@ import { useAssetGroups } from '../stock/groups/assetGroupQueries'
 import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
 import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import type { RunInputItem } from './types'
+import {
+  buildImportedRawParams,
+  importTargetDefs,
+  resolveImportedFormValues,
+  toImportNotice,
+  type ImportNotice,
+} from '../sdwebui/importParams'
 
 export interface RunFormLogic {
   caps: CapabilitiesResponse | undefined
@@ -126,6 +133,12 @@ export interface RunFormLogic {
   assetGroups: AssetGroupRow[]
 
   droppedParamsNotice: string | null
+  /**
+   * 画像の生成情報を読み込んだ後の「読み込めなかった項目」と注意(ADR-0038 9章)。閉じるか
+   * 「新規生成」で消える。
+   */
+  importNotice: ImportNotice | null
+  dismissImportNotice: () => void
   incompatibleErrors: string[]
   sizeValid: boolean
   sizeErrors: string[]
@@ -170,7 +183,14 @@ export function useRunFormLogic(
   onSubmitSuccess?: () => void,
 ): RunFormLogic {
   const queryClient = useQueryClient()
-  const { formState, setFormState, pendingPromptInsert, clearPendingPromptInsert } = useRunFormContext()
+  const {
+    formState,
+    setFormState,
+    pendingPromptInsert,
+    clearPendingPromptInsert,
+    pendingFormLoad,
+    clearPendingFormLoad,
+  } = useRunFormContext()
 
   // マウント時点の値だけを初期値として使う(以降 context から読み戻さない)。
   const initialRef = useRef(formState)
@@ -207,6 +227,7 @@ export function useRunFormLogic(
   const resolvedAssetGroupId = resolveAssetGroupId(assetGroupId, loadedAssetGroups)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [droppedParamsNotice, setDroppedParamsNotice] = useState<string | null>(null)
+  const [importNotice, setImportNotice] = useState<ImportNotice | null>(null)
   const didInitParamsRef = useRef(false)
 
   // operation は入力画像の枚数から導出する(利用者には選ばせない)。
@@ -392,6 +413,7 @@ export function useRunFormLogic(
     setAssetGroupId(loadLastAssetGroupId())
     setSubmitError(null)
     setDroppedParamsNotice(null)
+    setImportNotice(null)
     if (!caps) return
     const initial = computeInitialFormValues(caps)
     const initialProviderEntry = findProvider(caps, initial.provider)
@@ -425,6 +447,44 @@ export function useRunFormLogic(
     insertPrompt(pendingPromptInsert.text, pendingPromptInsert.mode, null)
     clearPendingPromptInsert()
   }, [pendingPromptInsert, insertPrompt, clearPendingPromptInsert])
+
+  // 画像の生成情報から SD WebUI のフォームへの読み込み(ADR-0038 9章)。プロンプトの置き換えの
+  // 確認は積む側(読み込みのダイアログ、ビューア)で済んでいる。capabilities が揃うまで待つ。
+  // パラメーターは、入れる先のモデル・操作の定義でここで作る(同じモデルのままでは defs の
+  // effect が走らないため。「新規生成」の resetForm と同じやり方)。入力画像は変えない。
+  const consumedFormLoadNonceRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!pendingFormLoad || !caps) return
+    if (consumedFormLoadNonceRef.current === pendingFormLoad.nonce) return
+    consumedFormLoadNonceRef.current = pendingFormLoad.nonce
+    clearPendingFormLoad()
+    const values = resolveImportedFormValues(pendingFormLoad.response, caps, { provider, model })
+    if (!values) {
+      setSubmitError(msg().sdwebui.importParams.noModels)
+      return
+    }
+    const targetDefs = importTargetDefs(caps, values, operation)
+    initialRef.current = {
+      ...initialRef.current,
+      provider: values.provider,
+      model: values.model,
+      prompt: values.prompt,
+      params: values.params,
+    }
+    didInitParamsRef.current = true
+    setProvider(values.provider)
+    setModel(values.model)
+    setPrompt(values.prompt)
+    setSizeState(paramToSizeState(values.size))
+    // 読み込んだサイズは意図したものなので、入力画像を足しても自動では変えない。
+    setSizeTouchedByUser(true)
+    setRawParams(buildImportedRawParams(targetDefs, values.params, loadSeedMode()))
+    setSubmitError(null)
+    setDroppedParamsNotice(null)
+    setImportNotice(toImportNotice(pendingFormLoad.response))
+    // provider・model・operation は消費した時点の値だけを使う(変わるたびに走らせない)。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFormLoad, caps, clearPendingFormLoad])
 
   const mutation = useMutation({
     mutationFn: createRun,
@@ -525,6 +585,8 @@ export function useRunFormLogic(
     setAssetGroupId,
     assetGroups,
     droppedParamsNotice,
+    importNotice,
+    dismissImportNotice: () => setImportNotice(null),
     incompatibleErrors,
     sizeValid: sizeValidation.valid,
     sizeErrors: sizeValidation.errors,

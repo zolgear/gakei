@@ -210,6 +210,23 @@
       "inpaintFullResDescription": "マスクの範囲(と周りの余白)を切り出し、出力のサイズまで拡大して描いてから戻します。小さな範囲を細かく描き直すときに使います。",
       "inpaintFullResPadding": "拡大するときの余白",
       "inpaintFullResPaddingDescription": "「マスク部分だけを拡大して描く」で、マスクの周りに含める余白(ピクセル)。"
+    },
+    "importParams": {
+      "inputMissing": "画像のファイルか、ストックの画像(asset_id)を指定してください。",
+      "invalidAssetId": "asset_id の形式が正しくありません。",
+      "noMetadata": "この画像には生成情報が埋め込まれていません。",
+      "notA1111": "この画像の生成情報は SD WebUI(A1111 形式)のものではないため、読み込めません。",
+      "notes": {
+        "modelNotFound": "チェックポイント「{name}」が接続先に見つからないため、モデルは変えていません。",
+        "modelMatchedByHash": "チェックポイント「{name}」は名前では見つからず、ハッシュが一致した「{model}」にしました。",
+        "sizeOutOfRange": "サイズ {value} は SD WebUI のサイズの制約に収まらないため、入れていません({reason})。",
+        "invalidValue": "{name} の値が範囲外か読めないため、入れていません。",
+        "samplerNotFound": "サンプラー「{value}」が接続先に見つからないため、入れていません。",
+        "schedulerNotFound": "スケジューラー「{value}」が接続先に見つからないため、入れていません。",
+        "vaeNotFound": "VAE「{value}」が接続先に見つからないため、入れていません。",
+        "dynamicPromptsUnavailable": "接続先に Dynamic Prompts が無いため、展開前のプロンプト(Template)ではなく、展開後のプロンプトを入れました。",
+        "truncated": "生成情報が長すぎるため、一部が切り詰められています。"
+      }
     }
   },
   "openaiSpec": {

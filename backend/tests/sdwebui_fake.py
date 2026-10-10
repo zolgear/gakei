@@ -201,7 +201,7 @@ class FakeSdWebui:
             {
                 "title": "model-a.safetensors [0123456789]",
                 "model_name": "model-a",
-                "hash": "01234567",
+                "hash": "0123456789",
                 "sha256": "0" * 64,
                 "filename": f"{FAKE_PATH_ROOT}/Stable-diffusion/model-a.safetensors",
                 "config": None,

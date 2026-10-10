@@ -50,6 +50,9 @@ import { OtherParamsDetails, PrimaryParamFields } from './ParamFields'
 import { AssetGroupField } from '../run-form/AssetGroupField'
 import { PromptToolsRow } from './PromptToolsRow'
 import { LoraPickerButton } from '../sdwebui/LoraPickerButton'
+import { ImportParamsButton } from '../sdwebui/ImportParamsButton'
+import { ImportNoticePanel } from '../sdwebui/ImportNoticePanel'
+import { isSdWebuiEnabled } from '../sdwebui/importParams'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
 import { InputPaneBottomLayout } from './InputPaneBottomLayout'
@@ -422,16 +425,21 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         />
       }
       providerTools={
-        form.provider === 'sdwebui' ? (
-          <LoraPickerButton
-            prompt={form.prompt}
-            escapeParens={shouldEscapeParens(form.provider)}
-            onInsert={(text, mode, cursorPos) => {
-              setSubmittedNotice(null)
-              form.insertPrompt(text, mode, cursorPos)
-            }}
-          />
-        ) : null
+        <>
+          {form.provider === 'sdwebui' && (
+            <LoraPickerButton
+              prompt={form.prompt}
+              escapeParens={shouldEscapeParens(form.provider)}
+              onInsert={(text, mode, cursorPos) => {
+                setSubmittedNotice(null)
+                form.insertPrompt(text, mode, cursorPos)
+              }}
+            />
+          )}
+          {/* 画像の生成情報から読み込む(ADR-0038 9章)。SD WebUI が有効なら、どのプロバイダーを
+              選んでいても出す(読み込むと SD WebUI に切り替わる)。 */}
+          {isSdWebuiEnabled(caps) && <ImportParamsButton currentPrompt={form.prompt} />}
+        </>
       }
     />
   )
@@ -518,6 +526,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     paramFields,
     groupField,
     otherParams,
+    importNotice: form.importNotice ? (
+      <ImportNoticePanel notice={form.importNotice} onDismiss={form.dismissImportNotice} />
+    ) : null,
   }
 
   return (

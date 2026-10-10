@@ -70,6 +70,10 @@ def test_all_settings_and_comfyui_mutations_require_admin(client_oidc: TestClien
             continue
         if not path.startswith(("/api/settings/", "/api/comfyui/", "/api/sdwebui/")):
             continue
+        # 画像の生成情報をフォームに読み込む(ADR-0038 9章)は一般ユーザーの操作(設定を変えない)。
+        # 認可は tests/test_sdwebui_import_params.py で確かめる。
+        if path == "/api/sdwebui/import-params":
+            continue
         filled = _fill_path_params(path)
         response = client_oidc.request(method, filled, json={})
         if response.status_code != 403:

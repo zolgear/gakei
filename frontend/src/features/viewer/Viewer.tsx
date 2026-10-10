@@ -418,7 +418,7 @@ export function Viewer({ assetId }: ViewerProps) {
             {supportsAnnotation(asset) && <AssetTagsSection asset={asset} />}
 
             {asset.origin && <OriginRecipeSection origin={asset.origin} />}
-            {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
+            {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} assetId={asset.id} />}
             <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
             {embeddingCaps && supportsSimilar(asset) && <SimilarAssetsSection key={asset.id} assetId={asset.id} />}
 

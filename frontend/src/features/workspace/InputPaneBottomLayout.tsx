@@ -19,6 +19,8 @@ export interface InputPaneSlots {
   /** 出力を入れるグループ(ADR-0022)。モデルの直下に同じ幅で置く。 */
   groupField: ReactNode
   otherParams: ReactNode
+  /** 画像の生成情報を読み込んだ後の通知(ADR-0038 9章)。無ければ null。先頭に置く。 */
+  importNotice: ReactNode
 }
 
 export function InputPaneBottomLayout({
@@ -31,9 +33,11 @@ export function InputPaneBottomLayout({
   paramFields,
   groupField,
   otherParams,
+  importNotice,
 }: InputPaneSlots) {
   return (
     <>
+      {importNotice}
       {inputImages}
 
       <div className={styles.grid}>
