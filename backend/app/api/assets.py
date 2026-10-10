@@ -242,9 +242,11 @@ def create_asset(
     if result.outcome == "created":
         queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
     db.commit()
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
+    # 応答は worker を起こす前に作る(annotate_asset と同じ理由)。
     detail = _to_detail(db, result.asset, produced_by_run=None, user=user)
-    return AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
+    response = AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
+    return response
 
 
 @router.get("", response_model=AssetListResponse, operation_id="list_assets")
