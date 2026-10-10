@@ -91,6 +91,7 @@ def test_capabilities_lists_checkpoints_as_models(db_session_factory: sessionmak
         "vae",
         "clip_skip",
         "n",
+        "n_iter",
         # 高解像度補助(ADR-0038 10章。test_sdwebui_hires.py)
         "hires",
         "hr_scale",

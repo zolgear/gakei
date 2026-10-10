@@ -79,6 +79,11 @@ SEED_MAX = 2**32 - 1
 VAE_BUILTIN = "builtin"
 DEFAULT_SIZE = "1024x1024"
 N_MAX = 8
+# バッチ回数(ADR-0038 2章)。WebUI は batch_size 枚を1回として n_iter 回くり返す。
+DEFAULT_N_ITER = 1
+N_ITER_MAX = 16
+# 1つの Run の出力の上限(枚数 × バッチ回数)。超える組み合わせは 422。
+MAX_TOTAL_OUTPUTS = 64
 
 _AVAILABILITY_CACHE_SECONDS = 5.0
 _CATALOG_CACHE_SECONDS = 60.0
@@ -365,6 +370,22 @@ class SdWebuiProvider:
 
         hires = _resolve_hires(catalog, params, is_edit=is_edit)
 
+        batch_size = params.get("n", 1)
+        # 組み合わせ生成(Dynamic Prompts)では WebUI がバッチ回数を使わず、枚数は組み合わせの数で
+        # 決まる(ADR-0038 7章)。記録と実際が食い違わないよう、バッチ回数は 1 で送る。
+        combinatorial = any(ext.adapter.output_limit(params) is not None for ext in extensions)
+        n_iter = DEFAULT_N_ITER if combinatorial else params.get("n_iter", DEFAULT_N_ITER)
+        if batch_size * n_iter > MAX_TOTAL_OUTPUTS:
+            raise RunValidationError(
+                t(
+                    "sdwebui.provider.tooManyOutputs",
+                    n=batch_size,
+                    n_iter=n_iter,
+                    total=batch_size * n_iter,
+                    max=MAX_TOTAL_OUTPUTS,
+                )
+            )
+
         seed = params.get("seed")
         if seed is None:
             seed = secrets.randbelow(SEED_MAX + 1)
@@ -408,8 +429,8 @@ class SdWebuiProvider:
             "cfg_scale": params.get("cfg_scale", 7.0),
             "width": width,
             "height": height,
-            "batch_size": params.get("n", 1),
-            "n_iter": 1,
+            "batch_size": batch_size,
+            "n_iter": n_iter,
         }
         if "sampler_name" in params:
             request["sampler_name"] = params["sampler_name"]
@@ -463,6 +484,7 @@ class SdWebuiProvider:
             body = await asyncio.to_thread(_attach_edit_inputs, body, run.inputs)
         task_id = str(params.get("sdwebui_task_id") or body.get("force_task_id") or "")
         batch_size = body.get("batch_size") if isinstance(body.get("batch_size"), int) else 1
+        n_iter = body.get("n_iter") if isinstance(body.get("n_iter"), int) else 1
 
         timeout = await asyncio.to_thread(self._effective_timeout_seconds)
         client = self.client()
@@ -505,8 +527,9 @@ class SdWebuiProvider:
         all_prompts = _str_list(info.get("all_prompts"))
         limit = output_limit(body.get("alwayson_scripts"), params, is_img2img=is_edit)
         if limit is None:
-            # 補助の画像(グリッドなど)は batch_size を超える分を捨てる(ADR-0038 4章)。
-            expected = max(batch_size, 1)
+            # 補助の画像は batch_size × n_iter を超える分を捨てる(ADR-0038 2章・4章)。先頭の
+            # グリッドは上の index_of_first_image で飛ばしてある(2枚以上で付きやすい)。
+            expected = max(batch_size, 1) * max(n_iter, 1)
         else:
             # 組み合わせ生成では、枚数は batch_size ではなく組み合わせの数で決まる(7章)。
             # 何枚が本物かは all_prompts の数で分かる。分からなければ返った分すべて。
@@ -977,6 +1000,16 @@ def _generate_params(catalog: Catalog) -> list[ParamDef]:
                 default=1,
                 form_default=1,
                 description=t("sdwebui.params.countDescription"),
+            ),
+            ParamDef(
+                name="n_iter",
+                type="int",
+                label=t("sdwebui.params.batchCount"),
+                minimum=1,
+                maximum=N_ITER_MAX,
+                default=DEFAULT_N_ITER,
+                form_default=DEFAULT_N_ITER,
+                description=t("sdwebui.params.batchCountDescription", max=MAX_TOTAL_OUTPUTS),
             ),
         ]
     )

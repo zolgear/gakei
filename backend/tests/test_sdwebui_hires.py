@@ -94,8 +94,8 @@ def test_capabilities_forge(db_session_factory: sessionmaker) -> None:
     params = _params_of(provider, "generate")
     names = list(params)
     assert HIRES_NAMES <= set(names)
-    # 本体の項目(枚数まで)のあとに並ぶ
-    assert names.index("hires") == names.index("n") + 1
+    # 本体の項目(枚数・バッチ回数まで)のあとに並ぶ
+    assert names.index("hires") == names.index("n_iter") + 1
     assert params["hires"].type == "bool"
     assert params["hires"].default is False
     assert params["hires"].form_default is False

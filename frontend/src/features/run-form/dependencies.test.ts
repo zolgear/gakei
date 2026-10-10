@@ -4,11 +4,13 @@ import { fmt, msg } from '../../i18n'
 import {
   DYNAMIC_PROMPTS_COMBINATORIAL_LIMIT,
   HIRES_DEPENDENT_PARAMS,
+  SDWEBUI_MAX_TOTAL_OUTPUTS,
   activeRawParams,
   buildEnabledParams,
   fieldDisabledNote,
   hiresTargetSize,
   isFieldEnabled,
+  totalOutputCount,
 } from './dependencies'
 import { UNSPECIFIED } from './paramsBuilder'
 
@@ -293,5 +295,37 @@ describe('無効の項目は値を残したまま送らない(activeRawParams / 
     const raw = { gate: 'off', a: 'on', b: '5' }
     expect(buildEnabledParams(defs, raw, cond, false)).toEqual({ gate: 'off' })
     expect(buildEnabledParams(defs, { ...raw, gate: 'on' }, cond, false)).toEqual({ gate: 'on', a: 'on', b: 5 })
+  })
+})
+
+// SD WebUI のバッチ回数(ADR-0038 2章)。
+describe('バッチ回数(n_iter)と合計の枚数', () => {
+  const nIterDef: ParamDef = { ...nDef, name: 'n_iter', label: 'バッチ回数', maximum: 16 }
+  const defs: ParamDef[] = [...dpDefs, nIterDef]
+
+  it('合計は枚数 × バッチ回数(未指定は既定の 1)', () => {
+    expect(totalOutputCount(defs, { n: '2', n_iter: '4' })).toEqual({ total: 8, tooMany: false })
+    expect(totalOutputCount(defs, { n: UNSPECIFIED, n_iter: '3' })).toEqual({ total: 3, tooMany: false })
+    expect(totalOutputCount(defs, {})).toEqual({ total: 1, tooMany: false })
+  })
+
+  it('上限ちょうどは実行でき、超えると tooMany', () => {
+    expect(totalOutputCount(defs, { n: '8', n_iter: '8' })).toEqual({ total: SDWEBUI_MAX_TOTAL_OUTPUTS, tooMany: false })
+    expect(totalOutputCount(defs, { n: '8', n_iter: '9' })).toEqual({ total: 72, tooMany: true })
+  })
+
+  it('バッチ回数の項目が無ければ出さない', () => {
+    expect(totalOutputCount(dpDefs, { n: '2' })).toBeNull()
+  })
+
+  it('組み合わせ生成では、枚数と同じくバッチ回数も無効にし、合計を出さない', () => {
+    const raw = { n: '2', n_iter: '4', dynamic_prompts: 'true', dynamic_prompts_combinatorial: 'true' }
+    expect(isFieldEnabled(defs, raw, [], 'n_iter')).toBe(false)
+    expect(fieldDisabledNote(defs, raw, 'n_iter')).toBe(
+      fmt(msg().runForm.dependencies.combinatorialCount, { limit: DYNAMIC_PROMPTS_COMBINATORIAL_LIMIT }),
+    )
+    expect(totalOutputCount(defs, raw)).toBeNull()
+    // 送る値からも外す
+    expect(buildEnabledParams(defs, raw, [], false)).not.toHaveProperty('n_iter')
   })
 })

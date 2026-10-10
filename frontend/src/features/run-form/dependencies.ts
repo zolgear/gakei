@@ -155,15 +155,17 @@ const CLIENT_DISABLE_RULES: ClientDisableRule[] = [
   ),
   // Dynamic Prompts(ADR-0038 7章): 無効にしたら、組み合わせ生成は意味を持たない。
   { field: 'dynamic_prompts_combinatorial', when: [{ field: 'dynamic_prompts', value: 'false' }] },
-  // 組み合わせ生成では、枚数の指定は使われず、組み合わせの数だけ作る。
-  {
-    field: 'n',
-    when: [
-      { field: 'dynamic_prompts', value: 'true' },
-      { field: 'dynamic_prompts_combinatorial', value: 'true' },
-    ],
-    note: () => fmt(msg().runForm.dependencies.combinatorialCount, { limit: DYNAMIC_PROMPTS_COMBINATORIAL_LIMIT }),
-  },
+  // 組み合わせ生成では、枚数とバッチ回数の指定は使われず、組み合わせの数だけ作る(ADR-0038 2章・7章)。
+  ...(['n', 'n_iter'] as const).map(
+    (field): ClientDisableRule => ({
+      field,
+      when: [
+        { field: 'dynamic_prompts', value: 'true' },
+        { field: 'dynamic_prompts_combinatorial', value: 'true' },
+      ],
+      note: () => fmt(msg().runForm.dependencies.combinatorialCount, { limit: DYNAMIC_PROMPTS_COMBINATORIAL_LIMIT }),
+    }),
+  ),
 ]
 
 function clientDisableRuleFor(defs: ParamDef[], raw: RawParamValues, fieldName: string): ClientDisableRule | null {
@@ -209,4 +211,28 @@ export function hiresTargetSize(defs: ParamDef[], raw: RawParamValues, size: Siz
   const width = floorToOutput(size.width * scale)
   const height = floorToOutput(size.height * scale)
   return { width, height, tooLarge: Math.max(width, height) > HIRES_MAX_LONG_EDGE }
+}
+
+/** SD WebUI の1つの Run の出力の上限(枚数 × バッチ回数。ADR-0038 2章。サーバーと同じ値)。 */
+export const SDWEBUI_MAX_TOTAL_OUTPUTS = 64
+
+export interface TotalOutputCount {
+  total: number
+  /** 上限(`SDWEBUI_MAX_TOTAL_OUTPUTS`)を超える(サーバーは 422 にする)。 */
+  tooMany: boolean
+}
+
+/**
+ * SD WebUI の合計の枚数(枚数 `n` × バッチ回数 `n_iter`。ADR-0038 2章)。バッチ回数の項目が
+ * あり、どちらも使われているとき(組み合わせ生成で無効になっていないとき)だけ。`raw` は送る値
+ * (`activeRawParams` の結果)を渡す。未指定はそれぞれの既定値。
+ */
+export function totalOutputCount(defs: ParamDef[], raw: RawParamValues): TotalOutputCount | null {
+  if (!defs.some((d) => d.name === 'n_iter')) return null
+  if (clientDisableRuleFor(defs, raw, 'n') !== null || clientDisableRuleFor(defs, raw, 'n_iter') !== null) return null
+  const n = Number(effectiveValue(defs, raw, 'n') ?? 1)
+  const nIter = Number(effectiveValue(defs, raw, 'n_iter') ?? 1)
+  if (!Number.isFinite(n) || !Number.isFinite(nIter) || n < 1 || nIter < 1) return null
+  const total = Math.trunc(n) * Math.trunc(nIter)
+  return { total, tooMany: total > SDWEBUI_MAX_TOTAL_OUTPUTS }
 }

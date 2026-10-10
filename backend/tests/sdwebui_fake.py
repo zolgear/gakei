@@ -37,6 +37,8 @@
   送ると 800×600)。infotext の `Size` は送られた値のまま。既定は 8×8 の画像。
 - `return_grid=True`: 実物の `return_grid` と同じく、先頭にグリッドを足し
   `index_of_first_image = 1` を返す(2枚以上のとき)。
+- バッチ回数(`n_iter`): 実物と同じく `batch_size × n_iter` 枚を描き、seed は1枚ごとに 1 ずつ
+  増やす。組み合わせ生成では使わない。
 """
 
 from __future__ import annotations
@@ -446,7 +448,8 @@ class FakeSdWebui:
         names = {c["model_name"] for c in self.checkpoints}
         used_model = requested if requested in names else self.current_model
 
-        batch = int(body.get("batch_size", 1))
+        # 実物と同じく batch_size 枚を n_iter 回くり返す(組み合わせ生成では使わない)
+        batch = int(body.get("batch_size", 1)) * int(body.get("n_iter", 1))
         seed = int(body.get("seed", 0))
         prompt = str(body.get("prompt", ""))
         negative = str(body.get("negative_prompt", ""))

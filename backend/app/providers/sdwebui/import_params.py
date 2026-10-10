@@ -27,6 +27,9 @@
   `Hires Module 1: Use same choices` は GAKEI が常に送る値なので、入れたものとして扱う。
   拡大後の寸法の指定(`Hires resize`)、別のチェックポイント・サンプラーは入れない。
 - `Clip skip`: 範囲に収まれば `clip_skip` に入れる。
+- `Batch size` / `Batch count`: 範囲に収まれば枚数 `n` / バッチ回数 `n_iter` に入れる
+  (無ければ入れない)。`Batch size` を入れたときは、1枚ごとの位置 `Batch pos` はフォームの
+  値ではないので並べない。
 
 フォームに入れなかった項目は、名前と値を `unapplied` に並べる(重複せず、入れたものは含めない)。
 照合にだけ使う `Model hash` と `VAE hash` は、照合の成否にかかわらず並べない(チェックポイントが
@@ -54,6 +57,8 @@ from app.providers.sdwebui.provider import (
     HR_SCALE_MAX,
     HR_SCALE_MIN,
     HR_SECOND_PASS_STEPS_MAX,
+    N_ITER_MAX,
+    N_MAX,
     PARAM_HIRES,
     SEED_MAX,
     SIZE_CONSTRAINTS,
@@ -78,6 +83,9 @@ KEY_VAE = "VAE"
 KEY_VAE_HASH = "VAE hash"
 KEY_VERSION = "Version"
 KEY_CLIP_SKIP = "Clip skip"
+KEY_BATCH_SIZE = "Batch size"
+KEY_BATCH_POS = "Batch pos"
+KEY_BATCH_COUNT = "Batch count"
 KEY_TEMPLATE = "Template"
 KEY_NEGATIVE_TEMPLATE = "Negative Template"
 KEY_DENOISING = "Denoising strength"
@@ -302,6 +310,22 @@ def build_form_values(meta: dict[str, Any], catalog: Catalog) -> ImportResult:
             consumed.add(KEY_CLIP_SKIP)
         else:
             note("invalidValue", name=KEY_CLIP_SKIP)
+
+    if KEY_BATCH_SIZE in infotext:
+        batch_size = _parse_int(infotext[KEY_BATCH_SIZE])
+        if batch_size is not None and 1 <= batch_size <= N_MAX:
+            result.params["n"] = batch_size
+            consumed.update((KEY_BATCH_SIZE, KEY_BATCH_POS))
+        else:
+            note("invalidValue", name=KEY_BATCH_SIZE)
+
+    if KEY_BATCH_COUNT in infotext:
+        batch_count = _parse_int(infotext[KEY_BATCH_COUNT])
+        if batch_count is not None and 1 <= batch_count <= N_ITER_MAX:
+            result.params["n_iter"] = batch_count
+            consumed.add(KEY_BATCH_COUNT)
+        else:
+            note("invalidValue", name=KEY_BATCH_COUNT)
 
     if KEY_SEED in infotext:
         seed = _parse_int(infotext[KEY_SEED])

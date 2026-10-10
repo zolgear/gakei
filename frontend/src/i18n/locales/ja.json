@@ -1364,6 +1364,8 @@
       "disabledNote": "使用不可",
       "hiresTarget": "拡大後 {width}×{height}",
       "hiresTargetTooLarge": "拡大後 {width}×{height}(長辺 {max}px を超えるため実行できません)",
+      "totalCount": "合計 {total} 枚",
+      "totalCountTooMany": "合計 {total} 枚({max} 枚を超えるため実行できません)",
       "boolOn": "オン",
       "boolOff": "オフ"
     },

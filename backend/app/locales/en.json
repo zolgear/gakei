@@ -169,7 +169,8 @@
       "inputImageMissingInternal": "The run has no source image among its inputs.",
       "unreadableInput": "Could not read the input image or the mask.",
       "hiresDisabled": "{key} can only be set when hires fix is enabled.",
-      "hiresTooLarge": "The upscaled size {width}×{height} is too large (long edge up to {max}px). Lower the upscale factor or the size."
+      "hiresTooLarge": "The upscaled size {width}×{height} is too large (long edge up to {max}px). Lower the upscale factor or the size.",
+      "tooManyOutputs": "Count {n} × batch count {n_iter} = {total} images is too many (up to {max}). Reduce the count or the batch count."
     },
     "params": {
       "negativePrompt": "Negative prompt",
@@ -190,6 +191,8 @@
       "clipSkipDescription": "How many of the last text encoder layers to skip. 1 skips none (usual). Some anime-style models recommend 2. It is used for this run only; the WebUI settings are not changed.",
       "count": "Count",
       "countDescription": "Number of images per run (batch_size).",
+      "batchCount": "Batch count",
+      "batchCountDescription": "How many times to repeat a batch of the given count (n_iter). A run produces count × batch count images, up to {max}. The seed increases by 1 for each image.",
       "dynamicPrompts": "Dynamic Prompts",
       "dynamicPromptsDescription": "Expands syntax such as {{red|blue|green}} and WebUI wildcards (__name__) once per image. When off, the prompt is sent as written.",
       "dynamicPromptsCombinatorial": "Generate all combinations",

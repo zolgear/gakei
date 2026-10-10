@@ -60,6 +60,13 @@ describe('groupParamsForProvider', () => {
     expect(aboveSize.map((d) => d.name)).toEqual(['n'])
   })
 
+  it('SD WebUI のバッチ回数は、枚数の隣(サイズ欄の上の段)に枚数・バッチ回数の順で出す', () => {
+    const defs = [makeDef('negative_prompt'), makeDef('n'), makeDef('steps'), makeDef('n_iter')]
+    const { primary, aboveSize } = groupParamsForProvider('sdwebui', defs)
+    expect(primary.map((d) => d.name)).toEqual(['negative_prompt', 'steps'])
+    expect(aboveSize.map((d) => d.name)).toEqual(['n', 'n_iter'])
+  })
+
   it('SD WebUI で枚数が無ければ、サイズ欄の上には何も出さない', () => {
     const defs = [makeDef('steps'), makeDef('vae')]
     const { primary, aboveSize } = groupParamsForProvider('sdwebui', defs)

@@ -1364,6 +1364,8 @@
       "disabledNote": "Unavailable",
       "hiresTarget": "Upscaled to {width}×{height}",
       "hiresTargetTooLarge": "Upscaled to {width}×{height} (exceeds the {max}px long-edge limit, so it cannot run)",
+      "totalCount": "{total} images in total",
+      "totalCountTooMany": "{total} images in total (over the limit of {max}; cannot run)",
       "boolOn": "On",
       "boolOff": "Off"
     },

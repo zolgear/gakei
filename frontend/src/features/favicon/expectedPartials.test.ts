@@ -10,6 +10,10 @@ describe('computeExpectedPartials', () => {
     expect(computeExpectedPartials({ n: 3, partial_images: 2 })).toBe(6)
   })
 
+  it('n_iter があれば枚数 × バッチ回数で数える', () => {
+    expect(computeExpectedPartials({ n: 2, n_iter: 3, partial_images: 1 })).toBe(6)
+  })
+
   it('partial_images が無い・0 なら null', () => {
     expect(computeExpectedPartials({ n: 3 })).toBeNull()
     expect(computeExpectedPartials({ n: 3, partial_images: 0 })).toBeNull()

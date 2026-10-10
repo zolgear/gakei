@@ -7,10 +7,12 @@ import type { ConditionalParam, ParamDef, SizeConstraints } from '../../api/clie
 import { fmt, useI18n } from '../../i18n'
 import {
   HIRES_MAX_LONG_EDGE,
+  SDWEBUI_MAX_TOTAL_OUTPUTS,
   activeRawParams,
   fieldDisabledNote,
   hiresTargetSize,
   isFieldEnabled,
+  totalOutputCount,
 } from '../run-form/dependencies'
 import { ParamField } from '../run-form/ParamField'
 import { isWideParam } from '../run-form/paramGrouping'
@@ -35,13 +37,17 @@ interface PrimaryParamFieldsProps extends ParamFieldsCommonProps {
   sizeState: SizeState
   onSizeChange: (next: SizeState) => void
   primary: ParamDef[]
-  /** サイズ欄のすぐ上の段に、サイズと同じ幅で出すパラメーター(SD WebUI の枚数。`paramGrouping.ts`)。 */
+  /**
+   * サイズ欄のすぐ上の段に、サイズと同じ幅で出すパラメーター(SD WebUI の枚数とバッチ回数。
+   * `paramGrouping.ts`)。2つ以上あれば、狭い幅でも横に並べる。
+   */
   aboveSize?: ParamDef[]
 }
 
 /**
  * サイズ入力(あれば)と、主に出すパラメーター。フラグメントなので親のグリッドに直接並ぶ。
- * `aboveSize` の項目はサイズ入力の上の段に、サイズと同じく2マス分で置く。
+ * `aboveSize` の項目はサイズ入力の上の段に、サイズと同じく2マス分で置く。SD WebUI の枚数と
+ * バッチ回数は横に並べ、その下に合計の枚数(上限を超えれば赤字)を添える(ADR-0038 2章)。
  */
 export function PrimaryParamFields({
   sizeConstraints,
@@ -76,6 +82,8 @@ export function PrimaryParamFields({
         warning: hiresTarget.tooLarge,
       }
     : null
+  // SD WebUI の合計の枚数(枚数 × バッチ回数)。組み合わせ生成で無効のときは出さない。
+  const total = totalOutputCount(defs, active)
   const renderField = (def: ParamDef) => (
     <ParamField
       key={def.name}
@@ -89,11 +97,28 @@ export function PrimaryParamFields({
   )
   return (
     <>
-      {aboveSize.map((def) => (
-        <div key={def.name} className={styles.spanTwo}>
-          {renderField(def)}
+      {aboveSize.length > 1 ? (
+        <div className={styles.spanTwo}>
+          <div className={styles.aboveSizeRow}>{aboveSize.map(renderField)}</div>
+          {total && (
+            <p
+              className={total.tooMany ? styles.totalCountWarning : styles.totalCount}
+              role={total.tooMany ? 'alert' : undefined}
+            >
+              {fmt(total.tooMany ? t.runForm.paramField.totalCountTooMany : t.runForm.paramField.totalCount, {
+                total: total.total,
+                max: SDWEBUI_MAX_TOTAL_OUTPUTS,
+              })}
+            </p>
+          )}
         </div>
-      ))}
+      ) : (
+        aboveSize.map((def) => (
+          <div key={def.name} className={styles.spanTwo}>
+            {renderField(def)}
+          </div>
+        ))
+      )}
 
       {sizeConstraints && (
         <div className={styles.spanTwo}>

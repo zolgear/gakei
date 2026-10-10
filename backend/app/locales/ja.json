@@ -169,7 +169,8 @@
       "inputImageMissingInternal": "Run の入力に元の画像がありません。",
       "unreadableInput": "入力画像またはマスクを読めませんでした。",
       "hiresDisabled": "{key} は高解像度補助を有効にしたときだけ指定できます。",
-      "hiresTooLarge": "拡大後の寸法 {width}×{height} が大きすぎます(長辺は {max}px まで)。アップスケール倍率か寸法を小さくしてください。"
+      "hiresTooLarge": "拡大後の寸法 {width}×{height} が大きすぎます(長辺は {max}px まで)。アップスケール倍率か寸法を小さくしてください。",
+      "tooManyOutputs": "枚数 {n} × バッチ回数 {n_iter} = {total} 枚は多すぎます({max} 枚まで)。枚数かバッチ回数を減らしてください。"
     },
     "params": {
       "negativePrompt": "ネガティブプロンプト",
@@ -190,6 +191,8 @@
       "clipSkipDescription": "テキストエンコーダーの最後の何層を飛ばすか。1 は飛ばさない(通常)。アニメ系のモデルでは 2 を勧めるものがあります。WebUI の設定は変えず、この実行だけに使います。",
       "count": "枚数",
       "countDescription": "1回の実行で描く枚数(batch_size)。",
+      "batchCount": "バッチ回数",
+      "batchCountDescription": "枚数(batch_size)を1回として、それを何回くり返すか(n_iter)。1つの Run の画像は枚数 × バッチ回数で、{max} 枚まで。seed は1枚ごとに 1 ずつ増えます。",
       "dynamicPrompts": "Dynamic Prompts",
       "dynamicPromptsDescription": "{{red|blue|green}} のような書き方や、WebUI 側のワイルドカード(__名前__)を1枚ずつ展開します。無効にすると、プロンプトをそのまま送ります。",
       "dynamicPromptsCombinatorial": "組み合わせをすべて作る",
