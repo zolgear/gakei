@@ -1936,9 +1936,9 @@
       "saveUrlWhileDisabled": "Save this URL",
       "testSuccessSaveDisabledNotice": "The connection test succeeded. Nothing is saved yet. Press \"Save this URL\" to save it (it stays disabled).",
       "notConnectedHeadline": "ComfyUI is not connected",
-      "disabledNote": "Disabled. ComfyUI is left out of the model choices and is not contacted. The URL and registered workflows are kept, so pressing \"Enable\" connects again with the same URL.",
+      "disabledNote": "Disabled. ComfyUI models cannot be selected.",
       "disableConfirmMessage": "This disables ComfyUI.",
-      "disableConfirmWarning": "ComfyUI will disappear from the model choices and will no longer be contacted. The URL, registered workflows and past Runs are kept, and \"Enable\" brings it back with the same URL. This choice is saved, so it stays disabled after a restart.",
+      "disableConfirmWarning": "The settings are kept, but ComfyUI models can no longer be selected.",
       "dialogDisabledNote": "The URL is saved while staying disabled. Pressing \"Enable\" connects to this URL.",
       "urlSavedWhileDisabled": "URL saved (still disabled)."
     },
@@ -2151,9 +2151,9 @@
       "saveUrlWhileDisabled": "Save this URL",
       "testSuccessSaveDisabledNotice": "The connection test succeeded. Nothing is saved yet. Press \"Save this URL\" to save it (it stays disabled).",
       "notConnectedHeadline": "SD WebUI is not connected",
-      "disabledNote": "Disabled. SD WebUI is left out of the model choices and the WebUI is not contacted. The URL, credentials and time limit are kept, so pressing \"Enable\" connects again with the same settings.",
+      "disabledNote": "Disabled. SD WebUI models cannot be selected.",
       "disableConfirmMessage": "This disables SD WebUI.",
-      "disableConfirmWarning": "SD WebUI will disappear from the model choices and the WebUI will no longer be contacted. The URL, credentials, time limit and past Runs are kept, and \"Enable\" brings it back with the same settings. This choice is saved, so it stays disabled after a restart.",
+      "disableConfirmWarning": "The settings are kept, but SD WebUI models can no longer be selected.",
       "dialogDisabledNote": "The URL is saved while staying disabled. Pressing \"Enable\" connects to this URL.",
       "urlSavedWhileDisabled": "URL saved (still disabled)."
     },

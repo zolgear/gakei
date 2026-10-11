@@ -1936,9 +1936,9 @@
       "saveUrlWhileDisabled": "この URL を保存する",
       "testSuccessSaveDisabledNotice": "接続テストに成功しました。まだ保存していません。「この URL を保存する」を押すと保存します(無効のままです)。",
       "notConnectedHeadline": "ComfyUI に接続していません",
-      "disabledNote": "無効にしています。モデルの選択肢に出さず、ComfyUI にも問い合わせません。接続先の URL と登録済みのワークフローは残っているので、「有効にする」を押すと同じ URL のまま接続します。",
+      "disabledNote": "無効にしています。ComfyUI のモデルは選べません。",
       "disableConfirmMessage": "ComfyUI を無効にします。",
-      "disableConfirmWarning": "モデルの選択肢から ComfyUI が消え、ComfyUI への問い合わせも止めます。接続先の URL、登録済みのワークフロー、過去の Run は残り、「有効にする」で同じ URL のまま戻せます。無効にしたことは設定として保存され、再起動しても無効のままです。",
+      "disableConfirmWarning": "設定は残したまま、ComfyUI のモデルを選べなくなります。",
       "dialogDisabledNote": "無効のまま URL を保存します。「有効にする」を押すと、この URL で接続します。",
       "urlSavedWhileDisabled": "URL を保存しました(無効のままです)"
     },
@@ -2151,9 +2151,9 @@
       "saveUrlWhileDisabled": "この URL を保存する",
       "testSuccessSaveDisabledNotice": "接続テストに成功しました。まだ保存していません。「この URL を保存する」を押すと保存します(無効のままです)。",
       "notConnectedHeadline": "SD WebUI に接続していません",
-      "disabledNote": "無効にしています。モデルの選択肢に出さず、WebUI にも問い合わせません。接続先の URL・資格情報・待つ上限は残っているので、「有効にする」を押すと同じ設定のまま接続します。",
+      "disabledNote": "無効にしています。SD WebUI のモデルは選べません。",
       "disableConfirmMessage": "SD WebUI を無効にします。",
-      "disableConfirmWarning": "モデルの選択肢から SD WebUI が消え、WebUI への問い合わせも止めます。接続先の URL・資格情報・待つ上限と過去の Run は残り、「有効にする」で同じ設定のまま戻せます。無効にしたことは設定として保存され、再起動しても無効のままです。",
+      "disableConfirmWarning": "設定は残したまま、SD WebUI のモデルを選べなくなります。",
       "dialogDisabledNote": "無効のまま URL を保存します。「有効にする」を押すと、この URL で接続します。",
       "urlSavedWhileDisabled": "URL を保存しました(無効のままです)"
     },
