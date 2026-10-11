@@ -74,3 +74,41 @@ export function buildSimilarSearchPath(assetId: string): string {
 export function resolveSemanticTarget(urlTarget: SemanticTarget, promptSearchAvailable: boolean): SemanticTarget {
   return urlTarget === 'prompt' && promptSearchAvailable ? 'prompt' : 'image'
 }
+
+/**
+ * 文章での検索(`GET /api/search/semantic`)の引数。指示を探すときだけ `target=prompt` を付ける
+ * (画像のときは付けない。サーバーの既定が画像)。検索ページとサイドバーのパネルで使う。
+ */
+export function semanticSearchParams(
+  query: string,
+  limit: number,
+  target: SemanticTarget,
+): { q: string; limit: number; target?: 'prompt' } {
+  return target === 'prompt' ? { q: query, limit, target: 'prompt' } : { q: query, limit }
+}
+
+/** サイドバーの検索パネルの「意味」の出し分け(ADR-0045 6章、2026-10-11 追記)。 */
+export interface SearchPanelSemanticView {
+  /** 実際に探す対象。 */
+  target: SemanticTarget
+  /** 「画像 / 指示」の切り替えを出すか(指示の埋め込みに対応するモデルのときだけ)。 */
+  showTargetSwitch: boolean
+  /** 「画像で探す」・画像のドロップ・英語専用のモデルの注記を使うか(画像のときだけ)。 */
+  imageOnlyControls: boolean
+  /** 「すべての結果を見る」の行き先。 */
+  viewAllPath: string
+}
+
+export function searchPanelSemanticView(
+  query: string,
+  storedTarget: SemanticTarget,
+  promptSearchAvailable: boolean,
+): SearchPanelSemanticView {
+  const target = resolveSemanticTarget(storedTarget, promptSearchAvailable)
+  return {
+    target,
+    showTargetSwitch: promptSearchAvailable,
+    imageOnlyControls: target === 'image',
+    viewAllPath: buildSearchPath(query, 'semantic', target),
+  }
+}

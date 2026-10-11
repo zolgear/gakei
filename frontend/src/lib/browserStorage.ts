@@ -32,6 +32,7 @@ export const GAKEI_STORAGE_KEYS = {
   'gakei:tag-translations': 'タグの日本語訳を表示するか',
   'gakei:viewer-similar-open': 'ビューアの「似た画像」の開閉',
   'gakei:search-panel-mode': 'サイドバーの検索パネルの方式(キーワード / 意味)',
+  'gakei:search-panel-target': 'サイドバーの検索パネルの意味で探す対象(画像 / 指示)',
   'gakei:map-prefs': 'マップの表示・近傍の数・上限・しきい値・系列の辺・詳細パネルの開閉',
   'gakei.sketch.prefs': 'スケッチのペン色と太さ',
   'gakei.runForm.seedMode': 'シードのランダム / 固定',

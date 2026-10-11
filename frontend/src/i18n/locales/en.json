@@ -204,6 +204,7 @@
     "imageSearch": "Search by image",
     "imageSearchTitle": "Find images similar to a local image on the search page (the image is not saved)",
     "semanticHint": "Describe the image you are looking for",
+    "promptHint": "Describe the instruction (prompt) you are looking for",
     "dropOverlay": "Drop to find similar images on the search page"
   },
   "search": {

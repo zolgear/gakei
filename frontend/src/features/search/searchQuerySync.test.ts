@@ -5,6 +5,8 @@ import {
   parseSearchQuery,
   parseSearchState,
   resolveSemanticTarget,
+  searchPanelSemanticView,
+  semanticSearchParams,
 } from './searchQuerySync'
 
 describe('parseSearchQuery', () => {
@@ -146,5 +148,40 @@ describe('探す対象(target)', () => {
     expect(resolveSemanticTarget('prompt', true)).toBe('prompt')
     expect(resolveSemanticTarget('prompt', false)).toBe('image')
     expect(resolveSemanticTarget('image', true)).toBe('image')
+  })
+})
+
+describe('semanticSearchParams', () => {
+  it('指示のときだけ target=prompt を送る', () => {
+    expect(semanticSearchParams('消す', 20, 'prompt')).toEqual({ q: '消す', limit: 20, target: 'prompt' })
+    expect(semanticSearchParams('cat', 20, 'image')).toEqual({ q: 'cat', limit: 20 })
+  })
+})
+
+describe('検索パネルの「意味」(searchPanelSemanticView)', () => {
+  it('指示に対応するモデルでは切り替えを出し、覚えた指示で探す', () => {
+    const view = searchPanelSemanticView('背景を消す', 'prompt', true)
+    expect(view.target).toBe('prompt')
+    expect(view.showTargetSwitch).toBe(true)
+    // 指示のときは「画像で探す」・ドロップ・英語専用の注記を使わない。
+    expect(view.imageOnlyControls).toBe(false)
+    // 「すべての結果を見る」は target=prompt を付けて検索ページへ。
+    expect(view.viewAllPath).toBe(`/search?${new URLSearchParams({ q: '背景を消す', mode: 'semantic', target: 'prompt' })}`)
+  })
+
+  it('画像を選んでいれば画像で探し、target を付けない', () => {
+    const view = searchPanelSemanticView('cat', 'image', true)
+    expect(view.target).toBe('image')
+    expect(view.showTargetSwitch).toBe(true)
+    expect(view.imageOnlyControls).toBe(true)
+    expect(view.viewAllPath).toBe('/search?q=cat&mode=semantic')
+  })
+
+  it('対応しないモデルでは、覚えた対象が指示でも画像として扱い、切り替えを出さない', () => {
+    const view = searchPanelSemanticView('cat', 'prompt', false)
+    expect(view.target).toBe('image')
+    expect(view.showTargetSwitch).toBe(false)
+    expect(view.imageOnlyControls).toBe(true)
+    expect(view.viewAllPath).toBe('/search?q=cat&mode=semantic')
   })
 })

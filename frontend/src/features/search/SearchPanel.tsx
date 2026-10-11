@@ -10,6 +10,12 @@
  * 近い順に並べる。最後に使った方式はブラウザに覚える(`gakei:search-panel-mode`)。意味のときは
  * 「画像で探す」も出す: 選んだ・落とした画像を検索ページ(`/search?mode=semantic`)へ渡して
  * そこで探す(画像は保存しない)。
+ *
+ * 使うモデルが指示(プロンプト)の埋め込みに対応するとき(capabilities の `prompt_search`)は、
+ * 意味のときに検索ページと同じ「画像 / 指示」の切り替えも出す(ADR-0045 6章、2026-10-11 追記)。
+ * 指示では Run を履歴パネルと同じ行(`RunListRow`)に類似度を添えて並べ、「画像で探す」と英語専用の
+ * 注記は出さない。最後に選んだ対象はブラウザに覚え(`gakei:search-panel-target`)、「すべての結果を
+ * 見る」で `target=prompt` として検索ページへ渡す。方式と同じく、検索ページで選んだ対象はパネルに写さない。
  */
 import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -24,8 +30,10 @@ import {
   QUERY_IMAGE_ACCEPT,
   dragHasFiles,
   loadSearchPanelMode,
+  loadSearchPanelTarget,
   pickImageFile,
   saveSearchPanelMode,
+  saveSearchPanelTarget,
   setPendingQueryImage,
 } from './queryImage'
 import { assetUrl } from '../../api/assetUrl'
@@ -34,7 +42,14 @@ import { RunListRow } from '../history/RunListRow'
 import { HighlightedText } from './HighlightedText'
 import { useDebouncedValue } from './useDebouncedValue'
 import { usePromptLoader } from './usePromptLoader'
-import { buildSearchPath, type SearchMode } from './searchQuerySync'
+import {
+  buildSearchPath,
+  searchPanelSemanticView,
+  semanticSearchParams,
+  type SearchMode,
+  type SemanticTarget,
+} from './searchQuerySync'
+import { promptRunCards } from './promptSearchResults'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { fmt, useI18n } from '../../i18n'
 import styles from './SearchPanel.module.css'
@@ -54,12 +69,24 @@ export function SearchPanel() {
   const [storedMode, setStoredMode] = useState<SearchMode>(loadSearchPanelMode)
   // 埋め込みが使えないときは、覚えた方式が意味でもキーワードで探す(切り替えも出さない)。
   const mode: SearchMode = embeddingCaps !== null && storedMode === 'semantic' ? 'semantic' : 'keyword'
+  const [storedTarget, setStoredTarget] = useState<SemanticTarget>(loadSearchPanelTarget)
+  // 指示で探せるか(ADR-0045)。対応しないモデルなら、覚えた対象が指示でも画像として扱う。
+  const promptSearchAvailable = embeddingCaps?.prompt_search === true
+  const semanticView = searchPanelSemanticView(debouncedQuery, storedTarget, promptSearchAvailable)
+  const target: SemanticTarget = semanticView.target
+  const imageMode = mode === 'semantic' && semanticView.imageOnlyControls
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [dragActive, setDragActive] = useState(false)
 
   function changeMode(next: SearchMode) {
     setStoredMode(next)
     saveSearchPanelMode(next)
+    inputRef.current?.focus()
+  }
+
+  function changeTarget(next: SemanticTarget) {
+    setStoredTarget(next)
+    saveSearchPanelTarget(next)
     inputRef.current?.focus()
   }
 
@@ -70,7 +97,7 @@ export function SearchPanel() {
   }
 
   function handleDragOver(e: DragEvent) {
-    if (mode !== 'semantic' || !dragHasFiles(e.dataTransfer)) return
+    if (!imageMode || !dragHasFiles(e.dataTransfer)) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
     if (!dragActive) setDragActive(true)
@@ -83,7 +110,7 @@ export function SearchPanel() {
   }
 
   function handleDrop(e: DragEvent) {
-    if (mode !== 'semantic') return
+    if (!imageMode) return
     e.preventDefault()
     setDragActive(false)
     const file = pickImageFile(e.dataTransfer)
@@ -104,15 +131,18 @@ export function SearchPanel() {
     enabled: debouncedQuery.length > 0 && mode === 'keyword',
   })
   const semanticQuery = useQuery({
-    queryKey: ['embeddings', 'semantic', 'panel', debouncedQuery],
-    queryFn: () => semanticSearch({ q: debouncedQuery, limit: PANEL_LIMIT }),
+    queryKey: ['embeddings', 'semantic', 'panel', debouncedQuery, target],
+    queryFn: () => semanticSearch(semanticSearchParams(debouncedQuery, PANEL_LIMIT, target)),
     enabled: debouncedQuery.length > 0 && mode === 'semantic',
     retry: retryEmbeddingQuery,
   })
-  const semanticHits = semanticQuery.data?.assets ?? []
+  // 指示のときは Run、画像のときは Asset が返る(応答の形は `target` で変わる)。
+  const semanticHits = target === 'image' ? (semanticQuery.data?.assets ?? []) : []
+  const promptCards = target === 'prompt' ? promptRunCards(semanticQuery.data) : []
+  const semanticHitCount = semanticHits.length + promptCards.length
   const semanticErrorKind = embeddingErrorKind(semanticQuery.error)
-  const showEnglishHint =
-    mode === 'semantic' && shouldShowEnglishOnlyHint(debouncedQuery, semanticQuery.data ?? embeddingCaps)
+  // 英語専用のモデルの注記は画像のときだけ(指示に対応するモデルは多言語)。
+  const showEnglishHint = imageMode && shouldShowEnglishOnlyHint(debouncedQuery, semanticQuery.data ?? embeddingCaps)
 
   const promptLoader = usePromptLoader()
 
@@ -151,6 +181,26 @@ export function SearchPanel() {
             </div>
           )}
         </div>
+        {/* 探す対象(ADR-0045 6章)。意味のときで、指示の埋め込みに対応するモデルのときだけ。 */}
+        {mode === 'semantic' && semanticView.showTargetSwitch && (
+          <div className={styles.targetRow}>
+            <div className={styles.modeSwitch} role="radiogroup" aria-label={t.search.page.targetLabel}>
+              {(['image', 'prompt'] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  role="radio"
+                  aria-checked={target === item}
+                  className={styles.modeButton}
+                  data-active={target === item}
+                  onClick={() => changeTarget(item)}
+                >
+                  {item === 'image' ? t.search.page.targetImage : t.search.page.targetPrompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className={styles.inputWrap}>
           <input
             ref={inputRef}
@@ -164,7 +214,13 @@ export function SearchPanel() {
                 setQueryText('')
               }
             }}
-            placeholder={mode === 'semantic' ? t.search.page.semanticPlaceholder : t.search.placeholder}
+            placeholder={
+              mode === 'semantic'
+                ? target === 'prompt'
+                  ? t.search.page.promptPlaceholder
+                  : t.search.page.semanticPlaceholder
+                : t.search.placeholder
+            }
           />
           {queryText.length > 0 && (
             <button
@@ -183,7 +239,7 @@ export function SearchPanel() {
             </button>
           )}
         </div>
-        {mode === 'semantic' && (
+        {imageMode && (
           <>
             <button
               type="button"
@@ -221,7 +277,11 @@ export function SearchPanel() {
 
       {mode === 'semantic' && (
         <div className={styles.results}>
-          {debouncedQuery.length === 0 && <p className={styles.hint}>{t.searchPanel.semanticHint}</p>}
+          {debouncedQuery.length === 0 && (
+            <p className={styles.hint}>
+              {target === 'prompt' ? t.searchPanel.promptHint : t.searchPanel.semanticHint}
+            </p>
+          )}
           {showEnglishHint && <p className={styles.languageHint}>{t.search.page.englishOnlyHint}</p>}
           {debouncedQuery.length > 0 && semanticQuery.isLoading && <p className={styles.hint}>{t.search.searching}</p>}
           {semanticErrorKind === 'unavailable' && <p className={styles.hint}>{t.embeddings.unavailable}</p>}
@@ -230,7 +290,7 @@ export function SearchPanel() {
               {semanticQuery.error instanceof ApiError ? semanticQuery.error.message : t.search.page.searchFailed}
             </p>
           )}
-          {debouncedQuery.length > 0 && semanticQuery.isSuccess && semanticHits.length === 0 && (
+          {debouncedQuery.length > 0 && semanticQuery.isSuccess && semanticHitCount === 0 && (
             <p className={styles.hint}>{t.search.page.semanticNoResults}</p>
           )}
           {semanticHits.length > 0 && (
@@ -265,11 +325,25 @@ export function SearchPanel() {
               </div>
             </section>
           )}
-          {semanticHits.length > 0 && (
+          {promptCards.length > 0 && (
+            <section className={styles.group}>
+              <h3 className={styles.groupHeading}>{t.search.page.semanticHeading}</h3>
+              {/* 行き先はキーワード検索の実行の行と同じ。類似度はメタ情報の先頭に添える。 */}
+              {promptCards.map((card) => (
+                <RunListRow
+                  key={card.run.id}
+                  run={card.run}
+                  ariaLabel={t.searchPanel.openRun}
+                  score={fmt(t.embeddings.score, { score: card.score })}
+                />
+              ))}
+            </section>
+          )}
+          {semanticHitCount > 0 && (
             <button
               type="button"
               className={styles.viewAllLink}
-              onClick={() => navigate(buildSearchPath(debouncedQuery, 'semantic'))}
+              onClick={() => navigate(semanticView.viewAllPath)}
             >
               {t.search.viewAll}
             </button>
