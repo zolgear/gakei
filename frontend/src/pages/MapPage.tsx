@@ -11,6 +11,12 @@
  * d3-force の 2 次元、地図は `UmapView`(UMAP 2 次元)になる。以前の `view=map` と覚えた値は
  * 地図のタブとして読む。
  *
+ * マップは面積が価値なので、上部は 1 段だけにする(狭い幅では 2 段)。1 段目は 見出し → タブ →
+ * 見せ方 → 文章で探す入力欄 → 「絞り込み」「表示」のボタンだけで、たまにしか触らない設定は
+ * ボタンを押して開くパネル(`ToolbarPanel`。canvas に重ねるので表示エリアの高さを奪わない)に
+ * 入れる。どの項目をどちらに出すかは `mapToolbar.ts`。「辺 N 本」「一致 N 件」「上限で切った旨」は
+ * canvas の隅に薄く重ねる(`statusOverlay`)。
+ *
  * 元データは `GET /api/embeddings/graph`。グループ・タグ(複数なら AND)・上限・近傍の数で絞り込める。タブ、
  * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
  * ときに保つ。履歴を増やさないよう replace で書く)。タブ・上限・近傍の数・しきい値・系列の辺は
@@ -18,13 +24,13 @@
  * パネルの開閉もブラウザにだけ覚える(URL には置かない)。上限で切ったときは、絞り込みを促す。
  * 埋め込みが使えないときは App バーの入口を出さない。直接開いたときは使えない旨だけを出す。
  *
- * マップ内の意味検索(試作)は、タブのすぐ下の入力欄。打ち終わってからマップと同じ絞り込みで
+ * マップ内の意味検索(試作)は、上部の入力欄。打ち終わってからマップと同じ絞り込みで
  * `GET /api/embeddings/graph/scores` を呼び、Asset ID で突き合わせて「上位 N 件」を一致とする
  * (類似度の帯が狭いので絶対値のしきい値は使わない。`mapSearchHighlight.ts`)。検索の文章は URL
  * だけに置き、一致の件数と距離の取り方はブラウザにも覚える。配置の距離の取り方(試作)は、
  * 効く地図のタブでだけ選べる。
  */
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import { embeddingGraph, embeddingGraphScores } from '../api/client'
@@ -37,6 +43,7 @@ import {
   buildSearchHighlight,
   MAP_MATCH_COUNT_CHOICES,
 } from '../features/map/mapSearchHighlight'
+import { mapDisplayFields, mapDisplaySummary } from '../features/map/mapToolbar'
 import { MAP_DISTANCE_METRICS, type MapDistanceMetric } from '../features/map/umapInput'
 import {
   MAP_K_CHOICES,
@@ -101,12 +108,12 @@ function MapBody() {
   const urlKey = searchParams.toString()
   const urlState = parseMapUrlState(searchParams, storedPrefs)
   const state: MapUrlState = pending && pending.base === urlKey ? { ...urlState, ...pending.patch } : urlState
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  // 上部のパネルは一度に 1 つだけ開く(canvas を覆う面積を増やさない)。
+  const [openPanel, setOpenPanel] = useState<'filters' | 'display' | null>(null)
   /** 画面の設定を変えた回数(開いたときの最初の回転を止めるのに使う)。 */
   const [settingsVersion, setSettingsVersion] = useState(0)
   const threshold = state.threshold
   const debouncedThreshold = useDebouncedValue(threshold, THRESHOLD_DEBOUNCE_MS)
-  const filtersId = useId()
   const thresholdId = useId()
 
   // スライダーを動かすたびに呼ばれるので、履歴を増やさないよう replace で書く。
@@ -209,186 +216,186 @@ function MapBody() {
   const filterCount = activeFilterCount(state)
   const errorKind = embeddingErrorKind(query.error)
 
+  // 「表示」パネルの項目と、ボタンに添える主要な値。
+  const displayFields = mapDisplayFields(state.view, trimmedQuery !== '')
+  const displaySummary = mapDisplaySummary(state.view, threshold, state.metric)
+  const displayValue =
+    displaySummary.kind === 'threshold' ? displaySummary.text : m.metricOption[displaySummary.metric]
+  const graphReady = Boolean(graph) && !query.isError && nodeCount > 0
+
   return (
     <>
       <header className={styles.toolbar}>
         <h1 className={styles.title}>{m.title}</h1>
-        <div className={styles.tabs} role="tablist" aria-label={m.viewLabel}>
-          {(['network', 'umap3d'] as MapView[]).map((view) => (
-            <button
-              key={view}
-              type="button"
-              role="tab"
-              aria-selected={state.view === view}
-              className={styles.tab}
-              data-active={state.view === view}
-              onClick={() => update({ view })}
-            >
-              {view === 'umap3d' ? m.tabMap : m.tabNetwork}
-            </button>
-          ))}
-        </div>
-        <div className={styles.tabs} role="group" aria-label={m.shapeLabel}>
-          {MAP_SHAPES.map((shape) => (
-            <button
-              key={shape}
-              type="button"
-              aria-pressed={state.shape === shape}
-              className={styles.tab}
-              data-active={state.shape === shape}
-              onClick={() => update({ shape })}
-            >
-              {m.shapeOption[shape]}
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          className={styles.filtersToggle}
-          aria-expanded={filtersOpen}
-          aria-controls={filtersId}
-          onClick={() => setFiltersOpen((v) => !v)}
-        >
-          {filterCount > 0 ? fmt(m.filtersWithCount, { count: filterCount }) : m.filters}
-        </button>
-      </header>
-
-      <div className={styles.searchBar} role="search">
-        <input
-          type="search"
-          className={styles.searchInput}
-          value={state.query}
-          maxLength={MAP_QUERY_MAX}
-          placeholder={m.searchPlaceholder}
-          aria-label={m.searchLabel}
-          onChange={(e) => update({ query: e.target.value })}
-          onKeyDown={(e) => {
-            // 入力欄の Esc は検索語を消すだけ(ビューの Esc の扱いは変えない)。
-            if (e.key === 'Escape') {
-              e.preventDefault()
-              update({ query: '' })
-            }
-          }}
-        />
-        {trimmedQuery !== '' && (
-          <label className={styles.inlineField}>
-            <span className={styles.fieldLabel}>{m.matchCountLabel}</span>
-            <select
-              className={styles.select}
-              value={state.matchCount}
-              onChange={(e) => update({ matchCount: Number(e.target.value) })}
-            >
-              {MAP_MATCH_COUNT_CHOICES.map((value) => (
-                <option key={value} value={value}>
-                  {fmt(m.matchCountOption, { count: value })}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <SearchStatus
-          query={trimmedQuery}
-          running={scoresQuery.isFetching}
-          error={scoresQuery.isError ? scoresQuery.error : null}
-          matches={searchHighlight?.ranked.length ?? null}
-        />
-      </div>
-
-      <div id={filtersId} className={styles.filters} data-open={filtersOpen}>
-        <GroupFilter value={state.groupId} onChange={(groupId) => update({ groupId })} />
-        <TagFilter value={state.tags} onChange={(tags) => update({ tags })} />
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>{m.limitLabel}</span>
-          <select
-            className={styles.select}
-            value={state.limit}
-            onChange={(e) => update({ limit: Number(e.target.value) })}
-          >
-            {MAP_LIMIT_CHOICES.map((value) => (
-              <option key={value} value={value}>
-                {fmt(m.limitOption, { count: value })}
-              </option>
+        <div className={styles.tabGroups}>
+          <div className={styles.tabs} role="tablist" aria-label={m.viewLabel}>
+            {(['network', 'umap3d'] as MapView[]).map((view) => (
+              <button
+                key={view}
+                type="button"
+                role="tab"
+                aria-selected={state.view === view}
+                className={styles.tab}
+                data-active={state.view === view}
+                onClick={() => update({ view })}
+              >
+                {view === 'umap3d' ? m.tabMap : m.tabNetwork}
+              </button>
             ))}
-          </select>
-        </label>
-        <label className={styles.field} title={m.kHelp}>
-          <span className={styles.fieldLabel}>{m.kLabel}</span>
-          <select className={styles.select} value={state.k} onChange={(e) => update({ k: Number(e.target.value) })}>
-            {MAP_K_CHOICES.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
+          </div>
+          <div className={styles.tabs} role="group" aria-label={m.shapeLabel}>
+            {MAP_SHAPES.map((shape) => (
+              <button
+                key={shape}
+                type="button"
+                aria-pressed={state.shape === shape}
+                className={styles.tab}
+                data-active={state.shape === shape}
+                onClick={() => update({ shape })}
+              >
+                {m.shapeOption[shape]}
+              </button>
             ))}
-          </select>
-        </label>
-      </div>
-
-      {state.view === 'umap3d' && (
-        <div className={styles.networkControls}>
-          <label className={styles.inlineField} title={m.metricHelp}>
-            <span className={styles.fieldLabel}>{m.metricLabel}</span>
-            <select
-              className={styles.select}
-              value={state.metric}
-              onChange={(e) => update({ metric: e.target.value as MapDistanceMetric })}
-            >
-              {MAP_DISTANCE_METRICS.map((value) => (
-                <option key={value} value={value}>
-                  {m.metricOption[value]}
-                </option>
-              ))}
-            </select>
-          </label>
+          </div>
         </div>
-      )}
 
-      {state.view === 'network' && (
-        <div className={styles.networkControls}>
-          <label className={styles.thresholdLabel} htmlFor={thresholdId}>
-            {m.thresholdLabel}
-          </label>
-          <input
-            id={thresholdId}
-            type="range"
-            className={styles.slider}
-            min={MAP_THRESHOLD_MIN}
-            max={MAP_THRESHOLD_MAX}
-            step={MAP_THRESHOLD_STEP}
-            value={threshold}
-            onChange={(e) => update({ threshold: clampThreshold(Number(e.target.value)) })}
-          />
-          <span className={styles.thresholdValue}>{threshold.toFixed(2)}</span>
-          {graph && (
-            <span className={styles.edgeCount}>
-              {edgeResult.total > edgeResult.edges.length
-                ? fmt(m.edgeCountCapped, { count: edgeResult.edges.length, total: edgeResult.total })
-                : fmt(m.edgeCount, { count: edgeResult.edges.length })}
-            </span>
-          )}
-          <label className={styles.checkbox}>
+        <div className={styles.controls}>
+          <div className={styles.searchBox} role="search">
             <input
-              type="checkbox"
-              checked={state.showLineage}
-              onChange={(e) => update({ showLineage: e.target.checked })}
+              type="search"
+              className={styles.searchInput}
+              value={state.query}
+              maxLength={MAP_QUERY_MAX}
+              placeholder={m.searchPlaceholder}
+              aria-label={m.searchLabel}
+              onChange={(e) => update({ query: e.target.value })}
+              onKeyDown={(e) => {
+                // 入力欄の Esc は検索語を消すだけ(ビューの Esc の扱いは変えない)。
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  update({ query: '' })
+                }
+              }}
             />
-            {/* canvas の系列の辺と同じ見た目(破線 + 子の側の塗った矢じり)。 */}
-            <svg className={styles.lineageSwatch} width="26" height="10" viewBox="0 0 26 10" aria-hidden="true">
-              <path d="M1 5H18" stroke="var(--color-edit)" strokeWidth="2" strokeDasharray="5 4" />
-              <path d="M25 5L18 1.5V8.5Z" fill="var(--color-edit)" />
-            </svg>
-            {m.showLineage}
-          </label>
-        </div>
-      )}
+          </div>
 
-      {graph?.truncated && (
-        <p className={styles.notice}>
-          {fmt(state.limit < MAP_LIMIT_CHOICES[MAP_LIMIT_CHOICES.length - 1] ? m.truncated : m.truncatedAtMax, {
-            total: graph.total,
-            count: nodeCount,
-          })}
-        </p>
-      )}
+          <ToolbarPanel
+            title={m.filters}
+            label={m.filters}
+            ariaLabel={filterCount > 0 ? fmt(m.filtersWithCount, { count: filterCount }) : m.filters}
+            badge={filterCount > 0 ? filterCount : null}
+            open={openPanel === 'filters'}
+            onOpenChange={(open) => setOpenPanel(open ? 'filters' : null)}
+          >
+            <div className={styles.panelGrid}>
+              <GroupFilter value={state.groupId} onChange={(groupId) => update({ groupId })} />
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>{m.limitLabel}</span>
+                <select
+                  className={styles.select}
+                  value={state.limit}
+                  onChange={(e) => update({ limit: Number(e.target.value) })}
+                >
+                  {MAP_LIMIT_CHOICES.map((value) => (
+                    <option key={value} value={value}>
+                      {fmt(m.limitOption, { count: value })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.field} title={m.kHelp}>
+                <span className={styles.fieldLabel}>{m.kLabel}</span>
+                <select className={styles.select} value={state.k} onChange={(e) => update({ k: Number(e.target.value) })}>
+                  {MAP_K_CHOICES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <TagFilter value={state.tags} onChange={(tags) => update({ tags })} />
+            </div>
+          </ToolbarPanel>
+
+          <ToolbarPanel
+            title={m.display}
+            label={fmt(m.displayWithValue, { value: displayValue })}
+            ariaLabel={fmt(m.displayWithValue, { value: displayValue })}
+            open={openPanel === 'display'}
+            onOpenChange={(open) => setOpenPanel(open ? 'display' : null)}
+          >
+            <div className={styles.panelRows}>
+              {displayFields.threshold && (
+                <div className={styles.panelRow}>
+                  <label className={styles.thresholdLabel} htmlFor={thresholdId}>
+                    {m.thresholdLabel}
+                  </label>
+                  <div className={styles.thresholdRow}>
+                    <input
+                      id={thresholdId}
+                      type="range"
+                      className={styles.slider}
+                      min={MAP_THRESHOLD_MIN}
+                      max={MAP_THRESHOLD_MAX}
+                      step={MAP_THRESHOLD_STEP}
+                      value={threshold}
+                      onChange={(e) => update({ threshold: clampThreshold(Number(e.target.value)) })}
+                    />
+                    <span className={styles.thresholdValue}>{threshold.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+              {displayFields.lineage && (
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={state.showLineage}
+                    onChange={(e) => update({ showLineage: e.target.checked })}
+                  />
+                  {/* canvas の系列の辺と同じ見た目(破線 + 子の側の塗った矢じり)。 */}
+                  <svg className={styles.lineageSwatch} width="26" height="10" viewBox="0 0 26 10" aria-hidden="true">
+                    <path d="M1 5H18" stroke="var(--color-edit)" strokeWidth="2" strokeDasharray="5 4" />
+                    <path d="M25 5L18 1.5V8.5Z" fill="var(--color-edit)" />
+                  </svg>
+                  {m.showLineage}
+                </label>
+              )}
+              {displayFields.metric && (
+                <label className={styles.field} title={m.metricHelp}>
+                  <span className={styles.fieldLabel}>{m.metricLabel}</span>
+                  <select
+                    className={styles.select}
+                    value={state.metric}
+                    onChange={(e) => update({ metric: e.target.value as MapDistanceMetric })}
+                  >
+                    {MAP_DISTANCE_METRICS.map((value) => (
+                      <option key={value} value={value}>
+                        {m.metricOption[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {displayFields.matchCount && (
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>{m.matchCountLabel}</span>
+                  <select
+                    className={styles.select}
+                    value={state.matchCount}
+                    onChange={(e) => update({ matchCount: Number(e.target.value) })}
+                  >
+                    {MAP_MATCH_COUNT_CHOICES.map((value) => (
+                      <option key={value} value={value}>
+                        {fmt(m.matchCountOption, { count: value })}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          </ToolbarPanel>
+        </div>
+      </header>
 
       <div className={styles.stage} data-fetching={query.isFetching && !query.isLoading}>
         {query.isLoading && <p className={styles.placeholder}>{m.loading}</p>}
@@ -441,8 +448,122 @@ function MapBody() {
             search={searchHighlight}
           />
         )}
+
+        {/* 状態は canvas の隅に薄く重ねる(上部の段を増やさない)。 */}
+        {graphReady && (
+          <div className={styles.statusOverlay} data-preview-open={previewOpen}>
+            {graph?.truncated && (
+              <span className={styles.statusNotice}>
+                {fmt(state.limit < MAP_LIMIT_CHOICES[MAP_LIMIT_CHOICES.length - 1] ? m.truncated : m.truncatedAtMax, {
+                  total: graph.total,
+                  count: nodeCount,
+                })}
+              </span>
+            )}
+            <div className={styles.statusLine}>
+              <SearchStatus
+                query={trimmedQuery}
+                running={scoresQuery.isFetching}
+                error={scoresQuery.isError ? scoresQuery.error : null}
+                matches={searchHighlight?.ranked.length ?? null}
+              />
+              {state.view === 'network' && (
+                <span className={styles.statusItem}>
+                  {edgeResult.total > edgeResult.edges.length
+                    ? fmt(m.edgeCountCapped, { count: edgeResult.edges.length, total: edgeResult.total })
+                    : fmt(m.edgeCount, { count: edgeResult.edges.length })}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
+  )
+}
+
+/**
+ * 上部のボタンと、押して開くパネル(ポップオーバー)。canvas に重ねて出すので、上部の段は
+ * 増えない。`aria-expanded` / `aria-controls`、Esc で閉じる、外側を押したら閉じる、Esc と
+ * 「閉じる」で閉じたらボタンにフォーカスを戻す(外側を押して閉じたときは、押した先の操作を
+ * 妨げないようフォーカスを奪わない)。
+ */
+function ToolbarPanel({
+  title,
+  label,
+  ariaLabel,
+  badge,
+  open,
+  onOpenChange,
+  children,
+}: {
+  title: string
+  label: string
+  ariaLabel?: string
+  badge?: number | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: ReactNode
+}) {
+  const { t } = useI18n()
+  const panelId = useId()
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handlePointerDown(e: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) onOpenChange(false)
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      // 選んだ画像のパネル(MapPreviewPanel)まで一緒に閉じないよう、ここで受け止める。
+      e.preventDefault()
+      onOpenChange(false)
+      buttonRef.current?.focus()
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open, onOpenChange])
+
+  return (
+    <div className={styles.panelWrap} ref={rootRef}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={styles.panelToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={ariaLabel}
+        onClick={() => onOpenChange(!open)}
+      >
+        <span className={styles.panelToggleLabel}>{label}</span>
+        {badge != null && <span className={styles.panelBadge}>{badge}</span>}
+      </button>
+      {open && (
+        <div id={panelId} className={styles.panel} role="group" aria-label={title}>
+          <div className={styles.panelHeader}>
+            <span className={styles.panelTitle}>{title}</span>
+            <button
+              type="button"
+              className={styles.panelClose}
+              aria-label={t.common.close}
+              onClick={() => {
+                onOpenChange(false)
+                buttonRef.current?.focus()
+              }}
+            >
+              ×
+            </button>
+          </div>
+          {children}
+        </div>
+      )}
+    </div>
   )
 }
 

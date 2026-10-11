@@ -2355,6 +2355,8 @@
     "loadFailed": "マップの元データを読み込めませんでした。",
     "filters": "絞り込み",
     "filtersWithCount": "絞り込み({count})",
+    "display": "表示",
+    "displayWithValue": "表示 · {value}",
     "groupLabel": "グループ",
     "groupAll": "すべて",
     "groupUnknown": "(見つからないグループ)",

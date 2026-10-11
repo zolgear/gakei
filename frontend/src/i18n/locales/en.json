@@ -2355,6 +2355,8 @@
     "loadFailed": "Couldn't load the map data.",
     "filters": "Filters",
     "filtersWithCount": "Filters ({count})",
+    "display": "View",
+    "displayWithValue": "View · {value}",
     "groupLabel": "Group",
     "groupAll": "All",
     "groupUnknown": "(Group not found)",

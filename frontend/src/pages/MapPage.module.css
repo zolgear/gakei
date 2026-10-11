@@ -9,17 +9,27 @@
   padding-bottom: max(16px, env(safe-area-inset-bottom));
 }
 
+/* 上部は 1 段だけ(狭い幅では 2 段)。残りはすべて canvas に渡す。 */
 .toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 8px 12px;
 }
 
 .title {
   margin: 0;
+  flex-shrink: 0;
   font-size: 18px;
   font-weight: 600;
+}
+
+/* タブと見せ方。狭い幅では 1 段目にこれだけを置く。 */
+.tabGroups {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .tabs {
@@ -50,22 +60,24 @@
   color: var(--color-text);
 }
 
-/* 広い幅では絞り込みを常に出すので、開閉のボタンは狭い幅だけ。 */
-.filtersToggle {
-  display: none;
-}
-
-/* マップ内の意味検索(試作)。タブのすぐ下に置く。 */
-.searchBar {
+/* 検索欄と、パネルを開くボタン。余った幅は検索欄に渡す。 */
+.controls {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 8px;
+}
+
+/* マップ内の意味検索(試作)。広すぎると上部が間延びするので最大幅を決める。 */
+.searchBox {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 360px;
 }
 
 .searchInput {
-  width: 280px;
-  max-width: 100%;
+  width: 100%;
   height: 30px;
   padding: 0 8px;
   background: var(--color-bg-sunken);
@@ -80,28 +92,126 @@
   border-color: var(--color-accent);
 }
 
-.searchStatus {
-  font-size: 12px;
-  color: var(--color-text-muted);
+/* ボタンと、押して開くパネル。パネルは canvas に重ねるので段を増やさない。 */
+.panelWrap {
+  position: relative;
+  flex-shrink: 0;
 }
 
-.searchStatus[data-tone='error'] {
-  color: var(--color-danger);
-}
-
-/* ラベルと選択を横に並べる(1行の操作列の中で使う)。 */
-.inlineField {
+.panelToggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
+  height: 30px;
+  padding: 0 12px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-.filters {
+.panelToggle:hover {
+  border-color: var(--color-accent);
+}
+
+.panelToggle[aria-expanded='true'] {
+  background: var(--color-header-band);
+  border-color: var(--color-accent);
+}
+
+.panelToggleLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panelBadge {
+  min-width: 16px;
+  padding: 0 5px;
+  background: var(--color-accent);
+  border-radius: var(--radius-pill);
+  color: #17181b;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: min(420px, calc(100vw - 32px));
   display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 10px 16px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panelTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.panelClose {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.panelClose:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+/* 絞り込みの項目は 2 列(タグは 2 列ぶん使う)。 */
+.panelGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+  gap: 10px 12px;
+}
+
+.panelGrid > [role='group'] {
+  grid-column: 1 / -1;
+}
+
+.panelRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panelRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .field {
@@ -120,7 +230,7 @@
 .select {
   height: 30px;
   min-width: 96px;
-  max-width: 220px;
+  max-width: 100%;
   padding: 0 8px;
   background: var(--color-bg-sunken);
   border: 1px solid var(--color-border-strong);
@@ -136,10 +246,11 @@
 
 .tagInput {
   position: relative;
-  width: 200px;
+  flex: 1 1 140px;
+  min-width: 0;
 }
 
-/* 候補はキャンバスの上に重ねて出す(ここはスクロール領域ではないので切れない)。 */
+/* 候補はパネルの外へはみ出して出す(パネルは縦に伸びない)。 */
 .tagInput ul {
   position: absolute;
   top: calc(100% + 4px);
@@ -155,7 +266,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  max-width: 480px;
 }
 
 .tagChipRow {
@@ -166,43 +276,35 @@
   min-height: 30px;
 }
 
-.networkControls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  padding: 6px 10px;
-  background: var(--color-bg-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+.thresholdLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
 }
 
-.thresholdLabel {
-  font-size: 12px;
-  font-weight: 600;
+.thresholdRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .slider {
-  width: 180px;
+  flex: 1 1 auto;
+  min-width: 0;
   accent-color: var(--color-accent);
 }
 
 .thresholdValue {
+  flex-shrink: 0;
   min-width: 3em;
   font-family: var(--font-mono);
   font-size: 12px;
-}
-
-.edgeCount {
-  font-size: 12px;
-  color: var(--color-text-muted);
 }
 
 .checkbox {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   font-size: 12px;
   cursor: pointer;
 }
@@ -212,28 +314,69 @@
   display: block;
 }
 
-.notice {
-  margin: 0;
-  padding: 8px 10px;
-  background: var(--color-bg-sunken);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-warning);
-  border-radius: var(--radius);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
 .stage {
   position: relative;
   flex: 1 1 auto;
   min-height: 240px;
   display: flex;
   flex-direction: column;
+  /* MapCanvas が重ねるパネル(MapPreviewPanel)の幅。隅の状態表示を同じ分だけ寄せる。 */
+  --map-preview-w: min(380px, 45%);
 }
 
 .stage[data-fetching='true'] {
   opacity: 0.7;
   transition: opacity 0.2s;
+}
+
+/* 「辺 N 本」「一致 N 件」「上限で切った旨」を canvas の右下に薄く重ねる。 */
+.statusOverlay {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  max-width: min(420px, calc(100% - 20px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.statusOverlay[data-preview-open='true'] {
+  right: calc(var(--map-preview-w) + 20px);
+}
+
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 10px;
+}
+
+.statusItem,
+.searchStatus {
+  padding: 2px 7px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.searchStatus[data-tone='error'] {
+  color: var(--color-danger);
+}
+
+.statusNotice {
+  padding: 4px 8px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
 }
 
 .placeholder {
@@ -270,23 +413,19 @@
   }
 
   .toolbar,
-  .searchBar,
-  .filters,
-  .notice,
   .placeholder,
   .errorBox {
     margin-left: 12px;
     margin-right: 12px;
   }
 
-  .toolbar {
-    flex-wrap: nowrap;
-    gap: 8px;
+  /* 2 段まで。1 段目にタブと見せ方、2 段目に検索欄とボタン。 */
+  .title {
+    display: none;
   }
 
-  .title {
-    font-size: 16px;
-    flex-shrink: 0;
+  .controls {
+    flex-basis: 100%;
   }
 
   .tab {
@@ -294,81 +433,42 @@
     padding: 0 12px;
   }
 
-  .filtersToggle {
-    display: block;
-    margin-left: auto;
-    height: 38px;
-    padding: 0 12px;
-    background: var(--color-bg-sunken);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius);
+  .panelToggle {
+    height: 40px;
     font-size: 13px;
-    white-space: nowrap;
   }
 
-  .filtersToggle[aria-expanded='true'] {
-    border-color: var(--color-accent);
+  .searchInput {
+    height: 40px;
+    font-size: 16px;
   }
 
-  .filters {
-    display: none;
-    padding: 10px;
-    background: var(--color-bg-raised);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
+  /* 画面幅いっぱいのシート(MapPreviewPanel と同じ作法)。 */
+  .panel {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 72vh;
+    overflow-y: auto;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
 
-  .filters[data-open='true'] {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: end;
+  .panelClose {
+    width: 40px;
+    height: 40px;
   }
 
   .select {
     width: 100%;
-    max-width: none;
-    height: 38px;
-  }
-
-  .tagInput {
-    width: 100%;
-  }
-
-  /* 狭い幅ではタグの欄を2列ぶん使う(チップが増えても入力欄を潰さない)。 */
-  .filters > [role='group'] {
-    grid-column: 1 / -1;
-  }
-
-  .tagFilterBox {
-    max-width: none;
-  }
-
-  .searchInput {
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-    height: 38px;
-  }
-
-  .networkControls {
-    margin: 0 12px;
-    padding: 6px 8px;
-    gap: 4px 10px;
-  }
-
-  .slider {
-    flex: 1;
-    min-width: 120px;
-    width: auto;
+    height: 40px;
   }
 
   .checkbox {
-    margin-left: 0;
-    min-height: 32px;
-  }
-
-  .notice {
-    padding: 6px 8px;
+    min-height: 40px;
   }
 
   .stage {
