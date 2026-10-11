@@ -97,12 +97,12 @@ def test_two_provider_lanes_run_concurrently(
         fast_id = fast_response.json()["id"]
 
         # 遅いレーン(slow)が gate で止まっている間に、別レーン(fast)は先に終わる。
-        fast_detail = wait_for_run_terminal(client, fast_id, timeout=5.0)
+        fast_detail = wait_for_run_terminal(client, fast_id)
         assert fast_detail["status"] == "succeeded"
 
         slow_detail = client.get(f"/api/runs/{slow_id}").json()
         assert slow_detail["status"] in ("queued", "running")
 
         slow_gate.set()
-        slow_final = wait_for_run_terminal(client, slow_id, timeout=5.0)
+        slow_final = wait_for_run_terminal(client, slow_id)
         assert slow_final["status"] == "succeeded"

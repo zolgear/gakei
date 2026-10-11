@@ -41,6 +41,11 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "tag_dictionary_translation",
         "asset_focal_point",
         "run_prompt_embedding",
+        "prompt_template",
+        "prompt_slot",
+        "prompt_variant",
+        "prompt_combo",
+        "prompt_combo_item",
         "alembic_version",
     } <= tables
 
@@ -1251,4 +1256,58 @@ def test_migration_0031_adds_run_prompt_embedding(empty_database_url: str) -> No
     command.downgrade(cfg, "0030")
     engine = create_engine(empty_database_url)
     assert "run_prompt_embedding" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0032_adds_prompt_template(empty_database_url: str) -> None:
+    """プロンプトテンプレート(実験): 0031 の DB に upgrade head でテンプレートの表と
+    `run.prompt_build` が加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0031")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "prompt_template" not in set(inspector.get_table_names())
+    assert "prompt_build" not in {c["name"] for c in inspector.get_columns("run")}
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    tables = set(inspector.get_table_names())
+    assert {
+        "prompt_template",
+        "prompt_slot",
+        "prompt_variant",
+        "prompt_combo",
+        "prompt_combo_item",
+    } <= tables
+    # 既存の run に足した列は nullable(既存の行は NULL のまま)。
+    run_columns = {c["name"]: c for c in inspector.get_columns("run")}
+    assert run_columns["prompt_build"]["nullable"] is True
+    assert inspector.get_pk_constraint("prompt_combo_item")["constrained_columns"] == [
+        "combo_id",
+        "variant_id",
+    ]
+    assert {fk["referred_table"] for fk in inspector.get_foreign_keys("prompt_combo_item")} == {
+        "prompt_combo",
+        "prompt_variant",
+    }
+    slot_columns = {c["name"]: c for c in inspector.get_columns("prompt_slot")}
+    assert slot_columns["deleted_at"]["nullable"] is True
+    assert slot_columns["default_mode"]["nullable"] is False
+    indexes = {i["name"] for i in inspector.get_indexes("prompt_template")}
+    assert {"ix_prompt_template_created_by_user_id", "ix_prompt_template_updated_at"} <= indexes
+    engine.dispose()
+
+    command.downgrade(cfg, "0031")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "prompt_template" not in set(inspector.get_table_names())
+    assert "prompt_build" not in {c["name"] for c in inspector.get_columns("run")}
     engine.dispose()

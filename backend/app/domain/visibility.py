@@ -12,6 +12,7 @@
 - グループ: `asset_group.created_by_user_id`
 - プロンプトセット: `prompt_set.created_by_user_id`
 - パラメーターセット(ADR-0040): `parameter_set.created_by_user_id`
+- プロンプトテンプレート(実験): `prompt_template.created_by_user_id`
 - 共有リンク(ADR-0029): `share.created_by_user_id`(一覧・取り消しは本人のものだけ)
 
 一覧・検索は `*_visible(user)` が返す SQLAlchemy の条件を `where()` に足し、詳細・操作は
@@ -32,7 +33,15 @@ from sqlalchemy import ColumnElement, and_, false, or_, select, true
 from sqlalchemy.orm import Session, aliased
 
 from app.auth.identity import CurrentUser
-from app.domain.models import Asset, AssetGroup, ParameterSet, PromptSet, Run, Share
+from app.domain.models import (
+    Asset,
+    AssetGroup,
+    ParameterSet,
+    PromptSet,
+    PromptTemplate,
+    Run,
+    Share,
+)
 
 
 def sees_everything(user: CurrentUser) -> bool:
@@ -118,6 +127,13 @@ def parameter_set_visible(user: CurrentUser) -> ColumnElement[bool]:
     return _owner_condition(ParameterSet.created_by_user_id, user)
 
 
+def prompt_template_visible(user: CurrentUser) -> ColumnElement[bool]:
+    """プロンプトテンプレート(実験)。作った本人だけが見える。"""
+    if sees_everything(user):
+        return true()
+    return _owner_condition(PromptTemplate.created_by_user_id, user)
+
+
 def share_visible(user: CurrentUser) -> ColumnElement[bool]:
     """自分が作った共有リンク(ADR-0029 7章)。管理者も他人のものは見えない(ADR-0025 5章)。"""
     if sees_everything(user):
@@ -153,6 +169,10 @@ def can_see_prompt_set(user: CurrentUser, prompt_set: PromptSet) -> bool:
 
 def can_see_parameter_set(user: CurrentUser, parameter_set: ParameterSet) -> bool:
     return owner_matches(user, parameter_set.created_by_user_id)
+
+
+def can_see_prompt_template(user: CurrentUser, template: PromptTemplate) -> bool:
+    return owner_matches(user, template.created_by_user_id)
 
 
 def can_see_share(user: CurrentUser, share: Share) -> bool:
@@ -265,3 +285,17 @@ def get_visible_parameter_set(
     ):
         return None
     return parameter_set
+
+
+def get_visible_prompt_template(
+    db: Session, user: CurrentUser, template_id: uuid.UUID
+) -> PromptTemplate | None:
+    """見える、削除されていないプロンプトテンプレート(実験)。それ以外は None。"""
+    template = db.get(PromptTemplate, template_id)
+    if (
+        template is None
+        or template.deleted_at is not None
+        or not can_see_prompt_template(user, template)
+    ):
+        return None
+    return template

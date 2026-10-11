@@ -964,6 +964,63 @@ export interface paths {
         patch: operations["update_prompt_set_item"];
         trace?: never;
     };
+    "/api/prompt-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Prompt Templates */
+        get: operations["list_prompt_templates"];
+        put?: never;
+        /** Create Prompt Template */
+        post: operations["create_prompt_template"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/prompt-templates/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Prompt Template */
+        get: operations["get_prompt_template"];
+        /** Replace Prompt Template */
+        put: operations["replace_prompt_template"];
+        post?: never;
+        /** Delete Prompt Template */
+        delete: operations["delete_prompt_template"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/prompt-templates/{template_id}/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build Prompt Template
+         * @description 選択を渡して組み立て結果を返す(生成はしない。確認用)。
+         */
+        post: operations["build_prompt_template"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/parameter-sets": {
         parameters: {
             query?: never;
@@ -4245,6 +4302,86 @@ export interface components {
             /** Text Outputs */
             text_outputs?: components["schemas"]["RunTextOutput"][] | null;
         };
+        /** PromptBuildRequest */
+        PromptBuildRequest: {
+            selections?: components["schemas"]["PromptSelections"];
+            /** Seed */
+            seed?: number | null;
+        };
+        /** PromptBuildResponse */
+        PromptBuildResponse: {
+            /** Prompt */
+            prompt: string;
+            /** Build */
+            build: {
+                [key: string]: unknown;
+            };
+        };
+        /** PromptComboInput */
+        PromptComboInput: {
+            /** Id */
+            id?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Weight
+             * @default 1
+             */
+            weight: number;
+            /** Items */
+            items: components["schemas"]["PromptComboItemInput"][];
+        };
+        /**
+         * PromptComboItemInput
+         * @description 組み合わせが指す候補。既存は `variant_id`、同じリクエストで作る候補は `variant_ref`。
+         */
+        PromptComboItemInput: {
+            /** Variant Id */
+            variant_id?: string | null;
+            /** Variant Ref */
+            variant_ref?: string | null;
+        };
+        /** PromptComboResponse */
+        PromptComboResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Weight */
+            weight: number;
+            /** Position */
+            position: number;
+            /** Variant Ids */
+            variant_ids?: string[];
+        };
+        /**
+         * PromptComboSelection
+         * @description `id` でその組み合わせ、`random` でまだ空いているスロットを覆う組から1つ。
+         */
+        PromptComboSelection: {
+            /** Id */
+            id?: string | null;
+            /**
+             * Random
+             * @default false
+             */
+            random: boolean;
+        };
+        /**
+         * PromptSelections
+         * @description 組み立ての選択。`slots` のキーはスロットの id。
+         */
+        PromptSelections: {
+            /** Combos */
+            combos?: components["schemas"]["PromptComboSelection"][];
+            /** Slots */
+            slots?: {
+                [key: string]: components["schemas"]["PromptSlotSelection"];
+            };
+        };
         /** PromptSetCreateRequest */
         PromptSetCreateRequest: {
             /** Name */
@@ -4331,6 +4468,52 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** PromptSlotInput */
+        PromptSlotInput: {
+            /** Id */
+            id?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Default Mode
+             * @default random
+             * @enum {string}
+             */
+            default_mode: "random" | "off";
+            /** Variants */
+            variants?: components["schemas"]["PromptVariantInput"][];
+        };
+        /** PromptSlotResponse */
+        PromptSlotResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Default Mode
+             * @enum {string}
+             */
+            default_mode: "random" | "off";
+            /** Position */
+            position: number;
+            /** Variants */
+            variants?: components["schemas"]["PromptVariantResponse"][];
+        };
+        /** PromptSlotSelection */
+        PromptSlotSelection: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "fixed" | "random" | "off" | "text";
+            /** Variant Id */
+            variant_id?: string | null;
+            /** Text */
+            text?: string | null;
+        };
         /**
          * PromptTagsResponse
          * @description 画像のタグをプロンプトにするときの並び(ADR-0039 1章)。エスケープ前のタグ名。
@@ -4345,6 +4528,123 @@ export interface components {
             tags?: string[];
             /** Vocabulary Available */
             vocabulary_available: boolean;
+        };
+        /** PromptTemplateListResponse */
+        PromptTemplateListResponse: {
+            /** Items */
+            items?: components["schemas"]["PromptTemplateSummary"][];
+        };
+        /** PromptTemplateResponse */
+        PromptTemplateResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Separator */
+            separator: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Slots */
+            slots?: components["schemas"]["PromptSlotResponse"][];
+            /** Combos */
+            combos?: components["schemas"]["PromptComboResponse"][];
+        };
+        /**
+         * PromptTemplateSummary
+         * @description 一覧用。中身は数だけ出す。
+         */
+        PromptTemplateSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Separator */
+            separator: string;
+            /** Slot Count */
+            slot_count: number;
+            /** Variant Count */
+            variant_count: number;
+            /** Combo Count */
+            combo_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * PromptTemplateWriteRequest
+         * @description 作成(POST)と丸ごと置換(PUT)の両方で使う。
+         */
+        PromptTemplateWriteRequest: {
+            /** Name */
+            name: string;
+            /**
+             * Separator
+             * @default ,
+             */
+            separator: string;
+            /** Slots */
+            slots?: components["schemas"]["PromptSlotInput"][];
+            /** Combos */
+            combos?: components["schemas"]["PromptComboInput"][];
+        };
+        /**
+         * PromptVariantInput
+         * @description 候補。`id` を渡すと既存の候補を更新し、渡さなければ新しく作る。
+         *
+         *     `ref` は同じリクエストの中だけで使う一時キー。新しい候補を組み合わせから指すときに使う
+         *     (サーバーが id を決めるため、作成前の候補は id で指せない)。
+         */
+        PromptVariantInput: {
+            /** Id */
+            id?: string | null;
+            /** Ref */
+            ref?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Text */
+            text: string;
+            /**
+             * Weight
+             * @default 1
+             */
+            weight: number;
+        };
+        /** PromptVariantResponse */
+        PromptVariantResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string | null;
+            /** Text */
+            text: string;
+            /** Weight */
+            weight: number;
+            /** Position */
+            position: number;
         };
         /**
          * ProviderEntry
@@ -4574,7 +4874,8 @@ export interface components {
             /** Model */
             model: string;
             /** Prompt */
-            prompt: string;
+            prompt?: string | null;
+            prompt_template?: components["schemas"]["RunPromptTemplate"] | null;
             /** Provider */
             provider?: string | null;
             /** Params */
@@ -4694,6 +4995,10 @@ export interface components {
             deployment?: string | null;
             /** Provider Request Id */
             provider_request_id?: string | null;
+            /** Prompt Build */
+            prompt_build?: {
+                [key: string]: unknown;
+            } | null;
             /** Inputs */
             inputs?: components["schemas"]["RunInputRef"][];
             imported?: components["schemas"]["RunImportInfo"] | null;
@@ -4807,6 +5112,18 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+        };
+        /**
+         * RunPromptTemplate
+         * @description `POST /api/runs` の `prompt_template`。`prompt` とは排他。
+         */
+        RunPromptTemplate: {
+            /**
+             * Template Id
+             * Format: uuid
+             */
+            template_id: string;
+            selections?: components["schemas"]["PromptSelections"];
         };
         /**
          * RunSummary
@@ -7877,6 +8194,210 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PromptSetItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_prompt_templates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_prompt_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptTemplateWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prompt_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_prompt_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptTemplateWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_prompt_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    build_prompt_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptBuildRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptBuildResponse"];
                 };
             };
             /** @description Validation Error */
