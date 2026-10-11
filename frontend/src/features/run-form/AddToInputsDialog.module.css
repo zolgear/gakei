@@ -66,3 +66,8 @@
     min-height: 44px;
   }
 }
+
+/* パネル自身がフォーカスを受けるのは受け皿のときだけなので、枠は出さない。 */
+.dialog:focus {
+  outline: none;
+}

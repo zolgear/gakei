@@ -67,7 +67,8 @@
       }
     },
     "drawer": {
-      "closeMenu": "Close menu"
+      "closeMenu": "Close menu",
+      "label": "Menu"
     },
     "iconRail": {
       "resourceNav": "Resources",

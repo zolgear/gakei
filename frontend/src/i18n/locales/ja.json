@@ -67,7 +67,8 @@
       }
     },
     "drawer": {
-      "closeMenu": "メニューを閉じる"
+      "closeMenu": "メニューを閉じる",
+      "label": "メニュー"
     },
     "iconRail": {
       "resourceNav": "リソース",

@@ -109,3 +109,75 @@ export function restoreFocus(previous: HTMLElement | null | undefined): void {
   if (!previous.isConnected) return
   previous.focus?.()
 }
+
+// ---------------------------------------------------------------------------
+// 個別に作ったダイアログ(ConfirmDialog、エディターなど)向けの規則(ADR-0009 9章)。
+// フック本体は `useModalFocus.ts`。ここには偽の要素で確かめられる部分だけを置く。
+// ---------------------------------------------------------------------------
+
+/**
+ * 最初にフォーカスを置く要素の目印。削除の確認の「キャンセル」のように、
+ * 先頭ではない要素へ最初のフォーカスを置きたいときに付ける。
+ */
+export const INITIAL_FOCUS_ATTRIBUTE = 'data-initial-focus'
+
+/**
+ * 個別のダイアログが開いた直後にフォーカスを移す先。
+ * 目印の付いた要素が操作できればそれを、無ければ `initialFocusTarget` と同じ規則で選ぶ。
+ */
+export function dialogInitialFocusTarget(panel: HTMLElement): HTMLElement {
+  const marked = panel.querySelector?.(`[${INITIAL_FOCUS_ATTRIBUTE}]`) as HTMLElement | null | undefined
+  if (marked != null && collectFocusable(panel).includes(marked)) return marked
+  return initialFocusTarget(panel)
+}
+
+/** 重なりの判定に使う、要素の最小限の形。 */
+export interface DialogNodeLike {
+  contains: (other: never) => boolean
+  compareDocumentPosition: (other: never) => number
+}
+
+/** `Node.DOCUMENT_POSITION_FOLLOWING`(テストでは `Node` が無いので数で持つ)。 */
+const DOCUMENT_POSITION_FOLLOWING = 4
+
+/**
+ * `panel` が、いまキーを受けるべきいちばん上のダイアログか。
+ *
+ * - `managed`: `useModalFocus` で開いた順のパネル。後から開いたものが上。
+ * - `unmanaged`: それ以外の `aria-modal="true"` の要素(`Modal` のパネルなど)。開いた順が
+ *   分からないので、文書順で後ろにあるもの(中に入れ子で描かれたものを含む)を上とみなす。
+ *   `panel` を中に含むもの(`Modal` の中の確認など)は下にある。
+ */
+export function isTopmostDialog<T extends DialogNodeLike>(panel: T, managed: readonly T[], unmanaged: readonly T[]): boolean {
+  if (managed[managed.length - 1] !== panel) return false
+  return !unmanaged.some(
+    (other) =>
+      other !== panel &&
+      !other.contains(panel as never) &&
+      (panel.compareDocumentPosition(other as never) & DOCUMENT_POSITION_FOLLOWING) !== 0,
+  )
+}
+
+/** `focusOrigin` で使う、要素の最小限の形。 */
+export interface FocusOriginNodeLike {
+  contains: (other: never) => boolean
+}
+
+/**
+ * 閉じたときに戻す先(開く前にフォーカスがあった要素)を決める。
+ *
+ * 効果(useEffect)が動く時点では、中の要素の `autoFocus` が先にフォーカスを奪っていることがある。
+ * そのときは `active` がパネルの中なので、その直前にフォーカスを持っていた要素
+ * (最後の focusin の `relatedTarget`)を使う。`body` は戻す先にしない。
+ */
+export function focusOrigin<T extends FocusOriginNodeLike>(
+  panel: T,
+  active: T | null,
+  lastRelated: T | null,
+  body: T | null,
+): T | null {
+  const candidate = active !== null && panel.contains(active as never) ? lastRelated : active
+  if (candidate === null || candidate === body) return null
+  if (panel.contains(candidate as never)) return null
+  return candidate
+}

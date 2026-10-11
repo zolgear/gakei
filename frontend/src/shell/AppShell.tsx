@@ -14,6 +14,8 @@ import { useScrollRestoration } from './useScrollRestoration'
 import { MissingApiKeyBanner } from '../features/settings/MissingApiKeyBanner'
 import { useFaviconProgress } from '../features/favicon/useFaviconProgress'
 import { useI18n } from '../i18n'
+import { MODAL_BODY_ATTRIBUTE } from '../components/modalFocus'
+import { useModalFocus } from '../components/useModalFocus'
 import styles from './AppShell.module.css'
 
 /**
@@ -45,6 +47,11 @@ export function AppShell() {
   }
   const selectedPanel = displayedPanel(rememberedPanel, collapsed, panelOverride)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // 狭い幅のドロワーは裏を覆うので、ダイアログと同じフォーカスの規則にする(ADR-0009 9章)。
+  // 開いたらレールの先頭へ移し、Tab は中で回し、Esc で閉じ、閉じたらメニューのボタンへ戻す。
+  // 広い幅では描かれない(display: none)ので、フック側で何もしない。
+  const drawerRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(drawerRef, drawerOpen, { onEscape: () => setDrawerOpen(false), isolateKeys: false })
   // App バーの虫眼鏡 / `/` キーから検索パネルにフォーカスを渡すための要求番号。
   const [searchFocusRequest, setSearchFocusRequest] = useState(0)
   const mainRef = useRef<HTMLElement | null>(null)
@@ -113,14 +120,20 @@ export function AppShell() {
           </div>
 
           {drawerOpen && (
-            <div className={styles.drawerOverlay}>
+            <div
+              ref={drawerRef}
+              className={styles.drawerOverlay}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t.shell.drawer.label}
+            >
               <button
                 type="button"
                 aria-label={t.shell.drawer.closeMenu}
                 className={styles.drawerBackdrop}
                 onClick={() => setDrawerOpen(false)}
               />
-              <div className={styles.drawerPanel}>
+              <div className={styles.drawerPanel} {...{ [MODAL_BODY_ATTRIBUTE]: '' }}>
                 <IconRail selected={selectedPanel} onSelect={handleSelectPanel} />
                 <SidebarPanel selected={selectedPanel} />
               </div>
