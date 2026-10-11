@@ -164,6 +164,10 @@ def test_clip_models_do_not_embed_prompts(client: TestClient) -> None:
     body = _patch(client, enabled=True)
     assert body["active_model_key"] == CLIP_KEY
     assert body["prompt_supported"] is False
+    # 指示で探せるかは、管理者でなくても読める capabilities でも分かる(ADR-0045 6章)。
+    caps = client.get("/api/capabilities").json()["embeddings"]
+    assert caps["available"] is True
+    assert caps["prompt_search"] is False
     run = _generate(client, "a boat")
     time.sleep(1.2)
     assert _prompt_rows(client) == []
@@ -181,8 +185,10 @@ def test_clip_models_do_not_embed_prompts(client: TestClient) -> None:
 
 
 def test_auto_embeds_prompt_and_searches_runs(client: TestClient) -> None:
+    assert client.get("/api/capabilities").json()["embeddings"]["prompt_search"] is False
     body = _patch(client, enabled=True, onnx_model="embeddinggemma-2-q8")
     assert body["prompt_supported"] is True
+    assert client.get("/api/capabilities").json()["embeddings"]["prompt_search"] is True
     boat = _generate(client, "a red boat on the sea", n=2)
     cat = _generate(client, "a sleeping cat")
     row = _wait_prompt(client, boat["id"])
@@ -218,6 +224,13 @@ def test_auto_embeds_prompt_and_searches_runs(client: TestClient) -> None:
     assert first["prompt"] == "a red boat on the sea"
     assert first["prompt_truncated"] is False
     assert first["output"]["id"] == boat["outputs"][0]["asset_id"]
+    # 履歴のカード用の要約(キーワード検索の Run と同じ形)。
+    summary = first["run"]
+    assert summary["id"] == boat["id"]
+    assert summary["status"] == "succeeded"
+    assert summary["prompt"] == "a red boat on the sea"
+    assert [o["asset_id"] for o in summary["outputs"]] == [o["asset_id"] for o in boat["outputs"]]
+    assert summary["input_count"] == 0
 
     # 画像の絞り込みは Run には掛けられない。
     bad = client.get(

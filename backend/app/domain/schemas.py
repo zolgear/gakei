@@ -47,6 +47,9 @@ class EmbeddingCapabilities(BaseModel):
     # 使うエンジン(使えないときは null)。リモートなら、画像で探す画像と検索の文章が推論
     # サーバーに送られることを画面に書く(ADR-0033 2章)。
     engine: Literal["onnx", "remote"] | None = None
+    # 指示(プロンプト)で探せるか(ADR-0045)。使うモデルがプロンプトの埋め込みに対応するときだけ
+    # true。検索ページの「画像 / 指示」の切り替えの出し分けに使う。
+    prompt_search: bool = False
 
 
 class CapabilitiesResponse(BaseModel):
@@ -1764,6 +1767,9 @@ class SemanticRunHit(BaseModel):
     # 最初の出力(削除されていない、`output_index` の最も小さいもの)。無ければ null。
     output: AssetSummary | None = None
     score: float
+    # 履歴のカードで並べるための Run の要約(キーワード検索の `runs` と同じ形)。検索ページが
+    # 指示の結果を履歴のカードで出すのに使う(ADR-0045 6章、2026-10-11 追記)。
+    run: RunSummary
 
 
 class SemanticSearchResponse(BaseModel):

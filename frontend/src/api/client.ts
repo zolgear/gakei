@@ -1239,6 +1239,7 @@ export type EmbeddingErrorCode = components['schemas']['EmbeddingErrorDetail']['
 export type AssetEmbeddingStatus = components['schemas']['AssetEmbeddingStatus']
 export type SemanticSearchResponse = components['schemas']['SemanticSearchResponse']
 export type SemanticAssetHit = components['schemas']['SemanticAssetHit']
+export type SemanticRunHit = components['schemas']['SemanticRunHit']
 export type SimilarAssetsResponse = components['schemas']['SimilarAssetsResponse']
 export type SimilarImageSearchResponse = components['schemas']['SimilarImageSearchResponse']
 export type DuplicatesResponse = components['schemas']['DuplicatesResponse']
@@ -1290,7 +1291,10 @@ export function requestAssetEmbedding(assetId: string): Promise<AssetEmbeddingSt
   return request(`/api/assets/${assetId}/embedding`, { method: 'POST' })
 }
 
-/** 文章での検索(類似度の高い順)。 */
+/**
+ * 文章での検索(類似度の高い順)。`target: 'prompt'` で指示(プロンプト)を探し、Run を `runs` に返す
+ * (ADR-0045 5章)。既定の画像は `assets` に返す。
+ */
 export function semanticSearch(
   params: operations['semantic_search']['parameters']['query'],
 ): Promise<SemanticSearchResponse> {

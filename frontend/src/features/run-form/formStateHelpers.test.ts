@@ -88,7 +88,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
 function caps(overrides: Partial<CapabilitiesResponse> = {}): CapabilitiesResponse {
   return {
     default_provider: 'fake',
-    embeddings: { available: false, index_backend: 'numpy' },
+    embeddings: { available: false, index_backend: 'numpy', prompt_search: false },
     providers: [provider({ provider: 'fake' })],
     ...overrides,
   }
