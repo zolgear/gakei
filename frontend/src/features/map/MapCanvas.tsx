@@ -138,8 +138,8 @@ const MAX_FOG = 0.82
 /** フォグの段数(点をまとめて描くために量子化する)。 */
 const FOG_STEPS = 6
 /** 座標のラインの濃さ(軸と格子)。 */
-const AXIS_ALPHA = 0.5
-const GRID_ALPHA = 0.16
+const AXIS_ALPHA = 0.85
+const GRID_ALPHA = 0.4
 
 interface Colors {
   dot: string
@@ -648,13 +648,13 @@ export function MapCanvas({
     function drawAxisGrid(target: CanvasRenderingContext2D) {
       const grid = axisGridLines(computeBounds3(pos!, n))
       if (!grid) return
-      const drawSegments = (segments: Float32Array, alpha: number, lineWidth: number) => {
+      const drawSegments = (segments: Float32Array, alpha: number, lineWidth: number, color: string) => {
         const count = Math.floor(segments.length / 3)
         if (count === 0) return
         const out = ensureProjectedCapacity(scratch.axisPoints, count)
         proj.project(segments, count, size, out, 3)
         target.save()
-        target.strokeStyle = colors.border
+        target.strokeStyle = color
         target.lineWidth = lineWidth
         for (let k = 0; k + 1 < count; k += 2) {
           if (!out.front[k] || !out.front[k + 1]) continue
@@ -668,8 +668,9 @@ export function MapCanvas({
         }
         target.restore()
       }
-      drawSegments(grid.grid, GRID_ALPHA, 1)
-      drawSegments(grid.axes, AXIS_ALPHA, 1.5)
+      drawSegments(grid.grid, GRID_ALPHA, 1, colors.border)
+      // 軸は格子より明るい色で、原点の向きが分かるようにする。
+      drawSegments(grid.axes, AXIS_ALPHA, 1.5, colors.dot)
     }
   }
 
