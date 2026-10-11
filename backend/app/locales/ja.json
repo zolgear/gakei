@@ -356,6 +356,7 @@
       "invalidModel": "モデル名は1〜{max}文字で指定してください",
       "invalidApiFormat": "形式は infinity である必要があります",
       "invalidThreshold": "しきい値は{min}〜{max}の数値である必要があります",
+      "thresholdNoModel": "しきい値は、リモートの接続先とモデル名を設定してから保存してください",
       "vectorsNotFound": "このモデルのベクトルはありません"
     },
     "auth": {

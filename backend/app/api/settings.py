@@ -614,7 +614,9 @@ def backfill_annotations(
 
 
 def _embedding_model_statuses(
-    settings: Settings, downloader: ClipModelDownloader
+    settings: Settings,
+    downloader: ClipModelDownloader,
+    config: embedding_settings.EmbeddingConfig,
 ) -> list[EmbeddingOnnxModelStatus]:
     statuses: list[EmbeddingOnnxModelStatus] = []
     for name, model in CLIP_MODELS.items():
@@ -629,6 +631,10 @@ def _embedding_model_statuses(
                 memory_bytes=model.memory_bytes,
                 memory_text_bytes=model.memory_text_bytes,
                 license=model.license,
+                heavy=model.heavy,
+                many_languages=model.many_languages,
+                duplicate_threshold=embedding_settings.onnx_threshold(config, name),
+                duplicate_threshold_default=model.duplicate_threshold,
                 downloaded=clip_is_downloaded(settings.data_dir, name),
                 download_status=state.status,  # type: ignore[arg-type]
                 download_progress=state.progress,
@@ -660,11 +666,12 @@ def _embedding_settings_response(
         failed = embeddings_domain.status_count(db, active_key, (embeddings_domain.STATUS_FAILED,))
     return EmbeddingSettingsResponse(
         **{name: getattr(config, name) for name in embedding_settings.FIELDS},
+        duplicate_threshold_default=embedding_settings.default_threshold(config),
         active_model_key=active_key,
         active_languages=languages,  # type: ignore[arg-type]
         usable=embedding_settings.usable(config, settings),
         index_backend=index_backend,  # type: ignore[arg-type]
-        onnx_models=_embedding_model_statuses(settings, downloader),
+        onnx_models=_embedding_model_statuses(settings, downloader, config),
         stored=[
             EmbeddingStoredCount(model_key=key, count=count, dim=dim, active=key == active_key)
             for key, count, dim in embeddings_domain.stored_counts(db)

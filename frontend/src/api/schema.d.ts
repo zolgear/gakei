@@ -3233,7 +3233,7 @@ export interface components {
              * Name
              * @enum {string}
              */
-            name: "clip-vit-b32-u8" | "clip-vit-b32" | "clip-japanese-base";
+            name: "clip-vit-b32-u8" | "clip-vit-b32" | "clip-japanese-base" | "embeddinggemma-2-q8";
             /** Model Key */
             model_key: string;
             /** Languages */
@@ -3248,6 +3248,20 @@ export interface components {
             memory_text_bytes: number;
             /** License */
             license: string;
+            /**
+             * Heavy
+             * @default false
+             */
+            heavy: boolean;
+            /**
+             * Many Languages
+             * @default false
+             */
+            many_languages: boolean;
+            /** Duplicate Threshold */
+            duplicate_threshold: number;
+            /** Duplicate Threshold Default */
+            duplicate_threshold_default: number;
             /** Downloaded */
             downloaded: boolean;
             /**
@@ -3276,7 +3290,7 @@ export interface components {
              * Onnx Model
              * @enum {string}
              */
-            onnx_model: "clip-vit-b32-u8" | "clip-vit-b32" | "clip-japanese-base";
+            onnx_model: "clip-vit-b32-u8" | "clip-vit-b32" | "clip-japanese-base" | "embeddinggemma-2-q8";
             /** Remote Connection Id */
             remote_connection_id?: string | null;
             /** Remote Model */
@@ -3290,6 +3304,8 @@ export interface components {
             auto_on_ingest: boolean;
             /** Duplicate Threshold */
             duplicate_threshold: number;
+            /** Duplicate Threshold Default */
+            duplicate_threshold_default: number;
             /** Active Model Key */
             active_model_key?: string | null;
             /** Active Languages */

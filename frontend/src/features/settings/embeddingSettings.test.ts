@@ -9,6 +9,8 @@ import {
   isValidDuplicateThreshold,
   describeStoredModelKey,
   sortLanguages,
+  thresholdBaseline,
+  thresholdDefault,
   validateEmbeddingDraft,
   type EmbeddingDraft,
 } from './embeddingSettings'
@@ -23,6 +25,10 @@ function model(overrides: Partial<EmbeddingOnnxModelStatus> = {}): EmbeddingOnnx
     memory_bytes: 600_000_000,
     memory_text_bytes: 300_000_000,
     license: 'MIT',
+    heavy: false,
+    many_languages: false,
+    duplicate_threshold: 0.9,
+    duplicate_threshold_default: 0.9,
     downloaded: true,
     download_status: 'idle',
     download_progress: null,
@@ -41,6 +47,7 @@ function settings(overrides: Partial<EmbeddingSettingsResponse> = {}): Embedding
     remote_api_format: 'infinity',
     auto_on_ingest: true,
     duplicate_threshold: 0.9,
+    duplicate_threshold_default: 0.9,
     active_model_key: 'onnx:clip-vit-b32-u8@d15189d',
     active_languages: ['en'],
     usable: true,
@@ -87,6 +94,28 @@ describe('diffEmbeddingDraft', () => {
       enabled: false,
       duplicate_threshold: 0.93,
     })
+  })
+
+  it('しきい値は、下書きで選んでいるモデルの保存済みの値と比べる(ADR-0044 5章)', () => {
+    const eg2 = model({
+      name: 'embeddinggemma-2-q8',
+      duplicate_threshold: 0.97,
+      duplicate_threshold_default: 0.97,
+    })
+    const saved = settings({ duplicate_threshold: 0.93, onnx_models: [model({ duplicate_threshold: 0.93 }), eg2] })
+    const switched = { ...embeddingDraftFromSettings(saved), onnx_model: 'embeddinggemma-2-q8' as const }
+    expect(thresholdBaseline(switched, saved)).toBe(0.97)
+    expect(thresholdDefault(switched, saved)).toBe(0.97)
+    // モデルを選び直してそのモデルの値にしたなら、しきい値は送らない。
+    expect(diffEmbeddingDraft({ ...switched, duplicate_threshold: '0.97' }, saved)).toEqual({
+      onnx_model: 'embeddinggemma-2-q8',
+    })
+    expect(diffEmbeddingDraft({ ...switched, duplicate_threshold: '0.95' }, saved)).toEqual({
+      onnx_model: 'embeddinggemma-2-q8',
+      duplicate_threshold: 0.95,
+    })
+    // リモートに切り替えたときの既定は 0.9。
+    expect(thresholdDefault({ engine: 'remote', onnx_model: 'clip-vit-b32-u8' }, saved)).toBe(0.9)
   })
 
   it('同じ値を別の書き方で入れても差分にしない', () => {
