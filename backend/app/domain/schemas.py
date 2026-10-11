@@ -29,6 +29,9 @@ class ProviderEntry(ProviderCapabilities):
 
     available: bool
     unavailable_reason: str | None = None
+    # 接続先(SD WebUI・ComfyUI)にまだ一度も問い合わせ終えていない(裏で確かめている)。
+    # そのあいだ available は False、モデルの一覧は空のことがある。フロントは少し後に読み直す。
+    checking: bool = False
     requires_api_key: bool
     supports_pricing: bool
 
@@ -49,6 +52,9 @@ class EmbeddingCapabilities(BaseModel):
     # 使うエンジン(使えないときは null)。リモートなら、画像で探す画像と検索の文章が推論
     # サーバーに送られることを画面に書く(ADR-0033 2章)。
     engine: Literal["onnx", "remote"] | None = None
+    # 指示(プロンプト)で探せるか(ADR-0045)。使うモデルがプロンプトの埋め込みに対応するときだけ
+    # true。検索ページの「画像 / 指示」の切り替えの出し分けに使う。
+    prompt_search: bool = False
 
 
 class CapabilitiesResponse(BaseModel):
@@ -1358,6 +1364,9 @@ class ComfyUIStatusResponse(BaseModel):
     locked: bool
     # url が None のときは null。
     loopback: bool | None = None
+    # ADR-0013 7章「無効にする / 有効にする」: URL を残したまま使わない状態か。true の間は
+    # enabled も false(モデルの選択肢に出さず、接続先に問い合わせない)。url は残っていれば返す。
+    disabled: bool
 
 
 class ComfyUIConnectionTestRequest(BaseModel):
@@ -1408,6 +1417,9 @@ class SdWebuiStatusResponse(BaseModel):
     # 接続できたときだけ。forge は Forge 系(forge_additional_modules がある)、a1111 はそれ以外。
     flavor: Literal["forge", "a1111"] | None = None
     checkpoint_count: int | None = None
+    # ADR-0038 6章「無効にする / 有効にする」: URL・資格情報を残したまま使わない状態か。true の間は
+    # enabled も false(モデルの選択肢に出さず、接続先に問い合わせない)。url は残っていれば返す。
+    disabled: bool
 
 
 class SdWebuiLora(BaseModel):
@@ -1969,6 +1981,9 @@ class SemanticRunHit(BaseModel):
     # 最初の出力(削除されていない、`output_index` の最も小さいもの)。無ければ null。
     output: AssetSummary | None = None
     score: float
+    # 履歴のカードで並べるための Run の要約(キーワード検索の `runs` と同じ形)。検索ページが
+    # 指示の結果を履歴のカードで出すのに使う(ADR-0045 6章、2026-10-11 追記)。
+    run: RunSummary
 
 
 class SemanticSearchResponse(BaseModel):
@@ -2089,6 +2104,24 @@ class EmbeddingGraphResponse(BaseModel):
     # 系列(ADR-0003)の主たる親の辺 `[親の位置, 子の位置]`。両方が `nodes` にあるものだけ。
     # `include_lineage` を指定したときだけ入る。
     lineage_edges: list[list[int]] | None = None
+    # 絞り込みに合う、ベクトルのある画像の数。
+    total: int
+    # `limit` を超えたので、古い画像を返していない。
+    truncated: bool
+
+
+class EmbeddingGraphScoresResponse(BaseModel):
+    """`GET /api/embeddings/graph/scores`。マップのノード全件と検索の文章の類似度。
+
+    `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`
+    なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
+    """
+
+    model_key: str
+    # 前後の空白を落とした検索の文章。
+    query: str
+    ids: list[uuid.UUID] = Field(default_factory=list)
+    scores: list[float] = Field(default_factory=list)
     # 絞り込みに合う、ベクトルのある画像の数。
     total: int
     # `limit` を超えたので、古い画像を返していない。

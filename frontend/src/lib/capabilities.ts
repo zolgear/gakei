@@ -36,6 +36,9 @@ export function parseModelOptionValue(value: string): { provider: string; model:
 /**
  * 現在の provider/model の組が今の capabilities でまだ有効か。無効なら呼び出し側は
  * capabilities の初期値(`default_provider`/`default_model`)に戻すべき合図として使う。
+ *
+ * 接続先をまだ確かめている(`checking`)プロバイダーは、モデルの一覧が空でも有効とみなす
+ * (起動直後などに、選んでいた SD WebUI のモデルを既定に戻してしまわないため)。
  */
 export function isProviderModelValid(
   caps: CapabilitiesResponse,
@@ -43,8 +46,17 @@ export function isProviderModelValid(
   model: string,
 ): boolean {
   const entry = findProvider(caps, provider)
-  return entry !== undefined && entry.models.some((m) => m.model === model)
+  if (entry === undefined) return false
+  return entry.checking || entry.models.some((m) => m.model === model)
 }
+
+/** 接続先をまだ確かめているプロバイダーがあるか(あれば少し後に capabilities を読み直す)。 */
+export function hasCheckingProvider(caps: CapabilitiesResponse | undefined): boolean {
+  return (caps?.providers ?? []).some((p) => p.checking)
+}
+
+// 確かめ中のプロバイダーがあるときに capabilities を読み直す間隔(ミリ秒)
+export const CAPABILITIES_CHECKING_REFETCH_MS = 1000
 
 /**
  * 保存されていた provider を検証する。今の capabilities に無ければ `default_provider` を使う

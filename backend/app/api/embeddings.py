@@ -5,6 +5,7 @@
 - `POST /api/search/similar-image`: 手元の画像に似た画像(画像は保存しない)
 - `GET /api/embeddings/duplicates`: 重複の候補
 - `GET /api/embeddings/graph`: マップの元データ
+- `GET /api/embeddings/graph/scores`: マップのノード全件と検索の文章の類似度
 
 どれも利用者(`require_user`)向けで、見える範囲(ADR-0025)だけを扱う。埋め込みが無効、または
 使えるモデルが無い間は 409(`detail.code = "embeddings_unavailable"`)。エンドポイントは同期関数に
@@ -36,6 +37,7 @@ from app.domain.schemas import (
     DuplicatesResponse,
     EmbeddingErrorDetail,
     EmbeddingGraphResponse,
+    EmbeddingGraphScoresResponse,
     SemanticSearchResponse,
     SimilarAssetsResponse,
     SimilarImageSearchResponse,
@@ -271,6 +273,46 @@ def graph_endpoint(
             group_id=group_id,
             tags=tag,
             include_lineage=include_lineage,
+        )
+    except _ERRORS as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get(
+    "/api/embeddings/graph/scores",
+    response_model=EmbeddingGraphScoresResponse,
+    operation_id="embedding_graph_scores",
+    responses=_CONFLICT,
+)
+def graph_scores_endpoint(
+    q: str = Query(..., description="検索の文章(自然文)"),
+    limit: int = Query(default=domain.GRAPH_DEFAULT_LIMIT, ge=1, le=domain.GRAPH_MAX_LIMIT),
+    group_id: uuid.UUID | None = Query(default=None),
+    tag: list[str] | None = Query(
+        default=None,
+        description="このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND)",
+    ),
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    index: VectorIndex = Depends(get_vector_index),
+    embedder: Embedder = Depends(get_embedder),
+    cache: domain.QueryVectorCache = Depends(get_query_vector_cache),
+    user: CurrentUser = Depends(require_user),
+) -> EmbeddingGraphScoresResponse:
+    """マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
+    `GET /api/embeddings/graph` の `nodes` と同じ並び。"""
+    try:
+        return domain.graph_scores(
+            db,
+            settings=settings,
+            index=index,
+            engines=embedder.engines,
+            cache=cache,
+            viewer=user,
+            q=q,
+            limit=limit,
+            group_id=group_id,
+            tags=tag,
         )
     except _ERRORS as exc:
         raise _http_error(exc) from exc

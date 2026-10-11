@@ -6,6 +6,8 @@ export interface UmapWorkerRequest {
   input: UmapInput
   nEpochs: number
   seed: number
+  /** 次元の数(2 か 3。省くと 2)。返る配置の刻み幅もこれになる。 */
+  nComponents?: 2 | 3
 }
 
 export type UmapWorkerResponse =

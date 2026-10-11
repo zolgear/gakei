@@ -21,9 +21,13 @@ interface RunListRowProps {
   run: RunSummary
   /** 既定は「この Run を表示」(historyPanel.openRun)。呼び出し側の文脈に合わせて上書き可。 */
   ariaLabel?: string
+  /**
+   * 添える文字列(検索パネルの指示の検索の類似度。ADR-0045 6章)。メタ情報の先頭に、欠けない形で出す。
+   */
+  score?: string
 }
 
-export function RunListRow({ run, ariaLabel }: RunListRowProps) {
+export function RunListRow({ run, ariaLabel, score }: RunListRowProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -58,6 +62,7 @@ export function RunListRow({ run, ariaLabel }: RunListRowProps) {
           {/* 狭い幅では末尾から欠けるので、重要な順(状態 → 日時 → モデル)に並べる。モデルは
               履歴カードと同じく model_label(ComfyUI ならワークフロー名)を優先する。 */}
           <span className={styles.meta}>
+            {score && <span className={styles.metaScore}>{score}</span>}
             {run.status !== 'succeeded' && (
               <span className={styles.metaStatus} data-status={run.status}>
                 {statusLabel(run.status)}

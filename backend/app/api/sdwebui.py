@@ -110,10 +110,14 @@ def _probe(
     """到達性と、チェックポイントの数。登録中のプロバイダーが同じ接続先なら、その一覧の
     キャッシュを使う。"""
     availability = client.check_available(timeout=timeout)
+    target = provider if provider is not None and provider.base_url == client.base_url else None
+    if target is not None:
+        # capabilities が裏の問い合わせを待たずに使えるよう、確かめた結果を渡しておく
+        target.record_availability(availability)
     if not availability.available:
         return availability, None
-    if provider is not None and provider.base_url == client.base_url:
-        catalog = provider.catalog()
+    if target is not None:
+        catalog = target.catalog()
     else:
         try:
             catalog = client.fetch_catalog()
@@ -128,15 +132,18 @@ def _build_status(
     url, source = connection.resolve_effective_url(db, settings)
     locked = _is_locked(db)
     credentials = connection.read_credentials(settings.data_dir)
-    if url is None:
+    disabled = connection.is_disabled(db)
+    if url is None or disabled:
+        # 未設定・切り離し・無効。無効の間は URL を見せるが、接続先には問い合わせない。
         return SdWebuiStatusResponse(
-            url=None,
+            url=url,
             enabled=False,
             available=False,
             source=source,
             locked=locked,
-            loopback=None,
+            loopback=is_loopback_url(url) if url is not None else None,
             credentials_set=credentials is not None,
+            disabled=disabled and url is not None,
         )
     availability, count = _probe(
         _make_client(url, credentials), timeout=1.0, provider=_registered(registry)
@@ -153,6 +160,7 @@ def _build_status(
         credentials_set=credentials is not None,
         flavor=availability.flavor,
         checkpoint_count=count,
+        disabled=False,
     )
 
 
@@ -177,6 +185,8 @@ def test_connection(
     settings: Settings = Depends(get_settings),
 ) -> SdWebuiConnectionTestResponse:
     """入力中の URL(省略時は有効な URL)への接続を試す。設定は変えない。
+
+    無効にしている間も試せる(明示の操作なので。無効の状態も変えない)。
 
     保存時と違い、ループバック以外でも確認チェックなしで試せる(送るのは一覧の問い合わせ
     だけで、画像やプロンプトは送らないため)。
@@ -230,6 +240,8 @@ async def set_connection(
 ) -> SdWebuiStatusResponse:
     """接続・URL の変更。再起動なしで登録簿と実行レーンに反映する。
 
+    無効にしている間は URL だけを保存し、無効のままにする(登録しない)。
+
     `runner.ensure_lane` が `asyncio.create_task` を呼ぶため、async にしている
     (`app/api/comfyui.py` の `set_connection` と同じ理由)。
     """
@@ -249,8 +261,9 @@ async def set_connection(
         )
 
     connection.save_connection_url(db, url)
-    registry.set_provider(PROVIDER_NAME, _make_provider(url, settings, session_factory))
-    runner.ensure_lane(PROVIDER_NAME)
+    if not connection.is_disabled(db):
+        registry.set_provider(PROVIDER_NAME, _make_provider(url, settings, session_factory))
+        runner.ensure_lane(PROVIDER_NAME)
 
     return await asyncio.to_thread(_build_status, db, settings, registry)
 
@@ -266,11 +279,56 @@ def detach_connection(
     settings: Settings = Depends(get_settings),
     registry: ProviderRegistry = Depends(get_registry),
 ) -> SdWebuiStatusResponse:
-    """切り離す。過去の Run と資格情報は消さない。"""
+    """切り離す。過去の Run と資格情報は消さない。無効にしていたら、その印も消す。"""
     _reject_if_locked(db, t("sdwebui.api.lockedDetach"))
     connection.save_detached(db)
     registry.set_provider(PROVIDER_NAME, None)
     return _build_status(db, settings, registry)
+
+
+@router.post(
+    "/connection/disable",
+    response_model=SdWebuiStatusResponse,
+    operation_id="disable_sdwebui",
+    dependencies=[Depends(require_admin)],
+)
+def disable_connection(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    registry: ProviderRegistry = Depends(get_registry),
+) -> SdWebuiStatusResponse:
+    """無効にする(ADR-0038 6章)。URL・資格情報・待つ上限は残し、登録簿から外す(切り離しと
+    同じく、モデルの選択肢から消え、裏の取り直しも含めて接続先に問い合わせなくなる)。"""
+    _reject_if_locked(db, t("sdwebui.api.lockedDisable"))
+    url, _source = connection.resolve_effective_url(db, settings)
+    if url is None:
+        raise HTTPException(status_code=409, detail=t("sdwebui.api.notConnected"))
+    connection.save_disabled(db, True)
+    registry.set_provider(PROVIDER_NAME, None)
+    return _build_status(db, settings, registry)
+
+
+@router.post(
+    "/connection/enable",
+    response_model=SdWebuiStatusResponse,
+    operation_id="enable_sdwebui",
+    dependencies=[Depends(require_admin)],
+)
+async def enable_connection(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    registry: ProviderRegistry = Depends(get_registry),
+    runner: Runner = Depends(get_runner),
+    session_factory: sessionmaker = Depends(get_session_factory),
+) -> SdWebuiStatusResponse:
+    """有効に戻す。保存してある同じ設定のまま接続する(async の理由は `set_connection` と同じ)。"""
+    _reject_if_locked(db, t("sdwebui.api.lockedEnable"))
+    url, _source = connection.resolve_effective_url(db, settings)
+    connection.save_disabled(db, False)
+    if url is not None:
+        registry.set_provider(PROVIDER_NAME, _make_provider(url, settings, session_factory))
+        runner.ensure_lane(PROVIDER_NAME)
+    return await asyncio.to_thread(_build_status, db, settings, registry)
 
 
 @router.put(
@@ -332,6 +390,9 @@ def refresh(
     url, _source = connection.resolve_effective_url(db, settings)
     if url is None:
         raise HTTPException(status_code=409, detail=t("sdwebui.api.notConnected"))
+    if connection.is_disabled(db):
+        # 無効の間は接続先に問い合わせない
+        raise HTTPException(status_code=409, detail=t("sdwebui.api.disabled"))
     client = _make_client(url, connection.read_credentials(settings.data_dir))
     try:
         client.refresh_checkpoints()

@@ -7,7 +7,12 @@ import { ApiError, type SdWebuiConnectionTestResponse, type SdWebuiStatus } from
 import { msg } from '../../i18n'
 import { isLoopbackUrl } from '../comfyui-workflows/comfyuiConnectionForm'
 
-export { canSaveConnection, connectionState, isLoopbackUrl } from '../comfyui-workflows/comfyuiConnectionForm'
+export {
+  canSaveConnection,
+  connectionState,
+  hasConnectionUrl,
+  isLoopbackUrl,
+} from '../comfyui-workflows/comfyuiConnectionForm'
 
 export type SdWebuiFlavor = NonNullable<SdWebuiStatus['flavor']>
 
@@ -17,10 +22,13 @@ export function flavorLabel(flavor: SdWebuiStatus['flavor']): string | null {
   return msg().sdwebui.connection.flavors[flavor]
 }
 
-/** カードの見出し(無効/接続できる/接続できない)。 */
-export function connectionHeadline(status: Pick<SdWebuiStatus, 'enabled' | 'available'>): string {
+/** カードの見出し(未接続/無効/接続できる/接続できない)。無効は URL などを残したまま使わない状態。 */
+export function connectionHeadline(
+  status: Pick<SdWebuiStatus, 'enabled' | 'available'> & { disabled?: boolean },
+): string {
   const c = msg().sdwebui.connection
-  if (!status.enabled) return c.disabledHeadline
+  if (status.disabled) return c.disabledHeadline
+  if (!status.enabled) return c.notConnectedHeadline
   return status.available ? c.availableHeadline : c.unavailableHeadline
 }
 
@@ -68,15 +76,21 @@ export function readCredentialsInput(username: string, password: string): Creden
  */
 export function testSuccessNotice(params: {
   enabled: boolean
+  /** 無効にしている間(保存しても無効のまま)か。 */
+  disabled?: boolean
   trimmedUrl: string
   testResult: Pick<SdWebuiConnectionTestResponse, 'available' | 'url'> | undefined
   confirmNonLoopback: boolean
 }): string | null {
-  const { enabled, trimmedUrl, testResult, confirmNonLoopback } = params
+  const { enabled, disabled, trimmedUrl, testResult, confirmNonLoopback } = params
   if (!testResult?.available) return null
   if (trimmedUrl === '' || testResult.url !== trimmedUrl) return null
   const c = msg().sdwebui.connection
-  const base = enabled ? c.testSuccessSaveNotice : c.testSuccessSaveAndConnectNotice
+  const base = disabled
+    ? c.testSuccessSaveDisabledNotice
+    : enabled
+      ? c.testSuccessSaveNotice
+      : c.testSuccessSaveAndConnectNotice
   if (!isLoopbackUrl(trimmedUrl) && !confirmNonLoopback) return base + c.testSuccessNonLoopbackSuffix
   return base
 }

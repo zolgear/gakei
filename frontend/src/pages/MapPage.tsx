@@ -1,9 +1,21 @@
 /**
- * `/map` マップ(ADR-0033 8章)。埋め込みの近さで画像を並べる。タブは2つ(2026-10-04 から
- * ネットワークが先頭で既定)。
+ * `/map` マップ(ADR-0033 8章)。埋め込みの近さで画像を並べる。既定のタブはネットワーク
+ * (2026-10-04 から)。
  *
- * - ネットワーク: 類似度がしきい値以上の組を辺にした力学モデル(`NetworkView`)。系列の辺も重ねられる。
- * - 地図: umap-js の 2D 配置(`UmapView`)。
+ * - ネットワーク: 類似度がしきい値以上の組を辺にした、3 次元の力学モデル(`NetworkView`)。系列の
+ *   辺も重ねられる。
+ * - 地図: umap-js の 3 次元の配置を、回る立体として見る(`Umap3DView`。試作)。
+ *
+ * タブはこの 2 つ。別に「見せ方」(平面 / 立体)の切り替えがあり、どちらのタブにも効く
+ * (タブ = 何を並べるか、見せ方 = どう見せるか)。既定は立体で、平面を選ぶとネットワークは
+ * d3-force の 2 次元、地図は `UmapView`(UMAP 2 次元)になる。以前の `view=map` と覚えた値は
+ * 地図のタブとして読む。
+ *
+ * マップは面積が価値なので、上部は 1 段だけにする(狭い幅では 2 段)。1 段目は 見出し → タブ →
+ * 見せ方 → 文章で探す入力欄 → 「絞り込み」「表示」のボタンだけで、たまにしか触らない設定は
+ * ボタンを押して開くパネル(`ToolbarPanel`。canvas に重ねるので表示エリアの高さを奪わない)に
+ * 入れる。どの項目をどちらに出すかは `mapToolbar.ts`。「辺 N 本」「一致 N 件」「上限で切った旨」は
+ * canvas の隅に薄く重ねる(`statusOverlay`)。
  *
  * 元データは `GET /api/embeddings/graph`。グループ・タグ(複数なら AND)・上限・近傍の数で絞り込める。タブ、
  * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
@@ -11,24 +23,39 @@
  * ブラウザにも覚え、URL に無ければ覚えた値を使う(`mapPrefs.ts`。2026-10-04)。選んだ画像を大きく見る
  * パネルの開閉もブラウザにだけ覚える(URL には置かない)。上限で切ったときは、絞り込みを促す。
  * 埋め込みが使えないときは App バーの入口を出さない。直接開いたときは使えない旨だけを出す。
+ *
+ * マップ内の意味検索(試作)は、上部の入力欄。打ち終わってからマップと同じ絞り込みで
+ * `GET /api/embeddings/graph/scores` を呼び、Asset ID で突き合わせて「上位 N 件」を一致とする
+ * (類似度の帯が狭いので絶対値のしきい値は使わない。`mapSearchHighlight.ts`)。検索の文章は URL
+ * だけに置き、一致の件数と距離の取り方はブラウザにも覚える。配置の距離の取り方(試作)は、
+ * 効く地図のタブでだけ選べる。
  */
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
-import { embeddingGraph } from '../api/client'
+import { embeddingGraph, embeddingGraphScores } from '../api/client'
 import { TagAutocomplete } from '../features/annotations/TagAutocomplete'
 import { TagChip } from '../features/annotations/TagChip'
 import { embeddingErrorKind, retryEmbeddingQuery } from '../features/embeddings/embeddingErrors'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { lineagePairs, similarityEdges } from '../features/map/edges'
 import {
+  buildSearchHighlight,
+  MAP_MATCH_COUNT_CHOICES,
+} from '../features/map/mapSearchHighlight'
+import { mapDisplayFields, mapDisplaySummary } from '../features/map/mapToolbar'
+import { MAP_DISTANCE_METRICS, type MapDistanceMetric } from '../features/map/umapInput'
+import {
   MAP_K_CHOICES,
+  MAP_SHAPES,
   MAP_LIMIT_CHOICES,
+  MAP_QUERY_MAX,
   MAP_THRESHOLD_MAX,
   MAP_THRESHOLD_MIN,
   MAP_THRESHOLD_STEP,
   activeFilterCount,
   buildMapSearchParams,
+  isMapSettingsChange,
   clampThreshold,
   normalizeTagList,
   parseMapUrlState,
@@ -37,6 +64,7 @@ import {
 } from '../features/map/mapUrlState'
 import { loadMapPrefs, pickStoredFields, saveMapPrefs } from '../features/map/mapPrefs'
 import { NetworkView } from '../features/map/NetworkView'
+import { Umap3DView } from '../features/map/Umap3DView'
 import { UmapView } from '../features/map/UmapView'
 import { useDebouncedValue } from '../features/search/useDebouncedValue'
 import { useAssetGroups } from '../features/stock/groups/assetGroupQueries'
@@ -44,6 +72,8 @@ import { fmt, useI18n } from '../i18n'
 import styles from './MapPage.module.css'
 
 const THRESHOLD_DEBOUNCE_MS = 200
+/** 検索の文章を打ち終わるのを待つ時間。 */
+const SEARCH_DEBOUNCE_MS = 300
 
 export function MapPage() {
   const { t } = useI18n()
@@ -78,14 +108,17 @@ function MapBody() {
   const urlKey = searchParams.toString()
   const urlState = parseMapUrlState(searchParams, storedPrefs)
   const state: MapUrlState = pending && pending.base === urlKey ? { ...urlState, ...pending.patch } : urlState
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  // 上部のパネルは一度に 1 つだけ開く(canvas を覆う面積を増やさない)。
+  const [openPanel, setOpenPanel] = useState<'filters' | 'display' | null>(null)
+  /** 画面の設定を変えた回数(開いたときの最初の回転を止めるのに使う)。 */
+  const [settingsVersion, setSettingsVersion] = useState(0)
   const threshold = state.threshold
   const debouncedThreshold = useDebouncedValue(threshold, THRESHOLD_DEBOUNCE_MS)
-  const filtersId = useId()
   const thresholdId = useId()
 
   // スライダーを動かすたびに呼ばれるので、履歴を増やさないよう replace で書く。
   function update(patch: Partial<MapUrlState>) {
+    if (isMapSettingsChange(patch)) setSettingsVersion((v) => v + 1)
     setPending((prev) => ({ base: urlKey, patch: { ...(prev && prev.base === urlKey ? prev.patch : {}), ...patch } }))
     if (Object.keys(pickStoredFields(patch)).length > 0) setStoredPrefs(saveMapPrefs(storedPrefs, patch))
     setSearchParams(buildMapSearchParams({ ...state, ...patch }), { replace: true })
@@ -101,6 +134,25 @@ function MapBody() {
     if (open !== previewOpen) setStoredPrefs(saveMapPrefs(storedPrefs, { previewOpen: open }))
   }
   const preview = { open: previewOpen, onOpenChange: setPreviewOpen }
+
+  /**
+   * 開いたときに一度だけ回すか(どちらのタブも立体)。URL には置かず、覚えた値だけを見る
+   * (既定は回す)。
+   * 設定を変えたら回転を止め、以後は回し直さない(タブを切り替えて戻ってきても回さない)。
+   */
+  const introSpin = {
+    enabled: (storedPrefs.autoRotate3d ?? true) && settingsVersion === 0,
+    settingsVersion,
+  }
+
+  // 座標のラインの重ね表示。URL には置かず、覚えた値だけを見る(既定は出さない)。
+  const axesShown = storedPrefs.axes3d ?? false
+  const axes = {
+    shown: axesShown,
+    onShownChange: (shown: boolean) => {
+      if (shown !== axesShown) setStoredPrefs(saveMapPrefs(storedPrefs, { axes3d: shown }))
+    },
+  }
 
   const query = useQuery({
     queryKey: ['embeddings', 'graph', state.k, state.limit, state.groupId, state.tags],
@@ -120,6 +172,34 @@ function MapBody() {
   })
   const graph = query.data
 
+  // マップ内の意味検索(試作)。文章を打ち終わってから、マップと同じ絞り込みで類似度を取る。
+  const trimmedQuery = state.query.trim()
+  const debouncedQuery = useDebouncedValue(trimmedQuery, SEARCH_DEBOUNCE_MS)
+  const scoresQuery = useQuery({
+    queryKey: ['embeddings', 'graph', 'scores', debouncedQuery, state.limit, state.groupId, state.tags],
+    queryFn: () =>
+      embeddingGraphScores({
+        q: debouncedQuery,
+        limit: state.limit,
+        group_id: state.groupId ?? undefined,
+        tag: state.tags.length > 0 ? state.tags : undefined,
+      }),
+    enabled: debouncedQuery !== '',
+    retry: retryEmbeddingQuery,
+    // 前の文章の結果をそのまま見せると、別の文章の一致を出してしまうので持ち越さない。
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  })
+  // 一致は Asset ID で突き合わせ、順位で決める(類似度の帯が狭いので絶対値のしきい値は使わない)。
+  const nodeIds = useMemo(() => (graph?.nodes ?? []).map((node) => node.id), [graph])
+  const scoresData = scoresQuery.data
+  // 一致は数千件でも軽いので、毎回そのまま組む(`state` は押した値を先に出すために作り直す
+  // オブジェクトなので、useMemo の依存に入れると React Compiler の最適化を止めてしまう)。
+  const searchHighlight =
+    debouncedQuery !== '' && scoresData
+      ? buildSearchHighlight(nodeIds, scoresData.ids ?? [], scoresData.scores ?? [], state.matchCount, debouncedQuery)
+      : null
+
   const edgeResult = useMemo(
     () =>
       graph
@@ -133,115 +213,192 @@ function MapBody() {
   )
 
   const nodeCount = graph?.nodes?.length ?? 0
+  // 大きく見るパネルは、開いていて、かつ画像を選んでいるときだけ出る(`MapCanvas` と同じ条件)。
+  // 隅の状態表示をよける幅も、これに合わせる(選択を外したら右端に戻す)。
+  const previewShown = previewOpen && !!state.selectedId && (graph?.nodes ?? []).some((n) => n.id === state.selectedId)
   const filterCount = activeFilterCount(state)
   const errorKind = embeddingErrorKind(query.error)
+
+  // 「表示」パネルの項目と、ボタンに添える主要な値。
+  const displayFields = mapDisplayFields(state.view, trimmedQuery !== '')
+  const displaySummary = mapDisplaySummary(state.view, threshold, state.metric)
+  const displayValue =
+    displaySummary.kind === 'threshold' ? displaySummary.text : m.metricOption[displaySummary.metric]
+  const graphReady = Boolean(graph) && !query.isError && nodeCount > 0
 
   return (
     <>
       <header className={styles.toolbar}>
         <h1 className={styles.title}>{m.title}</h1>
-        <div className={styles.tabs} role="tablist" aria-label={m.viewLabel}>
-          {(['network', 'umap'] as MapView[]).map((view) => (
-            <button
-              key={view}
-              type="button"
-              role="tab"
-              aria-selected={state.view === view}
-              className={styles.tab}
-              data-active={state.view === view}
-              onClick={() => update({ view })}
-            >
-              {view === 'umap' ? m.tabMap : m.tabNetwork}
-            </button>
-          ))}
+        <div className={styles.tabGroups}>
+          <div className={styles.tabs} role="tablist" aria-label={m.viewLabel}>
+            {(['network', 'umap3d'] as MapView[]).map((view) => (
+              <button
+                key={view}
+                type="button"
+                role="tab"
+                aria-selected={state.view === view}
+                className={styles.tab}
+                data-active={state.view === view}
+                onClick={() => update({ view })}
+              >
+                {view === 'umap3d' ? m.tabMap : m.tabNetwork}
+              </button>
+            ))}
+          </div>
+          <div className={styles.tabs} role="group" aria-label={m.shapeLabel}>
+            {MAP_SHAPES.map((shape) => (
+              <button
+                key={shape}
+                type="button"
+                aria-pressed={state.shape === shape}
+                className={styles.tab}
+                data-active={state.shape === shape}
+                onClick={() => update({ shape })}
+              >
+                {m.shapeOption[shape]}
+              </button>
+            ))}
+          </div>
         </div>
-        <button
-          type="button"
-          className={styles.filtersToggle}
-          aria-expanded={filtersOpen}
-          aria-controls={filtersId}
-          onClick={() => setFiltersOpen((v) => !v)}
-        >
-          {filterCount > 0 ? fmt(m.filtersWithCount, { count: filterCount }) : m.filters}
-        </button>
-      </header>
 
-      <div id={filtersId} className={styles.filters} data-open={filtersOpen}>
-        <GroupFilter value={state.groupId} onChange={(groupId) => update({ groupId })} />
-        <TagFilter value={state.tags} onChange={(tags) => update({ tags })} />
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>{m.limitLabel}</span>
-          <select
-            className={styles.select}
-            value={state.limit}
-            onChange={(e) => update({ limit: Number(e.target.value) })}
-          >
-            {MAP_LIMIT_CHOICES.map((value) => (
-              <option key={value} value={value}>
-                {fmt(m.limitOption, { count: value })}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={styles.field} title={m.kHelp}>
-          <span className={styles.fieldLabel}>{m.kLabel}</span>
-          <select className={styles.select} value={state.k} onChange={(e) => update({ k: Number(e.target.value) })}>
-            {MAP_K_CHOICES.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {state.view === 'network' && (
-        <div className={styles.networkControls}>
-          <label className={styles.thresholdLabel} htmlFor={thresholdId}>
-            {m.thresholdLabel}
-          </label>
-          <input
-            id={thresholdId}
-            type="range"
-            className={styles.slider}
-            min={MAP_THRESHOLD_MIN}
-            max={MAP_THRESHOLD_MAX}
-            step={MAP_THRESHOLD_STEP}
-            value={threshold}
-            onChange={(e) => update({ threshold: clampThreshold(Number(e.target.value)) })}
-          />
-          <span className={styles.thresholdValue}>{threshold.toFixed(2)}</span>
-          {graph && (
-            <span className={styles.edgeCount}>
-              {edgeResult.total > edgeResult.edges.length
-                ? fmt(m.edgeCountCapped, { count: edgeResult.edges.length, total: edgeResult.total })
-                : fmt(m.edgeCount, { count: edgeResult.edges.length })}
-            </span>
-          )}
-          <label className={styles.checkbox}>
+        <div className={styles.controls}>
+          <div className={styles.searchBox} role="search">
             <input
-              type="checkbox"
-              checked={state.showLineage}
-              onChange={(e) => update({ showLineage: e.target.checked })}
+              type="search"
+              className={styles.searchInput}
+              value={state.query}
+              maxLength={MAP_QUERY_MAX}
+              placeholder={m.searchPlaceholder}
+              aria-label={m.searchLabel}
+              onChange={(e) => update({ query: e.target.value })}
+              onKeyDown={(e) => {
+                // 入力欄の Esc は検索語を消すだけ(ビューの Esc の扱いは変えない)。
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  update({ query: '' })
+                }
+              }}
             />
-            {/* canvas の系列の辺と同じ見た目(破線 + 子の側の塗った矢じり)。 */}
-            <svg className={styles.lineageSwatch} width="26" height="10" viewBox="0 0 26 10" aria-hidden="true">
-              <path d="M1 5H18" stroke="var(--color-edit)" strokeWidth="2" strokeDasharray="5 4" />
-              <path d="M25 5L18 1.5V8.5Z" fill="var(--color-edit)" />
-            </svg>
-            {m.showLineage}
-          </label>
-        </div>
-      )}
+          </div>
 
-      {graph?.truncated && (
-        <p className={styles.notice}>
-          {fmt(state.limit < MAP_LIMIT_CHOICES[MAP_LIMIT_CHOICES.length - 1] ? m.truncated : m.truncatedAtMax, {
-            total: graph.total,
-            count: nodeCount,
-          })}
-        </p>
-      )}
+          <ToolbarPanel
+            title={m.filters}
+            label={m.filters}
+            ariaLabel={filterCount > 0 ? fmt(m.filtersWithCount, { count: filterCount }) : m.filters}
+            badge={filterCount > 0 ? filterCount : null}
+            open={openPanel === 'filters'}
+            onOpenChange={(open) => setOpenPanel(open ? 'filters' : null)}
+          >
+            <div className={styles.panelGrid}>
+              <GroupFilter value={state.groupId} onChange={(groupId) => update({ groupId })} />
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>{m.limitLabel}</span>
+                <select
+                  className={styles.select}
+                  value={state.limit}
+                  onChange={(e) => update({ limit: Number(e.target.value) })}
+                >
+                  {MAP_LIMIT_CHOICES.map((value) => (
+                    <option key={value} value={value}>
+                      {fmt(m.limitOption, { count: value })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.field} title={m.kHelp}>
+                <span className={styles.fieldLabel}>{m.kLabel}</span>
+                <select className={styles.select} value={state.k} onChange={(e) => update({ k: Number(e.target.value) })}>
+                  {MAP_K_CHOICES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <TagFilter value={state.tags} onChange={(tags) => update({ tags })} />
+            </div>
+          </ToolbarPanel>
+
+          <ToolbarPanel
+            title={m.display}
+            label={fmt(m.displayWithValue, { value: displayValue })}
+            ariaLabel={fmt(m.displayWithValue, { value: displayValue })}
+            open={openPanel === 'display'}
+            onOpenChange={(open) => setOpenPanel(open ? 'display' : null)}
+          >
+            <div className={styles.panelRows}>
+              {displayFields.threshold && (
+                <div className={styles.panelRow}>
+                  <label className={styles.thresholdLabel} htmlFor={thresholdId}>
+                    {m.thresholdLabel}
+                  </label>
+                  <div className={styles.thresholdRow}>
+                    <input
+                      id={thresholdId}
+                      type="range"
+                      className={styles.slider}
+                      min={MAP_THRESHOLD_MIN}
+                      max={MAP_THRESHOLD_MAX}
+                      step={MAP_THRESHOLD_STEP}
+                      value={threshold}
+                      onChange={(e) => update({ threshold: clampThreshold(Number(e.target.value)) })}
+                    />
+                    <span className={styles.thresholdValue}>{threshold.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+              {displayFields.lineage && (
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={state.showLineage}
+                    onChange={(e) => update({ showLineage: e.target.checked })}
+                  />
+                  {/* canvas の系列の辺と同じ見た目(破線 + 子の側の塗った矢じり)。 */}
+                  <svg className={styles.lineageSwatch} width="26" height="10" viewBox="0 0 26 10" aria-hidden="true">
+                    <path d="M1 5H18" stroke="var(--color-edit)" strokeWidth="2" strokeDasharray="5 4" />
+                    <path d="M25 5L18 1.5V8.5Z" fill="var(--color-edit)" />
+                  </svg>
+                  {m.showLineage}
+                </label>
+              )}
+              {displayFields.metric && (
+                <label className={styles.field} title={m.metricHelp}>
+                  <span className={styles.fieldLabel}>{m.metricLabel}</span>
+                  <select
+                    className={styles.select}
+                    value={state.metric}
+                    onChange={(e) => update({ metric: e.target.value as MapDistanceMetric })}
+                  >
+                    {MAP_DISTANCE_METRICS.map((value) => (
+                      <option key={value} value={value}>
+                        {m.metricOption[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {displayFields.matchCount && (
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>{m.matchCountLabel}</span>
+                  <select
+                    className={styles.select}
+                    value={state.matchCount}
+                    onChange={(e) => update({ matchCount: Number(e.target.value) })}
+                  >
+                    {MAP_MATCH_COUNT_CHOICES.map((value) => (
+                      <option key={value} value={value}>
+                        {fmt(m.matchCountOption, { count: value })}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          </ToolbarPanel>
+        </div>
+      </header>
 
       <div className={styles.stage} data-fetching={query.isFetching && !query.isLoading}>
         {query.isLoading && <p className={styles.placeholder}>{m.loading}</p>}
@@ -257,8 +414,27 @@ function MapBody() {
         {graph && !query.isError && nodeCount === 0 && (
           <p className={styles.placeholder}>{filterCount > 0 ? m.emptyFiltered : m.empty}</p>
         )}
-        {graph && !query.isError && nodeCount > 0 && state.view === 'umap' && (
-          <UmapView graph={graph} selectedId={state.selectedId} onSelectId={selectId} preview={preview} />
+        {graph && !query.isError && nodeCount > 0 && state.view === 'umap3d' && state.shape === 'flat' && (
+          <UmapView
+            graph={graph}
+            selectedId={state.selectedId}
+            onSelectId={selectId}
+            preview={preview}
+            metric={state.metric}
+            search={searchHighlight}
+          />
+        )}
+        {graph && !query.isError && nodeCount > 0 && state.view === 'umap3d' && state.shape === 'orbit' && (
+          <Umap3DView
+            graph={graph}
+            selectedId={state.selectedId}
+            onSelectId={selectId}
+            preview={preview}
+            introSpin={introSpin}
+            axes={axes}
+            metric={state.metric}
+            search={searchHighlight}
+          />
         )}
         {graph && !query.isError && nodeCount > 0 && state.view === 'network' && (
           <NetworkView
@@ -268,11 +444,167 @@ function MapBody() {
             lineageEdges={state.showLineage ? lineage : null}
             selectedId={state.selectedId}
             onSelectId={selectId}
+            shape={state.shape}
             preview={preview}
+            introSpin={introSpin}
+            axes={axes}
+            search={searchHighlight}
           />
+        )}
+
+        {/* 状態は canvas の隅に薄く重ねる(上部の段を増やさない)。 */}
+        {graphReady && (
+          <div className={styles.statusOverlay} data-preview-open={previewShown}>
+            {graph?.truncated && (
+              <span className={styles.statusNotice}>
+                {fmt(state.limit < MAP_LIMIT_CHOICES[MAP_LIMIT_CHOICES.length - 1] ? m.truncated : m.truncatedAtMax, {
+                  total: graph.total,
+                  count: nodeCount,
+                })}
+              </span>
+            )}
+            <div className={styles.statusLine}>
+              <SearchStatus
+                query={trimmedQuery}
+                running={scoresQuery.isFetching}
+                error={scoresQuery.isError ? scoresQuery.error : null}
+                matches={searchHighlight?.ranked.length ?? null}
+              />
+              {state.view === 'network' && (
+                <span className={styles.statusItem}>
+                  {edgeResult.total > edgeResult.edges.length
+                    ? fmt(m.edgeCountCapped, { count: edgeResult.edges.length, total: edgeResult.total })
+                    : fmt(m.edgeCount, { count: edgeResult.edges.length })}
+                </span>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </>
+  )
+}
+
+/**
+ * 上部のボタンと、押して開くパネル(ポップオーバー)。canvas に重ねて出すので、上部の段は
+ * 増えない。`aria-expanded` / `aria-controls`、Esc で閉じる、外側を押したら閉じる、Esc と
+ * 「閉じる」で閉じたらボタンにフォーカスを戻す(外側を押して閉じたときは、押した先の操作を
+ * 妨げないようフォーカスを奪わない)。
+ */
+function ToolbarPanel({
+  title,
+  label,
+  ariaLabel,
+  badge,
+  open,
+  onOpenChange,
+  children,
+}: {
+  title: string
+  label: string
+  ariaLabel?: string
+  badge?: number | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: ReactNode
+}) {
+  const { t } = useI18n()
+  const panelId = useId()
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handlePointerDown(e: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) onOpenChange(false)
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      // 選んだ画像のパネル(MapPreviewPanel)まで一緒に閉じないよう、ここで受け止める。
+      e.preventDefault()
+      onOpenChange(false)
+      buttonRef.current?.focus()
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open, onOpenChange])
+
+  return (
+    <div className={styles.panelWrap} ref={rootRef}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={styles.panelToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={ariaLabel}
+        onClick={() => onOpenChange(!open)}
+      >
+        <span className={styles.panelToggleLabel}>{label}</span>
+        {badge != null && <span className={styles.panelBadge}>{badge}</span>}
+      </button>
+      {open && (
+        <div id={panelId} className={styles.panel} role="group" aria-label={title}>
+          <div className={styles.panelHeader}>
+            <span className={styles.panelTitle}>{title}</span>
+            <button
+              type="button"
+              className={styles.panelClose}
+              aria-label={t.common.close}
+              onClick={() => {
+                onOpenChange(false)
+                buttonRef.current?.focus()
+              }}
+            >
+              ×
+            </button>
+          </div>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 検索の入力中・失敗・一致の件数を小さく出す。 */
+function SearchStatus({
+  query,
+  running,
+  error,
+  matches,
+}: {
+  query: string
+  running: boolean
+  error: unknown
+  matches: number | null
+}) {
+  const { t } = useI18n()
+  const m = t.map
+  if (query === '') return null
+  if (error) {
+    const kind = embeddingErrorKind(error)
+    return (
+      <span className={styles.searchStatus} data-tone="error">
+        {kind === 'unavailable' ? t.embeddings.unavailable : m.searchFailed}
+      </span>
+    )
+  }
+  if (running) {
+    return (
+      <span className={styles.searchStatus} role="status">
+        {m.searchRunning}
+      </span>
+    )
+  }
+  if (matches === null) return null
+  return (
+    <span className={styles.searchStatus} role="status">
+      {matches > 0 ? fmt(m.searchMatches, { count: matches }) : m.searchNoMatch}
+    </span>
   )
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeBounds,
+  computeBoundsOf,
   fitBounds,
   panBy,
   screenToWorld,
@@ -87,5 +88,19 @@ describe('tileWorldSize', () => {
     // 近傍が十分に離れていれば、平均の間隔の 0.9 倍のまま。
     const spread = [0, 0, 10, 0, 0, 10, 10, 10]
     expect(tileWorldSize(bounds, 4, spread, neighbors)).toBeCloseTo(spacing * 0.9)
+  })
+})
+
+describe('computeBoundsOf', () => {
+  const positions = new Float32Array([0, 0, 10, 0, 10, 10, -50, -50])
+
+  it('選んだ位置の点だけの外接矩形', () => {
+    expect(computeBoundsOf(positions, [0, 1, 2])).toEqual({ minX: 0, minY: 0, maxX: 10, maxY: 10 })
+    expect(computeBoundsOf(positions, [3])).toEqual({ minX: -50, minY: -50, maxX: -50, maxY: -50 })
+  })
+
+  it('点が無い・有限でないときは null', () => {
+    expect(computeBoundsOf(positions, [])).toBeNull()
+    expect(computeBoundsOf(new Float32Array([Number.NaN, 0]), [0])).toBeNull()
   })
 })

@@ -367,6 +367,8 @@ def restore_asset(
     asset_id: uuid.UUID,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    embedder: Embedder = Depends(get_embedder),
 ) -> AssetDetail:
     """論理削除した Asset を復元する。変更するのは `asset.deleted_at` だけ
     (ADR-0008「Assetの復元」)。生んだ Run が削除済みの場合は復元できない。
@@ -387,8 +389,14 @@ def restore_asset(
         )
 
     asset.deleted_at = None
+    # ADR-0046 4章: 取り込み時と同じ条件で、ベクトルが無ければ埋め込みを待ち行列に入れる。
+    queued = embeddings_domain.enqueue_on_restore(db, asset, settings)
     db.commit()
-    return _to_detail(db, asset, produced_by_run, user)
+    # 応答は worker を起こす前に作る(create_asset と同じ理由)。
+    detail = _to_detail(db, asset, produced_by_run, user)
+    if queued:
+        embedder.notify()
+    return detail
 
 
 @content_router.get("/{asset_id}/content", operation_id="get_asset_content")

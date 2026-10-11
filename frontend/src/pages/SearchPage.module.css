@@ -250,12 +250,19 @@
 /* ---------- 埋め込み(ADR-0033 8章) ---------- */
 
 /* 「キーワード / 意味」の切り替え。比較ビューの表示モードの切り替えと同じ見た目。 */
-.modeSwitch {
+/* 検索の方式と、意味のときの探す対象(ADR-0045 6章)の切り替えを横に並べる。狭い幅では折り返す。 */
+.modeRow {
   align-self: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: -10px;
+}
+
+.modeSwitch {
   display: flex;
   gap: 4px;
   padding: 3px;
-  margin-bottom: -10px;
   background: var(--color-bg-sunken);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -291,6 +298,14 @@
   font-size: 12px;
   line-height: 1.6;
   color: var(--color-text);
+}
+
+/* 指示で探した Run のカードと、その類似度。 */
+.scoredRun {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .assetScore {

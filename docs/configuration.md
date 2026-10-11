@@ -18,10 +18,10 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 
 次の項目は例外で、設定画面で保存すると、以降は画面の設定が環境変数より優先される(環境変数は、画面で保存するまでの既定値として使う)。
 
-- ComfyUI の接続先(`COMFYUI_URL`): 設定画面で一度でも接続または切り離しをしたとき
+- ComfyUI の接続先(`COMFYUI_URL`): 設定画面で一度でも接続または切り離しをしたとき。設定画面で「無効にする」を押したときは、`COMFYUI_URL` があっても無効のまま(URL は環境変数の値を見せる。「有効にする」で戻す)
 - `MODERATION`: 設定 → OpenAI(`/settings/openai`)で変えて、ページ上部の「保存」を押したとき
 - `COMFYUI_TIMEOUT_SECONDS`: 設定 → ComfyUI(`/settings/comfyui`)で変えて、ページ上部の「保存」を押したとき
-- SD WebUI の接続先(`SDWEBUI_URL`): 設定画面で一度でも接続または切り離しをしたとき
+- SD WebUI の接続先(`SDWEBUI_URL`): 設定画面で一度でも接続または切り離しをしたとき。設定画面で「無効にする」を押したときは、`SDWEBUI_URL` があっても無効のまま(URL は環境変数の値を見せる。「有効にする」で戻す)
 - `SDWEBUI_TIMEOUT_SECONDS`: 設定 → SD WebUI(`/settings/sdwebui`)で変えて保存したとき
 
 ## 一覧
@@ -70,7 +70,7 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 
 設定画面からダウンロードしたモデルは `DATA_DIR/models/` に置く(自動タグの WD Tagger は `models/wd/`、画像の埋め込みの CLIP は `models/clip/`。[auto-tags.md](auto-tags.md)、[embeddings.md](embeddings.md))。`STORAGE_BACKEND` を変えても、モデルは `DATA_DIR` に置く。消しても設定画面からダウンロードし直せる。画像の埋め込みに環境変数は無く、管理者設定の「埋め込み」で設定する。
 
-**`DATA_DIR` の中のファイルを、ファイルマネージャーなどで直接消したり動かしたり名前を変えたりしないこと。** DB に記録した場所と合わなくなり、画像が表示できなくなる。画像の削除は画面から行う。`DATA_DIR` をフォルダごとバックアップに取るのは構わない。
+**`DATA_DIR` の中のファイルを、ファイルマネージャーなどで直接消したり動かしたり名前を変えたりしないこと。** DB に記録した場所と合わなくなり、画像が表示できなくなる。画像の削除は画面から行う。`DATA_DIR` をフォルダごとバックアップに取るのは構わない。設定を残したまま画像と履歴を初期化したいときは、GAKEI を止めて画像を消した(退避した)後に、DB を合わせるツールを実行する([reconcile-storage.md](reconcile-storage.md))。
 
 `STORAGE_BACKEND` を `azure_blob` か `s3` にすると、原本と派生は `DATA_DIR` ではなく、コンテナ(バケット)の中に同じキーで保存される。起動時に接続と読み書きを確かめ、できなければ起動を中止する。ローカルから移すツールもある([object-storage.md](object-storage.md))。
 

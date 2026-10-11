@@ -7,6 +7,11 @@
 2. 保存された設定が無ければ、環境変数 `SDWEBUI_URL`(既定値としてだけ起動時に読む)。
 3. どちらも無ければ無効。
 
+これとは別に、「無効にした」ことを別のキー(`sdwebui.disabled`)に保存する(ADR-0038 6章の
+「無効にする / 有効にする」)。無効の間も URL・資格情報・待つ上限はそのまま残し、プロバイダーを
+登録しない(モデルの選択肢から外し、接続先に問い合わせない)。環境変数の URL があっても、
+無効のままにする。切り離すと、無効の印も消す(切り離した状態に「無効」は重ねない)。
+
 Basic 認証(WebUI の `--api-auth`)のユーザー名とパスワードは `DATA_DIR/secrets.json` に
 置く(`app/domain/api_key.py` の `write_secret_field` など)。値は API の応答・ログ・例外の
 メッセージに一部も出さず、「設定済みか」だけを返す。URL に `user:pass@` を含めることは
@@ -29,6 +34,7 @@ from app.i18n import t
 from app.providers.registry import is_loopback_url
 
 CONNECTION_KEY = "sdwebui.connection"
+DISABLED_KEY = "sdwebui.disabled"
 USERNAME_FIELD = "sdwebui_auth_username"
 PASSWORD_FIELD = "sdwebui_auth_password"
 
@@ -72,23 +78,46 @@ def resolve_effective_url(db: Session, settings: Settings) -> tuple[str | None, 
     return None, "none"
 
 
+def is_disabled(db: Session) -> bool:
+    """「無効にした」が保存されているか。"""
+    row = db.get(AppSetting, DISABLED_KEY)
+    return row is not None and isinstance(row.value, dict) and row.value.get("disabled") is True
+
+
+def resolve_active_url(db: Session, settings: Settings) -> str | None:
+    """プロバイダーを登録してよい接続先 URL。切り離し・未設定・無効のときは None。"""
+    if is_disabled(db):
+        return None
+    url, _source = resolve_effective_url(db, settings)
+    return url
+
+
 def save_connection_url(db: Session, url: str) -> None:
-    _save(db, {"url": url})
+    """接続 URL を保存する。無効の印はそのまま(無効の間に URL を変えても無効のまま)。"""
+    _put(db, CONNECTION_KEY, {"url": url})
+    db.commit()
 
 
 def save_detached(db: Session) -> None:
     """「切り離した」ことを明示的に保存する。環境変数があっても再起動で再び有効にならない。"""
-    _save(db, {"url": None})
+    _put(db, CONNECTION_KEY, {"url": None})
+    _put(db, DISABLED_KEY, {"disabled": False})
+    db.commit()
 
 
-def _save(db: Session, value: dict) -> None:
-    row = db.get(AppSetting, CONNECTION_KEY)
+def save_disabled(db: Session, disabled: bool) -> None:
+    """無効にする・有効にする。URL・資格情報・待つ上限には触れない。"""
+    _put(db, DISABLED_KEY, {"disabled": disabled})
+    db.commit()
+
+
+def _put(db: Session, key: str, value: dict) -> None:
+    row = db.get(AppSetting, key)
     if row is None:
-        db.add(AppSetting(key=CONNECTION_KEY, value=value, updated_at=_utcnow()))
+        db.add(AppSetting(key=key, value=value, updated_at=_utcnow()))
     else:
         row.value = value
         row.updated_at = _utcnow()
-    db.commit()
 
 
 def normalize_connection_url(url: str, *, allow_non_loopback: bool) -> str:

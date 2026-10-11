@@ -8,12 +8,23 @@
 import type { ComfyUIConnectionTestResponse, ComfyUIStatus } from '../../api/client'
 import { msg } from '../../i18n'
 
-export type ConnectionState = 'disabled' | 'available' | 'unavailable'
+export type ConnectionState = 'notConnected' | 'disabled' | 'available' | 'unavailable'
 
-/** 接続の3状態(無効/接続できる/接続できない)。接続のカードの色分けに使う。 */
-export function connectionState(status: Pick<ComfyUIStatus, 'enabled' | 'available'>): ConnectionState {
-  if (!status.enabled) return 'disabled'
+/**
+ * 接続の4状態(未接続/無効/接続できる/接続できない)。接続のカードの色分けと見出しに使う。
+ * 無効(`disabled`)は、URL を残したまま使わない状態(ADR-0013 7章「無効にする / 有効にする」)。
+ */
+export function connectionState(
+  status: Pick<ComfyUIStatus, 'enabled' | 'available'> & { disabled?: boolean },
+): ConnectionState {
+  if (status.disabled) return 'disabled'
+  if (!status.enabled) return 'notConnected'
   return status.available ? 'available' : 'unavailable'
+}
+
+/** 接続先の URL を持っているか(接続中か、無効にしているか)。URL の変更ダイアログの出し分けに使う。 */
+export function hasConnectionUrl(status: Pick<ComfyUIStatus, 'enabled' | 'disabled'>): boolean {
+  return status.enabled || status.disabled
 }
 
 export function isLoopbackUrl(url: string): boolean {
@@ -49,6 +60,23 @@ export function envSourceNote(status: Pick<ComfyUIStatus, 'source'>): string | n
   return msg().comfyui.connection.envNote
 }
 
+/** カードの見出し(未接続/無効/接続できる/接続できない)。 */
+export function connectionHeadline(
+  status: Pick<ComfyUIStatus, 'enabled' | 'available'> & { disabled?: boolean },
+): string {
+  const c = msg().comfyui.connection
+  switch (connectionState(status)) {
+    case 'notConnected':
+      return c.notConnectedHeadline
+    case 'disabled':
+      return c.disabledHeadline
+    case 'available':
+      return c.availableHeadline
+    case 'unavailable':
+      return c.unavailableHeadline
+  }
+}
+
 export function lockedMessage(action: 'save' | 'detach'): string {
   const t = msg().comfyui.connection
   return action === 'save' ? t.lockedSave : t.lockedDetach
@@ -64,16 +92,22 @@ export function testSuccessNotice(params: {
   showForm: boolean
   /** 既に有効(URL の変更中)か。ボタンの文言と、保存で何が起きるかの説明が変わる。 */
   enabled: boolean
+  /** 無効にしている間(保存しても無効のまま)か。 */
+  disabled?: boolean
   trimmedUrl: string
   testResult: Pick<ComfyUIConnectionTestResponse, 'available' | 'url'> | undefined
   confirmNonLoopback: boolean
 }): string | null {
-  const { showForm, enabled, trimmedUrl, testResult, confirmNonLoopback } = params
+  const { showForm, enabled, disabled, trimmedUrl, testResult, confirmNonLoopback } = params
   if (!showForm || !testResult?.available) return null
   if (trimmedUrl === '' || testResult.url !== trimmedUrl) return null
 
   const t = msg().comfyui.connection
-  const base = enabled ? t.testSuccessSaveNotice : t.testSuccessSaveAndConnectNotice
+  const base = disabled
+    ? t.testSuccessSaveDisabledNotice
+    : enabled
+      ? t.testSuccessSaveNotice
+      : t.testSuccessSaveAndConnectNotice
   if (!isLoopbackUrl(trimmedUrl) && !confirmNonLoopback) {
     return base + t.testSuccessNonLoopbackSuffix
   }

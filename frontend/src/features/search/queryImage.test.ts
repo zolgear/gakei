@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   SEARCH_PANEL_MODE_KEY,
+  SEARCH_PANEL_TARGET_KEY,
   dragHasFiles,
   loadSearchPanelMode,
+  loadSearchPanelTarget,
   pickImageFile,
   saveSearchPanelMode,
+  saveSearchPanelTarget,
   setPendingQueryImage,
   subscribePendingQueryImage,
   takePendingQueryImage,
@@ -92,5 +95,40 @@ describe('パネルの方式', () => {
     })
     expect(loadSearchPanelMode()).toBe('keyword')
     expect(() => saveSearchPanelMode('semantic')).not.toThrow()
+  })
+})
+
+describe('パネルの探す対象', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('既定は画像で、指示を覚える', () => {
+    const values = new Map<string, string>()
+    const localStorage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => void values.set(key, value),
+    }
+    vi.stubGlobal('localStorage', localStorage)
+    expect(loadSearchPanelTarget()).toBe('image')
+    saveSearchPanelTarget('prompt')
+    expect(SEARCH_PANEL_TARGET_KEY.startsWith('gakei:')).toBe(true)
+    expect(localStorage.getItem(SEARCH_PANEL_TARGET_KEY)).toBe('prompt')
+    expect(loadSearchPanelTarget()).toBe('prompt')
+    saveSearchPanelTarget('image')
+    expect(loadSearchPanelTarget()).toBe('image')
+    localStorage.setItem(SEARCH_PANEL_TARGET_KEY, 'bogus')
+    expect(loadSearchPanelTarget()).toBe('image')
+  })
+
+  it('ブラウザに保存できなくても画像で動く', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('denied')
+      },
+      setItem: () => {
+        throw new Error('denied')
+      },
+    })
+    expect(loadSearchPanelTarget()).toBe('image')
+    expect(() => saveSearchPanelTarget('prompt')).not.toThrow()
   })
 })

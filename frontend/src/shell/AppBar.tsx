@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, NavLink, useNavigate } from 'react-router'
 import { getCapabilities } from '../api/client'
+import { CAPABILITIES_CHECKING_REFETCH_MS, hasCheckingProvider } from '../lib/capabilities'
 import { useRunFormContext } from '../context/useRunFormContext'
 import { clearFormContent, hasFormContent } from '../features/run-form/formStateHelpers'
 import { loadLastAssetGroupId } from '../context/lastAssetGroupStorage'
@@ -38,7 +39,14 @@ export function AppBar({ onToggleDrawer, drawerOpen }: AppBarProps) {
   // 「新規生成」で使う capabilities の初期値取得。プロバイダーの表示(バッジ)には使わない
   // (モデル選択欄が既にプロバイダーを表示している)。useRunFormLogic 側の同じ queryKey の
   // クエリとキャッシュを共有するので、通常は追加のリクエストにならない。
-  const capsQuery = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities })
+  // 接続先(SD WebUI・ComfyUI)をサーバーがまだ確かめている間は、少し後に読み直す。App バーは
+  // どの画面でも出ているので、同じ queryKey を使う他の画面にもここで読み直した値が届く。
+  const capsQuery = useQuery({
+    queryKey: ['capabilities'],
+    queryFn: getCapabilities,
+    refetchInterval: (query) =>
+      hasCheckingProvider(query.state.data) ? CAPABILITIES_CHECKING_REFETCH_MS : false,
+  })
   const embeddings = useEmbeddingCapabilities()
   const { formState, setFormState } = useRunFormContext()
   const [newRunConfirmOpen, setNewRunConfirmOpen] = useState(false)

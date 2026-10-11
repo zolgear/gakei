@@ -59,7 +59,10 @@
       "workflowNotFound": "Workflow not found",
       "connectionUrlMissing": "No connection URL was given.",
       "lockedChangeConnection": "Cannot change the connection settings while a ComfyUI run is in progress or queued.",
-      "lockedDetach": "Cannot detach while a ComfyUI run is in progress or queued."
+      "lockedDetach": "Cannot detach while a ComfyUI run is in progress or queued.",
+      "lockedDisable": "Cannot disable while a ComfyUI run is in progress or queued.",
+      "lockedEnable": "Cannot enable while a ComfyUI run is in progress or queued.",
+      "notConnected": "ComfyUI is not connected."
     },
     "workflow": {
       "uiFormatMessage": "This file is in UI format (it contains nodes/links). Export it from ComfyUI with \"Export (API)\" and register the resulting API-format JSON instead.",
@@ -114,6 +117,7 @@
       "hintContact": "contacting ComfyUI"
     },
     "provider": {
+      "checking": "Checking the connection to ComfyUI.",
       "unknownWorkflow": "Unknown workflow: {model}",
       "workflowOperationMismatch": "Workflow \"{name}\" does not support operation={operation}",
       "missingPromptInternal": "run.params is missing comfyui_prompt (internal error).",
@@ -145,7 +149,10 @@
       "lockedChangeConnection": "An SD WebUI run is running or queued, so the connection settings cannot be changed.",
       "lockedDetach": "An SD WebUI run is running or queued, so it cannot be detached.",
       "lockedChangeCredentials": "An SD WebUI run is running or queued, so the credentials cannot be changed.",
-      "lockedRefresh": "An SD WebUI run is running or queued, so the lists cannot be reloaded."
+      "lockedRefresh": "An SD WebUI run is running or queued, so the lists cannot be reloaded.",
+      "lockedDisable": "An SD WebUI run is running or queued, so it cannot be disabled.",
+      "lockedEnable": "An SD WebUI run is running or queued, so it cannot be enabled.",
+      "disabled": "SD WebUI is disabled."
     },
     "client": {
       "apiNotEnabled": "The SD WebUI API was not found (404). Check that the WebUI was started with --api and that its startup log shows no API errors (such as a malformed --api-auth).",
@@ -159,6 +166,7 @@
       "executionFailedNoDetails": "Execution failed in SD WebUI (no details)."
     },
     "provider": {
+      "checking": "Checking the connection to SD WebUI.",
       "unavailable": "Cannot connect to SD WebUI, so the checkpoint list is unavailable.",
       "unknownCheckpoint": "Checkpoint {model} is not in the SD WebUI list.",
       "missingRequestInternal": "The run record has no request body for SD WebUI (sdwebui_request).",
@@ -678,6 +686,68 @@
     "pruned": {
       "one": "Deleted {count} derived image of another version.",
       "other": "Deleted {count} derived images of other versions."
+    }
+  },
+  "reconcileStorage": {
+    "description": "Bring the database in line with the storage after you deleted or moved image originals by hand (ADR-0046). Images whose original is missing from the storage (including logically deleted ones), and the rows and history attached to them, are deleted from the database. Settings are kept. Always stop GAKEI before running this. By default it only shows the counts and changes nothing.",
+    "applyHelp": "Actually delete (with SQLite, the database is backed up first; asks for confirmation before deleting)",
+    "yesHelp": "Skip the confirmation of --apply",
+    "includeRunsHelp": "Also delete runs that never produced an output (failed or canceled), for a full reset",
+    "databaseMissing": "Database file not found: {source}",
+    "tableMissing": "The database has no image table. Start this version of GAKEI once, then run this tool.",
+    "failed": "Aborted because reading from the storage failed. The database was not changed. Details: {error}",
+    "backupFailed": "Aborted because backing up the database failed. The database was not changed. Details: {error}",
+    "applyFailed": "Aborted because changing the database failed (the changes were rolled back). Details: {error}",
+    "storage": "Storage: {storage}",
+    "database": "Database: {database}",
+    "assets": {
+      "one": "Images without an original: {count} ({deleted} of them logically deleted)",
+      "other": "Images without an original: {count} ({deleted} of them logically deleted)"
+    },
+    "missingKeys": {
+      "one": "  Missing original keys: {count} (e.g. {keys})",
+      "other": "  Missing original keys: {count} (e.g. {keys})"
+    },
+    "runs": {
+      "one": "Runs to delete: {count} ({gone} whose outputs are all gone, {never} that never produced an output)",
+      "other": "Runs to delete: {count} ({gone} whose outputs are all gone, {never} that never produced an output)"
+    },
+    "runsKept": {
+      "one": "  Keeping {count} run that never produced an output (use --include-runs-without-outputs to delete it)",
+      "other": "  Keeping {count} runs that never produced an output (use --include-runs-without-outputs to delete them)"
+    },
+    "shares": {
+      "one": "Share links to delete: {count}",
+      "other": "Share links to delete: {count}"
+    },
+    "rowsHeading": "Rows deleted along with them:",
+    "nullifiedHeading": "References set to null (on remaining images):",
+    "item": {
+      "one": "  {name}: {count}",
+      "other": "  {name}: {count}"
+    },
+    "derived": {
+      "one": "Images whose derived images are deleted: {count} (identical contents count as one)",
+      "other": "Images whose derived images are deleted: {count} (identical contents count as one)"
+    },
+    "untracked": {
+      "one": "Original files in the storage not in the database: {count} (not deleted)",
+      "other": "Original files in the storage not in the database: {count} (not deleted)"
+    },
+    "dryRunDone": "dry-run: Nothing was changed. Run again with --apply to delete.",
+    "nothingToDo": "There is nothing to delete.",
+    "postgresBackup": "Note: PostgreSQL is not backed up automatically. Back up the database with pg_dump or similar before continuing.",
+    "confirm": "The above will be deleted from the database. This cannot be undone (except by restoring a backup). Continue? [y/N]: ",
+    "canceled": "Canceled. Nothing was changed.",
+    "backup": "Database backup: {path}",
+    "applied": "Deleted {assets} image(s) and {runs} run(s) from the database.",
+    "derivedDeleted": {
+      "one": "Deleted {count} derived image file.",
+      "other": "Deleted {count} derived image files."
+    },
+    "derivedFailed": {
+      "one": "Note: Derived images of {count} image could not be deleted (sha256): {keys}. Leaving them is harmless.",
+      "other": "Note: Derived images of {count} images could not be deleted (sha256): {keys}. Leaving them is harmless."
     }
   },
   "shares": {
