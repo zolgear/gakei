@@ -36,6 +36,7 @@ from app.config import Settings
 from app.domain import general_settings, sizes
 from app.domain.run_validation import RunValidationError
 from app.i18n import t
+from app.providers.background_cache import FIRST_CHECK_GRACE_SECONDS, BackgroundRefreshCache
 from app.providers.base import (
     InputImage,
     ModelCapabilities,
@@ -45,6 +46,7 @@ from app.providers.base import (
     ProgressCallback,
     ProviderCapabilities,
     ProviderError,
+    ProviderStatusSnapshot,
     ProviderUnavailableError,
     RunDraft,
     RunInputMeta,
@@ -55,6 +57,7 @@ from app.providers.base import (
     StepProgressEvent,
 )
 from app.providers.sdwebui.client import (
+    Availability,
     Catalog,
     Credentials,
     SdWebuiClient,
@@ -205,8 +208,22 @@ class SdWebuiProvider:
         self._transport = transport
         self._clock = clock or time.monotonic
         self._progress_interval = progress_interval
-        self._availability_cache: tuple[float, tuple[bool, str | None]] | None = None
-        self._catalog_cache: tuple[float, Catalog | None] | None = None
+        # 到達性と一覧は、待たない経路(`status_snapshot`)と待つ経路(`availability` /
+        # `catalog`)で同じキャッシュを使う。
+        self._availability_cache: BackgroundRefreshCache[tuple[bool, str | None]] = (
+            BackgroundRefreshCache(
+                self._fetch_availability,
+                lambda _value: _AVAILABILITY_CACHE_SECONDS,
+                name="sdwebui-availability",
+            )
+        )
+        self._catalog_cache: BackgroundRefreshCache[Catalog | None] = BackgroundRefreshCache(
+            self._fetch_catalog,
+            lambda value: (
+                _CATALOG_CACHE_SECONDS if value is not None else _CATALOG_FAILURE_CACHE_SECONDS
+            ),
+            name="sdwebui-catalog",
+        )
         self._lora_cache: tuple[float, list[LoraInfo]] | None = None
 
     @classmethod
@@ -235,39 +252,63 @@ class SdWebuiProvider:
     def invalidate_cache(self) -> None:
         """一覧(LoRA を含む)と到達性のキャッシュを捨てる(`POST /api/sdwebui/refresh`、
         資格情報の変更)。"""
-        self._availability_cache = None
-        self._catalog_cache = None
+        self._availability_cache.invalidate()
+        self._catalog_cache.invalidate()
         self._lora_cache = None
 
     # -- availability / 一覧 ---------------------------------------------------------
 
-    def availability(self) -> tuple[bool, str | None]:
-        """`GET /sdapi/v1/options` の結果を5秒キャッシュする。"""
-        now = time.monotonic()
-        if self._availability_cache is not None:
-            cached_at, cached = self._availability_cache
-            if now - cached_at < _AVAILABILITY_CACHE_SECONDS:
-                return cached
-        result = self.client().check_available(timeout=1.0)
-        value = (result.available, None if result.available else result.message)
-        self._availability_cache = (now, value)
-        return value
+    def _fetch_availability(self) -> tuple[bool, str | None]:
+        return _availability_value(self.client().check_available(timeout=1.0))
 
-    def catalog(self) -> Catalog | None:
-        """チェックポイントなどの一覧(60秒キャッシュ)。接続できなければ None。"""
-        now = time.monotonic()
-        if self._catalog_cache is not None:
-            cached_at, cached = self._catalog_cache
-            ttl = _CATALOG_CACHE_SECONDS if cached is not None else _CATALOG_FAILURE_CACHE_SECONDS
-            if now - cached_at < ttl:
-                return cached
+    def _fetch_catalog(self) -> Catalog | None:
         try:
-            catalog: Catalog | None = self.client().fetch_catalog()
+            return self.client().fetch_catalog()
         except SdWebuiError as exc:
             logger.info("SD WebUI の一覧を取得できませんでした(%s)", exc.code)
-            catalog = None
-        self._catalog_cache = (now, catalog)
-        return catalog
+            return None
+
+    def availability(self) -> tuple[bool, str | None]:
+        """`GET /sdapi/v1/options` の結果を5秒キャッシュする。古ければその場で問い合わせる。"""
+        return self._availability_cache.get()
+
+    def record_availability(self, result: Availability) -> None:
+        """設定画面の状態の確認(`GET /api/sdwebui/status` など)で同じ接続先を確かめたばかりの
+        結果を覚える(capabilities がすぐ使えるように)。"""
+        self._availability_cache.put(_availability_value(result))
+
+    def catalog(self) -> Catalog | None:
+        """チェックポイントなどの一覧(60秒キャッシュ)。接続できなければ None。
+
+        取れなかったことは短い間(5秒)だけ覚える。古ければその場で問い合わせる。
+        """
+        return self._catalog_cache.get()
+
+    def status_snapshot(self) -> ProviderStatusSnapshot:
+        """`GET /api/capabilities` 用。接続先に問い合わせず、手元の値をすぐ返す。
+
+        古いか無ければ裏で取り直す(一覧と到達性それぞれ同時に1つだけ)。一度も取れていない
+        ときは最初の問い合わせを短い間だけ待ち、それでも無ければ、一覧は空・使えない
+        (確かめ中)として返す。
+        """
+        self._availability_cache.peek()
+        self._catalog_cache.peek()
+        # 一度も値が無ければ、裏の最初の問い合わせを少しだけ待つ(手元の接続先ならこの間に済む)。
+        # 接続できないと分かっていれば、一覧は待たない。
+        deadline = time.monotonic() + FIRST_CHECK_GRACE_SECONDS
+        self._availability_cache.wait_first(deadline)
+        has_availability, availability = self._availability_cache.peek()
+        if not has_availability or (availability is not None and availability[0]):
+            self._catalog_cache.wait_first(deadline)
+        has_catalog, catalog = self._catalog_cache.peek()
+        capabilities = self._build_capabilities(catalog)
+        if not has_availability or availability is None:
+            return ProviderStatusSnapshot(capabilities, False, t("sdwebui.provider.checking"), True)
+        available, reason = availability
+        # 到達できても、一覧をまだ一度も取り終えていなければ確かめ中(モデルが空のため)
+        return ProviderStatusSnapshot(
+            capabilities, available, reason, available and not has_catalog
+        )
 
     def loras(self) -> list[LoraInfo]:
         """LoRA の一覧(ADR-0038 8章)。チェックポイントの一覧と同じく 60 秒キャッシュする。
@@ -284,7 +325,9 @@ class SdWebuiProvider:
     # -- capabilities -------------------------------------------------------------------
 
     def capabilities(self) -> ProviderCapabilities:
-        catalog = self.catalog()
+        return self._build_capabilities(self.catalog())
+
+    def _build_capabilities(self, catalog: Catalog | None) -> ProviderCapabilities:
         models: list[ModelCapabilities] = []
         if catalog is not None:
             generate_params = _generate_params(catalog)
@@ -666,6 +709,10 @@ class SdWebuiProvider:
                         mime="image/png",
                     )
                 )
+
+
+def _availability_value(result: Availability) -> tuple[bool, str | None]:
+    return (result.available, None if result.available else result.message)
 
 
 def _str_list(value: Any) -> list[str]:

@@ -49,6 +49,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
     max_input_images: 16,
     available: true,
     unavailable_reason: null,
+    checking: false,
     requires_api_key: false,
     supports_pricing: true,
     ...overrides,

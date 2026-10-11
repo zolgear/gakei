@@ -110,10 +110,14 @@ def _probe(
     """到達性と、チェックポイントの数。登録中のプロバイダーが同じ接続先なら、その一覧の
     キャッシュを使う。"""
     availability = client.check_available(timeout=timeout)
+    target = provider if provider is not None and provider.base_url == client.base_url else None
+    if target is not None:
+        # capabilities が裏の問い合わせを待たずに使えるよう、確かめた結果を渡しておく
+        target.record_availability(availability)
     if not availability.available:
         return availability, None
-    if provider is not None and provider.base_url == client.base_url:
-        catalog = provider.catalog()
+    if target is not None:
+        catalog = target.catalog()
     else:
         try:
             catalog = client.fetch_catalog()

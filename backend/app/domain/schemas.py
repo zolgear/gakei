@@ -27,6 +27,9 @@ class ProviderEntry(ProviderCapabilities):
 
     available: bool
     unavailable_reason: str | None = None
+    # 接続先(SD WebUI・ComfyUI)にまだ一度も問い合わせ終えていない(裏で確かめている)。
+    # そのあいだ available は False、モデルの一覧は空のことがある。フロントは少し後に読み直す。
+    checking: bool = False
     requires_api_key: bool
     supports_pricing: bool
 

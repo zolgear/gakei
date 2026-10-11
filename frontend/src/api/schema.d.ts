@@ -4277,6 +4277,11 @@ export interface components {
             available: boolean;
             /** Unavailable Reason */
             unavailable_reason?: string | null;
+            /**
+             * Checking
+             * @default false
+             */
+            checking: boolean;
             /** Requires Api Key */
             requires_api_key: boolean;
             /** Supports Pricing */

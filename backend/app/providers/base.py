@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, NamedTuple, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -262,3 +262,37 @@ class ImageProvider(Protocol):
         ...
 
     async def execute(self, run: RunRequest, on_progress: ProgressCallback) -> RunResult: ...
+
+
+class ProviderStatusSnapshot(NamedTuple):
+    """`GET /api/capabilities` の1件に載せる、待たずに分かる範囲の状態。
+
+    `checking` は、外部のサーバーにまだ一度も問い合わせ終えていない(裏で確かめている)こと。
+    そのあいだ `capabilities.models` は空で、`available` は False。
+    """
+
+    capabilities: ProviderCapabilities
+    available: bool
+    unavailable_reason: str | None
+    checking: bool
+
+
+@runtime_checkable
+class NonBlockingStatusProvider(Protocol):
+    """外部のサーバーに問い合わせるプロバイダー(SD WebUI・ComfyUI)が持つ、待たない版。
+
+    `GET /api/capabilities` はこれを使い、接続先が落ちていても待たない(手元の値を返し、
+    古ければ裏で取り直す)。`capabilities()` / `availability()` は Run の作成などのために、
+    これまでどおり古ければその場で問い合わせる。
+    """
+
+    def status_snapshot(self) -> ProviderStatusSnapshot: ...
+
+
+def provider_status_snapshot(provider: ImageProvider) -> ProviderStatusSnapshot:
+    """プロバイダーの状態を待たずに引く。待たない版を持たないもの(OpenAI・Fake)は、
+    もともと外部に問い合わせないので、そのまま `capabilities()` / `availability()` を呼ぶ。"""
+    if isinstance(provider, NonBlockingStatusProvider):
+        return provider.status_snapshot()
+    available, reason = provider.availability()
+    return ProviderStatusSnapshot(provider.capabilities(), available, reason, False)
