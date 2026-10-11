@@ -6,10 +6,30 @@
  * - umap-js は点の数が `nNeighbors` 以下だと止まる。画像が k + 1 枚以下のときは各行の長さが
  *   点の数と同じになるので、行を「点の数 - 1」に切り詰めて渡す。
  * - 近傍を渡せば umap-js は元のベクトルを使わず、`X.length` だけを見る(11章で確認)。
+ *
+ * 距離の取り方(`MapDistanceMetric`)は切り替えられる(試作)。モデルによって近傍の類似度が
+ * とても狭い帯(例: 0.86〜0.96)に詰まることがあり、`1 - 類似度` をそのまま渡すと塊が潰れる。
+ * 行ごとに伸ばす・順位にする、の2つを足して見比べられるようにしている。
  */
 
 /** これより少ない枚数では地図を作らない(並べても形にならない)。 */
 export const MIN_MAP_NODES = 4
+
+/**
+ * 距離の取り方。
+ *
+ * - `similarity`: `1 - 類似度`(今まで通り。既定)
+ * - `rowNormalized`: 各行の距離を、その行の最小〜最大で 0〜1 に伸ばす
+ * - `rank`: 距離を近傍の順位そのもの(0〜1 に正規化。等間隔)にする
+ */
+export type MapDistanceMetric = 'similarity' | 'rowNormalized' | 'rank'
+
+export const MAP_DISTANCE_METRICS: readonly MapDistanceMetric[] = ['similarity', 'rowNormalized', 'rank']
+export const DEFAULT_MAP_DISTANCE_METRIC: MapDistanceMetric = 'similarity'
+
+export function isMapDistanceMetric(value: unknown): value is MapDistanceMetric {
+  return typeof value === 'string' && (MAP_DISTANCE_METRICS as readonly string[]).includes(value)
+}
 
 export interface UmapInput {
   indices: number[][]
@@ -20,8 +40,14 @@ export interface UmapInput {
 /**
  * 近傍の行を umap-js の入力に直す。画像が少なすぎるとき(`MIN_MAP_NODES` 未満)や、行が
  * 壊れているときは null。
+ *
+ * 先頭は自分自身で距離 0、昇順、行の長さはそろえる、という性質は取り方に関わらず保つ。
  */
-export function toUmapInput(neighborIndices: number[][], neighborSimilarities: number[][]): UmapInput | null {
+export function toUmapInput(
+  neighborIndices: number[][],
+  neighborSimilarities: number[][],
+  metric: MapDistanceMetric = DEFAULT_MAP_DISTANCE_METRIC,
+): UmapInput | null {
   const n = neighborIndices.length
   if (n < MIN_MAP_NODES || neighborSimilarities.length !== n) return null
   let rowLength = Infinity
@@ -51,9 +77,36 @@ export function toUmapInput(neighborIndices: number[][], neighborSimilarities: n
       if (rowDist[c] < rowDist[c - 1]) rowDist[c] = rowDist[c - 1]
     }
     indices[i] = rowIdx
-    distances[i] = rowDist
+    distances[i] = applyMetric(rowDist, metric)
   }
   return { indices, distances, nNeighbors: width }
+}
+
+/**
+ * 1行の距離(昇順。先頭は自分自身で 0)を、取り方に合わせて作り直す。昇順と「先頭は 0」は保つ。
+ *
+ * `rowNormalized` で行の幅が 0(近傍の距離がすべて同じ)のときは伸ばせないので、順位に落とす。
+ */
+export function applyMetric(rowDist: readonly number[], metric: MapDistanceMetric): number[] {
+  const len = rowDist.length
+  if (metric === 'similarity' || len < 2) return [...rowDist]
+  if (metric === 'rank') return rankDistances(len)
+  const min = rowDist[1]
+  const max = rowDist[len - 1]
+  const span = max - min
+  if (!(span > 0)) return rankDistances(len)
+  const out = new Array<number>(len)
+  out[0] = 0
+  for (let c = 1; c < len; c++) out[c] = (rowDist[c] - min) / span
+  return out
+}
+
+/** 順位をそのまま距離にする(0, 1/(len-1), ... , 1 の等間隔)。 */
+function rankDistances(len: number): number[] {
+  const out = new Array<number>(len)
+  const last = Math.max(1, len - 1)
+  for (let c = 0; c < len; c++) out[c] = c / last
+  return out
 }
 
 /** コサイン類似度を距離(0〜2)にする。 */

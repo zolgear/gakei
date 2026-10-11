@@ -1,9 +1,12 @@
 /**
- * `/map` マップ(ADR-0033 8章)。埋め込みの近さで画像を並べる。タブは2つ(2026-10-04 から
- * ネットワークが先頭で既定)。
+ * `/map` マップ(ADR-0033 8章)。埋め込みの近さで画像を並べる。既定のタブはネットワーク
+ * (2026-10-04 から)。
  *
  * - ネットワーク: 類似度がしきい値以上の組を辺にした力学モデル(`NetworkView`)。系列の辺も重ねられる。
- * - 地図: umap-js の 2D 配置(`UmapView`)。
+ * - 3D: umap-js の 3 次元の配置を、回る立体として見る(`Umap3DView`。試作)。
+ *
+ * タブはこの 2 つ。2D の地図(`UmapView`)はあとで戻せるように残してあるが、今は出していない
+ * (以前の `view=map` と覚えた値は 3D として読む)。
  *
  * 元データは `GET /api/embeddings/graph`。グループ・タグ(複数なら AND)・上限・近傍の数で絞り込める。タブ、
  * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
@@ -11,24 +14,37 @@
  * ブラウザにも覚え、URL に無ければ覚えた値を使う(`mapPrefs.ts`。2026-10-04)。選んだ画像を大きく見る
  * パネルの開閉もブラウザにだけ覚える(URL には置かない)。上限で切ったときは、絞り込みを促す。
  * 埋め込みが使えないときは App バーの入口を出さない。直接開いたときは使えない旨だけを出す。
+ *
+ * マップ内の意味検索(試作)は、タブのすぐ下の入力欄。打ち終わってからマップと同じ絞り込みで
+ * `GET /api/embeddings/graph/scores` を呼び、Asset ID で突き合わせて「上位 N 件」を一致とする
+ * (類似度の帯が狭いので絶対値のしきい値は使わない。`mapSearchHighlight.ts`)。検索の文章は URL
+ * だけに置き、一致の件数と距離の取り方はブラウザにも覚える。配置の距離の取り方(試作)は、
+ * 効く 3D のタブでだけ選べる。
  */
 import { useId, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
-import { embeddingGraph } from '../api/client'
+import { embeddingGraph, embeddingGraphScores } from '../api/client'
 import { TagAutocomplete } from '../features/annotations/TagAutocomplete'
 import { TagChip } from '../features/annotations/TagChip'
 import { embeddingErrorKind, retryEmbeddingQuery } from '../features/embeddings/embeddingErrors'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { lineagePairs, similarityEdges } from '../features/map/edges'
 import {
+  buildSearchHighlight,
+  MAP_MATCH_COUNT_CHOICES,
+} from '../features/map/mapSearchHighlight'
+import { MAP_DISTANCE_METRICS, type MapDistanceMetric } from '../features/map/umapInput'
+import {
   MAP_K_CHOICES,
   MAP_LIMIT_CHOICES,
+  MAP_QUERY_MAX,
   MAP_THRESHOLD_MAX,
   MAP_THRESHOLD_MIN,
   MAP_THRESHOLD_STEP,
   activeFilterCount,
   buildMapSearchParams,
+  isMapSettingsChange,
   clampThreshold,
   normalizeTagList,
   parseMapUrlState,
@@ -37,13 +53,15 @@ import {
 } from '../features/map/mapUrlState'
 import { loadMapPrefs, pickStoredFields, saveMapPrefs } from '../features/map/mapPrefs'
 import { NetworkView } from '../features/map/NetworkView'
-import { UmapView } from '../features/map/UmapView'
+import { Umap3DView } from '../features/map/Umap3DView'
 import { useDebouncedValue } from '../features/search/useDebouncedValue'
 import { useAssetGroups } from '../features/stock/groups/assetGroupQueries'
 import { fmt, useI18n } from '../i18n'
 import styles from './MapPage.module.css'
 
 const THRESHOLD_DEBOUNCE_MS = 200
+/** 検索の文章を打ち終わるのを待つ時間。 */
+const SEARCH_DEBOUNCE_MS = 300
 
 export function MapPage() {
   const { t } = useI18n()
@@ -79,6 +97,8 @@ function MapBody() {
   const urlState = parseMapUrlState(searchParams, storedPrefs)
   const state: MapUrlState = pending && pending.base === urlKey ? { ...urlState, ...pending.patch } : urlState
   const [filtersOpen, setFiltersOpen] = useState(false)
+  /** 画面の設定を変えた回数(3D の最初の回転を止めるのに使う)。 */
+  const [settingsVersion, setSettingsVersion] = useState(0)
   const threshold = state.threshold
   const debouncedThreshold = useDebouncedValue(threshold, THRESHOLD_DEBOUNCE_MS)
   const filtersId = useId()
@@ -86,6 +106,7 @@ function MapBody() {
 
   // スライダーを動かすたびに呼ばれるので、履歴を増やさないよう replace で書く。
   function update(patch: Partial<MapUrlState>) {
+    if (isMapSettingsChange(patch)) setSettingsVersion((v) => v + 1)
     setPending((prev) => ({ base: urlKey, patch: { ...(prev && prev.base === urlKey ? prev.patch : {}), ...patch } }))
     if (Object.keys(pickStoredFields(patch)).length > 0) setStoredPrefs(saveMapPrefs(storedPrefs, patch))
     setSearchParams(buildMapSearchParams({ ...state, ...patch }), { replace: true })
@@ -101,6 +122,24 @@ function MapBody() {
     if (open !== previewOpen) setStoredPrefs(saveMapPrefs(storedPrefs, { previewOpen: open }))
   }
   const preview = { open: previewOpen, onOpenChange: setPreviewOpen }
+
+  /**
+   * 3D を開いたときに一度だけ回すか。URL には置かず、覚えた値だけを見る(既定は回す)。
+   * 設定を変えたら回転を止め、以後は回し直さない(タブを切り替えて戻ってきても回さない)。
+   */
+  const introSpin = {
+    enabled: (storedPrefs.autoRotate3d ?? true) && settingsVersion === 0,
+    settingsVersion,
+  }
+
+  // 座標のラインの重ね表示。URL には置かず、覚えた値だけを見る(既定は出さない)。
+  const axesShown = storedPrefs.axes3d ?? false
+  const axes = {
+    shown: axesShown,
+    onShownChange: (shown: boolean) => {
+      if (shown !== axesShown) setStoredPrefs(saveMapPrefs(storedPrefs, { axes3d: shown }))
+    },
+  }
 
   const query = useQuery({
     queryKey: ['embeddings', 'graph', state.k, state.limit, state.groupId, state.tags],
@@ -119,6 +158,34 @@ function MapBody() {
     refetchOnWindowFocus: false,
   })
   const graph = query.data
+
+  // マップ内の意味検索(試作)。文章を打ち終わってから、マップと同じ絞り込みで類似度を取る。
+  const trimmedQuery = state.query.trim()
+  const debouncedQuery = useDebouncedValue(trimmedQuery, SEARCH_DEBOUNCE_MS)
+  const scoresQuery = useQuery({
+    queryKey: ['embeddings', 'graph', 'scores', debouncedQuery, state.limit, state.groupId, state.tags],
+    queryFn: () =>
+      embeddingGraphScores({
+        q: debouncedQuery,
+        limit: state.limit,
+        group_id: state.groupId ?? undefined,
+        tag: state.tags.length > 0 ? state.tags : undefined,
+      }),
+    enabled: debouncedQuery !== '',
+    retry: retryEmbeddingQuery,
+    // 前の文章の結果をそのまま見せると、別の文章の一致を出してしまうので持ち越さない。
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  })
+  // 一致は Asset ID で突き合わせ、順位で決める(類似度の帯が狭いので絶対値のしきい値は使わない)。
+  const nodeIds = useMemo(() => (graph?.nodes ?? []).map((node) => node.id), [graph])
+  const scoresData = scoresQuery.data
+  // 一致は数千件でも軽いので、毎回そのまま組む(`state` は押した値を先に出すために作り直す
+  // オブジェクトなので、useMemo の依存に入れると React Compiler の最適化を止めてしまう)。
+  const searchHighlight =
+    debouncedQuery !== '' && scoresData
+      ? buildSearchHighlight(nodeIds, scoresData.ids ?? [], scoresData.scores ?? [], state.matchCount, debouncedQuery)
+      : null
 
   const edgeResult = useMemo(
     () =>
@@ -141,7 +208,7 @@ function MapBody() {
       <header className={styles.toolbar}>
         <h1 className={styles.title}>{m.title}</h1>
         <div className={styles.tabs} role="tablist" aria-label={m.viewLabel}>
-          {(['network', 'umap'] as MapView[]).map((view) => (
+          {(['network', 'umap3d'] as MapView[]).map((view) => (
             <button
               key={view}
               type="button"
@@ -151,7 +218,7 @@ function MapBody() {
               data-active={state.view === view}
               onClick={() => update({ view })}
             >
-              {view === 'umap' ? m.tabMap : m.tabNetwork}
+              {view === 'umap3d' ? m.tab3d : m.tabNetwork}
             </button>
           ))}
         </div>
@@ -165,6 +232,47 @@ function MapBody() {
           {filterCount > 0 ? fmt(m.filtersWithCount, { count: filterCount }) : m.filters}
         </button>
       </header>
+
+      <div className={styles.searchBar} role="search">
+        <input
+          type="search"
+          className={styles.searchInput}
+          value={state.query}
+          maxLength={MAP_QUERY_MAX}
+          placeholder={m.searchPlaceholder}
+          aria-label={m.searchLabel}
+          onChange={(e) => update({ query: e.target.value })}
+          onKeyDown={(e) => {
+            // 入力欄の Esc は検索語を消すだけ(ビューの Esc の扱いは変えない)。
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              update({ query: '' })
+            }
+          }}
+        />
+        {trimmedQuery !== '' && (
+          <label className={styles.inlineField}>
+            <span className={styles.fieldLabel}>{m.matchCountLabel}</span>
+            <select
+              className={styles.select}
+              value={state.matchCount}
+              onChange={(e) => update({ matchCount: Number(e.target.value) })}
+            >
+              {MAP_MATCH_COUNT_CHOICES.map((value) => (
+                <option key={value} value={value}>
+                  {fmt(m.matchCountOption, { count: value })}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <SearchStatus
+          query={trimmedQuery}
+          running={scoresQuery.isFetching}
+          error={scoresQuery.isError ? scoresQuery.error : null}
+          matches={searchHighlight?.ranked.length ?? null}
+        />
+      </div>
 
       <div id={filtersId} className={styles.filters} data-open={filtersOpen}>
         <GroupFilter value={state.groupId} onChange={(groupId) => update({ groupId })} />
@@ -194,6 +302,25 @@ function MapBody() {
           </select>
         </label>
       </div>
+
+      {state.view === 'umap3d' && (
+        <div className={styles.networkControls}>
+          <label className={styles.inlineField} title={m.metricHelp}>
+            <span className={styles.fieldLabel}>{m.metricLabel}</span>
+            <select
+              className={styles.select}
+              value={state.metric}
+              onChange={(e) => update({ metric: e.target.value as MapDistanceMetric })}
+            >
+              {MAP_DISTANCE_METRICS.map((value) => (
+                <option key={value} value={value}>
+                  {m.metricOption[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
 
       {state.view === 'network' && (
         <div className={styles.networkControls}>
@@ -257,8 +384,17 @@ function MapBody() {
         {graph && !query.isError && nodeCount === 0 && (
           <p className={styles.placeholder}>{filterCount > 0 ? m.emptyFiltered : m.empty}</p>
         )}
-        {graph && !query.isError && nodeCount > 0 && state.view === 'umap' && (
-          <UmapView graph={graph} selectedId={state.selectedId} onSelectId={selectId} preview={preview} />
+        {graph && !query.isError && nodeCount > 0 && state.view === 'umap3d' && (
+          <Umap3DView
+            graph={graph}
+            selectedId={state.selectedId}
+            onSelectId={selectId}
+            preview={preview}
+            introSpin={introSpin}
+            axes={axes}
+            metric={state.metric}
+            search={searchHighlight}
+          />
         )}
         {graph && !query.isError && nodeCount > 0 && state.view === 'network' && (
           <NetworkView
@@ -269,10 +405,49 @@ function MapBody() {
             selectedId={state.selectedId}
             onSelectId={selectId}
             preview={preview}
+            search={searchHighlight}
           />
         )}
       </div>
     </>
+  )
+}
+
+/** 検索の入力中・失敗・一致の件数を小さく出す。 */
+function SearchStatus({
+  query,
+  running,
+  error,
+  matches,
+}: {
+  query: string
+  running: boolean
+  error: unknown
+  matches: number | null
+}) {
+  const { t } = useI18n()
+  const m = t.map
+  if (query === '') return null
+  if (error) {
+    const kind = embeddingErrorKind(error)
+    return (
+      <span className={styles.searchStatus} data-tone="error">
+        {kind === 'unavailable' ? t.embeddings.unavailable : m.searchFailed}
+      </span>
+    )
+  }
+  if (running) {
+    return (
+      <span className={styles.searchStatus} role="status">
+        {m.searchRunning}
+      </span>
+    )
+  }
+  if (matches === null) return null
+  return (
+    <span className={styles.searchStatus} role="status">
+      {matches > 0 ? fmt(m.searchMatches, { count: matches }) : m.searchNoMatch}
+    </span>
   )
 }
 

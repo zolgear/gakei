@@ -1244,6 +1244,8 @@ export type SimilarImageSearchResponse = components['schemas']['SimilarImageSear
 export type DuplicatesResponse = components['schemas']['DuplicatesResponse']
 export type EmbeddingGraphResponse = components['schemas']['EmbeddingGraphResponse']
 export type EmbeddingGraphNode = components['schemas']['EmbeddingGraphNode']
+export type EmbeddingGraphScoresResponse =
+  components['schemas']['EmbeddingGraphScoresResponse']
 export type DuplicateGroup = components['schemas']['DuplicateGroup']
 export type DuplicateAsset = components['schemas']['DuplicateAsset']
 
@@ -1332,4 +1334,14 @@ export function embeddingGraph(
   params: NonNullable<operations['embedding_graph']['parameters']['query']> = {},
 ): Promise<EmbeddingGraphResponse> {
   return request(`/api/embeddings/graph${toQuery(params)}`)
+}
+
+/**
+ * マップのノード全件と検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
+ * `embeddingGraph` の `nodes` と同じ並びで、`scores[i]` が `ids[i]` の類似度。
+ */
+export function embeddingGraphScores(
+  params: NonNullable<operations['embedding_graph_scores']['parameters']['query']>,
+): Promise<EmbeddingGraphScoresResponse> {
+  return request(`/api/embeddings/graph/scores${toQuery(params)}`)
 }

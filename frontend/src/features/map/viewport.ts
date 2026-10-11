@@ -64,6 +64,28 @@ export function computeBounds(positions: ArrayLike<number>, count: number = posi
   return { minX, minY, maxX, maxY }
 }
 
+/**
+ * 選んだ位置(`indices`)の点だけの外接矩形。マップ内の意味検索で、一致したノードに表示を
+ * 合わせるのに使う。有限な点が無ければ null。
+ */
+export function computeBoundsOf(positions: ArrayLike<number>, indices: readonly number[]): Bounds | null {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const i of indices) {
+    const x = positions[i * 2]
+    const y = positions[i * 2 + 1]
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  if (minX === Infinity) return null
+  return { minX, minY, maxX, maxY }
+}
+
 /** 外接矩形が width × height の画面に余白 padding を残して収まる表示。 */
 export function fitBounds(bounds: Bounds, width: number, height: number, padding: number): Viewport {
   const w = Math.max(bounds.maxX - bounds.minX, 1e-9)

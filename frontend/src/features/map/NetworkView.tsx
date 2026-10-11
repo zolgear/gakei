@@ -22,6 +22,7 @@ import { fmt, useI18n } from '../../i18n'
 import type { SimilarityEdge } from './edges'
 import { getCachedLayout, layoutKey, setCachedLayout } from './layoutCache'
 import { MapCanvas, type MapCanvasHandle, type MapPreviewState } from './MapCanvas'
+import type { MapSearchHighlight } from './mapSearchHighlight'
 import { MAP_LAYOUT_SEED, mulberry32 } from './random'
 import { useSelectedIndex } from './useSelectedIndex'
 import styles from './MapViews.module.css'
@@ -48,6 +49,8 @@ interface NetworkViewProps {
   onSelectId: (id: string | null) => void
   /** 選んだ画像を大きく見るパネルの開閉(ブラウザに覚える)。 */
   preview: MapPreviewState
+  /** マップ内の意味検索の一致(null なら検索していない)。 */
+  search: MapSearchHighlight | null
 }
 
 export function NetworkView({
@@ -58,6 +61,7 @@ export function NetworkView({
   selectedId,
   onSelectId,
   preview,
+  search,
 }: NetworkViewProps) {
   const { t } = useI18n()
   const m = t.map
@@ -153,10 +157,12 @@ export function NetworkView({
       neighborIndices={neighborIndices}
       similarityEdges={edges}
       lineageEdges={lineageEdges}
+      projection="flat"
       tileScale={NETWORK_TILE_SCALE}
       selected={selected}
       onSelect={(index) => onSelectId(index === null ? null : (nodes[index]?.id ?? null))}
       preview={preview}
+      search={search}
       controllerRef={controllerRef}
       ariaLabel={fmt(m.networkAriaLabel, { count: nodes.length, edges: edges.length })}
       overlay={running ? <span className={styles.status}>{m.networkRunning}</span> : null}
