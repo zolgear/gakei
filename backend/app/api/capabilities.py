@@ -35,6 +35,7 @@ def embedding_capabilities(
         multilingual=("ja" in languages) if languages is not None else None,
         index_backend=index_backend,  # type: ignore[arg-type]
         engine=config.engine if available else None,
+        prompt_search=available and embedding_settings.prompt_supported(config),
     )
 
 

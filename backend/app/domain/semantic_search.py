@@ -51,6 +51,15 @@ from app.domain.models import (
     RunInput,
     RunInputRole,
 )
+from app.domain.run_views import (
+    bulk_asset_groups,
+    bulk_descendant_run_counts,
+    bulk_input_summary,
+    bulk_output_refs,
+    bulk_parent_focal_points,
+    bulk_users,
+    run_summary_fields,
+)
 from app.domain.schemas import (
     AssetSummary,
     DuplicateAsset,
@@ -58,6 +67,7 @@ from app.domain.schemas import (
     DuplicatesResponse,
     EmbeddingGraphNode,
     EmbeddingGraphResponse,
+    RunSummary,
     SemanticAssetHit,
     SemanticRunHit,
     SemanticSearchResponse,
@@ -296,12 +306,20 @@ def _first_outputs(db: Session, run_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID,
     return first
 
 
-def _hits_to_runs(db: Session, hits: Sequence[RunHit]) -> list[SemanticRunHit]:
+def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> list[SemanticRunHit]:
     ids = [h.run_id for h in hits]
     if not ids:
         return []
     runs = {r.id: r for r in db.execute(select(Run).where(Run.id.in_(ids))).scalars()}
     outputs = _first_outputs(db, ids)
+    # 履歴のカード用の要約(キーワード検索の `_search_runs` と同じ集計)。
+    run_ids = list(runs)
+    outputs_map = bulk_output_refs(db, run_ids)
+    inputs_map = bulk_input_summary(db, run_ids, viewer)
+    descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
+    users_map = bulk_users(db, [r.created_by_user_id for r in runs.values()])
+    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in runs.values()], viewer)
+    parent_focals = bulk_parent_focal_points(db, inputs_map)
     output_ids = [a.id for a in outputs.values()]
     titles = annotations_domain.bulk_titles(db, output_ids)
     focals = focal_points.bulk_get(db, output_ids)
@@ -336,6 +354,17 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit]) -> list[SemanticRunHit]:
                     else None
                 ),
                 score=round(hit.score, 6),
+                run=RunSummary(
+                    **run_summary_fields(
+                        run,
+                        outputs_map[run.id],
+                        *inputs_map[run.id],
+                        descendant_map[run.id],
+                        users_map.get(run.created_by_user_id),
+                        groups_map.get(run.asset_group_id),
+                        primary_parent_focal_point=parent_focals.get(inputs_map[run.id][1]),
+                    )
+                ),
             )
         )
     return result
@@ -376,7 +405,7 @@ def semantic_search(
             model_key=active.model_key,
             languages=list(active.languages) if active.languages is not None else None,  # type: ignore[arg-type]
             multilingual=active.multilingual,
-            runs=_hits_to_runs(db, run_hits),
+            runs=_hits_to_runs(db, run_hits, viewer),
         )
     flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     vector = embed_query(db, active, text, engines, cache)

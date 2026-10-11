@@ -3164,6 +3164,11 @@ export interface components {
             index_backend: "pgvector" | "numpy";
             /** Engine */
             engine?: ("onnx" | "remote") | null;
+            /**
+             * Prompt Search
+             * @default false
+             */
+            prompt_search: boolean;
         };
         /**
          * EmbeddingErrorDetail
@@ -5187,6 +5192,7 @@ export interface components {
             output?: components["schemas"]["AssetSummary"] | null;
             /** Score */
             score: number;
+            run: components["schemas"]["RunSummary"];
         };
         /**
          * SemanticSearchResponse

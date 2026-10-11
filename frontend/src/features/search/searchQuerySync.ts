@@ -5,13 +5,20 @@
  * 埋め込み(ADR-0033 8章)の検索も URL に残す。
  * - `mode=semantic`: 文章での検索(意味)。既定はキーワード検索で、そのときは `mode` を付けない。
  * - `similar=<assetId>`: その画像に似た画像。`q` と `mode` より優先する。
+ * - `target=prompt`: 意味での検索で、画像ではなく指示(プロンプト)を探す(ADR-0045 6章、
+ *   2026-10-11 追記)。既定は画像で、そのときは `target` を付けない。意味のときだけ付ける。
  */
 
 export type SearchMode = 'keyword' | 'semantic'
 
+/** 意味での検索で探す対象。 */
+export type SemanticTarget = 'image' | 'prompt'
+
 export interface SearchUrlState {
   query: string
   mode: SearchMode
+  /** 意味での検索で探す対象(URL のまま。使えるかは `resolveSemanticTarget` で決める)。 */
+  target: SemanticTarget
   /** 似た画像の起点。無ければ null。 */
   similar: string | null
 }
@@ -25,13 +32,17 @@ export function parseSearchQuery(locationSearch: string): string {
   return raw?.trim() ?? ''
 }
 
-/** `location.search` から、検索語・方式・似た画像の起点を取り出す。知らない `mode` はキーワード扱い。 */
+/**
+ * `location.search` から、検索語・方式・探す対象・似た画像の起点を取り出す。知らない `mode` は
+ * キーワード扱い、知らない `target` は画像扱い。
+ */
 export function parseSearchState(locationSearch: string): SearchUrlState {
   const params = new URLSearchParams(locationSearch)
   const similarRaw = params.get('similar')?.trim() ?? ''
   return {
     query: parseSearchQuery(locationSearch),
     mode: params.get('mode') === 'semantic' ? 'semantic' : 'keyword',
+    target: params.get('target') === 'prompt' ? 'prompt' : 'image',
     similar: ASSET_ID_RE.test(similarRaw) ? similarRaw : null,
   }
 }
@@ -39,12 +50,14 @@ export function parseSearchState(locationSearch: string): SearchUrlState {
 /**
  * 検索語から `/search?q=...` のパスを組み立てる。空なら `q` を付けない。
  * 意味での検索は `mode=semantic` を付ける(検索語が空でも、切り替えた状態を残す)。
+ * 意味で指示を探すときは、さらに `target=prompt` を付ける(キーワードのときは付けない)。
  */
-export function buildSearchPath(query: string, mode: SearchMode = 'keyword'): string {
+export function buildSearchPath(query: string, mode: SearchMode = 'keyword', target: SemanticTarget = 'image'): string {
   const trimmed = query.trim()
   const params = new URLSearchParams()
   if (trimmed) params.set('q', trimmed)
   if (mode === 'semantic') params.set('mode', 'semantic')
+  if (mode === 'semantic' && target === 'prompt') params.set('target', 'prompt')
   const qs = params.toString()
   return qs ? `/search?${qs}` : '/search'
 }
@@ -52,4 +65,12 @@ export function buildSearchPath(query: string, mode: SearchMode = 'keyword'): st
 /** その画像に似た画像を検索ページで見るパス。 */
 export function buildSimilarSearchPath(assetId: string): string {
   return `/search?${new URLSearchParams({ similar: assetId }).toString()}`
+}
+
+/**
+ * 実際に探す対象。URL が指示を指していても、使うモデルが指示の埋め込みに対応しないときは
+ * 画像として扱う(ADR-0045 6章)。
+ */
+export function resolveSemanticTarget(urlTarget: SemanticTarget, promptSearchAvailable: boolean): SemanticTarget {
+  return urlTarget === 'prompt' && promptSearchAvailable ? 'prompt' : 'image'
 }
