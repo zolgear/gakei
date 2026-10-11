@@ -21,6 +21,17 @@
   overflow: hidden;
 }
 
+/* パネルは tabIndex={-1} でフォーカスを受ける(中に操作できる要素が無いときの受け皿)。
+   マウス操作で枠が出ると目障りなので、キーボードのときだけ出す。 */
+.panel:focus {
+  outline: none;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .header {
   display: flex;
   align-items: center;
