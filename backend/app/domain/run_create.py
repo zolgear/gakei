@@ -17,10 +17,15 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.domain import api_key as api_key_domain
+from app.domain import prompt_templates
 from app.domain.models import Run, RunInput, RunStatus
 from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
 from app.domain.schemas import RunCreateRequest
-from app.domain.visibility import get_visible_asset, get_visible_group
+from app.domain.visibility import (
+    get_visible_asset,
+    get_visible_group,
+    get_visible_prompt_template,
+)
 from app.i18n import t
 from app.providers.base import ProviderUnavailableError, RunDraft
 from app.providers.registry import ProviderRegistry
@@ -134,15 +139,25 @@ def create_runs(
             )
         )
 
-    try:
-        validate_run_request(
-            caps, body.operation, body.model, body.prompt, body.params, input_metas
-        )
-    except RunValidationError as e:
-        raise RunCreateError("invalid", str(e)) from e
-
     if repeat < 1:
         raise ValueError("repeat must be >= 1")
+
+    # プロンプトテンプレート(実験)。Run ごとに組み立て直す(繰り返し回数 N なら N 回。
+    # 意味の通ったガチャになる)。`prompt` と `prompt_template` の排他はスキーマで断っている。
+    prompts, builds = _resolve_prompts(db, body, viewer=viewer, repeat=repeat)
+
+    for index in range(repeat):
+        try:
+            validate_run_request(
+                caps,
+                body.operation,
+                body.model,
+                prompts[index],
+                body.params,
+                input_metas,
+            )
+        except RunValidationError as e:
+            raise RunCreateError("invalid", str(e)) from e
 
     # 利用者が seed を指定したときだけ、2つ目以降の seed を進める(ADR-0042 2章)。指定が
     # 無ければ、各 Run でプロバイダーがそれぞれ決める(今と同じ)。
@@ -155,11 +170,11 @@ def create_runs(
         if index > 0 and user_seed is not None and repeat_seed is not None:
             seed = repeat_seed(finalized[0], index)
             if seed is not None:
-                params = {**body.params, "seed": seed}
+                params = {**params, "seed": seed}
         draft = RunDraft(
             operation=body.operation,
             model=body.model,
-            prompt=body.prompt,
+            prompt=prompts[index],
             params=params,
             inputs=input_metas,
         )
@@ -182,8 +197,10 @@ def create_runs(
             model=body.model,
             deployment=None,
             operation=body.operation,
-            prompt=body.prompt,
+            prompt=prompts[index],
             params=params,
+            # プロンプトテンプレート(実験)で組み立てたときの内訳。作成時に一度だけ書く。
+            prompt_build=builds[index],
             status=RunStatus.QUEUED,
             queued_at=queued_base + timedelta(microseconds=index),
             created_by_user_id=viewer.id,
@@ -204,3 +221,37 @@ def create_runs(
     db.commit()
     runner.notify()
     return runs
+
+
+def _resolve_prompts(
+    db: Session,
+    body: RunCreateRequest,
+    *,
+    viewer: CurrentUser,
+    repeat: int,
+) -> tuple[list[str], list[dict[str, Any] | None]]:
+    """Run ごとの(プロンプト、組み立ての内訳)を決める。
+
+    プロンプトテンプレート(実験)を使わないときは、今までどおり `body.prompt` のまま。
+    使うときは Run ごとに組み立て直す(`params` には手を触れない)。
+    """
+    if body.prompt_template is None:
+        assert body.prompt is not None  # スキーマでどちらか一方を強制している
+        return [body.prompt] * repeat, [None] * repeat
+
+    template = get_visible_prompt_template(db, viewer, body.prompt_template.template_id)
+    if template is None:
+        raise RunCreateError("not_found", t("promptTemplates.notFound"))
+    spec = prompt_templates.load_spec(db, template)
+    selections = body.prompt_template.selections.to_domain()
+
+    prompts: list[str] = []
+    builds: list[dict[str, Any] | None] = []
+    for _ in range(repeat):
+        try:
+            result = prompt_templates.build(spec, selections)
+        except prompt_templates.PromptBuildError as e:
+            raise RunCreateError("invalid", str(e)) from e
+        prompts.append(result.prompt)
+        builds.append(result.build)
+    return prompts, builds

@@ -95,6 +95,8 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
         ),
         deployment=run.deployment,
         provider_request_id=run.provider_request_id,
+        # プロンプトテンプレート(実験)で組み立てた Run だけ入る。
+        prompt_build=run.prompt_build,
         inputs=[
             RunInputRef(
                 asset_id=i.asset_id,

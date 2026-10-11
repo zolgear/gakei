@@ -456,6 +456,26 @@
     "notFound": "パラメーターセットが見つかりません",
     "serverOnlyParam": "サーバーだけが書く項目はパラメーターセットに保存できません: {name}"
   },
+  "promptTemplates": {
+    "notFound": "プロンプトテンプレートが見つかりません",
+    "unknownSlot": "スロットが見つかりません: {id}",
+    "unknownSlotId": "このテンプレートのスロットではありません: {id}",
+    "unknownVariantId": "このスロットの候補ではありません: {id}",
+    "unknownComboId": "このテンプレートの組み合わせではありません: {id}",
+    "unknownVariantRef": "候補の参照が見つかりません: {ref}",
+    "duplicateRef": "候補の参照が重複しています: {ref}",
+    "variantNotInTemplate": "このテンプレートの候補ではありません: {id}",
+    "comboSameSlot": "組み合わせ「{name}」が同じスロット「{slot}」の候補を2つ以上指しています",
+    "unknownCombo": "組み合わせが見つかりません: {id}",
+    "comboOverlap": "組み合わせ「{name}」のスロット「{slot}」が、ほかの組み合わせと重なっています",
+    "comboVariantMissing": "組み合わせ「{name}」が指している候補が見つかりません",
+    "slotLockedByCombo": "スロット「{name}」は組み合わせが埋めるため、個別に指定できません",
+    "variantRequired": "スロット「{name}」の候補を選んでください",
+    "variantNotInSlot": "候補 {id} はスロット「{name}」のものではありません",
+    "textRequired": "スロット「{name}」の文字列を入れてください",
+    "unknownMode": "未知の指定です: {mode}",
+    "emptyPrompt": "組み立てたプロンプトが空です"
+  },
   "assetGroups": {
     "notFound": "グループが見つかりません",
     "assetNotFound": "対象の画像が見つかりません: {ids}",
