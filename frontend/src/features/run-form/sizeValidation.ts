@@ -40,6 +40,51 @@ export function sizePresets(): SizePreset[] {
   return msg().runForm.sizeInput.presets as SizePreset[]
 }
 
+/**
+ * プロバイダーの制約で選べるプリセットだけを返す。`allow_auto` でなければ auto を外し、
+ * 幅と高さが制約(長辺・総画素・縦横比など)を満たさないプリセットも外す
+ * (OpenAI 向けの 2K・4K のプリセットを、長辺 2048px の SD WebUI で出さないため)。
+ */
+export function sizePresetsFor(constraints: SizeConstraints): SizePreset[] {
+  return sizePresets().filter((preset) => {
+    const value = preset.value
+    if (value.mode === 'auto') return constraints.allow_auto
+    if (value.mode !== 'custom') return true
+    return validateSize(constraints, value.width ?? 0, value.height ?? 0).valid
+  })
+}
+
+/**
+ * プロバイダーを切り替えたときのサイズ。今のサイズが新しいプロバイダーの制約で使えなければ
+ * (auto を受け付けない、長辺の上限を超えるなど)、そのプロバイダーの既定のサイズに戻す。
+ * 丸めれば済む(倍数でないだけの)サイズはそのまま残す(送信時に丸める)。
+ */
+export function sizeStateForProvider(
+  constraints: SizeConstraints,
+  defaultSize: string | null | undefined,
+  state: SizeState,
+): SizeState {
+  if (validateSizeState(constraints, roundSizeStateToMultiple(constraints, state)).valid) return state
+  return paramToSizeState(defaultSize ?? undefined)
+}
+
+/**
+ * Edit の入力画像を足したとき(またはプロバイダーを切り替えたときに入力画像があるとき)の
+ * サイズ。`auto` を受け付けないプロバイダー(SD WebUI)で、利用者がまだサイズを変えておらず
+ * 幅×高さ(既定の 1024×1024 など)が入っているなら「未指定」にする。未指定ならサーバーが
+ * 入力画像の寸法から決める(ADR-0038 2章)ので、入力の縦横比が崩れない。
+ * 変えなくてよいときは null。
+ */
+export function sizeStateForEditInputs(
+  constraints: SizeConstraints | null | undefined,
+  state: SizeState,
+  touchedByUser: boolean,
+): SizeState | null {
+  if (!constraints || constraints.allow_auto) return null
+  if (touchedByUser || state.mode !== 'custom') return null
+  return { ...state, mode: 'unspecified' }
+}
+
 /** select の「任意の幅×高さ」オプションの表示名。値は SIZE_PRESETS に含めず custom として扱う。 */
 export function customSizeLabel(): string {
   return msg().runForm.sizeInput.customLabel
@@ -86,17 +131,34 @@ export function validateSize(
 
   const aspectRatio = width / height
   if (aspectRatio < constraints.min_aspect_ratio || aspectRatio > constraints.max_aspect_ratio) {
-    errors.push(v.aspectRatio)
+    errors.push(
+      fmt(v.aspectRatio, {
+        min: formatAspectRatio(constraints.min_aspect_ratio),
+        max: formatAspectRatio(constraints.max_aspect_ratio),
+      }),
+    )
   }
 
   return { valid: errors.length === 0, errors }
 }
 
-/** SizeState 全体を検証する(unspecified/auto は常に有効)。 */
+/** 縦横比(幅 / 高さ)を `1:3`・`4:1` の形にする。小数は2桁まで。 */
+export function formatAspectRatio(ratio: number): string {
+  const short = (n: number) => String(Math.round(n * 100) / 100)
+  return ratio >= 1 ? `${short(ratio)}:1` : `1:${short(1 / ratio)}`
+}
+
+/**
+ * SizeState 全体を検証する。unspecified は常に有効。auto は `allow_auto` のプロバイダーだけ有効
+ * (SD WebUI など、auto を受け付けないプロバイダーではサーバーが 422 にするため)。
+ */
 export function validateSizeState(
   constraints: SizeConstraints,
   state: SizeState,
 ): SizeValidationResult {
+  if (state.mode === 'auto' && !constraints.allow_auto) {
+    return { valid: false, errors: [msg().runForm.sizeValidation.autoNotSupported] }
+  }
   if (state.mode !== 'custom') {
     return { valid: true, errors: [] }
   }
@@ -104,26 +166,45 @@ export function validateSizeState(
 }
 
 /**
- * `multipleOf` の倍数に丸める(最も近い倍数。四捨五入)。
+ * `multipleOf` の倍数に丸める。既定は最も近い倍数(四捨五入)で、`roundDown` なら切り捨てる
+ * (SD WebUI。WebUI 自身が 8 の倍数に切り捨てて描くため。ADR-0038 2章)。
  * 丸めた結果が0以下になる場合は multipleOf 自体を返す。
  */
-export function roundToMultiple(value: number, multipleOf: number): number {
+export function roundToMultiple(value: number, multipleOf: number, roundDown = false): number {
   if (multipleOf <= 0) return value
-  const rounded = Math.round(value / multipleOf) * multipleOf
+  const rounded = (roundDown ? Math.floor(value / multipleOf) : Math.round(value / multipleOf)) * multipleOf
   return Math.max(multipleOf, rounded)
 }
 
+/** プロバイダーの制約に従って、幅または高さを倍数に合わせる(`round_down` なら切り捨て)。 */
+export function roundDimension(constraints: SizeConstraints, value: number): number {
+  return roundToMultiple(value, constraints.multiple_of, constraints.round_down)
+}
+
 /**
- * custom モードの SizeState を、width/height を multiple_of の倍数に丸めたものへ変換する。
- * blur 時・送信時の自動丸めに使う(unspecified/auto はそのまま返す)。
+ * custom モードの SizeState を、width/height を multiple_of の倍数に丸めたものへ変換する
+ * (`round_down` のプロバイダーでは切り捨て)。blur 時・送信時の自動丸めに使う
+ * (unspecified/auto はそのまま返す)。
  */
 export function roundSizeStateToMultiple(constraints: SizeConstraints, state: SizeState): SizeState {
   if (state.mode !== 'custom') return state
   return {
     ...state,
-    width: roundToMultiple(state.width, constraints.multiple_of),
-    height: roundToMultiple(state.height, constraints.multiple_of),
+    width: roundDimension(constraints, state.width),
+    height: roundDimension(constraints, state.height),
   }
+}
+
+/**
+ * 幅と高さを入れ替えた SizeState(サイズ欄の「×」ボタン)。custom のときだけ入れ替え、
+ * blur・送信時と同じ丸め(`round_down` のプロバイダーでは切り捨て)を通して返す
+ * (入力途中の丸めていない値でも、制約に合った値で反映するため)。
+ * unspecified/auto はそのまま返す。入れ替えた結果がプリセットと一致すれば、select は
+ * 既存の照合(SizeInput.tsx の findPresetIndex)でそのプリセットの表示になる。
+ */
+export function swapSizeState(constraints: SizeConstraints, state: SizeState): SizeState {
+  if (state.mode !== 'custom') return state
+  return roundSizeStateToMultiple(constraints, { ...state, width: state.height, height: state.width })
 }
 
 /**
@@ -135,6 +216,14 @@ export const EXPERIMENTAL_TOTAL_PIXELS_THRESHOLD = 2560 * 1440
 /** 総画素数が推奨上限(2560×1440)を超えているか(エラーではなく注記の判定に使う)。 */
 export function isExperimentalSize(width: number, height: number): boolean {
   return width * height > EXPERIMENTAL_TOTAL_PIXELS_THRESHOLD
+}
+
+/**
+ * 「実験的」の注記を出す制約か。注記は OpenAI のガイドに基づくもので、長辺が 2560px を超える
+ * サイズ(4K 系)を受け付けるプロバイダーにだけ当てはまる(長辺 2048px の SD WebUI には出さない)。
+ */
+export function hasExperimentalSizes(constraints: SizeConstraints): boolean {
+  return constraints.max_long_edge > 2560
 }
 
 /** SizeState を `params.size` に入れる値へ変換する。unspecified は undefined(=キーを作らない)。 */

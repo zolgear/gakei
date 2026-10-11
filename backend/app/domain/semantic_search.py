@@ -1,8 +1,9 @@
 """埋め込みを使った検索(ADR-0033 6章・7章)。REST(`app/api/embeddings.py`)と MCP が使う。
 
 - 文章での検索: 検索の文章を使うモデルの文章側で1件だけ計算し(`QueryVectorCache` で
-  覚える)、近い画像を返す。推論は同期で行うので、呼び出し側はスレッドで呼ぶ(FastAPI の
-  同期エンドポイント、MCP の `_in_thread`)。
+  覚える)、近い画像を返す。`target = "prompt"` なら、Run のプロンプトの埋め込みと比べて近い
+  Run を返す(ADR-0045 5章。使うモデルが対応しなければ 422)。推論は同期で行うので、
+  呼び出し側はスレッドで呼ぶ(FastAPI の同期エンドポイント、MCP の `_in_thread`)。
 - 似た画像: 起点の画像のベクトルに近い画像(起点は除く)。ベクトルがまだ無ければ理由を返す
   (計算中、失敗、未計算)。
 - 画像で探す: 手元の画像(Asset にしない)のベクトルを、その場で1件だけ計算して近い画像を
@@ -33,17 +34,43 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
-from app.domain import derivatives, embedding_settings, perceptual_hash
+from app.domain import (
+    derivatives,
+    embedding_settings,
+    focal_points,
+    perceptual_hash,
+    prompt_embeddings,
+)
 from app.domain import embeddings as embeddings_domain
 from app.domain.assets import ALLOWED_UPLOAD_FORMATS, MAX_UPLOAD_BYTES
-from app.domain.models import Asset, AssetKind, AssetPerceptualHash, RunInput, RunInputRole
+from app.domain.models import (
+    Asset,
+    AssetKind,
+    AssetPerceptualHash,
+    Run,
+    RunInput,
+    RunInputRole,
+)
+from app.domain.run_views import (
+    bulk_asset_groups,
+    bulk_descendant_run_counts,
+    bulk_input_summary,
+    bulk_output_refs,
+    bulk_parent_focal_points,
+    bulk_users,
+    run_summary_fields,
+)
 from app.domain.schemas import (
+    AssetSummary,
     DuplicateAsset,
     DuplicateGroup,
     DuplicatesResponse,
     EmbeddingGraphNode,
     EmbeddingGraphResponse,
+    EmbeddingGraphScoresResponse,
+    RunSummary,
     SemanticAssetHit,
+    SemanticRunHit,
     SemanticSearchResponse,
     SimilarAssetsResponse,
     SimilarImageSearchResponse,
@@ -51,6 +78,8 @@ from app.domain.schemas import (
 from app.domain.vector_index import (
     AssetFilter,
     Hit,
+    RunFilter,
+    RunHit,
     VectorIndex,
     candidate_ids,
     knn_matrix,
@@ -58,8 +87,8 @@ from app.domain.vector_index import (
     pairs_at_least,
 )
 from app.domain.visibility import get_visible_asset, get_visible_group
-from app.embedding.base import EmbeddingError, composite_on_white
-from app.embedding.catalog import CLIP_MODELS
+from app.embedding.base import EmbeddingError, composite_on_white, l2_normalize
+from app.embedding.catalog import CLIP_MODELS, InputVariant
 from app.i18n import t
 
 if TYPE_CHECKING:
@@ -69,6 +98,8 @@ if TYPE_CHECKING:
 SEARCH_DEFAULT_LIMIT = 20
 SEARCH_MAX_LIMIT = 50
 QUERY_MAX_CHARS = 1000
+# 指示(プロンプト)で探したときに返すプロンプトの先頭の長さ(文字)。
+PROMPT_EXCERPT_CHARS = 200
 
 GRAPH_DEFAULT_K = 10
 GRAPH_MAX_K = 30
@@ -234,6 +265,7 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
         return []
     assets = {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_(ids))).scalars()}
     titles = annotations_domain.bulk_titles(db, ids)
+    focals = focal_points.bulk_get(db, ids)
     result: list[SemanticAssetHit] = []
     for hit in hits:
         asset = assets.get(hit.asset_id)
@@ -249,6 +281,7 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
                 bytes=asset.bytes,
                 created_at=asset.created_at,
                 title=titles.get(asset.id),
+                focal_point=focals.get(asset.id),
                 score=round(hit.score, 6),
             )
         )
@@ -256,6 +289,86 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
 
 
 # -- 文章での検索 -------------------------------------------------------------------
+
+
+def _first_outputs(db: Session, run_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, Asset]:
+    """Run ごとの最初の出力(削除されていない、`output_index` の最も小さいもの)。"""
+    if not run_ids:
+        return {}
+    rows = db.execute(
+        select(Asset)
+        .where(Asset.produced_by_run_id.in_(list(run_ids)), Asset.deleted_at.is_(None))
+        .order_by(Asset.output_index.asc(), Asset.created_at.asc())
+    ).scalars()
+    first: dict[uuid.UUID, Asset] = {}
+    for asset in rows:
+        assert asset.produced_by_run_id is not None
+        first.setdefault(asset.produced_by_run_id, asset)
+    return first
+
+
+def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> list[SemanticRunHit]:
+    ids = [h.run_id for h in hits]
+    if not ids:
+        return []
+    runs = {r.id: r for r in db.execute(select(Run).where(Run.id.in_(ids))).scalars()}
+    outputs = _first_outputs(db, ids)
+    # 履歴のカード用の要約(キーワード検索の `_search_runs` と同じ集計)。
+    run_ids = list(runs)
+    outputs_map = bulk_output_refs(db, run_ids)
+    inputs_map = bulk_input_summary(db, run_ids, viewer)
+    descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
+    users_map = bulk_users(db, [r.created_by_user_id for r in runs.values()])
+    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in runs.values()], viewer)
+    parent_focals = bulk_parent_focal_points(db, inputs_map)
+    output_ids = [a.id for a in outputs.values()]
+    titles = annotations_domain.bulk_titles(db, output_ids)
+    focals = focal_points.bulk_get(db, output_ids)
+    result: list[SemanticRunHit] = []
+    for hit in hits:
+        run = runs.get(hit.run_id)
+        if run is None:
+            continue
+        prompt = prompt_embeddings.select_prompt(run)
+        asset = outputs.get(run.id)
+        result.append(
+            SemanticRunHit(
+                id=run.id,
+                operation=run.operation,  # type: ignore[arg-type]
+                model=run.model,
+                created_at=run.queued_at,
+                prompt=prompt[:PROMPT_EXCERPT_CHARS],
+                prompt_truncated=len(prompt) > PROMPT_EXCERPT_CHARS,
+                output=(
+                    AssetSummary(
+                        id=asset.id,
+                        kind=asset.kind,
+                        mime=asset.mime,
+                        width=asset.width,
+                        height=asset.height,
+                        bytes=asset.bytes,
+                        created_at=asset.created_at,
+                        title=titles.get(asset.id),
+                        focal_point=focals.get(asset.id),
+                    )
+                    if asset is not None
+                    else None
+                ),
+                score=round(hit.score, 6),
+                run=RunSummary(
+                    **run_summary_fields(
+                        run,
+                        outputs_map[run.id],
+                        *inputs_map[run.id],
+                        descendant_map[run.id],
+                        users_map.get(run.created_by_user_id),
+                        groups_map.get(run.asset_group_id),
+                        primary_parent_focal_point=parent_focals.get(inputs_map[run.id][1]),
+                    )
+                ),
+            )
+        )
+    return result
 
 
 def semantic_search(
@@ -271,6 +384,7 @@ def semantic_search(
     group_id: uuid.UUID | None = None,
     tag: str | None = None,
     kind: str | None = None,
+    target: str = "image",
 ) -> SemanticSearchResponse:
     text = q.strip()
     if not text:
@@ -278,6 +392,22 @@ def semantic_search(
     if len(text) > QUERY_MAX_CHARS:
         raise EmbeddingsInvalidQueryError(t("embeddings.queryTooLong", max=QUERY_MAX_CHARS))
     active = require_active(db, settings)
+    if target == "prompt":
+        # ADR-0045 5章。画像の絞り込み(グループ・タグ・種類)は Run には掛けられない。
+        if not embedding_settings.prompt_supported(active.config):
+            raise EmbeddingsInvalidQueryError(t("embeddings.promptSearchNotSupported"))
+        if group_id is not None or tag is not None or kind is not None:
+            raise EmbeddingsInvalidQueryError(t("embeddings.promptSearchFilters"))
+        vector = embed_query(db, active, text, engines, cache)
+        run_hits = index.prompt_top_k(db, active.model_key, vector, RunFilter(viewer), limit)
+        return SemanticSearchResponse(
+            target="prompt",
+            query=text,
+            model_key=active.model_key,
+            languages=list(active.languages) if active.languages is not None else None,  # type: ignore[arg-type]
+            multilingual=active.multilingual,
+            runs=_hits_to_runs(db, run_hits, viewer),
+        )
     flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     vector = embed_query(db, active, text, engines, cache)
     hits = index.top_k(db, active.model_key, vector, flt, limit)
@@ -293,9 +423,10 @@ def semantic_search(
 # -- 画像で探す ---------------------------------------------------------------------
 
 
-def decode_query_image(data: bytes) -> Image.Image:
+def decode_query_image(data: bytes, variant: InputVariant = "thumb") -> Image.Image:
     """画像で探す画像を、取り込みと同じ規則で確かめ、thumb(長辺 512px)と同じ縮め方をした
-    RGB(透明な部分は白で合成)にする。保存はしない。
+    RGB(透明な部分は白で合成)にする。保存はしない。`variant` が preview なら、preview
+    (長辺 2048px)と同じ縮め方にする(入力に preview を使うモデル。ADR-0044)。
 
     取り込み(`assets.ingest`)と同じく、大きさの上限は `MAX_UPLOAD_BYTES`、形式は PNG / JPEG /
     WebP。中身を実際に展開して確かめる。縮め方を thumb の作り方(WebP にして読み直す)と揃える
@@ -324,7 +455,7 @@ def decode_query_image(data: bytes) -> Image.Image:
         raise EmbeddingsInvalidQueryError(t("assets.unsupportedFormat", format=image.format))
     try:
         image.load()  # ヘッダーだけでなく実際に展開して確かめる
-        thumb = Image.open(io.BytesIO(derivatives.make_thumb(image)))
+        thumb = Image.open(io.BytesIO(derivatives.make_derived(image, variant)))
         thumb.load()
     except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
         raise EmbeddingsInvalidQueryError(t("assets.cannotReadImage")) from e
@@ -367,7 +498,7 @@ def search_by_image(
     active = require_active(db, settings)
     flt = build_filter(db, viewer, group_id=group_id, tags=tags, kind=kind)
     with _QUERY_IMAGE_SLOTS:
-        image = decode_query_image(data)
+        image = decode_query_image(data, embedding_settings.input_variant(active.config))
         try:
             vector = embed_query_image(db, active, image, engines)
         finally:
@@ -534,6 +665,7 @@ def find_duplicates(
         else {}
     )
     titles = annotations_domain.bulk_titles(db, member_ids)
+    focals = focal_points.bulk_get(db, member_ids)
     groups: list[DuplicateGroup] = []
     for leader, members in raw_groups:
         # 代表は、メンバーとの類似度の最大値。メンバーは代表との類似度。
@@ -553,6 +685,7 @@ def find_duplicates(
                     bytes=asset.bytes,
                     created_at=asset.created_at,
                     title=titles.get(asset.id),
+                    focal_point=focals.get(asset.id),
                     max_score=round(score, 6),
                     hash_missing=by_position[x] is None,
                 )
@@ -643,6 +776,7 @@ def build_graph(
         else {}
     )
     titles = annotations_domain.bulk_titles(db, ordered)
+    focals = focal_points.bulk_get(db, ordered)
     nodes = [
         EmbeddingGraphNode(
             id=asset_id,
@@ -650,6 +784,7 @@ def build_graph(
             width=assets[asset_id].width,
             height=assets[asset_id].height,
             title=titles.get(asset_id),
+            focal_point=focals.get(asset_id),
         )
         for asset_id in ordered
     ]
@@ -660,6 +795,58 @@ def build_graph(
         neighbor_indices=indices.tolist(),
         neighbor_similarities=[[round(float(v), 4) for v in row] for row in sims],
         lineage_edges=_lineage_edges(db, ordered) if include_lineage else None,
+        total=total,
+        truncated=total > len(ordered),
+    )
+
+
+def graph_scores(
+    db: Session,
+    *,
+    settings: Settings,
+    index: VectorIndex,
+    engines: EmbeddingEngines,
+    cache: QueryVectorCache,
+    viewer: CurrentUser,
+    q: str,
+    limit: int = GRAPH_DEFAULT_LIMIT,
+    group_id: uuid.UUID | None = None,
+    tags: Sequence[str] | None = None,
+) -> EmbeddingGraphScoresResponse:
+    """マップのノード全件と検索の文章の類似度(絞り込みや順位では落とさない)。
+
+    `ids` は `build_graph` の `nodes` と同じ並び(同じ引数なら位置が一致する)。文章での検索
+    (`semantic_search`)は上限 `SEARCH_MAX_LIMIT` 件しか返せないので、マップの上で全ノードを
+    強調・絞り込みするためにこちらを使う。対象は画像だけで、指示(プロンプト)は扱わない。
+    """
+    text = q.strip()
+    if not text:
+        raise EmbeddingsInvalidQueryError(t("search.emptyQuery"))
+    if len(text) > QUERY_MAX_CHARS:
+        raise EmbeddingsInvalidQueryError(t("embeddings.queryTooLong", max=QUERY_MAX_CHARS))
+    active = require_active(db, settings)
+    flt = build_filter(db, viewer, group_id=group_id, tags=tags)
+    all_ids = candidate_ids(db, active.model_key, flt)
+    total = len(all_ids)
+    # `build_graph` と同じ順序・同じ行列を使う(位置が一致する)。
+    ordered, matrix = index.subset(db, active.model_key, all_ids[:limit])
+    vector = embed_query(db, active, text, engines, cache)
+    scores: list[float] = []
+    if ordered:
+        # 保存されているベクトルは正規化済みなので、検索の文章の側だけを正規化して内積を取ると
+        # コサイン類似度になる(`NumpyIndex._score` と同じ尺度)。
+        query = l2_normalize(np.asarray(vector, dtype=np.float32).reshape(-1))[0]
+        if query.shape[0] == matrix.shape[1]:
+            raw = np.clip(matrix @ query, -1.0, 1.0)
+            scores = [round(float(v), 4) for v in raw]
+        else:
+            # 次元が合わない(リモートの接続先のモデルを替えた)。0 を返す。
+            scores = [0.0] * len(ordered)
+    return EmbeddingGraphScoresResponse(
+        model_key=active.model_key,
+        query=text,
+        ids=ordered,
+        scores=scores,
         total=total,
         truncated=total > len(ordered),
     )

@@ -53,6 +53,7 @@ import { assetKindLabel, formatBytes, formatDateTime } from '../lib/format'
 import { useBackNavigate } from '../lib/useBackNavigate'
 import { useIsMobileViewport } from '../lib/viewport'
 import styles from './DuplicatesPage.module.css'
+import { focalStyle } from '../lib/focalPoint'
 
 /** スライダーを動かしてから取り直すまでの待ち(ミリ秒)。 */
 const THRESHOLD_DEBOUNCE_MS = 350
@@ -284,6 +285,7 @@ function DuplicatesBody({ defaultThreshold }: { defaultThreshold: number }) {
         open={deleteTarget !== null}
         message={m.deleteConfirmMessage}
         previewImageUrl={deleteTarget ? assetUrl(deleteTarget.id, 'thumb') : undefined}
+        previewFocalPoint={deleteTarget?.focal_point}
         previewDetail={deleteTarget ? `${deleteTarget.width} × ${deleteTarget.height}` : undefined}
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id)
@@ -313,7 +315,13 @@ function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleS
     <li className={styles.tile} data-selected={selected}>
       <div className={styles.thumbWrap}>
         <button type="button" className={styles.thumbButton} title={m.open} aria-label={m.open} onClick={onOpen}>
-          <img className={`${styles.thumb} checkerboard`} src={assetUrl(asset.id, 'thumb')} alt="" draggable={false} />
+          <img
+            className={`${styles.thumb} checkerboard`}
+            src={assetUrl(asset.id, 'thumb')}
+            style={focalStyle(asset.focal_point)}
+            alt=""
+            draggable={false}
+          />
         </button>
         {first && (
           <span className={styles.firstBadge} title={m.firstBadgeTitle}>

@@ -1,3 +1,23 @@
+/* Run 全体で、出力ごとの展開後のプロンプトを1つの見出しの下に並べる。 */
+.perOutput {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.perOutput > :first-child {
+  margin: 0;
+}
+
+/* 1件以上の FinalPromptBlock を縦に並べる外枠。 */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 .section {
   display: flex;
   flex-direction: column;

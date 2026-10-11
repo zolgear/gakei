@@ -93,6 +93,9 @@ export function StudioWorkspace() {
   const displayedInputWidth = clampStudioInputWidth(inputWidth, containerWidth)
   const urlRunId = parseRunIdFromSearch(location.search)
   const [pendingRunId, setPendingRunId] = useState<string | null>(urlRunId)
+  // 繰り返し回数(ADR-0042)でまとめて積んだ Run の id(積んだ順)。1件ならまとめて扱わない。
+  // 結果エリアは1つずつ追い、終わったら次へ進める(`handlePendingRunSettled`)。
+  const [repeatBatch, setRepeatBatch] = useState<string[] | null>(null)
   // InputPane(下段)が持つ実体(useRunFormLogic.insertPrompt)を ResultPane(上段、系列
   // インスペクター)へ受け渡すための窓口。prompt は textarea の制御コンポーネント state
   // (InputPane 側のローカル state)が正なので、Context 経由の書き込みでは反映されない。
@@ -136,6 +139,7 @@ export function StudioWorkspace() {
   if (isNewRunSignal) {
     setLastHandledResetAt(resetAt)
     setPendingRunId(null)
+    setRepeatBatch(null)
   }
 
   // `/studio`(パラメーターなし)に来たとき、直前に追っていた Run がまだ queued/running
@@ -164,7 +168,24 @@ export function StudioWorkspace() {
     [navigate],
   )
 
-  function handleRunCreated(runId: string) {
+  const repeatIndex = repeatBatch && pendingRunId ? repeatBatch.indexOf(pendingRunId) : -1
+  const repeatProgress =
+    repeatBatch && repeatIndex !== -1 ? { index: repeatIndex + 1, total: repeatBatch.length } : null
+
+  function handlePendingRunSettled(runId: string, keepAssetId: string | null) {
+    if (!repeatBatch || runId !== pendingRunId) return
+    const next = repeatBatch[repeatBatch.indexOf(runId) + 1]
+    if (next === undefined) return
+    setPendingRunId(next)
+    setLastUrlRunId(next)
+    // 成功した出力(無ければ今の表示)は残したまま、次の Run を追う。表示中の画像が無ければ
+    // 次の Run の進捗(待機中なら取り消し)が出る。
+    navigate(buildStudioPath(keepAssetId ?? displayedAssetId, null, next), { replace: true })
+  }
+
+  function handleRunCreated(runIds: string[]) {
+    const runId = runIds[0]
+    setRepeatBatch(runIds.length > 1 ? runIds : null)
     setPendingRunId(runId)
     // 上の「?run= の変化検知」が、この後の navigate による location 更新を「別の値への変化」と
     // みなして上書きしないよう、前回値も合わせて進めておく。
@@ -272,6 +293,8 @@ export function StudioWorkspace() {
           onSelectAsset={handleSelectAsset}
           insertPrompt={insertPrompt}
           layout={layout}
+          repeatProgress={repeatProgress}
+          onPendingRunSettled={handlePendingRunSettled}
         />
       </div>
 

@@ -15,28 +15,57 @@
   color: var(--color-text-faint);
 }
 
+/*
+ * select と「幅 × 高さ」のまとまりを横に並べ、幅が足りなければまとまりごと次の行へ折り返す
+ * (狭いスマートフォンや、左のフォームの列が狭いデスクトップでも数値欄が潰れないように)。
+ */
 .sizeRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
 /*
- * ParamField.module.css の `.field select { width: 100% }` に幅を奪われないよう(セレクトが
- * 潰れ、数値欄がはみ出す不具合の原因だった)、この行専用の select/input はここで独立に幅を
- * 決める。`.sizeRow` を祖先に含めた2クラスのセレクタにして、そちら側の指定より詳細度を
- * 確実に上げている。
+ * select は残りの幅を使う。flex-basis は折り返しの判定に使う幅で、これより狭くなるくらいなら
+ * 数値欄のまとまりを次の行へ送る(select の表示名が読めるだけの幅を残す)。
+ * `.sizeRow` を祖先に含めた2クラスのセレクタにして、ほかの select の指定より詳細度を上げている。
  */
 .sizeRow .presetSelect {
-  flex: 1 1 auto;
+  flex: 1 1 11em;
   min-width: 0;
   width: auto;
+  /* ほかのパラメーターの select(ParamField.module.css の .field select)と同じ見た目にする */
+  height: 34px;
+  box-sizing: border-box;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0 10px;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.sizeRow .presetSelect:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.dimensions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
 }
 
 .sizeRow .dimensionInput {
-  /* 4桁(最大 3840)が欠けずに入る幅。5桁は想定しない。 */
-  width: 64px;
+  /*
+   * 4桁(最大 4096)が欠けずに入る幅。文字幅(ch)で決めるので、狭い幅で font-size が
+   * 16px に上がっても足りる。5桁は想定しない。数値の上下ボタンは幅を食って数字を欠けさせる
+   * うえ、1ずつ増減しても倍数に丸め直されるだけなので出さない(矢印キーでの増減は残る)。
+   */
+  width: calc(5ch + 14px);
   min-width: 0;
   flex: 0 0 auto;
   box-sizing: border-box;
@@ -49,6 +78,14 @@
   font-family: var(--font-mono);
   font-size: 12px;
   text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.sizeRow .dimensionInput::-webkit-inner-spin-button,
+.sizeRow .dimensionInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .dimensionInput:focus {
@@ -58,7 +95,36 @@
 
 .times {
   flex: 0 0 auto;
+  width: 24px;
+  text-align: center;
   color: var(--color-text-muted);
+}
+
+/*
+ * 任意の幅×高さのときの「×」(幅と高さの入れ替え)。見た目は文字の「×」に近いまま、
+ * ホバーで背景、フォーカスでリング、カーソルで押せることを示す。
+ */
+.swapButton {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text-muted);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.swapButton:hover {
+  background: var(--color-header-band);
+  color: var(--color-accent);
+}
+
+.swapButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .errors {
@@ -69,7 +135,20 @@
 }
 
 @media (max-width: 767px) {
+  .sizeRow .presetSelect,
   .sizeRow .dimensionInput {
     font-size: 16px;
+  }
+
+  /* 指で押せる当たり判定(44px)。上下は負のマージンで行の高さ(34px)を変えない。 */
+  .swapButton {
+    width: 44px;
+    height: 44px;
+    margin: -5px 0;
+    font-size: 18px;
+  }
+
+  .times {
+    width: 44px;
   }
 }

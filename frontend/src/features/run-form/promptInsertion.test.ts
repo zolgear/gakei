@@ -71,4 +71,12 @@ describe('computePromptInsertion', () => {
       cursor: 2,
     })
   })
+
+  it('append-tags モードは末尾に `, ` でつなぐ(カーソル位置は見ない)', () => {
+    expect(computePromptInsertion('1girl, smile\n', 'sky, hat \\(object\\)', 'append-tags', 2)).toEqual({
+      text: '1girl, smile, sky, hat \\(object\\)',
+      cursor: 33,
+    })
+    expect(computePromptInsertion('', 'sky', 'append-tags', null)).toEqual({ text: 'sky', cursor: 3 })
+  })
 })

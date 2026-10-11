@@ -15,6 +15,12 @@ describe('buildParamChips', () => {
     expect(buildParamChips({ n: 4 })).toEqual(['×4'])
   })
 
+  it('SD WebUI のバッチ回数(n_iter)があれば ×(枚数 × バッチ回数)で出す', () => {
+    expect(buildParamChips({ n: 2, n_iter: 3 })).toEqual(['×6'])
+    expect(buildParamChips({ n_iter: 4 })).toEqual(['×4'])
+    expect(buildParamChips({ n: 1, n_iter: 1 })).toEqual([])
+  })
+
   it('output_format も出す', () => {
     expect(buildParamChips({ output_format: 'png' })).toEqual(['png'])
   })

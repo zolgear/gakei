@@ -349,6 +349,8 @@ _ASSET_KEYS = {
     "run_id",
     "depth",
     "allow_original",
+    # サムネイルの焦点(ADR-0043)。顔のおおよその位置で、秘密ではない。
+    "focal_point",
 }
 _RUN_KEYS = {"id", "operation", "model", "prompt", "params", "created_at", "text_outputs"}
 
@@ -705,7 +707,7 @@ def test_public_run_includes_text_outputs(client: TestClient) -> None:
         run.text_outputs = [item]
         db.commit()
     runs = _public(client, _token(share)).json()["runs"]
-    assert runs[0]["text_outputs"] == [item]
+    assert runs[0]["text_outputs"] == [{**item, "output_index": None}]
 
 
 # -- Run の詳細(ADR-0029 3章、2026-09-30 追記) --------------------------------------

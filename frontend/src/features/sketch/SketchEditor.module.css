@@ -258,3 +258,8 @@
 .primaryButton:hover:not(:disabled) {
   background: var(--color-accent-hover);
 }
+
+/* パネル自身がフォーカスを受けるのは受け皿のときだけなので、枠は出さない。 */
+.modal:focus {
+  outline: none;
+}

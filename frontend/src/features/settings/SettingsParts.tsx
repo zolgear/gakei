@@ -62,9 +62,11 @@ interface SettingsSwitchProps {
   label?: string
   disabled?: boolean
   title?: string
+  /** 読み上げの名前(一覧の行のスイッチのように、見える文言だけでは何のスイッチか分からないとき)。 */
+  ariaLabel?: string
 }
 
-export function SettingsSwitch({ checked, onChange, id, label, disabled, title }: SettingsSwitchProps) {
+export function SettingsSwitch({ checked, onChange, id, label, disabled, title, ariaLabel }: SettingsSwitchProps) {
   return (
     <label className={styles.switch} title={title}>
       <input
@@ -72,6 +74,7 @@ export function SettingsSwitch({ checked, onChange, id, label, disabled, title }
         type="checkbox"
         role="switch"
         className={styles.switchInput}
+        aria-label={ariaLabel}
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}

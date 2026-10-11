@@ -31,3 +31,17 @@ export function resolveInspectorContent(
   if ('embedded' in node && node.embedded) return { kind: 'embedded', node: node as LineageNode }
   return node.type === 'run' ? { kind: 'run', id: node.id } : { kind: 'asset', id: node.id }
 }
+
+/**
+ * インスペクターの「Generated の詳細を開く」(Asset の生成元 Run)の開き方を決める。同じグラフに
+ * その Run のノードがあれば、ページを移らずインスペクターをその Run に切り替える('select'。URL の
+ * `?node=` が変わるので、戻る操作で元の Asset に戻れる)。無ければ Run 詳細ページへ移る('page')。
+ */
+export function resolveOpenRunTarget(
+  runId: string,
+  nodes: InspectorGraphNode[] | LineageNode[],
+): { kind: 'select'; nodeId: string } | { kind: 'page'; path: string } {
+  const node = nodes.find((n) => n.id === runId && n.type === 'run')
+  if (node && !('embedded' in node && node.embedded)) return { kind: 'select', nodeId: runId }
+  return { kind: 'page', path: `/runs/${runId}` }
+}

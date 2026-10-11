@@ -4,7 +4,7 @@
  * 履歴(undo)はメモリを食いすぎないよう、アルファチャンネルだけをランレングス圧縮して保持する
  * (RGB は常に固定のブラシ色なので、アルファさえあれば見た目を完全に復元できる)。
  */
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createAsset, getAsset, type AssetDetail } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
@@ -22,6 +22,8 @@ import {
 } from './maskAlpha'
 import { interpolatePoints, pointerToCanvasCoords, type Point } from './maskGeometry'
 import { useUndoShortcut } from './undoShortcut'
+import { MODAL_BODY_ATTRIBUTE } from '../../components/modalFocus'
+import { useModalFocus } from '../../components/useModalFocus'
 import styles from './MaskEditor.module.css'
 
 const BRUSH_COLOR: readonly [number, number, number] = [255, 59, 59]
@@ -65,6 +67,10 @@ export function MaskEditor({
   const historyRef = useRef<HistorySnapshot[]>([])
   const drawingRef = useRef(false)
   const lastPointRef = useRef<Point | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const titleId = useId()
+  // 一度でも描いた(履歴を積んだ)か。Esc で閉じてよいかの判定に使う(ADR-0009 9章)。
+  const editedRef = useRef(false)
 
   const [containerSize, setContainerSize] = useState<Size | null>(null)
   const [mode, setMode] = useState<'paint' | 'erase'>('paint')
@@ -149,6 +155,7 @@ export function MaskEditor({
     const alpha = extractAlphaChannel(data)
     const runs = encodeRunLength(alpha)
     historyRef.current.push({ runs, length: alpha.length })
+    editedRef.current = true
     if (historyRef.current.length > MAX_HISTORY) {
       historyRef.current.shift()
     }
@@ -314,6 +321,14 @@ export function MaskEditor({
     },
   })
 
+  // フォーカスは ADR-0009 9章の規則。閉じるときの確認は無いので、描いた後の Esc では閉じない
+  // (描いた内容が確認なしで消えるため)。開いた直後で何も描いていなければ Esc でキャンセルする。
+  useModalFocus(panelRef, true, {
+    onEscape: () => {
+      if (!editedRef.current && !drawingRef.current) onCancel()
+    },
+  })
+
   const displayScale = containerSize
     ? computeFitScale(containerSize, { width: baseAsset.width, height: baseAsset.height })
     : 1
@@ -321,16 +336,32 @@ export function MaskEditor({
   const displayHeight = Math.round(baseAsset.height * displayScale)
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true">
-      <div className={styles.modal}>
+    <div className={styles.overlay}>
+      <div
+        ref={panelRef}
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
         <div className={styles.header}>
-          <h2 className={styles.title}>{m.title}</h2>
-          <button type="button" className={styles.closeButton} onClick={onCancel}>
+          <h2 id={titleId} className={styles.title}>
+            {m.title}
+          </h2>
+          <button
+            type="button"
+            className={styles.closeButton}
+            onClick={onCancel}
+            aria-label={t.common.close}
+            title={t.common.close}
+          >
             ✕
           </button>
         </div>
 
-        <div className={styles.toolbar}>
+        {/* 開いた直後のフォーカスは、閉じるボタンではなく道具の先頭に置く。 */}
+        <div className={styles.toolbar} {...{ [MODAL_BODY_ATTRIBUTE]: '' }}>
           <label className={styles.toolGroup}>
             <input
               type="radio"

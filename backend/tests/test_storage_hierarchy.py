@@ -18,7 +18,7 @@ from app.domain.assets import ingest
 from app.domain.embedded_meta import read_gakei_meta
 from app.domain.models import Asset, AssetKind
 from app.domain.storage import LocalFsStore, OriginalKeyInfo, normalize_segment
-from tests.conftest import make_png_bytes, wait_for_run_terminal
+from tests.conftest import make_png_bytes, wait_for_background_reads, wait_for_run_terminal
 
 pytestmark = pytest.mark.windows
 
@@ -292,6 +292,7 @@ def test_legacy_key_asset_is_served_and_downloadable(client: TestClient) -> None
     data = make_png_bytes(color=(10, 20, 30))
     asset_id = _upload(client, data=data)
     store: LocalFsStore = client.app.state.store
+    wait_for_background_reads(client)
     with client.app.state.session_factory() as session:
         asset = session.get(Asset, uuid.UUID(asset_id))
         assert asset is not None

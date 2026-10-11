@@ -1,6 +1,7 @@
 /**
  * `/settings/display`(ADR-0031 1章)。表示言語、タブのアイコンで進捗を示すか、生成画面の入力欄の配置
- * (ADR-0009 1章・2026-09-26 追記)、スケッチとマスクをストックに出すか(ADR-0035)。どれも「即時」の項目(ブラウザに保存し、その場で反映する)
+ * (ADR-0009 1章・2026-09-26 追記)、スケッチとマスクをストックに出すか(ADR-0035)、プロンプトのタグ補完と
+ * タグの日本語訳の表示(ADR-0041 3章・4章)。どれも「即時」の項目(ブラウザに保存し、その場で反映する)
  * なので、このページには保存のボタンを出さない。
  *
  * 末尾の「ブラウザに保存した設定」(2026-10-04)は、GAKEI がこのブラウザに置いたキー(`lib/browserStorage.ts`)
@@ -18,6 +19,13 @@ import {
 import { setStockShowSketchMask, useStockShowSketchMask } from '../../stock/stockPrefs'
 import { isStudioLayout, setStudioLayout } from '../../workspace/studioLayout'
 import { useStudioLayout } from '../../workspace/useStudioLayout'
+import {
+  isTagCompletionMode,
+  setShowTagTranslations,
+  setTagCompletionMode,
+  useShowTagTranslationsPref,
+  useTagCompletionMode,
+} from '../../tag-dictionary/tagCompletionPrefs'
 import { SettingsPageFrame } from '../SettingsPageFrame'
 import { SettingsRow, SettingsSection, SettingsSwitch } from '../SettingsParts'
 import styles from '../settings.module.css'
@@ -32,6 +40,8 @@ export function DisplaySettingsPage() {
   )
   const studioLayout = useStudioLayout()
   const stockShowSketchMask = useStockShowSketchMask()
+  const tagCompletionMode = useTagCompletionMode()
+  const showTagTranslations = useShowTagTranslationsPref()
   const [confirmClearOpen, setConfirmClearOpen] = useState(false)
   const b = d.browserStorage
 
@@ -86,6 +96,33 @@ export function DisplaySettingsPage() {
             id="gakei-stock-show-sketch-mask"
             checked={stockShowSketchMask}
             onChange={setStockShowSketchMask}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={d.tagCompletion.label} htmlFor="gakei-tag-completion" description={d.tagCompletion.help}>
+          <select
+            id="gakei-tag-completion"
+            className={styles.select}
+            value={tagCompletionMode}
+            onChange={(e) => {
+              if (isTagCompletionMode(e.target.value)) setTagCompletionMode(e.target.value)
+            }}
+          >
+            <option value="tag-providers">{d.tagCompletion.optionTagProviders}</option>
+            <option value="always">{d.tagCompletion.optionAlways}</option>
+            <option value="off">{d.tagCompletion.optionOff}</option>
+          </select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={d.tagTranslations.label}
+          htmlFor="gakei-tag-translations"
+          description={d.tagTranslations.help}
+        >
+          <SettingsSwitch
+            id="gakei-tag-translations"
+            checked={showTagTranslations}
+            onChange={setShowTagTranslations}
           />
         </SettingsRow>
       </SettingsSection>

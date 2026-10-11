@@ -15,13 +15,29 @@ function formatDefault(def: ParamDef): string | null {
     return String(rounded)
   }
   if (typeof value === 'string') return def.choice_labels?.[value] ?? value
-  if (typeof value === 'boolean') return String(value)
+  if (typeof value === 'boolean') {
+    const pf = msg().runForm.paramField
+    return value ? pf.boolOn : pf.boolOff
+  }
+  return null
+}
+
+/**
+ * 空なら別の欄の値を使うテキストの項目(SD WebUI の hires の2回目のプロンプト。ADR-0038 10章)。
+ * 「未指定」のかわりに、何が使われるかを placeholder に出す。
+ */
+function sameAsMainPlaceholder(def: ParamDef): string | null {
+  const t = msg().runForm.unspecifiedLabel
+  if (def.name === 'hr_prompt') return t.sameAsMainPrompt
+  if (def.name === 'hr_negative_prompt') return t.sameAsMainNegativePrompt
   return null
 }
 
 /** 数値・テキスト入力の placeholder。 */
 export function unspecifiedPlaceholder(def: ParamDef): string {
   const t = msg().runForm.unspecifiedLabel
+  const sameAsMain = sameAsMainPlaceholder(def)
+  if (sameAsMain !== null) return sameAsMain
   const formatted = formatDefault(def)
   return formatted === null ? t.unspecified : fmt(t.defaultValue, { formatted })
 }

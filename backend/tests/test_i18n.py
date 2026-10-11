@@ -289,6 +289,9 @@ _KNOWN_DYNAMIC_KEY_SITES: dict[str, frozenset[str]] = {
 # (`lineage_delivery.py` は `test_lineage_delivery.py` が `_d("...")` を走査する)。
 _KNOWN_DYNAMIC_PREFIX_SITES: dict[str, str] = {
     "app/domain/lineage_delivery.py": "lineageExport.delivery.",
+    # タグ辞書の断る理由と失敗の種類(`DictionaryFileError.code`、`tag_dictionary.error`)。
+    # キーの網羅は tests/test_tag_dictionaries.py で確かめる。
+    "app/api/tag_dictionaries.py": "tagDictionaries.",
 }
 
 

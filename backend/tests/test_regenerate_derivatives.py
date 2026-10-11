@@ -19,7 +19,7 @@ from app.config import Settings
 from app.domain import derivatives
 from app.domain.models import Asset
 from app.domain.storage import LocalFsStore
-from tests.conftest import _fake_settings, make_png_bytes
+from tests.conftest import _fake_settings, make_png_bytes, wait_for_background_reads
 
 pytestmark = pytest.mark.windows
 
@@ -127,6 +127,7 @@ def test_missing_original_is_reported(
     other_id = _upload(client, (1, 2, 3))
     by_id = {str(a.id): a for a in _assets(client)}
     gone = by_id[asset_id]
+    wait_for_background_reads(client)
     store.delete(gone.blob_key)
 
     monkeypatch.setattr(derivatives, "DERIVED_VERSION", 2)

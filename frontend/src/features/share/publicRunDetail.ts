@@ -134,3 +134,12 @@ export function splitPublicParams(params: Record<string, unknown> | null | undef
   }
   return { scalars, nested }
 }
+
+/**
+ * 共有の画像が、生成元の Run の何番目の出力か(`output` の辺の `output_index`)。無ければ null。
+ * 公開の Asset は `output_index` を持たないので、辺から引く(展開後のプロンプトの選択に使う。ADR-0038 7章)。
+ */
+export function publicOutputIndex(data: PublicShareResponse, runId: string, assetId: string): number | null {
+  const edge = (data.edges ?? []).find((e) => e.kind === 'output' && e.source === runId && e.target === assetId)
+  return edge?.output_index ?? null
+}

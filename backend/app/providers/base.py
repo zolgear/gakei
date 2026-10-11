@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, NamedTuple, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -40,6 +40,10 @@ class ParamDef(BaseModel):
     description: str = ""
     # UI に専用の入力欄を出す目印(seed: ランダム/固定の切り替えと乱数ボタン。ADR-0013)。
     widget: Literal["seed"] | None = None
+    # True: マスクがあるときだけ意味を持つ(SD WebUI の inpaint の項目。ADR-0038 2章)。マスクの
+    # 無い Run で指定されたら 422。フォームはマスクが無い間は無効にする。None は False と同じ
+    # (`widget` と同じく、使わないプロバイダーの定義に項目を増やさないため)。
+    mask_only: bool | None = None
 
 
 class IncompatiblePair(BaseModel):
@@ -91,6 +95,10 @@ class SizeConstraints(BaseModel):
     min_aspect_ratio: float
     max_aspect_ratio: float
     allow_auto: bool = True
+    # フォームが倍数でない幅・高さを倍数に合わせるとき、切り捨てるか(True)、最も近い倍数に
+    # 丸めるか(False)。SD WebUI は WebUI 自身が 8 の倍数に切り捨てて描くので、それに合わせて
+    # 切り捨てる(ADR-0038 2章)。サーバーはどちらでも倍数でなければ 422 にする。
+    round_down: bool = False
 
 
 class ProviderCapabilities(BaseModel):
@@ -177,7 +185,8 @@ class RunResult(BaseModel):
     outputs: list[RunOutputImage]
     usage: dict[str, Any] | None = None
     provider_request_id: str | None = None
-    # 実行時にワークフローが作ったテキスト(ADR-0030。今は ComfyUI の最終プロンプトだけ)。
+    # 実行時に作られたテキスト(ADR-0030。ComfyUI の最終プロンプトと、SD WebUI の出力ごとの
+    # 展開後のプロンプト。ADR-0038 7章)。
     # `run.text_outputs` にそのまま書く。無ければ None。
     text_outputs: list[dict[str, Any]] | None = None
 
@@ -243,4 +252,47 @@ class ImageProvider(Protocol):
         """
         ...
 
+    def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
+        """繰り返し回数(ADR-0042 2章)で、`index` 番目(0 始まり)の Run に使う seed。
+
+        利用者が seed を指定したときだけ呼ぶ。`first_params` は1つ目の Run の
+        `finalize_params` の戻り値。1回の枚数ぶん進め、範囲の上限を超えたら 0 から回す。
+        seed を持たないプロバイダーは None を返す(`params` をそのまま使う)。
+        """
+        ...
+
     async def execute(self, run: RunRequest, on_progress: ProgressCallback) -> RunResult: ...
+
+
+class ProviderStatusSnapshot(NamedTuple):
+    """`GET /api/capabilities` の1件に載せる、待たずに分かる範囲の状態。
+
+    `checking` は、外部のサーバーにまだ一度も問い合わせ終えていない(裏で確かめている)こと。
+    そのあいだ `capabilities.models` は空で、`available` は False。
+    """
+
+    capabilities: ProviderCapabilities
+    available: bool
+    unavailable_reason: str | None
+    checking: bool
+
+
+@runtime_checkable
+class NonBlockingStatusProvider(Protocol):
+    """外部のサーバーに問い合わせるプロバイダー(SD WebUI・ComfyUI)が持つ、待たない版。
+
+    `GET /api/capabilities` はこれを使い、接続先が落ちていても待たない(手元の値を返し、
+    古ければ裏で取り直す)。`capabilities()` / `availability()` は Run の作成などのために、
+    これまでどおり古ければその場で問い合わせる。
+    """
+
+    def status_snapshot(self) -> ProviderStatusSnapshot: ...
+
+
+def provider_status_snapshot(provider: ImageProvider) -> ProviderStatusSnapshot:
+    """プロバイダーの状態を待たずに引く。待たない版を持たないもの(OpenAI・Fake)は、
+    もともと外部に問い合わせないので、そのまま `capabilities()` / `availability()` を呼ぶ。"""
+    if isinstance(provider, NonBlockingStatusProvider):
+        return provider.status_snapshot()
+    available, reason = provider.availability()
+    return ProviderStatusSnapshot(provider.capabilities(), available, reason, False)

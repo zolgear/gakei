@@ -1,5 +1,12 @@
+.rowWrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .row {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -106,10 +113,28 @@
   white-space: nowrap;
 }
 
-/* 状態と日時は欠けさせず、モデル名だけが残り幅で省略される。 */
+/* 類似度・状態・日時は欠けさせず、モデル名だけが残り幅で省略される。 */
+.metaScore,
 .metaStatus,
 .metaDate {
   flex-shrink: 0;
+}
+
+.metaScore {
+  color: var(--color-text-muted);
+}
+
+/* 類似度を添えた行(検索パネルの指示の検索)は、類似度を残し、日時も残り幅で省略できるようにする。 */
+.metaScore ~ .metaDate {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 類似度を添えた行では、モデル名から先に欠ける。 */
+.metaScore ~ .metaModel {
+  flex-shrink: 1000;
 }
 
 .metaStatus[data-status='failed'] {
@@ -130,4 +155,29 @@
 /* タイトルがある行はプロンプトを 1 行にして、行の高さを大きく変えない。 */
 .title + .prompt {
   -webkit-line-clamp: 1;
+}
+
+/* 行の右端の「Generated の詳細を開く」。行と同じ遷移先で、行を押すと詳細が開くことを示す。 */
+.detailButton {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+}
+
+.detailButton:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+@media (max-width: 767px) {
+  .detailButton {
+    width: 44px;
+    height: 44px;
+  }
 }

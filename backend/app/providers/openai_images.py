@@ -103,6 +103,10 @@ class OpenAIImagesProvider:
             params["moderation"] = saved if saved is not None else self._moderation
         return params
 
+    def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
+        # OpenAI の画像 API に seed は無い(ADR-0042 2章)。
+        return None
+
     def _resolve_client(self) -> AsyncOpenAI:
         """キーと接続先(Base URL)を解決してクライアントを返す。
 

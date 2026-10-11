@@ -40,6 +40,7 @@ def test_status_disabled_when_comfyui_url_is_empty(client: TestClient) -> None:
         "source": "none",
         "locked": False,
         "loopback": None,
+        "disabled": False,
     }
 
 

@@ -499,6 +499,10 @@ async def get_capabilities(ctx: Context) -> CallToolResult:
         "Other parameters listed under models[].operations[].params also go in params "
         "(e.g. quality, background, output_format, n).",
         "generate_image returns right away with a run_id; wait with get_run(wait_seconds).",
+        (
+            "A provider with checking: true has not been reached yet (its models may be "
+            "empty); call get_capabilities again a moment later."
+        ),
         "estimate_cost gives a reference price before running (set quality and size to get "
         "a number; 'auto' cannot be estimated).",
         (
@@ -1292,6 +1296,7 @@ async def upload_image(
                 queued,
                 annotator=mc.state.annotator,
                 embedder=getattr(mc.state, "embedder", None),
+                focal=getattr(mc.state, "focal_worker", None),
             )
             return _asset_brief(mc, result.asset), result.outcome
 
@@ -1477,7 +1482,9 @@ _UNAVAILABLE_MESSAGES = {
     "size_auto": "size is 'auto' (or not set); set params.size (e.g. '1024x1024').",
     "size_invalid": "params.size is not a valid size for this model.",
     "unknown_model": "No price table for this model.",
-    "provider_not_supported": "This provider has no reference prices (e.g. a local ComfyUI).",
+    "provider_not_supported": (
+        "This provider has no reference prices (e.g. a local ComfyUI or SD WebUI)."
+    ),
 }
 
 

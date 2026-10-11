@@ -130,6 +130,25 @@ def python_notices() -> list[ThirdPartyEntry]:
     return [entries[name] for name in sorted(entries, key=str.lower)]
 
 
+def bundled_data_notices() -> list[ThirdPartyEntry]:
+    """Python の配布物ではないが、GAKEI に同梱しているデータ(ADR-0043 の顔検出のカスケード)。"""
+    from app.focal import detect
+
+    try:
+        text = detect.CASCADE_LICENSE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    return [
+        ThirdPartyEntry(
+            name="lbpcascade_animeface",
+            version=detect.CASCADE_COMMIT[:12],
+            license="MIT",
+            url=detect.CASCADE_SOURCE_URL,
+            texts=[text] if text else [],
+        )
+    ]
+
+
 def _render_entry(entry: ThirdPartyEntry) -> str:
     header = f"{entry.name} {entry.version} — {entry.license} — {entry.url or 'n/a'}"
     if not entry.texts:
@@ -145,6 +164,10 @@ def render_notices(frontend_dist: Path) -> str:
     sections = ["GAKEI third-party notices", "", "Python packages", ""]
     entries = python_notices()
     sections.append("\n----\n".join(_render_entry(entry) for entry in entries))
+    sections.append("")
+    sections.append("Bundled data files")
+    sections.append("")
+    sections.append("\n----\n".join(_render_entry(entry) for entry in bundled_data_notices()))
     sections.append("")
     sections.append("Frontend packages")
     sections.append("")

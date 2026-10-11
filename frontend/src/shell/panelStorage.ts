@@ -1,8 +1,17 @@
 /**
- * サイドバーの選択状態(ストック/プロンプトセット/系列グラフ/履歴/検索)を localStorage に保存する。
+ * サイドバーの選択状態(ストック/プロンプトセット/パラメーターセット/プロンプトテンプレート/
+ * 系列グラフ/履歴/検索)を localStorage に保存する。
  * プライベートブラウジング等で localStorage が使えない環境でも壊れないよう try/catch で囲む。
  */
-export type PanelId = 'stock' | 'prompts' | 'graph' | 'history' | 'search'
+export type PanelId =
+  | 'stock'
+  | 'prompts'
+  | 'parameterSets'
+  // プロンプトテンプレート(実験)。
+  | 'promptTemplates'
+  | 'graph'
+  | 'history'
+  | 'search'
 
 const STORAGE_KEY = 'gakei:selected-panel'
 
@@ -10,6 +19,8 @@ function isPanelId(value: unknown): value is PanelId {
   return (
     value === 'stock' ||
     value === 'prompts' ||
+    value === 'parameterSets' ||
+    value === 'promptTemplates' ||
     value === 'graph' ||
     value === 'history' ||
     value === 'search'

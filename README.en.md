@@ -15,11 +15,12 @@ All it needs is an OpenAI API key. Images are stored in a local directory and me
 - **History:** every run is recorded, including failures and cancellations. Re-running with the same settings is kept as a new run.
 - **Viewer:** zoom images up to 3840px, download the original, and compare an Edit's inputs and outputs.
 - **Stock / prompt sets / lineage graph:** open saved images, named prompts, and image parent-child relationships from the sidebar. Type `@` in the prompt field to insert a prompt set.
+- **Parameter sets:** save the provider, model, parameters (including the negative prompt) and prompt under a name, and load them into the generation form. Save with "Save settings" in the form or "Save as parameter set" in a run's details; load with "Load settings" in the form or from the sidebar panel. Whether to include the model and seed is chosen when saving. Models and parameters that the current setup doesn't have are not applied and are listed as "not loaded" (ADR-0040).
 - **Text search, similar images, duplicate candidates, map:** turn images into vectors with a CLIP-family model to find images by natural-language text, list similar or near-duplicate images, and show a map where similar images cluster together. Disabled by default; enable it in admin settings → Embeddings. The model runs locally on the CPU or on your own inference server. See [docs/embeddings.md](docs/embeddings.md) (Japanese).
 - **Embedded lineage:** PNGs downloaded at full resolution carry their lineage. Uploading such a PNG back to the same GAKEI treats it as the original image.
 - **Display language:** Japanese and English. Follows the browser's language by default and can be switched from Settings.
 - **Layout:** The input pane of the studio can sit at the bottom (default) or in a left sidebar. Switch from Settings → Display or the button in the result area.
-- **Local ComfyUI (preview):** connect to ComfyUI running on the same machine and use workflows exported with "Export (API)" alongside the OpenAI models. GAKEI only injects values such as prompt, seed, input images, and masks; it does not modify the graph. Disabled by default; connect from Settings → ComfyUI, then register workflows with "+ Register workflow" in the "Workflows" section of the same page (`/settings/comfyui`; the register/edit screen also opens inside Settings and is saved with "Save" at the top). If a node input seems to contain an API key or similar secret, registration shows a warning (share links hide the value and do not serve the originals of those images).
+- **Local ComfyUI (preview):** connect to ComfyUI running on the same machine and use workflows exported with "Export (API)" alongside the OpenAI models. GAKEI only injects values such as prompt, seed, input images, and masks; it does not modify the graph. Disabled by default; connect from Settings → ComfyUI, then register workflows with "+ Register workflow" in the "Workflows" section of the same page (`/settings/comfyui`; the register/edit screen also opens inside Settings and is saved with "Save" at the top). To pause ComfyUI temporarily, press "Disable" on the same page: it leaves the model choices while the URL and workflows are kept ("Enable" reconnects with the same URL; it stays disabled across restarts). If a node input seems to contain an API key or similar secret, registration shows a warning (share links hide the value and do not serve the originals of those images).
 
 ## Screenshots
 
@@ -30,8 +31,10 @@ All it needs is an OpenAI API key. Images are stored in a local directory and me
 | ![Lineage graph](docs/images/lineage-en.webp) | ![Compare before and after an edit](docs/images/compare-en.webp) |
 | **Run details with the lineage sidebar** | **Drawing a sketch to use as input** |
 | ![Run details with the lineage sidebar](docs/images/detail-en.webp) | ![Drawing a sketch to use as input](docs/images/sketch-en.webp) |
-| **Map (network of similar images with lineage)** | **Semantic search ("Japanese woodblock print")** |
-| ![Map (network of similar images with lineage)](docs/images/map-en.webp) | ![Semantic search ("Japanese woodblock print")](docs/images/semantic-en.webp) |
+| **Map (3D; similar images cluster together)** | **Searching inside the map ("Japanese woodblock print")** |
+| ![Map (3D; similar images cluster together)](docs/images/map-en.webp) | ![Searching inside the map ("Japanese woodblock print")](docs/images/map-search-en.webp) |
+| **Semantic search ("Japanese woodblock print")** | **Prompt search ("add a cat")** |
+| ![Semantic search ("Japanese woodblock print")](docs/images/semantic-en.webp) | ![Prompt search ("add a cat")](docs/images/prompt-search-en.webp) |
 
 Except for the hand-drawn sketches, all images in the screenshots are samples generated with GPT Image 2.5.
 

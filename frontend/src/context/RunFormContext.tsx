@@ -19,7 +19,7 @@ import type { PromptInsertMode } from '../features/run-form/promptInsertion'
 import { createEmptyFormState, type RunFormState } from '../features/run-form/types'
 import { loadLastAssetGroupId, saveLastAssetGroupId } from './lastAssetGroupStorage'
 import { loadRunFormState, saveRunFormState } from './runFormStorage'
-import { RunFormContext } from './useRunFormContext'
+import { RunFormContext, type FormLoadRequest } from './useRunFormContext'
 
 const SAVE_DEBOUNCE_MS = 300
 
@@ -36,6 +36,9 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
     { text: string; mode: PromptInsertMode; nonce: number } | null
   >(null)
   const insertNonceRef = useRef(0)
+  const [pendingFormLoad, setPendingFormLoad] = useState<
+    { request: FormLoadRequest; nonce: number } | null
+  >(null)
 
   function flushSave() {
     if (saveTimeoutRef.current) {
@@ -67,6 +70,13 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
 
   const clearPendingPromptInsert = useCallback(() => setPendingPromptInsert(null), [])
 
+  const requestFormLoad = useCallback((request: FormLoadRequest) => {
+    insertNonceRef.current += 1
+    setPendingFormLoad({ request, nonce: insertNonceRef.current })
+  }, [])
+
+  const clearPendingFormLoad = useCallback(() => setPendingFormLoad(null), [])
+
   useEffect(() => {
     // iOS Safari はバックグラウンドに回ったタブを破棄することがあるため、デバウンス中の
     // 保存をそのタイミングで前倒しして確定させる(取りこぼしを減らす保険)。
@@ -90,8 +100,20 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
       pendingPromptInsert,
       requestPromptInsert,
       clearPendingPromptInsert,
+      pendingFormLoad,
+      requestFormLoad,
+      clearPendingFormLoad,
     }),
-    [formState, setFormState, pendingPromptInsert, requestPromptInsert, clearPendingPromptInsert],
+    [
+      formState,
+      setFormState,
+      pendingPromptInsert,
+      requestPromptInsert,
+      clearPendingPromptInsert,
+      pendingFormLoad,
+      requestFormLoad,
+      clearPendingFormLoad,
+    ],
   )
   return <RunFormContext.Provider value={value}>{children}</RunFormContext.Provider>
 }

@@ -8,7 +8,7 @@
  * 3. リモートの推論サーバー(エンジンがリモートのとき): 接続先(「LLM の接続先」へのリンクつき)、
  *    モデル名、形式。選んだ接続先に画像と検索の文章が送られることを書く
  * 4. 計算: 取り込み時の自動実行、未計算・待ち行列・失敗の件数と一括実行
- * 5. 重複の候補: しきい値の既定
+ * 5. 重複の候補: しきい値の既定(モデルごと。ADR-0044 5章。モデルを選び直すと、そのモデルの値にする)
  * 6. 保存済みのベクトル: モデルごとの件数と削除
  *
  * 項目の種類(ADR-0031 2章):
@@ -50,11 +50,16 @@ import {
   EMBEDDING_REMOTE_MODEL_MAX,
   diffEmbeddingDraft,
   embeddingBackfillBlocker,
+  embeddingPendingTotal,
+  embeddingQueuedTotal,
+  promptEmbeddingCounts,
   embeddingConnectionChoices,
   embeddingDraftFromSettings,
   isAnyEmbeddingModelDownloading,
   describeStoredModelKey,
   sortLanguages,
+  thresholdBaseline,
+  thresholdDefault,
   validateEmbeddingDraft,
   type EmbeddingDraft,
 } from '../embeddingSettings'
@@ -97,7 +102,7 @@ export function EmbeddingSettingsPage() {
     refetchInterval: (q) => {
       const data = q.state.data
       if (isAnyEmbeddingModelDownloading(data)) return DOWNLOAD_POLL_MS
-      if ((data?.queued_count ?? 0) > 0) return QUEUE_POLL_MS
+      if (embeddingQueuedTotal(data) > 0) return QUEUE_POLL_MS
       return false
     },
   })
@@ -194,7 +199,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
   const backfillMutation = useMutation({
     mutationFn: backfillEmbeddings,
     onSuccess: (result) => {
-      toast.show({ message: fmt(m.run.queuedToast, { count: result.queued }) })
+      toast.show({ message: fmt(m.run.queuedToast, { count: result.queued + result.prompt_queued }) })
       void queryClient.invalidateQueries({ queryKey: EMBEDDING_SETTINGS_QUERY_KEY })
     },
   })
@@ -209,7 +214,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
   const blocker = embeddingBackfillBlocker({
     dirty: draft.dirty,
     usable: data.usable,
-    pendingCount: data.pending_count,
+    pendingCount: embeddingPendingTotal(data),
     running: backfillMutation.isPending,
   })
   const blockerText = blocker === 'unsaved' ? m.run.unsavedBlocked : blocker === 'notUsable' ? m.run.notUsable : null
@@ -232,6 +237,15 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
   const thresholdError = errors.duplicate_threshold
     ? fmt(m.duplicates.thresholdInvalid, { min: DUPLICATE_THRESHOLD_MIN, max: DUPLICATE_THRESHOLD_MAX })
     : null
+
+  // Run のプロンプトの埋め込み(ADR-0045)。使うモデルが対応しないときは null で、出さない。
+  const promptCounts = promptEmbeddingCounts(data)
+  const backfillMessage = [
+    data.pending_count > 0 || !promptCounts?.pending ? fmt(m.run.confirm.message, { count: data.pending_count }) : null,
+    promptCounts && promptCounts.pending > 0 ? fmt(m.run.promptConfirm, { count: promptCounts.pending }) : null,
+  ]
+    .filter((text): text is string => text !== null)
+    .join(' ')
 
   const stored = data.stored ?? []
   const storedLabel = (row: EmbeddingStoredCount) =>
@@ -290,7 +304,11 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
                 selected={model.name === values.onnx_model}
                 disabled={disabled}
                 busy={downloadMutation.isPending || deleteModelMutation.isPending}
-                onSelect={() => draft.set('onnx_model', model.name)}
+                onSelect={() => {
+                  draft.set('onnx_model', model.name)
+                  // しきい値はモデルごと。選んだモデルの保存済みの値にする。
+                  draft.set('duplicate_threshold', String(thresholdBaseline({ engine: 'onnx', onnx_model: model.name }, data)))
+                }}
                 onDownload={() => downloadMutation.mutate(model.name)}
                 onDelete={() => setModelToDelete(model.name)}
               />
@@ -406,7 +424,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
               {blockerText}
             </p>
           )}
-          {!blockerText && data.usable && data.pending_count > 0 && (
+          {!blockerText && data.usable && embeddingPendingTotal(data) > 0 && (
             <p className={styles.helpText}>{m.run.switchedHint}</p>
           )}
           {backfillError && <p className={styles.errorText}>{backfillError}</p>}
@@ -419,6 +437,11 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
             <span className={`${own.value} ${styles.mono}`}>{fmt(m.run.failedValue, { count: data.failed_count })}</span>
           </SettingsRow>
         )}
+        {promptCounts && (
+          <SettingsRow label={m.run.promptLabel} description={m.run.promptHelp}>
+            <span className={`${own.value} ${styles.mono}`}>{fmt(m.run.promptValue, { ...promptCounts })}</span>
+          </SettingsRow>
+        )}
       </SettingsSection>
 
       {/* 5. 重複の候補 */}
@@ -426,7 +449,11 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
         <SettingsRow
           label={m.duplicates.thresholdLabel}
           htmlFor="gakei-embedding-threshold"
-          description={fmt(m.duplicates.thresholdHelp, { min: DUPLICATE_THRESHOLD_MIN, max: DUPLICATE_THRESHOLD_MAX })}
+          description={fmt(m.duplicates.thresholdHelp, {
+            min: DUPLICATE_THRESHOLD_MIN,
+            max: DUPLICATE_THRESHOLD_MAX,
+            default: thresholdDefault(values, data),
+          })}
           changed={draft.isChanged('duplicate_threshold')}
         >
           <input
@@ -509,7 +536,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
       />
       <ConfirmDialog
         open={backfillOpen}
-        message={fmt(m.run.confirm.message, { count: data.pending_count })}
+        message={backfillMessage}
         confirmLabel={m.run.confirm.confirmLabel}
         onConfirm={() => {
           setBackfillOpen(false)
@@ -537,9 +564,11 @@ function EmbeddingModelRow({ model, selected, disabled, busy, onSelect, onDownlo
   const m = t.settings.embeddings.onnx
   const downloading = model.download_status === 'downloading'
   const percent = downloadPercent(model.download_progress)
-  const languages = sortLanguages(model.languages)
-    .map((lang) => m.languageNames[lang])
-    .join(m.languageSeparator)
+  const languages = model.many_languages
+    ? m.manyLanguages
+    : sortLanguages(model.languages)
+        .map((lang) => m.languageNames[lang])
+        .join(m.languageSeparator)
 
   let statusText: string
   if (downloading) statusText = percent === null ? m.downloading : fmt(m.downloadingPercent, { percent })
@@ -557,6 +586,7 @@ function EmbeddingModelRow({ model, selected, disabled, busy, onSelect, onDownlo
         <span className={modelStyles.modelMemory}>{fmt(m.languagesValue, { languages })}</span>
       </label>
       {isEnglishOnlyModel(model) && <p className={own.modelNote}>{m.englishOnlyNote}</p>}
+      {model.heavy && <p className={own.modelNote}>{m.heavyNote}</p>}
       <div className={modelStyles.modelStatusRow}>
         <span
           className={modelStyles.modelStatus}

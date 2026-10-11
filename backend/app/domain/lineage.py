@@ -28,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
+from app.domain import focal_points
 from app.domain.assets import asset_is_used_as_input, is_restorable
 from app.domain.embedded_meta import get_instance_id, normalize_lineage_meta
 from app.domain.lineage_mermaid import LineageGraph
@@ -87,6 +88,23 @@ def _asset_node(db: Session, asset: Asset, depth: int) -> LineageNode:
             restorable=is_restorable(asset, produced_by_run),
         ),
     )
+
+
+def _attach_focal_points(db: Session, nodes: list[LineageNode]) -> list[LineageNode]:
+    """asset ノードにサムネイルの焦点(ADR-0043)を付ける。1回の問い合わせでまとめて引く。
+    埋め込みノードは、手元の Asset に対応付いたとき(`resolved_asset_id`)だけ。"""
+
+    def thumb_id(node: LineageNode) -> uuid.UUID | None:
+        if node.type != "asset" or node.asset is None:
+            return None
+        return node.resolved_asset_id if node.embedded else node.id
+
+    focals = focal_points.bulk_get(db, [i for n in nodes if (i := thumb_id(n)) is not None])
+    for node in nodes:
+        asset_id = thumb_id(node)
+        if asset_id is not None and node.asset is not None:
+            node.asset.focal_point = focals.get(asset_id)
+    return nodes
 
 
 def _run_node(run: Run, depth: int) -> LineageNode:
@@ -801,7 +819,7 @@ def build_asset_lineage(
 
     return AssetLineageResponse(
         root_asset_id=root.id,
-        nodes=list(nodes.values()),
+        nodes=_attach_focal_points(db, list(nodes.values())),
         edges=edges,
         truncated=truncated_up or truncated_down,
     )
@@ -909,7 +927,7 @@ def build_run_lineage(
 
     return RunLineageResponse(
         root_run_id=run.id,
-        nodes=list(nodes.values()),
+        nodes=_attach_focal_points(db, list(nodes.values())),
         edges=list(unique.values()),
         truncated=truncated,
     )

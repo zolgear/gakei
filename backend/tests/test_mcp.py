@@ -668,7 +668,7 @@ def test_run_and_asset_include_text_outputs(client: TestClient) -> None:
         run.text_outputs = [item]
         db.commit()
 
-    expected = [{**item, "truncated": False}]
+    expected = [{**item, "output_index": None, "truncated": False}]
     run_payload = _ok(_call(client, "get_run", {"run_id": payload["run_id"]}))
     assert run_payload["text_outputs"] == expected
     asset = _ok(_call(client, "get_asset", {"asset_id": asset_id}))

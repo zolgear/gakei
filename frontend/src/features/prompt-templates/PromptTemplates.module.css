@@ -1,0 +1,773 @@
+/* プロンプトテンプレート(実験)。サイドバーのパネル、編集のダイアログ、生成フォームの選択。 */
+
+/* -- サイドバーのパネル(パラメーターセットと同じ作り) -- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 14px 16px;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.panelHeading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-faint);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.listWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.search,
+.input,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 8px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.search {
+  background: var(--color-bg);
+  border-radius: var(--radius);
+  padding: 0 10px;
+}
+
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 56px;
+  padding: 6px 8px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.input:focus,
+.select:focus,
+.search:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.list li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.itemName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.itemMeta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.itemActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.placeholder {
+  margin: 0;
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* -- ボタン -- */
+.smallButton {
+  min-height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.smallButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.smallButton:disabled {
+  opacity: 0.5;
+}
+
+.smallPrimary {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.smallDanger:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.iconButton {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+}
+
+.iconButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+}
+
+.primary,
+.secondary {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.primary {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: #17181b;
+  font-weight: 600;
+}
+
+.primary:disabled {
+  opacity: 0.55;
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+/* -- 編集のダイアログ -- */
+/* Modal の size="large" は本文を flex 列にして中身に高さを配る。こちらも伸び縮みできる
+   flex 列にし、スクロールするのは .editorScroll だけにする(保存ボタンは下に残す)。 */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.editorScroll {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* スクロール領域は縦の flex なので、中身が既定で縮む。縮むと行が潰れて中身が
+   隠れ、しかも溢れないのでスクロールバーも出ない。中身は本来の高さのまま並べる。 */
+.editorScroll > * {
+  flex: none;
+}
+
+.fieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+/* 幅は中身の量に合わせる。名前は長くなり、区切り文字は数文字で足りる。 */
+.nameField {
+  flex: 1 1 240px;
+}
+
+.separatorField {
+  flex: 0 0 140px;
+}
+
+.fieldLabel,
+.legend {
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.sectionHeading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.sectionHeaderRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 段取り(名前・区切り文字 → スロット → 組み合わせ)の区切り線。節の見出しの前に置く。 */
+.sectionBreak {
+  border-top: 1px solid var(--color-border);
+  padding-top: 14px;
+}
+
+/* 節の見出しの右側(追加のボタンと、押せない理由)。狭い幅では折り返す。 */
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.headerHint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+
+/* スロット・組み合わせの1つをカードにし、見出し帯で中身(候補・指す候補)と階層を分ける。 */
+.card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 5px 6px;
+  background: var(--color-header-band);
+  min-width: 0;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  min-width: 0;
+}
+
+.cardFoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 見出し帯の中の項目。ラベルを入力欄の左に置いて1行に収める。 */
+.headField {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.headFieldGrow {
+  flex: 1 1 180px;
+}
+
+.headField .fieldLabel {
+  flex: none;
+}
+
+.headField .errorText {
+  flex: 1 1 100%;
+}
+
+.headField .input,
+.headField .select {
+  width: auto;
+  min-width: 0;
+}
+
+.headName {
+  flex: 1 1 110px;
+}
+
+/* 選択肢は2つだけなので、中身に見合う幅で足りる。 */
+.headSelect {
+  flex: 0 0 110px;
+}
+
+.headWeight {
+  flex: 0 0 68px;
+}
+
+.cardActions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+/* 候補の一覧。表のように、列見出しをスロットごとに1回だけ出す。行は個別の枠を持たず、
+   字下げと細い罫線だけで区切り、スロットに属していることを見せる。 */
+.variantTable {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.variantHead,
+.variantRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+
+.variantHead {
+  padding-bottom: 2px;
+}
+
+/* 1行目の罫線は列見出しとの区切りも兼ねる。 */
+.variantRow {
+  padding: 2px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.colHead {
+  font-size: 11px;
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+
+/* 列の幅は中身の量に比例させる。テキストだけが伸び、重みは数値ぶんで足りる。 */
+.colName,
+.colText,
+.colWeight {
+  width: auto;
+  min-width: 0;
+}
+
+.colName {
+  flex: 1 1 110px;
+}
+
+.colText {
+  flex: 3 1 180px;
+}
+
+.colWeight {
+  flex: 0 0 68px;
+}
+
+/* 並べ替え・削除の列(見出しは空。.cardActions と同じ幅にして列を揃える)。 */
+.colActions {
+  flex: 0 0 92px;
+}
+
+/* 候補のテキストは既定で1行分の高さ。つまみで手で広げられる。 */
+.variantText {
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
+/* テキストが空の候補の印(保存できない)。`:focus` より後ろに書いて、入力中も赤を残す。 */
+.invalid,
+.invalid:focus {
+  border-color: var(--color-danger);
+}
+
+.variantError {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.checkList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* ラジオの下にぶら下げる一覧(生成フォームの「選ぶ」、編集のスロットごとの候補)。一段下げる。 */
+.comboPickList {
+  padding-left: 18px;
+}
+
+/* 編集のダイアログ。組み合わせが指す候補を、1スロット1行で横に並べる(多ければ折り返す)。 */
+.comboSlotRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 10px;
+  min-width: 0;
+}
+
+.comboOptions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.comboSlotName {
+  flex: 0 0 auto;
+  min-width: 88px;
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.checkItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  min-height: 28px;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* 空のときは、控えめな文のままそれ自体を次の操作(追加)にする。 */
+.emptyAction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+
+.emptyAction:hover {
+  border-color: var(--color-accent);
+}
+
+.emptyActionText {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.emptyActionCta {
+  font-size: 12px;
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 保存ボタンの横に出す要約(件数つき)。押すと問題の欄へ移るのでボタンにする。
+   件数が増えても1行のまま。狭い幅で同じ行に入らなければ .actions が折り返す。 */
+.invalidJump {
+  margin-inline-start: auto;
+  min-height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.invalidJump:hover {
+  background: var(--color-danger-bg);
+}
+
+/* -- 生成フォームの選択 -- */
+.formPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+  min-width: 0;
+}
+
+.formHeaderRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.formTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.slotRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.slotName {
+  flex: 0 0 auto;
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.slotControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.slotControls .select,
+.slotControls .input {
+  flex: 1 1 120px;
+  height: 32px;
+  width: auto;
+  min-width: 0;
+}
+
+.lockedTag {
+  font-size: 11px;
+  color: var(--color-warning);
+  overflow-wrap: anywhere;
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.previewLabel {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.previewText {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+/* -- Run 詳細の内訳 -- */
+.buildList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.buildItem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.buildSlotName {
+  color: var(--color-text-muted);
+  flex: none;
+}
+
+.buildMode {
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  flex: none;
+}
+
+.buildText {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.buildMeta {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 狭い幅(768px 未満)では指で押せる高さにする。 */
+@media (max-width: 767px) {
+  .input,
+  .select,
+  .search,
+  .slotControls .select,
+  .slotControls .input {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .textarea {
+    font-size: 16px;
+  }
+
+  /* 1行分の高さでも指で押せるように。つまみで広げられるのは変わらない。 */
+  .variantText {
+    min-height: 44px;
+  }
+
+  .smallButton,
+  .primary,
+  .secondary,
+  .emptyAction {
+    min-height: 44px;
+  }
+
+  .iconButton {
+    width: 44px;
+    min-height: 44px;
+  }
+
+  .checkItem {
+    min-height: 44px;
+  }
+
+  /* 並べ替え・削除は 44px 角が3つ。列見出しの空きも同じ幅にする。 */
+  .colActions {
+    flex: 0 0 140px;
+  }
+
+  /* 組み合わせが指す候補は、横に並べず縦積みにする(ラジオの高さを 44px に保つため)。 */
+  .comboSlotName {
+    flex: 1 1 100%;
+  }
+
+  .comboOptions {
+    flex: 1 1 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

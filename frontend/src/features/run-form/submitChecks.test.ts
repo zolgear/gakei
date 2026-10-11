@@ -30,6 +30,7 @@ const sizeConstraints = {
   min_aspect_ratio: 1 / 3,
   max_aspect_ratio: 3,
   allow_auto: true,
+  round_down: false,
 }
 
 function providerEntry(overrides: Partial<ProviderEntry> = {}): ProviderEntry {
@@ -52,6 +53,7 @@ function providerEntry(overrides: Partial<ProviderEntry> = {}): ProviderEntry {
     max_input_images: 1,
     available: true,
     unavailable_reason: null,
+    checking: false,
     requires_api_key: false,
     supports_pricing: false,
     ...overrides,

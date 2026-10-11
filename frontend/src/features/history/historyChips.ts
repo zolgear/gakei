@@ -11,8 +11,11 @@ export function buildParamChips(params: Record<string, unknown> | undefined): st
   if (typeof params.quality === 'string' && params.quality.length > 0) {
     chips.push(params.quality)
   }
-  if (typeof params.n === 'number' && params.n > 1) {
-    chips.push(`×${params.n}`)
+  // 枚数。SD WebUI のバッチ回数(`n_iter`。ADR-0038 2章)があれば、枚数 × バッチ回数
+  const n = typeof params.n === 'number' ? params.n : 1
+  const nIter = typeof params.n_iter === 'number' && params.n_iter > 0 ? params.n_iter : 1
+  if (n * nIter > 1) {
+    chips.push(`×${n * nIter}`)
   }
   if (typeof params.output_format === 'string' && params.output_format.length > 0) {
     chips.push(params.output_format)

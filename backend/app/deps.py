@@ -18,6 +18,7 @@ from app.providers.base import ImageProvider
 from app.providers.registry import ProviderRegistry
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
+from app.worker.focal import FocalPointWorker
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
 
@@ -79,6 +80,11 @@ def get_frontend_dist(request: Request) -> Path:
 def get_annotator(request: Request) -> Annotator:
     """ADR-0024: 自動タイトル・タグの推定の worker。"""
     return request.app.state.annotator
+
+
+def get_focal_worker(request: Request) -> FocalPointWorker | None:
+    """ADR-0043: サムネイルの焦点の worker。"""
+    return getattr(request.app.state, "focal_worker", None)
 
 
 def get_wd_downloader(request: Request) -> WdModelDownloader:

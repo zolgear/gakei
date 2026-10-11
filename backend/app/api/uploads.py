@@ -150,6 +150,7 @@ async def _upload(
             queued,
             annotator=getattr(request.app.state, "annotator", None),
             embedder=getattr(request.app.state, "embedder", None),
+            focal=getattr(request.app.state, "focal_worker", None),
         )
         asset = result.asset
         base = public_base_for(request)

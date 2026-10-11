@@ -2,6 +2,8 @@
  * 系列インスペクターの「プロンプトに挿入/置き換え」用の純粋関数。textarea の DOM 操作
  * (フォーカス・カーソル位置の読み取り)は呼び出し側で行い、ここでは文字列計算だけを行う。
  */
+import { appendTagsText } from '../prompt-tags/promptTags'
+
 export interface PromptInsertResult {
   text: string
   /** 挿入後にカーソルを置くべき位置(文字数)。 */
@@ -35,7 +37,12 @@ export function shouldConfirmReplace(current: string): boolean {
   return current.trim().length > 0
 }
 
-export type PromptInsertMode = 'insert' | 'replace'
+/**
+ * - insert: カーソル位置(無ければ末尾に改行を挟んで)に挿入
+ * - replace: 全文を置き換え
+ * - append-tags: 末尾に `, ` でつなぐ(画像のタグをプロンプトに使う。ADR-0039 1章)
+ */
+export type PromptInsertMode = 'insert' | 'replace' | 'append-tags'
 
 /** `useRunFormLogic` が公開する挿入/置き換え関数の型(ResultPane 側から呼ぶ)。 */
 export type InsertPromptFn = (text: string, mode: PromptInsertMode, cursorPos: number | null) => void
@@ -52,6 +59,10 @@ export function computePromptInsertion(
 ): PromptInsertResult {
   if (mode === 'replace') {
     return { text: insertText, cursor: insertText.length }
+  }
+  if (mode === 'append-tags') {
+    const text = appendTagsText(current, insertText)
+    return { text, cursor: text.length }
   }
   return insertPromptText(current, insertText, cursorPos)
 }

@@ -34,6 +34,18 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "share",
         "share_asset",
         "run_import",
+        "parameter_set",
+        "tag_dictionary",
+        "tag_dictionary_entry",
+        "tag_dictionary_alias",
+        "tag_dictionary_translation",
+        "asset_focal_point",
+        "run_prompt_embedding",
+        "prompt_template",
+        "prompt_slot",
+        "prompt_variant",
+        "prompt_combo",
+        "prompt_combo_item",
         "alembic_version",
     } <= tables
 
@@ -1079,4 +1091,223 @@ def test_migration_0027_adds_run_import(empty_database_url: str) -> None:
     command.downgrade(cfg, "0026")
     engine = create_engine(empty_database_url)
     assert "run_import" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0028_adds_parameter_set(empty_database_url: str) -> None:
+    """ADR-0040: 0027 の DB に upgrade head で parameter_set が加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0027")
+    engine = create_engine(empty_database_url)
+    assert "parameter_set" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "parameter_set" in set(inspector.get_table_names())
+    columns = {c["name"]: c for c in inspector.get_columns("parameter_set")}
+    assert columns["name"]["nullable"] is False
+    assert columns["provider"]["nullable"] is False
+    assert columns["params"]["nullable"] is False
+    assert columns["model"]["nullable"] is True
+    assert columns["prompt"]["nullable"] is True
+    assert columns["created_by_user_id"]["nullable"] is True
+    assert columns["deleted_at"]["nullable"] is True
+    indexes = {i["name"] for i in inspector.get_indexes("parameter_set")}
+    assert {"ix_parameter_set_created_by_user_id", "ix_parameter_set_updated_at"} <= indexes
+    foreign_keys = inspector.get_foreign_keys("parameter_set")
+    assert [fk["referred_table"] for fk in foreign_keys] == ["app_user"]
+    engine.dispose()
+
+    command.downgrade(cfg, "0027")
+    engine = create_engine(empty_database_url)
+    assert "parameter_set" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0029_adds_tag_dictionary_tables(empty_database_url: str) -> None:
+    """ADR-0041: 0028 の DB に upgrade head でタグ辞書のテーブルが加わり、downgrade で消えること。
+    前方一致の検索に使う主キー(辞書 + 検索用の列)を確かめる。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    names = {
+        "tag_dictionary",
+        "tag_dictionary_entry",
+        "tag_dictionary_alias",
+        "tag_dictionary_translation",
+    }
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0028")
+    engine = create_engine(empty_database_url)
+    assert not names & set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert names <= set(inspector.get_table_names())
+    assert inspector.get_pk_constraint("tag_dictionary_entry")["constrained_columns"] == [
+        "dictionary_id",
+        "name_key",
+    ]
+    assert inspector.get_pk_constraint("tag_dictionary_alias")["constrained_columns"] == [
+        "dictionary_id",
+        "alias_key",
+        "name_key",
+    ]
+    assert inspector.get_pk_constraint("tag_dictionary_translation")["constrained_columns"] == [
+        "dictionary_id",
+        "name_key",
+    ]
+    columns = {c["name"]: c for c in inspector.get_columns("tag_dictionary")}
+    assert columns["category_scheme"]["nullable"] is True
+    assert columns["status"]["nullable"] is False
+    for table in ("tag_dictionary_entry", "tag_dictionary_alias", "tag_dictionary_translation"):
+        foreign_keys = inspector.get_foreign_keys(table)
+        assert [fk["referred_table"] for fk in foreign_keys] == ["tag_dictionary"]
+    engine.dispose()
+
+    command.downgrade(cfg, "0028")
+    engine = create_engine(empty_database_url)
+    assert not names & set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0030_adds_asset_focal_point(empty_database_url: str) -> None:
+    """ADR-0043: 0029 の DB に upgrade head で焦点のテーブルが加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0029")
+    engine = create_engine(empty_database_url)
+    assert "asset_focal_point" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "asset_focal_point" in set(inspector.get_table_names())
+    assert inspector.get_pk_constraint("asset_focal_point")["constrained_columns"] == ["asset_id"]
+    columns = {c["name"]: c for c in inspector.get_columns("asset_focal_point")}
+    assert columns["x"]["nullable"] is True
+    assert columns["y"]["nullable"] is True
+    assert columns["method"]["nullable"] is False
+    assert columns["version"]["nullable"] is False
+    assert [fk["referred_table"] for fk in inspector.get_foreign_keys("asset_focal_point")] == [
+        "asset"
+    ]
+    engine.dispose()
+
+    command.downgrade(cfg, "0029")
+    engine = create_engine(empty_database_url)
+    assert "asset_focal_point" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0031_adds_run_prompt_embedding(empty_database_url: str) -> None:
+    """ADR-0045: 0030 の DB に upgrade head でプロンプトの埋め込みの表が加わり、downgrade で
+    消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0030")
+    engine = create_engine(empty_database_url)
+    assert "run_prompt_embedding" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "run_prompt_embedding" in set(inspector.get_table_names())
+    assert inspector.get_pk_constraint("run_prompt_embedding")["constrained_columns"] == [
+        "run_id",
+        "model_key",
+    ]
+    columns = {c["name"]: c for c in inspector.get_columns("run_prompt_embedding")}
+    assert columns["truncated"]["nullable"] is False
+    assert columns["text_sha256"]["nullable"] is True
+    assert columns["vector"]["nullable"] is True
+    assert [fk["referred_table"] for fk in inspector.get_foreign_keys("run_prompt_embedding")] == [
+        "run"
+    ]
+    indexes = {i["name"] for i in inspector.get_indexes("run_prompt_embedding")}
+    assert "ix_run_prompt_embedding_model_key_status" in indexes
+    engine.dispose()
+
+    command.downgrade(cfg, "0030")
+    engine = create_engine(empty_database_url)
+    assert "run_prompt_embedding" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0032_adds_prompt_template(empty_database_url: str) -> None:
+    """プロンプトテンプレート(実験): 0031 の DB に upgrade head でテンプレートの表と
+    `run.prompt_build` が加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0031")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "prompt_template" not in set(inspector.get_table_names())
+    assert "prompt_build" not in {c["name"] for c in inspector.get_columns("run")}
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    tables = set(inspector.get_table_names())
+    assert {
+        "prompt_template",
+        "prompt_slot",
+        "prompt_variant",
+        "prompt_combo",
+        "prompt_combo_item",
+    } <= tables
+    # 既存の run に足した列は nullable(既存の行は NULL のまま)。
+    run_columns = {c["name"]: c for c in inspector.get_columns("run")}
+    assert run_columns["prompt_build"]["nullable"] is True
+    assert inspector.get_pk_constraint("prompt_combo_item")["constrained_columns"] == [
+        "combo_id",
+        "variant_id",
+    ]
+    assert {fk["referred_table"] for fk in inspector.get_foreign_keys("prompt_combo_item")} == {
+        "prompt_combo",
+        "prompt_variant",
+    }
+    slot_columns = {c["name"]: c for c in inspector.get_columns("prompt_slot")}
+    assert slot_columns["deleted_at"]["nullable"] is True
+    assert slot_columns["default_mode"]["nullable"] is False
+    indexes = {i["name"] for i in inspector.get_indexes("prompt_template")}
+    assert {"ix_prompt_template_created_by_user_id", "ix_prompt_template_updated_at"} <= indexes
+    engine.dispose()
+
+    command.downgrade(cfg, "0031")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "prompt_template" not in set(inspector.get_table_names())
+    assert "prompt_build" not in {c["name"] for c in inspector.get_columns("run")}
     engine.dispose()

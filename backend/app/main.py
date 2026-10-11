@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,12 +32,16 @@ from app.api import events as events_api
 from app.api import health as health_api
 from app.api import lineage_transfer as lineage_transfer_api
 from app.api import llm_connections as llm_connections_api
+from app.api import parameter_sets as parameter_sets_api
 from app.api import pricing as pricing_api
 from app.api import prompt_sets as prompt_sets_api
+from app.api import prompt_templates as prompt_templates_api
 from app.api import runs as runs_api
+from app.api import sdwebui as sdwebui_api
 from app.api import search as search_api
 from app.api import settings as settings_api
 from app.api import shares as shares_api
+from app.api import tag_dictionaries as tag_dictionaries_api
 from app.api import tags as tags_api
 from app.api import uploads as uploads_api
 from app.api import users as users_api
@@ -46,7 +51,7 @@ from app.auth.runtime import AuthRuntime
 from app.auth.secret import load_or_create_auth_secret
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
-from app.domain import annotation_settings, embedding_index
+from app.domain import annotation_settings, embedding_index, tag_dictionaries
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.auth_settings import EffectiveAuthConfig, resolve_auth_config
 from app.domain.semantic_search import QueryVectorCache
@@ -56,11 +61,13 @@ from app.embedding.catalog import ClipModelDownloader
 from app.i18n import console_t, parse_accept_language, set_locale, t
 from app.mcp.endpoint import McpEndpoint
 from app.mcp.server import build_mcp_server, build_session_manager
-from app.providers.registry import _is_loopback_url, build_registry
+from app.providers.registry import build_registry, is_loopback_url
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
+from app.worker.focal import FocalPointWorker
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
+from app.worker.tag_dictionary_importer import TagDictionaryImporter
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
@@ -144,7 +151,7 @@ def check_auth_env(config: EffectiveAuthConfig | Settings) -> None:
             if from_settings:
                 message += " " + console_t("app.authEmergencyDisable")
             raise AuthConfigError(message)
-        if parsed.scheme == "http" and not _is_loopback_url(value):
+        if parsed.scheme == "http" and not is_loopback_url(value):
             logger.warning(console_t("app.authUrlInsecure", name=name, value=value))
 
 
@@ -317,6 +324,10 @@ def _build_lifespan(settings: Settings):
         # ADR-0024 8章: 推定の接続先1組の設定を、接続先の一覧と用途ごとの組に移す(冪等)。
         with session_factory() as session:
             annotation_settings.migrate_legacy(session, settings)
+        # ADR-0041 1章: 前回の終了で取り込み中のまま残ったタグ辞書を failed にする。
+        with session_factory() as session:
+            tag_dictionaries.recover_interrupted(session)
+        tag_dictionary_importer = TagDictionaryImporter(session_factory)
         # ADR-0028 2章: 画像の保存先。接続・読み書きできなければ、分かる文言で起動を中止する
         # (`StorageUnavailableError`)。
         store = open_store(settings)
@@ -341,6 +352,8 @@ def _build_lifespan(settings: Settings):
         # メモリの行列を読み直す。
         vector_index = build_vector_index(embedding_index_backend, embedder.version)
         clip_downloader = ClipModelDownloader(settings.data_dir, fake=settings.fake_provider)
+        # ADR-0043: サムネイルの焦点(顔の位置)を、取り込みの後に求める。
+        focal_worker = FocalPointWorker(session_factory, store)
         runner = Runner(
             session_factory,
             store,
@@ -349,6 +362,7 @@ def _build_lifespan(settings: Settings):
             settings.data_dir,
             annotator=annotator,
             embedder=embedder,
+            focal_worker=focal_worker,
         )
 
         app.state.settings = settings
@@ -361,11 +375,13 @@ def _build_lifespan(settings: Settings):
         app.state.annotator = annotator
         app.state.wd_downloader = wd_downloader
         app.state.embedder = embedder
+        app.state.focal_worker = focal_worker
         app.state.clip_downloader = clip_downloader
         app.state.embedding_index_backend = embedding_index_backend
         app.state.vector_index = vector_index
         app.state.query_vector_cache = QueryVectorCache()
         app.state.auth_runtime = auth_runtime
+        app.state.tag_dictionary_importer = tag_dictionary_importer
 
         # ADR-0023: `/mcp` のセッションマネージャー。`run()` は1インスタンスにつき1回しか
         # 呼べないので、lifespan のたびに作り直す(テストで同じアプリを複数回起動するため)。
@@ -375,6 +391,7 @@ def _build_lifespan(settings: Settings):
         await runner.start()
         await annotator.start()
         await embedder.start()
+        await focal_worker.start()
         try:
             async with mcp_session_manager.run():
                 yield
@@ -382,8 +399,10 @@ def _build_lifespan(settings: Settings):
             await runner.stop()
             await annotator.stop()
             await embedder.stop()
+            await focal_worker.stop()
             await wd_downloader.stop()
             await clip_downloader.stop()
+            await asyncio.to_thread(tag_dictionary_importer.stop)
             engine.dispose()
 
     return lifespan
@@ -578,16 +597,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(about_api.router, dependencies=auth_dep)
     app.include_router(capabilities_api.router, dependencies=auth_dep)
     app.include_router(comfyui_api.router, dependencies=auth_dep)
+    # ADR-0038: SD WebUI の設定(更新系は各ルートで `require_admin`)。
+    app.include_router(sdwebui_api.router, dependencies=auth_dep)
     app.include_router(assets_api.router, dependencies=auth_dep)
     app.include_router(asset_groups_api.router, dependencies=auth_dep)
     app.include_router(runs_api.router, dependencies=auth_dep)
     app.include_router(events_api.router, dependencies=auth_dep)
     app.include_router(prompt_sets_api.router, dependencies=auth_dep)
+    # プロンプトテンプレート(実験)。
+    app.include_router(prompt_templates_api.router, dependencies=auth_dep)
+    # ADR-0040: パラメーターセット(本人のものだけ)。
+    app.include_router(parameter_sets_api.router, dependencies=auth_dep)
     app.include_router(search_api.router, dependencies=auth_dep)
     app.include_router(embeddings_api.router, dependencies=auth_dep)
     app.include_router(tags_api.router, dependencies=auth_dep)
     app.include_router(pricing_api.router, dependencies=auth_dep)
     app.include_router(settings_api.router, dependencies=auth_dep)
+    app.include_router(tag_dictionaries_api.router, dependencies=auth_dep)
     # ADR-0034: 認証の設定(各ルートで `require_admin`)。
     app.include_router(auth_settings_api.router, dependencies=auth_dep)
     app.include_router(llm_connections_api.router, dependencies=auth_dep)

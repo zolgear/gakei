@@ -9,17 +9,23 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Literal
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.domain import api_key as api_key_domain
+from app.domain import prompt_templates
 from app.domain.models import Run, RunInput, RunStatus
 from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
 from app.domain.schemas import RunCreateRequest
-from app.domain.visibility import get_visible_asset, get_visible_group
+from app.domain.visibility import (
+    get_visible_asset,
+    get_visible_group,
+    get_visible_prompt_template,
+)
 from app.i18n import t
 from app.providers.base import ProviderUnavailableError, RunDraft
 from app.providers.registry import ProviderRegistry
@@ -55,7 +61,27 @@ def create_run(
     viewer: CurrentUser,
     origin: RunOrigin | None = None,
 ) -> Run:
-    """検証してから Run を挿入してコミットし、runner を起こす。作った Run を返す。
+    """Run を1つ作る(MCP 用。繰り返し回数は見ない。ADR-0042 3章)。"""
+    runs = create_runs(db, registry, runner, settings, body, viewer=viewer, origin=origin)
+    return runs[0]
+
+
+def create_runs(
+    db: Session,
+    registry: ProviderRegistry,
+    runner: Runner,
+    settings: Settings,
+    body: RunCreateRequest,
+    *,
+    viewer: CurrentUser,
+    origin: RunOrigin | None = None,
+    repeat: int = 1,
+) -> list[Run]:
+    """検証してから同じ設定の Run を `repeat` 個挿入してコミットし、runner を起こす。
+
+    作った Run を積んだ順に返す。検証は1回だけ行い、Run ごとの確定(`finalize_params`)の
+    どれかが断れば1つも作らない(1つのトランザクション。ADR-0042 3章)。runner への通知は
+    最後に1回。
 
     実行者は `viewer`(`created_by_user_id = viewer.id`。個人モードは null)。入力画像・マスク・
     出力先のグループは `viewer` に見えるものだけを指定でき、見えないものは存在しない場合と
@@ -113,50 +139,119 @@ def create_run(
             )
         )
 
-    try:
-        validate_run_request(
-            caps, body.operation, body.model, body.prompt, body.params, input_metas
+    if repeat < 1:
+        raise ValueError("repeat must be >= 1")
+
+    # プロンプトテンプレート(実験)。Run ごとに組み立て直す(繰り返し回数 N なら N 回。
+    # 意味の通ったガチャになる)。`prompt` と `prompt_template` の排他はスキーマで断っている。
+    prompts, builds = _resolve_prompts(db, body, viewer=viewer, repeat=repeat)
+
+    for index in range(repeat):
+        try:
+            validate_run_request(
+                caps,
+                body.operation,
+                body.model,
+                prompts[index],
+                body.params,
+                input_metas,
+            )
+        except RunValidationError as e:
+            raise RunCreateError("invalid", str(e)) from e
+
+    # 利用者が seed を指定したときだけ、2つ目以降の seed を進める(ADR-0042 2章)。指定が
+    # 無ければ、各 Run でプロバイダーがそれぞれ決める(今と同じ)。
+    user_seed = body.params.get("seed")
+    repeat_seed = getattr(provider, "repeat_seed", None)
+
+    finalized: list[dict[str, Any]] = []
+    for index in range(repeat):
+        params = body.params
+        if index > 0 and user_seed is not None and repeat_seed is not None:
+            seed = repeat_seed(finalized[0], index)
+            if seed is not None:
+                params = {**params, "seed": seed}
+        draft = RunDraft(
+            operation=body.operation,
+            model=body.model,
+            prompt=prompts[index],
+            params=params,
+            inputs=input_metas,
         )
-    except RunValidationError as e:
-        raise RunCreateError("invalid", str(e)) from e
+        try:
+            finalized.append(provider.finalize_params(db, draft))
+        except RunValidationError as e:
+            raise RunCreateError("invalid", str(e)) from e
+        except ProviderUnavailableError as e:
+            raise RunCreateError("conflict", str(e)) from e
 
-    draft = RunDraft(
-        operation=body.operation,
-        model=body.model,
-        prompt=body.prompt,
-        params=body.params,
-        inputs=input_metas,
-    )
-    try:
-        params = provider.finalize_params(db, draft)
-    except RunValidationError as e:
-        raise RunCreateError("invalid", str(e)) from e
-    except ProviderUnavailableError as e:
-        raise RunCreateError("conflict", str(e)) from e
-
-    run = Run(
-        # レジストリのキー(provider_name)を記録する。runner はこのキーで実行レーンを選ぶ
-        # ため、provider.name(自己申告の属性)ではなくこちらを正とする。
-        provider=provider_name,
-        model=body.model,
-        deployment=None,
-        operation=body.operation,
-        prompt=body.prompt,
-        params=params,
-        status=RunStatus.QUEUED,
-        created_by_user_id=viewer.id,
-        asset_group_id=body.asset_group_id,
-        origin=origin.origin,
-        api_token_id=origin.api_token_id,
-    )
-    db.add(run)
-    db.flush()
-
-    for item in body.inputs:
-        db.add(
-            RunInput(run_id=run.id, asset_id=item.asset_id, role=item.role, position=item.position)
+    # 積んだ順を queued_at で保つ(runner も履歴も queued_at 順。同じ時刻だと id の順になり、
+    # 順番が崩れる)。時計の分解能が粗い環境でも並ぶよう、1マイクロ秒ずつずらす。
+    queued_base = datetime.now(UTC)
+    runs: list[Run] = []
+    for index, params in enumerate(finalized):
+        run = Run(
+            # レジストリのキー(provider_name)を記録する。runner はこのキーで実行レーンを選ぶ
+            # ため、provider.name(自己申告の属性)ではなくこちらを正とする。
+            provider=provider_name,
+            model=body.model,
+            deployment=None,
+            operation=body.operation,
+            prompt=prompts[index],
+            params=params,
+            # プロンプトテンプレート(実験)で組み立てたときの内訳。作成時に一度だけ書く。
+            prompt_build=builds[index],
+            status=RunStatus.QUEUED,
+            queued_at=queued_base + timedelta(microseconds=index),
+            created_by_user_id=viewer.id,
+            asset_group_id=body.asset_group_id,
+            origin=origin.origin,
+            api_token_id=origin.api_token_id,
         )
+        db.add(run)
+        db.flush()
+        for item in body.inputs:
+            db.add(
+                RunInput(
+                    run_id=run.id, asset_id=item.asset_id, role=item.role, position=item.position
+                )
+            )
+        runs.append(run)
 
     db.commit()
     runner.notify()
-    return run
+    return runs
+
+
+def _resolve_prompts(
+    db: Session,
+    body: RunCreateRequest,
+    *,
+    viewer: CurrentUser,
+    repeat: int,
+) -> tuple[list[str], list[dict[str, Any] | None]]:
+    """Run ごとの(プロンプト、組み立ての内訳)を決める。
+
+    プロンプトテンプレート(実験)を使わないときは、今までどおり `body.prompt` のまま。
+    使うときは Run ごとに組み立て直す(`params` には手を触れない)。
+    """
+    if body.prompt_template is None:
+        assert body.prompt is not None  # スキーマでどちらか一方を強制している
+        return [body.prompt] * repeat, [None] * repeat
+
+    template = get_visible_prompt_template(db, viewer, body.prompt_template.template_id)
+    if template is None:
+        raise RunCreateError("not_found", t("promptTemplates.notFound"))
+    spec = prompt_templates.load_spec(db, template)
+    selections = body.prompt_template.selections.to_domain()
+
+    prompts: list[str] = []
+    builds: list[dict[str, Any] | None] = []
+    for _ in range(repeat):
+        try:
+            result = prompt_templates.build(spec, selections)
+        except prompt_templates.PromptBuildError as e:
+            raise RunCreateError("invalid", str(e)) from e
+        prompts.append(result.prompt)
+        builds.append(result.build)
+    return prompts, builds

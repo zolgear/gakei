@@ -16,6 +16,7 @@ from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_progress_bus, get_registry, get_runner, get_session, get_settings
+from app.domain import focal_points
 from app.domain import run_create as run_create_domain
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
@@ -31,11 +32,13 @@ from app.domain.run_views import (
     bulk_descendant_run_counts,
     bulk_input_summary,
     bulk_output_refs,
+    bulk_parent_focal_points,
     bulk_users,
     run_summary_fields,
 )
 from app.domain.schemas import (
     RunCancelResponse,
+    RunCreatedRef,
     RunCreateRequest,
     RunCreateResponse,
     RunDetail,
@@ -75,6 +78,8 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
     descendant_run_count = bulk_descendant_run_counts(db, [run.id], user)[run.id]
     created_by = bulk_users(db, [run.created_by_user_id]).get(run.created_by_user_id)
     asset_group = bulk_asset_groups(db, [run.asset_group_id], user).get(run.asset_group_id)
+    # サムネイルの焦点(ADR-0043)。入力と主たる親の分をまとめて引く。
+    focals = focal_points.bulk_get(db, [i.asset_id for i in inputs])
     return RunDetail(
         **run_summary_fields(
             run,
@@ -84,10 +89,23 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
             descendant_run_count,
             created_by,
             asset_group,
+            primary_parent_focal_point=focals.get(primary_parent_asset_id)
+            if primary_parent_asset_id is not None
+            else None,
         ),
         deployment=run.deployment,
         provider_request_id=run.provider_request_id,
-        inputs=[RunInputRef(asset_id=i.asset_id, role=i.role, position=i.position) for i in inputs],
+        # プロンプトテンプレート(実験)で組み立てた Run だけ入る。
+        prompt_build=run.prompt_build,
+        inputs=[
+            RunInputRef(
+                asset_id=i.asset_id,
+                role=i.role,
+                position=i.position,
+                focal_point=focals.get(i.asset_id),
+            )
+            for i in inputs
+        ],
         imported=_import_info(db, run),
     )
 
@@ -122,11 +140,18 @@ def create_run(
     user: CurrentUser = Depends(require_user),
 ) -> RunCreateResponse:
     # 検証〜挿入〜runner への投入は MCP と共通のドメイン関数に任せる(ADR-0023 1章)。
+    # 繰り返し回数(ADR-0042)は REST だけが受ける。
     try:
-        run = run_create_domain.create_run(db, registry, runner, settings, body, viewer=user)
+        runs = run_create_domain.create_runs(
+            db, registry, runner, settings, body, viewer=user, repeat=body.repeat
+        )
     except run_create_domain.RunCreateError as e:
         raise HTTPException(status_code=_ERROR_STATUS[e.kind], detail=str(e)) from e
-    return RunCreateResponse(id=run.id, status=run.status)
+    return RunCreateResponse(
+        id=runs[0].id,
+        status=runs[0].status,
+        runs=[RunCreatedRef(id=r.id, status=r.status) for r in runs],
+    )
 
 
 @router.get("", response_model=RunListResponse, operation_id="list_runs")
@@ -162,6 +187,7 @@ def list_runs(
     descendant_map = bulk_descendant_run_counts(db, run_ids, user)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], user)
+    parent_focals = bulk_parent_focal_points(db, inputs_map)
     items = [
         RunSummary(
             **run_summary_fields(
@@ -171,6 +197,7 @@ def list_runs(
                 descendant_map[r.id],
                 users_map.get(r.created_by_user_id),
                 groups_map.get(r.asset_group_id),
+                primary_parent_focal_point=parent_focals.get(inputs_map[r.id][1]),
             )
         )
         for r in rows

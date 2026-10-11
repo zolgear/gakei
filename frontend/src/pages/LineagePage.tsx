@@ -13,7 +13,7 @@ import { useBackNavigate } from '../lib/useBackNavigate'
 import { useResourcePanel } from '../context/useResourcePanel'
 import { LineageGraph } from '../features/lineage/LineageGraph'
 import { LineageInspectorPanel } from '../features/lineage/LineageInspectorPanel'
-import { resolveInspectorContent } from '../features/lineage/inspectorContent'
+import { resolveInspectorContent, resolveOpenRunTarget } from '../features/lineage/inspectorContent'
 import { parseNodeIdFromSearch, buildLineagePath } from '../features/lineage/nodeQueryParam'
 import { useI18n } from '../i18n'
 import styles from './LineagePage.module.css'
@@ -52,6 +52,13 @@ export function LineagePage() {
     navigate(buildLineagePath(assetId as string, id))
   }
 
+  // Asset のインスペクターの「Generated の詳細を開く」: グラフにある Run ならその場で切り替える。
+  function openRun(runId: string) {
+    const target = resolveOpenRunTarget(runId, lineageQuery.data?.nodes ?? [])
+    if (target.kind === 'select') selectNode(target.nodeId)
+    else navigate(target.path)
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -72,7 +79,7 @@ export function LineagePage() {
             onNodeClick={(node) => selectNode(node.id)}
           />
         </div>
-        <LineageInspectorPanel content={content} onClose={() => selectNode(null)} />
+        <LineageInspectorPanel content={content} onClose={() => selectNode(null)} onOpenRun={openRun} />
       </div>
     </div>
   )

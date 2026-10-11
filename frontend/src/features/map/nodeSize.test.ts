@@ -8,6 +8,7 @@ import {
   drawTilePx,
   fitNodes,
   lineageSegment,
+  MIN_LINEAGE_LEN_PX,
   nodeExtentPx,
   squareBorderDistance,
 } from './nodeSize'
@@ -104,9 +105,59 @@ describe('lineageSegment', () => {
     expect(squareBorderDistance(10, 1, 0)).toBe(10)
   })
 
-  it('サムネイルが重なるほど近いときは引かない', () => {
-    expect(lineageSegment(0, 0, 20, 0, 10, 8)).toBeNull()
+  it('縁から縁まで引く余地が無いほど近くても、向きが分かるように詰めて引く', () => {
+    // 立体では、ほとんど同じ画像どうしの親子がサムネイルの半分より近くに重なる。
+    const seg = lineageSegment(0, 0, 20, 0, 10, 8)!
+    expect(seg).not.toBeNull()
+    // 矢じりは長さの半分まで、縁は線分が残るところまで詰める。
+    expect(seg.head).toBeCloseTo(8)
+    expect(seg.x0).toBeCloseTo(2.4)
+    expect(seg.tipX).toBeCloseTo(17.6)
+    expect(seg.x1).toBeCloseTo(9.6)
+    // 線分として見える長さが残る。
+    expect(seg.x1 - seg.x0).toBeGreaterThan(5)
+    // 線分も矢じりも、必ず両端の間に収まる。
+    for (const v of [seg.x0, seg.x1, seg.tipX]) {
+      expect(v).toBeGreaterThanOrEqual(0)
+      expect(v).toBeLessThanOrEqual(20)
+    }
+  })
+
+  it('とても近いときは矢じりも詰める(向きは保つ)', () => {
+    const seg = lineageSegment(0, 0, 6, 0, 30, 14)!
+    expect(seg.head).toBeCloseTo(3)
+    expect(seg.x0).toBeCloseTo(0.6)
+    expect(seg.tipX).toBeGreaterThan(seg.x1)
+    expect(seg.ux).toBeCloseTo(1)
+  })
+
+  it('両端が同じ点に見えるほど近ければ引かない', () => {
+    expect(lineageSegment(0, 0, MIN_LINEAGE_LEN_PX - 1, 0, 10, 8)).toBeNull()
     expect(lineageSegment(5, 5, 5, 5, 10, 8)).toBeNull()
+  })
+
+  it('どの向き・どの大きさでも、矢じりの先は子の側・始点は親の側にある', () => {
+    const rand = mulberry32(7)
+    for (let i = 0; i < 200; i++) {
+      const bx = (rand() - 0.5) * 400
+      const by = (rand() - 0.5) * 400
+      const half = rand() * 60
+      const seg = lineageSegment(0, 0, bx, by, half, arrowSizePx(half * 2))
+      const len = Math.hypot(bx, by)
+      if (len < MIN_LINEAGE_LEN_PX) {
+        expect(seg).toBeNull()
+        continue
+      }
+      expect(seg).not.toBeNull()
+      const s = seg!
+      // 始点 → 矢じりの根元 → 先 の順に、親から子へ進む。
+      const along = (x: number, y: number) => (x * bx + y * by) / len
+      expect(along(s.x0, s.y0)).toBeGreaterThanOrEqual(-1e-6)
+      expect(along(s.x1, s.y1)).toBeGreaterThanOrEqual(along(s.x0, s.y0) - 1e-6)
+      expect(along(s.tipX, s.tipY)).toBeGreaterThanOrEqual(along(s.x1, s.y1) - 1e-6)
+      expect(along(s.tipX, s.tipY)).toBeLessThanOrEqual(len + 1e-6)
+      expect(s.head).toBeGreaterThan(0)
+    }
   })
 
   it('矢じりの長さはタイルに比例し、範囲に収める', () => {

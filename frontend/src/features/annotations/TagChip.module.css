@@ -94,3 +94,14 @@ button.label:hover {
     height: 38px;
   }
 }
+
+/* 辞書の訳(ADR-0041 4章)。表示だけの補助なので控えめにする。 */
+.translation {
+  flex-shrink: 1;
+  min-width: 0;
+  margin-left: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.85em;
+  color: var(--color-text-faint);
+}

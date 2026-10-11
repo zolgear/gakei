@@ -2,7 +2,7 @@
 
 GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を読む。通常は設定しなくても動く。API キーは起動後の設定画面から登録できる。
 
-`.env` を使う場合は、[`.env.example`](../.env.example)(英語。日本語版は [`.env.example.ja`](../.env.example.ja))をリポジトリ直下に `.env` としてコピーして編集する。`.env` はコミットしない。項目は「OpenAI」「保存先とサーバー」「ComfyUI」「認証」の4つの区画に分けてあり、`#KEY=value` の行は無効な設定(値は既定値)、`# 文章` の行は説明である。
+`.env` を使う場合は、[`.env.example`](../.env.example)(英語。日本語版は [`.env.example.ja`](../.env.example.ja))をリポジトリ直下に `.env` としてコピーして編集する。`.env` はコミットしない。項目は「OpenAI」「保存先とサーバー」「ComfyUI」(SD WebUI も同じ区画)「認証」の4つの区画に分けてあり、`#KEY=value` の行は無効な設定(値は既定値)、`# 文章` の行は説明である。
 
 ## 優先順位
 
@@ -18,9 +18,11 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 
 次の項目は例外で、設定画面で保存すると、以降は画面の設定が環境変数より優先される(環境変数は、画面で保存するまでの既定値として使う)。
 
-- ComfyUI の接続先(`COMFYUI_URL`): 設定画面で一度でも接続または切り離しをしたとき
+- ComfyUI の接続先(`COMFYUI_URL`): 設定画面で一度でも接続または切り離しをしたとき。設定画面で「無効にする」を押したときは、`COMFYUI_URL` があっても無効のまま(URL は環境変数の値を見せる。「有効にする」で戻す)
 - `MODERATION`: 設定 → OpenAI(`/settings/openai`)で変えて、ページ上部の「保存」を押したとき
 - `COMFYUI_TIMEOUT_SECONDS`: 設定 → ComfyUI(`/settings/comfyui`)で変えて、ページ上部の「保存」を押したとき
+- SD WebUI の接続先(`SDWEBUI_URL`): 設定画面で一度でも接続または切り離しをしたとき。設定画面で「無効にする」を押したときは、`SDWEBUI_URL` があっても無効のまま(URL は環境変数の値を見せる。「有効にする」で戻す)
+- `SDWEBUI_TIMEOUT_SECONDS`: 設定 → SD WebUI(`/settings/sdwebui`)で変えて保存したとき
 
 ## 一覧
 
@@ -45,6 +47,8 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 | `MODERATION` | `low` | Generate のときに送る表現の制限。`auto` または `low`。設定画面(設定 → OpenAI)で保存すると、そちらが優先される |
 | `COMFYUI_URL` | なし(無効) | ローカルの ComfyUI の URL(例: `http://127.0.0.1:8188`)。通常は設定画面(設定 → ComfyUI)から接続する。ループバック以外を指定すると、起動時に警告を出す |
 | `COMFYUI_TIMEOUT_SECONDS` | `1800` | ComfyUI の1回の実行を待つ上限(秒)。設定画面(設定 → ComfyUI)で保存すると、そちらが優先される |
+| `SDWEBUI_URL` | なし(無効) | Stable Diffusion WebUI(A1111 互換の API)の URL(例: `http://127.0.0.1:7860`)。通常は設定画面(設定 → SD WebUI)から接続する。ユーザー名・パスワードを URL に含めることはできない(Basic 認証は画面で設定する)。ループバック以外を指定すると、起動時に警告を出す。詳しくは [sdwebui.md](sdwebui.md) |
+| `SDWEBUI_TIMEOUT_SECONDS` | `600` | SD WebUI の1回の実行を待つ上限(秒)。設定画面(設定 → SD WebUI)で保存すると、そちらが優先される |
 | `AUTH_MODE` | なし(`none`) | `none`(個人モード。認証なし)か `oidc`(OIDC でログイン。ADR-0019)。通常は書かず、管理者設定の「認証」で切り替える(ADR-0034)。書くと画面の設定より優先し、画面では切り替えられなくなる。締め出されたときは `AUTH_MODE=none` を書いて再起動する。手順は [auth.md](auth.md) |
 | `OIDC_ISSUER` | なし | OIDC 発行者の URL(例: `https://keycloak.example.com/realms/gakei`)。末尾に `/.well-known/openid-configuration` を付けた Discovery 文書を読む。oidc のとき必須。画面の設定が優先する |
 | `OIDC_CLIENT_ID` | なし | IdP に登録したクライアント ID。oidc のとき必須。画面の設定が優先する |
@@ -66,7 +70,7 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 
 設定画面からダウンロードしたモデルは `DATA_DIR/models/` に置く(自動タグの WD Tagger は `models/wd/`、画像の埋め込みの CLIP は `models/clip/`。[auto-tags.md](auto-tags.md)、[embeddings.md](embeddings.md))。`STORAGE_BACKEND` を変えても、モデルは `DATA_DIR` に置く。消しても設定画面からダウンロードし直せる。画像の埋め込みに環境変数は無く、管理者設定の「埋め込み」で設定する。
 
-**`DATA_DIR` の中のファイルを、ファイルマネージャーなどで直接消したり動かしたり名前を変えたりしないこと。** DB に記録した場所と合わなくなり、画像が表示できなくなる。画像の削除は画面から行う。`DATA_DIR` をフォルダごとバックアップに取るのは構わない。
+**`DATA_DIR` の中のファイルを、ファイルマネージャーなどで直接消したり動かしたり名前を変えたりしないこと。** DB に記録した場所と合わなくなり、画像が表示できなくなる。画像の削除は画面から行う。`DATA_DIR` をフォルダごとバックアップに取るのは構わない。設定を残したまま画像と履歴を初期化したいときは、GAKEI を止めて画像を消した(退避した)後に、DB を合わせるツールを実行する([reconcile-storage.md](reconcile-storage.md))。
 
 `STORAGE_BACKEND` を `azure_blob` か `s3` にすると、原本と派生は `DATA_DIR` ではなく、コンテナ(バケット)の中に同じキーで保存される。起動時に接続と読み書きを確かめ、できなければ起動を中止する。ローカルから移すツールもある([object-storage.md](object-storage.md))。
 

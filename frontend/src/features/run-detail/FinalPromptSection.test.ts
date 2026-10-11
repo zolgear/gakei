@@ -43,3 +43,44 @@ describe('FinalPromptSection icon buttons', () => {
     expect(html).not.toContain(`>${rpa.replacePrompt}<`)
   })
 })
+
+describe('FinalPromptSection expanded prompts (ADR-0038 7章)', () => {
+  const sdOutputs: RunTextOutput[] = [
+    { role: 'final_prompt', output_index: 0, text: 'a red cat', truncated: false },
+    { role: 'final_negative_prompt', output_index: 0, text: 'ugly', truncated: false },
+    { role: 'final_prompt', output_index: 1, text: 'a {red|blue} cat', truncated: false },
+  ]
+  const baseline = { prompt: 'a {red|blue} cat', negativePrompt: '' }
+
+  it('shows one image\'s expanded prompts with headings, without insert actions on the negative', () => {
+    const t = msg()
+    const html = renderToStaticMarkup(
+      createElement(FinalPromptSection, {
+        textOutputs: sdOutputs,
+        outputIndex: 0,
+        ...baseline,
+        renderActions: () => createElement('button', { type: 'button', 'aria-label': 'insert' }),
+      }),
+    )
+    expect(html).toContain(t.finalPrompt.expandedHeading)
+    expect(html).toContain(t.finalPrompt.expandedNegativeHeading)
+    expect(html).not.toContain(`>${t.finalPrompt.heading}<`)
+    expect(buttons(html).filter((b) => b.includes('aria-label="insert"'))).toHaveLength(1)
+  })
+
+  it('renders nothing for an image whose prompt equals the run prompt', () => {
+    const html = renderToStaticMarkup(
+      createElement(FinalPromptSection, { textOutputs: sdOutputs, outputIndex: 1, ...baseline }),
+    )
+    expect(html).toBe('')
+  })
+
+  it('labels each output in the run-wide list', () => {
+    const t = msg()
+    const html = renderToStaticMarkup(createElement(FinalPromptSection, { textOutputs: sdOutputs, ...baseline }))
+    // 番号は出力の一覧と同じ output_index(0 始まり)
+    expect(html).toContain(t.finalPrompt.outputLabel.replace('{index}', '0'))
+    expect(html).toContain(t.finalPrompt.outputNegativeLabel.replace('{index}', '0'))
+    expect(html).not.toContain(t.finalPrompt.outputLabel.replace('{index}', '1'))
+  })
+})

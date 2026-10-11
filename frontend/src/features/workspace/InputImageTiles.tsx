@@ -15,6 +15,7 @@ import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import type { InputImagesProps } from './InputChipsRow'
 import styles from './InputImageTiles.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 /** 「前へ」(チップ行の ▲ に相当)。タイルでは矢印を左右向きの山形にする。 */
 function PrevIcon() {
@@ -115,7 +116,13 @@ export function InputImageTiles({
                 title={c.showInPreview}
                 onClick={() => onPreviewAsset(item.assetId)}
               >
-                <img className={styles.thumb} src={assetUrl(item.assetId, 'thumb')} alt="" draggable={false} />
+                <img
+                  className={styles.thumb}
+                  src={assetUrl(item.assetId, 'thumb')}
+                  style={focalStyle(detail?.focal_point)}
+                  alt=""
+                  draggable={false}
+                />
               </button>
 
               <span className={styles.indexBadge} title={isPrimary ? c.primaryTitle : undefined}>

@@ -17,10 +17,24 @@ from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user, require_user_or_api_token
 from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_annotator, get_embedder, get_session, get_settings, get_store
-from app.domain import annotation_settings, derivatives, embedding_settings, ingest_hooks
+from app.deps import (
+    get_annotator,
+    get_embedder,
+    get_focal_worker,
+    get_session,
+    get_settings,
+    get_store,
+)
+from app.domain import (
+    annotation_settings,
+    derivatives,
+    embedding_settings,
+    focal_points,
+    ingest_hooks,
+)
 from app.domain import annotations as annotations_domain
 from app.domain import embeddings as embeddings_domain
+from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.asset_groups import group_for_asset
 from app.domain.assets import IngestError, asset_is_used_as_input, is_restorable
 from app.domain.assets import ingest_upload as ingest_asset
@@ -48,6 +62,7 @@ from app.domain.schemas import (
     AssetUploadResponse,
     CreatedBy,
     EmbeddedGenerationMeta,
+    FocalPoint,
     ProducedByRunSummary,
 )
 from app.domain.storage import AssetStore
@@ -60,6 +75,7 @@ from app.domain.visibility import (
 from app.i18n import t
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
+from app.worker.focal import FocalPointWorker
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +93,9 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _to_summary(asset: Asset, title: str | None = None) -> AssetSummary:
+def _to_summary(
+    asset: Asset, title: str | None = None, focal_point: FocalPoint | None = None
+) -> AssetSummary:
     return AssetSummary(
         id=asset.id,
         kind=asset.kind,
@@ -87,6 +105,7 @@ def _to_summary(asset: Asset, title: str | None = None) -> AssetSummary:
         bytes=asset.bytes,
         created_at=asset.created_at,
         title=title,
+        focal_point=focal_point,
     )
 
 
@@ -175,6 +194,7 @@ def _to_detail(
         used_as_input=asset_is_used_as_input(db, asset.id),
         created_by=_to_created_by(db, asset.created_by_user_id),
         group=group_for_asset(db, asset.id, user),
+        focal_point=focal_points.get(db, asset.id),
         **annotations_domain.annotation_fields(db, asset.id),
     )
 
@@ -201,6 +221,7 @@ def create_asset(
     settings: Settings = Depends(get_settings),
     annotator: Annotator = Depends(get_annotator),
     embedder: Embedder = Depends(get_embedder),
+    focal_worker: FocalPointWorker | None = Depends(get_focal_worker),
 ) -> AssetUploadResponse:
     data = file.file.read()
     try:
@@ -222,9 +243,11 @@ def create_asset(
     if result.outcome == "created":
         queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
     db.commit()
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder)
+    # 応答は worker を起こす前に作る(annotate_asset と同じ理由)。
     detail = _to_detail(db, result.asset, produced_by_run=None, user=user)
-    return AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
+    response = AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
+    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
+    return response
 
 
 @router.get("", response_model=AssetListResponse, operation_id="list_assets")
@@ -300,8 +323,10 @@ def list_assets(
     rows = rows[:limit]
     next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id) if has_more and rows else None
     titles = annotations_domain.bulk_titles(db, [a.id for a in rows])
+    focals = focal_points.bulk_get(db, [a.id for a in rows])
     return AssetListResponse(
-        items=[_to_summary(a, titles.get(a.id)) for a in rows], next_cursor=next_cursor
+        items=[_to_summary(a, titles.get(a.id), focals.get(a.id)) for a in rows],
+        next_cursor=next_cursor,
     )
 
 
@@ -342,6 +367,8 @@ def restore_asset(
     asset_id: uuid.UUID,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    embedder: Embedder = Depends(get_embedder),
 ) -> AssetDetail:
     """論理削除した Asset を復元する。変更するのは `asset.deleted_at` だけ
     (ADR-0008「Assetの復元」)。生んだ Run が削除済みの場合は復元できない。
@@ -362,8 +389,14 @@ def restore_asset(
         )
 
     asset.deleted_at = None
+    # ADR-0046 4章: 取り込み時と同じ条件で、ベクトルが無ければ埋め込みを待ち行列に入れる。
+    queued = embeddings_domain.enqueue_on_restore(db, asset, settings)
     db.commit()
-    return _to_detail(db, asset, produced_by_run, user)
+    # 応答は worker を起こす前に作る(create_asset と同じ理由)。
+    detail = _to_detail(db, asset, produced_by_run, user)
+    if queued:
+        embedder.notify()
+    return detail
 
 
 @content_router.get("/{asset_id}/content", operation_id="get_asset_content")
@@ -505,17 +538,24 @@ def update_asset_title(
     body: AssetTitleUpdateRequest,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    embedder: Embedder = Depends(get_embedder),
 ) -> AssetAnnotationResponse:
     """タイトルを人が決める(以後の再推定で上書きしない)。null・空文字はタイトルを消し、
-    その状態も人の決定として保つ。"""
+    その状態も人の決定として保つ。Run の最初の出力なら、上限を超える長いプロンプトの埋め込みを
+    計算し直すことがある(ADR-0045 2章)。"""
     asset = _annotation_target(db, user, asset_id)
     try:
         annotations_domain.set_title(db, asset, body.title)
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e)) from e
+    requeued = prompt_embeddings_domain.on_title_changed(db, asset, settings)
     db.commit()
-    return annotations_domain.annotation_response(db, asset_id)
+    response = annotations_domain.annotation_response(db, asset_id)
+    if requeued:
+        embedder.notify()
+    return response
 
 
 @router.post(
@@ -585,8 +625,10 @@ def annotate_asset(
         raise HTTPException(status_code=409, detail=t("annotations.noEngine"))
     annotations_domain.request_annotation(db, asset)
     db.commit()
+    # 応答は worker を起こす前に作る。先に起こすと、拾われた後の running を返すことがある。
+    response = annotations_domain.annotation_response(db, asset_id)
     annotator.notify()
-    return annotations_domain.annotation_response(db, asset_id)
+    return response
 
 
 # -- 埋め込み(ADR-0033) ----------------------------------------------------------
@@ -620,10 +662,10 @@ def request_asset_embedding(
     assert model_key is not None
     embeddings_domain.request_embedding(db, asset, model_key)
     db.commit()
-    embedder.notify()
+    # 応答は worker を起こす前に作る(annotate_asset と同じ理由)。
     row = embeddings_domain.embedding_status(db, asset_id, model_key)
     assert row is not None
-    return AssetEmbeddingStatus(
+    response = AssetEmbeddingStatus(
         asset_id=asset_id,
         model_key=model_key,
         status=row.status,  # type: ignore[arg-type]
@@ -631,3 +673,5 @@ def request_asset_embedding(
         requested_at=row.requested_at,
         finished_at=row.finished_at,
     )
+    embedder.notify()
+    return response

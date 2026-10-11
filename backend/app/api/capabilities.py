@@ -1,7 +1,9 @@
 """GET /api/capabilities。複数プロバイダーの一覧を返す(ADR-0013)。
 
-フロントはこれだけで、プロバイダーごとのフォームを組み立てる。`capabilities()` と
-`availability()` はリクエストのたびに呼ぶ(キャッシュは各プロバイダーの責任)。
+フロントはこれだけで、プロバイダーごとのフォームを組み立てる。外部のサーバーに問い合わせる
+プロバイダー(SD WebUI・ComfyUI)は待たない版(`status_snapshot`)で引き、接続先が落ちていても
+すぐ返す(手元の値を返し、古ければ裏で取り直す)。まだ一度も確かめていないものは
+`checking: true` で返すので、フロントは少し後に読み直す。
 
 画像の埋め込み(ADR-0033 7章)が使えるかと、使うモデルの対応言語も返す(検索などの入口の
 出し分けに使う)。
@@ -17,6 +19,7 @@ from app.deps import get_embedding_index_backend, get_registry, get_session, get
 from app.domain import embedding_settings
 from app.domain.schemas import CapabilitiesResponse, EmbeddingCapabilities, ProviderEntry
 from app.domain.semantic_search import active_languages
+from app.providers.base import provider_status_snapshot
 from app.providers.registry import ProviderRegistry
 
 router = APIRouter(tags=["capabilities"])
@@ -35,6 +38,7 @@ def embedding_capabilities(
         multilingual=("ja" in languages) if languages is not None else None,
         index_backend=index_backend,  # type: ignore[arg-type]
         engine=config.engine if available else None,
+        prompt_search=available and embedding_settings.prompt_supported(config),
     )
 
 
@@ -49,13 +53,13 @@ def get_capabilities_endpoint(
 ) -> CapabilitiesResponse:
     entries: list[ProviderEntry] = []
     for provider in registry.providers.values():
-        caps = provider.capabilities()
-        available, unavailable_reason = provider.availability()
+        snapshot = provider_status_snapshot(provider)
         entries.append(
             ProviderEntry(
-                **caps.model_dump(),
-                available=available,
-                unavailable_reason=unavailable_reason,
+                **snapshot.capabilities.model_dump(),
+                available=snapshot.available,
+                unavailable_reason=snapshot.unavailable_reason,
+                checking=snapshot.checking,
                 requires_api_key=provider.requires_api_key,
                 supports_pricing=provider.supports_pricing,
             )

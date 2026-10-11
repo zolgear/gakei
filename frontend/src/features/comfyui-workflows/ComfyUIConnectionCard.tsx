@@ -7,12 +7,17 @@
  * すると以降は画面の設定が優先される(`source: 'env'` のときだけその旨を表示する)。
  * 接続・切り離しの成功後は、この状態(`comfyui-status`)と capabilities のキャッシュを両方無効化し、
  * 再読み込みなしでモデル選択肢に反映させる。
+ * 「無効にする」「有効にする」(ADR-0013 7章)は、URL を残したまま使わない状態にし、同じ URL で戻す。
+ * 無効の間も URL の変更と接続テストはできる(変えても無効のまま)。無効にするときは「切り離す」に
+ * 倣って確認のダイアログを出す。有効にするのは確認なし。
  */
 import { useCallback, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ApiError,
   detachComfyUIConnection,
+  disableComfyUIConnection,
+  enableComfyUIConnection,
   getComfyUIStatus,
   setComfyUIConnection,
   testComfyUIConnection,
@@ -27,8 +32,10 @@ import { useSettingsShell } from '../settings/settingsShell'
 import settingsStyles from '../settings/settings.module.css'
 import {
   canSaveConnection,
+  connectionHeadline,
   connectionState,
   envSourceNote,
+  hasConnectionUrl,
   isLoopbackUrl,
   lockedMessage,
   testSuccessNotice,
@@ -36,6 +43,7 @@ import {
 } from './comfyuiConnectionForm'
 
 const CARD_STATE: Record<ConnectionState, ConnectionCardState> = {
+  notConnected: 'warning',
   disabled: 'warning',
   available: 'ok',
   unavailable: 'error',
@@ -53,6 +61,7 @@ export function ComfyUIConnectionCard() {
   const statusQuery = useQuery({ queryKey: ['comfyui-status'], queryFn: getComfyUIStatus })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [detachConfirmOpen, setDetachConfirmOpen] = useState(false)
+  const [disableConfirmOpen, setDisableConfirmOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const testMutation = useMutation({
@@ -80,6 +89,46 @@ export function ComfyUIConnectionCard() {
     },
   })
 
+  const applyStatus = (data: ComfyUIStatus) => {
+    queryClient.setQueryData(['comfyui-status'], data)
+    void queryClient.invalidateQueries({ queryKey: ['capabilities'] })
+  }
+  const onConflict = (err: unknown) => {
+    if (err instanceof ApiError && err.status === 409) {
+      void queryClient.invalidateQueries({ queryKey: ['comfyui-status'] })
+    }
+  }
+
+  const disableMutation = useMutation({
+    mutationFn: disableComfyUIConnection,
+    onSuccess: (data) => {
+      applyStatus(data)
+      setDisableConfirmOpen(false)
+      setErrorMessage(null)
+      testMutation.reset()
+      toast.show({ message: c.disabledToast })
+    },
+    onError: (err: unknown) => {
+      setDisableConfirmOpen(false)
+      setErrorMessage(errorMessageOf(err, c.disableFailed))
+      onConflict(err)
+    },
+  })
+
+  const enableMutation = useMutation({
+    mutationFn: enableComfyUIConnection,
+    onSuccess: (data) => {
+      applyStatus(data)
+      setErrorMessage(null)
+      testMutation.reset()
+      toast.show({ message: c.enabledToast })
+    },
+    onError: (err: unknown) => {
+      setErrorMessage(errorMessageOf(err, c.enableFailed))
+      onConflict(err)
+    },
+  })
+
   if (statusQuery.isLoading) {
     return <p className={settingsStyles.placeholder}>{c.checking}</p>
   }
@@ -90,11 +139,7 @@ export function ComfyUIConnectionCard() {
   const status = statusQuery.data
   const state = connectionState(status)
   const envNote = envSourceNote(status)
-  const headline = !status.enabled
-    ? c.disabledHeadline
-    : status.available
-      ? c.availableHeadline
-      : c.unavailableHeadline
+  const headline = connectionHeadline(status)
 
   return (
     <>
@@ -102,9 +147,10 @@ export function ComfyUIConnectionCard() {
         title={c.cardTitle}
         state={CARD_STATE[state]}
         status={headline}
-        details={status.enabled ? statusDetails(status, c) : undefined}
+        details={hasConnectionUrl(status) ? statusDetails(status, c) : undefined}
         notes={
           <>
+            {status.disabled && <p className={settingsStyles.helpText}>{c.disabledNote}</p>}
             {envNote && <p className={settingsStyles.helpText}>{envNote}</p>}
             {status.locked && (
               <p className={settingsStyles.helpText}>{lockedMessage(status.enabled ? 'detach' : 'save')}</p>
@@ -115,6 +161,55 @@ export function ComfyUIConnectionCard() {
         actions={
           status.enabled ? (
             <>
+              <button
+                type="button"
+                className={settingsStyles.secondaryButton}
+                onClick={() => {
+                  setErrorMessage(null)
+                  testMutation.mutate()
+                }}
+                disabled={testMutation.isPending}
+              >
+                {testMutation.isPending ? c.testing : c.testConnection}
+              </button>
+              <button
+                type="button"
+                className={settingsStyles.secondaryButton}
+                onClick={() => setDialogOpen(true)}
+                disabled={status.locked}
+              >
+                {c.changeUrl}
+              </button>
+              <button
+                type="button"
+                className={settingsStyles.secondaryButton}
+                onClick={() => setDisableConfirmOpen(true)}
+                disabled={status.locked || disableMutation.isPending}
+              >
+                {c.disable}
+              </button>
+              <button
+                type="button"
+                className={settingsStyles.dangerButton}
+                onClick={() => setDetachConfirmOpen(true)}
+                disabled={status.locked}
+              >
+                {c.detach}
+              </button>
+            </>
+          ) : status.disabled ? (
+            <>
+              <button
+                type="button"
+                className={settingsStyles.primaryButton}
+                onClick={() => {
+                  setErrorMessage(null)
+                  enableMutation.mutate()
+                }}
+                disabled={status.locked || enableMutation.isPending}
+              >
+                {enableMutation.isPending ? c.enabling : c.enable}
+              </button>
               <button
                 type="button"
                 className={settingsStyles.secondaryButton}
@@ -178,6 +273,16 @@ export function ComfyUIConnectionCard() {
         onConfirm={() => detachMutation.mutate()}
         onCancel={() => setDetachConfirmOpen(false)}
       />
+
+      <ConfirmDialog
+        open={disableConfirmOpen}
+        message={c.disableConfirmMessage}
+        warning={c.disableConfirmWarning}
+        confirmLabel={c.disableConfirmLabel}
+        cancelLabel={c.cancel}
+        onConfirm={() => disableMutation.mutate()}
+        onCancel={() => setDisableConfirmOpen(false)}
+      />
     </>
   )
 }
@@ -229,7 +334,7 @@ function ComfyUIConnectionDialog({ status, onClose, onConnected }: DialogProps) 
     onSuccess: (data) => {
       queryClient.setQueryData(['comfyui-status'], data)
       void queryClient.invalidateQueries({ queryKey: ['capabilities'] })
-      toast.show({ message: c.connected })
+      toast.show({ message: data.disabled ? c.urlSavedWhileDisabled : c.connected })
       onConnected()
       onClose()
     },
@@ -251,6 +356,7 @@ function ComfyUIConnectionDialog({ status, onClose, onConnected }: DialogProps) 
   const testNotice = testSuccessNotice({
     showForm: true,
     enabled: status.enabled,
+    disabled: status.disabled,
     trimmedUrl,
     testResult: testMutation.data,
     confirmNonLoopback,
@@ -258,7 +364,7 @@ function ComfyUIConnectionDialog({ status, onClose, onConnected }: DialogProps) 
   const canConnect = !status.locked && !pending && canSaveConnection(urlInput, confirmNonLoopback)
 
   return (
-    <Modal open title={status.enabled ? c.changeDialogTitle : c.connectDialogTitle} onClose={close}>
+    <Modal open title={hasConnectionUrl(status) ? c.changeDialogTitle : c.connectDialogTitle} onClose={close}>
       <form
         className={settingsStyles.dialogForm}
         onSubmit={(e) => {
@@ -302,6 +408,7 @@ function ComfyUIConnectionDialog({ status, onClose, onConnected }: DialogProps) 
             </label>
           </div>
         )}
+        {status.disabled && <p className={settingsStyles.helpText}>{c.dialogDisabledNote}</p>}
         {status.locked && <p className={settingsStyles.helpText}>{lockedMessage('save')}</p>}
 
         <div className={settingsStyles.actions}>
@@ -326,7 +433,13 @@ function ComfyUIConnectionDialog({ status, onClose, onConnected }: DialogProps) 
             {c.cancel}
           </button>
           <button type="submit" className={settingsStyles.primaryButton} disabled={!canConnect}>
-            {pending ? c.connecting : status.enabled ? c.switchUrl : c.connect}
+            {pending
+              ? c.connecting
+              : status.disabled
+                ? c.saveUrlWhileDisabled
+                : status.enabled
+                  ? c.switchUrl
+                  : c.connect}
           </button>
         </div>
       </form>

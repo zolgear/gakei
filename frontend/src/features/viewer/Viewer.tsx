@@ -5,11 +5,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { ApiError, deleteAsset, getAsset, getRun, getShareSettings, restoreAsset } from '../../api/client'
-import {
-  comfyUiSeedTooltip,
-  describeComfyUiSeed,
-  extractComfyUiSeed,
-} from '../run-detail/comfyuiPromptDisplay'
+import { runSeedDisplay } from '../run-detail/runSeedDisplay'
 import { assetUrl } from '../../api/assetUrl'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { useResourcePanel } from '../../context/useResourcePanel'
@@ -23,6 +19,7 @@ import {
   DownloadIcon,
   ExportArchiveIcon,
   LineageIcon,
+  RunDetailIcon,
   ShareLinkIcon,
   TrashIcon,
 } from '../../components/icons'
@@ -44,9 +41,11 @@ import { ShareDialog } from '../share/ShareDialog'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import { importToastFromState } from '../lineage-transfer/lineageTransfer'
 import { FinalPromptSection } from '../run-detail/FinalPromptSection'
+import { baselineNegativePrompt } from '../run-detail/finalPrompt'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import styles from './Viewer.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 interface ViewerProps {
   assetId: string
@@ -147,13 +146,8 @@ export function Viewer({ assetId }: ViewerProps) {
 
   const asset = assetQuery.data
   const runQuery = useRun(asset?.produced_by_run?.id)
-  const seedText = runQuery.data
-    ? describeComfyUiSeed(
-        extractComfyUiSeed((runQuery.data.params ?? {}) as Record<string, unknown>),
-        runQuery.data.outputs?.length ?? 0,
-        asset?.output_index,
-      )
-    : null
+  // ComfyUI / SD WebUI の Run だけ、実際に使った seed を出す(runSeedDisplay.ts)。
+  const seed = runQuery.data ? runSeedDisplay(runQuery.data, asset?.output_index) : null
   const primaryParentAssetId = runQuery.data?.inputs?.find(
     (i) => i.role === 'image' && i.position === 0,
   )?.asset_id
@@ -258,6 +252,17 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <AddToInputIcon />
                 </button>
+                {/* 生成元の Run があるときだけ、その詳細へ直接移る(下の文字のリンクと同じ遷移先)。 */}
+                {asset.produced_by_run && (
+                  <Link
+                    to={`/runs/${asset.produced_by_run.id}`}
+                    className={styles.iconButton}
+                    aria-label={t.common.openGeneratedDetail}
+                    title={t.common.openGeneratedDetail}
+                  >
+                    <RunDetailIcon />
+                  </Link>
+                )}
                 <Link
                   to={`/lineage/${asset.id}`}
                   className={styles.iconButton}
@@ -353,6 +358,7 @@ export function Viewer({ assetId }: ViewerProps) {
                     >
                       <img
                         src={assetUrl(output.asset_id, 'thumb')}
+                        style={focalStyle(output.focal_point)}
                         alt=""
                         loading="lazy"
                         className={styles.outputThumbImg}
@@ -385,9 +391,9 @@ export function Viewer({ assetId }: ViewerProps) {
                 <p className={styles.runMeta}>
                   {runQuery.data?.model_label ?? asset.produced_by_run.model} ・ {asset.produced_by_run.operation}
                 </p>
-                {seedText && (
-                  <p className={styles.runMeta} title={comfyUiSeedTooltip(runQuery.data?.outputs?.length ?? 0)}>
-                    {seedText}
+                {seed && (
+                  <p className={styles.runMeta} title={seed.tooltip}>
+                    {seed.text}
                   </p>
                 )}
                 <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>
@@ -408,10 +414,14 @@ export function Viewer({ assetId }: ViewerProps) {
                     </Link>
                   </p>
                 )}
-                {/* 最終プロンプト(ADR-0030 3章)。挿入・置き換えはスタジオへ移って反映する。 */}
+                {/* 最終プロンプト(ADR-0030 3章)と、この画像の展開後のプロンプト(ADR-0038 7章)。
+                    挿入・置き換えはスタジオへ移って反映する。 */}
                 <FinalPromptSection
                   className={styles.finalPrompt}
                   textOutputs={asset.produced_by_run.text_outputs}
+                  outputIndex={asset.output_index ?? null}
+                  prompt={asset.produced_by_run.prompt}
+                  negativePrompt={runQuery.data ? baselineNegativePrompt(runQuery.data.params) : undefined}
                   headingClassName={styles.subheading}
                   renderActions={(text) => <StudioPromptActions prompt={text} />}
                 />
@@ -422,7 +432,7 @@ export function Viewer({ assetId }: ViewerProps) {
             {supportsAnnotation(asset) && <AssetTagsSection asset={asset} />}
 
             {asset.origin && <OriginRecipeSection origin={asset.origin} />}
-            {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} />}
+            {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} assetId={asset.id} />}
             <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
             {embeddingCaps && supportsSimilar(asset) && <SimilarAssetsSection key={asset.id} assetId={asset.id} />}
 
@@ -455,6 +465,7 @@ export function Viewer({ assetId }: ViewerProps) {
           open={deleteConfirmOpen}
           message={t.viewer.deleteConfirmMessage}
           previewImageUrl={assetUrl(asset.id, 'thumb')}
+          previewFocalPoint={asset.focal_point}
           previewDetail={`${asset.width} × ${asset.height}`}
           onConfirm={() => deleteMutation.mutate()}
           onCancel={() => setDeleteConfirmOpen(false)}

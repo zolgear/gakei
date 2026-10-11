@@ -94,10 +94,14 @@ def validate_run_request(
         _validate_param_value(pdef, value)
 
     if "size" in params:
+        # 制約はプロバイダーの capabilities のもの(OpenAI は sizes の既定と同じ値。
+        # SD WebUI は 8 の倍数・長辺 2048px。ADR-0038 2章)。
         try:
-            sizes.parse_size(str(params["size"]))
+            parsed_size = sizes.parse_size(str(params["size"]), caps.size)
         except sizes.InvalidSizeError as e:
             raise RunValidationError(str(e)) from e
+        if parsed_size is None and caps.size is not None and not caps.size.allow_auto:
+            raise RunValidationError(t("sizes.autoNotAllowed"))
 
     for pair in caps.incompatible_pairs:
         if params.get(pair.field_a) == pair.value_a and params.get(pair.field_b) == pair.value_b:
@@ -168,3 +172,9 @@ def validate_run_request(
         mask = mask_inputs[0]
         if (mask.width, mask.height) != (position0.width, position0.height):
             raise RunValidationError(t("runValidation.maskSizeMismatch"))
+    else:
+        # マスクの無い Run では、マスクがあるときだけ意味を持つ項目を受け付けない(黙って捨てない)。
+        for key in params:
+            pdef = param_defs.get(key)
+            if pdef is not None and pdef.mask_only:
+                raise RunValidationError(t("runValidation.maskOnlyParam", key=key))

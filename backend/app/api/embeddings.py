@@ -1,10 +1,11 @@
 """埋め込みを使った検索の API(ADR-0033 7章)。実装は `app/domain/semantic_search.py`。
 
-- `GET /api/search/semantic`: 文章での検索
+- `GET /api/search/semantic`: 文章での検索(`target=prompt` で Run の指示を探す。ADR-0045)
 - `GET /api/assets/{id}/similar`: 似た画像(その Asset が見えること)
 - `POST /api/search/similar-image`: 手元の画像に似た画像(画像は保存しない)
 - `GET /api/embeddings/duplicates`: 重複の候補
 - `GET /api/embeddings/graph`: マップの元データ
+- `GET /api/embeddings/graph/scores`: マップのノード全件と検索の文章の類似度
 
 どれも利用者(`require_user`)向けで、見える範囲(ADR-0025)だけを扱う。埋め込みが無効、または
 使えるモデルが無い間は 409(`detail.code = "embeddings_unavailable"`)。エンドポイントは同期関数に
@@ -36,6 +37,7 @@ from app.domain.schemas import (
     DuplicatesResponse,
     EmbeddingErrorDetail,
     EmbeddingGraphResponse,
+    EmbeddingGraphScoresResponse,
     SemanticSearchResponse,
     SimilarAssetsResponse,
     SimilarImageSearchResponse,
@@ -94,6 +96,13 @@ def semantic_search_endpoint(
     kind: Literal["upload", "generated", "sketch"] | None = Query(
         default=None, description="この種類の画像に絞る"
     ),
+    target: Literal["image", "prompt"] = Query(
+        default="image",
+        description=(
+            "探す対象。image は画像(`assets`)、prompt は Run の指示(プロンプト。`runs`)。"
+            "prompt は使うモデルが対応するときだけで、group_id・tag・kind は使えない"
+        ),
+    ),
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
     index: VectorIndex = Depends(get_vector_index),
@@ -101,7 +110,8 @@ def semantic_search_endpoint(
     cache: domain.QueryVectorCache = Depends(get_query_vector_cache),
     user: CurrentUser = Depends(require_user),
 ) -> SemanticSearchResponse:
-    """文章で画像を探す(類似度の高い順)。キーワード検索(`GET /api/search`)とは別。"""
+    """文章で画像を探す(類似度の高い順)。キーワード検索(`GET /api/search`)とは別。
+    `target=prompt` なら、指示(プロンプト)の意味が近い Run を探す(ADR-0045 5章)。"""
     try:
         return domain.semantic_search(
             db,
@@ -115,6 +125,7 @@ def semantic_search_endpoint(
             group_id=group_id,
             tag=tag,
             kind=kind,
+            target=target,
         )
     except _ERRORS as exc:
         raise _http_error(exc) from exc
@@ -262,6 +273,46 @@ def graph_endpoint(
             group_id=group_id,
             tags=tag,
             include_lineage=include_lineage,
+        )
+    except _ERRORS as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get(
+    "/api/embeddings/graph/scores",
+    response_model=EmbeddingGraphScoresResponse,
+    operation_id="embedding_graph_scores",
+    responses=_CONFLICT,
+)
+def graph_scores_endpoint(
+    q: str = Query(..., description="検索の文章(自然文)"),
+    limit: int = Query(default=domain.GRAPH_DEFAULT_LIMIT, ge=1, le=domain.GRAPH_MAX_LIMIT),
+    group_id: uuid.UUID | None = Query(default=None),
+    tag: list[str] | None = Query(
+        default=None,
+        description="このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND)",
+    ),
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    index: VectorIndex = Depends(get_vector_index),
+    embedder: Embedder = Depends(get_embedder),
+    cache: domain.QueryVectorCache = Depends(get_query_vector_cache),
+    user: CurrentUser = Depends(require_user),
+) -> EmbeddingGraphScoresResponse:
+    """マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
+    `GET /api/embeddings/graph` の `nodes` と同じ並び。"""
+    try:
+        return domain.graph_scores(
+            db,
+            settings=settings,
+            index=index,
+            engines=embedder.engines,
+            cache=cache,
+            viewer=user,
+            q=q,
+            limit=limit,
+            group_id=group_id,
+            tags=tag,
         )
     except _ERRORS as exc:
         raise _http_error(exc) from exc

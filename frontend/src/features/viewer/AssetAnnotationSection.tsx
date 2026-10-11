@@ -45,7 +45,9 @@ import {
   mergeAnnotation,
 } from '../annotations/annotationStatus'
 import { TAG_NAME_MAX, TITLE_MAX, checkTagInput, isTitleTooLong, normalizeTitleInput } from '../annotations/tagInput'
+import { PromptTagsActions } from '../prompt-tags/PromptTagsActions'
 import { tagCollapseState } from './tagCollapse'
+import { useTagTranslations } from '../tag-dictionary/useTagTranslations'
 import styles from './AssetAnnotationSection.module.css'
 
 interface AnnotationSectionProps {
@@ -291,6 +293,8 @@ export function AssetTagsSection({ asset }: AnnotationSectionProps) {
   }
   const collapse = tagCollapseState(tags.length, expanded)
   const visibleTags = tags.slice(0, collapse.visibleCount)
+  // タグ辞書の訳(ADR-0041 4章)。言語と設定で出さないときは空。
+  const translations = useTagTranslations(tags.map((tag) => tag.name))
 
   const addTagMutation = useMutation({
     mutationFn: (name: string) => addAssetTag(asset.id, name),
@@ -336,6 +340,7 @@ export function AssetTagsSection({ asset }: AnnotationSectionProps) {
               <TagChip
                 name={tag.name}
                 source={tag.source}
+                translation={translations[tag.name]}
                 onSelect={() => filterStockByTag(tag.name)}
                 selectLabel={fmt(a.filterByTag, { name: tag.name })}
                 onRemove={editable ? () => removeTagMutation.mutate(tag.name) : undefined}
@@ -373,6 +378,9 @@ export function AssetTagsSection({ asset }: AnnotationSectionProps) {
       )}
 
       <ErrorLine error={error} />
+
+      {/* ADR-0039 1章: タグをプロンプトに使う(使えるタグが無ければ出さない)。 */}
+      <PromptTagsActions assetId={asset.id} />
     </div>
   )
 }

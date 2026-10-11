@@ -4,7 +4,7 @@ import {
   UNSPECIFIED,
   buildParams,
   findDroppedParamNames,
-  omitComfyUiParams,
+  omitServerOnlyParams,
   paramsForRerun,
   sanitizeRawValues,
   toRawParamValues,
@@ -142,7 +142,7 @@ describe('toRawParamValues(float/text)', () => {
   })
 })
 
-describe('omitComfyUiParams', () => {
+describe('omitServerOnlyParams', () => {
   it('comfyui_ で始まるキーを取り除く', () => {
     const params = {
       prompt_extra: 'x',
@@ -154,15 +154,26 @@ describe('omitComfyUiParams', () => {
       comfyui_outputs: ['9'],
       comfyui_mask_mode: 'image_alpha',
     }
-    expect(omitComfyUiParams(params)).toEqual({ prompt_extra: 'x', seed: 42 })
+    expect(omitServerOnlyParams(params)).toEqual({ prompt_extra: 'x', seed: 42 })
   })
 
   it('comfyui_ 系が無ければそのまま', () => {
-    expect(omitComfyUiParams({ quality: 'low', n: 2 })).toEqual({ quality: 'low', n: 2 })
+    expect(omitServerOnlyParams({ quality: 'low', n: 2 })).toEqual({ quality: 'low', n: 2 })
   })
 
   it('空オブジェクトはそのまま', () => {
-    expect(omitComfyUiParams({})).toEqual({})
+    expect(omitServerOnlyParams({})).toEqual({})
+  })
+
+  it('sdwebui_ で始まるキーも取り除く(ADR-0038)', () => {
+    const params = {
+      negative_prompt: 'blurry',
+      steps: 20,
+      sdwebui_seed: 7,
+      sdwebui_task_id: 'gakei-run1',
+      sdwebui_request: { prompt: 'x', steps: 20 },
+    }
+    expect(omitServerOnlyParams(params)).toEqual({ negative_prompt: 'blurry', steps: 20 })
   })
 })
 
@@ -180,6 +191,19 @@ describe('paramsForRerun', () => {
   it('comfyui_seed が無ければ seed を足さない(comfyui_* を取り除くだけ)', () => {
     const params = { quality: 'low', comfyui_workflow: { id: 'w1' } }
     expect(paramsForRerun(params)).toEqual({ quality: 'low' })
+  })
+
+  it('sdwebui_seed を seed として固定し、sdwebui_* を取り除く', () => {
+    const params = {
+      steps: 20,
+      seed: 5,
+      sdwebui_seed: 5,
+      sdwebui_task_id: 'gakei-run1',
+      sdwebui_request: { prompt: 'x' },
+    }
+    expect(paramsForRerun(params)).toEqual({ steps: 20, seed: 5 })
+    // seed を指定しなかった(サーバーが決めた)Run でも、使った seed を固定する
+    expect(paramsForRerun({ steps: 20, sdwebui_seed: 9 })).toEqual({ steps: 20, seed: 9 })
   })
 
   it('comfyui_ 系が無いプロバイダーの params はそのまま', () => {
@@ -272,5 +296,18 @@ describe('findDroppedParamNames', () => {
     const prev = { quality: 'high', background: 'auto', n: '2' }
     const next = { quality: 'high' }
     expect(findDroppedParamNames(prev, next)).toEqual(['background', 'n'])
+  })
+})
+
+describe('同じ設定で開くときの、capabilities に無いパラメーター', () => {
+  it('Dynamic Prompts の無い接続先では dynamic_prompts を送らない', () => {
+    // Dynamic Prompts のある接続先で作った Run の params
+    const runParams = { n: 2, dynamic_prompts: true, dynamic_prompts_combinatorial: false, sdwebui_seed: 5 }
+    const prefill = paramsForRerun(runParams) as Record<string, string | number | boolean>
+    const raw = sanitizeRawValues(defs, toRawParamValues(defs, prefill))
+    expect(raw).not.toHaveProperty('dynamic_prompts')
+    expect(raw).not.toHaveProperty('dynamic_prompts_combinatorial')
+    const sent = buildParams(defs, raw)
+    expect(sent).toEqual({ n: 2 })
   })
 })

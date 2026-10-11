@@ -18,7 +18,7 @@ from sqlalchemy import text
 
 from app.domain.models import Asset
 from app.tools.backfill_embedded_meta import run_backfill
-from tests.conftest import make_png_bytes
+from tests.conftest import make_png_bytes, wait_for_background_reads
 
 pytestmark = pytest.mark.windows
 
@@ -108,6 +108,7 @@ def test_backfill_reports_missing_blob(client: TestClient) -> None:
         asset = session.get(Asset, uuid.UUID(uploaded["id"]))
         assert asset is not None
         blob_path = store.local_path(asset.blob_key, asset.sha256, "original")
+    wait_for_background_reads(client)
     blob_path.unlink()
 
     stats = run_backfill(session_factory, store)

@@ -6,8 +6,18 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, StrictInt, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    field_validator,
+    model_validator,
+)
 
+from app.domain import prompt_templates
 from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
 from app.providers.base import ProviderCapabilities
 
@@ -19,6 +29,9 @@ class ProviderEntry(ProviderCapabilities):
 
     available: bool
     unavailable_reason: str | None = None
+    # 接続先(SD WebUI・ComfyUI)にまだ一度も問い合わせ終えていない(裏で確かめている)。
+    # そのあいだ available は False、モデルの一覧は空のことがある。フロントは少し後に読み直す。
+    checking: bool = False
     requires_api_key: bool
     supports_pricing: bool
 
@@ -39,6 +52,9 @@ class EmbeddingCapabilities(BaseModel):
     # 使うエンジン(使えないときは null)。リモートなら、画像で探す画像と検索の文章が推論
     # サーバーに送られることを画面に書く(ADR-0033 2章)。
     engine: Literal["onnx", "remote"] | None = None
+    # 指示(プロンプト)で探せるか(ADR-0045)。使うモデルがプロンプトの埋め込みに対応するときだけ
+    # true。検索ページの「画像 / 指示」の切り替えの出し分けに使う。
+    prompt_search: bool = False
 
 
 class CapabilitiesResponse(BaseModel):
@@ -311,6 +327,14 @@ class AssetGroupRef(BaseModel):
 # -- Asset ---------------------------------------------------------------
 
 
+class FocalPoint(BaseModel):
+    """サムネイルの焦点(ADR-0043)。画像の幅・高さに対する 0〜1 の位置。画面は
+    `object-fit: cover` の画像に `object-position: x% y%` を付ける。"""
+
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+
+
 class AssetSummary(BaseModel):
     id: uuid.UUID
     kind: Literal["upload", "generated", "mask", "sketch"]
@@ -321,6 +345,8 @@ class AssetSummary(BaseModel):
     created_at: datetime
     # タイトル(ADR-0024)。人が付けたものか自動のものかは `AssetDetail.title_source` を見る。
     title: str | None = None
+    # サムネイルの焦点(ADR-0043)。無ければ null(画面は中央)。
+    focal_point: FocalPoint | None = None
 
 
 class AssetTagRef(BaseModel):
@@ -370,12 +396,99 @@ class TagListResponse(BaseModel):
     items: list[TagCount] = Field(default_factory=list)
 
 
+class TagSuggestion(BaseModel):
+    """プロンプトのタグの候補(ADR-0039 2章、ADR-0041 2章)。名前は `_` を空白にしたタグ名で、
+    括弧はエスケープしていない(プロンプトに入れるときにクライアントがエスケープする)。"""
+
+    name: str
+    # vocabulary: WD Tagger の語彙(count は語彙の件数)、tag: GAKEI のタグ(count は Asset の数)、
+    # dictionary: タグ辞書(count は辞書の件数。ADR-0041)
+    source: Literal["vocabulary", "tag", "dictionary"]
+    count: int
+    # 以下はタグ辞書の候補で入る(ほかは null)。カテゴリーは辞書の番号のまま
+    # (`category_scheme` が danbooru なら 0 一般、1 作者、3 作品、4 キャラクター、5 メタ)。
+    category: int | None = None
+    category_scheme: str | None = None
+    # 代表の訳(訳の辞書に訳があるとき。語彙・GAKEI のタグの候補にも付く)
+    translation: str | None = None
+    # 一致の種類(name: タグ名、alias: 別名、translation: 訳)と、別名・訳で一致したときの語
+    match: Literal["name", "alias", "translation"] | None = None
+    matched: str | None = None
+
+
+class TagSuggestionResponse(BaseModel):
+    items: list[TagSuggestion] = Field(default_factory=list)
+    # WD Tagger の語彙(`selected_tags.csv`)を使えたか
+    vocabulary_available: bool
+    # タグ辞書(有効なタグの一覧)で答えたか(ADR-0041)
+    dictionary_available: bool = False
+
+
+class TagTranslationsRequest(BaseModel):
+    """訳を引くタグ名(空白でも `_` でもよい。ADR-0041 4章)。"""
+
+    names: list[str] = Field(max_length=200)
+
+
+class TagTranslationsResponse(BaseModel):
+    # 渡したタグ名 → 代表の訳。訳の無いタグは含めない。
+    translations: dict[str, str] = Field(default_factory=dict)
+
+
+class TagDictionaryItem(BaseModel):
+    """登録したタグ辞書(ADR-0041 1章)。"""
+
+    id: uuid.UUID
+    filename: str
+    kind: Literal["tags", "translations"]
+    # タグの一覧のカテゴリーの体系(訳の辞書では null)
+    category_scheme: str | None
+    row_count: int
+    enabled: bool
+    status: Literal["importing", "ready", "failed"]
+    # 失敗の種類(interrupted / importFailed / noRows)と、その文言
+    error_code: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    finished_at: datetime | None = None
+
+
+class TagDictionaryListResponse(BaseModel):
+    items: list[TagDictionaryItem] = Field(default_factory=list)
+    # 選べるカテゴリーの体系
+    category_schemes: list[str] = Field(default_factory=list)
+
+
+class TagDictionaryUpdateRequest(BaseModel):
+    enabled: bool | None = None
+    category_scheme: Literal["danbooru", "other"] | None = None
+
+
+class PromptTagsResponse(BaseModel):
+    """画像のタグをプロンプトにするときの並び(ADR-0039 1章)。エスケープ前のタグ名。"""
+
+    asset_id: uuid.UUID
+    tags: list[str] = Field(default_factory=list)
+    vocabulary_available: bool
+
+
 class RunTextOutput(BaseModel):
-    """実行時にワークフローが作ったテキスト(ADR-0030 2章)。今は `role = "final_prompt"`
-    (ComfyUI の最終プロンプト = PE の出力)だけ。`node_id`・`class_type`・`title` は送った
-    グラフ(`run.params.comfyui_prompt`)から取った値。"""
+    """実行時に作られたテキスト(ADR-0030 2章)。
+
+    - `role = "final_prompt"`: モデルに渡った最終プロンプト。ComfyUI では PE の出力で、Run に
+      1件(`output_index` は null。すべての出力に当たる)。`node_id`・`class_type`・`title` は
+      送ったグラフ(`run.params.comfyui_prompt`)から取った値。SD WebUI では Dynamic Prompts
+      などが1枚ずつ展開したプロンプトで、出力ごとに1件(`output_index` が出力の Asset の
+      `output_index` に当たる。ADR-0038 7章)。
+    - `role = "final_negative_prompt"`: SD WebUI の、出力ごとの展開後のネガティブプロンプト。
+
+    SD WebUI では、展開しなくても(元のプロンプトと同じでも)記録する。表示する側が Run の
+    `prompt`(ネガティブは `params.negative_prompt`)と比べて、同じなら出さない。
+    """
 
     role: str
+    # 出力ごとのテキストのとき、その出力の `output_index`。Run 全体に当たるときは null。
+    output_index: int | None = None
     node_id: str | None = None
     class_type: str | None = None
     title: str | None = None
@@ -474,6 +587,197 @@ class AssetListResponse(BaseModel):
     next_cursor: str | None = None
 
 
+# -- プロンプトテンプレート(実験) ----------------------------------------
+# プロンプトを「スロット(枠)」に分けた組み立ての雛形。証跡ではないので更新・論理削除ができる。
+# 作成・置換はスロット・候補・組み合わせを入れ子で丸ごと受ける。
+
+PROMPT_TEMPLATE_NAME_MAX = 100
+PROMPT_TEMPLATE_SEPARATOR_MAX = 20
+PROMPT_TEMPLATE_TEXT_MAX = 32_000
+PROMPT_TEMPLATE_REF_MAX = 64
+
+
+class PromptVariantInput(BaseModel):
+    """候補。`id` を渡すと既存の候補を更新し、渡さなければ新しく作る。
+
+    `ref` は同じリクエストの中だけで使う一時キー。新しい候補を組み合わせから指すときに使う
+    (サーバーが id を決めるため、作成前の候補は id で指せない)。
+    """
+
+    id: uuid.UUID | None = None
+    ref: str | None = Field(default=None, min_length=1, max_length=PROMPT_TEMPLATE_REF_MAX)
+    name: str | None = Field(default=None, max_length=PROMPT_TEMPLATE_NAME_MAX)
+    text: str = Field(min_length=1, max_length=PROMPT_TEMPLATE_TEXT_MAX)
+    # ランダム選択の重み。0 は「選ばれない」。
+    weight: float = Field(default=1.0, ge=0, le=1000)
+
+
+class PromptSlotInput(BaseModel):
+    id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=PROMPT_TEMPLATE_NAME_MAX)
+    default_mode: Literal["random", "off"] = "random"
+    variants: list[PromptVariantInput] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+
+class PromptComboItemInput(BaseModel):
+    """組み合わせが指す候補。既存は `variant_id`、同じリクエストで作る候補は `variant_ref`。"""
+
+    variant_id: uuid.UUID | None = None
+    variant_ref: str | None = Field(default=None, min_length=1, max_length=PROMPT_TEMPLATE_REF_MAX)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> PromptComboItemInput:
+        if (self.variant_id is None) == (self.variant_ref is None):
+            raise ValueError("either variant_id or variant_ref is required")
+        return self
+
+
+class PromptComboInput(BaseModel):
+    id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=PROMPT_TEMPLATE_NAME_MAX)
+    weight: float = Field(default=1.0, ge=0, le=1000)
+    items: list[PromptComboItemInput] = Field(min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+
+class PromptTemplateWriteRequest(BaseModel):
+    """作成(POST)と丸ごと置換(PUT)の両方で使う。"""
+
+    name: str = Field(min_length=1, max_length=PROMPT_TEMPLATE_NAME_MAX)
+    separator: str = Field(default=", ", max_length=PROMPT_TEMPLATE_SEPARATOR_MAX)
+    slots: list[PromptSlotInput] = Field(default_factory=list)
+    combos: list[PromptComboInput] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+
+class PromptVariantResponse(BaseModel):
+    id: uuid.UUID
+    name: str | None
+    text: str
+    weight: float
+    position: int
+
+
+class PromptSlotResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    default_mode: Literal["random", "off"]
+    position: int
+    variants: list[PromptVariantResponse] = Field(default_factory=list)
+
+
+class PromptComboResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    weight: float
+    position: int
+    # 指している候補(削除済みの候補は含まない)。
+    variant_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class PromptTemplateResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    separator: str
+    created_at: datetime
+    updated_at: datetime
+    slots: list[PromptSlotResponse] = Field(default_factory=list)
+    combos: list[PromptComboResponse] = Field(default_factory=list)
+
+
+class PromptTemplateSummary(BaseModel):
+    """一覧用。中身は数だけ出す。"""
+
+    id: uuid.UUID
+    name: str
+    separator: str
+    slot_count: int
+    variant_count: int
+    combo_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PromptTemplateListResponse(BaseModel):
+    items: list[PromptTemplateSummary] = Field(default_factory=list)
+
+
+class PromptComboSelection(BaseModel):
+    """`id` でその組み合わせ、`random` でまだ空いているスロットを覆う組から1つ。"""
+
+    id: uuid.UUID | None = None
+    random: bool = False
+
+
+class PromptSlotSelection(BaseModel):
+    mode: Literal["fixed", "random", "off", "text"]
+    # mode=fixed のときだけ必要。
+    variant_id: uuid.UUID | None = None
+    # mode=text のときだけ必要。
+    text: str | None = Field(default=None, max_length=PROMPT_TEMPLATE_TEXT_MAX)
+
+
+class PromptSelections(BaseModel):
+    """組み立ての選択。`slots` のキーはスロットの id。"""
+
+    combos: list[PromptComboSelection] = Field(default_factory=list)
+    slots: dict[uuid.UUID, PromptSlotSelection] = Field(default_factory=dict)
+
+    def to_domain(self) -> prompt_templates.Selections:
+        return prompt_templates.Selections(
+            combos=tuple(
+                prompt_templates.ComboSelection(id=c.id, random=c.random) for c in self.combos
+            ),
+            slots={
+                slot_id: prompt_templates.SlotSelection(
+                    mode=s.mode, variant_id=s.variant_id, text=s.text
+                )
+                for slot_id, s in self.slots.items()
+            },
+        )
+
+
+class PromptBuildRequest(BaseModel):
+    selections: PromptSelections = Field(default_factory=PromptSelections)
+    # 確認用に乱数の種を固定できる(省略すると毎回引き直す)。
+    seed: int | None = Field(default=None, ge=0, le=2**32 - 1)
+
+
+class PromptBuildResponse(BaseModel):
+    prompt: str
+    # `run.prompt_build` に入るのと同じ内訳。
+    build: dict[str, Any]
+
+
+class RunPromptTemplate(BaseModel):
+    """`POST /api/runs` の `prompt_template`。`prompt` とは排他。"""
+
+    template_id: uuid.UUID
+    selections: PromptSelections = Field(default_factory=PromptSelections)
+
+
 # -- Run -------------------------------------------------------------------
 
 
@@ -483,27 +787,54 @@ class RunInputCreate(BaseModel):
     position: int = Field(ge=0)
 
 
+# 繰り返し回数の上限(ADR-0042 1章)。
+REPEAT_MAX = 20
+
+
 class RunCreateRequest(BaseModel):
     operation: Literal["generate", "edit"]
     model: str
-    prompt: str
+    # プロンプトテンプレート(実験)で組み立てるときは `prompt` を送らず `prompt_template` を送る。
+    # どちらか一方が必須(両方・どちらも無しは 422)。
+    prompt: str | None = None
+    prompt_template: RunPromptTemplate | None = None
     # 省略時は主プロバイダー(OpenAI。FAKE_PROVIDER=1 のときは fake)を使う(ADR-0013、ADR-0017)。
     provider: str | None = None
     params: dict[str, Any] = Field(default_factory=dict)
     inputs: list[RunInputCreate] = Field(default_factory=list)
     # 出力を入れるグループ(ADR-0022)。存在しない・削除済みなら 404。
     asset_group_id: uuid.UUID | None = None
+    # 繰り返し回数(ADR-0042)。同じ設定の Run をこの数だけまとめて積む。API に送る値では
+    # ないので `run.params` には入れない(ADR-0003 ルール4)。テンプレートと併用したときは
+    # Run ごとに組み立て直す(意味の通ったガチャになる)。
+    repeat: int = Field(default=1, ge=1, le=REPEAT_MAX)
+
+    @model_validator(mode="after")
+    def _prompt_xor_template(self) -> RunCreateRequest:
+        if (self.prompt is None) == (self.prompt_template is None):
+            raise ValueError("either prompt or prompt_template is required")
+        return self
+
+
+class RunCreatedRef(BaseModel):
+    id: uuid.UUID
+    status: Literal["queued", "running", "succeeded", "failed", "canceled"]
 
 
 class RunCreateResponse(BaseModel):
+    # 1件目の Run(繰り返し回数を足す前からの形。ADR-0042 3章)。
     id: uuid.UUID
     status: Literal["queued", "running", "succeeded", "failed", "canceled"]
+    # 作った Run の全体(積んだ順)。繰り返し回数が 1 なら1件。
+    runs: list[RunCreatedRef]
 
 
 class RunInputRef(BaseModel):
     asset_id: uuid.UUID
     role: Literal["image", "mask", "reference"]
     position: int
+    # サムネイルの焦点(ADR-0043)。マスクと焦点の無い画像は null。
+    focal_point: FocalPoint | None = None
 
 
 class RunOutputRef(BaseModel):
@@ -511,6 +842,8 @@ class RunOutputRef(BaseModel):
     output_index: int | None
     # 出力 Asset のタイトル(ADR-0024。履歴のカード用)。
     title: str | None = None
+    # サムネイルの焦点(ADR-0043)。
+    focal_point: FocalPoint | None = None
 
 
 class RunSummary(BaseModel):
@@ -536,6 +869,8 @@ class RunSummary(BaseModel):
     outputs: list[RunOutputRef] = Field(default_factory=list)
     # role=image かつ position=0 の入力(「主たる親」)。generate や入力なしの edit は None。
     primary_parent_asset_id: uuid.UUID | None = None
+    # 主たる親のサムネイルの焦点(ADR-0043。履歴のカードの親の小さな画像用)。
+    primary_parent_focal_point: FocalPoint | None = None
     # role=image の入力枚数(mask/reference は含まない)。
     input_count: int = 0
     # この Run の出力を入力に使っている、削除されていない Run の数。削除の警告に使う。
@@ -572,6 +907,8 @@ class RunImportInfo(BaseModel):
 class RunDetail(RunSummary):
     deployment: str | None = None
     provider_request_id: str | None = None
+    # プロンプトテンプレート(実験)で組み立てた Run だけ。それ以外は null。
+    prompt_build: dict[str, Any] | None = None
     inputs: list[RunInputRef] = Field(default_factory=list)
     # 系列の ZIP から取り込んだ Run(`origin = 'import'`)だけ。それ以外は null(ADR-0037)。
     imported: RunImportInfo | None = None
@@ -622,6 +959,8 @@ class LineageAssetInfo(BaseModel):
     height: int | None = None
     mime: str | None = None
     restorable: bool = False
+    # サムネイルの焦点(ADR-0043)。埋め込みノードは、手元の Asset に対応付いたときだけ。
+    focal_point: FocalPoint | None = None
 
 
 class LineageRunInfo(BaseModel):
@@ -786,6 +1125,100 @@ class PromptSetListResponse(BaseModel):
     items: list[PromptSetResponse] = Field(default_factory=list)
 
 
+# -- パラメーターセット(ADR-0040) -----------------------------------------
+# 生成のフォームの設定一式。`params` はフォームの値(型変換済み)で、入れ子は持たない。
+# サーバーだけが書く項目(`comfyui_*`、`sdwebui_*`)は API で 422 にする。
+
+PARAMETER_SET_NAME_MAX = 100
+PARAMETER_SET_PROVIDER_MAX = 32
+PARAMETER_SET_MODEL_MAX = 512
+PARAMETER_SET_PROMPT_MAX = 32_000
+PARAMETER_SET_PARAMS_MAX_KEYS = 200
+PARAMETER_SET_PARAM_KEY_MAX = 100
+
+# bool を int より先に置く(Strict なので 1 と true は取り違えない)。
+ParameterSetValue = StrictBool | StrictInt | StrictFloat | StrictStr
+
+
+def _validate_parameter_set_params(
+    value: dict[str, ParameterSetValue] | None,
+) -> dict[str, ParameterSetValue] | None:
+    if value is None:
+        return None
+    if len(value) > PARAMETER_SET_PARAMS_MAX_KEYS:
+        raise ValueError(f"params must have at most {PARAMETER_SET_PARAMS_MAX_KEYS} keys")
+    for key, item in value.items():
+        if not key or len(key) > PARAMETER_SET_PARAM_KEY_MAX:
+            raise ValueError(f"param name must be 1-{PARAMETER_SET_PARAM_KEY_MAX} characters")
+        if isinstance(item, str) and len(item) > PARAMETER_SET_PROMPT_MAX:
+            raise ValueError(f"param {key} must be at most {PARAMETER_SET_PROMPT_MAX} characters")
+    return value
+
+
+class ParameterSetCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=PARAMETER_SET_NAME_MAX)
+    # 登録簿にあるかは問わない(後で無効になることもあるため)。長さだけを確かめる。
+    provider: str = Field(min_length=1, max_length=PARAMETER_SET_PROVIDER_MAX)
+    model: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_MODEL_MAX)
+    prompt: str | None = Field(default=None, max_length=PARAMETER_SET_PROMPT_MAX)
+    params: dict[str, ParameterSetValue] = Field(default_factory=dict)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+    @field_validator("params")
+    @classmethod
+    def _check_params(cls, value: dict[str, ParameterSetValue]) -> dict[str, ParameterSetValue]:
+        return _validate_parameter_set_params(value) or {}
+
+
+class ParameterSetUpdateRequest(BaseModel):
+    """送った項目だけを変える。`model` と `prompt` は null を送ると「保存しない」に戻す。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_NAME_MAX)
+    provider: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_PROVIDER_MAX)
+    model: str | None = Field(default=None, min_length=1, max_length=PARAMETER_SET_MODEL_MAX)
+    prompt: str | None = Field(default=None, max_length=PARAMETER_SET_PROMPT_MAX)
+    params: dict[str, ParameterSetValue] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+    @field_validator("params")
+    @classmethod
+    def _check_params(
+        cls, value: dict[str, ParameterSetValue] | None
+    ) -> dict[str, ParameterSetValue] | None:
+        return _validate_parameter_set_params(value)
+
+
+class ParameterSetResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    provider: str
+    model: str | None
+    prompt: str | None
+    params: dict[str, ParameterSetValue]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ParameterSetListResponse(BaseModel):
+    items: list[ParameterSetResponse] = Field(default_factory=list)
+
+
 # -- Global search (ADR-0009 6章) ----------------------------------------
 # テキストの部分一致のみ。FTS・形態素解析なし。削除済みは除外。
 # 将来 embedding 検索を足すときも、この API の形はそのまま使う想定。
@@ -868,7 +1301,7 @@ class OpenAIBaseUrlUpdateRequest(BaseModel):
 
 
 # -- General settings (ADR-0009、ADR-0013 7章) -------------------------------
-# moderation(Generate 専用)と ComfyUI のタイムアウトを画面から変える。優先順位は
+# moderation(Generate 専用)と ComfyUI・SD WebUI のタイムアウトを画面から変える。優先順位は
 # 画面で保存した値(`app_setting`) > 環境変数 > 組み込みの既定値。
 
 
@@ -885,9 +1318,18 @@ class ComfyUITimeoutSetting(BaseModel):
     default: int
 
 
+class SdWebuiTimeoutSetting(BaseModel):
+    """SD WebUI の1回の実行を待つ上限(秒。ADR-0038 6章)。"""
+
+    value: int
+    source: Literal["setting", "env", "default"]
+    default: int
+
+
 class GeneralSettingsResponse(BaseModel):
     moderation: ModerationSetting
     comfyui_timeout_seconds: ComfyUITimeoutSetting
+    sdwebui_timeout_seconds: SdWebuiTimeoutSetting
 
 
 class GeneralSettingsUpdateRequest(BaseModel):
@@ -901,6 +1343,7 @@ class GeneralSettingsUpdateRequest(BaseModel):
 
     moderation: str | None = None
     comfyui_timeout_seconds: int | None = None
+    sdwebui_timeout_seconds: int | None = None
 
 
 # -- ComfyUI (ADR-0013) ----------------------------------------------------
@@ -921,6 +1364,9 @@ class ComfyUIStatusResponse(BaseModel):
     locked: bool
     # url が None のときは null。
     loopback: bool | None = None
+    # ADR-0013 7章「無効にする / 有効にする」: URL を残したまま使わない状態か。true の間は
+    # enabled も false(モデルの選択肢に出さず、接続先に問い合わせない)。url は残っていれば返す。
+    disabled: bool
 
 
 class ComfyUIConnectionTestRequest(BaseModel):
@@ -944,6 +1390,127 @@ class ComfyUIConnectionRequest(BaseModel):
     url: str
     # ループバック以外の URL を保存するための、画面での確認チェック。
     allow_non_loopback: bool = False
+
+
+# -- SD WebUI(ADR-0038) ------------------------------------------------------------
+# 資格情報(Basic 認証)の値は返さず、設定済みかだけを返す。接続先の options や一覧の
+# filename(フルパス)も返さない。
+
+
+SdWebuiReason = Literal[
+    "apiNotEnabled", "unauthorized", "unreachable", "timeout", "unexpectedResponse", "parseFailed"
+]
+
+
+class SdWebuiStatusResponse(BaseModel):
+    url: str | None
+    enabled: bool
+    available: bool
+    # 機械可読の理由(available が false のとき)。reason_message は利用者向けの文言。
+    reason: SdWebuiReason | None = None
+    reason_message: str | None = None
+    source: Literal["setting", "env", "none"]
+    # true の間は接続設定と資格情報を変更できない(SD WebUI の Run が queued/running)。
+    locked: bool
+    loopback: bool | None = None
+    credentials_set: bool
+    # 接続できたときだけ。forge は Forge 系(forge_additional_modules がある)、a1111 はそれ以外。
+    flavor: Literal["forge", "a1111"] | None = None
+    checkpoint_count: int | None = None
+    # ADR-0038 6章「無効にする / 有効にする」: URL・資格情報を残したまま使わない状態か。true の間は
+    # enabled も false(モデルの選択肢に出さず、接続先に問い合わせない)。url は残っていれば返す。
+    disabled: bool
+
+
+class SdWebuiLora(BaseModel):
+    """接続先の LoRA 1つ(ADR-0038 8章)。`path` とその他のメタ情報は返さない。"""
+
+    name: str
+    # name と違うときだけ
+    alias: str | None = None
+    # 学習時のメタ情報から分かるベースモデル。分からなければ null。
+    base_model: Literal["sdxl", "sd1"] | None = None
+    # `ss_tag_frequency` を足し合わせて多い順(最大 20。`_` は空白)。
+    trigger_tags: list[str] = Field(default_factory=list)
+
+
+class SdWebuiLorasResponse(BaseModel):
+    """`GET /api/sdwebui/loras`。name の順(大文字小文字を無視)。"""
+
+    items: list[SdWebuiLora]
+
+
+class SdWebuiImportUnapplied(BaseModel):
+    """フォームに入れなかった生成情報の項目(infotext の名前と値のまま)。"""
+
+    name: str
+    value: str
+
+
+class SdWebuiImportNote(BaseModel):
+    """読み込みの注意。`code` は機械可読(modelNotFound、modelMatchedByHash、sizeOutOfRange、
+    invalidValue、samplerNotFound、schedulerNotFound、vaeNotFound、dynamicPromptsUnavailable、
+    truncated)、`message` は利用者向けの文言。"""
+
+    code: str
+    message: str
+
+
+class SdWebuiImportSource(BaseModel):
+    """読み込んだ生成情報の出どころ(infotext の `Version`。無ければ null)。"""
+
+    software: str | None = None
+
+
+class SdWebuiImportParamsResponse(BaseModel):
+    """`POST /api/sdwebui/import-params`(ADR-0038 9章)。フォームに入れる値。
+
+    `model` はチェックポイントの `model_name`(見つからなければ null。フォームのモデルを変えない)。
+    `params` は SD WebUI の Generate のパラメーター名(capabilities と同じ)と `size`(`WxH`)。
+    """
+
+    model: str | None
+    prompt: str
+    params: dict[str, str | int | float | bool]
+    unapplied: list[SdWebuiImportUnapplied]
+    notes: list[SdWebuiImportNote]
+    source: SdWebuiImportSource
+
+
+class SdWebuiConnectionTestRequest(BaseModel):
+    """接続テスト(`POST /api/sdwebui/connection/test`)。
+
+    url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
+    試す(保存はしない)。省くと保存済みの資格情報を使う。
+    """
+
+    url: str | None = None
+    username: str | None = None
+    password: str | None = None
+
+
+class SdWebuiConnectionTestResponse(BaseModel):
+    url: str
+    available: bool
+    reason: SdWebuiReason | None = None
+    reason_message: str | None = None
+    loopback: bool
+    flavor: Literal["forge", "a1111"] | None = None
+    checkpoint_count: int | None = None
+
+
+class SdWebuiConnectionRequest(BaseModel):
+    """接続・変更(`PUT /api/sdwebui/connection`)。"""
+
+    url: str
+    allow_non_loopback: bool = False
+
+
+class SdWebuiCredentialsRequest(BaseModel):
+    """Basic 認証の資格情報(`PUT /api/sdwebui/credentials`)。値は応答に含めない。"""
+
+    username: str
+    password: str
 
 
 class ComfyNodeInputInfo(BaseModel):
@@ -1267,7 +1834,9 @@ class AnnotationBackfillResponse(BaseModel):
 
 # -- 画像の埋め込み(ADR-0033) -------------------------------------------------------
 
-EmbeddingOnnxModelName = Literal["clip-vit-b32-u8", "clip-vit-b32", "clip-japanese-base"]
+EmbeddingOnnxModelName = Literal[
+    "clip-vit-b32-u8", "clip-vit-b32", "clip-japanese-base", "embeddinggemma-2-q8"
+]
 
 
 class EmbeddingOnnxModelStatus(BaseModel):
@@ -1286,6 +1855,13 @@ class EmbeddingOnnxModelStatus(BaseModel):
     # 文章での検索だけのとき(文章側だけを読み込む)のメモリの目安(バイト)。
     memory_text_bytes: int
     license: str
+    # 検索の質が高い代わりに計算が重いモデル(EmbeddingGemma 2。ADR-0044 6章)。
+    heavy: bool = False
+    # 日本語・英語のほかにも多くの言語に対応する(画面では「多言語」と出す)。
+    many_languages: bool = False
+    # このモデルの重複のしきい値(保存した値、無ければ既定)と、その既定(ADR-0044 5章)。
+    duplicate_threshold: float
+    duplicate_threshold_default: float
     downloaded: bool
     download_status: Literal["idle", "downloading", "failed"]
     # 0〜1。ダウンロード中だけ値が入る。
@@ -1314,7 +1890,9 @@ class EmbeddingSettingsResponse(BaseModel):
     remote_model: str | None = None
     remote_api_format: Literal["infinity"]
     auto_on_ingest: bool
+    # 使うモデルの重複のしきい値(モデルごと。ADR-0044 5章)と、そのモデルの既定。
     duplicate_threshold: float
+    duplicate_threshold_default: float
     # 使うモデルの `model_key`。リモートで接続先かモデル名が未設定なら null。
     active_model_key: str | None = None
     # 使うモデルの対応言語(ローカルのモデルだけ分かる。リモートは null)。
@@ -1332,6 +1910,15 @@ class EmbeddingSettingsResponse(BaseModel):
     queued_count: int
     # 使うモデルで計算に失敗した件数。
     failed_count: int
+    # 使うモデルが Run のプロンプトの埋め込みに対応するか(ADR-0045 1章)。false なら下の
+    # `prompt_*` の件数は 0 で、画面には出さない。
+    prompt_supported: bool = False
+    # プロンプトの埋め込みの件数(使うモデル。画像の件数と同じ数え方。ADR-0045 6章)。
+    # 計算済み、一括実行の対象(失敗したものを含む)、待ち行列(queued と running)、失敗。
+    prompt_stored_count: int = 0
+    prompt_pending_count: int = 0
+    prompt_queued_count: int = 0
+    prompt_failed_count: int = 0
 
 
 class EmbeddingSettingsUpdateRequest(BaseModel):
@@ -1347,12 +1934,15 @@ class EmbeddingSettingsUpdateRequest(BaseModel):
     remote_model: str | None = None
     remote_api_format: str | None = None
     auto_on_ingest: bool | None = None
+    # 使うモデル(同じ更新でモデルを変えるなら変えた後のモデル)のしきい値。
     duplicate_threshold: float | None = None
 
 
 class EmbeddingBackfillResponse(BaseModel):
-    # 待ち行列に入れた件数。
+    # 待ち行列に入れた画像の件数。
     queued: int
+    # 待ち行列に入れた Run のプロンプトの件数(使うモデルが対応するときだけ。ADR-0045 4章)。
+    prompt_queued: int = 0
 
 
 class AssetEmbeddingStatus(BaseModel):
@@ -1376,9 +1966,33 @@ class SemanticAssetHit(AssetSummary):
     score: float
 
 
-class SemanticSearchResponse(BaseModel):
-    """`GET /api/search/semantic`。類似度の高い順。"""
+class SemanticRunHit(BaseModel):
+    """指示(プロンプト)で探したときの1件(ADR-0045 5章)。Run の単位で、同じ Run の出力を
+    何枚も並べない。`score` はコサイン類似度(-1〜1、大きいほど近い)。"""
 
+    id: uuid.UUID
+    operation: Literal["generate", "edit"]
+    model: str
+    created_at: datetime
+    # 埋め込んだプロンプト(最終プロンプトがあればそれ)の先頭。長ければ切る。
+    prompt: str
+    # `prompt` を切ったとき true。
+    prompt_truncated: bool = False
+    # 最初の出力(削除されていない、`output_index` の最も小さいもの)。無ければ null。
+    output: AssetSummary | None = None
+    score: float
+    # 履歴のカードで並べるための Run の要約(キーワード検索の `runs` と同じ形)。検索ページが
+    # 指示の結果を履歴のカードで出すのに使う(ADR-0045 6章、2026-10-11 追記)。
+    run: RunSummary
+
+
+class SemanticSearchResponse(BaseModel):
+    """`GET /api/search/semantic`。類似度の高い順。
+
+    `target = "image"`(既定)は画像を `assets` に、`target = "prompt"` は Run を `runs` に
+    返す(もう片方は空)。"""
+
+    target: Literal["image", "prompt"] = "image"
     query: str
     # 使ったモデル(ベクトル空間)の識別子。
     model_key: str
@@ -1388,6 +2002,7 @@ class SemanticSearchResponse(BaseModel):
     # リモートは分からないので null。
     multilingual: bool | None = None
     assets: list[SemanticAssetHit] = Field(default_factory=list)
+    runs: list[SemanticRunHit] = Field(default_factory=list)
 
 
 class SimilarAssetsResponse(BaseModel):
@@ -1467,6 +2082,8 @@ class EmbeddingGraphNode(BaseModel):
     width: int
     height: int
     title: str | None = None
+    # サムネイルの焦点(ADR-0043)。
+    focal_point: FocalPoint | None = None
 
 
 class EmbeddingGraphResponse(BaseModel):
@@ -1487,6 +2104,24 @@ class EmbeddingGraphResponse(BaseModel):
     # 系列(ADR-0003)の主たる親の辺 `[親の位置, 子の位置]`。両方が `nodes` にあるものだけ。
     # `include_lineage` を指定したときだけ入る。
     lineage_edges: list[list[int]] | None = None
+    # 絞り込みに合う、ベクトルのある画像の数。
+    total: int
+    # `limit` を超えたので、古い画像を返していない。
+    truncated: bool
+
+
+class EmbeddingGraphScoresResponse(BaseModel):
+    """`GET /api/embeddings/graph/scores`。マップのノード全件と検索の文章の類似度。
+
+    `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`
+    なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
+    """
+
+    model_key: str
+    # 前後の空白を落とした検索の文章。
+    query: str
+    ids: list[uuid.UUID] = Field(default_factory=list)
+    scores: list[float] = Field(default_factory=list)
     # 絞り込みに合う、ベクトルのある画像の数。
     total: int
     # `limit` を超えたので、古い画像を返していない。
@@ -1577,6 +2212,8 @@ class PublicShareAsset(BaseModel):
     # この画像の原本を出せるか(ADR-0029 4章)。共有が原本を許していても、秘密に見える値を含む
     # ComfyUI の Run の画像は false(2026-10-01 追記)。false ならプレビューまで。
     allow_original: bool
+    # サムネイルの焦点(ADR-0043)。
+    focal_point: FocalPoint | None = None
 
 
 class PublicShareRun(BaseModel):

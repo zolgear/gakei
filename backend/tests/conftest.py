@@ -54,6 +54,8 @@ def _isolate_from_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FAKE_PROVIDER", raising=False)
     # ADR-0013: テストは実物の ComfyUI(既定 127.0.0.1:8188)に接続しない。
     monkeypatch.setenv("COMFYUI_URL", "")
+    # ADR-0038: 実物の SD WebUI にも接続しない。
+    monkeypatch.setenv("SDWEBUI_URL", "")
 
 
 # --- DB の切り替え(ADR-0027 6章) ------------------------------------------------
@@ -333,21 +335,79 @@ def local_store(tmp_path: Path) -> LocalFsStore:
     return LocalFsStore(tmp_path / "domain_data")
 
 
+# run が終わるのを待つ上限(秒)。確かめたいのは「終了状態になること」であって速さでは
+# ないので、ここは走り続けるのを止めるための非常ブレーキでしかない。短くすると、CI の
+# ように並列で混み合う環境で runner が待たされ、正しいコードが落ちる(実際に起きた)。
+# 終わった時点ですぐ返るので、大きくしてもテスト全体は遅くならない。
+RUN_TERMINAL_TIMEOUT = float(os.environ.get("GAKEI_TEST_RUN_TIMEOUT", "30"))
+
+
 def wait_for_run_terminal(
-    client: TestClient, run_id: uuid.UUID | str, timeout: float = 5.0
+    client: TestClient, run_id: uuid.UUID | str, timeout: float | None = None
 ) -> dict:
     """run が終了状態になるまで待って、その時点の GET /api/runs/{id} を返す。"""
     import time
 
-    deadline = time.monotonic() + timeout
+    deadline = time.monotonic() + (RUN_TERMINAL_TIMEOUT if timeout is None else timeout)
+    last = "(未取得)"
     while time.monotonic() < deadline:
         response = client.get(f"/api/runs/{run_id}")
         response.raise_for_status()
         body = response.json()
-        if body["status"] in ("succeeded", "failed", "canceled"):
+        last = body["status"]
+        if last in ("succeeded", "failed", "canceled"):
             return body
         time.sleep(0.02)
-    raise TimeoutError(f"run {run_id} が時間内に終了しませんでした")
+    raise TimeoutError(f"run {run_id} が時間内に終了しませんでした(最後の状態: {last})")
+
+
+def wait_for_background_reads(client: TestClient, timeout: float = 10.0) -> None:
+    """裏の worker が原本を読み終えるまで待つ。テストで原本・派生のファイルを動かす・消す・
+    上書きする前に呼ぶ。
+
+    取り込みの後、焦点の worker(ADR-0043)が原本を `open_content` で開いて顔を探す。
+    Windows では開いているファイルを rename・unlink できず、`PermissionError`(WinError 32)
+    になる。アップロードは応答を返す前に worker へ渡すので、worker が空(`is_idle`)になれば
+    読み終えている。生成の出力は、runner が commit してから worker へ渡すまでの間に Run の
+    完了が見えることがあるので、マスク以外の Asset に焦点の行がそろうまでも待つ(行の無い
+    Asset が残っても、worker が空のまま `grace` 秒たてば、渡されないものとみなして戻る)。
+
+    自動タイトル・タグと埋め込みの worker は、設定でオンにしない限り原本を読まない。それを
+    オンにするテストは、それぞれの状態(`auto_status` など)が終わるのを待つこと。
+    """
+    import time
+
+    from sqlalchemy import exists, select
+
+    from app.domain.models import Asset, AssetFocalPoint, AssetKind
+
+    grace = 0.3
+    worker = client.app.state.focal_worker
+    session_factory = client.app.state.session_factory
+    deadline = time.monotonic() + timeout
+    idle_since: float | None = None
+    while time.monotonic() < deadline:
+        if worker.is_idle():
+            with session_factory() as session:
+                missing = session.scalar(
+                    select(
+                        exists().where(
+                            Asset.kind != AssetKind.MASK,
+                            ~exists().where(AssetFocalPoint.asset_id == Asset.id),
+                        )
+                    )
+                )
+            if not missing:
+                return
+            now = time.monotonic()
+            if idle_since is None:
+                idle_since = now
+            elif now - idle_since >= grace:
+                return
+        else:
+            idle_since = None
+        time.sleep(0.02)
+    raise TimeoutError("焦点の worker が時間内に終わりませんでした")
 
 
 @contextmanager

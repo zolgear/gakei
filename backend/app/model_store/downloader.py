@@ -34,12 +34,15 @@ _CHUNK = 1024 * 1024
 @dataclass(frozen=True)
 class RemoteFile:
     """取得するファイル1つ。`name` は置き場所でのファイル名、`path` はリポジトリの中の
-    パス(省略すると `name` と同じ)。"""
+    パス(省略すると `name` と同じ)。`repo` と `revision` は、モデルとは別のリポジトリから
+    取るファイルだけに指定する(省略するとモデルの `repo`・`revision`。ADR-0044 2章)。"""
 
     name: str
     size: int
     sha256: str
     path: str | None = None
+    repo: str | None = None
+    revision: str | None = None
 
     @property
     def remote_path(self) -> str:
@@ -66,7 +69,9 @@ class HubModel(Protocol):
 
 
 def hub_file_url(model: HubModel, remote: RemoteFile) -> str:
-    return f"https://huggingface.co/{model.repo}/resolve/{model.revision}/{remote.remote_path}"
+    repo = remote.repo or model.repo
+    revision = remote.revision or model.revision
+    return f"https://huggingface.co/{repo}/resolve/{revision}/{remote.remote_path}"
 
 
 def files_present(directory: Path, model: HubModel) -> bool:

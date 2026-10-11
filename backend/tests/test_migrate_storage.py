@@ -16,7 +16,12 @@ from app.config import Settings
 from app.domain.models import Asset
 from app.domain.storage import legacy_original_key
 from app.tools.migrate_storage import MigrationAbortedError, migrate
-from tests.conftest import _fake_settings, make_png_bytes, wait_for_run_terminal
+from tests.conftest import (
+    _fake_settings,
+    make_png_bytes,
+    wait_for_background_reads,
+    wait_for_run_terminal,
+)
 
 pytestmark = pytest.mark.windows
 
@@ -85,6 +90,8 @@ def populated(client: TestClient, data_dir: Path) -> TestClient:
 
     # 1枚を古いキー(ADR-0026 より前)に置き直す
     legacy_id = _upload(client, (7, 8, 9))
+    # 焦点の worker が原本を読み終えてから動かす(Windows では開いているファイルを動かせない)。
+    wait_for_background_reads(client)
     with client.app.state.session_factory() as db:
         asset = db.get(Asset, uuid.UUID(legacy_id))
         assert asset is not None

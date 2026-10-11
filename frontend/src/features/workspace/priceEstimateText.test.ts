@@ -151,3 +151,22 @@ describe('describeEstimate (en)', () => {
     expect(result.title.split('\n')[0]).toBe('Cannot calculate while quality is "auto" (set a quality to see it)')
   })
 })
+
+// 繰り返し回数(ADR-0042)。
+describe('describeEstimate と繰り返し回数', () => {
+  it('2 回以上は合計を掛け、内訳の先頭に1回分を出す', () => {
+    const result = describeEstimate(withOverrides({ total_usd: 0.006 }), 5)
+    expect(result.text).toBe('≈ $0.030')
+    expect(result.title.split('\n')[0]).toBe('繰り返し 5 回分(1回 $0.006)')
+  })
+
+  it('1 回なら今までどおり', () => {
+    expect(describeEstimate(withOverrides({}), 1)).toEqual(describeEstimate(withOverrides({})))
+  })
+
+  it('計算できないときは参考なしのまま', () => {
+    const result = describeEstimate(withOverrides({ total_usd: null, unavailable_reason: 'quality_auto' }), 3)
+    expect(result.text).toBe('参考なし')
+    expect(result.title).not.toContain('繰り返し')
+  })
+})

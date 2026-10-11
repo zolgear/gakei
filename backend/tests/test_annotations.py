@@ -332,7 +332,10 @@ def test_auto_on_ingest_upload_without_prompt_uses_vlm_title(
         client, auto_on_ingest=True, llm_enabled=True, vlm_enabled=True, onnx_enabled=True
     )
     uploaded = _upload(client)
-    assert uploaded["annotation"]["status"] == "queued"
+    # 取り込みで待ち行列に入る。応答は worker を起こす前に作るが、worker は起こされなくても
+    # `_POLL_INTERVAL_SECONDS` ごとに待ち行列を見るので、commit の後に応答を作るまでの間に
+    # 拾われて running になっていることがある(タイミング次第)。
+    assert uploaded["annotation"]["status"] in ("queued", "running")
     body = _wait_annotation(client, uploaded["id"])
     assert body["annotation"]["status"] == "succeeded", body["annotation"]
     # プロンプトが無いので LLM は呼ばず、VLM がタイトルを付ける。
@@ -430,7 +433,8 @@ def test_reannotate_keeps_user_title_and_removed_tags(client: TestClient) -> Non
 
     response = client.post(f"/api/assets/{asset_id}/annotate")
     assert response.status_code == 200
-    assert response.json()["annotation"]["status"] == "queued"
+    # 待ち行列に入る(worker の定期の見回りで、応答の時点で running になっていることもある)。
+    assert response.json()["annotation"]["status"] in ("queued", "running")
     body = _wait_annotation(client, asset_id)
     assert (body["title"], body["title_source"]) == ("人のタイトル", "user")
     names = {t["name"]: t["source"] for t in body["tags"]}

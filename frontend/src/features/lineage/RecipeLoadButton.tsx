@@ -20,14 +20,19 @@ export interface RecipeLoadButtonProps {
 export function RecipeLoadButton({ runInfo }: RecipeLoadButtonProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
-  const { setFormState } = useRunFormContext()
+  const { setFormState, requestFormLoad } = useRunFormContext()
   // provider/model が今の環境に無いモデルを指していないかの判定にだけ使う。
   const capsQuery = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities })
   const disabledReason = originRecipeDisabledReason(runInfo, capsQuery.data)
 
   function handleLoadRecipe() {
     if (runInfo === null || disabledReason !== null) return
-    setFormState(buildOriginFormState(runInfo, loadLastAssetGroupId()))
+    const state = buildOriginFormState(runInfo, loadLastAssetGroupId())
+    // スタジオのフォームは context をマウント時にしか読まないので、スタジオの結果エリアの
+    // インスペクター(フォームはマウントされたまま)からでも入るよう、読み込みのリクエストにも積む
+    // (Run 詳細の「同じ設定で新規作成」と同じ)。
+    setFormState(state)
+    requestFormLoad({ kind: 'run', state })
     navigate('/studio')
   }
 

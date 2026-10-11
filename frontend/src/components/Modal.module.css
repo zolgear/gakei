@@ -21,6 +21,17 @@
   overflow: hidden;
 }
 
+/* パネルは tabIndex={-1} でフォーカスを受ける(中に操作できる要素が無いときの受け皿)。
+   マウス操作で枠が出ると目障りなので、キーボードのときだけ出す。 */
+.panel:focus {
+  outline: none;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -83,7 +94,9 @@
     padding: 0;
   }
 
-  .panel {
+  /* size="large" の指定(詳細度が高い)にも勝つよう、両方を並べて全画面にする */
+  .panel,
+  .panel[data-size='large'] {
     width: 100%;
     height: 100dvh;
     max-height: 100dvh;

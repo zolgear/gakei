@@ -8,6 +8,7 @@
 import { PriceEstimate } from './PriceEstimate'
 import styles from './InputPane.module.css'
 import { useI18n } from '../../i18n'
+import { submitButtonLabel } from '../run-form/repeat'
 
 interface SubmitPriceInput {
   model: string
@@ -26,6 +27,8 @@ interface SubmitControlsProps {
   /** プロバイダーが参考価格に対応するか(`providerEntry.supports_pricing`)。 */
   showPrice: boolean
   price: SubmitPriceInput
+  /** 繰り返し回数(ADR-0042)。2 以上ならボタンに「×N」を添え、参考価格も掛ける。 */
+  repeat: number | null
   canSubmit: boolean
   isSubmitting: boolean
   onSubmit: () => void
@@ -36,6 +39,7 @@ interface SubmitControlsProps {
 export function SubmitControls({
   showPrice,
   price,
+  repeat,
   canSubmit,
   isSubmitting,
   onSubmit,
@@ -52,6 +56,7 @@ export function SubmitControls({
       n={price.n}
       promptLength={price.promptLength}
       inputAssetIds={price.inputAssetIds}
+      repeat={repeat ?? 1}
     />
   )
   const button = (
@@ -62,7 +67,7 @@ export function SubmitControls({
       disabled={!canSubmit}
       onClick={onSubmit}
     >
-      {isSubmitting ? ip.submitting : ip.generate}
+      {isSubmitting ? ip.submitting : submitButtonLabel(repeat)}
       <span className={styles.shortcutBadge}>Ctrl ⏎</span>
     </button>
   )

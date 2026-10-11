@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SEED_MAX, isSeedRandom, randomSeedValue } from './seedRandom'
+import { SEED_MAX, isSeedRandom, randomSeedValue, seedMaximum } from './seedRandom'
 
 describe('isSeedRandom', () => {
   it('空文字列はランダム扱い', () => {
@@ -35,5 +35,23 @@ describe('randomSeedValue', () => {
       expect(value).toBeGreaterThanOrEqual(0)
       expect(value).toBeLessThanOrEqual(SEED_MAX)
     }
+  })
+})
+
+describe('上限のある seed(SD WebUI は 2^32 未満。ADR-0038)', () => {
+  it('maximum を渡すと 0〜maximum に収める', () => {
+    const max = 2 ** 32 - 1
+    const value = randomSeedValue(() => new Uint32Array([0x1fffff, 0xffffffff]), max)
+    expect(value).toBeGreaterThanOrEqual(0)
+    expect(value).toBeLessThanOrEqual(max)
+    for (let i = 0; i < 50; i++) {
+      expect(randomSeedValue(undefined, max)).toBeLessThanOrEqual(max)
+    }
+  })
+
+  it('seedMaximum は capabilities の maximum を使い、無ければ SEED_MAX', () => {
+    expect(seedMaximum({ maximum: 2 ** 32 - 1 })).toBe(2 ** 32 - 1)
+    expect(seedMaximum({ maximum: null })).toBe(SEED_MAX)
+    expect(seedMaximum({})).toBe(SEED_MAX)
   })
 })

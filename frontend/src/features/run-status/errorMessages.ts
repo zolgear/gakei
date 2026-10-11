@@ -17,6 +17,11 @@ const KNOWN_CODES = [
   'providerUnavailable',
   'comfyuiUnavailable',
   'comfyuiValidation',
+  // SD WebUI(ADR-0038 5章)
+  'sdwebuiUnavailable',
+  'sdwebuiValidation',
+  'sdwebuiNoOutput',
+  'sdwebuiModelMismatch',
   'internalError',
 ] as const
 

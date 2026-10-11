@@ -328,6 +328,13 @@ class Run(Base):
     # 成功時に1回だけ書く(失敗した Run は null のまま)。
     text_outputs: Mapped[list | None] = mapped_column(JsonType, nullable=True)
 
+    # プロンプトテンプレート(実験)で組み立てたときの内訳。テンプレート名・組み合わせ・
+    # スロットごとに選ばれた候補のテキストそのものを持つ(外部キーは張らないので、
+    # テンプレートを消しても読める)。Run の作成時に一度だけ書き、UPDATE しない
+    # (`asset_group_id` や `origin` と同じ扱い。ADR-0003 の追記のみの規則に反しない)。
+    # API に送った値ではないので `params` には入れない。
+    prompt_build: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+
     # 実行したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
     # (INSERT 時に設定し、UPDATE しない)。
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -464,6 +471,135 @@ class PromptSetItem(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
     prompt_set: Mapped[PromptSet] = relationship("PromptSet", back_populates="items")
+
+
+class ParameterSet(Base):
+    """パラメーターセット(生成のフォームの設定一式に名前を付けたもの。ADR-0040)。
+
+    証跡ではないので名前と中身を更新でき、削除は論理削除。`run` とは外部キーを張らない
+    (Run には実行時の値がこれまでどおり残る。ADR-0003)。`params` にはフォームの値だけを入れ、
+    サーバーだけが書く項目(`comfyui_*`、`sdwebui_*`)は入れない(API で 422)。
+    `provider` は登録簿にあるかを保存時には問わない(後で無効になることもあるため。読み込む側で
+    判定する)。
+    """
+
+    __tablename__ = "parameter_set"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 保存しなければ null(読み込み時は今のモデル・プロンプトのまま)。
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    params: Mapped[dict] = mapped_column(JsonType, nullable=False, default=dict)
+    # 作成したユーザー(ADR-0025)。`none` モードでは null。追記のみ(INSERT 時に設定し、
+    # UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime(), nullable=False, default=_utcnow, index=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptTemplate(Base):
+    """プロンプトテンプレート(実験)。プロンプトを「スロット(枠)」に分けた組み立ての雛形。
+
+    証跡ではないので名前も中身も更新でき、削除は論理削除。`run` とは外部キーを張らない
+    (`run.prompt` には組み立てた後の文字列が残り、`run.prompt_build` には選ばれた候補の
+    テキストそのものが入るので、テンプレートを消しても Run の記録は読める)。
+    """
+
+    __tablename__ = "prompt_template"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    # スロットの連結に使う区切り。タグなら ', '、文章なら ' ' や改行にする。
+    separator: Mapped[str] = mapped_column(Text, nullable=False, default=", ")
+    # 作成したユーザー(ADR-0025)。`none` モードでは null。追記のみ(INSERT 時に設定し、
+    # UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime(), nullable=False, default=_utcnow, index=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptSlot(Base):
+    """スロット(役割の枠)。名前は利用者が決める(キャラ、衣装、背景など)。"""
+
+    __tablename__ = "prompt_slot"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_template.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 選択の指定が無いときのふるまい。'random' | 'off'。
+    default_mode: Mapped[str] = mapped_column(String(8), nullable=False, default="random")
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptVariant(Base):
+    """候補(スロットに入る選択肢)。`text` は解釈も展開もせずそのまま使う。"""
+
+    __tablename__ = "prompt_variant"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    slot_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_slot.id"), nullable=False, index=True
+    )
+    # 表示名。null なら画面は `text` の先頭を見せる。
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # ランダム選択の重み。0 以下は選ばれない。
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptCombo(Base):
+    """組み合わせ(複数のスロットを同時に埋める、辻褄の取れた組)。
+
+    候補を指すだけで、自前のテキストは持たない(候補を直せば組み合わせにも効く)。
+    1つの組み合わせが同じスロットの候補を2つ以上指してはいけない(API で 422)。
+    """
+
+    __tablename__ = "prompt_combo"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_template.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptComboItem(Base):
+    """組み合わせが指す候補。論理削除は持たず、組み合わせの置換時に入れ替える。"""
+
+    __tablename__ = "prompt_combo_item"
+
+    combo_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_combo.id"), primary_key=True
+    )
+    variant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_variant.id"), primary_key=True, index=True
+    )
 
 
 class AssetGroup(Base):
@@ -638,6 +774,33 @@ class AssetEmbedding(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
+class RunPromptEmbedding(Base):
+    """Run のプロンプトの埋め込みベクトル(ADR-0045 3章)。証跡ではないので更新・削除してよい。
+
+    作りは `AssetEmbedding` と同じ。(Run、`model_key`)ごとに1行で、`status` が待ち行列を兼ねる。
+    `text_sha256` は埋め込んだ文章(タイトルを付けたときはタイトル込み。文書のプレフィックスは
+    含めない)の sha256 で、タイトルが変わったときに埋め込み直しが要るかの判断に使う。
+    `truncated` は、プロンプトが上限を超えた(タイトルを先頭に付けて切った)とき True。
+    PostgreSQL で pgvector が使えるときの `embedding vector` 列も同じ(ORM には載せない)。
+    """
+
+    __tablename__ = "run_prompt_embedding"
+    __table_args__ = (Index("ix_run_prompt_embedding_model_key_status", "model_key", "status"),)
+
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("run.id"), primary_key=True)
+    model_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    # queued | running | succeeded | failed
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vector: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    text_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
 class AssetPerceptualHash(Base):
     """Asset の知覚ハッシュ(ADR-0033 12章)。重複の候補の判定に、CLIP の類似度と併せて使う。
 
@@ -657,6 +820,29 @@ class AssetPerceptualHash(Base):
     # アルゴリズムの版(`perceptual_hash.ALGORITHM_VERSION`)。違えば作り直す。
     version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class AssetFocalPoint(Base):
+    """Asset のサムネイルの焦点(顔の位置。ADR-0043)。画面で `object-fit: cover` の画像に
+    `object-position` を付けるのに使う。
+
+    証跡ではなく、作り直してよい派生データ(ADR-0003 の来歴の列には書かない)。顔が見つから
+    なかったときも行を作り(`method='none'`、`x`・`y` は null)、もう一度探さない。検出の手順を
+    変えたら `version` を上げ、古い行は埋め戻しのツールが作り直す。値は `app/focal/detect.py`、
+    読み書きは `app/domain/focal_points.py`。
+    """
+
+    __tablename__ = "asset_focal_point"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    # 画像の幅・高さに対する 0〜1 の位置。顔が見つからなければ null。
+    x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # `animeface-lbp`(顔を見つけた)/ `none`(見つからない・読めない)。
+    method: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 検出の版(`detect.ALGORITHM_VERSION`)。
+    version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class Share(Base):
@@ -703,3 +889,81 @@ class ShareAsset(Base):
         Uuid, ForeignKey("asset.id"), primary_key=True, index=True
     )
     depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+# ADR-0041 1章: タグ辞書の検索用の列(小文字にしたタグ名など)。前方一致を通常の索引の範囲検索
+# (`>= 'abc' AND < 'abd'`)で引くので、PostgreSQL では照合順序を "C"(バイト順)にする
+# (既定のロケールの照合では、記号を飛ばして並べるなどで範囲が前方一致と一致しないため)。
+# SQLite の既定(BINARY)はもともとバイト順。
+SearchKeyText = Text().with_variant(Text(collation="C"), "postgresql")
+
+
+class TagDictionary(Base):
+    """登録したタグ辞書(ADR-0041 1章)。インスタンス全体で共有し、管理者だけが登録・削除する。
+
+    証跡ではないので、有効/無効を変えられ、削除は物理削除(中身の行も消す)。アップロードした
+    ファイルそのものは保存しない。`kind` は `tags`(タグの一覧)か `translations`(訳)。
+    `status` は `importing` → `ready` | `failed`。候補と訳に使うのは `ready` で有効なものだけ。
+    """
+
+    __tablename__ = "tag_dictionary"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # タグの一覧のカテゴリーの番号の体系(`danbooru` など)。訳の辞書では null。
+    category_scheme: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class TagDictionaryEntry(Base):
+    """タグの一覧の1行。`name` は辞書の表記のまま(`_` 区切り)、`name_key` は検索用
+    (NFKC・小文字・空白を `_` に)。主キーの索引 (dictionary_id, name_key) で前方一致を引く。"""
+
+    __tablename__ = "tag_dictionary_entry"
+
+    dictionary_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tag_dictionary.id", ondelete="CASCADE"), primary_key=True
+    )
+    name_key: Mapped[str] = mapped_column(SearchKeyText, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    post_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class TagDictionaryAlias(Base):
+    """タグの一覧の別名(1行に複数ある別名を1つずつ)。`alias_key` は `name_key` と同じ正規化。"""
+
+    __tablename__ = "tag_dictionary_alias"
+
+    dictionary_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tag_dictionary.id", ondelete="CASCADE"), primary_key=True
+    )
+    alias_key: Mapped[str] = mapped_column(SearchKeyText, primary_key=True)
+    name_key: Mapped[str] = mapped_column(SearchKeyText, primary_key=True)
+    alias: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class TagDictionaryTranslation(Base):
+    """訳の1行。`translation` は代表の訳(先頭)、`translations` は欄の全体(カンマ区切り)。
+    `search_key` は訳のそれぞれを正規化して `,訳1,訳2,` の形にしたもの(訳の前方一致・部分一致に
+    使う。全件を走査するが、訳の辞書は数万行なので十分速い)。"""
+
+    __tablename__ = "tag_dictionary_translation"
+
+    dictionary_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tag_dictionary.id", ondelete="CASCADE"), primary_key=True
+    )
+    name_key: Mapped[str] = mapped_column(SearchKeyText, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    translation: Mapped[str] = mapped_column(Text, nullable=False)
+    translations: Mapped[str] = mapped_column(Text, nullable=False)
+    search_key: Mapped[str] = mapped_column(SearchKeyText, nullable=False)

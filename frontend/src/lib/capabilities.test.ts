@@ -6,6 +6,7 @@ import {
   modelOptionValue,
   parseModelOptionValue,
   isProviderModelValid,
+  hasCheckingProvider,
   resolveProvider,
 } from './capabilities'
 import type { CapabilitiesResponse, ModelCapabilities, ProviderEntry } from '../api/client'
@@ -18,6 +19,7 @@ const sizeConstraints = {
   min_aspect_ratio: 1 / 3,
   max_aspect_ratio: 3,
   allow_auto: true,
+  round_down: false,
 }
 
 function model(overrides: Partial<ModelCapabilities> & Pick<ModelCapabilities, 'model' | 'label'>): ModelCapabilities {
@@ -64,6 +66,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
     max_input_images: 16,
     available: true,
     unavailable_reason: null,
+    checking: false,
     requires_api_key: false,
     supports_pricing: true,
     ...overrides,
@@ -72,7 +75,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
 
 const caps: CapabilitiesResponse = {
   default_provider: 'fake',
-  embeddings: { available: false, index_backend: 'numpy' },
+  embeddings: { available: false, index_backend: 'numpy', prompt_search: false },
   providers: [
     provider({
       provider: 'fake',
@@ -162,6 +165,30 @@ describe('isProviderModelValid', () => {
 
   it('provider はあるが model が無ければ false', () => {
     expect(isProviderModelValid(caps, 'fake', 'wf-1')).toBe(false)
+  })
+
+  it('接続先を確かめ中の provider は、モデルの一覧が空でも true(選択を既定に戻さない)', () => {
+    const checking: CapabilitiesResponse = {
+      ...caps,
+      providers: [
+        ...(caps.providers ?? []),
+        provider({ provider: 'sdwebui', label: 'SD WebUI', available: false, checking: true }),
+      ],
+    }
+    expect(isProviderModelValid(checking, 'sdwebui', 'model-a')).toBe(true)
+    expect(isProviderModelValid(checking, 'unknown', 'model-a')).toBe(false)
+  })
+})
+
+describe('hasCheckingProvider', () => {
+  it('確かめ中のプロバイダーがあれば true', () => {
+    expect(hasCheckingProvider(undefined)).toBe(false)
+    expect(hasCheckingProvider(caps)).toBe(false)
+    const checking: CapabilitiesResponse = {
+      ...caps,
+      providers: [...(caps.providers ?? []), provider({ provider: 'sdwebui', label: 'SD WebUI', checking: true })],
+    }
+    expect(hasCheckingProvider(checking)).toBe(true)
   })
 })
 

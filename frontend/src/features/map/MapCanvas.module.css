@@ -75,6 +75,13 @@
   border-color: var(--color-border-strong);
 }
 
+/* 押している間ずっと効いている切り替え(座標のライン)。入っていることが分かるようにする。 */
+.zoomButton[data-active] {
+  background: var(--color-header-band);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
 .hoverCard {
   position: absolute;
   max-width: 200px;

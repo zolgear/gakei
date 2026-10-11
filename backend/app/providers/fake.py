@@ -96,6 +96,10 @@ class FakeProvider:
             params["moderation"] = saved if saved is not None else self._moderation
         return params
 
+    def repeat_seed(self, first_params: dict, index: int) -> int | None:
+        # seed を持たない(OpenAI と同じ)。
+        return None
+
     async def execute(self, run: RunRequest, on_progress: ProgressCallback) -> RunResult:
         self._maybe_raise_from_prompt(run.prompt)
 

@@ -28,6 +28,7 @@ const sizeConstraints = {
   min_aspect_ratio: 1 / 3,
   max_aspect_ratio: 3,
   allow_auto: true,
+  round_down: false,
 }
 
 function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provider' | 'models'>): ProviderEntry {
@@ -48,6 +49,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
     max_input_images: 16,
     available: true,
     unavailable_reason: null,
+    checking: false,
     requires_api_key: false,
     supports_pricing: true,
     ...overrides,
@@ -56,7 +58,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
 
 const caps: CapabilitiesResponse = {
   default_provider: 'fake',
-  embeddings: { available: false, index_backend: 'numpy' },
+  embeddings: { available: false, index_backend: 'numpy', prompt_search: false },
   providers: [
     provider({
       provider: 'fake',

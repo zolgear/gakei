@@ -379,6 +379,7 @@ def test_successful_run_records_text_outputs(
     expected = [
         {
             "role": "final_prompt",
+            "output_index": None,
             "node_id": "20",
             "class_type": "PreviewAny",
             "title": None,

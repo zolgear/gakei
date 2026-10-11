@@ -24,6 +24,7 @@ import { isTileSelectable } from './stockTileSelection'
 import { stockPickerKindChoices, stockPickerKinds, stockPickerQueryKey, type StockPickerKindFilter } from './stockQueryKey'
 import { useStockShowSketchMask } from './stockPrefs'
 import styles from './StockPickerGrid.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 type KindFilter = StockPickerKindFilter
 
@@ -158,7 +159,13 @@ export function StockPickerGrid({
                   disabled={!selectable}
                   onClick={() => onToggle(asset)}
                 >
-                  <img className={`${styles.thumb} checkerboard`} src={assetUrl(asset.id, 'thumb')} alt="" draggable={false} />
+                  <img
+                    className={`${styles.thumb} checkerboard`}
+                    src={assetUrl(asset.id, 'thumb')}
+                    style={focalStyle(asset.focal_point)}
+                    alt=""
+                    draggable={false}
+                  />
                   {/* alreadyBadge と同じ左上の位置なので、両方は出さない(alreadyIn を優先)。 */}
                   {asset.prompt_source === 'embedded' && !isAlreadyDisabled && (
                     <span className={styles.embeddedBadge} title={t.search.embeddedTitle}>

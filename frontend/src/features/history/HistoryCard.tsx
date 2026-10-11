@@ -9,6 +9,7 @@ import { Link, useNavigate } from 'react-router'
 import { ApiError, cancelRun, deleteRun, getRun, type RunSummary } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
 import { UserAvatar } from '../../components/UserAvatar'
+import { RunDetailIcon } from '../../components/icons'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { useResourcePanel } from '../../context/useResourcePanel'
@@ -32,6 +33,7 @@ import { buildRunDeleteWarning } from './runDeleteWarning'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { fmt, useI18n } from '../../i18n'
 import styles from './HistoryCard.module.css'
+import { focalStyle } from '../../lib/focalPoint'
 
 interface HistoryCardProps {
   run: RunSummary
@@ -201,6 +203,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
       <img
         className={styles.parentThumb}
         src={assetUrl(parentAssetId, 'thumb')}
+        style={focalStyle(run.primary_parent_focal_point)}
         alt={t.history.card.parent}
         draggable={false}
       />
@@ -234,6 +237,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
               <img
                 className={`${styles.mediaImage} checkerboard`}
                 src={assetUrl(firstOutput.asset_id, 'thumb')}
+                style={focalStyle(firstOutput.focal_point)}
                 alt=""
                 draggable
                 onDragStart={(e) => {
@@ -342,6 +346,16 @@ export function HistoryCard({ run }: HistoryCardProps) {
             </button>
           )}
           <span className={styles.actionsSpacer} />
+          {/* プロンプトの文字のリンクと同じ遷移先(Run 詳細)を、アイコンからも開けるようにする。
+              状態によらず出す(失敗・中止・実行中の Run にも詳細はある)。 */}
+          <Link
+            to={nav.runHref}
+            className={styles.iconButton}
+            aria-label={t.common.openGeneratedDetail}
+            title={t.common.openGeneratedDetail}
+          >
+            <RunDetailIcon size={15} />
+          </Link>
           {nav.showLineageButton && (
             <button
               type="button"
@@ -400,6 +414,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
         message={fmt(t.history.card.deleteConfirm.message, { count: outputs.length })}
         warning={buildRunDeleteWarning(run.descendant_run_count)}
         previewImageUrl={firstOutput ? assetUrl(firstOutput.asset_id, 'thumb') : undefined}
+        previewFocalPoint={firstOutput?.focal_point}
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setDeleteConfirmOpen(false)}
       />

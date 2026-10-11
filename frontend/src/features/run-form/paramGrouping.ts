@@ -28,11 +28,37 @@ export function splitPrimaryParams(
   return { primary, other }
 }
 
+/** SD WebUI でサイズ欄のすぐ上の段に並べるパラメーター(この順。ADR-0038 2章)。 */
+const SDWEBUI_ABOVE_SIZE = ['n', 'n_iter']
+
+/** プロバイダーごとの振り分け。`aboveSize` はサイズ欄のすぐ上の段に出す(グリッドの並びには入れない)。 */
+export interface ProviderGroupedParams extends GroupedParams {
+  aboveSize: ParamDef[]
+}
+
 /**
- * プロバイダーに応じて振り分ける。ComfyUI のパラメーターは、利用者がワークフローの登録時に
- * フォームへ出すと選んだものだけなので、畳まずに登録順のまま全部を主に出す。
+ * プロバイダーに応じて振り分ける。
+ * - ComfyUI のパラメーターは、利用者がワークフローの登録時にフォームへ出すと選んだものだけなので、
+ *   畳まずに登録順のまま全部を主に出す。
+ * - SD WebUI(ADR-0038)のパラメーターは8つほどで、ネガティブプロンプト・サンプラー・ステップ数・
+ *   CFG・seed・VAE のどれも毎回のように見て変えるものなので、畳まずにサーバーの順のまま全部を主に出す。
+ *   枚数(`n`)とバッチ回数(`n_iter`)だけはグリッドの並びから外し、サイズ欄のすぐ上の段に
+ *   この順で並べる(`aboveSize`)。
+ * - それ以外(OpenAI)は `splitPrimaryParams`。
  */
-export function groupParamsForProvider(provider: string | undefined, defs: ParamDef[]): GroupedParams {
-  if (provider === 'comfyui') return { primary: [...defs], other: [] }
-  return splitPrimaryParams(defs)
+export function groupParamsForProvider(provider: string | undefined, defs: ParamDef[]): ProviderGroupedParams {
+  if (provider === 'sdwebui') {
+    return {
+      primary: defs.filter((d) => !SDWEBUI_ABOVE_SIZE.includes(d.name)),
+      other: [],
+      aboveSize: SDWEBUI_ABOVE_SIZE.flatMap((name) => defs.filter((d) => d.name === name)),
+    }
+  }
+  if (provider === 'comfyui') return { primary: [...defs], other: [], aboveSize: [] }
+  return { ...splitPrimaryParams(defs), aboveSize: [] }
+}
+
+/** 設定グリッドで2マス分を使うパラメーター(文章の欄と seed の欄)。 */
+export function isWideParam(def: ParamDef): boolean {
+  return def.type === 'text' || def.widget === 'seed'
 }

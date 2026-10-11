@@ -1,10 +1,14 @@
 """画像の埋め込みの worker(ADR-0033 5章)。自動タイトル・タグの worker とは別。
 
 待ち行列は `asset_embedding.status = 'queued'` の行そのもの。api プロセス内の asyncio タスクが、
-使うモデルの行を古い依頼から取り、thumb(512px)を読んで計算する。
+使うモデルの行を古い依頼から取り、thumb(512px)を読んで計算する。EmbeddingGemma 2 のように
+入力に大きな画像を使うモデルは、preview(2048px)を読む(カタログの `input_variant`。ADR-0044)。
 
 - 1回に取る件数は `CLAIM_LIMIT`(8)と、エンジンが1回にまとめる枚数(`image_batch_size`。
-  リモートは 32)の大きいほう。ローカルの ONNX(8 か 1)は 8 件のまま。
+  リモートは 32)の大きいほう。ローカルの ONNX(8 か 1)は 8 件のまま。preview を読むモデルは
+  `PREVIEW_CLAIM_LIMIT`(2)件にする(デコードした preview は1枚 最大 12MB で、先読みの分も
+  メモリに持つため。1枚に数秒かかるモデルなので、少なく取っても待ちは生じない)。
+- 知覚ハッシュは、どのモデルでも thumb から作る(preview を読むモデルでは thumb も読む)。
 - thumb の読み込み(オブジェクトストレージならネットワーク)とデコードは、複数のスレッドで
   並列に行う。知覚ハッシュも取ったときに作る(先読みなら推論と重なる)。
 - 推論している間に、次の分を取って thumb を読み、デコードしておく(先読みは1つだけ)。
@@ -26,6 +30,11 @@
   (無いか、版が古いときだけ)。ハッシュの失敗は記録して飛ばし、埋め込みは失敗にしない。
   待ち行列が空のときは、埋め込みはあるのにハッシュが無い画像(この機能より前に計算したもの
   など)を少しずつ埋める。読めなかった画像は、プロセスが動いている間は再び試さない。
+- Run のプロンプトの埋め込み(ADR-0045 4章): `run_prompt_embedding.status = 'queued'` の行も
+  処理する。画像の待ち行列が空のときにだけ、1件ずつ取る(画像の結果が先にそろうように)。
+  使うモデルがプロンプトの埋め込みに対応しない間は取り出さない。文章側のセッションだけを
+  使い、計算中にタイトルが変わって待ち行列に戻された行(`running` でなくなった行)には結果を
+  書かない。
 """
 
 from __future__ import annotations
@@ -48,10 +57,24 @@ from sqlalchemy.orm import sessionmaker
 from app.domain import derivatives, embedding_index, embedding_settings
 from app.domain import embeddings as embeddings_domain
 from app.domain import perceptual_hash as perceptual_hash_domain
-from app.domain.models import Asset, AssetEmbedding, AssetKind, AssetPerceptualHash
+from app.domain import prompt_embeddings as prompt_domain
+from app.domain.models import (
+    Asset,
+    AssetEmbedding,
+    AssetKind,
+    AssetPerceptualHash,
+    Run,
+    RunPromptEmbedding,
+)
 from app.domain.storage import AssetStore
 from app.domain.text_safety import sanitize_external_text
-from app.embedding.base import EmbeddingEngine, EmbeddingError, vector_to_blob
+from app.embedding.base import (
+    DocumentEmbeddingEngine,
+    EmbeddingEngine,
+    EmbeddingError,
+    vector_to_blob,
+)
+from app.embedding.catalog import InputVariant
 from app.embedding.engines import EmbeddingEngines
 from app.i18n import t
 
@@ -61,6 +84,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CLAIM_LIMIT = 8
+PREVIEW_CLAIM_LIMIT = 2
+# プロンプトは1件ずつ取る(取るたびに画像の待ち行列を先に見る)。
+PROMPT_CLAIM_LIMIT = 1
 # thumb の読み込みとデコードを並列に行うスレッドの数(控えめにする)。
 _LOAD_WORKERS = 8
 # 待ち行列が空のときに、1回で知覚ハッシュを埋める枚数。
@@ -74,15 +100,59 @@ def _utcnow() -> datetime:
 
 
 def reset_running_embeddings(session_factory: sessionmaker) -> int:
-    """起動時に呼ぶ。`running` のままの行を `queued` に戻す。"""
+    """起動時に呼ぶ。`running` のままの行(画像とプロンプト)を `queued` に戻す。"""
     with session_factory() as session:
         result = session.execute(
             update(AssetEmbedding)
             .where(AssetEmbedding.status == embeddings_domain.STATUS_RUNNING)
             .values(status=embeddings_domain.STATUS_QUEUED)
         )
+        prompts = session.execute(
+            update(RunPromptEmbedding)
+            .where(RunPromptEmbedding.status == prompt_domain.STATUS_RUNNING)
+            .values(status=prompt_domain.STATUS_QUEUED)
+        )
         session.commit()
-        return result.rowcount or 0
+        return (result.rowcount or 0) + (prompts.rowcount or 0)
+
+
+def claim_prompts(
+    session_factory: sessionmaker, model_key: str, limit: int = PROMPT_CLAIM_LIMIT
+) -> list[uuid.UUID]:
+    """そのモデルのプロンプトの待ち行列の先頭から `limit` 件を `running` にして返す。"""
+    with session_factory() as session:
+        candidates = (
+            session.execute(
+                select(RunPromptEmbedding.run_id)
+                .where(
+                    RunPromptEmbedding.model_key == model_key,
+                    RunPromptEmbedding.status == prompt_domain.STATUS_QUEUED,
+                )
+                .order_by(
+                    RunPromptEmbedding.requested_at.asc().nulls_first(),
+                    RunPromptEmbedding.run_id.asc(),
+                )
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
+        claimed: list[uuid.UUID] = []
+        now = _utcnow()
+        for run_id in candidates:
+            result = session.execute(
+                update(RunPromptEmbedding)
+                .where(
+                    RunPromptEmbedding.run_id == run_id,
+                    RunPromptEmbedding.model_key == model_key,
+                    RunPromptEmbedding.status == prompt_domain.STATUS_QUEUED,
+                )
+                .values(status=prompt_domain.STATUS_RUNNING, updated_at=now)
+            )
+            if (result.rowcount or 0) > 0:
+                claimed.append(run_id)
+        session.commit()
+        return claimed
 
 
 def claim(
@@ -133,7 +203,19 @@ class _Job:
     claimed: list[uuid.UUID] = field(default_factory=list)
     # 計算する行(asset_id とデコード済みの画像)
     items: list[tuple[uuid.UUID, Image.Image]] = field(default_factory=list)
+    # 入力にする派生画像。thumb でなければ、知覚ハッシュ用に thumb も読む。
+    variant: InputVariant = "thumb"
     # 計算する前に失敗が決まった行(asset_id と理由)
+    failures: list[tuple[uuid.UUID, str]] = field(default_factory=list)
+
+
+@dataclass
+class _PromptJob:
+    model_key: str
+    engine: DocumentEmbeddingEngine | None
+    claimed: list[uuid.UUID] = field(default_factory=list)
+    # 計算する行(run_id と埋め込む文章)
+    items: list[tuple[uuid.UUID, prompt_domain.DocumentText]] = field(default_factory=list)
     failures: list[tuple[uuid.UUID, str]] = field(default_factory=list)
 
 
@@ -204,13 +286,26 @@ class Embedder:
             model_key = embedding_settings.active_model_key(config, self.settings)
             if model_key is None:
                 return
-            dim = embedding_settings.active_dim(config) or embeddings_domain.known_dim(
-                session, model_key
+            # `FAKE_PROVIDER=1` のダミーのエンジンは、カタログと違う次元(512)を返すので、
+            # カタログの次元で索引を作らない(計算したベクトルの次元で作る)。
+            catalog_dim = (
+                None if self.settings.fake_provider else embedding_settings.active_dim(config)
             )
-        if dim is None:
+            dim = catalog_dim or embeddings_domain.known_dim(session, model_key)
+        if dim is not None:
+            embedding_index.ensure_hnsw_index(self.db_engine, model_key, dim)
+            self._indexed.add(model_key)
+        # プロンプトの索引(ADR-0045 3章。対応するモデルのときだけ)。
+        if not embedding_settings.prompt_supported(config):
             return
-        embedding_index.ensure_hnsw_index(self.db_engine, model_key, dim)
-        self._indexed.add(model_key)
+        with self.session_factory() as session:
+            prompt_dim = catalog_dim or prompt_domain.known_dim(session, model_key)
+        if prompt_dim is None:
+            return
+        embedding_index.ensure_hnsw_index(
+            self.db_engine, model_key, prompt_dim, embedding_index.PROMPT_TABLE
+        )
+        self._indexed.add(prompt_domain.version_key(model_key))
 
     async def start(self) -> int:
         self._event_loop = asyncio.get_running_loop()
@@ -250,6 +345,18 @@ class Embedder:
                     await self._sleep()
                     continue
                 if job is None:
+                    # 画像の待ち行列が空なら、プロンプトを1件(ADR-0045 4章)。
+                    try:
+                        prompt_job = await asyncio.to_thread(self._prepare_prompt)
+                    except Exception:
+                        logger.exception("プロンプトの埋め込みの待ち行列の取得に失敗しました")
+                        prompt_job = None
+                    if prompt_job is not None:
+                        try:
+                            await self._process_prompt(prompt_job)
+                        except Exception:
+                            logger.exception("プロンプトの埋め込みで想定外の例外が発生しました")
+                        continue
                     try:
                         filled = await self._backfill_hashes()
                     except Exception:
@@ -318,12 +425,15 @@ class Embedder:
                 engine = self.engines.engine_for(session, config)
             except EmbeddingError as e:
                 engine_error = str(e)
+            variant = embedding_settings.input_variant(config)
 
         limit = CLAIM_LIMIT if engine is None else max(CLAIM_LIMIT, engine.image_batch_size)
+        if variant != "thumb":
+            limit = PREVIEW_CLAIM_LIMIT
         claimed = claim(self.session_factory, model_key, limit)
         if not claimed:
             return None
-        job = _Job(model_key=model_key, engine=engine, claimed=list(claimed))
+        job = _Job(model_key=model_key, engine=engine, claimed=list(claimed), variant=variant)
         if engine_error is not None:
             # 接続先が消えたなど、設定の問題。取った行は失敗にする(自動では再試行しない)。
             job.failures = [(asset_id, engine_error) for asset_id in claimed]
@@ -340,35 +450,54 @@ class Embedder:
                     job.failures.append((asset_id, t("embeddings.maskNotSupported")))
                     continue
                 targets.append(asset)
-            loaded = self._load_images(targets)
-        for asset, image in zip(targets, loaded, strict=True):
-            if image is None:
+            loaded = self._load_images(targets, job.variant)
+        hash_items: list[tuple[uuid.UUID, Image.Image]] = []
+        for asset, pair in zip(targets, loaded, strict=True):
+            if pair is None:
                 job.failures.append((asset.id, t("embeddings.imageUnreadable")))
             else:
+                image, hash_image = pair
                 job.items.append((asset.id, image))
-        if job.items:
+                if hash_image is not None:
+                    hash_items.append((asset.id, hash_image))
+        if hash_items:
             # 先読みのときは、前の分の推論を待つ間にハッシュも作っておける。
             try:
-                self._store_hashes(job.items)
+                self._store_hashes(hash_items)
             except Exception:
                 # ハッシュが無くても重複の候補は CLIP だけで判定できる。埋め込みは続ける。
                 logger.exception("知覚ハッシュの保存に失敗しました")
         return job
 
-    def _load_images(self, assets: list[Asset]) -> list[Image.Image | None]:
-        """thumb を読んでデコードする(複数のスレッドで並列に)。読めなければ None。順序は保つ。
+    def _load_images(
+        self, assets: list[Asset], variant: InputVariant = "thumb"
+    ) -> list[tuple[Image.Image, Image.Image | None] | None]:
+        """入力の派生画像を読んでデコードする(複数のスレッドで並列に)。返すのは
+        (入力の画像、知覚ハッシュ用の thumb)。読めなければ None。順序は保つ。
+
+        `variant` が thumb でなければ、ハッシュ用に thumb も読む。thumb だけが読めないときは
+        ハッシュ用を None にする(埋め込みは続ける)。
 
         Asset の属性は読み込み済みのものだけを使う(別スレッドから遅延読み込みをしない)。
         """
         refs = [(asset.id, asset.blob_key, asset.sha256) for asset in assets]
 
-        def load(ref: tuple[uuid.UUID, str, str]) -> Image.Image | None:
+        def load(
+            ref: tuple[uuid.UUID, str, str],
+        ) -> tuple[Image.Image, Image.Image | None] | None:
             asset_id, blob_key, sha256 = ref
             try:
-                return _decode_image(self._read_thumb_by_key(blob_key, sha256))
+                image = _decode_image(self._read_derived_by_key(blob_key, sha256, variant))
             except Exception as e:  # noqa: BLE001 - 読めなければその行だけ失敗にする
                 logger.warning("asset %s の画像を読めませんでした: %s", asset_id, e)
                 return None
+            if variant == "thumb":
+                return image, image
+            try:
+                return image, _decode_image(self._read_thumb_by_key(blob_key, sha256))
+            except Exception as e:  # noqa: BLE001 - ハッシュは後で埋め戻す
+                logger.warning("asset %s の thumb を読めませんでした: %s", asset_id, e)
+                return image, None
 
         if len(refs) <= 1:
             return [load(ref) for ref in refs]
@@ -412,15 +541,141 @@ class Embedder:
                 self._finish_succeeded, job.model_key, list(zip(ids, vectors, strict=True))
             )
 
+    # -- Run のプロンプト(ADR-0045) ------------------------------------------------
+
+    def _prepare_prompt(self) -> _PromptJob | None:
+        """使うモデルのプロンプトの行を取り、埋め込む文章を組み立てる。取るものが無い、
+        またはモデルが対応しなければ None。"""
+        with self.session_factory() as session:
+            config = embedding_settings.load(session)
+            model_key = prompt_domain.active_model_key(config, self.settings)
+            if model_key is None:
+                return None
+            engine: Any = None
+            engine_error: str | None = None
+            try:
+                engine = self.engines.engine_for(session, config)
+            except EmbeddingError as e:
+                engine_error = str(e)
+        if engine is not None and not hasattr(engine, "embed_documents"):
+            engine, engine_error = None, t("embeddings.promptNotSupported")
+        claimed = claim_prompts(self.session_factory, model_key, PROMPT_CLAIM_LIMIT)
+        if not claimed:
+            return None
+        job = _PromptJob(model_key=model_key, engine=engine, claimed=list(claimed))
+        if engine is None:
+            job.failures = [(run_id, engine_error or "") for run_id in claimed]
+            return job
+        with self.session_factory() as session:
+            for run_id in claimed:
+                run = session.get(Run, run_id)
+                if run is None or run.deleted_at is not None:
+                    job.failures.append((run_id, t("embeddings.runDeleted")))
+                    continue
+                if not prompt_domain.is_target(session, run):
+                    job.failures.append((run_id, t("embeddings.runNotTarget")))
+                    continue
+                prompt = prompt_domain.select_prompt(run)
+                title = prompt_domain.first_output_title(session, run_id)
+                try:
+                    document = prompt_domain.build_document(prompt, title, engine.document_fits)
+                except EmbeddingError as e:
+                    job.failures.append((run_id, str(e)))
+                    continue
+                job.items.append((run_id, document))
+        return job
+
+    async def _process_prompt(self, job: _PromptJob) -> None:
+        if job.failures:
+            await asyncio.to_thread(self._finish_prompt_failed, job.model_key, job.failures)
+        if job.engine is None:
+            return
+        engine = job.engine
+        for run_id, document in job.items:
+            try:
+                vectors = await asyncio.to_thread(engine.embed_documents, [document.text])
+                if vectors.shape[0] != 1:
+                    raise EmbeddingError(t("embeddings.remoteInvalidResponse"))
+            except EmbeddingError as e:
+                await asyncio.to_thread(
+                    self._finish_prompt_failed, job.model_key, [(run_id, str(e))]
+                )
+                continue
+            except Exception as e:  # noqa: BLE001 - どの失敗も記録する
+                logger.exception("プロンプトの埋め込みの計算中に予期しない例外が発生しました")
+                await asyncio.to_thread(
+                    self._finish_prompt_failed,
+                    job.model_key,
+                    [(run_id, f"internalError: {e}")],
+                )
+                continue
+            await asyncio.to_thread(
+                self._finish_prompt_succeeded, job.model_key, run_id, vectors[0], document
+            )
+
+    def _finish_prompt_failed(self, model_key: str, failures: list[tuple[uuid.UUID, str]]) -> None:
+        with self.session_factory() as session:
+            now = _utcnow()
+            for run_id, message in failures:
+                row = session.get(RunPromptEmbedding, (run_id, model_key))
+                # 計算の間に消された・待ち行列に戻された行には書かない。
+                if row is None or row.status != prompt_domain.STATUS_RUNNING:
+                    continue
+                row.status = prompt_domain.STATUS_FAILED
+                row.error = sanitize_external_text(message)[:_ERROR_MAX]
+                row.finished_at = now
+                row.updated_at = now
+            session.commit()
+
+    def _finish_prompt_succeeded(
+        self,
+        model_key: str,
+        run_id: uuid.UUID,
+        vector: np.ndarray,
+        document: prompt_domain.DocumentText,
+    ) -> None:
+        values = np.asarray(vector, dtype=np.float32).reshape(-1)
+        with self.session_factory() as session:
+            row = session.get(RunPromptEmbedding, (run_id, model_key))
+            # 計算の間に消された(管理者の操作)、またはタイトルが変わって待ち行列に戻された
+            # 行には書かない(戻された行は計算し直す)。
+            if row is None or row.status != prompt_domain.STATUS_RUNNING:
+                return
+            now = _utcnow()
+            row.status = prompt_domain.STATUS_SUCCEEDED
+            row.vector = vector_to_blob(values)
+            row.dim = int(values.shape[0])
+            row.text_sha256 = document.sha256
+            row.truncated = document.truncated
+            row.error = None
+            row.finished_at = now
+            row.updated_at = now
+            session.flush()
+            if self.pgvector:
+                embedding_index.write_embedding_column(
+                    session.connection(), run_id, model_key, values, embedding_index.PROMPT_TABLE
+                )
+            session.commit()
+        key = prompt_domain.version_key(model_key)
+        self.bump(key)
+        if self.pgvector and key not in self._indexed and self.db_engine is not None:
+            embedding_index.ensure_hnsw_index(
+                self.db_engine, model_key, int(values.shape[0]), embedding_index.PROMPT_TABLE
+            )
+            self._indexed.add(key)
+
     # -- 知覚ハッシュ(ADR-0033 12章) ----------------------------------------------
 
     def _read_thumb(self, asset: Asset) -> bytes:
         return self._read_thumb_by_key(asset.blob_key, asset.sha256)
 
     def _read_thumb_by_key(self, blob_key: str, sha256: str) -> bytes:
-        # 今の版の thumb が無ければ原本から作る(ADR-0036 2章)。
-        thumb = derivatives.ensure_derived(self.store, blob_key, sha256, "thumb")
-        return thumb.read_all() if thumb is not None else self.store.read(blob_key)
+        return self._read_derived_by_key(blob_key, sha256, "thumb")
+
+    def _read_derived_by_key(self, blob_key: str, sha256: str, variant: InputVariant) -> bytes:
+        # 今の版の派生が無ければ原本から作る(ADR-0036 2章)。作れなければ原本を読む。
+        derived = derivatives.ensure_derived(self.store, blob_key, sha256, variant)
+        return derived.read_all() if derived is not None else self.store.read(blob_key)
 
     def _store_hashes(self, images: list[tuple[uuid.UUID, Image.Image]]) -> int:
         """無いか版の古い知覚ハッシュを作って保存し、件数を返す。1枚の失敗は飛ばす。"""

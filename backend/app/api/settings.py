@@ -44,6 +44,7 @@ from app.domain import (
 from app.domain import annotations as annotations_domain
 from app.domain import api_key as api_key_domain
 from app.domain import embeddings as embeddings_domain
+from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.schemas import (
     AnnotationBackfillResponse,
     AnnotationComfyuiProfile,
@@ -70,6 +71,7 @@ from app.domain.schemas import (
     OpenAIBaseUrlUpdateRequest,
     OpenAIKeyStatusResponse,
     OpenAIKeyUpdateRequest,
+    SdWebuiTimeoutSetting,
     ShareSettingsResponse,
     ShareSettingsUpdateRequest,
 )
@@ -268,12 +270,15 @@ def delete_openai_base_url(
 
 
 # -- 全般設定(ADR-0009、ADR-0013 7章) ------------------------------------------
-# moderation(Generate 専用)と ComfyUI のタイムアウトを画面から変える。
+# moderation(Generate 専用)と ComfyUI・SD WebUI のタイムアウトを画面から変える。
 
 
 def _general_settings_response(db: Session, settings: Settings) -> GeneralSettingsResponse:
     moderation_value, moderation_source = general_settings.resolve_moderation(db, settings)
     timeout_value, timeout_source = general_settings.resolve_timeout_seconds(db, settings)
+    sdwebui_timeout_value, sdwebui_timeout_source = (
+        general_settings.resolve_sdwebui_timeout_seconds(db, settings)
+    )
     return GeneralSettingsResponse(
         moderation=ModerationSetting(
             value=moderation_value,
@@ -284,6 +289,11 @@ def _general_settings_response(db: Session, settings: Settings) -> GeneralSettin
             value=timeout_value,
             source=timeout_source,
             default=general_settings.default_timeout_seconds(settings),
+        ),
+        sdwebui_timeout_seconds=SdWebuiTimeoutSetting(
+            value=sdwebui_timeout_value,
+            source=sdwebui_timeout_source,
+            default=general_settings.default_sdwebui_timeout_seconds(settings),
         ),
     )
 
@@ -312,6 +322,8 @@ def update_general_settings(
             general_settings.validate_moderation(body.moderation)
         if "comfyui_timeout_seconds" in fields_set:
             general_settings.validate_timeout_seconds(body.comfyui_timeout_seconds)
+        if "sdwebui_timeout_seconds" in fields_set:
+            general_settings.validate_sdwebui_timeout_seconds(body.sdwebui_timeout_seconds)
     except general_settings.GeneralSettingsValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -319,6 +331,8 @@ def update_general_settings(
         general_settings.save_moderation(db, body.moderation)
     if "comfyui_timeout_seconds" in fields_set:
         general_settings.save_timeout_seconds(db, body.comfyui_timeout_seconds)
+    if "sdwebui_timeout_seconds" in fields_set:
+        general_settings.save_sdwebui_timeout_seconds(db, body.sdwebui_timeout_seconds)
     return _general_settings_response(db, settings)
 
 
@@ -601,7 +615,9 @@ def backfill_annotations(
 
 
 def _embedding_model_statuses(
-    settings: Settings, downloader: ClipModelDownloader
+    settings: Settings,
+    downloader: ClipModelDownloader,
+    config: embedding_settings.EmbeddingConfig,
 ) -> list[EmbeddingOnnxModelStatus]:
     statuses: list[EmbeddingOnnxModelStatus] = []
     for name, model in CLIP_MODELS.items():
@@ -616,6 +632,10 @@ def _embedding_model_statuses(
                 memory_bytes=model.memory_bytes,
                 memory_text_bytes=model.memory_text_bytes,
                 license=model.license,
+                heavy=model.heavy,
+                many_languages=model.many_languages,
+                duplicate_threshold=embedding_settings.onnx_threshold(config, name),
+                duplicate_threshold_default=model.duplicate_threshold,
                 downloaded=clip_is_downloaded(settings.data_dir, name),
                 download_status=state.status,  # type: ignore[arg-type]
                 download_progress=state.progress,
@@ -645,13 +665,36 @@ def _embedding_settings_response(
             (embeddings_domain.STATUS_QUEUED, embeddings_domain.STATUS_RUNNING),
         )
         failed = embeddings_domain.status_count(db, active_key, (embeddings_domain.STATUS_FAILED,))
+    # ADR-0045 6章: プロンプトの埋め込みの件数(使うモデルが対応するときだけ)。
+    prompt_supported = active_key is not None and embedding_settings.prompt_supported(config)
+    prompt_counts = {
+        "prompt_stored_count": 0,
+        "prompt_pending_count": 0,
+        "prompt_queued_count": 0,
+        "prompt_failed_count": 0,
+    }
+    if prompt_supported:
+        assert active_key is not None
+        prompt_counts = {
+            "prompt_stored_count": prompt_embeddings_domain.stored_count(db, active_key),
+            "prompt_pending_count": prompt_embeddings_domain.pending_count(db, active_key),
+            "prompt_queued_count": prompt_embeddings_domain.status_count(
+                db,
+                active_key,
+                (prompt_embeddings_domain.STATUS_QUEUED, prompt_embeddings_domain.STATUS_RUNNING),
+            ),
+            "prompt_failed_count": prompt_embeddings_domain.status_count(
+                db, active_key, (prompt_embeddings_domain.STATUS_FAILED,)
+            ),
+        }
     return EmbeddingSettingsResponse(
         **{name: getattr(config, name) for name in embedding_settings.FIELDS},
+        duplicate_threshold_default=embedding_settings.default_threshold(config),
         active_model_key=active_key,
         active_languages=languages,  # type: ignore[arg-type]
         usable=embedding_settings.usable(config, settings),
         index_backend=index_backend,  # type: ignore[arg-type]
-        onnx_models=_embedding_model_statuses(settings, downloader),
+        onnx_models=_embedding_model_statuses(settings, downloader, config),
         stored=[
             EmbeddingStoredCount(model_key=key, count=count, dim=dim, active=key == active_key)
             for key, count, dim in embeddings_domain.stored_counts(db)
@@ -659,6 +702,8 @@ def _embedding_settings_response(
         pending_count=pending,
         queued_count=queued,
         failed_count=failed,
+        prompt_supported=prompt_supported,
+        **prompt_counts,
     )
 
 
@@ -774,16 +819,21 @@ def backfill_embeddings(
     _user: CurrentUser = Depends(require_admin),
 ) -> EmbeddingBackfillResponse:
     """使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)をまとめて
-    待ち行列に入れる。埋め込みが無効、またはモデルが使えなければ 409。"""
+    待ち行列に入れる。使うモデルが対応すれば、Run のプロンプトも同じ規則で入れる(ADR-0045
+    4章)。埋め込みが無効、またはモデルが使えなければ 409。"""
     config = embedding_settings.load(db)
     if not embedding_settings.usable(config, settings):
         raise HTTPException(status_code=409, detail=t("embeddings.notUsable"))
     model_key = embedding_settings.active_model_key(config, settings)
     assert model_key is not None
     count = embeddings_domain.backfill(db, model_key)
+    prompt_count = 0
+    if embedding_settings.prompt_supported(config):
+        prompt_count = prompt_embeddings_domain.backfill(db, model_key)
     db.commit()
+    response = EmbeddingBackfillResponse(queued=count, prompt_queued=prompt_count)
     embedder.notify()
-    return EmbeddingBackfillResponse(queued=count)
+    return response
 
 
 @router.delete(
@@ -800,12 +850,14 @@ def delete_embedding_vectors(
     embedder: Embedder = Depends(get_embedder),
     _user: CurrentUser = Depends(require_admin),
 ) -> EmbeddingSettingsResponse:
-    """そのモデルのベクトルと計算の状態をすべて消す(使っているモデルも消せる。画像の取り込み時や
-    一括実行で計算し直す)。無ければ 404。"""
+    """そのモデルのベクトルと計算の状態をすべて消す(画像と Run のプロンプトの両方。使っている
+    モデルも消せる。画像の取り込み時や一括実行で計算し直す)。無ければ 404。"""
     count = embeddings_domain.delete_vectors(db, model_key)
-    if count == 0:
+    prompt_count = prompt_embeddings_domain.delete_vectors(db, model_key)
+    if count == 0 and prompt_count == 0:
         db.rollback()
         raise HTTPException(status_code=404, detail=t("settings.embedding.vectorsNotFound"))
     db.commit()
     embedder.bump(model_key)
+    embedder.bump(prompt_embeddings_domain.version_key(model_key))
     return _embedding_settings_response(db, settings, downloader, index_backend)

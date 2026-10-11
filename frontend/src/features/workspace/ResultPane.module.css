@@ -438,6 +438,13 @@
   color: var(--color-text-muted);
 }
 
+/* 繰り返し回数でまとめて積んだ Run の何番目か(ADR-0042) */
+.repeatProgress {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
 .progressTrack {
   position: absolute;
   left: 0;

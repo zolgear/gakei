@@ -41,7 +41,9 @@ INSTANCE_SETTING_KEY = "instance.id"
 # run.params のうち、画像に埋め込まない項目(ADR-0014 3章)。
 # comfyui_prompt: グラフ全体で大きく、ComfyUI 自身が `prompt` チャンクに入れている。
 # comfyui_outputs: 出力ノードの一覧で、レシピの復元には不要。
-_EXCLUDED_PARAM_KEYS = {"comfyui_prompt", "comfyui_outputs"}
+# sdwebui_request: WebUI に送った本文全体で大きく、WebUI 自身も `parameters` チャンクに
+# 生成の設定を入れている(ADR-0038 3章。seed は sdwebui_seed に残る)。
+_EXCLUDED_PARAM_KEYS = {"comfyui_prompt", "comfyui_outputs", "sdwebui_request"}
 
 # ADR-0014 6章: 祖先グラフのノード数上限と、本文の上限(超えたら params/prompt を落とす)。
 # モジュールレベルの定数にして、テストから monkeypatch できるようにする。

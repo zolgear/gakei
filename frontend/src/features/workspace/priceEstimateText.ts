@@ -83,12 +83,21 @@ function describeUnitPricesLine(estimate: PriceEstimateResponse): string | null 
   })
 }
 
-/** 生成ボタン横の短い表示と、ツールチップの内訳をまとめて作る。 */
-export function describeEstimate(estimate: PriceEstimateResponse): EstimateDescription {
+/**
+ * 生成ボタン横の短い表示と、ツールチップの内訳をまとめて作る。`repeat`(繰り返し回数。ADR-0042)が
+ * 2 以上なら、合計は1回分 × 回数にし、内訳の先頭に1回分の額を添える(入力画像も Run ごとに送るので、
+ * 1回分の見積もりをそのまま掛ければよい)。
+ */
+export function describeEstimate(estimate: PriceEstimateResponse, repeat = 1): EstimateDescription {
   const t = msg().workspace.priceEstimate
-  const text = estimate.total_usd === null ? t.noReference : formatEstimateAmount(estimate.total_usd)
+  const times = Number.isInteger(repeat) && repeat > 1 ? repeat : 1
+  const text =
+    estimate.total_usd === null ? t.noReference : formatEstimateAmount(estimate.total_usd * times)
 
   const lines: string[] = []
+  if (times > 1 && estimate.total_usd !== null) {
+    lines.push(fmt(t.repeatLine, { count: times, amount: formatUsd(estimate.total_usd) }))
+  }
   if (estimate.unavailable_reason) {
     lines.push(reasonText(estimate.unavailable_reason))
   }
