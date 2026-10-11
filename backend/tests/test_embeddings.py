@@ -236,6 +236,90 @@ def test_reupload_of_existing_asset_is_not_queued_again(client: TestClient) -> N
     assert _rows(client) == []
 
 
+def _delete_and_restore(client: TestClient, asset_id: str) -> None:
+    assert client.delete(f"/api/assets/{asset_id}").status_code == 204
+    response = client.post(f"/api/assets/{asset_id}/restore")
+    assert response.status_code == 200, response.text
+
+
+def test_restore_queues_missing_embedding(client: TestClient) -> None:
+    """復元したとき、ベクトルが無ければ取り込み時と同じ条件で計算する(ADR-0046 4章)。"""
+    _patch(client, enabled=True, auto_on_ingest=False)
+    asset = _upload(client)
+    assert client.delete(f"/api/assets/{asset['id']}").status_code == 204
+    _patch(client, auto_on_ingest=True)
+    assert client.post(f"/api/assets/{asset['id']}/restore").status_code == 200
+    assert _wait_status(client, asset["id"]).status == "succeeded"
+
+
+def test_restore_requeues_failed_embedding(client: TestClient) -> None:
+    _patch(client, enabled=True)
+    asset = _upload(client)
+    _wait_status(client, asset["id"])
+    with client.app.state.session_factory() as session:
+        row = session.get(AssetEmbedding, (uuid.UUID(asset["id"]), ACTIVE_KEY))
+        row.status = "failed"
+        row.error = "x"
+        row.vector = None
+        session.commit()
+    _delete_and_restore(client, asset["id"])
+    row = _wait_status(client, asset["id"])
+    assert row.status == "succeeded"
+    assert row.error is None
+
+
+def test_restore_does_not_requeue_computed_embedding(client: TestClient) -> None:
+    _patch(client, enabled=True)
+    asset = _upload(client)
+    before = _wait_status(client, asset["id"])
+    _delete_and_restore(client, asset["id"])
+    [after] = _rows(client, asset["id"])
+    assert after.status == "succeeded"
+    assert after.requested_at == before.requested_at
+    assert after.finished_at == before.finished_at
+
+
+def test_restore_does_not_requeue_queued_embedding(client: TestClient) -> None:
+    _patch(client, enabled=True, auto_on_ingest=False)
+    asset = _upload(client)
+    from datetime import UTC, datetime
+
+    queued_at = datetime(2026, 1, 1, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        session.add(
+            AssetEmbedding(
+                asset_id=uuid.UUID(asset["id"]),
+                model_key=ACTIVE_KEY,
+                status="running",
+                requested_at=queued_at,
+                updated_at=queued_at,
+            )
+        )
+        session.commit()
+    _patch(client, auto_on_ingest=True)
+    _delete_and_restore(client, asset["id"])
+    [row] = _rows(client, asset["id"])
+    assert row.status == "running"
+    assert row.requested_at.replace(tzinfo=UTC) == queued_at
+
+
+@pytest.mark.parametrize("values", [{"enabled": False}, {"enabled": True, "auto_on_ingest": False}])
+def test_restore_does_not_queue_when_disabled_or_auto_off(
+    client: TestClient, values: dict[str, Any]
+) -> None:
+    asset = _upload(client)
+    _patch(client, **values)
+    _delete_and_restore(client, asset["id"])
+    assert _rows(client, asset["id"]) == []
+
+
+def test_restore_does_not_queue_mask(client: TestClient) -> None:
+    _patch(client, enabled=True)
+    mask = _upload(client, color=(0, 0, 0), kind="mask")
+    _delete_and_restore(client, mask["id"])
+    assert _rows(client, mask["id"]) == []
+
+
 def test_batch_one_engine_computes_one_image_at_a_time(client: TestClient) -> None:
     """量子化したモデル(既定)は1枚ずつ計算する。"""
     _patch(client, enabled=True, auto_on_ingest=False)
