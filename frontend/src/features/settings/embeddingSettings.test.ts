@@ -3,6 +3,9 @@ import type { EmbeddingOnnxModelStatus, EmbeddingSettingsResponse } from '../../
 import {
   diffEmbeddingDraft,
   embeddingBackfillBlocker,
+  embeddingPendingTotal,
+  embeddingQueuedTotal,
+  promptEmbeddingCounts,
   embeddingConnectionChoices,
   embeddingDraftFromSettings,
   isAnyEmbeddingModelDownloading,
@@ -57,6 +60,11 @@ function settings(overrides: Partial<EmbeddingSettingsResponse> = {}): Embedding
     pending_count: 0,
     queued_count: 0,
     failed_count: 0,
+    prompt_supported: false,
+    prompt_stored_count: 0,
+    prompt_pending_count: 0,
+    prompt_queued_count: 0,
+    prompt_failed_count: 0,
     ...overrides,
   }
 }
@@ -199,6 +207,32 @@ describe('embeddingBackfillBlocker', () => {
     expect(embeddingBackfillBlocker({ ...base, dirty: true, usable: false })).toBe('unsaved')
     expect(embeddingBackfillBlocker({ ...base, usable: false, pendingCount: 0 })).toBe('notUsable')
     expect(embeddingBackfillBlocker({ ...base, pendingCount: 0 })).toBe('nothingPending')
+  })
+})
+
+describe('promptEmbeddingCounts / embeddingPendingTotal / embeddingQueuedTotal', () => {
+  const counts = {
+    pending_count: 2,
+    queued_count: 1,
+    prompt_stored_count: 5,
+    prompt_pending_count: 3,
+    prompt_queued_count: 4,
+    prompt_failed_count: 1,
+  }
+
+  it('対応しないモデルでは出さず、合計にも数えない', () => {
+    const data = settings(counts)
+    expect(promptEmbeddingCounts(data)).toBeNull()
+    expect(embeddingPendingTotal(data)).toBe(2)
+    expect(embeddingQueuedTotal(data)).toBe(1)
+    expect(embeddingQueuedTotal(undefined)).toBe(0)
+  })
+
+  it('対応するモデルでは画像とプロンプトを合わせる', () => {
+    const data = settings({ ...counts, prompt_supported: true })
+    expect(promptEmbeddingCounts(data)).toEqual({ stored: 5, pending: 3, queued: 4, failed: 1 })
+    expect(embeddingPendingTotal(data)).toBe(5)
+    expect(embeddingQueuedTotal(data)).toBe(5)
   })
 })
 

@@ -46,6 +46,20 @@ class EmbeddingEngine(Protocol):
         ...
 
 
+class DocumentEmbeddingEngine(Protocol):
+    """Run のプロンプトの埋め込み(ADR-0045)に対応するエンジン。対応するかはカタログの
+    `prompt_embeddings` で決まり、対応するエンジンだけがこの2つを持つ。"""
+
+    def document_fits(self, text: str) -> bool:
+        """文書のプレフィックスを付けた `text` が、切らずに上限に収まるか(トークナイザーだけを
+        使い、モデルのセッションは読み込まない)。"""
+        ...
+
+    def embed_documents(self, texts: list[str]) -> np.ndarray:
+        """文書のプレフィックスを付け、上限で切って1件ずつ計算する(優先の区間にしない)。"""
+        ...
+
+
 def l2_normalize(vectors: np.ndarray) -> np.ndarray:
     """行ごとに L2 正規化した float32 を返す(長さ 0 の行は 0 のまま)。"""
     array = np.asarray(vectors, dtype=np.float32)

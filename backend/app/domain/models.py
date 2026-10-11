@@ -669,6 +669,33 @@ class AssetEmbedding(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
+class RunPromptEmbedding(Base):
+    """Run のプロンプトの埋め込みベクトル(ADR-0045 3章)。証跡ではないので更新・削除してよい。
+
+    作りは `AssetEmbedding` と同じ。(Run、`model_key`)ごとに1行で、`status` が待ち行列を兼ねる。
+    `text_sha256` は埋め込んだ文章(タイトルを付けたときはタイトル込み。文書のプレフィックスは
+    含めない)の sha256 で、タイトルが変わったときに埋め込み直しが要るかの判断に使う。
+    `truncated` は、プロンプトが上限を超えた(タイトルを先頭に付けて切った)とき True。
+    PostgreSQL で pgvector が使えるときの `embedding vector` 列も同じ(ORM には載せない)。
+    """
+
+    __tablename__ = "run_prompt_embedding"
+    __table_args__ = (Index("ix_run_prompt_embedding_model_key_status", "model_key", "status"),)
+
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("run.id"), primary_key=True)
+    model_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    # queued | running | succeeded | failed
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vector: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    text_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
 class AssetPerceptualHash(Base):
     """Asset の知覚ハッシュ(ADR-0033 12章)。重複の候補の判定に、CLIP の類似度と併せて使う。
 

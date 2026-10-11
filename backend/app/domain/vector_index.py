@@ -15,6 +15,10 @@
 見える範囲(ADR-0025)、削除済みとマスクの除外、グループ・タグ・種類の絞り込みは、上位 k 件を
 取る前に掛ける(`AssetFilter`)。他人の画像は、似た画像にも重複にもマップにも出さない。
 
+Run のプロンプトの埋め込み(ADR-0045 5章)も同じ2つの方式で探す(`prompt_top_k`)。見える範囲と
+削除済みの除外は Run に掛ける(`RunFilter`)。numpy の行列は画像とプロンプトで別に持ち、版は
+`prompt_embeddings.version_key(model_key)` で数える。
+
 全組の近傍(マップ、重複の候補)は、どちらの方式でも、選んだ部分集合(件数に上限がある)の
 ベクトルを行列にして numpy で計算する(`knn_matrix`、`pairs_at_least`)。pgvector で1件ずつ
 HNSW を引くと、5000 件なら 5000 回の往復になり、しかも近似になる。部分集合の行列は高々
@@ -37,9 +41,17 @@ from sqlalchemy.types import UserDefinedType
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
-from app.domain import embedding_index
-from app.domain.models import Asset, AssetEmbedding, AssetGroupMember, AssetKind
-from app.domain.visibility import asset_visible
+from app.domain import embedding_index, prompt_embeddings
+from app.domain.models import (
+    Asset,
+    AssetEmbedding,
+    AssetGroupMember,
+    AssetKind,
+    Run,
+    RunPromptEmbedding,
+    RunStatus,
+)
+from app.domain.visibility import asset_visible, run_visible
 from app.embedding.base import blob_to_vector, l2_normalize
 
 logger = logging.getLogger(__name__)
@@ -85,6 +97,40 @@ class Hit:
     asset_id: uuid.UUID
     # コサイン類似度(ベクトルは L2 正規化済みなので内積)。
     score: float
+
+
+@dataclass(frozen=True)
+class RunFilter:
+    """プロンプトで探す対象の絞り込み(ADR-0045 5章)。見える範囲と、成功していない・削除済みの
+    Run の除外は常に掛ける。"""
+
+    viewer: CurrentUser
+
+    def conditions(self) -> list[Any]:
+        return [
+            Run.deleted_at.is_(None),
+            Run.status == RunStatus.SUCCEEDED,
+            run_visible(self.viewer),
+        ]
+
+
+@dataclass(frozen=True)
+class RunHit:
+    run_id: uuid.UUID
+    score: float
+
+
+def prompt_candidate_ids(db: Session, model_key: str, flt: RunFilter) -> list[uuid.UUID]:
+    """絞り込みに合い、そのモデルのプロンプトのベクトルがある Run の id。"""
+    query = (
+        select(Run.id)
+        .join(
+            RunPromptEmbedding,
+            and_(RunPromptEmbedding.run_id == Run.id, RunPromptEmbedding.model_key == model_key),
+        )
+        .where(RunPromptEmbedding.vector.is_not(None), *flt.conditions())
+    )
+    return list(db.execute(query).scalars().all())
 
 
 def _has_vector() -> Any:
@@ -218,6 +264,15 @@ class VectorIndex(Protocol):
         self, db: Session, model_key: str, asset_ids: Sequence[uuid.UUID]
     ) -> tuple[list[uuid.UUID], np.ndarray]: ...
 
+    def prompt_top_k(
+        self,
+        db: Session,
+        model_key: str,
+        query: np.ndarray,
+        flt: RunFilter,
+        k: int,
+    ) -> list[RunHit]: ...
+
 
 def neighbors(
     index: VectorIndex,
@@ -253,34 +308,64 @@ class NumpyIndex:
     def __init__(self, version_of: Callable[[str], int]) -> None:
         self._version_of = version_of
         self._lock = threading.Lock()
-        self._cache: dict[str, _Matrix] = {}
+        self._cache: dict[tuple[str, str], _Matrix] = {}
         # テストで読み直した回数を確かめる。
         self.loads = 0
 
-    def _matrix(self, db: Session, model_key: str) -> _Matrix:
+    def _matrix(self, db: Session, model_key: str, source: str = "asset") -> _Matrix:
+        """`source` は `asset`(画像)か `prompt`(Run のプロンプト。行の id は Run の id)。"""
         with self._lock:
-            version = self._version_of(model_key)
-            cached = self._cache.get(model_key)
+            if source == "prompt":
+                version = self._version_of(prompt_embeddings.version_key(model_key))
+            else:
+                version = self._version_of(model_key)
+            cached = self._cache.get((source, model_key))
             if cached is not None and cached.version == version:
                 return cached
             # 版は読む前に取る(読んでいる間に書かれたら、次の呼び出しで読み直す)。
-            rows = db.execute(
-                select(AssetEmbedding.asset_id, AssetEmbedding.vector)
-                .where(AssetEmbedding.model_key == model_key, _has_vector())
-                .order_by(AssetEmbedding.asset_id)
-            ).all()
-            ids = [asset_id for asset_id, _ in rows]
+            if source == "prompt":
+                rows = db.execute(
+                    select(RunPromptEmbedding.run_id, RunPromptEmbedding.vector)
+                    .where(
+                        RunPromptEmbedding.model_key == model_key,
+                        RunPromptEmbedding.vector.is_not(None),
+                    )
+                    .order_by(RunPromptEmbedding.run_id)
+                ).all()
+            else:
+                rows = db.execute(
+                    select(AssetEmbedding.asset_id, AssetEmbedding.vector)
+                    .where(AssetEmbedding.model_key == model_key, _has_vector())
+                    .order_by(AssetEmbedding.asset_id)
+                ).all()
+            ids = [row_id for row_id, _ in rows]
             matrix = _stack([blob_to_vector(bytes(blob)) for _, blob in rows])
             entry = _Matrix(
                 version=version,
                 ids=ids,
-                positions={asset_id: i for i, asset_id in enumerate(ids)},
+                positions={row_id: i for i, row_id in enumerate(ids)},
                 matrix=matrix,
             )
-            # 使うモデルは1つなので、ほかのモデルの行列は捨てる(メモリを抱えない)。
-            self._cache = {model_key: entry}
+            # 使うモデルは1つなので、同じ種類のほかのモデルの行列は捨てる(メモリを抱えない)。
+            self._cache = {key: value for key, value in self._cache.items() if key[0] != source}
+            self._cache[(source, model_key)] = entry
             self.loads += 1
             return entry
+
+    @staticmethod
+    def _score(
+        entry: _Matrix, allowed: list[int], query: np.ndarray, k: int
+    ) -> list[tuple[int, float]]:
+        """行列の `allowed` の行と `query` の内積の上位 k 件(行の位置と類似度)。"""
+        if not allowed:
+            return []
+        rows = np.asarray(allowed, dtype=np.int64)
+        q = l2_normalize(np.asarray(query, dtype=np.float32).reshape(-1))[0]
+        if q.shape[0] != entry.matrix.shape[1]:
+            return []
+        scores = entry.matrix[rows] @ q
+        top = _top_indices(scores, k)
+        return [(int(rows[i]), float(np.clip(scores[i], -1.0, 1.0))) for i in top]
 
     def top_k(
         self,
@@ -300,20 +385,37 @@ class NumpyIndex:
             for i in candidate_ids(db, model_key, flt)
             if i in entry.positions and i not in excluded
         ]
-        if not allowed:
-            return []
-        rows = np.asarray(allowed, dtype=np.int64)
-        q = l2_normalize(np.asarray(query, dtype=np.float32).reshape(-1))[0]
-        if q.shape[0] != entry.matrix.shape[1]:
-            return []
-        scores = entry.matrix[rows] @ q
-        top = _top_indices(scores, k)
         hits = [
-            Hit(asset_id=entry.ids[int(rows[i])], score=float(np.clip(scores[i], -1.0, 1.0)))
-            for i in top
+            Hit(asset_id=entry.ids[row], score=score)
+            for row, score in self._score(entry, allowed, query, k)
         ]
         # 同点の並びを pgvector の方式と揃える。
         hits.sort(key=lambda h: (-h.score, str(h.asset_id)))
+        return hits
+
+    def prompt_top_k(
+        self,
+        db: Session,
+        model_key: str,
+        query: np.ndarray,
+        flt: RunFilter,
+        k: int,
+    ) -> list[RunHit]:
+        entry = self._matrix(db, model_key, "prompt")
+        if not entry.ids or k <= 0:
+            return []
+        allowed = [
+            entry.positions[i]
+            for i in prompt_candidate_ids(db, model_key, flt)
+            if i in entry.positions
+        ]
+        # 候補の順は DB 次第なので、位置で並べてから計算する(同点の並びを決めるため)。
+        allowed.sort()
+        hits = [
+            RunHit(run_id=entry.ids[row], score=score)
+            for row, score in self._score(entry, allowed, query, k)
+        ]
+        hits.sort(key=lambda h: (-h.score, str(h.run_id)))
         return hits
 
     def vector_of(self, db: Session, model_key: str, asset_id: uuid.UUID) -> np.ndarray | None:
@@ -461,6 +563,64 @@ class PgvectorIndex:
         ]
         # relaxed_order では順番が少し前後することがあるので並べ直す。
         hits.sort(key=lambda h: (-h.score, str(h.asset_id)))
+        return hits
+
+    @staticmethod
+    def _prompt_dim(db: Session, model_key: str) -> int | None:
+        return db.execute(
+            select(RunPromptEmbedding.dim)
+            .where(
+                RunPromptEmbedding.model_key == model_key,
+                RunPromptEmbedding.dim.is_not(None),
+                RunPromptEmbedding.vector.is_not(None),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+
+    def prompt_query_statement(
+        self, model_key: str, dim: int, query: np.ndarray, flt: RunFilter, k: int
+    ) -> Any:
+        """プロンプトの上位 k 件の SELECT。式と条件は部分 HNSW 索引と同じ形にする。"""
+        dim = int(dim)
+        table = embedding_index.PROMPT_TABLE
+        column = f"{table.name}.{embedding_index.COLUMN}::vector({dim})"
+        distance = literal_column(column).op("<=>", return_type=Float)(
+            cast(bindparam("query_vector", embedding_index.vector_literal(query)), _PgVector(dim))
+        )
+        return (
+            select(RunPromptEmbedding.run_id, distance.label("distance"))
+            .join(Run, Run.id == RunPromptEmbedding.run_id)
+            .where(
+                text(f"{table.name}.model_key = {embedding_index.quote_literal(model_key)}"),
+                text(f"{table.name}.{embedding_index.COLUMN} IS NOT NULL"),
+                *flt.conditions(),
+            )
+            .order_by(distance)
+            .limit(k)
+        )
+
+    def prompt_top_k(
+        self,
+        db: Session,
+        model_key: str,
+        query: np.ndarray,
+        flt: RunFilter,
+        k: int,
+    ) -> list[RunHit]:
+        if k <= 0:
+            return []
+        q = np.asarray(query, dtype=np.float32).reshape(-1)
+        dim = self._prompt_dim(db, model_key)
+        if dim is None or dim != q.shape[0]:
+            return []
+        self.prepare_scan(db, k)
+        rows = db.execute(self.prompt_query_statement(model_key, dim, q, flt, k)).all()
+        hits = [
+            RunHit(run_id=run_id, score=float(min(1.0, max(-1.0, 1.0 - float(distance)))))
+            for run_id, distance in rows
+            if distance is not None
+        ]
+        hits.sort(key=lambda h: (-h.score, str(h.run_id)))
         return hits
 
     def vector_of(self, db: Session, model_key: str, asset_id: uuid.UUID) -> np.ndarray | None:

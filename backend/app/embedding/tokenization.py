@@ -246,6 +246,10 @@ class Eg2Tokenizer:
         body = self._encode_plain(text)[: max_length - 2]
         return [EG2_BOS, *body, EG2_EOS]
 
+    def count(self, text: str) -> int:
+        """切らずに `<bos>` と `<eos>` を付けたときのトークン数(`ids` と同じ数え方)。"""
+        return len(self._encode_plain(text)) + 2
+
     def _encode_plain(self, text: str) -> list[int]:
         """画像などの目印の id を、ふつうの文字の id に置き換えて分割する。"""
         ids: list[int] = []

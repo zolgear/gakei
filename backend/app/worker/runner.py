@@ -256,6 +256,13 @@ def _finish_run_succeeded(
             # None を代入すると JSON の null が入るので、無いときは触れない(SQL の NULL のまま)。
             run.text_outputs = sanitize_external(result.text_outputs)
         run.provider_request_id = sanitize_external_text_or_none(result.provider_request_id)
+        # ADR-0045 4章: プロンプトの埋め込みも、自動実行がオンで対応するモデルなら待ち行列に
+        # 入れる(最終プロンプトを書いた後に)。
+        if embedder is not None and output_ids:
+            from app.domain import prompt_embeddings
+
+            if prompt_embeddings.enqueue_on_success(session, run, embedder.settings):
+                queued = queued | ingest_hooks.IngestQueued(embedding=True)
         session.commit()
     ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
     return output_ids

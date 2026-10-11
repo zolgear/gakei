@@ -170,6 +170,37 @@ export function embeddingBackfillBlocker(params: {
   return null
 }
 
+/**
+ * Run のプロンプトの埋め込み(ADR-0045)の件数。使うモデルが対応しないときは null(画面に出さない)。
+ */
+export interface PromptEmbeddingCounts {
+  stored: number
+  pending: number
+  queued: number
+  failed: number
+}
+
+export function promptEmbeddingCounts(settings: EmbeddingSettingsResponse): PromptEmbeddingCounts | null {
+  if (!settings.prompt_supported) return null
+  return {
+    stored: settings.prompt_stored_count,
+    pending: settings.prompt_pending_count,
+    queued: settings.prompt_queued_count,
+    failed: settings.prompt_failed_count,
+  }
+}
+
+/** 一括実行の対象(画像と、対応するモデルならプロンプト)の合計。 */
+export function embeddingPendingTotal(settings: EmbeddingSettingsResponse): number {
+  return settings.pending_count + (promptEmbeddingCounts(settings)?.pending ?? 0)
+}
+
+/** 待ち行列の合計(あれば設定を取り直して件数を更新する)。 */
+export function embeddingQueuedTotal(settings: EmbeddingSettingsResponse | undefined): number {
+  if (!settings) return 0
+  return settings.queued_count + (promptEmbeddingCounts(settings)?.queued ?? 0)
+}
+
 /** ダウンロード中のモデルがあるか(あれば設定を取り直して進捗を出す)。 */
 export function isAnyEmbeddingModelDownloading(settings: EmbeddingSettingsResponse | undefined): boolean {
   return (settings?.onnx_models ?? []).some((model) => model.download_status === 'downloading')

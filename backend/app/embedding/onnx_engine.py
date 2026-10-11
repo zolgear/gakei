@@ -28,6 +28,9 @@ EmbeddingGemma 2(ADR-0044 3章。2026-10-11 に確かめた値):
 - `sentence_embedding` はプーリング・射影・L2 正規化まで済んでいるので、ここでは何もしない。
 - 画像も文章も1件ずつ計算する(q8 は動的量子化で、まとめる件数で値が変わる)。検索の文章には
   `SearchQuery` のプレフィックスを付け、1,024 トークンで切る。
+- Run のプロンプト(ADR-0045)は `embed_documents` で、`Document` のプレフィックスを付けて同じく
+  1,024 トークンで切る。文章側のセッションだけを使う。上限に収まるかの判定
+  (`document_fits`)は、トークナイザーだけを読み込んで数える。
 
 - 画像側と文章側は別々のセッションにし、使うときに初めて読み込む。文章での検索だけなら
   文章側だけを読み込む。
@@ -200,16 +203,18 @@ class OnnxClipEngine:
             self._last_used = time.monotonic()
         return np.stack(rows)
 
-    def _embed_texts_eg2(self, texts: list[str]) -> np.ndarray:
+    def _embed_texts_eg2(
+        self, texts: list[str], *, prefix: str | None = None, priority: bool = True
+    ) -> np.ndarray:
         max_length = self.model.max_text_tokens
         assert max_length is not None
-        with self._residency.use(self.RESIDENCY_OWNER, priority=True), self._lock:
+        if prefix is None:
+            prefix = self.model.query_prefix
+        with self._residency.use(self.RESIDENCY_OWNER, priority=priority), self._lock:
             session = self._ensure_text()
             rows: list[np.ndarray] = []
             for text in texts:
-                feeds: dict[str, np.ndarray] = self._tokenizer.feeds(
-                    self.model.query_prefix + text, max_length
-                )
+                feeds: dict[str, np.ndarray] = self._tokenizer.feeds(prefix + text, max_length)
                 feeds[EG2_IMAGE_FEATURES] = eg2_empty_features()
                 feeds[EG2_VIDEO_FEATURES] = eg2_empty_features()
                 feeds[EG2_AUDIO_FEATURES] = eg2_empty_features()
@@ -217,6 +222,30 @@ class OnnxClipEngine:
                 rows.append(np.asarray(result, dtype=np.float32).reshape(-1))
             self._last_used = time.monotonic()
         return np.stack(rows)
+
+    # -- Run のプロンプト(ADR-0045) --------------------------------------------------
+
+    def _require_documents(self) -> None:
+        if not self.model.prompt_embeddings:
+            raise EmbeddingError(t("embeddings.promptNotSupported"))
+
+    def document_fits(self, text: str) -> bool:
+        """トークナイザーだけを読み込んで数える(セッションは読み込まない)。"""
+        self._require_documents()
+        max_length = self.model.max_text_tokens
+        assert max_length is not None
+        with self._lock:
+            if self._tokenizer is None:
+                self._tokenizer = self._load_tokenizer()
+            tokenizer = self._tokenizer
+        return tokenizer.count(self.model.document_prefix + text) <= max_length
+
+    def embed_documents(self, texts: list[str]) -> np.ndarray:
+        """worker が待ち行列から計算する(画像と同じく優先の区間にしない)。"""
+        self._require_documents()
+        if not texts:
+            return np.zeros((0, self.dim), dtype=np.float32)
+        return self._embed_texts_eg2(texts, prefix=self.model.document_prefix, priority=False)
 
     def release_idle(self, idle_seconds: float = IDLE_RELEASE_SECONDS) -> bool:
         with self._lock:

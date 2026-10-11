@@ -44,6 +44,7 @@ from app.domain import (
 from app.domain import annotations as annotations_domain
 from app.domain import api_key as api_key_domain
 from app.domain import embeddings as embeddings_domain
+from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.schemas import (
     AnnotationBackfillResponse,
     AnnotationComfyuiProfile,
@@ -664,6 +665,28 @@ def _embedding_settings_response(
             (embeddings_domain.STATUS_QUEUED, embeddings_domain.STATUS_RUNNING),
         )
         failed = embeddings_domain.status_count(db, active_key, (embeddings_domain.STATUS_FAILED,))
+    # ADR-0045 6章: プロンプトの埋め込みの件数(使うモデルが対応するときだけ)。
+    prompt_supported = active_key is not None and embedding_settings.prompt_supported(config)
+    prompt_counts = {
+        "prompt_stored_count": 0,
+        "prompt_pending_count": 0,
+        "prompt_queued_count": 0,
+        "prompt_failed_count": 0,
+    }
+    if prompt_supported:
+        assert active_key is not None
+        prompt_counts = {
+            "prompt_stored_count": prompt_embeddings_domain.stored_count(db, active_key),
+            "prompt_pending_count": prompt_embeddings_domain.pending_count(db, active_key),
+            "prompt_queued_count": prompt_embeddings_domain.status_count(
+                db,
+                active_key,
+                (prompt_embeddings_domain.STATUS_QUEUED, prompt_embeddings_domain.STATUS_RUNNING),
+            ),
+            "prompt_failed_count": prompt_embeddings_domain.status_count(
+                db, active_key, (prompt_embeddings_domain.STATUS_FAILED,)
+            ),
+        }
     return EmbeddingSettingsResponse(
         **{name: getattr(config, name) for name in embedding_settings.FIELDS},
         duplicate_threshold_default=embedding_settings.default_threshold(config),
@@ -679,6 +702,8 @@ def _embedding_settings_response(
         pending_count=pending,
         queued_count=queued,
         failed_count=failed,
+        prompt_supported=prompt_supported,
+        **prompt_counts,
     )
 
 
@@ -794,16 +819,21 @@ def backfill_embeddings(
     _user: CurrentUser = Depends(require_admin),
 ) -> EmbeddingBackfillResponse:
     """使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)をまとめて
-    待ち行列に入れる。埋め込みが無効、またはモデルが使えなければ 409。"""
+    待ち行列に入れる。使うモデルが対応すれば、Run のプロンプトも同じ規則で入れる(ADR-0045
+    4章)。埋め込みが無効、またはモデルが使えなければ 409。"""
     config = embedding_settings.load(db)
     if not embedding_settings.usable(config, settings):
         raise HTTPException(status_code=409, detail=t("embeddings.notUsable"))
     model_key = embedding_settings.active_model_key(config, settings)
     assert model_key is not None
     count = embeddings_domain.backfill(db, model_key)
+    prompt_count = 0
+    if embedding_settings.prompt_supported(config):
+        prompt_count = prompt_embeddings_domain.backfill(db, model_key)
     db.commit()
+    response = EmbeddingBackfillResponse(queued=count, prompt_queued=prompt_count)
     embedder.notify()
-    return EmbeddingBackfillResponse(queued=count)
+    return response
 
 
 @router.delete(
@@ -820,12 +850,14 @@ def delete_embedding_vectors(
     embedder: Embedder = Depends(get_embedder),
     _user: CurrentUser = Depends(require_admin),
 ) -> EmbeddingSettingsResponse:
-    """そのモデルのベクトルと計算の状態をすべて消す(使っているモデルも消せる。画像の取り込み時や
-    一括実行で計算し直す)。無ければ 404。"""
+    """そのモデルのベクトルと計算の状態をすべて消す(画像と Run のプロンプトの両方。使っている
+    モデルも消せる。画像の取り込み時や一括実行で計算し直す)。無ければ 404。"""
     count = embeddings_domain.delete_vectors(db, model_key)
-    if count == 0:
+    prompt_count = prompt_embeddings_domain.delete_vectors(db, model_key)
+    if count == 0 and prompt_count == 0:
         db.rollback()
         raise HTTPException(status_code=404, detail=t("settings.embedding.vectorsNotFound"))
     db.commit()
     embedder.bump(model_key)
+    embedder.bump(prompt_embeddings_domain.version_key(model_key))
     return _embedding_settings_response(db, settings, downloader, index_backend)

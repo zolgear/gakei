@@ -745,6 +745,9 @@
           "one": "{count} item",
           "other": "{count} items"
         },
+        "promptLabel": "Prompts (instructions)",
+        "promptHelp": "Vectors of the instructions (prompts) of generations and edits. They are computed with the same model as images and queued together by Compute all.",
+        "promptValue": "{stored} done / {pending} without vectors / {queued} queued / {failed} failed",
         "run": "Compute all",
         "unsavedBlocked": "You have unsaved changes. Save them before running.",
         "notUsable": "Can't run because no model is usable.",
@@ -755,6 +758,10 @@
             "other": "Add {count} images without vectors to the queue."
           },
           "confirmLabel": "Add to queue"
+        },
+        "promptConfirm": {
+          "one": "Add the instruction (prompt) of {count} run without vectors to the queue.",
+          "other": "Add the instructions (prompts) of {count} runs without vectors to the queue."
         },
         "queuedToast": {
           "one": "Added {count} item to the queue",
