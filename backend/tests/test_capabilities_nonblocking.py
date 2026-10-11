@@ -24,6 +24,9 @@ from tests.sdwebui_fake import FakeSdWebui
 URL = "http://127.0.0.1:7860"
 # 「すぐ返る」の上限。最初の問い合わせを待つ猶予(0.2 秒)を含めても十分に短い。
 FAST_SECONDS = 0.5
+# HTTP を通すときの上限。DB への問い合わせも含み、遅い CI(PostgreSQL)では 1 秒を超えることがある。
+# 接続先は 10 秒止めているので、これより十分短ければ「待たずに返った」と言える。
+FAST_HTTP_SECONDS = 3.0
 
 
 class _Gate:
@@ -299,7 +302,7 @@ def test_capabilities_endpoint_does_not_wait_for_sdwebui(
     try:
         response, elapsed = _timed(lambda: client.get("/api/capabilities"))
         assert response.status_code == 200
-        assert elapsed < FAST_SECONDS
+        assert elapsed < FAST_HTTP_SECONDS
         entry = next(p for p in response.json()["providers"] if p["provider"] == "sdwebui")
         assert entry["checking"] is True
         assert entry["available"] is False
@@ -312,7 +315,7 @@ def test_capabilities_endpoint_does_not_wait_for_sdwebui(
     _wait_idle(provider)
 
     response, elapsed = _timed(lambda: client.get("/api/capabilities"))
-    assert elapsed < FAST_SECONDS
+    assert elapsed < FAST_HTTP_SECONDS
     entry = next(p for p in response.json()["providers"] if p["provider"] == "sdwebui")
     assert entry["checking"] is False
     assert entry["available"] is False
