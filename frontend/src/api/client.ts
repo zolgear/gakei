@@ -68,6 +68,24 @@ export type ParameterSetListResponse = components['schemas']['ParameterSetListRe
 export type ParameterSetCreateRequest = components['schemas']['ParameterSetCreateRequest']
 export type ParameterSetUpdateRequest = components['schemas']['ParameterSetUpdateRequest']
 
+// -- プロンプトテンプレート(実験) ------------------------------------------
+
+export type PromptTemplateSummary = components['schemas']['PromptTemplateSummary']
+export type PromptTemplateListResponse = components['schemas']['PromptTemplateListResponse']
+export type PromptTemplateResponse = components['schemas']['PromptTemplateResponse']
+export type PromptTemplateWriteRequest = components['schemas']['PromptTemplateWriteRequest']
+export type PromptSlotResponse = components['schemas']['PromptSlotResponse']
+export type PromptVariantResponse = components['schemas']['PromptVariantResponse']
+export type PromptComboResponse = components['schemas']['PromptComboResponse']
+export type PromptSlotInput = components['schemas']['PromptSlotInput']
+export type PromptVariantInput = components['schemas']['PromptVariantInput']
+export type PromptComboInput = components['schemas']['PromptComboInput']
+export type PromptSelections = components['schemas']['PromptSelections']
+export type PromptSlotSelection = components['schemas']['PromptSlotSelection']
+export type PromptBuildRequest = components['schemas']['PromptBuildRequest']
+export type PromptBuildResponse = components['schemas']['PromptBuildResponse']
+export type RunPromptTemplate = components['schemas']['RunPromptTemplate']
+
 export type SearchResponse = components['schemas']['SearchResponse']
 export type SearchRunHit = components['schemas']['SearchRunHit']
 export type SearchAssetHit = components['schemas']['SearchAssetHit']
@@ -791,6 +809,55 @@ export function updateParameterSet(
 
 export function deleteParameterSet(parameterSetId: string): Promise<void> {
   return request(`/api/parameter-sets/${parameterSetId}`, { method: 'DELETE' })
+}
+
+// -- プロンプトテンプレート(実験) ------------------------------------------
+
+export function listPromptTemplates(): Promise<PromptTemplateListResponse> {
+  return request('/api/prompt-templates')
+}
+
+export function getPromptTemplate(templateId: string): Promise<PromptTemplateResponse> {
+  return request(`/api/prompt-templates/${templateId}`)
+}
+
+export function createPromptTemplate(body: PromptTemplateWriteRequest): Promise<PromptTemplateResponse> {
+  return request('/api/prompt-templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/**
+ * 丸ごと置換。id を渡した子(スロット・候補・組み合わせ)は残して更新し、本文に無い子は
+ * 論理削除される。残したい子は必ず id を付けて本文に入れる。
+ */
+export function replacePromptTemplate(
+  templateId: string,
+  body: PromptTemplateWriteRequest,
+): Promise<PromptTemplateResponse> {
+  return request(`/api/prompt-templates/${templateId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function deletePromptTemplate(templateId: string): Promise<void> {
+  return request(`/api/prompt-templates/${templateId}`, { method: 'DELETE' })
+}
+
+/** 選択を渡して組み立て結果を返す(生成はしない。確認用)。 */
+export function buildPromptTemplate(
+  templateId: string,
+  body: PromptBuildRequest,
+): Promise<PromptBuildResponse> {
+  return request(`/api/prompt-templates/${templateId}/build`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
 
 // -- 参考価格 ----------------------------------------------------------------

@@ -91,6 +91,7 @@ class World:
     a_prompt_set: str = ""
     a_prompt_item: str = ""
     a_parameter_set: str = ""
+    a_prompt_template: str = ""
     a_token_id: str = ""
     a_share: str = ""
     # B のデータ
@@ -205,6 +206,13 @@ def world(client_oidc: TestClient) -> World:
     )
     assert parameter_set.status_code == 201, parameter_set.text
     w.a_parameter_set = parameter_set.json()["id"]
+    # プロンプトテンプレート(実験)。
+    prompt_template = c.post(
+        "/api/prompt-templates",
+        json={"name": "alice template", "slots": [{"name": "s", "variants": [{"text": "zebra"}]}]},
+    )
+    assert prompt_template.status_code == 201, prompt_template.text
+    w.a_prompt_template = prompt_template.json()["id"]
     w.a_token_id = c.get("/api/users/me/api-tokens").json()["items"][0]["id"]
     share = c.post("/api/shares", json={"asset_id": w.a_output, "scope": "single"})
     assert share.status_code == 201, share.text
@@ -237,6 +245,8 @@ _PARAM_SOURCES = {
     "item_id": "a_prompt_item",
     # パラメーターセット(ADR-0040)。
     "parameter_set_id": "a_parameter_set",
+    # プロンプトテンプレート(実験)。
+    "template_id": "a_prompt_template",
     "token_id": "a_token_id",
     "user_id": "user:A",
     "index": "literal:0",
@@ -274,6 +284,8 @@ def _bodies(w: World) -> dict[tuple[str, str], Any]:
         ("patch", "/api/asset-groups/{group_id}"): {"name": "hijack"},
         ("patch", "/api/prompt-sets/{prompt_set_id}"): {"name": "hijack"},
         ("patch", "/api/parameter-sets/{parameter_set_id}"): {"name": "hijack"},
+        ("put", "/api/prompt-templates/{template_id}"): {"name": "hijack"},
+        ("post", "/api/prompt-templates/{template_id}/build"): {},
         ("post", "/api/prompt-sets/{prompt_set_id}/items"): {"text": "hijack"},
         ("patch", "/api/prompt-sets/{prompt_set_id}/items/{item_id}"): {"text": "hijack"},
         ("patch", "/api/assets/{asset_id}/title"): {"title": "hijack"},
@@ -340,6 +352,8 @@ def test_every_id_route_returns_404_for_others(world: World) -> None:
     assert [i["text"] for i in sets[w.a_prompt_set]["items"]] == ["zebra text"]
     parameter_sets = {s["id"]: s for s in c.get("/api/parameter-sets").json()["items"]}
     assert parameter_sets[w.a_parameter_set]["name"] == "alice params"
+    templates = {s["id"]: s for s in c.get("/api/prompt-templates").json()["items"]}
+    assert templates[w.a_prompt_template]["name"] == "alice template"
     assert len(c.get("/api/users/me/api-tokens").json()["items"]) == 1
     # 共有リンク(ADR-0029)も他人には取り消せない。
     assert [s["id"] for s in c.get("/api/shares").json()["items"]] == [w.a_share]
@@ -365,6 +379,7 @@ def test_lists_and_search_show_only_own(world: World) -> None:
         w.a_group,
         w.a_prompt_set,
         w.a_parameter_set,
+        w.a_prompt_template,
     }
     legacy_ids = set(w.legacy.values())
 
@@ -379,6 +394,7 @@ def test_lists_and_search_show_only_own(world: World) -> None:
         ids |= {g["cover_asset_id"] for g in c.get("/api/asset-groups").json()["items"]}
         ids |= {p["id"] for p in c.get("/api/prompt-sets").json()["items"]}
         ids |= {p["id"] for p in c.get("/api/parameter-sets").json()["items"]}
+        ids |= {p["id"] for p in c.get("/api/prompt-templates").json()["items"]}
         found = c.get("/api/search", params={"q": "zebra"}).json()
         ids |= {r["id"] for r in found["runs"]}
         ids |= {a["id"] for a in found["assets"]}

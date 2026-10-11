@@ -14,8 +14,10 @@ from pydantic import (
     StrictInt,
     StrictStr,
     field_validator,
+    model_validator,
 )
 
+from app.domain import prompt_templates
 from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
 from app.providers.base import ProviderCapabilities
 
@@ -585,6 +587,197 @@ class AssetListResponse(BaseModel):
     next_cursor: str | None = None
 
 
+# -- プロンプトテンプレート(実験) ----------------------------------------
+# プロンプトを「スロット(枠)」に分けた組み立ての雛形。証跡ではないので更新・論理削除ができる。
+# 作成・置換はスロット・候補・組み合わせを入れ子で丸ごと受ける。
+
+PROMPT_TEMPLATE_NAME_MAX = 100
+PROMPT_TEMPLATE_SEPARATOR_MAX = 20
+PROMPT_TEMPLATE_TEXT_MAX = 32_000
+PROMPT_TEMPLATE_REF_MAX = 64
+
+
+class PromptVariantInput(BaseModel):
+    """候補。`id` を渡すと既存の候補を更新し、渡さなければ新しく作る。
+
+    `ref` は同じリクエストの中だけで使う一時キー。新しい候補を組み合わせから指すときに使う
+    (サーバーが id を決めるため、作成前の候補は id で指せない)。
+    """
+
+    id: uuid.UUID | None = None
+    ref: str | None = Field(default=None, min_length=1, max_length=PROMPT_TEMPLATE_REF_MAX)
+    name: str | None = Field(default=None, max_length=PROMPT_TEMPLATE_NAME_MAX)
+    text: str = Field(min_length=1, max_length=PROMPT_TEMPLATE_TEXT_MAX)
+    # ランダム選択の重み。0 は「選ばれない」。
+    weight: float = Field(default=1.0, ge=0, le=1000)
+
+
+class PromptSlotInput(BaseModel):
+    id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=PROMPT_TEMPLATE_NAME_MAX)
+    default_mode: Literal["random", "off"] = "random"
+    variants: list[PromptVariantInput] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+
+class PromptComboItemInput(BaseModel):
+    """組み合わせが指す候補。既存は `variant_id`、同じリクエストで作る候補は `variant_ref`。"""
+
+    variant_id: uuid.UUID | None = None
+    variant_ref: str | None = Field(default=None, min_length=1, max_length=PROMPT_TEMPLATE_REF_MAX)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> PromptComboItemInput:
+        if (self.variant_id is None) == (self.variant_ref is None):
+            raise ValueError("either variant_id or variant_ref is required")
+        return self
+
+
+class PromptComboInput(BaseModel):
+    id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=PROMPT_TEMPLATE_NAME_MAX)
+    weight: float = Field(default=1.0, ge=0, le=1000)
+    items: list[PromptComboItemInput] = Field(min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+
+class PromptTemplateWriteRequest(BaseModel):
+    """作成(POST)と丸ごと置換(PUT)の両方で使う。"""
+
+    name: str = Field(min_length=1, max_length=PROMPT_TEMPLATE_NAME_MAX)
+    separator: str = Field(default=", ", max_length=PROMPT_TEMPLATE_SEPARATOR_MAX)
+    slots: list[PromptSlotInput] = Field(default_factory=list)
+    combos: list[PromptComboInput] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+
+class PromptVariantResponse(BaseModel):
+    id: uuid.UUID
+    name: str | None
+    text: str
+    weight: float
+    position: int
+
+
+class PromptSlotResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    default_mode: Literal["random", "off"]
+    position: int
+    variants: list[PromptVariantResponse] = Field(default_factory=list)
+
+
+class PromptComboResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    weight: float
+    position: int
+    # 指している候補(削除済みの候補は含まない)。
+    variant_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class PromptTemplateResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    separator: str
+    created_at: datetime
+    updated_at: datetime
+    slots: list[PromptSlotResponse] = Field(default_factory=list)
+    combos: list[PromptComboResponse] = Field(default_factory=list)
+
+
+class PromptTemplateSummary(BaseModel):
+    """一覧用。中身は数だけ出す。"""
+
+    id: uuid.UUID
+    name: str
+    separator: str
+    slot_count: int
+    variant_count: int
+    combo_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PromptTemplateListResponse(BaseModel):
+    items: list[PromptTemplateSummary] = Field(default_factory=list)
+
+
+class PromptComboSelection(BaseModel):
+    """`id` でその組み合わせ、`random` でまだ空いているスロットを覆う組から1つ。"""
+
+    id: uuid.UUID | None = None
+    random: bool = False
+
+
+class PromptSlotSelection(BaseModel):
+    mode: Literal["fixed", "random", "off", "text"]
+    # mode=fixed のときだけ必要。
+    variant_id: uuid.UUID | None = None
+    # mode=text のときだけ必要。
+    text: str | None = Field(default=None, max_length=PROMPT_TEMPLATE_TEXT_MAX)
+
+
+class PromptSelections(BaseModel):
+    """組み立ての選択。`slots` のキーはスロットの id。"""
+
+    combos: list[PromptComboSelection] = Field(default_factory=list)
+    slots: dict[uuid.UUID, PromptSlotSelection] = Field(default_factory=dict)
+
+    def to_domain(self) -> prompt_templates.Selections:
+        return prompt_templates.Selections(
+            combos=tuple(
+                prompt_templates.ComboSelection(id=c.id, random=c.random) for c in self.combos
+            ),
+            slots={
+                slot_id: prompt_templates.SlotSelection(
+                    mode=s.mode, variant_id=s.variant_id, text=s.text
+                )
+                for slot_id, s in self.slots.items()
+            },
+        )
+
+
+class PromptBuildRequest(BaseModel):
+    selections: PromptSelections = Field(default_factory=PromptSelections)
+    # 確認用に乱数の種を固定できる(省略すると毎回引き直す)。
+    seed: int | None = Field(default=None, ge=0, le=2**32 - 1)
+
+
+class PromptBuildResponse(BaseModel):
+    prompt: str
+    # `run.prompt_build` に入るのと同じ内訳。
+    build: dict[str, Any]
+
+
+class RunPromptTemplate(BaseModel):
+    """`POST /api/runs` の `prompt_template`。`prompt` とは排他。"""
+
+    template_id: uuid.UUID
+    selections: PromptSelections = Field(default_factory=PromptSelections)
+
+
 # -- Run -------------------------------------------------------------------
 
 
@@ -601,7 +794,10 @@ REPEAT_MAX = 20
 class RunCreateRequest(BaseModel):
     operation: Literal["generate", "edit"]
     model: str
-    prompt: str
+    # プロンプトテンプレート(実験)で組み立てるときは `prompt` を送らず `prompt_template` を送る。
+    # どちらか一方が必須(両方・どちらも無しは 422)。
+    prompt: str | None = None
+    prompt_template: RunPromptTemplate | None = None
     # 省略時は主プロバイダー(OpenAI。FAKE_PROVIDER=1 のときは fake)を使う(ADR-0013、ADR-0017)。
     provider: str | None = None
     params: dict[str, Any] = Field(default_factory=dict)
@@ -609,8 +805,15 @@ class RunCreateRequest(BaseModel):
     # 出力を入れるグループ(ADR-0022)。存在しない・削除済みなら 404。
     asset_group_id: uuid.UUID | None = None
     # 繰り返し回数(ADR-0042)。同じ設定の Run をこの数だけまとめて積む。API に送る値では
-    # ないので `run.params` には入れない(ADR-0003 ルール4)。
+    # ないので `run.params` には入れない(ADR-0003 ルール4)。テンプレートと併用したときは
+    # Run ごとに組み立て直す(意味の通ったガチャになる)。
     repeat: int = Field(default=1, ge=1, le=REPEAT_MAX)
+
+    @model_validator(mode="after")
+    def _prompt_xor_template(self) -> RunCreateRequest:
+        if (self.prompt is None) == (self.prompt_template is None):
+            raise ValueError("either prompt or prompt_template is required")
+        return self
 
 
 class RunCreatedRef(BaseModel):
@@ -704,6 +907,8 @@ class RunImportInfo(BaseModel):
 class RunDetail(RunSummary):
     deployment: str | None = None
     provider_request_id: str | None = None
+    # プロンプトテンプレート(実験)で組み立てた Run だけ。それ以外は null。
+    prompt_build: dict[str, Any] | None = None
     inputs: list[RunInputRef] = Field(default_factory=list)
     # 系列の ZIP から取り込んだ Run(`origin = 'import'`)だけ。それ以外は null(ADR-0037)。
     imported: RunImportInfo | None = None

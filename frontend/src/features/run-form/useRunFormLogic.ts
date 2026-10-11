@@ -21,6 +21,7 @@ import {
   type OperationCapabilities,
   type AssetGroupRow,
   type ProviderEntry,
+  type PromptTemplateResponse,
 } from '../../api/client'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { fmt, msg } from '../../i18n'
@@ -72,6 +73,11 @@ import {
 import { buildParameterSetRawParams, resolveParameterSetLoad } from '../parameter-sets/parameterSets'
 import { resolveRunFormLoad } from './runFormLoad'
 import { loadRepeatRaw, parseRepeat, saveRepeatRaw } from './repeat'
+import {
+  initialSelectionState,
+  toPromptSelections,
+  type TemplateSelectionState,
+} from '../prompt-templates/promptTemplates'
 
 export interface RunFormLogic {
   caps: CapabilitiesResponse | undefined
@@ -183,10 +189,36 @@ export interface RunFormLogic {
   inputs: RunInputItem[]
   setInputs: (inputs: RunInputItem[]) => void
 
+  /**
+   * プロンプトテンプレート(実験)。テンプレートを選んでいる間は「テンプレートモード」で、
+   * プロンプト欄の代わりにスロットの選択を出し、`POST /api/runs` には `prompt` ではなく
+   * `prompt_template` を送る(排他)。null なら今までどおり。
+   */
+  promptTemplate: PromptTemplateMode | null
+  setTemplateSelections: (selections: TemplateSelectionState) => void
+  clearPromptTemplate: () => void
+  /**
+   * テンプレートの組み立ての結果(プレビュー)。選択の UI が build を呼んで報告する。
+   * 送信できるか(空のプロンプトを送らない)と参考価格の文字数に使う。
+   */
+  templatePreview: TemplatePreview | null
+  setTemplatePreview: (preview: TemplatePreview | null) => void
+
   canSubmit: boolean
   submitError: string | null
   isSubmitting: boolean
   submit: () => void
+}
+
+/** テンプレートモードの状態(選んだテンプレートと、スロット・組み合わせの選択)。 */
+export interface PromptTemplateMode {
+  template: PromptTemplateResponse
+  selections: TemplateSelectionState
+}
+
+/** 組み立ての結果のうち、フォームが判断に使う分。 */
+export interface TemplatePreview {
+  prompt: string
 }
 
 export function useRunFormLogic(
@@ -247,6 +279,9 @@ export function useRunFormLogic(
   }, [])
   const repeat = parseRepeat(repeatRaw)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // プロンプトテンプレート(実験)。サイドバーのパネルから `requestFormLoad` で入る。
+  const [promptTemplate, setPromptTemplate] = useState<PromptTemplateMode | null>(null)
+  const [templatePreview, setTemplatePreview] = useState<TemplatePreview | null>(null)
   const [droppedParamsNotice, setDroppedParamsNotice] = useState<string | null>(null)
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null)
   const didInitParamsRef = useRef(false)
@@ -360,9 +395,11 @@ export function useRunFormLogic(
   const sizeValidation = providerEntry?.size
     ? validateSizeState(providerEntry.size, roundSizeStateToMultiple(providerEntry.size, sizeState))
     : { valid: true, errors: [] as string[] }
-  const promptLength = prompt.length
   const promptMax = providerEntry?.prompt_max_length ?? 32_000
-  const promptValid = prompt.length > 0 && prompt.length <= promptMax
+  // テンプレートモード(実験)では、プロンプト欄ではなく組み立ての結果を見る。
+  const effectivePrompt = promptTemplate !== null ? (templatePreview?.prompt ?? '') : prompt
+  const promptLength = effectivePrompt.length
+  const promptValid = effectivePrompt.length > 0 && effectivePrompt.length <= promptMax
 
   const imageInputCount = formState.inputs.filter((i) => i.role === 'image').length
   // 入力画像を足した(0 枚 → 1 枚以上)とき、auto を受け付けないプロバイダー(SD WebUI)で
@@ -446,6 +483,9 @@ export function useRunFormLogic(
     setSizeState(paramToSizeState(initial.params.size))
     setSizeTouchedByUser(false)
     setRawParams(fillSeedDefaults(initialGenerateDefs, initialRaw, loadSeedMode()))
+    // テンプレートモード(実験)も解除する。
+    setPromptTemplate(null)
+    setTemplatePreview(null)
   }
 
   // スタジオの外からの挿入・置き換えのリクエスト(サイドバーのプロンプトセットの「末尾に追加」、
@@ -475,6 +515,19 @@ export function useRunFormLogic(
     consumedFormLoadNonceRef.current = pendingFormLoad.nonce
     clearPendingFormLoad()
     const request = pendingFormLoad.request
+
+    // プロンプトテンプレート(実験)。テンプレートモードに入る(null は解除)。プロンプト欄の
+    // ローカルの値は触らない(解除したら元のプロンプトに戻る)。
+    if (request.kind === 'promptTemplate') {
+      setPromptTemplate(
+        request.template === null
+          ? null
+          : { template: request.template, selections: initialSelectionState(request.template) },
+      )
+      setTemplatePreview(null)
+      setSubmitError(null)
+      return
+    }
 
     // Run 詳細の「同じ設定で新規作成」。フォームがマウントされたまま(スタジオの結果エリアの
     // Run 詳細から押した)でも入るように、ここでローカルの状態を Run の値で作り直す。入力画像は
@@ -589,6 +642,15 @@ export function useRunFormLogic(
     },
   })
 
+  const setTemplateSelections = useCallback((selections: TemplateSelectionState) => {
+    setPromptTemplate((prev) => (prev === null ? prev : { ...prev, selections }))
+  }, [])
+
+  const clearPromptTemplate = useCallback(() => {
+    setPromptTemplate(null)
+    setTemplatePreview(null)
+  }, [])
+
   function handleParamChange(name: string, value: string) {
     setRawParams((prev) => ({ ...prev, [name]: value }))
   }
@@ -642,9 +704,20 @@ export function useRunFormLogic(
       operation === 'edit'
         ? formState.inputs.map((i) => ({ asset_id: i.assetId, role: i.role, position: i.position }))
         : []
+    // プロンプトテンプレート(実験)。`prompt` と `prompt_template` は排他なので、テンプレート
+    // モードのときは `prompt` を送らない。組み立ては Run ごとにサーバーが引き直す。
+    const promptBody =
+      promptTemplate !== null
+        ? {
+            prompt_template: {
+              template_id: promptTemplate.template.id,
+              selections: toPromptSelections(promptTemplate.template, promptTemplate.selections),
+            },
+          }
+        : { prompt }
     mutation.mutate(
       withAssetGroupId(
-        { operation, model, prompt, provider, params, inputs, repeat: repeat ?? 1 },
+        { operation, model, provider, params, inputs, repeat: repeat ?? 1, ...promptBody },
         resolvedAssetGroupId,
       ),
     )
@@ -703,6 +776,11 @@ export function useRunFormLogic(
     inputCountRequirementReason,
     inputs: formState.inputs,
     setInputs,
+    promptTemplate,
+    setTemplateSelections,
+    clearPromptTemplate,
+    templatePreview,
+    setTemplatePreview,
     canSubmit,
     submitError,
     isSubmitting: mutation.isPending,

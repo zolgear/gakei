@@ -54,6 +54,7 @@ import { ImportParamsButton } from '../sdwebui/ImportParamsButton'
 import { ImportNoticePanel } from '../sdwebui/ImportNoticePanel'
 import { isSdWebuiEnabled } from '../sdwebui/importParams'
 import { FormParameterSetButtons } from '../parameter-sets/FormParameterSetButtons'
+import { PromptTemplateForm } from '../prompt-templates/PromptTemplateForm'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
 import { InputPaneBottomLayout } from './InputPaneBottomLayout'
@@ -331,7 +332,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const promptValid = form.promptLength > 0 && form.promptLength <= form.promptMax
 
   const blockReasons: string[] = []
-  if (!promptValid) {
+  // テンプレートモード(実験)では、プロンプト欄ではなく組み立ての結果を見る(その案内は
+  // テンプレートの選択の中に出す)。
+  if (!promptValid && form.promptTemplate === null) {
     blockReasons.push(ip.promptRequired)
   }
   if (!form.sizeValid) blockReasons.push(...form.sizeErrors)
@@ -352,9 +355,21 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     blockReasons.push(ip.maskUnsupported)
   }
 
+  // プロンプトテンプレート(実験)。テンプレートを選んでいる間は、プロンプト欄の代わりに
+  // スロットの選択と組み立て結果を出す(送るのは prompt ではなく prompt_template)。
+  const templateEditor = form.promptTemplate && (
+    <PromptTemplateForm
+      template={form.promptTemplate.template}
+      selections={form.promptTemplate.selections}
+      onChange={form.setTemplateSelections}
+      onClear={form.clearPromptTemplate}
+      onPreview={form.setTemplatePreview}
+    />
+  )
+
   // textarea + メンションポップオーバーは mention state と密結合なので、ここで組み立てて
   // スロット(ReactNode)として渡す(コンポーネント化しない)。
-  const promptEditor = (
+  const promptEditor = templateEditor || (
     <>
       <label htmlFor="prompt" className={styles.srOnly}>
         {ip.promptLabel}

@@ -464,6 +464,26 @@
     "notFound": "Parameter set not found",
     "serverOnlyParam": "Server-only parameters cannot be saved in a parameter set: {name}"
   },
+  "promptTemplates": {
+    "notFound": "Prompt template not found",
+    "unknownSlot": "Slot not found: {id}",
+    "unknownSlotId": "Not a slot of this template: {id}",
+    "unknownVariantId": "Not a variant of this slot: {id}",
+    "unknownComboId": "Not a combo of this template: {id}",
+    "unknownVariantRef": "Variant reference not found: {ref}",
+    "duplicateRef": "Duplicate variant reference: {ref}",
+    "variantNotInTemplate": "Not a variant of this template: {id}",
+    "comboSameSlot": "Combo \"{name}\" points at more than one variant of the same slot \"{slot}\"",
+    "unknownCombo": "Combo not found: {id}",
+    "comboOverlap": "Slot \"{slot}\" of combo \"{name}\" overlaps another combo",
+    "comboVariantMissing": "A variant pointed at by combo \"{name}\" was not found",
+    "slotLockedByCombo": "Slot \"{name}\" is filled by a combo and cannot be set individually",
+    "variantRequired": "Choose a variant for slot \"{name}\"",
+    "variantNotInSlot": "Variant {id} does not belong to slot \"{name}\"",
+    "textRequired": "Enter the text for slot \"{name}\"",
+    "unknownMode": "Unknown mode: {mode}",
+    "emptyPrompt": "The built prompt is empty"
+  },
   "assetGroups": {
     "notFound": "Group not found",
     "assetNotFound": "Asset not found: {ids}",

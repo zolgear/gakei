@@ -328,6 +328,13 @@ class Run(Base):
     # 成功時に1回だけ書く(失敗した Run は null のまま)。
     text_outputs: Mapped[list | None] = mapped_column(JsonType, nullable=True)
 
+    # プロンプトテンプレート(実験)で組み立てたときの内訳。テンプレート名・組み合わせ・
+    # スロットごとに選ばれた候補のテキストそのものを持つ(外部キーは張らないので、
+    # テンプレートを消しても読める)。Run の作成時に一度だけ書き、UPDATE しない
+    # (`asset_group_id` や `origin` と同じ扱い。ADR-0003 の追記のみの規則に反しない)。
+    # API に送った値ではないので `params` には入れない。
+    prompt_build: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+
     # 実行したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
     # (INSERT 時に設定し、UPDATE しない)。
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -495,6 +502,104 @@ class ParameterSet(Base):
         UtcDateTime(), nullable=False, default=_utcnow, index=True
     )
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptTemplate(Base):
+    """プロンプトテンプレート(実験)。プロンプトを「スロット(枠)」に分けた組み立ての雛形。
+
+    証跡ではないので名前も中身も更新でき、削除は論理削除。`run` とは外部キーを張らない
+    (`run.prompt` には組み立てた後の文字列が残り、`run.prompt_build` には選ばれた候補の
+    テキストそのものが入るので、テンプレートを消しても Run の記録は読める)。
+    """
+
+    __tablename__ = "prompt_template"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    # スロットの連結に使う区切り。タグなら ', '、文章なら ' ' や改行にする。
+    separator: Mapped[str] = mapped_column(Text, nullable=False, default=", ")
+    # 作成したユーザー(ADR-0025)。`none` モードでは null。追記のみ(INSERT 時に設定し、
+    # UPDATE しない)。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime(), nullable=False, default=_utcnow, index=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptSlot(Base):
+    """スロット(役割の枠)。名前は利用者が決める(キャラ、衣装、背景など)。"""
+
+    __tablename__ = "prompt_slot"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_template.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 選択の指定が無いときのふるまい。'random' | 'off'。
+    default_mode: Mapped[str] = mapped_column(String(8), nullable=False, default="random")
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptVariant(Base):
+    """候補(スロットに入る選択肢)。`text` は解釈も展開もせずそのまま使う。"""
+
+    __tablename__ = "prompt_variant"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    slot_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_slot.id"), nullable=False, index=True
+    )
+    # 表示名。null なら画面は `text` の先頭を見せる。
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # ランダム選択の重み。0 以下は選ばれない。
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptCombo(Base):
+    """組み合わせ(複数のスロットを同時に埋める、辻褄の取れた組)。
+
+    候補を指すだけで、自前のテキストは持たない(候補を直せば組み合わせにも効く)。
+    1つの組み合わせが同じスロットの候補を2つ以上指してはいけない(API で 422)。
+    """
+
+    __tablename__ = "prompt_combo"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_template.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class PromptComboItem(Base):
+    """組み合わせが指す候補。論理削除は持たず、組み合わせの置換時に入れ替える。"""
+
+    __tablename__ = "prompt_combo_item"
+
+    combo_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_combo.id"), primary_key=True
+    )
+    variant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prompt_variant.id"), primary_key=True, index=True
+    )
 
 
 class AssetGroup(Base):
