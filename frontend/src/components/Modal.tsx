@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react'
 import { useI18n } from '../i18n'
 import styles from './Modal.module.css'
 import { MODAL_BODY_ATTRIBUTE, handleModalKeyDown, initialFocusTarget, restoreFocus } from './modalFocus'
+import { focusOriginFor } from './useModalFocus'
 
 interface ModalProps {
   open: boolean
@@ -30,10 +31,10 @@ export function Modal({ open, title, onClose, children, size = 'default' }: Moda
   // (入れると開いている最中に後始末が走り、フォーカスが背後へ戻ってしまう)。
   useEffect(() => {
     if (!open) return
-    const previous = document.activeElement
-    const previouslyFocused =
-      previous instanceof HTMLElement && previous !== document.body ? previous : null
     const panel = panelRef.current
+    // 中の autoFocus が先にフォーカスを移していることがあるので、開く前の要素は
+    // focusin の記録から割り出す(`focusOriginFor`)。
+    const previouslyFocused = panel ? focusOriginFor(panel) : null
     if (panel) initialFocusTarget(panel).focus()
     return () => restoreFocus(previouslyFocused)
   }, [open])
