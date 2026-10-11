@@ -213,6 +213,9 @@ function MapBody() {
   )
 
   const nodeCount = graph?.nodes?.length ?? 0
+  // 大きく見るパネルは、開いていて、かつ画像を選んでいるときだけ出る(`MapCanvas` と同じ条件)。
+  // 隅の状態表示をよける幅も、これに合わせる(選択を外したら右端に戻す)。
+  const previewShown = previewOpen && !!state.selectedId && (graph?.nodes ?? []).some((n) => n.id === state.selectedId)
   const filterCount = activeFilterCount(state)
   const errorKind = embeddingErrorKind(query.error)
 
@@ -451,7 +454,7 @@ function MapBody() {
 
         {/* 状態は canvas の隅に薄く重ねる(上部の段を増やさない)。 */}
         {graphReady && (
-          <div className={styles.statusOverlay} data-preview-open={previewOpen}>
+          <div className={styles.statusOverlay} data-preview-open={previewShown}>
             {graph?.truncated && (
               <span className={styles.statusNotice}>
                 {fmt(state.limit < MAP_LIMIT_CHOICES[MAP_LIMIT_CHOICES.length - 1] ? m.truncated : m.truncatedAtMax, {
