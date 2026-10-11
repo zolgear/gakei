@@ -660,6 +660,68 @@
       "other": "今の版以外の派生を {count} 件消しました。"
     }
   },
+  "reconcileStorage": {
+    "description": "画像の原本を手で消した・退避した後に、DB を保存先に合わせます(ADR-0046)。原本が保存先に無い画像(論理削除済みも含む)と、それに付いた行・履歴を DB から消します。設定は消しません。必ず GAKEI を止めてから実行してください。既定は件数を示すだけで、何も変えません。",
+    "applyHelp": "実際に消す(SQLite なら先に DB をバックアップする。消す前に確認を求める)",
+    "yesHelp": "--apply の確認を省く",
+    "includeRunsHelp": "出力が一度も無い履歴(失敗・中止)も消す(全部を初期化するとき)",
+    "databaseMissing": "DB のファイルが見つかりません: {source}",
+    "tableMissing": "DB に画像のテーブルがありません。この版の GAKEI を一度起動してから実行してください。",
+    "failed": "保存先の読み取りに失敗したため、中止しました。DB は変えていません。詳細: {error}",
+    "backupFailed": "DB のバックアップに失敗したため、中止しました。DB は変えていません。詳細: {error}",
+    "applyFailed": "DB の変更に失敗したため、中止しました(変更は取り消しました)。詳細: {error}",
+    "storage": "保存先: {storage}",
+    "database": "DB: {database}",
+    "assets": {
+      "one": "原本が無い画像: {count} 件(うち論理削除済み {deleted} 件)",
+      "other": "原本が無い画像: {count} 件(うち論理削除済み {deleted} 件)"
+    },
+    "missingKeys": {
+      "one": "  原本が無かったキー: {count} 件(例: {keys})",
+      "other": "  原本が無かったキー: {count} 件(例: {keys})"
+    },
+    "runs": {
+      "one": "消す履歴(Run): {count} 件(出力がすべて消える {gone} 件、出力が一度も無い {never} 件)",
+      "other": "消す履歴(Run): {count} 件(出力がすべて消える {gone} 件、出力が一度も無い {never} 件)"
+    },
+    "runsKept": {
+      "one": "  出力が一度も無い履歴 {count} 件は残します(消すには --include-runs-without-outputs)",
+      "other": "  出力が一度も無い履歴 {count} 件は残します(消すには --include-runs-without-outputs)"
+    },
+    "shares": {
+      "one": "消す共有リンク: {count} 件",
+      "other": "消す共有リンク: {count} 件"
+    },
+    "rowsHeading": "一緒に消す行:",
+    "nullifiedHeading": "null にする参照(残る画像のもの):",
+    "item": {
+      "one": "  {name}: {count} 件",
+      "other": "  {name}: {count} 件"
+    },
+    "derived": {
+      "one": "派生画像を消す画像: {count} 件(同じ内容は1件と数えます)",
+      "other": "派生画像を消す画像: {count} 件(同じ内容は1件と数えます)"
+    },
+    "untracked": {
+      "one": "DB に無い保存先の原本のファイル: {count} 件(消しません)",
+      "other": "DB に無い保存先の原本のファイル: {count} 件(消しません)"
+    },
+    "dryRunDone": "dry-run: 何も変えていません。消すには --apply を付けて実行してください。",
+    "nothingToDo": "消すものはありません。",
+    "postgresBackup": "注意: PostgreSQL は自動でバックアップしません。続ける前に pg_dump などで DB のバックアップを取ってください。",
+    "confirm": "上の内容を DB から消します。元に戻せません(バックアップから戻すしかありません)。続けますか? [y/N]: ",
+    "canceled": "中止しました。何も変えていません。",
+    "backup": "DB のバックアップ: {path}",
+    "applied": "DB から画像 {assets} 件と履歴 {runs} 件を消しました。",
+    "derivedDeleted": {
+      "one": "派生画像のファイルを {count} 件消しました。",
+      "other": "派生画像のファイルを {count} 件消しました。"
+    },
+    "derivedFailed": {
+      "one": "注意: 派生画像を消せなかった画像が {count} 件あります(sha256): {keys}。残っても害はありません。",
+      "other": "注意: 派生画像を消せなかった画像が {count} 件あります(sha256): {keys}。残っても害はありません。"
+    }
+  },
   "shares": {
     "disabled": "共有リンクは管理者設定で無効になっています",
     "notFound": "共有リンクが見つかりません",
