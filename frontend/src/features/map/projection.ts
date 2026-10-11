@@ -186,7 +186,7 @@ export interface MapProjection {
   stopIntroSpin(): void
 }
 
-// ---- 平面(2D の地図。今はどのタブも使っていないが、戻せるように残す) ----
+// ---- 平面(「見せ方」で平面を選んだとき) ----
 
 /** 平面の見せ方。パンとズームだけで、奥行きも動きも持たない。 */
 class FlatProjection implements MapProjection {
@@ -294,7 +294,7 @@ class FlatProjection implements MapProjection {
   stopIntroSpin(): void {}
 }
 
-// ---- 立体(ネットワークと地図) ----
+// ---- 立体(「見せ方」で立体を選んだとき。既定) ----
 
 /** 最初の向き(少し上から、斜めに見る)。 */
 const INITIAL_AZIMUTH = 0.6

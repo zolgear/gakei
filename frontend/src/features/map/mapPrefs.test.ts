@@ -32,6 +32,19 @@ describe('parseMapPrefs', () => {
     expect(parseMapPrefs('{"v":1,"view":"x","k":7,"limit":"500","threshold":"0.9","lineage":1}')).toEqual({})
   })
 
+  it('見せ方も覚える(知らない値はその項目だけ捨てる)', () => {
+    expect(parseMapPrefs('{"v":1,"shape":"flat"}')).toEqual({ shape: 'flat' })
+    expect(parseMapPrefs('{"v":1,"shape":"orbit"}')).toEqual({ shape: 'orbit' })
+    expect(parseMapPrefs('{"v":1,"shape":"cube","k":20}')).toEqual({ k: 20 })
+    // 見せ方を足す前に覚えた値は、そのまま読める(項目が無いだけ)。
+    expect(parseMapPrefs('{"v":1,"view":"3d"}')).toEqual({ view: 'umap3d' })
+    expect(parseMapPrefs(serializeMapPrefs({ shape: 'flat' }))).toEqual({ shape: 'flat' })
+    expect(pickStoredFields({ shape: 'flat' })).toEqual({ shape: 'flat' })
+    // 覚えた見せ方は、URL に無いときの値になる。
+    expect(parseMapUrlState(new URLSearchParams(), { shape: 'flat' }).shape).toBe('flat')
+    expect(parseMapUrlState(new URLSearchParams('shape=orbit'), { shape: 'flat' }).shape).toBe('orbit')
+  })
+
   it('3D のタブと自動回転も読む(知らない値はその項目だけ捨てる)', () => {
     expect(parseMapPrefs('{"v":1,"view":"3d","autoRotate3d":false}')).toEqual({
       view: 'umap3d',

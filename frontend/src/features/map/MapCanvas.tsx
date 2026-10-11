@@ -1,6 +1,6 @@
 /**
  * マップ(ADR-0033 8章)の canvas。マップの機能はここ 1 か所に持ち、「ネットワーク(平面)」と
- * 「地図(立体)」の違いは投影(`projection.ts`)の実装の差だけにしている。
+ * 「地図」の違いも、平面と立体の違いも、投影(`projection.ts`)の実装の差だけにしている。
  *
  * - 点の座標(`positions`)は、投影の `stride`(平面 2、立体 3)刻み。画面の座標・奥行き・縮尺に
  *   投影し、**奥から手前へ**描く(painter's algorithm)。平面は奥行きが全点で同じなので、並べ替えも
@@ -137,6 +137,8 @@ const SEARCH_GROW = 0.25
 const MAX_FOG = 0.82
 /** フォグの段数(点をまとめて描くために量子化する)。 */
 const FOG_STEPS = 6
+/** 系列の辺の下に敷く、背景色の縁取りの濃さ(サムネイルの上でも読めるように)。 */
+const LINEAGE_HALO_ALPHA = 0.55
 /** 座標のラインの濃さ(軸と格子)。 */
 const AXIS_ALPHA = 0.85
 const GRID_ALPHA = 0.4
@@ -488,28 +490,31 @@ export function MapCanvas({
        *
        * - サムネイル: 親の縁から子の縁まで引き、子の側に塗った矢じりを付ける(サムネイルに
        *   隠れないように縁で止める)。両端の大きさが違う(立体)ときは、中ほどの大きさで縁を決める。
+       *   縁から縁まで引く余地が無いほど近いとき(立体では、ほとんど同じ画像どうしの親子が重なる
+       *   ので普通に起きる)は、`lineageSegment` が縁と矢じりを詰めて、向きだけは分かるようにする。
        * - 点: 中心どうしを破線で結び、子の側に小さな丸を付けて向きを示す。
-       * - サムネイルが重なって線を引けない組: 中心どうしを実線で結ぶ(向きは示せない)。
+       *
+       * 系列の辺は本数が少ないので、画面の外へ出た端点も描く(類似度の辺と違って間引かない)。
+       * 奥行きで消えないよう、カメラの後ろの点だけを避ける。
        */
       const segments: { seg: LineageSegment; wing: number }[] = []
       const dots: [number, number][] = []
-      const overlapped: [number, number][] = []
+      const lineageEnd = (i: number) => i < n && pts.front[i] === 1
       // サムネイルで描く大きさかは、画面の外に出た端点でも決まるように `tilePx` で見る
       // (平面では全点で同じ大きさなので、今までどおり「全部サムネイル」か「全部点」になる)。
       const asTile = (i: number) => tilePx[i] >= THUMB_MIN_PX
       for (const [a, b] of p.lineageEdges) {
-        if (!edgeEnd(a) || !edgeEnd(b)) continue
+        if (!lineageEnd(a) || !lineageEnd(b)) continue
         if (!asTile(a) || !asTile(b)) {
           dots.push([a, b])
           continue
         }
         const half = (tilePx[a] + tilePx[b]) / 4
-        const arrow = arrowSizePx(half * 2)
-        const seg = lineageSegment(sx[a], sy[a], sx[b], sy[b], half, arrow)
-        if (seg) segments.push({ seg, wing: arrow * 0.5 })
-        else overlapped.push([a, b])
+        const seg = lineageSegment(sx[a], sy[a], sx[b], sy[b], half, arrowSizePx(half * 2))
+        if (seg) segments.push({ seg, wing: seg.head * 0.5 })
       }
-      ctx.setLineDash([5, 4])
+      // 線の道筋は 1 回だけ組み、背景色の縁取り → 本体の順に 2 回なぞる(サムネイルの上でも
+      // 読めるように)。
       ctx.beginPath()
       for (const { seg } of segments) {
         ctx.moveTo(seg.x0, seg.y0)
@@ -519,6 +524,13 @@ export function MapCanvas({
         ctx.moveTo(sx[a], sy[a])
         ctx.lineTo(sx[b], sy[b])
       }
+      ctx.save()
+      ctx.strokeStyle = colors.bg
+      ctx.globalAlpha = LINEAGE_HALO_ALPHA
+      ctx.lineWidth = 4
+      ctx.stroke()
+      ctx.restore()
+      ctx.setLineDash([5, 4])
       ctx.stroke()
       ctx.setLineDash([])
       // 矢じり。
@@ -544,14 +556,6 @@ export function MapCanvas({
         ctx.arc(cx, cy, 2.5, 0, Math.PI * 2)
       }
       ctx.fill()
-      if (overlapped.length > 0) {
-        ctx.beginPath()
-        for (const [a, b] of overlapped) {
-          ctx.moveTo(sx[a], sy[a])
-          ctx.lineTo(sx[b], sy[b])
-        }
-        ctx.stroke()
-      }
       ctx.restore()
     }
 

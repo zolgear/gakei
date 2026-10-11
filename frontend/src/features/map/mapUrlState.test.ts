@@ -17,6 +17,7 @@ describe('mapUrlState', () => {
   it('往復で同じ状態に戻る', () => {
     const state = {
       view: 'umap3d' as const,
+      shape: 'flat' as const,
       groupId: 'g1',
       tags: ['猫', 'outdoor'],
       limit: 2000,
@@ -54,11 +55,24 @@ describe('mapUrlState', () => {
   it('ネットワークが既定。以前の 2D の地図の URL は 3D として読む', () => {
     expect(DEFAULT_MAP_URL_STATE.view).toBe('network')
     expect(buildMapSearchParams({ ...DEFAULT_MAP_URL_STATE, view: 'network' }).toString()).toBe('')
-    // タブは「ネットワーク」と「3D」の 2 つ。2D の地図の URL で開いても空白にならない。
+    // タブは「ネットワーク」と「地図」の 2 つ。2D の地図の URL で開いても空白にならない。
     expect(parseMapUrlState(new URLSearchParams('view=map')).view).toBe('umap3d')
     expect(parseMapUrlState(new URLSearchParams('view=umap')).view).toBe('umap3d')
     // 以前の URL も読める。
     expect(parseMapUrlState(new URLSearchParams('view=network')).view).toBe('network')
+  })
+
+  it('見せ方は shape=flat。既定の立体は URL に出さない', () => {
+    expect(DEFAULT_MAP_URL_STATE.shape).toBe('orbit')
+    expect(buildMapSearchParams({ ...DEFAULT_MAP_URL_STATE, shape: 'orbit' }).toString()).toBe('')
+    expect(buildMapSearchParams({ ...DEFAULT_MAP_URL_STATE, shape: 'flat' }).toString()).toBe('shape=flat')
+    expect(parseMapUrlState(new URLSearchParams('shape=flat')).shape).toBe('flat')
+    expect(parseMapUrlState(new URLSearchParams('shape=orbit')).shape).toBe('orbit')
+    // 知らない値は既定(または覚えた値)。
+    expect(parseMapUrlState(new URLSearchParams('shape=cube')).shape).toBe('orbit')
+    expect(parseMapUrlState(new URLSearchParams('shape=cube'), { shape: 'flat' }).shape).toBe('flat')
+    // 見せ方はタブと同じく「画面の設定」には数えない(開き直したときの回転を止めない)。
+    expect(isMapSettingsChange({ shape: 'flat' })).toBe(false)
   })
 
   it('タグは繰り返しの tag=。正規化して重複と空を除き、順を保つ', () => {

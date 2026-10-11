@@ -1,8 +1,8 @@
 /**
  * umap-js の 2D の配置を平面の見せ方で描くビュー(ADR-0033 8章)。
  *
- * 今は画面から外してあり(タブは「ネットワーク」と「地図」の 2 つ)、どこからも使っていない。
- * あとで 2D の地図を戻せるように、中核の canvas の上で動く形のまま残している。
+ * ツールバーの「見せ方」で平面を選んだときの、地図のタブの中身(立体は `Umap3DView`)。
+ * 覚える配置の鍵は `umap` で、3 次元の配置(`umap3d`)とは混ざらない。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EmbeddingGraphResponse } from '../../api/client'

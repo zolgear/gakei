@@ -15,6 +15,8 @@
  * - `q=<文章>`: マップ内の意味検索の文章(試作)。ブラウザには覚えない
  * - `mc=25`: 一致とみなす件数(上位 N 件。選べる値のどれか)
  * - `dist=rank`: 配置の距離の取り方(地図のみ。既定は `1 - 類似度`)
+ * - `shape=flat`: 見せ方(どう見せるか)。省くと立体(`orbit`)。タブ(何を並べるか)とは別で、
+ *   どちらのタブにも効く
  *
  * タブ・上限・近傍の数・しきい値・系列の辺・一致の件数・距離の取り方は、ブラウザにも覚える
  * (`mapPrefs.ts`。2026-10-04)。
@@ -26,6 +28,13 @@ import { DEFAULT_MAP_MATCH_COUNT, MAP_MATCH_COUNT_CHOICES } from './mapSearchHig
 import { DEFAULT_MAP_DISTANCE_METRIC, isMapDistanceMetric, type MapDistanceMetric } from './umapInput'
 
 export type MapView = 'umap' | 'network' | 'umap3d'
+
+/** 見せ方(平面か立体か)。タブとは別で、どちらのタブにも効く。 */
+export type MapShape = 'flat' | 'orbit'
+
+export const MAP_SHAPES: readonly MapShape[] = ['orbit', 'flat']
+/** 既定の見せ方は立体。 */
+export const DEFAULT_MAP_SHAPE: MapShape = 'orbit'
 
 export const MAP_LIMIT_CHOICES = [500, 1000, 2000, 5000] as const
 export const MAP_K_CHOICES = [5, 10, 15, 20, 30] as const
@@ -41,6 +50,8 @@ export const MAP_QUERY_MAX = 1000
 
 export interface MapUrlState {
   view: MapView
+  /** 見せ方(平面か立体か)。 */
+  shape: MapShape
   groupId: string | null
   /** 正規化済み・重複なし。すべてが付いた画像だけに絞る(AND)。 */
   tags: string[]
@@ -59,6 +70,7 @@ export interface MapUrlState {
 
 export const DEFAULT_MAP_URL_STATE: MapUrlState = {
   view: 'network',
+  shape: DEFAULT_MAP_SHAPE,
   groupId: null,
   tags: [],
   limit: DEFAULT_MAP_LIMIT,
@@ -109,6 +121,10 @@ function parseView(raw: string | null, fallback: MapView): MapView {
   return fallback
 }
 
+function parseShape(raw: string | null, fallback: MapShape): MapShape {
+  return raw === 'flat' || raw === 'orbit' ? raw : fallback
+}
+
 function parseLineage(raw: string | null, fallback: boolean): boolean {
   if (raw === null) return fallback
   return raw === '1'
@@ -117,7 +133,7 @@ function parseLineage(raw: string | null, fallback: boolean): boolean {
 /** URL の状態のうち、ブラウザに覚える(URL に無ければ覚えた値を使う)もの。 */
 export type MapStoredFields = Pick<
   MapUrlState,
-  'view' | 'limit' | 'k' | 'threshold' | 'showLineage' | 'matchCount' | 'metric'
+  'view' | 'shape' | 'limit' | 'k' | 'threshold' | 'showLineage' | 'matchCount' | 'metric'
 >
 
 /**
@@ -130,6 +146,7 @@ export function parseMapUrlState(params: URLSearchParams, fallback: Partial<MapS
   const group = params.get('group')?.trim() || null
   return {
     view: parseView(params.get('view'), base.view),
+    shape: parseShape(params.get('shape'), base.shape),
     groupId: group,
     tags: normalizeTagList(params.getAll('tag')),
     limit: pickChoice(params.get('limit'), MAP_LIMIT_CHOICES, base.limit),
@@ -152,6 +169,7 @@ export function buildMapSearchParams(state: MapUrlState): URLSearchParams {
   const qs = new URLSearchParams()
   if (state.view === 'umap') qs.set('view', 'map')
   else if (state.view === 'umap3d') qs.set('view', '3d')
+  if (state.shape !== DEFAULT_MAP_SHAPE) qs.set('shape', state.shape)
   if (state.groupId) qs.set('group', state.groupId)
   for (const tag of normalizeTagList(state.tags)) qs.append('tag', tag)
   if (state.limit !== DEFAULT_MAP_LIMIT) qs.set('limit', String(state.limit))
@@ -169,10 +187,10 @@ export function buildMapSearchParams(state: MapUrlState): URLSearchParams {
 /**
  * その変更が「画面の設定を変えた」操作かどうか(開いたときの最初の回転を止めて、以後は回し直さない
  * ための判断)。絞り込み・しきい値・検索・距離の取り方などは設定。選んだ画像は設定ではなく、
- * タブの切り替えも「立体を開き直す」操作なので設定に数えない。
+ * タブと見せ方の切り替えも「立体を開き直す」操作なので設定に数えない。
  */
 export function isMapSettingsChange(patch: Partial<MapUrlState>): boolean {
-  return Object.keys(patch).some((key) => key !== 'selectedId' && key !== 'view')
+  return Object.keys(patch).some((key) => key !== 'selectedId' && key !== 'view' && key !== 'shape')
 }
 
 /** 絞り込みのうち、既定から変えているものの数(狭い幅の「絞り込み」ボタンに添える)。タグは1つずつ数える。 */

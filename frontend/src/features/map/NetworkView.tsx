@@ -1,6 +1,9 @@
 /**
  * マップの「ネットワーク」タブ(ADR-0033 8章)。画像をノード、類似度がしきい値以上の組を辺にし、
- * d3-force-3d で 3 次元に配置して canvas に描く。系列(ADR-0003)の辺も重ねられる。
+ * 力学モデルで配置して canvas に描く。系列(ADR-0003)の辺も重ねられる。
+ *
+ * 見せ方(`shape`)で配置の次元が変わる。立体は d3-force-3d の 3 次元 + 軌道カメラ、平面は d3-force
+ * の 2 次元 + 平面の投影(3 次元にする前と同じ見た目・同じ操作)。覚える配置の鍵も別にする。
  *
  * - 力学モデルは UI のスレッドで回す。1フレームに使う時間を区切って少しずつ進め、落ち着いたら
  *   (alpha が下限を切ったら)止める。
@@ -11,14 +14,19 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  forceLink as forceLink2d,
+  forceManyBody as forceManyBody2d,
+  forceSimulation as forceSimulation2d,
+  forceX as forceX2d,
+  forceY as forceY2d,
+} from 'd3-force'
+import {
   forceLink,
   forceManyBody,
   forceSimulation,
   forceX,
   forceY,
   forceZ,
-  type SimulationLinkDatum3D,
-  type SimulationNodeDatum3D,
 } from 'd3-force-3d'
 import type { EmbeddingGraphResponse } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
@@ -32,6 +40,7 @@ import {
   type MapPreviewState,
 } from './MapCanvas'
 import type { MapSearchHighlight } from './mapSearchHighlight'
+import type { MapShape } from './mapUrlState'
 import { MAP_LAYOUT_SEED, mulberry32 } from './random'
 import { useSelectedIndex } from './useSelectedIndex'
 import styles from './MapViews.module.css'
@@ -42,14 +51,27 @@ const NETWORK_TILE_SCALE = 0.55
 /** 1フレームで力学モデルに使う時間(ミリ秒)。 */
 const FRAME_BUDGET_MS = 12
 
-/** 配置の次元(立体)。 */
-const DIMENSIONS = 3
-
-interface SimNode extends SimulationNodeDatum3D {
+/** 力学モデルが読み書きするノード(2 次元では z を使わない)。 */
+interface SimNode {
   index: number
+  x?: number
+  y?: number
+  z?: number
 }
 
-type SimLink = SimulationLinkDatum3D<SimNode> & { similarity: number }
+interface SimLink {
+  source: number | SimNode
+  target: number | SimNode
+  similarity: number
+}
+
+/** 自前のループから回すのに必要な分だけの、力学モデルの口(2 次元・3 次元で共通)。 */
+interface Runner {
+  tick(): unknown
+  alpha(): number
+  alphaMin(): number
+  stop(): unknown
+}
 
 interface NetworkViewProps {
   graph: EmbeddingGraphResponse
@@ -59,9 +81,11 @@ interface NetworkViewProps {
   /** 選んだ画像の Asset ID(URL に置く)。 */
   selectedId: string | null
   onSelectId: (id: string | null) => void
+  /** 見せ方(平面か立体か)。 */
+  shape: MapShape
   /** 選んだ画像を大きく見るパネルの開閉(ブラウザに覚える)。 */
   preview: MapPreviewState
-  /** 開いたときに一度だけ回すか(ブラウザに覚える)。 */
+  /** 開いたときに一度だけ回すか(ブラウザに覚える。立体のときだけ効く)。 */
   introSpin: MapIntroSpinState
   /** 座標のラインを重ねるか(ブラウザに覚える)。 */
   axes: MapAxesState
@@ -76,6 +100,7 @@ export function NetworkView({
   lineageEdges,
   selectedId,
   onSelectId,
+  shape,
   preview,
   introSpin,
   axes,
@@ -85,18 +110,27 @@ export function NetworkView({
   const m = t.map
   const nodes = useMemo(() => graph.nodes ?? [], [graph])
   const neighborIndices = useMemo(() => graph.neighbor_indices ?? [], [graph])
+  const dims = shape === 'orbit' ? 3 : 2
   const key = useMemo(
-    () => layoutKey('network3d', nodes.map((node) => node.id), `${graph.k}:${threshold.toFixed(2)}`),
-    [nodes, graph.k, threshold],
+    () =>
+      layoutKey(
+        dims === 3 ? 'network3d' : 'network',
+        nodes.map((node) => node.id),
+        `${graph.k}:${threshold.toFixed(2)}`,
+      ),
+    [dims, nodes, graph.k, threshold],
   )
-  // 描く辺(間引いたもの)。配置の計算には間引く前の `edges` を使う。
-  const drawnEdges = useMemo(() => budgetEdges(edges), [edges])
+  /**
+   * 描く辺。立体は回すたびに描き直すので上限まで間引く。平面は動かない(落ち着いたら描き直さない)
+   * ので、今までどおり全部描く。配置の計算にはどちらも間引く前の `edges` を使う。
+   */
+  const drawnEdges = useMemo(() => (dims === 3 ? budgetEdges(edges) : edges), [dims, edges])
   // 覚えている配置があればそれを使う。無ければ、力学モデルが書き込む配列(effect の中で作る)。
   const cached = getCachedLayout(key)
   const [live, setLive] = useState<{ key: string; positions: Float32Array } | null>(null)
   const [settledKey, setSettledKey] = useState<string | null>(null)
   const positions =
-    cached && cached.length === nodes.length * DIMENSIONS
+    cached && cached.length === nodes.length * dims
       ? cached
       : live?.key === key
         ? live.positions
@@ -108,8 +142,8 @@ export function NetworkView({
   useEffect(() => {
     const n = nodes.length
     const known = getCachedLayout(key)
-    if (known && known.length === n * DIMENSIONS) return
-    const buffer = new Float32Array(n * DIMENSIONS)
+    if (known && known.length === n * dims) return
+    const buffer = new Float32Array(n * dims)
     const simNodes: SimNode[] = Array.from({ length: n }, (_, index) => ({ index }))
     const simLinks: SimLink[] = edges.map((e) => ({ source: e.source, target: e.target, similarity: e.similarity }))
     // 点が多いほど、反発を弱めて全体の大きさを抑える。辺の無い画像は反発をさらに弱め、中心へ
@@ -120,33 +154,34 @@ export function NetworkView({
       degree[e.target]++
     }
     const charge = n > 2000 ? -8 : n > 500 ? -15 : -30
+    const chargeOf = (d: SimNode) => (degree[d.index] === 0 ? charge * 0.25 : charge)
     const centering = (d: SimNode) => (degree[d.index] === 0 ? 0.08 : 0.04)
-    const simulation = forceSimulation<SimNode>(simNodes, DIMENSIONS)
-      .randomSource(mulberry32(MAP_LAYOUT_SEED))
-      .force(
-        'link',
-        forceLink<SimNode, SimLink>(simLinks)
-          .id((d) => d.index)
-          // 似ているほど近くに置く。
-          .distance((l) => 12 + (1 - l.similarity) * 160),
-      )
-      .force(
-        'charge',
-        forceManyBody<SimNode>()
-          .strength((d) => (degree[d.index] === 0 ? charge * 0.25 : charge))
-          .theta(0.9)
-          .distanceMax(600),
-      )
-      .force('x', forceX<SimNode>(0).strength(centering))
-      .force('y', forceY<SimNode>(0).strength(centering))
-      .force('z', forceZ<SimNode>(0).strength(centering))
-      .stop()
+    // 似ているほど近くに置く。
+    const distanceOf = (l: SimLink) => 12 + (1 - l.similarity) * 160
+    const idOf = (d: SimNode) => d.index
+    const simulation: Runner =
+      dims === 3
+        ? forceSimulation<SimNode>(simNodes, 3)
+            .randomSource(mulberry32(MAP_LAYOUT_SEED))
+            .force('link', forceLink<SimNode, SimLink>(simLinks).id(idOf).distance(distanceOf))
+            .force('charge', forceManyBody<SimNode>().strength(chargeOf).theta(0.9).distanceMax(600))
+            .force('x', forceX<SimNode>(0).strength(centering))
+            .force('y', forceY<SimNode>(0).strength(centering))
+            .force('z', forceZ<SimNode>(0).strength(centering))
+            .stop()
+        : forceSimulation2d<SimNode>(simNodes)
+            .randomSource(mulberry32(MAP_LAYOUT_SEED))
+            .force('link', forceLink2d<SimNode, SimLink>(simLinks).id(idOf).distance(distanceOf))
+            .force('charge', forceManyBody2d<SimNode>().strength(chargeOf).theta(0.9).distanceMax(600))
+            .force('x', forceX2d<SimNode>(0).strength(centering))
+            .force('y', forceY2d<SimNode>(0).strength(centering))
+            .stop()
 
     const copy = () => {
       for (let i = 0; i < n; i++) {
-        buffer[i * DIMENSIONS] = simNodes[i].x ?? 0
-        buffer[i * DIMENSIONS + 1] = simNodes[i].y ?? 0
-        buffer[i * DIMENSIONS + 2] = simNodes[i].z ?? 0
+        buffer[i * dims] = simNodes[i].x ?? 0
+        buffer[i * dims + 1] = simNodes[i].y ?? 0
+        if (dims === 3) buffer[i * dims + 2] = simNodes[i].z ?? 0
       }
     }
     copy()
@@ -175,7 +210,7 @@ export function NetworkView({
       cancelAnimationFrame(frame)
       simulation.stop()
     }
-  }, [key, nodes, edges])
+  }, [dims, key, nodes, edges])
 
   return (
     <MapCanvas
@@ -185,7 +220,7 @@ export function NetworkView({
       neighborIndices={neighborIndices}
       similarityEdges={drawnEdges}
       lineageEdges={lineageEdges}
-      projection="orbit"
+      projection={shape}
       tileScale={NETWORK_TILE_SCALE}
       selected={selected}
       onSelect={(index) => onSelectId(index === null ? null : (nodes[index]?.id ?? null))}
@@ -195,7 +230,7 @@ export function NetworkView({
       search={search}
       controllerRef={controllerRef}
       ariaLabel={fmt(m.networkAriaLabel, { count: nodes.length, edges: edges.length })}
-      hint={m.rotateHint}
+      hint={shape === 'orbit' ? m.rotateHint : undefined}
       overlay={running ? <span className={styles.status}>{m.networkRunning}</span> : null}
     />
   )

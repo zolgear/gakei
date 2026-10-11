@@ -6,8 +6,10 @@
  *   辺も重ねられる。
  * - 地図: umap-js の 3 次元の配置を、回る立体として見る(`Umap3DView`。試作)。
  *
- * タブはこの 2 つで、どちらも回る立体。2D の地図(`UmapView`)はあとで戻せるように残してあるが、
- * 今は出していない(以前の `view=map` と覚えた値は 3 次元の地図として読む)。
+ * タブはこの 2 つ。別に「見せ方」(平面 / 立体)の切り替えがあり、どちらのタブにも効く
+ * (タブ = 何を並べるか、見せ方 = どう見せるか)。既定は立体で、平面を選ぶとネットワークは
+ * d3-force の 2 次元、地図は `UmapView`(UMAP 2 次元)になる。以前の `view=map` と覚えた値は
+ * 地図のタブとして読む。
  *
  * 元データは `GET /api/embeddings/graph`。グループ・タグ(複数なら AND)・上限・近傍の数で絞り込める。タブ、
  * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
@@ -38,6 +40,7 @@ import {
 import { MAP_DISTANCE_METRICS, type MapDistanceMetric } from '../features/map/umapInput'
 import {
   MAP_K_CHOICES,
+  MAP_SHAPES,
   MAP_LIMIT_CHOICES,
   MAP_QUERY_MAX,
   MAP_THRESHOLD_MAX,
@@ -55,6 +58,7 @@ import {
 import { loadMapPrefs, pickStoredFields, saveMapPrefs } from '../features/map/mapPrefs'
 import { NetworkView } from '../features/map/NetworkView'
 import { Umap3DView } from '../features/map/Umap3DView'
+import { UmapView } from '../features/map/UmapView'
 import { useDebouncedValue } from '../features/search/useDebouncedValue'
 import { useAssetGroups } from '../features/stock/groups/assetGroupQueries'
 import { fmt, useI18n } from '../i18n'
@@ -224,6 +228,20 @@ function MapBody() {
             </button>
           ))}
         </div>
+        <div className={styles.tabs} role="group" aria-label={m.shapeLabel}>
+          {MAP_SHAPES.map((shape) => (
+            <button
+              key={shape}
+              type="button"
+              aria-pressed={state.shape === shape}
+              className={styles.tab}
+              data-active={state.shape === shape}
+              onClick={() => update({ shape })}
+            >
+              {m.shapeOption[shape]}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className={styles.filtersToggle}
@@ -386,7 +404,17 @@ function MapBody() {
         {graph && !query.isError && nodeCount === 0 && (
           <p className={styles.placeholder}>{filterCount > 0 ? m.emptyFiltered : m.empty}</p>
         )}
-        {graph && !query.isError && nodeCount > 0 && state.view === 'umap3d' && (
+        {graph && !query.isError && nodeCount > 0 && state.view === 'umap3d' && state.shape === 'flat' && (
+          <UmapView
+            graph={graph}
+            selectedId={state.selectedId}
+            onSelectId={selectId}
+            preview={preview}
+            metric={state.metric}
+            search={searchHighlight}
+          />
+        )}
+        {graph && !query.isError && nodeCount > 0 && state.view === 'umap3d' && state.shape === 'orbit' && (
           <Umap3DView
             graph={graph}
             selectedId={state.selectedId}
@@ -406,6 +434,7 @@ function MapBody() {
             lineageEdges={state.showLineage ? lineage : null}
             selectedId={state.selectedId}
             onSelectId={selectId}
+            shape={state.shape}
             preview={preview}
             introSpin={introSpin}
             axes={axes}

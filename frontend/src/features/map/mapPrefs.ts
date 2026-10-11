@@ -1,6 +1,6 @@
 /**
  * マップ(`/map`)で利用者が選んだ値をブラウザに覚える(ADR-0033 8章・2026-10-04 追記)。
- * 覚えるのはタブ・近傍の数・上限・しきい値・系列の辺・一致の件数(`matchCount`)・距離の取り方
+ * 覚えるのはタブ・見せ方(`shape`)・近傍の数・上限・しきい値・系列の辺・一致の件数(`matchCount`)・距離の取り方
  * (`dist`)と、選んだ画像を大きく見るパネルの開閉
  * (`previewOpen`)、立体を開いたときに一度だけ回すか(`autoRotate3d`)だけ(この 2 つは URL には置かない)。グループ・タグ・選んだ画像・検索の文章は
  * データや打った内容に依存するので覚えない(URL だけ)。
@@ -10,7 +10,7 @@
  * 変えた項目だけを覚えた値に重ねて書く(リンクで開いた URL の値まで覚えないため)。
  *
  * 保存形式は1つのキーに
- * `{ "v": 1, view, k, limit, threshold, lineage, previewOpen, autoRotate3d, axes3d, matchCount, dist }`。
+ * `{ "v": 1, view, shape, k, limit, threshold, lineage, previewOpen, autoRotate3d, axes3d, matchCount, dist }`。
  * 読むときは項目ごとに URL と同じ規則で検証し、読めない項目だけを捨てる(`previewOpen` と
  * `autoRotate3d` は後から足した項目で、無い・読めないときは既定。項目を足しただけなので版は 1 のまま。
  * 知らない `view` の値も、その項目だけを捨てる)。localStorage が使えない環境でも壊れないよう
@@ -18,7 +18,14 @@
  */
 import { safeLocalStorage, type StorageLike } from '../../lib/browserStorage'
 import { MAP_MATCH_COUNT_CHOICES } from './mapSearchHighlight'
-import { MAP_K_CHOICES, MAP_LIMIT_CHOICES, clampThreshold, type MapStoredFields, type MapUrlState } from './mapUrlState'
+import {
+  MAP_K_CHOICES,
+  MAP_LIMIT_CHOICES,
+  clampThreshold,
+  type MapShape,
+  type MapStoredFields,
+  type MapUrlState,
+} from './mapUrlState'
 import { isMapDistanceMetric, type MapDistanceMetric } from './umapInput'
 
 /** 覚える値。URL にもある項目と、ブラウザにだけ覚える項目(パネルの開閉)。 */
@@ -47,6 +54,7 @@ const MAP_PREFS_VERSION = 1
 interface StoredMapPrefsV1 {
   v: 1
   view?: 'network' | 'map' | '3d'
+  shape?: MapShape
   k?: number
   limit?: number
   threshold?: number
@@ -81,6 +89,7 @@ export function parseMapPrefs(raw: string | null): Partial<MapPrefs> {
   if (data.view === 'map') prefs.view = 'umap3d'
   else if (data.view === '3d') prefs.view = 'umap3d'
   else if (data.view === 'network') prefs.view = 'network'
+  if (data.shape === 'flat' || data.shape === 'orbit') prefs.shape = data.shape
   const k = pickNumberChoice(data.k, MAP_K_CHOICES)
   if (k !== undefined) prefs.k = k
   const limit = pickNumberChoice(data.limit, MAP_LIMIT_CHOICES)
@@ -101,6 +110,7 @@ export function parseMapPrefs(raw: string | null): Partial<MapPrefs> {
 export function serializeMapPrefs(prefs: Partial<MapPrefs>): string {
   const out: StoredMapPrefsV1 = { v: MAP_PREFS_VERSION }
   if (prefs.view !== undefined) out.view = prefs.view === 'umap' ? 'map' : prefs.view === 'umap3d' ? '3d' : 'network'
+  if (prefs.shape !== undefined) out.shape = prefs.shape
   if (prefs.k !== undefined) out.k = prefs.k
   if (prefs.limit !== undefined) out.limit = prefs.limit
   if (prefs.threshold !== undefined) out.threshold = clampThreshold(prefs.threshold)
@@ -117,6 +127,7 @@ export function serializeMapPrefs(prefs: Partial<MapPrefs>): string {
 export function pickStoredFields(p: MapPrefsPatch): Partial<MapPrefs> {
   const out: Partial<MapPrefs> = {}
   if (p.view !== undefined) out.view = p.view
+  if (p.shape !== undefined) out.shape = p.shape
   if (p.k !== undefined) out.k = p.k
   if (p.limit !== undefined) out.limit = p.limit
   if (p.threshold !== undefined) out.threshold = p.threshold
