@@ -114,6 +114,7 @@
       "hintContact": "ComfyUI への問い合わせ"
     },
     "provider": {
+      "checking": "ComfyUI に接続できるか確かめています。",
       "unknownWorkflow": "未知のワークフローです: {model}",
       "workflowOperationMismatch": "ワークフロー「{name}」は operation={operation} に対応していません",
       "missingPromptInternal": "run.params に comfyui_prompt がありません(内部エラー)。",
@@ -159,6 +160,7 @@
       "executionFailedNoDetails": "SD WebUI での実行に失敗しました(詳細不明)。"
     },
     "provider": {
+      "checking": "SD WebUI に接続できるか確かめています。",
       "unavailable": "SD WebUI に接続できないため、チェックポイントの一覧を取得できません。",
       "unknownCheckpoint": "チェックポイント {model} は SD WebUI の一覧にありません。",
       "missingRequestInternal": "Run の記録に SD WebUI へ送る本文(sdwebui_request)がありません。",

@@ -40,6 +40,7 @@ from app.domain.models import ComfyWorkflow
 from app.domain.run_validation import RunInputMeta, RunValidationError
 from app.domain.sql_compat import binary_order
 from app.i18n import t
+from app.providers.background_cache import FIRST_CHECK_GRACE_SECONDS, BackgroundRefreshCache
 from app.providers.base import (
     InputImage,
     ModelCapabilities,
@@ -47,6 +48,7 @@ from app.providers.base import (
     ProgressCallback,
     ProviderCapabilities,
     ProviderError,
+    ProviderStatusSnapshot,
     RunDraft,
     RunOutputImage,
     RunRequest,
@@ -112,7 +114,15 @@ class ComfyUIProvider:
         self._timeout_seconds = timeout_seconds
         self._client_factory = client_factory or (lambda: ComfyUIClient(base_url))
         self._clock = clock or time.monotonic
-        self._availability_cache: tuple[float, tuple[bool, str | None]] | None = None
+        # 到達性は、待たない経路(`status_snapshot`)と待つ経路(`availability`)で同じ
+        # キャッシュを使う。
+        self._availability_cache: BackgroundRefreshCache[tuple[bool, str | None]] = (
+            BackgroundRefreshCache(
+                self._fetch_availability,
+                lambda _value: _AVAILABILITY_CACHE_SECONDS,
+                name="comfyui-availability",
+            )
+        )
 
     # -- capabilities / availability -----------------------------------------
 
@@ -144,18 +154,31 @@ class ComfyUIProvider:
             partial_images_max=0,
         )
 
-    def availability(self) -> tuple[bool, str | None]:
-        """`check_available` の結果を5秒キャッシュする。"""
-        now = time.monotonic()
-        if self._availability_cache is not None:
-            cached_at, cached_result = self._availability_cache
-            if now - cached_at < _AVAILABILITY_CACHE_SECONDS:
-                return cached_result
-
+    def _fetch_availability(self) -> tuple[bool, str | None]:
         available, reason, _body = check_available(self._base_url, timeout=1.0)
-        result = (available, reason)
-        self._availability_cache = (now, result)
-        return result
+        return (available, reason)
+
+    def availability(self) -> tuple[bool, str | None]:
+        """`check_available` の結果を5秒キャッシュする。古ければその場で問い合わせる。"""
+        return self._availability_cache.get()
+
+    def status_snapshot(self) -> ProviderStatusSnapshot:
+        """`GET /api/capabilities` 用。ComfyUI に問い合わせず、手元の到達性をすぐ返す。
+
+        古いか無ければ裏で取り直す(同時に1つだけ)。一度も確かめていなければ最初の問い合わせを
+        短い間だけ待ち、それでも無ければ使えない(確かめ中)として返す。ワークフローの一覧は
+        DB から引くので待たない。
+        """
+        capabilities = self.capabilities()
+        has_value, value = self._availability_cache.peek()
+        if not has_value:
+            # 裏の最初の問い合わせを少しだけ待つ(手元の接続先ならこの間に済む)
+            self._availability_cache.wait_first(time.monotonic() + FIRST_CHECK_GRACE_SECONDS)
+            has_value, value = self._availability_cache.peek()
+        if not has_value or value is None:
+            return ProviderStatusSnapshot(capabilities, False, t("comfyui.provider.checking"), True)
+        available, reason = value
+        return ProviderStatusSnapshot(capabilities, available, reason, False)
 
     # -- finalize_params -------------------------------------------------------
 

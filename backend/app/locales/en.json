@@ -114,6 +114,7 @@
       "hintContact": "contacting ComfyUI"
     },
     "provider": {
+      "checking": "Checking the connection to ComfyUI.",
       "unknownWorkflow": "Unknown workflow: {model}",
       "workflowOperationMismatch": "Workflow \"{name}\" does not support operation={operation}",
       "missingPromptInternal": "run.params is missing comfyui_prompt (internal error).",
@@ -159,6 +160,7 @@
       "executionFailedNoDetails": "Execution failed in SD WebUI (no details)."
     },
     "provider": {
+      "checking": "Checking the connection to SD WebUI.",
       "unavailable": "Cannot connect to SD WebUI, so the checkpoint list is unavailable.",
       "unknownCheckpoint": "Checkpoint {model} is not in the SD WebUI list.",
       "missingRequestInternal": "The run record has no request body for SD WebUI (sdwebui_request).",
