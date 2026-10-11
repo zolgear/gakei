@@ -76,6 +76,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
     max_input_images: 1,
     available: true,
     unavailable_reason: null,
+    checking: false,
     requires_api_key: false,
     supports_pricing: false,
     ...overrides,
@@ -85,7 +86,7 @@ function provider(overrides: Partial<ProviderEntry> & Pick<ProviderEntry, 'provi
 function caps(providers: ProviderEntry[]): CapabilitiesResponse {
   return {
     default_provider: 'fake',
-    embeddings: { available: false, index_backend: 'numpy' },
+    embeddings: { available: false, index_backend: 'numpy', prompt_search: false },
     providers,
   }
 }

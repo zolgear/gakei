@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { setLocale } from '../../i18n'
 import {
   canSaveConnection,
+  connectionHeadline,
   connectionState,
   disconnectedNotice,
   envSourceNote,
   formDisconnectedNotice,
+  hasConnectionUrl,
   isLoopbackUrl,
   lockedMessage,
   testSuccessNotice,
@@ -60,17 +62,36 @@ describe('envSourceNote', () => {
   })
 })
 
+describe('connectionHeadline', () => {
+  it('未接続と無効を言い分ける', () => {
+    expect(connectionHeadline({ enabled: false, available: false })).toBe('ComfyUI に接続していません')
+    expect(connectionHeadline({ enabled: false, available: false, disabled: true })).toBe('ComfyUI は無効です')
+  })
+})
+
+describe('hasConnectionUrl', () => {
+  it('接続中か無効なら URL を持っている', () => {
+    expect(hasConnectionUrl({ enabled: true, disabled: false })).toBe(true)
+    expect(hasConnectionUrl({ enabled: false, disabled: true })).toBe(true)
+    expect(hasConnectionUrl({ enabled: false, disabled: false })).toBe(false)
+  })
+})
+
 describe('lockedMessage', () => {
   it('操作ごとに文言が違う', () => {
     expect(lockedMessage('save')).toContain('変更できません')
-    expect(lockedMessage('detach')).toContain('切り離せません')
+    expect(lockedMessage('detach')).toContain('切り離すこともできません')
   })
 })
 
 describe('connectionState', () => {
-  it('無効なら disabled', () => {
-    expect(connectionState({ enabled: false, available: false })).toBe('disabled')
-    expect(connectionState({ enabled: false, available: true })).toBe('disabled')
+  it('URL が無ければ notConnected', () => {
+    expect(connectionState({ enabled: false, available: false })).toBe('notConnected')
+    expect(connectionState({ enabled: false, available: true })).toBe('notConnected')
+  })
+
+  it('無効にしていれば disabled(URL は残っている)', () => {
+    expect(connectionState({ enabled: false, available: false, disabled: true })).toBe('disabled')
   })
 
   it('有効で available なら available、そうでなければ unavailable', () => {
@@ -81,6 +102,19 @@ describe('connectionState', () => {
 
 describe('testSuccessNotice', () => {
   const loopbackUrl = 'http://127.0.0.1:8188'
+
+  it('無効の間は、保存しても無効のままと伝える', () => {
+    expect(
+      testSuccessNotice({
+        showForm: true,
+        enabled: false,
+        disabled: true,
+        trimmedUrl: loopbackUrl,
+        testResult: { available: true, url: loopbackUrl },
+        confirmNonLoopback: false,
+      }),
+    ).toContain('無効のまま')
+  })
 
   it('フォーム非表示なら出さない', () => {
     expect(
@@ -205,6 +239,6 @@ describe('en locale', () => {
   it('lockedMessage differs per action in English', () => {
     setLocale('en')
     expect(lockedMessage('save')).toContain('cannot be changed')
-    expect(lockedMessage('detach')).toContain('cannot disconnect')
+    expect(lockedMessage('detach')).toContain('cannot disable or disconnect')
   })
 })

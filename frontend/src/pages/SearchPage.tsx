@@ -9,6 +9,11 @@
  * - `similar=<id>`: その画像に似た画像(`GET /api/assets/{id}/similar`)。起点のサムネイルと結果を並べる。
  * 埋め込みが使えないときは切り替えを出さず、`mode=semantic` もキーワード検索として扱う。
  *
+ * 意味のときは、探す対象「画像 / 指示」の切り替えも出す(ADR-0045 6章、2026-10-11 追記)。使う
+ * モデルが指示(プロンプト)の埋め込みに対応するとき(capabilities の `prompt_search`)だけ出す。
+ * `target=prompt` では Run を履歴のカード(キーワード検索と同じ `HistoryCard`)に類似度を添えて
+ * 並べ、「画像で探す」と英語向けのモデルの注記は出さない。対応しないモデルでは画像として扱う。
+ *
  * 意味のときは「画像で探す」(2026-10-04、ユーザーの指示)も出す。ファイルを選ぶ、この画面に
  * 落とす、貼り付ける(Ctrl/Cmd+V)のどれかで手元の画像を `POST /api/search/similar-image` に送り、
  * 近い画像を類似度つきで並べる。画像は Asset にせず、サーバーも保存しない。手元のファイルなので
@@ -30,7 +35,15 @@ import { useBackNavigate } from '../lib/useBackNavigate'
 import { assetUrl } from '../api/assetUrl'
 import { HistoryCard } from '../features/history/HistoryCard'
 import { HighlightedText } from '../features/search/HighlightedText'
-import { buildSearchPath, parseSearchState, type SearchMode } from '../features/search/searchQuerySync'
+import {
+  buildSearchPath,
+  parseSearchState,
+  resolveSemanticTarget,
+  semanticSearchParams,
+  type SearchMode,
+  type SemanticTarget,
+} from '../features/search/searchQuerySync'
+import { promptRunCards } from '../features/search/promptSearchResults'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { embeddingErrorKind, embeddingPollInterval, retryEmbeddingQuery } from '../features/embeddings/embeddingErrors'
 import { EmbeddingStateNotice } from '../features/embeddings/EmbeddingStateNotice'
@@ -80,6 +93,9 @@ export function SearchPage() {
   const semanticAvailable = embeddingCaps !== null
   const similarId = semanticAvailable ? urlState.similar : null
   const mode: SearchMode = semanticAvailable && urlState.mode === 'semantic' ? 'semantic' : 'keyword'
+  // 指示で探せるか(ADR-0045)。対応しないモデルなら、URL が `target=prompt` でも画像として扱う。
+  const promptSearchAvailable = embeddingCaps?.prompt_search === true
+  const target: SemanticTarget = resolveSemanticTarget(urlState.target, promptSearchAvailable)
 
   // 戻る/進むで URL の q が変わったら入力欄も追随する(URL を正にする)。
   // effect ではなく、レンダー中に「同期済みの q」とズレていたらその場で補正する
@@ -98,19 +114,25 @@ export function SearchPage() {
     queryFn: () => search({ q: urlQuery, limit: PAGE_LIMIT }),
     enabled: urlQuery.length > 0 && mode === 'keyword' && similarId === null && !waitingCaps,
   })
-  // 意味での検索の件数。検索語が変わったら最初の件数に戻す(入力欄と同じ、レンダー中に補正する書き方)。
-  const [semanticLimitState, setSemanticLimitState] = useState(() => ({ query: urlQuery, limit: SEMANTIC_INITIAL_LIMIT }))
-  if (semanticLimitState.query !== urlQuery) {
-    setSemanticLimitState({ query: urlQuery, limit: SEMANTIC_INITIAL_LIMIT })
+  // 意味での検索の件数。検索語か探す対象が変わったら最初の件数に戻す(入力欄と同じ、レンダー中に
+  // 補正する書き方)。
+  const [semanticLimitState, setSemanticLimitState] = useState(() => ({
+    query: urlQuery,
+    target,
+    limit: SEMANTIC_INITIAL_LIMIT,
+  }))
+  if (semanticLimitState.query !== urlQuery || semanticLimitState.target !== target) {
+    setSemanticLimitState({ query: urlQuery, target, limit: SEMANTIC_INITIAL_LIMIT })
   }
   const semanticLimit = semanticLimitState.limit
   const semanticQuery = useQuery({
-    queryKey: ['embeddings', 'semantic', urlQuery, semanticLimit],
-    queryFn: () => semanticSearch({ q: urlQuery, limit: semanticLimit }),
+    queryKey: ['embeddings', 'semantic', urlQuery, target, semanticLimit],
+    queryFn: () => semanticSearch(semanticSearchParams(urlQuery, semanticLimit, target)),
     enabled: urlQuery.length > 0 && mode === 'semantic' && similarId === null,
     retry: retryEmbeddingQuery,
-    // 「もっと見る」で取り直す間も、今の結果を出したままにする。同じ検索語のときだけ引き継ぐ。
-    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === urlQuery ? keepPreviousData(prev) : undefined),
+    // 「もっと見る」で取り直す間も、今の結果を出したままにする。同じ検索語・探す対象のときだけ引き継ぐ。
+    placeholderData: (prev, prevQuery) =>
+      prevQuery?.queryKey[2] === urlQuery && prevQuery?.queryKey[3] === target ? keepPreviousData(prev) : undefined,
   })
   const similarKey = similarAssetsQueryKey(similarId ?? '', SEARCH_SIMILAR_LIMIT)
   const similarQuery = useQuery({
@@ -121,10 +143,10 @@ export function SearchPage() {
     refetchInterval: (q) => embeddingPollInterval(q.state.error),
   })
 
-  // 画像で探す(意味のときだけ)。
+  // 画像で探す(意味で画像を探すときだけ。指示のときは出さない)。
   const queryImage = useQueryImage()
   const { setFile: setQueryImageFile, clear: clearQueryImage } = queryImage
-  const imageSearchAvailable = mode === 'semantic' && similarId === null
+  const imageSearchAvailable = mode === 'semantic' && similarId === null && target === 'image'
   const imageActive = imageSearchAvailable && queryImage.image !== null
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -199,14 +221,22 @@ export function SearchPage() {
     // 文章で探し直したら、画像での検索はやめる。
     clearQueryImage()
     setPickError(false)
-    navigate(buildSearchPath(inputValue, mode))
+    navigate(buildSearchPath(inputValue, mode, target))
   }
 
   function handleModeChange(next: SearchMode) {
     if (next === mode && similarId === null) return
     clearQueryImage()
     setPickError(false)
-    navigate(buildSearchPath(inputValue, next))
+    // 探す対象は意味の中の選択なので、キーワードとの行き来でも覚えておく(URL には意味のときだけ付く)。
+    navigate(buildSearchPath(inputValue, next, target))
+  }
+
+  function handleTargetChange(next: SemanticTarget) {
+    if (next === target) return
+    clearQueryImage()
+    setPickError(false)
+    navigate(buildSearchPath(inputValue, 'semantic', next))
   }
 
   function renderAssetHits(hits: readonly SemanticAssetHit[], showScore: boolean) {
@@ -240,13 +270,19 @@ export function SearchPage() {
   const data = mode === 'keyword' && similarId === null ? searchQuery.data : undefined
   const isKeywordView = mode === 'keyword' && similarId === null && !waitingCaps
   const semanticHits = semanticQuery.data?.assets ?? []
+  const promptCards = promptRunCards(semanticQuery.data)
+  const semanticHitCount = target === 'prompt' ? promptCards.length : semanticHits.length
   const similarHits = similarQuery.data?.assets ?? []
   const similarErrorKind = embeddingErrorKind(similarQuery.error)
   const semanticErrorKind = embeddingErrorKind(semanticQuery.error)
   const imageHits = imageQuery.data?.assets ?? []
   const imageErrorKind = embeddingErrorKind(imageQuery.error)
   const showEnglishHint =
-    mode === 'semantic' && similarId === null && !imageActive && shouldShowEnglishOnlyHint(urlQuery, semanticQuery.data ?? embeddingCaps)
+    mode === 'semantic' &&
+    target === 'image' &&
+    similarId === null &&
+    !imageActive &&
+    shouldShowEnglishOnlyHint(urlQuery, semanticQuery.data ?? embeddingCaps)
   const runs = data?.runs ?? []
   const assets = data?.assets ?? []
   const promptSets = data?.prompt_sets ?? []
@@ -268,20 +304,40 @@ export function SearchPage() {
         {t.common.back}
       </button>
       {semanticAvailable && (
-        <div className={styles.modeSwitch} role="radiogroup" aria-label={t.search.page.modeLabel}>
-          {(['keyword', 'semantic'] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              role="radio"
-              aria-checked={similarId === null && mode === item}
-              className={styles.modeButton}
-              data-active={similarId === null && mode === item}
-              onClick={() => handleModeChange(item)}
-            >
-              {item === 'keyword' ? t.search.page.modeKeyword : t.search.page.modeSemantic}
-            </button>
-          ))}
+        <div className={styles.modeRow}>
+          <div className={styles.modeSwitch} role="radiogroup" aria-label={t.search.page.modeLabel}>
+            {(['keyword', 'semantic'] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="radio"
+                aria-checked={similarId === null && mode === item}
+                className={styles.modeButton}
+                data-active={similarId === null && mode === item}
+                onClick={() => handleModeChange(item)}
+              >
+                {item === 'keyword' ? t.search.page.modeKeyword : t.search.page.modeSemantic}
+              </button>
+            ))}
+          </div>
+          {/* 探す対象(ADR-0045 6章)。意味のときで、指示の埋め込みに対応するモデルのときだけ。 */}
+          {promptSearchAvailable && mode === 'semantic' && similarId === null && (
+            <div className={styles.modeSwitch} role="radiogroup" aria-label={t.search.page.targetLabel}>
+              {(['image', 'prompt'] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  role="radio"
+                  aria-checked={target === item}
+                  className={styles.modeButton}
+                  data-active={target === item}
+                  onClick={() => handleTargetChange(item)}
+                >
+                  {item === 'image' ? t.search.page.targetImage : t.search.page.targetPrompt}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <form className={styles.searchForm} onSubmit={handleSubmit}>
@@ -290,7 +346,13 @@ export function SearchPage() {
           className={styles.searchInput}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          placeholder={mode === 'semantic' ? t.search.page.semanticPlaceholder : t.search.placeholder}
+          placeholder={
+            mode === 'semantic'
+              ? target === 'prompt'
+                ? t.search.page.promptPlaceholder
+                : t.search.page.semanticPlaceholder
+              : t.search.placeholder
+          }
         />
         <button type="submit" className={styles.searchButton}>
           {t.search.page.submit}
@@ -420,7 +482,11 @@ export function SearchPage() {
       {similarId === null && mode === 'semantic' && !imageActive && (
         <>
           {showEnglishHint && <p className={styles.hint}>{t.search.page.englishOnlyHint}</p>}
-          {urlQuery.length === 0 && <p className={styles.placeholder}>{t.search.page.semanticEnterQuery}</p>}
+          {urlQuery.length === 0 && (
+            <p className={styles.placeholder}>
+              {target === 'prompt' ? t.search.page.promptEnterQuery : t.search.page.semanticEnterQuery}
+            </p>
+          )}
           {urlQuery.length > 0 && semanticQuery.isLoading && <p className={styles.placeholder}>{t.search.searching}</p>}
           {semanticErrorKind === 'unavailable' && <p className={styles.placeholder}>{t.embeddings.unavailable}</p>}
           {semanticQuery.isError && semanticErrorKind === null && (
@@ -428,15 +494,27 @@ export function SearchPage() {
               {semanticQuery.error instanceof ApiError ? semanticQuery.error.message : t.search.page.searchFailed}
             </p>
           )}
-          {semanticQuery.isSuccess && semanticHits.length === 0 && (
+          {semanticQuery.isSuccess && semanticHitCount === 0 && (
             <p className={styles.placeholder}>{t.search.page.semanticNoResults}</p>
           )}
-          {semanticHits.length > 0 && (
+          {semanticHitCount > 0 && (
             <section className={styles.section}>
               {/* 全件に順位を付けるので、件数(当たった数)は出さない。 */}
               <h2 className={styles.sectionHeading}>{t.search.page.semanticHeading}</h2>
-              {renderAssetHits(semanticHits, false)}
-              {semanticHits.length >= semanticLimit && semanticLimit < SEMANTIC_MAX_LIMIT && (
+              {target === 'prompt' ? (
+                // 指示の結果は Run の単位。キーワード検索と同じ履歴のカードに類似度を添える。
+                <div className={styles.runGrid}>
+                  {promptCards.map((card) => (
+                    <div key={card.run.id} className={styles.scoredRun}>
+                      <HistoryCard run={card.run} />
+                      <span className={styles.assetScore}>{fmt(t.embeddings.score, { score: card.score })}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                renderAssetHits(semanticHits, false)
+              )}
+              {semanticHitCount >= semanticLimit && semanticLimit < SEMANTIC_MAX_LIMIT && (
                 <button
                   type="button"
                   className={styles.showMore}

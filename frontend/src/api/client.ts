@@ -909,6 +909,16 @@ export function detachComfyUIConnection(): Promise<ComfyUIStatus> {
   return request('/api/comfyui/connection', { method: 'DELETE' })
 }
 
+/** 無効にする(ADR-0013 7章)。URL は残したまま、モデルの選択肢から外す。 */
+export function disableComfyUIConnection(): Promise<ComfyUIStatus> {
+  return request('/api/comfyui/connection/disable', { method: 'POST' })
+}
+
+/** 有効に戻す。保存してある同じ URL で接続する。 */
+export function enableComfyUIConnection(): Promise<ComfyUIStatus> {
+  return request('/api/comfyui/connection/enable', { method: 'POST' })
+}
+
 /** 保存はしない(登録画面向けの提案)。UI 形式の JSON などは 422(detail をそのまま表示する)。 */
 export function analyzeComfyWorkflow(
   template: Record<string, unknown>,
@@ -994,6 +1004,16 @@ export function setSdWebuiConnection(url: string, allowNonLoopback = false): Pro
 /** 切り離す。過去の Run と資格情報は消えない。 */
 export function detachSdWebuiConnection(): Promise<SdWebuiStatus> {
   return request('/api/sdwebui/connection', { method: 'DELETE' })
+}
+
+/** 無効にする(ADR-0038 6章)。URL・資格情報・待つ上限は残したまま、モデルの選択肢から外す。 */
+export function disableSdWebuiConnection(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/connection/disable', { method: 'POST' })
+}
+
+/** 有効に戻す。保存してある同じ設定で接続する。 */
+export function enableSdWebuiConnection(): Promise<SdWebuiStatus> {
+  return request('/api/sdwebui/connection/enable', { method: 'POST' })
 }
 
 /** Basic 認証の資格情報を保存する。応答に値は含まれない(`credentials_set` だけ)。 */
@@ -1239,6 +1259,7 @@ export type EmbeddingErrorCode = components['schemas']['EmbeddingErrorDetail']['
 export type AssetEmbeddingStatus = components['schemas']['AssetEmbeddingStatus']
 export type SemanticSearchResponse = components['schemas']['SemanticSearchResponse']
 export type SemanticAssetHit = components['schemas']['SemanticAssetHit']
+export type SemanticRunHit = components['schemas']['SemanticRunHit']
 export type SimilarAssetsResponse = components['schemas']['SimilarAssetsResponse']
 export type SimilarImageSearchResponse = components['schemas']['SimilarImageSearchResponse']
 export type DuplicatesResponse = components['schemas']['DuplicatesResponse']
@@ -1292,7 +1313,10 @@ export function requestAssetEmbedding(assetId: string): Promise<AssetEmbeddingSt
   return request(`/api/assets/${assetId}/embedding`, { method: 'POST' })
 }
 
-/** 文章での検索(類似度の高い順)。 */
+/**
+ * 文章での検索(類似度の高い順)。`target: 'prompt'` で指示(プロンプト)を探し、Run を `runs` に返す
+ * (ADR-0045 5章)。既定の画像は `assets` に返す。
+ */
 export function semanticSearch(
   params: operations['semantic_search']['parameters']['query'],
 ): Promise<SemanticSearchResponse> {

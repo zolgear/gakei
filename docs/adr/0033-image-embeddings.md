@@ -142,6 +142,7 @@ INDEX (model_key, status)
   - インデックスは、使うモデルごとの部分 HNSW インデックスにする: `USING hnsw ((embedding::vector(<次元>)) vector_cosine_ops) WHERE model_key = '<model_key>'`。モデルを選んだとき(起動時と設定の保存時)に `IF NOT EXISTS` で作る。
   - ORM のモデルには `embedding` 列を載せず、SQL で読み書きする(SQLite と同じモデルを保つため)。
 - Asset の論理削除ではベクトルを消さない。検索のときに `deleted_at IS NULL` で除く。元に戻したときに計算し直さずに済む。
+- 元に戻したとき(`POST /api/assets/{id}/restore`)は、取り込み時の自動実行と同じ条件で、使うモデルのベクトルが無い(行が無い、または失敗)ときだけ計算する。計算済み・待ち行列にあるなら何もしない(ADR-0046 4章)。
 - `migrate_to_postgres`(ADR-0027)は `asset_embedding` も移す。`embedding` 列は移行先で BLOB から作る。
 
 ### 5. 計算のタイミング

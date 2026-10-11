@@ -53,6 +53,7 @@ function providerEntry(overrides: Partial<ProviderEntry> = {}): ProviderEntry {
     max_input_images: 1,
     available: true,
     unavailable_reason: null,
+    checking: false,
     requires_api_key: false,
     supports_pricing: false,
     ...overrides,

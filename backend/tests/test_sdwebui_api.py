@@ -41,6 +41,7 @@ def test_status_disabled_by_default(client: TestClient) -> None:
         "credentials_set": False,
         "flavor": None,
         "checkpoint_count": None,
+        "disabled": False,
     }
 
 

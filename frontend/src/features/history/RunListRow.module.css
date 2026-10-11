@@ -113,10 +113,28 @@
   white-space: nowrap;
 }
 
-/* 状態と日時は欠けさせず、モデル名だけが残り幅で省略される。 */
+/* 類似度・状態・日時は欠けさせず、モデル名だけが残り幅で省略される。 */
+.metaScore,
 .metaStatus,
 .metaDate {
   flex-shrink: 0;
+}
+
+.metaScore {
+  color: var(--color-text-muted);
+}
+
+/* 類似度を添えた行(検索パネルの指示の検索)は、類似度を残し、日時も残り幅で省略できるようにする。 */
+.metaScore ~ .metaDate {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 類似度を添えた行では、モデル名から先に欠ける。 */
+.metaScore ~ .metaModel {
+  flex-shrink: 1000;
 }
 
 .metaStatus[data-status='failed'] {

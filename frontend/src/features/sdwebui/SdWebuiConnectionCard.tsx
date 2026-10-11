@@ -5,6 +5,9 @@
  * - 接続する・URL を変えるときはダイアログで入力し、接続テストで確かめてから登録する。ダイアログでは
  *   Basic 認証の資格情報も入れられる(入れると接続の前に資格情報を保存する)。
  * - 「一覧を読み直す」(`POST /api/sdwebui/refresh`)。
+ * - 「無効にする」「有効にする」(ADR-0038 6章)。URL・資格情報・待つ上限を残したまま使わない状態にし、
+ *   同じ設定で戻す。無効の間も URL の変更と接続テストはできる(変えても無効のまま)。無効にするときは
+ *   「切り離す」に倣って確認のダイアログを出す。有効にするのは確認なし。
  * - SD WebUI の Run が待機中・実行中(`locked`)の間は、変更系のボタンを押せなくし、理由を出す。
  * 変更のあとは状態のキャッシュを応答で置き換え、capabilities も取り直す(モデルの選択肢に反映する)。
  */
@@ -13,6 +16,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ApiError,
   detachSdWebuiConnection,
+  disableSdWebuiConnection,
+  enableSdWebuiConnection,
   getSdWebuiStatus,
   refreshSdWebui,
   setSdWebuiConnection,
@@ -35,6 +40,7 @@ import {
   connectionState,
   envSourceNote,
   flavorLabel,
+  hasConnectionUrl,
   isLoopbackUrl,
   readCredentialsInput,
   reasonNextStep,
@@ -43,6 +49,7 @@ import {
 import { SdWebuiCredentialsFields } from './SdWebuiCredentialsFields'
 
 const CARD_STATE: Record<ReturnType<typeof connectionState>, ConnectionCardState> = {
+  notConnected: 'warning',
   disabled: 'warning',
   available: 'ok',
   unavailable: 'error',
@@ -101,6 +108,7 @@ export function SdWebuiConnectionCard() {
   const statusQuery = useQuery({ queryKey: SDWEBUI_STATUS_QUERY_KEY, queryFn: getSdWebuiStatus })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [detachConfirmOpen, setDetachConfirmOpen] = useState(false)
+  const [disableConfirmOpen, setDisableConfirmOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const applyStatus = useCallback(
@@ -155,6 +163,36 @@ export function SdWebuiConnectionCard() {
     },
   })
 
+  const disableMutation = useMutation({
+    mutationFn: disableSdWebuiConnection,
+    onSuccess: (data) => {
+      applyStatus(data)
+      setDisableConfirmOpen(false)
+      setErrorMessage(null)
+      testMutation.reset()
+      toast.show({ message: c.disabledToast })
+    },
+    onError: (err: unknown) => {
+      setDisableConfirmOpen(false)
+      setErrorMessage(errorMessageOf(err, c.disableFailed))
+      onConflict(err)
+    },
+  })
+
+  const enableMutation = useMutation({
+    mutationFn: enableSdWebuiConnection,
+    onSuccess: (data) => {
+      applyStatus(data)
+      setErrorMessage(null)
+      testMutation.reset()
+      toast.show({ message: c.enabledToast })
+    },
+    onError: (err: unknown) => {
+      setErrorMessage(errorMessageOf(err, c.enableFailed))
+      onConflict(err)
+    },
+  })
+
   if (statusQuery.isLoading) {
     return <p className={settingsStyles.placeholder}>{c.checking}</p>
   }
@@ -172,10 +210,11 @@ export function SdWebuiConnectionCard() {
         title={c.cardTitle}
         state={CARD_STATE[state]}
         status={connectionHeadline(status)}
-        details={status.enabled ? connectionDetails(status, status.credentials_set, c) : undefined}
+        details={hasConnectionUrl(status) ? connectionDetails(status, status.credentials_set, c) : undefined}
         notes={
           <>
-            {!status.enabled && <p className={settingsStyles.helpText}>{c.disabledHelp}</p>}
+            {state === 'notConnected' && <p className={settingsStyles.helpText}>{c.disabledHelp}</p>}
+            {status.disabled && <p className={settingsStyles.helpText}>{c.disabledNote}</p>}
             {status.enabled && <p className={settingsStyles.helpText}>{c.refreshHelp}</p>}
             {envNote && <p className={settingsStyles.helpText}>{envNote}</p>}
             {status.locked && <p className={settingsStyles.helpText}>{c.locked}</p>}
@@ -206,6 +245,55 @@ export function SdWebuiConnectionCard() {
                 disabled={status.locked || refreshMutation.isPending}
               >
                 {refreshMutation.isPending ? c.refreshing : c.refresh}
+              </button>
+              <button
+                type="button"
+                className={settingsStyles.secondaryButton}
+                onClick={() => setDialogOpen(true)}
+                disabled={status.locked}
+              >
+                {c.changeUrl}
+              </button>
+              <button
+                type="button"
+                className={settingsStyles.secondaryButton}
+                onClick={() => setDisableConfirmOpen(true)}
+                disabled={status.locked || disableMutation.isPending}
+              >
+                {c.disable}
+              </button>
+              <button
+                type="button"
+                className={settingsStyles.dangerButton}
+                onClick={() => setDetachConfirmOpen(true)}
+                disabled={status.locked}
+              >
+                {c.detach}
+              </button>
+            </>
+          ) : status.disabled ? (
+            <>
+              <button
+                type="button"
+                className={settingsStyles.primaryButton}
+                onClick={() => {
+                  setErrorMessage(null)
+                  enableMutation.mutate()
+                }}
+                disabled={status.locked || enableMutation.isPending}
+              >
+                {enableMutation.isPending ? c.enabling : c.enable}
+              </button>
+              <button
+                type="button"
+                className={settingsStyles.secondaryButton}
+                onClick={() => {
+                  setErrorMessage(null)
+                  testMutation.mutate()
+                }}
+                disabled={testMutation.isPending}
+              >
+                {testMutation.isPending ? c.testing : c.testConnection}
               </button>
               <button
                 type="button"
@@ -261,6 +349,16 @@ export function SdWebuiConnectionCard() {
         onConfirm={() => detachMutation.mutate()}
         onCancel={() => setDetachConfirmOpen(false)}
       />
+
+      <ConfirmDialog
+        open={disableConfirmOpen}
+        message={c.disableConfirmMessage}
+        warning={c.disableConfirmWarning}
+        confirmLabel={c.disableConfirmLabel}
+        cancelLabel={c.cancel}
+        onConfirm={() => disableMutation.mutate()}
+        onCancel={() => setDisableConfirmOpen(false)}
+      />
     </>
   )
 }
@@ -312,7 +410,7 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
     },
     onSuccess: (data) => {
       onApplied(data)
-      toast.show({ message: c.connected })
+      toast.show({ message: data.disabled ? c.urlSavedWhileDisabled : c.connected })
       onClose()
     },
     onError: (err: unknown) => {
@@ -336,6 +434,7 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
   const credentialsPartial = credentials.kind === 'partial'
   const testNotice = testSuccessNotice({
     enabled: status.enabled,
+    disabled: status.disabled,
     trimmedUrl,
     testResult: testMutation.data,
     confirmNonLoopback,
@@ -344,7 +443,7 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
     !status.locked && !pending && !credentialsPartial && canSaveConnection(urlInput, confirmNonLoopback)
 
   return (
-    <Modal open title={status.enabled ? c.changeDialogTitle : c.connectDialogTitle} onClose={close}>
+    <Modal open title={hasConnectionUrl(status) ? c.changeDialogTitle : c.connectDialogTitle} onClose={close}>
       <form
         className={settingsStyles.dialogForm}
         onSubmit={(e) => {
@@ -415,6 +514,7 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
           {credentialsPartial && <p className={settingsStyles.errorText}>{t.sdwebui.credentials.partial}</p>}
         </fieldset>
 
+        {status.disabled && <p className={settingsStyles.helpText}>{c.dialogDisabledNote}</p>}
         {status.locked && <p className={settingsStyles.helpText}>{c.locked}</p>}
 
         <div className={settingsStyles.actions}>
@@ -444,7 +544,13 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
             {c.cancel}
           </button>
           <button type="submit" className={settingsStyles.primaryButton} disabled={!canConnect}>
-            {pending ? c.connecting : status.enabled ? c.switchUrl : c.connect}
+            {pending
+              ? c.connecting
+              : status.disabled
+                ? c.saveUrlWhileDisabled
+                : status.enabled
+                  ? c.switchUrl
+                  : c.connect}
           </button>
         </div>
       </form>

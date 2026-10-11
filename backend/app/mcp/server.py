@@ -499,6 +499,10 @@ async def get_capabilities(ctx: Context) -> CallToolResult:
         "Other parameters listed under models[].operations[].params also go in params "
         "(e.g. quality, background, output_format, n).",
         "generate_image returns right away with a run_id; wait with get_run(wait_seconds).",
+        (
+            "A provider with checking: true has not been reached yet (its models may be "
+            "empty); call get_capabilities again a moment later."
+        ),
         "estimate_cost gives a reference price before running (set quality and size to get "
         "a number; 'auto' cannot be estimated).",
         (
