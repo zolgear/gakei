@@ -57,6 +57,7 @@ import {
   type MapProjection,
   type ProjectionKind,
 } from './projection'
+import { changeProjection } from './projectionAccess'
 import { thumbCache, type ThumbRequest } from './thumbCache'
 import styles from './MapCanvas.module.css'
 
@@ -206,14 +207,21 @@ export function MapCanvas({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const sizeRef = useRef({ width: 0, height: 0 })
+  /** 利用者が動かすまでは、座標が変わるたびに全体に合わせ直す。 */
+  const userMovedRef = useRef(false)
   // 見せ方(投影)。種類が替わったときだけ作り直す。
   const projRef = useRef<MapProjection | null>(null)
   if (!projRef.current || projRef.current.kind !== projection) {
     projRef.current = createProjection(projection)
+    // 見せ方が替わったら、新しい投影はまだ何も合わせていないので、全体に合わせ直す。
+    userMovedRef.current = false
   }
+  /**
+   * このレンダーのときの投影。**長く生きる購読(`addEventListener`)の中では使わない**
+   * (見せ方を切り替えると作り直されるので、古い実体を掴んでしまう)。そこでは
+   * `changeView` を通して ref から読む。
+   */
   const proj = projRef.current
-  /** 利用者が動かすまでは、座標が変わるたびに全体に合わせ直す。 */
-  const userMovedRef = useRef(false)
   /** 検索の一致に表示を合わせたいか(座標が揃った最初のフレームで合わせる)。 */
   const pendingSearchFitRef = useRef(false)
   /** 画面に見えているか(見えていない間はフレームを回さない)。 */
@@ -688,7 +696,8 @@ export function MapCanvas({
     // タブが戻ってきた直後などに大きく進まないよう、1フレーム分の上限を置く。
     const dt = last === null ? 16 : Math.min(64, Math.max(0, ts - last))
     // 平面は動かない(常に false)ので、1 回の要求で 1 回だけ描く。
-    const animating = proj.step(dt)
+    // この関数は毎レンダー入れ替えるが、フレームの予約をまたぐので ref から今の投影を読む。
+    const animating = projRef.current?.step(dt) ?? false
     drawRef.current()
     if (animating && onScreenRef.current) scheduleRef.current()
     else lastTsRef.current = null
@@ -698,6 +707,12 @@ export function MapCanvas({
     frameRef.current = requestAnimationFrame((ts) => frameHandlerRef.current(ts))
   }
   const requestDraw = () => scheduleRef.current()
+  /**
+   * 見せ方(投影)を変える操作は、すべてここを通す。ref から**その時点の**実体を読み、変えたら
+   * 必ず描き直しを頼む(動きが止まっている間は、頼まないと画面が更新されない)。
+   */
+  const changeView = (change: (projection: MapProjection) => void) =>
+    changeProjection(projRef, requestDraw, change)
 
   // 呼び出し側へ描き直しの口を渡す。
   useEffect(() => {
@@ -883,9 +898,11 @@ export function MapCanvas({
     if (pointersRef.current.size === 1) {
       const pan = panButton || e.shiftKey
       gestureRef.current = { moved: 0, multi: false, pan, select: e.button === 0, lastAt: e.timeStamp }
-      proj.beginDrag(pan)
-      // 触った時点で、一度だけの回転は止める(クリックでの選択も含む)。
-      proj.stopIntroSpin()
+      changeView((p) => {
+        p.beginDrag(pan)
+        // 触った時点で、一度だけの回転は止める(クリックでの選択も含む)。
+        p.stopIntroSpin()
+      })
     } else {
       gestureRef.current.multi = true
     }
@@ -915,10 +932,9 @@ export function MapCanvas({
       if (g.moved > CLICK_SLOP) {
         userMovedRef.current = true
         const dtMs = Math.max(1, e.timeStamp - g.lastAt)
-        proj.drag(dx, dy, sizeRef.current, { pan: g.pan || e.shiftKey, dtMs })
+        changeView((p) => p.drag(dx, dy, sizeRef.current, { pan: g.pan || e.shiftKey, dtMs }))
         g.lastAt = e.timeStamp
         if (hover !== null) setHover(null)
-        requestDraw()
       }
       pointers.set(e.pointerId, { x, y })
       return
@@ -935,12 +951,13 @@ export function MapCanvas({
       const my0 = (before.a.y + before.b.y) / 2
       const mx1 = (after.a.x + after.b.x) / 2
       const my1 = (after.a.y + after.b.y) / 2
-      proj.cancelMotion()
-      proj.pan(mx1 - mx0, my1 - my0, sizeRef.current)
-      if (d0 > 0 && d1 > 0) proj.zoomBy(d1 / d0, mx1, my1, sizeRef.current)
+      changeView((p) => {
+        p.cancelMotion()
+        p.pan(mx1 - mx0, my1 - my0, sizeRef.current)
+        if (d0 > 0 && d1 > 0) p.zoomBy(d1 / d0, mx1, my1, sizeRef.current)
+      })
       userMovedRef.current = true
       gestureRef.current.moved += CLICK_SLOP + 1
-      requestDraw()
     }
   }
 
@@ -950,7 +967,7 @@ export function MapCanvas({
     pointers.delete(e.pointerId)
     const g = gestureRef.current
     if (pointers.size === 0) {
-      proj.endDrag({ pan: g.pan })
+      changeView((p) => p.endDrag({ pan: g.pan }))
       // 中ボタン・右ボタンでは選ばない。
       if (!g.multi && g.select && g.moved <= CLICK_SLOP && e.type === 'pointerup') {
         const [x, y] = localPoint(e)
@@ -971,12 +988,14 @@ export function MapCanvas({
       const rect = canvas.getBoundingClientRect()
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? rect.height : 1
       const factor = Math.exp(-e.deltaY * unit * 0.0015)
-      proj.zoomBy(factor, e.clientX - rect.left, e.clientY - rect.top, sizeRef.current)
+      // この購読は 1 回だけ作って使い回すので、レンダーのときの投影ではなく今の投影を使う。
+      changeView((p) => {
+        p.zoomBy(factor, e.clientX - rect.left, e.clientY - rect.top, sizeRef.current)
+        p.stopIntroSpin()
+        p.cancelMotion()
+      })
       userMovedRef.current = true
-      proj.stopIntroSpin()
-      proj.cancelMotion()
       setHover(null)
-      requestDraw()
     }
     // 中ボタンの自動スクロール(丸いカーソル)は mousedown で始まるので、ここでも止める
     // (pointerdown の preventDefault だけに頼らない)。左ボタンは焦点が移るよう触らない。
@@ -994,19 +1013,21 @@ export function MapCanvas({
 
   function zoomButton(factor: number) {
     const { width, height } = sizeRef.current
-    proj.zoomBy(factor, width / 2, height / 2, sizeRef.current)
+    changeView((p) => {
+      p.zoomBy(factor, width / 2, height / 2, sizeRef.current)
+      p.stopIntroSpin()
+      p.cancelMotion()
+    })
     userMovedRef.current = true
-    proj.stopIntroSpin()
-    proj.cancelMotion()
-    requestDraw()
   }
 
   function fitAll() {
-    proj.stopIntroSpin()
-    proj.cancelMotion()
+    changeView((p) => {
+      p.stopIntroSpin()
+      p.cancelMotion()
+    })
     userMovedRef.current = false
     pendingSearchFitRef.current = false
-    requestDraw()
   }
 
   /** 検索の一致を、スコアの高い順に1つずつ選んで中心に出す(立体はその点へ寄る)。 */
@@ -1014,26 +1035,27 @@ export function MapCanvas({
     const p = propsRef.current
     const next = stepMatch(p.search?.ranked ?? [], selected, step)
     if (next === null) return
-    proj.stopIntroSpin()
     pendingSearchFitRef.current = false
-    if (p.positions && proj.revealIndex(p.positions, next, sizeRef.current, tileWorldRef.current)) {
-      userMovedRef.current = true
-    }
+    changeView((view) => {
+      view.stopIntroSpin()
+      if (p.positions && view.revealIndex(p.positions, next, sizeRef.current, tileWorldRef.current)) {
+        userMovedRef.current = true
+      }
+    })
     onSelect(next)
-    requestDraw()
   }
 
   function rotateButton(dAzimuth: number, dElevation: number) {
     if (!proj.orbit) return
-    proj.stopIntroSpin()
-    proj.orbit(dAzimuth, dElevation)
+    changeView((p) => {
+      p.stopIntroSpin()
+      p.orbit?.(dAzimuth, dElevation)
+    })
     userMovedRef.current = true
-    requestDraw()
   }
 
   function startIntroSpin() {
-    proj.startIntroSpin()
-    requestDraw()
+    changeView((p) => p.startIntroSpin())
   }
 
   function expandPreview() {
