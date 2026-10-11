@@ -1,5 +1,7 @@
 """PostgreSQL の pgvector(ADR-0033 4章)。
 
+- 対象の表は、画像の `asset_embedding` と、Run のプロンプトの `run_prompt_embedding`
+  (ADR-0045 3章)。どちらも同じ作り(`VectorTable`)で、関数は表を引数に取る(既定は画像)。
 - 正本は `asset_embedding.vector`(BLOB)。PostgreSQL で拡張 `vector` を使えるときだけ、同じ値を
   次元を決めない `embedding vector` 列にも入れる。ORM には載せず、ここの SQL で読み書きする。
 - 起動時に列の有無を見て、検索の方式(`pgvector` / `numpy`)を決める(`prepare`)。列が無く、
@@ -18,6 +20,7 @@ import hashlib
 import logging
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
@@ -32,15 +35,34 @@ IndexBackend = Literal["pgvector", "numpy"]
 BACKEND_PGVECTOR: IndexBackend = "pgvector"
 BACKEND_NUMPY: IndexBackend = "numpy"
 
-TABLE = "asset_embedding"
 COLUMN = "embedding"
 _FILL_BATCH = 500
 
 
-def has_embedding_column(connection: Connection) -> bool:
+@dataclass(frozen=True)
+class VectorTable:
+    """ベクトルを持つ表(主キーは `(<id 列>, model_key)`)。"""
+
+    name: str
+    id_column: str
+    # 部分 HNSW 索引の名前の頭(後ろに `model_key` のハッシュを付ける)。
+    index_prefix: str
+
+
+ASSET_TABLE = VectorTable("asset_embedding", "asset_id", "ix_asset_embedding_hnsw_")
+PROMPT_TABLE = VectorTable("run_prompt_embedding", "run_id", "ix_run_prompt_embedding_hnsw_")
+TABLES = (ASSET_TABLE, PROMPT_TABLE)
+# 画像の表の名前(`vector_index` などが SQL に書く)。
+TABLE = ASSET_TABLE.name
+
+
+def has_embedding_column(connection: Connection, table: VectorTable = ASSET_TABLE) -> bool:
     if connection.dialect.name != "postgresql":
         return False
-    columns = {c["name"] for c in inspect(connection).get_columns(TABLE)}
+    inspector = inspect(connection)
+    if not inspector.has_table(table.name):
+        return False
+    columns = {c["name"] for c in inspector.get_columns(table.name)}
     return COLUMN in columns
 
 
@@ -51,18 +73,21 @@ def vector_literal(vector: Sequence[float] | np.ndarray) -> str:
 
 
 def prepare(engine: Engine) -> IndexBackend:
-    """起動時に呼ぶ。検索の方式を決め、必要なら列を足して BLOB から埋める。"""
+    """起動時に呼ぶ。検索の方式を決め、必要なら列を足して BLOB から埋める(画像とプロンプトの
+    両方の表に列があるときだけ pgvector にする)。"""
     if engine.dialect.name != "postgresql":
         return BACKEND_NUMPY
     with engine.connect() as connection:
-        if has_embedding_column(connection):
-            return BACKEND_PGVECTOR
+        missing = [table for table in TABLES if not has_embedding_column(connection, table)]
+    if not missing:
+        return BACKEND_PGVECTOR
     try:
         with engine.begin() as connection:
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
-            connection.exec_driver_sql(
-                f"ALTER TABLE {TABLE} ADD COLUMN IF NOT EXISTS {COLUMN} vector"
-            )
+            for table in missing:
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {table.name} ADD COLUMN IF NOT EXISTS {COLUMN} vector"
+                )
     except DBAPIError as e:
         logger.info(
             "pgvector を使えないので、埋め込みの検索は numpy で行います: %s",
@@ -70,7 +95,7 @@ def prepare(engine: Engine) -> IndexBackend:
         )
         return BACKEND_NUMPY
     with engine.begin() as connection:
-        filled = fill_embedding_column(connection)
+        filled = sum(fill_embedding_column(connection, table) for table in missing)
     if filled:
         logger.info("pgvector の列を BLOB から埋めました(%d 件)", filled)
     # 型の登録(`app/db.py`)は接続を作るときに行うので、拡張を作る前の接続を捨てる。
@@ -78,53 +103,57 @@ def prepare(engine: Engine) -> IndexBackend:
     return BACKEND_PGVECTOR
 
 
-def fill_embedding_column(connection: Connection) -> int:
+def fill_embedding_column(connection: Connection, table: VectorTable = ASSET_TABLE) -> int:
     """`embedding` が空で `vector`(BLOB)がある行を埋める。埋めた件数を返す。
     `migrate_to_postgres` の移行先でも使う。"""
     rows = connection.execute(
         text(
-            f"SELECT asset_id, model_key, vector FROM {TABLE} "
+            f"SELECT {table.id_column}, model_key, vector FROM {table.name} "
             f"WHERE vector IS NOT NULL AND {COLUMN} IS NULL"
         )
     ).all()
     statement = text(
-        f"UPDATE {TABLE} SET {COLUMN} = CAST(:v AS vector) "
-        "WHERE asset_id = :asset_id AND model_key = :model_key"
+        f"UPDATE {table.name} SET {COLUMN} = CAST(:v AS vector) "
+        f"WHERE {table.id_column} = :row_id AND model_key = :model_key"
     )
     for start in range(0, len(rows), _FILL_BATCH):
         params = [
             {
                 "v": vector_literal(blob_to_vector(bytes(vector))),
-                "asset_id": asset_id,
+                "row_id": row_id,
                 "model_key": model_key,
             }
-            for asset_id, model_key, vector in rows[start : start + _FILL_BATCH]
+            for row_id, model_key, vector in rows[start : start + _FILL_BATCH]
         ]
         connection.execute(statement, params)
     return len(rows)
 
 
 def write_embedding_column(
-    connection: Connection, asset_id: uuid.UUID, model_key: str, vector: np.ndarray | None
+    connection: Connection,
+    row_id: uuid.UUID,
+    model_key: str,
+    vector: np.ndarray | None,
+    table: VectorTable = ASSET_TABLE,
 ) -> None:
     """1行の `embedding` を書く(`vector` が None なら空にする)。呼び出し側が BLOB と同じ
     トランザクションで呼ぶ。"""
     connection.execute(
         text(
-            f"UPDATE {TABLE} SET {COLUMN} = CAST(:v AS vector) "
-            "WHERE asset_id = :asset_id AND model_key = :model_key"
+            f"UPDATE {table.name} SET {COLUMN} = CAST(:v AS vector) "
+            f"WHERE {table.id_column} = :row_id AND model_key = :model_key"
         ),
         {
             "v": vector_literal(vector) if vector is not None else None,
-            "asset_id": asset_id,
+            "row_id": row_id,
             "model_key": model_key,
         },
     )
 
 
-def hnsw_index_name(model_key: str) -> str:
+def hnsw_index_name(model_key: str, table: VectorTable = ASSET_TABLE) -> str:
     digest = hashlib.sha256(model_key.encode("utf-8")).hexdigest()[:16]
-    return f"ix_asset_embedding_hnsw_{digest}"
+    return f"{table.index_prefix}{digest}"
 
 
 def quote_literal(value: str) -> str:
@@ -132,12 +161,14 @@ def quote_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def ensure_hnsw_index(engine: Engine, model_key: str, dim: int) -> bool:
+def ensure_hnsw_index(
+    engine: Engine, model_key: str, dim: int, table: VectorTable = ASSET_TABLE
+) -> bool:
     """そのモデルの部分 HNSW 索引を作る(既にあれば何もしない)。作れなければ警告して False。"""
     if engine.dialect.name != "postgresql" or dim <= 0:
         return False
     statement = (
-        f"CREATE INDEX IF NOT EXISTS {hnsw_index_name(model_key)} ON {TABLE} "
+        f"CREATE INDEX IF NOT EXISTS {hnsw_index_name(model_key, table)} ON {table.name} "
         f"USING hnsw (({COLUMN}::vector({int(dim)})) vector_cosine_ops) "
         f"WHERE model_key = {quote_literal(model_key)}"
     )
@@ -146,7 +177,8 @@ def ensure_hnsw_index(engine: Engine, model_key: str, dim: int) -> bool:
             connection.exec_driver_sql(statement)
     except SQLAlchemyError as e:
         logger.warning(
-            "埋め込みの索引(%s)を作れませんでした: %s",
+            "埋め込みの索引(%s、%s)を作れませんでした: %s",
+            table.name,
             model_key,
             str(getattr(e, "orig", None) or e).strip().splitlines()[0],
         )

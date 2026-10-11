@@ -691,7 +691,12 @@
     "queryFailed": "検索の文章の埋め込みを計算できませんでした: {error}",
     "queryImageEmpty": "画像ファイルが空です",
     "queryImageTooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
-    "queryImageFailed": "画像の埋め込みを計算できませんでした: {error}"
+    "queryImageFailed": "画像の埋め込みを計算できませんでした: {error}",
+    "promptNotSupported": "使っている埋め込みのモデルは、プロンプトの埋め込みに対応していません",
+    "promptSearchNotSupported": "指示(プロンプト)で探すには、プロンプトの埋め込みに対応するモデル(EmbeddingGemma 2)を管理者設定の「埋め込み」で選んでください",
+    "promptSearchFilters": "指示(プロンプト)で探すときは、グループ・タグ・種類で絞り込めません",
+    "runDeleted": "削除された実行のプロンプトの埋め込みは計算しません",
+    "runNotTarget": "成功して画像を出力した実行のプロンプトだけを埋め込みます"
   },
   "lineageExport": {
     "contentMissing": "系列に含まれる画像の原本が保存先に見つからないため、書き出せません",

@@ -51,6 +51,9 @@ EG2_TOKENIZER_REVISION = "914f7f89142e33e77833254d9c9b90c3cef7303b"
 # `config_sentence_transformers.json` の `prompts`(末尾の空白込み)。検索の文章にだけ付け、
 # 画像には付けない(ADR-0044 3章)。
 EG2_SEARCH_QUERY_PREFIX = "task: search result | query: "
+# 同じく `prompts` の `Document`(末尾の空白込み)。Run のプロンプトの埋め込み(ADR-0045 2章)で、
+# 埋め込む文章の前に付ける。
+EG2_DOCUMENT_PREFIX = "title: none | text: "
 # 文章は `<bos>` と `<eos>` を含めてこの長さで切る(ADR-0044 3章)。
 EG2_MAX_TEXT_TOKENS = 1024
 
@@ -113,6 +116,10 @@ class ClipModel:
     # トークナイザーが 77 で切る)。
     query_prefix: str = ""
     max_text_tokens: int | None = None
+    # Run のプロンプトの埋め込みに対応するか(長い文章を扱えるモデルだけ。ADR-0045 1章)と、
+    # そのとき埋め込む文章の前に付ける文字列。
+    prompt_embeddings: bool = False
+    document_prefix: str = ""
     # 検索の質が高い代わりに計算が重いモデル(設定画面に一言出す。ADR-0044 6章)。
     heavy: bool = False
     # 日本語・英語のほかにも多くの言語に対応する(画面では「多言語」と出す)。
@@ -278,6 +285,8 @@ CLIP_MODELS: dict[str, ClipModel] = {
         input_variant="preview",
         query_prefix=EG2_SEARCH_QUERY_PREFIX,
         max_text_tokens=EG2_MAX_TEXT_TOKENS,
+        prompt_embeddings=True,
+        document_prefix=EG2_DOCUMENT_PREFIX,
         heavy=True,
         many_languages=True,
     ),

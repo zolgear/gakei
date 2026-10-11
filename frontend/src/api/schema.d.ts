@@ -530,7 +530,8 @@ export interface paths {
         /**
          * Update Asset Title
          * @description タイトルを人が決める(以後の再推定で上書きしない)。null・空文字はタイトルを消し、
-         *     その状態も人の決定として保つ。
+         *     その状態も人の決定として保つ。Run の最初の出力なら、上限を超える長いプロンプトの埋め込みを
+         *     計算し直すことがある(ADR-0045 2章)。
          */
         patch: operations["update_asset_title"];
         trace?: never;
@@ -938,6 +939,7 @@ export interface paths {
         /**
          * Semantic Search Endpoint
          * @description 文章で画像を探す(類似度の高い順)。キーワード検索(`GET /api/search`)とは別。
+         *     `target=prompt` なら、指示(プロンプト)の意味が近い Run を探す(ADR-0045 5章)。
          */
         get: operations["semantic_search"];
         put?: never;
@@ -1376,7 +1378,8 @@ export interface paths {
         /**
          * Backfill Embeddings
          * @description 使うモデルのベクトルが無い画像(削除済み・マスクを除く。失敗したものを含む)をまとめて
-         *     待ち行列に入れる。埋め込みが無効、またはモデルが使えなければ 409。
+         *     待ち行列に入れる。使うモデルが対応すれば、Run のプロンプトも同じ規則で入れる(ADR-0045
+         *     4章)。埋め込みが無効、またはモデルが使えなければ 409。
          */
         post: operations["backfill_embeddings"];
         delete?: never;
@@ -1397,8 +1400,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Embedding Vectors
-         * @description そのモデルのベクトルと計算の状態をすべて消す(使っているモデルも消せる。画像の取り込み時や
-         *     一括実行で計算し直す)。無ければ 404。
+         * @description そのモデルのベクトルと計算の状態をすべて消す(画像と Run のプロンプトの両方。使っている
+         *     モデルも消せる。画像の取り込み時や一括実行で計算し直す)。無ければ 404。
          */
         delete: operations["delete_embedding_vectors"];
         options?: never;
@@ -3135,6 +3138,11 @@ export interface components {
         EmbeddingBackfillResponse: {
             /** Queued */
             queued: number;
+            /**
+             * Prompt Queued
+             * @default 0
+             */
+            prompt_queued: number;
         };
         /**
          * EmbeddingCapabilities
@@ -3327,6 +3335,31 @@ export interface components {
             queued_count: number;
             /** Failed Count */
             failed_count: number;
+            /**
+             * Prompt Supported
+             * @default false
+             */
+            prompt_supported: boolean;
+            /**
+             * Prompt Stored Count
+             * @default 0
+             */
+            prompt_stored_count: number;
+            /**
+             * Prompt Pending Count
+             * @default 0
+             */
+            prompt_pending_count: number;
+            /**
+             * Prompt Queued Count
+             * @default 0
+             */
+            prompt_queued_count: number;
+            /**
+             * Prompt Failed Count
+             * @default 0
+             */
+            prompt_failed_count: number;
         };
         /**
          * EmbeddingSettingsUpdateRequest
@@ -5122,10 +5155,53 @@ export interface components {
             score: number;
         };
         /**
+         * SemanticRunHit
+         * @description 指示(プロンプト)で探したときの1件(ADR-0045 5章)。Run の単位で、同じ Run の出力を
+         *     何枚も並べない。`score` はコサイン類似度(-1〜1、大きいほど近い)。
+         */
+        SemanticRunHit: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "generate" | "edit";
+            /** Model */
+            model: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Prompt */
+            prompt: string;
+            /**
+             * Prompt Truncated
+             * @default false
+             */
+            prompt_truncated: boolean;
+            output?: components["schemas"]["AssetSummary"] | null;
+            /** Score */
+            score: number;
+        };
+        /**
          * SemanticSearchResponse
          * @description `GET /api/search/semantic`。類似度の高い順。
+         *
+         *     `target = "image"`(既定)は画像を `assets` に、`target = "prompt"` は Run を `runs` に
+         *     返す(もう片方は空)。
          */
         SemanticSearchResponse: {
+            /**
+             * Target
+             * @default image
+             * @enum {string}
+             */
+            target: "image" | "prompt";
             /** Query */
             query: string;
             /** Model Key */
@@ -5136,6 +5212,8 @@ export interface components {
             multilingual?: boolean | null;
             /** Assets */
             assets?: components["schemas"]["SemanticAssetHit"][];
+            /** Runs */
+            runs?: components["schemas"]["SemanticRunHit"][];
         };
         /** ShareCreateRequest */
         ShareCreateRequest: {
@@ -7761,6 +7839,8 @@ export interface operations {
                 tag?: string | null;
                 /** @description この種類の画像に絞る */
                 kind?: ("upload" | "generated" | "sketch") | null;
+                /** @description 探す対象。image は画像(`assets`)、prompt は Run の指示(プロンプト。`runs`)。prompt は使うモデルが対応するときだけで、group_id・tag・kind は使えない */
+                target?: "image" | "prompt";
             };
             header?: never;
             path?: never;

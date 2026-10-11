@@ -40,6 +40,7 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "tag_dictionary_alias",
         "tag_dictionary_translation",
         "asset_focal_point",
+        "run_prompt_embedding",
         "alembic_version",
     } <= tables
 
@@ -1210,4 +1211,44 @@ def test_migration_0030_adds_asset_focal_point(empty_database_url: str) -> None:
     command.downgrade(cfg, "0029")
     engine = create_engine(empty_database_url)
     assert "asset_focal_point" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_migration_0031_adds_run_prompt_embedding(empty_database_url: str) -> None:
+    """ADR-0045: 0030 の DB に upgrade head でプロンプトの埋め込みの表が加わり、downgrade で
+    消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0030")
+    engine = create_engine(empty_database_url)
+    assert "run_prompt_embedding" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert "run_prompt_embedding" in set(inspector.get_table_names())
+    assert inspector.get_pk_constraint("run_prompt_embedding")["constrained_columns"] == [
+        "run_id",
+        "model_key",
+    ]
+    columns = {c["name"]: c for c in inspector.get_columns("run_prompt_embedding")}
+    assert columns["truncated"]["nullable"] is False
+    assert columns["text_sha256"]["nullable"] is True
+    assert columns["vector"]["nullable"] is True
+    assert [fk["referred_table"] for fk in inspector.get_foreign_keys("run_prompt_embedding")] == [
+        "run"
+    ]
+    indexes = {i["name"] for i in inspector.get_indexes("run_prompt_embedding")}
+    assert "ix_run_prompt_embedding_model_key_status" in indexes
+    engine.dispose()
+
+    command.downgrade(cfg, "0030")
+    engine = create_engine(empty_database_url)
+    assert "run_prompt_embedding" not in set(sa_inspect(engine).get_table_names())
     engine.dispose()

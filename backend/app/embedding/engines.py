@@ -66,9 +66,19 @@ class EmbeddingEngines:
             engine = self._fakes.get(model_key)
             if engine is None:
                 batch = 8
+                max_text_tokens: int | None = None
+                document_prefix = ""
                 if config.engine == "onnx" and config.onnx_model in CLIP_MODELS:
-                    batch = CLIP_MODELS[config.onnx_model].image_batch_size
-                engine = FakeEmbeddingEngine(model_key, image_batch_size=batch)
+                    model = CLIP_MODELS[config.onnx_model]
+                    batch = model.image_batch_size
+                    max_text_tokens = model.max_text_tokens
+                    document_prefix = model.document_prefix
+                engine = FakeEmbeddingEngine(
+                    model_key,
+                    image_batch_size=batch,
+                    max_text_tokens=max_text_tokens,
+                    document_prefix=document_prefix,
+                )
                 self._fakes[model_key] = engine
             return engine
 

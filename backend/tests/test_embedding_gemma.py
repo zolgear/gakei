@@ -363,6 +363,32 @@ def test_eg2_engine_releases_both_sessions_when_idle(eg2_dir: Path) -> None:
     assert engine.loaded_parts == ()
 
 
+def test_eg2_engine_documents_use_document_prefix(eg2_dir: Path) -> None:
+    """Run のプロンプト(ADR-0045): Document のプレフィックスを付け、1,024 トークンで切る。
+    上限の判定はトークナイザーだけで行い、セッションは読み込まない。"""
+    engine = _StubEngine(eg2_dir)
+    limit = 1024 - 2 - len(EG2.document_prefix)
+    assert EG2.document_prefix == "title: none | text: "
+    assert engine.document_fits("x" * limit) is True
+    assert engine.document_fits("x" * (limit + 1)) is False
+    assert engine.loaded_parts == ()
+    vectors = engine.embed_documents(["ab", "x" * 3000])
+    assert vectors.shape == (2, 768)
+    assert engine.loaded_parts == ("text",)
+    prefix = [ord(ch) + 1000 for ch in EG2.document_prefix]
+    first = engine.calls[0][2]["input_ids"].tolist()[0]
+    assert first == [EG2_BOS, *prefix, 1097, 1098, EG2_EOS]
+    assert engine.calls[1][2]["input_ids"].shape == (1, 1024)
+
+
+def test_clip_engine_rejects_documents(tmp_path: Path) -> None:
+    engine = OnnxClipEngine(tmp_path, CLIP_MODELS["clip-vit-b32-u8"], residency=ModelResidency())
+    with pytest.raises(EmbeddingError):
+        engine.document_fits("a")
+    with pytest.raises(EmbeddingError):
+        engine.embed_documents(["a"])
+
+
 # -- 実際のモデル(GAKEI_TEST_EG2_DIR があるときだけ) -------------------------------------
 
 _EG2_DIR = os.environ.get("GAKEI_TEST_EG2_DIR", "").strip()
@@ -500,3 +526,21 @@ def test_real_eg2_duplicate_threshold_keeps_degraded_copies(
     for label in ("s25_q25", "crop3_s25_q25", "s50_q60"):
         other = engine.embed_images([preview(pi.DEGRADATIONS[label](base_image))])[0]
         assert float(base @ other) >= EG2.duplicate_threshold, (scene, label, float(base @ other))
+
+
+@requires_eg2
+def test_real_eg2_documents(real_eg2_data_dir: Path) -> None:
+    """Run のプロンプト(ADR-0045)。短い文章だけで確かめる(長い文章は時間が掛かる)。"""
+    engine = OnnxClipEngine(real_eg2_data_dir, EG2, residency=ModelResidency())
+    assert engine.document_fits("a girl with red hair")
+    assert engine.loaded_parts == ()
+    assert engine._tokenizer.count(EG2.document_prefix + "a girl with red hair") == len(
+        _REFERENCE_IDS["title: none | text: a girl with red hair"]
+    )
+    assert not engine.document_fits("x " * 1100)
+    documents = engine.embed_documents(["a girl with red hair", "a bowl of ramen on a table"])
+    assert documents.shape == (2, 768)
+    np.testing.assert_allclose(np.linalg.norm(documents, axis=1), 1.0, atol=1e-4)
+    query = engine.embed_texts(["赤い髪の少女"])[0]
+    # 検索の文章(SearchQuery)と意味の近いプロンプト(Document)が近い。
+    assert query @ documents[0] > query @ documents[1]

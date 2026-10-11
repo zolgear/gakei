@@ -1,6 +1,6 @@
 """埋め込みを使った検索の API(ADR-0033 7章)。実装は `app/domain/semantic_search.py`。
 
-- `GET /api/search/semantic`: 文章での検索
+- `GET /api/search/semantic`: 文章での検索(`target=prompt` で Run の指示を探す。ADR-0045)
 - `GET /api/assets/{id}/similar`: 似た画像(その Asset が見えること)
 - `POST /api/search/similar-image`: 手元の画像に似た画像(画像は保存しない)
 - `GET /api/embeddings/duplicates`: 重複の候補
@@ -94,6 +94,13 @@ def semantic_search_endpoint(
     kind: Literal["upload", "generated", "sketch"] | None = Query(
         default=None, description="この種類の画像に絞る"
     ),
+    target: Literal["image", "prompt"] = Query(
+        default="image",
+        description=(
+            "探す対象。image は画像(`assets`)、prompt は Run の指示(プロンプト。`runs`)。"
+            "prompt は使うモデルが対応するときだけで、group_id・tag・kind は使えない"
+        ),
+    ),
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
     index: VectorIndex = Depends(get_vector_index),
@@ -101,7 +108,8 @@ def semantic_search_endpoint(
     cache: domain.QueryVectorCache = Depends(get_query_vector_cache),
     user: CurrentUser = Depends(require_user),
 ) -> SemanticSearchResponse:
-    """文章で画像を探す(類似度の高い順)。キーワード検索(`GET /api/search`)とは別。"""
+    """文章で画像を探す(類似度の高い順)。キーワード検索(`GET /api/search`)とは別。
+    `target=prompt` なら、指示(プロンプト)の意味が近い Run を探す(ADR-0045 5章)。"""
     try:
         return domain.semantic_search(
             db,
@@ -115,6 +123,7 @@ def semantic_search_endpoint(
             group_id=group_id,
             tag=tag,
             kind=kind,
+            target=target,
         )
     except _ERRORS as exc:
         raise _http_error(exc) from exc

@@ -55,6 +55,7 @@ from app.annotation.engines import (
 from app.annotation.wd_tagger import WdTagger
 from app.domain import annotation_settings, derivatives, llm_connections, tag_dictionaries
 from app.domain import annotations as annotations_domain
+from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.models import Asset, AssetAnnotation, AssetKind, Run
 from app.domain.storage import AssetStore
 from app.domain.text_safety import (
@@ -698,6 +699,12 @@ class Annotator:
             row.auto_models = models or None
             row.auto_finished_at = now
             row.updated_at = now
+            # ADR-0045 2章: Run の最初の出力のタイトルが変わったら、上限を超える長いプロンプトの
+            # 埋め込みを計算し直す(埋め込みの worker は待ち行列を定期的に見るので、起こさない)。
+            if title is not None:
+                asset = session.get(Asset, asset_id)
+                if asset is not None:
+                    prompt_embeddings_domain.on_title_changed(session, asset, self.settings)
             session.commit()
 
 

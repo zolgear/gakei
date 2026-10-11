@@ -11,8 +11,8 @@
 - 移行先には Alembic で最新のスキーマを作り、全テーブルを外部キーの順にコピーして、最後に
   行数を突き合わせる。スキーマの作成からコピー、突き合わせまでを1つのトランザクションで
   行い、途中で失敗したら全体を戻す(PostgreSQL は DDL もトランザクションに入る)。
-- 埋め込みのベクトル(`asset_embedding`)も移す。移行先で拡張 `vector`(pgvector)を使えるときは、
-  `embedding` 列を BLOB から作る(ADR-0033 4章)。
+- 埋め込みのベクトル(`asset_embedding`、`run_prompt_embedding`)も移す。移行先で拡張
+  `vector`(pgvector)を使えるときは、`embedding` 列を BLOB から作る(ADR-0033 4章)。
 - 画像などのファイル(`DATA_DIR`)は移さない。移行後も同じ `DATA_DIR` を使う。
 - `--dry-run` は両方に接続して、テーブルごとの行数を表示するだけ。
 """
@@ -257,8 +257,9 @@ def migrate(source_path: Path, target_url: str, *, dry_run: bool = False) -> Mig
                 for table in tables:
                     _copy_table(source, target, table)
                 # ADR-0033 4章: 移行先で pgvector を使えるなら、`embedding` 列を BLOB から作る。
-                if embedding_index.has_embedding_column(target):
-                    embedding_index.fill_embedding_column(target)
+                for vector_table in embedding_index.TABLES:
+                    if embedding_index.has_embedding_column(target, vector_table):
+                        embedding_index.fill_embedding_column(target, vector_table)
 
                 mismatched: list[str] = []
                 for entry, table in zip(report.tables, tables, strict=True):

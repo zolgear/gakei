@@ -1693,6 +1693,15 @@ class EmbeddingSettingsResponse(BaseModel):
     queued_count: int
     # 使うモデルで計算に失敗した件数。
     failed_count: int
+    # 使うモデルが Run のプロンプトの埋め込みに対応するか(ADR-0045 1章)。false なら下の
+    # `prompt_*` の件数は 0 で、画面には出さない。
+    prompt_supported: bool = False
+    # プロンプトの埋め込みの件数(使うモデル。画像の件数と同じ数え方。ADR-0045 6章)。
+    # 計算済み、一括実行の対象(失敗したものを含む)、待ち行列(queued と running)、失敗。
+    prompt_stored_count: int = 0
+    prompt_pending_count: int = 0
+    prompt_queued_count: int = 0
+    prompt_failed_count: int = 0
 
 
 class EmbeddingSettingsUpdateRequest(BaseModel):
@@ -1713,8 +1722,10 @@ class EmbeddingSettingsUpdateRequest(BaseModel):
 
 
 class EmbeddingBackfillResponse(BaseModel):
-    # 待ち行列に入れた件数。
+    # 待ち行列に入れた画像の件数。
     queued: int
+    # 待ち行列に入れた Run のプロンプトの件数(使うモデルが対応するときだけ。ADR-0045 4章)。
+    prompt_queued: int = 0
 
 
 class AssetEmbeddingStatus(BaseModel):
@@ -1738,9 +1749,30 @@ class SemanticAssetHit(AssetSummary):
     score: float
 
 
-class SemanticSearchResponse(BaseModel):
-    """`GET /api/search/semantic`。類似度の高い順。"""
+class SemanticRunHit(BaseModel):
+    """指示(プロンプト)で探したときの1件(ADR-0045 5章)。Run の単位で、同じ Run の出力を
+    何枚も並べない。`score` はコサイン類似度(-1〜1、大きいほど近い)。"""
 
+    id: uuid.UUID
+    operation: Literal["generate", "edit"]
+    model: str
+    created_at: datetime
+    # 埋め込んだプロンプト(最終プロンプトがあればそれ)の先頭。長ければ切る。
+    prompt: str
+    # `prompt` を切ったとき true。
+    prompt_truncated: bool = False
+    # 最初の出力(削除されていない、`output_index` の最も小さいもの)。無ければ null。
+    output: AssetSummary | None = None
+    score: float
+
+
+class SemanticSearchResponse(BaseModel):
+    """`GET /api/search/semantic`。類似度の高い順。
+
+    `target = "image"`(既定)は画像を `assets` に、`target = "prompt"` は Run を `runs` に
+    返す(もう片方は空)。"""
+
+    target: Literal["image", "prompt"] = "image"
     query: str
     # 使ったモデル(ベクトル空間)の識別子。
     model_key: str
@@ -1750,6 +1782,7 @@ class SemanticSearchResponse(BaseModel):
     # リモートは分からないので null。
     multilingual: bool | None = None
     assets: list[SemanticAssetHit] = Field(default_factory=list)
+    runs: list[SemanticRunHit] = Field(default_factory=list)
 
 
 class SimilarAssetsResponse(BaseModel):

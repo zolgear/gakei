@@ -241,7 +241,7 @@ def test_batch_one_engine_computes_one_image_at_a_time(client: TestClient) -> No
     _patch(client, enabled=True, auto_on_ingest=False)
     for i in range(3):
         _upload(client, color=(i * 50, 0, 0))
-    assert client.post("/api/settings/embeddings/backfill").json() == {"queued": 3}
+    assert client.post("/api/settings/embeddings/backfill").json()["queued"] == 3
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         if all(r.status == "succeeded" for r in _rows(client)) and len(_rows(client)) == 3:
@@ -266,7 +266,7 @@ def test_backfill_counts_and_failed_rows(client: TestClient) -> None:
     embedder = client.app.state.embedder
     original = embedder.engines._fake
     embedder.engines._fake = lambda key, config: Failing(key)
-    assert client.post("/api/settings/embeddings/backfill").json() == {"queued": 3}
+    assert client.post("/api/settings/embeddings/backfill").json()["queued"] == 3
     for asset_id in ids:
         row = _wait_status(client, asset_id)
         assert row.status == "failed"
@@ -277,10 +277,10 @@ def test_backfill_counts_and_failed_rows(client: TestClient) -> None:
     assert body["pending_count"] == 3
 
     embedder.engines._fake = original
-    assert client.post("/api/settings/embeddings/backfill").json() == {"queued": 3}
+    assert client.post("/api/settings/embeddings/backfill").json()["queued"] == 3
     for asset_id in ids:
         assert _wait_status(client, asset_id).status == "succeeded"
-    assert client.post("/api/settings/embeddings/backfill").json() == {"queued": 0}
+    assert client.post("/api/settings/embeddings/backfill").json()["queued"] == 0
 
 
 def test_backfill_requires_usable(client: TestClient) -> None:

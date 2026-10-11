@@ -302,7 +302,7 @@ def test_embedder_regenerates_missing_thumb(
     _bump_version(monkeypatch)
     response = client.patch("/api/settings/embeddings", json={"enabled": True})
     assert response.status_code == 200, response.text
-    assert client.post("/api/settings/embeddings/backfill").json() == {"queued": 1}
+    assert client.post("/api/settings/embeddings/backfill").json()["queued"] == 1
 
     def done() -> bool:
         body = client.get("/api/settings/embeddings").json()

@@ -50,6 +50,9 @@ import {
   EMBEDDING_REMOTE_MODEL_MAX,
   diffEmbeddingDraft,
   embeddingBackfillBlocker,
+  embeddingPendingTotal,
+  embeddingQueuedTotal,
+  promptEmbeddingCounts,
   embeddingConnectionChoices,
   embeddingDraftFromSettings,
   isAnyEmbeddingModelDownloading,
@@ -99,7 +102,7 @@ export function EmbeddingSettingsPage() {
     refetchInterval: (q) => {
       const data = q.state.data
       if (isAnyEmbeddingModelDownloading(data)) return DOWNLOAD_POLL_MS
-      if ((data?.queued_count ?? 0) > 0) return QUEUE_POLL_MS
+      if (embeddingQueuedTotal(data) > 0) return QUEUE_POLL_MS
       return false
     },
   })
@@ -196,7 +199,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
   const backfillMutation = useMutation({
     mutationFn: backfillEmbeddings,
     onSuccess: (result) => {
-      toast.show({ message: fmt(m.run.queuedToast, { count: result.queued }) })
+      toast.show({ message: fmt(m.run.queuedToast, { count: result.queued + result.prompt_queued }) })
       void queryClient.invalidateQueries({ queryKey: EMBEDDING_SETTINGS_QUERY_KEY })
     },
   })
@@ -211,7 +214,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
   const blocker = embeddingBackfillBlocker({
     dirty: draft.dirty,
     usable: data.usable,
-    pendingCount: data.pending_count,
+    pendingCount: embeddingPendingTotal(data),
     running: backfillMutation.isPending,
   })
   const blockerText = blocker === 'unsaved' ? m.run.unsavedBlocked : blocker === 'notUsable' ? m.run.notUsable : null
@@ -234,6 +237,15 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
   const thresholdError = errors.duplicate_threshold
     ? fmt(m.duplicates.thresholdInvalid, { min: DUPLICATE_THRESHOLD_MIN, max: DUPLICATE_THRESHOLD_MAX })
     : null
+
+  // Run のプロンプトの埋め込み(ADR-0045)。使うモデルが対応しないときは null で、出さない。
+  const promptCounts = promptEmbeddingCounts(data)
+  const backfillMessage = [
+    data.pending_count > 0 || !promptCounts?.pending ? fmt(m.run.confirm.message, { count: data.pending_count }) : null,
+    promptCounts && promptCounts.pending > 0 ? fmt(m.run.promptConfirm, { count: promptCounts.pending }) : null,
+  ]
+    .filter((text): text is string => text !== null)
+    .join(' ')
 
   const stored = data.stored ?? []
   const storedLabel = (row: EmbeddingStoredCount) =>
@@ -412,7 +424,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
               {blockerText}
             </p>
           )}
-          {!blockerText && data.usable && data.pending_count > 0 && (
+          {!blockerText && data.usable && embeddingPendingTotal(data) > 0 && (
             <p className={styles.helpText}>{m.run.switchedHint}</p>
           )}
           {backfillError && <p className={styles.errorText}>{backfillError}</p>}
@@ -423,6 +435,11 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
         {data.failed_count > 0 && (
           <SettingsRow label={m.run.failedLabel}>
             <span className={`${own.value} ${styles.mono}`}>{fmt(m.run.failedValue, { count: data.failed_count })}</span>
+          </SettingsRow>
+        )}
+        {promptCounts && (
+          <SettingsRow label={m.run.promptLabel} description={m.run.promptHelp}>
+            <span className={`${own.value} ${styles.mono}`}>{fmt(m.run.promptValue, { ...promptCounts })}</span>
           </SettingsRow>
         )}
       </SettingsSection>
@@ -519,7 +536,7 @@ function EmbeddingSettingsBody({ data, connections, values, draft }: BodyProps) 
       />
       <ConfirmDialog
         open={backfillOpen}
-        message={fmt(m.run.confirm.message, { count: data.pending_count })}
+        message={backfillMessage}
         confirmLabel={m.run.confirm.confirmLabel}
         onConfirm={() => {
           setBackfillOpen(false)

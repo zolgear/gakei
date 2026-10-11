@@ -309,6 +309,15 @@ def active_model_key(config: EmbeddingConfig, settings: Settings) -> str | None:
     return key
 
 
+def prompt_supported(config: EmbeddingConfig) -> bool:
+    """使うモデルが Run のプロンプトの埋め込みに対応するか(ADR-0045 1章。ローカルのモデルの
+    カタログで決まる。リモートは対応しない)。`FAKE_PROVIDER=1` でも選んだモデルのカタログに従う。"""
+    if config.engine != "onnx":
+        return False
+    model = CLIP_MODELS.get(config.onnx_model)
+    return model is not None and model.prompt_embeddings
+
+
 def active_dim(config: EmbeddingConfig) -> int | None:
     """使うモデルの次元(ローカルのモデルだけ分かる。リモートは None)。"""
     if config.engine == "onnx":

@@ -1,8 +1,9 @@
 """埋め込みを使った検索(ADR-0033 6章・7章)。REST(`app/api/embeddings.py`)と MCP が使う。
 
 - 文章での検索: 検索の文章を使うモデルの文章側で1件だけ計算し(`QueryVectorCache` で
-  覚える)、近い画像を返す。推論は同期で行うので、呼び出し側はスレッドで呼ぶ(FastAPI の
-  同期エンドポイント、MCP の `_in_thread`)。
+  覚える)、近い画像を返す。`target = "prompt"` なら、Run のプロンプトの埋め込みと比べて近い
+  Run を返す(ADR-0045 5章。使うモデルが対応しなければ 422)。推論は同期で行うので、
+  呼び出し側はスレッドで呼ぶ(FastAPI の同期エンドポイント、MCP の `_in_thread`)。
 - 似た画像: 起点の画像のベクトルに近い画像(起点は除く)。ベクトルがまだ無ければ理由を返す
   (計算中、失敗、未計算)。
 - 画像で探す: 手元の画像(Asset にしない)のベクトルを、その場で1件だけ計算して近い画像を
@@ -33,17 +34,32 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
-from app.domain import derivatives, embedding_settings, focal_points, perceptual_hash
+from app.domain import (
+    derivatives,
+    embedding_settings,
+    focal_points,
+    perceptual_hash,
+    prompt_embeddings,
+)
 from app.domain import embeddings as embeddings_domain
 from app.domain.assets import ALLOWED_UPLOAD_FORMATS, MAX_UPLOAD_BYTES
-from app.domain.models import Asset, AssetKind, AssetPerceptualHash, RunInput, RunInputRole
+from app.domain.models import (
+    Asset,
+    AssetKind,
+    AssetPerceptualHash,
+    Run,
+    RunInput,
+    RunInputRole,
+)
 from app.domain.schemas import (
+    AssetSummary,
     DuplicateAsset,
     DuplicateGroup,
     DuplicatesResponse,
     EmbeddingGraphNode,
     EmbeddingGraphResponse,
     SemanticAssetHit,
+    SemanticRunHit,
     SemanticSearchResponse,
     SimilarAssetsResponse,
     SimilarImageSearchResponse,
@@ -51,6 +67,8 @@ from app.domain.schemas import (
 from app.domain.vector_index import (
     AssetFilter,
     Hit,
+    RunFilter,
+    RunHit,
     VectorIndex,
     candidate_ids,
     knn_matrix,
@@ -69,6 +87,8 @@ if TYPE_CHECKING:
 SEARCH_DEFAULT_LIMIT = 20
 SEARCH_MAX_LIMIT = 50
 QUERY_MAX_CHARS = 1000
+# 指示(プロンプト)で探したときに返すプロンプトの先頭の長さ(文字)。
+PROMPT_EXCERPT_CHARS = 200
 
 GRAPH_DEFAULT_K = 10
 GRAPH_MAX_K = 30
@@ -260,6 +280,67 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
 # -- 文章での検索 -------------------------------------------------------------------
 
 
+def _first_outputs(db: Session, run_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, Asset]:
+    """Run ごとの最初の出力(削除されていない、`output_index` の最も小さいもの)。"""
+    if not run_ids:
+        return {}
+    rows = db.execute(
+        select(Asset)
+        .where(Asset.produced_by_run_id.in_(list(run_ids)), Asset.deleted_at.is_(None))
+        .order_by(Asset.output_index.asc(), Asset.created_at.asc())
+    ).scalars()
+    first: dict[uuid.UUID, Asset] = {}
+    for asset in rows:
+        assert asset.produced_by_run_id is not None
+        first.setdefault(asset.produced_by_run_id, asset)
+    return first
+
+
+def _hits_to_runs(db: Session, hits: Sequence[RunHit]) -> list[SemanticRunHit]:
+    ids = [h.run_id for h in hits]
+    if not ids:
+        return []
+    runs = {r.id: r for r in db.execute(select(Run).where(Run.id.in_(ids))).scalars()}
+    outputs = _first_outputs(db, ids)
+    output_ids = [a.id for a in outputs.values()]
+    titles = annotations_domain.bulk_titles(db, output_ids)
+    focals = focal_points.bulk_get(db, output_ids)
+    result: list[SemanticRunHit] = []
+    for hit in hits:
+        run = runs.get(hit.run_id)
+        if run is None:
+            continue
+        prompt = prompt_embeddings.select_prompt(run)
+        asset = outputs.get(run.id)
+        result.append(
+            SemanticRunHit(
+                id=run.id,
+                operation=run.operation,  # type: ignore[arg-type]
+                model=run.model,
+                created_at=run.queued_at,
+                prompt=prompt[:PROMPT_EXCERPT_CHARS],
+                prompt_truncated=len(prompt) > PROMPT_EXCERPT_CHARS,
+                output=(
+                    AssetSummary(
+                        id=asset.id,
+                        kind=asset.kind,
+                        mime=asset.mime,
+                        width=asset.width,
+                        height=asset.height,
+                        bytes=asset.bytes,
+                        created_at=asset.created_at,
+                        title=titles.get(asset.id),
+                        focal_point=focals.get(asset.id),
+                    )
+                    if asset is not None
+                    else None
+                ),
+                score=round(hit.score, 6),
+            )
+        )
+    return result
+
+
 def semantic_search(
     db: Session,
     *,
@@ -273,6 +354,7 @@ def semantic_search(
     group_id: uuid.UUID | None = None,
     tag: str | None = None,
     kind: str | None = None,
+    target: str = "image",
 ) -> SemanticSearchResponse:
     text = q.strip()
     if not text:
@@ -280,6 +362,22 @@ def semantic_search(
     if len(text) > QUERY_MAX_CHARS:
         raise EmbeddingsInvalidQueryError(t("embeddings.queryTooLong", max=QUERY_MAX_CHARS))
     active = require_active(db, settings)
+    if target == "prompt":
+        # ADR-0045 5章。画像の絞り込み(グループ・タグ・種類)は Run には掛けられない。
+        if not embedding_settings.prompt_supported(active.config):
+            raise EmbeddingsInvalidQueryError(t("embeddings.promptSearchNotSupported"))
+        if group_id is not None or tag is not None or kind is not None:
+            raise EmbeddingsInvalidQueryError(t("embeddings.promptSearchFilters"))
+        vector = embed_query(db, active, text, engines, cache)
+        run_hits = index.prompt_top_k(db, active.model_key, vector, RunFilter(viewer), limit)
+        return SemanticSearchResponse(
+            target="prompt",
+            query=text,
+            model_key=active.model_key,
+            languages=list(active.languages) if active.languages is not None else None,  # type: ignore[arg-type]
+            multilingual=active.multilingual,
+            runs=_hits_to_runs(db, run_hits),
+        )
     flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     vector = embed_query(db, active, text, engines, cache)
     hits = index.top_k(db, active.model_key, vector, flt, limit)

@@ -691,7 +691,12 @@
     "queryFailed": "Could not compute the embedding of the search text: {error}",
     "queryImageEmpty": "The image file is empty",
     "queryImageTooManyPixels": "The image is too large (up to {max} pixels)",
-    "queryImageFailed": "Could not compute the embedding of the image: {error}"
+    "queryImageFailed": "Could not compute the embedding of the image: {error}",
+    "promptNotSupported": "The current embedding model does not support prompt embeddings",
+    "promptSearchNotSupported": "To search by instruction (prompt), choose a model that supports prompt embeddings (EmbeddingGemma 2) under Admin settings > Embeddings",
+    "promptSearchFilters": "Group, tag, and kind filters cannot be used when searching by instruction (prompt)",
+    "runDeleted": "Prompt embeddings are not computed for deleted runs",
+    "runNotTarget": "Only the prompts of runs that succeeded and produced images are embedded"
   },
   "lineageExport": {
     "contentMissing": "Cannot export: an original image in this lineage is missing from storage",

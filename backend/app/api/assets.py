@@ -34,6 +34,7 @@ from app.domain import (
 )
 from app.domain import annotations as annotations_domain
 from app.domain import embeddings as embeddings_domain
+from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.asset_groups import group_for_asset
 from app.domain.assets import IngestError, asset_is_used_as_input, is_restorable
 from app.domain.assets import ingest_upload as ingest_asset
@@ -529,17 +530,24 @@ def update_asset_title(
     body: AssetTitleUpdateRequest,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    embedder: Embedder = Depends(get_embedder),
 ) -> AssetAnnotationResponse:
     """タイトルを人が決める(以後の再推定で上書きしない)。null・空文字はタイトルを消し、
-    その状態も人の決定として保つ。"""
+    その状態も人の決定として保つ。Run の最初の出力なら、上限を超える長いプロンプトの埋め込みを
+    計算し直すことがある(ADR-0045 2章)。"""
     asset = _annotation_target(db, user, asset_id)
     try:
         annotations_domain.set_title(db, asset, body.title)
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e)) from e
+    requeued = prompt_embeddings_domain.on_title_changed(db, asset, settings)
     db.commit()
-    return annotations_domain.annotation_response(db, asset_id)
+    response = annotations_domain.annotation_response(db, asset_id)
+    if requeued:
+        embedder.notify()
+    return response
 
 
 @router.post(
