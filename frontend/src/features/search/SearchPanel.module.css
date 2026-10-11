@@ -56,6 +56,11 @@
   color: var(--color-text);
 }
 
+/* 探す対象(画像 / 指示。ADR-0045 6章)。方式の切り替えの下に、左寄せで出す。 */
+.targetRow {
+  display: flex;
+}
+
 /* 「画像で探す」(選んだ画像を検索ページへ渡す)。 */
 .imageSearchButton {
   align-self: flex-start;

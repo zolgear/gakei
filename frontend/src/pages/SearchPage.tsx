@@ -39,6 +39,7 @@ import {
   buildSearchPath,
   parseSearchState,
   resolveSemanticTarget,
+  semanticSearchParams,
   type SearchMode,
   type SemanticTarget,
 } from '../features/search/searchQuerySync'
@@ -126,10 +127,7 @@ export function SearchPage() {
   const semanticLimit = semanticLimitState.limit
   const semanticQuery = useQuery({
     queryKey: ['embeddings', 'semantic', urlQuery, target, semanticLimit],
-    queryFn: () =>
-      semanticSearch(
-        target === 'prompt' ? { q: urlQuery, limit: semanticLimit, target: 'prompt' } : { q: urlQuery, limit: semanticLimit },
-      ),
+    queryFn: () => semanticSearch(semanticSearchParams(urlQuery, semanticLimit, target)),
     enabled: urlQuery.length > 0 && mode === 'semantic' && similarId === null,
     retry: retryEmbeddingQuery,
     // 「もっと見る」で取り直す間も、今の結果を出したままにする。同じ検索語・探す対象のときだけ引き継ぐ。

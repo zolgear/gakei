@@ -5,11 +5,12 @@
  *   ローカルのファイルなので URL には残さない。
  * - サイドバーの検索パネルで選んだ・落とした画像は、検索ページ(`/search?mode=semantic`)へ移る
  *   間だけここに預ける(`File` は URL にも履歴の state にも載せない)。検索ページが受け取ったら消す。
- * - サイドバーのパネルが最後に使った方式(キーワード / 意味)をブラウザに覚える。検索ページは
- *   URL の `mode` を正にするので、これを使わない。
+ * - サイドバーのパネルが最後に使った方式(キーワード / 意味)と、意味で探す対象(画像 / 指示。
+ *   ADR-0045 6章)をブラウザに覚える。検索ページは URL の `mode` と `target` を正にするので、
+ *   これを使わない(ページで選んだものもパネルには写さない)。
  */
 import { safeLocalStorage } from '../../lib/browserStorage'
-import type { SearchMode } from './searchQuerySync'
+import type { SearchMode, SemanticTarget } from './searchQuerySync'
 
 /** ファイル選択で受ける形式(サーバーが受ける PNG / JPEG / WebP)。 */
 export const QUERY_IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp'
@@ -79,6 +80,27 @@ export function loadSearchPanelMode(): SearchMode {
 export function saveSearchPanelMode(mode: SearchMode): void {
   try {
     safeLocalStorage()?.setItem(SEARCH_PANEL_MODE_KEY, mode)
+  } catch {
+    // 覚えられなくても、今の画面では切り替わっている。
+  }
+}
+
+// -- サイドバーのパネルの探す対象(ADR-0045 6章、2026-10-11 追記) ------------------------
+
+export const SEARCH_PANEL_TARGET_KEY = 'gakei:search-panel-target'
+
+/** 覚えた対象。知らない値・読めないときは画像。使えるかは `resolveSemanticTarget` で決める。 */
+export function loadSearchPanelTarget(): SemanticTarget {
+  try {
+    return safeLocalStorage()?.getItem(SEARCH_PANEL_TARGET_KEY) === 'prompt' ? 'prompt' : 'image'
+  } catch {
+    return 'image'
+  }
+}
+
+export function saveSearchPanelTarget(target: SemanticTarget): void {
+  try {
+    safeLocalStorage()?.setItem(SEARCH_PANEL_TARGET_KEY, target)
   } catch {
     // 覚えられなくても、今の画面では切り替わっている。
   }

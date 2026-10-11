@@ -204,6 +204,7 @@
     "imageSearch": "画像で探す",
     "imageSearchTitle": "手元の画像に似た画像を、検索ページで探します(画像は保存しません)",
     "semanticHint": "探したい画像を文章で入力します",
+    "promptHint": "探したい指示(プロンプト)を文章で入力します",
     "dropOverlay": "落として、検索ページで似た画像を探す"
   },
   "search": {
