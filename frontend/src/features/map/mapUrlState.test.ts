@@ -41,7 +41,8 @@ describe('mapUrlState', () => {
 
   it('既定から変えた絞り込みを数える', () => {
     expect(activeFilterCount(DEFAULT_MAP_URL_STATE)).toBe(0)
-    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, tags: ['a'], k: 5, view: 'umap' })).toBe(2)
+    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, groupId: 'g1' })).toBe(1)
+    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, groupId: 'g1', tags: ['a'] })).toBe(2)
     expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, tags: ['a', 'b', 'c'] })).toBe(3)
   })
 
@@ -142,6 +143,14 @@ describe('mapUrlState', () => {
     expect(
       activeFilterCount({ ...DEFAULT_MAP_URL_STATE, threshold: 0.9, showLineage: true, selectedId: 'x' }),
     ).toBe(0)
+  })
+
+  it('上限と近傍の数は絞り込みの数に入れない(規模の調整で、画像は絞られない)', () => {
+    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, limit: 5000, k: 30 })).toBe(0)
+    // 覚えた近傍の数だけが既定と違うときも、バッジは付かない。
+    expect(activeFilterCount(parseMapUrlState(new URLSearchParams(), { k: 15 }))).toBe(0)
+    // 絞り込みと混ざっても、数えるのはグループとタグだけ。
+    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, limit: 5000, k: 30, groupId: 'g', tags: ['a'] })).toBe(2)
   })
 })
 

@@ -182,3 +182,63 @@ describe('全体を収める', () => {
     }
   })
 })
+
+describe('resetView', () => {
+  /** 投影した全点の画面座標・奥行き・縮尺を 1 本の文字列にする(見え方の比較用)。 */
+  function snapshot(proj: ReturnType<typeof createProjection>, positions: Float32Array, count: number): string {
+    const out = ensureProjectedCapacity(createProjectedPoints(), count)
+    proj.project(positions, count, SIZE, out)
+    const parts: string[] = []
+    for (let i = 0; i < count; i++) {
+      parts.push([out.sx[i], out.sy[i], out.depth[i], out.scale[i]].map((v) => v.toFixed(3)).join(','))
+    }
+    return parts.join('|')
+  }
+
+  for (const [kind, positions, stride] of [
+    ['flat', FLAT, 2],
+    ['orbit', SOLID, 3],
+  ] as const) {
+    it(`${kind}: 動かしたあと resetView + fitAll で、開いた直後と同じ見え方に戻る`, () => {
+      const count = positions.length / stride
+      const fresh = createProjection(kind)
+      fresh.fitAll(positions, count, SIZE, () => 0)
+      const opened = snapshot(fresh, positions, count)
+
+      const moved = createProjection(kind)
+      moved.fitAll(positions, count, SIZE, () => 0)
+      // 回して、動かして、拡大する(立体は向きも変わる)。
+      moved.orbit?.(1.1, -0.4)
+      moved.pan(120, -80, SIZE)
+      moved.zoomBy(3.5, 100, 100, SIZE)
+      expect(snapshot(moved, positions, count)).not.toBe(opened)
+
+      moved.resetView()
+      moved.fitAll(positions, count, SIZE, () => 0)
+      expect(snapshot(moved, positions, count)).toBe(opened)
+    })
+  }
+
+  it('orbit: resetView だけでは向きが戻り、慣性と一度だけの回転も止まる', () => {
+    const proj = createProjection('orbit')
+    const count = SOLID.length / 3
+    proj.fitAll(SOLID, count, SIZE, () => 0)
+    proj.startIntroSpin()
+    proj.resetView()
+    // 止まっているので、フレームを進めても動かない。
+    expect(proj.step(16)).toBe(false)
+    const before = snapshot(proj, SOLID, count)
+    expect(proj.step(16)).toBe(false)
+    expect(snapshot(proj, SOLID, count)).toBe(before)
+  })
+
+  it('flat: resetView は何も壊さない(fitAll で戻る)', () => {
+    const proj = createProjection('flat')
+    const count = FLAT.length / 2
+    expect(() => proj.resetView()).not.toThrow()
+    proj.fitAll(FLAT, count, SIZE, () => 0)
+    const fresh = createProjection('flat')
+    fresh.fitAll(FLAT, count, SIZE, () => 0)
+    expect(snapshot(proj, FLAT, count)).toBe(snapshot(fresh, FLAT, count))
+  })
+})

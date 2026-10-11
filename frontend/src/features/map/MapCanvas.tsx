@@ -59,6 +59,7 @@ import {
 } from './projection'
 import { changeProjection } from './projectionAccess'
 import { thumbCache, type ThumbRequest } from './thumbCache'
+import { selectionRevealStep } from './useSelectedIndex'
 import styles from './MapCanvas.module.css'
 
 /** 選んだ画像を大きく見るパネルの開閉。 */
@@ -737,12 +738,24 @@ export function MapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataKey])
 
-  // 選んだ画像へ寄る(立体だけ。開いた直後に URL で選ばれているときは寄せない)。
+  /**
+   * 選んだ画像へ寄る(立体だけ)。寄るのは**利用者がその場で選び直したとき**だけ。
+   *
+   * URL の `sel` は、配置ができるまで位置に直せない(`useSelectedIndex`)ので、開いた直後は
+   * null → 位置、と 2 段階で届く。これを「選び直した」と数えると、タブを切り替えた直後などに
+   * **まだ計算の途中の座標**へ寄ってしまい、そのあと配置が動いても追わない(`userMovedRef` が
+   * 立つ)ので、何も無い所を映したままになる。そこで、座標が出そろうまでは記録も寄りもしない。
+   */
+  const hasPositions = positions !== null
   useEffect(() => {
-    const prev = prevSelectedRef.current
-    prevSelectedRef.current = selected
-    if (!proj.followsSelection) return
-    if (prev === undefined || selected === null || prev === selected) return
+    const { record, reveal } = selectionRevealStep({
+      hasPositions,
+      followsSelection: proj.followsSelection,
+      prev: prevSelectedRef.current,
+      selected,
+    })
+    if (record) prevSelectedRef.current = selected
+    if (!reveal || selected === null) return
     const pos = propsRef.current.positions
     if (!pos) return
     if (!proj.revealIndex(pos, selected, sizeRef.current, tileWorldRef.current)) return
@@ -750,7 +763,7 @@ export function MapCanvas({
     proj.stopIntroSpin()
     requestDraw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected])
+  }, [selected, hasPositions])
 
   // 検索の一致が変わったら、一致したノードに表示を合わせる(検索語を消したら全体に戻す)。
   const searchKey = search ? `${search.query}\u0000${search.ranked.join(',')}` : ''
@@ -792,7 +805,7 @@ export function MapCanvas({
       hasSelection: selected !== null,
     })
     if (decided) introSpunRef.current = true
-    if (start) startIntroSpin()
+    if (start) changeView((p) => p.startIntroSpin())
   })
 
   /**
@@ -1054,8 +1067,20 @@ export function MapCanvas({
     userMovedRef.current = true
   }
 
-  function startIntroSpin() {
-    changeView((p) => p.startIntroSpin())
+  /**
+   * 表示をリセット(立体だけ)。向きを開いた直後の値に戻し、`userMovedRef` を下ろして全体に
+   * 合わせ直す(= 開いた直後の見え方)。開いたときの 1 回だけの回転はやり直さない(迷って
+   * 押すボタンなので、落ち着いた絵をすぐ出す)。
+   */
+  function resetView() {
+    changeView((p) => {
+      p.resetView()
+      p.cancelMotion()
+      p.stopIntroSpin()
+    })
+    introSpunRef.current = true
+    userMovedRef.current = false
+    pendingSearchFitRef.current = false
   }
 
   function expandPreview() {
@@ -1166,13 +1191,14 @@ export function MapCanvas({
             </button>
           </>
         )}
-        {proj.supportsIntroSpin && introSpin && (
+        {/* 立体だけ。平面では「全体を表示」と同じになるので出さない。 */}
+        {proj.hasDepth && (
           <button
             type="button"
             className={styles.zoomButton}
-            aria-label={m.rotateOnce}
-            title={m.rotateOnce}
-            onClick={startIntroSpin}
+            aria-label={m.resetView}
+            title={m.resetViewHelp}
+            onClick={resetView}
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M13.5 8a5.5 5.5 0 1 1-1.9-4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -1208,7 +1234,7 @@ export function MapCanvas({
         <button type="button" className={styles.zoomButton} aria-label={m.zoomOut} title={m.zoomOut} onClick={() => zoomButton(1 / 1.4)}>
           −
         </button>
-        <button type="button" className={styles.zoomButton} aria-label={m.fit} title={m.fit} onClick={fitAll}>
+        <button type="button" className={styles.zoomButton} aria-label={m.fit} title={m.fitHelp} onClick={fitAll}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" strokeWidth="1.5" />
           </svg>

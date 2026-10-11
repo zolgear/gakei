@@ -193,12 +193,17 @@ export function isMapSettingsChange(patch: Partial<MapUrlState>): boolean {
   return Object.keys(patch).some((key) => key !== 'selectedId' && key !== 'view' && key !== 'shape')
 }
 
-/** 絞り込みのうち、既定から変えているものの数(狭い幅の「絞り込み」ボタンに添える)。タグは1つずつ数える。 */
+/**
+ * 「絞り込み」ボタンに添える数。**並べる画像が絞られているか**だけを数える:
+ * グループを選んでいれば 1、タグは 1 つずつ。
+ *
+ * 上限と近傍の数は数えない。どちらも常に何らかの値を持つ「規模の調整」で、絞り込みではない
+ * (近傍の数はブラウザに覚えるので、数えると既定のつもりの画面でもバッジが付いたままになる)。
+ * しきい値・系列の辺・検索・距離の取り方・選んだ画像も、並べる画像を絞らないので数えない。
+ */
 export function activeFilterCount(state: MapUrlState): number {
   let count = 0
   if (state.groupId) count++
   count += state.tags.length
-  if (state.limit !== DEFAULT_MAP_LIMIT) count++
-  if (state.k !== DEFAULT_MAP_K) count++
   return count
 }

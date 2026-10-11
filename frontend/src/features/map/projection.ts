@@ -151,8 +151,13 @@ export interface MapProjection {
     y: number,
     radiusFor: (scale: number) => number,
   ): number
-  /** 全体が収まるように合わせる(その場で)。 */
+  /** 全体が収まるように合わせる(その場で)。向きは変えない。 */
   fitAll(positions: ArrayLike<number>, count: number, size: Size, extentAt: ExtentAt): void
+  /**
+   * 見え方を開いた直後の状態に戻す。立体は向き(方位角・仰角)を最初の値に戻し、注視点と距離は
+   * 呼び出し側が続けて `fitAll` で合わせ直す前提で捨てる。平面は `fitAll` だけで戻るので何もしない。
+   */
+  resetView(): void
   /**
    * 指定した点の集合が収まるように合わせる(立体は滑らかに寄る)。合わせられなければ false。
    */
@@ -243,6 +248,9 @@ class FlatProjection implements MapProjection {
     if (!bounds) return
     this.viewport = fitBoundsWithExtent(bounds, size.width, size.height, FIT_PADDING, extentAt)
   }
+
+  /** 平面は向きを持たないので、続く `fitAll` だけで開いた直後に戻る。 */
+  resetView(): void {}
 
   revealIndices(
     positions: ArrayLike<number>,
@@ -385,6 +393,23 @@ class OrbitProjection implements MapProjection {
   fitAll(positions: ArrayLike<number>, count: number, size: Size, extentAt: ExtentAt): void {
     // 向き(方位角・仰角)は変えず、注視点と距離だけを合わせる。
     this.camera = fitNodes3D(positions, count, size, this.camera, extentAt)
+  }
+
+  /**
+   * 向きを最初の値に戻し、動きと一度だけの回転も止める。注視点と距離は、このあと呼び出し側が
+   * `fitAll` で合わせ直すので、ここでは最初の形に戻すだけ。
+   */
+  resetView(): void {
+    this.camera = {
+      target: [0, 0, 0],
+      azimuth: INITIAL_AZIMUTH,
+      elevation: INITIAL_ELEVATION,
+      distance: this.camera.distance,
+    }
+    this.flyTo = null
+    this.spin = 0
+    this.lastSpin = 0
+    this.intro = null
   }
 
   revealIndices(
