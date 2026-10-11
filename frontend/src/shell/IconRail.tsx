@@ -1,4 +1,7 @@
-/** アイコンレール(52px)。ストック/プロンプトセット/パラメーターセット/系列グラフ/履歴/検索を切り替える。 */
+/**
+ * アイコンレール(52px)。ストック/プロンプトセット/パラメーターセット/プロンプトテンプレート/
+ * 系列グラフ/履歴/検索を切り替える。
+ */
 import type { ReactNode } from 'react'
 import type { PanelId } from './panelStorage'
 import { useI18n, type Messages } from '../i18n'
@@ -46,6 +49,19 @@ function items(labels: Messages['shell']['iconRail']): { id: PanelId; label: str
           <circle cx="6" cy="4.5" r="1.6" stroke="currentColor" strokeWidth="1.5" />
           <circle cx="12" cy="9" r="1.6" stroke="currentColor" strokeWidth="1.5" />
           <circle cx="8" cy="13.5" r="1.6" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      ),
+    },
+    {
+      // プロンプトテンプレート(実験)。枠(スロット)に差し替えの候補が入る形。
+      id: 'promptTemplates',
+      label: labels.promptTemplates,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <rect x="2" y="3" width="14" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+          <rect x="2" y="11" width="9" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M13 13h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M9 7v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       ),
     },

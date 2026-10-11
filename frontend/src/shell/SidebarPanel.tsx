@@ -16,6 +16,7 @@ import type { PanelId } from './panelStorage'
 import { StockPanel } from '../features/stock/StockPanel'
 import { PromptSetsPanel } from '../features/prompt-sets/PromptSetsPanel'
 import { ParameterSetsPanel } from '../features/parameter-sets/ParameterSetsPanel'
+import { PromptTemplatesPanel } from '../features/prompt-templates/PromptTemplatesPanel'
 import { LineageGraphPanel } from '../features/lineage/LineageGraphPanel'
 import { HistoryPanel } from '../features/history/HistoryPanel'
 import { SearchPanel } from '../features/search/SearchPanel'
@@ -155,6 +156,7 @@ export function SidebarPanel({ selected, resizable = false, side = 'left' }: Sid
       {selected === 'stock' && <StockPanel />}
       {selected === 'prompts' && <PromptSetsPanel />}
       {selected === 'parameterSets' && <ParameterSetsPanel />}
+      {selected === 'promptTemplates' && <PromptTemplatesPanel />}
       {selected === 'graph' && <LineageGraphPanel />}
       {selected === 'history' && <HistoryPanel />}
       {selected === 'search' && <SearchPanel />}

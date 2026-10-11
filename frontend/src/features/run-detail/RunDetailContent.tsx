@@ -46,6 +46,7 @@ import { nodeTargetPath } from '../lineage/nodeTargetPath'
 import { fmt, useI18n } from '../../i18n'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { FinalPromptSection } from './FinalPromptSection'
+import { PromptBuildSection } from './PromptBuildSection'
 import { ImportedRunSection } from '../lineage-transfer/ImportedRunSection'
 import { baselineNegativePrompt, selectFinalPromptEntries } from './finalPrompt'
 import styles from './RunDetailContent.module.css'
@@ -248,6 +249,13 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
         <p className={styles.prompt}>{run.prompt}</p>
         {promptActions?.(run.prompt)}
       </section>
+
+      {/* プロンプトテンプレート(実験)で組み立てた Run だけ。どのスロットに何が選ばれたか。 */}
+      {run.prompt_build && (
+        <section className={styles.section}>
+          <PromptBuildSection promptBuild={run.prompt_build} headingClassName={styles.heading} />
+        </section>
+      )}
 
       {/* 最終プロンプト(ADR-0030 3章)。スタジオ内では呼び出し側の挿入・置き換え(promptActions)を
           そのまま使い、スタジオの外ではリクエストを積んでスタジオへ移る(StudioPromptActions)。 */}
