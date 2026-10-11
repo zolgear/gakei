@@ -31,8 +31,10 @@ All it needs is an OpenAI API key. Images are stored in a local directory and me
 | ![Lineage graph](docs/images/lineage-en.webp) | ![Compare before and after an edit](docs/images/compare-en.webp) |
 | **Run details with the lineage sidebar** | **Drawing a sketch to use as input** |
 | ![Run details with the lineage sidebar](docs/images/detail-en.webp) | ![Drawing a sketch to use as input](docs/images/sketch-en.webp) |
-| **Map (network of similar images with lineage)** | **Semantic search ("Japanese woodblock print")** |
-| ![Map (network of similar images with lineage)](docs/images/map-en.webp) | ![Semantic search ("Japanese woodblock print")](docs/images/semantic-en.webp) |
+| **Map (3D; similar images cluster together)** | **Searching inside the map ("Japanese woodblock print")** |
+| ![Map (3D; similar images cluster together)](docs/images/map-en.webp) | ![Searching inside the map ("Japanese woodblock print")](docs/images/map-search-en.webp) |
+| **Semantic search ("Japanese woodblock print")** | **Prompt search ("add a cat")** |
+| ![Semantic search ("Japanese woodblock print")](docs/images/semantic-en.webp) | ![Prompt search ("add a cat")](docs/images/prompt-search-en.webp) |
 
 Except for the hand-drawn sketches, all images in the screenshots are samples generated with GPT Image 2.5.
 
