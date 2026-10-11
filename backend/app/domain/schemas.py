@@ -1159,6 +1159,9 @@ class ComfyUIStatusResponse(BaseModel):
     locked: bool
     # url が None のときは null。
     loopback: bool | None = None
+    # ADR-0013 7章「無効にする / 有効にする」: URL を残したまま使わない状態か。true の間は
+    # enabled も false(モデルの選択肢に出さず、接続先に問い合わせない)。url は残っていれば返す。
+    disabled: bool
 
 
 class ComfyUIConnectionTestRequest(BaseModel):
@@ -1209,6 +1212,9 @@ class SdWebuiStatusResponse(BaseModel):
     # 接続できたときだけ。forge は Forge 系(forge_additional_modules がある)、a1111 はそれ以外。
     flavor: Literal["forge", "a1111"] | None = None
     checkpoint_count: int | None = None
+    # ADR-0038 6章「無効にする / 有効にする」: URL・資格情報を残したまま使わない状態か。true の間は
+    # enabled も false(モデルの選択肢に出さず、接続先に問い合わせない)。url は残っていれば返す。
+    disabled: bool
 
 
 class SdWebuiLora(BaseModel):

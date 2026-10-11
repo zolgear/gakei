@@ -59,7 +59,10 @@
       "workflowNotFound": "ワークフローが見つかりません",
       "connectionUrlMissing": "接続先の URL が指定されていません。",
       "lockedChangeConnection": "ComfyUI の Run が実行中または待機中のため、接続設定を変更できません。",
-      "lockedDetach": "ComfyUI の Run が実行中または待機中のため、切り離せません。"
+      "lockedDetach": "ComfyUI の Run が実行中または待機中のため、切り離せません。",
+      "lockedDisable": "ComfyUI の Run が実行中または待機中のため、無効にできません。",
+      "lockedEnable": "ComfyUI の Run が実行中または待機中のため、有効にできません。",
+      "notConnected": "ComfyUI に接続していません。"
     },
     "workflow": {
       "uiFormatMessage": "UI 形式(nodes/links を含む)のファイルです。ComfyUI の「Export (API)」で書き出した API 形式の JSON を登録してください。",
@@ -146,7 +149,10 @@
       "lockedChangeConnection": "SD WebUI の Run が実行中または待機中のため、接続設定を変更できません。",
       "lockedDetach": "SD WebUI の Run が実行中または待機中のため、切り離せません。",
       "lockedChangeCredentials": "SD WebUI の Run が実行中または待機中のため、資格情報を変更できません。",
-      "lockedRefresh": "SD WebUI の Run が実行中または待機中のため、一覧を読み直せません。"
+      "lockedRefresh": "SD WebUI の Run が実行中または待機中のため、一覧を読み直せません。",
+      "lockedDisable": "SD WebUI の Run が実行中または待機中のため、無効にできません。",
+      "lockedEnable": "SD WebUI の Run が実行中または待機中のため、有効にできません。",
+      "disabled": "SD WebUI を無効にしています。"
     },
     "client": {
       "apiNotEnabled": "SD WebUI の API が見つかりません(404)。WebUI を --api を付けて起動したか、起動のログに API のエラーがないか(--api-auth の書式の誤りなど)を確かめてください。",

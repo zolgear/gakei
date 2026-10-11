@@ -18,8 +18,9 @@ describe('flavorLabel', () => {
 })
 
 describe('connectionHeadline', () => {
-  it('無効/接続できる/接続できない', () => {
-    expect(connectionHeadline({ enabled: false, available: false })).toBe('SD WebUI は無効です')
+  it('未接続/無効/接続できる/接続できない', () => {
+    expect(connectionHeadline({ enabled: false, available: false })).toBe('SD WebUI に接続していません')
+    expect(connectionHeadline({ enabled: false, available: false, disabled: true })).toBe('SD WebUI は無効です')
     expect(connectionHeadline({ enabled: true, available: true })).toBe('接続できます')
     expect(connectionHeadline({ enabled: true, available: false })).toBe('接続できません')
   })

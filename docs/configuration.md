@@ -18,10 +18,10 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 
 次の項目は例外で、設定画面で保存すると、以降は画面の設定が環境変数より優先される(環境変数は、画面で保存するまでの既定値として使う)。
 
-- ComfyUI の接続先(`COMFYUI_URL`): 設定画面で一度でも接続または切り離しをしたとき
+- ComfyUI の接続先(`COMFYUI_URL`): 設定画面で一度でも接続または切り離しをしたとき。設定画面で「無効にする」を押したときは、`COMFYUI_URL` があっても無効のまま(URL は環境変数の値を見せる。「有効にする」で戻す)
 - `MODERATION`: 設定 → OpenAI(`/settings/openai`)で変えて、ページ上部の「保存」を押したとき
 - `COMFYUI_TIMEOUT_SECONDS`: 設定 → ComfyUI(`/settings/comfyui`)で変えて、ページ上部の「保存」を押したとき
-- SD WebUI の接続先(`SDWEBUI_URL`): 設定画面で一度でも接続または切り離しをしたとき
+- SD WebUI の接続先(`SDWEBUI_URL`): 設定画面で一度でも接続または切り離しをしたとき。設定画面で「無効にする」を押したときは、`SDWEBUI_URL` があっても無効のまま(URL は環境変数の値を見せる。「有効にする」で戻す)
 - `SDWEBUI_TIMEOUT_SECONDS`: 設定 → SD WebUI(`/settings/sdwebui`)で変えて保存したとき
 
 ## 一覧

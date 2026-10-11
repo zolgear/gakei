@@ -150,6 +150,7 @@ def test_disabled_by_default_no_comfyui_in_capabilities(
             "source": "none",
             "locked": False,
             "loopback": None,
+            "disabled": False,
         }
 
 
