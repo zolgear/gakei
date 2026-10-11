@@ -12,12 +12,13 @@ const ctx = self as unknown as {
 }
 
 ctx.onmessage = (event) => {
-  const { jobId, input, nEpochs, seed } = event.data
+  const { jobId, input, nEpochs, seed, nComponents } = event.data
   const started = performance.now()
   try {
     const embedding = runUmapLayout(input, {
       nEpochs,
       seed,
+      nComponents,
       now: () => performance.now(),
       onProgress: (epoch, total, positions) => {
         ctx.postMessage({ type: 'progress', jobId, epoch, nEpochs: total, positions }, [positions.buffer])

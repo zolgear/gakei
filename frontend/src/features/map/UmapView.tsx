@@ -1,6 +1,8 @@
 /**
- * マップの「地図」タブ(ADR-0033 8章)。umap-js の配置を Web Worker で計算し、途中経過を
- * そのまま描く(点が少しずつ落ち着く)。計算した配置はページの中で覚え、戻ったときは計算し直さない。
+ * umap-js の 2D の配置を平面の見せ方で描くビュー(ADR-0033 8章)。
+ *
+ * ツールバーの「見せ方」で平面を選んだときの、地図のタブの中身(立体は `Umap3DView`)。
+ * 覚える配置の鍵は `umap` で、3 次元の配置(`umap3d`)とは混ざらない。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EmbeddingGraphResponse } from '../../api/client'
@@ -8,7 +10,8 @@ import { fmt, useI18n } from '../../i18n'
 import { getCachedLayout, layoutKey, setCachedLayout } from './layoutCache'
 import { MapCanvas, type MapCanvasHandle, type MapPreviewState } from './MapCanvas'
 import { MAP_LAYOUT_SEED } from './random'
-import { MIN_MAP_NODES, toUmapInput, umapEpochsFor } from './umapInput'
+import type { MapSearchHighlight } from './mapSearchHighlight'
+import { MIN_MAP_NODES, toUmapInput, umapEpochsFor, type MapDistanceMetric } from './umapInput'
 import type { UmapWorkerRequest, UmapWorkerResponse } from './umapWorkerProtocol'
 import { useSelectedIndex } from './useSelectedIndex'
 import styles from './MapViews.module.css'
@@ -25,20 +28,25 @@ interface UmapViewProps {
   onSelectId: (id: string | null) => void
   /** 選んだ画像を大きく見るパネルの開閉(ブラウザに覚える)。 */
   preview: MapPreviewState
+  /** 配置の距離の取り方(試作)。 */
+  metric: MapDistanceMetric
+  /** マップ内の意味検索の一致(null なら検索していない)。 */
+  search: MapSearchHighlight | null
 }
 
-export function UmapView({ graph, selectedId, onSelectId, preview }: UmapViewProps) {
+export function UmapView({ graph, selectedId, onSelectId, preview, metric, search }: UmapViewProps) {
   const { t } = useI18n()
   const m = t.map
   const nodes = useMemo(() => graph.nodes ?? [], [graph])
   const neighborIndices = useMemo(() => graph.neighbor_indices ?? [], [graph])
   const input = useMemo(
-    () => toUmapInput(graph.neighbor_indices ?? [], graph.neighbor_similarities ?? []),
-    [graph],
+    () => toUmapInput(graph.neighbor_indices ?? [], graph.neighbor_similarities ?? [], metric),
+    [graph, metric],
   )
+  // 距離の取り方ごとに別の配置として覚える。
   const key = useMemo(
-    () => layoutKey('umap', nodes.map((node) => node.id), input?.nNeighbors ?? 0),
-    [nodes, input],
+    () => layoutKey('umap', nodes.map((node) => node.id), `${input?.nNeighbors ?? 0}:${metric}`),
+    [nodes, input, metric],
   )
   const [positions, setPositions] = useState<Float32Array | null>(() => getCachedLayout(key) ?? null)
   const [positionsFor, setPositionsFor] = useState(key)
@@ -118,6 +126,7 @@ export function UmapView({ graph, selectedId, onSelectId, preview }: UmapViewPro
 
   return (
     <MapCanvas
+      projection="flat"
       nodes={nodes}
       positions={positions}
       dataKey={key}
@@ -126,6 +135,7 @@ export function UmapView({ graph, selectedId, onSelectId, preview }: UmapViewPro
       onSelect={(index) => onSelectId(index === null ? null : (nodes[index]?.id ?? null))}
       preview={preview}
       controllerRef={controllerRef}
+      search={search}
       ariaLabel={fmt(m.umapAriaLabel, { count: nodes.length })}
       overlay={overlay}
     />

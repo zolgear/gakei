@@ -399,6 +399,97 @@ def test_cache_follows_new_vectors(client: TestClient) -> None:
 # -- 見える範囲(oidc) -----------------------------------------------------------------
 
 
+def test_graph_scores_matches_graph_nodes(client: TestClient) -> None:
+    """`graph/scores` の `ids` は `graph` の `nodes` と同じ並びで、スコアは安定している。"""
+    _enable(client)
+    red, red2, other = _three_images(client)
+    # 検索の文章のベクトルは乱数なので、赤い画像のベクトルを「赤」の文章として覚えさせる。
+    client.app.state.query_vector_cache.put(ACTIVE_KEY, "red", _vector(client, red))
+
+    graph = client.get("/api/embeddings/graph").json()
+    response = client.get("/api/embeddings/graph/scores", params={"q": "  red "})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["model_key"] == ACTIVE_KEY
+    assert body["query"] == "red"
+    assert body["total"] == graph["total"] == 3
+    assert body["truncated"] is False
+    assert body["ids"] == [n["id"] for n in graph["nodes"]]
+    assert len(body["scores"]) == len(body["ids"])
+    assert all(-1.0 <= s <= 1.0 for s in body["scores"])
+
+    scores = dict(zip(body["ids"], body["scores"], strict=True))
+    # 文章のベクトルが赤の画像そのものなので、赤が 1.0、ほぼ同じ赤がそれに次ぐ。
+    assert scores[red] == pytest.approx(1.0, abs=1e-4)
+    assert scores[red] >= scores[red2] > scores[other]
+    # 同じ入力なら同じ結果。
+    again = client.get("/api/embeddings/graph/scores", params={"q": "red"}).json()
+    assert again["ids"] == body["ids"]
+    assert again["scores"] == body["scores"]
+
+    # `limit` で切ると、並びは `graph` と揃ったまま古いものが落ちる。
+    limited = client.get("/api/embeddings/graph/scores", params={"q": "red", "limit": 2}).json()
+    assert limited["ids"] == body["ids"][:2]
+    assert limited["total"] == 3
+    assert limited["truncated"] is True
+
+    assert client.get("/api/embeddings/graph/scores", params={"q": "  "}).status_code == 422
+    assert client.get("/api/embeddings/graph/scores", params={"q": "x" * 1001}).status_code == 422
+    assert client.get("/api/embeddings/graph/scores").status_code == 422
+    assert (
+        client.get("/api/embeddings/graph/scores", params={"q": "x", "limit": 5001}).status_code
+        == 422
+    )
+    missing = client.get(
+        "/api/embeddings/graph/scores", params={"q": "x", "group_id": str(uuid.uuid4())}
+    )
+    assert missing.status_code == 404
+
+
+def test_graph_scores_group_and_tags(client: TestClient) -> None:
+    """グループとタグ(繰り返しは AND)の絞り込みは `graph` と同じに効く。"""
+    _enable(client)
+    red, red2, other = _three_images(client)
+    group = client.post("/api/asset-groups", json={"name": "g"})
+    assert group.status_code in (200, 201), group.text
+    group_id = group.json()["id"]
+    added = client.post(f"/api/asset-groups/{group_id}/assets", json={"asset_ids": [other]})
+    assert added.status_code == 200, added.text
+    _tag(client, red, "cat")
+    _tag(client, red, "Outdoor")
+    _tag(client, red2, "cat")
+
+    def ids(params: Any) -> list[str]:
+        response = client.get("/api/embeddings/graph/scores", params=params)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert len(body["scores"]) == len(body["ids"]) == body["total"]
+        return body["ids"]
+
+    assert ids({"q": "red", "group_id": group_id}) == [other]
+    assert set(ids({"q": "red", "tag": "cat"})) == {red, red2}
+    assert ids([("q", "red"), ("tag", "cat"), ("tag", "outdoor")]) == [red]
+    assert ids([("q", "red"), ("tag", "cat"), ("tag", "nothing")]) == []
+
+
+def test_graph_scores_oidc_other_users_assets_never_appear(client_oidc: TestClient) -> None:
+    login_as(client_oidc, "admin@example.com")
+    _enable(client_oidc)
+    client_oidc.cookies.clear()
+
+    login_as(client_oidc, "alice@example.com")
+    alice_red = _upload(client_oidc, _png((220, 30, 30)))
+    client_oidc.cookies.clear()
+
+    login_as(client_oidc, "bob@example.com")
+    bob_red = _upload(client_oidc, _png((221, 30, 30)))
+    _wait_embedded(client_oidc, alice_red, bob_red)
+
+    body = client_oidc.get("/api/embeddings/graph/scores", params={"q": "red"}).json()
+    assert body["ids"] == [bob_red]
+    assert body["total"] == 1
+
+
 def test_oidc_other_users_assets_never_appear(client_oidc: TestClient) -> None:
     login_as(client_oidc, "admin@example.com")
     _enable(client_oidc)

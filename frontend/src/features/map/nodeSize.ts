@@ -110,13 +110,28 @@ export interface LineageSegment {
   /** 矢じりの先(子のサムネイルの縁の少し外)。 */
   tipX: number
   tipY: number
+  /** 実際に使った矢じりの長さ(近いときは詰める)。羽の幅もこれに合わせる。 */
+  head: number
   ux: number
   uy: number
 }
 
+/** 系列の辺を引く、画面上の最小の長さ(これより近い親子は同じ点とみなして描かない)。 */
+export const MIN_LINEAGE_LEN_PX = 5
 /**
- * 親 (ax, ay) → 子 (bx, by) の系列の辺を、サムネイル(半分の大きさ half)の縁から縁まで引き、子の側に
- * 長さ arrow の矢じりを付けるときの座標。サムネイルが重なって線を引く余地が無ければ null。
+ * サムネイルの縁から縁まで引く余地が無いときに、両端に残す余白の割合(矢じりを除いた長さに対して)。
+ * 残りが線分になるので、0.2 なら 6 割が線として残る。
+ */
+const CLOSE_BORDER_RATIO = 0.2
+
+/**
+ * 親 (ax, ay) → 子 (bx, by) の系列の辺を、サムネイル(半分の大きさ half)の縁から縁まで引き、子の
+ * 側に長さ arrow の矢じりを付けるときの座標。
+ *
+ * 縁から縁まで引く余地が無いとき(立体では、ほとんど同じ画像どうしの親子がサムネイルの半分より
+ * 近くに重なるので、これが普通に起きる)は、縁の位置と矢じりを収まるところまで詰めて、
+ * **向きだけは必ず分かる**ようにする(サムネイルの上に重ねて描く)。両端が同じ点に見えるほど
+ * 近い(`MIN_LINEAGE_LEN_PX` 未満)ときだけ null。
  */
 export function lineageSegment(
   ax: number,
@@ -130,20 +145,25 @@ export function lineageSegment(
   const dx = bx - ax
   const dy = by - ay
   const len = Math.hypot(dx, dy)
-  if (!(len > 0)) return null
+  if (!(len >= MIN_LINEAGE_LEN_PX)) return null
   const ux = dx / len
   const uy = dy / len
-  const border = squareBorderDistance(half, ux, uy) + gap
-  if (len < border * 2 + arrow) return null
+  // 矢じりは、長さの半分までに収める(近いほど小さな矢じりになる)。
+  const head = Math.min(arrow, len * 0.5)
+  const edge = squareBorderDistance(half, ux, uy) + gap
+  // 縁から縁まで引けるならそのまま。引けないほど近ければ、縁は諦めて(サムネイルの上に重ねて)
+  // 線分が残るところまで詰める。
+  const border = len >= edge * 2 + head ? edge : Math.max(0, (len - head) * CLOSE_BORDER_RATIO)
   const tipX = bx - ux * border
   const tipY = by - uy * border
   return {
     x0: ax + ux * border,
     y0: ay + uy * border,
-    x1: tipX - ux * arrow,
-    y1: tipY - uy * arrow,
+    x1: tipX - ux * head,
+    y1: tipY - uy * head,
     tipX,
     tipY,
+    head,
     ux,
     uy,
   }

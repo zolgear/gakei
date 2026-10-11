@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { MIN_MAP_NODES, similarityToDistance, toUmapInput, umapEpochsFor } from './umapInput'
+import {
+  DEFAULT_MAP_DISTANCE_METRIC,
+  MIN_MAP_NODES,
+  isMapDistanceMetric,
+  similarityToDistance,
+  toUmapInput,
+  umapEpochsFor,
+} from './umapInput'
 import { runUmapLayout } from './umapLayout'
 
 /** 2つの塊(0..half-1 と half..n-1)に分かれた近傍を作る。先頭は自分自身。 */
@@ -74,6 +81,77 @@ describe('toUmapInput', () => {
     for (const row of input.distances) {
       for (let c = 1; c < row.length; c++) expect(row[c]).toBeGreaterThanOrEqual(row[c - 1])
     }
+  })
+})
+
+describe('距離の取り方', () => {
+  /** 近傍の類似度が狭い帯(0.86〜0.96)に詰まった近傍。 */
+  const narrow = (() => {
+    const n = 12
+    const indices: number[][] = []
+    const sims: number[][] = []
+    for (let i = 0; i < n; i++) {
+      const order = [0, 1, 2, 3, 4].map((c) => (i + c + 1) % n)
+      indices.push([i, ...order])
+      sims.push([1, ...order.map((_, c) => 0.96 - c * 0.025)])
+    }
+    return { indices, sims }
+  })()
+
+  it('既定は今までと同じ(1 - 類似度)', () => {
+    expect(DEFAULT_MAP_DISTANCE_METRIC).toBe('similarity')
+    const base = toUmapInput(narrow.indices, narrow.sims)!
+    const same = toUmapInput(narrow.indices, narrow.sims, 'similarity')!
+    expect(same.distances).toEqual(base.distances)
+    expect(base.distances[0][1]).toBeCloseTo(1 - 0.96)
+  })
+
+  it('どの取り方でも、先頭は自分自身で距離 0・昇順・行の長さは同じ', () => {
+    const base = toUmapInput(narrow.indices, narrow.sims)!
+    for (const metric of ['similarity', 'rowNormalized', 'rank'] as const) {
+      const input = toUmapInput(narrow.indices, narrow.sims, metric)!
+      expect(input.nNeighbors).toBe(base.nNeighbors)
+      expect(input.indices).toEqual(base.indices)
+      for (const row of input.distances) {
+        expect(row).toHaveLength(base.nNeighbors)
+        expect(row[0]).toBe(0)
+        for (let c = 1; c < row.length; c++) expect(row[c]).toBeGreaterThanOrEqual(row[c - 1])
+      }
+    }
+  })
+
+  it('行ごとに正規化すると、各行が 0〜1 に伸びる', () => {
+    const input = toUmapInput(narrow.indices, narrow.sims, 'rowNormalized')!
+    for (const row of input.distances) {
+      expect(row[1]).toBe(0)
+      expect(row[row.length - 1]).toBe(1)
+    }
+  })
+
+  it('順位は等間隔で、最後が 1', () => {
+    const input = toUmapInput(narrow.indices, narrow.sims, 'rank')!
+    for (const row of input.distances) {
+      const step = row[1] - row[0]
+      for (let c = 1; c < row.length; c++) expect(row[c] - row[c - 1]).toBeCloseTo(step, 10)
+      expect(row[row.length - 1]).toBe(1)
+    }
+  })
+
+  it('近傍の距離がすべて同じときは、順位に落とす(潰れないように)', () => {
+    const indices = [0, 1, 2, 3, 4].map((i) => [i, (i + 1) % 5, (i + 2) % 5, (i + 3) % 5])
+    const sims = indices.map(() => [1, 0.9, 0.9, 0.9])
+    const input = toUmapInput(indices, sims, 'rowNormalized')!
+    for (const row of input.distances) {
+      expect(row[0]).toBe(0)
+      expect(row[row.length - 1]).toBe(1)
+      expect(row[1]).toBeCloseTo(1 / 3, 10)
+    }
+  })
+
+  it('取り方の名前を確かめられる', () => {
+    expect(isMapDistanceMetric('rank')).toBe(true)
+    expect(isMapDistanceMetric('cosine')).toBe(false)
+    expect(isMapDistanceMetric(undefined)).toBe(false)
   })
 })
 

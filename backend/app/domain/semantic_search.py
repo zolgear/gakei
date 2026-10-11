@@ -67,6 +67,7 @@ from app.domain.schemas import (
     DuplicatesResponse,
     EmbeddingGraphNode,
     EmbeddingGraphResponse,
+    EmbeddingGraphScoresResponse,
     RunSummary,
     SemanticAssetHit,
     SemanticRunHit,
@@ -86,7 +87,7 @@ from app.domain.vector_index import (
     pairs_at_least,
 )
 from app.domain.visibility import get_visible_asset, get_visible_group
-from app.embedding.base import EmbeddingError, composite_on_white
+from app.embedding.base import EmbeddingError, composite_on_white, l2_normalize
 from app.embedding.catalog import CLIP_MODELS, InputVariant
 from app.i18n import t
 
@@ -794,6 +795,58 @@ def build_graph(
         neighbor_indices=indices.tolist(),
         neighbor_similarities=[[round(float(v), 4) for v in row] for row in sims],
         lineage_edges=_lineage_edges(db, ordered) if include_lineage else None,
+        total=total,
+        truncated=total > len(ordered),
+    )
+
+
+def graph_scores(
+    db: Session,
+    *,
+    settings: Settings,
+    index: VectorIndex,
+    engines: EmbeddingEngines,
+    cache: QueryVectorCache,
+    viewer: CurrentUser,
+    q: str,
+    limit: int = GRAPH_DEFAULT_LIMIT,
+    group_id: uuid.UUID | None = None,
+    tags: Sequence[str] | None = None,
+) -> EmbeddingGraphScoresResponse:
+    """マップのノード全件と検索の文章の類似度(絞り込みや順位では落とさない)。
+
+    `ids` は `build_graph` の `nodes` と同じ並び(同じ引数なら位置が一致する)。文章での検索
+    (`semantic_search`)は上限 `SEARCH_MAX_LIMIT` 件しか返せないので、マップの上で全ノードを
+    強調・絞り込みするためにこちらを使う。対象は画像だけで、指示(プロンプト)は扱わない。
+    """
+    text = q.strip()
+    if not text:
+        raise EmbeddingsInvalidQueryError(t("search.emptyQuery"))
+    if len(text) > QUERY_MAX_CHARS:
+        raise EmbeddingsInvalidQueryError(t("embeddings.queryTooLong", max=QUERY_MAX_CHARS))
+    active = require_active(db, settings)
+    flt = build_filter(db, viewer, group_id=group_id, tags=tags)
+    all_ids = candidate_ids(db, active.model_key, flt)
+    total = len(all_ids)
+    # `build_graph` と同じ順序・同じ行列を使う(位置が一致する)。
+    ordered, matrix = index.subset(db, active.model_key, all_ids[:limit])
+    vector = embed_query(db, active, text, engines, cache)
+    scores: list[float] = []
+    if ordered:
+        # 保存されているベクトルは正規化済みなので、検索の文章の側だけを正規化して内積を取ると
+        # コサイン類似度になる(`NumpyIndex._score` と同じ尺度)。
+        query = l2_normalize(np.asarray(vector, dtype=np.float32).reshape(-1))[0]
+        if query.shape[0] == matrix.shape[1]:
+            raw = np.clip(matrix @ query, -1.0, 1.0)
+            scores = [round(float(v), 4) for v in raw]
+        else:
+            # 次元が合わない(リモートの接続先のモデルを替えた)。0 を返す。
+            scores = [0.0] * len(ordered)
+    return EmbeddingGraphScoresResponse(
+        model_key=active.model_key,
+        query=text,
+        ids=ordered,
+        scores=scores,
         total=total,
         truncated=total > len(ordered),
     )

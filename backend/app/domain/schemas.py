@@ -1905,6 +1905,24 @@ class EmbeddingGraphResponse(BaseModel):
     truncated: bool
 
 
+class EmbeddingGraphScoresResponse(BaseModel):
+    """`GET /api/embeddings/graph/scores`。マップのノード全件と検索の文章の類似度。
+
+    `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`
+    なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
+    """
+
+    model_key: str
+    # 前後の空白を落とした検索の文章。
+    query: str
+    ids: list[uuid.UUID] = Field(default_factory=list)
+    scores: list[float] = Field(default_factory=list)
+    # 絞り込みに合う、ベクトルのある画像の数。
+    total: int
+    # `limit` を超えたので、古い画像を返していない。
+    truncated: bool
+
+
 # -- 共有リンク(ADR-0029) ---------------------------------------------------------
 # 本人向け(`/api/shares`、ログインが要る)と、ログイン不要の公開(`/api/public/shares`)。
 # 公開の応答は、ほかの画面の型(AssetDetail、RunSummary、LineageNode など)を使い回さず、

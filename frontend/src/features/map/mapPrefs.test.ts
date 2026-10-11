@@ -21,14 +21,40 @@ describe('parseMapPrefs', () => {
   })
 
   it('項目ごとに検証し、読めない項目だけを捨てる', () => {
+    // 2D の地図のタブは外したので、覚えた `map` は 3D として読む。
     expect(parseMapPrefs('{"v":1,"view":"map","k":20,"limit":2000,"threshold":0.9,"lineage":true}')).toEqual({
-      view: 'umap',
+      view: 'umap3d',
       k: 20,
       limit: 2000,
       threshold: 0.9,
       showLineage: true,
     })
     expect(parseMapPrefs('{"v":1,"view":"x","k":7,"limit":"500","threshold":"0.9","lineage":1}')).toEqual({})
+  })
+
+  it('見せ方も覚える(知らない値はその項目だけ捨てる)', () => {
+    expect(parseMapPrefs('{"v":1,"shape":"flat"}')).toEqual({ shape: 'flat' })
+    expect(parseMapPrefs('{"v":1,"shape":"orbit"}')).toEqual({ shape: 'orbit' })
+    expect(parseMapPrefs('{"v":1,"shape":"cube","k":20}')).toEqual({ k: 20 })
+    // 見せ方を足す前に覚えた値は、そのまま読める(項目が無いだけ)。
+    expect(parseMapPrefs('{"v":1,"view":"3d"}')).toEqual({ view: 'umap3d' })
+    expect(parseMapPrefs(serializeMapPrefs({ shape: 'flat' }))).toEqual({ shape: 'flat' })
+    expect(pickStoredFields({ shape: 'flat' })).toEqual({ shape: 'flat' })
+    // 覚えた見せ方は、URL に無いときの値になる。
+    expect(parseMapUrlState(new URLSearchParams(), { shape: 'flat' }).shape).toBe('flat')
+    expect(parseMapUrlState(new URLSearchParams('shape=orbit'), { shape: 'flat' }).shape).toBe('orbit')
+  })
+
+  it('3D のタブと自動回転も読む(知らない値はその項目だけ捨てる)', () => {
+    expect(parseMapPrefs('{"v":1,"view":"3d","autoRotate3d":false}')).toEqual({
+      view: 'umap3d',
+      autoRotate3d: false,
+    })
+    expect(parseMapPrefs('{"v":1,"view":"cube","autoRotate3d":"no","k":20}')).toEqual({ k: 20 })
+    expect(parseMapPrefs(serializeMapPrefs({ view: 'umap3d', autoRotate3d: true }))).toEqual({
+      view: 'umap3d',
+      autoRotate3d: true,
+    })
   })
 
   it('しきい値は範囲に収めて丸める', () => {
@@ -45,6 +71,22 @@ describe('parseMapPrefs', () => {
     expect(parseMapPrefs('{"v":1,"k":20}')).toEqual({ k: 20 })
   })
 
+  it('一致の件数と距離の取り方も読む(知らない値はその項目だけ捨てる)', () => {
+    expect(parseMapPrefs('{"v":1,"matchCount":50,"dist":"rank"}')).toEqual({ matchCount: 50, metric: 'rank' })
+    expect(parseMapPrefs('{"v":1,"matchCount":7,"dist":"cosine","k":20}')).toEqual({ k: 20 })
+    // 項目を足す前に覚えた値も、そのまま読める。
+    expect(parseMapPrefs('{"v":1,"view":"map"}')).toEqual({ view: 'umap3d' })
+    expect(parseMapPrefs(serializeMapPrefs({ matchCount: 10, metric: 'rowNormalized' }))).toEqual({
+      matchCount: 10,
+      metric: 'rowNormalized',
+    })
+  })
+
+  it('検索の文章は覚えない', () => {
+    expect(pickStoredFields({ query: 'cat' })).toEqual({})
+    expect(serializeMapPrefs({ matchCount: 25 })).toBe('{"v":1,"matchCount":25}')
+  })
+
   it('書いたものを読み戻せる', () => {
     const prefs = { view: 'network' as const, k: 5, limit: 500, threshold: 0.7, showLineage: false, previewOpen: true }
     expect(parseMapPrefs(serializeMapPrefs(prefs))).toEqual(prefs)
@@ -56,6 +98,7 @@ describe('pickStoredFields', () => {
     expect(pickStoredFields({ groupId: 'g', tags: ['a'], selectedId: 's', k: 15 })).toEqual({ k: 15 })
     expect(pickStoredFields({ selectedId: null })).toEqual({})
     expect(pickStoredFields({ previewOpen: false })).toEqual({ previewOpen: false })
+    expect(pickStoredFields({ autoRotate3d: false, selectedId: 's' })).toEqual({ autoRotate3d: false })
   })
 })
 
@@ -103,7 +146,7 @@ describe('loadMapPrefs / saveMapPrefs', () => {
 })
 
 describe('URL > 覚えた値 > 既定', () => {
-  const stored = { view: 'umap' as const, k: 20, limit: 2000, threshold: 0.9, showLineage: true }
+  const stored = { view: 'umap3d' as const, k: 20, limit: 2000, threshold: 0.9, showLineage: true }
 
   it('URL に無い項目は覚えた値を使う', () => {
     const s = parseMapUrlState(new URLSearchParams(''), stored)
@@ -117,7 +160,7 @@ describe('URL > 覚えた値 > 既定', () => {
 
   it('URL の値が読めないときは覚えた値', () => {
     const s = parseMapUrlState(new URLSearchParams('view=x&k=7&th=abc'), stored)
-    expect(s).toMatchObject({ view: 'umap', k: 20, threshold: 0.9 })
+    expect(s).toMatchObject({ view: 'umap3d', k: 20, threshold: 0.9 })
   })
 
   it('覚えた値が無ければ既定', () => {

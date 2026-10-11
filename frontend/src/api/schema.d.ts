@@ -1124,6 +1124,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/embeddings/graph/scores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Graph Scores Endpoint
+         * @description マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
+         *     `GET /api/embeddings/graph` の `nodes` と同じ並び。
+         */
+        get: operations["embedding_graph_scores"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tags": {
         parameters: {
             query?: never;
@@ -3323,6 +3344,27 @@ export interface components {
             neighbor_similarities?: number[][];
             /** Lineage Edges */
             lineage_edges?: number[][] | null;
+            /** Total */
+            total: number;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /**
+         * EmbeddingGraphScoresResponse
+         * @description `GET /api/embeddings/graph/scores`。マップのノード全件と検索の文章の類似度。
+         *
+         *     `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`
+         *     なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
+         */
+        EmbeddingGraphScoresResponse: {
+            /** Model Key */
+            model_key: string;
+            /** Query */
+            query: string;
+            /** Ids */
+            ids?: string[];
+            /** Scores */
+            scores?: number[];
             /** Total */
             total: number;
             /** Truncated */
@@ -8288,6 +8330,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmbeddingGraphResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    embedding_graph_scores: {
+        parameters: {
+            query: {
+                /** @description 検索の文章(自然文) */
+                q: string;
+                limit?: number;
+                group_id?: string | null;
+                /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
+                tag?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingGraphScoresResponse"];
                 };
             };
             /** @description 埋め込みを使えない */
