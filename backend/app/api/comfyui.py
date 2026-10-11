@@ -36,9 +36,12 @@ from app.domain.comfy_workflow import (
 )
 from app.domain.comfyui_connection import (
     ComfyUIConnectionValidationError,
+    is_disabled,
+    resolve_active_url,
     resolve_effective_url,
     save_connection_url,
     save_detached,
+    save_disabled,
     validate_connection_url,
 )
 from app.domain.models import ComfyWorkflow, Run, RunStatus
@@ -263,9 +266,11 @@ def _is_comfyui_locked(db: Session) -> bool:
 def _build_status(db: Session, settings: Settings) -> ComfyUIStatusResponse:
     url, source = resolve_effective_url(db, settings)
     locked = _is_comfyui_locked(db)
-    if url is None:
+    disabled = is_disabled(db)
+    if url is None or disabled:
+        # 未設定・切り離し・無効。無効の間は URL を見せるが、接続先には問い合わせない。
         return ComfyUIStatusResponse(
-            url=None,
+            url=url,
             enabled=False,
             available=False,
             reason=None,
@@ -273,7 +278,8 @@ def _build_status(db: Session, settings: Settings) -> ComfyUIStatusResponse:
             device=None,
             source=source,
             locked=locked,
-            loopback=None,
+            loopback=is_loopback_url(url) if url is not None else None,
+            disabled=disabled and url is not None,
         )
 
     available, reason, body = check_available(url, timeout=1.0)
@@ -288,6 +294,7 @@ def _build_status(db: Session, settings: Settings) -> ComfyUIStatusResponse:
         source=source,
         locked=locked,
         loopback=is_loopback_url(url),
+        disabled=False,
     )
 
 
@@ -313,6 +320,7 @@ def test_connection(
 
     保存時と違い、ループバック以外でも確認チェックなしで試せる(送信するのは
     `/system_stats` への問い合わせだけで、画像やプロンプトは送らないため)。
+    無効にしている間も試せる(明示の操作なので。無効の状態も変えない)。
     """
     url = body.url
     if url is None:
@@ -359,6 +367,8 @@ async def set_connection(
     `runner.ensure_lane` がレーンの無いプロバイダーには `asyncio.create_task` を呼ぶため、
     実行中のイベントループ上で動く必要がある(同期のエンドポイントはスレッドプールで
     実行され、その場に実行中ループが無いため)。async にしているのはそのため。
+
+    無効にしている間は URL だけを保存し、無効のままにする(登録しない)。
     """
     if _is_comfyui_locked(db):
         raise HTTPException(
@@ -379,13 +389,8 @@ async def set_connection(
         )
 
     save_connection_url(db, body.url)
-
-    from app.providers.comfyui.provider import ComfyUIProvider
-
-    registry.set_provider(
-        "comfyui", ComfyUIProvider(body.url, session_factory, settings.comfyui_timeout_seconds)
-    )
-    runner.ensure_lane("comfyui")
+    if not is_disabled(db):
+        _register(registry, runner, body.url, settings, session_factory)
 
     # 接続の確認(同期の HTTP)でイベントループを止めないよう、スレッドで行う。
     return await asyncio.to_thread(_build_status, db, settings)
@@ -415,6 +420,67 @@ def detach_connection(
     return _build_status(db, settings)
 
 
+def _register(
+    registry: ProviderRegistry,
+    runner: Runner,
+    url: str,
+    settings: Settings,
+    session_factory: sessionmaker,
+) -> None:
+    from app.providers.comfyui.provider import ComfyUIProvider
+
+    registry.set_provider(
+        "comfyui", ComfyUIProvider(url, session_factory, settings.comfyui_timeout_seconds)
+    )
+    runner.ensure_lane("comfyui")
+
+
+@router.post(
+    "/connection/disable",
+    response_model=ComfyUIStatusResponse,
+    operation_id="disable_comfyui",
+    dependencies=[Depends(require_admin)],
+)
+def disable_connection(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    registry: ProviderRegistry = Depends(get_registry),
+) -> ComfyUIStatusResponse:
+    """無効にする(ADR-0013 7章)。URL は残し、レジストリから外す(切り離しと同じく、モデルの
+    選択肢から消え、接続先に問い合わせなくなる)。ワークフローと過去の Run は消さない。"""
+    if _is_comfyui_locked(db):
+        raise HTTPException(status_code=409, detail=t("comfyui.api.lockedDisable"))
+    url, _source = resolve_effective_url(db, settings)
+    if url is None:
+        raise HTTPException(status_code=409, detail=t("comfyui.api.notConnected"))
+    save_disabled(db, True)
+    registry.set_provider("comfyui", None)
+    return _build_status(db, settings)
+
+
+@router.post(
+    "/connection/enable",
+    response_model=ComfyUIStatusResponse,
+    operation_id="enable_comfyui",
+    dependencies=[Depends(require_admin)],
+)
+async def enable_connection(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    registry: ProviderRegistry = Depends(get_registry),
+    runner: Runner = Depends(get_runner),
+    session_factory: sessionmaker = Depends(get_session_factory),
+) -> ComfyUIStatusResponse:
+    """有効に戻す。保存してある同じ URL のまま接続する(async の理由は `set_connection` と同じ)。"""
+    if _is_comfyui_locked(db):
+        raise HTTPException(status_code=409, detail=t("comfyui.api.lockedEnable"))
+    url, _source = resolve_effective_url(db, settings)
+    save_disabled(db, False)
+    if url is not None:
+        _register(registry, runner, url, settings, session_factory)
+    return await asyncio.to_thread(_build_status, db, settings)
+
+
 @router.post(
     "/workflows/analyze",
     response_model=ComfyAnalyzeResponse,
@@ -432,8 +498,9 @@ def analyze(
     # ノードの推定にも使うため)。接続できない・失敗した場合は None のまま
     # (analyze_workflow はテンプレートの値だけからの推定にフォールバックする)。
     # URL は画面の接続設定(無ければ環境変数)から解決する(ADR-0013 7章)。
+    # 無効にしている間は接続先に問い合わせない(補完なしの推定になる)。
     object_info: dict[str, Any] | None = None
-    url, _source = resolve_effective_url(db, settings)
+    url = resolve_active_url(db, settings)
     if url:
         available, _reason, _info = check_available(url, timeout=1.0)
         if available:

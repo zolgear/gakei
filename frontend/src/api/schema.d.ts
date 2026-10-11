@@ -195,6 +195,7 @@ export interface paths {
          *
          *     保存時と違い、ループバック以外でも確認チェックなしで試せる(送信するのは
          *     `/system_stats` への問い合わせだけで、画像やプロンプトは送らないため)。
+         *     無効にしている間も試せる(明示の操作なので。無効の状態も変えない)。
          */
         post: operations["test_comfyui_connection"];
         delete?: never;
@@ -218,6 +219,8 @@ export interface paths {
          *     `runner.ensure_lane` がレーンの無いプロバイダーには `asyncio.create_task` を呼ぶため、
          *     実行中のイベントループ上で動く必要がある(同期のエンドポイントはスレッドプールで
          *     実行され、その場に実行中ループが無いため)。async にしているのはそのため。
+         *
+         *     無効にしている間は URL だけを保存し、無効のままにする(登録しない)。
          */
         put: operations["set_comfyui_connection"];
         post?: never;
@@ -226,6 +229,47 @@ export interface paths {
          * @description 切り離す。登録済みワークフローと過去の Run は消さない(ADR-0013 7章)。
          */
         delete: operations["detach_comfyui"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/comfyui/connection/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable Connection
+         * @description 無効にする(ADR-0013 7章)。URL は残し、レジストリから外す(切り離しと同じく、モデルの
+         *     選択肢から消え、接続先に問い合わせなくなる)。ワークフローと過去の Run は消さない。
+         */
+        post: operations["disable_comfyui"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/comfyui/connection/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable Connection
+         * @description 有効に戻す。保存してある同じ URL のまま接続する(async の理由は `set_connection` と同じ)。
+         */
+        post: operations["enable_comfyui"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -315,6 +359,8 @@ export interface paths {
          * Test Connection
          * @description 入力中の URL(省略時は有効な URL)への接続を試す。設定は変えない。
          *
+         *     無効にしている間も試せる(明示の操作なので。無効の状態も変えない)。
+         *
          *     保存時と違い、ループバック以外でも確認チェックなしで試せる(送るのは一覧の問い合わせ
          *     だけで、画像やプロンプトは送らないため)。
          */
@@ -337,6 +383,8 @@ export interface paths {
          * Set Connection
          * @description 接続・URL の変更。再起動なしで登録簿と実行レーンに反映する。
          *
+         *     無効にしている間は URL だけを保存し、無効のままにする(登録しない)。
+         *
          *     `runner.ensure_lane` が `asyncio.create_task` を呼ぶため、async にしている
          *     (`app/api/comfyui.py` の `set_connection` と同じ理由)。
          */
@@ -344,9 +392,50 @@ export interface paths {
         post?: never;
         /**
          * Detach Connection
-         * @description 切り離す。過去の Run と資格情報は消さない。
+         * @description 切り離す。過去の Run と資格情報は消さない。無効にしていたら、その印も消す。
          */
         delete: operations["detach_sdwebui"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/connection/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable Connection
+         * @description 無効にする(ADR-0038 6章)。URL・資格情報・待つ上限は残し、登録簿から外す(切り離しと
+         *     同じく、モデルの選択肢から消え、裏の取り直しも含めて接続先に問い合わせなくなる)。
+         */
+        post: operations["disable_sdwebui"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sdwebui/connection/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable Connection
+         * @description 有効に戻す。保存してある同じ設定のまま接続する(async の理由は `set_connection` と同じ)。
+         */
+        post: operations["enable_sdwebui"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2872,6 +2961,8 @@ export interface components {
             locked: boolean;
             /** Loopback */
             loopback?: boolean | null;
+            /** Disabled */
+            disabled: boolean;
         };
         /** ComfyUITimeoutSetting */
         ComfyUITimeoutSetting: {
@@ -4939,6 +5030,8 @@ export interface components {
             flavor?: ("forge" | "a1111") | null;
             /** Checkpoint Count */
             checkpoint_count?: number | null;
+            /** Disabled */
+            disabled: boolean;
         };
         /**
          * SdWebuiTimeoutSetting
@@ -5998,6 +6091,68 @@ export interface operations {
             };
         };
     };
+    disable_comfyui: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyUIStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_comfyui: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyUIStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     analyze_comfy_workflow: {
         parameters: {
             query?: never;
@@ -6302,6 +6457,68 @@ export interface operations {
         };
     };
     detach_sdwebui: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_sdwebui: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdWebuiStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_sdwebui: {
         parameters: {
             query?: never;
             header?: never;

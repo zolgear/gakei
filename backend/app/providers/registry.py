@@ -62,10 +62,10 @@ def build_registry(settings: Settings, session_factory: sessionmaker) -> Provide
 
     ComfyUI の接続先は起動時に一度だけ解決する(ADR-0013 7章)。DB の設定
     (`app_setting`。画面での接続・切り離し)があればそれを、無ければ環境変数
-    `COMFYUI_URL` を既定値として使う。以降の接続・切り離しは `ProviderRegistry.set_provider`
-    で再起動なしに反映する(`app/api/comfyui.py`)。
+    `COMFYUI_URL` を既定値として使う。無効にしていれば登録しない。以降の接続・切り離しは
+    `ProviderRegistry.set_provider` で再起動なしに反映する(`app/api/comfyui.py`)。
     """
-    from app.domain.comfyui_connection import resolve_effective_url
+    from app.domain.comfyui_connection import resolve_active_url
 
     # ADR-0017: 主プロバイダーは常に openai。FAKE_PROVIDER=1 のときだけ fake に切り替える
     # (開発・CI・確認用)。
@@ -75,7 +75,8 @@ def build_registry(settings: Settings, session_factory: sessionmaker) -> Provide
     }
 
     with session_factory() as session:
-        comfyui_url, _source = resolve_effective_url(session, settings)
+        # 無効にしている間は登録しない(ADR-0013 7章。URL は残っている)
+        comfyui_url = resolve_active_url(session, settings)
 
     if comfyui_url:
         if not is_loopback_url(comfyui_url):
@@ -102,12 +103,13 @@ def build_sdwebui_provider(
     settings: Settings, session_factory: sessionmaker
 ) -> ImageProvider | None:
     """SD WebUI の接続先(ADR-0038 6章。保存値 > `SDWEBUI_URL` > 無効)を起動時に解決し、
-    有効ならプロバイダーを作る。以降の接続・切り離しは `app/api/sdwebui.py` が
-    `ProviderRegistry.set_provider` で反映する。"""
-    from app.domain.sdwebui_connection import resolve_effective_url as resolve_sdwebui_url
+    有効ならプロバイダーを作る(無効にしていれば作らない)。以降の接続・切り離しは
+    `app/api/sdwebui.py` が `ProviderRegistry.set_provider` で反映する。"""
+    from app.domain.sdwebui_connection import resolve_active_url as resolve_sdwebui_url
 
     with session_factory() as session:
-        url, _source = resolve_sdwebui_url(session, settings)
+        # 無効にしている間は登録しない(ADR-0038 6章。URL・資格情報は残っている)
+        url = resolve_sdwebui_url(session, settings)
     if not url:
         return None
     if not is_loopback_url(url):

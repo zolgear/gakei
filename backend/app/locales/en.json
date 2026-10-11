@@ -59,7 +59,10 @@
       "workflowNotFound": "Workflow not found",
       "connectionUrlMissing": "No connection URL was given.",
       "lockedChangeConnection": "Cannot change the connection settings while a ComfyUI run is in progress or queued.",
-      "lockedDetach": "Cannot detach while a ComfyUI run is in progress or queued."
+      "lockedDetach": "Cannot detach while a ComfyUI run is in progress or queued.",
+      "lockedDisable": "Cannot disable while a ComfyUI run is in progress or queued.",
+      "lockedEnable": "Cannot enable while a ComfyUI run is in progress or queued.",
+      "notConnected": "ComfyUI is not connected."
     },
     "workflow": {
       "uiFormatMessage": "This file is in UI format (it contains nodes/links). Export it from ComfyUI with \"Export (API)\" and register the resulting API-format JSON instead.",
@@ -146,7 +149,10 @@
       "lockedChangeConnection": "An SD WebUI run is running or queued, so the connection settings cannot be changed.",
       "lockedDetach": "An SD WebUI run is running or queued, so it cannot be detached.",
       "lockedChangeCredentials": "An SD WebUI run is running or queued, so the credentials cannot be changed.",
-      "lockedRefresh": "An SD WebUI run is running or queued, so the lists cannot be reloaded."
+      "lockedRefresh": "An SD WebUI run is running or queued, so the lists cannot be reloaded.",
+      "lockedDisable": "An SD WebUI run is running or queued, so it cannot be disabled.",
+      "lockedEnable": "An SD WebUI run is running or queued, so it cannot be enabled.",
+      "disabled": "SD WebUI is disabled."
     },
     "client": {
       "apiNotEnabled": "The SD WebUI API was not found (404). Check that the WebUI was started with --api and that its startup log shows no API errors (such as a malformed --api-auth).",
