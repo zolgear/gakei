@@ -157,10 +157,16 @@ def test_thresholds_on_degraded_screenshots(path: Path) -> None:
         assert ph.is_close(base, other), (path.name, label, _distances(base, other))
 
 
+# 同じ画面に強調を重ねただけの組。重複の候補に出るのが正しいので、別の画面としては比べない。
+SAME_VIEW_SCREENSHOTS = {frozenset({"map-ja", "map-search-ja"})}
+
+
 @pytest.mark.skipif(not DOCS_IMAGES.is_dir(), reason="docs/images が無い")
 def test_different_screenshots_are_not_close() -> None:
     hashes = {p.stem: _hash(Image.open(p).convert("RGB")) for p in _screenshots()}
     for a, b in itertools.combinations(hashes, 2):
+        if frozenset({a, b}) in SAME_VIEW_SCREENSHOTS:
+            continue
         assert not ph.is_close(hashes[a], hashes[b]), (a, b, _distances(hashes[a], hashes[b]))
 
 
