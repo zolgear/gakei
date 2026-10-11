@@ -335,21 +335,30 @@ def local_store(tmp_path: Path) -> LocalFsStore:
     return LocalFsStore(tmp_path / "domain_data")
 
 
+# run が終わるのを待つ上限(秒)。確かめたいのは「終了状態になること」であって速さでは
+# ないので、ここは走り続けるのを止めるための非常ブレーキでしかない。短くすると、CI の
+# ように並列で混み合う環境で runner が待たされ、正しいコードが落ちる(実際に起きた)。
+# 終わった時点ですぐ返るので、大きくしてもテスト全体は遅くならない。
+RUN_TERMINAL_TIMEOUT = float(os.environ.get("GAKEI_TEST_RUN_TIMEOUT", "30"))
+
+
 def wait_for_run_terminal(
-    client: TestClient, run_id: uuid.UUID | str, timeout: float = 5.0
+    client: TestClient, run_id: uuid.UUID | str, timeout: float | None = None
 ) -> dict:
     """run が終了状態になるまで待って、その時点の GET /api/runs/{id} を返す。"""
     import time
 
-    deadline = time.monotonic() + timeout
+    deadline = time.monotonic() + (RUN_TERMINAL_TIMEOUT if timeout is None else timeout)
+    last = "(未取得)"
     while time.monotonic() < deadline:
         response = client.get(f"/api/runs/{run_id}")
         response.raise_for_status()
         body = response.json()
-        if body["status"] in ("succeeded", "failed", "canceled"):
+        last = body["status"]
+        if last in ("succeeded", "failed", "canceled"):
             return body
         time.sleep(0.02)
-    raise TimeoutError(f"run {run_id} が時間内に終了しませんでした")
+    raise TimeoutError(f"run {run_id} が時間内に終了しませんでした(最後の状態: {last})")
 
 
 def wait_for_background_reads(client: TestClient, timeout: float = 10.0) -> None:
