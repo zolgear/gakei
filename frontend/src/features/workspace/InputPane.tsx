@@ -32,7 +32,7 @@ import { UNSPECIFIED } from '../run-form/paramsBuilder'
 import { groupParamsForProvider } from '../run-form/paramGrouping'
 import { MaskEditor } from '../mask/MaskEditor'
 import { SketchEditor, type SketchSaveOptions } from '../sketch/SketchEditor'
-import sketchStyles from '../sketch/SketchEditor.module.css'
+import { SketchLoadingDialog } from '../sketch/SketchLoadingDialog'
 import { recommendedSketchPrompt } from '../sketch/recommendedPrompt'
 import { MentionPopover } from '../prompt-sets/MentionPopover'
 import {
@@ -623,25 +623,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       {/* ADR-0010(2026-09-25 追記): used_as_input を古いキャッシュではなく取り直す間、
           既存のスケッチエディタと同じ見た目の「読み込み中」を出す。 */}
       {sketchEditorState?.mode === 'over' && editLogic.sketchOverAssetLoading && (
-        <div className={sketchStyles.overlay} role="dialog" aria-modal="true">
-          <div className={sketchStyles.modal}>
-            <div className={sketchStyles.header}>
-              <h2 className={sketchStyles.title}>{t.sketch.title}</h2>
-              <button
-                type="button"
-                className={sketchStyles.closeButton}
-                onClick={editLogic.closeSketchEditor}
-                aria-label={t.sketch.close}
-                title={t.sketch.close}
-              >
-                ✕
-              </button>
-            </div>
-            <div className={sketchStyles.canvasArea}>
-              <p className={sketchStyles.loading}>{t.sketch.loading}</p>
-            </div>
-          </div>
-        </div>
+        <SketchLoadingDialog onCancel={editLogic.closeSketchEditor} />
       )}
       {sketchEditorState?.mode === 'over' && editLogic.sketchOverAsset && (
         <SketchEditor

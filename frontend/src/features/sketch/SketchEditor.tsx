@@ -19,7 +19,7 @@
  * `replaces_asset_id` を送る置き換えになり、系列のノードを増やさない。それ以外
  * (使用済みのスケッチ・通常の画像)は従来どおりの上描き(`source_asset_id`)。
  */
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createAsset, type AssetDetail } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
@@ -37,6 +37,8 @@ import {
 } from './sketchGeometry'
 import { loadSketchPrefs, saveSketchPrefs } from './sketchPrefs'
 import { useUndoShortcut } from '../mask/undoShortcut'
+import { MODAL_BODY_ATTRIBUTE } from '../../components/modalFocus'
+import { useModalFocus } from '../../components/useModalFocus'
 import * as sketchLayerStore from './sketchLayerStore'
 import styles from './SketchEditor.module.css'
 
@@ -211,6 +213,10 @@ export function SketchEditor({ base, onSave, onCancel }: SketchEditorProps) {
   const openPlanRef = useRef<SketchOpenPlan | null>(null)
   // 線レイヤーの初期状態。Canvas 生成後の layout effect が一度だけ描く。
   const lineInitRef = useRef<LineLayerContent>({ kind: 'empty' })
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const titleId = useId()
+  // 一度でも描いた(履歴を積んだ)か。Esc で閉じてよいかの判定に使う(ADR-0009 9章)。
+  const editedRef = useRef(false)
 
   const [canvasSize, setCanvasSize] = useState<PixelSize | null>(null)
   const [containerSize, setContainerSize] = useState<Size | null>(null)
@@ -332,6 +338,7 @@ export function SketchEditor({ base, onSave, onCancel }: SketchEditorProps) {
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
     historyRef.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height))
+    editedRef.current = true
     if (historyRef.current.length > MAX_HISTORY) {
       historyRef.current.shift()
     }
@@ -493,21 +500,39 @@ export function SketchEditor({ base, onSave, onCancel }: SketchEditorProps) {
     },
   })
 
+  // フォーカスは ADR-0009 9章の規則。閉じるときの確認は無いので、描いた後の Esc では閉じない
+  // (描いた線が確認なしで消えるため)。開いた直後で何も描いていなければ Esc でキャンセルする。
+  useModalFocus(panelRef, true, {
+    onEscape: () => {
+      if (!editedRef.current && !drawingRef.current) onCancel()
+    },
+  })
+
   const displayScale = containerSize && canvasSize ? computeFitScale(containerSize, canvasSize) : 1
   const displayWidth = canvasSize ? Math.round(canvasSize.width * displayScale) : 0
   const displayHeight = canvasSize ? Math.round(canvasSize.height * displayScale) : 0
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true">
-      <div className={styles.modal}>
+    <div className={styles.overlay}>
+      <div
+        ref={panelRef}
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
         <div className={styles.header}>
-          <h2 className={styles.title}>{t.sketch.title}</h2>
+          <h2 id={titleId} className={styles.title}>
+            {t.sketch.title}
+          </h2>
           <button type="button" className={styles.closeButton} onClick={onCancel} aria-label={t.sketch.close} title={t.sketch.close}>
             ✕
           </button>
         </div>
 
-        <div className={styles.toolbar}>
+        {/* 開いた直後のフォーカスは、閉じるボタンではなく道具の先頭に置く。 */}
+        <div className={styles.toolbar} {...{ [MODAL_BODY_ATTRIBUTE]: '' }}>
           <div className={styles.toolGroup}>
             {SKETCH_COLORS.map((c) => (
               <button
