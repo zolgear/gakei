@@ -1,8 +1,9 @@
 /**
  * 立体の見せ方に重ねる「座標のライン」(純関数のみ。試作)。
  *
- * 向きと距離感が分かるように、原点を通る X 軸・Y 軸の線と、その平面(z = 0)上の薄い格子の
- * 座標を作る。格子の間隔はデータの広がりから決め、線の数が増えすぎないように丸めた値
+ * 向きと距離感が分かるように、原点を通る X 軸・Y 軸・Z 軸の線と、X-Y 平面(z = 0)上の薄い
+ * 格子の座標を作る。Z 軸は原点で他の 2 本と交わる縦の線で、平面がどちらを向いているかの
+ * 手がかりになる。格子の間隔はデータの広がりから決め、線の数が増えすぎないように丸めた値
  * (1・2・5 × 10 の冪)にする。
  *
  * 返すのは配置の座標のままの線分(x0, y0, z0, x1, y1, z1 の 6 要素で 1 本)。画面の座標への
@@ -18,7 +19,7 @@ export const AXIS_GRID_MAX_TICKS = 21
 export interface AxisGrid {
   /** 格子の間隔(配置の座標)。 */
   step: number
-  /** X 軸・Y 軸(2 本)。 */
+  /** X 軸・Y 軸・Z 軸(3 本。原点で交わる)。 */
   axes: Float32Array
   /** 格子の線(軸と重なる線は含まない)。 */
   grid: Float32Array
@@ -54,7 +55,9 @@ export function axisGridLines(
   const maxX = Math.max(bounds.max[0], 0)
   const minY = Math.min(bounds.min[1], 0)
   const maxY = Math.max(bounds.max[1], 0)
-  if (![minX, maxX, minY, maxY].every(Number.isFinite)) return null
+  const minZ = Math.min(bounds.min[2], 0)
+  const maxZ = Math.max(bounds.max[2], 0)
+  if (![minX, maxX, minY, maxY, minZ, maxZ].every(Number.isFinite)) return null
 
   let step = niceStep(Math.max(maxX - minX, maxY - minY), divisions)
   const ticksFor = (lo: number, hi: number, s: number) =>
@@ -70,8 +73,19 @@ export function axisGridLines(
   const x1 = Math.ceil(maxX / step) * step
   const y0 = Math.floor(minY / step) * step
   const y1 = Math.ceil(maxY / step) * step
+  // Z 軸は格子を持たないので、範囲が潰れている(すべて z = 0)ときも 1 目盛り分の長さを残す。
+  let z0 = Math.floor(minZ / step) * step
+  let z1 = Math.ceil(maxZ / step) * step
+  if (z1 - z0 < step) {
+    z0 = -step
+    z1 = step
+  }
 
-  const axes = new Float32Array([x0, 0, 0, x1, 0, 0, 0, y0, 0, 0, y1, 0])
+  const axes = new Float32Array([
+    x0, 0, 0, x1, 0, 0,
+    0, y0, 0, 0, y1, 0,
+    0, 0, z0, 0, 0, z1,
+  ])
   const grid: number[] = []
   // Y 軸に平行な線(x = 一定)。x = 0 は軸そのものなので飛ばす。
   for (let i = Math.ceil(x0 / step); i <= Math.round(x1 / step); i++) {

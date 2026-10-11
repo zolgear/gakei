@@ -32,12 +32,16 @@ describe('axisGridLines', () => {
     expect(axisGridLines(null)).toBeNull()
   })
 
-  it('原点を通る 2 本の軸と、その平面の格子を返す', () => {
+  it('原点を通る 3 本の軸と、その平面の格子を返す', () => {
     const grid = axisGridLines(bounds(-10, -10, 10, 10))!
-    expect(grid.axes).toHaveLength(12)
+    expect(grid.axes).toHaveLength(18)
     // X 軸は y = z = 0、Y 軸は x = z = 0。
     expect([grid.axes[1], grid.axes[2], grid.axes[4], grid.axes[5]]).toEqual([0, 0, 0, 0])
     expect([grid.axes[6], grid.axes[8], grid.axes[9], grid.axes[11]]).toEqual([0, 0, 0, 0])
+    // Z 軸は x = y = 0 で、原点を挟んで伸びる。
+    expect([grid.axes[12], grid.axes[13], grid.axes[15], grid.axes[16]]).toEqual([0, 0, 0, 0])
+    expect(grid.axes[14]).toBeLessThan(0)
+    expect(grid.axes[17]).toBeGreaterThan(0)
     expect(grid.grid.length % 6).toBe(0)
     expect(grid.grid.length).toBeGreaterThan(0)
     // 格子の線は z = 0 の平面にある。
