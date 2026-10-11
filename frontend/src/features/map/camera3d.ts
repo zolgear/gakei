@@ -390,7 +390,7 @@ export function introSpinAngle(
 export interface IntroSpinChance {
   /** 覚えた値(開いたときに一度だけ回すか)。設定を変えたあとは呼び出し側が false にする。 */
   enabled: boolean
-  /** この 3D のビューで、もう回した(または回そうとした)か。 */
+  /** この立体のビューで、もう回した(または回そうとした)か。 */
   alreadySpun: boolean
   /** 配置の座標が届いているか。 */
   hasPositions: boolean
@@ -401,7 +401,7 @@ export interface IntroSpinChance {
 }
 
 /**
- * 最初の回転を始めてよいか。回すのは「3D のビューを開いて、配置が初めて出たとき」の 1 回だけ。
+ * 最初の回転を始めてよいか。回すのは「立体のビューを開いて、配置が初めて出たとき」の 1 回だけ。
  * 設定を変えたあと(`enabled` が false)・2 回目以降・座標がまだ無い・もう動かした・画像が
  * 選ばれているときは回さない(「もう一度回す」ボタンはこの判断を通さない)。
  */

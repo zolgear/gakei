@@ -1,11 +1,13 @@
 /**
  * マップの「ネットワーク」タブ(ADR-0033 8章)。画像をノード、類似度がしきい値以上の組を辺にし、
- * d3-force で配置して canvas に描く。系列(ADR-0003)の辺も重ねられる。
+ * d3-force-3d で 3 次元に配置して canvas に描く。系列(ADR-0003)の辺も重ねられる。
  *
  * - 力学モデルは UI のスレッドで回す。1フレームに使う時間を区切って少しずつ進め、落ち着いたら
  *   (alpha が下限を切ったら)止める。
  * - 揺らぎの乱数に種を与えるので、同じデータとしきい値なら同じ配置になる。落ち着いた配置は
- *   ページの中で覚える。
+ *   ページの中で覚える(2 次元の配置と混ざらないよう、別の種類名の鍵にする)。
+ * - 回すたびに辺を全部描き直すと重いので、描く辺は `budgetEdges` で上限まで間引く(配置の計算は
+ *   間引く前の全部の辺で行う)。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -14,14 +16,21 @@ import {
   forceSimulation,
   forceX,
   forceY,
-  type SimulationLinkDatum,
-  type SimulationNodeDatum,
-} from 'd3-force'
+  forceZ,
+  type SimulationLinkDatum3D,
+  type SimulationNodeDatum3D,
+} from 'd3-force-3d'
 import type { EmbeddingGraphResponse } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
-import type { SimilarityEdge } from './edges'
+import { budgetEdges, type SimilarityEdge } from './edges'
 import { getCachedLayout, layoutKey, setCachedLayout } from './layoutCache'
-import { MapCanvas, type MapCanvasHandle, type MapPreviewState } from './MapCanvas'
+import {
+  MapCanvas,
+  type MapAxesState,
+  type MapCanvasHandle,
+  type MapIntroSpinState,
+  type MapPreviewState,
+} from './MapCanvas'
 import type { MapSearchHighlight } from './mapSearchHighlight'
 import { MAP_LAYOUT_SEED, mulberry32 } from './random'
 import { useSelectedIndex } from './useSelectedIndex'
@@ -33,11 +42,14 @@ const NETWORK_TILE_SCALE = 0.55
 /** 1フレームで力学モデルに使う時間(ミリ秒)。 */
 const FRAME_BUDGET_MS = 12
 
-interface SimNode extends SimulationNodeDatum {
+/** 配置の次元(立体)。 */
+const DIMENSIONS = 3
+
+interface SimNode extends SimulationNodeDatum3D {
   index: number
 }
 
-type SimLink = SimulationLinkDatum<SimNode> & { similarity: number }
+type SimLink = SimulationLinkDatum3D<SimNode> & { similarity: number }
 
 interface NetworkViewProps {
   graph: EmbeddingGraphResponse
@@ -49,6 +61,10 @@ interface NetworkViewProps {
   onSelectId: (id: string | null) => void
   /** 選んだ画像を大きく見るパネルの開閉(ブラウザに覚える)。 */
   preview: MapPreviewState
+  /** 開いたときに一度だけ回すか(ブラウザに覚える)。 */
+  introSpin: MapIntroSpinState
+  /** 座標のラインを重ねるか(ブラウザに覚える)。 */
+  axes: MapAxesState
   /** マップ内の意味検索の一致(null なら検索していない)。 */
   search: MapSearchHighlight | null
 }
@@ -61,6 +77,8 @@ export function NetworkView({
   selectedId,
   onSelectId,
   preview,
+  introSpin,
+  axes,
   search,
 }: NetworkViewProps) {
   const { t } = useI18n()
@@ -68,14 +86,21 @@ export function NetworkView({
   const nodes = useMemo(() => graph.nodes ?? [], [graph])
   const neighborIndices = useMemo(() => graph.neighbor_indices ?? [], [graph])
   const key = useMemo(
-    () => layoutKey('network', nodes.map((node) => node.id), `${graph.k}:${threshold.toFixed(2)}`),
+    () => layoutKey('network3d', nodes.map((node) => node.id), `${graph.k}:${threshold.toFixed(2)}`),
     [nodes, graph.k, threshold],
   )
+  // 描く辺(間引いたもの)。配置の計算には間引く前の `edges` を使う。
+  const drawnEdges = useMemo(() => budgetEdges(edges), [edges])
   // 覚えている配置があればそれを使う。無ければ、力学モデルが書き込む配列(effect の中で作る)。
   const cached = getCachedLayout(key)
   const [live, setLive] = useState<{ key: string; positions: Float32Array } | null>(null)
   const [settledKey, setSettledKey] = useState<string | null>(null)
-  const positions = cached && cached.length === nodes.length * 2 ? cached : live?.key === key ? live.positions : null
+  const positions =
+    cached && cached.length === nodes.length * DIMENSIONS
+      ? cached
+      : live?.key === key
+        ? live.positions
+        : null
   const running = !cached && settledKey !== key
   const selected = useSelectedIndex(nodes, selectedId, positions !== null)
   const controllerRef = useRef<MapCanvasHandle | null>(null)
@@ -83,19 +108,20 @@ export function NetworkView({
   useEffect(() => {
     const n = nodes.length
     const known = getCachedLayout(key)
-    if (known && known.length === n * 2) return
-    const buffer = new Float32Array(n * 2)
+    if (known && known.length === n * DIMENSIONS) return
+    const buffer = new Float32Array(n * DIMENSIONS)
     const simNodes: SimNode[] = Array.from({ length: n }, (_, index) => ({ index }))
     const simLinks: SimLink[] = edges.map((e) => ({ source: e.source, target: e.target, similarity: e.similarity }))
     // 点が多いほど、反発を弱めて全体の大きさを抑える。辺の無い画像は反発をさらに弱め、中心へ
-    // 少し強く引く(つながりの無い画像が外周に輪を作って、塊を押し縮めないように)。
+    // 少し強く引く(つながりの無い画像が外周に殻を作って、塊を押し縮めないように)。
     const degree = new Uint32Array(n)
     for (const e of edges) {
       degree[e.source]++
       degree[e.target]++
     }
     const charge = n > 2000 ? -8 : n > 500 ? -15 : -30
-    const simulation = forceSimulation<SimNode>(simNodes)
+    const centering = (d: SimNode) => (degree[d.index] === 0 ? 0.08 : 0.04)
+    const simulation = forceSimulation<SimNode>(simNodes, DIMENSIONS)
       .randomSource(mulberry32(MAP_LAYOUT_SEED))
       .force(
         'link',
@@ -111,14 +137,16 @@ export function NetworkView({
           .theta(0.9)
           .distanceMax(600),
       )
-      .force('x', forceX<SimNode>(0).strength((d) => (degree[d.index] === 0 ? 0.08 : 0.04)))
-      .force('y', forceY<SimNode>(0).strength((d) => (degree[d.index] === 0 ? 0.08 : 0.04)))
+      .force('x', forceX<SimNode>(0).strength(centering))
+      .force('y', forceY<SimNode>(0).strength(centering))
+      .force('z', forceZ<SimNode>(0).strength(centering))
       .stop()
 
     const copy = () => {
       for (let i = 0; i < n; i++) {
-        buffer[i * 2] = simNodes[i].x ?? 0
-        buffer[i * 2 + 1] = simNodes[i].y ?? 0
+        buffer[i * DIMENSIONS] = simNodes[i].x ?? 0
+        buffer[i * DIMENSIONS + 1] = simNodes[i].y ?? 0
+        buffer[i * DIMENSIONS + 2] = simNodes[i].z ?? 0
       }
     }
     copy()
@@ -155,16 +183,19 @@ export function NetworkView({
       positions={positions}
       dataKey={key}
       neighborIndices={neighborIndices}
-      similarityEdges={edges}
+      similarityEdges={drawnEdges}
       lineageEdges={lineageEdges}
-      projection="flat"
+      projection="orbit"
       tileScale={NETWORK_TILE_SCALE}
       selected={selected}
       onSelect={(index) => onSelectId(index === null ? null : (nodes[index]?.id ?? null))}
       preview={preview}
+      introSpin={introSpin}
+      axes={axes}
       search={search}
       controllerRef={controllerRef}
       ariaLabel={fmt(m.networkAriaLabel, { count: nodes.length, edges: edges.length })}
+      hint={m.rotateHint}
       overlay={running ? <span className={styles.status}>{m.networkRunning}</span> : null}
     />
   )

@@ -2,8 +2,9 @@
  * マップ(`/map`)の URL の状態。ビューアへ移って戻ったときに、タブ・絞り込み・ネットワークの設定・
  * 選んだ画像を保つために URL に置く。既定値は URL から省く。
  *
- * - `view=3d`: 3D の地図のタブ(試作)。省くとネットワーク(2026-10-04 から既定)。以前の
- *   `view=map`(2D の地図)は、タブが「ネットワーク」と「3D」の 2 つになったので 3D として読む
+ * - `view=3d`: 地図のタブ(試作)。省くとネットワーク(2026-10-04 から既定)。以前の
+ *   `view=map`(2D の地図)は、タブが「ネットワーク」と「地図」の 2 つになったので、3 次元の
+ *   地図として読む
  * - `group=<id>`: 絞り込み
  * - `tag=<名前>`(繰り返せる): タグの絞り込み。すべてのタグが付いた画像だけ(AND)。サーバーの
  *   `normalize_tag_name` と同じく正規化し、重複と空を除き、最初に現れた順に並べる
@@ -13,7 +14,7 @@
  * - `sel=<Asset ID>`: 選んだ画像(配置にその画像が無ければ選ばない)
  * - `q=<文章>`: マップ内の意味検索の文章(試作)。ブラウザには覚えない
  * - `mc=25`: 一致とみなす件数(上位 N 件。選べる値のどれか)
- * - `dist=rank`: 配置の距離の取り方(3D のみ。既定は `1 - 類似度`)
+ * - `dist=rank`: 配置の距離の取り方(地図のみ。既定は `1 - 類似度`)
  *
  * タブ・上限・近傍の数・しきい値・系列の辺・一致の件数・距離の取り方は、ブラウザにも覚える
  * (`mapPrefs.ts`。2026-10-04)。
@@ -52,7 +53,7 @@ export interface MapUrlState {
   query: string
   /** 一致とみなす件数(上位 N 件)。 */
   matchCount: number
-  /** 配置の距離の取り方(地図と 3D)。 */
+  /** 配置の距離の取り方(地図)。 */
   metric: MapDistanceMetric
 }
 
@@ -101,7 +102,7 @@ export function normalizeTagList(raw: readonly string[]): string[] {
 }
 
 function parseView(raw: string | null, fallback: MapView): MapView {
-  // 2D の地図のタブは外したので、以前の `view=map`(手書きの `umap` も)は 3D として読む。
+  // 2D の地図のタブは外したので、以前の `view=map`(手書きの `umap` も)は 3 次元の地図として読む。
   if (raw === 'map' || raw === 'umap') return 'umap3d'
   if (raw === '3d' || raw === 'umap3d') return 'umap3d'
   if (raw === 'network') return 'network'
@@ -166,9 +167,9 @@ export function buildMapSearchParams(state: MapUrlState): URLSearchParams {
 }
 
 /**
- * その変更が「画面の設定を変えた」操作かどうか(3D の最初の回転を止めて、以後は回し直さない
+ * その変更が「画面の設定を変えた」操作かどうか(開いたときの最初の回転を止めて、以後は回し直さない
  * ための判断)。絞り込み・しきい値・検索・距離の取り方などは設定。選んだ画像は設定ではなく、
- * タブの切り替えも「3D を開き直す」操作なので設定に数えない。
+ * タブの切り替えも「立体を開き直す」操作なので設定に数えない。
  */
 export function isMapSettingsChange(patch: Partial<MapUrlState>): boolean {
   return Object.keys(patch).some((key) => key !== 'selectedId' && key !== 'view')

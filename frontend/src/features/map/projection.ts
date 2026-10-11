@@ -2,7 +2,7 @@
  * マップの「投影」(平面と立体で共通の口。試作)。
  *
  * マップの機能(サムネイル・選択・プレビュー・検索・辺・キー操作)は `MapCanvas.tsx` の 1 か所に
- * まとめ、「ネットワーク(平面)」と「3D(立体)」の違いはこのモジュールの実装の差だけにする。
+ * まとめ、「ネットワーク」と「地図」の違い(今はどちらも立体)はこのモジュールの実装の差だけにする。
  * 中身の計算は作り直さず、既にある純関数(平面は `viewport.ts` / `nodeSize.ts` / `hitTest.ts`、
  * 立体は `camera3d.ts`)を薄くくるんでいる。
  *
@@ -186,7 +186,7 @@ export interface MapProjection {
   stopIntroSpin(): void
 }
 
-// ---- 平面(ネットワーク・2D の地図) ----
+// ---- 平面(2D の地図。今はどのタブも使っていないが、戻せるように残す) ----
 
 /** 平面の見せ方。パンとズームだけで、奥行きも動きも持たない。 */
 class FlatProjection implements MapProjection {
@@ -294,7 +294,7 @@ class FlatProjection implements MapProjection {
   stopIntroSpin(): void {}
 }
 
-// ---- 立体(3D の地図) ----
+// ---- 立体(ネットワークと地図) ----
 
 /** 最初の向き(少し上から、斜めに見る)。 */
 const INITIAL_AZIMUTH = 0.6

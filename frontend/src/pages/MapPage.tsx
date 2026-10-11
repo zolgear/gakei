@@ -2,11 +2,12 @@
  * `/map` マップ(ADR-0033 8章)。埋め込みの近さで画像を並べる。既定のタブはネットワーク
  * (2026-10-04 から)。
  *
- * - ネットワーク: 類似度がしきい値以上の組を辺にした力学モデル(`NetworkView`)。系列の辺も重ねられる。
- * - 3D: umap-js の 3 次元の配置を、回る立体として見る(`Umap3DView`。試作)。
+ * - ネットワーク: 類似度がしきい値以上の組を辺にした、3 次元の力学モデル(`NetworkView`)。系列の
+ *   辺も重ねられる。
+ * - 地図: umap-js の 3 次元の配置を、回る立体として見る(`Umap3DView`。試作)。
  *
- * タブはこの 2 つ。2D の地図(`UmapView`)はあとで戻せるように残してあるが、今は出していない
- * (以前の `view=map` と覚えた値は 3D として読む)。
+ * タブはこの 2 つで、どちらも回る立体。2D の地図(`UmapView`)はあとで戻せるように残してあるが、
+ * 今は出していない(以前の `view=map` と覚えた値は 3 次元の地図として読む)。
  *
  * 元データは `GET /api/embeddings/graph`。グループ・タグ(複数なら AND)・上限・近傍の数で絞り込める。タブ、
  * 絞り込み、ネットワークのしきい値と系列の辺の表示、選んだ画像は URL に置く(ビューアから戻った
@@ -19,7 +20,7 @@
  * `GET /api/embeddings/graph/scores` を呼び、Asset ID で突き合わせて「上位 N 件」を一致とする
  * (類似度の帯が狭いので絶対値のしきい値は使わない。`mapSearchHighlight.ts`)。検索の文章は URL
  * だけに置き、一致の件数と距離の取り方はブラウザにも覚える。配置の距離の取り方(試作)は、
- * 効く 3D のタブでだけ選べる。
+ * 効く地図のタブでだけ選べる。
  */
 import { useId, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -97,7 +98,7 @@ function MapBody() {
   const urlState = parseMapUrlState(searchParams, storedPrefs)
   const state: MapUrlState = pending && pending.base === urlKey ? { ...urlState, ...pending.patch } : urlState
   const [filtersOpen, setFiltersOpen] = useState(false)
-  /** 画面の設定を変えた回数(3D の最初の回転を止めるのに使う)。 */
+  /** 画面の設定を変えた回数(開いたときの最初の回転を止めるのに使う)。 */
   const [settingsVersion, setSettingsVersion] = useState(0)
   const threshold = state.threshold
   const debouncedThreshold = useDebouncedValue(threshold, THRESHOLD_DEBOUNCE_MS)
@@ -124,7 +125,8 @@ function MapBody() {
   const preview = { open: previewOpen, onOpenChange: setPreviewOpen }
 
   /**
-   * 3D を開いたときに一度だけ回すか。URL には置かず、覚えた値だけを見る(既定は回す)。
+   * 開いたときに一度だけ回すか(どちらのタブも立体)。URL には置かず、覚えた値だけを見る
+   * (既定は回す)。
    * 設定を変えたら回転を止め、以後は回し直さない(タブを切り替えて戻ってきても回さない)。
    */
   const introSpin = {
@@ -218,7 +220,7 @@ function MapBody() {
               data-active={state.view === view}
               onClick={() => update({ view })}
             >
-              {view === 'umap3d' ? m.tab3d : m.tabNetwork}
+              {view === 'umap3d' ? m.tabMap : m.tabNetwork}
             </button>
           ))}
         </div>
@@ -405,6 +407,8 @@ function MapBody() {
             selectedId={state.selectedId}
             onSelectId={selectId}
             preview={preview}
+            introSpin={introSpin}
+            axes={axes}
             search={searchHighlight}
           />
         )}
