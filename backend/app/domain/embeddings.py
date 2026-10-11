@@ -77,6 +77,23 @@ def enqueue_on_ingest(db: Session, asset: Asset, settings: Settings) -> bool:
     return request_embedding(db, asset, model_key)
 
 
+def enqueue_on_restore(db: Session, asset: Asset, settings: Settings) -> bool:
+    """復元時の自動実行(ADR-0046 4章)。条件は取り込み時(`enqueue_on_ingest`)と同じで、
+    使うモデルのベクトルが無い(行が無い、または失敗)ときだけ待ち行列に入れる。
+    計算済み・待ち行列にあるなら何もしない。知覚ハッシュは worker が埋め込みと一緒に作る。"""
+    if not is_target(asset):
+        return False
+    config = embedding_settings.load(db)
+    if not config.auto_on_ingest or not embedding_settings.usable(config, settings):
+        return False
+    model_key = embedding_settings.active_model_key(config, settings)
+    assert model_key is not None
+    row = db.get(AssetEmbedding, (asset.id, model_key))
+    if row is not None and row.status != STATUS_FAILED:
+        return False
+    return request_embedding(db, asset, model_key)
+
+
 def _pending_condition(model_key: str) -> Any:
     """使うモデルのベクトルが無い(行が無い、または失敗した)・削除済みでない・マスク以外。
     待ち行列にあるもの(queued / running)は含めない。"""
