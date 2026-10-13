@@ -13,7 +13,7 @@ import { fmt, useI18n } from '../../i18n'
 import { clampTextareaHeight } from '../prompt-sets/textareaSizing'
 import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData, isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { isSubmitShortcut } from '../workspace/submitShortcut'
-import { ASSISTANT_ATTACHMENTS_MAX, ASSISTANT_TEXT_MAX, addAttachments } from './assistantForm'
+import { ASSISTANT_ATTACHMENTS_MAX, ASSISTANT_TEXT_MAX, type AttachmentPlan } from './assistantForm'
 import { AttachDialog } from './AttachDialog'
 import styles from './AssistantPanel.module.css'
 
@@ -23,15 +23,26 @@ const MAX_HEIGHT_VH = 30
 interface ComposerProps {
   sending: boolean
   disabled?: boolean
+  /** 添付(パネルが持つ。`show_assets` のカードからも足すため)。 */
+  attachments: string[]
+  onAttachmentsChange: (next: string[]) => void
+  onAttach: (assetIds: string[]) => AttachmentPlan
   onSend: (text: string, attachments: string[]) => Promise<boolean>
   onStop: () => void
 }
 
-export function Composer({ sending, disabled = false, onSend, onStop }: ComposerProps) {
+export function Composer({
+  sending,
+  disabled = false,
+  attachments,
+  onAttachmentsChange,
+  onAttach,
+  onSend,
+  onStop,
+}: ComposerProps) {
   const { t } = useI18n()
   const c = t.assistant.composer
   const [text, setText] = useState('')
-  const [attachments, setAttachments] = useState<string[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -57,16 +68,13 @@ export function Composer({ sending, disabled = false, onSend, onStop }: Composer
     setSubmitting(false)
     if (accepted) {
       setText('')
-      setAttachments([])
+      onAttachmentsChange([])
     }
   }
 
   function attach(ids: string[]) {
-    const next = addAttachments(attachments, ids)
-    if (next.length - attachments.length < ids.filter((id) => !attachments.includes(id)).length) {
-      setNotice(fmt(c.attachLimit, { max: ASSISTANT_ATTACHMENTS_MAX }))
-    }
-    setAttachments(next)
+    const plan = onAttach(ids)
+    if (plan.overflow > 0) setNotice(fmt(c.attachLimit, { max: ASSISTANT_ATTACHMENTS_MAX }))
   }
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
@@ -107,7 +115,7 @@ export function Composer({ sending, disabled = false, onSend, onStop }: Composer
                 className={styles.removeAttachment}
                 aria-label={c.removeAttachment}
                 title={c.removeAttachment}
-                onClick={() => setAttachments((prev) => prev.filter((a) => a !== id))}
+                onClick={() => onAttachmentsChange(attachments.filter((a) => a !== id))}
               >
                 ×
               </button>

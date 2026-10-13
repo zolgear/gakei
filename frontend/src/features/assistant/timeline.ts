@@ -3,8 +3,9 @@
  *
  * - 利用者の発言は吹き出し、アシスタントの本文は本文の段。
  * - 道具の結果はカードの種類を決める: `propose_prompt` はプロンプトのカード、プロンプトセットの
- *   書き込みは結果のカード(元に戻す)、`generate_image` は Run のカード。それ以外と失敗は、
- *   折りたたみの小さな行。
+ *   書き込みは結果のカード(元に戻す)、`generate_image` は Run のカード、`show_assets` は
+ *   画像の格子のカード(10章)。それ以外(`search_assets` などの捜索も)と失敗は、折りたたみの
+ *   小さな行。
  * - 道具の呼び出しの引数は、結果のメッセージには無いので、前のアシスタントのメッセージの
  *   `tool_calls` から引く。
  */
@@ -19,7 +20,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   'update_prompt_set_item',
 ])
 
-export type ToolCardKind = 'prompt' | 'write' | 'runs' | 'row'
+export type ToolCardKind = 'prompt' | 'write' | 'runs' | 'assets' | 'row'
 
 export function toolCardKind(message: AssistantMessageResponse): ToolCardKind {
   if (message.ok !== true) return 'row'
@@ -27,7 +28,47 @@ export function toolCardKind(message: AssistantMessageResponse): ToolCardKind {
   if (name === 'propose_prompt' && typeof message.result?.prompt === 'string') return 'prompt'
   if (WRITE_TOOLS.has(name)) return 'write'
   if (name === 'generate_image' && (message.run_ids ?? []).length > 0) return 'runs'
+  if (name === 'show_assets' && readShownAssets(message).assets.length > 0) return 'assets'
   return 'row'
+}
+
+// -- 見つけた画像(`show_assets`。ADR-0048 10章) -------------------------------------
+
+export interface ShownAsset {
+  assetId: string
+  title: string
+  width: number | null
+  height: number | null
+  focalPoint: { x: number; y: number } | null
+}
+
+export interface ShownAssets {
+  title: string
+  assets: ShownAsset[]
+}
+
+function readFocalPoint(value: unknown): ShownAsset['focalPoint'] {
+  const record = asRecord(value)
+  if (!record || typeof record.x !== 'number' || typeof record.y !== 'number') return null
+  return { x: record.x, y: record.y }
+}
+
+/** `show_assets` の結果を、カードに出す形にする。形の崩れた項目は落とす。 */
+export function readShownAssets(message: AssistantMessageResponse): ShownAssets {
+  const result = asRecord(message.result) ?? {}
+  const raw = Array.isArray(result.assets) ? result.assets : []
+  const assets: ShownAsset[] = []
+  for (const entry of raw.map(asRecord)) {
+    if (!entry || typeof entry.asset_id !== 'string') continue
+    assets.push({
+      assetId: entry.asset_id,
+      title: asText(entry.title),
+      width: typeof entry.width === 'number' ? entry.width : null,
+      height: typeof entry.height === 'number' ? entry.height : null,
+      focalPoint: readFocalPoint(entry.focal_point),
+    })
+  }
+  return { title: asText(result.title), assets }
 }
 
 export type TimelineItem =

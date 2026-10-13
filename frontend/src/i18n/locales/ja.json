@@ -2848,6 +2848,24 @@
       "showOutput": "結果エリアに表示",
       "loadFailed": "Run の状態を取得できませんでした"
     },
+    "assetsCard": {
+      "heading": {
+        "one": "見つけた画像 {count} 枚",
+        "other": "見つけた画像 {count} 枚"
+      },
+      "show": "結果エリアに表示",
+      "attachAll": "すべて添付",
+      "dragHint": "ドラッグで生成フォームの入力に使えます",
+      "attached": {
+        "one": "{count} 枚を添付しました。",
+        "other": "{count} 枚を添付しました。"
+      },
+      "overflow": {
+        "one": "添付は {max} 枚までのため、{count} 枚は入りませんでした。",
+        "other": "添付は {max} 枚までのため、{count} 枚は入りませんでした。"
+      },
+      "alreadyAttached": "すべて添付済みです。"
+    },
     "toolRow": {
       "running": "実行中…",
       "failed": "失敗",
@@ -2866,7 +2884,13 @@
       "add_prompt_set_items": "プロンプトセットに項目を追加",
       "update_prompt_set_item": "プロンプトセットの項目を変更",
       "generate_image": "生成",
-      "cancel_run": "Run を取り消す"
+      "cancel_run": "Run を取り消す",
+      "search_assets": "ストックを探す",
+      "find_similar_assets": "似た画像を探す",
+      "get_asset": "画像の情報を読む",
+      "list_groups": "グループを読む",
+      "list_tags": "タグを読む",
+      "show_assets": "画像を示す"
     }
   }
 }

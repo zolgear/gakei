@@ -498,11 +498,14 @@ def tag_name_matches(pattern: str) -> Any:
     )
 
 
-def list_tags(db: Session, user: CurrentUser, q: str | None, limit: int) -> list[tuple[str, int]]:
+def list_tags(
+    db: Session, user: CurrentUser, q: str | None, limit: int, *, prefix: bool = False
+) -> list[tuple[str, int]]:
     """タグ名と件数(removed と削除済み Asset を除く)。件数の多い順、同数は名前順。
 
     `user` に見える Asset だけで数える(ADR-0025。他人の Asset にしか付いていないタグ名は
-    出さない)。`q` は正規化してから部分一致で絞る(オートコンプリート用)。
+    出さない)。`q` は正規化してから部分一致で絞る(オートコンプリート用)。`prefix` なら
+    前方一致で絞る(アシスタントの `list_tags`。ADR-0048 10章)。
     """
     count = func.count(AssetTag.asset_id)
     query = (
@@ -519,5 +522,6 @@ def list_tags(db: Session, user: CurrentUser, q: str | None, limit: int) -> list
         needle = normalize_tag_name_or_none(q)
         if needle is None:
             return []
-        query = query.where(Tag.name.like(f"%{_escape_like(needle)}%", escape=_LIKE_ESCAPE_CHAR))
+        pattern = f"{_escape_like(needle)}%" if prefix else f"%{_escape_like(needle)}%"
+        query = query.where(Tag.name.like(pattern, escape=_LIKE_ESCAPE_CHAR))
     return [(name, n) for name, n in db.execute(query).all()]

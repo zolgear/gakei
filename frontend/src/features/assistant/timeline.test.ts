@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTimeline, describeWrite, toolCardKind } from './timeline'
+import { buildTimeline, describeWrite, readShownAssets, toolCardKind } from './timeline'
 import { makeMessage } from './testFixtures'
 
 describe('toolCardKind', () => {
@@ -12,6 +12,25 @@ describe('toolCardKind', () => {
       toolCardKind(makeMessage({ role: 'tool', tool_name: 'generate_image', ok: true, run_ids: ['r1'], result: {} })),
     ).toBe('runs')
     expect(toolCardKind(makeMessage({ role: 'tool', tool_name: 'get_run', ok: true, result: {} }))).toBe('row')
+    expect(
+      toolCardKind(
+        makeMessage({ role: 'tool', tool_name: 'show_assets', ok: true, result: { assets: [{ asset_id: 'a1' }] } }),
+      ),
+    ).toBe('assets')
+  })
+
+  it('捜索の道具は行のまま。画像の無い・失敗した show_assets も行', () => {
+    for (const name of ['search_assets', 'find_similar_assets', 'get_asset', 'list_groups', 'list_tags']) {
+      expect(
+        toolCardKind(makeMessage({ role: 'tool', tool_name: name, ok: true, result: { items: [{ asset_id: 'a1' }] } })),
+      ).toBe('row')
+    }
+    expect(toolCardKind(makeMessage({ role: 'tool', tool_name: 'show_assets', ok: true, result: { assets: [] } }))).toBe(
+      'row',
+    )
+    expect(
+      toolCardKind(makeMessage({ role: 'tool', tool_name: 'show_assets', ok: false, result: { error: 'not found' } })),
+    ).toBe('row')
   })
 
   it('失敗した呼び出しは、どの道具でも行にする', () => {
@@ -126,5 +145,31 @@ describe('describeWrite', () => {
 
   it('書き込みの道具でなければ null', () => {
     expect(describeWrite(makeMessage({ role: 'tool', tool_name: 'get_run', ok: true }))).toBeNull()
+  })
+})
+
+describe('readShownAssets', () => {
+  it('結果の画像を並びどおりに読み、形の崩れた項目は落とす', () => {
+    const message = makeMessage({
+      role: 'tool',
+      tool_name: 'show_assets',
+      ok: true,
+      result: {
+        shown: true,
+        title: '夕方の海',
+        assets: [
+          { asset_id: 'a2', title: 'sea', width: 1024, height: 768, focal_point: { x: 0.5, y: 0.2 } },
+          { title: 'no id' },
+          { asset_id: 'a1', title: null, width: null, height: null, focal_point: null },
+        ],
+      },
+    })
+    expect(readShownAssets(message)).toEqual({
+      title: '夕方の海',
+      assets: [
+        { assetId: 'a2', title: 'sea', width: 1024, height: 768, focalPoint: { x: 0.5, y: 0.2 } },
+        { assetId: 'a1', title: '', width: null, height: null, focalPoint: null },
+      ],
+    })
   })
 })

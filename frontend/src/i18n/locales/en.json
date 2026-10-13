@@ -2848,6 +2848,24 @@
       "showOutput": "Show in the results area",
       "loadFailed": "Could not load the run status"
     },
+    "assetsCard": {
+      "heading": {
+        "one": "{count} image found",
+        "other": "{count} images found"
+      },
+      "show": "Show in the results area",
+      "attachAll": "Attach all",
+      "dragHint": "Drag onto the generation form to use as input",
+      "attached": {
+        "one": "Attached {count} image.",
+        "other": "Attached {count} images."
+      },
+      "overflow": {
+        "one": "{count} image did not fit (up to {max} attachments).",
+        "other": "{count} images did not fit (up to {max} attachments)."
+      },
+      "alreadyAttached": "All of them are already attached."
+    },
     "toolRow": {
       "running": "Running…",
       "failed": "Failed",
@@ -2866,7 +2884,13 @@
       "add_prompt_set_items": "Add prompt set items",
       "update_prompt_set_item": "Change a prompt set item",
       "generate_image": "Generate",
-      "cancel_run": "Cancel a run"
+      "cancel_run": "Cancel a run",
+      "search_assets": "Search the stock",
+      "find_similar_assets": "Find similar images",
+      "get_asset": "Read image details",
+      "list_groups": "Read groups",
+      "list_tags": "Read tags",
+      "show_assets": "Show images"
     }
   }
 }

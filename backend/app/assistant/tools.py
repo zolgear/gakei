@@ -8,6 +8,9 @@
 - プロンプトセットの書き込み: `create_prompt_set`、`rename_prompt_set`、`add_prompt_set_items`、
   `update_prompt_set_item`。書き込むたびに変更前の値を結果(`before`)に残し、「元に戻す」に
   要る値を `undo` に入れる(4章)。
+- ストックの捜索: `search_assets`、`find_similar_assets`、`get_asset`、`list_groups`、
+  `list_tags`、`show_assets`(10章)。読み取りだけ。中身は MCP の同名のツールと同じ
+  `domain/asset_search.py` を呼ぶ。結果に画像の中身は入れない。
 - 生成: `generate_image`、`cancel_run`。Run は `run.origin = 'assistant'`、実行者は会話の
   利用者。1回の発言で作れる Run の数と、1時間あたりの Run の数を超えたら、Run を作らずに
   道具のエラーを返す(9章)。
@@ -36,7 +39,10 @@ from app.annotation.engines import image_to_jpeg
 from app.api.capabilities import get_capabilities_endpoint
 from app.assistant.engine import LlmImage, ToolCall, ToolSpec
 from app.auth.identity import CurrentUser
+from app.domain import annotations as annotations_domain
+from app.domain import asset_search as asset_search_domain
 from app.domain import assistant_settings, derivatives
+from app.domain import focal_points as focal_points_domain
 from app.domain import prompt_sets as prompt_sets_domain
 from app.domain import run_create as run_create_domain
 from app.domain.assistant_settings import AssistantConfig
@@ -61,6 +67,12 @@ _POLL_INTERVAL_SECONDS = 0.25
 VIEW_ASSETS_MAX = 4
 # LLM に送る画像の長辺(派生のプレビューを縮める。6章)。
 IMAGE_MAX_SIDE = 1024
+# `search_assets` / `find_similar_assets` の件数の上限(MCP と同じ。10章)。
+SEARCH_LIMIT_MAX = asset_search_domain.SEARCH_LIMIT_MAX
+# `show_assets` で1枚のカードに並べる枚数の上限。
+SHOW_ASSETS_MAX = 24
+# `list_tags` の件数の上限。
+LIST_TAGS_LIMIT_MAX = 200
 # 1回の書き込みで足せる項目の上限。
 ITEMS_MAX = 100
 # `list_prompt_sets` で1項目の本文を返す上限(長い本文で履歴が埋まらないように)。
@@ -154,6 +166,65 @@ class ViewAssetsArgs(_Args):
         min_length=1,
         max_length=VIEW_ASSETS_MAX,
         description=f"Asset ids to look at (up to {VIEW_ASSETS_MAX}).",
+    )
+
+
+class SearchAssetsArgs(_Args):
+    query: str | None = Field(
+        default=None,
+        max_length=1000,
+        description=(
+            "keyword mode: words to match in the generating prompt, titles and tags "
+            "(space-separated, AND); omit to list the newest images. semantic mode: a "
+            "natural-language description of the image (required)."
+        ),
+    )
+    mode: Literal["keyword", "semantic"] = Field(
+        default="keyword",
+        description=(
+            "keyword: text match, newest first. semantic: image embeddings, most similar "
+            "first (each result has a score). semantic fails when embeddings are turned off; "
+            "then use keyword."
+        ),
+    )
+    kind: Literal["upload", "generated", "mask", "sketch"] | None = Field(
+        default=None, description="Only images of this kind."
+    )
+    group_id: uuid.UUID | None = Field(
+        default=None, description="Only images in this group (see list_groups)."
+    )
+    tag: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Only images with this tag (exact tag name, see list_tags).",
+    )
+    limit: int = Field(default=20, ge=1, le=SEARCH_LIMIT_MAX)
+
+
+class FindSimilarAssetsArgs(_Args):
+    asset_id: uuid.UUID = Field(description="The image to compare with.")
+    limit: int = Field(default=12, ge=1, le=SEARCH_LIMIT_MAX)
+
+
+class GetAssetArgs(_Args):
+    asset_id: uuid.UUID
+
+
+class ListTagsArgs(_Args):
+    prefix: str | None = Field(
+        default=None, max_length=200, description="Only tags starting with this text."
+    )
+    limit: int = Field(default=50, ge=1, le=LIST_TAGS_LIMIT_MAX)
+
+
+class ShowAssetsArgs(_Args):
+    asset_ids: list[uuid.UUID] = Field(
+        min_length=1,
+        max_length=SHOW_ASSETS_MAX,
+        description=f"Images to show, in this order (up to {SHOW_ASSETS_MAX}).",
+    )
+    title: str | None = Field(
+        default=None, max_length=100, description="Short title for the card (optional)."
     )
 
 
@@ -458,6 +529,123 @@ async def view_assets(ctx: ToolContext, args: ViewAssetsArgs) -> ToolOutcome:
         },
         images=images,
     )
+
+
+# -- ストックの捜索(10章) ----------------------------------------------------------
+
+
+def _asset_brief(asset: Asset) -> dict[str, Any]:
+    """結果の1件の土台。URL は入れない(画面はサムネイルを Asset ID から引く)。"""
+    return {
+        "asset_id": str(asset.id),
+        "kind": str(asset.kind),
+        "width": asset.width,
+        "height": asset.height,
+        "created_at": _iso(asset.created_at),
+    }
+
+
+def _search_call[T](fn: Callable[[], T]) -> T:
+    try:
+        return fn()
+    except asset_search_domain.AssetSearchError as e:
+        raise ToolFailure(str(e)) from e
+
+
+async def search_assets(ctx: ToolContext, args: SearchAssetsArgs) -> ToolOutcome:
+    def _search() -> dict[str, Any]:
+        with ctx.session() as db:
+            payload, _assets = _search_call(
+                lambda: asset_search_domain.search_assets(
+                    db,
+                    ctx.state,
+                    ctx.user,
+                    _asset_brief,
+                    query=args.query,
+                    mode=args.mode,
+                    kind=args.kind,
+                    group_id=args.group_id,
+                    tag=args.tag,
+                    limit=args.limit,
+                )
+            )
+        return payload
+
+    return ToolOutcome(ok=True, result=await _in_thread(_search))
+
+
+async def find_similar_assets(ctx: ToolContext, args: FindSimilarAssetsArgs) -> ToolOutcome:
+    def _find() -> dict[str, Any]:
+        with ctx.session() as db:
+            payload, _assets = _search_call(
+                lambda: asset_search_domain.find_similar_assets(
+                    db, ctx.state, ctx.user, _asset_brief, asset_id=args.asset_id, limit=args.limit
+                )
+            )
+        return payload
+
+    return ToolOutcome(ok=True, result=await _in_thread(_find))
+
+
+async def get_asset(ctx: ToolContext, args: GetAssetArgs) -> ToolOutcome:
+    def _get() -> dict[str, Any]:
+        with ctx.session() as db:
+            asset = get_visible_asset(db, ctx.user, args.asset_id)
+            if asset is None or asset.deleted_at is not None:
+                raise ToolFailure(f"Asset {args.asset_id} not found.")
+            payload = _asset_brief(asset)
+            payload.update(asset_search_domain.asset_details(db, ctx.user, asset))
+        return payload
+
+    return ToolOutcome(ok=True, result=await _in_thread(_get))
+
+
+async def list_groups(ctx: ToolContext, _args: NoArgs) -> ToolOutcome:
+    def _list() -> dict[str, Any]:
+        with ctx.session() as db:
+            return asset_search_domain.groups_payload(db, ctx.user)
+
+    return ToolOutcome(ok=True, result=await _in_thread(_list))
+
+
+async def list_tags(ctx: ToolContext, args: ListTagsArgs) -> ToolOutcome:
+    def _list() -> dict[str, Any]:
+        with ctx.session() as db:
+            rows = annotations_domain.list_tags(db, ctx.user, args.prefix, args.limit, prefix=True)
+        return {"items": [{"name": name, "count": count} for name, count in rows]}
+
+    return ToolOutcome(ok=True, result=await _in_thread(_list))
+
+
+async def show_assets(ctx: ToolContext, args: ShowAssetsArgs) -> ToolOutcome:
+    """見つけた画像をカードで示す(書き込みはしない)。結果の `assets` を画面がサムネイルの
+    格子にする(サムネイルは Asset ID から `GET /api/assets/{id}/content?variant=thumb` で
+    引く)。並びは指定どおりで、重複は1つにまとめる。見えない・削除済みの画像は道具のエラー。"""
+
+    def _show() -> dict[str, Any]:
+        ids = list(dict.fromkeys(args.asset_ids))
+        with ctx.session() as db:
+            found: dict[uuid.UUID, Asset] = {}
+            for asset_id in ids:
+                asset = get_visible_asset(db, ctx.user, asset_id)
+                if asset is not None and asset.deleted_at is None:
+                    found[asset_id] = asset
+            missing = [str(i) for i in ids if i not in found]
+            if missing:
+                raise ToolFailure("Assets not found: " + ", ".join(missing))
+            titles = annotations_domain.bulk_titles(db, ids)
+            focal = focal_points_domain.bulk_get(db, ids)
+            assets = []
+            for asset_id in ids:
+                entry = _asset_brief(found[asset_id])
+                entry["title"] = titles.get(asset_id)
+                # サムネイルの焦点(ADR-0043)。画面が `object-position` に使う。
+                point = focal.get(asset_id)
+                entry["focal_point"] = point.model_dump(mode="json") if point else None
+                assets.append(entry)
+        return {"shown": True, "title": args.title, "assets": assets}
+
+    return ToolOutcome(ok=True, result=await _in_thread(_show))
 
 
 # -- プロンプトセットの書き込み ----------------------------------------------------------
@@ -860,6 +1048,49 @@ TOOLS: tuple[ToolDefinition, ...] = (
         "to you after the tool result.",
         ViewAssetsArgs,
         view_assets,
+    ),
+    ToolDefinition(
+        "search_assets",
+        "Search the user's stock of images. keyword mode matches prompts, titles and tags "
+        "(newest first; omit query to list the newest). semantic mode finds images by a "
+        "natural-language description using image embeddings. Filter by kind, group and tag. "
+        "Results are text only (ids, titles, tags, scores); use view_assets to look at "
+        "candidates and show_assets to present the ones you picked.",
+        SearchAssetsArgs,
+        search_assets,
+    ),
+    ToolDefinition(
+        "find_similar_assets",
+        "List images that look similar to the given image, most similar first (image "
+        "embeddings). Fails when embeddings are turned off.",
+        FindSimilarAssetsArgs,
+        find_similar_assets,
+    ),
+    ToolDefinition(
+        "get_asset",
+        "Get one image's details: kind, size, title, tags, group, the run that made it "
+        "(prompt, model, parameters) and its primary parent image.",
+        GetAssetArgs,
+        get_asset,
+    ),
+    ToolDefinition(
+        "list_groups",
+        "List the groups that organize the stock (with member counts).",
+        NoArgs,
+        list_groups,
+    ),
+    ToolDefinition(
+        "list_tags",
+        "List tags on the user's images with counts, most used first. Filter by prefix.",
+        ListTagsArgs,
+        list_tags,
+    ),
+    ToolDefinition(
+        "show_assets",
+        "Show images to the user as a card with a thumbnail grid. The user can open them, "
+        "drag them into the form or attach them to the next message. Changes nothing.",
+        ShowAssetsArgs,
+        show_assets,
     ),
     ToolDefinition(
         "create_prompt_set",

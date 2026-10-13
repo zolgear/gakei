@@ -33,12 +33,35 @@ export function assistantFormState(form: RunFormState): AssistantFormState {
   }
 }
 
+/** 添付を足した結果。`already` は添付済みで足さなかった数、`overflow` は上限で入らなかった数。 */
+export interface AttachmentPlan {
+  next: string[]
+  added: number
+  already: number
+  overflow: number
+}
+
+/** 添付を足す計画(重複は足さず、上限で止める。ADR-0048 6章・10章)。 */
+export function planAttachments(current: readonly string[], add: readonly string[]): AttachmentPlan {
+  const next = [...current]
+  let added = 0
+  let already = 0
+  let overflow = 0
+  for (const id of add) {
+    if (next.includes(id)) {
+      // 同じ画像を2度渡されたときも、添付済みとして数える。
+      already += 1
+    } else if (next.length >= ASSISTANT_ATTACHMENTS_MAX) {
+      overflow += 1
+    } else {
+      next.push(id)
+      added += 1
+    }
+  }
+  return { next, added, already, overflow }
+}
+
 /** 添付を足す(重複は足さず、上限で止める)。 */
 export function addAttachments(current: readonly string[], add: readonly string[]): string[] {
-  const next = [...current]
-  for (const id of add) {
-    if (next.length >= ASSISTANT_ATTACHMENTS_MAX) break
-    if (!next.includes(id)) next.push(id)
-  }
-  return next
+  return planAttachments(current, add).next
 }
