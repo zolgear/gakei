@@ -331,6 +331,41 @@ def resolve(connection: ConnectionConfig, settings: Settings) -> ResolvedConnect
     )
 
 
+@dataclass(frozen=True)
+class LlmTarget:
+    """LLM の1用途の送り先(接続先の実際のキーと Base URL、API 形式、モデル名)。自動タイトル・
+    タグ(ADR-0024)と生成のアシスタント(ADR-0048)が使う。
+
+    キーが無ければ `api_key=None`(組み込みの接続先で OpenAI のキーが未設定のとき)。
+    """
+
+    connection_id: str
+    model: str
+    api_key: str | None
+    base_url: str | None
+    api_style: ApiStyle = "responses"
+
+
+def resolve_target(
+    connections: tuple[ConnectionConfig, ...],
+    connection_id: str,
+    model: str,
+    settings: Settings,
+) -> LlmTarget:
+    """接続先の id とモデル名から送り先を決める。接続先が無ければ ConnectionNotFoundError。"""
+    connection = find_connection(connections, connection_id)
+    if connection is None:
+        raise ConnectionNotFoundError(connection_id)
+    resolved = resolve(connection, settings)
+    return LlmTarget(
+        connection_id=connection.id,
+        model=model,
+        api_key=resolved.api_key,
+        base_url=resolved.base_url,
+        api_style=resolved.api_style,
+    )
+
+
 def display_base_url(connection: ConnectionConfig, settings: Settings) -> str | None:
     """画面に出す Base URL(組み込みは OpenAI の設定の値。未設定なら None = OpenAI 本体)。"""
     if connection.builtin:

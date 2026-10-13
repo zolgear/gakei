@@ -346,7 +346,8 @@
       "featureSeparator": "、",
       "features": {
         "annotation": "自動タイトル・タグ",
-        "embedding": "埋め込み"
+        "embedding": "埋め込み",
+        "assistant": "アシスタント"
       }
     },
     "share": {
@@ -388,6 +389,12 @@
         "verified_email_not_admin": "テストログインをしたメールアドレスが、管理者のメールに含まれていません。",
         "self_not_admin": "操作しているあなたのメールアドレスを管理者のメールから外すことはできません。"
       }
+    },
+    "assistant": {
+      "invalidBool": "{name} は true か false である必要があります",
+      "unknownConnection": "指定した接続先がありません",
+      "invalidModel": "モデル名は1〜{max}文字で指定してください",
+      "invalidLimit": "{name} は{min}〜{max}の整数である必要があります"
     }
   },
   "runValidation": {
@@ -939,5 +946,22 @@
       "importFailed": "取り込みに失敗しました。もう一度登録してください",
       "noRows": "取り込める行がありませんでした"
     }
+  },
+  "assistant": {
+    "conversationNotFound": "会話が見つかりません",
+    "messageNotFound": "メッセージが見つかりません",
+    "disabled": "アシスタントは無効です(管理者設定で有効にできます)",
+    "connectionMissing": "アシスタントの接続先がありません。管理者設定で接続先を選んでください",
+    "apiKeyMissing": "アシスタントの接続先の API キーが設定されていません",
+    "hourlyLimitReached": "アシスタントの1時間あたりのリクエストの上限({limit}回)に達しました。しばらくしてからお試しください",
+    "attachmentNotFound": "添付した画像が見つかりません",
+    "busy": "この会話は応答の途中です。終わるか止めてから送ってください",
+    "llmError": "LLM の呼び出しに失敗しました: {error}",
+    "toolLimitReached": "1回の発言で道具を呼べる上限({limit}回)に達したので止めました",
+    "runsPerMessageLimit": "1回の発言で作れる Run の上限({limit}件)を超えるため、Run を作りませんでした(この発言で作った数: {used}件)",
+    "hourlyRunLimit": "アシスタントが1時間に作れる Run の上限({limit}件)を超えるため、Run を作りませんでした(直近1時間: {used}件)",
+    "undoConflict": "その後に対象が変わったか削除されたため、元に戻せません",
+    "undoNotAvailable": "このメッセージは元に戻せる書き込みではありません",
+    "undoAlreadyDone": "既に元に戻しています"
   }
 }

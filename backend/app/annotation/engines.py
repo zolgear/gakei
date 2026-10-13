@@ -39,6 +39,7 @@ from PIL import Image
 from app.annotation.wd_tagger import InsufficientMemoryError, WdTagger
 from app.domain.annotation_settings import AnnotationConfig, Target
 from app.i18n import t
+from app.llm.clients import LlmClientCache
 
 logger = logging.getLogger(__name__)
 
@@ -362,56 +363,28 @@ def _safe_api_message(e: openai.APIError) -> str:
 
 
 class OpenAIEngines:
-    # 接続先ごとのクライアントを持つ上限(設定を何度も変えたときに増え続けないように)。
-    _CLIENTS_MAX = 8
+    # 接続先ごとのクライアントを持つ上限(`LlmClientCache` と同じ)。
+    _CLIENTS_MAX = LlmClientCache.CLIENTS_MAX
 
     def __init__(self, tagger: WdTagger) -> None:
         self.tagger = tagger
         # (キー, Base URL) ごとのクライアント。LLM と VLM で接続先が異なりうる(ADR-0024 8章)。
-        # 使った順に並べ(最後が最新)、上限を超えたら最も古いものから捨てる。
-        self._clients: dict[tuple[str, str | None], AsyncOpenAI] = {}
-        # 捨てたクライアントを閉じるタスク(終わるまで参照を持っておく)。
-        self._closing: set[asyncio.Task[None]] = set()
+        # worker は1件ずつ処理し、1件で使うのは高々2つなので、使用中のクライアントを捨てる
+        # ことは無い。
+        self._cache = LlmClientCache(timeout=_TIMEOUT_SECONDS)
 
-    def _discard_client(self, client: AsyncOpenAI) -> None:
-        """捨てたクライアントを閉じる(接続を残さないように)。`AsyncOpenAI.close()` は
-        コルーチンなので、イベントループの上ではタスクにして閉じる。ループの外なら閉じずに
-        ガベージコレクションに任せる。"""
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        task = loop.create_task(self._close_quietly(client))
-        self._closing.add(task)
-        task.add_done_callback(self._closing.discard)
+    @property
+    def _clients(self) -> dict[tuple[str, str | None], AsyncOpenAI]:
+        return self._cache.clients
 
-    @staticmethod
-    async def _close_quietly(client: AsyncOpenAI) -> None:
-        try:
-            await client.close()
-        except Exception:  # noqa: BLE001 - 捨てるクライアントの後始末の失敗は無視する
-            logger.debug("推定のクライアントを閉じられませんでした", exc_info=True)
+    @property
+    def _closing(self) -> set[asyncio.Task[None]]:
+        return self._cache.closing
 
     def _client_for(self, target: Target) -> AsyncOpenAI:
         if not target.api_key:
             raise AnnotationEngineError(t("annotations.apiKeyMissing"))
-        key = (target.api_key, target.base_url)
-        client = self._clients.pop(key, None)
-        if client is None:
-            # 最も長く使っていないものから捨てる(worker は1件ずつ処理し、1件で使うのは
-            # 高々2つなので、使用中のクライアントを捨てることは無い)。
-            while len(self._clients) >= self._CLIENTS_MAX:
-                oldest = next(iter(self._clients))
-                self._discard_client(self._clients.pop(oldest))
-            client = AsyncOpenAI(
-                api_key=target.api_key,
-                base_url=target.base_url,
-                max_retries=2,
-                timeout=_TIMEOUT_SECONDS,
-            )
-        # 最新として末尾に入れ直す。
-        self._clients[key] = client
-        return client
+        return self._cache.get(target)
 
     async def _complete(
         self,
