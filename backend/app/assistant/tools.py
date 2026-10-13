@@ -525,13 +525,19 @@ async def view_assets(ctx: ToolContext, args: ViewAssetsArgs) -> ToolOutcome:
         ok=True,
         result={
             "assets": briefs,
-            "note": "The images follow in the next message, in this order.",
+            "note": "The images follow in the next message, in this order. " + _SHOW_HINT,
         },
         images=images,
     )
 
 
 # -- ストックの捜索(10章) ----------------------------------------------------------
+
+# 見つけた画像を文章で説明するだけで終わり、`show_assets` を呼ばないことがある(実機の確認で
+# 起きた)。システムプロンプトに加えて、見つけた画像を返す道具の結果でも促す。
+_SHOW_HINT = (
+    "The user cannot see these images. To present any of them, call show_assets with their ids."
+)
 
 
 def _asset_brief(asset: Asset) -> dict[str, Any]:
@@ -569,6 +575,8 @@ async def search_assets(ctx: ToolContext, args: SearchAssetsArgs) -> ToolOutcome
                     limit=args.limit,
                 )
             )
+        if payload.get("items"):
+            payload["note"] = _SHOW_HINT
         return payload
 
     return ToolOutcome(ok=True, result=await _in_thread(_search))
@@ -582,6 +590,8 @@ async def find_similar_assets(ctx: ToolContext, args: FindSimilarAssetsArgs) -> 
                     db, ctx.state, ctx.user, _asset_brief, asset_id=args.asset_id, limit=args.limit
                 )
             )
+        if payload.get("items"):
+            payload["note"] = _SHOW_HINT
         return payload
 
     return ToolOutcome(ok=True, result=await _in_thread(_find))
