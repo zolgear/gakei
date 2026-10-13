@@ -182,6 +182,12 @@ function sortedInputs(inputs: readonly RunInputItem[]): FormPatchInput[] {
     .map((i) => ({ assetId: i.assetId, role: i.role }))
 }
 
+// 操作を generate にすると、入力画像が元から空でも patch に `inputs: []` が入る。変わらない項目は
+// カードに出さない。
+function sameInputs(a: readonly FormPatchInput[], b: readonly FormPatchInput[]): boolean {
+  return a.length === b.length && a.every((x, i) => x.assetId === b[i].assetId && x.role === b[i].role)
+}
+
 /**
  * カードに出す変更の一覧。`before` は反映の直前のフォームの値(会話を開き直したなどで無ければ
  * null。そのときは変更後だけを出す)。変更後は書き込みの結果から作る(反映先のフォームが後で
@@ -219,9 +225,12 @@ export function describeFormWrite(write: FormWrite, before: RunFormState | null)
     changes.push({ field: 'param', key, before: beforeValue, after })
   }
   if (patch.inputs !== undefined) {
-    changes.push({ field: 'inputs', before: before ? sortedInputs(before.inputs) : null, after: patch.inputs })
+    const beforeInputs = before ? sortedInputs(before.inputs) : null
+    if (!beforeInputs || !sameInputs(beforeInputs, patch.inputs)) {
+      changes.push({ field: 'inputs', before: beforeInputs, after: patch.inputs })
+    }
   }
-  if (patch.assetGroupId !== undefined) {
+  if (patch.assetGroupId !== undefined && !(before && before.assetGroupId === patch.assetGroupId)) {
     changes.push({ field: 'group', before: before ? before.assetGroupId : undefined, after: patch.assetGroupId })
   }
   return changes

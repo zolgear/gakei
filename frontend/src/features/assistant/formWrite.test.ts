@@ -142,6 +142,15 @@ describe('describeFormWrite', () => {
     ])
   })
 
+  it('入力画像とグループが変わらないときは出さない(generate で空のまま inputs: [] が来たときなど)', () => {
+    const write = readFormWrite(
+      updateFormMessage({ prompt: 'a cat', inputs: [], operation: 'generate', asset_group_id: 'g1' }),
+    )!
+    expect(describeFormWrite(write, { ...base, inputs: [] })).toEqual([
+      { field: 'prompt', before: 'a lighthouse', after: 'a cat' },
+    ])
+  })
+
   it('モデルを変えたら、落ちたパラメーターも変更として出す', () => {
     const write = readFormWrite(updateFormMessage({ model: 'gpt-image-2' }, { size: '1024x1024', quality: 'low' }))!
     expect(describeFormWrite(write, base)).toEqual([
