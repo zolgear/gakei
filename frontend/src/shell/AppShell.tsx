@@ -4,6 +4,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation } from 'react-router'
+import { useQuery } from '@tanstack/react-query'
 import { AppBar } from './AppBar'
 import { IconRail } from './IconRail'
 import { SidebarPanel } from './SidebarPanel'
@@ -12,6 +13,9 @@ import { autoCollapsesPanel, displayedPanel, selectPanel, type PanelOverride } f
 import { ResourcePanelContext } from '../context/useResourcePanel'
 import { useScrollRestoration } from './useScrollRestoration'
 import { MissingApiKeyBanner } from '../features/settings/MissingApiKeyBanner'
+import { ASSISTANT_SETTINGS_QUERY_KEY } from '../features/settings/queryKeys'
+import { AssistantSessionProvider } from '../features/assistant/AssistantSessionProvider'
+import { getAssistantSettings } from '../api/client'
 import { useFaviconProgress } from '../features/favicon/useFaviconProgress'
 import { useI18n } from '../i18n'
 import { MODAL_BODY_ATTRIBUTE } from '../components/modalFocus'
@@ -45,7 +49,16 @@ export function AppShell() {
     setPrevCollapsed(collapsed)
     setPanelOverride(undefined)
   }
-  const selectedPanel = displayedPanel(rememberedPanel, collapsed, panelOverride)
+  // 生成のアシスタント(ADR-0048 2章)。管理者が無効にしている・接続先がそろっていないときは、
+  // アイコンレールに出さず、覚えた選択がアシスタントでもパネルを畳んで見せる(選択は書き換えない)。
+  const assistantSettings = useQuery({
+    queryKey: ASSISTANT_SETTINGS_QUERY_KEY,
+    queryFn: getAssistantSettings,
+    staleTime: 60_000,
+  })
+  const assistantUsable = assistantSettings.data?.usable === true
+  const shownPanel = displayedPanel(rememberedPanel, collapsed, panelOverride)
+  const selectedPanel = shownPanel === 'assistant' && !assistantUsable ? null : shownPanel
   const [drawerOpen, setDrawerOpen] = useState(false)
   // 狭い幅のドロワーは裏を覆うので、ダイアログと同じフォーカスの規則にする(ADR-0009 9章)。
   // 開いたらレールの先頭へ移し、Tab は中で回し、Esc で閉じ、閉じたらメニューのボタンへ戻す。
@@ -110,43 +123,45 @@ export function AppShell() {
 
   return (
     <ResourcePanelContext.Provider value={resourcePanelValue}>
-      <div className={styles.shell}>
-        <AppBar drawerOpen={drawerOpen} onToggleDrawer={() => setDrawerOpen((v) => !v)} />
+      <AssistantSessionProvider>
+        <div className={styles.shell}>
+          <AppBar drawerOpen={drawerOpen} onToggleDrawer={() => setDrawerOpen((v) => !v)} />
 
-        <div className={styles.body}>
-          <div className={styles.resourceDesktop} data-side={RESOURCE_SIDE}>
-            <IconRail selected={selectedPanel} onSelect={handleSelectPanel} />
-            <SidebarPanel selected={selectedPanel} resizable side={RESOURCE_SIDE} />
+          <div className={styles.body}>
+            <div className={styles.resourceDesktop} data-side={RESOURCE_SIDE}>
+              <IconRail selected={selectedPanel} onSelect={handleSelectPanel} showAssistant={assistantUsable} />
+              <SidebarPanel selected={selectedPanel} resizable side={RESOURCE_SIDE} />
+            </div>
+
+            {drawerOpen && (
+              <div
+                ref={drawerRef}
+                className={styles.drawerOverlay}
+                role="dialog"
+                aria-modal="true"
+                aria-label={t.shell.drawer.label}
+              >
+                <button
+                  type="button"
+                  aria-label={t.shell.drawer.closeMenu}
+                  className={styles.drawerBackdrop}
+                  onClick={() => setDrawerOpen(false)}
+                />
+                <div className={styles.drawerPanel} {...{ [MODAL_BODY_ATTRIBUTE]: '' }}>
+                  <IconRail selected={selectedPanel} onSelect={handleSelectPanel} showAssistant={assistantUsable} />
+                  <SidebarPanel selected={selectedPanel} />
+                </div>
+              </div>
+            )}
+
+            <main ref={mainRef} className={`${styles.main} dot-grid`} tabIndex={-1}>
+              <MissingApiKeyBanner />
+              <Outlet />
+            </main>
           </div>
 
-          {drawerOpen && (
-            <div
-              ref={drawerRef}
-              className={styles.drawerOverlay}
-              role="dialog"
-              aria-modal="true"
-              aria-label={t.shell.drawer.label}
-            >
-              <button
-                type="button"
-                aria-label={t.shell.drawer.closeMenu}
-                className={styles.drawerBackdrop}
-                onClick={() => setDrawerOpen(false)}
-              />
-              <div className={styles.drawerPanel} {...{ [MODAL_BODY_ATTRIBUTE]: '' }}>
-                <IconRail selected={selectedPanel} onSelect={handleSelectPanel} />
-                <SidebarPanel selected={selectedPanel} />
-              </div>
-            </div>
-          )}
-
-          <main ref={mainRef} className={`${styles.main} dot-grid`} tabIndex={-1}>
-            <MissingApiKeyBanner />
-            <Outlet />
-          </main>
         </div>
-
-      </div>
+      </AssistantSessionProvider>
     </ResourcePanelContext.Provider>
   )
 }

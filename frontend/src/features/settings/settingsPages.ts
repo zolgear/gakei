@@ -18,6 +18,7 @@ export type SettingsPageId =
   | 'llmConnections'
   | 'annotation'
   | 'embeddings'
+  | 'assistant'
   | 'comfyui'
   | 'sdwebui'
   | 'tagDictionary'
@@ -36,6 +37,7 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   llmConnections: 'llm-connections',
   annotation: 'annotation',
   embeddings: 'embeddings',
+  assistant: 'assistant',
   comfyui: 'comfyui',
   sdwebui: 'sdwebui',
   tagDictionary: 'tag-dictionary',
@@ -52,6 +54,7 @@ export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
   'annotation',
   'tagDictionary',
   'embeddings',
+  'assistant',
   'comfyui',
   'sdwebui',
   'mcp',

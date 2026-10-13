@@ -220,6 +220,8 @@ export function HistoryCard({ run }: HistoryCardProps) {
         {hasInputs && (
           <span className={styles.inputBadge}>{fmt(t.history.card.inputBadge, { count: run.input_count })}</span>
         )}
+        {/* アシスタントが作った Run(ADR-0048 9章)。実行元は Run 詳細にも出す。 */}
+        {run.origin === 'assistant' && <span className={styles.inputBadge}>{t.history.card.originAssistant}</span>}
         <span className={styles.model}>{run.model_label ?? shortenModelName(run.model)}</span>
         <span className={styles.status} data-status={run.status}>
           {statusLabel(run.status)}

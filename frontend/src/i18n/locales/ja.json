@@ -78,7 +78,8 @@
       "promptTemplates": "プロンプトテンプレート",
       "graph": "系列グラフ",
       "history": "履歴",
-      "search": "検索"
+      "search": "検索",
+      "assistant": "アシスタント"
     },
     "sidebar": {
       "resourcePanel": "リソースパネル",
@@ -115,7 +116,8 @@
       "deleteWarning": {
         "one": "この Generated の出力は、他の Generated {count} 件の元画像になっています。削除すると、その系列ではこの画像が「削除済み」になります。",
         "other": "この Generated の出力は、他の Generated {count} 件の元画像になっています。削除すると、その系列ではこの画像が「削除済み」になります。"
-      }
+      },
+      "originAssistant": "アシスタント"
     },
     "page": {
       "title": "履歴",
@@ -168,7 +170,8 @@
       "single": "seed {seed}",
       "batch": "seed {seed} ・ {outputCount} 枚を1回で生成",
       "indexed": "seed {seed} ・ {outputCount} 枚中 {outputIndex} 枚目"
-    }
+    },
+    "originAssistant": "アシスタント"
   },
   "runStatus": {
     "errorFallback": "不明なエラーが発生しました",
@@ -281,7 +284,8 @@
       "mcp": "MCP",
       "shareLinks": "共有リンクの公開",
       "about": "GAKEI について",
-      "authentication": "認証"
+      "authentication": "認証",
+      "assistant": "アシスタント"
     },
     "frame": {
       "changeCount": {
@@ -540,7 +544,8 @@
       "featureSeparator": "、",
       "features": {
         "annotation": "自動タイトル・タグ",
-        "embedding": "埋め込み"
+        "embedding": "埋め込み",
+        "assistant": "アシスタント"
       },
       "deleteDisabledInUse": "使っている機能があるため削除できません。"
     },
@@ -1084,6 +1089,49 @@
         "message": "認証を無効にすると、ログインなしで誰でも使えるようになります。",
         "warning": "サーバーを LAN やインターネットに公開しているなら危険です。",
         "confirmLabel": "無効にして保存"
+      }
+    },
+    "assistant": {
+      "intro": "生成フォームの横のパネルで、チャットしながらプロンプトやプロンプトセットを作り、生成を任せられるようにします。アシスタントが書き込んだプロンプトセットは、結果のカードから元に戻せます。",
+      "loading": "読み込み中...",
+      "loadFailed": "アシスタントの設定を取得できませんでした。",
+      "retry": "再読み込み",
+      "enabledLabel": "アシスタントを有効にする",
+      "enabledHelp": "有効にすると、アイコンレールに「アシスタント」のパネルが出ます。既定は無効です。",
+      "notUsable": "接続先かキーがそろっていないため、パネルは出ていません。接続先とキーを確かめてください。",
+      "connectionHeading": "LLM",
+      "connectionLabel": "接続先",
+      "connectionHelp": "道具の呼び出し(tool calling)とストリーミングに対応した接続先を選びます。添付した画像を読ませるには、画像を読めるモデルが必要です。",
+      "connectionsLink": "LLM の接続先",
+      "modelLabel": "モデル名",
+      "modelHelp": "接続先に送るモデル名です。",
+      "limitsHeading": "上限",
+      "limitsIntro": "利用者ごとに数えます。上限に達すると、待たせずに断ります。",
+      "limits": {
+        "hourly_request_limit": {
+          "label": "LLM のリクエスト(1 時間)",
+          "help": "直近 1 時間に送れる LLM のリクエストの数です({min}〜{max})。プロセスの中で数え、再起動で 0 に戻ります。"
+        },
+        "runs_per_message_limit": {
+          "label": "1 回の発言で作れる Run",
+          "help": "1 回の発言でアシスタントが作れる Run の数です({min}〜{max})。0 にするとアシスタントの生成を止めます。"
+        },
+        "hourly_run_limit": {
+          "label": "1 時間に作れる Run",
+          "help": "直近 1 時間にアシスタントが作れる Run の数です({min}〜{max})。0 にするとアシスタントの生成を止めます。"
+        },
+        "stopped": "上限が 0 のため、アシスタントの生成は止まっています。プロンプトやプロンプトセットの作成は使えます。"
+      },
+      "resetToDefault": "既定値({default})に戻す",
+      "usageLabel": "あなたの直近 1 時間",
+      "usageHelp": "LLM のリクエストの数と、アシスタントが作った Run の数です。",
+      "usageValue": "リクエスト {requests} / {requestLimit}、Run {runs} / {runLimit}",
+      "errors": {
+        "connectionRequired": "接続先を選んでください",
+        "connectionUnknown": "この接続先は見つかりません。選び直してください",
+        "modelRequired": "モデル名を入力してください",
+        "modelTooLong": "{max} 文字以内で入力してください",
+        "limitInvalid": "{min}〜{max} の整数を入力してください"
       }
     }
   },
@@ -2706,6 +2754,119 @@
     "assist": {
       "ariaLabel": "タグの候補",
       "loraAriaLabel": "LoRA の候補"
+    }
+  },
+  "assistant": {
+    "heading": "アシスタント",
+    "empty": "プロンプトの相談、プロンプトセットの作成、生成の依頼ができます。\n例: 「夕暮れの港町のプロンプトを3案」「このセットに冬の版を足して」「今の設定で4枚作って」",
+    "messagesLabel": "会話",
+    "thinking": "考えています…",
+    "stoppedTag": "止めました",
+    "errorTag": "失敗しました",
+    "sendFailed": "送信できませんでした。",
+    "connectionLost": "応答が途中で切れました。会話を開き直すと、保存された分を確かめられます。",
+    "conversations": {
+      "selectLabel": "会話",
+      "newConversation": "新しい会話",
+      "current": "(この会話)",
+      "untitled": "会話 {at}",
+      "new": "新規",
+      "rename": "名前を変更",
+      "renameLabel": "会話の名前",
+      "renameEmpty": "名前を入力してください",
+      "save": "保存",
+      "delete": "削除",
+      "deleteConfirm": "会話「{name}」を削除します。アシスタントが作ったプロンプトセットや画像は消えません。",
+      "deleteConfirmLabel": "削除する",
+      "renameFailed": "名前を変更できませんでした",
+      "deleteFailed": "削除できませんでした"
+    },
+    "composer": {
+      "label": "アシスタントへの発言",
+      "placeholder": "アシスタントに頼む",
+      "shortcutHint": "Ctrl+Enter で送信",
+      "send": "送信",
+      "stop": "止める",
+      "attach": "画像を添付 {count}/{max}",
+      "attachmentsLabel": "添付した画像",
+      "removeAttachment": "添付を外す",
+      "attachLimit": "添付できるのは {max} 枚までです",
+      "stockOnly": "添付できるのはストックの画像だけです。ファイルは先にストックへ入れてください。"
+    },
+    "attachDialog": {
+      "title": "ストックから添付",
+      "remaining": "あと {count} 枚(1 回の発言で {max} 枚まで)",
+      "alreadyAttached": "添付済み",
+      "empty": "ストックに画像がありません",
+      "loadFailed": "ストックを読み込めませんでした",
+      "loadMore": "さらに読み込む",
+      "selectedCount": "{count} 枚を選択",
+      "attach": "添付する"
+    },
+    "promptCard": {
+      "heading": "プロンプトの提案",
+      "insert": "フォームに入れる",
+      "replace": "フォームを置き換える",
+      "copy": "コピー",
+      "inserted": "フォームの末尾に入れました",
+      "replaced": "フォームのプロンプトを置き換えました",
+      "copied": "コピーしました",
+      "copyFailed": "コピーできませんでした。手で選択してコピーしてください。",
+      "replaceConfirm": "入力中のプロンプトを、この提案で置き換えます。",
+      "replaceConfirmLabel": "置き換える"
+    },
+    "writeCard": {
+      "titles": {
+        "create_prompt_set": "プロンプトセットを作成",
+        "rename_prompt_set": "プロンプトセットの名前を変更",
+        "add_prompt_set_items": "プロンプトセットに項目を追加",
+        "update_prompt_set_item": "プロンプトセットの項目を変更"
+      },
+      "fields": {
+        "name": "名前",
+        "label": "ラベル",
+        "text": "本文",
+        "position": "並び順"
+      },
+      "before": "変更前",
+      "after": "変更後",
+      "empty": "(なし)",
+      "undo": "元に戻す",
+      "undoCreate": "元に戻す(セットを削除)",
+      "undoing": "戻しています…",
+      "undoneAt": "元に戻しました({at})",
+      "undoFailed": "元に戻せませんでした"
+    },
+    "runCard": {
+      "heading": {
+        "one": "生成 {count} 件",
+        "other": "生成 {count} 件"
+      },
+      "cost": "料金の目安: ${cost}",
+      "watch": "結果エリアで見る",
+      "detail": "詳細",
+      "showOutput": "結果エリアに表示",
+      "loadFailed": "Run の状態を取得できませんでした"
+    },
+    "toolRow": {
+      "running": "実行中…",
+      "failed": "失敗",
+      "arguments": "引数",
+      "result": "結果"
+    },
+    "tools": {
+      "list_prompt_sets": "プロンプトセットを読む",
+      "get_form_context": "フォームを読む",
+      "propose_prompt": "プロンプトを提案",
+      "get_capabilities": "パラメーターの定義を読む",
+      "get_run": "Run の状態を見る",
+      "view_assets": "画像を見る",
+      "create_prompt_set": "プロンプトセットを作成",
+      "rename_prompt_set": "プロンプトセットの名前を変更",
+      "add_prompt_set_items": "プロンプトセットに項目を追加",
+      "update_prompt_set_item": "プロンプトセットの項目を変更",
+      "generate_image": "生成",
+      "cancel_run": "Run を取り消す"
     }
   }
 }

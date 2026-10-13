@@ -25,6 +25,7 @@ export const GAKEI_STORAGE_KEYS = {
   'gakei:studio-input-width': 'サイドバー配置での入力欄の幅',
   'gakei:sidebar-width': 'サイドバーの幅',
   'gakei:selected-panel': 'サイドバーで開いているパネル',
+  'gakei:assistant-conversation': 'アシスタントのパネルで開いていた会話',
   'gakei:stock-group-open': 'ストックの各グループの開閉',
   'gakei:stock-groups-open': '(旧)ストックのグループの開閉',
   'gakei:stock-show-sketch-mask': 'スケッチとマスクをストックに出すか',
