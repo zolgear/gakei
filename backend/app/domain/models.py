@@ -103,9 +103,11 @@ class RunStatus(enum.StrEnum):
     CANCELED = "canceled"
 
 
-# `run.origin` の値(ADR-0023 5章、ADR-0037 2章)。null は画面、`mcp` は MCP のツール。
-# `import` は、系列の ZIP から取り込んだ記録(この GAKEI では実行していない。ADR-0037)。
+# `run.origin` の値(ADR-0023 5章、ADR-0037 2章、ADR-0048 9章)。null は画面、`mcp` は MCP の
+# ツール。`import` は、系列の ZIP から取り込んだ記録(この GAKEI では実行していない。ADR-0037)。
+# `assistant` は、生成のアシスタントの道具(`generate_image`)が作った Run(ADR-0048)。
 RUN_ORIGIN_IMPORT = "import"
+RUN_ORIGIN_ASSISTANT = "assistant"
 
 
 class RunInputRole(enum.StrEnum):
@@ -349,9 +351,10 @@ class Run(Base):
     )
 
     # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツール、`import` は系列の ZIP から
-    # 取り込んだ記録(ADR-0037。実行していない。元の記録は `run_import`)。`api_token_id` は MCP を
-    # アクセストークンで呼んだとき(認証モード)だけ入る。いずれも作成時に一度だけ書き、UPDATE
-    # しない(ADR-0003 の追記のみの規則に反しない)。
+    # 取り込んだ記録(ADR-0037。実行していない。元の記録は `run_import`)、`assistant` は生成の
+    # アシスタント(ADR-0048 9章。どの会話から作ったかは会話の tool の結果に残す)。
+    # `api_token_id` は MCP をアクセストークンで呼んだとき(認証モード)だけ入る。いずれも
+    # 作成時に一度だけ書き、UPDATE しない(ADR-0003 の追記のみの規則に反しない)。
     origin: Mapped[str | None] = mapped_column(String(16), nullable=True)
     api_token_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("api_token.id"), nullable=True, index=True
@@ -471,6 +474,52 @@ class PromptSetItem(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
     prompt_set: Mapped[PromptSet] = relationship("PromptSet", back_populates="items")
+
+
+class AssistantConversation(Base):
+    """生成のアシスタントの会話(ADR-0048 3章)。証跡ではないので、名前の変更と論理削除ができる。
+
+    見えるのは本人の会話だけ(ADR-0025。個人モードでは全部)。`created_by_user_id` は作成時に
+    一度だけ書く。`updated_at` は発言のたびに進める(一覧は新しい順)。
+    """
+
+    __tablename__ = "assistant_conversation"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime(), nullable=False, default=_utcnow, index=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class AssistantMessage(Base):
+    """会話の1メッセージ(ADR-0048 3章)。`role` は `user` / `assistant` / `tool`。
+
+    `content` は JSON。本文、添付の Asset ID、tool の呼び出しと結果(書き込みの変更前の値を
+    含む)を入れる。画像の中身(base64)は入れない(ADR-0004)。形は `app/domain/assistant.py`。
+    「元に戻す」の印(`undone_at`)を書き足すほかは更新しない。
+    """
+
+    __tablename__ = "assistant_message"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id", "position", name="uq_assistant_message_conversation_position"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("assistant_conversation.id"), nullable=False, index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[dict] = mapped_column(JsonType, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class ParameterSet(Base):

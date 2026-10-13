@@ -46,6 +46,8 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "prompt_variant",
         "prompt_combo",
         "prompt_combo_item",
+        "assistant_conversation",
+        "assistant_message",
         "alembic_version",
     } <= tables
 
@@ -1310,4 +1312,42 @@ def test_migration_0032_adds_prompt_template(empty_database_url: str) -> None:
     inspector = sa_inspect(engine)
     assert "prompt_template" not in set(inspector.get_table_names())
     assert "prompt_build" not in {c["name"] for c in inspector.get_columns("run")}
+    engine.dispose()
+
+
+def test_migration_0033_adds_assistant_tables(empty_database_url: str) -> None:
+    """生成のアシスタント(ADR-0048): 0032 の DB に upgrade head で会話とメッセージの表が加わり、
+    downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0032")
+    engine = create_engine(empty_database_url)
+    assert "assistant_conversation" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert {"assistant_conversation", "assistant_message"} <= set(inspector.get_table_names())
+    columns = {c["name"]: c for c in inspector.get_columns("assistant_message")}
+    assert set(columns) == {"id", "conversation_id", "position", "role", "content", "created_at"}
+    assert {fk["referred_table"] for fk in inspector.get_foreign_keys("assistant_message")} == {
+        "assistant_conversation"
+    }
+    unique = inspector.get_unique_constraints("assistant_message")
+    assert any(u["column_names"] == ["conversation_id", "position"] for u in unique)
+    conversation_columns = {c["name"] for c in inspector.get_columns("assistant_conversation")}
+    assert {"title", "created_by_user_id", "deleted_at", "updated_at"} <= conversation_columns
+    engine.dispose()
+
+    command.downgrade(cfg, "0032")
+    engine = create_engine(empty_database_url)
+    tables = set(sa_inspect(engine).get_table_names())
+    assert "assistant_conversation" not in tables
+    assert "assistant_message" not in tables
     engine.dispose()

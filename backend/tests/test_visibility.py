@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain import assistant as assistant_domain
 from app.domain.models import (
     AppUser,
     Asset,
@@ -94,6 +95,9 @@ class World:
     a_prompt_template: str = ""
     a_token_id: str = ""
     a_share: str = ""
+    # 生成のアシスタントの会話と、その tool のメッセージ(ADR-0048)。
+    a_conversation: str = ""
+    a_assistant_message: str = ""
     # B のデータ
     b_group: str = ""
     b_upload: str = ""
@@ -223,6 +227,31 @@ def world(client_oidc: TestClient) -> World:
     ).status_code == 200
     assert (c.post(f"/api/assets/{w.a_output}/tags", json={"name": "alicetag"})).status_code == 200
 
+    # 生成のアシスタントの会話(ADR-0048)。書き込みの tool のメッセージは DB に直接入れる。
+    conversation = c.post("/api/assistant/conversations", json={"title": "alice chat"})
+    assert conversation.status_code == 201, conversation.text
+    w.a_conversation = conversation.json()["id"]
+    with client.app.state.session_factory() as db:
+        message = assistant_domain.append_message(
+            db,
+            uuid.UUID(w.a_conversation),
+            assistant_domain.ROLE_TOOL,
+            {
+                "tool_call_id": "c1",
+                "name": "rename_prompt_set",
+                "ok": True,
+                "result": {},
+                "undo": {
+                    "kind": "rename_prompt_set",
+                    "prompt_set_id": w.a_prompt_set,
+                    "name": "hijacked by undo",
+                    "updated_at": "2000-01-01T00:00:00+00:00",
+                },
+                "undone_at": None,
+            },
+        )
+        w.a_assistant_message = str(message.id)
+
     c = w.as_("B")
     w.b_upload = _upload(c, data=make_png_bytes(32, 32, (1, 2, 3)))["id"]
     group = c.post("/api/asset-groups", json={"name": "bob group"})
@@ -254,6 +283,9 @@ _PARAM_SOURCES = {
     "name": "literal:alicetag",
     # 共有リンク(ADR-0029)。A が自分の Asset から作った共有。
     "share_id": "a_share",
+    # 生成のアシスタント(ADR-0048)。A の会話と、A の会話の tool のメッセージ。
+    "conversation_id": "a_conversation",
+    "message_id": "a_assistant_message",
 }
 
 # 利用者のデータではないので対象外のルート(ADR-0025 5章: 管理者設定は利用者のデータと別)。
@@ -290,6 +322,8 @@ def _bodies(w: World) -> dict[tuple[str, str], Any]:
         ("patch", "/api/prompt-sets/{prompt_set_id}/items/{item_id}"): {"text": "hijack"},
         ("patch", "/api/assets/{asset_id}/title"): {"title": "hijack"},
         ("post", "/api/assets/{asset_id}/tags"): {"name": "hijack"},
+        ("patch", "/api/assistant/conversations/{conversation_id}"): {"title": "hijack"},
+        ("post", "/api/assistant/conversations/{conversation_id}/messages"): {"text": "hijack"},
     }
 
 
@@ -357,6 +391,9 @@ def test_every_id_route_returns_404_for_others(world: World) -> None:
     assert len(c.get("/api/users/me/api-tokens").json()["items"]) == 1
     # 共有リンク(ADR-0029)も他人には取り消せない。
     assert [s["id"] for s in c.get("/api/shares").json()["items"]] == [w.a_share]
+    # アシスタントの会話(ADR-0048)も他人には変えられない。
+    conversations = c.get("/api/assistant/conversations").json()["items"]
+    assert [(x["id"], x["title"]) for x in conversations] == [(w.a_conversation, "alice chat")]
 
     # 本人には見える(404 にならない)ことを代表的なルートで確かめる。
     for path in (

@@ -43,11 +43,11 @@ from sqlalchemy import and_, select, update
 from sqlalchemy.orm import Session
 
 from app.api.capabilities import get_capabilities_endpoint
-from app.api.prompt_sets import list_prompt_sets as list_prompt_sets_rest
 from app.domain import agent_images, ingest_hooks, mcp_settings
 from app.domain import annotations as annotations_domain
 from app.domain import api_tokens as api_tokens_domain
 from app.domain import download_tickets as download_tickets_domain
+from app.domain import prompt_sets as prompt_sets_domain
 from app.domain import run_create as run_create_domain
 from app.domain import semantic_search as semantic_domain
 from app.domain import upload_tickets as upload_tickets_domain
@@ -80,7 +80,12 @@ from app.domain.models import (
 from app.domain.pricing import EstimateResult, cost_from_usage
 from app.domain.pricing import estimate_cost as estimate_cost_domain
 from app.domain.run_views import run_text_outputs
-from app.domain.schemas import AssetGroupCreate, RunCreateRequest, RunInputCreate
+from app.domain.schemas import (
+    AssetGroupCreate,
+    PromptSetListResponse,
+    RunCreateRequest,
+    RunInputCreate,
+)
 from app.domain.search import MAX_LIMIT as SEARCH_MAX_LIMIT
 from app.domain.search import InvalidSearchQueryError, search
 from app.domain.storage import AssetStore
@@ -1311,7 +1316,8 @@ async def list_prompt_sets(ctx: Context) -> CallToolResult:
 
     def _list() -> dict[str, Any]:
         with _session(mc) as db:
-            return list_prompt_sets_rest(db, mc.user).model_dump(mode="json")
+            items = prompt_sets_domain.list_sets(db, mc.user)
+            return PromptSetListResponse(items=items).model_dump(mode="json")
 
     return _result(await _in_thread(_list))
 

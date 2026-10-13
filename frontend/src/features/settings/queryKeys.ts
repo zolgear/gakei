@@ -57,3 +57,9 @@ export const AUTH_SETTINGS_QUERY_KEY = ['auth-settings'] as const
  * 読み直しのあとは応答でこのキャッシュを置き換え、capabilities も取り直す。
  */
 export const SDWEBUI_STATUS_QUERY_KEY = ['sdwebui-status'] as const
+
+/**
+ * `GET /api/settings/assistant`(ADR-0048)。管理者設定の「アシスタント」と、アイコンレール
+ * (使えるときだけアシスタントのパネルを出す)が読む。
+ */
+export const ASSISTANT_SETTINGS_QUERY_KEY = ['assistant-settings'] as const

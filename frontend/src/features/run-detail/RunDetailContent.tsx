@@ -404,6 +404,12 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
               <dd>{t.runDetail.originMcp}</dd>
             </>
           )}
+          {run.origin === 'assistant' && (
+            <>
+              <dt>{t.runDetail.origin}</dt>
+              <dd>{t.runDetail.originAssistant}</dd>
+            </>
+          )}
           {run.origin === 'import' && (
             <>
               <dt>{t.runDetail.origin}</dt>

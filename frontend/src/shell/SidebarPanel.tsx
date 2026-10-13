@@ -20,6 +20,7 @@ import { PromptTemplatesPanel } from '../features/prompt-templates/PromptTemplat
 import { LineageGraphPanel } from '../features/lineage/LineageGraphPanel'
 import { HistoryPanel } from '../features/history/HistoryPanel'
 import { SearchPanel } from '../features/search/SearchPanel'
+import { AssistantPanel } from '../features/assistant/AssistantPanel'
 import {
   DEFAULT_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
@@ -160,6 +161,7 @@ export function SidebarPanel({ selected, resizable = false, side = 'left' }: Sid
       {selected === 'graph' && <LineageGraphPanel />}
       {selected === 'history' && <HistoryPanel />}
       {selected === 'search' && <SearchPanel />}
+      {selected === 'assistant' && <AssistantPanel />}
       {resizable && (
         <div
           className={styles.handle}

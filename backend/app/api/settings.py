@@ -36,6 +36,7 @@ from app.deps import (
 )
 from app.domain import (
     annotation_settings,
+    assistant_settings,
     embedding_settings,
     general_settings,
     mcp_settings,
@@ -54,6 +55,8 @@ from app.domain.schemas import (
     AnnotationSettingsResponse,
     AnnotationSettingsUpdateRequest,
     AnnotationTarget,
+    AssistantSettingsResponse,
+    AssistantSettingsUpdateRequest,
     ComfyUITimeoutSetting,
     EmbeddingBackfillResponse,
     EmbeddingOnnxModelStatus,
@@ -861,3 +864,71 @@ def delete_embedding_vectors(
     embedder.bump(model_key)
     embedder.bump(prompt_embeddings_domain.version_key(model_key))
     return _embedding_settings_response(db, settings, downloader, index_backend)
+
+
+# -- 生成のアシスタント(ADR-0048 7章・9章) --------------------------------------------
+# GET は全ログイン者(パネルを出すかの判断)、更新は管理者だけ。接続先は LLM の接続先
+# (ADR-0032)から選ぶ。
+
+
+def _assistant_settings_response(
+    db: Session, request: Request, user: CurrentUser
+) -> AssistantSettingsResponse:
+    from app.assistant.runtime import user_key
+    from app.domain.llm_connections import ConnectionNotFoundError
+
+    config = assistant_settings.load(db)
+    runtime = request.app.state.assistant
+    usable = config.enabled
+    if usable and runtime.engine.requires_target:
+        try:
+            target = assistant_settings.resolve_target(db, config, request.app.state.settings)
+            usable = bool(target.api_key)
+        except ConnectionNotFoundError:
+            usable = False
+    return AssistantSettingsResponse(
+        **{name: getattr(config, name) for name in assistant_settings.FIELDS},
+        hourly_request_limit_default=assistant_settings.DEFAULT_HOURLY_REQUEST_LIMIT,
+        hourly_request_limit_max=assistant_settings.HOURLY_REQUEST_LIMIT_MAX,
+        runs_per_message_limit_default=assistant_settings.DEFAULT_RUNS_PER_MESSAGE_LIMIT,
+        runs_per_message_limit_max=assistant_settings.RUNS_PER_MESSAGE_LIMIT_MAX,
+        hourly_run_limit_default=assistant_settings.DEFAULT_HOURLY_RUN_LIMIT,
+        hourly_run_limit_max=assistant_settings.HOURLY_RUN_LIMIT_MAX,
+        usable=usable,
+        requests_last_hour=runtime.requests.count(user_key(user.id)),
+        runs_last_hour=assistant_settings.count_recent_runs(db, user.id),
+    )
+
+
+@router.get(
+    "/assistant",
+    response_model=AssistantSettingsResponse,
+    operation_id="get_assistant_settings",
+)
+def get_assistant_settings(
+    request: Request,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> AssistantSettingsResponse:
+    return _assistant_settings_response(db, request, user)
+
+
+@router.patch(
+    "/assistant",
+    response_model=AssistantSettingsResponse,
+    operation_id="update_assistant_settings",
+)
+def update_assistant_settings(
+    body: AssistantSettingsUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_admin),
+) -> AssistantSettingsResponse:
+    # null を「変更しない」ではなく不正な値として扱う(検証で 422)。先に全部を検証してから
+    # 保存する(一部だけ保存される事態を避ける)。
+    updates = {name: getattr(body, name) for name in body.model_fields_set}
+    try:
+        assistant_settings.save(db, updates)
+    except assistant_settings.AssistantSettingsValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _assistant_settings_response(db, request, user)

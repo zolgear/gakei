@@ -1772,7 +1772,7 @@ class AnnotationSettingsUpdateRequest(BaseModel):
 # -- LLM の接続先(ADR-0032) --------------------------------------------------
 
 # 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
-LlmConnectionFeature = Literal["annotation", "embedding"]
+LlmConnectionFeature = Literal["annotation", "embedding", "assistant"]
 
 
 class LlmConnectionView(BaseModel):
@@ -2255,3 +2255,223 @@ class PublicShareResponse(BaseModel):
     assets: list[PublicShareAsset] = Field(default_factory=list)
     runs: list[PublicShareRun] = Field(default_factory=list)
     edges: list[PublicShareEdge] = Field(default_factory=list)
+
+
+# -- 生成のアシスタント(ADR-0048) --------------------------------------------
+# 会話は証跡ではないので、名前の変更と論理削除ができる。メッセージの `content`(JSON)は
+# `app/domain/assistant.py` で読み書きし、応答では役割ごとの項目に平らにして返す。
+
+ASSISTANT_ATTACHMENTS_MAX = 4
+ASSISTANT_TEXT_MAX = 20_000
+ASSISTANT_TITLE_MAX = 100
+
+
+class AssistantConversationResponse(BaseModel):
+    id: uuid.UUID
+    # 最初の発言の先頭から作る(LLM は使わない)。発言の前は空文字。
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssistantConversationListResponse(BaseModel):
+    items: list[AssistantConversationResponse] = Field(default_factory=list)
+
+
+class AssistantConversationCreateRequest(BaseModel):
+    title: str = Field(default="", max_length=ASSISTANT_TITLE_MAX)
+
+
+class AssistantConversationUpdateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=ASSISTANT_TITLE_MAX)
+
+
+class AssistantToolCallView(BaseModel):
+    id: str
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class AssistantMessageResponse(BaseModel):
+    """会話の1メッセージ。役割(`role`)ごとに使う項目が違う。
+
+    - `user`: `text`、`attachments`(添付の Asset ID)。
+    - `assistant`: `text`、`tool_calls`、`status`(`complete` / `stopped`(利用者が止めた) /
+      `error`)、`error`。
+    - `tool`: `tool_call_id`、`tool_name`、`ok`、`result`(道具が LLM に返した JSON。書き込みの
+      道具は `before` / `after` を含む)、`run_ids`(作った Run)、`undoable`(「元に戻す」が
+      使えるか)、`undone_at`(戻した日時)。
+    """
+
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    position: int
+    role: Literal["user", "assistant", "tool"]
+    created_at: datetime
+    text: str = ""
+    attachments: list[uuid.UUID] = Field(default_factory=list)
+    tool_calls: list[AssistantToolCallView] = Field(default_factory=list)
+    status: Literal["complete", "stopped", "error"] | None = None
+    error: str | None = None
+    tool_call_id: str | None = None
+    tool_name: str | None = None
+    ok: bool | None = None
+    result: dict[str, Any] | None = None
+    run_ids: list[uuid.UUID] = Field(default_factory=list)
+    undoable: bool = False
+    undone_at: datetime | None = None
+
+
+class AssistantConversationDetailResponse(AssistantConversationResponse):
+    messages: list[AssistantMessageResponse] = Field(default_factory=list)
+
+
+class AssistantFormInput(BaseModel):
+    asset_id: uuid.UUID
+    role: Literal["image", "mask", "reference"] = "image"
+
+
+class AssistantFormState(BaseModel):
+    """送信時の生成フォームの状態(ADR-0048 5章)。サーバーはフォームの状態を持たず、発言の
+    たびにブラウザが送る。`get_form_context` がそのまま返し、`generate_image` で指定の無い
+    項目に使う。"""
+
+    provider: str | None = Field(default=None, max_length=64)
+    model: str | None = Field(default=None, max_length=200)
+    operation: Literal["generate", "edit"] | None = None
+    prompt: str | None = Field(default=None, max_length=32_000)
+    params: dict[str, Any] = Field(default_factory=dict)
+    inputs: list[AssistantFormInput] = Field(default_factory=list, max_length=32)
+    asset_group_id: uuid.UUID | None = None
+
+
+class AssistantMessageCreateRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=ASSISTANT_TEXT_MAX)
+    # 添付するストックの Asset(本人に見えるものだけ。ADR-0048 6章)。
+    attachments: list[uuid.UUID] = Field(default_factory=list, max_length=ASSISTANT_ATTACHMENTS_MAX)
+    form: AssistantFormState | None = None
+    # 画面の言語。応答の言語をこれに合わせる(7章)。
+    locale: Literal["ja", "en"] = "ja"
+
+
+class AssistantUndoResponse(BaseModel):
+    """「元に戻す」の結果。`message` は戻した tool のメッセージ(`undone_at` が入る)、
+    `prompt_set` は戻した後のセット(作成を取り消したときは null)。"""
+
+    message: AssistantMessageResponse
+    prompt_set: PromptSetResponse | None = None
+
+
+# SSE のイベント(`POST /api/assistant/conversations/{id}/messages` の応答)。各イベントは
+# `event: <type>` と `data: <JSON>` の組で、JSON の `type` にも同じ値が入る。
+
+
+class AssistantUserMessageEvent(BaseModel):
+    """保存した利用者の発言(最初に1回)。"""
+
+    type: Literal["user_message"] = "user_message"
+    message: AssistantMessageResponse
+
+
+class AssistantTextDeltaEvent(BaseModel):
+    """アシスタントの本文の差分(届いた順につなぐ)。"""
+
+    type: Literal["text_delta"] = "text_delta"
+    text: str
+
+
+class AssistantToolCallEvent(BaseModel):
+    """道具の呼び出し(実行の前)。"""
+
+    type: Literal["tool_call"] = "tool_call"
+    tool_call_id: str
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class AssistantMessageEvent(BaseModel):
+    """保存したアシスタントのメッセージ(LLM の1回の応答ごと。本文と道具の呼び出し)。"""
+
+    type: Literal["assistant_message"] = "assistant_message"
+    message: AssistantMessageResponse
+
+
+class AssistantToolResultEvent(BaseModel):
+    """保存した道具の結果(tool のメッセージ)。"""
+
+    type: Literal["tool_result"] = "tool_result"
+    message: AssistantMessageResponse
+
+
+class AssistantRunCreatedEvent(BaseModel):
+    """`generate_image` が作った Run(Run ごとに1回)。進捗は既存の Run の SSE で見る。"""
+
+    type: Literal["run_created"] = "run_created"
+    run_id: uuid.UUID
+    tool_call_id: str
+    message_id: uuid.UUID
+
+
+class AssistantErrorEvent(BaseModel):
+    """処理を止めた理由。`llm_error`(LLM の呼び出しの失敗)、`rate_limited`(LLM の1時間の
+    上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`internal`(その他)。"""
+
+    type: Literal["error"] = "error"
+    code: Literal["llm_error", "rate_limited", "tool_limit", "internal"]
+    message: str
+
+
+class AssistantDoneEvent(BaseModel):
+    """最後に1回。`status` は `complete` / `error` / `limit`(上限で止めた)。"""
+
+    type: Literal["done"] = "done"
+    status: Literal["complete", "error", "limit"]
+    conversation: AssistantConversationResponse
+
+
+class AssistantStreamEvent(BaseModel):
+    """SSE のイベントの型(OpenAPI に型を出すための入れ物。`event` がイベント本体)。"""
+
+    event: (
+        AssistantUserMessageEvent
+        | AssistantTextDeltaEvent
+        | AssistantToolCallEvent
+        | AssistantMessageEvent
+        | AssistantToolResultEvent
+        | AssistantRunCreatedEvent
+        | AssistantErrorEvent
+        | AssistantDoneEvent
+    ) = Field(discriminator="type")
+
+
+class AssistantSettingsResponse(BaseModel):
+    """`GET /api/settings/assistant`(ADR-0048 7章・9章)。"""
+
+    enabled: bool
+    connection_id: str
+    model: str
+    hourly_request_limit: int
+    runs_per_message_limit: int
+    hourly_run_limit: int
+    hourly_request_limit_default: int
+    hourly_request_limit_max: int
+    runs_per_message_limit_default: int
+    runs_per_message_limit_max: int
+    hourly_run_limit_default: int
+    hourly_run_limit_max: int
+    # 有効で、接続先とキーがそろっている(パネルを出してよい)。
+    usable: bool
+    # 見ている利用者の、直近1時間の LLM のリクエスト数と、アシスタントが作った Run の数。
+    requests_last_hour: int
+    runs_last_hour: int
+
+
+class AssistantSettingsUpdateRequest(BaseModel):
+    """書いた項目だけ変える。null は不正な値(422)。"""
+
+    enabled: StrictBool | None = None
+    connection_id: StrictStr | None = None
+    model: StrictStr | None = None
+    hourly_request_limit: StrictInt | None = None
+    runs_per_message_limit: StrictInt | None = None
+    hourly_run_limit: StrictInt | None = None

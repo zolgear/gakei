@@ -14,6 +14,7 @@
 - パラメーターセット(ADR-0040): `parameter_set.created_by_user_id`
 - プロンプトテンプレート(実験): `prompt_template.created_by_user_id`
 - 共有リンク(ADR-0029): `share.created_by_user_id`(一覧・取り消しは本人のものだけ)
+- アシスタントの会話(ADR-0048 3章): `assistant_conversation.created_by_user_id`
 
 一覧・検索は `*_visible(user)` が返す SQLAlchemy の条件を `where()` に足し、詳細・操作は
 `get_visible_*()`(見えなければ None。呼び出し側は「存在しない」と同じ 404 にする)を使う。
@@ -36,6 +37,7 @@ from app.auth.identity import CurrentUser
 from app.domain.models import (
     Asset,
     AssetGroup,
+    AssistantConversation,
     ParameterSet,
     PromptSet,
     PromptTemplate,
@@ -139,6 +141,13 @@ def share_visible(user: CurrentUser) -> ColumnElement[bool]:
     if sees_everything(user):
         return true()
     return _owner_condition(Share.created_by_user_id, user)
+
+
+def assistant_conversation_visible(user: CurrentUser) -> ColumnElement[bool]:
+    """アシスタントの会話(ADR-0048 3章)。本人の会話だけが見える。"""
+    if sees_everything(user):
+        return true()
+    return _owner_condition(AssistantConversation.created_by_user_id, user)
 
 
 # -- 取り出し済みの行の判定 --------------------------------------------------
@@ -299,3 +308,17 @@ def get_visible_prompt_template(
     ):
         return None
     return template
+
+
+def get_visible_assistant_conversation(
+    db: Session, user: CurrentUser, conversation_id: uuid.UUID
+) -> AssistantConversation | None:
+    """見える、削除されていないアシスタントの会話(ADR-0048)。それ以外は None。"""
+    conversation = db.get(AssistantConversation, conversation_id)
+    if (
+        conversation is None
+        or conversation.deleted_at is not None
+        or not owner_matches(user, conversation.created_by_user_id)
+    ):
+        return None
+    return conversation
