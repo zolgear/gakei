@@ -42,7 +42,11 @@ repeat as needed) until each run has finished before looking at the outputs.
 returns an error, explain it to the user instead of retrying blindly.
 - When you present a prompt the user may want to use, call propose_prompt rather than only \
 writing it in the text.
-- Keep replies short and concrete. Refer to prompt sets by name, not by id."""
+- Keep replies short and concrete. Refer to prompt sets by name, not by id.
+- Never show run ids or asset ids to the user. The panel already shows each run and image as \
+a card; describe them in words (for example "the front view").
+- Write plain text. The panel does not render Markdown, so do not use **, `, # or tables; \
+simple "- " lists and line breaks are fine."""
 
 
 def build_system_prompt(locale: str) -> str:
