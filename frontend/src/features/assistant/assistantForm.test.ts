@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addAttachments, assistantFormState } from './assistantForm'
+import { addAttachments, assistantFormState, planAttachments } from './assistantForm'
 
 describe('assistantFormState', () => {
   it('入力画像が無ければ generate で、入力を送らない', () => {
@@ -48,5 +48,29 @@ describe('addAttachments', () => {
   it('重複を足さず、4枚で止める', () => {
     expect(addAttachments(['a'], ['a', 'b'])).toEqual(['a', 'b'])
     expect(addAttachments(['a', 'b', 'c'], ['d', 'e'])).toEqual(['a', 'b', 'c', 'd'])
+  })
+})
+
+describe('planAttachments', () => {
+  it('上限まで足し、入りきらない数と添付済みの数を返す', () => {
+    expect(planAttachments(['a'], ['b', 'a', 'c', 'd', 'e', 'f'])).toEqual({
+      next: ['a', 'b', 'c', 'd'],
+      added: 3,
+      already: 1,
+      overflow: 2,
+    })
+  })
+
+  it('すべて添付済みなら何も足さない', () => {
+    expect(planAttachments(['a', 'b'], ['b', 'a'])).toEqual({ next: ['a', 'b'], added: 0, already: 2, overflow: 0 })
+  })
+
+  it('上限に達していれば、添付済みでないものは全部 overflow', () => {
+    expect(planAttachments(['a', 'b', 'c', 'd'], ['e', 'a'])).toEqual({
+      next: ['a', 'b', 'c', 'd'],
+      added: 0,
+      already: 1,
+      overflow: 1,
+    })
   })
 })

@@ -5,6 +5,8 @@
 import { useLayoutEffect, useRef } from 'react'
 import { assetUrl } from '../../api/assetUrl'
 import { useI18n } from '../../i18n'
+import { AssetsCard } from './AssetsCard'
+import type { AttachmentPlan } from './assistantForm'
 import { PromptCard } from './PromptCard'
 import { RunCards } from './RunCards'
 import { ToolRow } from './ToolRow'
@@ -20,9 +22,11 @@ interface MessageListProps {
   /** 会話が変わったら、末尾へ送り直す。 */
   conversationKey: string
   emptyText: string
+  /** `show_assets` のカードの「すべて添付」。次の発言の添付に足す。 */
+  onAttach: (assetIds: string[]) => AttachmentPlan
 }
 
-export function MessageList({ items, conversationKey, emptyText }: MessageListProps) {
+export function MessageList({ items, conversationKey, emptyText, onAttach }: MessageListProps) {
   const { t } = useI18n()
   const a = t.assistant
   const ref = useRef<HTMLDivElement | null>(null)
@@ -94,6 +98,8 @@ export function MessageList({ items, conversationKey, emptyText }: MessageListPr
                 return <WriteResultCard key={item.key} message={item.message} />
               case 'runs':
                 return <RunCards key={item.key} message={item.message} />
+              case 'assets':
+                return <AssetsCard key={item.key} message={item.message} onAttach={onAttach} />
               case 'row':
                 return <ToolRow key={item.key} message={item.message} call={item.call} />
             }

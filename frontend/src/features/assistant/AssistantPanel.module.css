@@ -397,6 +397,26 @@
   gap: 8px;
 }
 
+/* -- 見つけた画像(show_assets)の格子 -- */
+
+.assetGrid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+
+.assetGridItem {
+  display: flex;
+  min-width: 0;
+}
+
+.assetGridItem .thumbButton {
+  width: 100%;
+}
+
 .runItem {
   display: flex;
   flex-direction: column;
