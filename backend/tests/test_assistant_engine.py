@@ -174,6 +174,53 @@ def test_chat_stream_assembles_tool_call_fragments() -> None:
     assert kwargs["tools"][0]["function"]["name"] == "get_form_context"
 
 
+def _bad_request(message: str) -> Any:
+    import httpx
+    import openai
+
+    response = httpx.Response(400, request=httpx.Request("POST", "http://x/v1/chat/completions"))
+    return openai.BadRequestError(message, response=response, body=None)
+
+
+def test_chat_retries_with_reasoning_none_when_tools_need_it() -> None:
+    client = _Client([_chunk("ok")])
+    attempts: list[dict[str, Any]] = []
+
+    async def chat_create(**kwargs: Any) -> Any:
+        attempts.append(kwargs)
+        if "reasoning_effort" not in kwargs:
+            raise _bad_request(
+                "Function tools with reasoning_effort are not supported for m-1 in "
+                "/v1/chat/completions."
+            )
+        return client.stream
+
+    client.chat = SimpleNamespace(completions=SimpleNamespace(create=chat_create))
+    engine = _engine(client)
+    assert asyncio.run(_collect(engine, _request(_target("chat")))) == [TextDelta("ok")]
+    assert [a.get("reasoning_effort") for a in attempts] == [None, "none"]
+
+    # 一度断られた接続先とモデルは、次から最初に付けて送る。
+    attempts.clear()
+    client.stream = _Stream([_chunk("again")])
+    assert asyncio.run(_collect(engine, _request(_target("chat")))) == [TextDelta("again")]
+    assert [a.get("reasoning_effort") for a in attempts] == ["none"]
+
+
+def test_chat_other_bad_request_is_not_retried() -> None:
+    client = _Client([])
+    attempts: list[dict[str, Any]] = []
+
+    async def chat_create(**kwargs: Any) -> Any:
+        attempts.append(kwargs)
+        raise _bad_request("model not found")
+
+    client.chat = SimpleNamespace(completions=SimpleNamespace(create=chat_create))
+    with pytest.raises(AssistantEngineError):
+        asyncio.run(_collect(_engine(client), _request(_target("chat"))))
+    assert len(attempts) == 1
+
+
 def test_chat_invalid_arguments_are_reported() -> None:
     events = [_chunk(tool_calls=[_tool_part(0, "c", "propose_prompt", "{not json")])]
     result = asyncio.run(_collect(_engine(_Client(events)), _request(_target("chat"))))

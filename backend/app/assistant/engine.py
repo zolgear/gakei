@@ -275,6 +275,8 @@ class OpenAIAssistantEngine:
         # 会話は同時に複数進むので、キャッシュの上限を超えても使用中のものを捨てにくいよう、
         # 接続先の数(数個)より十分大きい上限のまま使う。
         self._cache = LlmClientCache(timeout=_TIMEOUT_SECONDS)
+        # Chat Completions で道具を使うときに `reasoning_effort: "none"` が要る(接続先、モデル)。
+        self._chat_needs_no_reasoning: set[tuple[str | None, str]] = set()
 
     async def stream(self, request: EngineRequest) -> AsyncIterator[EngineEvent]:
         target = request.target
@@ -303,7 +305,7 @@ class OpenAIAssistantEngine:
         }
         if request.tools:
             kwargs["tools"] = chat_tools(request.tools)
-        stream = await client.chat.completions.create(**kwargs)
+        stream = await self._create_chat(client, target, kwargs)
         # index ごとに、届いた断片をつなぐ(id、名前、引数の JSON)。
         pending: dict[int, dict[str, str]] = {}
         try:
@@ -337,6 +339,22 @@ class OpenAIAssistantEngine:
                 arguments=arguments,
                 arguments_error=error,
             )
+
+    async def _create_chat(self, client: Any, target: LlmTarget, kwargs: dict[str, Any]) -> Any:
+        """Chat Completions を呼ぶ。OpenAI の推論モデル(gpt-5.6、GPT-6 系など)は、Chat
+        Completions で道具を使うときに `reasoning_effort: "none"` を求めて 400 を返す。ローカルの
+        サーバーは知らない引数を断ることがあるので常には付けず、この 400 が返ったときだけ付けて
+        送り直す。一度断られた接続先とモデルは覚えておき、次からは最初から付ける。"""
+        key = (target.base_url, target.model)
+        if "tools" in kwargs and key in self._chat_needs_no_reasoning:
+            return await client.chat.completions.create(**kwargs, reasoning_effort="none")
+        try:
+            return await client.chat.completions.create(**kwargs)
+        except openai.BadRequestError as e:
+            if "tools" not in kwargs or "reasoning_effort" not in str(e):
+                raise
+            self._chat_needs_no_reasoning.add(key)
+            return await client.chat.completions.create(**kwargs, reasoning_effort="none")
 
     async def _stream_responses(
         self, client: Any, target: LlmTarget, request: EngineRequest
