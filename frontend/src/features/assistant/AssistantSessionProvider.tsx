@@ -8,9 +8,12 @@
  * - 送信: 会話が無ければ先に作る。今のフォームの状態と画面の言語を添えて送り、応答の SSE を
  *   reducer に積む。プロンプトセットへの書き込みの結果が届いたら、プロンプトセットの一覧を
  *   取り直す。
+ * - 生成フォームの書き込み(`update_form`。ADR-0048 11章): 応答を受けている間に届いた成功の
+ *   結果だけをフォームに反映する(`requestFormLoad`)。反映の直前の値を記録し、カードの
+ *   「元に戻す」に使う。会話の読み込みでは反映しない。記録はこのページを開いている間だけ持つ。
  * - 止める: AbortController で接続を切る。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   ApiError,
@@ -24,6 +27,7 @@ import { useRunFormContext } from '../../context/useRunFormContext'
 import { getLocale, msg } from '../../i18n'
 import { assistantFormState } from './assistantForm'
 import { assistantSessionReducer, initialAssistantSession } from './assistantSession'
+import { applyFormWrite, formWriteFromStreamEvent, type FormWriteRecord } from './formWrite'
 import { readAssistantStream } from './assistantStream'
 import { loadAssistantConversationId, saveAssistantConversationId } from './assistantStorage'
 import { ASSISTANT_CONVERSATIONS_QUERY_KEY, PROMPT_SETS_QUERY_KEY } from './queryKeys'
@@ -36,7 +40,7 @@ function isAbortError(error: unknown): boolean {
 
 export function AssistantSessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
-  const { formState } = useRunFormContext()
+  const { formState, setFormState, requestFormLoad } = useRunFormContext()
   // 送信のときに最新の値を読むための ref(描いた後に更新する)。
   const formStateRef = useRef(formState)
   const [state, dispatch] = useReducer(assistantSessionReducer, undefined, () =>
@@ -48,6 +52,24 @@ export function AssistantSessionProvider({ children }: { children: ReactNode }) 
     stateRef.current = state
   })
   const abortRef = useRef<AbortController | null>(null)
+  const [formWrites, setFormWrites] = useState<Record<string, FormWriteRecord>>({})
+  const formWritesRef = useRef(formWrites)
+  useLayoutEffect(() => {
+    formWritesRef.current = formWrites
+  })
+  // 反映した書き込みのメッセージ(同じイベントが2度来ても重ねて反映しない)。
+  const appliedFormWritesRef = useRef(new Set<string>())
+
+  // フォームの全体の値を入れる。context(スタジオの外・入力画像)と、マウント済みのスタジオの
+  // ローカルの状態(読み込みのリクエスト)の両方に書く(Run 詳細の「同じ設定で新規作成」と同じ)。
+  const loadForm = useCallback(
+    (next: typeof formState) => {
+      formStateRef.current = next
+      setFormState(next)
+      requestFormLoad({ kind: 'assistant', state: next })
+    },
+    [setFormState, requestFormLoad],
+  )
   // 選び直した数。読み込みの応答が古い選択のものなら捨てる。
   const [reloadKey, bumpReload] = useReducer((n: number) => n + 1, 0)
 
@@ -81,6 +103,15 @@ export function AssistantSessionProvider({ children }: { children: ReactNode }) 
   const handleEvent = useCallback(
     (event: AssistantStreamEvent) => {
       dispatch({ type: 'event', event })
+      const formWrite = formWriteFromStreamEvent(event)
+      if (formWrite && event.type === 'tool_result' && !appliedFormWritesRef.current.has(event.message.id)) {
+        const id = event.message.id
+        appliedFormWritesRef.current.add(id)
+        const before = formStateRef.current
+        const after = applyFormWrite(before, formWrite)
+        loadForm(after)
+        setFormWrites((prev) => ({ ...prev, [id]: { before, after, undone: false } }))
+      }
       if (event.type === 'tool_result' && event.message.ok && WRITE_TOOLS.has(event.message.tool_name ?? '')) {
         void queryClient.invalidateQueries({ queryKey: PROMPT_SETS_QUERY_KEY })
       }
@@ -91,7 +122,17 @@ export function AssistantSessionProvider({ children }: { children: ReactNode }) 
         void queryClient.invalidateQueries({ queryKey: ASSISTANT_CONVERSATIONS_QUERY_KEY })
       }
     },
-    [queryClient],
+    [queryClient, loadForm],
+  )
+
+  const undoFormWrite = useCallback(
+    (messageId: string) => {
+      const record = formWritesRef.current[messageId]
+      if (!record || record.undone) return
+      loadForm(record.before)
+      setFormWrites((prev) => ({ ...prev, [messageId]: { ...record, undone: true } }))
+    },
+    [loadForm],
   )
 
   const send = useCallback(
@@ -178,8 +219,8 @@ export function AssistantSessionProvider({ children }: { children: ReactNode }) 
   const clearErrors = useCallback(() => dispatch({ type: 'clearErrors' }), [])
 
   const value = useMemo<AssistantSessionValue>(
-    () => ({ state, selectConversation, send, stop, replaceMessage, clearErrors }),
-    [state, selectConversation, send, stop, replaceMessage, clearErrors],
+    () => ({ state, selectConversation, send, stop, replaceMessage, clearErrors, formWrites, undoFormWrite }),
+    [state, selectConversation, send, stop, replaceMessage, clearErrors, formWrites, undoFormWrite],
   )
   return <AssistantSessionContext.Provider value={value}>{children}</AssistantSessionContext.Provider>
 }

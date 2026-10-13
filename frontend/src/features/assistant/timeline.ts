@@ -4,13 +4,14 @@
  * - 利用者の発言は吹き出し、アシスタントの本文は本文の段。
  * - 道具の結果はカードの種類を決める: `propose_prompt` はプロンプトのカード、プロンプトセットの
  *   書き込みは結果のカード(元に戻す)、`generate_image` は Run のカード、`show_assets` は
- *   画像の格子のカード(10章)。それ以外(`search_assets` などの捜索も)と失敗は、折りたたみの
+ *   画像の格子のカード(10章)、`update_form` は「フォームを変更」のカード(11章)。それ以外(`search_assets` などの捜索も)と失敗は、折りたたみの
  *   小さな行。
  * - 道具の呼び出しの引数は、結果のメッセージには無いので、前のアシスタントのメッセージの
  *   `tool_calls` から引く。
  */
 import type { AssistantMessageResponse, AssistantToolCallView } from '../../api/client'
 import type { PendingToolCall } from './assistantSession'
+import { readFormWrite } from './formWrite'
 
 /** プロンプトセットに書き込む道具(ADR-0048 4章)。 */
 export const WRITE_TOOLS: ReadonlySet<string> = new Set([
@@ -20,7 +21,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   'update_prompt_set_item',
 ])
 
-export type ToolCardKind = 'prompt' | 'write' | 'runs' | 'assets' | 'row'
+export type ToolCardKind = 'prompt' | 'write' | 'runs' | 'assets' | 'form' | 'row'
 
 export function toolCardKind(message: AssistantMessageResponse): ToolCardKind {
   if (message.ok !== true) return 'row'
@@ -29,6 +30,7 @@ export function toolCardKind(message: AssistantMessageResponse): ToolCardKind {
   if (WRITE_TOOLS.has(name)) return 'write'
   if (name === 'generate_image' && (message.run_ids ?? []).length > 0) return 'runs'
   if (name === 'show_assets' && readShownAssets(message).assets.length > 0) return 'assets'
+  if (readFormWrite(message) !== null) return 'form'
   return 'row'
 }
 

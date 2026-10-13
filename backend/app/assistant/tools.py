@@ -14,6 +14,9 @@
 - 生成: `generate_image`、`cancel_run`。Run は `run.origin = 'assistant'`、実行者は会話の
   利用者。1回の発言で作れる Run の数と、1時間あたりの Run の数を超えたら、Run を作らずに
   道具のエラーを返す(9章)。
+- 生成フォームの書き込み: `update_form`(11章)。検証して結果に入れるだけで、サーバーには
+  保存しない。ブラウザが応答を受けている間に届いた結果をフォームに反映する。同じ発言の
+  `get_form_context` と `generate_image` の補完には、変更を重ねた `ToolContext.form` が効く。
 
 引数は Pydantic のモデルで検証し、LLM に渡す JSON Schema も同じモデルから作る。
 """
@@ -56,9 +59,16 @@ from app.domain.models import (
     RunStatus,
 )
 from app.domain.pricing import estimate_cost as estimate_cost_domain
-from app.domain.schemas import REPEAT_MAX, AssistantFormState, RunCreateRequest, RunInputCreate
-from app.domain.visibility import get_visible_asset, get_visible_run
+from app.domain.schemas import (
+    REPEAT_MAX,
+    AssistantFormInput,
+    AssistantFormState,
+    RunCreateRequest,
+    RunInputCreate,
+)
+from app.domain.visibility import get_visible_asset, get_visible_group, get_visible_run
 from app.i18n import t
+from app.providers.base import ModelCapabilities, ProviderCapabilities, provider_status_snapshot
 
 # `get_run` の1回の待ちの上限(秒。9章)。
 WAIT_MAX_SECONDS = 25.0
@@ -73,6 +83,8 @@ SEARCH_LIMIT_MAX = asset_search_domain.SEARCH_LIMIT_MAX
 SHOW_ASSETS_MAX = 24
 # `list_tags` の件数の上限。
 LIST_TAGS_LIMIT_MAX = 200
+# `update_form` で入れられる入力画像の上限(フォームの状態の上限と同じ)。
+FORM_INPUTS_MAX = 32
 # 1回の書き込みで足せる項目の上限。
 ITEMS_MAX = 100
 # `list_prompt_sets` で1項目の本文を返す上限(長い本文で履歴が埋まらないように)。
@@ -304,6 +316,53 @@ class GenerateImageArgs(_Args):
 
 class CancelRunArgs(_Args):
     run_id: uuid.UUID
+
+
+class UpdateFormInputArg(_Args):
+    # 参照画像(reference)は、生成フォームに欄が無いので受けない(入れても見えずに送られる)。
+    asset_id: uuid.UUID
+    role: Literal["image", "mask"] = Field(
+        default="image",
+        description="image (the first one is the primary parent) or mask (at most one).",
+    )
+
+
+class UpdateFormArgs(_Args):
+    """指定した項目だけを変える(11章)。`asset_group_id` 以外は null を「指定なし」と同じに
+    扱う。`asset_group_id` は null を渡すと「グループなし」にする(省略とは区別する)。"""
+
+    provider: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Switch to this provider. The model becomes its default unless you pass model.",
+    )
+    model: str | None = Field(default=None, max_length=200, description="Switch to this model.")
+    operation: Literal["generate", "edit"] | None = Field(
+        default=None,
+        description=(
+            "generate clears the input images (unless you pass inputs). edit needs at least "
+            "one input image (in the form or in inputs)."
+        ),
+    )
+    prompt: str | None = Field(
+        default=None, max_length=32_000, description="Replace the prompt (empty string clears it)."
+    )
+    params: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            'Change only these parameters (see get_capabilities), e.g. {"quality": "low", '
+            '"size": "1024x1536"}. A null value resets that parameter to the form\'s default.'
+        ),
+    )
+    inputs: list[UpdateFormInputArg] | None = Field(
+        default=None,
+        max_length=FORM_INPUTS_MAX,
+        description="Replace the input images. Pass [] to remove all input images.",
+    )
+    asset_group_id: uuid.UUID | None = Field(
+        default=None,
+        description="Put outputs into this group (see list_groups). Pass null for no group.",
+    )
 
 
 # -- JSON Schema ------------------------------------------------------------------
@@ -1002,6 +1061,218 @@ async def cancel_run(ctx: ToolContext, args: CancelRunArgs) -> ToolOutcome:
     return ToolOutcome(ok=True, result={"run_id": str(args.run_id), "status": "canceled"})
 
 
+# -- 生成フォームの書き込み(11章) --------------------------------------------------
+
+_FORM_FIELDS = ("provider", "model", "operation", "prompt", "params", "inputs")
+_FORM_NOTE = (
+    "The generation form in the user's browser now has these values (nothing is saved on the "
+    "server). Tell the user briefly what you changed. Parameters you do not pass to "
+    "generate_image now come from this form."
+)
+
+
+def _given(args: UpdateFormArgs, name: str) -> bool:
+    """指定された項目か。`asset_group_id` は null も指定(「グループなし」)。"""
+    if name not in args.model_fields_set:
+        return False
+    return name == "asset_group_id" or getattr(args, name) is not None
+
+
+def _resolve_provider(ctx: ToolContext, name: str) -> ProviderCapabilities:
+    """今使えるプロバイダーの capabilities。使えなければ ToolFailure。"""
+    registry = ctx.state.registry
+    provider = registry.get(name)
+    if provider is None:
+        available = ", ".join(sorted(registry.providers))
+        raise ToolFailure(f"Unknown provider: {name}. Available providers: {available}.")
+    snapshot = provider_status_snapshot(provider)
+    if not snapshot.available:
+        reason = snapshot.unavailable_reason or t("runs.providerUnavailable", label=provider.label)
+        raise ToolFailure(f"The provider {name} cannot be used now: {reason}")
+    return snapshot.capabilities
+
+
+def _find_model(caps: ProviderCapabilities, model: str) -> ModelCapabilities:
+    found = next((m for m in caps.models if m.model == model), None)
+    if found is None:
+        models = ", ".join(m.model for m in caps.models) or "(none)"
+        raise ToolFailure(f"Unknown model for {caps.provider}: {model}. Models: {models}.")
+    return found
+
+
+def _param_default(caps: ProviderCapabilities, defs: dict[str, Any], key: str) -> Any:
+    """null で戻す先の値(フォームの既定。無ければ None = 未指定)。"""
+    if key == "size":
+        return caps.default_size
+    pdef = defs.get(key)
+    return None if pdef is None else pdef.form_default
+
+
+def _param_kept(caps: ProviderCapabilities, defs: dict[str, Any], key: str, value: Any) -> bool:
+    """モデル・操作を変えたとき、今の値を引き継げるか(キーと選択肢だけを見る。フォームの
+    `sanitizeRawValues` と同じ考え方)。"""
+    if key == "size":
+        return caps.size is not None
+    pdef = defs.get(key)
+    if pdef is None:
+        return False
+    return not (pdef.choices and str(value) not in pdef.choices)
+
+
+@dataclass
+class _FormUpdate:
+    patch: dict[str, Any]
+    form: AssistantFormState
+    dropped_params: list[str]
+
+
+def _resolve_form_update(ctx: ToolContext, args: UpdateFormArgs) -> _FormUpdate:
+    """フォームへの変更を検証し、変えた項目(`patch`)と重ねた後の値を作る。何かが通らなければ
+    ToolFailure(何も変えない)。"""
+    if not any(_given(args, name) for name in (*_FORM_FIELDS, "asset_group_id")):
+        raise ToolFailure(
+            "Nothing to change: pass at least one of provider, model, operation, prompt, "
+            "params, inputs or asset_group_id."
+        )
+    base = ctx.form or AssistantFormState()
+    registry = ctx.state.registry
+    patch: dict[str, Any] = {}
+
+    # 入力画像。操作(Generate / Edit)は、フォームと同じく入力画像から導く(ADR-0009)。
+    inputs = list(base.inputs)
+    if _given(args, "inputs"):
+        inputs = [AssistantFormInput(asset_id=i.asset_id, role=i.role) for i in args.inputs or []]
+        masks = sum(1 for i in inputs if i.role == "mask")
+        if masks > 1:
+            raise ToolFailure("Only one mask can be in the form.")
+        if masks and not any(i.role == "image" for i in inputs):
+            raise ToolFailure("A mask needs at least one input image (role image).")
+        with ctx.session() as db:
+            for item in inputs:
+                asset = get_visible_asset(db, ctx.user, item.asset_id)
+                if asset is None or asset.deleted_at is not None:
+                    raise ToolFailure(f"Asset {item.asset_id} not found.")
+        patch["inputs"] = [i.model_dump(mode="json") for i in inputs]
+    elif args.operation == "generate":
+        # Generate は入力画像の無いフォーム。入力画像を外す。
+        inputs = []
+        patch["inputs"] = []
+    has_image = any(i.role == "image" for i in inputs)
+    operation: Literal["generate", "edit"] = "edit" if has_image else "generate"
+    if args.operation is not None and args.operation != operation:
+        if args.operation == "edit":
+            raise ToolFailure(
+                "edit needs at least one input image: pass inputs with an image (role image)."
+            )
+        raise ToolFailure("generate takes no input images: pass inputs [] or omit inputs.")
+    base_operation = base.operation or ("edit" if base.inputs else "generate")
+    if _given(args, "operation") or _given(args, "inputs"):
+        patch["operation"] = operation
+
+    # プロバイダーとモデル。変えるとき・パラメーターを変えるとき・操作が変わるときだけ引く。
+    current_provider = base.provider or registry.primary
+    provider_name = args.provider if _given(args, "provider") else current_provider
+    if _given(args, "model"):
+        model = args.model
+    elif provider_name == current_provider and base.model:
+        model = base.model
+    else:
+        model = None
+    model_changed = provider_name != current_provider or (model is not None and model != base.model)
+    needs_caps = (
+        _given(args, "provider")
+        or _given(args, "model")
+        or _given(args, "params")
+        or operation != base_operation
+    )
+    params = dict(base.params)
+    dropped: list[str] = []
+    if needs_caps:
+        caps = _resolve_provider(ctx, provider_name or "")
+        model = model or caps.default_model
+        model_caps = _find_model(caps, model)
+        op_caps = next((o for o in model_caps.operations if o.operation == operation), None)
+        if op_caps is None:
+            raise ToolFailure(f"The model {model} does not support {operation}.")
+        defs = {p.name: p for p in op_caps.params}
+        if _given(args, "provider"):
+            patch["provider"] = provider_name
+        if _given(args, "provider") or _given(args, "model"):
+            patch["model"] = model
+        if model_changed or operation != base_operation:
+            # 新しいモデル・操作に無いキーと選択肢は落とす(フォームと同じ)。
+            for key in list(params):
+                if not _param_kept(caps, defs, key, params[key]):
+                    dropped.append(key)
+                    params.pop(key)
+        if _given(args, "params"):
+            requested = args.params or {}
+            for key, value in requested.items():
+                if key == "size":
+                    if caps.size is None:
+                        raise ToolFailure(f"{caps.provider} does not take a size parameter.")
+                elif key not in defs:
+                    names = ", ".join(["size", *defs] if caps.size else defs) or "(none)"
+                    raise ToolFailure(
+                        f"Unknown parameter for {model} ({operation}): {key}. Parameters: {names}."
+                    )
+                if value is not None and not isinstance(value, str | int | float | bool):
+                    raise ToolFailure(f"The value of {key} must be a string, number or boolean.")
+            for key, value in requested.items():
+                if value is None:
+                    default = _param_default(caps, defs, key)
+                    if default is None:
+                        params.pop(key, None)
+                    else:
+                        params[key] = default
+                else:
+                    params[key] = value
+            patch["params"] = dict(requested)
+        provider_out: str | None = provider_name
+    else:
+        provider_out = base.provider
+
+    if _given(args, "prompt"):
+        patch["prompt"] = args.prompt
+    group_id = base.asset_group_id
+    if _given(args, "asset_group_id"):
+        group_id = args.asset_group_id
+        if group_id is not None:
+            with ctx.session() as db:
+                if get_visible_group(db, ctx.user, group_id) is None:
+                    raise ToolFailure(f"Group {group_id} not found.")
+        patch["asset_group_id"] = str(group_id) if group_id is not None else None
+
+    form = AssistantFormState(
+        provider=provider_out,
+        model=model,
+        operation=operation,
+        prompt=patch["prompt"] if "prompt" in patch else base.prompt,
+        params=params,
+        inputs=inputs,
+        asset_group_id=group_id,
+    )
+    return _FormUpdate(patch=patch, form=form, dropped_params=dropped)
+
+
+async def update_form(ctx: ToolContext, args: UpdateFormArgs) -> ToolOutcome:
+    update = await _in_thread(lambda: _resolve_form_update(ctx, args))
+    # 同じ発言の `get_form_context` と `generate_image` の補完に効くよう、変更を重ねる。
+    ctx.form = update.form
+    result: dict[str, Any] = {
+        "patch": update.patch,
+        "form": update.form.model_dump(mode="json"),
+        "note": _FORM_NOTE,
+    }
+    if update.dropped_params:
+        result["dropped_params"] = update.dropped_params
+        result["dropped_note"] = (
+            "These parameters do not exist (or have a value that is not allowed) for the new "
+            "model or operation and were reset."
+        )
+    return ToolOutcome(ok=True, result=result)
+
+
 # -- 登録簿 ---------------------------------------------------------------------------
 
 
@@ -1028,9 +1299,18 @@ TOOLS: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         "get_form_context",
         "Get the current generation form: provider, model, operation (generate / edit), "
-        "prompt, params, input images and group.",
+        "prompt, params, input images and group. Includes changes made with update_form.",
         NoArgs,
         get_form_context,
+    ),
+    ToolDefinition(
+        "update_form",
+        "Change the generation form in the user's browser: provider, model, operation, prompt "
+        "(replaced), params (only the given keys; null resets a key), input images (replaced) "
+        "and output group. Only the fields you pass change. Applied immediately without "
+        "asking; the user sees a card with an Undo button. Nothing is saved on the server.",
+        UpdateFormArgs,
+        update_form,
     ),
     ToolDefinition(
         "propose_prompt",
@@ -1129,7 +1409,8 @@ TOOLS: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         "generate_image",
         "Create generation / edit runs (billed). Parameters you omit come from the current "
-        "form. Returns run ids right away with an estimated price; then wait with get_run.",
+        "form (including changes made with update_form). Returns run ids right away with an "
+        "estimated price; then wait with get_run.",
         GenerateImageArgs,
         generate_image,
     ),

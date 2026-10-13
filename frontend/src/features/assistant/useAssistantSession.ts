@@ -2,6 +2,7 @@
 import { createContext, useContext } from 'react'
 import type { AssistantMessageResponse } from '../../api/client'
 import type { AssistantSessionState } from './assistantSession'
+import type { FormWriteRecord } from './formWrite'
 
 export interface AssistantSessionValue {
   state: AssistantSessionState
@@ -14,6 +15,13 @@ export interface AssistantSessionValue {
   /** 「元に戻す」の結果などで、保存済みのメッセージを置き換える。 */
   replaceMessage: (message: AssistantMessageResponse) => void
   clearErrors: () => void
+  /**
+   * このページで反映した `update_form` の書き込み(ADR-0048 11章)。キーは tool のメッセージの
+   * id。変更前の値はここにしか無い(会話には保存しない)ので、開き直した会話のカードには無い。
+   */
+  formWrites: Readonly<Record<string, FormWriteRecord>>
+  /** 書き込みを元に戻す(反映の直前のフォームの値に戻す)。記録が無ければ何もしない。 */
+  undoFormWrite: (messageId: string) => void
 }
 
 export const AssistantSessionContext = createContext<AssistantSessionValue | null>(null)

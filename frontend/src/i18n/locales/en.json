@@ -2837,6 +2837,29 @@
       "undoneAt": "Undone ({at})",
       "undoFailed": "Could not undo"
     },
+    "formCard": {
+      "title": "Form changed",
+      "fields": {
+        "model": "Model",
+        "prompt": "Prompt",
+        "size": "Size",
+        "inputs": "Input images",
+        "group": "Group"
+      },
+      "roles": {
+        "image": "Input",
+        "mask": "Mask",
+        "reference": "Reference"
+      },
+      "none": "(none)",
+      "unspecified": "(not set)",
+      "on": "On",
+      "off": "Off",
+      "unknownGroup": "(group not found)",
+      "noChange": "Nothing changed.",
+      "undone": "Undone",
+      "outsideStudio": "The form picks this up when you open the studio."
+    },
     "runCard": {
       "heading": {
         "one": "{count} generation",
@@ -2890,7 +2913,8 @@
       "get_asset": "Read image details",
       "list_groups": "Read groups",
       "list_tags": "Read tags",
-      "show_assets": "Show images"
+      "show_assets": "Show images",
+      "update_form": "Change the form"
     }
   }
 }

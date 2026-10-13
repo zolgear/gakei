@@ -248,6 +248,10 @@
   border-left-color: var(--color-edit);
 }
 
+.card[data-kind='form'] {
+  border-left-color: var(--color-edit);
+}
+
 .card[data-undone] {
   opacity: 0.7;
 }
@@ -373,6 +377,32 @@
   font-size: 10px;
   color: var(--color-text-faint);
   text-decoration: none;
+}
+
+/* 生成フォームの書き込み */
+
+.formInputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.formInput {
+  position: relative;
+  display: inline-flex;
+}
+
+.formInputRole {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  opacity: 0.9;
 }
 
 /* Run */
