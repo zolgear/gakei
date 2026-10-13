@@ -6,6 +6,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { assetUrl } from '../../api/assetUrl'
 import { useI18n } from '../../i18n'
 import { AssetsCard } from './AssetsCard'
+import { FormWriteCard } from './FormWriteCard'
 import type { AttachmentPlan } from './assistantForm'
 import { PromptCard } from './PromptCard'
 import { RunCards } from './RunCards'
@@ -100,6 +101,8 @@ export function MessageList({ items, conversationKey, emptyText, onAttach }: Mes
                 return <RunCards key={item.key} message={item.message} />
               case 'assets':
                 return <AssetsCard key={item.key} message={item.message} onAttach={onAttach} />
+              case 'form':
+                return <FormWriteCard key={item.key} message={item.message} />
               case 'row':
                 return <ToolRow key={item.key} message={item.message} call={item.call} />
             }

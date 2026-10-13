@@ -7,12 +7,15 @@ import type { RunFormState } from '../features/run-form/types'
 /**
  * フォームへの読み込みのリクエスト。画像の生成情報(ADR-0038 9章)、パラメーターセット(ADR-0040)、
  * Run 詳細の「同じ設定で新規作成」(`run`。フォームの状態をそのまま入れる。入力画像とグループも含む)、
- * プロンプトテンプレート(実験。`promptTemplate`。フォームをテンプレートモードにする。null は解除)。
+ * プロンプトテンプレート(実験。`promptTemplate`。フォームをテンプレートモードにする。null は解除)、
+ * アシスタントの `update_form`(`assistant`。ADR-0048 11章。書き込みを重ねた・元に戻したフォームの
+ * 全体の値。`run` と同じく入れる。入力画像は積む側が context に書く)。
  */
 export type FormLoadRequest =
   | { kind: 'sdwebui'; response: SdWebuiImportParamsResponse }
   | { kind: 'parameterSet'; set: ParameterSetResponse }
   | { kind: 'run'; state: RunFormState }
+  | { kind: 'assistant'; state: RunFormState }
   | { kind: 'promptTemplate'; template: PromptTemplateResponse | null }
 
 export interface RunFormContextValue {

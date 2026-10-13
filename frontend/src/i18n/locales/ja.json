@@ -2837,6 +2837,29 @@
       "undoneAt": "元に戻しました({at})",
       "undoFailed": "元に戻せませんでした"
     },
+    "formCard": {
+      "title": "フォームを変更",
+      "fields": {
+        "model": "モデル",
+        "prompt": "プロンプト",
+        "size": "サイズ",
+        "inputs": "入力画像",
+        "group": "グループ"
+      },
+      "roles": {
+        "image": "入力",
+        "mask": "マスク",
+        "reference": "参照"
+      },
+      "none": "(なし)",
+      "unspecified": "(未指定)",
+      "on": "オン",
+      "off": "オフ",
+      "unknownGroup": "(見つからないグループ)",
+      "noChange": "変更はありません。",
+      "undone": "元に戻しました",
+      "outsideStudio": "スタジオを開くとフォームに入ります。"
+    },
     "runCard": {
       "heading": {
         "one": "生成 {count} 件",
@@ -2890,7 +2913,8 @@
       "get_asset": "画像の情報を読む",
       "list_groups": "グループを読む",
       "list_tags": "タグを読む",
-      "show_assets": "画像を示す"
+      "show_assets": "画像を示す",
+      "update_form": "フォームを変更"
     }
   }
 }
