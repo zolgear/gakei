@@ -51,5 +51,6 @@
 | ADR-0045 | [0045-prompt-embeddings.md](0045-prompt-embeddings.md) | プロンプト(指示)の埋め込みで、Run を指示の意味で探す | Proposed |
 | ADR-0046 | [0046-reconcile-storage.md](0046-reconcile-storage.md) | 画像を手で消した後に DB を合わせるメンテナンスのツール | Proposed |
 | ADR-0047 | [0047-map-3d-and-in-map-search.md](0047-map-3d-and-in-map-search.md) | マップを立体で見せ、マップの中で意味検索する | Proposed |
+| ADR-0048 | [0048-generation-assistant-chat.md](0048-generation-assistant-chat.md) | 生成のアシスタント(チャットでプロンプトとプロンプトセットを作る) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。
