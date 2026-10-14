@@ -2194,6 +2194,8 @@ class EmbeddingGraphNode(BaseModel):
     title: str | None = None
     # サムネイルの焦点(ADR-0043)。
     focal_point: FocalPoint | None = None
+    # レーティングの段階(ADR-0049 5章「マップ」)。未判定は null。マップでマスクするかを決める。
+    content_rating: ContentRatingLevel | None = None
 
 
 class EmbeddingGraphResponse(BaseModel):

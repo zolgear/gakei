@@ -4076,6 +4076,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /**
          * EmbeddingGraphResponse
