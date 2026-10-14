@@ -4,6 +4,7 @@ import {
   annotationDraftErrors,
   backfillBlocker,
   changeComfyuiConnection,
+  contentRatingBackfillBlocker,
   connectionCallsRows,
   diffAnnotationDraft,
   diffAnnotationForm,
@@ -339,6 +340,15 @@ describe('ページの下書き(ADR-0031)', () => {
     })
   })
 
+  it('レーティングの判定(ADR-0049)も下書きに持ち、変わったときだけ送る', () => {
+    const s = settings({ content_rating_enabled: false })
+    const draft = draftFromSettings(s)
+    expect(draft.content_rating_enabled).toBe(false)
+    expect(diffAnnotationDraft({ ...draft, content_rating_enabled: true }, s)).toEqual({ content_rating_enabled: true })
+    const on = settings({ content_rating_enabled: true })
+    expect(diffAnnotationDraft(draftFromSettings(on), on)).toEqual({})
+  })
+
   it('一度変えて元に戻したスイッチは送らない', () => {
     const s = settings({ vlm_enabled: true })
     const draft = { ...draftFromSettings(s), vlm_enabled: true }
@@ -400,5 +410,20 @@ describe('backfillBlocker', () => {
 
   it('未保存の理由を、エンジンが無い理由より先に出す(保存すれば解ける理由を先に)', () => {
     expect(backfillBlocker({ ...ok, dirty: true, usableEngineCount: 0 })).toBe('unsaved')
+  })
+})
+
+describe('contentRatingBackfillBlocker', () => {
+  const ok = { dirty: false, usable: true, pendingCount: 3, running: false }
+
+  it('押せるときは null', () => {
+    expect(contentRatingBackfillBlocker(ok)).toBeNull()
+  })
+
+  it('保存していない変更、使えない判定、未判定なし、実行中は押せない', () => {
+    expect(contentRatingBackfillBlocker({ ...ok, dirty: true })).toBe('unsaved')
+    expect(contentRatingBackfillBlocker({ ...ok, usable: false })).toBe('notUsable')
+    expect(contentRatingBackfillBlocker({ ...ok, pendingCount: 0 })).toBe('nothingPending')
+    expect(contentRatingBackfillBlocker({ ...ok, running: true, dirty: true })).toBe('running')
   })
 })

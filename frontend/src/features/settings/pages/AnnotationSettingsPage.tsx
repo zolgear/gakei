@@ -7,6 +7,8 @@
  *    接続先の選択肢は「LLM の接続先」(`/settings/llm-connections`。ADR-0032)の一覧から取り、
  *    接続先の追加・編集・キーはそのページで行う(リンクを置く)。
  * 3. 言語 4. 1時間の上限(接続先ごとの回数も出す) 5. ONNX タガー
+ * 6. レーティング(ADR-0049 3章): 判定の有効化(保存で反映)、未判定の件数と一括判定。ONNX タガーで
+ *    選んだモデルを使うので、その下に置く。
  *
  * 項目の種類(ADR-0031 2章):
  * - 保存で反映: スイッチ(取り込み時の自動実行、LLM・VLM・ONNX の有効化)、ONNX のモデルの選択、
@@ -25,6 +27,7 @@ import { Link } from 'react-router'
 import {
   ApiError,
   backfillAnnotations,
+  backfillContentRatings,
   deleteOnnxModel,
   downloadOnnxModel,
   getAnnotationSettings,
@@ -47,6 +50,7 @@ import {
   ONNX_THRESHOLD_MIN,
   annotationDraftErrors,
   backfillBlocker,
+  contentRatingBackfillBlocker,
   changeComfyuiConnection,
   connectionCallsRows,
   diffAnnotationDraft,
@@ -91,7 +95,7 @@ export function AnnotationSettingsPage() {
     refetchInterval: (q) => {
       const data = q.state.data
       if (isAnyOnnxDownloading(data)) return DOWNLOAD_POLL_MS
-      if ((data?.queued_count ?? 0) > 0) return QUEUE_POLL_MS
+      if ((data?.queued_count ?? 0) > 0 || (data?.content_rating_queued_count ?? 0) > 0) return QUEUE_POLL_MS
       return false
     },
   })
@@ -160,6 +164,7 @@ function AnnotationSettingsBody({ data, connections, saved, values, draft }: Bod
   const queryClient = useQueryClient()
   const [modelToDelete, setModelToDelete] = useState<OnnxModelName | null>(null)
   const [backfillOpen, setBackfillOpen] = useState(false)
+  const [ratingBackfillOpen, setRatingBackfillOpen] = useState(false)
 
   const setSettings = (next: AnnotationSettingsResponse) =>
     queryClient.setQueryData(ANNOTATION_SETTINGS_QUERY_KEY, next)
@@ -190,6 +195,14 @@ function AnnotationSettingsBody({ data, connections, saved, values, draft }: Bod
     },
   })
 
+  const ratingBackfillMutation = useMutation({
+    mutationFn: backfillContentRatings,
+    onSuccess: (result) => {
+      toast.show({ message: fmt(m.contentRating.queuedToast, { count: result.queued }) })
+      void queryClient.invalidateQueries({ queryKey: ANNOTATION_SETTINGS_QUERY_KEY })
+    },
+  })
+
   const cellErrors = validateAnnotationForm(values, connections)
   const usableEngines = data.usable_engines ?? []
   const onnxModels = data.onnx_models ?? []
@@ -205,6 +218,16 @@ function AnnotationSettingsBody({ data, connections, saved, values, draft }: Bod
   const blockerText = blocker === 'unsaved' ? m.backfill.unsavedBlocked : blocker === 'noEngines' ? m.backfill.noEngines : null
   const backfillError = errorText(backfillMutation.error, m.communicationFailed)
   const modelOpError = errorText(downloadMutation.error ?? deleteModelMutation.error, m.communicationFailed)
+
+  const ratingBlocker = contentRatingBackfillBlocker({
+    dirty: draft.dirty,
+    usable: data.content_rating_usable,
+    pendingCount: data.content_rating_pending_count,
+    running: ratingBackfillMutation.isPending,
+  })
+  const ratingBlockerText =
+    ratingBlocker === 'unsaved' ? m.backfill.unsavedBlocked : ratingBlocker === 'notUsable' ? m.contentRating.notUsable : null
+  const ratingBackfillError = errorText(ratingBackfillMutation.error, m.communicationFailed)
 
   const callRows = connectionCallsRows(connections, data.connection_calls)
 
@@ -453,6 +476,53 @@ function AnnotationSettingsBody({ data, connections, saved, values, draft }: Bod
         </SettingsRow>
       </SettingsSection>
 
+      {/* 6. レーティング(ADR-0049 3章) */}
+      <SettingsSection heading={m.contentRating.heading}>
+        <p className={styles.helpText}>{m.contentRating.notice}</p>
+        <SettingsRow
+          label={m.contentRating.enabledLabel}
+          htmlFor="gakei-annotation-content-rating"
+          description={m.contentRating.enabledHelp}
+          changed={draft.isChanged('content_rating_enabled')}
+        >
+          <SettingsSwitch
+            id="gakei-annotation-content-rating"
+            checked={values.content_rating_enabled}
+            disabled={disabled}
+            onChange={(checked) => draft.set('content_rating_enabled', checked)}
+          />
+          {/* 使うモデルは ONNX タガーで選んだもの(下書きの選択で判断する)。 */}
+          {values.content_rating_enabled && selectedModel && !selectedModel.downloaded && (
+            <p className={styles.warningText}>{m.contentRating.modelNotReady}</p>
+          )}
+        </SettingsRow>
+        <SettingsRow label={m.contentRating.pendingLabel}>
+          <span className={`${own.value} ${styles.mono}`}>
+            {fmt(m.contentRating.pendingValue, { count: data.content_rating_pending_count })}
+          </span>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={ratingBlocker !== null}
+            aria-describedby={ratingBlockerText ? 'gakei-content-rating-backfill-blocker' : undefined}
+            onClick={() => setRatingBackfillOpen(true)}
+          >
+            {m.contentRating.run}
+          </button>
+          {ratingBlockerText && (
+            <p id="gakei-content-rating-backfill-blocker" className={styles.helpText}>
+              {ratingBlockerText}
+            </p>
+          )}
+          {ratingBackfillError && <p className={styles.errorText}>{ratingBackfillError}</p>}
+        </SettingsRow>
+        <SettingsRow label={m.contentRating.queuedLabel}>
+          <span className={`${own.value} ${styles.mono}`}>
+            {fmt(m.contentRating.queuedValue, { count: data.content_rating_queued_count })}
+          </span>
+        </SettingsRow>
+      </SettingsSection>
+
       <ConfirmDialog
         open={modelToDelete !== null}
         message={fmt(m.onnx.deleteConfirm.message, { name: modelToDelete ?? '' })}
@@ -473,6 +543,16 @@ function AnnotationSettingsBody({ data, connections, saved, values, draft }: Bod
           backfillMutation.mutate()
         }}
         onCancel={() => setBackfillOpen(false)}
+      />
+      <ConfirmDialog
+        open={ratingBackfillOpen}
+        message={fmt(m.contentRating.confirm.message, { count: data.content_rating_pending_count })}
+        confirmLabel={m.contentRating.confirm.confirmLabel}
+        onConfirm={() => {
+          setRatingBackfillOpen(false)
+          ratingBackfillMutation.mutate()
+        }}
+        onCancel={() => setRatingBackfillOpen(false)}
       />
     </>
   )
