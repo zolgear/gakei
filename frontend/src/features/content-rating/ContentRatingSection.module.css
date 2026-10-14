@@ -1,0 +1,168 @@
+/* ビューアの「レーティング」の節(ADR-0049 4章)。枠と見出しは AssetAnnotationSection と共有する。 */
+
+.levelRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 自動か人か。人が選んだものは本文色、自動は控えめな色(タイトルの見分け方と揃える)。 */
+.source {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.source[data-source='user'] {
+  color: var(--color-text);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.levelButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.levelButton {
+  min-width: 36px;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.levelButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+/* 今の段階(自動でも人でも)。人が選んだときは aria-pressed も立つ。 */
+.levelButton[data-current='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.levelButton:disabled {
+  opacity: 0.5;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.detailBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detailLabel {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.scoreList,
+.signalList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.scoreRow {
+  display: grid;
+  grid-template-columns: 88px 1fr 48px;
+  align-items: center;
+  gap: 8px;
+}
+
+.scoreName,
+.signalTag,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.scoreBar {
+  height: 6px;
+  background: var(--color-bg-sunken);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.scoreBar > span {
+  display: block;
+  height: 100%;
+  background: var(--color-text-faint);
+}
+
+.scoreValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+  color: var(--color-text-muted);
+}
+
+.signalRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+}
+
+.signalRow[data-raised='true'] {
+  color: var(--color-text);
+}
+
+.signalTag {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.raised {
+  font-size: 11px;
+  color: var(--color-accent);
+}
+
+.metaList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  font-size: 12px;
+}
+
+.metaList dt {
+  color: var(--color-text-muted);
+}
+
+.metaList dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .levelButton {
+    min-width: 44px;
+    height: 40px;
+  }
+}
