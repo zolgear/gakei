@@ -1793,12 +1793,12 @@
     "textureError": "表示できない素材があります(読み込みに失敗しました)",
     "droppedSources": "読めない素材 {count} 件を外して開きました(削除された画像など)",
     "skippedSources": "使えない画像 {count} 枚を素材にしませんでした(削除された画像・マスクなど)",
-    "rejectedLayers": "素材は最大 16 枚のため、{count} 枚は足せませんでした",
+    "rejectedLayers": "素材は最大 16 枚のため、{count} 枚は追加できませんでした",
     "noComposition": "配置の記録が見つからないため、この画像を素材にして新しく始めます",
     "hint": "ドラッグで移動、四隅で拡大縮小、上の丸で回転(Shift で 15° 刻み)。2本指で拡大縮小と回転。矢印キーで少しずつ動かし、Delete で外します。",
     "distortHint": "変形: 四隅を1つずつ動かして台形などにします(凹む形・ねじれた形にはなりません)。上の丸で回転します。",
     "toolbar": {
-      "add": "素材を足す",
+      "add": "素材を追加",
       "modeGroup": "ハンドルの動き",
       "modeTransform": "移動・拡大縮小(縦横比を保つ)",
       "modeDistort": "変形(四隅を1つずつ動かす)",
@@ -1836,16 +1836,16 @@
       "flipped": "反転",
       "primaryBadge": "主",
       "primaryTitle": "主たる素材(系列で主たる親になる)",
-      "emptyLayers": "素材がありません。「素材を足す」から選んでください"
+      "emptyLayers": "素材がありません。「素材を追加」から選んでください"
     },
     "addDialog": {
-      "title": "素材を足す",
+      "title": "素材を追加",
       "fromInputs": "入力の画像",
       "inputAria": "入力の {n} 枚目",
       "fromStock": "ストックから選ぶ",
       "remaining": "あと {count} 枚",
       "selectedCount": "{count} 枚を選択中",
-      "addSelected": "足す",
+      "addSelected": "追加",
       "empty": "画像がありません",
       "loadFailed": "読み込みに失敗しました",
       "loadMore": "さらに読み込む"

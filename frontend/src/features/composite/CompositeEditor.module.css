@@ -119,6 +119,8 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+  /* 素材を動かす指で、ダイアログ・ページをスクロールやズームさせない(iOS は CompositeStage でも止める)。 */
+  overscroll-behavior: contain;
 }
 
 .canvasBackground {

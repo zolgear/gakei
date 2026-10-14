@@ -8,6 +8,10 @@
  *   その角だけを動かす(凸を保てる所で止める)
  * - 上の丸: 回転(Shift で 15° 刻み)
  * - 2本指: 選んだ素材の拡大縮小 + 回転 + 移動
+ * iOS の Safari は `touch-action: none` だけでは、素材を動かしながらページ(狭い幅でスクロールする
+ * ダイアログ)もスクロールしてしまう。素材やハンドルに触れた指と2本目の指は、ネイティブの
+ * touchstart / touchmove(passive でない)で `preventDefault` してスクロールさせない。何も無い所から
+ * 始めた指はスクロールに使える。
  * ドラッグ中は `onPreview` で途中の状態を親へ渡し、指を離したときに `onCommit` で1回だけ
  * 履歴に積む。
  *
@@ -256,6 +260,39 @@ export function CompositeStage({
       b0,
     }
   }
+
+  // 素材・ハンドルに触れた指でページをスクロールさせない(上のコメント)。ハンドラーは毎回の描画の
+  // 関数を ref 経由で呼ぶ(リスナーは付け直さない)。
+  const touchHitRef = useRef<(t: Touch) => boolean>(() => false)
+  touchHitRef.current = (t: Touch) => {
+    const p = toCanvas(t.clientX, t.clientY)
+    return p !== null && hitTest(p, 'touch') !== null
+  }
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    let blocking = false
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2 || touchHitRef.current(e.changedTouches[0])) blocking = true
+      if (blocking && e.cancelable) e.preventDefault()
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if ((blocking || gestureRef.current) && e.cancelable) e.preventDefault()
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) blocking = false
+    }
+    svg.addEventListener('touchstart', onTouchStart, { passive: false })
+    svg.addEventListener('touchmove', onTouchMove, { passive: false })
+    svg.addEventListener('touchend', onTouchEnd)
+    svg.addEventListener('touchcancel', onTouchEnd)
+    return () => {
+      svg.removeEventListener('touchstart', onTouchStart)
+      svg.removeEventListener('touchmove', onTouchMove)
+      svg.removeEventListener('touchend', onTouchEnd)
+      svg.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [])
 
   function handlePointerDown(e: ReactPointerEvent<SVGSVGElement>) {
     if (e.button !== 0 && e.pointerType === 'mouse') return
