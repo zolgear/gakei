@@ -55,6 +55,11 @@ function settings(overrides: Partial<AnnotationSettingsResponse> = {}): Annotati
     onnx_enabled: false,
     onnx_model: 'wd-vit-tagger-v3',
     onnx_threshold: 0.35,
+    content_rating_enabled: false,
+    content_rating_model_ready: false,
+    content_rating_usable: false,
+    content_rating_pending_count: 0,
+    content_rating_queued_count: 0,
     profiles: {
       default: {
         llm: { connection_id: 'openai', model: 'gpt-5.6-luna' },
