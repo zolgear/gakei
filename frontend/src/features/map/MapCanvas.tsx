@@ -26,21 +26,29 @@
  *   右上のボタンを押したときだけもう一度回す。
  * - 利用者が動かすまでは、座標が変わるたびに全体が収まるように合わせる(地図の計算の途中経過や、
  *   ネットワークの力学モデルの動きを追う)。
+ * - レーティング(ADR-0049 5章「マップ」): ユーザー設定でマスクする画像は、ぼかしたタイル
+ *   (`thumbCache.getMasked`)で描き、十分大きく描くときは段階のバッジを重ねる。なぞったときの
+ *   カード・選んだ画像のカードとパネルの画像もぼかす。1枚ずつは外さず、呼び出し側のツールバーの
+ *   切り替え(`ratingMask`)でマップ全体を外す。
  * - 色は CSS 変数(配色)から読む。requestAnimationFrame は、動きが落ち着いたとき・画面から
  *   外れたとき・タブが隠れたときに止める。
  */
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router'
 import { assetUrl } from '../../api/assetUrl'
 import type { EmbeddingGraphNode } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { focalStyle } from '../../lib/focalPoint'
 import { buildSimilarSearchPath } from '../search/searchQuerySync'
+import { RatingBadge } from '../content-rating/RatingBadge'
+import { useContentRatingMask } from '../content-rating/useContentRatingMask'
+import contentRatingStyles from '../content-rating/ContentRating.module.css'
 import { axisGridLines } from './axisGrid'
 import { computeBounds3, introSpinStep } from './camera3d'
 import { neighborsOf, type SimilarityEdge } from './edges'
 import { stepMatch, type MapSearchHighlight } from './mapSearchHighlight'
 import { MapPreviewPanel } from './MapPreviewPanel'
+import { RATING_CANVAS_COLORS, mapMaskFlags, ratingTileLabel } from './mapRatingMask'
 import {
   DOT_RADIUS,
   THUMB_MIN_PX,
@@ -123,6 +131,11 @@ interface MapCanvasProps {
   introSpin?: MapIntroSpinState
   /** 座標のラインの重ね表示(立体のときだけ効く)。 */
   axes?: MapAxesState
+  /**
+   * ユーザー設定でマスクする画像をマスクするか(ADR-0049 5章「マップ」)。false はツールバーで
+   * マップ全体のマスクを外しているとき。
+   */
+  ratingMask?: boolean
 }
 
 /** クリックとみなす移動量の上限。 */
@@ -144,6 +157,11 @@ const LINEAGE_HALO_ALPHA = 0.55
 /** 座標のラインの濃さ(軸と格子)。 */
 const AXIS_ALPHA = 0.85
 const GRID_ALPHA = 0.4
+/** canvas に重ねる段階のバッジの高さと、左右の余白(CSS ピクセル)。 */
+const RATING_LABEL_HEIGHT = 17
+const RATING_LABEL_PAD_X = 6
+/** なぞったときのカード・選んだ画像のカードの、マスクした画像の見た目(`AssetThumb` と同じ作り)。 */
+const MASKED_CARD_THUMB_STYLE: CSSProperties = { filter: 'blur(6px)', clipPath: 'inset(0)' }
 
 interface Colors {
   dot: string
@@ -154,6 +172,8 @@ interface Colors {
   lineage: string
   bg: string
   border: string
+  fontSans: string
+  fontMono: string
 }
 
 function readColors(el: Element): Colors {
@@ -168,6 +188,8 @@ function readColors(el: Element): Colors {
     lineage: v('--color-edit', '#56c2d6'),
     bg: v('--color-bg', '#17181b'),
     border: v('--color-border-strong', '#3a3f47'),
+    fontSans: v('--font-sans', 'sans-serif'),
+    fontMono: v('--font-mono', 'monospace'),
   }
 }
 
@@ -202,9 +224,14 @@ export function MapCanvas({
   projection,
   introSpin,
   axes,
+  ratingMask = true,
 }: MapCanvasProps) {
   const { t } = useI18n()
   const m = t.map
+  const { shouldMask } = useContentRatingMask()
+  /** ノードごとにマスクするか(マスクするものが無い・マップ全体で外しているときは null)。 */
+  const maskFlags = useMemo(() => mapMaskFlags(nodes, shouldMask, ratingMask), [nodes, shouldMask, ratingMask])
+  const ratingTexts = t.contentRating
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const sizeRef = useRef({ width: 0, height: 0 })
@@ -266,6 +293,8 @@ export function MapCanvas({
     search,
     showAxes: false,
     hover: -1,
+    maskFlags,
+    ratingTexts,
   })
   propsRef.current = {
     nodes,
@@ -278,6 +307,8 @@ export function MapCanvas({
     search,
     showAxes: proj.hasDepth && (axes?.shown ?? false),
     hover: hover?.index ?? -1,
+    maskFlags,
+    ratingTexts,
   }
 
   // ---- 描画 ----
@@ -419,6 +450,51 @@ export function MapCanvas({
 
     const wanted: { id: string; focal: EmbeddingGraphNode['focal_point']; depth: number }[] = []
     const dotRadius = (i: number) => proj.dotRadiusPx(tilePx[i])
+
+    /**
+     * ノード i のサムネイルを (x, y) から一辺 size で描く。マスクする画像はぼかしたタイルで描き、
+     * 十分大きければ段階のバッジを重ねる(ADR-0049 5章「マップ」)。まだ読んでいなければ下地を
+     * 塗って読みに行く。
+     */
+    const drawTile = (i: number, x: number, y: number, size: number) => {
+      const node = p.nodes[i]
+      const masked = p.maskFlags?.[i] === 1
+      const tile = masked ? thumbCache.getMasked(node.id) : thumbCache.get(node.id)
+      if (!tile) {
+        ctx.fillStyle = colors.tileBg
+        ctx.fillRect(x, y, size, size)
+        wanted.push({ id: node.id, focal: node.focal_point, depth: depth[i] })
+        return
+      }
+      ctx.drawImage(tile, x, y, size, size)
+      if (masked) drawRatingLabel(node.content_rating, x + size / 2, y + size / 2, size)
+    }
+
+    /** ぼかしたタイルの中央に、段階のバッジ(`RatingBadge` の `mask` に似せた角丸の札)を描く。 */
+    const drawRatingLabel = (level: EmbeddingGraphNode['content_rating'], cx: number, cy: number, size: number) => {
+      const label = ratingTileLabel(level, size, p.ratingTexts)
+      if (!label) return
+      const palette = RATING_CANVAS_COLORS[label.level]
+      ctx.save()
+      ctx.font = `600 11px ${label.level === 'unrated' ? colors.fontSans : colors.fontMono}`
+      const w = Math.min(size - 4, ctx.measureText(label.text).width + RATING_LABEL_PAD_X * 2)
+      const h = RATING_LABEL_HEIGHT
+      const x = cx - w / 2
+      const y = cy - h / 2
+      ctx.beginPath()
+      if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, 4)
+      else ctx.rect(x, y, w, h)
+      ctx.fillStyle = palette.bg
+      ctx.fill()
+      ctx.lineWidth = 1
+      ctx.strokeStyle = palette.border ?? colors.border
+      ctx.stroke()
+      ctx.fillStyle = palette.text ?? colors.dot
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(label.text, cx, cy + 0.5, w - 4)
+      ctx.restore()
+    }
     /**
      * 点は束にまとめ、サムネイルを描き終わってからまとめて描く(同じ濃さの点が重なっても
      * 濃くならないよう、束ごとに 1 回の fill にする)。束の鍵は「フォグの段 × 濃さの種類」。
@@ -450,17 +526,9 @@ export function MapCanvas({
         }
         continue
       }
-      const id = p.nodes[i].id
-      const tile = thumbCache.get(id)
       const half = tilePx[i] / 2
       ctx.globalAlpha = fogAlpha(step) * dim
-      if (tile) {
-        ctx.drawImage(tile, sx[i] - half, sy[i] - half, tilePx[i], tilePx[i])
-      } else {
-        ctx.fillStyle = colors.tileBg
-        ctx.fillRect(sx[i] - half, sy[i] - half, tilePx[i], tilePx[i])
-        wanted.push({ id, focal: p.nodes[i].focal_point, depth: depth[i] })
-      }
+      drawTile(i, sx[i] - half, sy[i] - half, tilePx[i])
       if (isEmphasized) {
         ctx.strokeStyle = colors.accent
         ctx.lineWidth = 1.5
@@ -578,16 +646,8 @@ export function MapCanvas({
         if (useThumb[i]) {
           const tileSize = tilePx[i] * (1 + SEARCH_GROW * strength)
           const h = tileSize / 2
-          const id = p.nodes[i].id
-          const tile = thumbCache.get(id)
           ctx.globalAlpha = 1
-          if (tile) {
-            ctx.drawImage(tile, sx[i] - h, sy[i] - h, tileSize, tileSize)
-          } else {
-            ctx.fillStyle = colors.tileBg
-            ctx.fillRect(sx[i] - h, sy[i] - h, tileSize, tileSize)
-            wanted.push({ id, focal: p.nodes[i].focal_point, depth: depth[i] })
-          }
+          drawTile(i, sx[i] - h, sy[i] - h, tileSize)
           ctx.globalAlpha = 0.6 + 0.4 * strength
           ctx.strokeStyle = colors.accent
           ctx.lineWidth = isTop ? 3 : 1.5
@@ -618,14 +678,7 @@ export function MapCanvas({
       ctx.globalAlpha = 1
       if (tilePx[i] >= THUMB_MIN_PX && (useThumb[i] === 1 || i === sel)) {
         const half = tilePx[i] / 2
-        const id = p.nodes[i].id
-        const tile = thumbCache.get(id)
-        if (tile) ctx.drawImage(tile, sx[i] - half, sy[i] - half, tilePx[i], tilePx[i])
-        else {
-          ctx.fillStyle = colors.tileBg
-          ctx.fillRect(sx[i] - half, sy[i] - half, tilePx[i], tilePx[i])
-          wanted.push({ id, focal: p.nodes[i].focal_point, depth: depth[i] })
-        }
+        drawTile(i, sx[i] - half, sy[i] - half, tilePx[i])
         const r = half + 2
         ctx.strokeStyle = colors.bg
         ctx.lineWidth = lineWidth + 2
@@ -1137,6 +1190,8 @@ export function MapCanvas({
 
   const hoverNode = hover && hover.index < nodes.length && hover.index !== selected ? nodes[hover.index] : null
   const selectedNode = selected !== null && selected < nodes.length ? nodes[selected] : null
+  const hoverMasked = hover !== null && maskFlags?.[hover.index] === 1
+  const selectedMasked = selected !== null && maskFlags?.[selected] === 1
   const { width: cw } = sizeRef.current
   const axesShown = axes?.shown ?? false
 
@@ -1252,7 +1307,7 @@ export function MapCanvas({
         >
           <img
             src={assetUrl(hoverNode.id, 'thumb')}
-            style={focalStyle(hoverNode.focal_point)}
+            style={hoverMasked ? { ...focalStyle(hoverNode.focal_point), ...MASKED_CARD_THUMB_STYLE } : focalStyle(hoverNode.focal_point)}
             alt=""
             className={styles.hoverThumb}
           />
@@ -1264,6 +1319,8 @@ export function MapCanvas({
         <MapPreviewPanel
           assetId={selectedNode.id}
           fallbackTitle={selectedNode.title}
+          ratingMasked={selectedMasked}
+          rating={selectedNode.content_rating}
           autoFocus={focusPanel}
           onCollapse={collapsePreview}
         />
@@ -1290,10 +1347,25 @@ export function MapCanvas({
           >
             <img
               src={assetUrl(selectedNode.id, 'thumb')}
-              style={focalStyle(selectedNode.focal_point)}
+              style={
+                selectedMasked
+                  ? { ...focalStyle(selectedNode.focal_point), ...MASKED_CARD_THUMB_STYLE }
+                  : focalStyle(selectedNode.focal_point)
+              }
               alt=""
               className={styles.selectionThumb}
             />
+            {selectedMasked && (
+              <span className={styles.selectionThumbBadge}>
+                {selectedNode.content_rating ? (
+                  <RatingBadge level={selectedNode.content_rating} size="corner" />
+                ) : (
+                  <span className={contentRatingStyles.badge} data-size="corner" data-level="unrated">
+                    {t.contentRating.unrated}
+                  </span>
+                )}
+              </span>
+            )}
           </Link>
           <div className={styles.selectionBody}>
             <span className={styles.selectionTitle}>{selectedNode.title || m.untitled}</span>

@@ -91,6 +91,8 @@ interface NetworkViewProps {
   axes: MapAxesState
   /** マップ内の意味検索の一致(null なら検索していない)。 */
   search: MapSearchHighlight | null
+  /** ユーザー設定でマスクする画像をマスクするか(false はマップ全体で外しているとき。ADR-0049)。 */
+  ratingMask: boolean
 }
 
 export function NetworkView({
@@ -105,6 +107,7 @@ export function NetworkView({
   introSpin,
   axes,
   search,
+  ratingMask,
 }: NetworkViewProps) {
   const { t } = useI18n()
   const m = t.map
@@ -228,6 +231,7 @@ export function NetworkView({
       introSpin={introSpin}
       axes={axes}
       search={search}
+      ratingMask={ratingMask}
       controllerRef={controllerRef}
       ariaLabel={fmt(m.networkAriaLabel, { count: nodes.length, edges: edges.length })}
       hint={shape === 'orbit' ? m.rotateHint : undefined}

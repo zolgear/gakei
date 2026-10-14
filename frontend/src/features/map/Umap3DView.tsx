@@ -41,6 +41,8 @@ interface Umap3DViewProps {
   metric: MapDistanceMetric
   /** マップ内の意味検索の一致(null なら検索していない)。 */
   search: MapSearchHighlight | null
+  /** ユーザー設定でマスクする画像をマスクするか(false はマップ全体で外しているとき。ADR-0049)。 */
+  ratingMask: boolean
 }
 
 export function Umap3DView({
@@ -52,6 +54,7 @@ export function Umap3DView({
   axes,
   metric,
   search,
+  ratingMask,
 }: Umap3DViewProps) {
   const { t } = useI18n()
   const m = t.map
@@ -156,6 +159,7 @@ export function Umap3DView({
       introSpin={introSpin}
       axes={axes}
       search={search}
+      ratingMask={ratingMask}
       controllerRef={controllerRef}
       ariaLabel={fmt(m.umap3dAriaLabel, { count: nodes.length })}
       hint={m.rotateHint}
