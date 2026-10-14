@@ -660,6 +660,24 @@ export function createAsset(
   return request('/api/assets', { method: 'POST', body: form })
 }
 
+/**
+ * 配置の結果(ADR-0050 3章)を `kind=composite` で保存する。`composition` は配置のレシピの JSON。
+ * `replacesAssetId` は配置の作り直しで、元の配置を置き換える(未使用なら元を論理削除する。
+ * 使用済みなら残す。判定はサーバー)。
+ */
+export function createCompositeAsset(
+  file: Blob,
+  composition: unknown,
+  replacesAssetId?: string,
+): Promise<AssetUploadResponse> {
+  const form = new FormData()
+  form.append('file', file, 'composite.png')
+  form.append('kind', 'composite')
+  form.append('composition', JSON.stringify(composition))
+  if (replacesAssetId) form.append('replaces_asset_id', replacesAssetId)
+  return request('/api/assets', { method: 'POST', body: form })
+}
+
 /** up/down は 0〜255 ホップ。省略時はサーバー既定(どちらも 255。量はノード数の上限 1000 で抑える。ADR-0014 6章)。 */
 export function getAssetLineage(
   assetId: string,
