@@ -14,10 +14,15 @@ import {
   type ReactZoomPanPinchRef,
 } from 'react-zoom-pan-pinch'
 import { assetUrl } from '../../api/assetUrl'
+import type { ContentRatingLevel } from '../../api/client'
 import { computeFitScale, type Size } from '../../lib/geometry'
 import { useI18n } from '../../i18n'
 import { shouldUseOriginal } from './viewerScale'
+import { useAssetMasked } from '../content-rating/useAssetMasked'
+import { RatingBadge } from '../content-rating/RatingBadge'
+import { revealAsset } from '../content-rating/revealStore'
 import styles from './AssetCanvas.module.css'
+import ratingStyles from '../content-rating/ContentRating.module.css'
 
 // ADR-0004 / backend/app/domain/derivatives.py の PREVIEW_LONG_EDGE と合わせる。
 const PREVIEW_LONG_EDGE = 2048
@@ -40,6 +45,12 @@ interface AssetCanvasProps {
   urlFor?: (variant: 'preview' | 'original') => string
   /** false なら拡大しても original に差し替えない(共有で原本を許していないとき。ADR-0029 4章)。 */
   allowOriginal?: boolean
+  /**
+   * レーティング(ADR-0049 5章)。ユーザー設定でマスクする段階なら、画像をぼかして「表示する」の
+   * ボタンを重ねる(クリックはパン・ズームに使うので、どこを押しても外れる形にはしない)。
+   * 省く(undefined)とマスクしない(共有のページ。ADR-0049 5章「出さない場所」)。
+   */
+  contentRating?: ContentRatingLevel | null
 }
 
 function CanvasToolbar({ scalePercent, leading }: { scalePercent: number; leading?: ReactNode }) {
@@ -109,8 +120,9 @@ function CanvasToolbar({ scalePercent, leading }: { scalePercent: number; leadin
   )
 }
 
-export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = true }: AssetCanvasProps) {
+export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = true, contentRating }: AssetCanvasProps) {
   const { t } = useI18n()
+  const masked = useAssetMasked(asset.id, contentRating)
   // asset が切り替わったら preview から見直す(差し替え前の倍率を引きずらない)。
   // effect ではなく、レンダー中に「直前に見ていた asset.id」とズレていたらその場で補正する
   // (React 公式が薦める「props から派生した state をリセットする」書き方)。
@@ -180,7 +192,14 @@ export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = tru
               alt={t.viewer.imageAlt}
               width={asset.width}
               height={asset.height}
-              style={{ width: asset.width, height: asset.height }}
+              style={{
+                width: asset.width,
+                height: asset.height,
+                // 画像は transform で縮めて出すので、ぼかしの強さは画像の大きさに比べて決める。
+                ...(masked
+                  ? { filter: `blur(${Math.max(16, Math.round(Math.max(asset.width, asset.height) / 30))}px)`, clipPath: 'inset(0)' }
+                  : null),
+              }}
               // 明示的に draggable=false にする(既定は true)。react-zoom-pan-pinch は
               // draggable="true" な要素の上ではパン用の mousedown を横取りしない仕様のため、
               // ここをドラッグ元にすると「画像上をドラッグして移動する」パン操作が壊れる。
@@ -189,6 +208,20 @@ export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = tru
             />
           </TransformComponent>
         </TransformWrapper>
+      )}
+      {masked && (
+        <div className={ratingStyles.canvasMask}>
+          {contentRating ? (
+            <RatingBadge level={contentRating} size="mask" />
+          ) : (
+            <span className={ratingStyles.badge} data-size="mask" data-level="unrated">
+              {t.contentRating.unrated}
+            </span>
+          )}
+          <button type="button" className={ratingStyles.revealButton} onClick={() => revealAsset(asset.id)}>
+            {t.contentRating.reveal}
+          </button>
+        </div>
       )}
     </div>
   )

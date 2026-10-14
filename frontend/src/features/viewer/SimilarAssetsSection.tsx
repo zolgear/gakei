@@ -13,7 +13,6 @@ import { useId, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { similarAssets } from '../../api/client'
-import { assetUrl } from '../../api/assetUrl'
 import { fmt, useI18n } from '../../i18n'
 import { EmbeddingStateNotice } from '../embeddings/EmbeddingStateNotice'
 import { embeddingErrorKind, embeddingPollInterval, retryEmbeddingQuery } from '../embeddings/embeddingErrors'
@@ -21,6 +20,7 @@ import { formatScore } from '../embeddings/duplicates'
 import { VIEWER_SIMILAR_LIMIT, similarAssetsQueryKey } from '../embeddings/similarAssets'
 import { buildSimilarSearchPath } from '../search/searchQuerySync'
 import { loadSimilarOpen, saveSimilarOpen } from './similarOpenStorage'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './SimilarAssetsSection.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -91,8 +91,9 @@ export function SimilarAssetsSection({ assetId }: { assetId: string }) {
                   return (
                     <li key={hit.id}>
                       <Link to={`/assets/${hit.id}`} className={styles.tile} title={label} aria-label={label}>
-                        <img
-                          src={assetUrl(hit.id, 'thumb')}
+                        <AssetThumb
+                          assetId={hit.id}
+                          rating={hit.content_rating}
                           style={focalStyle(hit.focal_point)}
                           alt=""
                           draggable={false}

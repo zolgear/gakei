@@ -9,7 +9,8 @@
  * - 道具の呼び出しの引数は、結果のメッセージには無いので、前のアシスタントのメッセージの
  *   `tool_calls` から引く。
  */
-import type { AssistantMessageResponse, AssistantToolCallView } from '../../api/client'
+import type { AssistantMessageResponse, AssistantToolCallView, ContentRatingLevel } from '../../api/client'
+import { isContentRatingLevel } from '../content-rating/contentRating'
 import type { PendingToolCall } from './assistantSession'
 import { readFormWrite } from './formWrite'
 
@@ -42,6 +43,11 @@ export interface ShownAsset {
   width: number | null
   height: number | null
   focalPoint: { x: number; y: number } | null
+  /**
+   * レーティング(ADR-0049)。null は未判定。レーティングより前に保存した会話の結果には欄が無いので
+   * undefined(マスクしない)。
+   */
+  contentRating: ContentRatingLevel | null | undefined
 }
 
 export interface ShownAssets {
@@ -53,6 +59,11 @@ function readFocalPoint(value: unknown): ShownAsset['focalPoint'] {
   const record = asRecord(value)
   if (!record || typeof record.x !== 'number' || typeof record.y !== 'number') return null
   return { x: record.x, y: record.y }
+}
+
+function readContentRating(entry: Record<string, unknown>): ShownAsset['contentRating'] {
+  if (!('content_rating' in entry)) return undefined
+  return isContentRatingLevel(entry.content_rating) ? entry.content_rating : null
 }
 
 /** `show_assets` の結果を、カードに出す形にする。形の崩れた項目は落とす。 */
@@ -68,6 +79,7 @@ export function readShownAssets(message: AssistantMessageResponse): ShownAssets 
       width: typeof entry.width === 'number' ? entry.width : null,
       height: typeof entry.height === 'number' ? entry.height : null,
       focalPoint: readFocalPoint(entry.focal_point),
+      contentRating: readContentRating(entry),
     })
   }
   return { title: asText(result.title), assets }

@@ -158,17 +158,22 @@ describe('readShownAssets', () => {
         shown: true,
         title: '夕方の海',
         assets: [
-          { asset_id: 'a2', title: 'sea', width: 1024, height: 768, focal_point: { x: 0.5, y: 0.2 } },
+          { asset_id: 'a2', title: 'sea', width: 1024, height: 768, focal_point: { x: 0.5, y: 0.2 }, content_rating: 'x' },
           { title: 'no id' },
           { asset_id: 'a1', title: null, width: null, height: null, focal_point: null },
+          { asset_id: 'a3', content_rating: null },
+          { asset_id: 'a4', content_rating: 'bogus' },
         ],
       },
     })
     expect(readShownAssets(message)).toEqual({
       title: '夕方の海',
       assets: [
-        { assetId: 'a2', title: 'sea', width: 1024, height: 768, focalPoint: { x: 0.5, y: 0.2 } },
-        { assetId: 'a1', title: '', width: null, height: null, focalPoint: null },
+        { assetId: 'a2', title: 'sea', width: 1024, height: 768, focalPoint: { x: 0.5, y: 0.2 }, contentRating: 'x' },
+        // レーティングより前の結果(欄が無い)は undefined(マスクしない)。
+        { assetId: 'a1', title: '', width: null, height: null, focalPoint: null, contentRating: undefined },
+        { assetId: 'a3', title: '', width: null, height: null, focalPoint: null, contentRating: null },
+        { assetId: 'a4', title: '', width: null, height: null, focalPoint: null, contentRating: null },
       ],
     })
   })

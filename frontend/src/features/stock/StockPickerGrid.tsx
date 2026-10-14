@@ -17,12 +17,12 @@
 import { useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { listAssets, search, type AssetSummary } from '../../api/client'
-import { assetUrl } from '../../api/assetUrl'
 import { useI18n, type Messages } from '../../i18n'
 import { useDebouncedValue } from '../search/useDebouncedValue'
 import { isTileSelectable } from './stockTileSelection'
 import { stockPickerKindChoices, stockPickerKinds, stockPickerQueryKey, type StockPickerKindFilter } from './stockQueryKey'
 import { useStockShowSketchMask } from './stockPrefs'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './StockPickerGrid.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -159,13 +159,17 @@ export function StockPickerGrid({
                   disabled={!selectable}
                   onClick={() => onToggle(asset)}
                 >
-                  <img
-                    className={`${styles.thumb} checkerboard`}
-                    src={assetUrl(asset.id, 'thumb')}
-                    style={focalStyle(asset.focal_point)}
-                    alt=""
-                    draggable={false}
-                  />
+                  <span className={styles.thumbFrame}>
+                    <AssetThumb
+                      assetId={asset.id}
+                      rating={asset.content_rating}
+                      badge
+                      className={`${styles.thumb} checkerboard`}
+                      style={focalStyle(asset.focal_point)}
+                      alt=""
+                      draggable={false}
+                    />
+                  </span>
                   {/* alreadyBadge と同じ左上の位置なので、両方は出さない(alreadyIn を優先)。 */}
                   {asset.prompt_source === 'embedded' && !isAlreadyDisabled && (
                     <span className={styles.embeddedBadge} title={t.search.embeddedTitle}>

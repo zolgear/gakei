@@ -9,11 +9,11 @@
  */
 import { Link, useLocation, useNavigate } from 'react-router'
 import type { RunSummary } from '../../api/client'
-import { assetUrl } from '../../api/assetUrl'
 import { RunDetailIcon } from '../../components/icons'
 import { nodeTargetPath } from '../lineage/nodeTargetPath'
 import { formatDateTime, shortenModelName, statusLabel } from '../../lib/format'
 import { useI18n } from '../../i18n'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './RunListRow.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -44,9 +44,11 @@ export function RunListRow({ run, ariaLabel, score }: RunListRowProps) {
       >
         <span className={styles.thumbWrap}>
           {firstOutput ? (
-            <img
+            <AssetThumb
+              assetId={firstOutput.asset_id}
+              rating={firstOutput.content_rating}
+              badge
               className={`${styles.thumb} checkerboard`}
-              src={assetUrl(firstOutput.asset_id, 'thumb')}
               style={focalStyle(firstOutput.focal_point)}
               alt=""
               draggable={false}

@@ -9,7 +9,6 @@ import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import { getAsset, getRun } from '../../api/client'
-import { assetUrl } from '../../api/assetUrl'
 import { useBackNavigate } from '../../lib/useBackNavigate'
 import { useIsMobileViewport } from '../../lib/viewport'
 import { useResourcePanel } from '../../context/useResourcePanel'
@@ -25,6 +24,7 @@ import {
   resolveEffectiveMode,
   type CompareMode,
 } from './compareState'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './CompareView.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -147,7 +147,7 @@ export function CompareView() {
                         title={`${c.role} #${c.position}`}
                         onClick={() => selectBefore(c.assetId)}
                       >
-                        <img src={assetUrl(c.assetId, 'thumb')} style={focalStyle(c.focalPoint)} alt="" draggable={false} />
+                        <AssetThumb assetId={c.assetId} rating={c.contentRating} style={focalStyle(c.focalPoint)} alt="" draggable={false} />
                       </button>
                     ))}
                   </div>
@@ -166,7 +166,7 @@ export function CompareView() {
                         title={c.outputIndex !== null ? `#${c.outputIndex}` : undefined}
                         onClick={() => selectAfter(c.assetId)}
                       >
-                        <img src={assetUrl(c.assetId, 'thumb')} style={focalStyle(c.focalPoint)} alt="" draggable={false} />
+                        <AssetThumb assetId={c.assetId} rating={c.contentRating} style={focalStyle(c.focalPoint)} alt="" draggable={false} />
                       </button>
                     ))}
                   </div>
@@ -178,7 +178,15 @@ export function CompareView() {
           <div className={styles.canvasArea}>
             {isLoading && <p className={styles.placeholder}>{t.compare.loading}</p>}
             {!isLoading && isError && <p className={styles.placeholder}>{t.compare.imageLoadError}</p>}
-            {ready && <CompareCanvas before={before} after={after} mode={effectiveMode} />}
+            {ready && (
+              <CompareCanvas
+                before={before}
+                after={after}
+                mode={effectiveMode}
+                beforeRating={before.content_rating ?? null}
+                afterRating={after.content_rating ?? null}
+              />
+            )}
           </div>
         </>
       )}
