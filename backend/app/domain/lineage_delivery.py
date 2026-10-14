@@ -103,7 +103,7 @@ class GraphNode:
 class GraphEdge:
     source: str
     target: str
-    # "image" / "mask" / "reference"(入力)、"output"、"sketch_source"
+    # "image" / "mask" / "reference"(入力)、"output"、"sketch_source"、"composite_source"
     label: str
     primary: bool = False
 
@@ -117,6 +117,17 @@ class GraphLayout:
 
     def node(self, key: str) -> GraphNode:
         return next(n for n in self.nodes if n.key == key)
+
+
+def _composition_sources(asset: dict[str, Any]) -> list[dict[str, Any]]:
+    """manifest の Asset の配置の素材(ADR-0050)。無ければ空。"""
+    composition = asset.get("composition")
+    if not isinstance(composition, dict):
+        return []
+    sources = composition.get("sources")
+    if not isinstance(sources, list):
+        return []
+    return [s for s in sources if isinstance(s, dict) and s.get("asset_id")]
 
 
 def layout_graph(manifest: dict[str, Any]) -> GraphLayout:
@@ -153,6 +164,11 @@ def layout_graph(manifest: dict[str, Any]) -> GraphLayout:
         source = a.get("source_asset_id")
         if source and f"a:{source}" in nodes:
             edges.append(GraphEdge(f"a:{source}", akey, "sketch_source"))
+        for material in _composition_sources(a):
+            mkey = f"a:{material.get('asset_id')}"
+            if mkey in nodes:
+                primary = material.get("position") == 0
+                edges.append(GraphEdge(mkey, akey, "composite_source", primary))
 
     parents: dict[str, list[str]] = defaultdict(list)
     children: dict[str, list[str]] = defaultdict(list)
@@ -205,7 +221,7 @@ def _d(key: str, /, **params: Any) -> str:
 
 def _kind_label(kind: Any) -> str:
     value = str(kind)
-    if value in ("upload", "generated", "mask", "sketch"):
+    if value in ("upload", "generated", "mask", "sketch", "composite"):
         return _d(f"kinds.{value}")
     return value
 
@@ -227,7 +243,7 @@ def _status_label(status: Any) -> str:
 def _edge_label(edge: GraphEdge) -> str:
     if edge.label == "image" and edge.primary:
         return _d("edges.primary")
-    if edge.label in ("image", "mask", "reference", "output", "sketch_source"):
+    if edge.label in ("image", "mask", "reference", "output", "sketch_source", "composite_source"):
         return _d(f"edges.{edge.label}")
     return edge.label
 
@@ -273,7 +289,7 @@ def _render_graph_svg(
         classes = "edge"
         if edge.label == "output":
             classes += " edge-output"
-        elif edge.label == "sketch_source":
+        elif edge.label in ("sketch_source", "composite_source"):
             classes += " edge-source"
         elif edge.primary:
             classes += " edge-primary"
@@ -421,6 +437,10 @@ def _render_asset_card(
     source = asset.get("source_asset_id")
     if source:
         rows.append(_row(_d("fields.sketchSource"), _asset_link(str(source), labels)))
+    materials = _composition_sources(asset)
+    if materials:
+        links = ", ".join(_asset_link(str(m.get("asset_id")), labels) for m in materials)
+        rows.append(_row(_d("fields.compositeSources"), links))
     rows.append(_row(_d("fields.id"), _code(asset_id)))
     badge = f' <span class="badge badge-root">{_e(_d("mainImage"))}</span>' if is_root else ""
     img_attrs = f' width="{_e(width)}" height="{_e(height)}"' if width and height else ""

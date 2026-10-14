@@ -438,7 +438,7 @@
   "assets": {
     "sourceAssetOnlyForSketch": "source_asset_id can only be set for a sketch (kind=sketch)",
     "baseAssetNotFound": "The base asset was not found",
-    "replacesAssetOnlyForSketchOrMask": "replaces_asset_id can only be set for a sketch (kind=sketch) or a mask (kind=mask)",
+    "replacesAssetOnlyForSketchOrMask": "replaces_asset_id can only be set for a sketch (kind=sketch), a mask (kind=mask) or an arrangement (kind=composite)",
     "cannotCombineSourceAndReplaces": "source_asset_id and replaces_asset_id cannot be set together",
     "replaceTargetNotFound": "The asset to replace was not found",
     "replaceTargetKindMismatch": "The asset to replace must be the same kind",
@@ -448,6 +448,12 @@
     "unsupportedFormat": "Unsupported image format: {format}",
     "maskMustBePng": "Masks must be in PNG format",
     "sketchMustBePng": "Sketches must be in PNG format",
+    "compositeMustBePng": "Arrangements must be in PNG format",
+    "compositionRequired": "An arrangement (kind=composite) needs its record (composition)",
+    "compositionOnlyForComposite": "composition can only be set for an arrangement (kind=composite)",
+    "compositionInvalid": "The arrangement record (composition) is invalid ({reason})",
+    "compositionSourceNotFound": "A source asset of the arrangement was not found",
+    "compositionSourceIsMask": "A mask cannot be used in an arrangement",
     "notFound": "Asset not found",
     "contentNotFound": "Content not found",
     "notDeleted": "Not deleted",
@@ -859,7 +865,8 @@
         "upload": "Upload",
         "generated": "Generated",
         "mask": "Mask",
-        "sketch": "Sketch"
+        "sketch": "Sketch",
+        "composite": "Arrangement"
       },
       "operations": {
         "generate": "Generate",
@@ -878,7 +885,8 @@
         "mask": "mask",
         "reference": "reference",
         "output": "output",
-        "sketch_source": "base"
+        "sketch_source": "base",
+        "composite_source": "arranged"
       },
       "fields": {
         "fileName": "File name",
@@ -890,6 +898,7 @@
         "kind": "Kind",
         "producedBy": "Produced by",
         "sketchSource": "Sketch base",
+        "compositeSources": "Arrangement sources",
         "id": "ID",
         "provider": "Provider",
         "model": "Model",

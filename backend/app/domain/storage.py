@@ -9,6 +9,7 @@ ADR-0028: `STORAGE_BACKEND` で Azure Blob Storage / S3 互換ストレージも
   アップロード: assets/uploads/{YYYY-MM}/...
   マスク:       assets/masks/{YYYY-MM}/...
   スケッチ:     assets/sketches/{YYYY-MM}/...
+  配置:         assets/composites/{YYYY-MM}/...(ADR-0050)
   日時はサーバーのローカル時刻、短ID は Asset の id の先頭 8 文字。同名があれば `-2` `-3`。
   以前の規則 `assets/{sha256の先頭2文字}/{sha256}.{拡張子}` で保存した原本は移さず、
   `asset.blob_key` のまま読み出す。
@@ -40,14 +41,19 @@ if TYPE_CHECKING:
     from app.config import Settings
 
 Variant = Literal["original", "thumb", "preview"]
-OriginalKind = Literal["generated", "upload", "mask", "sketch"]
+OriginalKind = Literal["generated", "upload", "mask", "sketch", "composite"]
 
 _DERIVED_VARIANTS = ("thumb", "preview")
 # 派生のファイル名(`thumb.webp` / `thumb.v2.webp` など。ADR-0036 1章)
 _DERIVED_NAME = re.compile(r"^(thumb|preview)(?:\.v([1-9][0-9]*))?\.webp$")
 
 # 生成画像以外の種類ごとのフォルダ(ADR-0026 1章)
-_KIND_FOLDERS = {"upload": "uploads", "mask": "masks", "sketch": "sketches"}
+_KIND_FOLDERS = {
+    "upload": "uploads",
+    "mask": "masks",
+    "sketch": "sketches",
+    "composite": "composites",
+}
 
 _SEGMENT_MAX_LENGTH = 64
 _UNSAFE_CHARS = re.compile(r"[^A-Za-z0-9._-]")

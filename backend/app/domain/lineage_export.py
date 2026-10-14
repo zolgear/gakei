@@ -12,6 +12,9 @@
   画像なら、種類は `generated` のまま(取り込みでは、作った Run が分からない画像として扱う)。
 - Run の入力のうち範囲に入らない Asset(見えない、削除済み、範囲の外)は、ID を出さず数だけ
   (`omitted_input_count`)書く。スケッチの下地(`source_asset_id`)も範囲の外なら null。
+- 配置の結果(ADR-0050)は `composition`(レシピと素材の `position`)を書く。範囲の外の素材は
+  ID を出さないよう、素材の一覧からもレシピのレイヤーからも除く(主たる素材が範囲の外なら、
+  残ったレイヤーの最初の素材を主にする)。範囲の中の素材が1つも無ければ `composition` は null。
 - 原本は保存しているバイト列のまま入れる(系列情報を埋め込まない。sha256 で照合できるように)。
 - タイトル・タグ・グループ・埋め込みベクトルは入れない。
 
@@ -40,11 +43,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
+from app.domain.compositions import composition_sources_bulk, load_recipe
 from app.domain.lineage import _asset_node, _run_node
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
     AppUser,
     Asset,
+    AssetCompositionSource,
+    AssetKind,
     Run,
     RunImport,
     RunInput,
@@ -237,6 +243,9 @@ def build_export(
         for run_id in imported_ids:
             imported_runs.setdefault(str(run_id), ImportedRunInfo(None, None, None, None))
 
+    sources_by_composite = composition_sources_bulk(
+        db, {a.id for a in assets if a.kind == AssetKind.COMPOSITE}
+    )
     manifest_assets: list[dict[str, Any]] = []
     files: list[ExportFile] = []
     for asset in assets:
@@ -258,6 +267,13 @@ def build_export(
                 # 範囲の外の下地は ID を出さない。
                 "source_asset_id": (
                     str(asset.source_asset_id) if asset.source_asset_id in asset_ids else None
+                ),
+                "composition": (
+                    _export_composition(
+                        load_recipe(db, asset.id), sources_by_composite.get(asset.id, []), asset_ids
+                    )
+                    if asset.kind == AssetKind.COMPOSITE
+                    else None
                 ),
                 "file": name,
             }
@@ -298,7 +314,15 @@ def build_export(
 
     omitted_input_count = sum(r["omitted_input_count"] for r in manifest_runs)
     graph = (
-        _build_graph(db, root_asset_id, result.assets, runs, inputs_by_run, result.truncated)
+        _build_graph(
+            db,
+            root_asset_id,
+            result.assets,
+            runs,
+            inputs_by_run,
+            result.truncated,
+            sources_by_composite,
+        )
         if include_graph
         else None
     )
@@ -329,6 +353,37 @@ def build_export(
     )
 
 
+def _export_composition(
+    recipe: dict[str, Any] | None,
+    sources: list[AssetCompositionSource],
+    asset_ids: set[uuid.UUID],
+) -> dict[str, Any] | None:
+    """manifest の `composition`。範囲の外の素材は ID を出さない(素材の一覧とレイヤーから除く)。"""
+    if not isinstance(recipe, dict):
+        return None
+    in_scope = [row for row in sources if row.source_asset_id in asset_ids]
+    if not in_scope:
+        return None
+    kept = {str(row.source_asset_id) for row in in_scope}
+    raw_layers = recipe.get("layers")
+    layers = [
+        layer
+        for layer in (raw_layers if isinstance(raw_layers, list) else [])
+        if isinstance(layer, dict) and layer.get("source_asset_id") in kept
+    ]
+    if not layers:
+        return None
+    primary = recipe.get("primary_source_asset_id")
+    if primary not in kept:
+        primary = layers[0].get("source_asset_id")
+    return {
+        "recipe": {**recipe, "primary_source_asset_id": primary, "layers": layers},
+        "sources": [
+            {"asset_id": str(row.source_asset_id), "position": row.position} for row in in_scope
+        ],
+    }
+
+
 def _build_graph(
     db: Session,
     root_asset_id: uuid.UUID,
@@ -336,6 +391,7 @@ def _build_graph(
     runs: list[Run],
     inputs_by_run: dict[uuid.UUID, list[RunInput]],
     truncated: bool,
+    sources_by_composite: dict[uuid.UUID, list[AssetCompositionSource]],
 ) -> AssetLineageResponse:
     """ZIP に入る Asset と Run だけで系列グラフを作る(書き出し前のプレビュー)。
 
@@ -389,6 +445,17 @@ def _build_graph(
                     primary=True,
                 )
             )
+        for row in sources_by_composite.get(asset.id, []):
+            if row.source_asset_id in asset_ids:
+                edges.append(
+                    LineageEdge(
+                        source=row.source_asset_id,
+                        target=asset.id,
+                        kind="composite_source",
+                        position=row.position,
+                        primary=row.position == 0,
+                    )
+                )
     return AssetLineageResponse(
         root_asset_id=root_asset_id, nodes=nodes, edges=edges, truncated=truncated
     )

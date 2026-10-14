@@ -438,7 +438,7 @@
   "assets": {
     "sourceAssetOnlyForSketch": "source_asset_id はスケッチ(kind=sketch)にのみ指定できます",
     "baseAssetNotFound": "下地の Asset が見つかりません",
-    "replacesAssetOnlyForSketchOrMask": "replaces_asset_id はスケッチ(kind=sketch)かマスク(kind=mask)にのみ指定できます",
+    "replacesAssetOnlyForSketchOrMask": "replaces_asset_id はスケッチ(kind=sketch)・マスク(kind=mask)・配置(kind=composite)にのみ指定できます",
     "cannotCombineSourceAndReplaces": "source_asset_id と replaces_asset_id は同時に指定できません",
     "replaceTargetNotFound": "置き換え元の Asset が見つかりません",
     "replaceTargetKindMismatch": "置き換え元の Asset は同じ種類(kind)である必要があります",
@@ -448,6 +448,12 @@
     "unsupportedFormat": "対応していない画像形式です: {format}",
     "maskMustBePng": "マスクはPNG形式である必要があります",
     "sketchMustBePng": "スケッチはPNG形式である必要があります",
+    "compositeMustBePng": "配置の結果はPNG形式である必要があります",
+    "compositionRequired": "配置(kind=composite)には配置の記録(composition)が必要です",
+    "compositionOnlyForComposite": "composition は配置(kind=composite)にのみ指定できます",
+    "compositionInvalid": "配置の記録(composition)が正しくありません({reason})",
+    "compositionSourceNotFound": "配置の素材の Asset が見つかりません",
+    "compositionSourceIsMask": "マスクは配置の素材にできません",
     "notFound": "asset が見つかりません",
     "contentNotFound": "content が見つかりません",
     "notDeleted": "削除されていません",
@@ -859,7 +865,8 @@
         "upload": "アップロード",
         "generated": "生成",
         "mask": "マスク",
-        "sketch": "スケッチ"
+        "sketch": "スケッチ",
+        "composite": "配置"
       },
       "operations": {
         "generate": "生成",
@@ -878,7 +885,8 @@
         "mask": "マスク",
         "reference": "参照",
         "output": "出力",
-        "sketch_source": "下地"
+        "sketch_source": "下地",
+        "composite_source": "配置の素材"
       },
       "fields": {
         "fileName": "ファイル名",
@@ -890,6 +898,7 @@
         "kind": "種類",
         "producedBy": "作った実行",
         "sketchSource": "スケッチの下地",
+        "compositeSources": "配置の素材",
         "id": "ID",
         "provider": "プロバイダー",
         "model": "モデル",

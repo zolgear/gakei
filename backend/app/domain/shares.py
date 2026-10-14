@@ -25,9 +25,11 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
 from app.domain import focal_points, share_settings
+from app.domain.compositions import composition_sources_bulk
 from app.domain.lineage import MAX_DEPTH, MAX_NODES, LineageNotFoundError, build_asset_lineage
 from app.domain.models import (
     Asset,
+    AssetKind,
     Run,
     RunInput,
     RunInputRole,
@@ -421,6 +423,21 @@ def build_public_response(db: Session, share: Share) -> PublicShareResponse:
         if asset.origin_asset_id is not None and asset.origin_asset_id in asset_ids:
             edges.append(
                 PublicShareEdge(source=asset.origin_asset_id, target=asset.id, kind="origin")
+            )
+    # 配置の素材(ADR-0050 4章)。共有に含まれる素材からの辺だけ。
+    composites = {a.id for a in assets if a.kind == AssetKind.COMPOSITE}
+    for composite_id, rows in composition_sources_bulk(db, composites).items():
+        for row in rows:
+            if row.source_asset_id not in asset_ids:
+                continue
+            edges.append(
+                PublicShareEdge(
+                    source=row.source_asset_id,
+                    target=composite_id,
+                    kind="composite_source",
+                    position=row.position,
+                    primary=row.position == 0,
+                )
             )
     if runs_by_id:
         run_inputs = (

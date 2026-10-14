@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain import derivatives
+from app.domain import compositions, derivatives
 from app.domain.embedded_meta import (
     get_instance_id,
     read_gakei_meta,
@@ -30,6 +30,7 @@ from app.domain.embedded_meta import (
 )
 from app.domain.generation_meta import extract_generation_meta
 from app.domain.models import Asset, AssetKind, Run, RunInput
+from app.domain.schemas import CompositionRecipe
 from app.domain.storage import AssetStore, OriginalKeyInfo
 from app.domain.visibility import get_visible_asset
 from app.i18n import t
@@ -96,7 +97,7 @@ def ingest(
         raise IngestError(t("assets.maskTooLarge"))
     # ADR-0010: スケッチは保存後は通常の入力画像として扱うので、マスクの4MB制限は
     # 課さずアップロード画像と同じ上限(MAX_UPLOAD_BYTES)を使う。形式はマスクと同じくPNGのみ。
-    if kind == AssetKind.SKETCH and len(data) >= MAX_UPLOAD_BYTES:
+    if kind in (AssetKind.SKETCH, AssetKind.COMPOSITE) and len(data) >= MAX_UPLOAD_BYTES:
         raise IngestError(t("assets.uploadTooLarge"))
 
     try:
@@ -113,6 +114,9 @@ def ingest(
         raise IngestError(t("assets.maskMustBePng"))
     if kind == AssetKind.SKETCH and fmt != "PNG":
         raise IngestError(t("assets.sketchMustBePng"))
+    # ADR-0050 3章: 配置の結果も、スケッチと同じく PNG だけ。
+    if kind == AssetKind.COMPOSITE and fmt != "PNG":
+        raise IngestError(t("assets.compositeMustBePng"))
 
     mime, ext = ALLOWED_UPLOAD_FORMATS[fmt]
     sha256 = hashlib.sha256(data).hexdigest()
@@ -211,9 +215,12 @@ def _ingest_replacement(
     replaces_asset_id: uuid.UUID,
     *,
     viewer: CurrentUser,
+    composition: CompositionRecipe | None = None,
 ) -> IngestResult:
-    """未使用スケッチ・未使用マスクの再編集(ADR-0010、2026-09-25 追記)。`kind` は
-    `sketch` か `mask`。置き換え元は同じ `kind` である必要がある。
+    """未使用スケッチ・未使用マスク・未使用の配置の再編集(ADR-0010、2026-09-25 追記。配置は
+    ADR-0050 3章)。`kind` は `sketch`・`mask`・`composite`。置き換え元は同じ `kind` である
+    必要がある。配置は `source_asset_id` を持たず、新しい Asset に `composition` のレシピと
+    素材を付ける(置き換え元が使用済みでも未使用でも同じ)。
 
     置き換え元が未使用(`run_input` に1行も無い)なら、新しい Asset は置き換え元の
     `source_asset_id` を引き継ぎ(マスクは常に `source_asset_id` を持たないので None のまま)、
@@ -241,6 +248,8 @@ def _ingest_replacement(
             source_asset_id=chained_source,
             created_by_user_id=created_by_user_id,
         )
+        if composition is not None:
+            compositions.save_composition(session, asset, composition)
         return IngestResult(asset, "created")
 
     inherited_source = target.source_asset_id if kind == AssetKind.SKETCH else None
@@ -252,6 +261,8 @@ def _ingest_replacement(
         source_asset_id=inherited_source,
         created_by_user_id=created_by_user_id,
     )
+    if composition is not None:
+        compositions.save_composition(session, asset, composition)
     target.deleted_at = _utcnow()
     session.flush()
     return IngestResult(asset, "created")
@@ -265,6 +276,7 @@ def ingest_upload(
     *,
     source_asset_id: uuid.UUID | None = None,
     replaces_asset_id: uuid.UUID | None = None,
+    composition: str | None = None,
     viewer: CurrentUser,
 ) -> IngestResult:
     """`POST /api/assets` から呼ぶ ingest(ADR-0014 4章・6章、ADR-0010 2026-09-25 追記)。
@@ -300,12 +312,30 @@ def ingest_upload(
     created_by_user_id = viewer.id
     if source_asset_id is not None and get_visible_asset(session, viewer, source_asset_id) is None:
         raise IngestError(t("assets.baseAssetNotFound"))
+
+    # ADR-0050 3章: 配置の結果は、レシピ(`composition`)が必須。ほかの種類には付けられない。
+    recipe: CompositionRecipe | None = None
+    if kind == AssetKind.COMPOSITE:
+        if composition is None:
+            raise IngestError(t("assets.compositionRequired"))
+        if source_asset_id is not None:
+            raise IngestError(t("assets.sourceAssetOnlyForSketch"))
+        try:
+            recipe = compositions.parse_recipe(composition)
+            compositions.check_sources(session, viewer, recipe)
+        except compositions.CompositionError as e:
+            raise IngestError(str(e)) from e
+    elif composition is not None:
+        raise IngestError(t("assets.compositionOnlyForComposite"))
+
     if replaces_asset_id is not None:
-        if kind not in (AssetKind.SKETCH, AssetKind.MASK):
+        if kind not in (AssetKind.SKETCH, AssetKind.MASK, AssetKind.COMPOSITE):
             raise IngestError(t("assets.replacesAssetOnlyForSketchOrMask"))
         if source_asset_id is not None:
             raise IngestError(t("assets.cannotCombineSourceAndReplaces"))
-        return _ingest_replacement(session, store, data, kind, replaces_asset_id, viewer=viewer)
+        return _ingest_replacement(
+            session, store, data, kind, replaces_asset_id, viewer=viewer, composition=recipe
+        )
 
     if kind != AssetKind.UPLOAD:
         asset = ingest(
@@ -316,6 +346,8 @@ def ingest_upload(
             source_asset_id=source_asset_id,
             created_by_user_id=created_by_user_id,
         )
+        if recipe is not None:
+            compositions.save_composition(session, asset, recipe)
         return IngestResult(asset, "created")
 
     meta = read_gakei_meta(data)
