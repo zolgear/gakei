@@ -1,15 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ContentRatingLevel } from '../../api/client'
-import { msg } from '../../i18n'
 import { maskPrefsFrom, shouldMaskLevel } from '../content-rating/contentRating'
 import {
-  RATING_CANVAS_COLORS,
-  RATING_LABEL_MIN_PX,
   isMapUnmasked,
   mapHasMaskable,
   mapMaskFlags,
   mapRatingToggle,
-  ratingTileLabel,
   setMapUnmasked,
 } from './mapRatingMask'
 
@@ -57,27 +53,5 @@ describe('マップ全体の切り替えの状態', () => {
     expect(isMapUnmasked()).toBe(false)
     setMapUnmasked(true)
     expect(isMapUnmasked()).toBe(true)
-  })
-})
-
-describe('ratingTileLabel', () => {
-  const texts = msg().contentRating
-
-  it('小さく描くタイルには出さない', () => {
-    expect(ratingTileLabel('x', RATING_LABEL_MIN_PX - 1, texts)).toBeNull()
-  })
-
-  it('大きく描くタイルには段階の略称を出す', () => {
-    expect(ratingTileLabel('xxx', RATING_LABEL_MIN_PX, texts)).toEqual({ text: texts.shortLevels.xxx, level: 'xxx' })
-  })
-
-  it('未判定は「未判定」と出す(AssetThumb と同じ)', () => {
-    expect(ratingTileLabel(null, 80, texts)).toEqual({ text: texts.unrated, level: 'unrated' })
-  })
-
-  it('すべての段階(と未判定)に canvas の色がある', () => {
-    for (const level of ['g', 'r', 'x', 'xx', 'xxx', 'unrated'] as const) {
-      expect(RATING_CANVAS_COLORS[level].bg).toBeTruthy()
-    }
   })
 })

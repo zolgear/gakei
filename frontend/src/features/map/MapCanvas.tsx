@@ -27,7 +27,7 @@
  * - 利用者が動かすまでは、座標が変わるたびに全体が収まるように合わせる(地図の計算の途中経過や、
  *   ネットワークの力学モデルの動きを追う)。
  * - レーティング(ADR-0049 5章「マップ」): ユーザー設定でマスクする画像は、ぼかしたタイル
- *   (`thumbCache.getMasked`)で描き、十分大きく描くときは段階のバッジを重ねる。なぞったときの
+ *   (`thumbCache.getMasked`)で描く(段階は重ねない)。なぞったときの
  *   カード・選んだ画像のカードとパネルの画像もぼかす。1枚ずつは外さず、呼び出し側のツールバーの
  *   切り替え(`ratingMask`)でマップ全体を外す。
  * - 色は CSS 変数(配色)から読む。requestAnimationFrame は、動きが落ち着いたとき・画面から
@@ -48,7 +48,7 @@ import { computeBounds3, introSpinStep } from './camera3d'
 import { neighborsOf, type SimilarityEdge } from './edges'
 import { stepMatch, type MapSearchHighlight } from './mapSearchHighlight'
 import { MapPreviewPanel } from './MapPreviewPanel'
-import { RATING_CANVAS_COLORS, mapMaskFlags, ratingTileLabel } from './mapRatingMask'
+import { mapMaskFlags } from './mapRatingMask'
 import {
   DOT_RADIUS,
   THUMB_MIN_PX,
@@ -157,9 +157,6 @@ const LINEAGE_HALO_ALPHA = 0.55
 /** 座標のラインの濃さ(軸と格子)。 */
 const AXIS_ALPHA = 0.85
 const GRID_ALPHA = 0.4
-/** canvas に重ねる段階のバッジの高さと、左右の余白(CSS ピクセル)。 */
-const RATING_LABEL_HEIGHT = 17
-const RATING_LABEL_PAD_X = 6
 /** なぞったときのカード・選んだ画像のカードの、マスクした画像の見た目(`AssetThumb` と同じ作り)。 */
 const MASKED_CARD_THUMB_STYLE: CSSProperties = { filter: 'blur(6px)', clipPath: 'inset(0)' }
 
@@ -231,7 +228,6 @@ export function MapCanvas({
   const { shouldMask } = useContentRatingMask()
   /** ノードごとにマスクするか(マスクするものが無い・マップ全体で外しているときは null)。 */
   const maskFlags = useMemo(() => mapMaskFlags(nodes, shouldMask, ratingMask), [nodes, shouldMask, ratingMask])
-  const ratingTexts = t.contentRating
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const sizeRef = useRef({ width: 0, height: 0 })
@@ -294,7 +290,6 @@ export function MapCanvas({
     showAxes: false,
     hover: -1,
     maskFlags,
-    ratingTexts,
   })
   propsRef.current = {
     nodes,
@@ -308,7 +303,6 @@ export function MapCanvas({
     showAxes: proj.hasDepth && (axes?.shown ?? false),
     hover: hover?.index ?? -1,
     maskFlags,
-    ratingTexts,
   }
 
   // ---- 描画 ----
@@ -452,9 +446,8 @@ export function MapCanvas({
     const dotRadius = (i: number) => proj.dotRadiusPx(tilePx[i])
 
     /**
-     * ノード i のサムネイルを (x, y) から一辺 size で描く。マスクする画像はぼかしたタイルで描き、
-     * 十分大きければ段階のバッジを重ねる(ADR-0049 5章「マップ」)。まだ読んでいなければ下地を
-     * 塗って読みに行く。
+     * ノード i のサムネイルを (x, y) から一辺 size で描く。マスクする画像はぼかしたタイルで描く
+     * (段階は重ねない。ADR-0049 5章「マップ」)。まだ読んでいなければ下地を塗って読みに行く。
      */
     const drawTile = (i: number, x: number, y: number, size: number) => {
       const node = p.nodes[i]
@@ -467,34 +460,8 @@ export function MapCanvas({
         return
       }
       ctx.drawImage(tile, x, y, size, size)
-      if (masked) drawRatingLabel(node.content_rating, x + size / 2, y + size / 2, size)
     }
 
-    /** ぼかしたタイルの中央に、段階のバッジ(`RatingBadge` の `mask` に似せた角丸の札)を描く。 */
-    const drawRatingLabel = (level: EmbeddingGraphNode['content_rating'], cx: number, cy: number, size: number) => {
-      const label = ratingTileLabel(level, size, p.ratingTexts)
-      if (!label) return
-      const palette = RATING_CANVAS_COLORS[label.level]
-      ctx.save()
-      ctx.font = `600 11px ${label.level === 'unrated' ? colors.fontSans : colors.fontMono}`
-      const w = Math.min(size - 4, ctx.measureText(label.text).width + RATING_LABEL_PAD_X * 2)
-      const h = RATING_LABEL_HEIGHT
-      const x = cx - w / 2
-      const y = cy - h / 2
-      ctx.beginPath()
-      if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, 4)
-      else ctx.rect(x, y, w, h)
-      ctx.fillStyle = palette.bg
-      ctx.fill()
-      ctx.lineWidth = 1
-      ctx.strokeStyle = palette.border ?? colors.border
-      ctx.stroke()
-      ctx.fillStyle = palette.text ?? colors.dot
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(label.text, cx, cy + 0.5, w - 4)
-      ctx.restore()
-    }
     /**
      * 点は束にまとめ、サムネイルを描き終わってからまとめて描く(同じ濃さの点が重なっても
      * 濃くならないよう、束ごとに 1 回の fill にする)。束の鍵は「フォグの段 × 濃さの種類」。
