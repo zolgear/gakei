@@ -44,6 +44,7 @@ Asset(入力) ──RunInput──▶ Run ──produced_by──▶ Asset(出�
 7. アップロードした PNG に GAKEI の系列情報が埋め込まれていて、同じインスタンスの Asset と内容が一致すれば、新しい行を作らずに既存の Asset を使う。一致しなければ新しい `upload` Asset を作り、追記のみの列 `origin_asset_id`(null可)と `origin_meta`(読み取った内容。自己申告)に記録する。系列グラフでは `origin_asset_id` からの辺を「未検証」として描く(2026-09-24 追記。ADR-0014)。
 8. 他の画像生成ツール(Stable Diffusion WebUI、ComfyUI、NovelAI など)や C2PA が画像に埋め込んだ生成メタ情報は、`upload` の取り込み時に読み、追記のみの列 `embedded_meta`(null可。自己申告)に記録する。`run` / `run_input` には書かず、画面では「未検証」として表示するだけにする(2026-09-26 追記。ADR-0018)。
 9. 系列の ZIP(ADR-0037)から取り込んだ Run は、この GAKEI で API を呼んだ証跡ではない。`run.origin = 'import'` の新しい行として作り(状態は書き出し時のもの、実行はしない、`created_by_user_id` は取り込んだ利用者)、元の Run の ID・実行者の表示名・日時は追記のみの表 `run_import` に置く。画面では「取り込み」の印と「未検証」の説明を出し、料金などの集計には数えない(2026-10-07 追記。ADR-0037)。
+10. アプリ内で複数の画像を配置して作った入力画像(`kind = composite`、ADR-0050)は、素材の Asset を `asset_composition_source` で指す(追記のみ)。系列グラフでは素材から配置の結果へ辺を描き、`position = 0` の素材を主たる親として辿る。ほかの素材は参照として描く。
 
 ### 世代を辿るクエリ(例)
 
