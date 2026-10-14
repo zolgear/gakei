@@ -44,6 +44,9 @@ import {
   MAP_MATCH_COUNT_CHOICES,
 } from '../features/map/mapSearchHighlight'
 import { mapDisplayFields, mapDisplaySummary } from '../features/map/mapToolbar'
+import { mapRatingToggle, setMapUnmasked, useMapUnmasked } from '../features/map/mapRatingMask'
+import { useContentRatingMask } from '../features/content-rating/useContentRatingMask'
+import { EyeIcon, EyeOffIcon } from '../components/icons'
 import { MAP_DISTANCE_METRICS, type MapDistanceMetric } from '../features/map/umapInput'
 import {
   MAP_K_CHOICES,
@@ -226,6 +229,13 @@ function MapBody() {
     displaySummary.kind === 'threshold' ? displaySummary.text : m.metricOption[displaySummary.metric]
   const graphReady = Boolean(graph) && !query.isError && nodeCount > 0
 
+  // レーティングのマスク(ADR-0049 5章「マップ」)。マップ全体で外すか掛けるかを目のボタンで
+  // 切り替える(メモリにだけ置く。マスクする画像がマップに無ければボタンを出さない)。
+  const { shouldMask } = useContentRatingMask()
+  const mapUnmasked = useMapUnmasked()
+  const ratingToggle = mapRatingToggle(graphReady ? (graph?.nodes ?? []) : [], shouldMask, mapUnmasked)
+  const ratingMask = !mapUnmasked
+
   return (
     <>
       <header className={styles.toolbar}>
@@ -397,6 +407,20 @@ function MapBody() {
               )}
             </div>
           </ToolbarPanel>
+
+          {ratingToggle.visible && (
+            <button
+              type="button"
+              className={styles.iconToggle}
+              aria-pressed={ratingToggle.pressed}
+              aria-label={m.ratingMaskToggle}
+              title={ratingToggle.pressed ? m.ratingMaskApplyHelp : m.ratingMaskShowAllHelp}
+              onClick={() => setMapUnmasked(!ratingToggle.pressed)}
+            >
+              {/* マスクしているあいだは閉じた目、外しているあいだは開いた目(今の状態を出す)。 */}
+              {ratingToggle.pressed ? <EyeIcon size={15} /> : <EyeOffIcon size={15} />}
+            </button>
+          )}
         </div>
       </header>
 
@@ -422,6 +446,7 @@ function MapBody() {
             preview={preview}
             metric={state.metric}
             search={searchHighlight}
+            ratingMask={ratingMask}
           />
         )}
         {graph && !query.isError && nodeCount > 0 && state.view === 'umap3d' && state.shape === 'orbit' && (
@@ -434,6 +459,7 @@ function MapBody() {
             axes={axes}
             metric={state.metric}
             search={searchHighlight}
+            ratingMask={ratingMask}
           />
         )}
         {graph && !query.isError && nodeCount > 0 && state.view === 'network' && (
@@ -449,6 +475,7 @@ function MapBody() {
             introSpin={introSpin}
             axes={axes}
             search={searchHighlight}
+            ratingMask={ratingMask}
           />
         )}
 

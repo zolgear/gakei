@@ -10,15 +10,22 @@
  * - マスクをクリック(タップ)すると、その画像だけマスクを外す(`revealStore`。ページを読み直すと戻る)。
  *   下のカードのリンクやボタンは動かさない(`preventDefault` と `stopPropagation`)。外したあとは
  *   普段どおりクリックできる。
+ * - 外した画像(設定ではマスクする段階のもの)には、隅のバッジの位置に、目を閉じたアイコンだけの
+ *   小さなボタンを置き、押すとマスクに戻す(5章「マスクに戻す」。2026-10-15)。`badge` の
+ *   有無に関わらず出し、隅のバッジと置き換えるので、ほかの印やボタンとは重ならない。カードの中に
+ *   入るので `<button>` ではなく `role="button"` の要素にし(リンクやボタンの入れ子にしない)、
+ *   マスクと同じく下のカードへクリックとポインタを渡さない。
  * - `rating` が `undefined`(応答に段階の欄が無い)ならマスクもバッジも出さない。
  */
-import type { CSSProperties, ImgHTMLAttributes, MouseEvent } from 'react'
+import type { CSSProperties, ImgHTMLAttributes, KeyboardEvent, MouseEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
 import type { ContentRatingLevel } from '../../api/client'
+import { EyeOffIcon } from '../../components/icons'
 import { useI18n } from '../../i18n'
 import { RatingBadge } from './RatingBadge'
+import { isActivationKey, remaskFromEvent } from './remask'
 import { revealAsset } from './revealStore'
-import { useAssetMasked } from './useAssetMasked'
+import { useAssetMaskState } from './useAssetMasked'
 import styles from './ContentRating.module.css'
 
 /** ぼかした `<img>` に足す style。はみ出したぼかしを要素の枠で切る。 */
@@ -51,12 +58,16 @@ export function AssetThumb({
   ...imgProps
 }: AssetThumbProps) {
   const { t } = useI18n()
-  const masked = useAssetMasked(assetId, rating)
+  const { masked, revealed } = useAssetMaskState(assetId, rating)
 
   function reveal(e: MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
     revealAsset(assetId)
+  }
+
+  function remaskByKey(e: KeyboardEvent) {
+    if (isActivationKey(e.key)) remaskFromEvent(e, assetId)
   }
 
   return (
@@ -86,7 +97,24 @@ export function AssetThumb({
           )}
         </span>
       )}
-      {!masked && badge && rating && (
+      {revealed && (
+        <span
+          role="button"
+          tabIndex={0}
+          className={`${styles.badge} ${styles.corner} ${styles.remask}`}
+          data-level={rating ?? 'unrated'}
+          data-size="corner"
+          data-position={badgePosition}
+          aria-label={t.contentRating.remask}
+          title={t.contentRating.remaskHint}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => remaskFromEvent(e, assetId)}
+          onKeyDown={remaskByKey}
+        >
+          <EyeOffIcon size={12} />
+        </span>
+      )}
+      {!masked && !revealed && badge && rating && (
         <RatingBadge level={rating} size="corner" className={styles.corner} position={badgePosition} />
       )}
     </>

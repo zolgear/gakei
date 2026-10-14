@@ -2670,7 +2670,11 @@
     "previewLabel": "選んだ画像の詳細",
     "previewLoadFailed": "画像の情報を読み込めませんでした。",
     "kindLabel": "種類",
-    "embeddedPromptHeading": "プロンプト(画像に埋め込まれた情報、未検証)"
+    "embeddedPromptHeading": "プロンプト(画像に埋め込まれた情報、未検証)",
+    "ratingMaskToggle": "マスクを外して表示",
+    "ratingMaskShowAllHelp": "マスクしている画像を、このマップでだけ表示します(ページを読み直すとマスクに戻ります)",
+    "ratingMaskApplyHelp": "マップの画像をマスクに戻します",
+    "ratingMaskPreviewHint": "マスクはツールバーの目のボタンで外せます"
   },
   "lineageTransfer": {
     "export": {
@@ -2974,6 +2978,8 @@
     "unrated": "未判定",
     "revealHint": "クリックで表示",
     "reveal": "表示する",
+    "remask": "マスクする",
+    "remaskHint": "クリックでマスクに戻す",
     "section": {
       "heading": "レーティング",
       "sourceAuto": "自動",

@@ -2670,7 +2670,11 @@
     "previewLabel": "Selected image details",
     "previewLoadFailed": "Could not load the image details.",
     "kindLabel": "Kind",
-    "embeddedPromptHeading": "Prompt (embedded in the image, unverified)"
+    "embeddedPromptHeading": "Prompt (embedded in the image, unverified)",
+    "ratingMaskToggle": "Show masked images",
+    "ratingMaskShowAllHelp": "Show masked images on this map only (they are masked again when the page reloads)",
+    "ratingMaskApplyHelp": "Mask the images on the map again",
+    "ratingMaskPreviewHint": "Use the eye button in the toolbar to unmask the map"
   },
   "lineageTransfer": {
     "export": {
@@ -2974,6 +2978,8 @@
     "unrated": "Unrated",
     "revealHint": "Click to show",
     "reveal": "Show",
+    "remask": "Mask again",
+    "remaskHint": "Click to mask again",
     "section": {
       "heading": "Rating",
       "sourceAuto": "Automatic",

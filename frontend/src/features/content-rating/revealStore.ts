@@ -2,6 +2,7 @@
  * マスクを一時的に外した画像(ADR-0049 5章「一時的に見る」)。Asset の id の集合をメモリにだけ置き、
  * サーバーにもブラウザ(localStorage)にも覚えない。ページを読み直すと戻る。
  * 同じ画像は、外した場所に関わらず(履歴で外せばビューアでも)外れたままにする。
+ * 外した画像は `hideAsset` でマスクに戻せる(5章「マスクに戻す」。2026-10-15)。
  */
 import { useCallback, useSyncExternalStore } from 'react'
 
@@ -20,6 +21,15 @@ export function revealAsset(assetId: string): void {
   if (revealed.has(assetId)) return
   const next = new Set(revealed)
   next.add(assetId)
+  revealed = next
+  emit()
+}
+
+/** マスクに戻す(外した集合から除く)。外していなければ何もしない。 */
+export function hideAsset(assetId: string): void {
+  if (!revealed.has(assetId)) return
+  const next = new Set(revealed)
+  next.delete(assetId)
   revealed = next
   emit()
 }

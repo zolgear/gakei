@@ -18,9 +18,10 @@ import type { ContentRatingLevel } from '../../api/client'
 import { computeFitScale, type Size } from '../../lib/geometry'
 import { useI18n } from '../../i18n'
 import { shouldUseOriginal } from './viewerScale'
-import { useAssetMasked } from '../content-rating/useAssetMasked'
+import { useAssetMaskState } from '../content-rating/useAssetMasked'
 import { RatingBadge } from '../content-rating/RatingBadge'
-import { revealAsset } from '../content-rating/revealStore'
+import { CanvasRemaskButton } from '../content-rating/CanvasRemaskButton'
+import { hideAsset, revealAsset } from '../content-rating/revealStore'
 import styles from './AssetCanvas.module.css'
 import ratingStyles from '../content-rating/ContentRating.module.css'
 
@@ -48,6 +49,7 @@ interface AssetCanvasProps {
   /**
    * レーティング(ADR-0049 5章)。ユーザー設定でマスクする段階なら、画像をぼかして「表示する」の
    * ボタンを重ねる(クリックはパン・ズームに使うので、どこを押しても外れる形にはしない)。
+   * 外したあとは右下に「マスクする」のボタンを出す(2026-10-15)。
    * 省く(undefined)とマスクしない(共有のページ。ADR-0049 5章「出さない場所」)。
    */
   contentRating?: ContentRatingLevel | null
@@ -122,7 +124,7 @@ function CanvasToolbar({ scalePercent, leading }: { scalePercent: number; leadin
 
 export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = true, contentRating }: AssetCanvasProps) {
   const { t } = useI18n()
-  const masked = useAssetMasked(asset.id, contentRating)
+  const { masked, revealed } = useAssetMaskState(asset.id, contentRating)
   // asset が切り替わったら preview から見直す(差し替え前の倍率を引きずらない)。
   // effect ではなく、レンダー中に「直前に見ていた asset.id」とズレていたらその場で補正する
   // (React 公式が薦める「props から派生した state をリセットする」書き方)。
@@ -223,6 +225,7 @@ export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = tru
           </button>
         </div>
       )}
+      {revealed && <CanvasRemaskButton onRemask={() => hideAsset(asset.id)} />}
     </div>
   )
 }

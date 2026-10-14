@@ -121,6 +121,32 @@
   border-color: var(--color-accent);
 }
 
+/* 文字の無いアイコンだけのボタン(レーティングのマスクの切り替え。ADR-0049)。 */
+.iconToggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+}
+
+.iconToggle:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.iconToggle[aria-pressed='true'] {
+  background: var(--color-header-band);
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
 .panelToggleLabel {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -436,6 +462,11 @@
   .panelToggle {
     height: 40px;
     font-size: 13px;
+  }
+
+  .iconToggle {
+    width: 40px;
+    height: 40px;
   }
 
   .searchInput {

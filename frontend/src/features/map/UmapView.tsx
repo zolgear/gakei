@@ -32,9 +32,11 @@ interface UmapViewProps {
   metric: MapDistanceMetric
   /** マップ内の意味検索の一致(null なら検索していない)。 */
   search: MapSearchHighlight | null
+  /** ユーザー設定でマスクする画像をマスクするか(false はマップ全体で外しているとき。ADR-0049)。 */
+  ratingMask: boolean
 }
 
-export function UmapView({ graph, selectedId, onSelectId, preview, metric, search }: UmapViewProps) {
+export function UmapView({ graph, selectedId, onSelectId, preview, metric, search, ratingMask }: UmapViewProps) {
   const { t } = useI18n()
   const m = t.map
   const nodes = useMemo(() => graph.nodes ?? [], [graph])
@@ -136,6 +138,7 @@ export function UmapView({ graph, selectedId, onSelectId, preview, metric, searc
       preview={preview}
       controllerRef={controllerRef}
       search={search}
+      ratingMask={ratingMask}
       ariaLabel={fmt(m.umapAriaLabel, { count: nodes.length })}
       overlay={overlay}
     />

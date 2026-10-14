@@ -375,7 +375,6 @@ export function Viewer({ assetId }: ViewerProps) {
               </div>
             )}
             {supportsAnnotation(asset) && <AssetTitleSection asset={asset} />}
-            <ContentRatingSection asset={asset} />
             <dl className={styles.metaList}>
               <dt>{t.viewer.dimensions}</dt>
               <dd>
@@ -435,8 +434,10 @@ export function Viewer({ assetId }: ViewerProps) {
               </>
             )}
 
-            {/* タグはプロンプトの下(Run が無い画像では大きさ・形式の下)。多いと畳む。 */}
+            {/* タグはプロンプトの下(Run が無い画像では大きさ・形式の下)。多いと畳む。
+                レーティング(ADR-0049 4章)はタグの下。 */}
             {supportsAnnotation(asset) && <AssetTagsSection asset={asset} />}
+            <ContentRatingSection asset={asset} />
 
             {asset.origin && <OriginRecipeSection origin={asset.origin} />}
             {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} assetId={asset.id} />}

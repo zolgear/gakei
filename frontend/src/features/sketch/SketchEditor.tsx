@@ -37,6 +37,7 @@ import {
 } from './sketchGeometry'
 import { loadSketchPrefs, saveSketchPrefs } from './sketchPrefs'
 import { useUndoShortcut } from '../mask/undoShortcut'
+import { EyeIcon, EyeOffIcon } from '../../components/icons'
 import { MODAL_BODY_ATTRIBUTE } from '../../components/modalFocus'
 import { useModalFocus } from '../../components/useModalFocus'
 import * as sketchLayerStore from './sketchLayerStore'
@@ -122,35 +123,6 @@ function EraserIcon() {
         strokeLinejoin="round"
       />
       <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function EyeIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
-      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
-    </svg>
-  )
-}
-
-function EyeOffIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
-      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M2 14 14 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   )
 }
