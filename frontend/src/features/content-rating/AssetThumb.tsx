@@ -10,8 +10,8 @@
  * - マスクをクリック(タップ)すると、その画像だけマスクを外す(`revealStore`。ページを読み直すと戻る)。
  *   下のカードのリンクやボタンは動かさない(`preventDefault` と `stopPropagation`)。外したあとは
  *   普段どおりクリックできる。
- * - 外した画像(設定ではマスクする段階のもの)には、隅のバッジの位置に、目を閉じたアイコンと段階を
- *   出す小さなボタンを置き、押すとマスクに戻す(5章「マスクに戻す」。2026-10-15)。`badge` の
+ * - 外した画像(設定ではマスクする段階のもの)には、隅のバッジの位置に、目を閉じたアイコンだけの
+ *   小さなボタンを置き、押すとマスクに戻す(5章「マスクに戻す」。2026-10-15)。`badge` の
  *   有無に関わらず出し、隅のバッジと置き換えるので、ほかの印やボタンとは重ならない。カードの中に
  *   入るので `<button>` ではなく `role="button"` の要素にし(リンクやボタンの入れ子にしない)、
  *   マスクと同じく下のカードへクリックとポインタを渡さない。
@@ -111,8 +111,7 @@ export function AssetThumb({
           onClick={(e) => remaskFromEvent(e, assetId)}
           onKeyDown={remaskByKey}
         >
-          <EyeOffIcon size={11} />
-          {rating && <span aria-hidden="true">{t.contentRating.shortLevels[rating]}</span>}
+          <EyeOffIcon size={12} />
         </span>
       )}
       {!masked && !revealed && badge && rating && (

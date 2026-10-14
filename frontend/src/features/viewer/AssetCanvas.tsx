@@ -225,7 +225,7 @@ export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = tru
           </button>
         </div>
       )}
-      {revealed && <CanvasRemaskButton levels={[contentRating]} onRemask={() => hideAsset(asset.id)} />}
+      {revealed && <CanvasRemaskButton onRemask={() => hideAsset(asset.id)} />}
     </div>
   )
 }

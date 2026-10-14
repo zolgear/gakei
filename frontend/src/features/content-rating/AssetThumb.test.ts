@@ -49,7 +49,7 @@ describe('AssetThumb のマスクに戻すボタン', () => {
     expect(html).not.toContain(`aria-label="${label}"`)
   })
 
-  it('外した画像(マスクする段階)には、隅に目を閉じたアイコンと段階を出す', () => {
+  it('外した画像(マスクする段階)には、隅に目を閉じたアイコンだけを出す(段階は出さない)', () => {
     revealAsset('a1')
     const html = render('x', { badgePosition: 'top-right' })
     expect(html).not.toContain('data-rating-masked')
@@ -57,7 +57,7 @@ describe('AssetThumb のマスクに戻すボタン', () => {
     expect(html).toContain('role="button"')
     expect(html).toContain('data-position="top-right"')
     expect(html).toContain('<svg')
-    expect(html).toContain('>X</span>')
+    expect(html).not.toContain('>X</span>')
   })
 
   it('badge を付けないサムネイルにも出す', () => {

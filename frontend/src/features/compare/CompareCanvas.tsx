@@ -291,12 +291,8 @@ export function CompareCanvas({
         </button>
       </div>
     ) : beforeRevealed || afterRevealed ? (
-      // 外したあとは右下の「マスクする」で、外している画像をまとめてマスクに戻す(2026-10-15)。
+      // 外したあとは右下の目のアイコンで、外している画像をまとめてマスクに戻す(2026-10-15)。
       <CanvasRemaskButton
-        levels={[
-          beforeRevealed ? beforeRating : undefined,
-          afterRevealed && before.id !== after.id ? afterRating : undefined,
-        ]}
         onRemask={() => {
           if (beforeRevealed) hideAsset(before.id)
           if (afterRevealed) hideAsset(after.id)
