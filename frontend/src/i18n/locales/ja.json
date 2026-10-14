@@ -2974,6 +2974,8 @@
     "unrated": "未判定",
     "revealHint": "クリックで表示",
     "reveal": "表示する",
+    "remask": "マスクする",
+    "remaskHint": "クリックでマスクに戻す",
     "section": {
       "heading": "レーティング",
       "sourceAuto": "自動",

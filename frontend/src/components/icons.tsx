@@ -1,5 +1,6 @@
 /**
- * 複数の画面で使う小さな線のアイコン(ビューアの操作、最終プロンプトの挿入・置き換え・コピー)。
+ * 複数の画面で使う小さな線のアイコン(ビューアの操作、最終プロンプトの挿入・置き換え・コピー、
+ * 表示・非表示の切り替え)。
  * アイコンのライブラリは入れず、既存のツールバーと同じく SVG をインラインで描く。色は
  * `currentColor` に従うので、ボタンの文字色(危険操作の赤など)がそのまま乗る。
  * 意味はボタン側の `aria-label` / `title` で伝えるので、ここでは `aria-hidden` にする。
@@ -145,6 +146,27 @@ export function CrossIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M4 4l8 8M12 4l-8 8" />
+    </Icon>
+  )
+}
+
+/** 開いた目: 表示する(スケッチの線レイヤー、マップのマスクを外す)。 */
+export function EyeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z" />
+      <circle cx="8" cy="8" r="2" />
+    </Icon>
+  )
+}
+
+/** 斜線の入った目: 隠す・マスクする(ADR-0049 5章)。 */
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z" />
+      <circle cx="8" cy="8" r="2" />
+      <path d="M2 14 14 2" />
     </Icon>
   )
 }

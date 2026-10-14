@@ -2974,6 +2974,8 @@
     "unrated": "Unrated",
     "revealHint": "Click to show",
     "reveal": "Show",
+    "remask": "Mask again",
+    "remaskHint": "Click to mask again",
     "section": {
       "heading": "Rating",
       "sourceAuto": "Automatic",
