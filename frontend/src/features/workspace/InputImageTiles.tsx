@@ -13,6 +13,7 @@ import { assetUrl } from '../../api/assetUrl'
 import { fmt, useI18n } from '../../i18n'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
+import { ArrangeIcon } from '../composite/compositeIcons'
 import type { InputImagesProps } from './InputChipsRow'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputImageTiles.module.css'
@@ -202,6 +203,20 @@ export function InputImageTiles({
                   </button>
                 )}
 
+                {detail?.kind === 'composite' && (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    aria-label={t.composite.edit}
+                    title={t.composite.edit}
+                    onClick={() =>
+                      logic.openCompositeEditor({ mode: 'reopen', inputId: item.inputId, assetId: item.assetId })
+                    }
+                  >
+                    <ArrangeIcon size={12} />
+                  </button>
+                )}
+
                 <button
                   type="button"
                   className={styles.actionButton}
@@ -250,6 +265,17 @@ export function InputImageTiles({
         >
           <PencilIcon />
           <span>{c.sketch}</span>
+        </button>
+
+        <button
+          type="button"
+          className={styles.addTile}
+          aria-label={t.composite.button}
+          title={t.composite.buttonTitle}
+          onClick={() => logic.openCompositeEditor({ mode: 'new' })}
+        >
+          <ArrangeIcon />
+          <span>{t.composite.button}</span>
         </button>
       </div>
 

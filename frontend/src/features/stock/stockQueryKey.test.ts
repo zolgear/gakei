@@ -76,11 +76,12 @@ describe('ストックのパネルの種類(ADR-0035)', () => {
   })
 
   it('設定がオンならチップは 5 つ', () => {
-    expect(stockKindChoices(true)).toEqual(['all', 'generated', 'upload', 'sketch', 'mask'])
+    expect(stockKindChoices(true)).toEqual(['all', 'generated', 'upload', 'sketch', 'composite', 'mask'])
   })
 
   it('スケッチ・マスクを選んだまま設定をオフにすると「すべて」に戻す', () => {
     expect(normalizeStockKindFilter('sketch', false)).toBe('all')
+    expect(normalizeStockKindFilter('composite', false)).toBe('all')
     expect(normalizeStockKindFilter('mask', false)).toBe('all')
     expect(normalizeStockKindFilter('generated', false)).toBe('generated')
     expect(normalizeStockKindFilter('mask', true)).toBe('mask')
@@ -112,14 +113,15 @@ describe('ストックのパネルの種類(ADR-0035)', () => {
 describe('ストックピッカーの種類(ADR-0035)', () => {
   it('マスクのチップは出さず、スケッチは設定に従う', () => {
     expect(stockPickerKindChoices(false)).toEqual(['all', 'generated', 'upload'])
-    expect(stockPickerKindChoices(true)).toEqual(['all', 'generated', 'upload', 'sketch'])
+    expect(stockPickerKindChoices(true)).toEqual(['all', 'generated', 'upload', 'sketch', 'composite'])
   })
 
   it('「すべて」でもマスクを除くため、常に種類を明示する', () => {
     expect(stockPickerKinds('all', false)).toEqual(['generated', 'upload'])
-    expect(stockPickerKinds('all', true)).toEqual(['generated', 'upload', 'sketch'])
+    expect(stockPickerKinds('all', true)).toEqual(['generated', 'upload', 'sketch', 'composite'])
     expect(stockPickerKinds('sketch', true)).toEqual(['sketch'])
     expect(stockPickerKinds('sketch', false)).toEqual(['generated', 'upload'])
+    expect(stockPickerKinds('composite', false)).toEqual(['generated', 'upload'])
   })
 
   it('ピッカーのキーはパネルの節のキーと衝突しない', () => {

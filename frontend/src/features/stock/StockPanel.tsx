@@ -62,6 +62,7 @@ import {
   type StockKindFilter,
 } from './stockQueryKey'
 import { useStockShowSketchMask } from './stockPrefs'
+import { useOpenInArrange } from '../composite/useOpenInArrange'
 import { StockTagFilter } from './StockTagFilter'
 import { useStockTagFilter } from './stockTagFilterStore'
 import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
@@ -82,6 +83,8 @@ function kindLabel(t: Messages, kind: KindFilter): string {
       return t.stock.kindSketch
     case 'mask':
       return t.stock.kindMask
+    case 'composite':
+      return t.stock.kindComposite
   }
 }
 
@@ -282,6 +285,9 @@ export function StockPanel() {
     // kind === 'asset' | 'none' は何もしない。
   }
 
+  // 「配置で開く」(ADR-0050 5章)。選んだ画像(マスクを除く)を素材にして開く。
+  const arrange = useOpenInArrange({ onNotice: setMessage })
+
   function handleUseAsInput(asset: AssetSummary) {
     const result = addImageInputs(formState.inputs, [asset.id], maxInputImages)
     if (result.addedCount === 0) {
@@ -441,6 +447,16 @@ export function StockPanel() {
             <button
               type="button"
               className={styles.selectionButton}
+              disabled={selectedIds.length === 0}
+              title={t.composite.buttonTitle}
+              // マスクは編集画面の側で外し、そのことを示す。
+              onClick={() => arrange.open(selectedIds)}
+            >
+              {t.composite.openWith}
+            </button>
+            <button
+              type="button"
+              className={styles.selectionButton}
               disabled={selected.size === 0}
               onClick={() => setSelected(new Map())}
             >
@@ -462,6 +478,7 @@ export function StockPanel() {
         onCancel={() => setDeleteTarget(null)}
       />
       <ToastHost toast={toast.toast} onDismiss={toast.dismiss} />
+      {arrange.editor}
     </div>
   )
 }
