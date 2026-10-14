@@ -32,6 +32,7 @@ import { canDeleteRun } from './runDeletion'
 import { buildRunDeleteWarning } from './runDeleteWarning'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { fmt, useI18n } from '../../i18n'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './HistoryCard.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -200,13 +201,16 @@ export function HistoryCard({ run }: HistoryCardProps) {
 
   const parentOverlay = parentAssetId && (
     <div className={styles.parentOverlay}>
-      <img
-        className={styles.parentThumb}
-        src={assetUrl(parentAssetId, 'thumb')}
-        style={focalStyle(run.primary_parent_focal_point)}
-        alt={t.history.card.parent}
-        draggable={false}
-      />
+      <span className={styles.parentThumbFrame}>
+        <AssetThumb
+          assetId={parentAssetId}
+          rating={run.primary_parent_content_rating}
+          className={styles.parentThumb}
+          style={focalStyle(run.primary_parent_focal_point)}
+          alt={t.history.card.parent}
+          draggable={false}
+        />
+      </span>
       <span>
         {extraInputCount > 0 ? fmt(t.history.card.parentWithExtra, { extra: extraInputCount }) : t.history.card.parent}
       </span>
@@ -220,6 +224,8 @@ export function HistoryCard({ run }: HistoryCardProps) {
         {hasInputs && (
           <span className={styles.inputBadge}>{fmt(t.history.card.inputBadge, { count: run.input_count })}</span>
         )}
+        {/* アシスタントが作った Run(ADR-0048 9章)。実行元は Run 詳細にも出す。 */}
+        {run.origin === 'assistant' && <span className={styles.inputBadge}>{t.history.card.originAssistant}</span>}
         <span className={styles.model}>{run.model_label ?? shortenModelName(run.model)}</span>
         <span className={styles.status} data-status={run.status}>
           {statusLabel(run.status)}
@@ -234,9 +240,13 @@ export function HistoryCard({ run }: HistoryCardProps) {
         >
           {run.status === 'succeeded' && firstOutput && (
             <>
-              <img
+              <AssetThumb
+                assetId={firstOutput.asset_id}
+                rating={firstOutput.content_rating}
+                badge
+                // 左下は親のサムネイル、右上は出力の枚数なので左上に置く。
+                badgePosition="top-left"
                 className={`${styles.mediaImage} checkerboard`}
-                src={assetUrl(firstOutput.asset_id, 'thumb')}
                 style={focalStyle(firstOutput.focal_point)}
                 alt=""
                 draggable

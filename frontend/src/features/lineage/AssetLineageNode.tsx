@@ -8,11 +8,11 @@
  * 無いため、サムネイルを要求すると 404 になる)。
  */
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { assetUrl } from '../../api/assetUrl'
 import type { LineageAssetInfo } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { assetKindLabel } from '../../lib/format'
 import { focalStyle } from '../../lib/focalPoint'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './LineageNodes.module.css'
 
 export interface AssetNodeData {
@@ -76,13 +76,20 @@ export function AssetLineageNode({ id, data }: NodeProps) {
       {assetInfo.kind === 'mask' ? (
         <div className={styles.maskPlaceholder}>{t.lineage.assetMask}</div>
       ) : thumbAssetId ? (
-        <img
-          className={`${styles.thumb} checkerboard`}
-          src={thumbUrlFor ? thumbUrlFor(thumbAssetId) : assetUrl(thumbAssetId, 'thumb')}
-          style={focalStyle(assetInfo.focal_point)}
-          alt=""
-          draggable={false}
-        />
+        <span className={styles.thumbFrame}>
+          <AssetThumb
+            assetId={thumbAssetId}
+            // 共有のページ(thumbUrlFor)と埋め込みのノードはマスクしない(ADR-0049 5章。埋め込みの
+            // ノードの段階は、対応する Asset のものではない)。
+            rating={thumbUrlFor || embedded ? undefined : (assetInfo.content_rating ?? null)}
+            badge
+            src={thumbUrlFor ? thumbUrlFor(thumbAssetId) : undefined}
+            className={`${styles.thumb} checkerboard`}
+            style={focalStyle(assetInfo.focal_point)}
+            alt=""
+            draggable={false}
+          />
+        </span>
       ) : (
         <div className={styles.embeddedPlaceholder}>
           <span>{t.lineage.noEmbeddedImage}</span>

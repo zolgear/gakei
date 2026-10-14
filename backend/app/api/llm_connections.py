@@ -20,7 +20,7 @@ from app.config import Settings
 from app.deps import get_annotator, get_session, get_settings
 
 # annotation_settings と embedding_settings は、読み込むと使っている機能を登録する(上の docstring)。
-from app.domain import annotation_settings, embedding_settings, llm_connections
+from app.domain import annotation_settings, assistant_settings, embedding_settings, llm_connections
 from app.domain.schemas import (
     LlmConnectionApiKeyUpdateRequest,
     LlmConnectionCreateRequest,
@@ -62,6 +62,8 @@ def _feature_name(feature: str) -> str:
         return t("settings.llmConnections.features.annotation")
     if feature == embedding_settings.FEATURE_ID:
         return t("settings.llmConnections.features.embedding")
+    if feature == assistant_settings.FEATURE_ID:
+        return t("settings.llmConnections.features.assistant")
     return feature
 
 

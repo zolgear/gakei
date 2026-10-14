@@ -204,6 +204,8 @@ export interface AnnotationDraft extends AnnotationForm {
   vlm_enabled: boolean
   onnx_enabled: boolean
   onnx_model: OnnxModelName
+  /** レーティングを判定する(ADR-0049 3章)。ONNX のタグ付けとは独立に切り替える。 */
+  content_rating_enabled: boolean
 }
 
 export function draftFromSettings(settings: AnnotationSettingsResponse): AnnotationDraft {
@@ -214,10 +216,18 @@ export function draftFromSettings(settings: AnnotationSettingsResponse): Annotat
     vlm_enabled: settings.vlm_enabled,
     onnx_enabled: settings.onnx_enabled,
     onnx_model: settings.onnx_model,
+    content_rating_enabled: settings.content_rating_enabled,
   }
 }
 
-const DRAFT_FLAG_KEYS = ['auto_on_ingest', 'llm_enabled', 'vlm_enabled', 'onnx_enabled', 'onnx_model'] as const
+const DRAFT_FLAG_KEYS = [
+  'auto_on_ingest',
+  'llm_enabled',
+  'vlm_enabled',
+  'onnx_enabled',
+  'onnx_model',
+  'content_rating_enabled',
+] as const
 
 /**
  * 下書きと保存済みの設定の差分(PATCH の本文)。使い方・言語・上限・しきい値は `diffAnnotationForm`
@@ -279,6 +289,25 @@ export function backfillBlocker(params: {
   if (params.running) return 'running'
   if (params.dirty) return 'unsaved'
   if (params.usableEngineCount === 0) return 'noEngines'
+  if (params.pendingCount === 0) return 'nothingPending'
+  return null
+}
+
+/**
+ * レーティングの一括判定(ADR-0049 3章)を押せない理由。押せるなら null。判定が使えない(保存済みの設定で
+ * 無効、またはモデルが無い)ときはサーバーが 409 を返すので押させない。
+ */
+export type ContentRatingBackfillBlocker = 'unsaved' | 'notUsable' | 'nothingPending' | 'running'
+
+export function contentRatingBackfillBlocker(params: {
+  dirty: boolean
+  usable: boolean
+  pendingCount: number
+  running: boolean
+}): ContentRatingBackfillBlocker | null {
+  if (params.running) return 'running'
+  if (params.dirty) return 'unsaved'
+  if (!params.usable) return 'notUsable'
   if (params.pendingCount === 0) return 'nothingPending'
   return null
 }

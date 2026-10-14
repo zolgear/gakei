@@ -52,6 +52,8 @@ import { fmt, intlLocale, useI18n } from '../i18n'
 import { assetKindLabel, formatBytes, formatDateTime } from '../lib/format'
 import { useBackNavigate } from '../lib/useBackNavigate'
 import { useIsMobileViewport } from '../lib/viewport'
+import { AssetThumb } from '../features/content-rating/AssetThumb'
+import { thumbRating } from '../features/content-rating/contentRating'
 import styles from './DuplicatesPage.module.css'
 import { focalStyle } from '../lib/focalPoint'
 
@@ -275,6 +277,8 @@ function DuplicatesBody({ defaultThreshold }: { defaultThreshold: number }) {
                 beforeLabel={fmt(m.compareOlder, { width: comparing[0].width, height: comparing[0].height })}
                 afterLabel={fmt(m.compareNewer, { width: comparing[1].width, height: comparing[1].height })}
                 frameBasis="larger"
+                beforeRating={thumbRating(comparing[0])}
+                afterRating={thumbRating(comparing[1])}
               />
             </div>
           </div>
@@ -315,9 +319,11 @@ function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleS
     <li className={styles.tile} data-selected={selected}>
       <div className={styles.thumbWrap}>
         <button type="button" className={styles.thumbButton} title={m.open} aria-label={m.open} onClick={onOpen}>
-          <img
+          <AssetThumb
+            assetId={asset.id}
+            rating={thumbRating(asset)}
+            badge
             className={`${styles.thumb} checkerboard`}
-            src={assetUrl(asset.id, 'thumb')}
             style={focalStyle(asset.focal_point)}
             alt=""
             draggable={false}

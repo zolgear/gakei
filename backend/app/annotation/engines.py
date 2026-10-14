@@ -39,6 +39,7 @@ from PIL import Image
 from app.annotation.wd_tagger import InsufficientMemoryError, WdTagger
 from app.domain.annotation_settings import AnnotationConfig, Target
 from app.i18n import t
+from app.llm.clients import LlmClientCache
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,19 @@ class VlmResult:
     translations: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass
+class OnnxAnalysis:
+    """ONNX タガー(WD Tagger)の1回の推論の結果(ADR-0024 3章、ADR-0049 3章)。`tags` は
+    しきい値以上のタグ、`rating_scores` は rating の4つの確率、`rating_tag_probs` は
+    引き上げのタグ(`content_rating.BOOST_TAGS`)の確率(しきい値で捨てる前)。`model` は
+    レーティングの記録に残すモデル名。"""
+
+    tags: list[tuple[str, float]]
+    rating_scores: dict[str, float]
+    rating_tag_probs: dict[str, float]
+    model: str
+
+
 def wants_translation(config: AnnotationConfig) -> bool:
     """ONNX の英語のタグを訳して足すか(localized で、言語が英語以外)。"""
     return config.tag_language == "localized" and config.language != "en"
@@ -205,6 +219,10 @@ class AnnotationEngines(Protocol):
 
     def onnx_tags(self, image: Image.Image, ctx: EngineContext) -> list[tuple[str, float]]:
         """同期関数(呼び出し側が `asyncio.to_thread` で呼ぶ)。"""
+        ...
+
+    def onnx_analyze(self, image: Image.Image, ctx: EngineContext) -> OnnxAnalysis:
+        """タグとレーティングの材料を1回の推論で返す(ADR-0049 3章)。同期関数。"""
         ...
 
     def release_idle(self) -> None: ...
@@ -362,56 +380,28 @@ def _safe_api_message(e: openai.APIError) -> str:
 
 
 class OpenAIEngines:
-    # 接続先ごとのクライアントを持つ上限(設定を何度も変えたときに増え続けないように)。
-    _CLIENTS_MAX = 8
+    # 接続先ごとのクライアントを持つ上限(`LlmClientCache` と同じ)。
+    _CLIENTS_MAX = LlmClientCache.CLIENTS_MAX
 
     def __init__(self, tagger: WdTagger) -> None:
         self.tagger = tagger
         # (キー, Base URL) ごとのクライアント。LLM と VLM で接続先が異なりうる(ADR-0024 8章)。
-        # 使った順に並べ(最後が最新)、上限を超えたら最も古いものから捨てる。
-        self._clients: dict[tuple[str, str | None], AsyncOpenAI] = {}
-        # 捨てたクライアントを閉じるタスク(終わるまで参照を持っておく)。
-        self._closing: set[asyncio.Task[None]] = set()
+        # worker は1件ずつ処理し、1件で使うのは高々2つなので、使用中のクライアントを捨てる
+        # ことは無い。
+        self._cache = LlmClientCache(timeout=_TIMEOUT_SECONDS)
 
-    def _discard_client(self, client: AsyncOpenAI) -> None:
-        """捨てたクライアントを閉じる(接続を残さないように)。`AsyncOpenAI.close()` は
-        コルーチンなので、イベントループの上ではタスクにして閉じる。ループの外なら閉じずに
-        ガベージコレクションに任せる。"""
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        task = loop.create_task(self._close_quietly(client))
-        self._closing.add(task)
-        task.add_done_callback(self._closing.discard)
+    @property
+    def _clients(self) -> dict[tuple[str, str | None], AsyncOpenAI]:
+        return self._cache.clients
 
-    @staticmethod
-    async def _close_quietly(client: AsyncOpenAI) -> None:
-        try:
-            await client.close()
-        except Exception:  # noqa: BLE001 - 捨てるクライアントの後始末の失敗は無視する
-            logger.debug("推定のクライアントを閉じられませんでした", exc_info=True)
+    @property
+    def _closing(self) -> set[asyncio.Task[None]]:
+        return self._cache.closing
 
     def _client_for(self, target: Target) -> AsyncOpenAI:
         if not target.api_key:
             raise AnnotationEngineError(t("annotations.apiKeyMissing"))
-        key = (target.api_key, target.base_url)
-        client = self._clients.pop(key, None)
-        if client is None:
-            # 最も長く使っていないものから捨てる(worker は1件ずつ処理し、1件で使うのは
-            # 高々2つなので、使用中のクライアントを捨てることは無い)。
-            while len(self._clients) >= self._CLIENTS_MAX:
-                oldest = next(iter(self._clients))
-                self._discard_client(self._clients.pop(oldest))
-            client = AsyncOpenAI(
-                api_key=target.api_key,
-                base_url=target.base_url,
-                max_retries=2,
-                timeout=_TIMEOUT_SECONDS,
-            )
-        # 最新として末尾に入れ直す。
-        self._clients[key] = client
-        return client
+        return self._cache.get(target)
 
     async def _complete(
         self,
@@ -493,8 +483,16 @@ class OpenAIEngines:
         return parse_translations(_parse_json_object(raw).get("translations"))
 
     def onnx_tags(self, image: Image.Image, ctx: EngineContext) -> list[tuple[str, float]]:
+        return self.onnx_analyze(image, ctx).tags
+
+    def onnx_analyze(self, image: Image.Image, ctx: EngineContext) -> OnnxAnalysis:
+        from app.domain.content_rating import BOOST_TAGS
+
+        model = ctx.config.onnx_model
         try:
-            return self.tagger.tag(image, ctx.config.onnx_model, ctx.config.onnx_threshold)
+            result = self.tagger.analyze(
+                image, model, ctx.config.onnx_threshold, probe_tags=BOOST_TAGS
+            )
         except FileNotFoundError as e:
             raise AnnotationEngineError(t("annotations.onnxModelMissing")) from e
         except InsufficientMemoryError as e:
@@ -506,6 +504,12 @@ class OpenAIEngines:
                     available=f"{e.available / 1e9:.1f}",
                 )
             ) from e
+        return OnnxAnalysis(
+            tags=result.tags,
+            rating_scores=result.ratings,
+            rating_tag_probs=result.probes,
+            model=model,
+        )
 
     def release_idle(self) -> None:
         self.tagger.release_if_idle()
@@ -514,8 +518,46 @@ class OpenAIEngines:
 # -- FAKE_PROVIDER=1 用のダミー ----------------------------------------------------
 
 
+# ダミーのレーティングの材料(段階ごと)。rating の4つの確率と、引き上げのタグの確率。
+FAKE_RATING_PROFILES: dict[str, tuple[dict[str, float], dict[str, float]]] = {
+    "g": (
+        {"general": 0.9, "sensitive": 0.08, "questionable": 0.01, "explicit": 0.01},
+        {},
+    ),
+    "r": (
+        {"general": 0.35, "sensitive": 0.55, "questionable": 0.07, "explicit": 0.03},
+        {"swimsuit": 0.45},
+    ),
+    "x": (
+        {"general": 0.1, "sensitive": 0.3, "questionable": 0.5, "explicit": 0.1},
+        {"nipples": 0.3},
+    ),
+    "xx": (
+        {"general": 0.03, "sensitive": 0.07, "questionable": 0.3, "explicit": 0.6},
+        {"pussy": 0.7, "sex": 0.3},
+    ),
+    "xxx": (
+        {"general": 0.02, "sensitive": 0.03, "questionable": 0.15, "explicit": 0.8},
+        {"pussy": 0.8, "sex": 0.9},
+    ),
+}
+_FAKE_RATING_ORDER = ("g", "r", "x", "xx", "xxx")
+
+
+def fake_rating_level(image: Image.Image) -> str:
+    """画像から決まるダミーの段階(同じ画像なら同じ段階。色の平均から選ぶ)。"""
+    small = image.convert("RGB").resize((1, 1), Image.Resampling.BOX)
+    red, green, blue = small.getpixel((0, 0))  # type: ignore[misc]
+    return _FAKE_RATING_ORDER[(int(red) + int(green) + int(blue)) // 16 % len(_FAKE_RATING_ORDER)]
+
+
 class FakeEngines:
-    """決定的なタイトルとタグを返す(課金なし・ダウンロードなし。開発・E2E 確認・テスト用)。"""
+    """決定的なタイトルとタグを返す(課金なし・ダウンロードなし。開発・E2E 確認・テスト用)。
+
+    レーティングの材料は画像の色から決まる段階(`fake_rating_level`)のもの。テストでは
+    `rating_level` に段階を入れて固定できる。"""
+
+    rating_level: str | None = None
 
     async def title_from_prompt(self, prompt: str, ctx: EngineContext) -> str:
         head = " ".join(prompt.split())[:20]
@@ -550,6 +592,16 @@ class FakeEngines:
 
     def onnx_tags(self, image: Image.Image, ctx: EngineContext) -> list[tuple[str, float]]:
         return [("fake onnx", 0.9)]
+
+    def onnx_analyze(self, image: Image.Image, ctx: EngineContext) -> OnnxAnalysis:
+        level = self.rating_level or fake_rating_level(image)
+        scores, probes = FAKE_RATING_PROFILES[level]
+        return OnnxAnalysis(
+            tags=list(self.onnx_tags(image, ctx)),
+            rating_scores=dict(scores),
+            rating_tag_probs=dict(probes),
+            model=f"fake:{ctx.config.onnx_model}",
+        )
 
     def release_idle(self) -> None:
         return None

@@ -42,6 +42,7 @@ import { TagDictionarySettingsPage } from '../features/settings/pages/TagDiction
 import { ShareLinksSettingsPage } from '../features/settings/pages/ShareLinksSettingsPage'
 import { AnnotationSettingsPage } from '../features/settings/pages/AnnotationSettingsPage'
 import { EmbeddingSettingsPage } from '../features/settings/pages/EmbeddingSettingsPage'
+import { AssistantSettingsPage } from '../features/settings/pages/AssistantSettingsPage'
 import { LlmConnectionsSettingsPage } from '../features/settings/pages/LlmConnectionsSettingsPage'
 import { AuthSettingsPage } from '../features/settings/pages/AuthSettingsPage'
 import {
@@ -62,6 +63,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   llmConnections: LlmConnectionsSettingsPage,
   annotation: AnnotationSettingsPage,
   embeddings: EmbeddingSettingsPage,
+  assistant: AssistantSettingsPage,
   comfyui: ComfyUISettingsPage,
   sdwebui: SdWebuiSettingsPage,
   tagDictionary: TagDictionarySettingsPage,

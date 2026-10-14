@@ -279,7 +279,15 @@
   color: var(--color-text-muted);
 }
 
+/* レーティングのマスクとバッジ(ADR-0049)を、サムネイルの大きさに合わせて重ねるための枠。 */
+.thumbFrame {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
 .thumb {
+  display: block;
   width: 100%;
   aspect-ratio: 1 / 1;
   object-fit: contain;

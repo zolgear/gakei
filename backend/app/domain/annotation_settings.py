@@ -38,7 +38,6 @@ from app.domain.llm_connections import (
     BUILTIN_CONNECTION_ID,
     ApiStyle,
     ConnectionConfig,
-    ConnectionNotFoundError,
 )
 from app.domain.models import AppSetting
 from app.i18n import t
@@ -151,6 +150,9 @@ class AnnotationConfig:
     onnx_enabled: bool = False
     onnx_model: OnnxModelName = "wd-vit-tagger-v3"
     onnx_threshold: float = DEFAULT_ONNX_THRESHOLD
+    # レーティングの判定(ADR-0049 3章)。`onnx_model` の WD のモデルを使う。`onnx_enabled` とは
+    # 独立にオンにできる。
+    content_rating_enabled: bool = False
     # LLM の接続先のうち利用者が登録したもの(組み込みの openai は含まない。`all_connections`
     # を参照)。`llm_connections` から読む。
     connections: tuple[ConnectionConfig, ...] = ()
@@ -216,7 +218,13 @@ def _is_threshold(value: object) -> bool:
 
 def normalize_value(name: str, value: Any) -> Any:
     """1項目を検証して保存する形に整える。不正なら AnnotationSettingsValidationError。"""
-    if name in ("auto_on_ingest", "llm_enabled", "vlm_enabled", "onnx_enabled"):
+    if name in (
+        "auto_on_ingest",
+        "llm_enabled",
+        "vlm_enabled",
+        "onnx_enabled",
+        "content_rating_enabled",
+    ):
         if not _is_bool(value):
             raise AnnotationSettingsValidationError(t("settings.annotation.invalidBool", name=name))
         return value
@@ -382,18 +390,9 @@ llm_connections.register_usage(FEATURE_ID, used_connection_ids)
 # -- 接続先の解決 ----------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class Target:
-    """推定1用途の送り先(接続先の実際のキーと Base URL、API 形式、モデル名)。
-
-    キーが無ければ `api_key=None`(組み込みの接続先で OpenAI のキーが未設定のとき)。
-    """
-
-    connection_id: str
-    model: str
-    api_key: str | None
-    base_url: str | None
-    api_style: ApiStyle = "responses"
+# 推定1用途の送り先。接続先の解決は生成のアシスタント(ADR-0048)と共用する
+# (`llm_connections.LlmTarget`)。
+Target = llm_connections.LlmTarget
 
 
 def profile_for_provider(provider: str | None) -> Profile:
@@ -408,16 +407,8 @@ def resolve_target(
     """組と用途から送り先を決める。接続先が無ければ ConnectionNotFoundError(既定の組には
     切り替えない)。"""
     choice = config.profiles.choice(profile, purpose)
-    connection = config.find_connection(choice.connection_id)
-    if connection is None:
-        raise ConnectionNotFoundError(choice.connection_id)
-    resolved = llm_connections.resolve(connection, settings)
-    return Target(
-        connection_id=connection.id,
-        model=choice.model,
-        api_key=resolved.api_key,
-        base_url=resolved.base_url,
-        api_style=resolved.api_style,
+    return llm_connections.resolve_target(
+        config.all_connections(), choice.connection_id, choice.model, settings
     )
 
 

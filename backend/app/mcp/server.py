@@ -39,26 +39,23 @@ from mcp.types import (
     ToolAnnotations,
 )
 from pydantic import Field, ValidationError
-from sqlalchemy import and_, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.api.capabilities import get_capabilities_endpoint
-from app.api.prompt_sets import list_prompt_sets as list_prompt_sets_rest
 from app.domain import agent_images, ingest_hooks, mcp_settings
-from app.domain import annotations as annotations_domain
 from app.domain import api_tokens as api_tokens_domain
+from app.domain import asset_search as asset_search_domain
 from app.domain import download_tickets as download_tickets_domain
+from app.domain import prompt_sets as prompt_sets_domain
 from app.domain import run_create as run_create_domain
-from app.domain import semantic_search as semantic_domain
 from app.domain import upload_tickets as upload_tickets_domain
 from app.domain.alpha_stats import alpha_stats
 from app.domain.asset_groups import (
     AssetGroupAssetsMissingError,
     add_members,
-    group_for_asset,
 )
 from app.domain.asset_groups import create_group as create_group_domain
-from app.domain.asset_groups import list_groups as list_groups_domain
 from app.domain.assets import MAX_UPLOAD_BYTES, IngestError, ingest_upload
 from app.domain.lineage import (
     LineageNotFoundError,
@@ -70,7 +67,6 @@ from app.domain.lineage_mermaid import LineageGraph, MermaidOptions, render_line
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
     Asset,
-    AssetGroupMember,
     AssetKind,
     Run,
     RunInput,
@@ -79,10 +75,13 @@ from app.domain.models import (
 )
 from app.domain.pricing import EstimateResult, cost_from_usage
 from app.domain.pricing import estimate_cost as estimate_cost_domain
-from app.domain.run_views import run_text_outputs
-from app.domain.schemas import AssetGroupCreate, RunCreateRequest, RunInputCreate
+from app.domain.schemas import (
+    AssetGroupCreate,
+    PromptSetListResponse,
+    RunCreateRequest,
+    RunInputCreate,
+)
 from app.domain.search import MAX_LIMIT as SEARCH_MAX_LIMIT
-from app.domain.search import InvalidSearchQueryError, search
 from app.domain.storage import AssetStore
 from app.domain.text_safety import find_nul
 from app.domain.visibility import (
@@ -243,14 +242,6 @@ def _asset_lineage_mermaid(mc: McpRequestContext, db: Session, asset_id: uuid.UU
     )
 
 
-def _text_outputs_payload(run: Run) -> list[dict[str, Any]] | None:
-    """最終プロンプト(PE の出力)など、実行時に作られたテキスト(ADR-0030 4章)。無ければ None。"""
-    items = run_text_outputs(run)
-    if items is None:
-        return None
-    return [item.model_dump(mode="json") for item in items]
-
-
 def _run_payload(
     mc: McpRequestContext,
     db: Session,
@@ -292,7 +283,7 @@ def _run_payload(
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
         "origin": run.origin,
-        "text_outputs": _text_outputs_payload(run),
+        "text_outputs": asset_search_domain.text_outputs_payload(run),
         "asset_group": group,
         "inputs": [
             {"asset_id": str(i.asset_id), "role": str(i.role), "position": i.position}
@@ -793,204 +784,37 @@ async def search_assets(
     ones, which may be wrong).
     """
     mc = get_mcp_context(ctx)
-    tag_value = tag.strip() if tag and tag.strip() else None
 
     def _search() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
-            if group_id is not None and get_visible_group(db, mc.user, group_id) is None:
-                raise ToolError(f"Group {group_id} not found.")
-            if mode == "semantic":
-                if not query or not query.strip():
-                    raise ToolError("semantic mode needs a query (a description of the image).")
-                if kind == "mask":
-                    # REST(`GET /api/search/semantic`)と同じく、マスクは種類に指定できない
-                    # (マスクには埋め込みが無い。ADR-0033)。
-                    raise ToolError(
-                        "Masks have no embeddings: kind 'mask' cannot be used in semantic mode."
-                    )
-                try:
-                    response = semantic_domain.semantic_search(
-                        db,
-                        settings=mc.state.settings,
-                        index=mc.state.vector_index,
-                        engines=mc.state.embedder.engines,
-                        cache=mc.state.query_vector_cache,
-                        viewer=mc.user,
-                        q=query,
-                        limit=limit,
-                        group_id=group_id,
-                        tag=tag_value,
-                        kind=kind,
-                    )
-                except _SEMANTIC_ERRORS as e:
-                    raise _semantic_tool_error(e) from e
-                hits = [(h.id, h.score) for h in response.assets]
-                return _scored_items(
-                    mc,
+            try:
+                payload, assets = asset_search_domain.search_assets(
                     db,
-                    hits,
-                    include_thumbnails,
-                    extra={
-                        "mode": "semantic",
-                        "model_key": response.model_key,
-                        "multilingual": response.multilingual,
-                        "truncated": False,
-                    },
+                    mc.state,
+                    mc.user,
+                    functools.partial(_asset_brief, mc),
+                    query=query,
+                    mode=mode,
+                    kind=kind,
+                    group_id=group_id,
+                    tag=tag,
+                    limit=limit,
                 )
-            tag_clause = None
-            if tag_value is not None:
-                try:
-                    tag_clause = annotations_domain.tag_filter(tag_value)
-                except annotations_domain.TagNameError as e:
-                    raise ToolError(str(e)) from e
-            if query and query.strip():
-                try:
-                    hits = search(
-                        db,
-                        query,
-                        viewer=mc.user,
-                        limit=SEARCH_LIMIT_MAX,
-                        types={"asset"},
-                        tag=tag_value,
-                    ).assets
-                except InvalidSearchQueryError as e:
-                    raise ToolError(str(e)) from e
-                snippets = {h.id: h.prompt_snippet for h in hits}
-                ids = [h.id for h in hits]
-                assets_by_id = {
-                    a.id: a
-                    for a in db.execute(
-                        select(Asset).where(Asset.id.in_(ids), asset_visible(mc.user))
-                    )
-                    .scalars()
-                    .all()
-                }
-                assets = [assets_by_id[i] for i in ids if i in assets_by_id]
-            else:
-                snippets = {}
-                q = select(Asset).where(Asset.deleted_at.is_(None), asset_visible(mc.user))
-                if kind is not None:
-                    q = q.where(Asset.kind == kind)
-                if tag_clause is not None:
-                    q = q.where(tag_clause)
-                if group_id is not None:
-                    q = q.join(
-                        AssetGroupMember,
-                        and_(
-                            AssetGroupMember.asset_id == Asset.id,
-                            AssetGroupMember.asset_group_id == group_id,
-                        ),
-                    )
-                q = q.order_by(Asset.created_at.desc(), Asset.id.desc()).limit(limit + 1)
-                assets = list(db.execute(q).scalars().all())
-
-            if query and query.strip():
-                if kind is not None:
-                    assets = [a for a in assets if a.kind == kind]
-                if group_id is not None:
-                    member_ids = set(
-                        db.execute(
-                            select(AssetGroupMember.asset_id).where(
-                                AssetGroupMember.asset_group_id == group_id
-                            )
-                        )
-                        .scalars()
-                        .all()
-                    )
-                    assets = [a for a in assets if a.id in member_ids]
-
-            truncated = len(assets) > limit
-            assets = assets[:limit]
-            asset_ids = [a.id for a in assets]
-            titles = annotations_domain.bulk_titles(db, asset_ids)
-            tags_map = annotations_domain.bulk_tags(db, asset_ids)
-            items = []
-            for asset in assets:
-                item = _asset_brief(mc, asset)
-                item["title"] = titles.get(asset.id)
-                item["tags"] = [ref.model_dump(mode="json") for ref in tags_map.get(asset.id, [])]
-                group = group_for_asset(db, asset.id, mc.user)
-                item["group"] = group.model_dump(mode="json") if group else None
-                if asset.id in snippets:
-                    item["prompt_snippet"] = snippets[asset.id]
-                items.append(item)
-            images: list[ImageContent] = []
-            if include_thumbnails:
-                for asset in assets:
-                    thumb = _thumbnail(mc.state.store, asset)
-                    if thumb is not None:
-                        images.append(thumb)
-            return {"mode": "keyword", "items": items, "truncated": truncated}, images
+            except asset_search_domain.AssetSearchError as e:
+                raise ToolError(str(e)) from e
+            return payload, _thumbnails(mc, assets) if include_thumbnails else []
 
     payload, images = await _in_thread(_search)
     return _result(payload, images)
 
 
-_SEMANTIC_ERRORS = (
-    semantic_domain.EmbeddingsConflictError,
-    semantic_domain.EmbeddingsNotFoundError,
-    semantic_domain.EmbeddingsInvalidQueryError,
-    semantic_domain.EmbeddingsEngineError,
-)
-
-
-def _semantic_tool_error(e: Exception) -> ToolError:
-    if isinstance(e, semantic_domain.EmbeddingsConflictError):
-        if e.code == "embeddings_unavailable":
-            return ToolError(
-                "Image embeddings are not available (turned off or no model is ready in the "
-                "GAKEI admin settings). Use search_assets in keyword mode instead."
-            )
-        if e.code == "embedding_pending":
-            return ToolError("The embedding of this image is still being computed. Try later.")
-        if e.code == "embedding_not_supported":
-            return ToolError("Masks have no embeddings.")
-        return ToolError(
-            "This image has no embedding yet (it was not computed or computing failed). "
-            "It can be computed from the image details in the GAKEI web UI."
-        )
-    if isinstance(e, semantic_domain.EmbeddingsEngineError):
-        return ToolError(f"Could not compute the embedding of the query: {e}")
-    return ToolError(str(e))
-
-
-def _scored_items(
-    mc: McpRequestContext,
-    db: Session,
-    hits: list[tuple[uuid.UUID, float]],
-    include_thumbnails: bool,
-    extra: dict[str, Any],
-) -> tuple[dict[str, Any], list[ImageContent]]:
-    """類似度つきの結果(文章での検索、似た画像)。並びは `hits` の順(類似度の高い順)。"""
-    ids = [asset_id for asset_id, _ in hits]
-    assets_by_id = (
-        {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_(ids))).scalars().all()}
-        if ids
-        else {}
-    )
-    titles = annotations_domain.bulk_titles(db, ids)
-    tags_map = annotations_domain.bulk_tags(db, ids)
-    items = []
-    assets: list[Asset] = []
-    for asset_id, score in hits:
-        asset = assets_by_id.get(asset_id)
-        if asset is None:
-            continue
-        assets.append(asset)
-        item = _asset_brief(mc, asset)
-        item["score"] = round(score, 4)
-        item["title"] = titles.get(asset.id)
-        item["tags"] = [ref.model_dump(mode="json") for ref in tags_map.get(asset.id, [])]
-        group = group_for_asset(db, asset.id, mc.user)
-        item["group"] = group.model_dump(mode="json") if group else None
-        items.append(item)
+def _thumbnails(mc: McpRequestContext, assets: list[Asset]) -> list[ImageContent]:
     images: list[ImageContent] = []
-    if include_thumbnails:
-        for asset in assets:
-            thumb = _thumbnail(mc.state.store, asset)
-            if thumb is not None:
-                images.append(thumb)
-    return {**extra, "items": items}, images
+    for asset in assets:
+        thumb = _thumbnail(mc.state.store, asset)
+        if thumb is not None:
+            images.append(thumb)
+    return images
 
 
 async def find_similar_assets(
@@ -1010,26 +834,17 @@ async def find_similar_assets(
     def _find() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
             try:
-                response = semantic_domain.similar_assets(
+                payload, assets = asset_search_domain.find_similar_assets(
                     db,
-                    settings=mc.state.settings,
-                    index=mc.state.vector_index,
-                    viewer=mc.user,
+                    mc.state,
+                    mc.user,
+                    functools.partial(_asset_brief, mc),
                     asset_id=asset_id,
                     limit=limit,
                 )
-            except semantic_domain.EmbeddingsNotFoundError as e:
-                raise ToolError(f"Asset {asset_id} not found.") from e
-            except _SEMANTIC_ERRORS as e:
-                raise _semantic_tool_error(e) from e
-            hits = [(h.id, h.score) for h in response.assets]
-            return _scored_items(
-                mc,
-                db,
-                hits,
-                include_thumbnails,
-                extra={"asset_id": str(asset_id), "model_key": response.model_key},
-            )
+            except asset_search_domain.AssetSearchError as e:
+                raise ToolError(str(e)) from e
+            return payload, _thumbnails(mc, assets) if include_thumbnails else []
 
     payload, images = await _in_thread(_find)
     return _result(payload, images)
@@ -1070,38 +885,7 @@ async def get_asset(
                 raise ToolError(f"Asset {asset_id} not found.")
             payload = _asset_brief(mc, asset)
             payload.update(_transparency(mc.state.store, asset))
-            fields = annotations_domain.annotation_fields(db, asset.id)
-            payload["title"] = fields["title"]
-            payload["title_source"] = fields["title_source"]
-            payload["tags"] = [ref.model_dump(mode="json") for ref in fields["tags"]]
-            group = group_for_asset(db, asset.id, mc.user)
-            payload["group"] = group.model_dump(mode="json") if group else None
-            payload["produced_by_run"] = None
-            payload["primary_parent_asset_id"] = None
-            if asset.produced_by_run_id is not None:
-                run = db.get(Run, asset.produced_by_run_id)
-                if run is not None:
-                    payload["produced_by_run"] = {
-                        "run_id": str(run.id),
-                        "status": str(run.status),
-                        "operation": str(run.operation),
-                        "provider": run.provider,
-                        "model": run.model,
-                        "prompt": run.prompt,
-                        "params": run.params or {},
-                        "origin": run.origin,
-                        "text_outputs": _text_outputs_payload(run),
-                    }
-                    parent = db.execute(
-                        select(RunInput.asset_id).where(
-                            RunInput.run_id == run.id,
-                            RunInput.role == RunInputRole.IMAGE,
-                            RunInput.position == 0,
-                        )
-                    ).scalar_one_or_none()
-                    if parent is not None and not visible_asset_ids(db, mc.user, [parent]):
-                        parent = None
-                    payload["primary_parent_asset_id"] = str(parent) if parent else None
+            payload.update(asset_search_domain.asset_details(db, mc.user, asset))
             if include_lineage:
                 payload["lineage_mermaid"] = _asset_lineage_mermaid(mc, db, asset.id)
             images: list[ImageContent] = []
@@ -1311,7 +1095,8 @@ async def list_prompt_sets(ctx: Context) -> CallToolResult:
 
     def _list() -> dict[str, Any]:
         with _session(mc) as db:
-            return list_prompt_sets_rest(db, mc.user).model_dump(mode="json")
+            items = prompt_sets_domain.list_sets(db, mc.user)
+            return PromptSetListResponse(items=items).model_dump(mode="json")
 
     return _result(await _in_thread(_list))
 
@@ -1322,7 +1107,7 @@ async def list_groups(ctx: Context) -> CallToolResult:
 
     def _list() -> dict[str, Any]:
         with _session(mc) as db:
-            return {"items": [g.model_dump(mode="json") for g in list_groups_domain(db, mc.user)]}
+            return asset_search_domain.groups_payload(db, mc.user)
 
     return _result(await _in_thread(_list))
 

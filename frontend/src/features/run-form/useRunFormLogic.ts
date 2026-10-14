@@ -533,7 +533,9 @@ export function useRunFormLogic(
     // Run 詳細から押した)でも入るように、ここでローカルの状態を Run の値で作り直す。入力画像は
     // 積む側が context に書いている。パラメーターの定義が見つからない(プロバイダーが無効、
     // モデルが一覧に無い)ときは、マウント時と同じく上の effect が capabilities の初期値に戻す。
-    if (request.kind === 'run') {
+    // アシスタントの `update_form` とその「元に戻す」(ADR-0048 11章)も、フォームの全体の値を
+    // 積むので同じ扱いにする。
+    if (request.kind === 'run' || request.kind === 'assistant') {
       const state = request.state
       const values = resolveRunFormLoad(state, caps, loadSeedMode())
       initialRef.current = { ...initialRef.current, ...state }

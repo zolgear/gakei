@@ -35,6 +35,9 @@ import { supportsSimilar } from '../embeddings/similarAssets'
 import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
 import { AssetTagsSection, AssetTitleSection } from './AssetAnnotationSection'
 import { annotationPollInterval, supportsAnnotation } from '../annotations/annotationStatus'
+import { contentRatingPollInterval } from '../content-rating/contentRating'
+import { ContentRatingSection } from '../content-rating/ContentRatingSection'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
 import { ShareDialog } from '../share/ShareDialog'
@@ -73,11 +76,12 @@ function isEditableTarget(el: Element | null): boolean {
 
 export function Viewer({ assetId }: ViewerProps) {
   const { t } = useI18n()
-  // 推定中(ADR-0024)は終わるまで取り直す(`annotationPollInterval`)。
+  // 推定中(ADR-0024)とレーティングの判定中(ADR-0049)は、終わるまで取り直す。
   const assetQuery = useQuery({
     queryKey: ['asset', assetId],
     queryFn: () => getAsset(assetId),
-    refetchInterval: (query) => annotationPollInterval(query.state.data),
+    refetchInterval: (query) =>
+      annotationPollInterval(query.state.data) || contentRatingPollInterval(query.state.data),
   })
   const { originAssetId, setOriginAssetId } = useLineageOrigin()
   const { selectedPanel, openPanel } = useResourcePanel()
@@ -194,6 +198,7 @@ export function Viewer({ assetId }: ViewerProps) {
         {isReady && (
           <AssetCanvas
             asset={asset}
+            contentRating={asset.content_rating ?? null}
             toolbarLeading={
               <button type="button" className={styles.backButton} onClick={goBack}>
                 {t.viewer.back}
@@ -356,8 +361,9 @@ export function Viewer({ assetId }: ViewerProps) {
                       disabled={output.asset_id === asset.id}
                       onClick={() => navigate(`/assets/${output.asset_id}`, { replace: true })}
                     >
-                      <img
-                        src={assetUrl(output.asset_id, 'thumb')}
+                      <AssetThumb
+                        assetId={output.asset_id}
+                        rating={output.content_rating}
                         style={focalStyle(output.focal_point)}
                         alt=""
                         loading="lazy"
@@ -369,6 +375,7 @@ export function Viewer({ assetId }: ViewerProps) {
               </div>
             )}
             {supportsAnnotation(asset) && <AssetTitleSection asset={asset} />}
+            <ContentRatingSection asset={asset} />
             <dl className={styles.metaList}>
               <dt>{t.viewer.dimensions}</dt>
               <dd>

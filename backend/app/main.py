@@ -22,6 +22,7 @@ from app.api import about as about_api
 from app.api import api_tokens as api_tokens_api
 from app.api import asset_groups as asset_groups_api
 from app.api import assets as assets_api
+from app.api import assistant as assistant_api
 from app.api import auth as auth_api
 from app.api import auth_settings as auth_settings_api
 from app.api import capabilities as capabilities_api
@@ -46,6 +47,7 @@ from app.api import tags as tags_api
 from app.api import uploads as uploads_api
 from app.api import users as users_api
 from app.api.request_text import reject_nul_in_request
+from app.assistant.runtime import build_runtime as build_assistant_runtime
 from app.auth.deps import require_user
 from app.auth.runtime import AuthRuntime
 from app.auth.secret import load_or_create_auth_secret
@@ -382,6 +384,8 @@ def _build_lifespan(settings: Settings):
         app.state.query_vector_cache = QueryVectorCache()
         app.state.auth_runtime = auth_runtime
         app.state.tag_dictionary_importer = tag_dictionary_importer
+        # ADR-0048: 生成のアシスタント(エンジン、1時間の上限の記録、進行中の会話)。
+        app.state.assistant = build_assistant_runtime(settings.fake_provider)
 
         # ADR-0023: `/mcp` のセッションマネージャー。`run()` は1インスタンスにつき1回しか
         # 呼べないので、lifespan のたびに作り直す(テストで同じアプリを複数回起動するため)。
@@ -604,6 +608,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(runs_api.router, dependencies=auth_dep)
     app.include_router(events_api.router, dependencies=auth_dep)
     app.include_router(prompt_sets_api.router, dependencies=auth_dep)
+    app.include_router(assistant_api.router, dependencies=auth_dep)
     # プロンプトテンプレート(実験)。
     app.include_router(prompt_templates_api.router, dependencies=auth_dep)
     # ADR-0040: パラメーターセット(本人のものだけ)。

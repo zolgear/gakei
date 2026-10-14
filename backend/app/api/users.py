@@ -1,5 +1,8 @@
-"""ユーザーのアバター(ADR-0020)。oidc モードだけの機能で、`none` モードでは全エンドポイントを
-404(`t("auth.disabled")`)にする(`/api/auth/login` 等の既存の扱いに合わせる)。
+"""ユーザーのアバター(ADR-0020)と、ユーザーごとの設定(ADR-0049 6章)。
+
+アバターは oidc モードだけの機能で、`none` モードではアバターのエンドポイントを
+404(`t("auth.disabled")`)にする(`/api/auth/login` 等の既存の扱いに合わせる)。ユーザーごとの
+設定(`/me/preferences`)は両方のモードで使える(`none` モードの持ち主は `local`)。
 
 自分のアバターだけを変えられる(管理者が他人のアバターを変える機能は無い)。表示(`GET`)は
 ログインしていれば誰のものでも見られる(履歴の実行者に出すため)。
@@ -18,6 +21,7 @@ from app.auth.identity import CurrentUser
 from app.auth.runtime import AuthRuntime, get_auth_runtime
 from app.config import Settings
 from app.deps import get_session, get_settings, get_store
+from app.domain import user_preferences
 from app.domain.avatars import (
     MAX_AVATAR_BYTES,
     AvatarError,
@@ -28,7 +32,13 @@ from app.domain.avatars import (
     save_avatar,
 )
 from app.domain.models import AppUser
-from app.domain.schemas import AuthUser, AvatarFromAssetRequest, CropRect
+from app.domain.schemas import (
+    AuthUser,
+    AvatarFromAssetRequest,
+    CropRect,
+    UserPreferencesResponse,
+    UserPreferencesUpdateRequest,
+)
 from app.domain.storage import AssetStore
 from app.domain.visibility import get_visible_asset
 from app.i18n import t
@@ -167,3 +177,54 @@ def get_avatar(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
     return Response(content=path.read_bytes(), media_type="image/webp", headers=headers)
+
+
+# -- ユーザーごとの設定(ADR-0049 6章) -------------------------------------------------
+
+
+def _preferences_response(db: Session, user: CurrentUser) -> UserPreferencesResponse:
+    return UserPreferencesResponse.model_validate(user_preferences.load(db, user))
+
+
+@router.get(
+    "/me/preferences",
+    response_model=UserPreferencesResponse,
+    operation_id="get_user_preferences",
+)
+def get_user_preferences(
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> UserPreferencesResponse:
+    """本人の設定。保存していないキーは既定値で返す。"""
+    return _preferences_response(db, user)
+
+
+@router.patch(
+    "/me/preferences",
+    response_model=UserPreferencesResponse,
+    operation_id="update_user_preferences",
+)
+def update_user_preferences(
+    body: UserPreferencesUpdateRequest,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> UserPreferencesResponse:
+    """書いたキーだけ変える。知らないキーと形の合わない値は 422(`null` も 422)。"""
+    updates: dict[str, object] = {}
+    for name in body.model_fields_set:
+        key = UserPreferencesUpdateRequest.model_fields[name].alias or name
+        value = getattr(body, name)
+        if value is None:
+            raise HTTPException(
+                status_code=422, detail=t("users.preferences.invalidValue", key=key)
+            )
+        updates[key] = value
+    try:
+        user_preferences.save(db, user, updates)
+    except (KeyError, ValueError) as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=422, detail=t("users.preferences.invalidValue", key=str(e))
+        ) from e
+    db.commit()
+    return _preferences_response(db, user)

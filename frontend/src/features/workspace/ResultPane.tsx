@@ -40,6 +40,9 @@ import { setWatchedRun, type WatchedRunStatus } from '../favicon/watchedRunStore
 import { shouldInvalidateAssetsOnStatusChange } from '../run-status/assetInvalidation'
 import { describeError } from '../run-status/errorMessages'
 import { AssetCanvas } from '../viewer/AssetCanvas'
+import { AssetThumb } from '../content-rating/AssetThumb'
+import { contentRatingPollInterval } from '../content-rating/contentRating'
+import { useRefreshListsWhenJudged } from '../content-rating/contentRatingRefresh'
 import { LineageGraph } from '../lineage/LineageGraph'
 import { LineageInspectorPanel } from '../lineage/LineageInspectorPanel'
 import { StudioLayoutToggleButton } from './StudioLayoutToggleButton'
@@ -351,12 +354,15 @@ export function ResultPane({
   const isInputPreview = origin.kind === 'primary-input'
 
   // --- 表示中の Asset ---
+  // レーティングの判定中(ADR-0049)は終わるまで取り直し、終わったら一覧(この Run の出力など)も取り直す。
   const assetQuery = useQuery({
     queryKey: ['asset', effectiveAssetId],
     queryFn: () => getAsset(effectiveAssetId as string),
     enabled: effectiveAssetId !== null,
+    refetchInterval: (query) => contentRatingPollInterval(query.state.data),
   })
   const asset = assetQuery.data
+  useRefreshListsWhenJudged(asset?.content_rating_detail?.status)
   const ownerRunId = asset?.produced_by_run?.id
   const ownerRunQuery = useQuery({
     queryKey: ['run', ownerRunId],
@@ -630,7 +636,7 @@ export function ResultPane({
           {effectiveAssetId && asset && (
             <>
               <div className={styles.canvasWrap}>
-                <AssetCanvas asset={asset} />
+                <AssetCanvas asset={asset} contentRating={asset.content_rating ?? null} />
                 <div className={styles.canvasActionBar}>
                   <button
                     type="button"
@@ -677,9 +683,11 @@ export function ResultPane({
                         aria-label={fmt(rp.outputIndexAria, { index: (output.output_index ?? 0) + 1 })}
                         onClick={() => onSelectAsset(output.asset_id)}
                       >
-                        <img
+                        <AssetThumb
+                          assetId={output.asset_id}
+                          rating={output.content_rating}
+                          badge
                           className={styles.thumbImage}
-                          src={assetUrl(output.asset_id, 'thumb')}
                           style={focalStyle(output.focal_point)}
                           alt=""
                           draggable={false}
@@ -705,9 +713,11 @@ export function ResultPane({
                         aria-label={rp.showThisOutputAria}
                         onClick={() => onSelectAsset(item.id)}
                       >
-                        <img
+                        <AssetThumb
+                          assetId={item.id}
+                          rating={item.content_rating}
+                          badge
                           className={styles.thumbImage}
-                          src={assetUrl(item.id, 'thumb')}
                           style={focalStyle(item.focal_point)}
                           alt=""
                           draggable={false}

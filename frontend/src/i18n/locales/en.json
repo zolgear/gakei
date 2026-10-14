@@ -78,7 +78,8 @@
       "promptTemplates": "Prompt templates",
       "graph": "Lineage graph",
       "history": "History",
-      "search": "Search"
+      "search": "Search",
+      "assistant": "Assistant"
     },
     "sidebar": {
       "resourcePanel": "Resource panel",
@@ -115,7 +116,8 @@
       "deleteWarning": {
         "one": "This run's output is a parent input for {count} other run. Deleting it will mark this image as deleted in that lineage.",
         "other": "This run's output is a parent input for {count} other runs. Deleting it will mark this image as deleted in that lineage."
-      }
+      },
+      "originAssistant": "Assistant"
     },
     "page": {
       "title": "History",
@@ -168,7 +170,8 @@
       "single": "seed {seed}",
       "batch": "seed {seed} · {outputCount} generated in one batch",
       "indexed": "seed {seed} · {outputIndex} of {outputCount}"
-    }
+    },
+    "originAssistant": "Assistant"
   },
   "runStatus": {
     "errorFallback": "An unknown error occurred.",
@@ -281,7 +284,8 @@
       "mcp": "MCP",
       "shareLinks": "Public share links",
       "about": "About GAKEI",
-      "authentication": "Authentication"
+      "authentication": "Authentication",
+      "assistant": "Assistant"
     },
     "frame": {
       "changeCount": {
@@ -321,7 +325,7 @@
       "help": "You can use your own generated or uploaded images as your avatar (PNG/JPEG/WebP, up to 20MB). You can choose the area to crop."
     },
     "display": {
-      "intro": "Changes on this page take effect immediately. They are stored only in this browser.",
+      "intro": "Changes on this page take effect immediately. Except for the rating mask, they are stored only in this browser.",
       "faviconProgress": {
         "label": "Show progress in the tab icon",
         "help": "Shows the run status in the browser tab icon while a run is queued or running. Turning this off does not change the animated logo in the app bar."
@@ -346,6 +350,14 @@
       "tagTranslations": {
         "label": "Show Japanese translations of tags",
         "help": "Shows the translation from the tag dictionary next to tag suggestions and chips. Only shown when the display language is Japanese."
+      },
+      "contentRatingMask": {
+        "heading": "Rating mask",
+        "help": "Images at the chosen levels are blurred in lists and the viewer. Click one to show just that image. This only changes how images look; it does not restrict access to them.",
+        "levelsLabel": "Levels to mask",
+        "unratedLabel": "Also mask unrated images",
+        "loadFailed": "Could not load the settings",
+        "saveFailed": "Could not save the settings"
       },
       "browserStorage": {
         "heading": "Settings stored in this browser",
@@ -540,7 +552,8 @@
       "featureSeparator": ", ",
       "features": {
         "annotation": "Auto titles and tags",
-        "embedding": "Embeddings"
+        "embedding": "Embeddings",
+        "assistant": "Assistant"
       },
       "deleteDisabledInUse": "Cannot be deleted while a feature uses it."
     },
@@ -665,6 +678,36 @@
         "queuedToast": {
           "one": "Queued {count} item",
           "other": "Queued {count} items"
+        }
+      },
+      "contentRating": {
+        "heading": "Rating",
+        "notice": "Rates how sexually explicit an image is on five levels (Green, R, X, XX, XXX) with the WD Tagger model chosen under ONNX tagger. Images are not sent outside. It can be turned on independently of tagging with the ONNX tagger.",
+        "enabledLabel": "Rate images",
+        "enabledHelp": "While on, every generated, uploaded or sketched image is rated when it is added.",
+        "modelNotReady": "Not available until the model chosen under ONNX tagger is downloaded.",
+        "pendingLabel": "Images not rated (including those rated with older rules)",
+        "pendingValue": {
+          "one": "{count} image",
+          "other": "{count} images"
+        },
+        "queuedLabel": "Queue",
+        "queuedValue": {
+          "one": "{count} item",
+          "other": "{count} items"
+        },
+        "run": "Rate all",
+        "notUsable": "Available after rating is turned on and saved and the model is downloaded.",
+        "confirm": {
+          "message": {
+            "one": "Adds {count} image that has not been rated (or was rated with older rules) to the rating queue.",
+            "other": "Adds {count} images that have not been rated (or were rated with older rules) to the rating queue."
+          },
+          "confirmLabel": "Add to queue"
+        },
+        "queuedToast": {
+          "one": "Added {count} item to the queue",
+          "other": "Added {count} items to the queue"
         }
       }
     },
@@ -1084,6 +1127,49 @@
         "message": "Turning off authentication lets anyone use GAKEI without signing in.",
         "warning": "This is dangerous if the server is exposed to your LAN or the internet.",
         "confirmLabel": "Turn off and save"
+      }
+    },
+    "assistant": {
+      "intro": "Lets you chat in a panel next to the generation form to write prompts and prompt sets, and to hand off generation. Prompt sets written by the assistant can be restored from the result card.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the assistant settings.",
+      "retry": "Reload",
+      "enabledLabel": "Enable the assistant",
+      "enabledHelp": "When enabled, an \"Assistant\" panel appears in the icon rail. Off by default.",
+      "notUsable": "The panel is hidden because the connection or its key is missing. Check the connection and key.",
+      "connectionHeading": "LLM",
+      "connectionLabel": "Connection",
+      "connectionHelp": "Choose a connection that supports tool calling and streaming. Reading attached images needs a model that accepts images.",
+      "connectionsLink": "LLM connections",
+      "modelLabel": "Model name",
+      "modelHelp": "The model name sent to the connection.",
+      "limitsHeading": "Limits",
+      "limitsIntro": "Counted per user. When a limit is reached, requests are refused right away.",
+      "limits": {
+        "hourly_request_limit": {
+          "label": "LLM requests (per hour)",
+          "help": "LLM requests allowed in the last hour ({min}–{max}). Counted in the process and reset on restart."
+        },
+        "runs_per_message_limit": {
+          "label": "Runs per message",
+          "help": "Runs the assistant can create for one message ({min}–{max}). 0 stops generation by the assistant."
+        },
+        "hourly_run_limit": {
+          "label": "Runs per hour",
+          "help": "Runs the assistant can create in the last hour ({min}–{max}). 0 stops generation by the assistant."
+        },
+        "stopped": "Generation by the assistant is stopped because the limit is 0. Writing prompts and prompt sets still works."
+      },
+      "resetToDefault": "Reset to default ({default})",
+      "usageLabel": "Your last hour",
+      "usageHelp": "LLM requests and runs created by the assistant.",
+      "usageValue": "Requests {requests} / {requestLimit}, runs {runs} / {runLimit}",
+      "errors": {
+        "connectionRequired": "Choose a connection",
+        "connectionUnknown": "This connection no longer exists. Choose another one",
+        "modelRequired": "Enter a model name",
+        "modelTooLong": "Use {max} characters or fewer",
+        "limitInvalid": "Enter an integer from {min} to {max}"
       }
     }
   },
@@ -2706,6 +2792,214 @@
     "assist": {
       "ariaLabel": "Tag suggestions",
       "loraAriaLabel": "LoRA suggestions"
+    }
+  },
+  "assistant": {
+    "heading": "Assistant",
+    "empty": "Ask for prompts, create prompt sets, or hand off generation.\nFor example: \"Three prompts for a harbor town at dusk\", \"Add winter versions to this set\", \"Make 4 images with the current settings\"",
+    "messagesLabel": "Conversation",
+    "thinking": "Thinking…",
+    "stoppedTag": "Stopped",
+    "errorTag": "Failed",
+    "sendFailed": "Could not send.",
+    "connectionLost": "The response was cut off. Reopen the conversation to see what was saved.",
+    "conversations": {
+      "selectLabel": "Conversation",
+      "newConversation": "New conversation",
+      "current": "(this conversation)",
+      "untitled": "Conversation {at}",
+      "new": "New",
+      "rename": "Rename",
+      "renameLabel": "Conversation name",
+      "renameEmpty": "Enter a name",
+      "save": "Save",
+      "delete": "Delete",
+      "deleteConfirm": "Delete the conversation \"{name}\"? Prompt sets and images made by the assistant are kept.",
+      "deleteConfirmLabel": "Delete",
+      "renameFailed": "Could not rename",
+      "deleteFailed": "Could not delete"
+    },
+    "composer": {
+      "label": "Message to the assistant",
+      "placeholder": "Ask the assistant",
+      "shortcutHint": "Ctrl+Enter to send",
+      "send": "Send",
+      "stop": "Stop",
+      "attach": "Attach images {count}/{max}",
+      "attachmentsLabel": "Attached images",
+      "removeAttachment": "Remove attachment",
+      "attachLimit": "You can attach up to {max} images",
+      "stockOnly": "Only stock images can be attached. Add files to the stock first."
+    },
+    "attachDialog": {
+      "title": "Attach from stock",
+      "remaining": "{count} more ({max} per message)",
+      "alreadyAttached": "Attached",
+      "empty": "No images in the stock",
+      "loadFailed": "Could not load the stock",
+      "loadMore": "Load more",
+      "selectedCount": "{count} selected",
+      "attach": "Attach"
+    },
+    "promptCard": {
+      "heading": "Suggested prompt",
+      "insert": "Add to form",
+      "replace": "Replace form",
+      "copy": "Copy",
+      "inserted": "Added to the end of the form",
+      "replaced": "Replaced the form's prompt",
+      "copied": "Copied",
+      "copyFailed": "Could not copy. Select the text and copy it by hand.",
+      "replaceConfirm": "Replace the prompt you are writing with this suggestion?",
+      "replaceConfirmLabel": "Replace"
+    },
+    "writeCard": {
+      "titles": {
+        "create_prompt_set": "Created a prompt set",
+        "rename_prompt_set": "Renamed a prompt set",
+        "add_prompt_set_items": "Added items to a prompt set",
+        "update_prompt_set_item": "Changed a prompt set item"
+      },
+      "fields": {
+        "name": "Name",
+        "label": "Label",
+        "text": "Text",
+        "position": "Order"
+      },
+      "before": "Before",
+      "after": "After",
+      "empty": "(none)",
+      "undo": "Undo",
+      "undoCreate": "Undo (delete the set)",
+      "undoing": "Undoing…",
+      "undoneAt": "Undone ({at})",
+      "undoFailed": "Could not undo"
+    },
+    "formCard": {
+      "title": "Form changed",
+      "fields": {
+        "model": "Model",
+        "prompt": "Prompt",
+        "size": "Size",
+        "inputs": "Input images",
+        "group": "Group"
+      },
+      "roles": {
+        "image": "Input",
+        "mask": "Mask",
+        "reference": "Reference"
+      },
+      "none": "(none)",
+      "unspecified": "(not set)",
+      "on": "On",
+      "off": "Off",
+      "unknownGroup": "(group not found)",
+      "noChange": "Nothing changed.",
+      "undone": "Undone",
+      "outsideStudio": "The form picks this up when you open the studio."
+    },
+    "runCard": {
+      "heading": {
+        "one": "{count} generation",
+        "other": "{count} generations"
+      },
+      "cost": "Estimated cost: ${cost}",
+      "watch": "View in results",
+      "detail": "Details",
+      "showOutput": "Show in the results area",
+      "loadFailed": "Could not load the run status"
+    },
+    "assetsCard": {
+      "heading": {
+        "one": "{count} image found",
+        "other": "{count} images found"
+      },
+      "show": "Show in the results area",
+      "attachAll": "Attach all",
+      "dragHint": "Drag onto the generation form to use as input",
+      "attached": {
+        "one": "Attached {count} image.",
+        "other": "Attached {count} images."
+      },
+      "overflow": {
+        "one": "{count} image did not fit (up to {max} attachments).",
+        "other": "{count} images did not fit (up to {max} attachments)."
+      },
+      "alreadyAttached": "All of them are already attached."
+    },
+    "toolRow": {
+      "running": "Running…",
+      "failed": "Failed",
+      "arguments": "Arguments",
+      "result": "Result"
+    },
+    "tools": {
+      "list_prompt_sets": "Read prompt sets",
+      "get_form_context": "Read the form",
+      "propose_prompt": "Suggest a prompt",
+      "get_capabilities": "Read parameter definitions",
+      "get_run": "Check a run",
+      "view_assets": "Look at images",
+      "create_prompt_set": "Create a prompt set",
+      "rename_prompt_set": "Rename a prompt set",
+      "add_prompt_set_items": "Add prompt set items",
+      "update_prompt_set_item": "Change a prompt set item",
+      "generate_image": "Generate",
+      "cancel_run": "Cancel a run",
+      "search_assets": "Search the stock",
+      "find_similar_assets": "Find similar images",
+      "get_asset": "Read image details",
+      "list_groups": "Read groups",
+      "list_tags": "Read tags",
+      "show_assets": "Show images",
+      "update_form": "Change the form"
+    }
+  },
+  "contentRating": {
+    "label": "Rating",
+    "levels": {
+      "g": "Green",
+      "r": "R",
+      "x": "X",
+      "xx": "XX",
+      "xxx": "XXX"
+    },
+    "shortLevels": {
+      "g": "G",
+      "r": "R",
+      "x": "X",
+      "xx": "XX",
+      "xxx": "XXX"
+    },
+    "unrated": "Unrated",
+    "revealHint": "Click to show",
+    "reveal": "Show",
+    "section": {
+      "heading": "Rating",
+      "sourceAuto": "Automatic",
+      "sourceUser": "Set by a person",
+      "noLevel": "Not rated yet",
+      "levelSelectLabel": "Choose a level",
+      "revertToAuto": "Revert to automatic",
+      "judge": "Rate",
+      "rejudge": "Re-rate",
+      "rejudgeTooltip": "Rates the image again. A level chosen by a person is kept.",
+      "statusQueued": "Waiting to be rated…",
+      "statusRunning": "Rating the image…",
+      "statusFailed": "Rating failed: {error}",
+      "statusFailedNoReason": "Rating failed",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details",
+      "scoresLabel": "Rating probabilities",
+      "signalsLabel": "Tags that raise the level",
+      "signalsNone": "None",
+      "raised": "Raised the level",
+      "modelLabel": "Model",
+      "rulesVersionLabel": "Rules version",
+      "judgedAtLabel": "Rated at",
+      "autoLevelLabel": "Automatic level",
+      "saveFailed": "Could not save",
+      "judgeFailed": "Could not start rating"
     }
   }
 }

@@ -2,7 +2,7 @@
  * 比較ビュー(`/runs/:runId/compare`)の URL 同期・既定選択にまつわる純粋関数。
  * ADR-0009「7. 編集前との比較」参照。
  */
-import type { RunDetail } from '../../api/client'
+import type { ContentRatingLevel, RunDetail } from '../../api/client'
 import type { FocalPointValue } from '../../lib/focalPoint'
 
 export type CompareMode = 'side' | 'slider'
@@ -46,6 +46,7 @@ export function compareInputCandidates(
   role: 'image' | 'reference'
   position: number
   focalPoint: FocalPointValue | null
+  contentRating: ContentRatingLevel | null
 }[] {
   return (run.inputs ?? [])
     .filter((i) => i.role === 'image' || i.role === 'reference')
@@ -54,17 +55,24 @@ export function compareInputCandidates(
       role: i.role as 'image' | 'reference',
       position: i.position,
       focalPoint: i.focal_point ?? null,
+      contentRating: i.content_rating ?? null,
     }))
 }
 
 /** 比較対象として選べる出力。 */
 export function compareOutputCandidates(
   run: Pick<RunDetail, 'outputs'>,
-): { assetId: string; outputIndex: number | null; focalPoint: FocalPointValue | null }[] {
+): {
+  assetId: string
+  outputIndex: number | null
+  focalPoint: FocalPointValue | null
+  contentRating: ContentRatingLevel | null
+}[] {
   return (run.outputs ?? []).map((o) => ({
     assetId: o.asset_id,
     outputIndex: o.output_index,
     focalPoint: o.focal_point ?? null,
+    contentRating: o.content_rating ?? null,
   }))
 }
 

@@ -10,7 +10,6 @@ import { useEffect, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { getAsset, getCapabilities, getRun, type AssetDetail } from '../../api/client'
-import { assetUrl } from '../../api/assetUrl'
 import { UserAvatar } from '../../components/UserAvatar'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
@@ -49,6 +48,7 @@ import { FinalPromptSection } from './FinalPromptSection'
 import { PromptBuildSection } from './PromptBuildSection'
 import { ImportedRunSection } from '../lineage-transfer/ImportedRunSection'
 import { baselineNegativePrompt, selectFinalPromptEntries } from './finalPrompt'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './RunDetailContent.module.css'
 
 export interface RunDetailContentProps {
@@ -292,12 +292,16 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
                 to={nodeTargetPath({ id: output.asset_id, type: 'asset' }, location.pathname)}
                 className={styles.thumbCard}
               >
-                <img
-                  className={`${styles.thumb} checkerboard`}
-                  src={assetUrl(output.asset_id, 'thumb')}
-                  alt=""
-                  draggable={false}
-                />
+                <span className={styles.thumbFrame}>
+                  <AssetThumb
+                    assetId={output.asset_id}
+                    rating={output.content_rating}
+                    badge
+                    className={`${styles.thumb} checkerboard`}
+                    alt=""
+                    draggable={false}
+                  />
+                </span>
                 <span className={styles.thumbLabel}>
                   #{output.output_index}
                   {thumbAssetDetails.get(output.asset_id)?.deleted_at && (
@@ -404,6 +408,12 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
               <dd>{t.runDetail.originMcp}</dd>
             </>
           )}
+          {run.origin === 'assistant' && (
+            <>
+              <dt>{t.runDetail.origin}</dt>
+              <dd>{t.runDetail.originAssistant}</dd>
+            </>
+          )}
           {run.origin === 'import' && (
             <>
               <dt>{t.runDetail.origin}</dt>
@@ -462,12 +472,17 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
                 to={nodeTargetPath({ id: input.asset_id, type: 'asset' }, location.pathname)}
                 className={styles.thumbCard}
               >
-                <img
-                  className={`${styles.thumb} checkerboard`}
-                  src={assetUrl(input.asset_id, 'thumb')}
-                  alt=""
-                  draggable={false}
-                />
+                <span className={styles.thumbFrame}>
+                  <AssetThumb
+                    assetId={input.asset_id}
+                    // マスクの入力は判定の対象外(ADR-0049 3章)。
+                    rating={input.role === 'mask' ? undefined : input.content_rating}
+                    badge
+                    className={`${styles.thumb} checkerboard`}
+                    alt=""
+                    draggable={false}
+                  />
+                </span>
                 <span className={styles.thumbLabel}>
                   {input.role} #{input.position}
                   {input.role === 'image' && input.position === 0 && (

@@ -686,6 +686,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/content-rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Asset Content Rating
+         * @description 人が段階を選ぶ(以後の再判定で変わらない)。`level: null` で自動の段階に戻す
+         *     (ADR-0049 2章)。
+         */
+        put: operations["update_asset_content_rating"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/content-rating/judge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Judge Asset Content Rating
+         * @description この Asset のレーティングの(再)判定を待ち行列に入れる。人が選んだ段階は保つ。
+         *     判定が無効、またはモデルが無ければ 409。既に待ち行列にあれば何もしない。
+         */
+        post: operations["judge_asset_content_rating"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/embedding": {
         parameters: {
             query?: never;
@@ -962,6 +1004,102 @@ export interface paths {
         head?: never;
         /** Update Prompt Set Item */
         patch: operations["update_prompt_set_item"];
+        trace?: never;
+    };
+    "/api/assistant/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Conversations */
+        get: operations["list_assistant_conversations"];
+        put?: never;
+        /** Create Conversation */
+        post: operations["create_assistant_conversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Conversation */
+        get: operations["get_assistant_conversation"];
+        put?: never;
+        post?: never;
+        /** Delete Conversation */
+        delete: operations["delete_assistant_conversation"];
+        options?: never;
+        head?: never;
+        /** Update Conversation */
+        patch: operations["update_assistant_conversation"];
+        trace?: never;
+    };
+    "/api/assistant/conversations/{conversation_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Message
+         * @description 発言を送り、応答を `text/event-stream` で返す(ADR-0048 8章)。ブラウザは
+         *     `EventSource` ではなく `fetch` で読む。止めるときは接続を切る(LLM の呼び出しをやめ、そこまでの
+         *     本文を保存し、この発言で作った Run のうち `queued` のものを取り消す)。
+         *
+         *     各イベントは `event: <type>` と `data: <JSON>` の組。JSON の形は `AssistantStreamEvent.event`
+         *     (`type` で見分ける):
+         *
+         *     - `user_message`: 保存した利用者の発言(最初に1回)。
+         *     - `text_delta`: アシスタントの本文の差分(`text`)。
+         *     - `tool_call`: 道具の呼び出し(`tool_call_id`、`name`、`arguments`)。実行の前に出る。
+         *     - `assistant_message`: 保存したアシスタントのメッセージ(LLM の1回の応答ごと)。
+         *     - `tool_result`: 保存した道具の結果(tool のメッセージ。書き込みは `before` / `after` と
+         *       `undoable`)。
+         *     - `run_created`: `generate_image` が作った Run(`run_id`)。進捗は `GET /api/runs/{id}/events`。
+         *     - `error`: 止めた理由(`code` は `llm_error` / `rate_limited` / `tool_limit` / `internal`)。
+         *     - `done`: 最後に1回(`status` は `complete` / `error` / `limit`、`conversation`)。
+         *
+         *     送る前に断るもの(JSON のエラー): 無効(409)、会話が無い(404)、添付が見えない(404)、
+         *     LLM の1時間の上限(429)、接続先・キーが無い(409)、同じ会話で処理中(409)。
+         */
+        post: operations["send_assistant_message"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant/undo/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo
+         * @description アシスタントのプロンプトセットへの書き込みを元に戻す(ADR-0048 4章)。その後に対象が
+         *     変わっていれば戻さずに 409。作成を戻すとセットは論理削除になる。
+         */
+        post: operations["undo_assistant_write"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/prompt-templates": {
@@ -1474,6 +1612,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/annotation/content-rating/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backfill Content Ratings
+         * @description 未判定と、古い版の規則で自動判定した Asset(削除済み・マスクを除く)をまとめて
+         *     レーティングの判定の待ち行列に入れる(ADR-0049 3章)。判定が無効、またはモデルが無ければ 409。
+         */
+        post: operations["backfill_content_ratings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/embeddings": {
         parameters: {
             query?: never;
@@ -1574,6 +1733,24 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/settings/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Assistant Settings */
+        get: operations["get_assistant_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Assistant Settings */
+        patch: operations["update_assistant_settings"];
         trace?: never;
     };
     "/api/settings/tag-dictionaries": {
@@ -1791,6 +1968,30 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get User Preferences
+         * @description 本人の設定。保存していないキーは既定値で返す。
+         */
+        get: operations["get_user_preferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update User Preferences
+         * @description 書いたキーだけ変える。知らないキーと形の合わない値は 422(`null` も 422)。
+         */
+        patch: operations["update_user_preferences"];
         trace?: never;
     };
     "/api/users/me/api-tokens": {
@@ -2179,6 +2380,31 @@ export interface components {
             connection_calls?: components["schemas"]["AnnotationConnectionCalls"][];
             /** Usable Engines */
             usable_engines?: ("llm" | "vlm" | "onnx")[];
+            /**
+             * Content Rating Enabled
+             * @default false
+             */
+            content_rating_enabled: boolean;
+            /**
+             * Content Rating Model Ready
+             * @default false
+             */
+            content_rating_model_ready: boolean;
+            /**
+             * Content Rating Usable
+             * @default false
+             */
+            content_rating_usable: boolean;
+            /**
+             * Content Rating Pending Count
+             * @default 0
+             */
+            content_rating_pending_count: number;
+            /**
+             * Content Rating Queued Count
+             * @default 0
+             */
+            content_rating_queued_count: number;
         };
         /**
          * AnnotationSettingsUpdateRequest
@@ -2204,6 +2430,8 @@ export interface components {
             onnx_model?: string | null;
             /** Onnx Threshold */
             onnx_threshold?: number | null;
+            /** Content Rating Enabled */
+            content_rating_enabled?: boolean | null;
             profiles?: components["schemas"]["AnnotationProfilesUpdate"] | null;
         };
         /**
@@ -2332,6 +2560,29 @@ export interface components {
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
         };
+        /**
+         * AssetContentRatingResponse
+         * @description レーティングの変更と再判定の応答(更新後の状態)。
+         */
+        AssetContentRatingResponse: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
+        };
+        /**
+         * AssetContentRatingUpdateRequest
+         * @description `PUT /api/assets/{id}/content-rating`。`level` に段階を入れると人が選んだ段階になり、
+         *     以後の再判定で変わらない。`null` で自動の段階に戻す(ADR-0049 2章)。
+         */
+        AssetContentRatingUpdateRequest: {
+            /** Level */
+            level: ("g" | "r" | "x" | "xx" | "xxx") | null;
+        };
         /** AssetDetail */
         AssetDetail: {
             /**
@@ -2360,6 +2611,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -2388,6 +2641,7 @@ export interface components {
             /** Tags */
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
+            content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
         };
         /**
          * AssetEmbeddingStatus
@@ -2567,6 +2821,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /**
          * AssetTagAddRequest
@@ -2628,6 +2884,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -2656,11 +2914,400 @@ export interface components {
             /** Tags */
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
+            content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
             /**
              * Ingest Outcome
              * @enum {string}
              */
             ingest_outcome: "created" | "matched_existing";
+        };
+        /** AssistantConversationCreateRequest */
+        AssistantConversationCreateRequest: {
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /** AssistantConversationDetailResponse */
+        AssistantConversationDetailResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Messages */
+            messages?: components["schemas"]["AssistantMessageResponse"][];
+        };
+        /** AssistantConversationListResponse */
+        AssistantConversationListResponse: {
+            /** Items */
+            items?: components["schemas"]["AssistantConversationResponse"][];
+        };
+        /** AssistantConversationResponse */
+        AssistantConversationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AssistantConversationUpdateRequest */
+        AssistantConversationUpdateRequest: {
+            /** Title */
+            title: string;
+        };
+        /**
+         * AssistantDoneEvent
+         * @description 最後に1回。`status` は `complete` / `error` / `limit`(上限で止めた)。
+         */
+        AssistantDoneEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "done";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "complete" | "error" | "limit";
+            conversation: components["schemas"]["AssistantConversationResponse"];
+        };
+        /**
+         * AssistantErrorEvent
+         * @description 処理を止めた理由。`llm_error`(LLM の呼び出しの失敗)、`rate_limited`(LLM の1時間の
+         *     上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`internal`(その他)。
+         */
+        AssistantErrorEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "llm_error" | "rate_limited" | "tool_limit" | "internal";
+            /** Message */
+            message: string;
+        };
+        /** AssistantFormInput */
+        AssistantFormInput: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Role
+             * @default image
+             * @enum {string}
+             */
+            role: "image" | "mask" | "reference";
+        };
+        /**
+         * AssistantFormState
+         * @description 送信時の生成フォームの状態(ADR-0048 5章)。サーバーはフォームの状態を持たず、発言の
+         *     たびにブラウザが送る。`get_form_context` がそのまま返し、`generate_image` で指定の無い
+         *     項目に使う。
+         */
+        AssistantFormState: {
+            /** Provider */
+            provider?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Operation */
+            operation?: ("generate" | "edit") | null;
+            /** Prompt */
+            prompt?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
+            /** Inputs */
+            inputs?: components["schemas"]["AssistantFormInput"][];
+            /** Asset Group Id */
+            asset_group_id?: string | null;
+        };
+        /** AssistantMessageCreateRequest */
+        AssistantMessageCreateRequest: {
+            /** Text */
+            text: string;
+            /** Attachments */
+            attachments?: string[];
+            form?: components["schemas"]["AssistantFormState"] | null;
+            /**
+             * Locale
+             * @default ja
+             * @enum {string}
+             */
+            locale: "ja" | "en";
+        };
+        /**
+         * AssistantMessageEvent
+         * @description 保存したアシスタントのメッセージ(LLM の1回の応答ごと。本文と道具の呼び出し)。
+         */
+        AssistantMessageEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_message";
+            message: components["schemas"]["AssistantMessageResponse"];
+        };
+        /**
+         * AssistantMessageResponse
+         * @description 会話の1メッセージ。役割(`role`)ごとに使う項目が違う。
+         *
+         *     - `user`: `text`、`attachments`(添付の Asset ID)。
+         *     - `assistant`: `text`、`tool_calls`、`status`(`complete` / `stopped`(利用者が止めた) /
+         *       `error`)、`error`。
+         *     - `tool`: `tool_call_id`、`tool_name`、`ok`、`result`(道具が LLM に返した JSON。書き込みの
+         *       道具は `before` / `after` を含む)、`run_ids`(作った Run)、`undoable`(「元に戻す」が
+         *       使えるか)、`undone_at`(戻した日時)。
+         */
+        AssistantMessageResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Position */
+            position: number;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant" | "tool";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /** Attachments */
+            attachments?: string[];
+            /** Tool Calls */
+            tool_calls?: components["schemas"]["AssistantToolCallView"][];
+            /** Status */
+            status?: ("complete" | "stopped" | "error") | null;
+            /** Error */
+            error?: string | null;
+            /** Tool Call Id */
+            tool_call_id?: string | null;
+            /** Tool Name */
+            tool_name?: string | null;
+            /** Ok */
+            ok?: boolean | null;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
+            /** Run Ids */
+            run_ids?: string[];
+            /**
+             * Undoable
+             * @default false
+             */
+            undoable: boolean;
+            /** Undone At */
+            undone_at?: string | null;
+        };
+        /**
+         * AssistantRunCreatedEvent
+         * @description `generate_image` が作った Run(Run ごとに1回)。進捗は既存の Run の SSE で見る。
+         */
+        AssistantRunCreatedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "run_created";
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Tool Call Id */
+            tool_call_id: string;
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+        };
+        /**
+         * AssistantSettingsResponse
+         * @description `GET /api/settings/assistant`(ADR-0048 7章・9章)。
+         */
+        AssistantSettingsResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Connection Id */
+            connection_id: string;
+            /** Model */
+            model: string;
+            /** Hourly Request Limit */
+            hourly_request_limit: number;
+            /** Runs Per Message Limit */
+            runs_per_message_limit: number;
+            /** Hourly Run Limit */
+            hourly_run_limit: number;
+            /** Hourly Request Limit Default */
+            hourly_request_limit_default: number;
+            /** Hourly Request Limit Max */
+            hourly_request_limit_max: number;
+            /** Runs Per Message Limit Default */
+            runs_per_message_limit_default: number;
+            /** Runs Per Message Limit Max */
+            runs_per_message_limit_max: number;
+            /** Hourly Run Limit Default */
+            hourly_run_limit_default: number;
+            /** Hourly Run Limit Max */
+            hourly_run_limit_max: number;
+            /** Usable */
+            usable: boolean;
+            /** Requests Last Hour */
+            requests_last_hour: number;
+            /** Runs Last Hour */
+            runs_last_hour: number;
+        };
+        /**
+         * AssistantSettingsUpdateRequest
+         * @description 書いた項目だけ変える。null は不正な値(422)。
+         */
+        AssistantSettingsUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Connection Id */
+            connection_id?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Hourly Request Limit */
+            hourly_request_limit?: number | null;
+            /** Runs Per Message Limit */
+            runs_per_message_limit?: number | null;
+            /** Hourly Run Limit */
+            hourly_run_limit?: number | null;
+        };
+        /**
+         * AssistantStreamEvent
+         * @description SSE のイベントの型(OpenAPI に型を出すための入れ物。`event` がイベント本体)。
+         */
+        AssistantStreamEvent: {
+            /** Event */
+            event: components["schemas"]["AssistantUserMessageEvent"] | components["schemas"]["AssistantTextDeltaEvent"] | components["schemas"]["AssistantToolCallEvent"] | components["schemas"]["AssistantMessageEvent"] | components["schemas"]["AssistantToolResultEvent"] | components["schemas"]["AssistantRunCreatedEvent"] | components["schemas"]["AssistantErrorEvent"] | components["schemas"]["AssistantDoneEvent"];
+        };
+        /**
+         * AssistantTextDeltaEvent
+         * @description アシスタントの本文の差分(届いた順につなぐ)。
+         */
+        AssistantTextDeltaEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "text_delta";
+            /** Text */
+            text: string;
+        };
+        /**
+         * AssistantToolCallEvent
+         * @description 道具の呼び出し(実行の前)。
+         */
+        AssistantToolCallEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool_call";
+            /** Tool Call Id */
+            tool_call_id: string;
+            /** Name */
+            name: string;
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+        };
+        /** AssistantToolCallView */
+        AssistantToolCallView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * AssistantToolResultEvent
+         * @description 保存した道具の結果(tool のメッセージ)。
+         */
+        AssistantToolResultEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool_result";
+            message: components["schemas"]["AssistantMessageResponse"];
+        };
+        /**
+         * AssistantUndoResponse
+         * @description 「元に戻す」の結果。`message` は戻した tool のメッセージ(`undone_at` が入る)、
+         *     `prompt_set` は戻した後のセット(作成を取り消したときは null)。
+         */
+        AssistantUndoResponse: {
+            message: components["schemas"]["AssistantMessageResponse"];
+            prompt_set?: components["schemas"]["PromptSetResponse"] | null;
+        };
+        /**
+         * AssistantUserMessageEvent
+         * @description 保存した利用者の発言(最初に1回)。
+         */
+        AssistantUserMessageEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "user_message";
+            message: components["schemas"]["AssistantMessageResponse"];
         };
         /** AuthClientSecretStatus */
         AuthClientSecretStatus: {
@@ -3167,6 +3814,56 @@ export interface components {
             depends_on_values: string[];
         };
         /**
+         * ContentRatingDetail
+         * @description レーティングの詳細(ADR-0049 2章・4章)。`AssetDetail.content_rating_detail`。
+         */
+        ContentRatingDetail: {
+            /** Level */
+            level?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /** Source */
+            source?: ("auto" | "user") | null;
+            /** Auto Level */
+            auto_level?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /** Status */
+            status?: ("queued" | "running" | "succeeded" | "failed") | null;
+            /** Error */
+            error?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Rules Version */
+            rules_version?: number | null;
+            /** Scores */
+            scores?: {
+                [key: string]: number;
+            } | null;
+            /** Signals */
+            signals?: components["schemas"]["ContentRatingSignal"][];
+            /** Requested At */
+            requested_at?: string | null;
+            /** Judged At */
+            judged_at?: string | null;
+        };
+        /**
+         * ContentRatingSignal
+         * @description 判定の根拠の1つ(ADR-0049 2章)。引き上げの表に載っているタグのうち確率 0.2 以上のもの。
+         */
+        ContentRatingSignal: {
+            /** Tag */
+            tag: string;
+            /** Score */
+            score: number;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "g" | "r" | "x" | "xx" | "xxx";
+            /**
+             * Raised
+             * @default false
+             */
+            raised: boolean;
+        };
+        /**
          * CreatedBy
          * @description 実行者・アップロード者(ADR-0019)。`none` モードでは付かない(`created_by: null`)。
          */
@@ -3227,6 +3924,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Max Score */
             max_score: number;
             /** Hash Missing */
@@ -3731,6 +4430,8 @@ export interface components {
              */
             restorable: boolean;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /**
          * LineageEdge
@@ -3948,7 +4649,7 @@ export interface components {
             /** Api Key Set */
             api_key_set: boolean;
             /** Used By */
-            used_by?: ("annotation" | "embedding")[];
+            used_by?: ("annotation" | "embedding" | "assistant")[];
         };
         /**
          * LlmConnectionsResponse
@@ -4971,6 +5672,8 @@ export interface components {
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
             primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Primary Parent Content Rating */
+            primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
              * Input Count
              * @default 0
@@ -5092,6 +5795,8 @@ export interface components {
             /** Position */
             position: number;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /** RunListResponse */
         RunListResponse: {
@@ -5112,6 +5817,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /**
          * RunPromptTemplate
@@ -5179,6 +5886,8 @@ export interface components {
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
             primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Primary Parent Content Rating */
+            primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
              * Input Count
              * @default 0
@@ -5441,6 +6150,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Produced By Run Id */
             produced_by_run_id: string | null;
             /**
@@ -5541,6 +6252,8 @@ export interface components {
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
             primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Primary Parent Content Rating */
+            primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
              * Input Count
              * @default 0
@@ -5613,6 +6326,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Score */
             score: number;
         };
@@ -6038,6 +6753,31 @@ export interface components {
             url: string;
             /** Viewer Url */
             viewer_url: string;
+        };
+        /**
+         * UserPreferencesResponse
+         * @description `GET`/`PATCH /api/users/me/preferences`。すべてのキーを、保存していなければ既定値で返す。
+         *     キーは `content_rating.mask_levels` のように `.` を含む。
+         */
+        UserPreferencesResponse: {
+            /** Content Rating.Mask Levels */
+            "content_rating.mask_levels"?: ("g" | "r" | "x" | "xx" | "xxx")[];
+            /**
+             * Content Rating.Mask Unrated
+             * @default false
+             */
+            "content_rating.mask_unrated": boolean;
+        };
+        /**
+         * UserPreferencesUpdateRequest
+         * @description `PATCH /api/users/me/preferences`。書いたキーだけ変える。知らないキー、形の合わない値、
+         *     `null` は 422。
+         */
+        UserPreferencesUpdateRequest: {
+            /** Content Rating.Mask Levels */
+            "content_rating.mask_levels"?: ("g" | "r" | "x" | "xx" | "xxx")[] | null;
+            /** Content Rating.Mask Unrated */
+            "content_rating.mask_unrated"?: boolean | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -7453,6 +8193,76 @@ export interface operations {
             };
         };
     };
+    update_asset_content_rating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetContentRatingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetContentRatingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    judge_asset_content_rating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetContentRatingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     request_asset_embedding: {
         parameters: {
             query?: never;
@@ -8194,6 +9004,244 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PromptSetItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_assistant_conversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_assistant_conversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantConversationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_conversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_assistant_conversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_assistant_conversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantConversationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_assistant_message: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantMessageCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE のイベント列(形は AssistantStreamEvent.event)。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                    "application/json": components["schemas"]["AssistantStreamEvent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_assistant_write: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantUndoResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9654,6 +10702,37 @@ export interface operations {
             };
         };
     };
+    backfill_content_ratings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationBackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_embedding_settings: {
         parameters: {
             query?: never;
@@ -9839,6 +10918,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmbeddingSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_assistant_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSettingsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10477,6 +11622,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferencesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPreferencesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferencesResponse"];
                 };
             };
             /** @description Validation Error */

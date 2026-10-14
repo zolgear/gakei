@@ -33,6 +33,7 @@ from app.domain import (
     ingest_hooks,
 )
 from app.domain import annotations as annotations_domain
+from app.domain import content_rating as content_rating_domain
 from app.domain import embeddings as embeddings_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.asset_groups import group_for_asset
@@ -51,6 +52,8 @@ from app.domain.models import AppUser, Asset, AssetGroup, AssetGroupMember, Asse
 from app.domain.run_views import run_text_outputs
 from app.domain.schemas import (
     AssetAnnotationResponse,
+    AssetContentRatingResponse,
+    AssetContentRatingUpdateRequest,
     AssetDetail,
     AssetEmbeddingStatus,
     AssetLineageResponse,
@@ -94,7 +97,10 @@ def _utcnow() -> datetime:
 
 
 def _to_summary(
-    asset: Asset, title: str | None = None, focal_point: FocalPoint | None = None
+    asset: Asset,
+    title: str | None = None,
+    focal_point: FocalPoint | None = None,
+    content_rating: str | None = None,
 ) -> AssetSummary:
     return AssetSummary(
         id=asset.id,
@@ -106,6 +112,7 @@ def _to_summary(
         created_at=asset.created_at,
         title=title,
         focal_point=focal_point,
+        content_rating=content_rating,  # type: ignore[arg-type]
     )
 
 
@@ -196,6 +203,7 @@ def _to_detail(
         group=group_for_asset(db, asset.id, user),
         focal_point=focal_points.get(db, asset.id),
         **annotations_domain.annotation_fields(db, asset.id),
+        **content_rating_domain.detail_fields(db, asset.id),
     )
 
 
@@ -324,8 +332,9 @@ def list_assets(
     next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id) if has_more and rows else None
     titles = annotations_domain.bulk_titles(db, [a.id for a in rows])
     focals = focal_points.bulk_get(db, [a.id for a in rows])
+    ratings = content_rating_domain.bulk_levels(db, [a.id for a in rows])
     return AssetListResponse(
-        items=[_to_summary(a, titles.get(a.id), focals.get(a.id)) for a in rows],
+        items=[_to_summary(a, titles.get(a.id), focals.get(a.id), ratings.get(a.id)) for a in rows],
         next_cursor=next_cursor,
     )
 
@@ -627,6 +636,72 @@ def annotate_asset(
     db.commit()
     # 応答は worker を起こす前に作る。先に起こすと、拾われた後の running を返すことがある。
     response = annotations_domain.annotation_response(db, asset_id)
+    annotator.notify()
+    return response
+
+
+# -- レーティング(ADR-0049) -------------------------------------------------------
+
+
+def _content_rating_target(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
+    """レーティングを変える・判定する対象。見えなければ 404、マスク・削除済みは 409。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    if asset.kind == AssetKind.MASK:
+        raise HTTPException(status_code=409, detail=t("contentRating.maskNotSupported"))
+    if asset.deleted_at is not None:
+        raise HTTPException(status_code=409, detail=t("contentRating.assetDeleted"))
+    return asset
+
+
+def _content_rating_response(db: Session, asset_id: uuid.UUID) -> AssetContentRatingResponse:
+    return AssetContentRatingResponse(
+        asset_id=asset_id, **content_rating_domain.detail_fields(db, asset_id)
+    )
+
+
+@router.put(
+    "/{asset_id}/content-rating",
+    response_model=AssetContentRatingResponse,
+    operation_id="update_asset_content_rating",
+)
+def update_asset_content_rating(
+    asset_id: uuid.UUID,
+    body: AssetContentRatingUpdateRequest,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> AssetContentRatingResponse:
+    """人が段階を選ぶ(以後の再判定で変わらない)。`level: null` で自動の段階に戻す
+    (ADR-0049 2章)。"""
+    asset = _content_rating_target(db, user, asset_id)
+    content_rating_domain.set_user_level(db, asset, body.level)
+    db.commit()
+    return _content_rating_response(db, asset_id)
+
+
+@router.post(
+    "/{asset_id}/content-rating/judge",
+    response_model=AssetContentRatingResponse,
+    operation_id="judge_asset_content_rating",
+)
+def judge_asset_content_rating(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+) -> AssetContentRatingResponse:
+    """この Asset のレーティングの(再)判定を待ち行列に入れる。人が選んだ段階は保つ。
+    判定が無効、またはモデルが無ければ 409。既に待ち行列にあれば何もしない。"""
+    asset = _content_rating_target(db, user, asset_id)
+    config = annotation_settings.load(db)
+    if not content_rating_domain.usable(config, settings):
+        raise HTTPException(status_code=409, detail=t("contentRating.notUsable"))
+    content_rating_domain.request_judge(db, asset)
+    db.commit()
+    # 応答は worker を起こす前に作る(annotate_asset と同じ理由)。
+    response = _content_rating_response(db, asset_id)
     annotator.notify()
     return response
 

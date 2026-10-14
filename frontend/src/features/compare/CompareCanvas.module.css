@@ -172,3 +172,9 @@
     margin-left: -18px;
   }
 }
+
+/* マスク(ADR-0049 5章)の上に並べる段階のバッジ(2枚とも出すことがある)。 */
+.maskBadges {
+  display: flex;
+  gap: 8px;
+}

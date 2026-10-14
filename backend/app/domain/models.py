@@ -103,9 +103,11 @@ class RunStatus(enum.StrEnum):
     CANCELED = "canceled"
 
 
-# `run.origin` の値(ADR-0023 5章、ADR-0037 2章)。null は画面、`mcp` は MCP のツール。
-# `import` は、系列の ZIP から取り込んだ記録(この GAKEI では実行していない。ADR-0037)。
+# `run.origin` の値(ADR-0023 5章、ADR-0037 2章、ADR-0048 9章)。null は画面、`mcp` は MCP の
+# ツール。`import` は、系列の ZIP から取り込んだ記録(この GAKEI では実行していない。ADR-0037)。
+# `assistant` は、生成のアシスタントの道具(`generate_image`)が作った Run(ADR-0048)。
 RUN_ORIGIN_IMPORT = "import"
+RUN_ORIGIN_ASSISTANT = "assistant"
 
 
 class RunInputRole(enum.StrEnum):
@@ -349,9 +351,10 @@ class Run(Base):
     )
 
     # 実行元(ADR-0023 5章)。null は画面、`mcp` は MCP のツール、`import` は系列の ZIP から
-    # 取り込んだ記録(ADR-0037。実行していない。元の記録は `run_import`)。`api_token_id` は MCP を
-    # アクセストークンで呼んだとき(認証モード)だけ入る。いずれも作成時に一度だけ書き、UPDATE
-    # しない(ADR-0003 の追記のみの規則に反しない)。
+    # 取り込んだ記録(ADR-0037。実行していない。元の記録は `run_import`)、`assistant` は生成の
+    # アシスタント(ADR-0048 9章。どの会話から作ったかは会話の tool の結果に残す)。
+    # `api_token_id` は MCP をアクセストークンで呼んだとき(認証モード)だけ入る。いずれも
+    # 作成時に一度だけ書き、UPDATE しない(ADR-0003 の追記のみの規則に反しない)。
     origin: Mapped[str | None] = mapped_column(String(16), nullable=True)
     api_token_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("api_token.id"), nullable=True, index=True
@@ -471,6 +474,52 @@ class PromptSetItem(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
     prompt_set: Mapped[PromptSet] = relationship("PromptSet", back_populates="items")
+
+
+class AssistantConversation(Base):
+    """生成のアシスタントの会話(ADR-0048 3章)。証跡ではないので、名前の変更と論理削除ができる。
+
+    見えるのは本人の会話だけ(ADR-0025。個人モードでは全部)。`created_by_user_id` は作成時に
+    一度だけ書く。`updated_at` は発言のたびに進める(一覧は新しい順)。
+    """
+
+    __tablename__ = "assistant_conversation"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime(), nullable=False, default=_utcnow, index=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class AssistantMessage(Base):
+    """会話の1メッセージ(ADR-0048 3章)。`role` は `user` / `assistant` / `tool`。
+
+    `content` は JSON。本文、添付の Asset ID、tool の呼び出しと結果(書き込みの変更前の値を
+    含む)を入れる。画像の中身(base64)は入れない(ADR-0004)。形は `app/domain/assistant.py`。
+    「元に戻す」の印(`undone_at`)を書き足すほかは更新しない。
+    """
+
+    __tablename__ = "assistant_message"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id", "position", name="uq_assistant_message_conversation_position"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("assistant_conversation.id"), nullable=False, index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[dict] = mapped_column(JsonType, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class ParameterSet(Base):
@@ -711,6 +760,56 @@ class AssetAnnotation(Base):
     auto_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     auto_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     auto_finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class AssetContentRating(Base):
+    """Asset のレーティング(性表現の強さの段階。ADR-0049 2章)。証跡ではないので更新してよい。
+
+    `status` が判定の待ち行列を兼ねる(`queued` の行を `app/worker/annotator.py` が1件ずつ
+    処理する。ADR-0049 3章)。NULL は未実行。`level` は表示に使う段階で、人が選んでいれば人の
+    段階(`source = user`)、なければ自動の段階。再判定は `auto_level` 以下の列だけを書き換える。
+    規則と書き込みは `app/domain/content_rating.py`。
+    """
+
+    __tablename__ = "asset_content_rating"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    # g | r | x | xx | xxx(未判定なら NULL)
+    level: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # auto | user(まだ判定も人の選択も無ければ NULL)
+    source: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    auto_level: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # queued | running | succeeded | failed(NULL は未実行)
+    status: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 判定に使った WD Tagger のモデル名
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rules_version: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    # rating の4つの確率 {"general": 0.9, ...}
+    scores: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+    # 引き上げの表に載っているタグのうち確率 0.2 以上のもの
+    # [{"tag": ..., "score": ..., "level": ..., "raised": bool}, ...]
+    signals: Mapped[list | None] = mapped_column(JsonType, nullable=True)
+    # 待ち行列に入れた時刻(古い依頼から処理する)
+    requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    judged_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class UserPreference(Base):
+    """ユーザーごとの設定(ADR-0049 6章)。キーと値の組で持つ。
+
+    `owner` は認証モードでは `app_user.id` の文字列、個人モードでは `local`(個人モードには
+    `app_user` の行が無いので、外部キーにしない)。キーと値の形は
+    `app/domain/user_preferences.py` が決める。
+    """
+
+    __tablename__ = "user_preference"
+
+    owner: Mapped[str] = mapped_column(String(64), primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[object] = mapped_column(JsonType, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 

@@ -128,6 +128,19 @@ export type OnnxModelStatus = components['schemas']['OnnxModelStatus']
 export type OnnxModelName = OnnxModelStatus['name']
 export type AnnotationEngine = NonNullable<AnnotationSettingsResponse['usable_engines']>[number]
 
+// -- レーティング(ADR-0049) ---------------------------------------------------
+
+/** 段階の識別子(`g`、`r`、`x`、`xx`、`xxx`)。未判定は null。 */
+export type ContentRatingLevel = NonNullable<AssetSummary['content_rating']>
+export type ContentRatingDetail = components['schemas']['ContentRatingDetail']
+export type ContentRatingSignal = components['schemas']['ContentRatingSignal']
+export type AssetContentRatingResponse = components['schemas']['AssetContentRatingResponse']
+
+// -- ユーザーごとの設定(ADR-0049 6章) -----------------------------------------
+
+export type UserPreferencesResponse = components['schemas']['UserPreferencesResponse']
+export type UserPreferencesUpdateRequest = components['schemas']['UserPreferencesUpdateRequest']
+
 // -- LLM の接続先(ADR-0032) ----------------------------------------------------
 export type LlmConnectionsResponse = components['schemas']['LlmConnectionsResponse']
 export type LlmConnectionView = components['schemas']['LlmConnectionView']
@@ -446,42 +459,49 @@ function formatDetail(detail: unknown): string | null {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // サーバーの文言(エラー、capabilities の見出し)を画面の言語に合わせる(ADR-0015)。
-  const headers = new Headers(init?.headers)
-  headers.set('Accept-Language', getLocale())
-  const res = await fetch(path, { ...init, headers })
-  if (!res.ok) {
-    // oidc モードでセッションが切れた(ADR-0019)。`/api/auth/*` 自体の 401 は
-    // 未ログイン時の正常応答(`/me` は 401 を返さないが、念のため対象から外す)。
-    if (res.status === 401 && !path.startsWith('/api/auth/')) {
-      markUnauthenticated()
-    }
-    let message = res.statusText || `HTTP ${res.status}`
-    let code: string | null = null
-    let field: string | null = null
-    try {
-      const body: unknown = await res.json()
-      if (body && typeof body === 'object' && 'detail' in body) {
-        const detail = (body as { detail: unknown }).detail
-        message = formatDetail(detail) ?? message
-        if (detail && typeof detail === 'object' && 'code' in detail) {
-          const value = (detail as { code: unknown }).code
-          code = typeof value === 'string' ? value : null
-        }
-        if (detail && typeof detail === 'object' && 'field' in detail) {
-          const value = (detail as { field: unknown }).field
-          field = typeof value === 'string' ? value : null
-        }
-      }
-    } catch {
-      // レスポンスが JSON でない場合はそのまま statusText を使う。
-    }
-    throw new ApiError(res.status, message, code, field)
-  }
+  const res = await fetchWithLocale(path, init)
+  if (!res.ok) throw await apiErrorFromResponse(path, res)
   if (res.status === 204) {
     return undefined as T
   }
   return (await res.json()) as T
+}
+
+function fetchWithLocale(path: string, init?: RequestInit): Promise<Response> {
+  // サーバーの文言(エラー、capabilities の見出し)を画面の言語に合わせる(ADR-0015)。
+  const headers = new Headers(init?.headers)
+  headers.set('Accept-Language', getLocale())
+  return fetch(path, { ...init, headers })
+}
+
+/** 失敗の応答から ApiError を作る(本文の `detail` を読む)。 */
+async function apiErrorFromResponse(path: string, res: Response): Promise<ApiError> {
+  // oidc モードでセッションが切れた(ADR-0019)。`/api/auth/*` 自体の 401 は
+  // 未ログイン時の正常応答(`/me` は 401 を返さないが、念のため対象から外す)。
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    markUnauthenticated()
+  }
+  let message = res.statusText || `HTTP ${res.status}`
+  let code: string | null = null
+  let field: string | null = null
+  try {
+    const body: unknown = await res.json()
+    if (body && typeof body === 'object' && 'detail' in body) {
+      const detail = (body as { detail: unknown }).detail
+      message = formatDetail(detail) ?? message
+      if (detail && typeof detail === 'object' && 'code' in detail) {
+        const value = (detail as { code: unknown }).code
+        code = typeof value === 'string' ? value : null
+      }
+      if (detail && typeof detail === 'object' && 'field' in detail) {
+        const value = (detail as { field: unknown }).field
+        field = typeof value === 'string' ? value : null
+      }
+    }
+  } catch {
+    // レスポンスが JSON でない場合はそのまま statusText を使う。
+  }
+  return new ApiError(res.status, message, code, field)
 }
 
 function toQuery(
@@ -1261,6 +1281,50 @@ export function backfillAnnotations(): Promise<AnnotationBackfillResponse> {
   return request('/api/settings/annotation/backfill', { method: 'POST' })
 }
 
+/**
+ * レーティングの判定を待ち行列に入れる(管理者。ADR-0049 3章)。未判定と、古い版の規則で自動判定した画像が
+ * 対象。判定が無効、またはモデルが無ければ 409。
+ */
+export function backfillContentRatings(): Promise<AnnotationBackfillResponse> {
+  return request('/api/settings/annotation/content-rating/backfill', { method: 'POST' })
+}
+
+// -- レーティング(ADR-0049) ---------------------------------------------------
+// マスクと削除済みの Asset は 409(detail に理由)。いずれも更新後の状態を返す。
+
+/** 人が段階を選ぶ(以後の再判定で変わらない)。`null` で自動の段階に戻す。 */
+export function updateAssetContentRating(
+  assetId: string,
+  level: ContentRatingLevel | null,
+): Promise<AssetContentRatingResponse> {
+  return request(`/api/assets/${assetId}/content-rating`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level }),
+  })
+}
+
+/** 再判定を待ち行列に入れる。判定が無効、またはモデルが無ければ 409。 */
+export function judgeAssetContentRating(assetId: string): Promise<AssetContentRatingResponse> {
+  return request(`/api/assets/${assetId}/content-rating/judge`, { method: 'POST' })
+}
+
+// -- ユーザーごとの設定(ADR-0049 6章) -----------------------------------------
+
+/** すべてのキーを返す(保存していないキーは既定値)。個人モードでも使える。 */
+export function getUserPreferences(): Promise<UserPreferencesResponse> {
+  return request('/api/users/me/preferences')
+}
+
+/** 書いたキーだけ変える。知らないキーと形の合わない値は 422。 */
+export function updateUserPreferences(body: UserPreferencesUpdateRequest): Promise<UserPreferencesResponse> {
+  return request('/api/users/me/preferences', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 // -- LLM の接続先(ADR-0032) ----------------------------------------------------
 
 /** 接続先の一覧(全ログイン者)。先頭は組み込みの「OpenAI の設定」。キーは設定済みかどうかだけ。 */
@@ -1435,4 +1499,91 @@ export function embeddingGraphScores(
   params: NonNullable<operations['embedding_graph_scores']['parameters']['query']>,
 ): Promise<EmbeddingGraphScoresResponse> {
   return request(`/api/embeddings/graph/scores${toQuery(params)}`)
+}
+
+// -- 生成のアシスタント(ADR-0048) ----------------------------------------------
+
+export type AssistantConversationResponse = components['schemas']['AssistantConversationResponse']
+export type AssistantConversationListResponse = components['schemas']['AssistantConversationListResponse']
+export type AssistantConversationDetailResponse = components['schemas']['AssistantConversationDetailResponse']
+export type AssistantMessageResponse = components['schemas']['AssistantMessageResponse']
+export type AssistantToolCallView = components['schemas']['AssistantToolCallView']
+export type AssistantMessageCreateRequest = components['schemas']['AssistantMessageCreateRequest']
+export type AssistantFormState = components['schemas']['AssistantFormState']
+export type AssistantUndoResponse = components['schemas']['AssistantUndoResponse']
+/** 発言の送信の応答(SSE)の1イベント。`type` で見分ける。 */
+export type AssistantStreamEvent = components['schemas']['AssistantStreamEvent']['event']
+export type AssistantSettingsResponse = components['schemas']['AssistantSettingsResponse']
+export type AssistantSettingsUpdateRequest = components['schemas']['AssistantSettingsUpdateRequest']
+
+/** 本人の会話(新しい順)。 */
+export function listAssistantConversations(): Promise<AssistantConversationListResponse> {
+  return request('/api/assistant/conversations')
+}
+
+export function createAssistantConversation(title = ''): Promise<AssistantConversationResponse> {
+  return request('/api/assistant/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function getAssistantConversation(conversationId: string): Promise<AssistantConversationDetailResponse> {
+  return request(`/api/assistant/conversations/${conversationId}`)
+}
+
+export function renameAssistantConversation(
+  conversationId: string,
+  title: string,
+): Promise<AssistantConversationResponse> {
+  return request(`/api/assistant/conversations/${conversationId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function deleteAssistantConversation(conversationId: string): Promise<void> {
+  return request(`/api/assistant/conversations/${conversationId}`, { method: 'DELETE' })
+}
+
+/**
+ * 発言を送る。応答は `text/event-stream` なので、本文を読まずに Response を返す(読むのは
+ * `features/assistant/assistantStream.ts`)。送る前に断られたとき(404/409/422/429)は ApiError。
+ * `signal` で中断すると、サーバーは切断として扱い、処理を止める(ADR-0048 9章)。
+ */
+export async function openAssistantMessageStream(
+  conversationId: string,
+  body: AssistantMessageCreateRequest,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const path = `/api/assistant/conversations/${conversationId}/messages`
+  const res = await fetchWithLocale(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!res.ok) throw await apiErrorFromResponse(path, res)
+  return res
+}
+
+/** プロンプトセットへの書き込みを元に戻す。その後に対象が変わっていれば 409。 */
+export function undoAssistantWrite(messageId: string): Promise<AssistantUndoResponse> {
+  return request(`/api/assistant/undo/${messageId}`, { method: 'POST' })
+}
+
+/** 全ログイン者が読める(パネルを出すかの判断。`usable`)。 */
+export function getAssistantSettings(): Promise<AssistantSettingsResponse> {
+  return request('/api/settings/assistant')
+}
+
+/** 管理者のみ。書いた項目だけ変える。不正な値は 422。 */
+export function updateAssistantSettings(body: AssistantSettingsUpdateRequest): Promise<AssistantSettingsResponse> {
+  return request('/api/settings/assistant', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }

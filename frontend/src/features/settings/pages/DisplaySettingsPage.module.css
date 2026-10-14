@@ -1,0 +1,16 @@
+/* 「レーティングのマスク」の段階のチェックボックス(ADR-0049 6章)。狭い幅では折り返す。 */
+.levelChecks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.levelChecks label {
+  min-height: 28px;
+}
+
+@media (max-width: 767px) {
+  .levelChecks label {
+    min-height: 44px;
+  }
+}

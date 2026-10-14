@@ -24,6 +24,16 @@ localized ならその訳も同じ呼び出しで返させる)。VLM が無効�
 LLM で訳す。どれか1つが失敗したら、動いている他の処理を取り消して全体を `failed` にする。
 LLM・VLM の呼び出しは、始める前に要る回数だけ1時間の枠が空いているかを確かめる(画像を
 読む前に一度確かめ、呼ぶ直前にもう一度確かめる)。
+
+レーティング(ADR-0049 3章):
+
+- 推定で ONNX が走るときは、同じ推論の結果からレーティングも書く(判定がオンのとき。推論を
+  2回しない)。推定の残り(VLM など)が後で失敗しても、レーティングは書いたままにする。
+- それ以外は `asset_content_rating.status = 'queued'` の行を、推定の待ち行列が空のとき(または
+  推定の組がすべて1時間の上限で止まっているとき)に1件ずつ拾い、WD だけで判定する。WD の
+  モデル(`onnx_model`)をダウンロード済みであることが条件で、`onnx_enabled` には依らない。
+- 起動時に `running` の行を `queued` に戻す。失敗したら `failed` と理由を残し、自動では
+  再試行しない。
 """
 
 from __future__ import annotations
@@ -48,6 +58,7 @@ from app.annotation.engines import (
     AnnotationEngines,
     EngineContext,
     FakeEngines,
+    OnnxAnalysis,
     OpenAIEngines,
     image_to_jpeg,
     wants_translation,
@@ -55,6 +66,7 @@ from app.annotation.engines import (
 from app.annotation.wd_tagger import WdTagger
 from app.domain import annotation_settings, derivatives, llm_connections, tag_dictionaries
 from app.domain import annotations as annotations_domain
+from app.domain import content_rating as content_rating_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.models import Asset, AssetAnnotation, AssetKind, Run
 from app.domain.storage import AssetStore
@@ -274,6 +286,7 @@ class Annotator:
     async def start(self) -> int:
         self._event_loop = asyncio.get_running_loop()
         count = await asyncio.to_thread(reset_running_annotations, self.session_factory)
+        count += await asyncio.to_thread(content_rating_domain.reset_running, self.session_factory)
         self._task = asyncio.create_task(self._loop(), name="gakei-annotator")
         return count
 
@@ -355,13 +368,25 @@ class Annotator:
                 await asyncio.to_thread(self.engines.release_idle)
                 config = await asyncio.to_thread(self._load_config)
                 blocked = self._blocked_profiles(config)
-                if len(blocked) == len(annotation_settings.PROFILES):
-                    await self._sleep()
-                    continue
-                picked = await asyncio.to_thread(_pick, self.session_factory, blocked)
+                picked = None
+                if len(blocked) < len(annotation_settings.PROFILES):
+                    picked = await asyncio.to_thread(_pick, self.session_factory, blocked)
+                rating_picked = None
+                if picked is None:
+                    # 推定の待ち行列が空(または上限で止まっている)ならレーティングの判定を進める。
+                    rating_picked = await asyncio.to_thread(
+                        content_rating_domain.pick_queued, self.session_factory
+                    )
             except Exception:
                 logger.exception("推定の待ち行列の取得に失敗しました")
                 await self._sleep()
+                continue
+
+            if picked is None and rating_picked is not None:
+                try:
+                    await self._process_rating(rating_picked)
+                except Exception:
+                    logger.exception("asset %s のレーティングの判定で想定外の例外", rating_picked)
                 continue
 
             if picked is None:
@@ -557,7 +582,11 @@ class Annotator:
         try:
             onnx_tags: list[tuple[str, float | None]] | None = None
             if use_onnx:
-                onnx_tags = list(await asyncio.to_thread(self.engines.onnx_tags, image, ctx))
+                analysis = await asyncio.to_thread(self.engines.onnx_analyze, image, ctx)
+                onnx_tags = list(analysis.tags)
+                # ADR-0049 3章: 同じ推論の結果からレーティングも書く(推論を2回しない)。
+                if config.content_rating_enabled:
+                    await asyncio.to_thread(self._write_rating, job.asset_id, analysis)
             onnx_names = [name for name, _ in onnx_tags or []]
 
             # タイトルの LLM が既に失敗していれば、VLM を呼ぶ前にここで止める(無駄な課金を
@@ -648,6 +677,67 @@ class Annotator:
             if annotations_domain.normalize_tag_name_or_none(translation) is not None:
                 result[name] = translation
         return result
+
+    # -- レーティング(ADR-0049 3章) ----------------------------------------------
+
+    def _write_rating(self, asset_id: uuid.UUID, analysis: OnnxAnalysis) -> None:
+        """推論の結果からレーティングを判定して書く(人が選んだ段階は変えない)。"""
+        with self.session_factory() as session:
+            content_rating_domain.write_auto_result(
+                session,
+                asset_id,
+                model=analysis.model,
+                scores=analysis.rating_scores,
+                tag_probs=analysis.rating_tag_probs,
+            )
+            session.commit()
+
+    def _load_rating_job(
+        self, asset_id: uuid.UUID
+    ) -> tuple[annotation_settings.AnnotationConfig, bytes] | str:
+        """判定に要る設定と画像(preview)。判定できなければ失敗の理由(文字列)を返す。"""
+        with self.session_factory() as session:
+            asset = session.get(Asset, asset_id)
+            if asset is None or asset.deleted_at is not None:
+                return t("contentRating.assetDeleted")
+            if asset.kind == AssetKind.MASK:
+                return t("contentRating.maskNotSupported")
+            config = annotation_settings.load(session)
+            if not content_rating_domain.usable(config, self.settings):
+                return t("contentRating.notUsable")
+            # 今の版の preview が無ければ原本から作る(ADR-0036 2章)。
+            preview = derivatives.ensure_derived(
+                self.store, asset.blob_key, asset.sha256, "preview"
+            )
+            image_bytes = (
+                preview.read_all() if preview is not None else self.store.read(asset.blob_key)
+            )
+            return config, image_bytes
+
+    async def _process_rating(self, asset_id: uuid.UUID) -> None:
+        """レーティングの判定だけの1件を処理する(WD の推論1回)。"""
+        try:
+            job = await asyncio.to_thread(self._load_rating_job, asset_id)
+            if isinstance(job, str):
+                await asyncio.to_thread(self._finish_rating_failed, asset_id, job)
+                return
+            config, image_bytes = job
+            image = await asyncio.to_thread(_decode_image, image_bytes)
+            ctx = EngineContext(config=config)
+            analysis = await asyncio.to_thread(self.engines.onnx_analyze, image, ctx)
+        except AnnotationEngineError as e:
+            await asyncio.to_thread(self._finish_rating_failed, asset_id, str(e))
+            return
+        except Exception as e:  # noqa: BLE001 - どの段階の失敗も記録する
+            logger.exception("asset %s のレーティングの判定に失敗しました", asset_id)
+            await asyncio.to_thread(self._finish_rating_failed, asset_id, f"internalError: {e}")
+            return
+        await asyncio.to_thread(self._write_rating, asset_id, analysis)
+
+    def _finish_rating_failed(self, asset_id: uuid.UUID, message: str) -> None:
+        with self.session_factory() as session:
+            content_rating_domain.mark_failed(session, asset_id, sanitize_external_text(message))
+            session.commit()
 
     def _requeue(self, asset_id: uuid.UUID) -> None:
         with self.session_factory() as session:

@@ -346,7 +346,8 @@
       "featureSeparator": ", ",
       "features": {
         "annotation": "Auto titles and tags",
-        "embedding": "Embeddings"
+        "embedding": "Embeddings",
+        "assistant": "Assistant"
       }
     },
     "share": {
@@ -388,6 +389,12 @@
         "verified_email_not_admin": "The email address used for the test sign-in is not in the admin emails.",
         "self_not_admin": "You cannot remove your own email address from the admin emails."
       }
+    },
+    "assistant": {
+      "invalidBool": "{name} must be true or false",
+      "unknownConnection": "The specified connection does not exist",
+      "invalidModel": "The model name must be 1 to {max} characters",
+      "invalidLimit": "{name} must be an integer from {min} to {max}"
     }
   },
   "runValidation": {
@@ -522,6 +529,9 @@
       "notFound": "Avatar not found",
       "invalidCrop": "The crop rectangle is malformed",
       "cropOutOfBounds": "The crop rectangle is outside the image"
+    },
+    "preferences": {
+      "invalidValue": "The value of setting {key} is invalid."
     }
   },
   "apiTokens": {
@@ -550,6 +560,11 @@
     "onnxModelMissing": "The ONNX tagger model was not found. Download it from Admin settings",
     "onnxInsufficientMemory": "The ONNX tagger model {model} was not loaded because there is not enough free memory (needs about {needed} GB, about {available} GB free). Choose a smaller model in Admin settings or add memory",
     "connectionMissing": "The connection used for annotation was not found. Choose the connections again in Admin settings > Auto titles and tags"
+  },
+  "contentRating": {
+    "notUsable": "Content rating is not available. Turn on \"Judge content rating\" under \"Auto titles and tags\" in the admin settings and download the WD Tagger model.",
+    "maskNotSupported": "Masks cannot have a content rating.",
+    "assetDeleted": "The content rating of a deleted image cannot be changed."
   },
   "uploads": {
     "notFound": "This upload URL does not exist.",
@@ -939,5 +954,22 @@
       "importFailed": "The import failed. Register the dictionary again",
       "noRows": "There were no rows to import"
     }
+  },
+  "assistant": {
+    "conversationNotFound": "Conversation not found",
+    "messageNotFound": "Message not found",
+    "disabled": "The assistant is turned off (an administrator can turn it on in the settings)",
+    "connectionMissing": "The assistant has no connection. Choose one in the administrator settings",
+    "apiKeyMissing": "No API key is set for the assistant's connection",
+    "hourlyLimitReached": "The assistant's hourly request limit ({limit}) has been reached. Please try again later",
+    "attachmentNotFound": "An attached image was not found",
+    "busy": "This conversation is still replying. Wait for it to finish or stop it before sending",
+    "llmError": "The LLM call failed: {error}",
+    "toolLimitReached": "Stopped: the limit of {limit} tool calls per message was reached",
+    "runsPerMessageLimit": "No run was created: it would exceed the limit of {limit} runs per message ({used} created in this message)",
+    "hourlyRunLimit": "No run was created: it would exceed the assistant's limit of {limit} runs per hour ({used} in the last hour)",
+    "undoConflict": "Cannot undo: the target has been changed or deleted since",
+    "undoNotAvailable": "This message is not a write that can be undone",
+    "undoAlreadyDone": "Already undone"
   }
 }
