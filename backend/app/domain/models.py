@@ -763,6 +763,56 @@ class AssetAnnotation(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
+class AssetContentRating(Base):
+    """Asset のレーティング(性表現の強さの段階。ADR-0049 2章)。証跡ではないので更新してよい。
+
+    `status` が判定の待ち行列を兼ねる(`queued` の行を `app/worker/annotator.py` が1件ずつ
+    処理する。ADR-0049 3章)。NULL は未実行。`level` は表示に使う段階で、人が選んでいれば人の
+    段階(`source = user`)、なければ自動の段階。再判定は `auto_level` 以下の列だけを書き換える。
+    規則と書き込みは `app/domain/content_rating.py`。
+    """
+
+    __tablename__ = "asset_content_rating"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    # g | r | x | xx | xxx(未判定なら NULL)
+    level: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # auto | user(まだ判定も人の選択も無ければ NULL)
+    source: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    auto_level: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # queued | running | succeeded | failed(NULL は未実行)
+    status: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 判定に使った WD Tagger のモデル名
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rules_version: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    # rating の4つの確率 {"general": 0.9, ...}
+    scores: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+    # 引き上げの表に載っているタグのうち確率 0.2 以上のもの
+    # [{"tag": ..., "score": ..., "level": ..., "raised": bool}, ...]
+    signals: Mapped[list | None] = mapped_column(JsonType, nullable=True)
+    # 待ち行列に入れた時刻(古い依頼から処理する)
+    requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    judged_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class UserPreference(Base):
+    """ユーザーごとの設定(ADR-0049 6章)。キーと値の組で持つ。
+
+    `owner` は認証モードでは `app_user.id` の文字列、個人モードでは `local`(個人モードには
+    `app_user` の行が無いので、外部キーにしない)。キーと値の形は
+    `app/domain/user_preferences.py` が決める。
+    """
+
+    __tablename__ = "user_preference"
+
+    owner: Mapped[str] = mapped_column(String(64), primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[object] = mapped_column(JsonType, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
 class Tag(Base):
     """タグの表記(ADR-0024 2章)。`name` は `app/domain/annotations.normalize_tag_name` で
     正規化した値(NFKC、前後の空白除去、小文字化、空白の連続を1つに)。"""

@@ -16,7 +16,7 @@ from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_progress_bus, get_registry, get_runner, get_session, get_settings
-from app.domain import focal_points
+from app.domain import content_rating, focal_points
 from app.domain import run_create as run_create_domain
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
@@ -32,6 +32,7 @@ from app.domain.run_views import (
     bulk_descendant_run_counts,
     bulk_input_summary,
     bulk_output_refs,
+    bulk_parent_content_ratings,
     bulk_parent_focal_points,
     bulk_users,
     run_summary_fields,
@@ -80,6 +81,8 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
     asset_group = bulk_asset_groups(db, [run.asset_group_id], user).get(run.asset_group_id)
     # サムネイルの焦点(ADR-0043)。入力と主たる親の分をまとめて引く。
     focals = focal_points.bulk_get(db, [i.asset_id for i in inputs])
+    # レーティング(ADR-0049)も入力と主たる親の分をまとめて引く。
+    ratings = content_rating.bulk_levels(db, [i.asset_id for i in inputs])
     return RunDetail(
         **run_summary_fields(
             run,
@@ -90,6 +93,9 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
             created_by,
             asset_group,
             primary_parent_focal_point=focals.get(primary_parent_asset_id)
+            if primary_parent_asset_id is not None
+            else None,
+            primary_parent_content_rating=ratings.get(primary_parent_asset_id)
             if primary_parent_asset_id is not None
             else None,
         ),
@@ -103,6 +109,7 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
                 role=i.role,
                 position=i.position,
                 focal_point=focals.get(i.asset_id),
+                content_rating=ratings.get(i.asset_id),
             )
             for i in inputs
         ],
@@ -188,6 +195,7 @@ def list_runs(
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], user)
     parent_focals = bulk_parent_focal_points(db, inputs_map)
+    parent_ratings = bulk_parent_content_ratings(db, inputs_map)
     items = [
         RunSummary(
             **run_summary_fields(
@@ -198,6 +206,7 @@ def list_runs(
                 users_map.get(r.created_by_user_id),
                 groups_map.get(r.asset_group_id),
                 primary_parent_focal_point=parent_focals.get(inputs_map[r.id][1]),
+                primary_parent_content_rating=parent_ratings.get(inputs_map[r.id][1]),
             )
         )
         for r in rows

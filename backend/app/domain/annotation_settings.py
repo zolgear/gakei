@@ -150,6 +150,9 @@ class AnnotationConfig:
     onnx_enabled: bool = False
     onnx_model: OnnxModelName = "wd-vit-tagger-v3"
     onnx_threshold: float = DEFAULT_ONNX_THRESHOLD
+    # レーティングの判定(ADR-0049 3章)。`onnx_model` の WD のモデルを使う。`onnx_enabled` とは
+    # 独立にオンにできる。
+    content_rating_enabled: bool = False
     # LLM の接続先のうち利用者が登録したもの(組み込みの openai は含まない。`all_connections`
     # を参照)。`llm_connections` から読む。
     connections: tuple[ConnectionConfig, ...] = ()
@@ -215,7 +218,13 @@ def _is_threshold(value: object) -> bool:
 
 def normalize_value(name: str, value: Any) -> Any:
     """1項目を検証して保存する形に整える。不正なら AnnotationSettingsValidationError。"""
-    if name in ("auto_on_ingest", "llm_enabled", "vlm_enabled", "onnx_enabled"):
+    if name in (
+        "auto_on_ingest",
+        "llm_enabled",
+        "vlm_enabled",
+        "onnx_enabled",
+        "content_rating_enabled",
+    ):
         if not _is_bool(value):
             raise AnnotationSettingsValidationError(t("settings.annotation.invalidBool", name=name))
         return value

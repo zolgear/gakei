@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
+from app.domain import content_rating as content_rating_domain
 from app.domain import semantic_search as semantic_domain
 from app.domain.asset_groups import group_for_asset, list_groups
 from app.domain.models import Asset, AssetGroupMember, Run, RunInput, RunInputRole
@@ -90,10 +91,12 @@ def _decorate(
     scores: dict[uuid.UUID, float] | None = None,
     snippets: dict[uuid.UUID, str | None] | None = None,
 ) -> list[dict[str, Any]]:
-    """結果の1件ずつに、タイトル、タグ、グループ(と類似度・プロンプトの抜粋)を足す。"""
+    """結果の1件ずつに、タイトル、タグ、レーティング、グループ(と類似度・プロンプトの抜粋)を
+    足す。"""
     asset_ids = [a.id for a in assets]
     titles = annotations_domain.bulk_titles(db, asset_ids)
     tags_map = annotations_domain.bulk_tags(db, asset_ids)
+    ratings = content_rating_domain.bulk_levels(db, asset_ids)
     items = []
     for asset in assets:
         item = brief(asset)
@@ -101,6 +104,8 @@ def _decorate(
             item["score"] = round(scores[asset.id], 4)
         item["title"] = titles.get(asset.id)
         item["tags"] = [ref.model_dump(mode="json") for ref in tags_map.get(asset.id, [])]
+        # ADR-0049 5章: AI に渡す画像はマスクしない代わりに、段階を情報として渡す。
+        item["content_rating"] = ratings.get(asset.id)
         group = group_for_asset(db, asset.id, viewer)
         item["group"] = group.model_dump(mode="json") if group else None
         if snippets is not None and asset.id in snippets:
@@ -274,13 +279,15 @@ def find_similar_assets(
 
 
 def asset_details(db: Session, viewer: CurrentUser, asset: Asset) -> dict[str, Any]:
-    """1枚の画像の情報: タイトル(と出どころ)、タグ、グループ、生成した Run(プロンプト、
-    モデル、パラメーター、実行時のテキスト)、主たる親(見えるときだけ)。"""
+    """1枚の画像の情報: タイトル(と出どころ)、タグ、レーティング、グループ、生成した Run
+    (プロンプト、モデル、パラメーター、実行時のテキスト)、主たる親(見えるときだけ)。"""
     payload: dict[str, Any] = {}
     fields = annotations_domain.annotation_fields(db, asset.id)
     payload["title"] = fields["title"]
     payload["title_source"] = fields["title_source"]
     payload["tags"] = [ref.model_dump(mode="json") for ref in fields["tags"]]
+    # レーティングの段階(ADR-0049。未判定は null)。
+    payload["content_rating"] = content_rating_domain.level_for(db, asset.id)
     group = group_for_asset(db, asset.id, viewer)
     payload["group"] = group.model_dump(mode="json") if group else None
     payload["produced_by_run"] = None

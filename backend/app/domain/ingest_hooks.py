@@ -1,4 +1,5 @@
-"""取り込みのたびに走らせる後処理の待ち行列への投入(ADR-0024 4章、ADR-0033 5章、ADR-0043)。
+"""取り込みのたびに走らせる後処理の待ち行列への投入(ADR-0024 4章、ADR-0033 5章、ADR-0043、
+ADR-0049 3章)。
 
 自動タイトル・タグと埋め込みを、同じ場所(生成の出力、アップロード、スケッチ、MCP の
 アップロード、URL でのアップロード)から1つの関数で待ち行列に入れる。どちらも設定が
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Protocol
 from sqlalchemy.orm import Session
 
 from app.domain import annotations as annotations_domain
+from app.domain import content_rating as content_rating_domain
 from app.domain import embeddings as embeddings_domain
 from app.domain.models import Asset, AssetKind
 
@@ -61,9 +63,14 @@ def focal_targets(asset: Asset) -> IngestQueued:
 
 def enqueue_after_ingest(db: Session, asset: Asset, settings: Settings) -> IngestQueued:
     """新しく取り込んだ Asset を、自動タイトル・タグと埋め込みの待ち行列に入れる(設定が
-    オンのときだけ。マスクは入れない)。焦点(ADR-0043)の対象も覚えておく。commit はしない。"""
+    オンのときだけ。マスクは入れない)。焦点(ADR-0043)の対象も覚えておく。commit はしない。
+
+    レーティング(ADR-0049 3章)は、判定がオンなら `auto_on_ingest` とは別に常に入れる。判定も
+    推定と同じ worker が処理するので、どちらかを入れたら推定の worker を起こす。"""
+    annotation = annotations_domain.enqueue_on_ingest(db, asset, settings)
+    rating = content_rating_domain.enqueue_on_ingest(db, asset, settings)
     return IngestQueued(
-        annotation=annotations_domain.enqueue_on_ingest(db, asset, settings),
+        annotation=annotation or rating,
         embedding=embeddings_domain.enqueue_on_ingest(db, asset, settings),
     ) | focal_targets(asset)
 

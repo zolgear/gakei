@@ -76,6 +76,7 @@ ASSET_REFERENCES: dict[tuple[str, str], str] = {
     ("asset_embedding", "asset_id"): DELETE,
     ("asset_perceptual_hash", "asset_id"): DELETE,
     ("asset_focal_point", "asset_id"): DELETE,
+    ("asset_content_rating", "asset_id"): DELETE,
     ("share_asset", "asset_id"): DELETE,
     ("share", "root_asset_id"): DELETE_SHARE,
 }

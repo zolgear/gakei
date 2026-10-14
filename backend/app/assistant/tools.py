@@ -45,6 +45,7 @@ from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
 from app.domain import asset_search as asset_search_domain
 from app.domain import assistant_settings, derivatives
+from app.domain import content_rating as content_rating_domain
 from app.domain import focal_points as focal_points_domain
 from app.domain import prompt_sets as prompt_sets_domain
 from app.domain import run_create as run_create_domain
@@ -559,6 +560,8 @@ def load_visible_images(
                 raise ToolFailure(f"Asset {asset_id} not found.")
             db.expunge(asset)
             assets.append(asset)
+        # レーティング(ADR-0049)。AI に渡す画像はマスクしない代わりに、段階を情報として渡す。
+        ratings = content_rating_domain.bulk_levels(db, [a.id for a in assets])
     for asset in assets:
         try:
             image = render_asset_for_llm(ctx.state.store, asset)
@@ -573,6 +576,7 @@ def load_visible_images(
                 "kind": str(asset.kind),
                 "width": asset.width,
                 "height": asset.height,
+                "content_rating": ratings.get(asset.id),
             }
         )
     return briefs, images
@@ -704,6 +708,7 @@ async def show_assets(ctx: ToolContext, args: ShowAssetsArgs) -> ToolOutcome:
                 raise ToolFailure("Assets not found: " + ", ".join(missing))
             titles = annotations_domain.bulk_titles(db, ids)
             focal = focal_points_domain.bulk_get(db, ids)
+            ratings = content_rating_domain.bulk_levels(db, ids)
             assets = []
             for asset_id in ids:
                 entry = _asset_brief(found[asset_id])
@@ -711,6 +716,8 @@ async def show_assets(ctx: ToolContext, args: ShowAssetsArgs) -> ToolOutcome:
                 # サムネイルの焦点(ADR-0043)。画面が `object-position` に使う。
                 point = focal.get(asset_id)
                 entry["focal_point"] = point.model_dump(mode="json") if point else None
+                # レーティング(ADR-0049)。画面のカードがマスクに使う。
+                entry["content_rating"] = ratings.get(asset_id)
                 assets.append(entry)
         return {"shown": True, "title": args.title, "assets": assets}
 
