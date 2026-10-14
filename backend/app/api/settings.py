@@ -44,6 +44,7 @@ from app.domain import (
 )
 from app.domain import annotations as annotations_domain
 from app.domain import api_key as api_key_domain
+from app.domain import content_rating as content_rating_domain
 from app.domain import embeddings as embeddings_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.schemas import (
@@ -487,6 +488,10 @@ def _annotation_settings_response(
         calls_last_hour=annotator.calls_last_hour(),
         connection_calls=_connection_calls(config, annotator),
         usable_engines=annotations_domain.usable_engines(config, settings),  # type: ignore[arg-type]
+        content_rating_model_ready=content_rating_domain.model_ready(config, settings),
+        content_rating_usable=content_rating_domain.usable(config, settings),
+        content_rating_pending_count=content_rating_domain.pending_count(db),
+        content_rating_queued_count=content_rating_domain.queued_count(db),
     )
 
 
@@ -607,6 +612,28 @@ def backfill_annotations(
     if not annotations_domain.usable_engines(config, settings):
         raise HTTPException(status_code=409, detail=t("annotations.noEngine"))
     count = annotations_domain.backfill(db)
+    db.commit()
+    annotator.notify()
+    return AnnotationBackfillResponse(queued=count)
+
+
+@router.post(
+    "/annotation/content-rating/backfill",
+    response_model=AnnotationBackfillResponse,
+    operation_id="backfill_content_ratings",
+)
+def backfill_content_ratings(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    _user: CurrentUser = Depends(require_admin),
+) -> AnnotationBackfillResponse:
+    """未判定と、古い版の規則で自動判定した Asset(削除済み・マスクを除く)をまとめて
+    レーティングの判定の待ち行列に入れる(ADR-0049 3章)。判定が無効、またはモデルが無ければ 409。"""
+    config = annotation_settings.load(db)
+    if not content_rating_domain.usable(config, settings):
+        raise HTTPException(status_code=409, detail=t("contentRating.notUsable"))
+    count = content_rating_domain.backfill(db)
     db.commit()
     annotator.notify()
     return AnnotationBackfillResponse(queued=count)

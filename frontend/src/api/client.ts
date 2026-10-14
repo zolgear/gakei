@@ -128,6 +128,19 @@ export type OnnxModelStatus = components['schemas']['OnnxModelStatus']
 export type OnnxModelName = OnnxModelStatus['name']
 export type AnnotationEngine = NonNullable<AnnotationSettingsResponse['usable_engines']>[number]
 
+// -- レーティング(ADR-0049) ---------------------------------------------------
+
+/** 段階の識別子(`g`、`r`、`x`、`xx`、`xxx`)。未判定は null。 */
+export type ContentRatingLevel = NonNullable<AssetSummary['content_rating']>
+export type ContentRatingDetail = components['schemas']['ContentRatingDetail']
+export type ContentRatingSignal = components['schemas']['ContentRatingSignal']
+export type AssetContentRatingResponse = components['schemas']['AssetContentRatingResponse']
+
+// -- ユーザーごとの設定(ADR-0049 6章) -----------------------------------------
+
+export type UserPreferencesResponse = components['schemas']['UserPreferencesResponse']
+export type UserPreferencesUpdateRequest = components['schemas']['UserPreferencesUpdateRequest']
+
 // -- LLM の接続先(ADR-0032) ----------------------------------------------------
 export type LlmConnectionsResponse = components['schemas']['LlmConnectionsResponse']
 export type LlmConnectionView = components['schemas']['LlmConnectionView']
@@ -1266,6 +1279,50 @@ export function deleteOnnxModel(model: OnnxModelName): Promise<AnnotationSetting
 /** 推定を一度も実行していない画像(削除済みを除く)をまとめて待ち行列に入れる。 */
 export function backfillAnnotations(): Promise<AnnotationBackfillResponse> {
   return request('/api/settings/annotation/backfill', { method: 'POST' })
+}
+
+/**
+ * レーティングの判定を待ち行列に入れる(管理者。ADR-0049 3章)。未判定と、古い版の規則で自動判定した画像が
+ * 対象。判定が無効、またはモデルが無ければ 409。
+ */
+export function backfillContentRatings(): Promise<AnnotationBackfillResponse> {
+  return request('/api/settings/annotation/content-rating/backfill', { method: 'POST' })
+}
+
+// -- レーティング(ADR-0049) ---------------------------------------------------
+// マスクと削除済みの Asset は 409(detail に理由)。いずれも更新後の状態を返す。
+
+/** 人が段階を選ぶ(以後の再判定で変わらない)。`null` で自動の段階に戻す。 */
+export function updateAssetContentRating(
+  assetId: string,
+  level: ContentRatingLevel | null,
+): Promise<AssetContentRatingResponse> {
+  return request(`/api/assets/${assetId}/content-rating`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level }),
+  })
+}
+
+/** 再判定を待ち行列に入れる。判定が無効、またはモデルが無ければ 409。 */
+export function judgeAssetContentRating(assetId: string): Promise<AssetContentRatingResponse> {
+  return request(`/api/assets/${assetId}/content-rating/judge`, { method: 'POST' })
+}
+
+// -- ユーザーごとの設定(ADR-0049 6章) -----------------------------------------
+
+/** すべてのキーを返す(保存していないキーは既定値)。個人モードでも使える。 */
+export function getUserPreferences(): Promise<UserPreferencesResponse> {
+  return request('/api/users/me/preferences')
+}
+
+/** 書いたキーだけ変える。知らないキーと形の合わない値は 422。 */
+export function updateUserPreferences(body: UserPreferencesUpdateRequest): Promise<UserPreferencesResponse> {
+  return request('/api/users/me/preferences', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
 
 // -- LLM の接続先(ADR-0032) ----------------------------------------------------

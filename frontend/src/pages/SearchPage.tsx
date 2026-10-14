@@ -61,6 +61,8 @@ import {
 } from '../features/search/queryImage'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { fmt, useI18n } from '../i18n'
+import { AssetThumb } from '../features/content-rating/AssetThumb'
+import { thumbRating } from '../features/content-rating/contentRating'
 import styles from './SearchPage.module.css'
 import { focalStyle } from '../lib/focalPoint'
 
@@ -245,9 +247,11 @@ export function SearchPage() {
         {hits.map((hit) => (
           <button key={hit.id} type="button" className={styles.assetTile} onClick={() => navigate(`/assets/${hit.id}`)}>
             <div className={styles.thumbWrap}>
-              <img
+              <AssetThumb
+                assetId={hit.id}
+                rating={thumbRating(hit)}
+                badge
                 className={`${styles.assetThumb} checkerboard`}
-                src={assetUrl(hit.id, 'thumb')}
                 style={focalStyle(hit.focal_point)}
                 alt=""
                 draggable={false}
@@ -576,9 +580,11 @@ export function SearchPage() {
                 onClick={() => navigate(`/assets/${hit.id}`)}
               >
                 <div className={styles.thumbWrap}>
-                  <img
+                  <AssetThumb
+                    assetId={hit.id}
+                    rating={thumbRating(hit)}
+                    badge
                     className={`${styles.assetThumb} checkerboard`}
-                    src={assetUrl(hit.id, 'thumb')}
                     style={focalStyle(hit.focal_point)}
                     alt=""
                     draggable={false}

@@ -4,6 +4,10 @@
  * タグの日本語訳の表示(ADR-0041 3章・4章)。どれも「即時」の項目(ブラウザに保存し、その場で反映する)
  * なので、このページには保存のボタンを出さない。
  *
+ * 「レーティングのマスク」(ADR-0049 6章)だけはサーバーに、ユーザーごとに保存する(端末ごとに設定し直さなくて
+ * よいように)。ほかの項目と同じく、変えたらすぐに送る(`useUpdateUserPreferences`)。「ブラウザに保存した
+ * 設定を消す」の対象には含めない。
+ *
  * 末尾の「ブラウザに保存した設定」(2026-10-04)は、GAKEI がこのブラウザに置いたキー(`lib/browserStorage.ts`)
  * をまとめて消し、メモリ上の状態も戻すためにページを読み込み直す。即時の操作(確認ダイアログを経る)。
  */
@@ -26,9 +30,13 @@ import {
   useShowTagTranslationsPref,
   useTagCompletionMode,
 } from '../../tag-dictionary/tagCompletionPrefs'
+import { CONTENT_RATING_LEVELS, maskPrefsFrom, toggleMaskLevel } from '../../content-rating/contentRating'
+import { RatingBadge } from '../../content-rating/RatingBadge'
+import { useUpdateUserPreferences, useUserPreferencesQuery } from '../useUserPreferences'
 import { SettingsPageFrame } from '../SettingsPageFrame'
 import { SettingsRow, SettingsSection, SettingsSwitch } from '../SettingsParts'
 import styles from '../settings.module.css'
+import own from './DisplaySettingsPage.module.css'
 
 export function DisplaySettingsPage() {
   const { t, locale, setLocale } = useI18n()
@@ -127,6 +135,8 @@ export function DisplaySettingsPage() {
         </SettingsRow>
       </SettingsSection>
 
+      <ContentRatingMaskSection />
+
       <SettingsSection heading={b.heading}>
         <SettingsRow label={b.label} description={b.help}>
           <button type="button" className={styles.dangerButton} onClick={() => setConfirmClearOpen(true)}>
@@ -147,5 +157,51 @@ export function DisplaySettingsPage() {
         onCancel={() => setConfirmClearOpen(false)}
       />
     </SettingsPageFrame>
+  )
+}
+
+/** 「レーティングのマスク」(ADR-0049 5章・6章)。段階ごとのチェックボックスと「未判定もマスクする」。 */
+function ContentRatingMaskSection() {
+  const { t } = useI18n()
+  const c = t.settings.display.contentRatingMask
+  const query = useUserPreferencesQuery()
+  const update = useUpdateUserPreferences()
+  const prefs = maskPrefsFrom(query.data)
+  // 読み込むまでは、既定の値で操作させない(保存済みの値を既定で上書きしないように)。
+  const disabled = !query.data
+
+  return (
+    <SettingsSection heading={c.heading}>
+      <p className={styles.helpText}>{c.help}</p>
+      {query.isError && <p className={styles.errorText}>{c.loadFailed}</p>}
+      <SettingsRow label={c.levelsLabel}>
+        <div className={own.levelChecks} role="group" aria-label={c.levelsLabel}>
+          {CONTENT_RATING_LEVELS.map((level) => (
+            <label key={level} className={styles.checkboxRow}>
+              <input
+                type="checkbox"
+                checked={prefs.maskLevels.includes(level)}
+                disabled={disabled}
+                onChange={(e) =>
+                  update.mutate({
+                    'content_rating.mask_levels': toggleMaskLevel(prefs.maskLevels, level, e.target.checked),
+                  })
+                }
+              />
+              <RatingBadge level={level} />
+            </label>
+          ))}
+        </div>
+      </SettingsRow>
+      <SettingsRow label={c.unratedLabel} htmlFor="gakei-content-rating-mask-unrated">
+        <SettingsSwitch
+          id="gakei-content-rating-mask-unrated"
+          checked={prefs.maskUnrated}
+          disabled={disabled}
+          onChange={(checked) => update.mutate({ 'content_rating.mask_unrated': checked })}
+        />
+      </SettingsRow>
+      {update.isError && <p className={styles.errorText}>{c.saveFailed}</p>}
+    </SettingsSection>
   )
 }

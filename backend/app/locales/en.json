@@ -529,6 +529,9 @@
       "notFound": "Avatar not found",
       "invalidCrop": "The crop rectangle is malformed",
       "cropOutOfBounds": "The crop rectangle is outside the image"
+    },
+    "preferences": {
+      "invalidValue": "The value of setting {key} is invalid."
     }
   },
   "apiTokens": {
@@ -557,6 +560,11 @@
     "onnxModelMissing": "The ONNX tagger model was not found. Download it from Admin settings",
     "onnxInsufficientMemory": "The ONNX tagger model {model} was not loaded because there is not enough free memory (needs about {needed} GB, about {available} GB free). Choose a smaller model in Admin settings or add memory",
     "connectionMissing": "The connection used for annotation was not found. Choose the connections again in Admin settings > Auto titles and tags"
+  },
+  "contentRating": {
+    "notUsable": "Content rating is not available. Turn on \"Judge content rating\" under \"Auto titles and tags\" in the admin settings and download the WD Tagger model.",
+    "maskNotSupported": "Masks cannot have a content rating.",
+    "assetDeleted": "The content rating of a deleted image cannot be changed."
   },
   "uploads": {
     "notFound": "This upload URL does not exist.",

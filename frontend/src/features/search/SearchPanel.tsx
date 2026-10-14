@@ -36,7 +36,6 @@ import {
   saveSearchPanelTarget,
   setPendingQueryImage,
 } from './queryImage'
-import { assetUrl } from '../../api/assetUrl'
 import { nodeTargetPath } from '../lineage/nodeTargetPath'
 import { RunListRow } from '../history/RunListRow'
 import { HighlightedText } from './HighlightedText'
@@ -52,6 +51,8 @@ import {
 import { promptRunCards } from './promptSearchResults'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { fmt, useI18n } from '../../i18n'
+import { AssetThumb } from '../content-rating/AssetThumb'
+import { thumbRating } from '../content-rating/contentRating'
 import styles from './SearchPanel.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -306,9 +307,11 @@ export function SearchPanel() {
                     onClick={() => navigate(nodeTargetPath({ id: hit.id, type: 'asset' }, location.pathname))}
                   >
                     <div className={styles.thumbWrap}>
-                      <img
+                      <AssetThumb
+                        assetId={hit.id}
+                        rating={thumbRating(hit)}
+                        badge
                         className={`${styles.assetThumb} checkerboard`}
-                        src={assetUrl(hit.id, 'thumb')}
                         style={focalStyle(hit.focal_point)}
                         alt=""
                         draggable={false}
@@ -385,9 +388,11 @@ export function SearchPanel() {
                     }
                   >
                     <div className={styles.thumbWrap}>
-                      <img
+                      <AssetThumb
+                        assetId={hit.id}
+                        rating={thumbRating(hit)}
+                        badge
                         className={`${styles.assetThumb} checkerboard`}
-                        src={assetUrl(hit.id, 'thumb')}
                         style={focalStyle(hit.focal_point)}
                         alt=""
                         draggable={false}

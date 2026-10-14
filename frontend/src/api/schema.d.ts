@@ -686,6 +686,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/content-rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Asset Content Rating
+         * @description 人が段階を選ぶ(以後の再判定で変わらない)。`level: null` で自動の段階に戻す
+         *     (ADR-0049 2章)。
+         */
+        put: operations["update_asset_content_rating"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/content-rating/judge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Judge Asset Content Rating
+         * @description この Asset のレーティングの(再)判定を待ち行列に入れる。人が選んだ段階は保つ。
+         *     判定が無効、またはモデルが無ければ 409。既に待ち行列にあれば何もしない。
+         */
+        post: operations["judge_asset_content_rating"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/embedding": {
         parameters: {
             query?: never;
@@ -1570,6 +1612,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/annotation/content-rating/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backfill Content Ratings
+         * @description 未判定と、古い版の規則で自動判定した Asset(削除済み・マスクを除く)をまとめて
+         *     レーティングの判定の待ち行列に入れる(ADR-0049 3章)。判定が無効、またはモデルが無ければ 409。
+         */
+        post: operations["backfill_content_ratings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/embeddings": {
         parameters: {
             query?: never;
@@ -1905,6 +1968,30 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get User Preferences
+         * @description 本人の設定。保存していないキーは既定値で返す。
+         */
+        get: operations["get_user_preferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update User Preferences
+         * @description 書いたキーだけ変える。知らないキーと形の合わない値は 422(`null` も 422)。
+         */
+        patch: operations["update_user_preferences"];
         trace?: never;
     };
     "/api/users/me/api-tokens": {
@@ -2293,6 +2380,31 @@ export interface components {
             connection_calls?: components["schemas"]["AnnotationConnectionCalls"][];
             /** Usable Engines */
             usable_engines?: ("llm" | "vlm" | "onnx")[];
+            /**
+             * Content Rating Enabled
+             * @default false
+             */
+            content_rating_enabled: boolean;
+            /**
+             * Content Rating Model Ready
+             * @default false
+             */
+            content_rating_model_ready: boolean;
+            /**
+             * Content Rating Usable
+             * @default false
+             */
+            content_rating_usable: boolean;
+            /**
+             * Content Rating Pending Count
+             * @default 0
+             */
+            content_rating_pending_count: number;
+            /**
+             * Content Rating Queued Count
+             * @default 0
+             */
+            content_rating_queued_count: number;
         };
         /**
          * AnnotationSettingsUpdateRequest
@@ -2318,6 +2430,8 @@ export interface components {
             onnx_model?: string | null;
             /** Onnx Threshold */
             onnx_threshold?: number | null;
+            /** Content Rating Enabled */
+            content_rating_enabled?: boolean | null;
             profiles?: components["schemas"]["AnnotationProfilesUpdate"] | null;
         };
         /**
@@ -2446,6 +2560,29 @@ export interface components {
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
         };
+        /**
+         * AssetContentRatingResponse
+         * @description レーティングの変更と再判定の応答(更新後の状態)。
+         */
+        AssetContentRatingResponse: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
+        };
+        /**
+         * AssetContentRatingUpdateRequest
+         * @description `PUT /api/assets/{id}/content-rating`。`level` に段階を入れると人が選んだ段階になり、
+         *     以後の再判定で変わらない。`null` で自動の段階に戻す(ADR-0049 2章)。
+         */
+        AssetContentRatingUpdateRequest: {
+            /** Level */
+            level: ("g" | "r" | "x" | "xx" | "xxx") | null;
+        };
         /** AssetDetail */
         AssetDetail: {
             /**
@@ -2474,6 +2611,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -2502,6 +2641,7 @@ export interface components {
             /** Tags */
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
+            content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
         };
         /**
          * AssetEmbeddingStatus
@@ -2681,6 +2821,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /**
          * AssetTagAddRequest
@@ -2742,6 +2884,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -2770,6 +2914,7 @@ export interface components {
             /** Tags */
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
+            content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -3669,6 +3814,56 @@ export interface components {
             depends_on_values: string[];
         };
         /**
+         * ContentRatingDetail
+         * @description レーティングの詳細(ADR-0049 2章・4章)。`AssetDetail.content_rating_detail`。
+         */
+        ContentRatingDetail: {
+            /** Level */
+            level?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /** Source */
+            source?: ("auto" | "user") | null;
+            /** Auto Level */
+            auto_level?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /** Status */
+            status?: ("queued" | "running" | "succeeded" | "failed") | null;
+            /** Error */
+            error?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Rules Version */
+            rules_version?: number | null;
+            /** Scores */
+            scores?: {
+                [key: string]: number;
+            } | null;
+            /** Signals */
+            signals?: components["schemas"]["ContentRatingSignal"][];
+            /** Requested At */
+            requested_at?: string | null;
+            /** Judged At */
+            judged_at?: string | null;
+        };
+        /**
+         * ContentRatingSignal
+         * @description 判定の根拠の1つ(ADR-0049 2章)。引き上げの表に載っているタグのうち確率 0.2 以上のもの。
+         */
+        ContentRatingSignal: {
+            /** Tag */
+            tag: string;
+            /** Score */
+            score: number;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "g" | "r" | "x" | "xx" | "xxx";
+            /**
+             * Raised
+             * @default false
+             */
+            raised: boolean;
+        };
+        /**
          * CreatedBy
          * @description 実行者・アップロード者(ADR-0019)。`none` モードでは付かない(`created_by: null`)。
          */
@@ -3729,6 +3924,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Max Score */
             max_score: number;
             /** Hash Missing */
@@ -4233,6 +4430,8 @@ export interface components {
              */
             restorable: boolean;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /**
          * LineageEdge
@@ -5473,6 +5672,8 @@ export interface components {
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
             primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Primary Parent Content Rating */
+            primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
              * Input Count
              * @default 0
@@ -5594,6 +5795,8 @@ export interface components {
             /** Position */
             position: number;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /** RunListResponse */
         RunListResponse: {
@@ -5614,6 +5817,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /**
          * RunPromptTemplate
@@ -5681,6 +5886,8 @@ export interface components {
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
             primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Primary Parent Content Rating */
+            primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
              * Input Count
              * @default 0
@@ -5943,6 +6150,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Produced By Run Id */
             produced_by_run_id: string | null;
             /**
@@ -6043,6 +6252,8 @@ export interface components {
             /** Primary Parent Asset Id */
             primary_parent_asset_id?: string | null;
             primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Primary Parent Content Rating */
+            primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
              * Input Count
              * @default 0
@@ -6115,6 +6326,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /** Score */
             score: number;
         };
@@ -6540,6 +6753,31 @@ export interface components {
             url: string;
             /** Viewer Url */
             viewer_url: string;
+        };
+        /**
+         * UserPreferencesResponse
+         * @description `GET`/`PATCH /api/users/me/preferences`。すべてのキーを、保存していなければ既定値で返す。
+         *     キーは `content_rating.mask_levels` のように `.` を含む。
+         */
+        UserPreferencesResponse: {
+            /** Content Rating.Mask Levels */
+            "content_rating.mask_levels"?: ("g" | "r" | "x" | "xx" | "xxx")[];
+            /**
+             * Content Rating.Mask Unrated
+             * @default false
+             */
+            "content_rating.mask_unrated": boolean;
+        };
+        /**
+         * UserPreferencesUpdateRequest
+         * @description `PATCH /api/users/me/preferences`。書いたキーだけ変える。知らないキー、形の合わない値、
+         *     `null` は 422。
+         */
+        UserPreferencesUpdateRequest: {
+            /** Content Rating.Mask Levels */
+            "content_rating.mask_levels"?: ("g" | "r" | "x" | "xx" | "xxx")[] | null;
+            /** Content Rating.Mask Unrated */
+            "content_rating.mask_unrated"?: boolean | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -7942,6 +8180,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetAnnotationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_asset_content_rating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetContentRatingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetContentRatingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    judge_asset_content_rating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetContentRatingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10394,6 +10702,37 @@ export interface operations {
             };
         };
     };
+    backfill_content_ratings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationBackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_embedding_settings: {
         parameters: {
             query?: never;
@@ -11283,6 +11622,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferencesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPreferencesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferencesResponse"];
                 };
             };
             /** @description Validation Error */

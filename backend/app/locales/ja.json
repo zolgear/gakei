@@ -529,6 +529,9 @@
       "notFound": "アバターが見つかりません",
       "invalidCrop": "切り出す範囲の指定が壊れています",
       "cropOutOfBounds": "切り出す範囲が画像の外にはみ出しています"
+    },
+    "preferences": {
+      "invalidValue": "設定 {key} の値が正しくありません"
     }
   },
   "apiTokens": {
@@ -557,6 +560,11 @@
     "onnxModelMissing": "ONNX タガーのモデルが見つかりません。管理者設定からダウンロードしてください",
     "onnxInsufficientMemory": "空きメモリが足りないため、ONNX タガーのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)。管理者設定で小さいモデルを選ぶか、メモリを増やしてください",
     "connectionMissing": "推定に使う接続先が見つかりません。管理者設定の「自動タイトル・タグ」で使い方の接続先を選び直してください"
+  },
+  "contentRating": {
+    "notUsable": "レーティングの判定が使えません。管理者設定の「自動タイトル・タグ」で「レーティングを判定する」をオンにし、WD Tagger のモデルをダウンロードしてください",
+    "maskNotSupported": "マスクにはレーティングを付けられません",
+    "assetDeleted": "削除された画像のレーティングは変えられません"
   },
   "uploads": {
     "notFound": "このアップロード URL は存在しません。",

@@ -28,7 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain import focal_points
+from app.domain import content_rating, focal_points
 from app.domain.assets import asset_is_used_as_input, is_restorable
 from app.domain.embedded_meta import get_instance_id, normalize_lineage_meta
 from app.domain.lineage_mermaid import LineageGraph
@@ -91,19 +91,24 @@ def _asset_node(db: Session, asset: Asset, depth: int) -> LineageNode:
 
 
 def _attach_focal_points(db: Session, nodes: list[LineageNode]) -> list[LineageNode]:
-    """asset ノードにサムネイルの焦点(ADR-0043)を付ける。1回の問い合わせでまとめて引く。
-    埋め込みノードは、手元の Asset に対応付いたとき(`resolved_asset_id`)だけ。"""
+    """asset ノードにサムネイルの焦点(ADR-0043)とレーティング(ADR-0049)を付ける。それぞれ
+    1回の問い合わせでまとめて引く。埋め込みノードは、手元の Asset に対応付いたとき
+    (`resolved_asset_id`)だけ。"""
 
     def thumb_id(node: LineageNode) -> uuid.UUID | None:
         if node.type != "asset" or node.asset is None:
             return None
         return node.resolved_asset_id if node.embedded else node.id
 
-    focals = focal_points.bulk_get(db, [i for n in nodes if (i := thumb_id(n)) is not None])
+    ids = [i for n in nodes if (i := thumb_id(n)) is not None]
+    focals = focal_points.bulk_get(db, ids)
+    # レーティング(ADR-0049)も同じ対象にまとめて付ける。
+    ratings = content_rating.bulk_levels(db, ids)
     for node in nodes:
         asset_id = thumb_id(node)
         if asset_id is not None and node.asset is not None:
             node.asset.focal_point = focals.get(asset_id)
+            node.asset.content_rating = ratings.get(asset_id)  # type: ignore[assignment]
     return nodes
 
 

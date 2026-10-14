@@ -10,7 +10,6 @@ import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { getRun, type AssistantMessageResponse } from '../../api/client'
-import { assetUrl } from '../../api/assetUrl'
 import { fmt, useI18n } from '../../i18n'
 import { focalStyle } from '../../lib/focalPoint'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
@@ -18,6 +17,7 @@ import { progressPercent } from '../run-status/runProgress'
 import { useRunEvents } from '../run-status/useRunEvents'
 import { buildStudioPath } from '../workspace/assetQueryParam'
 import { effectiveRunStatus, isTerminalRunStatus, shouldWatchRunEvents } from './runCardState'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './AssistantPanel.module.css'
 
 const POLL_MS = 3000
@@ -117,9 +117,11 @@ function RunCard({ runId }: { runId: string }) {
           title={r.showOutput}
           onClick={() => navigate(buildStudioPath(output.asset_id))}
         >
-          <img
+          <AssetThumb
+            assetId={output.asset_id}
+            rating={output.content_rating}
+            badge
             className={`${styles.thumb} checkerboard`}
-            src={assetUrl(output.asset_id, 'thumb')}
             style={focalStyle(output.focal_point)}
             alt=""
             draggable

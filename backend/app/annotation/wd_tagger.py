@@ -11,6 +11,9 @@
 9(rating)は付けない。しきい値以上を確信度の高い順に最大20個、`_` を空白にして返す。
 モデルの出力はシグモイド適用済みの確率。
 
+同じ推論の出力から、レーティング(ADR-0049 1章)に使う rating の4つの確率と、引き上げの
+タグの確率(タグのしきい値で捨てる前の値)も取り出す(`analyze`。推論を2回しない)。
+
 セッションは初回の推論で読み込み、`IDLE_RELEASE_SECONDS` 使わなければ解放する
 (`release_if_idle` を worker が定期的に呼ぶ)。読み込み(`InferenceSession` の生成)も推論も
 `tag()` の中で行い、呼び出し側が `asyncio.to_thread` で別スレッドに逃がす(イベントループを
@@ -38,7 +41,7 @@ from __future__ import annotations
 import csv
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -128,6 +131,41 @@ def postprocess(
     return picked[:max_tags]
 
 
+@dataclass(frozen=True)
+class WdResult:
+    """1回の推論の結果。`tags` は `postprocess` の結果、`ratings` は rating(category 9)の
+    ラベルごとの確率、`probes` は求められたタグ(WD の表記)の確率(しきい値で捨てる前)。"""
+
+    tags: list[tuple[str, float]]
+    ratings: dict[str, float]
+    probes: dict[str, float]
+
+
+def extract_ratings(probs: np.ndarray, labels: list[Label]) -> dict[str, float]:
+    """rating(category 9)のラベルごとの確率。"""
+    values = np.asarray(probs, dtype=np.float32).reshape(-1)
+    return {
+        label.name: float(values[index])
+        for index, label in enumerate(labels)
+        if index < values.shape[0] and label.category == CATEGORY_RATING
+    }
+
+
+def extract_probes(
+    probs: np.ndarray, labels: list[Label], names: Iterable[str]
+) -> dict[str, float]:
+    """名前(WD の表記)で求めたタグの確率。しきい値は掛けない。ラベルに無い名前は含めない。"""
+    wanted = set(names)
+    if not wanted:
+        return {}
+    values = np.asarray(probs, dtype=np.float32).reshape(-1)
+    return {
+        label.name: float(values[index])
+        for index, label in enumerate(labels)
+        if index < values.shape[0] and label.name in wanted
+    }
+
+
 def _input_size(session: Any) -> int:
     """ONNX の入力の形(N, H, W, C)から H を読む。読めなければ 448。"""
     try:
@@ -202,13 +240,28 @@ class WdTagger:
         self._size = _input_size(session)
 
     def tag(self, image: Image.Image, model_name: str, threshold: float) -> list[tuple[str, float]]:
+        return self.analyze(image, model_name, threshold).tags
+
+    def analyze(
+        self,
+        image: Image.Image,
+        model_name: str,
+        threshold: float,
+        probe_tags: Iterable[str] = (),
+    ) -> WdResult:
+        """1回の推論で、タグと rating の確率と `probe_tags` の確率を返す。"""
         with self._lock, self._residency.use(self.RESIDENCY_OWNER):
             self._ensure_loaded(model_name)
             batch = preprocess(image, self._size)
             input_name = self._session.get_inputs()[0].name
             outputs = self._session.run(None, {input_name: batch})
             self._last_used = time.monotonic()
-            return postprocess(outputs[0][0], self._labels, threshold)
+            probs = outputs[0][0]
+            return WdResult(
+                tags=postprocess(probs, self._labels, threshold),
+                ratings=extract_ratings(probs, self._labels),
+                probes=extract_probes(probs, self._labels, probe_tags),
+            )
 
     def release_if_idle(self, idle_seconds: float = IDLE_RELEASE_SECONDS) -> bool:
         with self._lock:

@@ -14,6 +14,7 @@ import { fmt, useI18n } from '../../i18n'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import type { InputImagesProps } from './InputChipsRow'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputImageTiles.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -116,9 +117,11 @@ export function InputImageTiles({
                 title={c.showInPreview}
                 onClick={() => onPreviewAsset(item.assetId)}
               >
-                <img
+                <AssetThumb
+                  assetId={item.assetId}
+                  // 詳細を取得するまでは段階が分からない(undefined)のでマスクしない。
+                  rating={detail ? (detail.content_rating ?? null) : undefined}
                   className={styles.thumb}
-                  src={assetUrl(item.assetId, 'thumb')}
                   style={focalStyle(detail?.focal_point)}
                   alt=""
                   draggable={false}

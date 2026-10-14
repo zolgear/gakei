@@ -325,7 +325,7 @@
       "help": "自分の生成画像やアップロードした画像をアバターに使えます(PNG/JPEG/WebP、20MB以下)。切り出す範囲を選べます。"
     },
     "display": {
-      "intro": "このページの項目は、変えるとすぐに反映されます。このブラウザにだけ保存されます。",
+      "intro": "このページの項目は、変えるとすぐに反映されます。「レーティングのマスク」のほかは、このブラウザにだけ保存されます。",
       "faviconProgress": {
         "label": "タブのアイコンで進捗を示す",
         "help": "生成の待機中・実行中に、ブラウザのタブのアイコンで状態を示します。オフにしてもアプリ内のロゴの動きは変わりません。"
@@ -350,6 +350,14 @@
       "tagTranslations": {
         "label": "タグの日本語訳を表示",
         "help": "タグ辞書に訳があれば、タグの候補とチップに小さく添えます。画面の言語が日本語のときだけ出ます。"
+      },
+      "contentRatingMask": {
+        "heading": "レーティングのマスク",
+        "help": "選んだ段階の画像を、一覧とビューアでぼかして表示します。クリックすると、その画像だけ表示します。見え方だけの設定で、画像へのアクセスは制限しません。",
+        "levelsLabel": "マスクする段階",
+        "unratedLabel": "未判定もマスクする",
+        "loadFailed": "設定を読み込めませんでした",
+        "saveFailed": "設定を保存できませんでした"
       },
       "browserStorage": {
         "heading": "ブラウザに保存した設定",
@@ -665,6 +673,36 @@
             "other": "推定をまだ実行していない {count} 枚の画像を、推定の待ち行列に入れます。"
           },
           "warning": "LLM・VLM を OpenAI で使う場合は、枚数に応じて課金されます。",
+          "confirmLabel": "待ち行列に入れる"
+        },
+        "queuedToast": {
+          "one": "{count} 件を待ち行列に入れました",
+          "other": "{count} 件を待ち行列に入れました"
+        }
+      },
+      "contentRating": {
+        "heading": "レーティング",
+        "notice": "ONNX タガーで選んだ WD Tagger のモデルで、画像の性表現の強さを5段階(グリーン、R、X、XX、XXX)で判定します。画像は外部に送りません。ONNX タガーでタグを付けるかとは別にオンにできます。",
+        "enabledLabel": "レーティングを判定する",
+        "enabledHelp": "オンの間は、生成・アップロード・スケッチの画像を取り込むたびに判定します。",
+        "modelNotReady": "ONNX タガーで選んだモデルをダウンロードするまで使えません。",
+        "pendingLabel": "判定していない画像(古い規則で判定したものを含む)",
+        "pendingValue": {
+          "one": "{count} 枚",
+          "other": "{count} 枚"
+        },
+        "queuedLabel": "待ち行列",
+        "queuedValue": {
+          "one": "{count} 件",
+          "other": "{count} 件"
+        },
+        "run": "まとめて判定する",
+        "notUsable": "判定を有効にして保存し、モデルをダウンロードすると実行できます。",
+        "confirm": {
+          "message": {
+            "one": "判定していない(または古い規則で判定した){count} 枚の画像を、レーティングの判定の待ち行列に入れます。",
+            "other": "判定していない(または古い規則で判定した){count} 枚の画像を、レーティングの判定の待ち行列に入れます。"
+          },
           "confirmLabel": "待ち行列に入れる"
         },
         "queuedToast": {
@@ -2915,6 +2953,53 @@
       "list_tags": "タグを読む",
       "show_assets": "画像を示す",
       "update_form": "フォームを変更"
+    }
+  },
+  "contentRating": {
+    "label": "レーティング",
+    "levels": {
+      "g": "グリーン",
+      "r": "R",
+      "x": "X",
+      "xx": "XX",
+      "xxx": "XXX"
+    },
+    "shortLevels": {
+      "g": "G",
+      "r": "R",
+      "x": "X",
+      "xx": "XX",
+      "xxx": "XXX"
+    },
+    "unrated": "未判定",
+    "revealHint": "クリックで表示",
+    "reveal": "表示する",
+    "section": {
+      "heading": "レーティング",
+      "sourceAuto": "自動",
+      "sourceUser": "人が選択",
+      "noLevel": "まだ判定していません",
+      "levelSelectLabel": "段階を選ぶ",
+      "revertToAuto": "自動に戻す",
+      "judge": "判定する",
+      "rejudge": "再判定",
+      "rejudgeTooltip": "レーティングを判定し直します。人が選んだ段階はそのまま保ちます。",
+      "statusQueued": "判定の順番を待っています…",
+      "statusRunning": "レーティングを判定しています…",
+      "statusFailed": "判定に失敗しました: {error}",
+      "statusFailedNoReason": "判定に失敗しました",
+      "showDetails": "詳しく見る",
+      "hideDetails": "詳細を閉じる",
+      "scoresLabel": "rating の確率",
+      "signalsLabel": "引き上げのタグ",
+      "signalsNone": "ありません",
+      "raised": "段階を上げた",
+      "modelLabel": "モデル",
+      "rulesVersionLabel": "規則の版",
+      "judgedAtLabel": "判定の時刻",
+      "autoLevelLabel": "自動の段階",
+      "saveFailed": "保存に失敗しました",
+      "judgeFailed": "判定を始められませんでした"
     }
   }
 }

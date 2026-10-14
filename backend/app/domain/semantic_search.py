@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
 from app.domain import (
+    content_rating,
     derivatives,
     embedding_settings,
     focal_points,
@@ -56,6 +57,7 @@ from app.domain.run_views import (
     bulk_descendant_run_counts,
     bulk_input_summary,
     bulk_output_refs,
+    bulk_parent_content_ratings,
     bulk_parent_focal_points,
     bulk_users,
     run_summary_fields,
@@ -266,6 +268,7 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
     assets = {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_(ids))).scalars()}
     titles = annotations_domain.bulk_titles(db, ids)
     focals = focal_points.bulk_get(db, ids)
+    ratings = content_rating.bulk_levels(db, ids)
     result: list[SemanticAssetHit] = []
     for hit in hits:
         asset = assets.get(hit.asset_id)
@@ -282,6 +285,7 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
                 created_at=asset.created_at,
                 title=titles.get(asset.id),
                 focal_point=focals.get(asset.id),
+                content_rating=ratings.get(asset.id),  # type: ignore[arg-type]
                 score=round(hit.score, 6),
             )
         )
@@ -321,9 +325,11 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> l
     users_map = bulk_users(db, [r.created_by_user_id for r in runs.values()])
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in runs.values()], viewer)
     parent_focals = bulk_parent_focal_points(db, inputs_map)
+    parent_ratings = bulk_parent_content_ratings(db, inputs_map)
     output_ids = [a.id for a in outputs.values()]
     titles = annotations_domain.bulk_titles(db, output_ids)
     focals = focal_points.bulk_get(db, output_ids)
+    ratings = content_rating.bulk_levels(db, output_ids)
     result: list[SemanticRunHit] = []
     for hit in hits:
         run = runs.get(hit.run_id)
@@ -350,6 +356,7 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> l
                         created_at=asset.created_at,
                         title=titles.get(asset.id),
                         focal_point=focals.get(asset.id),
+                        content_rating=ratings.get(asset.id),  # type: ignore[arg-type]
                     )
                     if asset is not None
                     else None
@@ -364,6 +371,7 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> l
                         users_map.get(run.created_by_user_id),
                         groups_map.get(run.asset_group_id),
                         primary_parent_focal_point=parent_focals.get(inputs_map[run.id][1]),
+                        primary_parent_content_rating=parent_ratings.get(inputs_map[run.id][1]),
                     )
                 ),
             )
@@ -666,6 +674,7 @@ def find_duplicates(
     )
     titles = annotations_domain.bulk_titles(db, member_ids)
     focals = focal_points.bulk_get(db, member_ids)
+    ratings = content_rating.bulk_levels(db, member_ids)
     groups: list[DuplicateGroup] = []
     for leader, members in raw_groups:
         # 代表は、メンバーとの類似度の最大値。メンバーは代表との類似度。
@@ -686,6 +695,7 @@ def find_duplicates(
                     created_at=asset.created_at,
                     title=titles.get(asset.id),
                     focal_point=focals.get(asset.id),
+                    content_rating=ratings.get(asset.id),  # type: ignore[arg-type]
                     max_score=round(score, 6),
                     hash_missing=by_position[x] is None,
                 )

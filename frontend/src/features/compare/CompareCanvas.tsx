@@ -34,7 +34,12 @@ import {
   type ContainRect,
 } from './compareSync'
 import type { CompareMode } from './compareState'
+import type { ContentRatingLevel } from '../../api/client'
+import { useAssetMasked } from '../content-rating/useAssetMasked'
+import { RatingBadge } from '../content-rating/RatingBadge'
+import { revealAsset } from '../content-rating/revealStore'
 import styles from './CompareCanvas.module.css'
+import ratingStyles from '../content-rating/ContentRating.module.css'
 
 // ADR-0004 / backend/app/domain/derivatives.py の PREVIEW_LONG_EDGE と合わせる(AssetCanvas と同じ値)。
 const PREVIEW_LONG_EDGE = 2048
@@ -59,6 +64,12 @@ interface CompareCanvasProps {
    * 寸法の枠にし、解像度の違う2枚を同じ大きさに揃えて重ねる(重複の候補。`computeSharedFrameSize`)。
    */
   frameBasis?: 'after' | 'larger'
+  /**
+   * レーティング(ADR-0049 5章)。ユーザー設定でマスクする段階なら、その画像をぼかし、全体に
+   * 「表示する」のボタンを重ねる。省く(undefined)とマスクしない(共有のページ)。
+   */
+  beforeRating?: ContentRatingLevel | null
+  afterRating?: ContentRatingLevel | null
 }
 
 function nextVariant(current: Variant, effectiveScale: number, image: CanvasImage, allowOriginal: boolean): Variant {
@@ -75,6 +86,7 @@ function FrameImage({
   rect,
   label,
   urlFor,
+  masked = false,
 }: {
   asset: CanvasImage
   variant: Variant
@@ -82,7 +94,15 @@ function FrameImage({
   rect: ContainRect
   label: string
   urlFor: (assetId: string, variant: Variant) => string
+  /** レーティングでマスクする(ADR-0049 5章)。ぼかしの強さは枠の中の画像の大きさに比べて決める。 */
+  masked?: boolean
 }) {
+  const maskStyle = masked
+    ? {
+        filter: `blur(${Math.max(16, Math.round(Math.max(rect.width, rect.height) / 30))}px)`,
+        clipPath: 'inset(0)',
+      }
+    : null
   return (
     <div style={{ position: 'relative', width: frame.width, height: frame.height }}>
       <img
@@ -90,7 +110,15 @@ function FrameImage({
         alt={label}
         draggable={false}
         // object-fit は寸法の記録と実際の画素の縦横比がずれたときの保険(合っていれば何もしない)。
-        style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height, objectFit: 'contain' }}
+        style={{
+          position: 'absolute',
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          objectFit: 'contain',
+          ...maskStyle,
+        }}
       />
     </div>
   )
@@ -236,8 +264,32 @@ export function CompareCanvas({
   beforeLabel,
   afterLabel,
   frameBasis = 'after',
+  beforeRating,
+  afterRating,
 }: CompareCanvasProps) {
   const { t } = useI18n()
+  const beforeMasked = useAssetMasked(before.id, beforeRating)
+  const afterMasked = useAssetMasked(after.id, afterRating)
+  // マスクは2枚の上にまとめて重ね、「表示する」でマスクしている画像をすべて外す。
+  const maskOverlay =
+    beforeMasked || afterMasked ? (
+      <div className={ratingStyles.canvasMask}>
+        <span className={styles.maskBadges}>
+          {beforeMasked && <MaskLevelBadge level={beforeRating} />}
+          {afterMasked && before.id !== after.id && <MaskLevelBadge level={afterRating} />}
+        </span>
+        <button
+          type="button"
+          className={ratingStyles.revealButton}
+          onClick={() => {
+            if (beforeMasked) revealAsset(before.id)
+            if (afterMasked) revealAsset(after.id)
+          }}
+        >
+          {t.contentRating.reveal}
+        </button>
+      </div>
+    ) : null
   const labelBefore = beforeLabel ?? t.compare.before
   const labelAfter = afterLabel ?? t.compare.after
   const pairKey = `${before.id}:${after.id}`
@@ -364,7 +416,7 @@ export function CompareCanvas({
                   wrapperStyle={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
                   contentClass={styles.layerContent}
                 >
-                  <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={labelBefore} urlFor={urlFor} />
+                  <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={labelBefore} urlFor={urlFor} masked={beforeMasked} />
                 </TransformComponent>
               </TransformWrapper>
 
@@ -401,7 +453,7 @@ export function CompareCanvas({
                   }}
                   contentClass={styles.layerContent}
                 >
-                  <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={labelAfter} urlFor={urlFor} />
+                  <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={labelAfter} urlFor={urlFor} masked={afterMasked} />
                 </TransformComponent>
               </TransformWrapper>
 
@@ -415,6 +467,7 @@ export function CompareCanvas({
             </>
           )}
         </div>
+        {maskOverlay}
       </div>
     )
   }
@@ -447,7 +500,7 @@ export function CompareCanvas({
                 wrapperStyle={{ width: '100%', height: '100%' }}
                 contentClass={styles.layerContent}
               >
-                <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={labelBefore} urlFor={urlFor} />
+                <FrameImage asset={before} variant={variantState.before} frame={frame} rect={beforeRect} label={labelBefore} urlFor={urlFor} masked={beforeMasked} />
               </TransformComponent>
             </TransformWrapper>
           )}
@@ -473,12 +526,24 @@ export function CompareCanvas({
                 wrapperStyle={{ width: '100%', height: '100%' }}
                 contentClass={styles.layerContent}
               >
-                <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={labelAfter} urlFor={urlFor} />
+                <FrameImage asset={after} variant={variantState.after} frame={frame} rect={afterRect} label={labelAfter} urlFor={urlFor} masked={afterMasked} />
               </TransformComponent>
             </TransformWrapper>
           )}
         </div>
       </div>
+      {maskOverlay}
     </div>
+  )
+}
+
+/** マスクの上に出す段階(未判定は「未判定」)。 */
+function MaskLevelBadge({ level }: { level: ContentRatingLevel | null | undefined }) {
+  const { t } = useI18n()
+  if (level) return <RatingBadge level={level} size="mask" />
+  return (
+    <span className={ratingStyles.badge} data-size="mask" data-level="unrated">
+      {t.contentRating.unrated}
+    </span>
   )
 }

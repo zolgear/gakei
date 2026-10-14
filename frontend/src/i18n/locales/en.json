@@ -325,7 +325,7 @@
       "help": "You can use your own generated or uploaded images as your avatar (PNG/JPEG/WebP, up to 20MB). You can choose the area to crop."
     },
     "display": {
-      "intro": "Changes on this page take effect immediately. They are stored only in this browser.",
+      "intro": "Changes on this page take effect immediately. Except for the rating mask, they are stored only in this browser.",
       "faviconProgress": {
         "label": "Show progress in the tab icon",
         "help": "Shows the run status in the browser tab icon while a run is queued or running. Turning this off does not change the animated logo in the app bar."
@@ -350,6 +350,14 @@
       "tagTranslations": {
         "label": "Show Japanese translations of tags",
         "help": "Shows the translation from the tag dictionary next to tag suggestions and chips. Only shown when the display language is Japanese."
+      },
+      "contentRatingMask": {
+        "heading": "Rating mask",
+        "help": "Images at the chosen levels are blurred in lists and the viewer. Click one to show just that image. This only changes how images look; it does not restrict access to them.",
+        "levelsLabel": "Levels to mask",
+        "unratedLabel": "Also mask unrated images",
+        "loadFailed": "Could not load the settings",
+        "saveFailed": "Could not save the settings"
       },
       "browserStorage": {
         "heading": "Settings stored in this browser",
@@ -670,6 +678,36 @@
         "queuedToast": {
           "one": "Queued {count} item",
           "other": "Queued {count} items"
+        }
+      },
+      "contentRating": {
+        "heading": "Rating",
+        "notice": "Rates how sexually explicit an image is on five levels (Green, R, X, XX, XXX) with the WD Tagger model chosen under ONNX tagger. Images are not sent outside. It can be turned on independently of tagging with the ONNX tagger.",
+        "enabledLabel": "Rate images",
+        "enabledHelp": "While on, every generated, uploaded or sketched image is rated when it is added.",
+        "modelNotReady": "Not available until the model chosen under ONNX tagger is downloaded.",
+        "pendingLabel": "Images not rated (including those rated with older rules)",
+        "pendingValue": {
+          "one": "{count} image",
+          "other": "{count} images"
+        },
+        "queuedLabel": "Queue",
+        "queuedValue": {
+          "one": "{count} item",
+          "other": "{count} items"
+        },
+        "run": "Rate all",
+        "notUsable": "Available after rating is turned on and saved and the model is downloaded.",
+        "confirm": {
+          "message": {
+            "one": "Adds {count} image that has not been rated (or was rated with older rules) to the rating queue.",
+            "other": "Adds {count} images that have not been rated (or were rated with older rules) to the rating queue."
+          },
+          "confirmLabel": "Add to queue"
+        },
+        "queuedToast": {
+          "one": "Added {count} item to the queue",
+          "other": "Added {count} items to the queue"
         }
       }
     },
@@ -2915,6 +2953,53 @@
       "list_tags": "Read tags",
       "show_assets": "Show images",
       "update_form": "Change the form"
+    }
+  },
+  "contentRating": {
+    "label": "Rating",
+    "levels": {
+      "g": "Green",
+      "r": "R",
+      "x": "X",
+      "xx": "XX",
+      "xxx": "XXX"
+    },
+    "shortLevels": {
+      "g": "G",
+      "r": "R",
+      "x": "X",
+      "xx": "XX",
+      "xxx": "XXX"
+    },
+    "unrated": "Unrated",
+    "revealHint": "Click to show",
+    "reveal": "Show",
+    "section": {
+      "heading": "Rating",
+      "sourceAuto": "Automatic",
+      "sourceUser": "Set by a person",
+      "noLevel": "Not rated yet",
+      "levelSelectLabel": "Choose a level",
+      "revertToAuto": "Revert to automatic",
+      "judge": "Rate",
+      "rejudge": "Re-rate",
+      "rejudgeTooltip": "Rates the image again. A level chosen by a person is kept.",
+      "statusQueued": "Waiting to be rated…",
+      "statusRunning": "Rating the image…",
+      "statusFailed": "Rating failed: {error}",
+      "statusFailedNoReason": "Rating failed",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details",
+      "scoresLabel": "Rating probabilities",
+      "signalsLabel": "Tags that raise the level",
+      "signalsNone": "None",
+      "raised": "Raised the level",
+      "modelLabel": "Model",
+      "rulesVersionLabel": "Rules version",
+      "judgedAtLabel": "Rated at",
+      "autoLevelLabel": "Automatic level",
+      "saveFailed": "Could not save",
+      "judgeFailed": "Could not start rating"
     }
   }
 }

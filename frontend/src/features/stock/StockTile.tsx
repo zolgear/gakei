@@ -6,10 +6,10 @@
  * タイトル(ADR-0024)があればキャプションの上の行に 1 行で出す(長いものは省略)。
  * 画像はドラッグ元になり、入力欄やグループの節の見出しに落とせる(マスクと選択モード中は除く)。
  */
-import { assetUrl } from '../../api/assetUrl'
 import type { AssetSummary } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './StockTile.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -80,9 +80,11 @@ export function StockTile({
         aria-pressed={selectionMode ? isSelected : undefined}
         onClick={() => (selectionMode ? onToggleSelect(asset) : onOpen(asset))}
       >
-        <img
+        <AssetThumb
+          assetId={asset.id}
+          rating={asset.content_rating}
+          badge
           className={`${styles.tileImage} checkerboard`}
-          src={assetUrl(asset.id, 'thumb')}
           style={focalStyle(asset.focal_point)}
           alt=""
           draggable={draggable}

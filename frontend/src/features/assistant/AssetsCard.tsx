@@ -7,13 +7,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { AssistantMessageResponse } from '../../api/client'
-import { assetUrl } from '../../api/assetUrl'
 import { fmt, useI18n } from '../../i18n'
 import { focalStyle } from '../../lib/focalPoint'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { buildStudioPath } from '../workspace/assetQueryParam'
 import { ASSISTANT_ATTACHMENTS_MAX, type AttachmentPlan } from './assistantForm'
 import { readShownAssets } from './timeline'
+import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './AssistantPanel.module.css'
 
 interface AssetsCardProps {
@@ -54,9 +54,11 @@ export function AssetsCard({ message, onAttach }: AssetsCardProps) {
               title={asset.title || c.show}
               onClick={() => navigate(buildStudioPath(asset.assetId))}
             >
-              <img
+              <AssetThumb
+                assetId={asset.assetId}
+                rating={asset.contentRating}
+                badge
                 className={`${styles.thumb} checkerboard`}
-                src={assetUrl(asset.assetId, 'thumb')}
                 style={focalStyle(asset.focalPoint)}
                 alt=""
                 loading="lazy"

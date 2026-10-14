@@ -22,6 +22,8 @@ import { FinalPromptSection } from '../run-detail/FinalPromptSection'
 import { baselineNegativePrompt } from '../run-detail/finalPrompt'
 import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
+import { AssetThumb } from '../content-rating/AssetThumb'
+import { thumbRating } from '../content-rating/contentRating'
 import styles from './LineageAssetInspectorContent.module.css'
 
 export interface LineageAssetInspectorContentProps {
@@ -90,12 +92,17 @@ export function LineageAssetInspectorContent({ assetId, onOpenRun }: LineageAsse
         </div>
       )}
 
-      <img
-        className={`${styles.preview} checkerboard`}
-        src={assetUrl(asset.id, 'preview')}
-        alt=""
-        draggable={false}
-      />
+      <div className={styles.previewFrame}>
+        <AssetThumb
+          assetId={asset.id}
+          rating={thumbRating(asset)}
+          badge
+          src={assetUrl(asset.id, 'preview')}
+          className={`${styles.preview} checkerboard`}
+          alt=""
+          draggable={false}
+        />
+      </div>
 
       <dl className={styles.metaList}>
         <dt>{t.lineage.dimensions}</dt>

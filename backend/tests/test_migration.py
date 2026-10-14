@@ -48,6 +48,8 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "prompt_combo_item",
         "assistant_conversation",
         "assistant_message",
+        "asset_content_rating",
+        "user_preference",
         "alembic_version",
     } <= tables
 
@@ -1350,4 +1352,62 @@ def test_migration_0033_adds_assistant_tables(empty_database_url: str) -> None:
     tables = set(sa_inspect(engine).get_table_names())
     assert "assistant_conversation" not in tables
     assert "assistant_message" not in tables
+    engine.dispose()
+
+
+def test_migration_0034_adds_content_rating_tables(empty_database_url: str) -> None:
+    """レーティング(ADR-0049): 0033 の DB に upgrade head でレーティングとユーザーごとの設定の
+    表が加わり、downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0033")
+    engine = create_engine(empty_database_url)
+    assert "asset_content_rating" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert {"asset_content_rating", "user_preference"} <= set(inspector.get_table_names())
+    columns = {c["name"] for c in inspector.get_columns("asset_content_rating")}
+    assert columns == {
+        "asset_id",
+        "level",
+        "source",
+        "auto_level",
+        "status",
+        "error",
+        "model",
+        "rules_version",
+        "scores",
+        "signals",
+        "requested_at",
+        "judged_at",
+        "updated_at",
+    }
+    assert inspector.get_pk_constraint("asset_content_rating")["constrained_columns"] == [
+        "asset_id"
+    ]
+    assert {fk["referred_table"] for fk in inspector.get_foreign_keys("asset_content_rating")} == {
+        "asset"
+    }
+    indexes = {i["name"] for i in inspector.get_indexes("asset_content_rating")}
+    assert "ix_asset_content_rating_status" in indexes
+    assert inspector.get_pk_constraint("user_preference")["constrained_columns"] == [
+        "owner",
+        "key",
+    ]
+    assert inspector.get_foreign_keys("user_preference") == []
+    engine.dispose()
+
+    command.downgrade(cfg, "0033")
+    engine = create_engine(empty_database_url)
+    tables = set(sa_inspect(engine).get_table_names())
+    assert "asset_content_rating" not in tables
+    assert "user_preference" not in tables
     engine.dispose()
