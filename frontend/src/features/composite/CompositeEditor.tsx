@@ -481,6 +481,10 @@ function CompositeEditorBody({
     sizeOptions.push({ key: `form:${sizeKey(s)}`, label: fmt(c.panel.sizeForm, { ...s }), size: s })
   }
   for (const s of PRESET_SIZES) sizeOptions.push({ key: sizeKey(s), label: `${s.width}×${s.height}`, size: s })
+  // 今の大きさがどの選択肢にも無い(作り直しで開いた・カスタムで決めた)ときは、その大きさも選択肢に出す。
+  if (doc && !sizeOptions.some((o) => sizeKey(o.size) === sizeKey(doc.canvas))) {
+    sizeOptions.unshift({ key: `current:${sizeKey(doc.canvas)}`, label: `${doc.canvas.width}×${doc.canvas.height}`, size: doc.canvas })
+  }
   const currentOption = doc && !customSize ? sizeOptions.find((o) => sizeKey(o.size) === sizeKey(doc.canvas)) : undefined
   const sizeSelectValue = currentOption?.key ?? 'custom'
 
