@@ -51,7 +51,7 @@ def _get_active_group(db: Session, group_id: uuid.UUID, user: CurrentUser) -> As
 
 @router.get("", response_model=AssetGroupListResponse, operation_id="list_asset_groups")
 def list_asset_groups(
-    kind: list[Literal["upload", "generated", "mask", "sketch"]] | None = Query(
+    kind: list[Literal["upload", "generated", "mask", "sketch", "composite"]] | None = Query(
         default=None,
         description="繰り返して指定できる。指定すると、`member_count` と `cover_asset_id` を"
         "その種類の Asset だけで数える(ADR-0035)。省くと種類を問わない。",

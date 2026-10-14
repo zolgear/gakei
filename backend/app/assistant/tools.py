@@ -200,7 +200,7 @@ class SearchAssetsArgs(_Args):
             "then use keyword."
         ),
     )
-    kind: Literal["upload", "generated", "mask", "sketch"] | None = Field(
+    kind: Literal["upload", "generated", "mask", "sketch", "composite"] | None = Field(
         default=None, description="Only images of this kind."
     )
     group_id: uuid.UUID | None = Field(

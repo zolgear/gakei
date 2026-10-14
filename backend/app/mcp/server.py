@@ -760,7 +760,7 @@ async def search_assets(
         ),
     ] = "keyword",
     kind: Annotated[
-        Literal["upload", "generated", "mask", "sketch"] | None,
+        Literal["upload", "generated", "mask", "sketch", "composite"] | None,
         Field(description="Only return assets of this kind."),
     ] = None,
     group_id: Annotated[uuid.UUID | None, Field(description="Only assets in this group.")] = None,

@@ -88,6 +88,8 @@ class AssetKind(enum.StrEnum):
     GENERATED = "generated"
     MASK = "mask"
     SKETCH = "sketch"
+    # 入力画像の配置(ADR-0050)。素材は `asset_composition_source` で指す。
+    COMPOSITE = "composite"
 
 
 class RunOperation(enum.StrEnum):
@@ -919,6 +921,36 @@ class AssetPerceptualHash(Base):
     # アルゴリズムの版(`perceptual_hash.ALGORITHM_VERSION`)。違えば作り直す。
     version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class AssetComposition(Base):
+    """配置の結果(`kind = composite`)の記録(レシピ。ADR-0050 3章)。追記のみ(ADR-0003 1項)。
+
+    レシピは「何をどう置いたか」の記録で、画素の正本は保存した PNG。サーバーは描き直さない。
+    形は `schemas.CompositionRecipe`(版 1)。
+    """
+
+    __tablename__ = "asset_composition"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    recipe: Mapped[dict] = mapped_column(JsonType, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class AssetCompositionSource(Base):
+    """配置の素材(系列をたどるための索引。ADR-0050 3章・4章)。追記のみ。
+
+    `position` は重ね順ではなく素材を足した順で、0 が主たる素材(系列の木で主たる親として辿る)。
+    同じ素材を複数のレイヤーに使っても、行は1つだけ。
+    """
+
+    __tablename__ = "asset_composition_source"
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_asset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("asset.id"), nullable=False, index=True
+    )
 
 
 class AssetFocalPoint(Base):

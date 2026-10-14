@@ -1411,3 +1411,52 @@ def test_migration_0034_adds_content_rating_tables(empty_database_url: str) -> N
     assert "asset_content_rating" not in tables
     assert "user_preference" not in tables
     engine.dispose()
+
+
+def test_migration_0035_adds_composition_tables(empty_database_url: str) -> None:
+    """入力画像の配置(ADR-0050): 0034 の DB に upgrade head でレシピと素材の表が加わり、
+    downgrade で消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0034")
+    engine = create_engine(empty_database_url)
+    assert "asset_composition" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert {"asset_composition", "asset_composition_source"} <= set(inspector.get_table_names())
+    assert {c["name"] for c in inspector.get_columns("asset_composition")} == {
+        "asset_id",
+        "recipe",
+        "created_at",
+    }
+    assert inspector.get_pk_constraint("asset_composition")["constrained_columns"] == ["asset_id"]
+    assert {c["name"] for c in inspector.get_columns("asset_composition_source")} == {
+        "asset_id",
+        "position",
+        "source_asset_id",
+    }
+    assert inspector.get_pk_constraint("asset_composition_source")["constrained_columns"] == [
+        "asset_id",
+        "position",
+    ]
+    assert {
+        fk["referred_table"] for fk in inspector.get_foreign_keys("asset_composition_source")
+    } == {"asset"}
+    indexes = {i["name"] for i in inspector.get_indexes("asset_composition_source")}
+    assert "ix_asset_composition_source_source_asset_id" in indexes
+    engine.dispose()
+
+    command.downgrade(cfg, "0034")
+    engine = create_engine(empty_database_url)
+    tables = set(sa_inspect(engine).get_table_names())
+    assert "asset_composition" not in tables
+    assert "asset_composition_source" not in tables
+    engine.dispose()
