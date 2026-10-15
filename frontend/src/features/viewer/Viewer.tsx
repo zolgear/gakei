@@ -221,6 +221,18 @@ export function Viewer({ assetId }: ViewerProps) {
             <div className={styles.headerRow}>
               <h2 className={styles.heading}>Asset</h2>
               <div className={styles.headerActions}>
+                {/* 生成元の Run の詳細へ直接移る(下の文字のリンクと同じ遷移先)。生成元がある画像
+                    だけに出る。並びは右寄せなので、左端に置けば有無でほかのボタンの位置は変わらない。 */}
+                {asset.produced_by_run && (
+                  <Link
+                    to={`/runs/${asset.produced_by_run.id}`}
+                    className={styles.iconButton}
+                    aria-label={t.common.openGeneratedDetail}
+                    title={t.common.openGeneratedDetail}
+                  >
+                    <RunDetailIcon />
+                  </Link>
+                )}
                 <a
                   className={styles.iconButton}
                   href={assetUrl(asset.id, 'original', { download: true })}
@@ -239,28 +251,6 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <AddToInputIcon />
                 </button>
-                {/* 生成元の Run の詳細へ直接移る(下の文字のリンクと同じ遷移先)。アイコンの位置を
-                    画像によって変えないよう、生成元が無い画像(アップロードなど)でも押せない状態で残す。 */}
-                {asset.produced_by_run ? (
-                  <Link
-                    to={`/runs/${asset.produced_by_run.id}`}
-                    className={styles.iconButton}
-                    aria-label={t.common.openGeneratedDetail}
-                    title={t.common.openGeneratedDetail}
-                  >
-                    <RunDetailIcon />
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label={t.common.openGeneratedDetail}
-                    title={t.common.openGeneratedDetail}
-                    disabled
-                  >
-                    <RunDetailIcon />
-                  </button>
-                )}
                 <Link
                   to={`/lineage/${asset.id}`}
                   className={styles.iconButton}
