@@ -230,6 +230,6 @@ def test_form_context_and_update_form_keep_result_asset_id(client: TestClient) -
 
 def test_view_result_schema() -> None:
     schema = parameters_schema(TOOLS_BY_NAME["view_result"].args)
-    assert set(schema["properties"]) == {"asset_id", "include_image"}
+    assert set(schema["properties"]) == {"asset_id", "asset_ids", "include_image"}
     assert schema.get("required", []) == []
     assert schema.get("additionalProperties") is False

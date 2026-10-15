@@ -36,6 +36,7 @@ from app.domain.run_views import (
     bulk_parent_focal_points,
     bulk_users,
     run_summary_fields,
+    visible_runs_query,
 )
 from app.domain.schemas import (
     RunCancelResponse,
@@ -48,7 +49,7 @@ from app.domain.schemas import (
     RunListResponse,
     RunSummary,
 )
-from app.domain.visibility import get_visible_run, run_visible, visible_asset_ids
+from app.domain.visibility import get_visible_run, visible_asset_ids
 from app.i18n import t
 from app.providers.registry import ProviderRegistry
 from app.worker.progress import ProgressBus
@@ -169,7 +170,7 @@ def list_runs(
     user: CurrentUser = Depends(require_user),
 ) -> RunListResponse:
     # ADR-0025: 見える Run だけ(App バーの実行中・待機中の件数もこの一覧から数える)。
-    query = select(Run).where(Run.deleted_at.is_(None), run_visible(user))
+    query = visible_runs_query(user)
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)
@@ -181,7 +182,7 @@ def list_runs(
                 and_(Run.queued_at == moment, Run.id < cursor_id),
             )
         )
-    query = query.order_by(Run.queued_at.desc(), Run.id.desc()).limit(limit + 1)
+    query = query.limit(limit + 1)
 
     rows = list(db.execute(query).scalars().all())
     has_more = len(rows) > limit

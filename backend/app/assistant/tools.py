@@ -6,7 +6,9 @@
 - 読み取り: `list_prompt_sets`、`get_form_context`、`propose_prompt`、`get_capabilities`、
   `get_run`、`view_assets`
 - 生成結果の読み取り: `view_result`(12章)。スタジオの結果エリアの画像(ブラウザが送る
-  `form.result_asset_id`)か指定の画像の、`get_asset` と同じ情報と縮めたプレビューを返す。
+  `form.result_asset_id`)か指定の画像(`asset_ids` で最大4枚)の、`get_asset` と同じ情報と
+  縮めたプレビューを返す。`list_recent_results` は本人に見える Run を新しい順に返す(履歴の
+  参照。中身は REST・MCP の Run の一覧と同じ `domain/run_views.py`)。画像の中身は入れない。
 - プロンプトセットの書き込み: `create_prompt_set`、`rename_prompt_set`、`add_prompt_set_items`、
   `update_prompt_set_item`。書き込むたびに変更前の値を結果(`before`)に残し、「元に戻す」に
   要る値を `undo` に入れる(4章)。
@@ -51,6 +53,7 @@ from app.domain import content_rating as content_rating_domain
 from app.domain import focal_points as focal_points_domain
 from app.domain import prompt_sets as prompt_sets_domain
 from app.domain import run_create as run_create_domain
+from app.domain import run_views as run_views_domain
 from app.domain.assistant_settings import AssistantConfig
 from app.domain.models import (
     RUN_ORIGIN_ASSISTANT,
@@ -63,6 +66,7 @@ from app.domain.models import (
 )
 from app.domain.pricing import estimate_cost as estimate_cost_domain
 from app.domain.schemas import (
+    ASSISTANT_ATTACHMENTS_MAX,
     REPEAT_MAX,
     AssistantFormInput,
     AssistantFormState,
@@ -76,8 +80,8 @@ from app.providers.base import ModelCapabilities, ProviderCapabilities, provider
 # `get_run` の1回の待ちの上限(秒。9章)。
 WAIT_MAX_SECONDS = 25.0
 _POLL_INTERVAL_SECONDS = 0.25
-# `view_assets` で1回に見る枚数の上限(添付と同じ。6章)。
-VIEW_ASSETS_MAX = 4
+# `view_assets` と `view_result` で1回に見る枚数の上限(添付と同じ。6・12章)。
+VIEW_ASSETS_MAX = ASSISTANT_ATTACHMENTS_MAX
 # LLM に送る画像の長辺(派生のプレビューを縮める。6章)。
 IMAGE_MAX_SIDE = 1024
 # `search_assets` / `find_similar_assets` の件数の上限(MCP と同じ。10章)。
@@ -92,6 +96,11 @@ FORM_INPUTS_MAX = 32
 ITEMS_MAX = 100
 # `list_prompt_sets` で1項目の本文を返す上限(長い本文で履歴が埋まらないように)。
 LIST_ITEM_TEXT_MAX = 2000
+# `list_recent_results` の件数の上限と既定(12章)。
+RECENT_RESULTS_LIMIT_MAX = 50
+RECENT_RESULTS_LIMIT_DEFAULT = 10
+# `list_recent_results` で1件のプロンプトを返す上限(文字数)。
+RECENT_RESULTS_PROMPT_MAX = 300
 
 _TERMINAL = {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED}
 _COST_NOTE = "Reference price in USD computed by GAKEI, not an invoice."
@@ -229,8 +238,17 @@ class ViewResultArgs(_Args):
     asset_id: uuid.UUID | None = Field(
         default=None,
         description=(
-            "The image to look at. Omit to look at the image shown in the studio's result "
-            "area (the generation result the user is looking at)."
+            "One image to look at. Omit (and omit asset_ids) to look at the image shown in "
+            "the studio's result area (the generation result the user is looking at)."
+        ),
+    )
+    asset_ids: list[uuid.UUID] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=VIEW_ASSETS_MAX,
+        description=(
+            f"Several images to look at together, for example to compare results from the "
+            f"history (up to {VIEW_ASSETS_MAX}). Do not combine with asset_id."
         ),
     )
     include_image: bool = Field(
@@ -238,6 +256,22 @@ class ViewResultArgs(_Args):
         description=(
             "Send the image itself. Pass false to get only the text (tags, prompt, model, "
             "parameters), for example when the model cannot read images."
+        ),
+    )
+
+
+class ListRecentResultsArgs(_Args):
+    limit: int = Field(
+        default=RECENT_RESULTS_LIMIT_DEFAULT,
+        ge=1,
+        le=RECENT_RESULTS_LIMIT_MAX,
+        description="How many runs to return, newest first.",
+    )
+    group_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "Only runs in this group (runs whose outputs were sent to it or are in it now). "
+            "Get ids with list_groups."
         ),
     )
 
@@ -696,7 +730,13 @@ def _asset_payload(ctx: ToolContext, asset_id: uuid.UUID) -> dict[str, Any]:
 
 
 async def view_result(ctx: ToolContext, args: ViewResultArgs) -> ToolOutcome:
-    """生成結果を読む(12章)。`asset_id` を省くと、スタジオの結果エリアの画像を見る。"""
+    """生成結果を読む(12章)。`asset_id` と `asset_ids` を省くと、スタジオの結果エリアの画像を
+    見る。`asset_ids` は複数の画像を渡した順に返す(結果は画像ごとの配列)。"""
+    if args.asset_id is not None and args.asset_ids is not None:
+        raise ToolFailure("Pass either asset_id or asset_ids, not both.")
+    if args.asset_ids is not None:
+        return await _in_thread(lambda: _view_many(ctx, args.asset_ids or [], args.include_image))
+
     asset_id = args.asset_id
     from_result_area = asset_id is None
     if asset_id is None:
@@ -717,6 +757,78 @@ async def view_result(ctx: ToolContext, args: ViewResultArgs) -> ToolOutcome:
         return ToolOutcome(ok=True, result=payload, images=images)
 
     return await _in_thread(_view)
+
+
+def _view_many(ctx: ToolContext, asset_ids: list[uuid.UUID], include_image: bool) -> ToolOutcome:
+    """`view_result` の `asset_ids`。1枚でも見えなければ全体を ToolFailure にする。"""
+    shown = ctx.form.result_asset_id if ctx.form is not None else None
+    items: list[dict[str, Any]] = []
+    for asset_id in asset_ids:
+        payload = _asset_payload(ctx, asset_id)
+        # 結果エリアの画像かどうか(履歴の位置を数える起点を示す)。
+        payload["in_result_area"] = asset_id == shown
+        items.append(payload)
+    result: dict[str, Any] = {"assets": items}
+    images: list[LlmImage] = []
+    if include_image:
+        _briefs, images = load_visible_images(ctx, asset_ids)
+        result["note"] = "The images follow in the next message, in the same order as assets."
+    return ToolOutcome(ok=True, result=result, images=images)
+
+
+def _clip(text: str | None, limit: int) -> str | None:
+    if text is None or len(text) <= limit:
+        return text
+    return text[:limit] + "…"
+
+
+async def list_recent_results(ctx: ToolContext, args: ListRecentResultsArgs) -> ToolOutcome:
+    """履歴の参照(12章)。本人に見える Run を新しい順に(実行元は問わない)。画像の中身は
+    入れない。一覧と見える範囲は REST・MCP の Run の一覧と同じ `visible_runs_query`。"""
+
+    def _list() -> dict[str, Any]:
+        with ctx.session() as db:
+            query = run_views_domain.visible_runs_query(ctx.user)
+            if args.group_id is not None:
+                if get_visible_group(db, ctx.user, args.group_id) is None:
+                    raise ToolFailure(f"Group {args.group_id} not found.")
+                query = query.where(run_views_domain.run_in_group(args.group_id))
+            runs = list(db.execute(query.limit(args.limit + 1)).scalars().all())
+            truncated = len(runs) > args.limit
+            runs = runs[: args.limit]
+            run_ids = [r.id for r in runs]
+            outputs = run_views_domain.bulk_output_refs(db, run_ids, exclude_deleted=True)
+            inputs = run_views_domain.bulk_input_refs(db, run_ids, ctx.user)
+            items = [
+                {
+                    "run_id": str(run.id),
+                    "created_at": _iso(run.queued_at),
+                    "status": str(run.status),
+                    "operation": str(run.operation),
+                    "provider": run.provider,
+                    "model": run.model,
+                    "origin": run.origin or "web",
+                    "prompt": _clip(run.prompt, RECENT_RESULTS_PROMPT_MAX),
+                    "output_asset_ids": [str(o.asset_id) for o in outputs[run.id]],
+                    "inputs": [
+                        {"asset_id": str(asset_id), "role": role}
+                        for asset_id, role, _position in inputs[run.id]
+                    ],
+                }
+                for run in runs
+            ]
+        shown = ctx.form.result_asset_id if ctx.form is not None else None
+        payload: dict[str, Any] = {"items": items, "truncated": truncated}
+        if shown is not None:
+            payload["result_area_asset_id"] = str(shown)
+        payload["note"] = (
+            "Newest first. Count positions by run (a run with several outputs counts once); "
+            "runs you created are included. Text only: to look at outputs, call view_result "
+            f"with asset_ids (up to {VIEW_ASSETS_MAX})."
+        )
+        return payload
+
+    return ToolOutcome(ok=True, result=await _in_thread(_list))
 
 
 async def list_groups(ctx: ToolContext, _args: NoArgs) -> ToolOutcome:
@@ -1397,15 +1509,27 @@ TOOLS: tuple[ToolDefinition, ...] = (
     ),
     ToolDefinition(
         "view_result",
-        "Look at the generation result shown in the studio's result area (omit asset_id), or "
-        "at another image (pass asset_id). Use this whenever the user talks about the result, "
-        "the current image or the image they are looking at, for example when they want it "
-        "fixed or ask for an edit prompt. Returns the same details as get_asset (title, tags "
-        "including automatic tags, the prompt, model and parameters that made it, its primary "
-        "parent) and the image itself after the tool result. Pass include_image=false for the "
-        "text only.",
+        "Look at the generation result shown in the studio's result area (omit asset_id and "
+        "asset_ids), at another image (asset_id), or at up to 4 images together (asset_ids, "
+        "for example earlier results found with list_recent_results). Use this whenever the "
+        "user talks about the result, the current image or the image they are looking at, for "
+        "example when they want it fixed or ask for an edit prompt. Returns the same details "
+        "as get_asset (title, tags including automatic tags, the prompt, model and parameters "
+        "that made it with its run id, its primary parent) and the images after the tool "
+        "result. With asset_ids, the details are a list in the given order. Pass "
+        "include_image=false for the text only.",
         ViewResultArgs,
         view_result,
+    ),
+    ToolDefinition(
+        "list_recent_results",
+        "List the user's recent runs, newest first, from any origin (the form, you, or MCP): "
+        "run id, time, status, operation, model, prompt (shortened), output asset ids in order "
+        "and input asset ids with roles. Includes unfinished and failed runs. Use it for "
+        "requests such as 'the result before last' or 'compare the last two'. Text only; look "
+        "at outputs with view_result (asset_ids).",
+        ListRecentResultsArgs,
+        list_recent_results,
     ),
     ToolDefinition(
         "search_assets",

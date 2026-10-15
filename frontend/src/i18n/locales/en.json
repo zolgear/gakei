@@ -3033,6 +3033,7 @@
       "get_run": "Check a run",
       "view_assets": "Look at images",
       "view_result": "Look at the result",
+      "list_recent_results": "Look at the history",
       "create_prompt_set": "Create a prompt set",
       "rename_prompt_set": "Rename a prompt set",
       "add_prompt_set_items": "Add prompt set items",
