@@ -239,8 +239,9 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <AddToInputIcon />
                 </button>
-                {/* 生成元の Run があるときだけ、その詳細へ直接移る(下の文字のリンクと同じ遷移先)。 */}
-                {asset.produced_by_run && (
+                {/* 生成元の Run の詳細へ直接移る(下の文字のリンクと同じ遷移先)。アイコンの位置を
+                    画像によって変えないよう、生成元が無い画像(アップロードなど)でも押せない状態で残す。 */}
+                {asset.produced_by_run ? (
                   <Link
                     to={`/runs/${asset.produced_by_run.id}`}
                     className={styles.iconButton}
@@ -249,6 +250,16 @@ export function Viewer({ assetId }: ViewerProps) {
                   >
                     <RunDetailIcon />
                   </Link>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t.common.openGeneratedDetail}
+                    title={t.common.openGeneratedDetail}
+                    disabled
+                  >
+                    <RunDetailIcon />
+                  </button>
                 )}
                 <Link
                   to={`/lineage/${asset.id}`}
@@ -267,25 +278,27 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <LineageIcon />
                 </Link>
-                {/* 系列を ZIP に書き出す(ADR-0037)。共有リンクと違い管理者設定は無い。 */}
-                {!asset.deleted_at && (
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label={t.lineageTransfer.export.button}
-                    title={t.lineageTransfer.export.buttonTooltip}
-                    onClick={() => setExportOpen(true)}
-                  >
-                    <ExportArchiveIcon />
-                  </button>
-                )}
-                {shareEnabled && !asset.deleted_at && (
+                {/* 系列を ZIP に書き出す(ADR-0037)。共有リンクと違い管理者設定は無い。
+                    削除済みの画像では押せない状態で残す(アイコンの位置を変えないため)。 */}
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={t.lineageTransfer.export.button}
+                  title={t.lineageTransfer.export.buttonTooltip}
+                  onClick={() => setExportOpen(true)}
+                  disabled={Boolean(asset.deleted_at)}
+                >
+                  <ExportArchiveIcon />
+                </button>
+                {/* 共有は管理者が無効にしていれば出さない(画像によらず同じなので並びは変わらない)。 */}
+                {shareEnabled && (
                   <button
                     type="button"
                     className={styles.iconButton}
                     aria-label={t.share.button}
                     title={t.share.buttonTooltip}
                     onClick={() => setShareOpen(true)}
+                    disabled={Boolean(asset.deleted_at)}
                   >
                     <ShareLinkIcon />
                   </button>

@@ -91,12 +91,12 @@
 .headerActions {
   display: flex;
   align-items: center;
-  /* 生成画像は「Generated の詳細」が1つ多く、情報欄の幅に収まらないと最後の共有のボタンが
-     はみ出して見えなくなっていた。収まらないときは折り返して右に寄せる。 */
+  /* ボタンは画像によらず同じ数・同じ位置に並べる(使えないものは押せない状態で残す)。
+     6 個で情報欄の幅に1行で収まる間隔にする。狭い画面(44px のボタン)では折り返して右に寄せる。 */
   flex-wrap: wrap;
   justify-content: flex-end;
   min-width: 0;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* 文字ラベルは置かず、アイコン + title(ツールチップ)で説明する。 */
