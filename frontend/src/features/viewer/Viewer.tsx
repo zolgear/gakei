@@ -11,8 +11,6 @@ import { useResourcePanel } from '../../context/useResourcePanel'
 import { useBackNavigate } from '../../lib/useBackNavigate'
 import { isMobileViewport } from '../../lib/viewport'
 import { useAddToInputs } from '../run-form/useAddToInputs'
-import { useOpenInArrange } from '../composite/useOpenInArrange'
-import { ArrangeIcon } from '../composite/compositeIcons'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import {
@@ -79,7 +77,6 @@ export function Viewer({ assetId }: ViewerProps) {
   const navigate = useNavigate()
   const addToInputs = useAddToInputs()
   // 「配置で開く」(ADR-0050 5章)。保存するとフォームの入力に置いてスタジオへ移る。
-  const arrange = useOpenInArrange()
   const queryClient = useQueryClient()
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -242,18 +239,6 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <AddToInputIcon />
                 </button>
-                {asset.kind !== 'mask' && (
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label={t.composite.openWith}
-                    title={t.composite.openWith}
-                    onClick={() => arrange.open([asset.id])}
-                    disabled={Boolean(asset.deleted_at)}
-                  >
-                    <ArrangeIcon />
-                  </button>
-                )}
                 {/* 生成元の Run があるときだけ、その詳細へ直接移る(下の文字のリンクと同じ遷移先)。 */}
                 {asset.produced_by_run && (
                   <Link
@@ -392,7 +377,6 @@ export function Viewer({ assetId }: ViewerProps) {
         )}
       </aside>
 
-      {arrange.editor}
       <AddToInputsDialog
         open={addToInputs.isPending}
         onAdd={() => addToInputs.resolve('add')}
