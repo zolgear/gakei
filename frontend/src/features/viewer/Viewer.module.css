@@ -67,7 +67,8 @@
   margin: -8px -16px 0;
   padding: 8px 16px;
   display: flex;
-  align-items: center;
+  /* ボタンが折り返したときも、見出しは1段目のボタンの高さに揃えて上に置く。 */
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   background: var(--color-bg-raised);
@@ -82,6 +83,9 @@
 .heading {
   margin: 0;
   font-size: 15px;
+  /* ボタン(.iconButton)と同じ高さの行にして、1段目のボタンと中央を揃える。 */
+  line-height: 28px;
+  flex-shrink: 0;
 }
 
 .headerActions {
@@ -312,6 +316,10 @@
   .headerRow {
     position: static;
     gap: 8px;
+  }
+
+  .heading {
+    line-height: 44px;
   }
 
   .iconButton {
