@@ -53,7 +53,7 @@ def _layer(source: str, x: float = 0, y: float = 0, size: float = 100, **extra: 
 
 def _recipe(primary: str, *layers: dict, **canvas: Any) -> dict:
     return {
-        "version": 1,
+        "version": 2,
         "canvas": {"width": 256, "height": 256, "background": "white", **canvas},
         "primary_source_asset_id": primary,
         "layers": list(layers),
@@ -135,6 +135,18 @@ def test_create_composite_saves_recipe_and_sources(client: TestClient) -> None:
     assert client.get(f"/api/assets/{a}").json()["composition"] is None
 
 
+@pytest.mark.parametrize("version", [1, 2])
+def test_composite_accepts_recipe_versions(client: TestClient, version: int) -> None:
+    # 版 1(射影変換で描いたもの)も、作り直しで開けるよう引き続き受け付ける。
+    a = _upload(client)
+    recipe = _recipe(a, _layer(a))
+    recipe["version"] = version
+    body = _create(client, recipe)
+    assert body["composition"]["recipe"]["version"] == version
+    detail = client.get(f"/api/assets/{body['id']}").json()
+    assert detail["composition"]["recipe"]["version"] == version
+
+
 def test_composite_is_listed_by_kind(client: TestClient) -> None:
     a, _b, recipe = _two_sources(client)
     composite = _create(client, recipe)["id"]
@@ -155,7 +167,8 @@ def test_composite_accepts_sketch_and_composite_sources(client: TestClient) -> N
 @pytest.mark.parametrize(
     ("mutate", "fragment"),
     [
-        (lambda r: r.update(version=2), "version"),
+        (lambda r: r.update(version=3), "version"),
+        (lambda r: r.update(version=0), "version"),
         (lambda r: r["canvas"].update(background="red"), "background"),
         (lambda r: r["canvas"].update(width=0), "width"),
         (lambda r: r["canvas"].update(height=100_000), "height"),

@@ -8,7 +8,8 @@
 import type { components } from '../../api/schema'
 import { isValidQuad, type Quad, type Size } from './quad'
 
-export const RECIPE_VERSION = 1
+/** 作り方の版。1 は四隅を射影変換で描いたもの、2 は双一次の写像で描いたもの(ADR-0050 1章)。 */
+export const RECIPE_VERSION = 2
 export const MAX_LAYERS = 16
 /** キャンバスの1辺の範囲(サーバーの画像の大きさの上限に合わせる)。 */
 export const MIN_CANVAS_EDGE = 64

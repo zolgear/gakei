@@ -3871,15 +3871,18 @@ export interface components {
         };
         /**
          * CompositionRecipe
-         * @description 配置の記録(レシピ。版 1。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
+         * @description 配置の記録(レシピ。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
          *     複数のレイヤーに使ってよい。`primary_source_asset_id` はレイヤーの素材のどれか。
+         *
+         *     `version` は作り方の版。1 は四隅を射影変換で描いたもの、2 は双一次の写像で描いたもの
+         *     (ADR-0050 1章の描画の改訂)。四隅の座標の形は同じなので、どちらも受け付ける。
          */
         CompositionRecipe: {
             /**
              * Version
-             * @constant
+             * @enum {integer}
              */
-            version: 1;
+            version: 1 | 2;
             canvas: components["schemas"]["CompositionCanvas"];
             /**
              * Primary Source Asset Id
