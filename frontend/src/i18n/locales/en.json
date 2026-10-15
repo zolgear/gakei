@@ -1796,7 +1796,7 @@
     "rejectedLayers": "Up to 16 source images are allowed; {count} could not be added",
     "noComposition": "No arrangement record was found, so a new arrangement starts from this image",
     "hint": "Drag to move, drag a corner to scale, drag the top dot to rotate (Shift snaps to 15°). Pinch with two fingers to scale and rotate. Arrow keys nudge; Delete removes.",
-    "distortHint": "Distort: move each corner on its own, e.g. into a trapezoid (shapes never become concave or twisted). Drag the top dot to rotate.",
+    "distortHint": "Distort: pull each corner on its own to stretch the flat image into a trapezoid, parallelogram, and so on (no depth is added; shapes never become concave or twisted). Drag the top dot to rotate.",
     "toolbar": {
       "add": "Add source images",
       "modeGroup": "Handle behavior",

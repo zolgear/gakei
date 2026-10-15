@@ -40,7 +40,7 @@ describe('buildRecipe', () => {
     let doc = docOf(['a', 'b'])
     doc = toggleFlip(doc, doc.layers[1].key, 'x')
     const recipe = buildRecipe(doc)!
-    expect(recipe.version).toBe(1)
+    expect(recipe.version).toBe(2)
     expect(recipe.canvas).toEqual({ width: 1024, height: 1024, background: 'white' })
     expect(recipe.primary_source_asset_id).toBe('a')
     expect(recipe.layers.map((l) => l.source_asset_id)).toEqual(['a', 'b'])
@@ -128,6 +128,14 @@ describe('parseComposition と作り直し', () => {
     const recipe = buildRecipe(doc)!
     expect(recipe.primary_source_asset_id).toBe('b')
     expect(recipe.layers[1].corners).toEqual(composition.recipe.layers[1].corners)
+    // 版 1(射影変換で描いたもの)を作り直すと、今の版(双一次)のレシピになる。
+    expect(recipe.version).toBe(2)
+  })
+
+  it('版 2 のレシピも同じように読める', () => {
+    const parsed = parseComposition({ ...composition, recipe: { ...composition.recipe, version: 2 } })!
+    expect(parsed.layers.map((l) => l.assetId)).toEqual(['a', 'b'])
+    expect(parsed.droppedCount).toBe(1)
   })
 
   it('壊れた形は null', () => {

@@ -2,15 +2,17 @@
  * 配置(ADR-0050)の WebGL の描画。画面の表示と保存の書き出しの両方がこれを使う
  * (同じ処理で描くので、画面と保存の結果が一致する)。
  *
- * 素材は四隅を頂点にした三角形2枚で描き(凸の四角形なので2枚で覆える)、フラグメント
- * シェーダーで画素ごとに「キャンバスの座標 → 単位正方形」の逆ホモグラフィーを当てて
- * テクスチャの座標を求める。三角形ごとのアフィンの近似ではなく、正確な射影の写像になる。
+ * 素材は四隅を頂点にした三角形2枚で描き(凸の四角形なので2枚で覆える。双一次の写像でも
+ * 辺はまっすぐなので、写った形は四隅を結んだ四角形そのもの)、フラグメントシェーダーで画素ごとに
+ * 「キャンバスの座標 → 単位正方形」の逆の双一次の写像を解いてテクスチャの座標を求める
+ * (`bilinear.ts`。三角形ごとのアフィンの近似ではなく、四角形全体で1つの双一次の写像になる。
+ * 射影変換と違って奥行きは付かず、どの辺の上でも絵の間隔は均等。ADR-0050 1章)。
  *
  * テクスチャは乗算済みアルファで載せ(UNPACK_PREMULTIPLY_ALPHA)、合成は
  * ONE / ONE_MINUS_SRC_ALPHA にする(透過 PNG の素材の縁が黒ずまない)。縮小の多い素材でも
  * ちらつかないよう、ミップマップを作る(WebGL2 は 2 の累乗でない大きさでも作れる)。
  */
-import { invertMat3, squareToQuad, toColumnMajor } from './homography'
+import { bilinearCoefficients, LINEAR_EPSILON } from './bilinear'
 import type { Quad } from './quad'
 
 const VERTEX_SHADER = `#version 300 es
@@ -26,16 +28,55 @@ void main() {
 }
 `
 
+// 逆の双一次の写像。`bilinear.ts` の `invBilinearWith` と同じ手順(係数は `bilinearCoefficients`
+// で作る: u_origin = P0、u_e = P1-P0、u_f = P3-P0、u_g = P0-P1+P2-P3 を u_invScale 倍したもの)。
 const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec2 v_pos;
-uniform mat3 u_inv;
+uniform vec2 u_origin;
+uniform vec2 u_e;
+uniform vec2 u_f;
+uniform vec2 u_g;
+uniform float u_invScale;
 uniform vec2 u_flip;
 uniform sampler2D u_tex;
 out vec4 outColor;
+
+float cross2(vec2 a, vec2 b) { return a.x * b.y - a.y * b.x; }
+
+// solveU: h - v f = u (e + v g) の最小二乗の解。
+float solveU(vec2 h, float v) {
+  vec2 d = u_e + u_g * v;
+  return dot(h - u_f * v, d) / max(dot(d, d), 1e-20);
+}
+
+// outside: (u, v) が [0,1]² からどれだけはみ出しているか。
+float outsideAmount(vec2 uv) {
+  return max(max(0.0, max(-uv.x, uv.x - 1.0)), max(-uv.y, uv.y - 1.0));
+}
+
+vec2 invBilinear(vec2 p) {
+  vec2 h = (p - u_origin) * u_invScale;
+  float k2 = cross2(u_g, u_f);
+  float k1 = cross2(u_e, u_f) + cross2(h, u_g);
+  float k0 = cross2(h, u_e);
+  if (abs(k2) < ${LINEAR_EPSILON.toExponential()}) {
+    // 1次: k1 v + k0 = 0(左右の辺が平行)。
+    float v = -k0 / k1;
+    return vec2(solveU(h, v), v);
+  }
+  // 2次: 桁落ちしない形の解の公式。2つの解のうち [0,1]² に近い方。
+  float disc = max(0.0, k1 * k1 - 4.0 * k0 * k2);
+  float q = -0.5 * (k1 + (k1 >= 0.0 ? 1.0 : -1.0) * sqrt(disc));
+  float va = q / k2;
+  float vb = abs(q) < 1e-20 ? va : k0 / q;
+  vec2 a = vec2(solveU(h, va), va);
+  vec2 b = vec2(solveU(h, vb), vb);
+  return outsideAmount(a) <= outsideAmount(b) ? a : b;
+}
+
 void main() {
-  vec3 uvw = u_inv * vec3(v_pos, 1.0);
-  vec2 uv = uvw.xy / uvw.z;
+  vec2 uv = invBilinear(v_pos);
   if (u_flip.x > 0.5) uv.x = 1.0 - uv.x;
   if (u_flip.y > 0.5) uv.y = 1.0 - uv.y;
   outColor = texture(u_tex, uv);
@@ -84,7 +125,11 @@ export class CompositeRenderer {
   private vao: WebGLVertexArrayObject
   private uView: WebGLUniformLocation | null
   private uViewport: WebGLUniformLocation | null
-  private uInv: WebGLUniformLocation | null
+  private uOrigin: WebGLUniformLocation | null
+  private uE: WebGLUniformLocation | null
+  private uF: WebGLUniformLocation | null
+  private uG: WebGLUniformLocation | null
+  private uInvScale: WebGLUniformLocation | null
   private uFlip: WebGLUniformLocation | null
   private uTex: WebGLUniformLocation | null
 
@@ -109,7 +154,11 @@ export class CompositeRenderer {
     this.program = program
     this.uView = gl.getUniformLocation(program, 'u_view')
     this.uViewport = gl.getUniformLocation(program, 'u_viewport')
-    this.uInv = gl.getUniformLocation(program, 'u_inv')
+    this.uOrigin = gl.getUniformLocation(program, 'u_origin')
+    this.uE = gl.getUniformLocation(program, 'u_e')
+    this.uF = gl.getUniformLocation(program, 'u_f')
+    this.uG = gl.getUniformLocation(program, 'u_g')
+    this.uInvScale = gl.getUniformLocation(program, 'u_invScale')
     this.uFlip = gl.getUniformLocation(program, 'u_flip')
     this.uTex = gl.getUniformLocation(program, 'u_tex')
 
@@ -214,12 +263,16 @@ export class CompositeRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer)
     const verts = new Float32Array(12)
     for (const layer of layers) {
-      const inv = invertMat3(squareToQuad(layer.corners))
-      if (!inv) continue
+      const c = bilinearCoefficients(layer.corners)
+      if (!c) continue
       const [p0, p1, p2, p3] = layer.corners
       verts.set([p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p0.x, p0.y, p2.x, p2.y, p3.x, p3.y])
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, verts)
-      gl.uniformMatrix3fv(this.uInv, false, toColumnMajor(inv))
+      gl.uniform2f(this.uOrigin, c.origin.x, c.origin.y)
+      gl.uniform2f(this.uE, c.e.x, c.e.y)
+      gl.uniform2f(this.uF, c.f.x, c.f.y)
+      gl.uniform2f(this.uG, c.g.x, c.g.y)
+      gl.uniform1f(this.uInvScale, c.invScale)
       gl.uniform2f(this.uFlip, layer.flipX ? 1 : 0, layer.flipY ? 1 : 0)
       gl.bindTexture(gl.TEXTURE_2D, layer.texture)
       gl.drawArrays(gl.TRIANGLES, 0, 6)

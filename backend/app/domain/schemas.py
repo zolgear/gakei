@@ -651,12 +651,15 @@ class CompositionLayer(BaseModel):
 
 
 class CompositionRecipe(BaseModel):
-    """配置の記録(レシピ。版 1。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
-    複数のレイヤーに使ってよい。`primary_source_asset_id` はレイヤーの素材のどれか。"""
+    """配置の記録(レシピ。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
+    複数のレイヤーに使ってよい。`primary_source_asset_id` はレイヤーの素材のどれか。
+
+    `version` は作り方の版。1 は四隅を射影変換で描いたもの、2 は双一次の写像で描いたもの
+    (ADR-0050 1章の描画の改訂)。四隅の座標の形は同じなので、どちらも受け付ける。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1]
+    version: Literal[1, 2]
     canvas: CompositionCanvas
     primary_source_asset_id: uuid.UUID
     layers: list[CompositionLayer] = Field(min_length=1, max_length=COMPOSITION_MAX_LAYERS)
