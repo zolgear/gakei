@@ -75,6 +75,7 @@ from app.domain.models import (
 )
 from app.domain.pricing import EstimateResult, cost_from_usage
 from app.domain.pricing import estimate_cost as estimate_cost_domain
+from app.domain.run_views import visible_runs_query
 from app.domain.schemas import (
     AssetGroupCreate,
     PromptSetListResponse,
@@ -89,7 +90,6 @@ from app.domain.visibility import (
     get_visible_asset,
     get_visible_group,
     get_visible_run,
-    run_visible,
     visible_asset_ids,
 )
 from app.mcp.context import McpRequestContext, find_mcp_context, get_mcp_context
@@ -1194,7 +1194,7 @@ async def list_runs(
     def _list() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
             # ADR-0025: 常に本人の Run だけ(個人モードは全件が本人のもの)。
-            q = select(Run).where(Run.deleted_at.is_(None), run_visible(mc.user))
+            q = visible_runs_query(mc.user)
             if origin == "mcp":
                 q = q.where(Run.origin == mcp_settings.ORIGIN_MCP)
             elif origin == "web":
@@ -1204,7 +1204,7 @@ async def list_runs(
                 q = q.where(Run.queued_at >= moment.astimezone(UTC))
             if status:
                 q = q.where(Run.status.in_(status))
-            q = q.order_by(Run.queued_at.desc(), Run.id.desc()).limit(limit + 1)
+            q = q.limit(limit + 1)
             runs = list(db.execute(q).scalars().all())
             truncated = len(runs) > limit
             items: list[dict[str, Any]] = []

@@ -19,7 +19,16 @@ describe('assistantFormState', () => {
       params: { quality: 'low' },
       inputs: [],
       asset_group_id: null,
+      result_asset_id: null,
     })
+  })
+
+  it('結果エリアの画像の ID を result_asset_id として送る', () => {
+    const form = assistantFormState(
+      { provider: 'openai', model: 'gpt-image-2', prompt: '', params: {}, inputs: [], assetGroupId: null },
+      'r1',
+    )
+    expect(form.result_asset_id).toBe('r1')
   })
 
   it('入力画像があれば edit で、並び順に入力を送る。未解決のプロバイダーは null', () => {
