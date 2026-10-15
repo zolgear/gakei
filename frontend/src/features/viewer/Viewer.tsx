@@ -11,8 +11,6 @@ import { useResourcePanel } from '../../context/useResourcePanel'
 import { useBackNavigate } from '../../lib/useBackNavigate'
 import { isMobileViewport } from '../../lib/viewport'
 import { useAddToInputs } from '../run-form/useAddToInputs'
-import { useOpenInArrange } from '../composite/useOpenInArrange'
-import { ArrangeIcon } from '../composite/compositeIcons'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import {
@@ -79,7 +77,6 @@ export function Viewer({ assetId }: ViewerProps) {
   const navigate = useNavigate()
   const addToInputs = useAddToInputs()
   // 「配置で開く」(ADR-0050 5章)。保存するとフォームの入力に置いてスタジオへ移る。
-  const arrange = useOpenInArrange()
   const queryClient = useQueryClient()
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -224,6 +221,18 @@ export function Viewer({ assetId }: ViewerProps) {
             <div className={styles.headerRow}>
               <h2 className={styles.heading}>Asset</h2>
               <div className={styles.headerActions}>
+                {/* 生成元の Run の詳細へ直接移る(下の文字のリンクと同じ遷移先)。生成元がある画像
+                    だけに出る。並びは右寄せなので、左端に置けば有無でほかのボタンの位置は変わらない。 */}
+                {asset.produced_by_run && (
+                  <Link
+                    to={`/runs/${asset.produced_by_run.id}`}
+                    className={styles.iconButton}
+                    aria-label={t.common.openGeneratedDetail}
+                    title={t.common.openGeneratedDetail}
+                  >
+                    <RunDetailIcon />
+                  </Link>
+                )}
                 <a
                   className={styles.iconButton}
                   href={assetUrl(asset.id, 'original', { download: true })}
@@ -242,29 +251,6 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <AddToInputIcon />
                 </button>
-                {asset.kind !== 'mask' && (
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label={t.composite.openWith}
-                    title={t.composite.openWith}
-                    onClick={() => arrange.open([asset.id])}
-                    disabled={Boolean(asset.deleted_at)}
-                  >
-                    <ArrangeIcon />
-                  </button>
-                )}
-                {/* 生成元の Run があるときだけ、その詳細へ直接移る(下の文字のリンクと同じ遷移先)。 */}
-                {asset.produced_by_run && (
-                  <Link
-                    to={`/runs/${asset.produced_by_run.id}`}
-                    className={styles.iconButton}
-                    aria-label={t.common.openGeneratedDetail}
-                    title={t.common.openGeneratedDetail}
-                  >
-                    <RunDetailIcon />
-                  </Link>
-                )}
                 <Link
                   to={`/lineage/${asset.id}`}
                   className={styles.iconButton}
@@ -282,25 +268,27 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <LineageIcon />
                 </Link>
-                {/* 系列を ZIP に書き出す(ADR-0037)。共有リンクと違い管理者設定は無い。 */}
-                {!asset.deleted_at && (
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label={t.lineageTransfer.export.button}
-                    title={t.lineageTransfer.export.buttonTooltip}
-                    onClick={() => setExportOpen(true)}
-                  >
-                    <ExportArchiveIcon />
-                  </button>
-                )}
-                {shareEnabled && !asset.deleted_at && (
+                {/* 系列を ZIP に書き出す(ADR-0037)。共有リンクと違い管理者設定は無い。
+                    削除済みの画像では押せない状態で残す(アイコンの位置を変えないため)。 */}
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={t.lineageTransfer.export.button}
+                  title={t.lineageTransfer.export.buttonTooltip}
+                  onClick={() => setExportOpen(true)}
+                  disabled={Boolean(asset.deleted_at)}
+                >
+                  <ExportArchiveIcon />
+                </button>
+                {/* 共有は管理者が無効にしていれば出さない(画像によらず同じなので並びは変わらない)。 */}
+                {shareEnabled && (
                   <button
                     type="button"
                     className={styles.iconButton}
                     aria-label={t.share.button}
                     title={t.share.buttonTooltip}
                     onClick={() => setShareOpen(true)}
+                    disabled={Boolean(asset.deleted_at)}
                   >
                     <ShareLinkIcon />
                   </button>
@@ -392,7 +380,6 @@ export function Viewer({ assetId }: ViewerProps) {
         )}
       </aside>
 
-      {arrange.editor}
       <AddToInputsDialog
         open={addToInputs.isPending}
         onAdd={() => addToInputs.resolve('add')}

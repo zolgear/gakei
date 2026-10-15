@@ -1787,7 +1787,6 @@
     "button": "配置",
     "buttonTitle": "入力画像を並べ、動かして1枚の入力にする",
     "edit": "配置を編集",
-    "openWith": "配置で開く",
     "webglUnavailable": "このブラウザでは WebGL2 が使えないため、配置の編集画面を開けません。",
     "loading": "読み込み中...",
     "loadError": "素材の読み込みに失敗しました",

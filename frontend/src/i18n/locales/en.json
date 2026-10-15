@@ -1787,7 +1787,6 @@
     "button": "Arrange",
     "buttonTitle": "Lay out and transform input images into a single input",
     "edit": "Edit arrangement",
-    "openWith": "Open in Arrange",
     "webglUnavailable": "WebGL2 is not available in this browser, so the Arrange editor cannot be opened.",
     "loading": "Loading...",
     "loadError": "Failed to load the source images",

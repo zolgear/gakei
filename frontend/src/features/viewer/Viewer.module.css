@@ -68,7 +68,8 @@
   padding: 8px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* ボタンは右寄せ。左端の「Generated の詳細」の有無で、ほかのボタンの位置は変わらない。 */
+  justify-content: flex-end;
   gap: 8px;
   background: var(--color-bg-raised);
 }
@@ -80,14 +81,25 @@
 }
 
 .heading {
-  margin: 0;
-  font-size: 15px;
+  /* 見出しは画面に出さず、読み上げだけに残す(ボタンの行を幅いっぱいに使う)。 */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* ボタンは折り返さず1行に並べる(折り返すとボタンの位置が画像ごとに変わる)。 */
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 /* 文字ラベルは置かず、アイコン + title(ツールチップ)で説明する。 */
@@ -307,12 +319,6 @@
   .headerRow {
     position: static;
     gap: 8px;
-  }
-
-  /* アイコンが 44px になると 6 個(共有を有効にしたとき)で1行に収まらないので、折り返して右に寄せる。 */
-  .headerActions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
   }
 
   .iconButton {
