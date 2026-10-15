@@ -285,7 +285,11 @@ export function StudioWorkspace() {
     <div className={styles.workspace} ref={containerRef} data-layout={layout}>
       <div
         className={styles.top}
-        style={layout === 'bottom' ? { flex: `0 0 ${displayedTopRatio}%` } : undefined}
+        // 狭い幅では比率で高さを決めない(境界は出さず、ページ全体がスクロールする)。比率で決めると、
+        // 結果エリアの中身(画像の枠 + サムネイルの行)がこの高さを超え、下が overflow: hidden で
+        // 切れる。全体表示の倍率は切れる前の枠の高さで計算されるので、縦長の画像の下側が見えず、
+        // パンしても「収まっている」とみなされて戻される。狭い幅の高さは CSS(.top)で中身に合わせる。
+        style={layout === 'bottom' && !isMobile ? { flex: `0 0 ${displayedTopRatio}%` } : undefined}
       >
         <ResultPane
           displayedAssetId={displayedAssetId}
