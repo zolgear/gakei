@@ -25,6 +25,7 @@ import { useUndoShortcut } from './undoShortcut'
 import { MODAL_BODY_ATTRIBUTE } from '../../components/modalFocus'
 import { useModalFocus } from '../../components/useModalFocus'
 import styles from './MaskEditor.module.css'
+import { usePreventPageZoom } from '../../lib/usePreventPageZoom'
 
 const BRUSH_COLOR: readonly [number, number, number] = [255, 59, 59]
 const BRUSH_ALPHA = 0.55
@@ -63,6 +64,8 @@ export function MaskEditor({
   const m = t.mask
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  // 2本指でページ全体が拡大されないようにする(iOS の Safari。lib/usePreventPageZoom.ts)。
+  usePreventPageZoom(containerRef)
   const cursorRef = useRef<HTMLDivElement | null>(null)
   const historyRef = useRef<HistorySnapshot[]>([])
   const drawingRef = useRef(false)

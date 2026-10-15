@@ -71,8 +71,29 @@
 }
 
 @media (max-width: 767px) {
+  /* 幅 320px でも「← 戻る」とズームの行が枠に収まるよう、間隔と余白を詰める。 */
+  .toolbarRow {
+    gap: 6px;
+  }
+
+  .toolbar {
+    gap: 4px;
+    padding: 4px 6px;
+  }
+
+  .scaleLabel {
+    min-width: 36px;
+  }
+
   .iconButton {
     width: 40px;
     height: 40px;
+  }
+}
+
+/* 幅 360px 未満(320px など)では「← 戻る」とあわせて行が枠からはみ出すので、ボタンの幅をもう少し詰める。 */
+@media (max-width: 359px) {
+  .iconButton {
+    width: 36px;
   }
 }

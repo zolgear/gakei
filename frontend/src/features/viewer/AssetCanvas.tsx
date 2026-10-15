@@ -53,6 +53,13 @@ interface AssetCanvasProps {
    * 省く(undefined)とマスクしない(共有のページ。ADR-0049 5章「出さない場所」)。
    */
   contentRating?: ContentRatingLevel | null
+  /**
+   * true なら、画像が枠に収まっている(全体表示の倍率以下の)あいだは、1本指の動きをパンに使わず
+   * ページのスクロールに任せる(`touch-action: pan-y`)。狭い幅のビューアは画像の枠の下に情報欄が
+   * 続くので、枠の上でもページを縦にスクロールできるようにする。ピンチでの拡大と、拡大したあとの
+   * 1本指のパンは今までどおり。既定(false)は今までどおり(スタジオの結果エリアなど)。
+   */
+  pageScrollWhenFit?: boolean
 }
 
 function CanvasToolbar({ scalePercent, leading }: { scalePercent: number; leading?: ReactNode }) {
@@ -122,7 +129,14 @@ function CanvasToolbar({ scalePercent, leading }: { scalePercent: number; leadin
   )
 }
 
-export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = true, contentRating }: AssetCanvasProps) {
+export function AssetCanvas({
+  asset,
+  toolbarLeading,
+  urlFor,
+  allowOriginal = true,
+  contentRating,
+  pageScrollWhenFit = false,
+}: AssetCanvasProps) {
   const { t } = useI18n()
   const { masked, revealed } = useAssetMaskState(asset.id, contentRating)
   // asset が切り替わったら preview から見直す(差し替え前の倍率を引きずらない)。
@@ -140,6 +154,13 @@ export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = tru
   }
 
   const [scalePercent, setScalePercent] = useState(100)
+  // 画像全体が枠に収まっているか(pageScrollWhenFit のときだけ使う)。初期表示は全体表示なので true。
+  // asset が変わったら、上の variantState と同じ書き方で true に戻す。
+  const [fitState, setFitState] = useState<{ assetId: string; fits: boolean }>(() => ({ assetId: asset.id, fits: true }))
+  if (fitState.assetId !== asset.id) {
+    setFitState({ assetId: asset.id, fits: true })
+  }
+  const scrollPage = pageScrollWhenFit && fitState.fits
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [containerSize, setContainerSize] = useState<Size | null>(null)
 
@@ -155,6 +176,13 @@ export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = tru
 
   function handleTransform(_ref: ReactZoomPanPinchRef, state: { scale: number }) {
     setScalePercent(Math.round(state.scale * 100))
+    if (pageScrollWhenFit && containerSize) {
+      // 拡大の倍率そのものではなく「画像が枠に収まるか」で決める(画面に合わせるボタンの倍率と
+      // computeFitScale のわずかな差や、枠より小さい画像を等倍で出す場合も同じに扱える)。
+      const fits =
+        asset.width * state.scale <= containerSize.width + 1 && asset.height * state.scale <= containerSize.height + 1
+      setFitState((s) => (s.fits === fits ? s : { ...s, fits }))
+    }
     if (variant === 'original' || !allowOriginal) return
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
     if (shouldUseOriginal(state.scale, asset, PREVIEW_LONG_EDGE, dpr)) {
@@ -163,7 +191,13 @@ export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = tru
   }
 
   return (
-    <div ref={containerRef} className={styles.canvasArea}>
+    <div
+      ref={containerRef}
+      className={styles.canvasArea}
+      // 収まっているあいだは縦のスワイプをページのスクロールに渡し(ピンチはページを拡大せず
+      // ライブラリに届く)、拡大中はパンとピンチを全部ライブラリに任せる。
+      style={pageScrollWhenFit ? { touchAction: scrollPage ? 'pan-y' : 'none' } : undefined}
+    >
       {containerSize && (
         <TransformWrapper
           // asset が変わるたびに作り直し、パン/ズーム状態をリセットする(前の画像の倍率を
@@ -178,6 +212,9 @@ export function AssetCanvas({ asset, toolbarLeading, urlFor, allowOriginal = tru
           wheel={{ step: ZOOM_STEP }}
           centerOnInit
           onTransform={handleTransform}
+          // 収まっているあいだは1本指のパンを止める。ライブラリが touchmove を preventDefault しなく
+          // なり、ブラウザがページをスクロールする(ピンチは panning と別の扱いなので効く)。
+          panning={{ disabled: scrollPage }}
         >
           <CanvasToolbar scalePercent={scalePercent} leading={toolbarLeading} />
           <TransformComponent

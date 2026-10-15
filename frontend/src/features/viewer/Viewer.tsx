@@ -9,7 +9,7 @@ import { assetUrl } from '../../api/assetUrl'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { useResourcePanel } from '../../context/useResourcePanel'
 import { useBackNavigate } from '../../lib/useBackNavigate'
-import { isMobileViewport } from '../../lib/viewport'
+import { isMobileViewport, useIsMobileViewport } from '../../lib/viewport'
 import { useAddToInputs } from '../run-form/useAddToInputs'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -64,6 +64,7 @@ function isEditableTarget(el: Element | null): boolean {
 
 export function Viewer({ assetId }: ViewerProps) {
   const { t } = useI18n()
+  const isMobile = useIsMobileViewport()
   // 推定中(ADR-0024)とレーティングの判定中(ADR-0049)は、終わるまで取り直す。
   const assetQuery = useQuery({
     queryKey: ['asset', assetId],
@@ -181,6 +182,9 @@ export function Viewer({ assetId }: ViewerProps) {
           <AssetCanvas
             asset={asset}
             contentRating={asset.content_rating ?? null}
+            // 狭い幅では画像の枠の下に情報欄が続くので、枠の上でもページを縦にスクロールできるように
+            // する(全体表示のときだけ。拡大したらパン)。
+            pageScrollWhenFit={isMobile}
             toolbarLeading={
               <button type="button" className={styles.backButton} onClick={goBack}>
                 {t.viewer.back}

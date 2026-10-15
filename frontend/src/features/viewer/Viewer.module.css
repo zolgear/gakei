@@ -29,6 +29,9 @@
   border-radius: var(--radius);
   color: var(--color-text);
   font-size: 12px;
+  /* 狭い幅でツールバー行に押されて「← 戻る」が2行に折れないようにする。 */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .backButton:hover {
@@ -313,6 +316,7 @@
 
   .backButton {
     min-height: 44px;
+    padding: 0 8px;
   }
 
   /* パネルが画像の下に回り、ページ全体がスクロールするので見出しの行は固定しない。 */
@@ -321,8 +325,19 @@
     gap: 8px;
   }
 
+  /* ボタンが6個並ぶと幅 320px では行に収まらない(44px × 6 + 間隔)。幅だけ行に合わせて詰める
+     (並びと右寄せは変えない。高さは 44px のまま)。 */
+  /* 行の幅いっぱいに広げてから右寄せで並べる(中身の幅に合わせると、ボタンが基準の 44px ではなく
+     アイコンの幅まで縮む)。 */
+  .headerActions {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .iconButton {
-    width: 44px;
+    width: auto;
+    flex: 0 1 44px;
+    min-width: 0;
     height: 44px;
   }
 
