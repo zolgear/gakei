@@ -87,6 +87,11 @@
 .headerActions {
   display: flex;
   align-items: center;
+  /* 生成画像は「Generated の詳細」が1つ多く、情報欄の幅に収まらないと最後の共有のボタンが
+     はみ出して見えなくなっていた。収まらないときは折り返して右に寄せる。 */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
   gap: 6px;
 }
 
@@ -307,12 +312,6 @@
   .headerRow {
     position: static;
     gap: 8px;
-  }
-
-  /* アイコンが 44px になると 6 個(共有を有効にしたとき)で1行に収まらないので、折り返して右に寄せる。 */
-  .headerActions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
   }
 
   .iconButton {
