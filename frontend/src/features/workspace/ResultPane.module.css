@@ -551,44 +551,10 @@
     flex-shrink: 0;
   }
 
+  /* 狭い幅では「出力 · 直近」の行を出さない(ユーザーの判断)。入力に使うのは画像の上の操作バー、
+     ほかの画像は入力の「追加」とサイドバーのストックから選ぶ。 */
   .sidebarThumbs {
-    width: 100%;
-    flex-direction: row;
-    padding: 10px 12px;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .thumbsHeading {
     display: none;
-  }
-
-  /* ラッパーの箱を消して、中身(タイル/フッターの中身)を直接 .sidebarThumbs の横並びの
-     一員にする(縦スクロール用の3段構成をやめ、以前どおり1行の横スクロールに戻す)。 */
-  .thumbsScroll,
-  .thumbsFooter {
-    display: contents;
-  }
-
-  .thumbTile {
-    margin-left: 0;
-    width: 96px;
-    flex-shrink: 0;
-  }
-
-  .thumbButton {
-    width: 100%;
-  }
-
-  /* タッチ端末はホバーが無いので常時表示する(指示により、あえて小さいまま)。 */
-  .thumbAddButton {
-    opacity: 1;
-  }
-
-  .useAsInputButton {
-    margin-left: 8px;
-    width: 96px;
-    flex-shrink: 0;
   }
 
   .canvasActionBar {
