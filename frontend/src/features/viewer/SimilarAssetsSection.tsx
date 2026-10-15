@@ -24,7 +24,14 @@ import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './SimilarAssetsSection.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
-export function SimilarAssetsSection({ assetId }: { assetId: string }) {
+export function SimilarAssetsSection({
+  assetId,
+  assetLinkTo = (id) => `/assets/${id}`,
+}: {
+  assetId: string
+  /** 似た画像を押したときの移り先。省略時はビューア(スタジオでは結果エリアに出す)。 */
+  assetLinkTo?: (assetId: string) => string
+}) {
   const { t } = useI18n()
   const m = t.embeddings
   const queryClient = useQueryClient()
@@ -90,7 +97,7 @@ export function SimilarAssetsSection({ assetId }: { assetId: string }) {
                   const label = hit.title ? `${hit.title} · ${score}` : score
                   return (
                     <li key={hit.id}>
-                      <Link to={`/assets/${hit.id}`} className={styles.tile} title={label} aria-label={label}>
+                      <Link to={assetLinkTo(hit.id)} className={styles.tile} title={label} aria-label={label}>
                         <AssetThumb
                           assetId={hit.id}
                           rating={hit.content_rating}

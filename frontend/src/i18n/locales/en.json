@@ -1499,6 +1499,7 @@
     "resultPane": {
       "viewModeGroup": "View",
       "preview": "Preview",
+      "detail": "Details",
       "lineage": "Lineage",
       "deletedBadge": "Deleted",
       "restore": "Restore",
@@ -2061,10 +2062,8 @@
     "restoreFailed": "Failed to restore.",
     "dimensions": "Dimensions",
     "format": "Format",
-    "size": "Size",
     "created": "Created",
     "promptHeading": "Prompt",
-    "viewRunDetail": "View Generated details",
     "useAsInput": "Use as input",
     "openInViewer": "Open in viewer",
     "download": "Download",

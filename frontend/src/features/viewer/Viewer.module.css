@@ -114,14 +114,6 @@
   opacity: 0.4;
 }
 
-.subheading {
-  margin: 12px 0 4px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-}
-
 /* 同じ Generated(Run)の他の出力への切り替え(出力が2つ以上のときだけ表示)。 */
 .outputNav {
   margin: 8px 0 4px;
@@ -200,46 +192,6 @@
   height: 100%;
   object-fit: cover;
   display: block;
-}
-
-.metaList {
-  margin: 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 8px;
-  font-size: 12px;
-}
-
-.metaList dt {
-  color: var(--color-text-faint);
-}
-
-.metaList dd {
-  margin: 0;
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
-
-.runPrompt {
-  margin: 0;
-  font-size: 12px;
-}
-
-.runMeta {
-  margin: 4px 0;
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-/* 最終プロンプト(ADR-0030)。見出しの上の余白は .subheading と揃える。 */
-.finalPrompt {
-  margin-top: 12px;
-}
-
-.runLink {
-  font-size: 12px;
 }
 
 /* 末尾に残す操作は削除だけ(よく使う操作は見出しの行のアイコン)。 */

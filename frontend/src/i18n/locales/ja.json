@@ -1499,6 +1499,7 @@
     "resultPane": {
       "viewModeGroup": "表示",
       "preview": "プレビュー",
+      "detail": "詳細",
       "lineage": "系列",
       "deletedBadge": "削除済み",
       "restore": "復元",
@@ -2061,10 +2062,8 @@
     "restoreFailed": "復元に失敗しました",
     "dimensions": "寸法",
     "format": "形式",
-    "size": "サイズ",
     "created": "作成",
     "promptHeading": "プロンプト",
-    "viewRunDetail": "Generated 詳細を見る",
     "useAsInput": "入力に使う",
     "openInViewer": "ビューアで開く",
     "download": "ダウンロード",
