@@ -18,6 +18,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ClipboardEvent as ReactClipboardEvent,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
@@ -278,6 +279,15 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     editLogic.handleDrop(e)
   }
 
+  function handlePanePaste(e: ReactClipboardEvent<HTMLDivElement>) {
+    // 画像の貼り付けはペインのどこでも受ける(プロンプトのテキスト欄だけでなく、タグのモードの入力欄や
+    // 入力画像のタイルにフォーカスがあるときも)。ダイアログ(ポータル)の中の貼り付けは React では
+    // ここまで伝わるが、DOM 上はペインの外なので受けない(配置やパラメーターの読み込みが自分で受ける)。
+    if (e.defaultPrevented) return
+    if (!(e.target instanceof Node) || !e.currentTarget.contains(e.target)) return
+    editLogic.handlePaste(e)
+  }
+
   function handlePaneDragOver(e: ReactDragEvent<HTMLDivElement>) {
     if (!isRelevantDragTypes(Array.from(e.dataTransfer.types))) return
     e.preventDefault()
@@ -431,7 +441,6 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
               updateMentionFromCursor(e.currentTarget)
             }}
             onClick={(e) => updateMentionFromCursor(e.currentTarget)}
-            onPaste={editLogic.handlePaste}
             placeholder={ip.promptPlaceholder}
           />
           {mention === null && tagAssist.popover}
@@ -614,6 +623,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       data-layout={layout}
       onKeyDown={handleKeyDown}
       onDrop={handlePaneDrop}
+      onPaste={handlePanePaste}
       onDragOver={handlePaneDragOver}
     >
       <PromptEditScopeContext.Provider value={{ provider: form.provider, model: form.model }}>
