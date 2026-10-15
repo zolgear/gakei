@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { ApiError, deleteAsset, getAsset, getRun, getShareSettings, restoreAsset } from '../../api/client'
-import { runSeedDisplay } from '../run-detail/runSeedDisplay'
 import { assetUrl } from '../../api/assetUrl'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { useResourcePanel } from '../../context/useResourcePanel'
@@ -26,28 +25,18 @@ import {
   TrashIcon,
 } from '../../components/icons'
 import { ToastHost, useToast } from '../../components/Toast'
-import { formatBytes, formatDateTime } from '../../lib/format'
+import { formatDateTime } from '../../lib/format'
 import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/assetRestore'
 import { fmt, useI18n } from '../../i18n'
-import { EmbeddedMetaSection } from '../lineage/EmbeddedMetaSection'
-import { OriginRecipeSection } from '../lineage/OriginRecipeSection'
-import { AssetGroupsSection } from './AssetGroupsSection'
-import { SimilarAssetsSection } from './SimilarAssetsSection'
-import { supportsSimilar } from '../embeddings/similarAssets'
-import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
-import { AssetTagsSection, AssetTitleSection } from './AssetAnnotationSection'
-import { annotationPollInterval, supportsAnnotation } from '../annotations/annotationStatus'
+import { annotationPollInterval } from '../annotations/annotationStatus'
 import { contentRatingPollInterval } from '../content-rating/contentRating'
-import { ContentRatingSection } from '../content-rating/ContentRatingSection'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
+import { AssetDetailSections } from './AssetDetailSections'
 import { ShareDialog } from '../share/ShareDialog'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import { importToastFromState } from '../lineage-transfer/lineageTransfer'
-import { FinalPromptSection } from '../run-detail/FinalPromptSection'
-import { baselineNegativePrompt } from '../run-detail/finalPrompt'
-import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import styles from './Viewer.module.css'
 import { focalStyle } from '../../lib/focalPoint'
@@ -57,9 +46,8 @@ interface ViewerProps {
 }
 
 /**
- * 生成元 Run の詳細を取得する共通フック。主たる親 Asset(role=image かつ position=0 の入力)と、
- * 出力一覧(他の出力への切り替え用)の両方をこの1回の fetch から導く(queryKey を共有し、
- * 二重に取得しない)。
+ * 生成元 Run の詳細を取得する共通フック。出力一覧(他の出力への切り替え用)を導く。queryKey は
+ * `AssetDetailSections`(主たる親 Asset と seed)と共有し、二重に取得しない。
  */
 function useRun(runId: string | undefined) {
   return useQuery({
@@ -102,8 +90,6 @@ export function Viewer({ assetId }: ViewerProps) {
   // 共有リンク(ADR-0029)は管理者設定で有効なときだけ「共有」を出す。
   const shareSettingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
   const shareEnabled = shareSettingsQuery.data?.enabled === true
-  // 似た画像(ADR-0033)は埋め込みが使えるときだけ出す。
-  const embeddingCaps = useEmbeddingCapabilities()
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteAsset(assetId),
@@ -154,11 +140,6 @@ export function Viewer({ assetId }: ViewerProps) {
 
   const asset = assetQuery.data
   const runQuery = useRun(asset?.produced_by_run?.id)
-  // ComfyUI / SD WebUI の Run だけ、実際に使った seed を出す(runSeedDisplay.ts)。
-  const seed = runQuery.data ? runSeedDisplay(runQuery.data, asset?.output_index) : null
-  const primaryParentAssetId = runQuery.data?.inputs?.find(
-    (i) => i.role === 'image' && i.position === 0,
-  )?.asset_id
   const outputNav =
     asset && runQuery.data?.outputs ? resolveRunOutputNav(runQuery.data.outputs, asset.id) : null
 
@@ -390,75 +371,8 @@ export function Viewer({ assetId }: ViewerProps) {
                 </div>
               </div>
             )}
-            {supportsAnnotation(asset) && <AssetTitleSection asset={asset} />}
-            <dl className={styles.metaList}>
-              <dt>{t.viewer.dimensions}</dt>
-              <dd>
-                {asset.width} × {asset.height} px
-              </dd>
-              <dt>{t.viewer.format}</dt>
-              <dd>{asset.mime}</dd>
-              <dt>{t.viewer.size}</dt>
-              <dd>{formatBytes(asset.bytes)}</dd>
-              <dt>sha256</dt>
-              <dd className={styles.mono}>{asset.sha256.slice(0, 16)}...</dd>
-              <dt>{t.viewer.created}</dt>
-              <dd>{formatDateTime(asset.created_at)}</dd>
-            </dl>
-
-            {asset.produced_by_run && (
-              <>
-                <h3 className={styles.subheading}>{t.viewer.promptHeading}</h3>
-                <p className={styles.runPrompt}>{asset.produced_by_run.prompt.slice(0, 80)}</p>
-                <p className={styles.runMeta}>
-                  {runQuery.data?.model_label ?? asset.produced_by_run.model} ・ {asset.produced_by_run.operation}
-                </p>
-                {seed && (
-                  <p className={styles.runMeta} title={seed.tooltip}>
-                    {seed.text}
-                  </p>
-                )}
-                <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>
-                  {t.viewer.viewRunDetail}
-                </Link>
-                {primaryParentAssetId && (
-                  <p className={styles.runMeta}>
-                    {t.viewer.sourceImage}{' '}
-                    <Link to={`/assets/${primaryParentAssetId}`} className={styles.runLink}>
-                      {t.viewer.view}
-                    </Link>{' '}
-                    ・{' '}
-                    <Link
-                      to={`/runs/${asset.produced_by_run.id}/compare?before=${primaryParentAssetId}&after=${asset.id}`}
-                      className={styles.runLink}
-                    >
-                      {t.viewer.compareWithOriginal}
-                    </Link>
-                  </p>
-                )}
-                {/* 最終プロンプト(ADR-0030 3章)と、この画像の展開後のプロンプト(ADR-0038 7章)。
-                    挿入・置き換えはスタジオへ移って反映する。 */}
-                <FinalPromptSection
-                  className={styles.finalPrompt}
-                  textOutputs={asset.produced_by_run.text_outputs}
-                  outputIndex={asset.output_index ?? null}
-                  prompt={asset.produced_by_run.prompt}
-                  negativePrompt={runQuery.data ? baselineNegativePrompt(runQuery.data.params) : undefined}
-                  headingClassName={styles.subheading}
-                  renderActions={(text) => <StudioPromptActions prompt={text} />}
-                />
-              </>
-            )}
-
-            {/* タグはプロンプトの下(Run が無い画像では大きさ・形式の下)。多いと畳む。
-                レーティング(ADR-0049 4章)はタグの下。 */}
-            {supportsAnnotation(asset) && <AssetTagsSection asset={asset} />}
-            <ContentRatingSection asset={asset} />
-
-            {asset.origin && <OriginRecipeSection origin={asset.origin} />}
-            {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} assetId={asset.id} />}
-            <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
-            {embeddingCaps && supportsSimilar(asset) && <SimilarAssetsSection key={asset.id} assetId={asset.id} />}
+            {/* タイトル、寸法など、生成元、タグ、レーティングなど(スタジオの「詳細」タブ・系列インスペクターと共通)。 */}
+            <AssetDetailSections asset={asset} />
 
             {!asset.deleted_at && (
               <div className={styles.actions}>

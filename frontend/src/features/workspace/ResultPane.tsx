@@ -1,5 +1,7 @@
 /**
- * スタジオ上段(結果エリア)。「プレビュー / 系列」を切り替える。プレビューは表示中の Asset
+ * スタジオ上段(結果エリア)。「プレビュー / 詳細 / 系列」を切り替える。詳細は表示中の Asset の
+ * `AssetDetailSections`(ビューアの情報欄と同じ。ADR-0009 1章 2026-10-15 追記)をスクロールできる
+ * 領域に出す。プレビューは表示中の Asset
  * (`displayedAssetId`。URL の `?asset=` と同期、親が管理)か、実行中/直前の Run
  * (`pendingRunId`。URL の `?run=` と同期、親が管理)の進捗・結果を表示する。系列は
  * `LineageGraph` を埋め込み、ノードのタップ= 選択(遷移しない。`?node=` と同期)、
@@ -14,7 +16,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import {
   ApiError,
   cancelRun,
@@ -27,7 +29,6 @@ import {
   restoreAsset,
 } from '../../api/client'
 import { assetUrl, runPartialUrl } from '../../api/assetUrl'
-import { RunDetailIcon } from '../../components/icons'
 import { fmt, useI18n } from '../../i18n'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
@@ -42,6 +43,8 @@ import { describeError } from '../run-status/errorMessages'
 import { AssetCanvas } from '../viewer/AssetCanvas'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { contentRatingPollInterval } from '../content-rating/contentRating'
+import { annotationPollInterval } from '../annotations/annotationStatus'
+import { AssetDetailSections } from '../viewer/AssetDetailSections'
 import { useRefreshListsWhenJudged } from '../content-rating/contentRatingRefresh'
 import { LineageGraph } from '../lineage/LineageGraph'
 import { LineageInspectorPanel } from '../lineage/LineageInspectorPanel'
@@ -98,6 +101,8 @@ interface ResultPaneProps {
   onPendingRunSettled?: (runId: string, keepAssetId: string | null) => void
 }
 
+type ResultViewMode = 'preview' | 'detail' | 'graph'
+
 function formatSize(size: unknown): string | null {
   return typeof size === 'string' && size.length > 0 ? size.replace('x', ' × ') : null
 }
@@ -115,7 +120,7 @@ export function ResultPane({
   const rp = t.workspace.resultPane
   const navigate = useNavigate()
   const location = useLocation()
-  const [viewMode, setViewMode] = useState<'preview' | 'graph'>('preview')
+  const [viewMode, setViewMode] = useState<ResultViewMode>('preview')
   const queryClient = useQueryClient()
   const { formState, setFormState } = useRunFormContext()
   const studioReturn = useStudioReturn()
@@ -349,17 +354,24 @@ export function ResultPane({
     else navigate(target.path)
   }
 
+  // 詳細タブは表示中の Asset があるときだけ。無いとき(生成中など)はプレビューの中身を出す
+  // (タブの選択は残し、出力に切り替わったら詳細に戻る)。
+  const showDetail = viewMode === 'detail' && effectiveAssetId !== null
+
   // 「入力の主たる親」を表示しているときは、その Asset に生成元 Run があっても Run の情報
   // ではなく「入力」であることを示す(ユーザーが今から使う入力の確認が目的のため)。
   const isInputPreview = origin.kind === 'primary-input'
 
   // --- 表示中の Asset ---
   // レーティングの判定中(ADR-0049)は終わるまで取り直し、終わったら一覧(この Run の出力など)も取り直す。
+  // 詳細タブではタイトル・タグの推定中(ADR-0024)もビューアと同じく取り直す。
   const assetQuery = useQuery({
     queryKey: ['asset', effectiveAssetId],
     queryFn: () => getAsset(effectiveAssetId as string),
     enabled: effectiveAssetId !== null,
-    refetchInterval: (query) => contentRatingPollInterval(query.state.data),
+    refetchInterval: (query) =>
+      (viewMode === 'detail' ? annotationPollInterval(query.state.data) : 0) ||
+      contentRatingPollInterval(query.state.data),
   })
   const asset = assetQuery.data
   useRefreshListsWhenJudged(asset?.content_rating_detail?.status)
@@ -481,7 +493,7 @@ export function ResultPane({
         <div className={styles.modeGroup} role="group" aria-label={rp.viewModeGroup}>
           <button
             type="button"
-            aria-pressed={viewMode === 'preview'}
+            aria-pressed={viewMode === 'preview' || (viewMode === 'detail' && !showDetail)}
             className={styles.modeButton}
             onClick={() => {
               if (selectedNodeId) selectNode(null)
@@ -489,6 +501,18 @@ export function ResultPane({
             }}
           >
             {rp.preview}
+          </button>
+          <button
+            type="button"
+            aria-pressed={showDetail}
+            className={styles.modeButton}
+            onClick={() => {
+              if (selectedNodeId) selectNode(null)
+              setViewMode('detail')
+            }}
+            disabled={!effectiveAssetId}
+          >
+            {rp.detail}
           </button>
           <button
             type="button"
@@ -534,18 +558,6 @@ export function ResultPane({
 
         <StudioLayoutToggleButton className={`${styles.headerIconButton} ${styles.layoutToggle}`} />
 
-        {/* スタジオ内では Run 詳細ページへ移動せず、結果エリアに Run 詳細を出す(`?run=`)。
-            既に Run 詳細を表示中なら出さない。フルページの Run 詳細は履歴から開ける。 */}
-        {headerRun && !showRunDetail && (
-          <Link
-            to={buildStudioPath(null, null, headerRun.id)}
-            className={styles.headerIconButton}
-            aria-label={t.common.openGeneratedDetail}
-            title={t.common.openGeneratedDetail}
-          >
-            <RunDetailIcon />
-          </Link>
-        )}
         {asset && (
           <>
             <a
@@ -594,7 +606,28 @@ export function ResultPane({
       {deleteError && <p className={styles.deleteError}>{deleteError}</p>}
       {restoreError && <p className={styles.deleteError}>{restoreError}</p>}
 
-      {viewMode === 'graph' ? (
+      {showDetail ? (
+        <div className={styles.body}>
+          <div className={styles.detailScroll}>
+            {asset ? (
+              <div className={styles.detailContent}>
+                {/* Generated の詳細は、スタジオを離れず結果エリアに Run 詳細を出す(`?run=`)。
+                    元になった画像・似た画像も結果エリアに出す(`?asset=`)。 */}
+                <AssetDetailSections
+                  asset={asset}
+                  runDetailTo={(runId) => buildStudioPath(null, null, runId)}
+                  assetLinkTo={(assetId) => buildStudioPath(assetId)}
+                  renderPromptActions={(prompt) => (
+                    <RunPromptActions prompt={prompt} currentPrompt={formState.prompt} insertPrompt={insertPrompt} />
+                  )}
+                />
+              </div>
+            ) : (
+              <p className={styles.emptyState}>{assetQuery.isError ? rp.assetLoadFailed : rp.loading}</p>
+            )}
+          </div>
+        </div>
+      ) : viewMode === 'graph' ? (
         effectiveAssetId ? (
           <div className={styles.body}>
             <div className={styles.graphCanvasWrap}>

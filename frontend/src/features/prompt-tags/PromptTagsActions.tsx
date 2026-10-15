@@ -15,7 +15,7 @@
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { getAssetPromptTags } from '../../api/client'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { fmt, useI18n } from '../../i18n'
@@ -28,6 +28,7 @@ export function PromptTagsActions({ assetId }: { assetId: string }) {
   const { t } = useI18n()
   const pt = t.promptTags.fromImage
   const navigate = useNavigate()
+  const location = useLocation()
   const { formState, requestPromptInsert } = useRunFormContext()
   const [confirmingReplace, setConfirmingReplace] = useState(false)
   const [copyStatus, setCopyStatus] = useState<{ assetId: string; ok: boolean } | null>(null)
@@ -51,7 +52,8 @@ export function PromptTagsActions({ assetId }: { assetId: string }) {
     const text = tagNamesToPrompt(tags, shouldEscapeParens(formState.provider))
     requestPromptInsert(text, mode)
     setConfirmingReplace(false)
-    navigate('/studio')
+    // スタジオの中(結果エリアの「詳細」タブなど)では、表示中の画像(`?asset=`)を残したまま反映する。
+    if (location.pathname !== '/studio') navigate('/studio')
   }
 
   function handleReplaceClick() {
