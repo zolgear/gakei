@@ -67,9 +67,9 @@
   margin: -8px -16px 0;
   padding: 8px 16px;
   display: flex;
-  /* ボタンが折り返したときも、見出しは1段目のボタンの高さに揃えて上に置く。 */
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  /* ボタンは右寄せ。左端の「Generated の詳細」の有無で、ほかのボタンの位置は変わらない。 */
+  justify-content: flex-end;
   gap: 8px;
   background: var(--color-bg-raised);
 }
@@ -81,25 +81,24 @@
 }
 
 .heading {
-  margin: 0;
-  font-size: 15px;
-  /* ボタン(.iconButton)と同じ高さの行にして、1段目のボタンと中央を揃える。 */
-  line-height: 28px;
-  /* 幅が足りないときは見出しを省略して、ボタンを1行に保つ。 */
-  min-width: 0;
+  /* 見出しは画面に出さず、読み上げだけに残す(ボタンの行を幅いっぱいに使う)。 */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip: rect(0 0 0 0);
   white-space: nowrap;
+  border: 0;
 }
 
 .headerActions {
   display: flex;
   align-items: center;
-  /* ボタンは折り返さず1行に並べる(折り返すと見出しとボタンの位置が画像ごとに変わる)。
-     幅が足りないときは見出しの側を縮める。狭い画面(44px のボタン)だけ折り返して右に寄せる。 */
+  /* ボタンは折り返さず1行に並べる(折り返すとボタンの位置が画像ごとに変わる)。 */
   flex-wrap: nowrap;
   justify-content: flex-end;
-  flex-shrink: 0;
   gap: 4px;
 }
 
@@ -320,17 +319,6 @@
   .headerRow {
     position: static;
     gap: 8px;
-  }
-
-  .heading {
-    line-height: 44px;
-    flex-shrink: 0;
-  }
-
-  .headerActions {
-    flex-wrap: wrap;
-    flex-shrink: 1;
-    min-width: 0;
   }
 
   .iconButton {
