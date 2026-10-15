@@ -18,7 +18,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type ClipboardEvent as ReactClipboardEvent,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
@@ -269,6 +268,25 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     }
   }
 
+  // 画像の貼り付けはスタジオの画面のどこでも受ける(プロンプトのテキスト欄だけでなく、タグのモードの
+  // 入力欄、入力画像のタイル、何も選んでいないとき、「入力画像を追加」のダイアログの中でも)。
+  // ほかのダイアログ(配置・スケッチ・マスクなど)の中では受けない。画像を含まない貼り付けは
+  // handlePaste が何もしないので、テキストの貼り付けはそのまま入る。
+  const handlePasteRef = useRef(editLogic.handlePaste)
+  handlePasteRef.current = editLogic.handlePaste
+  const addDialogOpenRef = useRef(addDialogOpen)
+  addDialogOpenRef.current = addDialogOpen
+  useEffect(() => {
+    function handleWindowPaste(e: ClipboardEvent) {
+      if (e.defaultPrevented) return
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('[role="dialog"]') && !addDialogOpenRef.current) return
+      handlePasteRef.current(e)
+    }
+    window.addEventListener('paste', handleWindowPaste)
+    return () => window.removeEventListener('paste', handleWindowPaste)
+  }, [])
+
   function handlePaneDrop(e: ReactDragEvent<HTMLDivElement>) {
     // 下段全体でもドロップを受ける(チップ行の外にドロップされた場合の保険)。関係ないドラッグ
     // (テキスト選択など)まで奪わないよう、Files・アプリ内マーカー・text/uri-list のときだけ処理する。
@@ -277,15 +295,6 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     if (e.defaultPrevented) return
     e.preventDefault()
     editLogic.handleDrop(e)
-  }
-
-  function handlePanePaste(e: ReactClipboardEvent<HTMLDivElement>) {
-    // 画像の貼り付けはペインのどこでも受ける(プロンプトのテキスト欄だけでなく、タグのモードの入力欄や
-    // 入力画像のタイルにフォーカスがあるときも)。ダイアログ(ポータル)の中の貼り付けは React では
-    // ここまで伝わるが、DOM 上はペインの外なので受けない(配置やパラメーターの読み込みが自分で受ける)。
-    if (e.defaultPrevented) return
-    if (!(e.target instanceof Node) || !e.currentTarget.contains(e.target)) return
-    editLogic.handlePaste(e)
   }
 
   function handlePaneDragOver(e: ReactDragEvent<HTMLDivElement>) {
@@ -623,7 +632,6 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       data-layout={layout}
       onKeyDown={handleKeyDown}
       onDrop={handlePaneDrop}
-      onPaste={handlePanePaste}
       onDragOver={handlePaneDragOver}
     >
       <PromptEditScopeContext.Provider value={{ provider: form.provider, model: form.model }}>
