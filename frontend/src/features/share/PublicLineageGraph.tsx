@@ -89,7 +89,7 @@ function PublicLineageGraphInner({
     [data, highlightedNodeId, thumbUrlFor, full],
   )
   // キャンバスの大きさが決まってから(狭い幅で縦に並べ替わったときも)表示を決め直す。
-  const { fitAll } = useLineageViewport({
+  const { fitAll, viewportReady } = useLineageViewport({
     canvasRef,
     fitKey: `${data.root_asset_id}:${nodes.length}`,
     nodeCount: nodes.length,
@@ -108,6 +108,7 @@ function PublicLineageGraphInner({
   return (
     <div className={lineageStyles.canvas} ref={canvasRef}>
       <ReactFlow
+        className={viewportReady ? undefined : lineageStyles.viewportPending}
         nodes={nodes}
         edges={edges}
         nodeTypes={lineageNodeTypes}
