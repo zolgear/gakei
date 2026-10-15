@@ -84,7 +84,7 @@ function ExportPreviewGraphCanvas({
   const canvasRef = useRef<HTMLDivElement | null>(null)
   // 起点は `isRoot` の見た目で示す(強調するノードは無し)。サムネイルは通常の配信の URL。
   const { nodes, edges } = useMemo(() => buildFlowGraph(graph, rootAssetId, null), [graph, rootAssetId])
-  const { fitAll } = useLineageViewport({
+  const { fitAll, viewportReady } = useLineageViewport({
     canvasRef,
     fitKey: `${rootAssetId}:${nodes.map((n) => n.id).join(',')}`,
     nodeCount: nodes.length,
@@ -95,6 +95,7 @@ function ExportPreviewGraphCanvas({
   return (
     <div className={lineageStyles.canvas} ref={canvasRef}>
       <ReactFlow
+        className={viewportReady ? undefined : lineageStyles.viewportPending}
         nodes={nodes}
         edges={edges}
         nodeTypes={lineageNodeTypes}

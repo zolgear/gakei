@@ -36,6 +36,15 @@
   overflow: hidden;
 }
 
+/* 系列ごとの最初の自動の表示(`useLineageViewport`)が済むまで、ノードとエッジを隠す。
+   既定の位置(左上、倍率 1)で一瞬描かれてから拡大されるちらつきを防ぐ。背景とボタンは見せたまま。
+   React Flow は測り終えたノードに `visibility: visible` を直接書くので、`visibility: hidden` では
+   子のノードが見えてしまう。子が打ち消せない `opacity` で隠す。 */
+.viewportPending :global(.react-flow__viewport) {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ツールバーはキャンバスの右下に重ねる。上段ヘッダーの下に独立した行は作らない。 */
 .overlayBottom {
   position: absolute;
