@@ -33,6 +33,7 @@ import { groupParamsForProvider } from '../run-form/paramGrouping'
 import { MaskEditor } from '../mask/MaskEditor'
 import { SketchEditor, type SketchSaveOptions } from '../sketch/SketchEditor'
 import { SketchLoadingDialog } from '../sketch/SketchLoadingDialog'
+import { CompositeEditor } from '../composite/CompositeEditor'
 import { recommendedSketchPrompt } from '../sketch/recommendedPrompt'
 import { MentionPopover } from '../prompt-sets/MentionPopover'
 import {
@@ -311,6 +312,14 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const blankSketchSize = paramToSizeState(sizeToParam(form.sizeState))
 
   const sketchEditorState = editLogic.sketchEditor
+
+  // 配置(ADR-0050)のキャンバスの既定に使う、フォームで選んでいるサイズ(auto・未指定なら null)。
+  const formSizeParam = sizeToParam(form.sizeState)
+  const compositeFormSize =
+    formSizeParam && formSizeParam !== 'auto'
+      ? { width: blankSketchSize.width, height: blankSketchSize.height }
+      : null
+  const compositeEditorState = editLogic.compositeEditor
 
   function readPromptCursorPos(): number | null {
     const el = document.getElementById('prompt')
@@ -645,6 +654,21 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
           base={{ kind: 'asset', asset: editLogic.sketchOverAsset }}
           onSave={(asset, options) => handleSketchSave(asset, options, sketchEditorState.inputId)}
           onCancel={editLogic.closeSketchEditor}
+        />
+      )}
+
+      {compositeEditorState && (
+        <CompositeEditor
+          init={
+            compositeEditorState.mode === 'reopen'
+              ? { kind: 'reopen', assetId: compositeEditorState.assetId }
+              : { kind: 'new', sourceAssetIds: [...new Set(editLogic.images.map((i) => i.assetId))] }
+          }
+          formSize={compositeFormSize}
+          inputAssetIds={editLogic.images.map((i) => i.assetId)}
+          showRemoveSourcesOption={compositeEditorState.mode === 'new' && form.maxInputImages > 1}
+          onSave={editLogic.saveComposite}
+          onCancel={editLogic.closeCompositeEditor}
         />
       )}
     </div>

@@ -346,7 +346,10 @@
 }
 
 /* スイッチ(チェックボックスを使う。保存で反映の項目は保存まで送らない) */
+/* position: relative は、隠したチェックボックスをスイッチの位置に留めるため。無いと設定のスクロールに付いてこず、
+   フォーカスでアプリの外枠ごとスクロールして画面が消える */
 .switch {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;

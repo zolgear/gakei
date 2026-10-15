@@ -6,12 +6,23 @@
  * - 読んだら正方形に切り抜き(焦点があればその位置が入るように。ADR-0043。無ければ中央)、小さな ImageBitmap にして元の画像は捨てる(数千枚を
  *   512px のまま持つとメモリが足りない)。古いものから捨てる(LRU)。
  * - タブを切り替えても読み直さないよう、ページの中で1つを共有する。
+ * - マスクする画像(ADR-0049 5章「マップ」)には、読んだタイルからぼかしたタイルを作って描く
+ *   (`getMasked`)。小さく縮めてから引き伸ばしてぼかし(`ctx.filter` は Safari が対応しないので
+ *   使わない)、ブラウザのメモリにだけ置く。元のタイルを捨てるときに一緒に捨てる。
  */
 import { assetUrl } from '../../api/assetUrl'
 import type { FocalPointValue } from '../../lib/focalPoint'
+import { BLUR_SAMPLE_PX } from './mapRatingMask'
 
 /** 保持するサムネイルの一辺(デバイスピクセル)。 */
 export const THUMB_TILE_PX = 96
+/**
+ * ぼかしたタイルの一辺。ぼけた絵は引き伸ばしても崩れないので小さく持つ(描くときに
+ * `drawImage` が滑らかに広げる)。
+ */
+const BLURRED_TILE_PX = 32
+/** ぼかしたタイルを少し暗くする(サムネイルのマスク `.mask` の背景と同じ)。 */
+const BLURRED_SHADE = 'rgba(16, 17, 20, 0.28)'
 const MAX_ENTRIES = 1500
 const CONCURRENCY = 6
 
@@ -22,6 +33,7 @@ export type ThumbRequest = { id: string; focal?: FocalPointValue | null }
 
 class ThumbCache {
   private bitmaps = new Map<string, ImageBitmap | HTMLCanvasElement>()
+  private blurred = new Map<string, HTMLCanvasElement>()
   private inFlight = new Set<string>()
   private failed = new Set<string>()
   private queue: ThumbRequest[] = []
@@ -35,6 +47,20 @@ class ThumbCache {
       this.bitmaps.set(id, value)
     }
     return value
+  }
+
+  /**
+   * マスクする画像のための、ぼかしたタイル。元のタイルをまだ読んでいなければ undefined
+   * (呼び出し側は `want` で元のタイルを読む)。
+   */
+  getMasked(id: string): HTMLCanvasElement | undefined {
+    const tile = this.get(id)
+    if (!tile) return undefined
+    const cached = this.blurred.get(id)
+    if (cached) return cached
+    const made = toBlurredTile(tile)
+    if (made) this.blurred.set(id, made)
+    return made ?? undefined
   }
 
   /** 読みたいものを、優先する順に渡す(前の要求は捨てる)。 */
@@ -75,6 +101,7 @@ class ThumbCache {
         const value = this.bitmaps.get(oldest)
         if (value && 'close' in value) value.close()
         this.bitmaps.delete(oldest)
+        this.blurred.delete(oldest)
       }
       for (const listener of this.listeners) listener()
     } catch {
@@ -141,3 +168,29 @@ function drawToCanvas(source: CanvasImageSource, sx: number, sy: number, side: n
 }
 
 export const thumbCache = new ThumbCache()
+
+/**
+ * ぼかしたタイルを作る。`BLUR_SAMPLE_PX` まで縮めてから、2段で引き伸ばす(一度に広げると格子が
+ * 見えやすい)。canvas が使えなければ null。
+ */
+function toBlurredTile(source: CanvasImageSource): HTMLCanvasElement | null {
+  const step = (from: CanvasImageSource, side: number): HTMLCanvasElement | null => {
+    const canvas = document.createElement('canvas')
+    canvas.width = side
+    canvas.height = side
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(from, 0, 0, side, side)
+    return canvas
+  }
+  const small = step(source, BLUR_SAMPLE_PX)
+  const mid = small && step(small, Math.round((BLUR_SAMPLE_PX + BLURRED_TILE_PX) / 2))
+  const out = mid && step(mid, BLURRED_TILE_PX)
+  const ctx = out?.getContext('2d')
+  if (!out || !ctx) return null
+  ctx.fillStyle = BLURRED_SHADE
+  ctx.fillRect(0, 0, BLURRED_TILE_PX, BLURRED_TILE_PX)
+  return out
+}

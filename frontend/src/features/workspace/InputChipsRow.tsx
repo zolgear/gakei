@@ -3,7 +3,8 @@
  * マスクを描く、描き込む、外す)で横並びに表示する。サムネイルを押すと、その画像を上段のプレビューに
  * 出す(編集元を見ながらプロンプトを書けるように。ビューアへは移動しない)。番号 1 が主たる親(position 0)で、マスクが
  * あればそのチップ内に表示する。行末に枚数 `n/16` を出す。「+ 追加」の隣の「スケッチ」ボタンは
- * 白紙に描いて入力画像を作る(ADR-0010)。
+ * 白紙に描いて入力画像を作る(ADR-0010)。その隣の「配置」は、入力画像を並べて動かし1枚の入力にする
+ * (ADR-0050)。配置の結果のチップには「配置を編集」を出す。
  * ドロップはこの行と下段全体の両方で受ける(呼び出し側が `onDrop`/`onDragOver` を
  * このコンポーネントとコンテナの両方に配線する)。
  * 「+ 追加」は OS のファイル選択を直接開かず、`onOpenAddDialog` で `AddInputImagesDialog`
@@ -15,6 +16,7 @@ import { fmt, useI18n } from '../../i18n'
 import type { EditInputsLogic } from '../run-form/useEditInputsLogic'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
+import { ArrangeIcon } from '../composite/compositeIcons'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputChipsRow.module.css'
 import { focalStyle } from '../../lib/focalPoint'
@@ -202,6 +204,20 @@ export function InputChipsRow({
                       )
                     ))}
 
+                  {detail?.kind === 'composite' && (
+                    <button
+                      type="button"
+                      className={styles.iconButton}
+                      aria-label={t.composite.edit}
+                      title={t.composite.edit}
+                      onClick={() =>
+                        logic.openCompositeEditor({ mode: 'reopen', inputId: item.inputId, assetId: item.assetId })
+                      }
+                    >
+                      <ArrangeIcon size={12} />
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     className={styles.iconButton}
@@ -257,6 +273,16 @@ export function InputChipsRow({
       >
         <PencilIcon />
         {c.sketch}
+      </button>
+      <button
+        type="button"
+        className={styles.addButton}
+        aria-label={t.composite.button}
+        title={t.composite.buttonTitle}
+        onClick={() => logic.openCompositeEditor({ mode: 'new' })}
+      >
+        <ArrangeIcon size={12} />
+        {t.composite.button}
       </button>
 
       {logic.uploadErrors.length > 0 && (

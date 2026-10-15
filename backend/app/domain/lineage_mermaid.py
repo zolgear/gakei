@@ -39,7 +39,7 @@ class MermaidOptions:
     id_comments: bool = True
     # 先頭に形と矢印の読み方を1行のコメントで書く。
     legend_comment: bool = True
-    # Asset のラベルに種類(generated / upload / mask / sketch)と大きさを入れる。
+    # Asset のラベルに種類(generated / upload / mask / sketch / composite)と大きさを入れる。
     show_asset_kind: bool = True
     show_asset_size: bool = True
     # Run のラベルにモデル(表示名があればそれ)と、成功以外の状態を入れる。
@@ -225,6 +225,8 @@ def _edge_label(edge: LineageEdge, output_counts: dict[uuid.UUID, int]) -> str:
         return "output"
     if edge.kind == "sketch_source":
         return "sketch base"
+    if edge.kind == "composite_source":
+        return "composite source"
     return "origin, unverified"
 
 

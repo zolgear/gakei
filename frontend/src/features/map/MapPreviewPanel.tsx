@@ -7,16 +7,22 @@
  * 読むだけのパネル(編集はビューアで行う)。情報はビューアの情報欄を縮めたもので、取得もビューアと
  * 同じ `['asset', id]` のクエリを使う(ビューアへ移ったときに取り直さない)。
  * パネルはマップの canvas の兄弟要素なので、パネルの上のポインタ操作とホイールはマップを動かさない。
+ *
+ * マップでマスクしているあいだ(ADR-0049 5章「マップ」)は、マスクする画像をぼかして段階を重ねる。
+ * ここでは1枚ずつは外さない(外すのはツールバーの目のボタンだけ)。画像を押すと今までどおり
+ * ビューアを開く(ビューアでは1枚ずつ外せる)。
  */
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { getAsset } from '../../api/client'
+import { getAsset, type ContentRatingLevel } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
 import { assetKindLabel, formatBytes, formatDateTime } from '../../lib/format'
 import { useI18n } from '../../i18n'
 import { TagChip } from '../annotations/TagChip'
 import { buildSimilarSearchPath } from '../search/searchQuerySync'
+import { RatingBadge } from '../content-rating/RatingBadge'
+import ratingStyles from '../content-rating/ContentRating.module.css'
 import styles from './MapPreviewPanel.module.css'
 
 interface MapPreviewPanelProps {
@@ -26,12 +32,23 @@ interface MapPreviewPanelProps {
   /** 開いたときに閉じるボタンへ焦点を移すか(「↗」で広げたときだけ)。 */
   autoFocus: boolean
   onCollapse: () => void
+  /** マップでマスクしているか(ユーザー設定でマスクする画像で、マップ全体で外していない)。 */
+  ratingMasked?: boolean
+  /** 段階(マスクしているときに重ねる。null は未判定)。 */
+  rating?: ContentRatingLevel | null
 }
 
 /** プロンプトの抜粋の長さ(残りは CSS で行数を切る)。 */
 const PROMPT_SNIPPET_MAX = 400
 
-export function MapPreviewPanel({ assetId, fallbackTitle, autoFocus, onCollapse }: MapPreviewPanelProps) {
+export function MapPreviewPanel({
+  assetId,
+  fallbackTitle,
+  autoFocus,
+  onCollapse,
+  ratingMasked = false,
+  rating,
+}: MapPreviewPanelProps) {
   const { t } = useI18n()
   const m = t.map
   const v = t.viewer
@@ -88,7 +105,25 @@ export function MapPreviewPanel({ assetId, fallbackTitle, autoFocus, onCollapse 
 
       <div className={styles.body}>
         <Link to={`/assets/${assetId}`} className={styles.imageLink} aria-label={m.openInViewer} title={m.openInViewer}>
-          <img key={assetId} src={assetUrl(assetId, 'preview')} alt="" className={styles.image} />
+          <img
+            key={assetId}
+            src={assetUrl(assetId, 'preview')}
+            alt=""
+            className={styles.image}
+            data-rating-masked={ratingMasked || undefined}
+          />
+          {ratingMasked && (
+            <span className={styles.imageMask}>
+              {rating ? (
+                <RatingBadge level={rating} size="mask" />
+              ) : (
+                <span className={ratingStyles.badge} data-size="mask" data-level="unrated">
+                  {t.contentRating.unrated}
+                </span>
+              )}
+              <span className={styles.imageMaskHint}>{m.ratingMaskPreviewHint}</span>
+            </span>
+          )}
         </Link>
 
         <div className={styles.actions}>

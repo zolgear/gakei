@@ -48,6 +48,8 @@ function kindLabel(t: Messages, kind: AssetSummary['kind']): string {
       return t.stock.kindSketch
     case 'mask':
       return t.stock.kindMask
+    case 'composite':
+      return t.stock.kindComposite
   }
 }
 

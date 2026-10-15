@@ -28,7 +28,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain.models import AppSetting, Asset, Run, RunInput, RunStatus
+from app.domain.compositions import composition_sources
+from app.domain.models import AppSetting, Asset, AssetKind, Run, RunInput, RunStatus
 from app.domain.visibility import VisibilityChecker
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -52,7 +53,7 @@ MAX_LINEAGE_BYTES = 1024 * 1024  # 1 MiB
 
 _VALID_RUN_STATUSES = {"queued", "running", "succeeded", "failed", "canceled"}
 _VALID_RUN_INPUT_ROLES = {"image", "mask", "reference"}
-_VALID_EDGE_KINDS = {"input", "output", "sketch_source", "origin"}
+_VALID_EDGE_KINDS = {"input", "output", "sketch_source", "composite_source", "origin"}
 
 
 def _utcnow() -> datetime:
@@ -308,6 +309,16 @@ def _direct_edge(source_id: str, target_id: str, kind: str) -> dict[str, Any]:
     return {"source": source_id, "target": target_id, "kind": kind}
 
 
+def _composite_edge(source_id: str, target_id: str, position: int) -> dict[str, Any]:
+    """配置の素材 → 配置の結果(ADR-0050 4章)。`position` 0 が主たる素材。"""
+    return {
+        "source": source_id,
+        "target": target_id,
+        "kind": "composite_source",
+        "position": position,
+    }
+
+
 def build_lineage_meta(session: Session, asset: Asset, *, viewer: CurrentUser) -> dict[str, Any]:
     """`gakei.lineage/2` の内容を組み立てる(ADR-0014 6章)。起点から祖先方向だけを辿り
     (Run の全入力、上描きの下地、`origin`)、兄弟の出力と子孫は含めない。追記のみの列だけ
@@ -405,6 +416,20 @@ def build_lineage_meta(session: Session, asset: Asset, *, viewer: CurrentUser) -
                     edges.append(_direct_edge(source_key, current_key, "sketch_source"))
                     if current.source_asset_id not in visited_assets:
                         queue.append(current.source_asset_id)
+
+        # 2') 配置の素材(ADR-0050)。
+        if current.kind == AssetKind.COMPOSITE:
+            for row in composition_sources(session, current.id):
+                material = session.get(Asset, row.source_asset_id)
+                if material is None or not checker.asset(material):
+                    continue
+                material_key = str(row.source_asset_id)
+                if material_key in nodes or add_node(
+                    material_key, _local_asset_node(instance_id, material)
+                ):
+                    edges.append(_composite_edge(material_key, current_key, row.position))
+                    if row.source_asset_id not in visited_assets:
+                        queue.append(row.source_asset_id)
 
         # 3) 由来(ADR-0014)。同じインスタンスで解決できていれば、その Asset をそのまま辿る。
         origin_asset = (
@@ -667,6 +692,11 @@ def _normalize_v2(meta: dict[str, Any]) -> dict[str, Any] | None:
             ):
                 output_index = None
             edges.append(_output_edge(source_id, target_id, output_index))
+        elif kind == "composite_source":
+            position = raw.get("position")
+            if not isinstance(position, int) or isinstance(position, bool) or position < 0:
+                continue
+            edges.append(_composite_edge(source_id, target_id, position))
         else:
             edges.append(_direct_edge(source_id, target_id, kind))
 

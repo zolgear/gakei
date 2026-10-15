@@ -30,6 +30,12 @@ function edgeStyle(
     case 'sketch_source':
       // 上描きスケッチの下地への辺(ADR-0010)。主たる親と同じ実線扱い。
       return { stroke: 'var(--color-edit)', dashed: false, width: 2 }
+    case 'composite_source':
+      // 配置の素材から配置の結果への辺(ADR-0050 4章)。主たる素材は上描きスケッチと同じ実線、
+      // ほかの素材は Edit の参照の入力と同じ破線。
+      return edge.primary
+        ? { stroke: 'var(--color-edit)', dashed: false, width: 2 }
+        : { stroke: 'var(--color-border-strong)', dashed: true, width: 1.2 }
     case 'origin':
       // 再アップロードで一致しなかった、埋め込みメタ情報の由来(ADR-0014)。署名の無い
       // 自己申告なので、他の辺より弱く・細い破線にする。

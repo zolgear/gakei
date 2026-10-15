@@ -2560,6 +2560,26 @@ export interface components {
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
         };
+        /** AssetComposition */
+        AssetComposition: {
+            recipe: components["schemas"]["CompositionRecipe"];
+            /** Sources */
+            sources: components["schemas"]["AssetCompositionSourceView"][];
+        };
+        /**
+         * AssetCompositionSourceView
+         * @description 配置の素材1件(`position` の順)。論理削除済み・原本が無い・見えない素材は
+         *     `available = false`(それでも並べる)。
+         */
+        AssetCompositionSourceView: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Available */
+            available: boolean;
+        };
         /**
          * AssetContentRatingResponse
          * @description レーティングの変更と再判定の応答(更新後の状態)。
@@ -2594,7 +2614,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
             /** Mime */
             mime: string;
             /** Width */
@@ -2642,6 +2662,7 @@ export interface components {
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
             content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
+            composition?: components["schemas"]["AssetComposition"] | null;
         };
         /**
          * AssetEmbeddingStatus
@@ -2804,7 +2825,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
             /** Mime */
             mime: string;
             /** Width */
@@ -2867,7 +2888,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
             /** Mime */
             mime: string;
             /** Width */
@@ -2915,6 +2936,7 @@ export interface components {
             tags?: components["schemas"]["AssetTagRef"][];
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
             content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
+            composition?: components["schemas"]["AssetComposition"] | null;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -3545,7 +3567,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "mask" | "sketch";
+            kind: "upload" | "mask" | "sketch" | "composite";
             /**
              * Source Asset Id
              * @description 上描きスケッチの下地 Asset の id(ADR-0010)。kind=sketch のときだけ指定可。
@@ -3553,9 +3575,14 @@ export interface components {
             source_asset_id?: string | null;
             /**
              * Replaces Asset Id
-             * @description 未使用スケッチ・未使用マスクの再編集で置き換える元の Asset の id(ADR-0010、2026-09-25 追記)。kind=sketch か kind=mask のときだけ指定可(置き換え元と同じ kind である必要がある)。source_asset_id とは同時指定不可。
+             * @description 未使用スケッチ・未使用マスクの再編集で置き換える元の Asset の id(ADR-0010、2026-09-25 追記)。kind=sketch か kind=mask のときだけ指定可(置き換え元と同じ kind である必要がある)。source_asset_id とは同時指定不可。kind=composite(配置。ADR-0050)でも指定できる。
              */
             replaces_asset_id?: string | null;
+            /**
+             * Composition
+             * @description 配置の記録(レシピ。`CompositionRecipe` の JSON の文字列。ADR-0050 3章)。kind=composite のときは必須で、それ以外では指定できない。
+             */
+            composition?: string | null;
         };
         /** Body_import_lineage */
         Body_import_lineage: {
@@ -3801,6 +3828,65 @@ export interface components {
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][] | null;
         };
+        /** CompositionCanvas */
+        CompositionCanvas: {
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /**
+             * Background
+             * @enum {string}
+             */
+            background: "white" | "transparent";
+        };
+        /**
+         * CompositionLayer
+         * @description 素材1枚。`corners` はキャンバスの画素での四隅(画像の左上・右上・右下・左下の順。反転は
+         *     この四隅に貼る前のテクスチャーに掛ける)。凸で、ねじれていない四角形であること。
+         */
+        CompositionLayer: {
+            /**
+             * Source Asset Id
+             * Format: uuid
+             */
+            source_asset_id: string;
+            /** Corners */
+            corners: [
+                number,
+                number
+            ][];
+            /**
+             * Flip X
+             * @default false
+             */
+            flip_x: boolean;
+            /**
+             * Flip Y
+             * @default false
+             */
+            flip_y: boolean;
+        };
+        /**
+         * CompositionRecipe
+         * @description 配置の記録(レシピ。版 1。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
+         *     複数のレイヤーに使ってよい。`primary_source_asset_id` はレイヤーの素材のどれか。
+         */
+        CompositionRecipe: {
+            /**
+             * Version
+             * @constant
+             */
+            version: 1;
+            canvas: components["schemas"]["CompositionCanvas"];
+            /**
+             * Primary Source Asset Id
+             * Format: uuid
+             */
+            primary_source_asset_id: string;
+            /** Layers */
+            layers: components["schemas"]["CompositionLayer"][];
+        };
         /**
          * ConditionalParam
          * @description 特定のフィールドが特定の値のときだけ有効になるパラメータ(例: output_compression)。
@@ -3907,7 +3993,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
             /** Mime */
             mime: string;
             /** Width */
@@ -4068,7 +4154,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "sketch";
+            kind: "upload" | "generated" | "sketch" | "composite";
             /** Width */
             width: number;
             /** Height */
@@ -4076,6 +4162,8 @@ export interface components {
             /** Title */
             title?: string | null;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /** Content Rating */
+            content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
         };
         /**
          * EmbeddingGraphResponse
@@ -4417,7 +4505,7 @@ export interface components {
         /** LineageAssetInfo */
         LineageAssetInfo: {
             /** Kind */
-            kind?: ("upload" | "generated" | "mask" | "sketch") | null;
+            kind?: ("upload" | "generated" | "mask" | "sketch" | "composite") | null;
             /** Width */
             width?: number | null;
             /** Height */
@@ -4436,7 +4524,9 @@ export interface components {
         /**
          * LineageEdge
          * @description input は Asset→Run、output は Run→Asset、sketch_source は下地 Asset→上描き Asset
-         *     (ADR-0010、2026-09-23 追記。Run を介さない直接の来歴)。origin は、再アップロードで
+         *     (ADR-0010、2026-09-23 追記。Run を介さない直接の来歴)。composite_source は配置の素材
+         *     Asset→配置の結果(ADR-0050 4章。Run を介さない。`position` は素材を足した順で、0 が主たる
+         *     素材で `primary` が true)。origin は、再アップロードで
          *     Asset に一致しなかった埋め込みメタ情報の由来 Asset→新しい Asset(ADR-0014、
          *     2026-09-24 追記。署名の無い自己申告で、`primary` は常に false)。
          */
@@ -4455,7 +4545,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "input" | "output" | "sketch_source" | "origin";
+            kind: "input" | "output" | "sketch_source" | "composite_source" | "origin";
             /** Role */
             role?: ("image" | "mask" | "reference") | null;
             /** Position */
@@ -5432,7 +5522,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
             /** Mime */
             mime: string;
             /** Width */
@@ -5476,7 +5566,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "input" | "output" | "sketch_source" | "origin";
+            kind: "input" | "output" | "sketch_source" | "composite_source" | "origin";
             /** Role */
             role?: ("image" | "mask" | "reference") | null;
             /** Position */
@@ -6133,7 +6223,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
             /** Mime */
             mime: string;
             /** Width */
@@ -6309,7 +6399,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
             /** Mime */
             mime: string;
             /** Width */
@@ -6430,7 +6520,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
             /** Width */
             width: number;
             /** Height */
@@ -7844,7 +7934,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description 繰り返して指定できる(`?kind=generated&kind=upload`)。指定した種類のどれかに当たる Asset に絞る。省くと全種類(ADR-0035)。 */
-                kind?: ("upload" | "generated" | "mask" | "sketch")[] | null;
+                kind?: ("upload" | "generated" | "mask" | "sketch" | "composite")[] | null;
                 /** @description 指定すると、そのグループのメンバーだけに絞る(ADR-0022)。 */
                 group_id?: string | null;
                 /** @description true なら、削除済みでないどのグループにも入っていない Asset だけに絞る(ストックの「グループなし」の節。ADR-0022)。`group_id` と同時には指定できない。 */
@@ -8300,7 +8390,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description 繰り返して指定できる。指定すると、`member_count` と `cover_asset_id` をその種類の Asset だけで数える(ADR-0035)。省くと種類を問わない。 */
-                kind?: ("upload" | "generated" | "mask" | "sketch")[] | null;
+                kind?: ("upload" | "generated" | "mask" | "sketch" | "composite")[] | null;
             };
             header?: never;
             path?: never;
@@ -9677,7 +9767,7 @@ export interface operations {
                 /** @description このタグが付いた画像に絞る */
                 tag?: string | null;
                 /** @description この種類の画像に絞る */
-                kind?: ("upload" | "generated" | "sketch") | null;
+                kind?: ("upload" | "generated" | "sketch" | "composite") | null;
                 /** @description 探す対象。image は画像(`assets`)、prompt は Run の指示(プロンプト。`runs`)。prompt は使うモデルが対応するときだけで、group_id・tag・kind は使えない */
                 target?: "image" | "prompt";
             };
@@ -9727,7 +9817,7 @@ export interface operations {
                 /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
                 tag?: string[] | null;
                 /** @description この種類の画像に絞る */
-                kind?: ("upload" | "generated" | "sketch") | null;
+                kind?: ("upload" | "generated" | "sketch" | "composite") | null;
             };
             header?: never;
             path?: never;

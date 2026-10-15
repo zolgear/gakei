@@ -93,7 +93,7 @@ def semantic_search_endpoint(
     limit: int = Query(default=domain.SEARCH_DEFAULT_LIMIT, ge=1, le=domain.SEARCH_MAX_LIMIT),
     group_id: uuid.UUID | None = Query(default=None, description="このグループの画像に絞る"),
     tag: str | None = Query(default=None, description="このタグが付いた画像に絞る"),
-    kind: Literal["upload", "generated", "sketch"] | None = Query(
+    kind: Literal["upload", "generated", "sketch", "composite"] | None = Query(
         default=None, description="この種類の画像に絞る"
     ),
     target: Literal["image", "prompt"] = Query(
@@ -149,7 +149,7 @@ def search_by_image_endpoint(
         default=None,
         description="このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND)",
     ),
-    kind: Literal["upload", "generated", "sketch"] | None = Query(
+    kind: Literal["upload", "generated", "sketch", "composite"] | None = Query(
         default=None, description="この種類の画像に絞る"
     ),
     db: Session = Depends(get_session),

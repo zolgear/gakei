@@ -377,7 +377,7 @@ class ContentRatingDetail(BaseModel):
 
 class AssetSummary(BaseModel):
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
     mime: str
     width: int
     height: int
@@ -600,6 +600,101 @@ class EmbeddedGenerationMeta(BaseModel):
     verified: Literal[False] = False
 
 
+# -- 入力画像の配置(ADR-0050) -----------------------------------------
+
+COMPOSITION_RECIPE_VERSION = 1
+COMPOSITION_MAX_LAYERS = 16
+COMPOSITION_MAX_CANVAS_SIDE = 8192
+# 四隅の座標の範囲(キャンバスの幅・高さの何倍まで外に出してよいか)。
+COMPOSITION_CORNER_BOUND = 4
+
+
+class CompositionCanvas(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    width: int = Field(ge=1, le=COMPOSITION_MAX_CANVAS_SIDE)
+    height: int = Field(ge=1, le=COMPOSITION_MAX_CANVAS_SIDE)
+    background: Literal["white", "transparent"]
+
+
+class CompositionLayer(BaseModel):
+    """素材1枚。`corners` はキャンバスの画素での四隅(画像の左上・右上・右下・左下の順。反転は
+    この四隅に貼る前のテクスチャーに掛ける)。凸で、ねじれていない四角形であること。"""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    source_asset_id: uuid.UUID
+    corners: list[tuple[float, float]] = Field(min_length=4, max_length=4)
+    flip_x: bool = False
+    flip_y: bool = False
+
+    @field_validator("corners")
+    @classmethod
+    def _convex_quad(cls, value: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        crosses: list[float] = []
+        for i in range(4):
+            ax, ay = value[i]
+            bx, by = value[(i + 1) % 4]
+            cx, cy = value[(i + 2) % 4]
+            crosses.append((bx - ax) * (cy - by) - (by - ay) * (cx - bx))
+        # 4つの角がすべて同じ向きに曲がっていれば、凸でねじれていない(4点なので自己交差もない)。
+        if not (all(c > 0 for c in crosses) or all(c < 0 for c in crosses)):
+            raise ValueError("corners must form a convex, non-self-intersecting quadrilateral")
+        area = 0.0
+        for i in range(4):
+            x1, y1 = value[i]
+            x2, y2 = value[(i + 1) % 4]
+            area += x1 * y2 - x2 * y1
+        if abs(area) / 2 < 1e-6:
+            raise ValueError("corners must enclose a nonzero area")
+        return value
+
+
+class CompositionRecipe(BaseModel):
+    """配置の記録(レシピ。版 1。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
+    複数のレイヤーに使ってよい。`primary_source_asset_id` はレイヤーの素材のどれか。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1]
+    canvas: CompositionCanvas
+    primary_source_asset_id: uuid.UUID
+    layers: list[CompositionLayer] = Field(min_length=1, max_length=COMPOSITION_MAX_LAYERS)
+
+    @model_validator(mode="after")
+    def _check(self) -> CompositionRecipe:
+        if self.primary_source_asset_id not in {layer.source_asset_id for layer in self.layers}:
+            raise ValueError("primary_source_asset_id must be one of the layers' sources")
+        bound_x = COMPOSITION_CORNER_BOUND * self.canvas.width
+        bound_y = COMPOSITION_CORNER_BOUND * self.canvas.height
+        for layer in self.layers:
+            for x, y in layer.corners:
+                if abs(x) > bound_x or abs(y) > bound_y:
+                    raise ValueError("corners are too far outside the canvas")
+        return self
+
+    def source_order(self) -> list[uuid.UUID]:
+        """`asset_composition_source` の並び: 主たる素材が先頭、残りは重ならないようレイヤー順。"""
+        order = [self.primary_source_asset_id]
+        for layer in self.layers:
+            if layer.source_asset_id not in order:
+                order.append(layer.source_asset_id)
+        return order
+
+
+class AssetCompositionSourceView(BaseModel):
+    """配置の素材1件(`position` の順)。論理削除済み・原本が無い・見えない素材は
+    `available = false`(それでも並べる)。"""
+
+    asset_id: uuid.UUID
+    available: bool
+
+
+class AssetComposition(BaseModel):
+    recipe: CompositionRecipe
+    sources: list[AssetCompositionSourceView]
+
+
 class AssetDetail(AssetSummary):
     sha256: str
     output_index: int | None
@@ -633,6 +728,9 @@ class AssetDetail(AssetSummary):
     annotation: AnnotationStatusView | None = None
     # ADR-0049: レーティングの詳細(段階の出どころ、確率、根拠、判定の状態)。行が無ければ null。
     content_rating_detail: ContentRatingDetail | None = None
+    # 配置の結果(kind=composite)のレシピと素材(ADR-0050)。それ以外、またはレシピの無い配置
+    # (素材を範囲の外にして書き出した ZIP から取り込んだものなど)は null。
+    composition: AssetComposition | None = None
 
 
 class AssetUploadResponse(AssetDetail):
@@ -1019,7 +1117,7 @@ class RunEvent(BaseModel):
 class LineageAssetInfo(BaseModel):
     # 埋め込み(未検証)ノードは kind/width/height/mime が分からないことがある
     # (ADR-0014 6章。`gakei.lineage/1` から変換した入力 Asset など)。
-    kind: Literal["upload", "generated", "mask", "sketch"] | None = None
+    kind: Literal["upload", "generated", "mask", "sketch", "composite"] | None = None
     width: int | None = None
     height: int | None = None
     mime: str | None = None
@@ -1079,14 +1177,16 @@ class LineageNode(BaseModel):
 
 class LineageEdge(BaseModel):
     """input は Asset→Run、output は Run→Asset、sketch_source は下地 Asset→上描き Asset
-    (ADR-0010、2026-09-23 追記。Run を介さない直接の来歴)。origin は、再アップロードで
+    (ADR-0010、2026-09-23 追記。Run を介さない直接の来歴)。composite_source は配置の素材
+    Asset→配置の結果(ADR-0050 4章。Run を介さない。`position` は素材を足した順で、0 が主たる
+    素材で `primary` が true)。origin は、再アップロードで
     Asset に一致しなかった埋め込みメタ情報の由来 Asset→新しい Asset(ADR-0014、
     2026-09-24 追記。署名の無い自己申告で、`primary` は常に false)。
     """
 
     source: uuid.UUID
     target: uuid.UUID
-    kind: Literal["input", "output", "sketch_source", "origin"]
+    kind: Literal["input", "output", "sketch_source", "composite_source", "origin"]
     role: Literal["image", "mask", "reference"] | None = None
     position: int | None = None
     output_index: int | None = None
@@ -2188,12 +2288,14 @@ class DuplicatesResponse(BaseModel):
 
 class EmbeddingGraphNode(BaseModel):
     id: uuid.UUID
-    kind: Literal["upload", "generated", "sketch"]
+    kind: Literal["upload", "generated", "sketch", "composite"]
     width: int
     height: int
     title: str | None = None
     # サムネイルの焦点(ADR-0043)。
     focal_point: FocalPoint | None = None
+    # レーティングの段階(ADR-0049 5章「マップ」)。未判定は null。マップでマスクするかを決める。
+    content_rating: ContentRatingLevel | None = None
 
 
 class EmbeddingGraphResponse(BaseModel):
@@ -2272,7 +2374,7 @@ class SharePreviewAsset(BaseModel):
     """共有に含まれる画像1件(作る前の確認用。サムネイルは本人向けの配信 URL で出す)。"""
 
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
     width: int
     height: int
     title: str | None = None
@@ -2309,7 +2411,7 @@ class ShareListResponse(BaseModel):
 
 class PublicShareAsset(BaseModel):
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
     mime: str
     width: int
     height: int
@@ -2348,7 +2450,7 @@ class PublicShareEdge(BaseModel):
 
     source: uuid.UUID
     target: uuid.UUID
-    kind: Literal["input", "output", "sketch_source", "origin"]
+    kind: Literal["input", "output", "sketch_source", "composite_source", "origin"]
     role: Literal["image", "mask", "reference"] | None = None
     position: int | None = None
     output_index: int | None = None

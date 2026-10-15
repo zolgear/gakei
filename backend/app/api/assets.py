@@ -33,6 +33,7 @@ from app.domain import (
     ingest_hooks,
 )
 from app.domain import annotations as annotations_domain
+from app.domain import compositions as compositions_domain
 from app.domain import content_rating as content_rating_domain
 from app.domain import embeddings as embeddings_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
@@ -163,7 +164,11 @@ def _to_created_by(db: Session, user_id: uuid.UUID | None) -> CreatedBy | None:
 
 
 def _to_detail(
-    db: Session, asset: Asset, produced_by_run: Run | None, user: CurrentUser
+    db: Session,
+    asset: Asset,
+    produced_by_run: Run | None,
+    user: CurrentUser,
+    store: AssetStore | None = None,
 ) -> AssetDetail:
     """`asset` は `user` に見えることを呼び出し側で確かめ済み。その Asset が指す他の Asset
     (上描きの下地、由来)やグループが見えなければ、id を返さない(ADR-0025)。
@@ -204,13 +209,14 @@ def _to_detail(
         focal_point=focal_points.get(db, asset.id),
         **annotations_domain.annotation_fields(db, asset.id),
         **content_rating_domain.detail_fields(db, asset.id),
+        composition=compositions_domain.composition_view(db, asset, checker, store),
     )
 
 
 @router.post("", response_model=AssetUploadResponse, status_code=201, operation_id="create_asset")
 def create_asset(
     file: UploadFile = File(...),
-    kind: Literal["upload", "mask", "sketch"] = Form(...),
+    kind: Literal["upload", "mask", "sketch", "composite"] = Form(...),
     source_asset_id: uuid.UUID | None = Form(
         default=None,
         description="上描きスケッチの下地 Asset の id(ADR-0010)。kind=sketch のときだけ指定可。",
@@ -221,6 +227,14 @@ def create_asset(
             "未使用スケッチ・未使用マスクの再編集で置き換える元の Asset の id"
             "(ADR-0010、2026-09-25 追記)。kind=sketch か kind=mask のときだけ指定可"
             "(置き換え元と同じ kind である必要がある)。source_asset_id とは同時指定不可。"
+            "kind=composite(配置。ADR-0050)でも指定できる。"
+        ),
+    ),
+    composition: str | None = Form(
+        default=None,
+        description=(
+            "配置の記録(レシピ。`CompositionRecipe` の JSON の文字列。ADR-0050 3章)。"
+            "kind=composite のときは必須で、それ以外では指定できない。"
         ),
     ),
     db: Session = Depends(get_session),
@@ -240,6 +254,7 @@ def create_asset(
             AssetKind(kind),
             source_asset_id=source_asset_id,
             replaces_asset_id=replaces_asset_id,
+            composition=composition,
             viewer=user,
         )
     except IngestError as e:
@@ -252,7 +267,7 @@ def create_asset(
         queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
     db.commit()
     # 応答は worker を起こす前に作る(annotate_asset と同じ理由)。
-    detail = _to_detail(db, result.asset, produced_by_run=None, user=user)
+    detail = _to_detail(db, result.asset, produced_by_run=None, user=user, store=store)
     response = AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
     ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
     return response
@@ -260,7 +275,7 @@ def create_asset(
 
 @router.get("", response_model=AssetListResponse, operation_id="list_assets")
 def list_assets(
-    kind: list[Literal["upload", "generated", "mask", "sketch"]] | None = Query(
+    kind: list[Literal["upload", "generated", "mask", "sketch", "composite"]] | None = Query(
         default=None,
         description="繰り返して指定できる(`?kind=generated&kind=upload`)。指定した種類の"
         "どれかに当たる Asset に絞る。省くと全種類(ADR-0035)。",
@@ -343,6 +358,7 @@ def list_assets(
 def get_asset(
     asset_id: uuid.UUID,
     db: Session = Depends(get_session),
+    store: AssetStore = Depends(get_store),
     user: CurrentUser = Depends(require_user),
 ) -> AssetDetail:
     # 論理削除済みでも200で返す(Run詳細・系列グラフから引き続き参照できるようにするため)。
@@ -353,7 +369,7 @@ def get_asset(
     produced_by_run = None
     if asset.produced_by_run_id is not None:
         produced_by_run = db.get(Run, asset.produced_by_run_id)
-    return _to_detail(db, asset, produced_by_run, user)
+    return _to_detail(db, asset, produced_by_run, user, store)
 
 
 @router.delete("/{asset_id}", status_code=204, operation_id="delete_asset")
@@ -375,6 +391,7 @@ def delete_asset(
 def restore_asset(
     asset_id: uuid.UUID,
     db: Session = Depends(get_session),
+    store: AssetStore = Depends(get_store),
     user: CurrentUser = Depends(require_user),
     settings: Settings = Depends(get_settings),
     embedder: Embedder = Depends(get_embedder),
@@ -402,7 +419,7 @@ def restore_asset(
     queued = embeddings_domain.enqueue_on_restore(db, asset, settings)
     db.commit()
     # 応答は worker を起こす前に作る(create_asset と同じ理由)。
-    detail = _to_detail(db, asset, produced_by_run, user)
+    detail = _to_detail(db, asset, produced_by_run, user, store)
     if queued:
         embedder.notify()
     return detail

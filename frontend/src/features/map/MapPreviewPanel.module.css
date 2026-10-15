@@ -69,6 +69,7 @@
 }
 
 .imageLink {
+  position: relative;
   display: block;
   flex-shrink: 0;
   cursor: pointer;
@@ -95,6 +96,37 @@
   object-fit: contain;
   background: var(--color-header-band);
   border-radius: var(--radius-sm);
+}
+
+/* マップでマスクしている画像(ADR-0049 5章「マップ」)。`AssetThumb` と同じく画像そのものをぼかし、
+   はみ出しを切る。 */
+.image[data-rating-masked='true'] {
+  filter: blur(24px);
+  clip-path: inset(0 round var(--radius-sm));
+}
+
+.imageMask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(16, 17, 20, 0.28);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  pointer-events: none;
+}
+
+.imageMaskHint {
+  max-width: 24em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(16, 17, 20, 0.6);
+  color: var(--color-text-muted);
+  font-size: 12px;
 }
 
 .actions {

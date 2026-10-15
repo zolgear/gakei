@@ -12,6 +12,7 @@ All it needs is an OpenAI API key. Images are stored in a local directory and me
 
 - **Generate / Edit:** run with a chosen model, size (presets or any width × height), quality, output format, background, number of images, and so on. An estimated cost is shown before running.
 - **Edit inputs:** use past results, local images, or images pasted from the clipboard as input (up to 16, reorderable). Draw masks with a brush. Sketches drawn on a blank canvas or on top of an input image can also be used as input.
+- **Arranging input images:** lay out several images on one canvas, then move, scale, rotate, distort the corners (e.g. into a trapezoid), and flip them to make a single input image — a rough composition for Edit to finish. See [docs/composite-input.md](docs/composite-input.md) (Japanese, ADR-0050).
 - **History:** every run is recorded, including failures and cancellations. Re-running with the same settings is kept as a new run.
 - **Viewer:** zoom images up to 3840px, download the original, and compare an Edit's inputs and outputs.
 - **Stock / prompt sets / lineage graph:** open saved images, named prompts, and image parent-child relationships from the sidebar. Type `@` in the prompt field to insert a prompt set.

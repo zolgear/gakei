@@ -35,9 +35,10 @@ import {
 } from './compareSync'
 import type { CompareMode } from './compareState'
 import type { ContentRatingLevel } from '../../api/client'
-import { useAssetMasked } from '../content-rating/useAssetMasked'
+import { useAssetMaskState } from '../content-rating/useAssetMasked'
 import { RatingBadge } from '../content-rating/RatingBadge'
-import { revealAsset } from '../content-rating/revealStore'
+import { CanvasRemaskButton } from '../content-rating/CanvasRemaskButton'
+import { hideAsset, revealAsset } from '../content-rating/revealStore'
 import styles from './CompareCanvas.module.css'
 import ratingStyles from '../content-rating/ContentRating.module.css'
 
@@ -268,8 +269,8 @@ export function CompareCanvas({
   afterRating,
 }: CompareCanvasProps) {
   const { t } = useI18n()
-  const beforeMasked = useAssetMasked(before.id, beforeRating)
-  const afterMasked = useAssetMasked(after.id, afterRating)
+  const { masked: beforeMasked, revealed: beforeRevealed } = useAssetMaskState(before.id, beforeRating)
+  const { masked: afterMasked, revealed: afterRevealed } = useAssetMaskState(after.id, afterRating)
   // マスクは2枚の上にまとめて重ね、「表示する」でマスクしている画像をすべて外す。
   const maskOverlay =
     beforeMasked || afterMasked ? (
@@ -289,6 +290,14 @@ export function CompareCanvas({
           {t.contentRating.reveal}
         </button>
       </div>
+    ) : beforeRevealed || afterRevealed ? (
+      // 外したあとは右下の目のアイコンで、外している画像をまとめてマスクに戻す(2026-10-15)。
+      <CanvasRemaskButton
+        onRemask={() => {
+          if (beforeRevealed) hideAsset(before.id)
+          if (afterRevealed) hideAsset(after.id)
+        }}
+      />
     ) : null
   const labelBefore = beforeLabel ?? t.compare.before
   const labelAfter = afterLabel ?? t.compare.after

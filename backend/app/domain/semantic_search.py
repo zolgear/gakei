@@ -787,6 +787,7 @@ def build_graph(
     )
     titles = annotations_domain.bulk_titles(db, ordered)
     focals = focal_points.bulk_get(db, ordered)
+    ratings = content_rating.bulk_levels(db, ordered)
     nodes = [
         EmbeddingGraphNode(
             id=asset_id,
@@ -795,6 +796,7 @@ def build_graph(
             height=assets[asset_id].height,
             title=titles.get(asset_id),
             focal_point=focals.get(asset_id),
+            content_rating=ratings.get(asset_id),  # type: ignore[arg-type]
         )
         for asset_id in ordered
     ]

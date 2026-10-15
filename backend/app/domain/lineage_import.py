@@ -13,9 +13,10 @@ Asset と Run にする。
 - 範囲が `descendants` の起点で、作った Run が ZIP に無い生成画像は、アップロードとして作る
   (Run はこしらえない。ADR-0037 1章)。
 - Asset: 通常の取り込み(`assets.ingest`)。持ち主は取り込んだ利用者。アップロード・マスク・
-  スケッチは、取り込んだ利用者が同じ種類・同じ内容(sha256)の削除されていない Asset を
+  スケッチ・配置は、取り込んだ利用者が同じ種類・同じ内容(sha256)の削除されていない Asset を
   持っていれば、それを使う(他人の Asset は使わない。ADR-0025)。生成画像は、取り込んだ Run の
-  出力として作る(`produced_by_run_id` と `output_index`)。
+  出力として作る(`produced_by_run_id` と `output_index`)。配置(ADR-0050)は、新しく作ったときだけ
+  レシピと素材の行を付ける(素材の ID は取り込んだ Asset に付け替える)。
 - Run: `origin = 'import'` の新しい行。状態は書き出し時のもの(終了状態だけ)で、キューには
   載せない。`created_by_user_id` は取り込んだ利用者。元の記録は `run_import`。入力は取り込んだ
   Asset に付け替え、ZIP に無い入力は付けない。
@@ -42,6 +43,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import assets as assets_domain
+from app.domain import compositions as compositions_domain
 from app.domain.lineage_export import EXPORT_FORMAT, MANIFEST_NAME, asset_file_name
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
@@ -52,6 +54,7 @@ from app.domain.models import (
     RunInput,
     RunStatus,
 )
+from app.domain.schemas import CompositionRecipe
 from app.domain.storage import AssetStore
 from app.domain.text_safety import sanitize_external
 from app.i18n import t
@@ -97,10 +100,22 @@ class ManifestRunInput(_Model):
     position: int = Field(ge=0, le=1000)
 
 
+class ManifestCompositionSource(_Model):
+    asset_id: uuid.UUID
+    position: int = Field(ge=0, le=1000)
+
+
+class ManifestComposition(_Model):
+    """配置の結果のレシピと素材(ADR-0050)。レシピは画面からの保存と同じ検証を通す。"""
+
+    recipe: CompositionRecipe
+    sources: list[ManifestCompositionSource] = Field(min_length=1, max_length=1000)
+
+
 class ManifestAsset(_Model):
     id: uuid.UUID
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    kind: Literal["upload", "generated", "mask", "sketch"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
     mime: Literal["image/png", "image/jpeg", "image/webp"]
     width: int = Field(ge=1)
     height: int = Field(ge=1)
@@ -109,6 +124,7 @@ class ManifestAsset(_Model):
     produced_by_run_id: uuid.UUID | None = None
     output_index: int | None = Field(default=None, ge=0, le=1000)
     source_asset_id: uuid.UUID | None = None
+    composition: ManifestComposition | None = None
     file: str = Field(max_length=200)
 
 
@@ -246,6 +262,8 @@ def _check_manifest_consistency(manifest: Manifest) -> None:
         if asset.source_asset_id is not None:
             if asset.kind != "sketch" or asset.source_asset_id not in assets_by_id:
                 raise _fail(t("lineageImport.invalidManifest", reason="invalid sketch source"))
+        if asset.composition is not None:
+            _check_composition(asset, assets_by_id)
     for run in manifest.runs:
         seen: set[tuple[str, int]] = set()
         for run_input in run.inputs:
@@ -263,6 +281,8 @@ def _check_manifest_consistency(manifest: Manifest) -> None:
             graph.setdefault(("run", asset.produced_by_run_id), []).append(("asset", asset.id))
         if asset.source_asset_id is not None:
             graph.setdefault(("asset", asset.source_asset_id), []).append(("asset", asset.id))
+        for source_id in _composition_source_ids(asset):
+            graph.setdefault(("asset", source_id), []).append(("asset", asset.id))
     for run in manifest.runs:
         for run_input in run.inputs:
             graph.setdefault(("asset", run_input.asset_id), []).append(("run", run.id))
@@ -287,6 +307,33 @@ def _check_manifest_consistency(manifest: Manifest) -> None:
             else:
                 state[node] = 2
                 stack.pop()
+
+
+def _composition_source_ids(asset: ManifestAsset) -> list[uuid.UUID]:
+    if asset.composition is None:
+        return []
+    return [source.asset_id for source in asset.composition.sources]
+
+
+def _check_composition(asset: ManifestAsset, assets_by_id: dict[uuid.UUID, ManifestAsset]) -> None:
+    """配置のレシピと素材の整合(ADR-0050)。素材は ZIP の中の、マスクでない Asset で、`position`
+    と素材は重ならない。レシピのレイヤーの素材は、素材の一覧にあるものだけ。"""
+    composition = asset.composition
+    assert composition is not None
+    if asset.kind != "composite":
+        raise _fail(t("lineageImport.invalidManifest", reason="composition on a non-composite"))
+    positions: set[int] = set()
+    source_ids: set[uuid.UUID] = set()
+    for source in composition.sources:
+        source_asset = assets_by_id.get(source.asset_id)
+        if source_asset is None or source_asset.kind == "mask" or source.asset_id == asset.id:
+            raise _fail(t("lineageImport.invalidManifest", reason="invalid composite source"))
+        if source.position in positions or source.asset_id in source_ids:
+            raise _fail(t("lineageImport.invalidManifest", reason="duplicate composite source"))
+        positions.add(source.position)
+        source_ids.add(source.asset_id)
+    if any(layer.source_asset_id not in source_ids for layer in composition.recipe.layers):
+        raise _fail(t("lineageImport.invalidManifest", reason="invalid composite layer"))
 
 
 def open_archive(fileobj: IO[bytes]) -> ValidatedArchive:
@@ -391,7 +438,7 @@ def _find_imported_run(db: Session, viewer: CurrentUser, source_run_id: uuid.UUI
 
 def _find_own_asset(db: Session, viewer: CurrentUser, kind: str, sha256: str) -> Asset | None:
     """取り込んだ利用者が持っている、同じ種類・同じ内容の、削除されていない Asset
-    (アップロード・マスク・スケッチ。生成画像は Run の出力として扱うので対象にしない)。"""
+    (アップロード・マスク・スケッチ・配置。生成画像は Run の出力として扱うので対象にしない)。"""
     return (
         db.execute(
             select(Asset)
@@ -410,21 +457,34 @@ def _find_own_asset(db: Session, viewer: CurrentUser, kind: str, sha256: str) ->
 
 
 def _asset_order(manifest: Manifest) -> list[ManifestAsset]:
-    """下地がスケッチより先に来る順(manifest の順を保つ)。循環は検証済み。"""
+    """下地がスケッチより先に、素材が配置の結果より先に来る順(manifest の順を保つ)。循環は
+    検証済み。"""
     by_id = {a.id: a for a in manifest.assets}
     ordered: list[ManifestAsset] = []
     done: set[uuid.UUID] = set()
 
+    def parents(asset: ManifestAsset) -> list[uuid.UUID]:
+        ids = [asset.source_asset_id] if asset.source_asset_id else []
+        return ids + _composition_source_ids(asset)
+
     def visit(asset: ManifestAsset) -> None:
-        chain: list[ManifestAsset] = []
-        current: ManifestAsset | None = asset
-        while current is not None and current.id not in done:
-            chain.append(current)
-            current = by_id.get(current.source_asset_id) if current.source_asset_id else None
-        for item in reversed(chain):
-            if item.id not in done:
-                done.add(item.id)
-                ordered.append(item)
+        # 再帰を使わず、帰りがけ順にたどる(深い系列でも再帰の上限に掛からないように)。
+        stack: list[tuple[ManifestAsset, int]] = [(asset, 0)]
+        while stack:
+            current, index = stack[-1]
+            if current.id in done:
+                stack.pop()
+                continue
+            deps = parents(current)
+            if index < len(deps):
+                stack[-1] = (current, index + 1)
+                dep = by_id.get(deps[index])
+                if dep is not None and dep.id not in done:
+                    stack.append((dep, 0))
+                continue
+            done.add(current.id)
+            ordered.append(current)
+            stack.pop()
 
     for asset in manifest.assets:
         visit(asset)
@@ -544,6 +604,8 @@ def import_archive(
                 source_asset_id=source,
                 created_by_user_id=viewer.id,
             )
+            if kind == AssetKind.COMPOSITE and masset.composition is not None:
+                _save_imported_composition(db, asset, masset.composition, asset_map, imported_at)
         asset_map[masset.id] = asset.id
         created.append(asset)
 
@@ -570,6 +632,36 @@ def import_archive(
         run_count=len(manifest.runs),
         created_assets=created,
         created_run_count=len(new_run_ids),
+    )
+
+
+def _save_imported_composition(
+    db: Session,
+    asset: Asset,
+    composition: ManifestComposition,
+    asset_map: dict[uuid.UUID, uuid.UUID],
+    imported_at: datetime,
+) -> None:
+    """取り込んだ配置の結果に、レシピと素材の行を付ける(素材の ID は取り込んだ Asset に付け替え、
+    `position` は書き出し元のまま)。"""
+    recipe = composition.recipe
+    mapped = recipe.model_copy(
+        update={
+            "primary_source_asset_id": asset_map[recipe.primary_source_asset_id],
+            "layers": [
+                layer.model_copy(update={"source_asset_id": asset_map[layer.source_asset_id]})
+                for layer in recipe.layers
+            ],
+        }
+    )
+    sources = sorted(composition.sources, key=lambda source: source.position)
+    compositions_domain.save_composition(
+        db,
+        asset,
+        mapped,
+        source_ids=[asset_map[source.asset_id] for source in sources],
+        positions=[source.position for source in sources],
+        created_at=imported_at,
     )
 
 

@@ -348,6 +348,20 @@ def test_graph_shape_and_lineage(client: TestClient) -> None:
     assert client.get("/api/embeddings/graph?limit=5001").status_code == 422
 
 
+def test_graph_nodes_carry_content_rating(client: TestClient) -> None:
+    """マップのノードにレーティングの段階が載る(ADR-0049 5章「マップ」)。未判定は null。"""
+    _enable(client)
+    red, red2, other = _three_images(client)
+    response = client.put(f"/api/assets/{red}/content-rating", json={"level": "xx"})
+    assert response.status_code == 200, response.text
+    response = client.put(f"/api/assets/{other}/content-rating", json={"level": "g"})
+    assert response.status_code == 200, response.text
+
+    body = client.get("/api/embeddings/graph").json()
+    ratings = {n["id"]: n["content_rating"] for n in body["nodes"]}
+    assert ratings == {red: "xx", red2: None, other: "g"}
+
+
 def _tag(client: TestClient, asset_id: str, name: str) -> None:
     response = client.post(f"/api/assets/{asset_id}/tags", json={"name": name})
     assert response.status_code == 200, response.text

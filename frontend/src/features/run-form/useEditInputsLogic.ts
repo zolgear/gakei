@@ -23,6 +23,8 @@ import { findDeletedInputAssetIds } from './deletedInputs'
 import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData } from './dragDropAssets'
 import { pickPastedImageFiles } from './clipboardImages'
 import type { RunInputItem } from './types'
+import { applyCompositeToInputs } from '../composite/compositeInputs'
+import type { CompositeSaveResult } from '../composite/CompositeEditor'
 
 /**
  * スケッチエディタをどう開いたか。白紙(末尾に追加)か、既存の入力画像への上描き(差し替え)。
@@ -30,6 +32,12 @@ import type { RunInputItem } from './types'
  * assetId は下絵にする Asset の取得に使う。
  */
 export type SketchEditorTarget = { mode: 'blank' } | { mode: 'over'; inputId: string; assetId: string }
+
+/**
+ * 配置(ADR-0050)の編集画面をどう開いたか。今の入力画像を素材にして新しく始める(`new`)か、
+ * 入力にある配置の結果を作り直す(`reopen`。保存するとその入力を同じ position で差し替える)。
+ */
+export type CompositeEditorTarget = { mode: 'new' } | { mode: 'reopen'; inputId: string; assetId: string }
 
 export interface EditInputsLogic {
   images: RunInputItem[]
@@ -69,6 +77,11 @@ export interface EditInputsLogic {
   sketchOverAssetLoading: boolean
   /** replaceInputId を指定すると上描き(その入力を同じ position で差し替え)、省略すると白紙(末尾に追加)。 */
   saveSketch: (asset: AssetDetail, replaceInputId?: string) => void
+  compositeEditor: CompositeEditorTarget | null
+  openCompositeEditor: (target: CompositeEditorTarget) => void
+  closeCompositeEditor: () => void
+  /** 配置の保存後に入力を並べ直す(ADR-0050 5章)。 */
+  saveComposite: (result: CompositeSaveResult) => void
 }
 
 export function useEditInputsLogic(
@@ -84,6 +97,7 @@ export function useEditInputsLogic(
   const [sketchEditor, setSketchEditor] = useState<SketchEditorTarget | null>(null)
   const [sketchOverAsset, setSketchOverAsset] = useState<AssetDetail | null>(null)
   const [sketchOverAssetLoading, setSketchOverAssetLoading] = useState(false)
+  const [compositeEditor, setCompositeEditor] = useState<CompositeEditorTarget | null>(null)
 
   const images = inputs.filter((i) => i.role === 'image').sort((a, b) => a.position - b.position)
   const maskInput = inputs.find((i) => i.role === 'mask')
@@ -303,6 +317,29 @@ export function useEditInputsLogic(
     setSketchOverAssetLoading(false)
   }
 
+  function saveComposite(result: CompositeSaveResult) {
+    const target = compositeEditor
+    queryClient.setQueryData(['asset', result.asset.id], result.asset)
+    if (target?.mode === 'reopen') {
+      // 作り直し: 同じ入力を差し替える(元の配置は未使用なら論理削除されている)。
+      onChange(replaceImageInput(inputs, target.inputId, result.asset.id))
+      setUploadErrors([])
+    } else {
+      const applied = applyCompositeToInputs(inputs, result.asset.id, result.sourceAssetIds, {
+        removeSources: result.removeSources,
+        maxInputImages,
+      })
+      onChange(applied.inputs)
+      setUploadErrors(
+        applied.droppedCount > 0
+          ? [fmt(msg().composite.droppedInputs, { max: maxInputImages, count: applied.droppedCount })]
+          : [],
+      )
+    }
+    setUploadNotice(null)
+    setCompositeEditor(null)
+  }
+
   return {
     images,
     maskInput,
@@ -329,5 +366,9 @@ export function useEditInputsLogic(
     sketchOverAsset,
     sketchOverAssetLoading,
     saveSketch,
+    compositeEditor,
+    openCompositeEditor: setCompositeEditor,
+    closeCompositeEditor: () => setCompositeEditor(null),
+    saveComposite,
   }
 }

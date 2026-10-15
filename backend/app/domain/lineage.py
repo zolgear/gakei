@@ -30,9 +30,10 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.domain import content_rating, focal_points
 from app.domain.assets import asset_is_used_as_input, is_restorable
+from app.domain.compositions import composites_using, composition_sources
 from app.domain.embedded_meta import get_instance_id, normalize_lineage_meta
 from app.domain.lineage_mermaid import LineageGraph
-from app.domain.models import RUN_ORIGIN_IMPORT, Asset, Run, RunInput, RunInputRole
+from app.domain.models import RUN_ORIGIN_IMPORT, Asset, AssetKind, Run, RunInput, RunInputRole
 from app.domain.run_views import model_label_from_params
 from app.domain.schemas import (
     AssetLineageResponse,
@@ -197,7 +198,7 @@ def _embedded_node(
 
     if node_type == "asset":
         kind = enode.get("kind")
-        if kind not in ("upload", "generated", "mask", "sketch"):
+        if kind not in ("upload", "generated", "mask", "sketch", "composite"):
             kind = None
         width = enode.get("width")
         height = enode.get("height")
@@ -357,12 +358,12 @@ def _expand_embedded_ancestors(
             if -source_depth > up:
                 continue
             kind = edge.get("kind")
-            if kind not in ("input", "output", "sketch_source", "origin"):
+            if kind not in ("input", "output", "sketch_source", "composite_source", "origin"):
                 continue
             role = edge.get("role") if kind == "input" else None
             if role not in (None, "image", "mask", "reference"):
                 continue
-            position = edge.get("position") if kind == "input" else None
+            position = edge.get("position") if kind in ("input", "composite_source") else None
             if position is not None and (
                 not isinstance(position, int) or isinstance(position, bool)
             ):
@@ -372,10 +373,12 @@ def _expand_embedded_ancestors(
                 not isinstance(output_index, int) or isinstance(output_index, bool)
             ):
                 output_index = None
-            # 主たる親の判定はローカルの辺と同じにする(sketch_source と、position 0 の
-            # image 入力)。output と origin は主たる親にしない。
-            is_primary = kind == "sketch_source" or (
-                kind == "input" and role == "image" and position == 0
+            # 主たる親の判定はローカルの辺と同じにする(sketch_source、position 0 の
+            # composite_source と image 入力)。output と origin は主たる親にしない。
+            is_primary = (
+                kind == "sketch_source"
+                or (kind == "composite_source" and position == 0)
+                or (kind == "input" and role == "image" and position == 0)
             )
             edges.append(
                 LineageEdge(
@@ -422,6 +425,35 @@ def _expand_ancestors(
         asset = db.get(Asset, asset_id)
         if asset is None or not checker.asset(asset):
             continue
+
+        # ADR-0050 4章: 配置の結果は `asset_composition_source` で素材を指す。Run を介さない
+        # 直接の辺で、position 0 の素材を主たる親として、ほかの素材は参照として辿る。
+        if asset.kind == AssetKind.COMPOSITE:
+            source_rows = composition_sources(db, asset_id)
+            if source_rows:
+                source_depth = depth - 1
+                if -source_depth > up:
+                    continue
+                for row in source_rows:
+                    if row.source_asset_id not in nodes:
+                        if len(nodes) >= max_nodes:
+                            truncated = True
+                            continue
+                        source_asset = db.get(Asset, row.source_asset_id)
+                        if source_asset is None or not checker.asset(source_asset):
+                            continue
+                        nodes[row.source_asset_id] = _asset_node(db, source_asset, source_depth)
+                    edges.append(
+                        LineageEdge(
+                            source=row.source_asset_id,
+                            target=asset_id,
+                            kind="composite_source",
+                            position=row.position,
+                            primary=row.position == 0,
+                        )
+                    )
+                    queue.append((row.source_asset_id, source_depth))
+                continue
 
         # ADR-0010(2026-09-23 追記): 上描きスケッチは source_asset_id で下地 Asset を指す。
         # Run を介さない直接の辺として、主たる親と同じく辿る。
@@ -629,6 +661,7 @@ def _expand_ancestors(
 
 def _is_replaced_away_sketch(db: Session, asset: Asset) -> bool:
     """論理削除済み、かつどの run_input にも無いスケッチか(ADR-0010、2026-09-25 追記)。
+    配置の結果(ADR-0050 3章。未使用なら置き換える)にも同じ判定を使う。
 
     未使用スケッチの再編集で置き換えられて消えた下書きは、子孫方向の探索(sketch_source
     の辺)では辿らない・ノードにも含めない。起点(root)自身はこの判定の対象にしない
@@ -686,6 +719,30 @@ def _expand_descendants(
                         target=derived_asset.id,
                         kind="sketch_source",
                         primary=True,
+                    )
+                )
+                queue.append((derived_asset.id, sketch_depth))
+
+            # ADR-0050 4章: この Asset を素材にした配置の結果へ、Run を介さない直接の辺で辿る。
+            # 置き換えで消えた未使用の配置は、スケッチと同じく辿らない。
+            for derived_asset, position in composites_using(db, asset_id):
+                if _is_replaced_away_sketch(db, derived_asset):
+                    continue
+                if not checker.asset(derived_asset):
+                    continue
+                if derived_asset.id not in nodes:
+                    if len(nodes) >= max_nodes:
+                        truncated = True
+                        continue
+                    nodes[derived_asset.id] = _asset_node(db, derived_asset, sketch_depth)
+
+                edges.append(
+                    LineageEdge(
+                        source=asset_id,
+                        target=derived_asset.id,
+                        kind="composite_source",
+                        position=position,
+                        primary=position == 0,
                     )
                 )
                 queue.append((derived_asset.id, sketch_depth))
@@ -962,7 +1019,7 @@ def lineage_frontier(
             asset = db.get(Asset, node.id)
             if asset is None:
                 continue
-            if node.depth <= 0 and node.id not in has_in and _asset_has_parent(checker, asset):
+            if node.depth <= 0 and node.id not in has_in and _asset_has_parent(db, checker, asset):
                 more_up.add(node.id)
             if node.depth >= 0 and node.id not in has_out and _asset_has_child(db, checker, asset):
                 more_down.add(node.id)
@@ -982,8 +1039,12 @@ def lineage_frontier(
     return more_up, more_down
 
 
-def _asset_has_parent(checker: VisibilityChecker, asset: Asset) -> bool:
+def _asset_has_parent(db: Session, checker: VisibilityChecker, asset: Asset) -> bool:
     if asset.source_asset_id is not None and checker.asset_id(asset.source_asset_id):
+        return True
+    if asset.kind == AssetKind.COMPOSITE and any(
+        checker.asset_id(row.source_asset_id) for row in composition_sources(db, asset.id)
+    ):
         return True
     if asset.origin_asset_id is not None and checker.asset_id(asset.origin_asset_id):
         return True
@@ -1007,7 +1068,12 @@ def _asset_has_child(db: Session, checker: VisibilityChecker, asset: Asset) -> b
             (Asset.source_asset_id == asset.id) | (Asset.origin_asset_id == asset.id)
         )
     ).scalars()
-    return any(checker.asset(a) and not _is_replaced_away_sketch(db, a) for a in derived)
+    if any(checker.asset(a) and not _is_replaced_away_sketch(db, a) for a in derived):
+        return True
+    return any(
+        checker.asset(a) and not _is_replaced_away_sketch(db, a)
+        for a, _position in composites_using(db, asset.id)
+    )
 
 
 def asset_lineage_graph(

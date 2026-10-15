@@ -337,7 +337,7 @@
         "help": "狭い幅(768px 未満)では、どちらを選んでも結果の下に入力欄が並びます。生成画面の結果エリア右上のボタンでも切り替えられます。"
       },
       "stockShowSketchMask": {
-        "label": "スケッチとマスクをストックに出す",
+        "label": "スケッチ・マスク・配置をストックに出す",
         "help": "オフのときは、系列グラフと Run の詳細から開けます。"
       },
       "tagCompletion": {
@@ -1780,6 +1780,92 @@
     "pngExportError": "PNG の書き出しに失敗しました",
     "recommendedPrompt": "この下描きを写実的な画像にしてください。レイアウト、比率、パースは正確に保ってください。下描きの意図に合う現実的な素材と光を選んでください。新しい要素や文字は加えないでください。"
   },
+  "composite": {
+    "title": "入力画像の配置",
+    "close": "閉じる",
+    "button": "配置",
+    "buttonTitle": "入力画像を並べ、動かして1枚の入力にする",
+    "edit": "配置を編集",
+    "openWith": "配置で開く",
+    "webglUnavailable": "このブラウザでは WebGL2 が使えないため、配置の編集画面を開けません。",
+    "loading": "読み込み中...",
+    "loadError": "素材の読み込みに失敗しました",
+    "textureError": "表示できない素材があります(読み込みに失敗しました)",
+    "droppedSources": "読めない素材 {count} 件を外して開きました(削除された画像など)",
+    "skippedSources": "使えない画像 {count} 枚を素材にしませんでした(削除された画像・マスクなど)",
+    "rejectedLayers": "素材は最大 16 枚のため、{count} 枚は追加できませんでした",
+    "noComposition": "配置の記録が見つからないため、この画像を素材にして新しく始めます",
+    "hint": "ドラッグで移動、四隅で拡大縮小、上の丸で回転(Shift で 15° 刻み)。2本指で拡大縮小と回転。矢印キーで少しずつ動かし、Delete で外します。",
+    "distortHint": "変形: 四隅を1つずつ動かして台形などにします(凹む形・ねじれた形にはなりません)。上の丸で回転します。",
+    "toolbar": {
+      "add": "素材を追加",
+      "modeGroup": "ハンドルの動き",
+      "modeTransform": "移動・拡大縮小(縦横比を保つ)",
+      "modeDistort": "変形(四隅を1つずつ動かす)",
+      "flipX": "左右反転",
+      "flipY": "上下反転",
+      "forward": "前面へ",
+      "backward": "背面へ",
+      "duplicate": "複製",
+      "setPrimary": "主にする(系列で主たる親になる素材)",
+      "remove": "素材を外す",
+      "fit": "キャンバスに合わせる",
+      "center": "中央に寄せる",
+      "undo": "元に戻す",
+      "redo": "やり直す"
+    },
+    "panel": {
+      "canvasHeading": "キャンバス",
+      "size": "大きさ",
+      "sizeFirst": "1枚目の画像 ({width}×{height})",
+      "sizeForm": "フォームのサイズ ({width}×{height})",
+      "sizeCustom": "カスタム",
+      "width": "幅",
+      "height": "高さ",
+      "background": "背景",
+      "backgroundWhite": "白",
+      "backgroundTransparent": "透明",
+      "selectedHeading": "選んだ素材",
+      "noSelection": "素材を選ぶと、位置・倍率・角度を数値で変えられます",
+      "centerX": "中心 X (px)",
+      "centerY": "中心 Y (px)",
+      "scale": "倍率 (%)",
+      "angle": "角度 (°)",
+      "layersHeading": "素材 ({count}/{max})",
+      "layerLabel": "素材 {n}",
+      "flipped": "反転",
+      "primaryBadge": "主",
+      "primaryTitle": "主たる素材(系列で主たる親になる)",
+      "emptyLayers": "素材がありません。「素材を追加」から選んでください"
+    },
+    "addDialog": {
+      "title": "素材を追加",
+      "fromInputs": "入力の画像",
+      "inputAria": "入力の {n} 枚目",
+      "fromStock": "ストックから選ぶ",
+      "remaining": "あと {count} 枚",
+      "selectedCount": "{count} 枚を選択中",
+      "addSelected": "追加",
+      "empty": "画像がありません",
+      "loadFailed": "読み込みに失敗しました",
+      "loadMore": "さらに読み込む"
+    },
+    "problems": {
+      "noLayers": "素材が1枚もありません",
+      "tooManyLayers": "素材は最大 {max} 枚です",
+      "invalidShape": "形が不正な素材があります",
+      "invalidCanvas": "キャンバスの大きさは {min}〜{max} px にしてください",
+      "outOfBounds": "キャンバスから離れすぎた素材があります(キャンバスの近くへ戻してください)"
+    },
+    "removeSources": "元の画像を入力から外す",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saving": "保存しています...",
+    "saveFailedDefault": "配置の保存に失敗しました",
+    "exportError": "画像の書き出しに失敗しました",
+    "canvasTooLarge": "このブラウザでは、この大きさのキャンバスを書き出せません",
+    "droppedInputs": "入力の上限({max} 枚)のため、元の画像 {count} 枚を入力に入れませんでした"
+  },
   "mask": {
     "title": "マスクを描く",
     "brush": "ブラシ",
@@ -1966,6 +2052,7 @@
     },
     "assetMask": "マスク",
     "assetSketch": "スケッチ",
+    "assetComposite": "配置",
     "deletedTag": "削除済み",
     "assetLoadError": "Asset の取得に失敗しました",
     "deletedAt": "削除済みです({date})",
@@ -2013,6 +2100,7 @@
     "kindUpload": "アップロード",
     "kindSketch": "スケッチ",
     "kindMask": "マスク",
+    "kindComposite": "配置",
     "tagFilter": {
       "heading": "タグ",
       "placeholder": "タグで絞り込む",
@@ -2670,7 +2758,11 @@
     "previewLabel": "選んだ画像の詳細",
     "previewLoadFailed": "画像の情報を読み込めませんでした。",
     "kindLabel": "種類",
-    "embeddedPromptHeading": "プロンプト(画像に埋め込まれた情報、未検証)"
+    "embeddedPromptHeading": "プロンプト(画像に埋め込まれた情報、未検証)",
+    "ratingMaskToggle": "マスクを外して表示",
+    "ratingMaskShowAllHelp": "マスクしている画像を、このマップでだけ表示します(ページを読み直すとマスクに戻ります)",
+    "ratingMaskApplyHelp": "マップの画像をマスクに戻します",
+    "ratingMaskPreviewHint": "マスクはツールバーの目のボタンで外せます"
   },
   "lineageTransfer": {
     "export": {
@@ -2974,6 +3066,8 @@
     "unrated": "未判定",
     "revealHint": "クリックで表示",
     "reveal": "表示する",
+    "remask": "マスクする",
+    "remaskHint": "クリックでマスクに戻す",
     "section": {
       "heading": "レーティング",
       "sourceAuto": "自動",
