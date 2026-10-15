@@ -3032,6 +3032,7 @@
       "get_capabilities": "パラメーターの定義を読む",
       "get_run": "Run の状態を見る",
       "view_assets": "画像を見る",
+      "view_result": "生成結果を見る",
       "create_prompt_set": "プロンプトセットを作成",
       "rename_prompt_set": "プロンプトセットの名前を変更",
       "add_prompt_set_items": "プロンプトセットに項目を追加",

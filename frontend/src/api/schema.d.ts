@@ -3076,6 +3076,8 @@ export interface components {
             inputs?: components["schemas"]["AssistantFormInput"][];
             /** Asset Group Id */
             asset_group_id?: string | null;
+            /** Result Asset Id */
+            result_asset_id?: string | null;
         };
         /** AssistantMessageCreateRequest */
         AssistantMessageCreateRequest: {

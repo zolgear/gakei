@@ -2555,6 +2555,10 @@ class AssistantFormState(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     inputs: list[AssistantFormInput] = Field(default_factory=list, max_length=32)
     asset_group_id: uuid.UUID | None = None
+    # スタジオの結果エリアに出ている画像(ADR-0048 12章)。画像が無いとき・スタジオを開いて
+    # いないときは null。`view_result` が引数の無いときに見る。フォームの値ではないので
+    # `update_form` では変わらない。
+    result_asset_id: uuid.UUID | None = None
 
 
 class AssistantMessageCreateRequest(BaseModel):

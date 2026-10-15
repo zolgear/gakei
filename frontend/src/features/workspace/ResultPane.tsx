@@ -62,6 +62,7 @@ import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/
 import { addAsInput, isUsedAsInput } from './useAsInputToggle'
 import { addImageInputs } from '../run-form/editInputs'
 import { resolveResultOrigin } from './resultOrigin'
+import { setStudioResultAssetId } from './studioResultStore'
 import { buildStudioPath } from './assetQueryParam'
 import { invalidateAssetGroupQueries } from '../stock/groups/assetGroupQueries'
 import styles from './ResultPane.module.css'
@@ -322,6 +323,13 @@ export function ResultPane({
   useEffect(() => {
     if (effectiveAssetId) setOriginAssetId(effectiveAssetId)
   }, [effectiveAssetId, setOriginAssetId])
+
+  // アシスタントの `view_result` に、結果エリアに出ている画像を伝える(ADR-0048 12章)。
+  // 実行中の Run・Run 詳細・空状態では null。スタジオから離れたら(外れたら)null に戻す。
+  useEffect(() => {
+    setStudioResultAssetId(effectiveAssetId)
+  }, [effectiveAssetId])
+  useEffect(() => () => setStudioResultAssetId(null), [])
 
   // 系列モードのインスペクター用: 選択中ノードが Run/Asset のどちらかをグラフのノード一覧から
   // 判定する(`LineageGraph` 自身のクエリと同じ queryKey なのでキャッシュを共有する)。

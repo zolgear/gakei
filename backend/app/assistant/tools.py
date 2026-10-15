@@ -1,10 +1,12 @@
-"""アシスタントの道具(ADR-0048 4・5・6・9章)。
+"""アシスタントの道具(ADR-0048 4・5・6・9・10・11・12章)。
 
 道具は REST を HTTP で呼ばず、REST と同じドメイン関数を直接呼ぶ(MCP と同じ方針。ADR-0023)。
 扱えるのは会話の利用者に見えるものだけ(ADR-0025)。削除の道具は作らない。
 
 - 読み取り: `list_prompt_sets`、`get_form_context`、`propose_prompt`、`get_capabilities`、
   `get_run`、`view_assets`
+- 生成結果の読み取り: `view_result`(12章)。スタジオの結果エリアの画像(ブラウザが送る
+  `form.result_asset_id`)か指定の画像の、`get_asset` と同じ情報と縮めたプレビューを返す。
 - プロンプトセットの書き込み: `create_prompt_set`、`rename_prompt_set`、`add_prompt_set_items`、
   `update_prompt_set_item`。書き込むたびに変更前の値を結果(`before`)に残し、「元に戻す」に
   要る値を `undo` に入れる(4章)。
@@ -221,6 +223,23 @@ class FindSimilarAssetsArgs(_Args):
 
 class GetAssetArgs(_Args):
     asset_id: uuid.UUID
+
+
+class ViewResultArgs(_Args):
+    asset_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "The image to look at. Omit to look at the image shown in the studio's result "
+            "area (the generation result the user is looking at)."
+        ),
+    )
+    include_image: bool = Field(
+        default=True,
+        description=(
+            "Send the image itself. Pass false to get only the text (tags, prompt, model, "
+            "parameters), for example when the model cannot read images."
+        ),
+    )
 
 
 class ListTagsArgs(_Args):
@@ -661,16 +680,43 @@ async def find_similar_assets(ctx: ToolContext, args: FindSimilarAssetsArgs) -> 
 
 
 async def get_asset(ctx: ToolContext, args: GetAssetArgs) -> ToolOutcome:
-    def _get() -> dict[str, Any]:
-        with ctx.session() as db:
-            asset = get_visible_asset(db, ctx.user, args.asset_id)
-            if asset is None or asset.deleted_at is not None:
-                raise ToolFailure(f"Asset {args.asset_id} not found.")
-            payload = _asset_brief(asset)
-            payload.update(asset_search_domain.asset_details(db, ctx.user, asset))
-        return payload
+    payload = await _in_thread(lambda: _asset_payload(ctx, args.asset_id))
+    return ToolOutcome(ok=True, result=payload)
 
-    return ToolOutcome(ok=True, result=await _in_thread(_get))
+
+def _asset_payload(ctx: ToolContext, asset_id: uuid.UUID) -> dict[str, Any]:
+    """`get_asset` と `view_result` の文字の情報。見えない・削除済みは ToolFailure。"""
+    with ctx.session() as db:
+        asset = get_visible_asset(db, ctx.user, asset_id)
+        if asset is None or asset.deleted_at is not None:
+            raise ToolFailure(f"Asset {asset_id} not found.")
+        payload = _asset_brief(asset)
+        payload.update(asset_search_domain.asset_details(db, ctx.user, asset))
+    return payload
+
+
+async def view_result(ctx: ToolContext, args: ViewResultArgs) -> ToolOutcome:
+    """生成結果を読む(12章)。`asset_id` を省くと、スタジオの結果エリアの画像を見る。"""
+    asset_id = args.asset_id
+    from_result_area = asset_id is None
+    if asset_id is None:
+        asset_id = ctx.form.result_asset_id if ctx.form is not None else None
+    if asset_id is None:
+        raise ToolFailure(
+            "No image is shown in the studio's result area (or the studio is not open). "
+            "Ask the user to open the result in the studio, or pass asset_id."
+        )
+
+    def _view() -> ToolOutcome:
+        payload = _asset_payload(ctx, asset_id)
+        payload["from_result_area"] = from_result_area
+        images: list[LlmImage] = []
+        if args.include_image:
+            _briefs, images = load_visible_images(ctx, [asset_id])
+            payload["note"] = "The image follows in the next message."
+        return ToolOutcome(ok=True, result=payload, images=images)
+
+    return await _in_thread(_view)
 
 
 async def list_groups(ctx: ToolContext, _args: NoArgs) -> ToolOutcome:
@@ -1258,6 +1304,8 @@ def _resolve_form_update(ctx: ToolContext, args: UpdateFormArgs) -> _FormUpdate:
         params=params,
         inputs=inputs,
         asset_group_id=group_id,
+        # 結果エリアの画像はフォームの値ではない。書き込んでも引き継ぐ(12章)。
+        result_asset_id=base.result_asset_id,
     )
     return _FormUpdate(patch=patch, form=form, dropped_params=dropped)
 
@@ -1268,7 +1316,8 @@ async def update_form(ctx: ToolContext, args: UpdateFormArgs) -> ToolOutcome:
     ctx.form = update.form
     result: dict[str, Any] = {
         "patch": update.patch,
-        "form": update.form.model_dump(mode="json"),
+        # ブラウザがフォームに反映する値。結果エリアの画像はフォームの値ではないので入れない。
+        "form": update.form.model_dump(mode="json", exclude={"result_asset_id"}),
         "note": _FORM_NOTE,
     }
     if update.dropped_params:
@@ -1345,6 +1394,18 @@ TOOLS: tuple[ToolDefinition, ...] = (
         "to you after the tool result.",
         ViewAssetsArgs,
         view_assets,
+    ),
+    ToolDefinition(
+        "view_result",
+        "Look at the generation result shown in the studio's result area (omit asset_id), or "
+        "at another image (pass asset_id). Use this whenever the user talks about the result, "
+        "the current image or the image they are looking at, for example when they want it "
+        "fixed or ask for an edit prompt. Returns the same details as get_asset (title, tags "
+        "including automatic tags, the prompt, model and parameters that made it, its primary "
+        "parent) and the image itself after the tool result. Pass include_image=false for the "
+        "text only.",
+        ViewResultArgs,
+        view_result,
     ),
     ToolDefinition(
         "search_assets",
