@@ -12,6 +12,7 @@
  */
 import { useState, type DragEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import { fmt, useI18n } from '../../i18n'
 import type { EditInputsLogic } from '../run-form/useEditInputsLogic'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
@@ -170,9 +171,10 @@ export function InputChipsRow({
                     !isWithheld &&
                     (maskInput ? (
                       <>
-                        <img
+                        <AssetImage
                           className={styles.maskThumb}
                           src={assetUrl(maskInput.assetId, 'thumb')}
+                          withheld={detailsByAssetId.get(maskInput.assetId)?.content_withheld === true}
                           alt={c.maskAlt}
                           draggable={false}
                         />

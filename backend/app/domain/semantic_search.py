@@ -60,6 +60,7 @@ from app.domain.run_views import (
     bulk_output_refs,
     bulk_parent_content_ratings,
     bulk_parent_focal_points,
+    bulk_parent_withheld,
     bulk_users,
     run_summary_fields,
 )
@@ -335,6 +336,7 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> l
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in runs.values()], viewer)
     parent_focals = bulk_parent_focal_points(db, inputs_map)
     parent_ratings = bulk_parent_content_ratings(db, inputs_map)
+    parent_withheld = bulk_parent_withheld(db, inputs_map)
     output_ids = [a.id for a in outputs.values()]
     titles = annotations_domain.bulk_titles(db, output_ids)
     focals = focal_points.bulk_get(db, output_ids)
@@ -381,6 +383,7 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> l
                         groups_map.get(run.asset_group_id),
                         primary_parent_focal_point=parent_focals.get(inputs_map[run.id][1]),
                         primary_parent_content_rating=parent_ratings.get(inputs_map[run.id][1]),
+                        primary_parent_content_withheld=inputs_map[run.id][1] in parent_withheld,
                     )
                 ),
             )

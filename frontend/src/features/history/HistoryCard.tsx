@@ -205,6 +205,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
         <AssetThumb
           assetId={parentAssetId}
           rating={run.primary_parent_content_rating}
+          withheld={run.primary_parent_content_withheld}
           className={styles.parentThumb}
           style={focalStyle(run.primary_parent_focal_point)}
           alt={t.history.card.parent}
@@ -425,6 +426,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
         message={fmt(t.history.card.deleteConfirm.message, { count: outputs.length })}
         warning={buildRunDeleteWarning(run.descendant_run_count)}
         previewImageUrl={firstOutput ? assetUrl(firstOutput.asset_id, 'thumb') : undefined}
+        previewWithheld={firstOutput?.content_withheld}
         previewFocalPoint={firstOutput?.focal_point}
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setDeleteConfirmOpen(false)}

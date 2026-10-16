@@ -289,6 +289,7 @@ function DuplicatesBody({ defaultThreshold }: { defaultThreshold: number }) {
         open={deleteTarget !== null}
         message={m.deleteConfirmMessage}
         previewImageUrl={deleteTarget ? assetUrl(deleteTarget.id, 'thumb') : undefined}
+        previewWithheld={deleteTarget?.content_withheld}
         previewFocalPoint={deleteTarget?.focal_point}
         previewDetail={deleteTarget ? `${deleteTarget.width} × ${deleteTarget.height}` : undefined}
         onConfirm={() => {

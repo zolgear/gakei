@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { getAsset, type ContentRatingLevel } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import { assetKindLabel, formatBytes, formatDateTime } from '../../lib/format'
 import { useI18n } from '../../i18n'
 import { TagChip } from '../annotations/TagChip'
@@ -110,7 +111,7 @@ export function MapPreviewPanel({
             // 画像を残さなかった(ADR-0051 4章。マップに出た後で判定を受けたとき)。読みに行かない。
             <WithheldPlaceholder className={styles.image} label={asset.content_withheld_verdict?.label} />
           ) : (
-            <img
+            <AssetImage
               key={assetId}
               src={assetUrl(assetId, 'preview')}
               alt=""

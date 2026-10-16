@@ -10,6 +10,7 @@
  */
 import { useState, type DragEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import { fmt, useI18n } from '../../i18n'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
@@ -153,9 +154,10 @@ export function InputImageTiles({
 
               {isPrimary && maskInput && (
                 <span className={styles.maskBadge}>
-                  <img
+                  <AssetImage
                     className={styles.maskThumb}
                     src={assetUrl(maskInput.assetId, 'thumb')}
+                    withheld={detailsByAssetId.get(maskInput.assetId)?.content_withheld === true}
                     alt={c.maskAlt}
                     draggable={false}
                   />

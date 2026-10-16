@@ -42,6 +42,7 @@ from app.domain.run_views import (
     bulk_output_refs,
     bulk_parent_content_ratings,
     bulk_parent_focal_points,
+    bulk_parent_withheld,
     bulk_users,
     run_summary_fields,
     visible_runs_query,
@@ -118,6 +119,7 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
             primary_parent_content_rating=ratings.get(primary_parent_asset_id)
             if primary_parent_asset_id is not None
             else None,
+            primary_parent_content_withheld=primary_parent_asset_id in withheld,
         ),
         deployment=run.deployment,
         provider_request_id=run.provider_request_id,
@@ -219,6 +221,7 @@ def list_runs(
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], user)
     parent_focals = bulk_parent_focal_points(db, inputs_map)
     parent_ratings = bulk_parent_content_ratings(db, inputs_map)
+    parent_withheld = bulk_parent_withheld(db, inputs_map)
     items = [
         RunSummary(
             **run_summary_fields(
@@ -230,6 +233,7 @@ def list_runs(
                 groups_map.get(r.asset_group_id),
                 primary_parent_focal_point=parent_focals.get(inputs_map[r.id][1]),
                 primary_parent_content_rating=parent_ratings.get(inputs_map[r.id][1]),
+                primary_parent_content_withheld=inputs_map[r.id][1] in parent_withheld,
             )
         )
         for r in rows

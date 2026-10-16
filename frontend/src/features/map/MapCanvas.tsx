@@ -36,6 +36,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import type { EmbeddingGraphNode } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { focalStyle } from '../../lib/focalPoint'
@@ -1272,7 +1273,7 @@ export function MapCanvas({
           }}
           aria-hidden="true"
         >
-          <img
+          <AssetImage
             src={assetUrl(hoverNode.id, 'thumb')}
             style={hoverMasked ? { ...focalStyle(hoverNode.focal_point), ...MASKED_CARD_THUMB_STYLE } : focalStyle(hoverNode.focal_point)}
             alt=""
@@ -1312,7 +1313,7 @@ export function MapCanvas({
             aria-label={m.openInViewer}
             title={m.openInViewer}
           >
-            <img
+            <AssetImage
               src={assetUrl(selectedNode.id, 'thumb')}
               style={
                 selectedMasked

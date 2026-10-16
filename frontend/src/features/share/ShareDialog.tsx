@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, createShare, previewShare, type ShareRow, type ShareScope } from '../../api/client'
+import { AssetImage } from '../mods/AssetImage'
 import { assetUrl } from '../../api/assetUrl'
 import { Modal } from '../../components/Modal'
 import type { UseToastResult } from '../../components/Toast'
@@ -125,8 +126,9 @@ function ShareDialogBody({ assetId, onClose, toast }: Omit<ShareDialogProps, 'op
             <ul className={styles.thumbs}>
               {assets.map((a) => (
                 <li key={a.id} className={styles.thumb} title={a.title ?? undefined}>
-                  <img
+                  <AssetImage
                     src={assetUrl(a.id, 'thumb')}
+                    withheld={a.content_withheld}
                     alt={a.title ?? ''}
                     loading="lazy"
                     className={`${styles.thumbImg} checkerboard`}
