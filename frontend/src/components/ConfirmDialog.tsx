@@ -10,6 +10,7 @@
  */
 import { useId, useRef } from 'react'
 import { useI18n } from '../i18n'
+import { AssetImage } from '../features/mods/AssetImage'
 import { type FocalPointValue, focalStyle } from '../lib/focalPoint'
 import styles from './ConfirmDialog.module.css'
 import { INITIAL_FOCUS_ATTRIBUTE } from './modalFocus'
@@ -27,6 +28,11 @@ interface ConfirmDialogProps {
   /** サムネイルの焦点(ADR-0043)。あれば顔の位置に寄せて切り取る。 */
   previewFocalPoint?: FocalPointValue | null
   previewDetail?: string
+  /**
+   * サムネイルの画像を残さなかった(ADR-0051 4章)。true なら `<img>` を読まず「画像なし(拒否)」の
+   * 表示にする(分からなくても、読み込みが 410 なら同じ表示に切り替わる)。
+   */
+  previewWithheld?: boolean
   /** 確認文の下に警告色で出す補足(例: 他の実行の元画像になっている旨)。 */
   warning?: string
 }
@@ -42,6 +48,7 @@ export function ConfirmDialog({
   previewImageAlt,
   previewFocalPoint,
   previewDetail,
+  previewWithheld,
   warning,
 }: ConfirmDialogProps) {
   const { t } = useI18n()
@@ -70,7 +77,8 @@ export function ConfirmDialog({
       >
         {previewImageUrl && (
           <div className={styles.previewRow}>
-            <img
+            <AssetImage
+              withheld={previewWithheld}
               className={`${styles.previewThumb} checkerboard`}
               src={previewImageUrl}
               style={focalStyle(previewFocalPoint)}

@@ -6527,6 +6527,11 @@ export interface components {
             /** Primary Parent Content Rating */
             primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
+             * Primary Parent Content Withheld
+             * @default false
+             */
+            primary_parent_content_withheld: boolean;
+            /**
              * Input Count
              * @default 0
              */
@@ -6794,6 +6799,11 @@ export interface components {
             primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Primary Parent Content Rating */
             primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Primary Parent Content Withheld
+             * @default false
+             */
+            primary_parent_content_withheld: boolean;
             /**
              * Input Count
              * @default 0
@@ -7168,6 +7178,11 @@ export interface components {
             /** Primary Parent Content Rating */
             primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
+             * Primary Parent Content Withheld
+             * @default false
+             */
+            primary_parent_content_withheld: boolean;
+            /**
              * Input Count
              * @default 0
              */
@@ -7357,6 +7372,11 @@ export interface components {
             height: number;
             /** Title */
             title?: string | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
         };
         /** SharePreviewRequest */
         SharePreviewRequest: {
@@ -7410,6 +7430,11 @@ export interface components {
              * @default false
              */
             root_deleted: boolean;
+            /**
+             * Root Content Withheld
+             * @default false
+             */
+            root_content_withheld: boolean;
             /** Root Title */
             root_title?: string | null;
             /**

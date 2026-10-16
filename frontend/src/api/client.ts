@@ -1605,3 +1605,128 @@ export function updateAssistantSettings(body: AssistantSettingsUpdateRequest): P
     body: JSON.stringify(body),
   })
 }
+
+// -- 送り先の区分(ADR-0051 3章。管理者のみ) ---------------------------------------
+
+export type ProviderLocalitiesResponse = components['schemas']['ProviderLocalitiesResponse']
+export type ProviderLocalitySetting = components['schemas']['ProviderLocalitySetting']
+export type ProviderLocalitiesUpdateRequest = components['schemas']['ProviderLocalitiesUpdateRequest']
+export type Locality = ProviderLocalitySetting['value']
+/** 区分を設定できる画像のプロバイダー。 */
+export type LocalityProvider = keyof ProviderLocalitiesResponse
+
+export function getProviderLocalities(): Promise<ProviderLocalitiesResponse> {
+  return request('/api/settings/provider-localities')
+}
+
+/** 省略したプロバイダーは変えない。`null` は保存した値を消して既定に戻す。 */
+export function updateProviderLocalities(body: ProviderLocalitiesUpdateRequest): Promise<ProviderLocalitiesResponse> {
+  return request('/api/settings/provider-localities', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+// -- Mod とフック(ADR-0051 7章。管理者のみ) -----------------------------------------
+
+export type ModsResponse = components['schemas']['ModsResponse']
+export type ModWebhookView = components['schemas']['ModWebhookView']
+export type PythonModView = components['schemas']['PythonModView']
+export type ModSettingFieldView = components['schemas']['ModSettingFieldView']
+export type ModFilters = components['schemas']['ModFilters']
+export type ModWebhookCreateRequest = components['schemas']['ModWebhookCreateRequest']
+export type ModWebhookUpdateRequest = components['schemas']['ModWebhookUpdateRequest']
+export type PythonModUpdateRequest = components['schemas']['PythonModUpdateRequest']
+export type ModOrderItem = components['schemas']['ModOrderItem']
+export type ModTestResponse = components['schemas']['ModTestResponse']
+export type ModInvocationView = components['schemas']['ModInvocationView']
+export type ModDeliveryView = components['schemas']['ModDeliveryView']
+export type ModEvent = ModWebhookView['events'][number]
+export type ModPurpose = NonNullable<ModFilters['purposes']>[number]
+export type ModSource = NonNullable<ModFilters['sources']>[number]
+export type ModOnFailure = ModWebhookView['on_failure']
+export type ModKind = ModOrderItem['kind']
+/** Asset・Run の判定(ADR-0051 4章・5章。Mod ごとの最新)。 */
+export type ModVerdictView = components['schemas']['ModVerdictView']
+/** Run の詳細の送る前のチェックの記録(`ai.before_send` だけ)。 */
+export type RunModInvocationView = components['schemas']['RunModInvocationView']
+
+export function getMods(): Promise<ModsResponse> {
+  return request('/api/settings/mods')
+}
+
+export function updateMods(body: components['schemas']['ModsUpdateRequest']): Promise<ModsResponse> {
+  return request('/api/settings/mods', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** Webhook を足す。署名の鍵は必須で、応答には返らない(設定済みかどうかだけ)。 */
+export function createModWebhook(body: ModWebhookCreateRequest): Promise<ModsResponse> {
+  return request('/api/settings/mods/webhooks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 書いた項目だけ変える。`secret` を送ると鍵を差し替える。 */
+export function updateModWebhook(webhookId: string, body: ModWebhookUpdateRequest): Promise<ModsResponse> {
+  return request(`/api/settings/mods/webhooks/${encodeURIComponent(webhookId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteModWebhook(webhookId: string): Promise<ModsResponse> {
+  return request(`/api/settings/mods/webhooks/${encodeURIComponent(webhookId)}`, { method: 'DELETE' })
+}
+
+export function updatePythonMod(modId: string, body: PythonModUpdateRequest): Promise<ModsResponse> {
+  return request(`/api/settings/mods/python/${encodeURIComponent(modId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** ダミーのイベントを送り、応答と所要時間を返す(記録には残らない)。Python の Mod は有効にしたものだけ。 */
+export function testMod(kind: ModKind, modId: string, event: ModEvent): Promise<ModTestResponse> {
+  const segment = kind === 'webhook' ? 'webhooks' : 'python'
+  return request(`/api/settings/mods/${segment}/${encodeURIComponent(modId)}/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event }),
+  })
+}
+
+/** 呼ぶ順番。この並びの順に呼ぶ。 */
+export function updateModOrder(items: ModOrderItem[]): Promise<ModsResponse> {
+  return request('/api/settings/mods/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+}
+
+/** 直近の呼び出し(新しい順)。`failedOnly` は失敗・時間切れ・拒否だけ。 */
+export function listModInvocations(params: { failedOnly?: boolean; limit?: number } = {}): Promise<{
+  items: ModInvocationView[]
+}> {
+  const q = new URLSearchParams()
+  if (params.failedOnly) q.set('failed_only', 'true')
+  if (params.limit !== undefined) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return request(`/api/settings/mods/invocations${qs ? `?${qs}` : ''}`)
+}
+
+/** 配達の失敗(新しい順)。 */
+export function listModDeliveryFailures(limit?: number): Promise<{ items: ModDeliveryView[] }> {
+  const q = new URLSearchParams({ status: 'failed' })
+  if (limit !== undefined) q.set('limit', String(limit))
+  return request(`/api/settings/mods/deliveries?${q.toString()}`)
+}

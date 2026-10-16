@@ -368,6 +368,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (!form.sizeValid) blockReasons.push(...form.sizeErrors)
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
+  if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
   if (form.imageInputCount > form.maxInputImages) {
     blockReasons.push(fmt(ip.maxInputImagesExceeded, { max: form.maxInputImages }))
   }

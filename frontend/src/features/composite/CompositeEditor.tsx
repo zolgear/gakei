@@ -768,6 +768,7 @@ function CompositeEditorBody({
                               <AssetThumb
                                 assetId={l.assetId}
                                 rating={detail ? (detail.content_rating ?? null) : undefined}
+                                withheld={detail?.content_withheld === true}
                                 className={`${styles.thumbImage} checkerboard`}
                                 alt=""
                                 draggable={false}

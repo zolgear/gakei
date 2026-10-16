@@ -178,3 +178,49 @@
   display: flex;
   gap: 8px;
 }
+
+/* どちらかの画像が無いとき(ADR-0051 4章)。2枚を並べるだけ。狭い幅では縦に積む。 */
+.withheldCompare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.withheldSide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.withheldSideLabel {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.withheldSideBody {
+  flex: 1 1 auto;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.withheldSideImage {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 767px) {
+  .withheldCompare {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+}

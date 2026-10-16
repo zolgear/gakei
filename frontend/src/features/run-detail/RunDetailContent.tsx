@@ -49,6 +49,7 @@ import { PromptBuildSection } from './PromptBuildSection'
 import { ImportedRunSection } from '../lineage-transfer/ImportedRunSection'
 import { baselineNegativePrompt, selectFinalPromptEntries } from './finalPrompt'
 import { AssetThumb } from '../content-rating/AssetThumb'
+import { RunModChecksSection } from '../mods/RunModChecksSection'
 import styles from './RunDetailContent.module.css'
 
 export interface RunDetailContentProps {
@@ -297,6 +298,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
                     assetId={output.asset_id}
                     rating={output.content_rating}
                     badge
+                    withheld={output.content_withheld}
                     className={`${styles.thumb} checkerboard`}
                     alt=""
                     draggable={false}
@@ -462,6 +464,9 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
         </section>
       )}
 
+      {/* Mod の送る前のチェックと判定(ADR-0051 5章)。記録が無ければ出さない。 */}
+      <RunModChecksSection run={run} sectionClassName={styles.section} headingClassName={styles.heading} />
+
       {inputs.length > 0 && (
         <section className={styles.section}>
           <h2 className={styles.heading}>{t.runDetail.inputsHeading}</h2>
@@ -478,6 +483,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
                     // マスクの入力は判定の対象外(ADR-0049 3章)。
                     rating={input.role === 'mask' ? undefined : input.content_rating}
                     badge
+                    withheld={input.content_withheld}
                     className={`${styles.thumb} checkerboard`}
                     alt=""
                     draggable={false}

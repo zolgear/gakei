@@ -520,6 +520,25 @@ def test_assistant_attachment_of_denied_image_is_refused(client: TestClient) -> 
     assert response.status_code == 409, response.text
 
 
+def test_run_summary_tells_primary_parent_is_withheld(client: TestClient) -> None:
+    """履歴のカードの親のサムネイルが 410 で壊れないよう、主たる親を残さなかったことを返す。"""
+    base = _upload(client)
+    response = _create_run(client, [base["id"]])
+    assert response.status_code == 202, response.text
+    run_id = response.json()["id"]
+    assert wait_for_run_terminal(client, run_id)["status"] == "succeeded"
+    item = next(r for r in client.get("/api/runs").json()["items"] if r["id"] == run_id)
+    assert item["primary_parent_asset_id"] == base["id"]
+    assert item["primary_parent_content_withheld"] is False
+
+    _deny(client, base["id"])
+    item = next(r for r in client.get("/api/runs").json()["items"] if r["id"] == run_id)
+    assert item["primary_parent_content_withheld"] is True
+    assert client.get(f"/api/runs/{run_id}").json()["primary_parent_content_withheld"] is True
+    hits = client.get("/api/search", params={"q": "apple"}).json()["runs"]
+    assert next(h for h in hits if h["id"] == run_id)["primary_parent_content_withheld"] is True
+
+
 # -- Run の詳細 ------------------------------------------------------------------------
 
 
@@ -556,6 +575,26 @@ def test_share_includes_withheld_node_without_image(client: TestClient) -> None:
     content = client.get(f"/api/public/shares/{token}/assets/{base['id']}/content?variant=thumb")
     assert content.status_code == 410
     assert _LABEL not in content.text
+
+
+def test_share_preview_and_list_tell_withheld(client: TestClient) -> None:
+    """共有のダイアログのプレビューと、ユーザー設定の共有の一覧が、画像なしを返す。"""
+    assert client.patch("/api/settings/share", json={"enabled": True}).status_code == 200
+    base = _upload(client)
+    other = _upload(client, make_png_bytes(41, 30))
+    share = client.post("/api/shares", json={"asset_id": base["id"], "scope": "single"})
+    assert share.status_code == 201, share.text
+    assert share.json()["root_content_withheld"] is False
+    _deny(client, base["id"])
+
+    preview = client.post("/api/shares/preview", json={"asset_id": base["id"], "scope": "single"})
+    assert preview.status_code == 200, preview.text
+    assert [a["content_withheld"] for a in preview.json()["assets"]] == [True]
+    preview = client.post("/api/shares/preview", json={"asset_id": other["id"], "scope": "single"})
+    assert [a["content_withheld"] for a in preview.json()["assets"]] == [False]
+
+    rows = client.get("/api/shares").json()["items"]
+    assert [r["root_content_withheld"] for r in rows if r["root_asset_id"] == base["id"]] == [True]
 
 
 def test_lineage_zip_keeps_withheld_node_and_imports_it(client: TestClient) -> None:

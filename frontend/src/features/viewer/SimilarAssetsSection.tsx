@@ -101,6 +101,7 @@ export function SimilarAssetsSection({
                         <AssetThumb
                           assetId={hit.id}
                           rating={hit.content_rating}
+                          withheld={hit.content_withheld}
                           style={focalStyle(hit.focal_point)}
                           alt=""
                           draggable={false}

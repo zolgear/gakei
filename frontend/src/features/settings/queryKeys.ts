@@ -63,3 +63,18 @@ export const SDWEBUI_STATUS_QUERY_KEY = ['sdwebui-status'] as const
  * (使えるときだけアシスタントのパネルを出す)が読む。
  */
 export const ASSISTANT_SETTINGS_QUERY_KEY = ['assistant-settings'] as const
+
+/**
+ * `GET /api/settings/provider-localities`(ADR-0051 3章)。OpenAI・ComfyUI・SD WebUI のページの
+ * 「送り先の区分」のカードが読む。
+ */
+export const PROVIDER_LOCALITIES_QUERY_KEY = ['provider-localities'] as const
+
+/** `GET /api/settings/mods`(ADR-0051 7章)。管理者設定の「Mod」だけが読む。 */
+export const MODS_QUERY_KEY = ['mods'] as const
+
+/** `GET /api/settings/mods/invocations`。直近の呼び出し(失敗だけに絞るかを後ろに足す)。 */
+export const MOD_INVOCATIONS_QUERY_KEY = ['mod-invocations'] as const
+
+/** `GET /api/settings/mods/deliveries?status=failed`。配達の失敗。 */
+export const MOD_DELIVERY_FAILURES_QUERY_KEY = ['mod-delivery-failures'] as const

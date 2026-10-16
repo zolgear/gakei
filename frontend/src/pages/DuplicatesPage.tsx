@@ -289,6 +289,7 @@ function DuplicatesBody({ defaultThreshold }: { defaultThreshold: number }) {
         open={deleteTarget !== null}
         message={m.deleteConfirmMessage}
         previewImageUrl={deleteTarget ? assetUrl(deleteTarget.id, 'thumb') : undefined}
+        previewWithheld={deleteTarget?.content_withheld}
         previewFocalPoint={deleteTarget?.focal_point}
         previewDetail={deleteTarget ? `${deleteTarget.width} × ${deleteTarget.height}` : undefined}
         onConfirm={() => {
@@ -322,6 +323,7 @@ function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleS
           <AssetThumb
             assetId={asset.id}
             rating={thumbRating(asset)}
+            withheld={asset.content_withheld}
             badge
             className={`${styles.thumb} checkerboard`}
             style={focalStyle(asset.focal_point)}

@@ -84,6 +84,9 @@ export function AssetLineageNode({ id, data }: NodeProps) {
             // ノードの段階は、対応する Asset のものではない)。
             rating={thumbUrlFor || embedded ? undefined : (assetInfo.content_rating ?? null)}
             badge
+            // 画像を残さなかった Asset(ADR-0051 4章)は「画像なし(拒否)」のノードとして描く。埋め込みの
+            // ノードの値は対応する Asset のものではないので使わない。
+            withheld={!embedded && assetInfo.content_withheld === true}
             src={thumbUrlFor ? thumbUrlFor(thumbAssetId) : undefined}
             className={`${styles.thumb} checkerboard`}
             style={focalStyle(assetInfo.focal_point)}

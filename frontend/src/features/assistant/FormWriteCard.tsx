@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router'
 import { getCapabilities, type AssistantMessageResponse, type CapabilitiesResponse } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import { useI18n, type Messages } from '../../i18n'
 import { findProvider } from '../../lib/capabilities'
 import { isStudioPath } from '../lineage/nodeTargetPath'
@@ -43,7 +44,7 @@ function InputThumbs({ inputs, c }: { inputs: FormPatchInput[]; c: CardMessages 
     <span className={styles.formInputs}>
       {inputs.map((input, index) => (
         <span key={`${input.assetId}-${index}`} className={styles.formInput}>
-          <img className={`${styles.attachmentThumb} checkerboard`} src={assetUrl(input.assetId, 'thumb')} alt="" loading="lazy" />
+          <AssetImage className={`${styles.attachmentThumb} checkerboard`} src={assetUrl(input.assetId, 'thumb')} alt="" loading="lazy" />
           {input.role !== 'image' && <span className={styles.formInputRole}>{c.roles[input.role]}</span>}
         </span>
       ))}

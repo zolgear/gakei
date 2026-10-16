@@ -47,6 +47,8 @@ export function compareInputCandidates(
   position: number
   focalPoint: FocalPointValue | null
   contentRating: ContentRatingLevel | null
+  /** 画像を残さなかった(ADR-0051)。 */
+  withheld: boolean
 }[] {
   return (run.inputs ?? [])
     .filter((i) => i.role === 'image' || i.role === 'reference')
@@ -56,6 +58,7 @@ export function compareInputCandidates(
       position: i.position,
       focalPoint: i.focal_point ?? null,
       contentRating: i.content_rating ?? null,
+      withheld: i.content_withheld === true,
     }))
 }
 
@@ -67,12 +70,15 @@ export function compareOutputCandidates(
   outputIndex: number | null
   focalPoint: FocalPointValue | null
   contentRating: ContentRatingLevel | null
+  /** 画像を残さなかった(ADR-0051)。 */
+  withheld: boolean
 }[] {
   return (run.outputs ?? []).map((o) => ({
     assetId: o.asset_id,
     outputIndex: o.output_index,
     focalPoint: o.focal_point ?? null,
     contentRating: o.content_rating ?? null,
+    withheld: o.content_withheld === true,
   }))
 }
 

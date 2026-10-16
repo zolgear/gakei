@@ -68,6 +68,7 @@ import { resolveResultOrigin } from './resultOrigin'
 import { setStudioResultAssetId } from './studioResultStore'
 import { buildStudioPath } from './assetQueryParam'
 import { invalidateAssetGroupQueries } from '../stock/groups/assetGroupQueries'
+import { isSendBlocked, isWithheld } from '../mods/modVerdicts'
 import styles from './ResultPane.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -446,10 +447,13 @@ export function ResultPane({
   // 「入力に使う」の上限は、現在フォームで選ばれているモデルの edit 上限を使う。
   const maxInputImagesForToggle = editMaxInputImages(capsQuery.data, formState.provider, formState.model)
   const usedAsInput = effectiveAssetId ? isUsedAsInput(formState.inputs, effectiveAssetId) : false
+  // 画像を残さなかった Asset(ADR-0051 4章)と、入力に使えない Asset(画像なし、または deny の判定)。
+  const withheld = isWithheld(asset)
+  const sendBlocked = isSendBlocked(asset)
 
   // 追加のみ。使用中のときはボタンを無効にし、外すのは入力欄のチップから行う。
   function handleUseAsInput() {
-    if (!effectiveAssetId || usedAsInput) return
+    if (!effectiveAssetId || usedAsInput || sendBlocked) return
     setToggleError(null)
     const result = addAsInput(formState.inputs, effectiveAssetId, maxInputImagesForToggle)
     setFormState({ ...formState, inputs: result.inputs })
@@ -568,6 +572,7 @@ export function ResultPane({
 
         {asset && (
           <>
+            {!withheld && (
             <a
               className={styles.headerIconButton}
               aria-label={rp.downloadOriginal}
@@ -584,6 +589,7 @@ export function ResultPane({
                 />
               </svg>
             </a>
+            )}
             {!asset.deleted_at && (
               <button
                 type="button"
@@ -677,18 +683,26 @@ export function ResultPane({
           {effectiveAssetId && asset && (
             <>
               <div className={styles.canvasWrap}>
-                <AssetCanvas asset={asset} contentRating={asset.content_rating ?? null} />
+                <AssetCanvas
+                  asset={asset}
+                  contentRating={asset.content_rating ?? null}
+                  withheld={withheld}
+                  withheldLabel={asset.content_withheld_verdict?.label}
+                  withheldMessage={asset.content_withheld_verdict?.message}
+                  onImageError={() => queryClient.invalidateQueries({ queryKey: ['asset', asset.id] })}
+                />
                 <div className={styles.canvasActionBar}>
                   <button
                     type="button"
                     className={styles.canvasUseAsInputButton}
                     data-active={usedAsInput}
-                    disabled={usedAsInput}
-                    title={usedAsInput ? rp.inUseHint : undefined}
+                    disabled={usedAsInput || sendBlocked}
+                    title={usedAsInput ? rp.inUseHint : sendBlocked ? t.mods.cannotUseAsInput : undefined}
                     onClick={handleUseAsInput}
                   >
                     {usedAsInput ? rp.inUse : rp.useAsInput}
                   </button>
+                  {!withheld && (
                   <a
                     className={styles.canvasIconButton}
                     aria-label={rp.downloadOriginal}
@@ -705,6 +719,7 @@ export function ResultPane({
                       />
                     </svg>
                   </a>
+                  )}
                 </div>
               </div>
               {/* サイドバー配置では右のストックと役割が重なり、「入力に使う」も画像下の
@@ -728,6 +743,7 @@ export function ResultPane({
                           assetId={output.asset_id}
                           rating={output.content_rating}
                           badge
+                          withheld={output.content_withheld}
                           className={styles.thumbImage}
                           style={focalStyle(output.focal_point)}
                           alt=""
@@ -739,6 +755,8 @@ export function ResultPane({
                         type="button"
                         className={styles.thumbAddButton}
                         aria-label={rp.addToInputAria}
+                        disabled={output.content_withheld}
+                        title={output.content_withheld ? t.mods.cannotUseAsInput : undefined}
                         onClick={() => handleAddThumbnailAsInput(output.asset_id)}
                       >
                         +
@@ -758,6 +776,7 @@ export function ResultPane({
                           assetId={item.id}
                           rating={item.content_rating}
                           badge
+                          withheld={item.content_withheld}
                           className={styles.thumbImage}
                           style={focalStyle(item.focal_point)}
                           alt=""
@@ -768,6 +787,8 @@ export function ResultPane({
                         type="button"
                         className={styles.thumbAddButton}
                         aria-label={rp.addToInputAria}
+                        disabled={item.content_withheld}
+                        title={item.content_withheld ? t.mods.cannotUseAsInput : undefined}
                         onClick={() => handleAddThumbnailAsInput(item.id)}
                       >
                         +
@@ -780,8 +801,8 @@ export function ResultPane({
                     type="button"
                     className={styles.useAsInputButton}
                     data-active={usedAsInput}
-                    disabled={usedAsInput}
-                    title={usedAsInput ? rp.inUseHint : undefined}
+                    disabled={usedAsInput || sendBlocked}
+                    title={usedAsInput ? rp.inUseHint : sendBlocked ? t.mods.cannotUseAsInput : undefined}
                     onClick={handleUseAsInput}
                   >
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -916,7 +937,7 @@ export function ResultPane({
       <ConfirmDialog
         open={deleteConfirmOpen}
         message={rp.deleteConfirmMessage}
-        previewImageUrl={asset ? assetUrl(asset.id, 'thumb') : undefined}
+        previewImageUrl={asset && !withheld ? assetUrl(asset.id, 'thumb') : undefined}
         previewFocalPoint={asset?.focal_point}
         previewDetail={asset ? `${asset.width} × ${asset.height}` : undefined}
         onConfirm={() => deleteMutation.mutate()}

@@ -43,7 +43,9 @@ import {
   type ConnectionForm,
 } from '../llmConnections'
 import { hasChanges } from '../annotationSettings'
-import { ANNOTATION_SETTINGS_QUERY_KEY, LLM_CONNECTIONS_QUERY_KEY } from '../queryKeys'
+import { LocalityHelp, LocalitySelect } from '../LocalityParts'
+import { localityLabel } from '../locality'
+import { ANNOTATION_SETTINGS_QUERY_KEY, LLM_CONNECTIONS_QUERY_KEY, PROVIDER_LOCALITIES_QUERY_KEY } from '../queryKeys'
 import { SettingsPageFrame } from '../SettingsPageFrame'
 import { ConnectionCard, QueryStatus, SettingsSection } from '../SettingsParts'
 import { useSettingsShell } from '../settingsShell'
@@ -62,6 +64,8 @@ function useApplyConnections() {
     (next: LlmConnectionsResponse) => {
       queryClient.setQueryData(LLM_CONNECTIONS_QUERY_KEY, next)
       void queryClient.invalidateQueries({ queryKey: ANNOTATION_SETTINGS_QUERY_KEY })
+      // 組み込みの接続先の区分は、画像のプロバイダーの OpenAI の区分と同じ値(ADR-0051 3章)。
+      void queryClient.invalidateQueries({ queryKey: PROVIDER_LOCALITIES_QUERY_KEY })
     },
     [queryClient],
   )
@@ -135,6 +139,7 @@ function ConnectionsSection({ connections }: { connections: LlmConnectionView[] 
                   },
                   { label: m.apiStyleLabel, value: view.api_style === 'chat' ? m.apiStyleChat : m.apiStyleResponses },
                   { label: m.apiKeyLabel, value: <KeyStatus view={view} /> },
+                  { label: t.settings.locality.label, value: localityLabel(view.locality) },
                   {
                     label: m.usedByLabel,
                     value:
@@ -368,6 +373,20 @@ function ConnectionDialog({ view, onClose }: { view?: LlmConnectionView; onClose
               <option value="chat">{m.apiStyleChat}</option>
             </select>
             <p className={styles.helpText}>{m.apiStyleHelp}</p>
+          </div>
+          <div className={styles.field}>
+            <label htmlFor={`${idPrefix}-locality`} className={styles.rowLabel}>
+              {t.settings.locality.label}
+            </label>
+            <LocalitySelect
+              id={`${idPrefix}-locality`}
+              value={form.locality}
+              disabled={busy}
+              describedBy={`${idPrefix}-locality-help`}
+              onChange={(locality) => update({ locality })}
+            />
+            <LocalityHelp id={`${idPrefix}-locality-help`} />
+            {builtin && <p className={styles.helpText}>{t.settings.locality.builtinNote}</p>}
           </div>
           {!view && (
             <div className={styles.field}>

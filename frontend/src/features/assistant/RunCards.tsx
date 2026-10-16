@@ -120,6 +120,7 @@ function RunCard({ runId }: { runId: string }) {
           <AssetThumb
             assetId={output.asset_id}
             rating={output.content_rating}
+            withheld={output.content_withheld}
             badge
             className={`${styles.thumb} checkerboard`}
             style={focalStyle(output.focal_point)}

@@ -116,10 +116,11 @@ export function canEditContentRating(asset: Pick<AssetDetail, 'kind' | 'deleted_
 
 /** 「再判定」を出すか。判定が使えない(無効、モデルが無い)なら押しても 409 になるので出さない。 */
 export function canRequestContentRating(
-  asset: Pick<AssetDetail, 'kind' | 'deleted_at'>,
+  asset: Pick<AssetDetail, 'kind' | 'deleted_at'> & { content_withheld?: boolean | null },
   usable: boolean | undefined,
 ): boolean {
-  return canEditContentRating(asset) && usable === true
+  // 画像を残さなかった Asset(ADR-0051)は判定する画像が無い(サーバーも 409)。
+  return canEditContentRating(asset) && asset.content_withheld !== true && usable === true
 }
 
 /** 変更・再判定の応答を Asset 詳細へ重ねる。 */

@@ -15,6 +15,7 @@ import { baselineNegativePrompt } from '../run-detail/finalPrompt'
 import type { PublicRunDetail, PublicRunInput } from './publicRunDetail'
 import { PublicParams } from './PublicParams'
 import styles from './PublicSharePage.module.css'
+import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
 
 interface PublicRunDetailPanelProps {
   detail: PublicRunDetail
@@ -38,7 +39,7 @@ export function PublicRunDetailPanel({
   const p = t.publicShare
   const { run, primaryParent, references, outputs } = detail
 
-  function thumb(assetId: string, label: ReactNode, key: string) {
+  function thumb(assetId: string, label: ReactNode, key: string, withheld = false) {
     return (
       <li key={key}>
         <button
@@ -47,7 +48,12 @@ export function PublicRunDetailPanel({
           aria-current={assetId === selectedAssetId}
           onClick={() => onSelectAsset(assetId)}
         >
-          <img src={thumbUrlFor(assetId)} alt="" className={`${styles.runThumbImg} checkerboard`} draggable={false} />
+          {withheld ? (
+            // 画像を残さなかった(ADR-0051 4章)。画像を読みに行かない。
+            <WithheldPlaceholder className={styles.runThumbImg} />
+          ) : (
+            <img src={thumbUrlFor(assetId)} alt="" className={`${styles.runThumbImg} checkerboard`} draggable={false} />
+          )}
           <span className={styles.runThumbLabel}>{label}</span>
         </button>
       </li>
@@ -103,7 +109,9 @@ export function PublicRunDetailPanel({
             )}
           </div>
           <ul className={styles.runThumbs}>
-            {outputs.map((o) => thumb(o.asset.id, o.outputIndex !== null ? `#${o.outputIndex}` : '', o.asset.id))}
+            {outputs.map((o) =>
+              thumb(o.asset.id, o.outputIndex !== null ? `#${o.outputIndex}` : '', o.asset.id, o.asset.content_withheld),
+            )}
           </ul>
         </>
       )}
@@ -114,7 +122,7 @@ export function PublicRunDetailPanel({
         <>
           <h2 className={styles.subheading}>{p.primaryParentHeading}</h2>
           <ul className={styles.runThumbs}>
-            {thumb(primaryParent.asset.id, inputLabel(primaryParent), 'primary')}
+            {thumb(primaryParent.asset.id, inputLabel(primaryParent), 'primary', primaryParent.asset.content_withheld)}
           </ul>
         </>
       )}
@@ -122,7 +130,9 @@ export function PublicRunDetailPanel({
         <>
           <h2 className={styles.subheading}>{p.referencesHeading}</h2>
           <ul className={styles.runThumbs}>
-            {references.map((r) => thumb(r.asset.id, inputLabel(r), `${r.asset.id}-${r.role}-${r.position}`))}
+            {references.map((r) =>
+              thumb(r.asset.id, inputLabel(r), `${r.asset.id}-${r.role}-${r.position}`, r.asset.content_withheld),
+            )}
           </ul>
         </>
       )}

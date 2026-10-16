@@ -60,6 +60,7 @@ def _to_row(
         url=shares_domain.share_url(base, share.token),
         root_asset_id=share.root_asset_id,
         root_deleted=root is None or root.deleted_at is not None,
+        root_content_withheld=root is not None and root.content_withheld_at is not None,
         root_title=root_title,
         scope=share.scope,  # type: ignore[arg-type]
         allow_original=share.allow_original,
@@ -92,7 +93,12 @@ def preview_share(
         asset_count=len(result.assets),
         assets=[
             SharePreviewAsset(
-                id=a.id, kind=a.kind, width=a.width, height=a.height, title=titles.get(a.id)
+                id=a.id,
+                kind=a.kind,
+                width=a.width,
+                height=a.height,
+                title=titles.get(a.id),
+                content_withheld=a.content_withheld_at is not None,
             )
             for a, _depth in result.assets
         ],

@@ -19,7 +19,7 @@ import {
   setMaskInput,
 } from './editInputs'
 import { validateInputFile } from './inputValidation'
-import { findDeletedInputAssetIds } from './deletedInputs'
+import { findBlockedInputAssetIds, findDeletedInputAssetIds } from './deletedInputs'
 import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData } from './dragDropAssets'
 import { pickPastedImageFiles } from './clipboardImages'
 import type { RunInputItem } from './types'
@@ -45,6 +45,8 @@ export interface EditInputsLogic {
   detailsByAssetId: Map<string, AssetDetail>
   notFoundAssetIds: Set<string>
   deletedAssetIds: Set<string>
+  /** 入力に使えない Asset(画像なし、または Mod の判定で deny。ADR-0051 4章)。 */
+  blockedAssetIds: Set<string>
   positionZeroAsset: AssetDetail | undefined
   uploadErrors: string[]
   /** アップロードが既存 Asset に一致した(ADR-0014)ときの案内。エラーとは別枠で出す。 */
@@ -120,6 +122,7 @@ export function useEditInputsLogic(
     else if (query?.isError) notFoundAssetIds.add(id)
   })
   const deletedAssetIds = new Set(findDeletedInputAssetIds(inputs, detailsByAssetId))
+  const blockedAssetIds = new Set(findBlockedInputAssetIds(inputs, detailsByAssetId))
   const positionZeroAsset = images[0] ? detailsByAssetId.get(images[0].assetId) : undefined
 
   const uploadMutation = useMutation({
@@ -347,6 +350,7 @@ export function useEditInputsLogic(
     detailsByAssetId,
     notFoundAssetIds,
     deletedAssetIds,
+    blockedAssetIds,
     positionZeroAsset,
     uploadErrors,
     uploadNotice,

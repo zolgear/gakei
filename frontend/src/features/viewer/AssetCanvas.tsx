@@ -22,6 +22,7 @@ import { useAssetMaskState } from '../content-rating/useAssetMasked'
 import { RatingBadge } from '../content-rating/RatingBadge'
 import { CanvasRemaskButton } from '../content-rating/CanvasRemaskButton'
 import { hideAsset, revealAsset } from '../content-rating/revealStore'
+import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
 import styles from './AssetCanvas.module.css'
 import ratingStyles from '../content-rating/ContentRating.module.css'
 
@@ -60,6 +61,19 @@ interface AssetCanvasProps {
    * 1本指のパンは今までどおり。既定(false)は今までどおり(スタジオの結果エリアなど)。
    */
   pageScrollWhenFit?: boolean
+  /**
+   * 画像を残さなかった Asset(ADR-0051 4章)。true なら画像を読みに行かず、枠いっぱいに
+   * 「画像なし(拒否)」の表示を出す(パン・ズームのツールバーも出さない。`toolbarLeading` は残す)。
+   */
+  withheld?: boolean
+  /** 置き換えの表示に添える判定の label と message。 */
+  withheldLabel?: string | null
+  withheldMessage?: string | null
+  /**
+   * 画像を読めなかったとき(後から判定で画像を消された 410 など)。呼び出し側が詳細を取り直し、
+   * 画像なしなら置き換えの表示に切り替える。
+   */
+  onImageError?: () => void
 }
 
 function CanvasToolbar({ scalePercent, leading }: { scalePercent: number; leading?: ReactNode }) {
@@ -136,7 +150,41 @@ export function AssetCanvas({
   allowOriginal = true,
   contentRating,
   pageScrollWhenFit = false,
+  withheld = false,
+  withheldLabel,
+  withheldMessage,
+  onImageError,
 }: AssetCanvasProps) {
+  if (withheld) {
+    return (
+      <div className={`${styles.canvasArea} ${styles.withheldArea}`}>
+        {toolbarLeading && <div className={styles.toolbarRow}>{toolbarLeading}</div>}
+        <WithheldPlaceholder variant="canvas" label={withheldLabel} message={withheldMessage} />
+      </div>
+    )
+  }
+  return (
+    <ImageCanvas
+      asset={asset}
+      toolbarLeading={toolbarLeading}
+      urlFor={urlFor}
+      allowOriginal={allowOriginal}
+      contentRating={contentRating}
+      pageScrollWhenFit={pageScrollWhenFit}
+      onImageError={onImageError}
+    />
+  )
+}
+
+function ImageCanvas({
+  asset,
+  toolbarLeading,
+  urlFor,
+  allowOriginal = true,
+  contentRating,
+  pageScrollWhenFit = false,
+  onImageError,
+}: Omit<AssetCanvasProps, 'withheld' | 'withheldLabel' | 'withheldMessage'>) {
   const { t } = useI18n()
   const { masked, revealed } = useAssetMaskState(asset.id, contentRating)
   // asset が切り替わったら preview から見直す(差し替え前の倍率を引きずらない)。
@@ -244,6 +292,7 @@ export function AssetCanvas({
               // ここをドラッグ元にすると「画像上をドラッグして移動する」パン操作が壊れる。
               // 「入力に使う」ボタンが同じ用途を安全に提供しているので、ここはドラッグ元にしない。
               draggable={false}
+              onError={onImageError}
             />
           </TransformComponent>
         </TransformWrapper>

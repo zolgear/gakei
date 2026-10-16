@@ -1,0 +1,167 @@
+/* Mod の判定と送る前のチェックの一覧(ビューアの詳細・Run の詳細。ADR-0051 5章)。 */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+  font-size: 12px;
+}
+
+.item[data-verdict='ok'],
+.item[data-tone='allow'] {
+  border-left-color: var(--color-success);
+}
+
+.item[data-verdict='flag'],
+.item[data-tone='failed'] {
+  border-left-color: var(--color-warning);
+}
+
+.item[data-verdict='deny'],
+.item[data-tone='deny'] {
+  border-left-color: var(--color-danger);
+}
+
+.itemHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.modName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.date {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.label {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.message {
+  margin: 0;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  font-size: 11px;
+}
+
+.meta dt {
+  color: var(--color-text-faint);
+}
+
+.meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.link {
+  align-self: flex-start;
+  font-size: 12px;
+}
+
+.note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+/* 画像なしの理由(ビューアの詳細の上部)。 */
+.withheldBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  background: var(--color-danger-bg);
+  font-size: 12px;
+}
+
+.withheldTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.withheldText {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* 送る前のチェック: Mod ごとの見出しと、その中の呼び出し。 */
+.groupHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.checkReason {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.duration {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}

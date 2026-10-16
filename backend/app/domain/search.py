@@ -30,6 +30,7 @@ from app.domain.run_views import (
     bulk_output_refs,
     bulk_parent_content_ratings,
     bulk_parent_focal_points,
+    bulk_parent_withheld,
     bulk_users,
     run_summary_fields,
 )
@@ -151,6 +152,7 @@ def _search_runs(
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], viewer)
     parent_focals = bulk_parent_focal_points(db, inputs_map)
     parent_ratings = bulk_parent_content_ratings(db, inputs_map)
+    parent_withheld = bulk_parent_withheld(db, inputs_map)
 
     hits = [
         SearchRunHit(
@@ -163,6 +165,7 @@ def _search_runs(
                 groups_map.get(run.asset_group_id),
                 primary_parent_focal_point=parent_focals.get(inputs_map[run.id][1]),
                 primary_parent_content_rating=parent_ratings.get(inputs_map[run.id][1]),
+                primary_parent_content_withheld=inputs_map[run.id][1] in parent_withheld,
             ),
             snippet=build_snippet(run.prompt, terms),
         )

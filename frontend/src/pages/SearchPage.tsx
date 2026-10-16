@@ -65,6 +65,7 @@ import { AssetThumb } from '../features/content-rating/AssetThumb'
 import { thumbRating } from '../features/content-rating/contentRating'
 import styles from './SearchPage.module.css'
 import { focalStyle } from '../lib/focalPoint'
+import { WithheldPlaceholder } from '../features/mods/WithheldPlaceholder'
 
 const PAGE_LIMIT = 50
 // 意味での検索は全件に順位を付けるので「当たった件数」は無い。最初は少なめに出し、「もっと見る」で
@@ -250,6 +251,7 @@ export function SearchPage() {
               <AssetThumb
                 assetId={hit.id}
                 rating={thumbRating(hit)}
+                withheld={hit.content_withheld}
                 badge
                 className={`${styles.assetThumb} checkerboard`}
                 style={focalStyle(hit.focal_point)}
@@ -374,7 +376,12 @@ export function SearchPage() {
               title={t.search.page.similarOriginLabel}
               onClick={() => navigate(`/assets/${similarId}`)}
             >
-              <img className={`${styles.assetThumb} checkerboard`} src={assetUrl(similarId, 'thumb')} alt="" draggable={false} />
+              {similarErrorKind === 'withheld' ? (
+                // 起点の画像を残さなかった(ADR-0051 4章)。画像を読みに行かない。
+                <WithheldPlaceholder className={styles.assetThumb} />
+              ) : (
+                <img className={`${styles.assetThumb} checkerboard`} src={assetUrl(similarId, 'thumb')} alt="" draggable={false} />
+              )}
             </button>
             <h2 className={styles.sectionHeading}>
               {t.search.page.similarHeading}
@@ -392,6 +399,7 @@ export function SearchPage() {
             onRequested={() => void queryClient.invalidateQueries({ queryKey: similarKey })}
           />
           {similarErrorKind === 'unavailable' && <p className={styles.placeholder}>{t.embeddings.unavailable}</p>}
+          {similarErrorKind === 'withheld' && <p className={styles.placeholder}>{t.mods.withheldNotice}</p>}
           {similarQuery.isError && similarErrorKind === null && (
             <p className={styles.resolveError}>{t.embeddings.loadFailed}</p>
           )}
@@ -583,6 +591,7 @@ export function SearchPage() {
                   <AssetThumb
                     assetId={hit.id}
                     rating={thumbRating(hit)}
+                    withheld={hit.content_withheld}
                     badge
                     className={`${styles.assetThumb} checkerboard`}
                     style={focalStyle(hit.focal_point)}

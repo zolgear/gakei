@@ -55,7 +55,10 @@ export function AssistantPanel() {
       )}
       {state.streamError && (
         <p className={styles.errorText} role="alert">
-          {state.streamError.message}
+          {/* Mod の送る前のチェックで止まったとき(ADR-0051 2章)は、画面の言語の見出しを添える。 */}
+          {state.streamError.code === 'hook_denied'
+            ? `${t.runStatus.errorCodes.hookDenied}: ${state.streamError.message}`
+            : state.streamError.message}
         </p>
       )}
       {state.sendError && (

@@ -60,6 +60,11 @@
   gap: 12px;
 }
 
+/* グリッドの1行を使う欄(送り先の区分) */
+.gridFullRow {
+  grid-column: 1 / -1;
+}
+
 /* ラベルを上に置く欄(差し込み先のノード選択と同じ見た目) */
 .field {
   display: flex;

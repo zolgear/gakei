@@ -12,7 +12,9 @@ export function similarAssetsQueryKey(assetId: string, limit: number) {
   return ['embeddings', 'similar', assetId, limit] as const
 }
 
-/** 似た画像を出せる画像か(マスクと削除済みは対象外)。 */
-export function supportsSimilar(asset: Pick<AssetDetail, 'kind' | 'deleted_at'>): boolean {
-  return asset.kind !== 'mask' && !asset.deleted_at
+/** 似た画像を出せる画像か(マスク、削除済み、画像を残さなかったもの(ADR-0051)は対象外)。 */
+export function supportsSimilar(
+  asset: Pick<AssetDetail, 'kind' | 'deleted_at'> & { content_withheld?: boolean | null },
+): boolean {
+  return asset.kind !== 'mask' && !asset.deleted_at && asset.content_withheld !== true
 }

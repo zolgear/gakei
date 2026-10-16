@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { ApiError, listShares, revokeShare, type ShareRow } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import type { UseToastResult } from '../../components/Toast'
 import { copyText } from '../../lib/copyText'
@@ -104,8 +105,9 @@ export function SharesSection({ toast }: SharesSectionProps) {
                   aria-label={s.openRoot}
                   title={item.root_title ?? s.openRoot}
                 >
-                  <img
+                  <AssetImage
                     src={assetUrl(item.root_asset_id, 'thumb')}
+                    withheld={item.root_content_withheld}
                     alt=""
                     loading="lazy"
                     className={`${styles.thumb} checkerboard`}
@@ -155,6 +157,7 @@ export function SharesSection({ toast }: SharesSectionProps) {
         message={s.revokeConfirm.message}
         confirmLabel={s.revokeConfirm.confirmLabel}
         previewImageUrl={revokeTarget ? assetUrl(revokeTarget.root_asset_id, 'thumb') : undefined}
+        previewWithheld={revokeTarget?.root_content_withheld}
         previewDetail={revokeTarget ? shareScopeLabel(revokeTarget.scope) : undefined}
         onConfirm={() => {
           if (revokeTarget) revokeMutation.mutate(revokeTarget.id)

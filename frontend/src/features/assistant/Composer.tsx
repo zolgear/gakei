@@ -9,6 +9,7 @@
  */
 import { useLayoutEffect, useRef, useState, type DragEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import { fmt, useI18n } from '../../i18n'
 import { clampTextareaHeight } from '../prompt-sets/textareaSizing'
 import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData, isRelevantDragTypes } from '../run-form/dragDropAssets'
@@ -109,7 +110,7 @@ export function Composer({
         <ul className={styles.attachments} aria-label={c.attachmentsLabel}>
           {attachments.map((id) => (
             <li key={id} className={styles.attachmentItem}>
-              <img className={`${styles.attachmentThumb} checkerboard`} src={assetUrl(id, 'thumb')} alt="" />
+              <AssetImage className={`${styles.attachmentThumb} checkerboard`} src={assetUrl(id, 'thumb')} alt="" />
               <button
                 type="button"
                 className={styles.removeAttachment}

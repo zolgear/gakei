@@ -1092,6 +1092,8 @@ class RunSummary(BaseModel):
     primary_parent_focal_point: FocalPoint | None = None
     # 主たる親のレーティングの段階(ADR-0049)。未判定なら null。
     primary_parent_content_rating: ContentRatingLevel | None = None
+    # 主たる親の画像を残さなかったか(ADR-0051 4章。履歴のカードの親の小さな画像用)。
+    primary_parent_content_withheld: bool = False
     # role=image の入力枚数(mask/reference は含まない)。
     input_count: int = 0
     # この Run の出力を入力に使っている、削除されていない Run の数。削除の警告に使う。
@@ -2483,6 +2485,8 @@ class SharePreviewAsset(BaseModel):
     width: int
     height: int
     title: str | None = None
+    # 画像を残さなかったか(ADR-0051 4章)。true ならサムネイルは出さない(410 になる)。
+    content_withheld: bool = False
 
 
 class SharePreviewResponse(BaseModel):
@@ -2501,6 +2505,8 @@ class ShareRow(BaseModel):
     root_asset_id: uuid.UUID
     # 起点の画像が削除されている(共有のページは 404 になっている)。
     root_deleted: bool = False
+    # 起点の画像を残さなかった(ADR-0051 4章。サムネイルは出さない)。
+    root_content_withheld: bool = False
     root_title: str | None = None
     scope: ShareScope
     allow_original: bool

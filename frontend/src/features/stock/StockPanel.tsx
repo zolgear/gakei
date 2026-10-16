@@ -456,6 +456,7 @@ export function StockPanel() {
         open={deleteTarget !== null}
         message={t.stock.deleteConfirmMessage}
         previewImageUrl={deleteTarget ? assetUrl(deleteTarget.id, 'thumb') : undefined}
+        previewWithheld={deleteTarget?.content_withheld}
         previewFocalPoint={deleteTarget?.focal_point}
         previewDetail={deleteTarget ? `${deleteTarget.width} × ${deleteTarget.height}` : undefined}
         onConfirm={() => {
