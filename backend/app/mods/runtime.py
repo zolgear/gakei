@@ -93,14 +93,76 @@ class ImageOpener:
                 raise LookupError("image not available")
             return data
         with self._session_factory() as session:
-            asset = session.get(Asset, uuid.UUID(asset_id))
-            if asset is None or asset.content_withheld_at is not None:
-                raise LookupError(f"asset {asset_id} not available")
+            asset = self._asset(session, asset_id)
             blob_key = asset.blob_key
         return self._store.read(blob_key)
 
+    @staticmethod
+    def _asset(session: Session, asset_id: str) -> Asset:
+        try:
+            parsed = uuid.UUID(asset_id)
+        except ValueError as e:
+            raise LookupError(f"asset {asset_id} not available") from e
+        asset = session.get(Asset, parsed)
+        if asset is None:
+            raise LookupError(f"asset {asset_id} not available")
+        if asset.content_withheld_at is not None:
+            raise contract.ImageWithheld(f"asset {asset_id} has no image (withheld)")
+        return asset
+
+    def read_with_lineage(self, ref: contract.ImageRef | str) -> bytes:
+        """ダウンロードと同じ、系列の情報を埋め込んだ PNG(ADR-0014)。系列は、その Asset を
+        作った人に見える範囲(作った人の記録が無ければ、個人モードと同じくすべて)。PNG でない
+        原本と、まだ保存していない画像(`extras`)は原本のまま返す。"""
+        from app.auth.identity import LOCAL_ADMIN, CurrentUser
+        from app.domain.embedded_meta import build_lineage_meta, embed_gakei_chunk
+        from app.domain.models import AppUser
+
+        if not isinstance(ref, str) and (ref.sha256 in self._extras or ref.asset_id is None):
+            return self.read(ref)
+        asset_id = ref if isinstance(ref, str) else ref.asset_id
+        assert asset_id is not None
+        with self._session_factory() as session:
+            asset = self._asset(session, asset_id)
+            data = self._store.read(asset.blob_key)
+            if asset.mime != "image/png":
+                return data
+            owner_id = asset.created_by_user_id
+            if owner_id is None and asset.produced_by_run_id is not None:
+                run = session.get(Run, asset.produced_by_run_id)
+                owner_id = run.created_by_user_id if run is not None else None
+            viewer = LOCAL_ADMIN
+            if owner_id is not None:
+                user = session.get(AppUser, owner_id)
+                viewer = CurrentUser(
+                    id=owner_id,
+                    name=user.name if user is not None else None,
+                    email=user.email if user is not None else None,
+                    role="user",
+                )
+            meta = build_lineage_meta(session, asset, viewer=viewer)
+        return embed_gakei_chunk(data, meta)
+
+    def run_info(self, run_id: str) -> contract.RunFinishedSubject | None:
+        """`run.finished` の `subject` と同じ形の Run の情報(無ければ None)。"""
+        try:
+            parsed = uuid.UUID(run_id)
+        except ValueError:
+            return None
+        with self._session_factory() as session:
+            run = session.get(Run, parsed)
+            if run is None:
+                return None
+            return mods_events.run_finished_subject(session, run)
+
     async def open(self, ref: contract.ImageRef | str) -> bytes:
         return await asyncio.to_thread(self.read, ref)
+
+    async def open_with_lineage(self, ref: contract.ImageRef | str) -> bytes:
+        return await asyncio.to_thread(self.read_with_lineage, ref)
+
+    async def get_run(self, run_id: str) -> contract.RunFinishedSubject | None:
+        return await asyncio.to_thread(self.run_info, run_id)
 
 
 # -- 購読 ----------------------------------------------------------------------------
@@ -219,8 +281,8 @@ class ModRuntime:
     # -- 読み込み ------------------------------------------------------------------
 
     def scan(self) -> None:
-        """`MODS_DIR` のマニフェストを読む(起動のとき)。"""
-        folders = loader.scan(self.settings.mods_path)
+        """同梱の Mod と `MODS_DIR` のマニフェストを読む(起動のとき)。"""
+        folders = loader.scan_all(self.settings.mods_path)
         with self._lock:
             self._folders = {f.id: f for f in folders}
 
@@ -446,6 +508,8 @@ class ModRuntime:
                     open_image=opener.open,
                     logger=logging.getLogger(f"gakei.mods.{sub.id}"),
                     submit_verdicts=self._verdict_submitter(sub),
+                    open_image_with_lineage=opener.open_with_lineage,
+                    get_run=opener.get_run,
                 )
                 raw = await asyncio.wait_for(handler(event, ctx), timeout=sub.timeout_seconds)
             if event.event == contract.AI_BEFORE_SEND:

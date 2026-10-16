@@ -18,6 +18,10 @@
 - マニフェストは起動のときに読む。置いただけでは動かず、管理者が有効にしたものだけ import する。
 - マニフェストの不正と import の失敗は、その Mod を「読み込みエラー」として一覧に出すだけで、
   起動は止めない。
+- `name` と設定の項目の `label` は、文字列か、言語ごとの表(`{ ja = "...", en = "..." }`)。
+- GAKEI に同梱の Mod(`app/mods/builtin/` の下。例: `local-export`「ローカルに保存」)も、
+  `MODS_DIR` の Mod と同じ形で置き、同じく一覧に出す(`scan_all`)。同じ id の Mod が `MODS_DIR` に
+  あれば、同梱のほうを使い、`MODS_DIR` のほうは読み込みエラー(id の重複)として一覧に出す。
 - import は Mod のフォルダを1つのパッケージ(`_gakei_mods.<id>`)として行う。フォルダの中の
   ほかのモジュールは相対 import(`from . import util`)で読める。`sys.path` には足さない。
 """
@@ -43,6 +47,8 @@ from app.mods.config import is_valid_mod_id
 logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "gakei-mod.toml"
+# GAKEI に同梱の Mod の置き場所(Docker のイメージにも `backend/app` と一緒に入る)。
+BUILTIN_DIR = Path(__file__).resolve().parent / "builtin"
 SETTING_TYPES: tuple[str, ...] = ("string", "number", "bool", "path", "secret")
 _PACKAGE_ROOT = "_gakei_mods"
 _MESSAGE_MAX = 500
@@ -68,12 +74,20 @@ class SettingField:
 @dataclass(frozen=True)
 class Manifest:
     id: str
+    # 記録(`mod_invocation.mod_name` など)に使う名前。言語ごとの表なら `ja`(無ければ最初の値)。
     name: str
     version: str
     api_version: int
     module: str
     events: tuple[str, ...]
     settings: tuple[SettingField, ...] = ()
+    # 言語ごとの名前(マニフェストの `name` が表のとき)。画面は今の言語のものを出す。
+    name_i18n: dict[str, str] | None = None
+
+    def display_name(self, locale: str | None) -> str:
+        if self.name_i18n:
+            return (locale and self.name_i18n.get(locale)) or self.name
+        return self.name
 
 
 @dataclass
@@ -85,6 +99,8 @@ class ModFolder:
     folder: Path
     manifest: Manifest | None = None
     error: str | None = None
+    # GAKEI に同梱の Mod か。
+    builtin: bool = False
 
 
 @dataclass
@@ -134,7 +150,18 @@ def parse_manifest(raw: dict[str, Any]) -> Manifest:
     mod_id = raw.get("id")
     if not is_valid_mod_id(mod_id):
         raise ModLoadError("id must match [a-z0-9][a-z0-9_.-]{0,63}")
-    name = raw.get("name")
+    name_raw = raw.get("name")
+    name_i18n: dict[str, str] | None = None
+    if isinstance(name_raw, dict):
+        if not name_raw or not all(
+            isinstance(k, str) and isinstance(v, str) and v.strip() and len(v) <= 100
+            for k, v in name_raw.items()
+        ):
+            raise ModLoadError("name is required (up to 100 characters)")
+        name_i18n = {k: v.strip() for k, v in name_raw.items()}
+        name = name_i18n.get("ja") or next(iter(name_i18n.values()))
+    else:
+        name = name_raw
     if not isinstance(name, str) or not name.strip() or len(name) > 100:
         raise ModLoadError("name is required (up to 100 characters)")
     version = raw.get("version")
@@ -192,18 +219,22 @@ def parse_manifest(raw: dict[str, Any]) -> Manifest:
         module=module,
         events=tuple(events),
         settings=tuple(settings),
+        name_i18n=name_i18n,
     )
 
 
-def scan(mods_dir: Path) -> list[ModFolder]:
+def scan(
+    mods_dir: Path, *, builtin: bool = False, reserved: frozenset[str] = frozenset()
+) -> list[ModFolder]:
     """`mods_dir` の下のフォルダのマニフェストを読む。フォルダが無ければ空。並びは id の順。
 
     同じ id のマニフェストが2つあれば、後のもの(フォルダの名前の順)を読み込みエラーにする。
+    `reserved`(同梱の Mod の id)と同じ id のものも読み込みエラーにする。
     """
     if not mods_dir.is_dir():
         return []
     found: list[ModFolder] = []
-    seen: set[str] = set()
+    seen: set[str] = set(reserved)
     for folder in sorted(p for p in mods_dir.iterdir() if p.is_dir()):
         if folder.name.startswith((".", "_")):
             continue
@@ -215,7 +246,9 @@ def scan(mods_dir: Path) -> list[ModFolder]:
                 raw = tomllib.load(f)
             manifest = parse_manifest(raw)
         except (OSError, tomllib.TOMLDecodeError, ModLoadError) as e:
-            found.append(ModFolder(id=folder.name, folder=folder, error=_short(str(e))))
+            found.append(
+                ModFolder(id=folder.name, folder=folder, error=_short(str(e)), builtin=builtin)
+            )
             continue
         if manifest.id in seen:
             found.append(
@@ -223,12 +256,30 @@ def scan(mods_dir: Path) -> list[ModFolder]:
                     id=folder.name,
                     folder=folder,
                     error=_short(f"duplicate id: {manifest.id}"),
+                    builtin=builtin,
                 )
             )
             continue
         seen.add(manifest.id)
-        found.append(ModFolder(id=manifest.id, folder=folder, manifest=manifest))
+        found.append(ModFolder(id=manifest.id, folder=folder, manifest=manifest, builtin=builtin))
     return sorted(found, key=lambda m: m.id)
+
+
+def scan_all(mods_dir: Path, builtin_dir: Path = BUILTIN_DIR) -> list[ModFolder]:
+    """同梱の Mod と `mods_dir` の Mod を読む。同じ id なら同梱のほうを使う(`mods_dir` のほうは
+    読み込みエラー)。読み込みエラーの行の id(フォルダの名前)が既にある id と重なるときは、
+    同梱・先に読んだほうを残す。並びは id の順。"""
+    builtin = scan(builtin_dir, builtin=True)
+    reserved = frozenset(m.manifest.id for m in builtin if m.manifest is not None)
+    result: dict[str, ModFolder] = {m.id: m for m in builtin}
+    for entry in scan(mods_dir, reserved=reserved):
+        if entry.id in result:
+            logger.warning(
+                "Mod のフォルダ %s は、id が同梱の Mod と重なるため読み込みません", entry.folder
+            )
+            continue
+        result[entry.id] = entry
+    return sorted(result.values(), key=lambda m: m.id)
 
 
 def _package_name(mod_id: str) -> str:
