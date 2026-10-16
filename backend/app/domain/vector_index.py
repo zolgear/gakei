@@ -74,6 +74,8 @@ class AssetFilter:
     def conditions(self) -> list[Any]:
         clauses: list[Any] = [
             Asset.deleted_at.is_(None),
+            # 画像を残さなかった Asset(ADR-0051 4章)は、似た画像・重複・マップから外す。
+            Asset.content_withheld_at.is_(None),
             Asset.kind != AssetKind.MASK,
             asset_visible(self.viewer),
         ]

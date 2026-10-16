@@ -30,8 +30,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.domain import content_withholding
 from app.domain.models import Asset, ModDelivery, ModInvocation, ModVerdict, Run
 from app.domain.text_safety import sanitize_external_text_or_none
 from app.i18n import t
@@ -81,6 +83,9 @@ class ImageOpener:
 
     def read(self, ref: contract.ImageRef | str) -> bytes:
         asset_id = ref if isinstance(ref, str) else ref.asset_id
+        # 「判定を待つ」購読では、原本をまだ保存していない(メモリの中のバイト列を渡す)。
+        if not isinstance(ref, str) and ref.sha256 in self._extras:
+            return self._extras[ref.sha256]
         if asset_id is None:
             assert not isinstance(ref, str)
             data = self._extras.get(ref.sha256)
@@ -116,6 +121,9 @@ class Subscriber:
     send_images: bool = False
     url: str | None = None
     loaded: loader.LoadedMod | None = None
+    # 「判定を待つ」(ADR-0051 2章)。`asset.ingested` と `run.finished` を、原本をストレージに
+    # 書く前に同期で呼ぶ。
+    wait_for_verdict: bool = False
     values: Mapping[str, Any] = field(default_factory=dict)
 
     def matches(
@@ -239,6 +247,7 @@ class ModRuntime:
                     order=common.order if common.order is not None else _ORDER_LAST,
                     send_images=webhook.send_images,
                     url=webhook.url,
+                    wait_for_verdict=common.wait_for_verdict,
                 )
             )
         with self._lock:
@@ -270,6 +279,7 @@ class ModRuntime:
                     order=cfg.common.order if cfg.common.order is not None else _ORDER_LAST,
                     loaded=loaded,
                     values=self._python_values(folder, cfg),
+                    wait_for_verdict=cfg.common.wait_for_verdict,
                 )
             )
         subscribers.sort(key=lambda s: (s.order, s.kind, s.id))
@@ -373,6 +383,22 @@ class ModRuntime:
             return True
         return False
 
+    def waiting_subscribers(
+        self,
+        event: str,
+        *,
+        source: str | None = None,
+        provider: str | None = None,
+    ) -> list[Subscriber]:
+        """「判定を待つ」購読(`asset.ingested` と `run.finished` だけ)。DB には触れない。"""
+        if event not in (contract.ASSET_INGESTED, contract.RUN_FINISHED):
+            return []
+        return [
+            s
+            for s in self.subscribers(event, source=source, provider=provider)
+            if s.wait_for_verdict
+        ]
+
     def find_subscriber(self, kind: str, mod_id: str) -> Subscriber | None:
         return next((s for s in self._subscribers if s.kind == kind and s.id == mod_id), None)
 
@@ -419,6 +445,7 @@ class ModRuntime:
                     settings=dict(sub.values),
                     open_image=opener.open,
                     logger=logging.getLogger(f"gakei.mods.{sub.id}"),
+                    submit_verdicts=self._verdict_submitter(sub),
                 )
                 raw = await asyncio.wait_for(handler(event, ctx), timeout=sub.timeout_seconds)
             if event.event == contract.AI_BEFORE_SEND:
@@ -472,7 +499,11 @@ class ModRuntime:
         images: list[webhook_send.WebhookImage] = []
         if sub.send_images:
             for ref in _event_images(event):
-                data = await opener.open(ref)
+                try:
+                    data = await opener.open(ref)
+                except (LookupError, FileNotFoundError):
+                    # 画像を残さなかった Asset(ADR-0051 4章)など。メタ情報だけを送る。
+                    continue
                 images.append(
                     webhook_send.WebhookImage(
                         asset_id=ref.asset_id, sha256=ref.sha256, mime=ref.mime, data=data
@@ -554,6 +585,10 @@ class ModRuntime:
     ) -> Denial | None:
         """スレッド(同期の処理)から `before_send` を呼ぶ。イベントループのスレッドから呼ばない。"""
         coro = self.before_send(subject, actor=actor, asset_id=asset_id, extra_images=extra_images)
+        return self._blocking(coro)
+
+    def _blocking(self, coro):  # noqa: ANN001, ANN202
+        """スレッドからコルーチンを動かして結果を待つ(イベントループのスレッドからは呼ばない)。"""
         loop = self._loop
         if loop is None or loop.is_closed():
             return asyncio.run(coro)
@@ -624,10 +659,14 @@ class ModRuntime:
         run_id: uuid.UUID | None = None,
         source: str | None = None,
         provider: str | None = None,
+        exclude_waiting: bool = False,
     ) -> bool:
         """呼び出し側のトランザクションで `mod_delivery` に積む(commit はしない)。積んだら
-        True。commit の後に `notify` を呼ぶ。"""
+        True。commit の後に `notify` を呼ぶ。`exclude_waiting` なら、同期で呼んだ(「判定を
+        待つ」)購読には積まない(同じイベントを重ねて送らない)。"""
         subs = self.subscribers(name, source=source, provider=provider)
+        if exclude_waiting:
+            subs = [s for s in subs if not s.wait_for_verdict]
         if not subs:
             return False
         event = self.make_event(name, subject, mods_events.actor_for_user_id(db, actor_user_id))
@@ -654,7 +693,11 @@ class ModRuntime:
         return True
 
     def enqueue_asset_ingested(self, db: Session, asset: Asset, source: str) -> bool:
-        """取り込んだ Asset の `asset.ingested` を積む。"""
+        """取り込んだ Asset の `asset.ingested` を積む。「判定を待つ」購読は取り込みのときに同期で
+        呼んでいるので積まない。画像を残さなかった Asset(取り込みのときに拒否された、同じ内容が
+        拒否されていた)は積まない。"""
+        if asset.content_withheld_at is not None:
+            return False
         if not self.wants(contract.ASSET_INGESTED, source=source):
             return False
         run = db.get(Run, asset.produced_by_run_id) if asset.produced_by_run_id else None
@@ -673,10 +716,13 @@ class ModRuntime:
             run_id=asset.produced_by_run_id,
             source=source,
             provider=provider,
+            exclude_waiting=True,
         )
 
     def enqueue_run_finished(self, db: Session, run: Run) -> bool:
-        """終わった Run の `run.finished` を積む(Run の状態を書いたのと同じトランザクションで)。"""
+        """終わった Run の `run.finished` を積む(Run の状態を書いたのと同じトランザクションで)。
+        成功した Run は、「判定を待つ」購読を出力の取り込みの前に同期で呼んでいるので、その購読
+        には積まない(失敗・取り消しの Run は画像が無いので、待つ購読にも非同期で送る)。"""
         if not self.wants(contract.RUN_FINISHED, provider=run.provider):
             return False
         db.flush()
@@ -688,6 +734,7 @@ class ModRuntime:
             actor_user_id=run.created_by_user_id,
             run_id=run.id,
             provider=run.provider,
+            exclude_waiting=str(run.status) == "succeeded",
         )
 
     def enqueue_runs_finished(self, run_ids: list[uuid.UUID]) -> bool:
@@ -728,12 +775,38 @@ class ModRuntime:
         sub: Subscriber,
         invocation_id: uuid.UUID,
         verdicts: list[contract.Verdict],
-    ) -> int:
+    ) -> list[ModVerdict]:
         """判定を `mod_verdict` に足す(commit しない)。そのイベントで届いた Asset と Run に
-        対するものだけ受け、ほかは捨てる。足した数を返す。"""
+        対するものだけ受け、ほかは捨てる。足した行を返す(`deny` の効力は呼び出し側が
+        `apply_verdicts` で当てる)。"""
         allowed_assets, allowed_runs = _verdict_targets(event)
+        return self._add_verdicts(
+            session,
+            sub_kind=sub.kind,
+            sub_id=sub.id,
+            sub_name=sub.name,
+            invocation_id=invocation_id,
+            event_id=uuid.UUID(event.event_id),
+            verdicts=verdicts,
+            allowed_assets=allowed_assets,
+            allowed_runs=allowed_runs,
+        )
+
+    def _add_verdicts(
+        self,
+        session: Session,
+        *,
+        sub_kind: str,
+        sub_id: str,
+        sub_name: str,
+        invocation_id: uuid.UUID | None,
+        event_id: uuid.UUID | None,
+        verdicts: list[contract.Verdict],
+        allowed_assets: set[str],
+        allowed_runs: set[str],
+    ) -> list[ModVerdict]:
         now = _utcnow()
-        count = 0
+        rows: list[ModVerdict] = []
         for verdict in verdicts:
             target_id = verdict.target.id
             if verdict.target.type == "asset" and target_id in allowed_assets:
@@ -742,27 +815,175 @@ class ModRuntime:
                 asset_id, run_id = None, uuid.UUID(target_id)
             else:
                 continue
-            session.add(
-                ModVerdict(
-                    id=uuid.uuid4(),
-                    mod_kind=sub.kind,
-                    mod_id=sub.id,
-                    mod_name=sub.name,
+            row = ModVerdict(
+                id=uuid.uuid4(),
+                mod_kind=sub_kind,
+                mod_id=sub_id,
+                mod_name=sub_name,
+                invocation_id=invocation_id,
+                event_id=event_id,
+                asset_id=asset_id,
+                run_id=run_id,
+                verdict=verdict.verdict,
+                label=sanitize_external_text_or_none(verdict.label),
+                score=verdict.score,
+                message=sanitize_external_text_or_none(verdict.message),
+                reference=sanitize_external_text_or_none(verdict.reference),
+                url=sanitize_external_text_or_none(verdict.url),
+                created_at=now,
+            )
+            session.add(row)
+            rows.append(row)
+        return rows
+
+    # -- 判定の効力(ADR-0051 4章) ---------------------------------------------------
+
+    def apply_verdicts(
+        self, session: Session, rows: list[ModVerdict]
+    ) -> list[content_withholding.PurgeTarget]:
+        """足した判定のうち `deny` の効力を当てる(画像を残さない。commit はしない)。commit の
+        後に `purge` に渡す。"""
+        session.flush()
+        return content_withholding.apply_denials(session, rows)
+
+    def purge(self, targets: list[content_withholding.PurgeTarget]) -> None:
+        """保存先から原本と派生を消す(commit の後)。"""
+        if targets:
+            content_withholding.purge(self.store, targets)
+
+    # -- 判定を待つ(ADR-0051 2章) ---------------------------------------------------
+
+    async def judge(
+        self,
+        subs: list[Subscriber],
+        event: contract.Event,
+        extras: Mapping[str, bytes],
+    ) -> list[tuple[Subscriber, CallResult]]:
+        """「判定を待つ」購読を順に呼ぶ(記録は呼び出し側が `record_judgement` で残す。原本を
+        書く前の取り込みのトランザクションの中で記録するため)。画像は `extras`(sha256 →
+        バイト列)から渡す。"""
+        opener = ImageOpener(self.session_factory, self.store, extras)
+        results: list[tuple[Subscriber, CallResult]] = []
+        for sub in subs:
+            results.append((sub, await self.call(sub, event, opener)))
+        return results
+
+    def judge_blocking(
+        self,
+        subs: list[Subscriber],
+        event: contract.Event,
+        extras: Mapping[str, bytes],
+    ) -> list[tuple[Subscriber, CallResult]]:
+        """スレッド(取り込みの処理)から `judge` を呼ぶ。"""
+        return self._blocking(self.judge(subs, event, extras))
+
+    def record_judgement(
+        self,
+        session: Session,
+        event: contract.Event,
+        results: list[tuple[Subscriber, CallResult]],
+        *,
+        asset_id: uuid.UUID | None = None,
+        run_id: uuid.UUID | None = None,
+    ) -> dict[uuid.UUID, ModVerdict]:
+        """同期で呼んだ結果を `mod_invocation` と `mod_verdict` に記録し(commit しない)、
+        `deny` を受けた Asset ごとに最初の `deny` の判定を返す。
+
+        失敗・時間切れは、その Mod の失敗時の扱いに従う。`block` なら、そのイベントで届いた
+        Asset すべてに `deny` と同じ判定(理由は「チェックに失敗した」)を GAKEI が記録する。
+        """
+        allowed_assets, _allowed_runs = _verdict_targets(event)
+        denials: dict[uuid.UUID, ModVerdict] = {}
+        for sub, result in results:
+            effective: str | None = None
+            if result.failed:
+                effective = "deny" if sub.on_failure == "block" else "allow"
+            invocation_id = self.record_invocation(
+                event=event,
+                sub=sub,
+                result=result,
+                effective=effective,
+                reason=t("mods.checkFailed") if effective == "deny" else None,
+                run_id=run_id,
+                asset_id=asset_id,
+                session=session,
+            )
+            if result.failed:
+                if effective != "deny":
+                    continue
+                verdicts = [
+                    contract.Verdict(
+                        target=contract.VerdictTarget(type="asset", id=target),
+                        verdict="deny",
+                        label=t("mods.checkFailedLabel"),
+                        message=t("mods.checkFailed"),
+                    )
+                    for target in sorted(allowed_assets)
+                ]
+                rows = self._add_verdicts(
+                    session,
+                    sub_kind=sub.kind,
+                    sub_id=sub.id,
+                    sub_name=sub.name,
                     invocation_id=invocation_id,
                     event_id=uuid.UUID(event.event_id),
-                    asset_id=asset_id,
-                    run_id=run_id,
-                    verdict=verdict.verdict,
-                    label=sanitize_external_text_or_none(verdict.label),
-                    score=verdict.score,
-                    message=sanitize_external_text_or_none(verdict.message),
-                    reference=sanitize_external_text_or_none(verdict.reference),
-                    url=sanitize_external_text_or_none(verdict.url),
-                    created_at=now,
+                    verdicts=verdicts,
+                    allowed_assets=allowed_assets,
+                    allowed_runs=set(),
                 )
+            else:
+                rows = self.save_verdicts(
+                    session,
+                    event=event,
+                    sub=sub,
+                    invocation_id=invocation_id,
+                    verdicts=result.verdicts,
+                )
+            for row in rows:
+                if row.verdict == "deny" and row.asset_id is not None:
+                    denials.setdefault(row.asset_id, row)
+        return denials
+
+    # -- 後から届く判定(ADR-0051 8章) -----------------------------------------------
+
+    def receive_verdicts(
+        self, kind: str, mod_id: str, mod_name: str, verdicts: list[contract.Verdict]
+    ) -> int:
+        """受付の API と、Python の Mod が後で送る判定。送れる対象は、その Mod の呼び出し
+        (`asset.ingested` / `run.finished`)で届いた Asset と Run だけ(対象外が1つでもあれば
+        何も記録せず VerdictTargetError)。記録して `deny` の効力を当て、足した数を返す。"""
+        with self.session_factory() as session:
+            allowed_assets, allowed_runs = _delivered_targets(session, kind, mod_id, verdicts)
+            for verdict in verdicts:
+                allowed = allowed_assets if verdict.target.type == "asset" else allowed_runs
+                if verdict.target.id not in allowed:
+                    raise VerdictTargetError(verdict.target.type, verdict.target.id)
+            rows = self._add_verdicts(
+                session,
+                sub_kind=kind,
+                sub_id=mod_id,
+                sub_name=mod_name,
+                invocation_id=None,
+                event_id=None,
+                verdicts=verdicts,
+                allowed_assets=allowed_assets,
+                allowed_runs=allowed_runs,
             )
-            count += 1
-        return count
+            targets = self.apply_verdicts(session, rows)
+            session.commit()
+        self.purge(targets)
+        return len(rows)
+
+    def _verdict_submitter(self, sub: Subscriber):  # noqa: ANN202
+        """Python の Mod に渡す、判定を後で送る関数(`ModContext.submit_verdicts`)。"""
+
+        async def submit(verdicts: list[contract.Verdict]) -> int:
+            parsed = contract.verdicts_from_json(list(verdicts))
+            return await asyncio.to_thread(
+                self.receive_verdicts, sub.kind, sub.id, sub.name, parsed
+            )
+
+        return submit
 
     # -- テスト送信 ------------------------------------------------------------------
 
@@ -827,6 +1048,82 @@ class ModRuntime:
 
 class ModNotEnabledError(Exception):
     """有効にしていない Python の Mod は呼ばない(テスト送信も)。"""
+
+
+class VerdictTargetError(Exception):
+    """後から送られた判定の対象が、その Mod に届けた Asset・Run ではない。"""
+
+    def __init__(self, target_type: str, target_id: str) -> None:
+        super().__init__(f"{target_type} {target_id}")
+        self.target_type = target_type
+        self.target_id = target_id
+
+
+def _parse_uuid(value: str) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(value)
+    except ValueError:
+        return None
+
+
+def _delivered_targets(
+    session: Session, kind: str, mod_id: str, verdicts: list[contract.Verdict]
+) -> tuple[set[str], set[str]]:
+    """判定の対象のうち、その Mod の呼び出しで届いたもの(Asset と Run の id の文字列)。
+
+    `asset.ingested` で届いた Asset、`run.finished` で届いた Run と、その Run の出力の Asset。
+    送らなかった呼び出し(`skipped`)は数えない。"""
+    asset_ids = {
+        parsed
+        for v in verdicts
+        if v.target.type == "asset" and (parsed := _parse_uuid(v.target.id)) is not None
+    }
+    run_ids = {
+        parsed
+        for v in verdicts
+        if v.target.type == "run" and (parsed := _parse_uuid(v.target.id)) is not None
+    }
+    base = select(ModInvocation).where(
+        ModInvocation.mod_kind == kind,
+        ModInvocation.mod_id == mod_id,
+        ModInvocation.event.in_((contract.ASSET_INGESTED, contract.RUN_FINISHED)),
+        ModInvocation.outcome != "skipped",
+    )
+    allowed_assets: set[str] = set()
+    allowed_runs: set[str] = set()
+    if asset_ids:
+        direct = session.execute(
+            base.with_only_columns(ModInvocation.asset_id).where(
+                ModInvocation.event == contract.ASSET_INGESTED,
+                ModInvocation.asset_id.in_(asset_ids),
+            )
+        ).scalars()
+        allowed_assets |= {str(a) for a in direct if a is not None}
+        produced = session.execute(
+            select(Asset.id, Asset.produced_by_run_id).where(
+                Asset.id.in_(asset_ids), Asset.produced_by_run_id.is_not(None)
+            )
+        ).all()
+        parent_runs = {run_id for _asset_id, run_id in produced}
+        if parent_runs:
+            finished = set(
+                session.execute(
+                    base.with_only_columns(ModInvocation.run_id).where(
+                        ModInvocation.event == contract.RUN_FINISHED,
+                        ModInvocation.run_id.in_(parent_runs),
+                    )
+                ).scalars()
+            )
+            allowed_assets |= {str(a) for a, run_id in produced if run_id in finished}
+    if run_ids:
+        delivered = session.execute(
+            base.with_only_columns(ModInvocation.run_id).where(
+                ModInvocation.event == contract.RUN_FINISHED,
+                ModInvocation.run_id.in_(run_ids),
+            )
+        ).scalars()
+        allowed_runs |= {str(r) for r in delivered if r is not None}
+    return allowed_assets, allowed_runs
 
 
 def _actor_uuid(actor: contract.Actor | None) -> uuid.UUID | None:

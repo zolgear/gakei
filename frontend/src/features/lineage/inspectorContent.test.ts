@@ -18,7 +18,14 @@ function embeddedAssetNode(id: string): LineageNode {
     instance: 'other-instance',
     resolved_asset_id: null,
     embedded_detail: { type: 'asset', id, sha256: 'abc' },
-    asset: { kind: 'generated', width: null, height: null, mime: null, restorable: false },
+    asset: {
+      kind: 'generated',
+      width: null,
+      height: null,
+      mime: null,
+      restorable: false,
+      content_withheld: false,
+    },
   }
 }
 

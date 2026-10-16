@@ -1519,3 +1519,27 @@ def test_migration_0036_adds_mod_tables_and_columns(empty_database_url: str) -> 
     assert "content_withheld_at" not in {c["name"] for c in inspector.get_columns("asset")}
     assert "locality" not in {c["name"] for c in inspector.get_columns("comfy_workflow")}
     engine.dispose()
+
+
+def test_migration_0037_adds_verdict_propagation(empty_database_url: str) -> None:
+    """Mod の判定の波及(ADR-0051 4章): `mod_verdict.propagated_from_id` が加わり、downgrade で
+    消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0036")
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    columns = {c["name"] for c in sa_inspect(engine).get_columns("mod_verdict")}
+    assert "propagated_from_id" in columns
+    engine.dispose()
+
+    command.downgrade(cfg, "0036")
+    engine = create_engine(empty_database_url)
+    columns = {c["name"] for c in sa_inspect(engine).get_columns("mod_verdict")}
+    assert "propagated_from_id" not in columns
+    engine.dispose()

@@ -14,13 +14,13 @@ import {
 function makeRun(overrides: Partial<RunDetail> = {}): Pick<RunDetail, 'inputs' | 'outputs'> {
   return {
     inputs: [
-      { asset_id: 'in-primary', role: 'image', position: 0 },
-      { asset_id: 'in-mask', role: 'mask', position: 0 },
-      { asset_id: 'in-ref', role: 'reference', position: 1 },
+      { asset_id: 'in-primary', role: 'image', position: 0, content_withheld: false },
+      { asset_id: 'in-mask', role: 'mask', position: 0, content_withheld: false },
+      { asset_id: 'in-ref', role: 'reference', position: 1, content_withheld: false },
     ],
     outputs: [
-      { asset_id: 'out-1', output_index: 0 },
-      { asset_id: 'out-2', output_index: 1 },
+      { asset_id: 'out-1', output_index: 0, content_withheld: false },
+      { asset_id: 'out-2', output_index: 1, content_withheld: false },
     ],
     ...overrides,
   }
@@ -94,7 +94,7 @@ describe('primaryParentAssetId', () => {
   })
 
   it('無ければ null', () => {
-    expect(primaryParentAssetId({ inputs: [{ asset_id: 'x', role: 'reference', position: 0 }] })).toBeNull()
+    expect(primaryParentAssetId({ inputs: [{ asset_id: 'x', role: 'reference', position: 0, content_withheld: false }] })).toBeNull()
   })
 })
 
@@ -109,7 +109,7 @@ describe('hasComparableInput', () => {
   })
 
   it('マスクしか無ければ false', () => {
-    expect(hasComparableInput({ inputs: [{ asset_id: 'm', role: 'mask', position: 0 }] })).toBe(false)
+    expect(hasComparableInput({ inputs: [{ asset_id: 'm', role: 'mask', position: 0, content_withheld: false }] })).toBe(false)
   })
 })
 
@@ -143,7 +143,7 @@ describe('resolveComparison', () => {
   })
 
   it('主たる親が無ければ最初の候補入力を使う', () => {
-    const run = makeRun({ inputs: [{ asset_id: 'in-ref', role: 'reference', position: 0 }] })
+    const run = makeRun({ inputs: [{ asset_id: 'in-ref', role: 'reference', position: 0, content_withheld: false }] })
     expect(resolveComparison(run, { before: null, after: null }).before).toBe('in-ref')
   })
 

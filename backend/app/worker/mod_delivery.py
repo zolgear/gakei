@@ -126,8 +126,19 @@ class ModDeliveryWorker:
         self.runtime.bind_loop(self._event_loop)
         self.runtime.set_wake(self.notify)
         count = await asyncio.to_thread(reset_delivering, self.session_factory)
+        # 画像を残さなかった Asset の原本・派生が保存先に残っていれば消し直す(ADR-0051 4章)。
+        await asyncio.to_thread(self._purge_leftovers)
         self._task = asyncio.create_task(self._loop(), name="gakei-mod-delivery")
         return count
+
+    def _purge_leftovers(self) -> None:
+        from app.domain import content_withholding
+
+        try:
+            with self.session_factory() as session:
+                content_withholding.purge_leftovers(session, self.runtime.store)
+        except Exception:  # noqa: BLE001 - 起動は止めない
+            logger.exception("画像を残さなかった Asset の後始末に失敗しました")
 
     async def stop(self) -> None:
         self._stop.set()
@@ -220,13 +231,16 @@ class ModDeliveryWorker:
                 asset_id=row.asset_id,
                 session=session,
             )
-            self.runtime.save_verdicts(
+            rows = self.runtime.save_verdicts(
                 session,
                 event=event,
                 sub=sub,
                 invocation_id=invocation_id,
                 verdicts=result.verdicts,
             )
+            # ADR-0051 4章: `deny` の判定を受けた Asset は画像を残さない(保存先のファイルは
+            # commit の後に消す)。
+            targets = self.runtime.apply_verdicts(session, rows)
             now = _utcnow()
             row.status = STATUS_DONE
             row.attempts = row.attempts + 1
@@ -234,6 +248,7 @@ class ModDeliveryWorker:
             row.finished_at = now
             row.updated_at = now
             session.commit()
+        self.runtime.purge(targets)
 
     def _finish_failed_attempt(
         self,

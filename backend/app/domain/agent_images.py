@@ -25,6 +25,7 @@ import io
 import math
 import threading
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -230,6 +231,17 @@ def clear_cache() -> None:
         _large_cache.clear()
 
 
+def forget(sha256s: Iterable[str]) -> None:
+    """その内容の縮小画像を捨てる(画像を残さない処理の後。ADR-0051 4章)。"""
+    targets = set(sha256s)
+    if not targets:
+        return
+    with _cache_lock:
+        for cache in (_small_cache, _large_cache):
+            for key in [k for k in cache if k[0] in targets]:
+                del cache[key]
+
+
 def render_asset(
     store: AssetStore,
     asset: Asset,
@@ -242,6 +254,9 @@ def render_asset(
     `transparent` は原本から求めた透過の有無(分かっていれば)。省くと元にした画像の画素から
     判定する。
     """
+    # 画像を残さなかった Asset(ADR-0051 4章)は見せない。
+    if asset.content_withheld_at is not None:
+        return None
     long_edge = LONG_EDGES[size]
     variant = _source_variant(asset, long_edge)
     if long_edge <= SMALL_LONG_EDGE:

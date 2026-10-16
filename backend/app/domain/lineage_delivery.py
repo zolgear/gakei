@@ -312,11 +312,18 @@ def _render_graph_svg(
             parts.append(
                 f'<rect x="{x0:.1f}" y="{y0:.1f}" width="{_ASSET_W}" height="{_ASSET_H}" rx="8"/>'
             )
-            parts.append(
-                f'<image href="{_e(asset.get("file"))}" x="{node.x - _THUMB / 2:.1f}" '
-                f'y="{y0 + 8:.1f}" width="{_THUMB}" height="{_THUMB}" '
-                'preserveAspectRatio="xMidYMid meet"/>'
-            )
+            if asset.get("file"):
+                parts.append(
+                    f'<image href="{_e(asset.get("file"))}" x="{node.x - _THUMB / 2:.1f}" '
+                    f'y="{y0 + 8:.1f}" width="{_THUMB}" height="{_THUMB}" '
+                    'preserveAspectRatio="xMidYMid meet"/>'
+                )
+            else:
+                # 画像を残さなかった Asset(ADR-0051 9章)。画像の代わりに文字を出す。
+                parts.append(
+                    f'<text class="node-label" x="{node.x:.1f}" y="{y0 + 8 + _THUMB / 2:.1f}">'
+                    f"{_e(_d('contentWithheld'))}</text>"
+                )
             caption = f"{labels[node.key]} · {_kind_label(asset.get('kind'))}"
             parts.append(
                 f'<text class="node-label" x="{node.x:.1f}" y="{y0 + _ASSET_H - 12:.1f}">'
@@ -446,10 +453,17 @@ def _render_asset_card(
     img_attrs = f' width="{_e(width)}" height="{_e(height)}"' if width and height else ""
     label = labels[f"a:{asset_id}"]
     card_class = "card asset-card is-root" if is_root else "card asset-card"
+    if file_name:
+        thumb = (
+            f'<a class="thumb" href="{_e(file_name)}"><img src="{_e(file_name)}" '
+            f'alt="{_e(label)}"{img_attrs} loading="lazy"></a>'
+        )
+    else:
+        # 画像を残さなかった Asset(ADR-0051 9章)。
+        thumb = f'<div class="thumb">{_e(_d("contentWithheld"))}</div>'
     return (
         f'<article class="{card_class}" id="asset-{_e(asset_id)}">'
-        f'<a class="thumb" href="{_e(file_name)}"><img src="{_e(file_name)}" alt="{_e(label)}"'
-        f'{img_attrs} loading="lazy"></a>'
+        f"{thumb}"
         f'<div class="card-body"><h3>{_e(label)}{badge}</h3>'
         f'<dl class="fields">{"".join(rows)}</dl></div></article>'
     )
@@ -675,7 +689,7 @@ def render_index_html(
     summary_rows = []
     if root is not None:
         summary_rows.append(_row(main_image_label, _asset_link(root_id, labels)))
-        summary_rows.append(_row(_d("fields.fileName"), _code(root.get("file"))))
+        summary_rows.append(_row(_d("fields.fileName"), _code(root.get("file") or "")))
         summary_rows.append(
             _row(_d("fields.sha256"), f'<code class="hash">{_e(root.get("sha256"))}</code>')
         )
@@ -689,7 +703,7 @@ def render_index_html(
         ),
     ]
     root_img = ""
-    if root is not None:
+    if root is not None and root.get("file"):
         root_img = (
             f'<a href="{_e(root.get("file"))}"><img src="{_e(root.get("file"))}" '
             f'alt="{_e(_d("mainImage"))}"></a>'

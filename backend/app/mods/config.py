@@ -94,7 +94,8 @@ class CommonConfig:
     filters: Filters = field(default_factory=Filters)
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     on_failure: OnFailure = "block"
-    # 「判定を待つ」(ADR-0051 2章)。この段では保存するだけで、まだ使わない。
+    # 「判定を待つ」(ADR-0051 2章)。`asset.ingested` と `run.finished` を、原本を書く前に同期で
+    # 呼ぶ(`app/mods/gate.py`)。
     wait_for_verdict: bool = False
     order: int | None = None
 

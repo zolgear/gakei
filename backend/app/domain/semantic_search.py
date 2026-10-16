@@ -594,6 +594,9 @@ def similar_assets(
     asset = get_visible_asset(db, viewer, asset_id)
     if asset is None:
         raise EmbeddingsNotFoundError(t("assets.notFound"))
+    # 画像を残さなかった Asset(ADR-0051 4章)は、埋め込みも消してあるので起点にできない。
+    if asset.content_withheld_at is not None:
+        raise EmbeddingsConflictError("content_withheld", t("mods.contentWithheld"))
     active = require_active(db, settings)
     flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     hits = neighbors(index, db, active.model_key, asset.id, flt, limit)

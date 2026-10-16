@@ -33,6 +33,7 @@ from app.api import events as events_api
 from app.api import health as health_api
 from app.api import lineage_transfer as lineage_transfer_api
 from app.api import llm_connections as llm_connections_api
+from app.api import mod_verdicts as mod_verdicts_api
 from app.api import mods as mods_api
 from app.api import parameter_sets as parameter_sets_api
 from app.api import pricing as pricing_api
@@ -655,6 +656,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(uploads_api.router)
     # ADR-0023 8章 3: 原本の1回限りのダウンロード URL(URL のトークン自体が認可)。
     app.include_router(downloads_api.router)
+
+    # ADR-0051 8章: 外部からの判定の受付。認証は Webhook の鍵による署名(ルートの中で確かめる)
+    # なので `require_user` は掛けない。
+    app.include_router(mod_verdicts_api.router)
 
     # ADR-0029 6章: ログイン不要の共有リンク。`require_user` を掛けず、見せてよいかは
     # `app/domain/shares.resolve_public_share` だけで確かめる。

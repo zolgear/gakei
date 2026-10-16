@@ -1,0 +1,114 @@
+"""外部からの判定の受付(ADR-0051 8章)。`POST /api/mods/{mod_id}/verdicts`。
+
+非同期の判定を後から返したいシステム(Webhook の Mod)のための受け口。
+
+- 認証はユーザーのセッションでもアクセストークンでもなく、その Webhook の署名の鍵による署名。
+  送るときと同じ形式(`X-Gakei-Timestamp` は UNIX 秒、`X-Gakei-Signature: sha256=<HMAC-SHA256(鍵,
+  "<timestamp>." + 本文のバイト列) の hex>`)で確かめ、時刻が前後 `MAX_SKEW_SECONDS` を超えて
+  ずれていれば断る(古い要求の再送を受けない)。`require_user` は掛けない。
+- 本文は応答と同じ判定の配列(`[{target, verdict, ...}]` か `{"verdicts": [...]}`)。
+- 送れる対象は、その Mod の呼び出し(`asset.ingested` / `run.finished`)で届いた Asset と Run
+  だけ。対象外が1つでもあれば、何も記録せずに 403。
+- 受けた判定は配達の応答と同じ扱い(`mod_verdict` に追記し、`deny` なら画像を残さない)。
+- 無効にした Webhook と、無い Webhook は 404。
+"""
+
+from __future__ import annotations
+
+import hmac
+import json
+import time
+
+from fastapi import APIRouter, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
+
+from app.domain.schemas import ModVerdictReceiveResponse
+from app.i18n import t
+from app.mods import api as contract
+from app.mods import config as mods_config
+from app.mods import webhook as webhook_send
+from app.mods.runtime import ModRuntime, VerdictTargetError
+
+router = APIRouter(prefix="/api/mods", tags=["mods"])
+
+# 時刻のずれの許容(秒)。
+MAX_SKEW_SECONDS = 300
+_BODY_MAX_BYTES = 1024 * 1024
+
+
+def _unauthorized() -> HTTPException:
+    return HTTPException(status_code=401, detail=t("mods.verdictUnauthorized"))
+
+
+def _not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail=t("mods.notFound"))
+
+
+def verify_signature(
+    secret: str, timestamp: str | None, signature: str | None, body: bytes, *, now: float
+) -> bool:
+    """署名と時刻を確かめる。"""
+    if not timestamp or not signature:
+        return False
+    try:
+        sent_at = int(timestamp)
+    except ValueError:
+        return False
+    if abs(now - sent_at) > MAX_SKEW_SECONDS:
+        return False
+    expected = webhook_send.sign(secret, timestamp, body)
+    return hmac.compare_digest(expected, signature)
+
+
+@router.post(
+    "/{mod_id}/verdicts",
+    response_model=ModVerdictReceiveResponse,
+    operation_id="receive_mod_verdicts",
+    responses={
+        401: {"description": "署名が無い・合わない、または時刻が古い"},
+        403: {"description": "その Mod に届けていない Asset・Run への判定を含む"},
+        404: {"description": "Webhook が無い、または無効"},
+        422: {"description": "本文が判定の配列の形でない"},
+    },
+)
+async def receive_mod_verdicts(mod_id: str, request: Request) -> ModVerdictReceiveResponse:
+    runtime: ModRuntime = request.app.state.mods
+    body = await request.body()
+    if len(body) > _BODY_MAX_BYTES:
+        raise HTTPException(status_code=413, detail=t("mods.verdictTooLarge"))
+
+    def _lookup() -> tuple[mods_config.WebhookConfig | None, str | None]:
+        with request.app.state.session_factory() as db:
+            webhook = mods_config.find_webhook(mods_config.load_webhooks(db), mod_id)
+        if webhook is None:
+            return None, None
+        return webhook, mods_config.read_webhook_secret(runtime.settings.data_dir, webhook.id)
+
+    webhook, secret = await run_in_threadpool(_lookup)
+    if webhook is None or not webhook.common.enabled:
+        raise _not_found()
+    if not secret or not verify_signature(
+        secret,
+        request.headers.get("x-gakei-timestamp"),
+        request.headers.get("x-gakei-signature"),
+        body,
+        now=time.time(),
+    ):
+        raise _unauthorized()
+
+    try:
+        raw = json.loads(body) if body.strip() else None
+        verdicts = contract.verdicts_from_json(raw)
+    except (ValueError, contract.ContractError) as e:
+        raise HTTPException(status_code=422, detail=t("mods.verdictInvalid", error=str(e))) from e
+
+    try:
+        accepted = await run_in_threadpool(
+            runtime.receive_verdicts, mods_config.KIND_WEBHOOK, webhook.id, webhook.name, verdicts
+        )
+    except VerdictTargetError as e:
+        raise HTTPException(
+            status_code=403,
+            detail=t("mods.verdictTargetNotAllowed", target=f"{e.target_type} {e.target_id}"),
+        ) from e
+    return ModVerdictReceiveResponse(accepted=accepted)

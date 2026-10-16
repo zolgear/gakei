@@ -273,6 +273,8 @@ def _search_assets(
                 title=title,
                 focal_point=focals.get(asset.id),
                 content_rating=ratings.get(asset.id),  # type: ignore[arg-type]
+                content_withheld=asset.content_withheld_at is not None,
+                content_withheld_at=asset.content_withheld_at,
                 produced_by_run_id=asset.produced_by_run_id,
                 prompt_source=prompt_source,
                 prompt_snippet=build_snippet(snippet_text or "", terms),

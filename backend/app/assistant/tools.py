@@ -48,7 +48,7 @@ from app.assistant.engine import LlmImage, ToolCall, ToolSpec
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
 from app.domain import asset_search as asset_search_domain
-from app.domain import assistant_settings, derivatives
+from app.domain import assistant_settings, content_withholding, derivatives
 from app.domain import content_rating as content_rating_domain
 from app.domain import focal_points as focal_points_domain
 from app.domain import prompt_sets as prompt_sets_domain
@@ -108,6 +108,10 @@ _COST_NOTE = "Reference price in USD computed by GAKEI, not an invoice."
 
 class ToolFailure(Exception):
     """道具の失敗。メッセージは LLM にそのまま返す(LLM が利用者に伝える)。"""
+
+
+class ImageWithheldFailure(ToolFailure):
+    """`deny` の判定を受けた・画像を残さなかった Asset の画像は LLM に送らない(ADR-0051 4章)。"""
 
 
 @dataclass
@@ -613,6 +617,14 @@ def load_visible_images(
                 raise ToolFailure(f"Asset {asset_id} not found.")
             db.expunge(asset)
             assets.append(asset)
+        # ADR-0051 4章: `deny` の判定を受けた・画像を残さなかった画像は送らない。
+        blocked = content_withholding.blocked_asset_ids(db, [a.id for a in assets])
+        for asset in assets:
+            if asset.id in blocked:
+                raise ImageWithheldFailure(
+                    f"The image of asset {asset.id} cannot be shown: a GAKEI Mod denied it "
+                    "(content withheld or denied). Its text information is still available."
+                )
         # レーティング(ADR-0049)。AI に渡す画像はマスクしない代わりに、段階を情報として渡す。
         ratings = content_rating_domain.bulk_levels(db, [a.id for a in assets])
     for asset in assets:

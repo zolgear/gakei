@@ -28,7 +28,12 @@ from sqlalchemy.orm import Session
 from app.assistant.engine import LlmImage
 from app.assistant.runtime import AssistantRuntime, user_key
 from app.assistant.service import AssistantTurn, TurnInput
-from app.assistant.tools import ToolContext, ToolFailure, load_visible_images
+from app.assistant.tools import (
+    ImageWithheldFailure,
+    ToolContext,
+    ToolFailure,
+    load_visible_images,
+)
 from app.assistant.undo import UndoConflictError, UndoNotAvailableError, undo_message
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
@@ -227,6 +232,9 @@ async def send_message(
             _briefs, attachment_images = await anyio.to_thread.run_sync(
                 lambda: load_visible_images(ctx, list(dict.fromkeys(body.attachments)))
             )
+        except ImageWithheldFailure as e:
+            # ADR-0051 4章: `deny` の判定を受けた画像は添付として送らない。
+            raise HTTPException(status_code=409, detail=t("mods.attachmentDenied")) from e
         except ToolFailure as e:
             raise HTTPException(status_code=404, detail=t("assistant.attachmentNotFound")) from e
 

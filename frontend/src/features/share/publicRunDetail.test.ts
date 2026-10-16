@@ -28,6 +28,7 @@ function asset(
     run_id: runId,
     depth: 0,
     allow_original: allowOriginal,
+    content_withheld: false,
   }
 }
 

@@ -87,6 +87,8 @@ def _asset_node(db: Session, asset: Asset, depth: int) -> LineageNode:
             height=asset.height,
             mime=asset.mime,
             restorable=is_restorable(asset, produced_by_run),
+            content_withheld=asset.content_withheld_at is not None,
+            content_withheld_at=asset.content_withheld_at,
         ),
     )
 

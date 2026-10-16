@@ -4,17 +4,17 @@ import { resolveRunOutputNav, sortRunOutputs } from './runOutputs'
 describe('sortRunOutputs', () => {
   it('output_index の昇順に並べ替える', () => {
     const outputs = [
-      { asset_id: 'c', output_index: 2 },
-      { asset_id: 'a', output_index: 0 },
-      { asset_id: 'b', output_index: 1 },
+      { asset_id: 'c', output_index: 2, content_withheld: false },
+      { asset_id: 'a', output_index: 0, content_withheld: false },
+      { asset_id: 'b', output_index: 1, content_withheld: false },
     ]
     expect(sortRunOutputs(outputs).map((o) => o.asset_id)).toEqual(['a', 'b', 'c'])
   })
 
   it('元の配列を書き換えない', () => {
     const outputs = [
-      { asset_id: 'b', output_index: 1 },
-      { asset_id: 'a', output_index: 0 },
+      { asset_id: 'b', output_index: 1, content_withheld: false },
+      { asset_id: 'a', output_index: 0, content_withheld: false },
     ]
     sortRunOutputs(outputs)
     expect(outputs.map((o) => o.asset_id)).toEqual(['b', 'a'])
@@ -23,15 +23,15 @@ describe('sortRunOutputs', () => {
 
 describe('resolveRunOutputNav', () => {
   const outputs = [
-    { asset_id: 'a', output_index: 0 },
-    { asset_id: 'b', output_index: 1 },
-    { asset_id: 'c', output_index: 2 },
-    { asset_id: 'd', output_index: 3 },
+    { asset_id: 'a', output_index: 0, content_withheld: false },
+    { asset_id: 'b', output_index: 1, content_withheld: false },
+    { asset_id: 'c', output_index: 2, content_withheld: false },
+    { asset_id: 'd', output_index: 3, content_withheld: false },
   ]
 
   it('出力が1つ以下なら null(切り替えUIは出さない)', () => {
     expect(resolveRunOutputNav([], 'a')).toBeNull()
-    expect(resolveRunOutputNav([{ asset_id: 'a', output_index: 0 }], 'a')).toBeNull()
+    expect(resolveRunOutputNav([{ asset_id: 'a', output_index: 0, content_withheld: false }], 'a')).toBeNull()
   })
 
   it('現在の Asset がその出力一覧に無ければ null', () => {

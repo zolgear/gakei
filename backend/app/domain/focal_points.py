@@ -84,7 +84,10 @@ def needs_compute(session: Session, asset_id: uuid.UUID) -> bool:
 def pending_query(*, recompute: bool = False) -> Select:
     """焦点を求める Asset の id(マスク以外。論理削除済みも、復元に備えて含める)。
     `recompute` なら今の版の行がある Asset も含める。古い順(作成日時と id)に並べる。"""
-    query = select(Asset.id).where(Asset.kind != AssetKind.MASK)
+    # 画像を残さなかった Asset(ADR-0051 4章)は対象外。
+    query = select(Asset.id).where(
+        Asset.kind != AssetKind.MASK, Asset.content_withheld_at.is_(None)
+    )
     if not recompute:
         query = query.outerjoin(AssetFocalPoint, AssetFocalPoint.asset_id == Asset.id).where(
             or_(

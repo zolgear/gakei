@@ -24,7 +24,7 @@ from app.deps import (
     get_session,
     get_settings,
 )
-from app.domain import content_rating, focal_points
+from app.domain import content_rating, content_withholding, focal_points
 from app.domain import run_create as run_create_domain
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
@@ -93,6 +93,16 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
     focals = focal_points.bulk_get(db, [i.asset_id for i in inputs])
     # レーティング(ADR-0049)も入力と主たる親の分をまとめて引く。
     ratings = content_rating.bulk_levels(db, [i.asset_id for i in inputs])
+    # 画像を残さなかった入力(ADR-0051 4章)。
+    withheld = set(
+        db.execute(
+            select(Asset.id).where(
+                Asset.id.in_([i.asset_id for i in inputs]), Asset.content_withheld_at.is_not(None)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return RunDetail(
         **run_summary_fields(
             run,
@@ -120,10 +130,13 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
                 position=i.position,
                 focal_point=focals.get(i.asset_id),
                 content_rating=ratings.get(i.asset_id),
+                content_withheld=i.asset_id in withheld,
             )
             for i in inputs
         ],
         imported=_import_info(db, run),
+        verdicts=content_withholding.verdict_views(db, run_id=run.id),
+        mod_invocations=content_withholding.run_invocation_views(db, run.id),
     )
 
 

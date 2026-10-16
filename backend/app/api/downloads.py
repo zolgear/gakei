@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.assets import asset_content_response
+from app.api.assets import asset_content_response, raise_if_withheld
 from app.auth.runtime import AuthRuntime, get_auth_runtime
 from app.auth.sessions import viewer_for_issuer
 from app.deps import get_session, get_store
@@ -66,6 +66,8 @@ def download_by_url(
     asset = get_visible_asset(db, viewer, ticket.asset_id)
     if asset is None:
         raise _not_found()
+    # ADR-0051 4章: 画像を残さなかった Asset は 410(URL は使用済みにしない)。
+    raise_if_withheld(db, asset, include_verdict=True)
     if not store.content_exists(asset.blob_key, asset.sha256, "original"):
         raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
     # 同時に取得されても片方だけが通る。使用済みを確定してから配信する。
