@@ -604,12 +604,22 @@ def test_lineage_zip_keeps_withheld_node_and_imports_it(client: TestClient) -> N
     output_id = detail["outputs"][0]["asset_id"]
     _deny(client, output_id)
 
+    # 画像なしの Asset を起点には書き出さない(2026-10-16 のユーザーの判断)。
     for mode in ("import", "delivery"):
-        exported = client.get(
+        refused = client.get(
             f"/api/assets/{output_id}/export", params={"scope": "ancestors", "mode": mode}
         )
+        assert refused.status_code == 409, refused.text
+    preview = client.get(f"/api/assets/{output_id}/export/preview")
+    assert preview.status_code == 409, preview.text
+
+    # 範囲の途中の画像なしの Asset は、ノードとして書き出す。
+    for mode in ("import", "delivery"):
+        exported = client.get(
+            f"/api/assets/{base['id']}/export", params={"scope": "descendants", "mode": mode}
+        )
         assert exported.status_code == 200, exported.text
-    exported = client.get(f"/api/assets/{output_id}/export", params={"scope": "ancestors"})
+    exported = client.get(f"/api/assets/{base['id']}/export", params={"scope": "descendants"})
     with zipfile.ZipFile(io.BytesIO(exported.content)) as zf:
         manifest = json.loads(zf.read("manifest.json"))
         names = set(zf.namelist())
@@ -625,13 +635,16 @@ def test_lineage_zip_keeps_withheld_node_and_imports_it(client: TestClient) -> N
     )
     assert imported.status_code == 201, imported.text
     root = imported.json()["root_asset_id"]
-    assert root != output_id
-    root_detail = client.get(f"/api/assets/{root}").json()
-    assert root_detail["content_withheld"] is True
-    assert not _has_files(client.app.state.store, _asset(client, root))
     lineage = client.get(f"/api/assets/{root}/lineage").json()
-    node = next(n for n in lineage["nodes"] if n["id"] == root)
-    assert node["asset"]["content_withheld"] is True
+    withheld_nodes = [
+        n for n in lineage["nodes"] if n.get("asset") and n["asset"].get("content_withheld")
+    ]
+    # 起点は同じ内容の既存の Asset に合流するので、系列には元の出力と取り込んだ出力の両方が並ぶ。
+    imported_outputs = [n["id"] for n in withheld_nodes if n["id"] != output_id]
+    assert len(imported_outputs) == 1
+    imported_output = imported_outputs[0]
+    assert client.get(f"/api/assets/{imported_output}").json()["content_withheld"] is True
+    assert not _has_files(client.app.state.store, _asset(client, imported_output))
 
 
 _MCP_HEADERS = {

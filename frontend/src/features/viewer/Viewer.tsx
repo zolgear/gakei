@@ -302,14 +302,14 @@ export function Viewer({ assetId }: ViewerProps) {
                   <LineageIcon />
                 </Link>
                 {/* 系列を ZIP に書き出す(ADR-0037)。共有リンクと違い管理者設定は無い。
-                    削除済みの画像では押せない状態で残す(アイコンの位置を変えないため)。 */}
+                    削除済みと画像なし(ADR-0051)では押せない状態で残す(アイコンの位置を変えないため)。 */}
                 <button
                   type="button"
                   className={styles.iconButton}
                   aria-label={t.lineageTransfer.export.button}
-                  title={t.lineageTransfer.export.buttonTooltip}
+                  title={withheld ? t.mods.withheldUnavailable : t.lineageTransfer.export.buttonTooltip}
                   onClick={() => setExportOpen(true)}
-                  disabled={Boolean(asset.deleted_at)}
+                  disabled={Boolean(asset.deleted_at) || withheld}
                 >
                   <ExportArchiveIcon />
                 </button>

@@ -813,6 +813,7 @@
     "runNotTarget": "成功して画像を出力した実行のプロンプトだけを埋め込みます"
   },
   "lineageExport": {
+    "rootWithheld": "Mod の判定で画像を残さなかった画像からは、系列を書き出せません",
     "contentMissing": "系列に含まれる画像の原本が保存先に見つからないため、書き出せません",
     "delivery": {
       "title": "画像の系列の記録",

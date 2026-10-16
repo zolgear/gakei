@@ -121,8 +121,8 @@ export function LineageAssetInspectorContent({ assetId, onOpenRun }: LineageAsse
             {t.lineage.download}
           </a>
         )}
-        {/* 系列を ZIP に書き出す(ADR-0037)。 */}
-        {!asset.deleted_at && (
+        {/* 系列を ZIP に書き出す(ADR-0037)。画像なし(ADR-0051)からは書き出さない。 */}
+        {!asset.deleted_at && !isWithheld(asset) && (
           <button type="button" className={styles.actionButton} onClick={() => setExportOpen(true)}>
             {t.lineage.exportLineage}
           </button>

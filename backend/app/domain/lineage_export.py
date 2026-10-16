@@ -86,6 +86,11 @@ class ExportTargetNotFoundError(Exception):
     """起点の Asset が存在しない・見えない・削除済み(API 層で 404)。"""
 
 
+class ExportRootWithheldError(Exception):
+    """起点の Asset が Mod の判定で画像を残さなかったもの(ADR-0051。API 層で 409)。範囲の途中に
+    ある画像なしの Asset は、ノードとして書き出す。"""
+
+
 class ExportContentMissingError(Exception):
     """範囲の Asset の原本が保存先に無い(API 層で 409)。"""
 
@@ -185,7 +190,8 @@ def build_export(
     null にする(ADR-0037 4章。既定は含めない)。
     `include_graph` が真なら、ZIP に入る Asset と Run だけの系列グラフ(`plan.graph`)も作る
     (書き出し前のプレビュー。2026-10-07)。
-    起点が `viewer` に見えない・削除済みなら `ExportTargetNotFoundError`。
+    起点が `viewer` に見えない・削除済みなら `ExportTargetNotFoundError`、画像なしなら
+    `ExportRootWithheldError`。
     """
     from app.domain.shares import ShareTargetNotFoundError
 
@@ -196,6 +202,8 @@ def build_export(
 
     exported_at = now or datetime.now(UTC)
     assets = [asset for asset, _depth in result.assets]
+    if any(a.id == root_asset_id and a.content_withheld_at is not None for a in assets):
+        raise ExportRootWithheldError(root_asset_id)
     asset_ids = {a.id for a in assets}
 
     # `descendants` では、起点を生んだ Run を範囲の外とする(子孫を生んだ Run が起点を生むことは
