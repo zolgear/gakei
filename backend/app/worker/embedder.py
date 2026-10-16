@@ -77,6 +77,8 @@ from app.embedding.base import (
 from app.embedding.catalog import InputVariant
 from app.embedding.engines import EmbeddingEngines
 from app.i18n import t
+from app.mods import events as mods_events
+from app.mods.api import ImageRef
 
 if TYPE_CHECKING:
     from app.config import Settings
@@ -207,6 +209,9 @@ class _Job:
     variant: InputVariant = "thumb"
     # 計算する前に失敗が決まった行(asset_id と理由)
     failures: list[tuple[uuid.UUID, str]] = field(default_factory=list)
+    # Mod の `ai.before_send` に載せる画像と、取り込んだ人(ADR-0051)。
+    refs: dict[uuid.UUID, ImageRef] = field(default_factory=dict)
+    creators: dict[uuid.UUID, uuid.UUID | None] = field(default_factory=dict)
 
 
 @dataclass
@@ -450,6 +455,8 @@ class Embedder:
                     job.failures.append((asset_id, t("embeddings.maskNotSupported")))
                     continue
                 targets.append(asset)
+                job.refs[asset.id] = mods_events.image_ref(asset, "primary")
+                job.creators[asset.id] = asset.created_by_user_id
             loaded = self._load_images(targets, job.variant)
         hash_items: list[tuple[uuid.UUID, Image.Image]] = []
         for asset, pair in zip(targets, loaded, strict=True):
@@ -519,6 +526,10 @@ class Embedder:
             chunk = decoded[start : start + batch]
             ids = [asset_id for asset_id, _ in chunk]
             try:
+                # ADR-0051: リモートに送る前のチェック(ローカルの ONNX とダミーは何もしない)。
+                denial = await asyncio.to_thread(self._before_send, engine, job, ids)
+                if denial is not None:
+                    raise EmbeddingError(denial.message)
                 vectors = await asyncio.to_thread(
                     engine.embed_images, [image for _, image in chunk]
                 )
@@ -540,6 +551,18 @@ class Embedder:
             await asyncio.to_thread(
                 self._finish_succeeded, job.model_key, list(zip(ids, vectors, strict=True))
             )
+
+    def _before_send(self, engine: EmbeddingEngine, job: _Job, ids: list[uuid.UUID]) -> Any:
+        before_send = getattr(self.engines, "before_send", None)
+        if before_send is None:
+            return None
+        creators = {job.creators.get(i) for i in ids}
+        return before_send(
+            engine,
+            images=[job.refs[i] for i in ids if i in job.refs],
+            # 取り込んだ人が1人に決まるときだけ actor にする。
+            actor_user_id=next(iter(creators)) if len(creators) == 1 else None,
+        )
 
     # -- Run のプロンプト(ADR-0045) ------------------------------------------------
 

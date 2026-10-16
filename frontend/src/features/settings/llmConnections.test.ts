@@ -24,6 +24,8 @@ function connection(overrides: Partial<LlmConnectionView> = {}): LlmConnectionVi
     base_url: null,
     api_style: 'responses',
     api_key_set: true,
+    locality: 'cloud',
+    locality_source: 'default',
     used_by: ['annotation'],
     ...overrides,
   }

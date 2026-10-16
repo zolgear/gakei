@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     # で動かす場合は未設定のままでよい(`app.version.get_commit` が None を返す)。
     gakei_commit: str | None = Field(default=None, alias="GAKEI_COMMIT")
 
+    # ADR-0051 7章: Python の Mod を置くフォルダ。未指定なら `DATA_DIR/mods`。起動のときに
+    # 各フォルダのマニフェスト(`gakei-mod.toml`)を読む。
+    mods_dir: Path | None = Field(default=None, alias="MODS_DIR")
+
     # ADR-0034: 以下の `.env` の認証の値は、DB(画面の設定)に値が無い項目の初期値として
     # `app.domain.auth_settings` が読む。リクエストの処理からは直接読まない。
 
@@ -158,6 +162,10 @@ class Settings(BaseSettings):
     @property
     def uses_sqlite(self) -> bool:
         return self.sqlalchemy_url.startswith("sqlite")
+
+    @property
+    def mods_path(self) -> Path:
+        return self.mods_dir if self.mods_dir is not None else self.data_dir / "mods"
 
     @property
     def assets_dir(self) -> Path:

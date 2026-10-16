@@ -144,13 +144,20 @@ async def _upload(
         # 作ったときだけ)。MCP の upload_image と同じ扱いにする。
         queued = ingest_hooks.IngestQueued()
         if result.outcome == "created":
-            queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
+            queued = ingest_hooks.enqueue_after_ingest(
+                db,
+                result.asset,
+                settings,
+                source="url",
+                mods=getattr(request.app.state, "mods", None),
+            )
         db.commit()
         ingest_hooks.notify_workers(
             queued,
             annotator=getattr(request.app.state, "annotator", None),
             embedder=getattr(request.app.state, "embedder", None),
             focal=getattr(request.app.state, "focal_worker", None),
+            mods=getattr(request.app.state, "mods", None),
         )
         asset = result.asset
         base = public_base_for(request)

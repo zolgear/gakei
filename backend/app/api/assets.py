@@ -21,6 +21,7 @@ from app.deps import (
     get_annotator,
     get_embedder,
     get_focal_worker,
+    get_mods,
     get_session,
     get_settings,
     get_store,
@@ -77,6 +78,7 @@ from app.domain.visibility import (
     get_visible_group,
 )
 from app.i18n import t
+from app.mods.runtime import ModRuntime
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
 from app.worker.focal import FocalPointWorker
@@ -244,6 +246,7 @@ def create_asset(
     annotator: Annotator = Depends(get_annotator),
     embedder: Embedder = Depends(get_embedder),
     focal_worker: FocalPointWorker | None = Depends(get_focal_worker),
+    mods: ModRuntime | None = Depends(get_mods),
 ) -> AssetUploadResponse:
     data = file.file.read()
     try:
@@ -264,12 +267,16 @@ def create_asset(
     # 既存の Asset を返す場合(`matched_existing`)は重ねて待ち行列に入れない。
     queued = ingest_hooks.IngestQueued()
     if result.outcome == "created":
-        queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
+        queued = ingest_hooks.enqueue_after_ingest(
+            db, result.asset, settings, source=ingest_hooks.source_for_kind(kind), mods=mods
+        )
     db.commit()
     # 応答は worker を起こす前に作る(annotate_asset と同じ理由)。
     detail = _to_detail(db, result.asset, produced_by_run=None, user=user, store=store)
     response = AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
+    ingest_hooks.notify_workers(
+        queued, annotator=annotator, embedder=embedder, focal=focal_worker, mods=mods
+    )
     return response
 
 

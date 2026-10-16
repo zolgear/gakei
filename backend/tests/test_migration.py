@@ -50,6 +50,9 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "assistant_message",
         "asset_content_rating",
         "user_preference",
+        "mod_invocation",
+        "mod_verdict",
+        "mod_delivery",
         "alembic_version",
     } <= tables
 
@@ -1459,4 +1462,60 @@ def test_migration_0035_adds_composition_tables(empty_database_url: str) -> None
     tables = set(sa_inspect(engine).get_table_names())
     assert "asset_composition" not in tables
     assert "asset_composition_source" not in tables
+    engine.dispose()
+
+
+def test_migration_0036_adds_mod_tables_and_columns(empty_database_url: str) -> None:
+    """Mod とフック(ADR-0051): 0035 の DB に upgrade head で呼び出し・判定・配達の表と、
+    Asset の「画像なし(拒否)」の列、ワークフローの送り先の区分が加わり、downgrade で消えること。
+    既存のワークフローの区分は `unset` になる。"""
+    import uuid
+    from datetime import UTC, datetime
+
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0035")
+    engine = create_engine(empty_database_url)
+    now = datetime.now(UTC)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO comfy_workflow (id, name, operation, template, bindings,"
+                " exposed_params, template_sha256, created_at, updated_at)"
+                " VALUES (:id, 'wf', 'generate', '{}', '{}', '[]', :sha, :now, :now)"
+            ),
+            {
+                "id": uuid.uuid4().hex if engine.dialect.name == "sqlite" else str(uuid.uuid4()),
+                "sha": "0" * 64,
+                "now": now,
+            },
+        )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert {"mod_invocation", "mod_verdict", "mod_delivery"} <= set(inspector.get_table_names())
+    asset_columns = {c["name"] for c in inspector.get_columns("asset")}
+    assert {"content_withheld_at", "content_withheld_verdict_id"} <= asset_columns
+    assert "locality" in {c["name"] for c in inspector.get_columns("comfy_workflow")}
+    assert "ix_mod_delivery_status_next" in {
+        i["name"] for i in inspector.get_indexes("mod_delivery")
+    }
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT locality FROM comfy_workflow")).scalar_one() == "unset"
+    engine.dispose()
+
+    command.downgrade(cfg, "0035")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    tables = set(inspector.get_table_names())
+    assert not {"mod_invocation", "mod_verdict", "mod_delivery"} & tables
+    assert "content_withheld_at" not in {c["name"] for c in inspector.get_columns("asset")}
+    assert "locality" not in {c["name"] for c in inspector.get_columns("comfy_workflow")}
     engine.dispose()

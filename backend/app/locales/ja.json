@@ -395,6 +395,9 @@
       "unknownConnection": "指定した接続先がありません",
       "invalidModel": "モデル名は1〜{max}文字で指定してください",
       "invalidLimit": "{name} は{min}〜{max}の整数である必要があります"
+    },
+    "locality": {
+      "invalid": "送り先の区分は local・cloud・unset のどれかを指定してください"
     }
   },
   "runValidation": {
@@ -980,5 +983,27 @@
     "undoConflict": "その後に対象が変わったか削除されたため、元に戻せません",
     "undoNotAvailable": "このメッセージは元に戻せる書き込みではありません",
     "undoAlreadyDone": "既に元に戻しています"
+  },
+  "mods": {
+    "denied": "{mod} が送信を止めました: {reason}",
+    "checkFailed": "送る前のチェックに失敗しました",
+    "deniedNoReason": "理由は示されていません",
+    "notFound": "Mod が見つかりません",
+    "loadFailed": "Mod を読み込めません: {error}",
+    "manifestInvalid": "この Mod のマニフェストを読めないので、設定の値を保存できません",
+    "invalidName": "名前は1〜{max}文字で指定してください",
+    "invalidInstanceName": "インスタンスの名前は{max}文字以内で指定してください",
+    "invalidUrl": "URL は http または https で指定してください(ユーザー名・パスワード・# は含められません)",
+    "invalidSecret": "署名の鍵は1〜{max}文字で指定してください",
+    "invalidEvents": "購読するイベントが不正です",
+    "invalidFilters": "絞り込みの指定が不正です",
+    "invalidTimeout": "待つ時間は{min}〜{max}秒で指定してください",
+    "invalidOnFailure": "失敗したときの扱いは block か allow を指定してください",
+    "invalidOrder": "順番の指定が不正です",
+    "invalidEnabled": "真偽値で指定してください",
+    "tooManyWebhooks": "Webhook は{max}件まで登録できます",
+    "unknownSetting": "設定の項目 {key} はこの Mod にありません",
+    "invalidSettingValue": "設定の項目 {key} の値の型が合いません",
+    "enableFirst": "先に Mod を有効にしてください"
   }
 }
