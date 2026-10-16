@@ -35,6 +35,7 @@ import {
 import { SettingsShellContext, type SettingsShellValue } from '../features/settings/settingsShell'
 import { DisplaySettingsPage } from '../features/settings/pages/DisplaySettingsPage'
 import { McpSettingsPage } from '../features/settings/pages/McpSettingsPage'
+import { ModsSettingsPage } from '../features/settings/pages/ModsSettingsPage'
 import { OpenAiSettingsPage } from '../features/settings/pages/OpenAiSettingsPage'
 import { ComfyUISettingsPage } from '../features/settings/pages/ComfyUISettingsPage'
 import { SdWebuiSettingsPage } from '../features/settings/pages/SdWebuiSettingsPage'
@@ -68,6 +69,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   sdwebui: SdWebuiSettingsPage,
   tagDictionary: TagDictionarySettingsPage,
   mcp: McpSettingsPage,
+  mods: ModsSettingsPage,
   shareLinks: ShareLinksSettingsPage,
   authentication: AuthSettingsPage,
   about: AboutSettingsPage,

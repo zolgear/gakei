@@ -8,6 +8,8 @@
  *   だけ効く。ADR-0009 1章 2026-09-24)。`PATCH /api/settings/general` の `moderation` だけを送る。
  *   「既定値に戻す」は下書きに null を入れる。環境変数(`MODERATION`)由来でも入力欄はロックしない
  *   (画面で保存した値が優先。注記だけ出す)。
+ * - 「接続」: 送り先の区分(ADR-0051 3章。`ProviderLocalityCard`)。区分は別の API なので、
+ *   ページの保存には混ぜずダイアログでその場で送る。
  */
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -31,7 +33,14 @@ import { fmt, useI18n } from '../../../i18n'
 import { apiKeyStatusView, canDeleteKey, isEnvLocked } from '../apiKeyStatus'
 import { baseUrlStatusView, canClearBaseUrl, isBaseUrlEnvLocked } from '../baseUrlStatus'
 import { canResetToDefault, isFromEnv } from '../generalSettings'
-import { GENERAL_SETTINGS_QUERY_KEY, OPENAI_BASE_URL_STATUS_QUERY_KEY, OPENAI_KEY_STATUS_QUERY_KEY } from '../queryKeys'
+import { ProviderLocalityCard } from '../LocalityParts'
+import {
+  GENERAL_SETTINGS_QUERY_KEY,
+  LLM_CONNECTIONS_QUERY_KEY,
+  OPENAI_BASE_URL_STATUS_QUERY_KEY,
+  OPENAI_KEY_STATUS_QUERY_KEY,
+  PROVIDER_LOCALITIES_QUERY_KEY,
+} from '../queryKeys'
 import { SettingsPageFrame } from '../SettingsPageFrame'
 import { ConnectionCard, QueryStatus, SettingsRow, SettingsSection } from '../SettingsParts'
 import { useSettingsShell } from '../settingsShell'
@@ -74,6 +83,7 @@ export function OpenAiSettingsPage() {
       <SettingsSection heading={o.connectionHeading}>
         <OpenAiKeyCard />
         <OpenAiBaseUrlCard />
+        <ProviderLocalityCard provider="openai" />
       </SettingsSection>
 
       <SettingsSection heading={o.generationHeading}>
@@ -298,6 +308,9 @@ function OpenAiBaseUrlCard() {
     mutationFn: deleteOpenAiBaseUrl,
     onSuccess: (data) => {
       queryClient.setQueryData(OPENAI_BASE_URL_STATUS_QUERY_KEY, data)
+      // 公式の接続先かどうかで、送り先の区分の既定(クラウド・未設定)が変わる(ADR-0051 3章)。
+      void queryClient.invalidateQueries({ queryKey: PROVIDER_LOCALITIES_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: LLM_CONNECTIONS_QUERY_KEY })
       toast.show({ message: b.clearedToast })
     },
   })
@@ -385,6 +398,9 @@ function OpenAiBaseUrlDialog({ status, onClose }: { status: OpenAIBaseUrlStatus;
     mutationFn: setOpenAiBaseUrl,
     onSuccess: (data) => {
       queryClient.setQueryData(OPENAI_BASE_URL_STATUS_QUERY_KEY, data)
+      // 公式の接続先かどうかで、送り先の区分の既定(クラウド・未設定)が変わる(ADR-0051 3章)。
+      void queryClient.invalidateQueries({ queryKey: PROVIDER_LOCALITIES_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: LLM_CONNECTIONS_QUERY_KEY })
       toast.show({ message: b.savedToast })
       onClose()
     },

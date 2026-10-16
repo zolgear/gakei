@@ -6,7 +6,7 @@
  * - analyze の結果をフォームに当てはめる(初回の読み込みと、ファイルの差し替え)。
  * - 「戻る」と保存後の行き先は ComfyUI のページ。そこから開いたなら1つ戻る。
  */
-import type { ComfyAnalyzeResponse, ComfyNodeInfo, ComfyOperation, ComfyWorkflowDetail } from '../../api/client'
+import type { ComfyAnalyzeResponse, ComfyNodeInfo, ComfyOperation, ComfyWorkflowDetail, Locality } from '../../api/client'
 import { isSameDraftValue } from '../settings/settingsDraft'
 import {
   bindingsFormFromApi,
@@ -25,10 +25,12 @@ export interface WorkflowFormValues {
   nodes: ComfyNodeInfo[]
   bindings: BindingsFormState
   exposedRows: ExposedParamRow[]
+  /** 送り先の区分(ADR-0051 3章)。`unset` は「接続の設定に従う」。 */
+  locality: Locality
 }
 
 /** 変更の件数に数える欄(画面に出る順)。 */
-export const WORKFLOW_FORM_DRAFT_KEYS = ['name', 'operation', 'template', 'bindings', 'exposedRows'] as const
+export const WORKFLOW_FORM_DRAFT_KEYS = ['name', 'operation', 'locality', 'template', 'bindings', 'exposedRows'] as const
 
 export type WorkflowFormDraftKey = (typeof WORKFLOW_FORM_DRAFT_KEYS)[number]
 
@@ -40,6 +42,7 @@ export const EMPTY_WORKFLOW_FORM: WorkflowFormValues = {
   nodes: [],
   bindings: EMPTY_BINDINGS_FORM,
   exposedRows: [],
+  locality: 'unset',
 }
 
 /** 保存済みの値と違う欄。テンプレートは同じオブジェクトなら中身を比べない(大きいことがある)。 */
@@ -52,7 +55,8 @@ export function changedWorkflowFormKeys(saved: WorkflowFormValues, values: Workf
  * analyze に失敗したとき(`analyzed` が null)も、保存済みの値はそのまま残す(保存で消さないため)。
  */
 export function workflowFormFromSaved(
-  wf: Pick<ComfyWorkflowDetail, 'name' | 'operation' | 'template' | 'bindings' | 'exposed_params'>,
+  wf: Pick<ComfyWorkflowDetail, 'name' | 'operation' | 'template' | 'bindings' | 'exposed_params'> &
+    Partial<Pick<ComfyWorkflowDetail, 'locality'>>,
   analyzed: Pick<ComfyAnalyzeResponse, 'nodes' | 'candidate_params'> | null,
 ): WorkflowFormValues {
   return {
@@ -62,6 +66,7 @@ export function workflowFormFromSaved(
     nodes: analyzed?.nodes ?? [],
     bindings: bindingsFormFromApi(wf.bindings),
     exposedRows: buildExposedParamRows(analyzed?.candidate_params ?? [], wf.exposed_params ?? []),
+    locality: wf.locality ?? 'unset',
   }
 }
 

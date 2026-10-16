@@ -22,22 +22,31 @@ const KNOWN_CODES = [
   'sdwebuiValidation',
   'sdwebuiNoOutput',
   'sdwebuiModelMismatch',
+  // Mod の送る前のチェック(ADR-0051 2章)。サーバーのコードは `hook_denied`(`CODE_ALIASES`)。
+  'hookDenied',
   'internalError',
 ] as const
 
 type KnownErrorCode = (typeof KNOWN_CODES)[number]
 
-function isKnownErrorCode(code: string | null | undefined): code is KnownErrorCode {
-  return (KNOWN_CODES as readonly string[]).includes(code ?? '')
+/** 辞書のキーと綴りの違うサーバーのコード。 */
+const CODE_ALIASES: Record<string, KnownErrorCode> = { hook_denied: 'hookDenied' }
+
+function knownErrorCode(code: string | null | undefined): KnownErrorCode | null {
+  if (!code) return null
+  const key = CODE_ALIASES[code] ?? code
+  return (KNOWN_CODES as readonly string[]).includes(key) ? (key as KnownErrorCode) : null
 }
 
 const NO_DETAIL_CODES = new Set<KnownErrorCode>(['contentFilter', 'rateLimited', 'interrupted'])
 
 export function describeError(code: string | null | undefined, message: string | null | undefined): string {
   const t = msg().runStatus.errorCodes
-  if (isKnownErrorCode(code)) {
-    const headline = t[code]
-    if (NO_DETAIL_CODES.has(code) || !message) return headline
+  const known = knownErrorCode(code)
+  if (known) {
+    const headline = t[known]
+    // `hook_denied` の message は「{Mod} が送信を止めました: {理由}」(サーバーの言語)。理由を読めるように添える。
+    if (NO_DETAIL_CODES.has(known) || !message) return headline
     return `${headline}: ${message}`
   }
   return message ?? msg().runStatus.errorFallback
