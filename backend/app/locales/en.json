@@ -813,6 +813,7 @@
     "runNotTarget": "Only the prompts of runs that succeeded and produced images are embedded"
   },
   "lineageExport": {
+    "rootWithheld": "Cannot export a lineage from an image that was not kept because of a mod verdict",
     "contentMissing": "Cannot export: an original image in this lineage is missing from storage",
     "delivery": {
       "title": "Image lineage record",

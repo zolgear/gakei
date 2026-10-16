@@ -75,6 +75,8 @@ def _plan(
         )
     except export_domain.ExportTargetNotFoundError as e:
         raise HTTPException(status_code=404, detail=t("assets.notFound")) from e
+    except export_domain.ExportRootWithheldError as e:
+        raise HTTPException(status_code=409, detail=t("lineageExport.rootWithheld")) from e
 
 
 @router.get(
