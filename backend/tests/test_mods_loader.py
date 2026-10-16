@@ -158,7 +158,7 @@ def test_enabled_python_mod_is_imported_and_called(
     with db_session_factory() as db:
         runtime.reload(db)
     # 置いただけでは import しない。
-    status = runtime.python_mods(db_session_factory())[0]
+    status = next(s for s in runtime.python_mods(db_session_factory()) if s.folder.id == "checker")
     assert (status.loaded, status.error) == (False, None)
     assert not runtime.wants(contract.AI_BEFORE_SEND)
 

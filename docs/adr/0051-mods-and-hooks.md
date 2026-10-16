@@ -237,12 +237,29 @@ Mod にはさせないこと(この ADR では作らない):
 
 ## Action Items
 
-1. [ ] 契約の型(`gakei_mod`)、JSON Schema の書き出し、`docs/mods.md`。
-1a. [ ] 送り先の区分(`locality`)の設定の項目(接続とワークフロー)と、`target` への載せ方。
-2. [ ] マイグレーション(`mod_invocation`、`mod_verdict`、`mod_delivery`)と、非同期の配達の worker。
-3. [ ] `ai.before_send` の4つの入口(Run の実行、自動タイトル・タグ、アシスタント、リモートの埋め込み)。
-3a. [ ] 「判定を待つ」購読(原本を書く前に呼ぶ)と、画像を残さない処理(`content_withheld_at`、同じ内容への波及、画像から作ったものの削除、画像を返す経路、`reconcile_storage` の除外)。
-4. [ ] Webhook(署名、multipart、テスト送信)と、判定の受付の API。
-5. [ ] Python の Mod の読み込みと設定の項目、同梱の「ローカルに保存」。
-6. [ ] 管理者設定の「Mod」のページ、Run の詳細・ビューアの詳細・ストックの表示。
-7. [ ] ADR-0001 の追記、README。
+1. [x] 契約の型(`gakei_mod`)、JSON Schema の書き出し、`docs/mods.md`。
+1a. [x] 送り先の区分(`locality`)の設定の項目(接続とワークフロー)と、`target` への載せ方。
+2. [x] マイグレーション(`mod_invocation`、`mod_verdict`、`mod_delivery`)と、非同期の配達の worker。
+3. [x] `ai.before_send` の4つの入口(Run の実行、自動タイトル・タグ、アシスタント、リモートの埋め込み)。
+3a. [x] 「判定を待つ」購読(原本を書く前に呼ぶ)と、画像を残さない処理(`content_withheld_at`、同じ内容への波及、画像から作ったものの削除、画像を返す経路、`reconcile_storage` の除外)。
+4. [x] Webhook(署名、multipart、テスト送信)と、判定の受付の API。
+5. [x] Python の Mod の読み込みと設定の項目、同梱の「ローカルに保存」。
+6. [x] 管理者設定の「Mod」のページ、Run の詳細・ビューアの詳細・ストックの表示。
+7. [x] ADR-0001 の追記、README。
+
+## 2026-10-16 追記(実装で決めた細部)
+
+本文の決定は変えず、本文に書いていなかった細部を実装で次のように決めた。利用者向けの説明は `docs/mods.md`。
+
+- **鍵の保存先:** Webhook の署名の鍵と、Python の Mod の `secret` の項目は、DB に入れず `DATA_DIR/secrets.json` に置く(API キーと同じファイル)。
+- **署名の形:** `X-Gakei-Signature: sha256=<hex>`。鍵による `"<X-Gakei-Timestamp>." + 本文のバイト列` の HMAC-SHA256(multipart では境界を含む送るバイト列そのもの)。ほかに `X-Gakei-Event`、`X-Gakei-Delivery`(`event_id`)を付ける。リダイレクトは辿らない。
+- **multipart の部分の名前:** JSON は `event`(`event.json`)、画像は `images`(ファイル名は `<Asset の id>.<拡張子>`)。
+- **判定の応答:** 配列のほか `{"verdicts": [...]}` も受ける。1回に 100 件まで。そのイベントで届いていない対象への判定は捨てる。
+- **配達の送り直し:** 5 回まで。間隔は 30 秒から倍にしていく(上限 1 時間)。
+- **「判定を待つ」購読の失敗:** 失敗時の扱いが「止める」なら、届いた Asset すべてに、GAKEI が「チェックの失敗」の `deny` を記録する(画像を残さない)。
+- **同じ内容への波及の記録:** ほかの Asset に及ぼした判定は、その Asset への `mod_verdict` の行として足し、`mod_verdict.propagated_from_id` で元の判定を指す(マイグレーション 0037)。
+- **受付の API:** 時刻のずれは前後 300 秒まで。本文は 1 MB まで。対象外が1つでもあれば何も記録せず 403。無効な Webhook は 404。Python の Mod は、受付の API の代わりに `ModContext.submit_verdicts` で後から送る。
+- **Python の Mod の読み込み:** マニフェストは起動のときに読み、一度 import した Mod は読み直さない(置いた・書き換えたら再起動)。`name` と設定の項目の `label` は、文字列か言語ごとの表(`{ ja = "...", en = "..." }`)。記録に残す名前は `ja`。
+- **`gakei_mod` に足したもの:** 同梱の「ローカルに保存」のために、`ModContext.open_image_with_lineage`(ダウンロードと同じ、系列を埋め込んだ PNG。系列はその Asset を作った人に見える範囲)、`ModContext.get_run`(`run.finished` の `subject` と同じ形の Run の情報)、画像を残さなかった Asset を開いたときの例外 `ImageWithheld` を足した。項目の追加なので `schema_version` と `api_version` は上げない。
+- **同梱の Mod:** `backend/app/mods/builtin/` に置き、`MODS_DIR` の Mod と同じ形で一覧に出す。「ローカルに保存」の id は `local-export`。同じ id の Mod が `MODS_DIR` にあれば同梱のほうを使い、`MODS_DIR` のほうは読み込みエラーにする(同梱の Mod の設定が、別のコードに引き継がれないように)。
+- **「ローカルに保存」の書き方:** ファイル名はひな形(既定 `{date}/{time}_{run_id8}_{index}.{ext}`)から作り、置き換えの値は英数字と `._-` だけにする。保存先の外に出るパス、同名の上書きは作らない(`_1`、`_2` … を付け、同じ中身のファイルが既にあれば書かない)。一時ファイルに書いてから置き換える。書けなければ例外にし、配達の失敗として送り直す。

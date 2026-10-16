@@ -101,7 +101,7 @@ def _python_view(status: PythonModStatus, settings: Settings) -> PythonModView:
                 )
     return PythonModView(
         id=folder.id,
-        name=manifest.name if manifest else None,
+        name=manifest.display_name(current_locale()) if manifest else None,
         version=manifest.version if manifest else None,
         api_version=manifest.api_version if manifest else None,
         available_events=list(manifest.events) if manifest else [],  # type: ignore[arg-type]

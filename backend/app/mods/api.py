@@ -68,6 +68,13 @@ class ContractError(ValueError):
     """応答が契約に合わない(GAKEI はその呼び出しを失敗として扱う)。"""
 
 
+class ImageWithheld(LookupError):
+    """画像を残さなかった Asset(ADR-0051 4章。`deny` の判定を受けた)の原本を開こうとした。
+
+    `ModContext.open_image` と `open_image_with_lineage` が出す。原本はもう無いので、Mod はこの
+    Asset を飛ばしてよい(失敗にしなくてよい)。"""
+
+
 # -- イベント -------------------------------------------------------------------------
 
 
@@ -393,6 +400,12 @@ class ModContext:
 
     - `settings`: マニフェストに書いた設定の項目の値(秘密の項目も値が入る。ログに出さないこと)。
     - `open_image`: 画像の原本のバイト列を返す。`ImageRef` か Asset の id を渡す。
+    - `open_image_with_lineage`: ダウンロードと同じ、系列の情報を埋め込んだ PNG を返す
+      (ADR-0014。系列はその Asset を作った人に見える範囲)。PNG でない原本と、まだ保存して
+      いない画像(「判定を待つ」購読、テスト送信)は、原本のバイト列をそのまま返す。
+    - `get_run`: Run の id から、`run.finished` の `subject` と同じ形の Run の情報を返す(無ければ
+      None)。`asset.ingested` で届いた生成の出力の Run を調べるときに使う。
+    - 画像を残さなかった Asset(ADR-0051 4章)を開こうとすると、`ImageWithheld` を出す。
     - `logger`: この Mod のロガー。
     - `submit_verdicts`: 判定を後から送る(ADR-0051 8章。外部のシステムの結果を待ってから
       判定を返したいとき)。対象は、この Mod に届いた Asset・Run だけ(`asset.ingested` /
@@ -406,6 +419,8 @@ class ModContext:
     open_image: Callable[[ImageRef | str], Awaitable[bytes]]
     logger: logging.Logger
     submit_verdicts: Callable[[list[Verdict]], Awaitable[int]] | None = None
+    open_image_with_lineage: Callable[[ImageRef | str], Awaitable[bytes]] | None = None
+    get_run: Callable[[str], Awaitable[RunFinishedSubject | None]] | None = None
 
 
 __all__ = [
@@ -421,14 +436,20 @@ __all__ = [
     "EVENTS",
     "Event",
     "ImageRef",
+    "ImageWithheld",
     "Instance",
+    "IMAGE_ROLES",
+    "LOCALITIES",
     "ModContext",
+    "PURPOSES",
     "RUN_FINISHED",
     "RunError",
     "RunFinishedSubject",
     "SCHEMA_VERSION",
+    "SOURCES",
     "Target",
     "TextPart",
+    "VERDICTS",
     "Verdict",
     "VerdictTarget",
     "WorkflowRef",
