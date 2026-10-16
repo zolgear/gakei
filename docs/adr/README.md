@@ -54,5 +54,6 @@
 | ADR-0048 | [0048-generation-assistant-chat.md](0048-generation-assistant-chat.md) | 生成のアシスタント(チャットでプロンプトとプロンプトセットを作る) | Proposed |
 | ADR-0049 | [0049-content-rating.md](0049-content-rating.md) | 画像のレーティング(WD Tagger による判定と、一覧でのマスク) | Proposed |
 | ADR-0050 | [0050-composite-input.md](0050-composite-input.md) | 入力画像の配置(複数の画像を移動・回転・拡大縮小して1枚の入力にする) | Proposed |
+| ADR-0051 | [0051-mods-and-hooks.md](0051-mods-and-hooks.md) | Mod とフック(取り込み・AI へ送る前・生成後に、外部のシステムや手元の処理をつなぐ) | Accepted |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。
