@@ -1006,6 +1006,7 @@
     "unknownSetting": "This mod has no setting {key}",
     "invalidSettingValue": "The value of the setting {key} has the wrong type",
     "enableFirst": "Enable the mod first",
+    "waitForVerdictUnsupported": "This mod does not return verdicts, so it cannot wait for a verdict",
     "contentWithheld": "This image was not kept because a Mod denied it",
     "contentWithheldWithVerdict": "This image was not kept because a Mod denied it ({mod}: {label} — {message})",
     "assetDenied": "Image {id} was denied by a Mod and cannot be sent to an external AI",

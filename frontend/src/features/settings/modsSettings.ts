@@ -332,7 +332,10 @@ export function diffPythonModForm(form: PythonModForm, view: PythonModView): Pyt
   const timeout = Number(form.timeout.trim())
   if (timeout !== view.timeout_seconds) body.timeout_seconds = timeout
   if (form.on_failure !== view.on_failure) body.on_failure = form.on_failure
-  if (form.wait_for_verdict !== view.wait_for_verdict) body.wait_for_verdict = form.wait_for_verdict
+  // 判定を返さない Mod では「判定を待つ」を出さず、送らない(送ると 422)。
+  if (view.returns_verdicts && form.wait_for_verdict !== view.wait_for_verdict) {
+    body.wait_for_verdict = form.wait_for_verdict
+  }
 
   const values: Record<string, unknown> = {}
   const secrets: Record<string, string | null> = {}

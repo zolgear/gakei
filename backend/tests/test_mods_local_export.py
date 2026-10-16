@@ -50,6 +50,10 @@ def test_builtin_mod_is_listed_and_disabled(tmp_path: Path, client) -> None:  # 
     assert mod["name"] == "ローカルに保存"
     assert (mod["enabled"], mod["loaded"], mod["error"]) == (False, False, None)
     assert mod["available_events"] == ["run.finished", "asset.ingested"]
+    # 判定を返さないので、「判定を待つ」は選べない(書き込みの失敗を deny にしない)。
+    assert (mod["returns_verdicts"], mod["wait_for_verdict"]) == (False, False)
+    response = client.patch(f"/api/settings/mods/python/{MOD_ID}", json={"wait_for_verdict": True})
+    assert response.status_code == 422
     settings = {s["key"]: s for s in mod["settings"]}
     assert set(settings) == {
         "folder",

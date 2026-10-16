@@ -2876,6 +2876,8 @@ class PythonModView(BaseModel):
     timeout_seconds: float
     on_failure: ModOnFailure
     wait_for_verdict: bool
+    # 判定を返す Mod か(マニフェストの `returns_verdicts`)。false なら「判定を待つ」を選べない。
+    returns_verdicts: bool = True
     order: int | None = None
     settings: list[ModSettingFieldView] = Field(default_factory=list)
 

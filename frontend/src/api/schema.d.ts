@@ -6399,6 +6399,11 @@ export interface components {
             on_failure: "block" | "allow";
             /** Wait For Verdict */
             wait_for_verdict: boolean;
+            /**
+             * Returns Verdicts
+             * @default true
+             */
+            returns_verdicts: boolean;
             /** Order */
             order?: number | null;
             /** Settings */

@@ -62,6 +62,7 @@ function pythonMod(overrides: Partial<PythonModView> = {}): PythonModView {
     timeout_seconds: 10,
     on_failure: 'block',
     wait_for_verdict: false,
+    returns_verdicts: true,
     order: null,
     settings: [
       { key: 'folder', type: 'path', label: '保存先', default: '/srv/out', value: '/srv/out' },
@@ -206,6 +207,14 @@ describe('Python の Mod', () => {
     expect(
       diffPythonModForm({ ...form, values: { ...form.values, limit: '8', json: true, folder: '/srv/other' } }, view),
     ).toEqual({ values: { limit: 8, json: true, folder: '/srv/other' } })
+  })
+
+  it('判定を待つ: 判定を返す Mod だけ送る', () => {
+    const view = pythonMod({ returns_verdicts: true })
+    const form = pythonModFormFromView(view)
+    expect(diffPythonModForm({ ...form, wait_for_verdict: true }, view)).toEqual({ wait_for_verdict: true })
+    const noVerdicts = pythonMod({ returns_verdicts: false })
+    expect(diffPythonModForm({ ...pythonModFormFromView(noVerdicts), wait_for_verdict: true }, noVerdicts)).toEqual({})
   })
 
   it('数値の空欄は null(既定に戻す)', () => {

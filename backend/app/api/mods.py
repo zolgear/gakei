@@ -74,6 +74,7 @@ def _python_view(status: PythonModStatus, settings: Settings) -> PythonModView:
     folder = status.folder
     manifest = folder.manifest
     common = status.config.common
+    returns_verdicts = manifest.returns_verdicts if manifest is not None else True
     fields: list[ModSettingFieldView] = []
     if manifest is not None:
         for spec in manifest.settings:
@@ -112,7 +113,9 @@ def _python_view(status: PythonModStatus, settings: Settings) -> PythonModView:
         filters=_filters_view(common.filters),
         timeout_seconds=common.timeout_seconds,
         on_failure=common.on_failure,
-        wait_for_verdict=common.wait_for_verdict,
+        # 判定を返さない Mod では、保存した値が true でも待たない(実行時と同じに見せる)。
+        wait_for_verdict=common.wait_for_verdict and returns_verdicts,
+        returns_verdicts=returns_verdicts,
         order=common.order,
         settings=fields,
     )
@@ -312,6 +315,13 @@ def _python_updates(
     fields = _fields(body)
     manifest = folder.manifest
     allowed_events = manifest.events if manifest is not None else ()
+    if (
+        fields.get("wait_for_verdict") is True
+        and manifest is not None
+        and not manifest.returns_verdicts
+    ):
+        # 判定を返さない Mod を待っても、失敗が `deny` になるだけ(ADR-0051 2026-10-16 追記)。
+        raise mods_config.ModValidationError(t("mods.waitForVerdictUnsupported"))
     common = mods_config.apply_common_updates(
         current.common,
         {k: v for k, v in fields.items() if k in mods_config.COMMON_FIELDS},

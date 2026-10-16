@@ -1006,6 +1006,7 @@
     "unknownSetting": "設定の項目 {key} はこの Mod にありません",
     "invalidSettingValue": "設定の項目 {key} の値の型が合いません",
     "enableFirst": "先に Mod を有効にしてください",
+    "waitForVerdictUnsupported": "この Mod は判定を返さないため、判定を待つ設定にできません",
     "contentWithheld": "Mod の判定(拒否)により、この画像は保存していません",
     "contentWithheldWithVerdict": "Mod の判定(拒否)により、この画像は保存していません({mod}: {label} — {message})",
     "assetDenied": "画像 {id} は Mod の判定で拒否されたため、外部の AI に送れません",

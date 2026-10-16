@@ -9,6 +9,7 @@
     api_version = 1
     module = "main"            # フォルダの中の main.py(または main/__init__.py)
     events = ["run.finished"]
+    returns_verdicts = false   # 判定を返さない Mod(既定は true)
 
     [settings.folder]
     type = "path"              # string / number / bool / path / secret
@@ -19,6 +20,9 @@
 - マニフェストの不正と import の失敗は、その Mod を「読み込みエラー」として一覧に出すだけで、
   起動は止めない。
 - `name` と設定の項目の `label` は、文字列か、言語ごとの表(`{ ja = "...", en = "..." }`)。
+- `returns_verdicts` は、`asset.ingested` と `run.finished` に判定を返すか(既定は true)。false の
+  Mod は「判定を待つ」を選べず、返してきた判定は捨てる(書き出すだけの Mod の失敗が `deny` に
+  ならないように)。
 - GAKEI に同梱の Mod(`app/mods/builtin/` の下。例: `local-export`「ローカルに保存」)も、
   `MODS_DIR` の Mod と同じ形で置き、同じく一覧に出す(`scan_all`)。同じ id の Mod が `MODS_DIR` に
   あれば、同梱のほうを使い、`MODS_DIR` のほうは読み込みエラー(id の重複)として一覧に出す。
@@ -83,6 +87,8 @@ class Manifest:
     settings: tuple[SettingField, ...] = ()
     # 言語ごとの名前(マニフェストの `name` が表のとき)。画面は今の言語のものを出す。
     name_i18n: dict[str, str] | None = None
+    # `asset.ingested` と `run.finished` に判定を返すか(マニフェストの `returns_verdicts`)。
+    returns_verdicts: bool = True
 
     def display_name(self, locale: str | None) -> str:
         if self.name_i18n:
@@ -191,6 +197,9 @@ def parse_manifest(raw: dict[str, Any]) -> Manifest:
             raise ModLoadError(f"unknown event: {event}")
         if event not in events:
             events.append(event)
+    returns_verdicts = raw.get("returns_verdicts", True)
+    if not isinstance(returns_verdicts, bool):
+        raise ModLoadError("returns_verdicts must be true or false")
     settings_raw = raw.get("settings", {})
     if not isinstance(settings_raw, dict):
         raise ModLoadError("settings must be a table")
@@ -220,6 +229,7 @@ def parse_manifest(raw: dict[str, Any]) -> Manifest:
         events=tuple(events),
         settings=tuple(settings),
         name_i18n=name_i18n,
+        returns_verdicts=returns_verdicts,
     )
 
 

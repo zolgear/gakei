@@ -1,7 +1,8 @@
 /**
  * 購読の共通の項目(ADR-0051 6・7章): 有効、イベント、絞り込み、判定を待つ、待つ時間、失敗のとき。
  * Webhook と Python の Mod のダイアログで使う。絞り込みは、関係するイベントを選んだときだけ出す
- * (`purpose` は `ai.before_send`、`source` は `asset.ingested`)。
+ * (`purpose` は `ai.before_send`、`source` は `asset.ingested`)。「判定を待つ」は、判定を返さない
+ * Python の Mod(マニフェストの `returns_verdicts = false`)では出さない。
  */
 import type { ModEvent, ModOnFailure, ModPurpose, ModSource } from '../../../api/client'
 import { fmt, useI18n } from '../../../i18n'
@@ -30,6 +31,8 @@ interface SubscriptionFieldsProps {
   availableEvents: readonly ModEvent[]
   disabled: boolean
   timeoutInvalid: boolean
+  /** 判定を返す Mod か。false なら「判定を待つ」を出さない(既定は true)。 */
+  returnsVerdicts?: boolean
   onChange: (patch: Partial<ModCommonForm>) => void
 }
 
@@ -39,6 +42,7 @@ export function SubscriptionFields({
   availableEvents,
   disabled,
   timeoutInvalid,
+  returnsVerdicts = true,
   onChange,
 }: SubscriptionFieldsProps) {
   const { t } = useI18n()
@@ -140,16 +144,18 @@ export function SubscriptionFields({
         </fieldset>
       )}
 
-      <div className={styles.field}>
-        <SettingsSwitch
-          id={`${idPrefix}-wait`}
-          checked={form.wait_for_verdict}
-          disabled={disabled || (!waitApplies && !form.wait_for_verdict)}
-          label={m.waitForVerdictLabel}
-          onChange={(wait_for_verdict) => onChange({ wait_for_verdict })}
-        />
-        <p className={styles.helpText}>{waitApplies ? m.waitForVerdictHelp : m.waitForVerdictNotApplicable}</p>
-      </div>
+      {returnsVerdicts && (
+        <div className={styles.field}>
+          <SettingsSwitch
+            id={`${idPrefix}-wait`}
+            checked={form.wait_for_verdict}
+            disabled={disabled || (!waitApplies && !form.wait_for_verdict)}
+            label={m.waitForVerdictLabel}
+            onChange={(wait_for_verdict) => onChange({ wait_for_verdict })}
+          />
+          <p className={styles.helpText}>{waitApplies ? m.waitForVerdictHelp : m.waitForVerdictNotApplicable}</p>
+        </div>
+      )}
 
       <div className={styles.field}>
         <label htmlFor={`${idPrefix}-timeout`} className={styles.rowLabel}>
