@@ -17,6 +17,8 @@
 - AI へ送る前のチェック: 画像の生成だけでなく、外部へ送るすべての処理に掛ける。
 - フックの効力: 許可・拒否と判定の記録まで。プロンプトや画像の書き換えはしない。
 
+同日の追加の指示: ComfyUI のワークフローのように、ローカルで処理するのかどうかを GAKEI が自動で判定できないものがある。接続したプロバイダーとワークフローの単位で、ローカルかクラウドかを設定できるようにし、Mod の側の判断に使えるようにする(3章の「送り先の区分」)。
+
 ## Context
 
 - 組織での利用では、生成 AI に送る前に、送る内容(プロンプト、入力画像、送り先)を社内のシステムで検査し、記録したいことがある。情報の持ち出しの検査、利用の台帳、禁止語の確認などに使う。
@@ -74,11 +76,27 @@ Mod にはさせないこと(この ADR では作らない):
 - すべてのイベントは、同じ形の JSON を持つ。`schema_version`(最初は `1`)、`event`、`event_id`(UUID)、`occurred_at`、`instance`(GAKEI のバージョンと、管理者が決めた名前)、`actor`(実行したユーザーの id・メール・表示名。個人モードでは `null`)、`subject`(イベントごとの中身)。
 - `ai.before_send` の `subject`:
   - `purpose`
-  - `target`: プロバイダー、モデル、接続先のホスト名。API キーは出さない。
+  - `target`: プロバイダー、モデル、接続先のホスト名、ワークフロー(ComfyUI のとき。id と名前)、送り先の区分(`locality`。下記)。API キーは出さない。
   - `text`: プロンプト、ネガティブプロンプト、アシスタントのメッセージなど、送る文
   - `params`: 送るパラメーター
   - `images`: 送る画像の一覧。Asset の id、sha256、大きさ、形式、使い方(主たる入力、参照、マスク、添付)
   - `run_id`: `image_run` のとき
+- **送り先の区分(`locality`):** 送り先がローカルかクラウドかを、管理者が設定で決める。値は次の3つ。
+  - `local`: 組織の中で処理する
+  - `cloud`: 組織の外のサービスへ送る
+  - `unset`: 決めていない
+  - **GAKEI は自動で判定しない。** ホスト名が手元でも、ComfyUI のワークフローに外部の API を呼ぶノードがあれば、データは外に出る。逆に、OpenAI 互換の接続先が組織の中のサーバーのこともある。
+  - **GAKEI はこの値で動作を変えない。** `ai.before_send` に載せて、許可・拒否の判断は Mod に任せる。たとえば「`cloud` と `unset` だけ検査する」「`unset` は拒否する」などを Mod の側で決める。
+  - **設定する場所:**
+    - 画像のプロバイダーの接続(OpenAI、ComfyUI、SD WebUI)
+    - ComfyUI のワークフロー(`comfy_workflow` に列を足す)
+    - LLM・VLM の接続先(ADR-0032)
+    - リモートの埋め込みの接続先(ADR-0033)
+  - **既定値と優先順:**
+    - OpenAI の公式の接続先は `cloud`。それ以外はすべて `unset`。
+    - ワークフローの値は、`unset` でなければ接続の値より優先する。
+    - どこで決まった値かを `locality_source`(`workflow` / `connection` / `default`)として一緒に送る。
+  - 区分の項目は、Mod を1つも有効にしていなくても設定の画面に出す(後から Mod を足したときに、設定し直さなくて済むように)。
 - `asset.ingested` の `subject`: Asset の id・種類・sha256・大きさ・形式・`source`、作った Run の id(生成の出力のとき)、レーティング(判定済みのとき)。
 - `run.finished` の `subject`: Run の id・状態・プロバイダー・モデル・プロンプト・パラメーター・入力の一覧・出力の一覧(Asset の id、sha256、大きさ)・usage・エラー。
 - 契約は `docs/mods.md` に書き、JSON Schema を `uv run python -m app.tools.export_mod_schema` で書き出せるようにする。項目を足すのは版を上げずに行い、消す・意味を変えるときは `schema_version` を上げる。
@@ -185,10 +203,12 @@ Mod にはさせないこと(この ADR では作らない):
 - 管理者設定に「Mod」のページが増える。表が3つ増える(`mod_invocation`、`mod_verdict`、`mod_delivery`)。
 - 契約(`schema_version`)と、Python の公開モジュール `gakei_mod` の互換性を保つ責任が生まれる。
 - Run の失敗の理由に `hook_denied` が加わる。
+- プロバイダー・ComfyUI のワークフロー・LLM の接続先・埋め込みの接続先の設定に、送り先の区分が1項目ずつ増える。
 
 ## Action Items
 
 1. [ ] 契約の型(`gakei_mod`)、JSON Schema の書き出し、`docs/mods.md`。
+1a. [ ] 送り先の区分(`locality`)の設定の項目(接続とワークフロー)と、`target` への載せ方。
 2. [ ] マイグレーション(`mod_invocation`、`mod_verdict`、`mod_delivery`)と、非同期の配達の worker。
 3. [ ] `ai.before_send` の4つの入口(Run の実行、自動タイトル・タグ、アシスタント、リモートの埋め込み)と、`deny` の判定のある Asset の扱い。
 4. [ ] Webhook(署名、multipart、テスト送信)と、判定の受付の API。
