@@ -6,6 +6,8 @@ version = "1.0.0"
 api_version = 1
 module = "main"
 events = ["run.finished", "asset.ingested"]
+# 書き出すだけで判定は返さない。「判定を待つ」を選べないようにする(書き込みの失敗を deny にしない)。
+returns_verdicts = false
 
 [settings.folder]
 type = "path"

@@ -180,6 +180,7 @@ function PythonModDialog({ view, onClose }: { view: PythonModView; onClose: () =
           availableEvents={view.available_events ?? []}
           disabled={busy}
           timeoutInvalid={Boolean(errors.timeout)}
+          returnsVerdicts={view.returns_verdicts}
           onChange={update}
         />
 

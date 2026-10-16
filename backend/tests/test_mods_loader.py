@@ -281,3 +281,98 @@ def test_python_mod_api(client, data_dir: Path) -> None:  # noqa: ANN001
         {"events": ["asset.ingested"]},
     ):
         assert client.patch("/api/settings/mods/python/checker", json=bad).status_code == 422, bad
+
+
+# -- 判定を返さない Mod(`returns_verdicts = false`) ------------------------------------------
+
+_NO_VERDICTS_MANIFEST = _GOOD_MANIFEST.replace(
+    'events = ["ai.before_send", "run.finished"]',
+    'events = ["ai.before_send", "run.finished"]\nreturns_verdicts = false',
+)
+
+
+def test_manifest_returns_verdicts() -> None:
+    base = {
+        "id": "m",
+        "name": "M",
+        "version": "1",
+        "api_version": 1,
+        "module": "main",
+        "events": ["run.finished"],
+    }
+    # 書いていなければ判定を返す(今までの動作のまま)。
+    assert loader.parse_manifest(base).returns_verdicts is True
+    assert loader.parse_manifest({**base, "returns_verdicts": False}).returns_verdicts is False
+    with pytest.raises(loader.ModLoadError):
+        loader.parse_manifest({**base, "returns_verdicts": "no"})
+
+
+def test_mod_without_verdicts_cannot_wait_and_its_verdicts_are_dropped(
+    client,  # noqa: ANN001
+    data_dir: Path,
+) -> None:
+    _write_mod(
+        data_dir / "mods",
+        "writer",
+        _NO_VERDICTS_MANIFEST.format(mod_id="writer"),
+        {
+            "main.py": _GOOD_MODULE,
+            "helper.py": "def reason(word):\n    return f'contains {word}'\n",
+        },
+    )
+    runtime: ModRuntime = client.app.state.mods
+    runtime.scan()
+    mod = {m["id"]: m for m in client.get("/api/settings/mods").json()["python_mods"]}["writer"]
+    assert (mod["returns_verdicts"], mod["wait_for_verdict"]) == (False, False)
+
+    # 判定を待つ設定にはできない(422)。false と、ほかの項目は変えられる。
+    response = client.patch(
+        "/api/settings/mods/python/writer", json={"enabled": True, "wait_for_verdict": True}
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "この Mod は判定を返さないため、判定を待つ設定にできません"
+    response = client.patch(
+        "/api/settings/mods/python/writer", json={"enabled": True, "wait_for_verdict": False}
+    )
+    assert response.status_code == 200, response.text
+
+    # 保存済みの true(マニフェストを後から変えたとき)は、実行時に無視して非同期にする。
+    with runtime.session_factory() as db:
+        current = mods_config.python_config_or_default(
+            mods_config.load_python_configs(db), "writer"
+        )
+        mods_config.save_python_config(
+            db,
+            mods_config.PythonModConfig(
+                mod_id="writer",
+                common=mods_config.CommonConfig(
+                    enabled=True, wait_for_verdict=True, order=current.common.order
+                ),
+            ),
+        )
+        runtime.reload(db)
+    assert runtime.waiting_subscribers(contract.RUN_FINISHED) == []
+    sub = runtime.find_subscriber("python", "writer")
+    assert sub is not None and sub.wait_for_verdict is False and sub.returns_verdicts is False
+    mod = {m["id"]: m for m in client.get("/api/settings/mods").json()["python_mods"]}["writer"]
+    assert (mod["returns_verdicts"], mod["wait_for_verdict"]) == (False, False)
+
+    # 返してきた判定は捨てる(テスト送信でも出さない)。
+    finished = client.post(
+        "/api/settings/mods/python/writer/test", json={"event": "run.finished"}
+    ).json()
+    assert (finished["outcome"], finished["response"]) == ("ok", [])
+    # 後から送る判定も捨てる。
+    submitted = asyncio.run(
+        runtime._verdict_submitter(sub)(
+            [
+                contract.Verdict(
+                    target=contract.VerdictTarget(
+                        type="run", id="00000000-0000-0000-0000-000000000001"
+                    ),
+                    verdict="deny",
+                )
+            ]
+        )
+    )
+    assert submitted == 0

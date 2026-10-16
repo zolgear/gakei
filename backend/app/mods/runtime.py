@@ -187,6 +187,9 @@ class Subscriber:
     # 書く前に同期で呼ぶ。
     wait_for_verdict: bool = False
     values: Mapping[str, Any] = field(default_factory=dict)
+    # 判定を返す Mod か(Python の Mod はマニフェストの `returns_verdicts`。Webhook は常に True)。
+    # False なら「判定を待つ」にせず、返してきた判定は捨てる。
+    returns_verdicts: bool = True
 
     def matches(
         self,
@@ -341,7 +344,10 @@ class ModRuntime:
                     order=cfg.common.order if cfg.common.order is not None else _ORDER_LAST,
                     loaded=loaded,
                     values=self._python_values(folder, cfg),
-                    wait_for_verdict=cfg.common.wait_for_verdict,
+                    # 判定を返さない Mod は、保存した設定が「待つ」でも待たない(マニフェストを
+                    # 後から変えたときのため)。
+                    wait_for_verdict=cfg.common.wait_for_verdict and manifest.returns_verdicts,
+                    returns_verdicts=manifest.returns_verdicts,
                 )
             )
         subscribers.sort(key=lambda s: (s.order, s.kind, s.id))
@@ -522,6 +528,13 @@ class ModRuntime:
                     response=raw,
                 )
             verdicts = contract.verdicts_from_json(raw)
+            if verdicts and not sub.returns_verdicts:
+                logger.warning(
+                    "Mod %s は判定を返さない Mod なので、返した判定 %d 件を捨てました",
+                    sub.id,
+                    len(verdicts),
+                )
+                verdicts = []
             return CallResult(
                 outcome="ok",
                 duration_ms=elapsed(),
@@ -1043,6 +1056,14 @@ class ModRuntime:
 
         async def submit(verdicts: list[contract.Verdict]) -> int:
             parsed = contract.verdicts_from_json(list(verdicts))
+            if not sub.returns_verdicts:
+                if parsed:
+                    logger.warning(
+                        "Mod %s は判定を返さない Mod なので、送った判定 %d 件を捨てました",
+                        sub.id,
+                        len(parsed),
+                    )
+                return 0
             return await asyncio.to_thread(
                 self.receive_verdicts, sub.kind, sub.id, sub.name, parsed
             )
@@ -1096,6 +1117,7 @@ class ModRuntime:
             order=0,
             loaded=loaded,
             values=self._python_values(folder, cfg),
+            returns_verdicts=folder.manifest.returns_verdicts,
         )
 
     async def test_send(self, sub: Subscriber, event_name: str) -> CallResult:
