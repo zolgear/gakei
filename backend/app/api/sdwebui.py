@@ -540,6 +540,9 @@ def _meta_from_asset(
         raise HTTPException(status_code=404, detail=t("assets.notFound"))
     if isinstance(asset.embedded_meta, dict) and asset.embedded_meta.get("tool"):
         return asset.embedded_meta
+    # 画像を残さなかった Asset(ADR-0051 4章)には原本が無い。
+    if asset.content_withheld_at is not None:
+        raise HTTPException(status_code=410, detail=t("mods.contentWithheld"))
     content = store.open_content(asset.blob_key, asset.sha256, "original")
     if content is None:
         raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))

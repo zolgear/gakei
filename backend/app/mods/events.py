@@ -200,27 +200,40 @@ def asset_ingested_subject(db: Session, asset: Asset, source: str) -> contract.A
     )
 
 
-def run_finished_subject(db: Session, run: Run) -> contract.RunFinishedSubject:
-    outputs = (
-        db.execute(
-            select(Asset).where(Asset.produced_by_run_id == run.id).order_by(Asset.output_index)
+def run_finished_subject(
+    db: Session,
+    run: Run,
+    *,
+    status: str | None = None,
+    outputs: list[contract.ImageRef] | None = None,
+    usage: dict[str, Any] | None = None,
+) -> contract.RunFinishedSubject:
+    """`status`・`outputs`・`usage` は、「判定を待つ」購読に、出力を取り込む前(Run の状態を
+    書く前)の値を渡すときだけ指定する(ADR-0051 2章)。"""
+    if outputs is None:
+        rows = (
+            db.execute(
+                select(Asset).where(Asset.produced_by_run_id == run.id).order_by(Asset.output_index)
+            )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
+        outputs = [image_ref(asset) for asset in rows]
+    if usage is None:
+        usage = dict(run.usage) if isinstance(run.usage, dict) else None
     error = None
     if run.error_code or run.error_message:
         error = contract.RunError(code=run.error_code, message=run.error_message)
     return contract.RunFinishedSubject(
         run_id=str(run.id),
-        status=str(run.status),
+        status=status or str(run.status),
         provider=run.provider,
         model=run.model,
         operation=str(run.operation),
         prompt=run.prompt,
         params=run_params(run),
         inputs=run_inputs(db, run.id, sent_only=False),
-        outputs=[image_ref(asset) for asset in outputs],
-        usage=dict(run.usage) if isinstance(run.usage, dict) else None,
+        outputs=outputs,
+        usage=usage,
         error=error,
     )

@@ -27,6 +27,7 @@ from app.domain.assets import MAX_UPLOAD_BYTES, IngestError, ingest_upload
 from app.domain.models import AssetKind
 from app.domain.storage import AssetStore
 from app.i18n import t
+from app.mods.gate import ingest_gate
 
 router = APIRouter(tags=["uploads"])
 
@@ -134,7 +135,15 @@ async def _upload(
             db.rollback()
             raise HTTPException(status_code=404, detail=t("uploads.notFound"))
         try:
-            result = ingest_upload(db, store, data, AssetKind.UPLOAD, viewer=viewer)
+            result = ingest_upload(
+                db,
+                store,
+                data,
+                AssetKind.UPLOAD,
+                viewer=viewer,
+                # ADR-0051 2章: 「判定を待つ」購読があれば、原本を書く前に呼ぶ。
+                gate=ingest_gate(getattr(request.app.state, "mods", None), "url"),
+            )
         except IngestError as e:
             # 取り込めなかったときはチケットを使用済みにしない(期限内なら送り直せる)。
             db.rollback()

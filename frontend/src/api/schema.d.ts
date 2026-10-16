@@ -2409,6 +2409,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mods/{mod_id}/verdicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Receive Mod Verdicts */
+        post: operations["receive_mod_verdicts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/shares/{token}": {
         parameters: {
             query?: never;
@@ -2818,6 +2835,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -2848,6 +2872,9 @@ export interface components {
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
             content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
             composition?: components["schemas"]["AssetComposition"] | null;
+            /** Verdicts */
+            verdicts?: components["schemas"]["ModVerdictView"][];
+            content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
         };
         /**
          * AssetEmbeddingStatus
@@ -3029,6 +3056,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
         };
         /**
          * AssetTagAddRequest
@@ -3092,6 +3126,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -3122,6 +3163,9 @@ export interface components {
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
             content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
             composition?: components["schemas"]["AssetComposition"] | null;
+            /** Verdicts */
+            verdicts?: components["schemas"]["ModVerdictView"][];
+            content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -4219,6 +4263,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Max Score */
             max_score: number;
             /** Hash Missing */
@@ -4340,13 +4391,14 @@ export interface components {
          *     - `embedding_failed`: その画像のベクトルの計算に失敗した
          *     - `embedding_missing`: その画像のベクトルがまだ無い(計算を頼んでいない)
          *     - `embedding_not_supported`: マスクは対象外
+         *     - `content_withheld`: Mod の `deny` の判定で画像を残さなかった(ADR-0051 4章)
          */
         EmbeddingErrorDetail: {
             /**
              * Code
              * @enum {string}
              */
-            code: "embeddings_unavailable" | "embedding_pending" | "embedding_failed" | "embedding_missing" | "embedding_not_supported";
+            code: "embeddings_unavailable" | "embedding_pending" | "embedding_failed" | "embedding_missing" | "embedding_not_supported" | "content_withheld";
             /** Message */
             message: string;
         };
@@ -4727,6 +4779,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
         };
         /**
          * LineageEdge
@@ -5214,6 +5273,59 @@ export interface components {
             response?: unknown;
             /** Error */
             error?: string | null;
+        };
+        /**
+         * ModVerdictReceiveResponse
+         * @description `POST /api/mods/{mod_id}/verdicts` の応答(ADR-0051 8章)。
+         */
+        ModVerdictReceiveResponse: {
+            /** Accepted */
+            accepted: number;
+        };
+        /**
+         * ModVerdictView
+         * @description Mod の判定(ADR-0051 4章・5章)。Mod ごとの最新だけを返す。
+         */
+        ModVerdictView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mod Kind
+             * @enum {string}
+             */
+            mod_kind: "webhook" | "python";
+            /** Mod Id */
+            mod_id: string;
+            /** Mod Name */
+            mod_name: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "ok" | "flag" | "deny";
+            /** Label */
+            label?: string | null;
+            /** Score */
+            score?: number | null;
+            /** Message */
+            message?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Url */
+            url?: string | null;
+            /**
+             * Propagated
+             * @default false
+             */
+            propagated: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * ModWebhookCreateRequest
@@ -6124,6 +6236,11 @@ export interface components {
             /** Allow Original */
             allow_original: boolean;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
         };
         /**
          * PublicShareEdge
@@ -6440,6 +6557,10 @@ export interface components {
             /** Inputs */
             inputs?: components["schemas"]["RunInputRef"][];
             imported?: components["schemas"]["RunImportInfo"] | null;
+            /** Verdicts */
+            verdicts?: components["schemas"]["ModVerdictView"][];
+            /** Mod Invocations */
+            mod_invocations?: components["schemas"]["RunModInvocationView"][];
         };
         /**
          * RunEvent
@@ -6532,6 +6653,11 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
         };
         /** RunListResponse */
         RunListResponse: {
@@ -6539,6 +6665,46 @@ export interface components {
             items: components["schemas"]["RunSummary"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /**
+         * RunModInvocationView
+         * @description Mod の呼び出しの記録(ADR-0051 5章)。Run の詳細には `ai.before_send` のものだけを返す。
+         *     運用の情報(HTTP の状態、例外の種類)は含めない。
+         */
+        RunModInvocationView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mod Kind
+             * @enum {string}
+             */
+            mod_kind: "webhook" | "python";
+            /** Mod Id */
+            mod_id: string;
+            /** Mod Name */
+            mod_name: string;
+            /** Event */
+            event: string;
+            /** Purpose */
+            purpose?: string | null;
+            /** Outcome */
+            outcome: string;
+            /** Effective */
+            effective?: ("allow" | "deny") | null;
+            /** Reason */
+            reason?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** RunOutputRef */
         RunOutputRef: {
@@ -6554,6 +6720,11 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
         };
         /**
          * RunPromptTemplate
@@ -6887,6 +7058,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Produced By Run Id */
             produced_by_run_id: string | null;
             /**
@@ -7063,6 +7241,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Score */
             score: number;
         };
@@ -13369,6 +13554,56 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    receive_mod_verdicts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mod_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModVerdictReceiveResponse"];
+                };
+            };
+            /** @description 署名が無い・合わない、または時刻が古い */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description その Mod に届けていない Asset・Run への判定を含む */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook が無い、または無効 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 本文が判定の配列の形でない */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

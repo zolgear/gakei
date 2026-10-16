@@ -67,7 +67,13 @@ from app.annotation.engines import (
     wants_translation,
 )
 from app.annotation.wd_tagger import WdTagger
-from app.domain import annotation_settings, derivatives, llm_connections, tag_dictionaries
+from app.domain import (
+    annotation_settings,
+    content_withholding,
+    derivatives,
+    llm_connections,
+    tag_dictionaries,
+)
 from app.domain import annotations as annotations_domain
 from app.domain import content_rating as content_rating_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
@@ -428,6 +434,9 @@ class Annotator:
                 return t("annotations.assetDeleted")
             if asset.kind == AssetKind.MASK:
                 return t("annotations.maskNotSupported")
+            # ADR-0051 4章: `deny` の判定を受けた・画像を残さなかった画像は VLM・LLM に送らない。
+            if content_withholding.blocked_asset_ids(session, [asset.id]):
+                return t("mods.contentWithheld")
             config = annotation_settings.load(session)
             engines = annotations_domain.usable_engines(config, self.settings)
             if not engines:
@@ -791,6 +800,8 @@ class Annotator:
                 return t("contentRating.assetDeleted")
             if asset.kind == AssetKind.MASK:
                 return t("contentRating.maskNotSupported")
+            if asset.content_withheld_at is not None:
+                return t("mods.contentWithheld")
             config = annotation_settings.load(session)
             if not content_rating_domain.usable(config, self.settings):
                 return t("contentRating.notUsable")

@@ -37,8 +37,12 @@ def _utcnow() -> datetime:
 
 
 def is_target(asset: Asset) -> bool:
-    """計算の対象か(マスクと削除済みは対象外)。"""
-    return asset.kind != AssetKind.MASK and asset.deleted_at is None
+    """計算の対象か(マスクと削除済みと、画像を残さなかった Asset(ADR-0051 4章)は対象外)。"""
+    return (
+        asset.kind != AssetKind.MASK
+        and asset.deleted_at is None
+        and asset.content_withheld_at is None
+    )
 
 
 def _queue(row: AssetEmbedding, now: datetime) -> None:
@@ -51,7 +55,10 @@ def _queue(row: AssetEmbedding, now: datetime) -> None:
 
 def request_embedding(db: Session, asset: Asset, model_key: str) -> bool:
     """1枚の(再)計算を待ち行列に入れる。既に queued / running なら何もしない(False)。
-    計算済みのベクトルは、計算し直すまで残す。"""
+    計算済みのベクトルは、計算し直すまで残す。画像を残さなかった Asset(ADR-0051 4章)は
+    入れない。"""
+    if asset.content_withheld_at is not None:
+        return False
     row = db.get(AssetEmbedding, (asset.id, model_key))
     now = _utcnow()
     if row is None:
@@ -99,6 +106,7 @@ def _pending_condition(model_key: str) -> Any:
     待ち行列にあるもの(queued / running)は含めない。"""
     return and_(
         Asset.deleted_at.is_(None),
+        Asset.content_withheld_at.is_(None),
         Asset.kind != AssetKind.MASK,
         or_(AssetEmbedding.asset_id.is_(None), AssetEmbedding.status == STATUS_FAILED),
     )

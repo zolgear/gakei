@@ -35,6 +35,7 @@ export function toLineageResponse(data: PublicShareResponse): AssetLineageRespon
           mime: a.mime,
           restorable: false,
           focal_point: a.focal_point ?? null,
+          content_withheld: a.content_withheld,
         },
       }),
     ),

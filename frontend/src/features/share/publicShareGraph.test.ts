@@ -9,6 +9,7 @@ const base = {
   created_at: '2026-09-30T00:00:00Z',
   title: null,
   allow_original: true,
+  content_withheld: false,
 }
 
 describe('toLineageResponse', () => {

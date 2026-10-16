@@ -54,7 +54,7 @@ from PIL import Image
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import sessionmaker
 
-from app.domain import derivatives, embedding_index, embedding_settings
+from app.domain import content_withholding, derivatives, embedding_index, embedding_settings
 from app.domain import embeddings as embeddings_domain
 from app.domain import perceptual_hash as perceptual_hash_domain
 from app.domain import prompt_embeddings as prompt_domain
@@ -454,6 +454,11 @@ class Embedder:
                 if asset.kind == AssetKind.MASK:
                     job.failures.append((asset_id, t("embeddings.maskNotSupported")))
                     continue
+                # ADR-0051 4章: `deny` の判定を受けた・画像を残さなかった画像は埋め込まない
+                # (リモートの埋め込みに送らない)。
+                if content_withholding.blocked_asset_ids(session, [asset.id]):
+                    job.failures.append((asset_id, t("mods.contentWithheld")))
+                    continue
                 targets.append(asset)
                 job.refs[asset.id] = mods_events.image_ref(asset, "primary")
                 job.creators[asset.id] = asset.created_by_user_id
@@ -753,6 +758,7 @@ class Embedder:
                 .outerjoin(AssetPerceptualHash, AssetPerceptualHash.asset_id == Asset.id)
                 .where(
                     Asset.deleted_at.is_(None),
+                    Asset.content_withheld_at.is_(None),
                     Asset.kind != AssetKind.MASK,
                     embedded,
                     or_(

@@ -389,6 +389,52 @@ class AssetSummary(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049)。未判定なら null。
     content_rating: ContentRatingLevel | None = None
+    # Mod の `deny` の判定で画像(原本と派生)を残さなかったか(ADR-0051 4章)。true なら
+    # `/content` は 410 で、画面は「画像なし(拒否)」の置き換えの表示にする。
+    content_withheld: bool = False
+    content_withheld_at: datetime | None = None
+
+
+class ModVerdictView(BaseModel):
+    """Mod の判定(ADR-0051 4章・5章)。Mod ごとの最新だけを返す。"""
+
+    id: uuid.UUID
+    mod_kind: Literal["webhook", "python"]
+    mod_id: str
+    # 判定を記録した時点の Mod の名前。
+    mod_name: str
+    verdict: Literal["ok", "flag", "deny"]
+    label: str | None = None
+    # 0〜1(任意)。
+    score: float | None = None
+    message: str | None = None
+    # 外部のシステムの受付番号など。
+    reference: str | None = None
+    # 外部の詳細へのリンク(http / https)。
+    url: str | None = None
+    # 同じ内容(sha256)のほかの Asset への判定を及ぼしたものなら true。
+    propagated: bool = False
+    created_at: datetime
+
+
+class RunModInvocationView(BaseModel):
+    """Mod の呼び出しの記録(ADR-0051 5章)。Run の詳細には `ai.before_send` のものだけを返す。
+    運用の情報(HTTP の状態、例外の種類)は含めない。"""
+
+    id: uuid.UUID
+    mod_kind: Literal["webhook", "python"]
+    mod_id: str
+    mod_name: str
+    event: str
+    purpose: str | None = None
+    # Mod の答え(allow / deny / ok / error / timeout / skipped)。
+    outcome: str
+    # GAKEI がそれをどう扱ったか(失敗時の扱いを当てた後の allow / deny)。
+    effective: Literal["allow", "deny"] | None = None
+    reason: str | None = None
+    reference: str | None = None
+    duration_ms: int
+    created_at: datetime
 
 
 class AssetTagRef(BaseModel):
@@ -734,6 +780,11 @@ class AssetDetail(AssetSummary):
     # 配置の結果(kind=composite)のレシピと素材(ADR-0050)。それ以外、またはレシピの無い配置
     # (素材を範囲の外にして書き出した ZIP から取り込んだものなど)は null。
     composition: AssetComposition | None = None
+    # Mod の判定(ADR-0051 4章)。Mod ごとの最新で、新しい順。
+    verdicts: list[ModVerdictView] = Field(default_factory=list)
+    # 画像を残さなかった理由の判定(`content_withheld` が true のときだけ。系列の ZIP から
+    # 画像の無いノードとして取り込んだものなど、判定が無ければ null)。
+    content_withheld_verdict: ModVerdictView | None = None
 
 
 class AssetUploadResponse(AssetDetail):
@@ -997,6 +1048,8 @@ class RunInputRef(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049)。未判定・マスクは null。
     content_rating: ContentRatingLevel | None = None
+    # 画像を残さなかったか(ADR-0051 4章)。
+    content_withheld: bool = False
 
 
 class RunOutputRef(BaseModel):
@@ -1008,6 +1061,8 @@ class RunOutputRef(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049)。未判定なら null。
     content_rating: ContentRatingLevel | None = None
+    # 画像を残さなかったか(ADR-0051 4章)。
+    content_withheld: bool = False
 
 
 class RunSummary(BaseModel):
@@ -1078,6 +1133,10 @@ class RunDetail(RunSummary):
     inputs: list[RunInputRef] = Field(default_factory=list)
     # 系列の ZIP から取り込んだ Run(`origin = 'import'`)だけ。それ以外は null(ADR-0037)。
     imported: RunImportInfo | None = None
+    # Run に対する Mod の判定(ADR-0051 4章)。Mod ごとの最新で、新しい順。
+    verdicts: list[ModVerdictView] = Field(default_factory=list)
+    # `ai.before_send` の呼び出しの結果(ADR-0051 5章)。古い順。
+    mod_invocations: list[RunModInvocationView] = Field(default_factory=list)
 
 
 class RunListResponse(BaseModel):
@@ -1129,6 +1188,9 @@ class LineageAssetInfo(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049)。焦点と同じく、埋め込みノードは対応付いたときだけ。
     content_rating: ContentRatingLevel | None = None
+    # 画像を残さなかったか(ADR-0051 4章)。埋め込みノードは常に false。
+    content_withheld: bool = False
+    content_withheld_at: datetime | None = None
 
 
 class LineageRunInfo(BaseModel):
@@ -2280,6 +2342,7 @@ class EmbeddingErrorDetail(BaseModel):
     - `embedding_failed`: その画像のベクトルの計算に失敗した
     - `embedding_missing`: その画像のベクトルがまだ無い(計算を頼んでいない)
     - `embedding_not_supported`: マスクは対象外
+    - `content_withheld`: Mod の `deny` の判定で画像を残さなかった(ADR-0051 4章)
     """
 
     code: Literal[
@@ -2288,6 +2351,7 @@ class EmbeddingErrorDetail(BaseModel):
         "embedding_failed",
         "embedding_missing",
         "embedding_not_supported",
+        "content_withheld",
     ]
     message: str
 
@@ -2467,6 +2531,8 @@ class PublicShareAsset(BaseModel):
     allow_original: bool
     # サムネイルの焦点(ADR-0043)。
     focal_point: FocalPoint | None = None
+    # 画像を残さなかったか(ADR-0051 9章)。true なら画像は返さない(判定は含めない)。
+    content_withheld: bool = False
 
 
 class PublicShareRun(BaseModel):
@@ -2763,7 +2829,8 @@ class ModWebhookView(BaseModel):
     send_images: bool
     timeout_seconds: float
     on_failure: ModOnFailure
-    # 「判定を待つ」(この版では保存するだけで、まだ使わない)。
+    # 「判定を待つ」(ADR-0051 2章)。`asset.ingested` と `run.finished` を、原本をストレージに
+    # 書く前に同期で呼ぶ。
     wait_for_verdict: bool
     order: int | None = None
     secret_set: bool
@@ -2941,3 +3008,10 @@ class ModDeliveryView(BaseModel):
 
 class ModDeliveryListResponse(BaseModel):
     items: list[ModDeliveryView]
+
+
+class ModVerdictReceiveResponse(BaseModel):
+    """`POST /api/mods/{mod_id}/verdicts` の応答(ADR-0051 8章)。"""
+
+    # 記録した判定の数。
+    accepted: int

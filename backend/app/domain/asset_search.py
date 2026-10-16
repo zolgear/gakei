@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
 from app.domain import content_rating as content_rating_domain
+from app.domain import content_withholding
 from app.domain import semantic_search as semantic_domain
 from app.domain.asset_groups import group_for_asset, list_groups
 from app.domain.models import Asset, AssetGroupMember, Run, RunInput, RunInputRole
@@ -316,6 +317,12 @@ def asset_details(db: Session, viewer: CurrentUser, asset: Asset) -> dict[str, A
             if parent is not None and not visible_asset_ids(db, viewer, [parent]):
                 parent = None
             payload["primary_parent_asset_id"] = str(parent) if parent else None
+    # Mod の判定と、画像を残さなかったか(ADR-0051 4章・9章)。
+    payload["content_withheld"] = asset.content_withheld_at is not None
+    payload["verdicts"] = [
+        view.model_dump(mode="json")
+        for view in content_withholding.verdict_views(db, asset_id=asset.id)
+    ]
     return payload
 
 

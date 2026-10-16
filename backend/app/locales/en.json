@@ -922,7 +922,8 @@
         "sourceVersion": "Source GAKEI version"
       },
       "footerFiles": "assets/ holds the original images, and manifest.json holds the same record in machine-readable form. This ZIP, including manifest.json, can be imported into GAKEI with \"Import lineage\".",
-      "footerMadeWith": "Exported with GAKEI (a self-hosted image generation tool)."
+      "footerMadeWith": "Exported with GAKEI (a self-hosted image generation tool).",
+      "contentWithheld": "No image (denied)"
     },
     "readme": {
       "body": "GAKEI image lineage record (delivery ZIP)\n\nThis ZIP is a record of an image lineage exported from GAKEI.\nGAKEI is a self-hosted web tool for using image generation APIs such as OpenAI's.\nRepository: {repo_url}\n\nContents of this ZIP:\n  index.html     A page for reading this record. Extract the ZIP, then open it in a browser (no internet connection needed).\n  assets/        The original images, byte for byte as they were generated or stored.\n  manifest.json  The same record in machine-readable form ({format}). It can be imported into GAKEI with \"Import lineage\".\n  README.txt     This file.\n\nMain image ID: {root}\nExported at (UTC): {exported_at}\nGAKEI version: {version}\n\nThis ZIP has no tamper detection or signature. The sha256 of every image is listed in index.html and manifest.json; compute an image file's sha256 and compare to confirm that the image has not been replaced.\n  Windows: certutil -hashfile <file> SHA256\n  macOS / Linux: shasum -a 256 <file>"
@@ -1004,6 +1005,16 @@
     "tooManyWebhooks": "You can register up to {max} webhooks",
     "unknownSetting": "This mod has no setting {key}",
     "invalidSettingValue": "The value of the setting {key} has the wrong type",
-    "enableFirst": "Enable the mod first"
+    "enableFirst": "Enable the mod first",
+    "contentWithheld": "This image was not kept because a Mod denied it",
+    "contentWithheldWithVerdict": "This image was not kept because a Mod denied it ({mod}: {label} — {message})",
+    "assetDenied": "Image {id} was denied by a Mod and cannot be sent to an external AI",
+    "inputDenied": "Input image {id} was denied by a Mod and cannot be used",
+    "checkFailedLabel": "Check failed",
+    "attachmentDenied": "An attached image was denied by a Mod and cannot be sent",
+    "verdictUnauthorized": "The signature is missing or invalid, or the timestamp is too old",
+    "verdictTooLarge": "The request body is too large",
+    "verdictInvalid": "The verdicts are not in a valid form: {error}",
+    "verdictTargetNotAllowed": "Verdicts are accepted only for items delivered to this Mod: {target}"
   }
 }

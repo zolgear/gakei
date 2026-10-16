@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain import asset_groups as asset_groups_domain
 from app.domain import assets as assets_domain
+from app.domain import content_withholding
 from app.domain.models import (
     Asset,
     AssetKind,
@@ -175,6 +176,21 @@ def _load_inputs(
         return inputs
 
 
+def _blocked_input_message(session_factory: sessionmaker, run_id: uuid.UUID) -> str | None:
+    """入力に `deny` の判定を受けた・画像を残さなかった Asset があれば、その理由の文。"""
+    with session_factory() as session:
+        asset_ids = list(
+            session.execute(select(RunInput.asset_id).where(RunInput.run_id == run_id))
+            .scalars()
+            .all()
+        )
+        blocked = content_withholding.blocked_asset_ids(session, asset_ids)
+        if not blocked:
+            return None
+        first = next(asset_id for asset_id in asset_ids if asset_id in blocked)
+        return t("mods.inputDenied", id=first)
+
+
 def _save_partial(partial_dir: Path, index: int, data: bytes) -> None:
     partial_dir.mkdir(parents=True, exist_ok=True)
     (partial_dir / f"{index}.png").write_bytes(data)
@@ -221,15 +237,31 @@ def _finish_run_succeeded(
     待ち行列に入れる。Mod の `asset.ingested` と `run.finished`(ADR-0051)も同じトランザクションで
     積む。"""
     from app.domain import ingest_hooks
+    from app.mods.gate import judge_run_outputs
 
     queued = ingest_hooks.IngestQueued()
+    # 形式と大きさの確認はメモリの中で先に済ませる(「判定を待つ」購読に、保存の前の出力を
+    # 渡すため。ADR-0051 2章)。
+    prepared = [
+        assets_domain.prepare_image(output.data, AssetKind.GENERATED) for output in result.outputs
+    ]
     with session_factory() as session:
         run = session.get(Run, run_id)
         assert run is not None
 
+        # ADR-0051 2章: 「判定を待つ」購読があれば、出力をまとめて送って判定を待つ。`deny` の
+        # 出力は原本を書かない。
+        denials = judge_run_outputs(
+            mods,
+            session,
+            run,
+            prepared,
+            usage=sanitize_external(result.usage) if isinstance(result.usage, dict) else None,
+        )
+
         output_ids: list[uuid.UUID] = []
         storage_model = _storage_model_label(session, run)
-        for index, output in enumerate(result.outputs):
+        for index, (output, item) in enumerate(zip(result.outputs, prepared, strict=True)):
             asset = assets_domain.ingest(
                 session,
                 store,
@@ -240,6 +272,8 @@ def _finish_run_succeeded(
                 created_by_user_id=run.created_by_user_id,
                 provider=run.provider,
                 model=storage_model,
+                prepared=item,
+                denial=denials.get(item.asset_id),
             )
             output_ids.append(asset.id)
             if annotator is not None:
@@ -463,6 +497,12 @@ class Runner:
             )
 
         try:
+            # ADR-0051 4章: `deny` の判定を受けた・画像を残さなかった入力があれば、送る前の
+            # チェック(`ai.before_send`)を呼ぶ前に断る(Run を作った後に判定が届いた場合)。
+            blocked = await asyncio.to_thread(_blocked_input_message, self.session_factory, run.id)
+            if blocked is not None:
+                await self._mark_failed(run.id, "hook_denied", blocked, None)
+                return
             # 入力読み込み・実行・出力の ingest のどこで失敗しても failed として記録する。
             inputs = await asyncio.to_thread(_load_inputs, self.session_factory, self.store, run.id)
             # ADR-0051 2章: 外部へ送る直前のチェック(`ai.before_send`、目的 `image_run`)。

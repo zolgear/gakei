@@ -394,12 +394,18 @@ class ModContext:
     - `settings`: マニフェストに書いた設定の項目の値(秘密の項目も値が入る。ログに出さないこと)。
     - `open_image`: 画像の原本のバイト列を返す。`ImageRef` か Asset の id を渡す。
     - `logger`: この Mod のロガー。
+    - `submit_verdicts`: 判定を後から送る(ADR-0051 8章。外部のシステムの結果を待ってから
+      判定を返したいとき)。対象は、この Mod に届いた Asset・Run だけ(`asset.ingested` /
+      `run.finished` で届いたもの。対象外が混じると何も記録せずに例外)。記録した数を返す。
+      `deny` の判定は、応答で返したときと同じく画像を残さない処理をする。関数の中で受け取った
+      `ctx` を覚えておき、後で呼んでよい。
     """
 
     mod_id: str
     settings: Mapping[str, Any]
     open_image: Callable[[ImageRef | str], Awaitable[bytes]]
     logger: logging.Logger
+    submit_verdicts: Callable[[list[Verdict]], Awaitable[int]] | None = None
 
 
 __all__ = [

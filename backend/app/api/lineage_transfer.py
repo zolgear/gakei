@@ -173,7 +173,14 @@ def import_lineage(
         raise HTTPException(status_code=e.status_code, detail=str(e)) from e
     try:
         import_domain.verify_contents(archive)
-        result = import_domain.import_archive(db, store, user, archive)
+        result = import_domain.import_archive(
+            db,
+            store,
+            user,
+            archive,
+            # ADR-0051 2章: 「判定を待つ」購読があれば、原本を書く前に呼ぶ。
+            mods=mods,
+        )
         # ADR-0024 4章・ADR-0033 5章: 新しく作った Asset だけ、自動タイトル・タグと埋め込みの
         # 待ち行列に入れる(設定がオンのときだけ)。
         queued = ingest_hooks.IngestQueued()

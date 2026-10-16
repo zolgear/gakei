@@ -10,7 +10,14 @@ function assetNode(id: string, depth: number): LineageNode {
     deleted: false,
     embedded: false,
     local_hidden: false,
-    asset: { kind: 'generated', width: 1024, height: 1024, mime: 'image/png', restorable: false },
+    asset: {
+      kind: 'generated',
+      width: 1024,
+      height: 1024,
+      mime: 'image/png',
+      restorable: false,
+      content_withheld: false,
+    },
   }
 }
 

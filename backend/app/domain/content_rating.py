@@ -305,6 +305,9 @@ def request_judge(db: Session, asset: Asset) -> AssetContentRating:
     row = _get_or_create(db, asset.id)
     if row.status in (STATUS_QUEUED, STATUS_RUNNING):
         return row
+    # 画像を残さなかった Asset(ADR-0051 4章)は判定しない。
+    if asset.content_withheld_at is not None:
+        return row
     _queue(row, _utcnow())
     db.flush()
     return row
@@ -315,6 +318,8 @@ def enqueue_on_ingest(db: Session, asset: Asset, settings: Settings) -> bool:
     タイトル・タグの `auto_on_ingest` とは別に常に待ち行列に入れる。マスクと削除済みは
     入れない。入れたら True(呼び出し側は commit 後に worker を起こす)。"""
     if asset.kind == AssetKind.MASK or asset.deleted_at is not None:
+        return False
+    if asset.content_withheld_at is not None:
         return False
     config = annotation_settings.load(db)
     if not usable(config, settings):
@@ -350,6 +355,7 @@ def _pending_condition() -> Any:
     )
     return and_(
         Asset.deleted_at.is_(None),
+        Asset.content_withheld_at.is_(None),
         Asset.kind != AssetKind.MASK,
         or_(unjudged, outdated),
     )

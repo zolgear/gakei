@@ -333,6 +333,9 @@ def _queue(row: AssetAnnotation, now: datetime) -> None:
 
 def request_annotation(db: Session, asset: Asset) -> None:
     """1枚の(再)推定を待ち行列に入れる。既に queued / running なら何もしない。"""
+    # 画像を残さなかった Asset(ADR-0051 4章)は推定しない(VLM に送らない)。
+    if asset.content_withheld_at is not None:
+        return
     row = _get_or_create_annotation(db, asset.id)
     if row.auto_status in (STATUS_QUEUED, STATUS_RUNNING):
         return
@@ -345,6 +348,8 @@ def enqueue_on_ingest(db: Session, asset: Asset, settings: Settings) -> bool:
     しない。待ち行列に入れたら True(呼び出し側は commit 後に worker を起こす)。"""
     if asset.kind == AssetKind.MASK or asset.deleted_at is not None:
         return False
+    if asset.content_withheld_at is not None:
+        return False
     config = annotation_settings.load(db)
     if not config.auto_on_ingest or not usable_engines(config, settings):
         return False
@@ -356,6 +361,7 @@ def _pending_condition() -> Any:
     """未実行(注釈の行が無い、または auto_status が NULL)・削除済みでない・マスク以外。"""
     return and_(
         Asset.deleted_at.is_(None),
+        Asset.content_withheld_at.is_(None),
         Asset.kind != AssetKind.MASK,
         or_(AssetAnnotation.asset_id.is_(None), AssetAnnotation.auto_status.is_(None)),
     )

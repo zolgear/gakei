@@ -1169,6 +1169,9 @@ class ModVerdict(Base):
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     reference: Mapped[str | None] = mapped_column(Text, nullable=True)
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 同じ内容(sha256)のほかの Asset に `deny` を及ぼしたときに足した行なら、元の判定の id
+    # (ADR-0051 4章)。Mod が返した判定そのものは null。
+    propagated_from_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 

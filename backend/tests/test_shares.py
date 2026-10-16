@@ -351,6 +351,8 @@ _ASSET_KEYS = {
     "allow_original",
     # サムネイルの焦点(ADR-0043)。顔のおおよその位置で、秘密ではない。
     "focal_point",
+    # 画像を残さなかったか(ADR-0051 9章)。真偽だけで、判定(label・message)は含めない。
+    "content_withheld",
 }
 _RUN_KEYS = {"id", "operation", "model", "prompt", "params", "created_at", "text_outputs"}
 
@@ -631,6 +633,8 @@ _UNAUTHENTICATED_PREFIXES = (
     "/api/downloads/",
     # ログイン不要の共有リンク(ADR-0029 6章)。
     "/api/public/",
+    # Mod の判定の受付(ADR-0051 8章)。認証は Webhook の鍵による署名。
+    "/api/mods/",
 )
 # 前方一致ではなく完全一致で許すルート。生存確認(Issue #43)は `{"status": "ok"}` だけを返す。
 _UNAUTHENTICATED_PATHS = frozenset({"/api/health"})

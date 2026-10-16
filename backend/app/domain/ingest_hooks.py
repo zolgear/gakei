@@ -63,7 +63,7 @@ class IngestQueued:
 
 def focal_targets(asset: Asset) -> IngestQueued:
     """焦点を求める対象なら、その Asset を入れた `IngestQueued`(マスクは入れない)。"""
-    if asset.kind == AssetKind.MASK:
+    if asset.kind == AssetKind.MASK or asset.content_withheld_at is not None:
         return IngestQueued()
     return IngestQueued(focal_asset_ids=(asset.id,))
 
