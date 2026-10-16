@@ -243,6 +243,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
               <AssetThumb
                 assetId={firstOutput.asset_id}
                 rating={firstOutput.content_rating}
+                withheld={firstOutput.content_withheld}
                 badge
                 // 左下は親のサムネイル、右上は出力の枚数なので左上に置く。
                 badgePosition="top-left"

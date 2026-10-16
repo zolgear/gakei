@@ -345,3 +345,10 @@
     min-height: 44px;
   }
 }
+
+/* Mod の判定の印(ADR-0051 5章)。見出しの行の左端に置き、ボタンの並びは右寄せのまま。 */
+.verdictMark {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-right: auto;
+}

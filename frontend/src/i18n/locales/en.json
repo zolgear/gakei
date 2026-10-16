@@ -3298,5 +3298,38 @@
       "saveFailed": "Could not save",
       "judgeFailed": "Could not start rating"
     }
+  },
+  "mods": {
+    "withheld": "No image (denied)",
+    "withheldDescription": "No image (denied): a mod's verdict kept this image from being stored",
+    "withheldWithLabel": "No image (denied): {label}",
+    "withheldNotice": "A mod's verdict (deny) kept this image from being stored. The records and lineage remain.",
+    "withheldNoticeAt": "A mod's verdict (deny) removed this image on {date}. The records and lineage remain.",
+    "withheldNoVerdict": "The verdict behind this is no longer on record.",
+    "withheldUnavailable": "Unavailable because there is no image",
+    "verdictsHeading": "Verdicts",
+    "verdicts": {
+      "ok": "OK",
+      "flag": "Flagged",
+      "deny": "Denied"
+    },
+    "flagMark": "Mod verdict: flagged",
+    "score": "Score",
+    "reference": "Reference",
+    "openExternal": "Open details",
+    "propagated": "Carried over from a verdict on an image with the same content",
+    "checksHeading": "Checks before sending",
+    "checkOutcomes": {
+      "allow": "Allowed",
+      "deny": "Denied",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "effectiveDeny": "Stopped",
+    "effectiveAllow": "Let through",
+    "inputBlocked": "Denied",
+    "inputBlockedTitle": "Images denied by a mod's verdict can't be used as input",
+    "inputsBlockedPresent": "Some input images were denied by a mod's verdict. Remove them",
+    "cannotUseAsInput": "Images denied by a mod's verdict can't be used as input"
   }
 }

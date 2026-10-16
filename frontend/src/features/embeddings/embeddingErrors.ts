@@ -7,10 +7,11 @@
  * - `missing`: まだ計算していない。「計算する」を出す。
  * - `failed`: 計算に失敗した。「計算し直す」を出す。
  * - `notSupported`: マスクは対象外。何も出さない。
+ * - `withheld`: Mod の判定で画像を残さなかった(ADR-0051 4章)。ベクトルも消してあるので計算もできない。
  */
 import { ApiError } from '../../api/client'
 
-export type EmbeddingErrorKind = 'unavailable' | 'pending' | 'missing' | 'failed' | 'notSupported'
+export type EmbeddingErrorKind = 'unavailable' | 'pending' | 'missing' | 'failed' | 'notSupported' | 'withheld'
 
 const CODE_TO_KIND: Record<string, EmbeddingErrorKind> = {
   embeddings_unavailable: 'unavailable',
@@ -18,6 +19,7 @@ const CODE_TO_KIND: Record<string, EmbeddingErrorKind> = {
   embedding_missing: 'missing',
   embedding_failed: 'failed',
   embedding_not_supported: 'notSupported',
+  content_withheld: 'withheld',
 }
 
 /** 409 の `code` から種類を引く。埋め込みの 409 でなければ null(通信の失敗などとして扱う)。 */

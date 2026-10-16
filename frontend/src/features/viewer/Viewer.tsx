@@ -36,6 +36,8 @@ import { ShareDialog } from '../share/ShareDialog'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import { importToastFromState } from '../lineage-transfer/lineageTransfer'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
+import { hasDenyVerdict, hasFlagVerdict, isSendBlocked, isWithheld } from '../mods/modVerdicts'
+import { VerdictBadge } from '../mods/VerdictList'
 import styles from './Viewer.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -163,6 +165,10 @@ export function Viewer({ assetId }: ViewerProps) {
   }, [outputNav, deleteConfirmOpen, addToInputs.isPending, shareOpen, exportOpen, navigate])
 
   const isReady = !assetQuery.isLoading && !assetQuery.isError && asset !== undefined
+  // 画像を残さなかった(ADR-0051 4章)。画像を使う操作(ダウンロード、共有、入力に使う)を止める。
+  const withheld = isWithheld(asset)
+  // 入力に使えない(画像なし、または最新の判定に deny がある)。
+  const sendBlocked = isSendBlocked(asset)
 
   return (
     <div className={styles.page}>
@@ -182,6 +188,10 @@ export function Viewer({ assetId }: ViewerProps) {
           <AssetCanvas
             asset={asset}
             contentRating={asset.content_rating ?? null}
+            withheld={withheld}
+            withheldLabel={asset.content_withheld_verdict?.label}
+            withheldMessage={asset.content_withheld_verdict?.message}
+            onImageError={() => queryClient.invalidateQueries({ queryKey: ['asset', asset.id] })}
             // 狭い幅では画像の枠の下に情報欄が続くので、枠の上でもページを縦にスクロールできるように
             // する(全体表示のときだけ。拡大したらパン)。
             pageScrollWhenFit={isMobile}
@@ -224,6 +234,12 @@ export function Viewer({ assetId }: ViewerProps) {
             {/* 見出しの行はパネルの上端に固定し、よく使う操作をアイコンで並べる(削除だけは末尾)。 */}
             <div className={styles.headerRow}>
               <h2 className={styles.heading}>Asset</h2>
+              {/* Mod の判定の印(ADR-0051 5章)。拒否を優先し、無ければ要確認。 */}
+              {(hasDenyVerdict(asset) || hasFlagVerdict(asset)) && (
+                <span className={styles.verdictMark} title={hasDenyVerdict(asset) ? undefined : t.mods.flagMark}>
+                  <VerdictBadge verdict={hasDenyVerdict(asset) ? 'deny' : 'flag'} />
+                </span>
+              )}
               <div className={styles.headerActions}>
                 {/* 生成元の Run の詳細へ直接移る(下の文字のリンクと同じ遷移先)。生成元がある画像
                     だけに出る。並びは右寄せなので、左端に置けば有無でほかのボタンの位置は変わらない。 */}
@@ -237,21 +253,34 @@ export function Viewer({ assetId }: ViewerProps) {
                     <RunDetailIcon />
                   </Link>
                 )}
-                <a
-                  className={styles.iconButton}
-                  href={assetUrl(asset.id, 'original', { download: true })}
-                  aria-label={t.viewer.downloadOriginal}
-                  title={t.viewer.downloadOriginal}
-                >
-                  <DownloadIcon />
-                </a>
+                {withheld ? (
+                  // 画像が無いのでダウンロードできない(位置を変えないよう、押せないボタンで残す)。
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t.viewer.downloadOriginal}
+                    title={t.mods.withheldUnavailable}
+                    disabled
+                  >
+                    <DownloadIcon />
+                  </button>
+                ) : (
+                  <a
+                    className={styles.iconButton}
+                    href={assetUrl(asset.id, 'original', { download: true })}
+                    aria-label={t.viewer.downloadOriginal}
+                    title={t.viewer.downloadOriginal}
+                  >
+                    <DownloadIcon />
+                  </a>
+                )}
                 <button
                   type="button"
                   className={styles.iconButton}
                   aria-label={t.viewer.useAsInput}
-                  title={t.viewer.useAsInput}
+                  title={sendBlocked ? t.mods.cannotUseAsInput : t.viewer.useAsInput}
                   onClick={() => addToInputs.request(asset.id)}
-                  disabled={Boolean(asset.deleted_at)}
+                  disabled={Boolean(asset.deleted_at) || sendBlocked}
                 >
                   <AddToInputIcon />
                 </button>
@@ -290,9 +319,9 @@ export function Viewer({ assetId }: ViewerProps) {
                     type="button"
                     className={styles.iconButton}
                     aria-label={t.share.button}
-                    title={t.share.buttonTooltip}
+                    title={withheld ? t.mods.withheldUnavailable : t.share.buttonTooltip}
                     onClick={() => setShareOpen(true)}
-                    disabled={Boolean(asset.deleted_at)}
+                    disabled={Boolean(asset.deleted_at) || withheld}
                   >
                     <ShareLinkIcon />
                   </button>
@@ -353,6 +382,7 @@ export function Viewer({ assetId }: ViewerProps) {
                       <AssetThumb
                         assetId={output.asset_id}
                         rating={output.content_rating}
+                        withheld={output.content_withheld}
                         style={focalStyle(output.focal_point)}
                         alt=""
                         loading="lazy"
@@ -394,7 +424,7 @@ export function Viewer({ assetId }: ViewerProps) {
         <ConfirmDialog
           open={deleteConfirmOpen}
           message={t.viewer.deleteConfirmMessage}
-          previewImageUrl={assetUrl(asset.id, 'thumb')}
+          previewImageUrl={withheld ? undefined : assetUrl(asset.id, 'thumb')}
           previewFocalPoint={asset.focal_point}
           previewDetail={`${asset.width} × ${asset.height}`}
           onConfirm={() => deleteMutation.mutate()}

@@ -29,6 +29,7 @@ import { assetKindLabel, formatDateTime } from '../../lib/format'
 import { useIsMobileViewport } from '../../lib/viewport'
 import { fmt, useI18n } from '../../i18n'
 import { AssetCanvas } from '../viewer/AssetCanvas'
+import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
 import { CompareCanvas } from '../compare/CompareCanvas'
 import { CompareModeSwitch } from '../compare/CompareModeSwitch'
 import { resolveEffectiveMode, type CompareMode } from '../compare/compareState'
@@ -264,6 +265,8 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
                 mode={effectiveCompareMode}
                 urlFor={compareUrlFor}
                 allowOriginal={compareAllowsOriginal(data, compareTargets)}
+                beforeWithheld={compareTargets.before.content_withheld}
+                afterWithheld={compareTargets.after.content_withheld}
               />
             </div>
           </div>
@@ -272,6 +275,7 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
             asset={selected}
             urlFor={(variant) => publicShareAssetUrl(token, selected.id, variant)}
             allowOriginal={original === 'allowed'}
+            withheld={selected.content_withheld}
           />
         )}
       </section>
@@ -338,7 +342,10 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
           </>
         )}
 
-        {original === 'allowed' ? (
+        {selected.content_withheld ? (
+          // 画像を残さなかった(ADR-0051 4章)。共有では判定(理由)は見せない(9章)。
+          <p className={styles.note}>{t.mods.withheldUnavailable}</p>
+        ) : original === 'allowed' ? (
           <a
             className={styles.downloadButton}
             href={publicShareAssetUrl(token, selected.id, 'original', { download: true })}
@@ -365,7 +372,11 @@ function PublicShareBody({ token, data, view, onNavigate }: PublicShareBodyProps
                     title={a.title ?? undefined}
                     onClick={() => showAsset(a.id)}
                   >
-                    <img src={thumbUrlFor(a.id)} alt="" className={`${styles.thumbImg} checkerboard`} />
+                    {a.content_withheld ? (
+                      <WithheldPlaceholder className={styles.thumbImg} />
+                    ) : (
+                      <img src={thumbUrlFor(a.id)} alt="" className={`${styles.thumbImg} checkerboard`} />
+                    )}
                   </button>
                 </li>
               ))}

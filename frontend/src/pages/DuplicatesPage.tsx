@@ -322,6 +322,7 @@ function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleS
           <AssetThumb
             assetId={asset.id}
             rating={thumbRating(asset)}
+            withheld={asset.content_withheld}
             badge
             className={`${styles.thumb} checkerboard`}
             style={focalStyle(asset.focal_point)}

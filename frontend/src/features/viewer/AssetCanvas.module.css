@@ -97,3 +97,9 @@
     width: 36px;
   }
 }
+
+/* 画像なし(拒否。ADR-0051)。置き換えの表示を枠の中に余白を取って置く(上のツールバーの行と重ならないように)。 */
+.withheldArea {
+  box-sizing: border-box;
+  padding: 56px 16px 16px;
+}

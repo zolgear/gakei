@@ -24,6 +24,7 @@ import { buildSimilarSearchPath } from '../search/searchQuerySync'
 import { RatingBadge } from '../content-rating/RatingBadge'
 import ratingStyles from '../content-rating/ContentRating.module.css'
 import styles from './MapPreviewPanel.module.css'
+import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
 
 interface MapPreviewPanelProps {
   assetId: string
@@ -105,14 +106,19 @@ export function MapPreviewPanel({
 
       <div className={styles.body}>
         <Link to={`/assets/${assetId}`} className={styles.imageLink} aria-label={m.openInViewer} title={m.openInViewer}>
-          <img
-            key={assetId}
-            src={assetUrl(assetId, 'preview')}
-            alt=""
-            className={styles.image}
-            data-rating-masked={ratingMasked || undefined}
-          />
-          {ratingMasked && (
+          {asset?.content_withheld ? (
+            // 画像を残さなかった(ADR-0051 4章。マップに出た後で判定を受けたとき)。読みに行かない。
+            <WithheldPlaceholder className={styles.image} label={asset.content_withheld_verdict?.label} />
+          ) : (
+            <img
+              key={assetId}
+              src={assetUrl(assetId, 'preview')}
+              alt=""
+              className={styles.image}
+              data-rating-masked={ratingMasked || undefined}
+            />
+          )}
+          {ratingMasked && !asset?.content_withheld && (
             <span className={styles.imageMask}>
               {rating ? (
                 <RatingBadge level={rating} size="mask" />

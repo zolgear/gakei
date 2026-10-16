@@ -150,7 +150,11 @@ export function StockPickerGrid({
             {assets.map((asset) => {
               const isSelected = selectedIds.includes(asset.id)
               const isAlreadyDisabled = disabledAssetIds?.has(asset.id) ?? false
-              const selectable = isTileSelectable({ selection, assetId: asset.id, isSelected, disabledAssetIds, canSelectMore })
+              // 画像を残さなかった Asset(ADR-0051)は、入力・配置・添付・アバターのどれにも使えない。
+              const withheld = asset.content_withheld === true
+              const selectable =
+                !withheld &&
+                isTileSelectable({ selection, assetId: asset.id, isSelected, disabledAssetIds, canSelectMore })
               return (
                 <button
                   key={asset.id}
@@ -159,6 +163,7 @@ export function StockPickerGrid({
                   data-selected={isSelected}
                   aria-pressed={isSelected}
                   disabled={!selectable}
+                  title={withheld ? t.mods.withheldUnavailable : undefined}
                   onClick={() => onToggle(asset)}
                 >
                   <span className={styles.thumbFrame}>
@@ -166,6 +171,7 @@ export function StockPickerGrid({
                       assetId={asset.id}
                       rating={asset.content_rating}
                       badge
+                      withheld={withheld}
                       className={`${styles.thumb} checkerboard`}
                       style={focalStyle(asset.focal_point)}
                       alt=""

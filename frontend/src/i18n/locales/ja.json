@@ -3298,5 +3298,38 @@
       "saveFailed": "保存に失敗しました",
       "judgeFailed": "判定を始められませんでした"
     }
+  },
+  "mods": {
+    "withheld": "画像なし(拒否)",
+    "withheldDescription": "画像なし(拒否): Mod の判定で画像を保存していません",
+    "withheldWithLabel": "画像なし(拒否): {label}",
+    "withheldNotice": "Mod の判定(拒否)により、この画像は保存していません。記録と系列は残っています。",
+    "withheldNoticeAt": "Mod の判定(拒否)により、{date} からこの画像は保存していません。記録と系列は残っています。",
+    "withheldNoVerdict": "理由の判定は記録に残っていません。",
+    "withheldUnavailable": "画像が無いため使えません",
+    "verdictsHeading": "判定",
+    "verdicts": {
+      "ok": "問題なし",
+      "flag": "要確認",
+      "deny": "拒否"
+    },
+    "flagMark": "Mod の判定: 要確認",
+    "score": "スコア",
+    "reference": "受付番号",
+    "openExternal": "詳細を開く",
+    "propagated": "同じ内容の画像への判定を引き継いでいます",
+    "checksHeading": "送る前のチェック",
+    "checkOutcomes": {
+      "allow": "許可",
+      "deny": "拒否",
+      "failed": "失敗",
+      "skipped": "飛ばした"
+    },
+    "effectiveDeny": "止めた",
+    "effectiveAllow": "通した",
+    "inputBlocked": "拒否",
+    "inputBlockedTitle": "Mod の判定で拒否された画像は、入力に使えません",
+    "inputsBlockedPresent": "Mod の判定で拒否された入力画像があります。取り除いてください",
+    "cannotUseAsInput": "Mod の判定で拒否された画像は、入力に使えません"
   }
 }

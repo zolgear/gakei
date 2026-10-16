@@ -59,7 +59,7 @@ export function InputChipsRow({
   const { t } = useI18n()
   const c = t.workspace.inputChips
   const [isDragOver, setIsDragOver] = useState(false)
-  const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds } = logic
+  const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
 
   function handleDragOver(e: DragEvent<HTMLElement>) {
     if (!isRelevantDragTypes(Array.from(e.dataTransfer.types))) return
@@ -98,13 +98,16 @@ export function InputChipsRow({
               const isPrimary = index === 0
               const isNotFound = notFoundAssetIds.has(item.assetId)
               const isDeleted = deletedAssetIds.has(item.assetId)
+              // Mod の判定で入力に使えない(ADR-0051 4章)。画像が無ければ描き込み・配置・マスクも出さない。
+              const isBlocked = blockedAssetIds.has(item.assetId)
+              const isWithheld = detail?.content_withheld === true
               return (
                 <div
                   key={item.inputId}
                   className={styles.chip}
                   data-primary={isPrimary}
                   data-not-found={isNotFound}
-                  data-deleted={isDeleted}
+                  data-deleted={isDeleted || isBlocked}
                 >
                   <button
                     type="button"
@@ -117,6 +120,8 @@ export function InputChipsRow({
                       assetId={item.assetId}
                       // 詳細を取得するまでは段階が分からない(undefined)のでマスクしない。
                       rating={detail ? (detail.content_rating ?? null) : undefined}
+                      withheld={isWithheld}
+                      withheldLabel={detail?.content_withheld_verdict?.label}
                       className={styles.thumb}
                       style={focalStyle(detail?.focal_point)}
                       alt=""
@@ -130,6 +135,10 @@ export function InputChipsRow({
                     <span className={styles.statusTag}>{c.notFound}</span>
                   ) : isDeleted ? (
                     <span className={styles.statusTag}>{c.deleted}</span>
+                  ) : isBlocked ? (
+                    <span className={styles.statusTag} title={t.mods.inputBlockedTitle}>
+                      {t.mods.inputBlocked}
+                    </span>
                   ) : (
                     <span className={styles.dims}>
                       {detail ? `${detail.width}×${detail.height}` : c.dimsLoading}
@@ -158,6 +167,7 @@ export function InputChipsRow({
                   )}
 
                   {isPrimary &&
+                    !isWithheld &&
                     (maskInput ? (
                       <>
                         <img
@@ -204,7 +214,7 @@ export function InputChipsRow({
                       )
                     ))}
 
-                  {detail?.kind === 'composite' && (
+                  {detail?.kind === 'composite' && !isWithheld && (
                     <button
                       type="button"
                       className={styles.iconButton}
@@ -218,17 +228,19 @@ export function InputChipsRow({
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label={c.drawOver}
-                    title={c.drawOver}
-                    onClick={() =>
-                      logic.openSketchEditor({ mode: 'over', inputId: item.inputId, assetId: item.assetId })
-                    }
-                  >
-                    <PencilIcon />
-                  </button>
+                  {!isWithheld && (
+                    <button
+                      type="button"
+                      className={styles.iconButton}
+                      aria-label={c.drawOver}
+                      title={c.drawOver}
+                      onClick={() =>
+                        logic.openSketchEditor({ mode: 'over', inputId: item.inputId, assetId: item.assetId })
+                      }
+                    >
+                      <PencilIcon />
+                    </button>
+                  )}
 
                   <button
                     type="button"

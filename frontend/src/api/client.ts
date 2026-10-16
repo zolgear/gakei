@@ -1647,6 +1647,10 @@ export type ModPurpose = NonNullable<ModFilters['purposes']>[number]
 export type ModSource = NonNullable<ModFilters['sources']>[number]
 export type ModOnFailure = ModWebhookView['on_failure']
 export type ModKind = ModOrderItem['kind']
+/** Asset・Run の判定(ADR-0051 4章・5章。Mod ごとの最新)。 */
+export type ModVerdictView = components['schemas']['ModVerdictView']
+/** Run の詳細の送る前のチェックの記録(`ai.before_send` だけ)。 */
+export type RunModInvocationView = components['schemas']['RunModInvocationView']
 
 export function getMods(): Promise<ModsResponse> {
   return request('/api/settings/mods')

@@ -3,8 +3,8 @@
  * ビューア(`/assets/:id`)、スタジオの結果エリアの「詳細」タブ、系列インスペクターの Asset 表示の
  * 3か所で同じものを使う。
  *
- * 並びはビューアのまま: タイトル → 寸法など → 生成元(プロンプト、Generated の詳細、元になった画像、
- * 最終プロンプト)→ タグ → レーティング → 作り方 → 埋め込み情報 → グループ → 似た画像。
+ * 並びはビューアのまま: (画像なしの理由)→ タイトル → 寸法など → 生成元(プロンプト、Generated の詳細、
+ * 元になった画像、最終プロンプト)→ タグ → レーティング → 判定 → 作り方 → 埋め込み情報 → グループ → 似た画像。
  * 無効な機能の節(レーティング、似た画像など)は各節が隠す。
  *
  * 外側の枠は持たず、フラグメントで返す(並べ方と間隔は置き場所の側が決める。ビューアは情報欄の
@@ -26,6 +26,7 @@ import { supportsSimilar } from '../embeddings/similarAssets'
 import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
 import { supportsAnnotation } from '../annotations/annotationStatus'
 import { ContentRatingSection } from '../content-rating/ContentRatingSection'
+import { AssetVerdictsSection, WithheldNotice } from '../mods/AssetVerdictsSection'
 import { AssetGroupsSection } from './AssetGroupsSection'
 import { SimilarAssetsSection } from './SimilarAssetsSection'
 import { AssetTagsSection, AssetTitleSection } from './AssetAnnotationSection'
@@ -75,6 +76,8 @@ export function AssetDetailSections({
 
   return (
     <>
+      {/* 画像を残さなかった理由(ADR-0051 5章)。いちばん上に出す。 */}
+      <WithheldNotice asset={asset} />
       {supportsAnnotation(asset) && <AssetTitleSection asset={asset} />}
       <dl className={styles.metaList}>
         <dt>{t.viewer.dimensions}</dt>
@@ -144,6 +147,8 @@ export function AssetDetailSections({
           レーティング(ADR-0049 4章)はタグの下。 */}
       {supportsAnnotation(asset) && <AssetTagsSection asset={asset} />}
       <ContentRatingSection asset={asset} />
+      {/* Mod の判定(ADR-0051 5章)。判定が無ければ出さない。 */}
+      <AssetVerdictsSection asset={asset} />
 
       {asset.origin && <OriginRecipeSection origin={asset.origin} />}
       {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} assetId={asset.id} />}

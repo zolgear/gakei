@@ -147,7 +147,15 @@ export function CompareView() {
                         title={`${c.role} #${c.position}`}
                         onClick={() => selectBefore(c.assetId)}
                       >
-                        <AssetThumb assetId={c.assetId} rating={c.contentRating} style={focalStyle(c.focalPoint)} alt="" draggable={false} />
+                        <AssetThumb
+                          assetId={c.assetId}
+                          rating={c.contentRating}
+                          withheld={c.withheld}
+                          className={styles.chipThumb}
+                          style={focalStyle(c.focalPoint)}
+                          alt=""
+                          draggable={false}
+                        />
                       </button>
                     ))}
                   </div>
@@ -166,7 +174,15 @@ export function CompareView() {
                         title={c.outputIndex !== null ? `#${c.outputIndex}` : undefined}
                         onClick={() => selectAfter(c.assetId)}
                       >
-                        <AssetThumb assetId={c.assetId} rating={c.contentRating} style={focalStyle(c.focalPoint)} alt="" draggable={false} />
+                        <AssetThumb
+                          assetId={c.assetId}
+                          rating={c.contentRating}
+                          withheld={c.withheld}
+                          className={styles.chipThumb}
+                          style={focalStyle(c.focalPoint)}
+                          alt=""
+                          draggable={false}
+                        />
                       </button>
                     ))}
                   </div>
@@ -185,6 +201,8 @@ export function CompareView() {
                 mode={effectiveMode}
                 beforeRating={before.content_rating ?? null}
                 afterRating={after.content_rating ?? null}
+                beforeWithheld={before.content_withheld}
+                afterWithheld={after.content_withheld}
               />
             )}
           </div>

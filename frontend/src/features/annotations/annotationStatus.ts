@@ -46,10 +46,11 @@ export function canEditAnnotation(asset: Pick<AssetDetail, 'kind' | 'deleted_at'
 
 /** 「再推定」を出すか。使えるエンジンが 1 つも無ければ出さない(押しても 409 になる)。 */
 export function canRequestAnnotation(
-  asset: Pick<AssetDetail, 'kind' | 'deleted_at'>,
+  asset: Pick<AssetDetail, 'kind' | 'deleted_at'> & { content_withheld?: boolean | null },
   usableEngines: readonly AnnotationEngine[] | undefined,
 ): boolean {
-  return canEditAnnotation(asset) && (usableEngines?.length ?? 0) > 0
+  // 画像を残さなかった Asset(ADR-0051)は推定する画像が無い(サーバーも 409)。
+  return canEditAnnotation(asset) && asset.content_withheld !== true && (usableEngines?.length ?? 0) > 0
 }
 
 /** 編集 API の応答(更新後の注釈)を Asset 詳細へ重ねる。 */

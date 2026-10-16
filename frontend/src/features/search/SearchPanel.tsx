@@ -310,6 +310,7 @@ export function SearchPanel() {
                       <AssetThumb
                         assetId={hit.id}
                         rating={thumbRating(hit)}
+                        withheld={hit.content_withheld}
                         badge
                         className={`${styles.assetThumb} checkerboard`}
                         style={focalStyle(hit.focal_point)}
@@ -391,6 +392,7 @@ export function SearchPanel() {
                       <AssetThumb
                         assetId={hit.id}
                         rating={thumbRating(hit)}
+                        withheld={hit.content_withheld}
                         badge
                         className={`${styles.assetThumb} checkerboard`}
                         style={focalStyle(hit.focal_point)}

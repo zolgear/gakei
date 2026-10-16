@@ -19,6 +19,7 @@ import { AssetThumb } from '../content-rating/AssetThumb'
 import { contentRatingPollInterval, thumbRating } from '../content-rating/contentRating'
 import { annotationPollInterval } from '../annotations/annotationStatus'
 import { AssetDetailSections } from '../viewer/AssetDetailSections'
+import { isSendBlocked, isWithheld } from '../mods/modVerdicts'
 import styles from './LineageAssetInspectorContent.module.css'
 
 export interface LineageAssetInspectorContentProps {
@@ -89,6 +90,8 @@ export function LineageAssetInspectorContent({ assetId, onOpenRun }: LineageAsse
           assetId={asset.id}
           rating={thumbRating(asset)}
           badge
+          withheld={isWithheld(asset)}
+          withheldLabel={asset.content_withheld_verdict?.label}
           src={assetUrl(asset.id, 'preview')}
           className={`${styles.preview} checkerboard`}
           alt=""
@@ -104,16 +107,20 @@ export function LineageAssetInspectorContent({ assetId, onOpenRun }: LineageAsse
           type="button"
           className={styles.actionButton}
           onClick={() => addToInputs.request(asset.id)}
-          disabled={Boolean(asset.deleted_at)}
+          disabled={Boolean(asset.deleted_at) || isSendBlocked(asset)}
+          title={isSendBlocked(asset) ? t.mods.cannotUseAsInput : undefined}
         >
           {t.lineage.useAsInput}
         </button>
         <Link to={`/assets/${asset.id}`} className={styles.actionButton}>
           {t.lineage.openInViewer}
         </Link>
-        <a className={styles.actionButton} href={assetUrl(asset.id, 'original', { download: true })}>
-          {t.lineage.download}
-        </a>
+        {/* 画像を残さなかった Asset(ADR-0051)はダウンロードできないので出さない。 */}
+        {!isWithheld(asset) && (
+          <a className={styles.actionButton} href={assetUrl(asset.id, 'original', { download: true })}>
+            {t.lineage.download}
+          </a>
+        )}
         {/* 系列を ZIP に書き出す(ADR-0037)。 */}
         {!asset.deleted_at && (
           <button type="button" className={styles.actionButton} onClick={() => setExportOpen(true)}>
