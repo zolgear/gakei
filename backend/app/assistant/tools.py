@@ -1199,6 +1199,10 @@ def cancel_queued_runs(state: Any, run_ids: list[uuid.UUID]) -> list[uuid.UUID]:
             if result.rowcount:
                 canceled.append(run_id)
         db.commit()
+    # ADR-0051: 取り消しも Run の終わり(`run.finished`)として Mod に知らせる。
+    mods = getattr(state, "mods", None)
+    if mods is not None and canceled:
+        mods.enqueue_runs_finished(canceled)
     return canceled
 
 

@@ -43,6 +43,9 @@ from app.domain.text_safety import (
     sanitize_external_text_or_none,
 )
 from app.i18n import t
+from app.mods import events as mods_events
+from app.mods.api import AI_BEFORE_SEND, Actor, BeforeSendSubject
+from app.mods.runtime import Denial
 from app.providers.base import (
     ImageProvider,
     InputImage,
@@ -55,6 +58,7 @@ from app.providers.registry import ProviderRegistry
 from app.worker.progress import ProgressBus
 
 if TYPE_CHECKING:
+    from app.mods.runtime import ModRuntime
     from app.worker.annotator import Annotator
     from app.worker.embedder import Embedder
     from app.worker.focal import FocalPointWorker
@@ -68,7 +72,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def reset_interrupted_runs(session_factory: sessionmaker) -> int:
+def reset_interrupted_runs(session_factory: sessionmaker, mods: ModRuntime | None = None) -> int:
     """起動時に呼ぶ。`running` のままの行は再開せず `failed` + `interrupted` にする。
 
     (本線では `queued` に戻して再試行するが、ローカルMVPでは `--reload` での頻繁な再起動中に
@@ -82,12 +86,14 @@ def reset_interrupted_runs(session_factory: sessionmaker) -> int:
             row.error_code = "interrupted"
             row.error_message = t("worker.interruptedByRestart")
             row.finished_at = now
+            if mods is not None:
+                mods.enqueue_run_finished(session, row)
         session.commit()
         return len(rows)
 
 
 def mark_unregistered_provider_runs_failed(
-    session_factory: sessionmaker, known_providers: set[str]
+    session_factory: sessionmaker, known_providers: set[str], mods: ModRuntime | None = None
 ) -> int:
     """起動時に呼ぶ。登録されていない provider の `queued` な Run を
     `failed` + `providerUnavailable` にする(ADR-0013)。
@@ -106,6 +112,8 @@ def mark_unregistered_provider_runs_failed(
             row.error_code = "providerUnavailable"
             row.error_message = t("worker.providerNotRegistered", provider=row.provider)
             row.finished_at = now
+            if mods is not None:
+                mods.enqueue_run_finished(session, row)
             count += 1
         session.commit()
         return count
@@ -206,10 +214,12 @@ def _finish_run_succeeded(
     annotator: Annotator | None = None,
     embedder: Embedder | None = None,
     focal_worker: FocalPointWorker | None = None,
+    mods: ModRuntime | None = None,
 ) -> list[uuid.UUID]:
     """出力を取り込んで Run を成功にする。`annotator` があれば、取り込み時の自動推定
     (ADR-0024 4章)と埋め込み(ADR-0033 5章)を、設定がオンのときだけ同じトランザクションで
-    待ち行列に入れる。"""
+    待ち行列に入れる。Mod の `asset.ingested` と `run.finished`(ADR-0051)も同じトランザクションで
+    積む。"""
     from app.domain import ingest_hooks
 
     queued = ingest_hooks.IngestQueued()
@@ -234,10 +244,14 @@ def _finish_run_succeeded(
             output_ids.append(asset.id)
             if annotator is not None:
                 queued = queued | ingest_hooks.enqueue_after_ingest(
-                    session, asset, annotator.settings
+                    session, asset, annotator.settings, source="generated", mods=mods
                 )
             else:
-                queued = queued | ingest_hooks.focal_targets(asset)
+                queued = (
+                    queued
+                    | ingest_hooks.focal_targets(asset)
+                    | ingest_hooks.mod_targets(session, asset, source="generated", mods=mods)
+                )
 
         # ADR-0022: 生成時にグループが指定されていれば、取り込んだ出力を同じトランザクションで
         # そのグループに入れる(既に入っているものは無視)。実行までにグループが削除されて
@@ -263,8 +277,12 @@ def _finish_run_succeeded(
 
             if prompt_embeddings.enqueue_on_success(session, run, embedder.settings):
                 queued = queued | ingest_hooks.IngestQueued(embedding=True)
+        if mods is not None and mods.enqueue_run_finished(session, run):
+            queued = queued | ingest_hooks.IngestQueued(mods=True)
         session.commit()
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
+    ingest_hooks.notify_workers(
+        queued, annotator=annotator, embedder=embedder, focal=focal_worker, mods=mods
+    )
     return output_ids
 
 
@@ -274,7 +292,9 @@ def _finish_run_failed(
     error_code: str,
     error_message: str,
     provider_request_id: str | None,
+    mods: ModRuntime | None = None,
 ) -> None:
+    queued = False
     with session_factory() as session:
         run = session.get(Run, run_id)
         assert run is not None
@@ -285,7 +305,11 @@ def _finish_run_failed(
         run.error_message = sanitize_external_text(error_message)[:2000]
         if provider_request_id:
             run.provider_request_id = sanitize_external_text(provider_request_id)
+        if mods is not None:
+            queued = mods.enqueue_run_finished(session, run)
         session.commit()
+    if queued and mods is not None:
+        mods.notify()
 
 
 class Runner:
@@ -302,8 +326,10 @@ class Runner:
         annotator: Annotator | None = None,
         embedder: Embedder | None = None,
         focal_worker: FocalPointWorker | None = None,
+        mods: ModRuntime | None = None,
     ) -> None:
         self.session_factory = session_factory
+        self.mods = mods
         self.annotator = annotator
         self.embedder = embedder
         self.focal_worker = focal_worker
@@ -323,11 +349,18 @@ class Runner:
             event.set()
 
     async def start(self) -> int:
-        reset_count = await asyncio.to_thread(reset_interrupted_runs, self.session_factory)
+        reset_count = await asyncio.to_thread(
+            reset_interrupted_runs, self.session_factory, self.mods
+        )
         known_providers = set(self.registry.providers)
         await asyncio.to_thread(
-            mark_unregistered_provider_runs_failed, self.session_factory, known_providers
+            mark_unregistered_provider_runs_failed,
+            self.session_factory,
+            known_providers,
+            self.mods,
         )
+        if self.mods is not None:
+            self.mods.notify()
         self._tasks = [
             asyncio.create_task(self._loop(name), name=f"gakei-runner-{name}")
             for name in self.registry.providers
@@ -432,6 +465,12 @@ class Runner:
         try:
             # 入力読み込み・実行・出力の ingest のどこで失敗しても failed として記録する。
             inputs = await asyncio.to_thread(_load_inputs, self.session_factory, self.store, run.id)
+            # ADR-0051 2章: 外部へ送る直前のチェック(`ai.before_send`、目的 `image_run`)。
+            # 拒否されたら送らずに Run を failed にする。
+            denial = await self._check_before_send(run)
+            if denial is not None:
+                await self._mark_failed(run.id, "hook_denied", denial.message, None)
+                return
             request = RunRequest(
                 run_id=run.id,
                 operation=run.operation,
@@ -450,6 +489,7 @@ class Runner:
                 self.annotator,
                 self.embedder,
                 self.focal_worker,
+                self.mods,
             )
         except ProviderError as e:
             await self._mark_failed(run.id, e.code, e.message, e.request_id)
@@ -467,6 +507,26 @@ class Runner:
             )
         finally:
             await asyncio.to_thread(_cleanup_partial_dir, partial_dir)
+
+    async def _check_before_send(self, run: Run) -> Denial | None:
+        """`ai.before_send` を呼ぶ(有効な購読が無ければ DB にも触れない)。"""
+        mods = self.mods
+        if mods is None or not mods.wants(
+            AI_BEFORE_SEND, purpose="image_run", provider=run.provider
+        ):
+            return None
+
+        def build() -> tuple[BeforeSendSubject, Actor | None]:
+            with self.session_factory() as session:
+                row = session.get(Run, run.id)
+                assert row is not None
+                return (
+                    mods_events.image_run_subject(session, mods.settings, row),
+                    mods_events.actor_for_user_id(session, row.created_by_user_id),
+                )
+
+        subject, actor = await asyncio.to_thread(build)
+        return await mods.before_send(subject, actor=actor)
 
     async def _mark_failed(
         self,
@@ -487,6 +547,7 @@ class Runner:
                 error_code,
                 error_message,
                 provider_request_id,
+                self.mods,
             )
         except Exception:
             logger.exception("run %s を failed として記録できませんでした", run_id)

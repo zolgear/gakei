@@ -731,6 +731,10 @@ async def cancel_run(
             db.commit()
             if result.rowcount == 0:
                 raise ToolError(f"Run {run_id} has already started and cannot be canceled.")
+        # ADR-0051: 取り消しも Run の終わり(`run.finished`)として Mod に知らせる。
+        mods = getattr(mc.state, "mods", None)
+        if mods is not None:
+            mods.enqueue_runs_finished([run_id])
 
     await _in_thread(_cancel)
     await mc.state.progress_bus.publish(run_id, {"type": "status", "status": "canceled"})
@@ -1074,13 +1078,20 @@ async def upload_image(
             # 新しく作ったときだけ)。
             queued = ingest_hooks.IngestQueued()
             if result.outcome == "created":
-                queued = ingest_hooks.enqueue_after_ingest(db, result.asset, mc.state.settings)
+                queued = ingest_hooks.enqueue_after_ingest(
+                    db,
+                    result.asset,
+                    mc.state.settings,
+                    source="mcp",
+                    mods=getattr(mc.state, "mods", None),
+                )
             db.commit()
             ingest_hooks.notify_workers(
                 queued,
                 annotator=mc.state.annotator,
                 embedder=getattr(mc.state, "embedder", None),
                 focal=getattr(mc.state, "focal_worker", None),
+                mods=getattr(mc.state, "mods", None),
             )
             return _asset_brief(mc, result.asset), result.outcome
 

@@ -4,6 +4,7 @@ POST /api/runs はサーバー側で capabilities に照らして検証する。
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 
@@ -15,7 +16,14 @@ from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_progress_bus, get_registry, get_runner, get_session, get_settings
+from app.deps import (
+    get_mods,
+    get_progress_bus,
+    get_registry,
+    get_runner,
+    get_session,
+    get_settings,
+)
 from app.domain import content_rating, focal_points
 from app.domain import run_create as run_create_domain
 from app.domain.models import (
@@ -51,6 +59,7 @@ from app.domain.schemas import (
 )
 from app.domain.visibility import get_visible_run, visible_asset_ids
 from app.i18n import t
+from app.mods.runtime import ModRuntime
 from app.providers.registry import ProviderRegistry
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
@@ -266,6 +275,7 @@ async def cancel_run(
     db: Session = Depends(get_session),
     bus: ProgressBus = Depends(get_progress_bus),
     user: CurrentUser = Depends(require_user),
+    mods: ModRuntime | None = Depends(get_mods),
 ) -> RunCancelResponse:
     run = get_visible_run(db, user, run_id)
     if run is None:
@@ -287,6 +297,10 @@ async def cancel_run(
             status_code=409,
             detail=t("runs.cannotCancelAlreadyRunning"),
         )
+
+    # ADR-0051: 取り消しも Run の終わり(`run.finished`)として Mod に知らせる。
+    if mods is not None:
+        await asyncio.to_thread(mods.enqueue_runs_finished, [run_id])
 
     # このハンドラは async のため、イベントループ上で安全に asyncio.Queue へ publish できる。
     await bus.publish(run_id, {"type": "status", "status": "canceled"})

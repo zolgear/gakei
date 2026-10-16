@@ -395,6 +395,9 @@
       "unknownConnection": "The specified connection does not exist",
       "invalidModel": "The model name must be 1 to {max} characters",
       "invalidLimit": "{name} must be an integer from {min} to {max}"
+    },
+    "locality": {
+      "invalid": "The locality must be local, cloud or unset"
     }
   },
   "runValidation": {
@@ -980,5 +983,27 @@
     "undoConflict": "Cannot undo: the target has been changed or deleted since",
     "undoNotAvailable": "This message is not a write that can be undone",
     "undoAlreadyDone": "Already undone"
+  },
+  "mods": {
+    "denied": "{mod} blocked sending: {reason}",
+    "checkFailed": "The check before sending failed",
+    "deniedNoReason": "No reason was given",
+    "notFound": "Mod not found",
+    "loadFailed": "Cannot load the mod: {error}",
+    "manifestInvalid": "The manifest of this mod cannot be read, so its settings cannot be saved",
+    "invalidName": "The name must be 1 to {max} characters",
+    "invalidInstanceName": "The instance name must be at most {max} characters",
+    "invalidUrl": "The URL must be http or https (user name, password and # are not allowed)",
+    "invalidSecret": "The signing secret must be 1 to {max} characters",
+    "invalidEvents": "Invalid events",
+    "invalidFilters": "Invalid filters",
+    "invalidTimeout": "The timeout must be between {min} and {max} seconds",
+    "invalidOnFailure": "On failure must be block or allow",
+    "invalidOrder": "Invalid order",
+    "invalidEnabled": "Must be true or false",
+    "tooManyWebhooks": "You can register up to {max} webhooks",
+    "unknownSetting": "This mod has no setting {key}",
+    "invalidSettingValue": "The value of the setting {key} has the wrong type",
+    "enableFirst": "Enable the mod first"
   }
 }

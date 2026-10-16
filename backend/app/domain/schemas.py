@@ -1502,6 +1502,31 @@ class GeneralSettingsResponse(BaseModel):
     sdwebui_timeout_seconds: SdWebuiTimeoutSetting
 
 
+class ProviderLocalitySetting(BaseModel):
+    """画像のプロバイダーの接続の送り先の区分(ADR-0051 3章)。"""
+
+    # 実効の値(保存した値、無ければ既定)。
+    value: Literal["local", "cloud", "unset"]
+    # connection = 画面で決めた値、default = 既定(OpenAI の公式の接続先は cloud、ほかは unset)。
+    source: Literal["connection", "default"]
+    default: Literal["local", "cloud", "unset"]
+
+
+class ProviderLocalitiesResponse(BaseModel):
+    openai: ProviderLocalitySetting
+    comfyui: ProviderLocalitySetting
+    sdwebui: ProviderLocalitySetting
+
+
+class ProviderLocalitiesUpdateRequest(BaseModel):
+    """`PATCH /api/settings/provider-localities`。省略した項目は変えず、明示的な `null` は保存した
+    値を消して既定に戻す。"""
+
+    openai: Literal["local", "cloud", "unset"] | None = None
+    comfyui: Literal["local", "cloud", "unset"] | None = None
+    sdwebui: Literal["local", "cloud", "unset"] | None = None
+
+
 class GeneralSettingsUpdateRequest(BaseModel):
     """`PATCH /api/settings/general` の本文。項目を省略すると変更せず、明示的な `null` は
     保存済みの値を削除して環境変数・既定値に戻す(`model_fields_set` で区別する)。
@@ -1716,6 +1741,9 @@ class ComfyWorkflowCreateRequest(BaseModel):
     template: dict[str, Any]
     bindings: Bindings
     exposed_params: list[ExposedParam] = Field(default_factory=list)
+    # 送り先の区分(ADR-0051 3章)。`unset` でなければ ComfyUI の接続の値より優先する。
+    # 省略・null は `unset`。
+    locality: Literal["local", "cloud", "unset"] | None = None
 
 
 class ComfyWorkflowUpdateRequest(BaseModel):
@@ -1726,6 +1754,7 @@ class ComfyWorkflowUpdateRequest(BaseModel):
     template: dict[str, Any] | None = None
     bindings: Bindings | None = None
     exposed_params: list[ExposedParam] | None = None
+    locality: Literal["local", "cloud", "unset"] | None = None
 
 
 class ComfyWorkflowSummary(BaseModel):
@@ -1733,6 +1762,8 @@ class ComfyWorkflowSummary(BaseModel):
     name: str
     operation: Literal["generate", "edit"]
     template_sha256: str
+    # 送り先の区分(ADR-0051 3章)。
+    locality: Literal["local", "cloud", "unset"] = "unset"
     created_at: datetime
     updated_at: datetime
 
@@ -1972,6 +2003,9 @@ class LlmConnectionView(BaseModel):
     api_style: Literal["responses", "chat"]
     # キーを設定しているか(組み込みの接続先は OpenAI のキーの有無)。
     api_key_set: bool
+    # 送り先の区分(ADR-0051 3章)と、どこで決まったか。組み込みの接続先は OpenAI の接続の値。
+    locality: Literal["local", "cloud", "unset"] = "unset"
+    locality_source: Literal["connection", "default"] = "default"
     # この接続先を使っている機能。空でなければ削除できない。
     used_by: list[LlmConnectionFeature] = Field(default_factory=list)
 
@@ -1990,6 +2024,8 @@ class LlmConnectionCreateRequest(BaseModel):
     base_url: str
     api_style: str = "responses"
     api_key: str | None = None
+    # 送り先の区分(ADR-0051 3章)。省略・null は `unset`。
+    locality: Literal["local", "cloud", "unset"] | None = None
 
 
 class LlmConnectionUpdateRequest(BaseModel):
@@ -1999,6 +2035,8 @@ class LlmConnectionUpdateRequest(BaseModel):
     name: str | None = None
     base_url: str | None = None
     api_style: str | None = None
+    # 送り先の区分(ADR-0051 3章)。null は既定に戻す(組み込みの接続先は OpenAI の既定)。
+    locality: Literal["local", "cloud", "unset"] | None = None
 
 
 class LlmConnectionApiKeyUpdateRequest(BaseModel):
@@ -2633,10 +2671,11 @@ class AssistantRunCreatedEvent(BaseModel):
 
 class AssistantErrorEvent(BaseModel):
     """処理を止めた理由。`llm_error`(LLM の呼び出しの失敗)、`rate_limited`(LLM の1時間の
-    上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`internal`(その他)。"""
+    上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`hook_denied`(Mod が送る前の
+    チェックで止めた。ADR-0051)、`internal`(その他)。"""
 
     type: Literal["error"] = "error"
-    code: Literal["llm_error", "rate_limited", "tool_limit", "internal"]
+    code: Literal["llm_error", "rate_limited", "tool_limit", "hook_denied", "internal"]
     message: str
 
 
@@ -2694,3 +2733,211 @@ class AssistantSettingsUpdateRequest(BaseModel):
     hourly_request_limit: StrictInt | None = None
     runs_per_message_limit: StrictInt | None = None
     hourly_run_limit: StrictInt | None = None
+
+
+# -- Mod とフック(ADR-0051) ---------------------------------------------------------
+
+ModEvent = Literal["asset.ingested", "ai.before_send", "run.finished"]
+ModPurpose = Literal["image_run", "annotation", "assistant", "embedding"]
+ModSource = Literal["upload", "url", "sketch", "mask", "composite", "generated", "import", "mcp"]
+ModOnFailure = Literal["block", "allow"]
+
+
+class ModFilters(BaseModel):
+    """購読の絞り込み。空のリストは絞らない。"""
+
+    purposes: list[ModPurpose] = Field(default_factory=list)
+    sources: list[ModSource] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
+
+
+class ModWebhookView(BaseModel):
+    """Webhook 1つ。署名の鍵の値は一部も返さず、設定済みかどうか(`secret_set`)だけ返す。"""
+
+    id: str
+    name: str
+    url: str
+    enabled: bool
+    events: list[ModEvent]
+    filters: ModFilters
+    send_images: bool
+    timeout_seconds: float
+    on_failure: ModOnFailure
+    # 「判定を待つ」(この版では保存するだけで、まだ使わない)。
+    wait_for_verdict: bool
+    order: int | None = None
+    secret_set: bool
+
+
+class ModSettingFieldView(BaseModel):
+    """Python の Mod のマニフェストに書いた設定の項目。秘密の項目は値を返さず、`secret_set`
+    だけ返す。"""
+
+    key: str
+    type: Literal["string", "number", "bool", "path", "secret"]
+    # 画面の言語の名前(マニフェストに言語ごとの名前があれば、その言語のもの)。
+    label: str
+    default: Any = None
+    value: Any = None
+    secret_set: bool | None = None
+
+
+class PythonModView(BaseModel):
+    """`MODS_DIR` に置いた Python の Mod 1つ。マニフェストが読めない・import できないものも
+    `error` を付けて返す(読み込みエラー)。"""
+
+    id: str
+    name: str | None = None
+    version: str | None = None
+    api_version: int | None = None
+    # マニフェストに書いた購読できるイベント。
+    available_events: list[ModEvent] = Field(default_factory=list)
+    # 読み込みエラー(マニフェストの不正、import の失敗)。
+    error: str | None = None
+    # import 済みか(有効にして、読み込めたもの)。
+    loaded: bool
+    enabled: bool
+    # 購読するイベント。null はマニフェストのイベントすべて。
+    events: list[ModEvent] | None = None
+    filters: ModFilters
+    timeout_seconds: float
+    on_failure: ModOnFailure
+    wait_for_verdict: bool
+    order: int | None = None
+    settings: list[ModSettingFieldView] = Field(default_factory=list)
+
+
+class ModsResponse(BaseModel):
+    """`GET /api/settings/mods`(管理者だけ)。"""
+
+    # イベントの `instance.name`(管理者が決めた名前。未設定なら null)。
+    instance_name: str | None = None
+    webhooks: list[ModWebhookView]
+    python_mods: list[PythonModView]
+
+
+class ModsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/mods`。null・空はインスタンスの名前を消す。"""
+
+    instance_name: str | None = None
+
+
+class ModWebhookCreateRequest(BaseModel):
+    """`POST /api/settings/mods/webhooks`。署名の鍵は必須(応答には返さない)。"""
+
+    name: str
+    url: str
+    secret: str
+    enabled: bool = False
+    events: list[ModEvent] = Field(default_factory=list)
+    filters: ModFilters = Field(default_factory=ModFilters)
+    send_images: bool = False
+    timeout_seconds: float = 10.0
+    on_failure: ModOnFailure = "block"
+    wait_for_verdict: bool = False
+
+
+class ModWebhookUpdateRequest(BaseModel):
+    """`PATCH /api/settings/mods/webhooks/{id}`。省略した項目は変えない。`secret` を送ると鍵を
+    差し替える。"""
+
+    name: str | None = None
+    url: str | None = None
+    secret: str | None = None
+    enabled: bool | None = None
+    events: list[ModEvent] | None = None
+    filters: ModFilters | None = None
+    send_images: bool | None = None
+    timeout_seconds: float | None = None
+    on_failure: ModOnFailure | None = None
+    wait_for_verdict: bool | None = None
+
+
+class PythonModUpdateRequest(BaseModel):
+    """`PATCH /api/settings/mods/python/{id}`。省略した項目は変えない。
+
+    `events` の null はマニフェストのイベントすべてに戻す。`values` は秘密でない項目の値
+    (null は既定に戻す)。`secrets` は秘密の項目の値(null は消す。値は応答に返さない)。"""
+
+    enabled: bool | None = None
+    events: list[ModEvent] | None = None
+    filters: ModFilters | None = None
+    timeout_seconds: float | None = None
+    on_failure: ModOnFailure | None = None
+    wait_for_verdict: bool | None = None
+    values: dict[str, Any] | None = None
+    secrets: dict[str, str | None] | None = None
+
+
+class ModOrderItem(BaseModel):
+    kind: Literal["webhook", "python"]
+    id: str
+
+
+class ModOrderRequest(BaseModel):
+    """`PUT /api/settings/mods/order`。この並びの順に呼ぶ(並びに無い Mod の順番は変えない)。"""
+
+    items: list[ModOrderItem]
+
+
+class ModTestRequest(BaseModel):
+    """テスト送信で送るダミーのイベント。"""
+
+    event: ModEvent = "ai.before_send"
+
+
+class ModTestResponse(BaseModel):
+    """テスト送信の結果。記録(`mod_invocation`)には残さない。"""
+
+    # allow / deny / ok / error / timeout
+    outcome: Literal["allow", "deny", "ok", "error", "timeout"]
+    duration_ms: int
+    # Webhook の HTTP の状態(Python の Mod と、届かなかったときは null)。
+    status_code: int | None = None
+    # 応答の本文(JSON。契約に合わなくても、読めたものを返す)。
+    response: Any = None
+    error: str | None = None
+
+
+class ModInvocationView(BaseModel):
+    id: uuid.UUID
+    event: ModEvent
+    event_id: uuid.UUID
+    mod_kind: Literal["webhook", "python"]
+    mod_id: str
+    mod_name: str
+    purpose: ModPurpose | None = None
+    run_id: uuid.UUID | None = None
+    asset_id: uuid.UUID | None = None
+    outcome: Literal["allow", "deny", "ok", "error", "timeout", "skipped"]
+    # `ai.before_send` で GAKEI が実際にどう扱ったか(失敗時の扱いを当てた後)。
+    effective: Literal["allow", "deny"] | None = None
+    reason: str | None = None
+    reference: str | None = None
+    error: str | None = None
+    duration_ms: int
+    created_at: datetime
+
+
+class ModInvocationListResponse(BaseModel):
+    items: list[ModInvocationView]
+
+
+class ModDeliveryView(BaseModel):
+    id: uuid.UUID
+    event: ModEvent
+    event_id: uuid.UUID
+    mod_kind: Literal["webhook", "python"]
+    mod_id: str
+    asset_id: uuid.UUID | None = None
+    run_id: uuid.UUID | None = None
+    status: Literal["queued", "delivering", "done", "failed"]
+    attempts: int
+    last_error: str | None = None
+    next_attempt_at: datetime
+    created_at: datetime
+    finished_at: datetime | None = None
+
+
+class ModDeliveryListResponse(BaseModel):
+    items: list[ModDeliveryView]

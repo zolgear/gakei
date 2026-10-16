@@ -4,11 +4,14 @@
   切り替えたら、前のエンジンのセッションを手放す。
 - リモートは、呼ぶたびに接続先(Base URL とキー)を引き直す(画面で変えたらすぐ効くように)。
 - `FAKE_PROVIDER=1` では、どのモデルでもダミーのエンジン(`FakeEmbeddingEngine`)を使う。
+- リモートのエンジンに送る前に、Mod の `ai.before_send`(目的 `embedding`。ADR-0051 2章)を呼ぶ
+  (`before_send`)。ローカルの ONNX とダミーのエンジンは外へ送らないので呼ばない。
 """
 
 from __future__ import annotations
 
 import threading
+import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -24,9 +27,12 @@ from app.embedding.remote import InfinityEngine
 from app.i18n import t
 from app.model_store.onnx_runtime import available_memory_bytes
 from app.model_store.residency import ModelResidency
+from app.mods import events as mods_events
+from app.mods.api import AI_BEFORE_SEND, Actor, BeforeSendSubject, ImageRef, TextPart
 
 if TYPE_CHECKING:
     from app.config import Settings
+    from app.mods.runtime import Denial, ModRuntime
 
 
 class EmbeddingEngines:
@@ -45,6 +51,8 @@ class EmbeddingEngines:
         self._lock = threading.Lock()
         self._onnx: OnnxClipEngine | None = None
         self._fakes: dict[str, FakeEmbeddingEngine] = {}
+        # ADR-0051: 送る前のチェック。lifespan で入れる(無ければ呼ばない)。
+        self.mods: ModRuntime | None = None
 
     def engine_for(
         self, db: Session, config: embedding_settings.EmbeddingConfig
@@ -115,6 +123,50 @@ class EmbeddingEngines:
             api_key=api_key,
             client_factory=self._remote_client_factory,
         )
+
+    def before_send(
+        self,
+        engine: EmbeddingEngine,
+        *,
+        text: list[TextPart] | None = None,
+        images: list[ImageRef] | None = None,
+        actor: Actor | None = None,
+        actor_user_id: uuid.UUID | None = None,
+        extra_images: dict[str, bytes] | None = None,
+    ) -> Denial | None:
+        """リモートのエンジンに送る直前の `ai.before_send`(同期。スレッドから呼ぶ)。止めたら
+        Denial。リモートでないエンジン・有効な購読が無いときは何もしない(DB にも触れない)。"""
+        mods = self.mods
+        if (
+            mods is None
+            or not isinstance(engine, InfinityEngine)
+            or not mods.wants(AI_BEFORE_SEND, purpose="embedding")
+        ):
+            return None
+        with mods.session_factory() as db:
+            connection = llm_connections.find_connection(
+                llm_connections.load_user_connections(db), engine.connection_id
+            ) or llm_connections.ConnectionConfig(
+                id=engine.connection_id, name="", base_url=engine.base_url
+            )
+            target = mods_events.llm_target(
+                db,
+                self.settings,
+                connection,
+                model=engine.model,
+                base_url=engine.base_url,
+                provider="infinity",
+            )
+            if actor is None and actor_user_id is not None:
+                actor = mods_events.actor_for_user_id(db, actor_user_id)
+        subject = BeforeSendSubject(
+            purpose="embedding",
+            target=target,
+            text=list(text or []),
+            params={"model": engine.model, "modality": "image" if images else "text"},
+            images=list(images or []),
+        )
+        return mods.before_send_blocking(subject, actor=actor, extra_images=extra_images)
 
     def release_idle(self) -> None:
         with self._lock:

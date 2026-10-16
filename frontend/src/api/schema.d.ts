@@ -1481,6 +1481,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/provider-localities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Provider Localities */
+        get: operations["get_provider_localities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Provider Localities */
+        patch: operations["update_provider_localities"];
+        trace?: never;
+    };
     "/api/settings/general": {
         parameters: {
             query?: never;
@@ -1913,6 +1931,173 @@ export interface paths {
         post?: never;
         /** Delete Llm Connection Api Key */
         delete: operations["delete_llm_connection_api_key"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Mods */
+        get: operations["get_mods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Mods */
+        patch: operations["update_mods"];
+        trace?: never;
+    };
+    "/api/settings/mods/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Webhook */
+        post: operations["create_mod_webhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/webhooks/{webhook_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Webhook */
+        delete: operations["delete_mod_webhook"];
+        options?: never;
+        head?: never;
+        /** Update Webhook */
+        patch: operations["update_mod_webhook"];
+        trace?: never;
+    };
+    "/api/settings/mods/webhooks/{webhook_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Webhook
+         * @description ダミーのイベントを送り、応答と所要時間を返す(有効でなくても送れる)。
+         */
+        post: operations["test_mod_webhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/python/{mod_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Python Mod */
+        patch: operations["update_python_mod"];
+        trace?: never;
+    };
+    "/api/settings/mods/python/{mod_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Python Mod
+         * @description ダミーのイベントで Mod の関数を呼び、応答と所要時間を返す(有効にしたものだけ)。
+         */
+        post: operations["test_python_mod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Order */
+        put: operations["update_mod_order"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/invocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Invocations
+         * @description 直近の呼び出し(新しい順)。
+         */
+        get: operations["list_mod_invocations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deliveries
+         * @description 配達の一覧(新しい順)。既定は送れなかったもの。
+         */
+        get: operations["list_mod_deliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3023,7 +3208,8 @@ export interface components {
         /**
          * AssistantErrorEvent
          * @description 処理を止めた理由。`llm_error`(LLM の呼び出しの失敗)、`rate_limited`(LLM の1時間の
-         *     上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`internal`(その他)。
+         *     上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`hook_denied`(Mod が送る前の
+         *     チェックで止めた。ADR-0051)、`internal`(その他)。
          */
         AssistantErrorEvent: {
             /**
@@ -3035,7 +3221,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "llm_error" | "rate_limited" | "tool_limit" | "internal";
+            code: "llm_error" | "rate_limited" | "tool_limit" | "hook_denied" | "internal";
             /** Message */
             message: string;
         };
@@ -3746,6 +3932,8 @@ export interface components {
             bindings: components["schemas"]["Bindings"];
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][];
+            /** Locality */
+            locality?: ("local" | "cloud" | "unset") | null;
         };
         /** ComfyWorkflowDetail */
         ComfyWorkflowDetail: {
@@ -3763,6 +3951,12 @@ export interface components {
             operation: "generate" | "edit";
             /** Template Sha256 */
             template_sha256: string;
+            /**
+             * Locality
+             * @default unset
+             * @enum {string}
+             */
+            locality: "local" | "cloud" | "unset";
             /**
              * Created At
              * Format: date-time
@@ -3803,6 +3997,12 @@ export interface components {
             /** Template Sha256 */
             template_sha256: string;
             /**
+             * Locality
+             * @default unset
+             * @enum {string}
+             */
+            locality: "local" | "cloud" | "unset";
+            /**
              * Created At
              * Format: date-time
              */
@@ -3829,6 +4029,8 @@ export interface components {
             bindings?: components["schemas"]["Bindings"] | null;
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][] | null;
+            /** Locality */
+            locality?: ("local" | "cloud" | "unset") | null;
         };
         /** CompositionCanvas */
         CompositionCanvas: {
@@ -4709,6 +4911,8 @@ export interface components {
             api_style: string;
             /** Api Key */
             api_key?: string | null;
+            /** Locality */
+            locality?: ("local" | "cloud" | "unset") | null;
         };
         /**
          * LlmConnectionUpdateRequest
@@ -4722,6 +4926,8 @@ export interface components {
             base_url?: string | null;
             /** Api Style */
             api_style?: string | null;
+            /** Locality */
+            locality?: ("local" | "cloud" | "unset") | null;
         };
         /**
          * LlmConnectionView
@@ -4743,6 +4949,18 @@ export interface components {
             api_style: "responses" | "chat";
             /** Api Key Set */
             api_key_set: boolean;
+            /**
+             * Locality
+             * @default unset
+             * @enum {string}
+             */
+            locality: "local" | "cloud" | "unset";
+            /**
+             * Locality Source
+             * @default default
+             * @enum {string}
+             */
+            locality_source: "connection" | "default";
             /** Used By */
             used_by?: ("annotation" | "embedding" | "assistant")[];
         };
@@ -4801,6 +5019,301 @@ export interface components {
             /** Hourly Run Limit */
             hourly_run_limit?: number | null;
         };
+        /** ModDeliveryListResponse */
+        ModDeliveryListResponse: {
+            /** Items */
+            items: components["schemas"]["ModDeliveryView"][];
+        };
+        /** ModDeliveryView */
+        ModDeliveryView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Event
+             * @enum {string}
+             */
+            event: "asset.ingested" | "ai.before_send" | "run.finished";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Mod Kind
+             * @enum {string}
+             */
+            mod_kind: "webhook" | "python";
+            /** Mod Id */
+            mod_id: string;
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "delivering" | "done" | "failed";
+            /** Attempts */
+            attempts: number;
+            /** Last Error */
+            last_error?: string | null;
+            /**
+             * Next Attempt At
+             * Format: date-time
+             */
+            next_attempt_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at?: string | null;
+        };
+        /**
+         * ModFilters
+         * @description 購読の絞り込み。空のリストは絞らない。
+         */
+        ModFilters: {
+            /** Purposes */
+            purposes?: ("image_run" | "annotation" | "assistant" | "embedding")[];
+            /** Sources */
+            sources?: ("upload" | "url" | "sketch" | "mask" | "composite" | "generated" | "import" | "mcp")[];
+            /** Providers */
+            providers?: string[];
+        };
+        /** ModInvocationListResponse */
+        ModInvocationListResponse: {
+            /** Items */
+            items: components["schemas"]["ModInvocationView"][];
+        };
+        /** ModInvocationView */
+        ModInvocationView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Event
+             * @enum {string}
+             */
+            event: "asset.ingested" | "ai.before_send" | "run.finished";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Mod Kind
+             * @enum {string}
+             */
+            mod_kind: "webhook" | "python";
+            /** Mod Id */
+            mod_id: string;
+            /** Mod Name */
+            mod_name: string;
+            /** Purpose */
+            purpose?: ("image_run" | "annotation" | "assistant" | "embedding") | null;
+            /** Run Id */
+            run_id?: string | null;
+            /** Asset Id */
+            asset_id?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "allow" | "deny" | "ok" | "error" | "timeout" | "skipped";
+            /** Effective */
+            effective?: ("allow" | "deny") | null;
+            /** Reason */
+            reason?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ModOrderItem */
+        ModOrderItem: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "webhook" | "python";
+            /** Id */
+            id: string;
+        };
+        /**
+         * ModOrderRequest
+         * @description `PUT /api/settings/mods/order`。この並びの順に呼ぶ(並びに無い Mod の順番は変えない)。
+         */
+        ModOrderRequest: {
+            /** Items */
+            items: components["schemas"]["ModOrderItem"][];
+        };
+        /**
+         * ModSettingFieldView
+         * @description Python の Mod のマニフェストに書いた設定の項目。秘密の項目は値を返さず、`secret_set`
+         *     だけ返す。
+         */
+        ModSettingFieldView: {
+            /** Key */
+            key: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "string" | "number" | "bool" | "path" | "secret";
+            /** Label */
+            label: string;
+            /** Default */
+            default?: unknown;
+            /** Value */
+            value?: unknown;
+            /** Secret Set */
+            secret_set?: boolean | null;
+        };
+        /**
+         * ModTestRequest
+         * @description テスト送信で送るダミーのイベント。
+         */
+        ModTestRequest: {
+            /**
+             * Event
+             * @default ai.before_send
+             * @enum {string}
+             */
+            event: "asset.ingested" | "ai.before_send" | "run.finished";
+        };
+        /**
+         * ModTestResponse
+         * @description テスト送信の結果。記録(`mod_invocation`)には残さない。
+         */
+        ModTestResponse: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "allow" | "deny" | "ok" | "error" | "timeout";
+            /** Duration Ms */
+            duration_ms: number;
+            /** Status Code */
+            status_code?: number | null;
+            /** Response */
+            response?: unknown;
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * ModWebhookCreateRequest
+         * @description `POST /api/settings/mods/webhooks`。署名の鍵は必須(応答には返さない)。
+         */
+        ModWebhookCreateRequest: {
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+            /** Secret */
+            secret: string;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Events */
+            events?: ("asset.ingested" | "ai.before_send" | "run.finished")[];
+            filters?: components["schemas"]["ModFilters"];
+            /**
+             * Send Images
+             * @default false
+             */
+            send_images: boolean;
+            /**
+             * Timeout Seconds
+             * @default 10
+             */
+            timeout_seconds: number;
+            /**
+             * On Failure
+             * @default block
+             * @enum {string}
+             */
+            on_failure: "block" | "allow";
+            /**
+             * Wait For Verdict
+             * @default false
+             */
+            wait_for_verdict: boolean;
+        };
+        /**
+         * ModWebhookUpdateRequest
+         * @description `PATCH /api/settings/mods/webhooks/{id}`。省略した項目は変えない。`secret` を送ると鍵を
+         *     差し替える。
+         */
+        ModWebhookUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Secret */
+            secret?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Events */
+            events?: ("asset.ingested" | "ai.before_send" | "run.finished")[] | null;
+            filters?: components["schemas"]["ModFilters"] | null;
+            /** Send Images */
+            send_images?: boolean | null;
+            /** Timeout Seconds */
+            timeout_seconds?: number | null;
+            /** On Failure */
+            on_failure?: ("block" | "allow") | null;
+            /** Wait For Verdict */
+            wait_for_verdict?: boolean | null;
+        };
+        /**
+         * ModWebhookView
+         * @description Webhook 1つ。署名の鍵の値は一部も返さず、設定済みかどうか(`secret_set`)だけ返す。
+         */
+        ModWebhookView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Events */
+            events: ("asset.ingested" | "ai.before_send" | "run.finished")[];
+            filters: components["schemas"]["ModFilters"];
+            /** Send Images */
+            send_images: boolean;
+            /** Timeout Seconds */
+            timeout_seconds: number;
+            /**
+             * On Failure
+             * @enum {string}
+             */
+            on_failure: "block" | "allow";
+            /** Wait For Verdict */
+            wait_for_verdict: boolean;
+            /** Order */
+            order?: number | null;
+            /** Secret Set */
+            secret_set: boolean;
+        };
         /** ModelCapabilities */
         ModelCapabilities: {
             /** Model */
@@ -4834,6 +5347,26 @@ export interface components {
              * @enum {string}
              */
             default: "auto" | "low";
+        };
+        /**
+         * ModsResponse
+         * @description `GET /api/settings/mods`(管理者だけ)。
+         */
+        ModsResponse: {
+            /** Instance Name */
+            instance_name?: string | null;
+            /** Webhooks */
+            webhooks: components["schemas"]["ModWebhookView"][];
+            /** Python Mods */
+            python_mods: components["schemas"]["PythonModView"][];
+        };
+        /**
+         * ModsUpdateRequest
+         * @description `PATCH /api/settings/mods`。null・空はインスタンスの名前を消す。
+         */
+        ModsUpdateRequest: {
+            /** Instance Name */
+            instance_name?: string | null;
         };
         /** OnnxDownloadRequest */
         OnnxDownloadRequest: {
@@ -5516,6 +6049,46 @@ export interface components {
             /** Supports Pricing */
             supports_pricing: boolean;
         };
+        /** ProviderLocalitiesResponse */
+        ProviderLocalitiesResponse: {
+            openai: components["schemas"]["ProviderLocalitySetting"];
+            comfyui: components["schemas"]["ProviderLocalitySetting"];
+            sdwebui: components["schemas"]["ProviderLocalitySetting"];
+        };
+        /**
+         * ProviderLocalitiesUpdateRequest
+         * @description `PATCH /api/settings/provider-localities`。省略した項目は変えず、明示的な `null` は保存した
+         *     値を消して既定に戻す。
+         */
+        ProviderLocalitiesUpdateRequest: {
+            /** Openai */
+            openai?: ("local" | "cloud" | "unset") | null;
+            /** Comfyui */
+            comfyui?: ("local" | "cloud" | "unset") | null;
+            /** Sdwebui */
+            sdwebui?: ("local" | "cloud" | "unset") | null;
+        };
+        /**
+         * ProviderLocalitySetting
+         * @description 画像のプロバイダーの接続の送り先の区分(ADR-0051 3章)。
+         */
+        ProviderLocalitySetting: {
+            /**
+             * Value
+             * @enum {string}
+             */
+            value: "local" | "cloud" | "unset";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "connection" | "default";
+            /**
+             * Default
+             * @enum {string}
+             */
+            default: "local" | "cloud" | "unset";
+        };
         /** PublicShareAsset */
         PublicShareAsset: {
             /**
@@ -5646,6 +6219,73 @@ export interface components {
             created_at: string;
             /** Text Outputs */
             text_outputs?: components["schemas"]["RunTextOutput"][] | null;
+        };
+        /**
+         * PythonModUpdateRequest
+         * @description `PATCH /api/settings/mods/python/{id}`。省略した項目は変えない。
+         *
+         *     `events` の null はマニフェストのイベントすべてに戻す。`values` は秘密でない項目の値
+         *     (null は既定に戻す)。`secrets` は秘密の項目の値(null は消す。値は応答に返さない)。
+         */
+        PythonModUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Events */
+            events?: ("asset.ingested" | "ai.before_send" | "run.finished")[] | null;
+            filters?: components["schemas"]["ModFilters"] | null;
+            /** Timeout Seconds */
+            timeout_seconds?: number | null;
+            /** On Failure */
+            on_failure?: ("block" | "allow") | null;
+            /** Wait For Verdict */
+            wait_for_verdict?: boolean | null;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
+            /** Secrets */
+            secrets?: {
+                [key: string]: string | null;
+            } | null;
+        };
+        /**
+         * PythonModView
+         * @description `MODS_DIR` に置いた Python の Mod 1つ。マニフェストが読めない・import できないものも
+         *     `error` を付けて返す(読み込みエラー)。
+         */
+        PythonModView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /** Version */
+            version?: string | null;
+            /** Api Version */
+            api_version?: number | null;
+            /** Available Events */
+            available_events?: ("asset.ingested" | "ai.before_send" | "run.finished")[];
+            /** Error */
+            error?: string | null;
+            /** Loaded */
+            loaded: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Events */
+            events?: ("asset.ingested" | "ai.before_send" | "run.finished")[] | null;
+            filters: components["schemas"]["ModFilters"];
+            /** Timeout Seconds */
+            timeout_seconds: number;
+            /**
+             * On Failure
+             * @enum {string}
+             */
+            on_failure: "block" | "allow";
+            /** Wait For Verdict */
+            wait_for_verdict: boolean;
+            /** Order */
+            order?: number | null;
+            /** Settings */
+            settings?: components["schemas"]["ModSettingFieldView"][];
         };
         /** RunCancelResponse */
         RunCancelResponse: {
@@ -10434,6 +11074,72 @@ export interface operations {
             };
         };
     };
+    get_provider_localities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderLocalitiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_provider_localities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderLocalitiesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderLocalitiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_general_settings: {
         parameters: {
             query?: never;
@@ -11583,6 +12289,393 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_mods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_mod_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModWebhookCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_mod_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                webhook_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mod_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                webhook_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModWebhookUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_mod_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                webhook_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModTestRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_python_mod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mod_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PythonModUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_python_mod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mod_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModTestRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mod_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mod_invocations: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description true なら失敗(error・timeout)と拒否(deny)だけ。 */
+                failed_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModInvocationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mod_deliveries: {
+        parameters: {
+            query?: {
+                /** @description 配達の状態で絞る。省くと失敗(failed)だけ。 */
+                status?: ("queued" | "delivering" | "done" | "failed") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModDeliveryListResponse"];
                 };
             };
             /** @description Validation Error */

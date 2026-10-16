@@ -12,6 +12,8 @@
 - 切断(止めるボタン): ジェネレーターが閉じられたら、LLM の呼び出しをやめ、そこまでの本文を
   `status = "stopped"` で保存し、この発言で作った Run のうち `queued` のものを取り消す。
 - 履歴: 直近から数えて `HISTORY_MAX_CHARS` 文字まで送る。発言の途中で切らない。
+- 送る前のチェック: LLM を呼ぶたびに(道具の往復を含む)、Mod の `ai.before_send`(目的
+  `assistant`。ADR-0051 2章)を呼ぶ。拒否されたら、その回の応答を止めて理由をエラーで出す。
 """
 
 from __future__ import annotations
@@ -47,9 +49,10 @@ from app.assistant.tools import (
 )
 from app.auth.identity import CurrentUser
 from app.domain import assistant as assistant_domain
+from app.domain import llm_connections
 from app.domain.assistant_settings import AssistantConfig
 from app.domain.llm_connections import LlmTarget
-from app.domain.models import AssistantConversation, AssistantMessage
+from app.domain.models import Asset, AssistantConversation, AssistantMessage
 from app.domain.schemas import (
     AssistantDoneEvent,
     AssistantErrorEvent,
@@ -62,6 +65,9 @@ from app.domain.schemas import (
     AssistantUserMessageEvent,
 )
 from app.i18n import set_locale, t
+from app.mods import events as mods_events
+from app.mods.api import AI_BEFORE_SEND, BeforeSendSubject, TextPart
+from app.mods.runtime import Denial
 
 logger = logging.getLogger(__name__)
 
@@ -341,6 +347,11 @@ class AssistantTurn:
                 tools=tools,
                 locale=turn.locale,
             )
+            denial = await self._check_before_send(request)
+            if denial is not None:
+                yield sse(AssistantErrorEvent(code="hook_denied", message=denial.message))
+                status = "error"
+                break
             calls: list[ToolCall] = []
             self._pending_text = []
             error: str | None = None
@@ -453,6 +464,62 @@ class AssistantTurn:
 
         conversation = await _in_thread(self._conversation_response)
         yield sse(AssistantDoneEvent(status=status, conversation=conversation))  # type: ignore[arg-type]
+
+    async def _check_before_send(self, request: EngineRequest) -> Denial | None:
+        """LLM を呼ぶ直前の `ai.before_send`(ADR-0051)。有効な購読が無ければ何もしない。"""
+        mods = getattr(self.state, "mods", None)
+        if mods is None or not mods.wants(AI_BEFORE_SEND, purpose="assistant"):
+            return None
+        turn = self.turn
+
+        def build() -> BeforeSendSubject:
+            with self._session() as db:
+                connections = llm_connections.load(db)
+                connection = llm_connections.find_connection(
+                    connections, turn.config.connection_id
+                ) or llm_connections.ConnectionConfig(
+                    id=turn.config.connection_id, name="", base_url=None
+                )
+                base_url = (
+                    turn.target.base_url
+                    if turn.target is not None
+                    else llm_connections.display_base_url(connection, self.state.settings)
+                )
+                text = [TextPart(role="system", text=request.system)]
+                image_ids: list[uuid.UUID] = []
+                for message in request.messages:
+                    if message.text:
+                        text.append(TextPart(role=message.role, text=message.text))
+                    for image in message.images:
+                        try:
+                            image_ids.append(uuid.UUID(image.label))
+                        except ValueError:
+                            continue
+                images = []
+                for asset_id in dict.fromkeys(image_ids):
+                    asset = db.get(Asset, asset_id)
+                    if asset is not None:
+                        images.append(mods_events.image_ref(asset, "attachment"))
+                return BeforeSendSubject(
+                    purpose="assistant",
+                    target=mods_events.llm_target(
+                        db,
+                        self.state.settings,
+                        connection,
+                        model=turn.target.model if turn.target is not None else turn.config.model,
+                        base_url=base_url,
+                    ),
+                    text=text,
+                    params={
+                        "model": turn.config.model,
+                        "tools": [tool.name for tool in request.tools],
+                        "conversation_id": str(turn.conversation_id),
+                    },
+                    images=images,
+                )
+
+        subject = await _in_thread(build)
+        return await mods.before_send(subject, actor=mods_events.actor_from_user(turn.user))
 
     async def _execute(self, call: ToolCall) -> ToolOutcome:
         try:

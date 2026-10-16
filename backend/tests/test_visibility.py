@@ -305,6 +305,8 @@ _EXCLUDED_PREFIXES = (
     "/api/settings/llm-connections/",
     # タグ辞書(ADR-0041)。インスタンス全体で共有する管理者設定で、利用者のデータではない。
     "/api/settings/tag-dictionaries/",
+    # Mod(ADR-0051)。管理者設定で、利用者のデータではない。
+    "/api/settings/mods/",
 )
 
 

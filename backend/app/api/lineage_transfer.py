@@ -27,6 +27,7 @@ from app.deps import (
     get_annotator,
     get_embedder,
     get_focal_worker,
+    get_mods,
     get_session,
     get_settings,
     get_store,
@@ -38,6 +39,7 @@ from app.domain import lineage_import as import_domain
 from app.domain.schemas import LineageExportPreviewResponse, LineageImportResponse
 from app.domain.storage import AssetStore
 from app.i18n import current_locale, t
+from app.mods.runtime import ModRuntime
 from app.version import get_version
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
@@ -161,6 +163,7 @@ def import_lineage(
     annotator: Annotator = Depends(get_annotator),
     embedder: Embedder = Depends(get_embedder),
     focal_worker: FocalPointWorker | None = Depends(get_focal_worker),
+    mods: ModRuntime | None = Depends(get_mods),
 ) -> LineageImportResponse:
     """系列の ZIP を取り込む(ADR-0037 2章)。検証に1つでも当たれば ZIP 全体を断り、DB には
     何も書かない。取り込んだ Asset と Run の持ち主は、取り込んだ利用者。"""
@@ -175,7 +178,9 @@ def import_lineage(
         # 待ち行列に入れる(設定がオンのときだけ)。
         queued = ingest_hooks.IngestQueued()
         for asset in result.created_assets:
-            queued = queued | ingest_hooks.enqueue_after_ingest(db, asset, settings)
+            queued = queued | ingest_hooks.enqueue_after_ingest(
+                db, asset, settings, source="import", mods=mods
+            )
         db.commit()
     except import_domain.LineageImportError as e:
         db.rollback()
@@ -185,7 +190,9 @@ def import_lineage(
         raise
     finally:
         archive.zf.close()
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
+    ingest_hooks.notify_workers(
+        queued, annotator=annotator, embedder=embedder, focal=focal_worker, mods=mods
+    )
     return LineageImportResponse(
         root_asset_id=result.root_asset_id,
         asset_count=result.asset_count,

@@ -44,6 +44,7 @@ from app.domain.comfyui_connection import (
     save_disabled,
     validate_connection_url,
 )
+from app.domain.locality import normalize_or_unset
 from app.domain.models import ComfyWorkflow, Run, RunStatus
 from app.domain.schemas import (
     ComfyAnalyzeRequest,
@@ -94,6 +95,7 @@ def _to_summary(wf: ComfyWorkflow) -> ComfyWorkflowSummary:
         name=wf.name,
         operation=wf.operation,  # type: ignore[arg-type]
         template_sha256=wf.template_sha256,
+        locality=normalize_or_unset(wf.locality),
         created_at=wf.created_at,
         updated_at=wf.updated_at,
     )
@@ -543,6 +545,7 @@ def create_workflow(
         bindings=body.bindings.model_dump(mode="json"),
         exposed_params=[p.model_dump(mode="json") for p in body.exposed_params],
         template_sha256=compute_template_sha256(body.template),
+        locality=body.locality or "unset",
         created_at=now,
         updated_at=now,
     )
@@ -609,6 +612,9 @@ def update_workflow(
         wf.template_sha256 = compute_template_sha256(template)
     wf.bindings = bindings.model_dump(mode="json")
     wf.exposed_params = [p.model_dump(mode="json") for p in exposed_params]
+    if "locality" in fields_set:
+        # null は既定(`unset`)に戻す。
+        wf.locality = body.locality or "unset"
     wf.updated_at = _utcnow()
     db.commit()
     return _to_detail(wf)
