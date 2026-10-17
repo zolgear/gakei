@@ -24,10 +24,21 @@ interface SettingsPageFrameProps {
   status?: string
   /** 「戻る」を差し替える(省くと ADR-0031 3章の行き先)。 */
   onBack?: () => void
+  /** 本文の幅を広げる(図を横に並べるページ。ADR-0052 4章)。 */
+  wide?: boolean
   children: ReactNode
 }
 
-export function SettingsPageFrame({ pageId, title, intro, draft, status, onBack, children }: SettingsPageFrameProps) {
+export function SettingsPageFrame({
+  pageId,
+  title,
+  intro,
+  draft,
+  status,
+  onBack,
+  wide = false,
+  children,
+}: SettingsPageFrameProps) {
   const { t } = useI18n()
   const f = t.settings.frame
   const { isWide, reportDirty } = useSettingsShell()
@@ -55,7 +66,7 @@ export function SettingsPageFrame({ pageId, title, intro, draft, status, onBack,
   }
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-wide={wide || undefined}>
       <header className={styles.header}>
         <div className={styles.headerRow}>
           <button type="button" className={styles.backButton} onClick={goBack}>

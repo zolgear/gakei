@@ -9,6 +9,7 @@ import {
   fullGraph,
   inputUse,
   keptNodeIds,
+  nodeCategory,
   mapEdges,
   nodePickable,
   nodeRoles,
@@ -18,7 +19,7 @@ import {
   withoutInputRef,
   type MapEdge,
   type MapGraph,
-} from './bindingMap'
+} from './bindingGraph'
 import { layoutLayers } from './bindingMapLayout'
 import { EMPTY_BINDINGS_FORM, type BindingsFormState } from './bindingsForm'
 import type { ExposedParamRow } from './exposedParamsForm'
@@ -281,6 +282,17 @@ function row(node: string, input: string, enabled: boolean, name = input): Expos
   }
 }
 
+describe('nodeCategory', () => {
+  it('クラス名から大まかな種類を推す', () => {
+    expect(nodeCategory({ class_type: 'LoraLoaderModelOnly' })).toBe('model')
+    expect(nodeCategory({ class_type: 'StringFormat' })).toBe('text')
+    expect(nodeCategory({ class_type: 'PrimitiveStringMultiline' })).toBe('text')
+    expect(nodeCategory({ class_type: 'FluxKontextMultiReferenceLatentMethod' })).toBe('cond')
+    expect(nodeCategory({ class_type: 'ImageScaleToTotalPixels' })).toBe('image')
+    expect(nodeCategory({ class_type: 'SomethingCustom' })).toBe('other')
+  })
+})
+
 describe('collapseGraph', () => {
   it('公式風の小さな構成は、錨を残してほとんど束ねない', () => {
     const { graph } = collapsed(SD15)
@@ -408,12 +420,11 @@ describe('roles and assignment', () => {
   })
 
   it('割り当てられる項目は値の種類で決まり、配線された入力には無い', () => {
-    expect(fieldsForInput(node('459:490'), input('459:490', 'width'), 'edit')).toEqual([
-      'seed',
-      'width',
-      'height',
-      'batch_size',
-    ])
+    // 入力名の合う項目だけ(幅の入力をシードにはしない)。
+    expect(fieldsForInput(node('459:490'), input('459:490', 'width'), 'edit')).toEqual(['width'])
+    expect(fieldsForInput(node('459:500'), input('459:500', 'steps'), 'edit')).toEqual([])
+    // 文字列でも、選択肢のような入力(sampler_name など)はプロンプトにしない。
+    expect(fieldsForInput(node('459:472'), input('459:472', 'f_string'), 'edit')).toEqual([])
     // ファイル名の文字列はプロンプトにしない。
     expect(fieldsForInput(node('10'), input('10', 'image'), 'edit')).toEqual(['images', 'mask'])
     expect(fieldsForInput(node('10'), input('10', 'image'), 'generate')).toEqual([])
@@ -466,6 +477,12 @@ describe('fieldHighlight', () => {
     const h = fieldHighlight('prompt', EDIT31_BINDINGS, nodes, mapped, undefined)
     expect([...h.pathNodes]).toEqual(['459:470', '459:472', '459:474', '459:477', '459:500', '459:510', '20', '21'])
     expect([...h.pathEdges]).toContain(keys([['459:472', '459:474', 'prompt']])[0])
+  })
+
+  it('画像の枠は IMAGE の出力からの道筋(透過のための MASK の近道は通らない)', () => {
+    const h = fieldHighlight('images', EDIT31_BINDINGS, nodes, mapped, undefined)
+    expect(h.pathEdges.has(keys([['10', '20', 'alpha']])[0])).toBe(false)
+    expect([...h.pathNodes]).toEqual(expect.arrayContaining(['10', '459:480', '459:500', '21']))
   })
 
   it('最終プロンプトは表示している配線を示す', () => {

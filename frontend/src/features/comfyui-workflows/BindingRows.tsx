@@ -67,6 +67,8 @@ interface BindingRowsProps {
   flashField: FieldKey | null
   /** 問いのカードへ移る(問いがある行から)。 */
   onGoToQuestion: (id: PendingQuestion['id']) => void
+  /** 図で選ぶ(図があり、割り当てられる幅のときだけ)。 */
+  onPickInMap?: (field: FieldKey) => void
 }
 
 export function BindingRows(props: BindingRowsProps) {
@@ -95,6 +97,7 @@ function BindingRow({
   onUseReading,
   flashField,
   onGoToQuestion,
+  onPickInMap,
 }: BindingRowsProps & { field: FieldKey }) {
   const { t } = useI18n()
   const c = t.comfyui.cards
@@ -183,11 +186,18 @@ function BindingRow({
           ) : (
             <p className={styles.why}>{c.noPath}</p>
           )}
-          {comparison === 'differ' && (
-            <div>
-              <button type="button" className={styles.smallButton} onClick={() => onUseReading(field)}>
-                {c.useReading}
-              </button>
+          {(comparison === 'differ' || (onPickInMap && !(operation === 'generate' && field === 'mask'))) && (
+            <div className={styles.rowActions}>
+              {comparison === 'differ' && (
+                <button type="button" className={styles.smallButton} onClick={() => onUseReading(field)}>
+                  {c.useReading}
+                </button>
+              )}
+              {onPickInMap && !(operation === 'generate' && field === 'mask') && (
+                <button type="button" className={styles.smallButton} onClick={() => onPickInMap(field)}>
+                  {t.comfyui.map.pickInMap}
+                </button>
+              )}
             </div>
           )}
           <FieldEditor

@@ -211,25 +211,41 @@ export const INPUT_FIELDS: readonly InputField[] = [
 
 const FILE_VALUE_RE = /\.(png|jpe?g|webp|gif|bmp|safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i
 
+/** 文字列の差し込み先になりうる入力名(エンコーダーの文、Primitive の値など)。 */
+const TEXT_INPUT_RE = /^(text|text_[gl]|prompt|negative_prompt|positive|negative|value|string|clip_l|t5xxl)$/i
+
+/** 数の差し込み先になりうる入力名(項目ごと)。Primitive の `value` はどれにもなりうる。 */
+const NUMBER_INPUT_RE: Record<'seed' | 'width' | 'height' | 'batch_size', RegExp> = {
+  seed: /seed/i,
+  width: /width/i,
+  height: /height/i,
+  batch_size: /^(batch_size|batch|amount|length)$/i,
+}
+
 /**
- * 入力がその項目の差し込み先の候補になるか(値の種類と、画像は読み込みのノードであること)。
- * 正しいかの最終的な判断は保存時の検証(サーバー)が持つ。
+ * 入力がその項目の差し込み先の候補になるか(値の種類と入力名。画像は読み込みのノード)。
+ * 名前の合わない入力(`steps` を幅にする、など)は出さない。正しいかの最終的な判断は保存時の検証
+ * (サーバー)が持つ。
  */
 export function inputFitsField(node: ComfyNodeInfo, input: ComfyNodeInputInfo, field: InputField): boolean {
   if (input.linked) return false
   const value = input.value
   const cls = node.class_type ?? ''
+  const primitive = cls.startsWith('Primitive') && input.name === 'value'
   switch (field) {
     case 'prompt':
     case 'negative_prompt':
-      return typeof value === 'string' && !FILE_VALUE_RE.test(value)
+      return typeof value === 'string' && !FILE_VALUE_RE.test(value) && (primitive || TEXT_INPUT_RE.test(input.name))
     case 'seed':
     case 'width':
     case 'height':
     case 'batch_size':
-      return typeof value === 'number' && Number.isInteger(value)
+      return (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (primitive || NUMBER_INPUT_RE[field].test(input.name))
+      )
     case 'images':
-      return cls.startsWith('LoadImage') && input.name === 'image' && typeof value === 'string'
     case 'mask':
       return cls.startsWith('LoadImage') && input.name === 'image' && typeof value === 'string'
   }
@@ -420,8 +436,9 @@ export type NodeCategory = 'model' | 'text' | 'image' | 'cond' | 'other'
 export function nodeCategory(node: Pick<ComfyNodeInfo, 'class_type'>): NodeCategory {
   const cls = node.class_type ?? ''
   if (/Loader|^Load(?!Image)|^Unet|ModelSampling|CFGNorm|^Lora|ModelMerge|PatchModel|Hook/i.test(cls)) return 'model'
-  if (/String|Text(?!Encode)|Primitive(String|Text)|Prompt/i.test(cls)) return 'text'
   if (/Conditioning|ControlNet|Guidance|Guider|ReferenceLatent|Style(Model)?Apply|unCLIP/i.test(cls)) return 'cond'
+  // 大文字小文字を区別する(`FluxKontext` の `text` を文字列と取り違えないように)。
+  if (/String|Text(?!Encode)|Prompt/.test(cls)) return 'text'
   if (/Image|Latent|Pixel|VAE|Upscale|Mask|Preprocess|Canny|Depth|Pose|Sharpen|Blur|Invert|Color|Grain|Stitch|Compare|Crop|Pad|Resize/i.test(cls))
     return 'image'
   return 'other'
@@ -699,7 +716,8 @@ export const EMPTY_HIGHLIGHT: Highlight = {
 
 /**
  * `start` から配線を下って `targets` のどれかに届く最短の道筋(ノードと配線)。選ばれなかった枝は辿らない。
- * 届かなければ null。
+ * 起点からは、まず最初の出力(画像の読み込みなら IMAGE)から出る配線だけで探す(MASK を透過に使うだけの
+ * 近道を道筋にしないため)。届かなければ、ほかの出力も使う。届かなければ null。
  */
 export function pathToTargets(
   start: string,
@@ -707,9 +725,19 @@ export function pathToTargets(
   targets: ReadonlySet<string>,
 ): { nodes: string[]; edges: MapEdge[] } | null {
   if (targets.has(start)) return { nodes: [start], edges: [] }
+  return searchPath(start, edges, targets, true) ?? searchPath(start, edges, targets, false)
+}
+
+function searchPath(
+  start: string,
+  edges: readonly MapEdge[],
+  targets: ReadonlySet<string>,
+  firstOutputOnly: boolean,
+): { nodes: string[]; edges: MapEdge[] } | null {
   const out = new Map<string, MapEdge[]>()
   for (const e of edges) {
     if (!e.followed) continue
+    if (firstOutputOnly && e.source === start && e.output !== 0) continue
     const list = out.get(e.source) ?? []
     list.push(e)
     out.set(e.source, list)
@@ -814,4 +842,41 @@ export function fieldHighlight(
     if (h.evidenceNodes.has(e.source) && h.evidenceNodes.has(e.target)) h.evidenceEdges.add(edgeKey(e))
   }
   return h
+}
+
+/** 図のパネルで選んだ入力の扱い。 */
+export type InputChoice = { kind: 'fixed' } | { kind: 'exposed' } | { kind: 'bind'; field: InputField }
+
+/** 入力の今の扱いを、選択肢の値にする。 */
+export function choiceOf(use: InputUse): InputChoice | null {
+  switch (use.kind) {
+    case 'wired':
+      return null
+    case 'fixed':
+      return { kind: 'fixed' }
+    case 'exposed':
+      return { kind: 'exposed' }
+    case 'bound': {
+      const field = use.fields.find((f): f is InputField => (INPUT_FIELDS as readonly string[]).includes(f))
+      return field ? { kind: 'bind', field } : { kind: 'fixed' }
+    }
+  }
+}
+
+export function choiceValue(choice: InputChoice): string {
+  return choice.kind === 'bind' ? `bind:${choice.field}` : choice.kind
+}
+
+export function parseChoiceValue(value: string): InputChoice | null {
+  if (value === 'fixed' || value === 'exposed') return { kind: value }
+  if (value.startsWith('bind:')) {
+    const field = value.slice('bind:'.length)
+    if ((INPUT_FIELDS as readonly string[]).includes(field)) return { kind: 'bind', field: field as InputField }
+  }
+  return null
+}
+
+/** 公開できる値か(真偽値・数・文字列)。 */
+export function canExpose(input: ComfyNodeInputInfo): boolean {
+  return !input.linked && inferParamType(input.value) !== null
 }

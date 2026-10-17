@@ -1023,3 +1023,10 @@ button.cand:hover {
     min-height: 44px;
   }
 }
+
+/* 行を開いたときの操作(読み取りの値にする、図で選ぶ) */
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

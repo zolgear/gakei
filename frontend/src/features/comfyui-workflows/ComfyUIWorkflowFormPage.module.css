@@ -244,18 +244,75 @@
   gap: 16px;
 }
 
-/* 図の領域があるときだけ2列にする(第3段)。広い幅でもカードの列は潰さない。 */
-@container settings-page (min-width: 1100px) {
-  .bindingLayout[data-has-diagram='true'] {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
-  }
-}
-
 .cardsColumn {
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+}
+
+/* 差し込み先の行・公開パラメーター・詳細設定(狭い幅では図の後ろに回す) */
+.lateGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  order: 2;
+}
+
+.diagramColumn {
+  min-width: 0;
+  order: 1;
+}
+
+.diagramColumn:focus {
+  outline: none;
+}
+
+/* 「図で選ぶ」で移ったとき、上に留まるヘッダーに隠れないように */
+.diagramColumn {
+  scroll-margin-top: 72px;
+}
+
+/* 図があり、2列にできない幅: カードの列をほどいて、図を差し込み先の行の上に置く(ADR-0052 4章)。 */
+.bindingLayout[data-has-diagram='true'] .cardsColumn {
+  display: contents;
+}
+
+/* 広い幅: カードの左、図の右。図はスクロールしても見えるように上に留める。 */
+@container settings-page (min-width: 1100px) {
+  .bindingLayout[data-has-diagram='true'] {
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 1.05fr);
+    align-items: start;
+  }
+
+  .bindingLayout[data-has-diagram='true'] .cardsColumn {
+    display: flex;
+  }
+
+  .bindingLayout[data-has-diagram='true'] .diagramColumn {
+    position: sticky;
+    top: 72px;
+    max-height: calc(100dvh - 88px);
+    overflow-y: auto;
+  }
+}
+
+/* 768px 未満: 図はカードの下に畳む(見るだけ)。 */
+@media (max-width: 767px) {
+  .diagramColumn {
+    order: 3;
+  }
+}
+
+.diagramDetails {
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.diagramDetails[open] > summary {
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* 詳細設定(今までの2段のドロップダウン) */
