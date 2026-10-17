@@ -1814,6 +1814,24 @@ class ComfyAnalyzeResponse(BaseModel):
     validation: list[ValidationIssue] = Field(default_factory=list)
 
 
+class ComfyValidateRequest(BaseModel):
+    """登録・編集の画面で、保存の前に差し込み先と公開パラメーターを検証する(ADR-0052 3章)。
+
+    `bindings` は analyze の提案と同じ形で、まだ選んでいない必須項目(prompt、outputs)は問わない
+    (欠けは画面が別に示す)。保存はしない。
+    """
+
+    template: dict[str, Any]
+    operation: Literal["generate", "edit"]
+    bindings: SuggestedBindings
+    exposed_params: list[ExposedParam] = Field(default_factory=list)
+
+
+class ComfyValidateResponse(BaseModel):
+    # 保存時と同じ検証の結果(エラーと警告)。
+    issues: list[ValidationIssue] = Field(default_factory=list)
+
+
 class ComfyWorkflowCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     operation: Literal["generate", "edit"]

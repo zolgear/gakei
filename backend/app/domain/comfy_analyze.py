@@ -53,6 +53,8 @@ BindingField = Literal[
     "final_prompt",
 ]
 ParamTier = Literal["recommended", "other", "hidden"]
+# 「公開しない」の理由(画面が文にする)。推奨・その他では None。
+HiddenReason = Literal["unused_branch", "secret", "fixed_setting", "file_or_model", "fixed_text"]
 
 _FIELD_ORDER: tuple[BindingField, ...] = (
     "prompt",
@@ -110,6 +112,8 @@ class ParamTierInfo(BaseModel):
     node: str
     input: str
     tier: ParamTier
+    # `hidden` のときだけ、公開しない理由。
+    hidden_reason: HiddenReason | None = None
 
 
 @dataclass
@@ -1224,26 +1228,29 @@ class _Reader:
                 if control is not None:
                     self.recommended.add(control)
 
-    def param_tier(self, node_id: str, input_name: str, value: Any, secrets: set) -> ParamTier:
+    def param_tier(
+        self, node_id: str, input_name: str, value: Any, secrets: set
+    ) -> tuple[ParamTier, HiddenReason | None]:
+        """候補の段と、公開しないときの理由。"""
         if (node_id, input_name) in self.recommended:
-            return "recommended"
+            return "recommended", None
         if self.live and self.states.get(node_id) != "live":
-            return "hidden"
+            return "hidden", "unused_branch"
         if (node_id, input_name) in secrets:
-            return "hidden"
+            return "hidden", "secret"
         if input_name in _HIDDEN_INPUTS:
-            return "hidden"
+            return "hidden", "fixed_setting"
         if input_name.endswith("_name") and input_name != "sampler_name":
-            return "hidden"
-        if isinstance(value, str) and (
-            _FILE_VALUE_RE.search(value) or len(value) > _FIXED_TEXT or "\n" in value
-        ):
-            return "hidden"
+            return "hidden", "file_or_model"
+        if isinstance(value, str) and _FILE_VALUE_RE.search(value):
+            return "hidden", "file_or_model"
+        if isinstance(value, str) and (len(value) > _FIXED_TEXT or "\n" in value):
+            return "hidden", "fixed_text"
         if self.g.class_type(node_id).startswith("Primitive") and self.g.has_custom_title(node_id):
-            return "recommended"
+            return "recommended", None
         if input_name in _RECOMMENDED_INPUTS:
-            return "recommended"
-        return "other"
+            return "recommended", None
+        return "other", None
 
 
 # -- 公開パラメーターの候補(ADR-0013 からの互換) -------------------------------------
@@ -1454,17 +1461,20 @@ def analyze_workflow(
     candidate_params = _build_candidate_params(template, used)
     reader._collect_switch_controls()
     secret_keys = {(s.node_id, s.input) for s in secrets}
-    param_tiers = [
-        ParamTierInfo(
-            name=param.name,
-            node=param.node,
-            input=param.input,
-            tier=reader.param_tier(
-                param.node, param.input, g.inputs(param.node).get(param.input), secret_keys
-            ),
+    param_tiers: list[ParamTierInfo] = []
+    for param in candidate_params:
+        tier, hidden_reason = reader.param_tier(
+            param.node, param.input, g.inputs(param.node).get(param.input), secret_keys
         )
-        for param in candidate_params
-    ]
+        param_tiers.append(
+            ParamTierInfo(
+                name=param.name,
+                node=param.node,
+                input=param.input,
+                tier=tier,
+                hidden_reason=hidden_reason,
+            )
+        )
 
     validation = check_workflow(template, suggested_operation, suggested_bindings, [], object_info)
 

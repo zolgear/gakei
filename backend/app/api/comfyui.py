@@ -55,6 +55,8 @@ from app.domain.schemas import (
     ComfyUIConnectionTestRequest,
     ComfyUIConnectionTestResponse,
     ComfyUIStatusResponse,
+    ComfyValidateRequest,
+    ComfyValidateResponse,
     ComfyWorkflowCreateRequest,
     ComfyWorkflowDetail,
     ComfyWorkflowListResponse,
@@ -541,6 +543,22 @@ def analyze(
         param_tiers=result.param_tiers,
         validation=result.validation,
     )
+
+
+@router.post(
+    "/workflows/validate",
+    response_model=ComfyValidateResponse,
+    operation_id="validate_comfy_workflow",
+    dependencies=[Depends(require_admin)],
+)
+def validate(body: ComfyValidateRequest) -> ComfyValidateResponse:
+    """保存せずに、保存時と同じ検証(ADR-0052 3章)だけを掛ける。画面が値を変えるたびに呼ぶ。
+
+    規則を画面に二重に持たないための口。`/object_info` は保存時と同じく使わない。
+    """
+    _check_template_format(body.template)
+    issues = check_workflow(body.template, body.operation, body.bindings, body.exposed_params)
+    return ComfyValidateResponse(issues=issues)
 
 
 @router.post(

@@ -419,6 +419,13 @@ export type ComfyInputRef = components['schemas']['InputRef']
 export type ComfyMaskBinding = components['schemas']['MaskBinding']
 export type ComfyExposedParam = components['schemas']['ExposedParam']
 export type ComfyOperation = ComfyWorkflowSummary['operation']
+export type ComfyBindingReading = components['schemas']['BindingReading']
+export type ComfyBindingCandidate = components['schemas']['BindingCandidate']
+export type ComfyPathStep = components['schemas']['PathStep']
+export type ComfyParamTierInfo = components['schemas']['ParamTierInfo']
+export type ComfyValidationIssue = components['schemas']['ValidationIssue']
+export type ComfyValidateRequest = components['schemas']['ComfyValidateRequest']
+export type ComfyValidateResponse = components['schemas']['ComfyValidateResponse']
 export type ComfyParamType = ComfyExposedParam['type']
 
 export type PriceEstimateResponse = components['schemas']['PriceEstimate']
@@ -1032,6 +1039,15 @@ export function analyzeComfyWorkflow(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ template }),
+  })
+}
+
+/** 保存せずに、保存時と同じ検証だけを掛ける(ADR-0052 3章)。画面が値を変えるたびに呼ぶ。 */
+export function validateComfyWorkflow(body: ComfyValidateRequest): Promise<ComfyValidateResponse> {
+  return request('/api/comfyui/workflows/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   })
 }
 

@@ -292,6 +292,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/comfyui/workflows/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate
+         * @description 保存せずに、保存時と同じ検証(ADR-0052 3章)だけを掛ける。画面が値を変えるたびに呼ぶ。
+         *
+         *     規則を画面に二重に持たないための口。`/object_info` は保存時と同じく使わない。
+         */
+        post: operations["validate_comfy_workflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfyui/workflows": {
         parameters: {
             query?: never;
@@ -4012,6 +4034,32 @@ export interface components {
             /** Default */
             default: number;
         };
+        /**
+         * ComfyValidateRequest
+         * @description 登録・編集の画面で、保存の前に差し込み先と公開パラメーターを検証する(ADR-0052 3章)。
+         *
+         *     `bindings` は analyze の提案と同じ形で、まだ選んでいない必須項目(prompt、outputs)は問わない
+         *     (欠けは画面が別に示す)。保存はしない。
+         */
+        ComfyValidateRequest: {
+            /** Template */
+            template: {
+                [key: string]: unknown;
+            };
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "generate" | "edit";
+            bindings: components["schemas"]["SuggestedBindings"];
+            /** Exposed Params */
+            exposed_params?: components["schemas"]["ExposedParam"][];
+        };
+        /** ComfyValidateResponse */
+        ComfyValidateResponse: {
+            /** Issues */
+            issues?: components["schemas"]["ValidationIssue"][];
+        };
         /** ComfyWorkflowCreateRequest */
         ComfyWorkflowCreateRequest: {
             /** Name */
@@ -5687,6 +5735,8 @@ export interface components {
              * @enum {string}
              */
             tier: "recommended" | "other" | "hidden";
+            /** Hidden Reason */
+            hidden_reason?: ("unused_branch" | "secret" | "fixed_setting" | "file_or_model" | "fixed_text") | null;
         };
         /** ParameterSetCreateRequest */
         ParameterSetCreateRequest: {
@@ -8331,6 +8381,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComfyAnalyzeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_comfy_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComfyValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyValidateResponse"];
                 };
             };
             /** @description Validation Error */
