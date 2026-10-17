@@ -973,7 +973,8 @@
         "image_run": "Image generation",
         "annotation": "Auto titles and tags",
         "assistant": "Assistant",
-        "embedding": "Remote embeddings"
+        "embedding": "Remote embeddings",
+        "workflow_analysis": "Workflow analysis (ComfyUI)"
       },
       "sourcesLabel": "Ingest source (asset.ingested)",
       "sources": {

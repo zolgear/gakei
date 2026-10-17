@@ -36,7 +36,13 @@ export const MOD_DEFAULT_TIMEOUT_SECONDS = 10
 export const MOD_WEBHOOKS_MAX = 50
 
 export const MOD_EVENTS: readonly ModEvent[] = ['asset.ingested', 'ai.before_send', 'run.finished']
-export const MOD_PURPOSES: readonly ModPurpose[] = ['image_run', 'annotation', 'assistant', 'embedding']
+export const MOD_PURPOSES: readonly ModPurpose[] = [
+  'image_run',
+  'annotation',
+  'assistant',
+  'embedding',
+  'workflow_analysis',
+]
 export const MOD_SOURCES: readonly ModSource[] = [
   'upload',
   'url',

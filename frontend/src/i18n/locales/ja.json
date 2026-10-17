@@ -973,7 +973,8 @@
         "image_run": "画像の生成",
         "annotation": "自動タイトル・タグ",
         "assistant": "アシスタント",
-        "embedding": "リモートの埋め込み"
+        "embedding": "リモートの埋め込み",
+        "workflow_analysis": "ワークフローの推定(ComfyUI)"
       },
       "sourcesLabel": "取り込みの経路(asset.ingested)",
       "sources": {

@@ -5413,7 +5413,7 @@ export interface components {
          */
         ModFilters: {
             /** Purposes */
-            purposes?: ("image_run" | "annotation" | "assistant" | "embedding")[];
+            purposes?: ("image_run" | "annotation" | "assistant" | "embedding" | "workflow_analysis")[];
             /** Sources */
             sources?: ("upload" | "url" | "sketch" | "mask" | "composite" | "generated" | "import" | "mcp")[];
             /** Providers */
@@ -5451,7 +5451,7 @@ export interface components {
             /** Mod Name */
             mod_name: string;
             /** Purpose */
-            purpose?: ("image_run" | "annotation" | "assistant" | "embedding") | null;
+            purpose?: ("image_run" | "annotation" | "assistant" | "embedding" | "workflow_analysis") | null;
             /** Run Id */
             run_id?: string | null;
             /** Asset Id */

@@ -2916,7 +2916,7 @@ class AssistantSettingsUpdateRequest(BaseModel):
 # -- Mod とフック(ADR-0051) ---------------------------------------------------------
 
 ModEvent = Literal["asset.ingested", "ai.before_send", "run.finished"]
-ModPurpose = Literal["image_run", "annotation", "assistant", "embedding"]
+ModPurpose = Literal["image_run", "annotation", "assistant", "embedding", "workflow_analysis"]
 ModSource = Literal["upload", "url", "sketch", "mask", "composite", "generated", "import", "mcp"]
 ModOnFailure = Literal["block", "allow"]
 
