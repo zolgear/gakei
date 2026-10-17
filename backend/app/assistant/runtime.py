@@ -4,6 +4,8 @@
 - LLM のリクエストの1時間の記録(利用者ごと)。プロセス内で数え、再起動で 0 に戻る
   (ADR-0024 8章と同じ)。上限に達したら待たせずに断る。
 - 進行中の会話(同じ会話で同時に2つの発言を処理しない)。
+- 決まった形の JSON を受ける呼び出しのエンジン(ComfyUI のワークフローの推定。ADR-0052 6章)。
+  1時間の記録は会話と同じものに数える。
 """
 
 from __future__ import annotations
@@ -14,6 +16,11 @@ import uuid
 from collections import deque
 
 from app.assistant.engine import AssistantEngine, FakeAssistantEngine, OpenAIAssistantEngine
+from app.assistant.structured import (
+    FakeStructuredEngine,
+    OpenAIStructuredEngine,
+    StructuredEngine,
+)
 
 _WINDOW_SECONDS = 3600.0
 # 個人モード(利用者の id が無い)の記録のキー。
@@ -57,8 +64,9 @@ class HourlyRequestCounter:
 
 
 class AssistantRuntime:
-    def __init__(self, engine: AssistantEngine) -> None:
+    def __init__(self, engine: AssistantEngine, structured: StructuredEngine | None = None) -> None:
         self.engine = engine
+        self.structured: StructuredEngine = structured or FakeStructuredEngine()
         self.requests = HourlyRequestCounter()
         self._active: set[uuid.UUID] = set()
         self._active_lock = threading.Lock()
@@ -78,4 +86,5 @@ class AssistantRuntime:
 
 def build_runtime(fake: bool) -> AssistantRuntime:
     engine: AssistantEngine = FakeAssistantEngine() if fake else OpenAIAssistantEngine()
-    return AssistantRuntime(engine)
+    structured: StructuredEngine = FakeStructuredEngine() if fake else OpenAIStructuredEngine()
+    return AssistantRuntime(engine, structured)
