@@ -69,8 +69,8 @@ export function AssistantSuggestPanel({
   const diff = result ? suggestionDiff(bindings, operation, result) : null
   const error = current ? mutation.error : null
   const errorKind = error ? suggestErrorKind(error) : null
-  const errorPrefix =
-    errorKind === 'denied' ? s.errorDenied : errorKind === 'limit' ? s.errorLimit : s.errorFailed
+  // サーバーの文(拒否の理由・上限・失敗の理由)をそのまま出す。拒否なら、規則の読み取りは使えることを添える。
+  const errorMessage = error instanceof ApiError ? error.message : s.errorFailed
   const tokens = result ? totalTokens(result.usage) : null
 
   return (
@@ -102,7 +102,8 @@ export function AssistantSuggestPanel({
 
       {error && !mutation.isPending && (
         <p className={settingsStyles.errorText} role="alert">
-          {errorPrefix} {error instanceof ApiError ? error.message : ''}
+          {errorMessage}
+          {errorKind === 'denied' && <> {s.errorDenied}</>}
         </p>
       )}
 
