@@ -33,7 +33,7 @@ from app.domain.comfy_workflow import (
     SuggestedBindings,
     ValidationIssue,
 )
-from app.providers.base import ProviderCapabilities
+from app.providers.base import ParamType, ProviderCapabilities
 
 # -- Capabilities (ADR-0013: 複数プロバイダー) -------------------------------
 
@@ -1898,6 +1898,54 @@ class ComfyWorkflowDetail(ComfyWorkflowSummary):
 
 class ComfyWorkflowListResponse(BaseModel):
     items: list[ComfyWorkflowSummary] = Field(default_factory=list)
+
+
+class ComfyViewNodeInput(BaseModel):
+    """閲覧用の入力1つ(ADR-0052 7章)。秘密に見える値(ADR-0013 8章)は `value` を返さず、
+    `redacted` を True にする。"""
+
+    name: str
+    value: Any = None
+    linked: bool
+    redacted: bool = False
+
+
+class ComfyViewNode(BaseModel):
+    id: str
+    class_type: str | None = None
+    title: str | None = None
+    inputs: list[ComfyViewNodeInput] = Field(default_factory=list)
+    # 出力につながる(live)/ 表示だけ(display)/ 使われない(unused)。ADR-0052 2章。
+    state: NodeState = "live"
+    kind: NodeKind | None = None
+
+
+class ComfyViewExposedParam(BaseModel):
+    """閲覧用の公開パラメーター。登録した既定値が秘密に見えれば伏せる(`default_redacted`)。"""
+
+    name: str
+    label: str
+    node: str
+    input: str
+    type: ParamType
+    default: Any | None = None
+    default_redacted: bool = False
+
+
+class ComfyWorkflowViewResponse(BaseModel):
+    """生成画面からの閲覧(`GET /api/comfyui/workflows/{id}/view`。ADR-0052 7章)。
+
+    図に要る構造と値だけを返す。テンプレートそのものは返さない。差し込み先(`bindings`)には
+    出力(`outputs`)と最終プロンプト(`final_prompt`)も含まれる。
+    """
+
+    id: uuid.UUID
+    name: str
+    operation: Literal["generate", "edit"]
+    nodes: list[ComfyViewNode] = Field(default_factory=list)
+    edges: list[AnalyzeEdge] = Field(default_factory=list)
+    bindings: Bindings
+    exposed_params: list[ComfyViewExposedParam] = Field(default_factory=list)
 
 
 # -- About (ADR-0021 3章) ---------------------------------------------------

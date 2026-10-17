@@ -769,3 +769,118 @@ def test_analyze_requires_exactly_one_of_template_or_workflow_id(client: TestCli
         json={"workflow_id": "00000000-0000-0000-0000-000000000000"},
     )
     assert missing.status_code == 404
+
+
+# -- 生成画面からの閲覧(ADR-0052 7章) ------------------------------------------------
+
+# テスト用の、形だけそれらしい値(実在のキーではない)。
+_FAKE_KEY = "sk-proj-" + "Ab3dEf6hIj9kLm2nOp5qRs8t"
+
+
+def _connect(client: TestClient) -> None:
+    response = client.put("/api/comfyui/connection", json={"url": "http://127.0.0.1:8189"})
+    assert response.status_code == 200, response.text
+
+
+def _create_workflow_with_secret(client: TestClient) -> dict:
+    template = clone(T2I_GRAPH)
+    # 出力に届かないカスタムノードに、秘密に見える値を2通り(名前と値の形)で書く。
+    template["90"] = {
+        "class_type": "ExternalApiNode",
+        "inputs": {"api_key": "plain-looking", "note": f"use {_FAKE_KEY}", "count": 3},
+        "_meta": {"title": "外部 API"},
+    }
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "秘密入り",
+            "operation": "generate",
+            "template": template,
+            "bindings": _t2i_bindings_body(),
+            "exposed_params": [
+                {
+                    "name": "steps",
+                    "node": "3",
+                    "input": "steps",
+                    "type": "int",
+                    "label": "ステップ数",
+                },
+                {
+                    "name": "note",
+                    "node": "90",
+                    "input": "note",
+                    "type": "text",
+                    "label": "メモ",
+                    "default": f"use {_FAKE_KEY}",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_view_returns_structure_and_redacts_secrets(client: TestClient) -> None:
+    _connect(client)
+    workflow = _create_workflow_with_secret(client)
+
+    response = client.get(f"/api/comfyui/workflows/{workflow['id']}/view")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "plain-looking" not in response.text
+    assert _FAKE_KEY not in response.text
+    # テンプレートそのものは返さない。
+    assert "template" not in body
+    assert body["name"] == "秘密入り"
+    assert body["operation"] == "generate"
+
+    nodes = {n["id"]: n for n in body["nodes"]}
+    assert nodes["3"]["kind"] == "sampler"
+    assert nodes["3"]["state"] == "live"
+    assert nodes["90"]["state"] == "unused"
+    inputs = {i["name"]: i for i in nodes["90"]["inputs"]}
+    assert inputs["api_key"] == {
+        "name": "api_key",
+        "value": None,
+        "linked": False,
+        "redacted": True,
+    }
+    assert inputs["note"]["redacted"] is True and inputs["note"]["value"] is None
+    assert inputs["count"] == {"name": "count", "value": 3, "linked": False, "redacted": False}
+    sampler_inputs = {i["name"]: i for i in nodes["3"]["inputs"]}
+    assert sampler_inputs["model"]["linked"] is True
+    assert sampler_inputs["model"]["value"] == ["4", 0]
+
+    assert any(e["source"] == "3" and e["target"] == "8" for e in body["edges"])
+    assert body["bindings"]["prompt"] == {"node": "6", "input": "text"}
+    assert body["bindings"]["outputs"] == ["9"]
+
+    params = {p["name"]: p for p in body["exposed_params"]}
+    assert params["steps"]["default_redacted"] is False
+    assert params["steps"]["label"] == "ステップ数"
+    assert params["note"]["default"] is None
+    assert params["note"]["default_redacted"] is True
+
+
+def test_view_returns_404_when_connection_inactive_or_workflow_deleted(
+    client: TestClient,
+) -> None:
+    # 接続が無い(未設定)間は、生成画面に出ないので閲覧もできない。
+    workflow = _create_t2i_workflow(client)
+    response = client.get(f"/api/comfyui/workflows/{workflow['id']}/view")
+    assert response.status_code == 404
+
+    _connect(client)
+    assert client.get(f"/api/comfyui/workflows/{workflow['id']}/view").status_code == 200
+
+    # 無効にした接続。
+    assert client.post("/api/comfyui/connection/disable").status_code == 200
+    assert client.get(f"/api/comfyui/workflows/{workflow['id']}/view").status_code == 404
+    assert client.post("/api/comfyui/connection/enable").status_code == 200
+    assert client.get(f"/api/comfyui/workflows/{workflow['id']}/view").status_code == 200
+
+    # 削除したワークフロー・無いワークフロー。
+    assert client.delete(f"/api/comfyui/workflows/{workflow['id']}").status_code == 204
+    assert client.get(f"/api/comfyui/workflows/{workflow['id']}/view").status_code == 404
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert client.get(f"/api/comfyui/workflows/{unknown}/view").status_code == 404

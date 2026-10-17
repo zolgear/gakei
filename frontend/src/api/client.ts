@@ -424,6 +424,10 @@ export type ComfyBindingCandidate = components['schemas']['BindingCandidate']
 export type ComfyPathStep = components['schemas']['PathStep']
 export type ComfyAnalyzeEdge = components['schemas']['AnalyzeEdge']
 export type ComfyNodeKind = NonNullable<ComfyNodeInfo['kind']>
+export type ComfyWorkflowView = components['schemas']['ComfyWorkflowViewResponse']
+export type ComfyViewNode = components['schemas']['ComfyViewNode']
+export type ComfyViewNodeInput = components['schemas']['ComfyViewNodeInput']
+export type ComfyViewExposedParam = components['schemas']['ComfyViewExposedParam']
 export type ComfyParamTierInfo = components['schemas']['ParamTierInfo']
 export type ComfyValidationIssue = components['schemas']['ValidationIssue']
 export type ComfyValidateRequest = components['schemas']['ComfyValidateRequest']
@@ -1087,6 +1091,11 @@ export function listComfyWorkflows(): Promise<ComfyWorkflowListResponse> {
 
 export function getComfyWorkflow(workflowId: string): Promise<ComfyWorkflowDetail> {
   return request(`/api/comfyui/workflows/${workflowId}`)
+}
+
+/** 生成画面からの閲覧(ADR-0052 7章)。図に要る構造と値だけで、秘密に見える値は伏せてある。 */
+export function viewComfyWorkflow(workflowId: string): Promise<ComfyWorkflowView> {
+  return request(`/api/comfyui/workflows/${encodeURIComponent(workflowId)}/view`)
 }
 
 export function createComfyWorkflow(
