@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { ComfyNodeInfo } from '../../api/client'
 import { mapEdges } from './bindingGraph'
-import { MAP_MIN_READABLE_ZOOM, buildMapView, mainPathBoxes, mapFrame, mapNodeHeight } from './bindingMapView'
+import {
+  MAP_MIN_READABLE_ZOOM,
+  buildMapView,
+  chooseDirection,
+  mainPathBoxes,
+  mapFrame,
+  mapNodeHeight,
+} from './bindingMapView'
 import { EMPTY_BINDINGS_FORM, type BindingsFormState } from './bindingsForm'
 import type { ExposedParamRow } from './exposedParamsForm'
 
@@ -246,5 +253,26 @@ describe('buildMapView の主要な道筋の範囲', () => {
     const xs = (id: string) => v.flowNodes.find((n) => n.id === id)!.position.x
     expect(v.focus!.minX).toBeLessThanOrEqual(xs('6'))
     expect(v.focus!.maxX).toBeGreaterThanOrEqual(xs('9'))
+  })
+})
+
+describe('chooseDirection', () => {
+  const lr = { width: 2000, height: 500, spineSize: { width: 2000, height: 80 } }
+  const tb = { width: 1000, height: 1100, spineSize: { width: 240, height: 1100 } }
+
+  it('主要な道筋が読める倍率で収まる向きを選ぶ', () => {
+    // 横長でも、左 → 右では道筋が入らず、上 → 下なら入る。
+    expect(chooseDirection({ width: 1000, height: 950 }, lr, tb)).toBe('TB')
+    // 十分に横長なら左 → 右で入る。
+    expect(chooseDirection({ width: 2400, height: 600 }, lr, tb)).toBe('LR')
+  })
+
+  it('どちらも入らないときは枠の形で選ぶ', () => {
+    expect(chooseDirection({ width: 800, height: 400 }, lr, tb)).toBe('LR')
+    expect(chooseDirection({ width: 400, height: 800 }, lr, tb)).toBe('TB')
+  })
+
+  it('大きさが分からないときは枠の形', () => {
+    expect(chooseDirection({ width: 0, height: 0 }, lr, tb)).toBe('LR')
   })
 })

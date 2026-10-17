@@ -1,16 +1,19 @@
 /**
- * 差し込み先の読むだけの図(ADR-0052 4章)。カードの横(狭い幅では上、768px 未満はカードの下に畳む)に置く。
+ * 差し込み先の読むだけの図(ADR-0052 4章)。登録画面の「図」の表示で、左に図、右にパネル(`renderPanel`)を並べる。
  *
  * - 既定は縮約した図(役割を持つノードと錨を残し、ほかを束ねる)。「すべてのノード」に切り替えられる。
  * - ノードの状態(出力につながる / 表示だけ / 使われない)を線と濃さで描き分ける。開いた項目の道筋を金、
  *   差し込まない項目の根拠を赤の破線で示す。
- * - ノードを選ぶと、下のパネルに入力の一覧が出て、入力ごとに差し込む・公開・固定を選べる(`readOnly` では見るだけ)。
+ * - ノードを選ぶと `onSelect` を呼ぶ(パネルの「ノード」タブに入力の一覧を出すのはページ)。
  * - 「図で選ぶ」の間は、選べるノードだけを点線の枠で示す。
+ * - 図の向きは枠の形と中身で選ぶ(`chooseDirection`)。
+ * - スクロールの入れ物を作らない: 図はページのスクロールに付いて上に留まり(768px 未満は高さ固定)、ホイールは
+ *   ページのスクロールに渡す。拡大縮小はボタン・ピンチ・Ctrl(Mac は ⌘)+ホイール、移動はドラッグ。
  *
  * React Flow はパン・ズーム・描画だけに使う。ノードのドラッグ・接続・選択は無効にし、配置は保存しない。
  * テンプレートの値と配線は変えない(ADR-0001 の非ゴールの線引き)。
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Background,
   Controls,
@@ -21,13 +24,13 @@ import {
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { ComfyBindingReading, ComfyNodeInfo, ComfyOperation } from '../../api/client'
+import type { ComfyBindingReading, ComfyNodeInfo } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
-import { inputFitsField, nodePickable, type InputChoice, type MapEdge } from './bindingGraph'
+import { inputFitsField, nodePickable, type InputChoice, type MapEdge, type MapGraph } from './bindingGraph'
 import {
   buildMapView,
+  chooseDirection,
   mapFrame,
-  type MapDirection,
   type MapEdgeData,
   type MapMode,
   type MapNodeData,
@@ -36,7 +39,6 @@ import type { FieldKey } from './bindingCards'
 import type { BindingsFormState } from './bindingsForm'
 import type { ExposedParamRow } from './exposedParamsForm'
 import { BindingMapNode } from './BindingMapNode'
-import { BindingMapInspector } from './BindingMapInspector'
 import styles from './BindingMap.module.css'
 
 const nodeTypes = { mapBox: BindingMapNode }
@@ -50,7 +52,6 @@ export interface BindingMapProps {
   bindings: BindingsFormState
   exposedRows: readonly ExposedParamRow[]
   readings: readonly ComfyBindingReading[]
-  operation: ComfyOperation
   /** 開いている項目(道筋を強調する)。 */
   focusField: FieldKey | null
   /** 「図で選ぶ」の項目。 */
@@ -61,8 +62,8 @@ export interface BindingMapProps {
   onSelect: (id: string | null) => void
   /** 見るだけ(768px 未満)。割り当てはカードで行う。 */
   readOnly: boolean
-  /** 図の向き。縦長の枠(カードの右の列、768px 未満)は上 → 下、横長の枠は左 → 右。 */
-  direction: MapDirection
+  /** 右(768px 未満は下)のパネルの中身。束の情報(どのノードがどの箱か)を渡す。 */
+  renderPanel: (graph: MapGraph) => ReactNode
   onChooseInput: (nodeId: string, input: string, choice: InputChoice) => void
   onToggleOutput: (nodeId: string) => void
   onToggleFinalPrompt: (nodeId: string) => void
@@ -82,14 +83,13 @@ function BindingMapInner({
   bindings,
   exposedRows,
   readings,
-  operation,
   focusField,
   pickField,
   onCancelPick,
   selected,
   onSelect,
   readOnly,
-  direction,
+  renderPanel,
   onChooseInput,
   onToggleOutput,
   onToggleFinalPrompt,
@@ -100,31 +100,35 @@ function BindingMapInner({
   const [pickMessage, setPickMessage] = useState<string | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const { setViewport } = useReactFlow()
-  // 枠の幅(高さと最初の表示の計算に使う)と、画面の高さ(枠の高さの上限)。
-  const [canvasWidth, setCanvasWidth] = useState(0)
-  const [screenHeight, setScreenHeight] = useState(() => (typeof window === 'undefined' ? 800 : window.innerHeight))
+  // 枠の大きさ(CSS が決める。向きと最初の表示の計算に使う)。
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   useEffect(() => {
     const el = canvasRef.current
     if (!el) return
     const update = () => {
-      setCanvasWidth(Math.round(el.getBoundingClientRect().width))
-      setScreenHeight(window.innerHeight)
+      const rect = el.getBoundingClientRect()
+      setCanvasSize((prev) =>
+        prev.width === Math.round(rect.width) && prev.height === Math.round(rect.height)
+          ? prev
+          : { width: Math.round(rect.width), height: Math.round(rect.height) },
+      )
     }
     update()
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
     observer?.observe(el)
-    window.addEventListener('resize', update)
-    return () => {
-      observer?.disconnect()
-      window.removeEventListener('resize', update)
-    }
+    return () => observer?.disconnect()
   }, [])
 
-  const view = useMemo(
-    () =>
-      buildMapView({ nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected, direction }),
-    [nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected, direction],
+  const viewLR = useMemo(
+    () => buildMapView({ nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected, direction: 'LR' }),
+    [nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected],
   )
+  const viewTB = useMemo(
+    () => buildMapView({ nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected, direction: 'TB' }),
+    [nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected],
+  )
+  const direction = chooseDirection(canvasSize, viewLR, viewTB)
+  const view = direction === 'LR' ? viewLR : viewTB
 
   const flowEdges: Edge[] = useMemo(
     () =>
@@ -143,19 +147,14 @@ function BindingMapInner({
     [view.flowEdges],
   )
 
-  // 枠の高さは中身に合わせる。上限は画面の高さ程度(縦向きの右の列は、ヘッダーと図の見出しを除いた高さ。
-  // 768px 未満は、ページのスクロールを妨げないよう画面の 65%)。最初の表示は `mapFrame` が決める。
-  const maxHeight = readOnly
-    ? Math.round(screenHeight * 0.65)
-    : direction === 'TB'
-      ? Math.max(320, screenHeight - 230)
-      : Math.min(720, Math.max(320, screenHeight - 200))
-  const frame = mapFrame(canvasWidth, { width: view.width, height: view.height, rects: view.rects }, view.focus, {
+  // 最初の表示(枠の高さは CSS が決めるので、その高さで倍率と位置を決める)。
+  const frame = mapFrame(canvasSize.width, { width: view.width, height: view.height, rects: view.rects }, view.focus, {
     direction,
-    maxHeight,
+    minHeight: canvasSize.height,
+    maxHeight: canvasSize.height,
   })
   const resetKey = `${mode}:${direction}:${nodes.length}:${nodes[0]?.id ?? ''}`
-  // 表示を切り替えたとき・テンプレートを差し替えたとき・枠の幅が変わったときだけ、最初の表示に戻す
+  // 表示を切り替えたとき・テンプレートを差し替えたとき・枠の大きさが変わったときだけ、最初の表示に戻す
   // (割り当てで箱が変わるたびに戻すと、見ている場所がずれるため)。
   const frameRef = useRef(frame)
   // 描画のあとに最新の表示を覚える(下の effect より先に走る)。
@@ -163,9 +162,9 @@ function BindingMapInner({
     frameRef.current = frame
   })
   useEffect(() => {
-    if (canvasWidth <= 0) return
+    if (canvasSize.width <= 0 || canvasSize.height <= 0) return
     void setViewport(frameRef.current.viewport)
-  }, [resetKey, canvasWidth, setViewport])
+  }, [resetKey, canvasSize, setViewport])
 
   const boxById = useMemo(() => new Map(view.graph.boxes.map((b) => [b.id, b])), [view.graph.boxes])
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
@@ -186,7 +185,6 @@ function BindingMapInner({
           if (pickField === 'outputs') {
             if (!bindings.outputs.includes(pickable[0].id)) onToggleOutput(pickable[0].id)
           } else if (bindings.finalPrompt !== pickable[0].id) onToggleFinalPrompt(pickable[0].id)
-          onSelect(pickable[0].id)
           onCancelPick()
           return
         }
@@ -196,7 +194,6 @@ function BindingMapInner({
         )
         if (inputs.length === 1) {
           onChooseInput(inputs[0].node, inputs[0].input, { kind: 'bind', field: pickField })
-          onSelect(inputs[0].node)
           return
         }
       }
@@ -210,129 +207,115 @@ function BindingMapInner({
   const boxCount = view.graph.boxes.length
 
   return (
-    <section className={styles.map} aria-label={m.heading}>
-      <div className={styles.mapHead}>
-        <div className={styles.mapTitleRow}>
-          <h2 className={styles.mapTitle}>{m.heading}</h2>
-          <div className={styles.segmented} role="group" aria-label={m.viewLabel}>
-            {(['collapsed', 'full'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={mode === value}
-                onClick={() => setMode(value)}
-              >
-                {value === 'collapsed' ? m.viewCollapsed : m.viewFull}
-              </button>
-            ))}
+    <div className={styles.workspace} data-readonly={readOnly || undefined}>
+      <section className={styles.map} aria-label={m.heading}>
+        <div className={styles.mapHead}>
+          <div className={styles.mapTitleRow}>
+            <h2 className={styles.mapTitle}>{m.heading}</h2>
+            <div className={styles.segmented} role="group" aria-label={m.viewLabel}>
+              {(['collapsed', 'full'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={mode === value}
+                  onClick={() => setMode(value)}
+                >
+                  {value === 'collapsed' ? m.viewCollapsed : m.viewFull}
+                </button>
+              ))}
+            </div>
           </div>
+          <p className={styles.mapLead}>
+            {readOnly ? m.leadReadOnly : m.lead}{' '}
+            {mode === 'full'
+              ? fmt(m.summaryFull, { nodes: nodeCount })
+              : fmt(m.summary, { nodes: nodeCount, boxes: boxCount })}
+          </p>
+          <ul className={styles.legend}>
+            <li>
+              <i className={styles.legendLive} aria-hidden="true" />
+              {m.legendLive}
+            </li>
+            <li>
+              <i className={styles.legendDisplay} aria-hidden="true" />
+              {m.legendDisplay}
+            </li>
+            <li>
+              <i className={styles.legendUnused} aria-hidden="true" />
+              {m.legendUnused}
+            </li>
+            <li>
+              <i className={styles.legendPath} aria-hidden="true" />
+              {m.legendPath}
+            </li>
+            <li>
+              <i className={styles.legendEvidence} aria-hidden="true" />
+              {m.legendEvidence}
+            </li>
+          </ul>
         </div>
-        <p className={styles.mapLead}>
-          {readOnly ? m.leadReadOnly : m.lead}{' '}
-          {mode === 'full'
-            ? fmt(m.summaryFull, { nodes: nodeCount })
-            : fmt(m.summary, { nodes: nodeCount, boxes: boxCount })}
-        </p>
-        <ul className={styles.legend}>
-          <li>
-            <i className={styles.legendLive} aria-hidden="true" />
-            {m.legendLive}
-          </li>
-          <li>
-            <i className={styles.legendDisplay} aria-hidden="true" />
-            {m.legendDisplay}
-          </li>
-          <li>
-            <i className={styles.legendUnused} aria-hidden="true" />
-            {m.legendUnused}
-          </li>
-          <li>
-            <i className={styles.legendPath} aria-hidden="true" />
-            {m.legendPath}
-          </li>
-          <li>
-            <i className={styles.legendEvidence} aria-hidden="true" />
-            {m.legendEvidence}
-          </li>
-        </ul>
-      </div>
 
-      {pickField && !readOnly && (
-        <div className={styles.pickBar} role="status">
-          <span>{fmt(m.pickBar, { field: t.comfyui.cards.fields[pickField] })}</span>
-          <button
-            type="button"
-            className={styles.smallButton}
-            onClick={() => {
-              setPickMessage(null)
-              onCancelPick()
+        {pickField && !readOnly && (
+          <div className={styles.pickBar} role="status">
+            <span>{fmt(m.pickBar, { field: t.comfyui.cards.fields[pickField] })}</span>
+            <button
+              type="button"
+              className={styles.smallButton}
+              onClick={() => {
+                setPickMessage(null)
+                onCancelPick()
+              }}
+            >
+              {m.pickCancel}
+            </button>
+          </div>
+        )}
+        {pickMessage && (
+          <p className={styles.pickMessage} role="status">
+            {pickMessage}
+          </p>
+        )}
+
+        <div className={styles.canvas} aria-label={m.canvasLabel} role="figure" ref={canvasRef}>
+          <ReactFlow
+            // 表示を切り替えたとき・テンプレートを差し替えたときは、最初の表示からやり直す。
+            key={resetKey}
+            nodes={view.flowNodes as Node<MapNodeData>[]}
+            edges={flowEdges}
+            nodeTypes={nodeTypes}
+            onInit={(instance) => {
+              if (canvasSize.width > 0) void instance.setViewport(frameRef.current.viewport)
+            }}
+            minZoom={0.15}
+            maxZoom={1.6}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            edgesReconnectable={false}
+            elementsSelectable={false}
+            // ホイールはページのスクロールに渡す(図の中だけスクロールして止まる状態を作らない)。
+            panOnScroll={false}
+            zoomOnScroll={false}
+            preventScrolling={false}
+            zoomOnPinch
+            proOptions={{ hideAttribution: true }}
+            onNodeClick={(_event, node) => handleBoxClick(node.id)}
+            onPaneClick={() => {
+              if (!pickField) onSelect(null)
             }}
           >
-            {m.pickCancel}
-          </button>
+            <Background gap={20} color="#2a2e34" />
+            {/* 背骨(主要な道筋)に重ねない側に置く: 左 → 右は右端に出力が来るので左下、上 → 下は左に背骨が来るので右下。 */}
+            <Controls
+              showInteractive={false}
+              fitViewOptions={FIT_OPTIONS}
+              position={direction === 'TB' ? 'bottom-right' : 'bottom-left'}
+            />
+          </ReactFlow>
         </div>
-      )}
-      {pickMessage && (
-        <p className={styles.pickMessage} role="status">
-          {pickMessage}
-        </p>
-      )}
-
-      <div
-        className={styles.canvas}
-        aria-label={m.canvasLabel}
-        role="figure"
-        ref={canvasRef}
-        style={{ height: frame.height }}
-      >
-        <ReactFlow
-          // 表示を切り替えたとき・テンプレートを差し替えたときは、最初の表示からやり直す。
-          key={resetKey}
-          nodes={view.flowNodes as Node<MapNodeData>[]}
-          edges={flowEdges}
-          nodeTypes={nodeTypes}
-          onInit={(instance) => {
-            if (canvasWidth > 0) void instance.setViewport(frameRef.current.viewport)
-          }}
-          minZoom={0.15}
-          maxZoom={1.6}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          edgesReconnectable={false}
-          elementsSelectable={false}
-          panOnScroll
-          zoomOnPinch
-          proOptions={{ hideAttribution: true }}
-          onNodeClick={(_event, node) => handleBoxClick(node.id)}
-          onPaneClick={() => {
-            if (!pickField) onSelect(null)
-          }}
-        >
-          <Background gap={20} color="#2a2e34" />
-          {/* 背骨(主要な道筋)に重ねない側に置く: 左 → 右は右端に出力が来るので左下、上 → 下は左に背骨が来るので右下。 */}
-          <Controls
-            showInteractive={false}
-            fitViewOptions={FIT_OPTIONS}
-            position={direction === 'TB' ? 'bottom-right' : 'bottom-left'}
-          />
-        </ReactFlow>
+      </section>
+      <div className={styles.panel} id="binding-map-panel" tabIndex={-1}>
+        {renderPanel(view.graph)}
       </div>
-
-      <BindingMapInspector
-        selected={selected}
-        graph={view.graph}
-        nodes={nodes}
-        edges={edges}
-        bindings={bindings}
-        exposedRows={exposedRows}
-        operation={operation}
-        pickField={pickField}
-        readOnly={readOnly}
-        onSelect={onSelect}
-        onChooseInput={onChooseInput}
-        onToggleOutput={onToggleOutput}
-        onToggleFinalPrompt={onToggleFinalPrompt}
-      />
-    </section>
+    </div>
   )
 }

@@ -100,6 +100,7 @@ import { BindingIssues } from './BindingIssues'
 import { ReadingSummary } from './ReadingSummary'
 import { ExposedParamsTiers } from './ExposedParamsTiers'
 import { BindingMap } from './BindingMap'
+import { BindingMapInspector } from './BindingMapInspector'
 import {
   assignInputRole,
   mapEdges,
@@ -132,11 +133,27 @@ function goToComfyUIPage(navigate: NavigateFunction, location: Pick<Location, 's
   else void navigate(dest.path, { replace: true })
 }
 
-/**
- * カードと図を2列に並べる `.bindingLayout` の幅(px)。CSS のコンテナクエリ(設定のページの幅 1100px 以上)
- * から、ページの左右の余白(20px × 2)を引いたもの。
- */
-const TWO_COLUMN_MIN_WIDTH = 1060
+/** 差し込み先の表示(一覧 / 図)を覚えておく localStorage のキー。 */
+const VIEW_STORAGE_KEY = 'gakei.comfyui.workflowBindingView'
+
+type BindingView = 'list' | 'map'
+type PanelTab = 'bindings' | 'node'
+
+function loadBindingView(): BindingView {
+  try {
+    return window.localStorage.getItem(VIEW_STORAGE_KEY) === 'map' ? 'map' : 'list'
+  } catch {
+    return 'list'
+  }
+}
+
+function storeBindingView(view: BindingView) {
+  try {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, view)
+  } catch {
+    // 覚えられなくても表示は切り替わる。
+  }
+}
 
 /** 読み取りが無いときの図の読み取り(毎回新しい配列を作らない)。 */
 const NO_READINGS: ComfyBindingReading[] = []
@@ -183,19 +200,10 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
   const [pickField, setPickField] = useState<FieldKey | null>(null)
   const [mapSelected, setMapSelected] = useState<string | null>(null)
   const isMobile = useIsMobileViewport()
-  // カードと図を2列に並べる幅か(`.bindingLayout` のコンテナクエリと同じ判定)。図の向きを決めるのに使う。
-  const layoutRef = useRef<HTMLDivElement | null>(null)
-  const [twoColumns, setTwoColumns] = useState(false)
-  const hasTemplate = values.template !== null
-  useEffect(() => {
-    const el = layoutRef.current
-    if (!el || typeof ResizeObserver === 'undefined') return
-    const update = () => setTwoColumns(el.getBoundingClientRect().width >= TWO_COLUMN_MIN_WIDTH)
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [hasTemplate])
+  // 差し込み先の表示: 一覧(カード)か図か。どちらも同じ状態(差し込み先・公開パラメーター・検証)を使う。
+  const [bindingView, setBindingView] = useState<BindingView>(loadBindingView)
+  // 図の表示の右のパネルのタブ。
+  const [panelTab, setPanelTab] = useState<PanelTab>('bindings')
   // サーバーの検証の結果(エラーと警告)。値を変えるたびに取り直す。
   const [issues, setIssues] = useState<ComfyValidationIssue[]>([])
   const [confirming, setConfirming] = useState(false)
@@ -412,12 +420,31 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
     else if (mapFocus === field) setMapFocus(fields.find((f) => f !== field && expanded.has(f)) ?? null)
   }
 
-  /** カードの行の「図で選ぶ」。選べるノードを図で示す。 */
+  /** カードの行の「図で選ぶ」。選べるノードを図で示す(図は上に留まっているので、ページは動かさない)。 */
   function startPickInMap(field: FieldKey) {
     setPickField(field)
     setMapFocus(field)
     setMapSelected(null)
-    focusElement('binding-map')
+  }
+
+  function changeBindingView(next: BindingView) {
+    setBindingView(next)
+    storeBindingView(next)
+    setPickField(null)
+  }
+
+  /** 図でノードを選んだ。右のパネルを「ノード」にして、その位置までページを動かす。 */
+  function selectMapNode(id: string | null) {
+    setMapSelected(id)
+    if (id === null) return
+    setPanelTab('node')
+    window.requestAnimationFrame(() => {
+      const el = document.getElementById('binding-map-panel')
+      if (!el) return
+      const top = el.getBoundingClientRect().top
+      // パネルの先頭が画面の上(ヘッダーの下)より上にあるか、画面の外にあるときだけ動かす。
+      if (top < 80 || top > window.innerHeight - 120) el.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    })
   }
 
   /** 図の入力の一覧で、入力の扱い(差し込む・公開・固定)を選んだ。テンプレートの値は変えない。 */
@@ -433,6 +460,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
       if (pickField !== null) {
         setPickField(null)
         setFlashField(choice.field)
+        setPanelTab('bindings')
       }
       return
     }
@@ -446,6 +474,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
     if (pickField === 'outputs') {
       setPickField(null)
       setFlashField('outputs')
+      setPanelTab('bindings')
     }
   }
 
@@ -455,6 +484,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
     if (pickField === 'final_prompt') {
       setPickField(null)
       setFlashField('final_prompt')
+      setPanelTab('bindings')
     }
   }
 
@@ -590,26 +620,84 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
   const headerStatus =
     template !== null && blockerCount > 0 ? fmt(c.headerBlocked, { count: blockerCount }) : undefined
 
-  // 図はノードがあるときだけ出す(読み取りに失敗した編集画面でも、ノードの入力の配線から描く)。
-  const showDiagram = template !== null && nodes.length > 0
-  const diagram = showDiagram ? (
+  // 図はノードがあるときだけ選べる(読み取りに失敗した編集画面でも、ノードの入力の配線から描く)。
+  const canShowMap = template !== null && nodes.length > 0
+  const showMap = canShowMap && bindingView === 'map'
+
+  const renderRows = (onPickInMap?: (field: FieldKey) => void) => (
+    <BindingRows
+      fields={fields}
+      operation={operation}
+      readings={readings}
+      origins={origins}
+      bindings={bindings}
+      nodes={nodes}
+      suggested={analysis?.suggested_bindings ?? null}
+      issues={issues}
+      questions={questions}
+      expanded={expanded}
+      onToggle={toggleRow}
+      onChange={(field, update) => changeBindings(update, [field])}
+      onUseReading={adoptReading}
+      flashField={flashField}
+      onGoToQuestion={(id) => focusElement(questionCardId(id))}
+      onPickInMap={onPickInMap}
+    />
+  )
+
+  const mapWorkspace = showMap ? (
     <BindingMap
       nodes={nodes}
       edges={diagramEdges}
       bindings={bindings}
       exposedRows={effectiveRows}
       readings={analysis?.readings ?? NO_READINGS}
-      operation={operation}
       focusField={mapFocus}
       pickField={isMobile ? null : pickField}
       onCancelPick={() => setPickField(null)}
       selected={mapSelected}
-      onSelect={setMapSelected}
+      onSelect={selectMapNode}
       readOnly={isMobile}
-      direction={isMobile || twoColumns ? 'TB' : 'LR'}
       onChooseInput={chooseInputFromMap}
       onToggleOutput={toggleOutputFromMap}
       onToggleFinalPrompt={toggleFinalPromptFromMap}
+      renderPanel={(graph) => (
+        <>
+          <div className={styles.panelTabs} role="tablist" aria-label={t.comfyui.map.panelLabel}>
+            {(['bindings', 'node'] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={panelTab === tab}
+                className={styles.panelTab}
+                onClick={() => setPanelTab(tab)}
+              >
+                {tab === 'bindings' ? t.comfyui.map.tabBindings : t.comfyui.map.tabNode}
+              </button>
+            ))}
+          </div>
+          {panelTab === 'bindings' ? (
+            renderRows(isMobile ? undefined : startPickInMap)
+          ) : (
+            <BindingMapInspector
+              selected={mapSelected}
+              graph={graph}
+              nodes={nodes}
+              edges={diagramEdges}
+              bindings={bindings}
+              exposedRows={effectiveRows}
+              operation={operation}
+              pickField={isMobile ? null : pickField}
+              readOnly={isMobile}
+              onSelect={selectMapNode}
+              onChooseInput={chooseInputFromMap}
+              onToggleOutput={toggleOutputFromMap}
+              onToggleFinalPrompt={toggleFinalPromptFromMap}
+            />
+          )}
+        </>
+      )}
     />
   ) : null
 
@@ -620,7 +708,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
       draft={loading || loadFailed ? undefined : draft}
       status={headerStatus}
       onBack={() => goToComfyUIPage(navigate, location)}
-      wide={template !== null}
+      wide={showMap}
     >
       {loading && <p className={settingsStyles.placeholder}>{f.loading}</p>}
       {loadFailed && <p className={settingsStyles.errorText}>{f.workflowLoadError}</p>}
@@ -746,107 +834,84 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
               </SettingsSection>
 
               {/*
-                カードの列と図の領域(ADR-0052 4章)。広い幅ではカードの右に図、狭い幅では差し込み先の行の
-                上に図を置く(カードの列を `display: contents` にして並べ替える)。768px 未満は図をカードの下に畳み、
-                見るだけにする(割り当てはカードで行う)。
+                差し込み先(ADR-0052 4章)。読み取りの要約・問い・検証の一覧は共通。その下は「一覧(カード)」と
+                「図」のどちらか一方を出す(状態は共有する)。図の表示は左に図、右にパネル。スクロールはページだけ。
               */}
-              <div
-                className={styles.bindingLayout}
-                data-has-diagram={showDiagram ? 'true' : 'false'}
-                ref={layoutRef}
-              >
-                <div className={styles.cardsColumn}>
-                  <SettingsSection heading={c.readingHeading}>
-                    <p className={settingsStyles.helpText}>{c.readingLead}</p>
-                    <ReadingSummary summary={summary} differCount={differCount} noReading={analysis === null} />
-                  </SettingsSection>
-
-                  {questions.map((question) => (
-                    <BindingQuestionCard
-                      key={question.id}
-                      question={question}
-                      nodes={nodes}
-                      onAnswer={(candidate) => answerQuestion(question, candidate)}
-                      onNeither={() => neitherQuestion(question)}
-                    />
-                  ))}
-
-                  <BindingIssues
-                    issues={issues}
-                    clientErrors={dirty ? clientErrorsShown : []}
-                    onJump={handleJump}
-                    confirming={confirming}
-                    saving={saveMutation.isPending}
-                    onConfirmSave={saveNow}
-                    onCancelConfirm={() => setConfirming(false)}
-                  />
-
-                  <div className={styles.lateGroup}>
-                    <SettingsSection heading={f.bindingsHeading}>
-                      <p className={settingsStyles.helpText}>{c.bindingsLead}</p>
-                      <BindingRows
-                        fields={fields}
-                        operation={operation}
-                        readings={readings}
-                        origins={origins}
-                        bindings={bindings}
-                        nodes={nodes}
-                        suggested={analysis?.suggested_bindings ?? null}
-                        issues={issues}
-                        questions={questions}
-                        expanded={expanded}
-                        onToggle={toggleRow}
-                        onChange={(field, update) => changeBindings(update, [field])}
-                        onUseReading={adoptReading}
-                        flashField={flashField}
-                        onGoToQuestion={(id) => focusElement(questionCardId(id))}
-                        onPickInMap={showDiagram && !isMobile ? startPickInMap : undefined}
-                      />
-                    </SettingsSection>
-
-                    <SettingsSection heading={f.exposedParamsHeading} id="exposed-params">
-                      <p className={settingsStyles.helpText}>{c.exposedLead}</p>
-                      <ExposedParamsTiers
-                        rows={exposedRows}
-                        tiers={analysis?.param_tiers}
-                        bindings={bindings}
-                        nodes={nodes}
-                        onChange={(index, row) =>
-                          updateExposedRows((rows) => rows.map((r, i) => (i === index ? row : r)))
-                        }
-                      />
-                    </SettingsSection>
-
-                    <details className={styles.advanced}>
-                      <summary className={styles.advancedSummary}>
-                        <span className={styles.advancedTitle}>{c.advancedTitle}</span>
-                        <span className={styles.advancedSub}>{c.advancedSub}</span>
-                      </summary>
-                      <AdvancedBindings
-                        operation={operation}
-                        nodes={nodes}
-                        bindings={bindings}
-                        onChange={(update) => changeBindings(update)}
-                      />
-                    </details>
-                  </div>
-                </div>
-
-                {showDiagram && (
-                  <div className={styles.diagramColumn} id="binding-map" tabIndex={-1}>
-                    {isMobile ? (
-                      <details className={styles.diagramDetails}>
-                        <summary className={styles.advancedSummary}>
-                          <span className={styles.advancedTitle}>{t.comfyui.map.mobileSummary}</span>
-                        </summary>
-                        {diagram}
-                      </details>
-                    ) : (
-                      diagram
-                    )}
+              <SettingsSection heading={c.readingHeading}>
+                <p className={settingsStyles.helpText}>{c.readingLead}</p>
+                <ReadingSummary summary={summary} differCount={differCount} noReading={analysis === null} />
+                {canShowMap && (
+                  <div className={styles.viewSwitch} role="group" aria-label={t.comfyui.map.viewSwitchLabel}>
+                    {(['list', 'map'] as const).map((view) => (
+                      <button
+                        key={view}
+                        type="button"
+                        aria-pressed={bindingView === view}
+                        onClick={() => changeBindingView(view)}
+                      >
+                        {view === 'list' ? t.comfyui.map.viewList : t.comfyui.map.viewMap}
+                      </button>
+                    ))}
                   </div>
                 )}
-              </div>
+              </SettingsSection>
+
+              {questions.map((question) => (
+                <BindingQuestionCard
+                  key={question.id}
+                  question={question}
+                  nodes={nodes}
+                  onAnswer={(candidate) => answerQuestion(question, candidate)}
+                  onNeither={() => neitherQuestion(question)}
+                />
+              ))}
+
+              <BindingIssues
+                issues={issues}
+                clientErrors={dirty ? clientErrorsShown : []}
+                onJump={handleJump}
+                confirming={confirming}
+                saving={saveMutation.isPending}
+                onConfirmSave={saveNow}
+                onCancelConfirm={() => setConfirming(false)}
+              />
+
+              {showMap ? (
+                mapWorkspace
+              ) : (
+                <>
+                  <SettingsSection heading={f.bindingsHeading}>
+                    <p className={settingsStyles.helpText}>{c.bindingsLead}</p>
+                    {renderRows()}
+                  </SettingsSection>
+
+                  <SettingsSection heading={f.exposedParamsHeading} id="exposed-params">
+                    <p className={settingsStyles.helpText}>{c.exposedLead}</p>
+                    <ExposedParamsTiers
+                      rows={exposedRows}
+                      tiers={analysis?.param_tiers}
+                      bindings={bindings}
+                      nodes={nodes}
+                      onChange={(index, row) =>
+                        updateExposedRows((rows) => rows.map((r, i) => (i === index ? row : r)))
+                      }
+                    />
+                  </SettingsSection>
+
+                  <details className={styles.advanced}>
+                    <summary className={styles.advancedSummary}>
+                      <span className={styles.advancedTitle}>{c.advancedTitle}</span>
+                      <span className={styles.advancedSub}>{c.advancedSub}</span>
+                    </summary>
+                    <AdvancedBindings
+                      operation={operation}
+                      nodes={nodes}
+                      bindings={bindings}
+                      onChange={(update) => changeBindings(update)}
+                    />
+                  </details>
+                </>
+              )}
             </>
           )}
         </>

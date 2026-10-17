@@ -1,4 +1,31 @@
-/* 差し込み先の図(ADR-0052 4章)。GAKEI のダーク基調のトークンを使う(ADR-0009)。 */
+/* 差し込み先の図(ADR-0052 4章)。GAKEI のダーク基調のトークンを使う(ADR-0009)。
+   スクロールの入れ物は作らない: 図はページのスクロールに付いて上に留まり、パネルはページと一緒に流れる。 */
+
+/* 左に図、右にパネル。狭い枠では図の下にパネル。 */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: 16px;
+  align-items: start;
+}
+
+@container settings-page (max-width: 719px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  scroll-margin-top: 72px;
+}
+
+.panel:focus {
+  outline: none;
+}
 
 .map {
   --map-number: #b9a2e6;
@@ -9,6 +36,19 @@
   background: var(--color-bg-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  /* 上に留める。高さは画面の高さからヘッダーなどを引いたもの(中はスクロールしない)。 */
+  position: sticky;
+  top: 72px;
+  height: calc(100dvh - 92px);
+  overflow: hidden;
+}
+
+/* 狭い枠(図の下にパネル): 留めずに高さを固定する。 */
+@container settings-page (max-width: 719px) {
+  .map {
+    position: static;
+    height: min(560px, 70svh);
+  }
 }
 
 .mapHead {
@@ -124,8 +164,8 @@
 
 .canvas {
   position: relative;
-  /* 高さは中身に合わせて JS が決める(`mapFrame`)。 */
-  height: 320px;
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-border);

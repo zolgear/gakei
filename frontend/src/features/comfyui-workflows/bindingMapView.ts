@@ -178,6 +178,9 @@ export interface MapView {
   focus: { minX: number; maxX: number } | null
   /** 箱の位置と大きさ(最初の表示の計算に使う)。 */
   rects: MapRect[]
+  /** 主要な道筋(背骨。無ければプロンプト・サンプラー・保存の箱)を囲む大きさ。無ければ null。 */
+  spineSize: { width: number; height: number } | null
+  direction: MapDirection
 }
 
 /**
@@ -292,6 +295,45 @@ export function mainPathBoxes(
   return boxes
 }
 
+/** 図の大きさと主要な道筋の大きさ(`chooseDirection` に渡す)。 */
+export interface DirectionCandidate {
+  width: number
+  height: number
+  spineSize: { width: number; height: number } | null
+}
+
+/**
+ * 図の向きを枠の形と中身で選ぶ。読める倍率(全体が収まる倍率と下限の大きい方)で、主要な道筋
+ * (プロンプトの根 → サンプラー → 保存)が枠に収まる向きを選ぶ。両方収まるなら倍率の大きい方
+ * (同じなら枠の形)、どちらも収まらないなら枠の形(横長は左 → 右、縦長は上 → 下)。
+ */
+export function chooseDirection(
+  canvas: { width: number; height: number },
+  lr: DirectionCandidate,
+  tb: DirectionCandidate,
+  minZoom = MAP_MIN_READABLE_ZOOM,
+): MapDirection {
+  const byShape: MapDirection = canvas.width >= canvas.height ? 'LR' : 'TB'
+  if (canvas.width <= 0 || canvas.height <= 0) return byShape
+  const zoomOf = (c: DirectionCandidate) =>
+    c.width > 0 && c.height > 0 ? Math.max(Math.min(canvas.width / c.width, canvas.height / c.height, 1), minZoom) : 1
+  const fits = (c: DirectionCandidate) => {
+    const z = zoomOf(c)
+    const size = c.spineSize ?? { width: c.width, height: c.height }
+    return size.width * z <= canvas.width && size.height * z <= canvas.height
+  }
+  const lrFits = fits(lr)
+  const tbFits = fits(tb)
+  if (lrFits && !tbFits) return 'LR'
+  if (tbFits && !lrFits) return 'TB'
+  if (lrFits && tbFits) {
+    const zl = zoomOf(lr)
+    const zt = zoomOf(tb)
+    if (Math.abs(zl - zt) > 0.01) return zl > zt ? 'LR' : 'TB'
+  }
+  return byShape
+}
+
 export function buildMapView(input: MapViewInput): MapView {
   const t = msg().comfyui
   const { nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected } = input
@@ -394,11 +436,22 @@ export function buildMapView(input: MapViewInput): MapView {
       : graph.boxes.filter((b) => b.nodeIds.some((id) => keyNodes.has(id)))
   const xs = keyBoxes.map((b) => layout.positions.get(b.id)?.x ?? 0)
   const focus = xs.length > 0 ? { minX: Math.min(...xs) - 16, maxX: Math.max(...xs) + MAP_NODE_WIDTH + 16 } : null
+  const keyRects = keyBoxes.map((b) => ({
+    y: layout.positions.get(b.id)?.y ?? 0,
+    h: data.find((d) => d.box.id === b.id)?.height ?? 0,
+  }))
+  const spineSize =
+    focus && keyRects.length > 0
+      ? {
+          width: focus.maxX - focus.minX,
+          height: Math.max(...keyRects.map((r) => r.y + r.h)) - Math.min(...keyRects.map((r) => r.y)) + 32,
+        }
+      : null
   const rects = data.map((d) => ({
     x: layout.positions.get(d.box.id)?.x ?? 0,
     y: layout.positions.get(d.box.id)?.y ?? 0,
     width: MAP_NODE_WIDTH,
     height: d.height,
   }))
-  return { graph, flowNodes, flowEdges, width: layout.width, height: layout.height, focus, rects }
+  return { graph, flowNodes, flowEdges, width: layout.width, height: layout.height, focus, rects, spineSize, direction }
 }

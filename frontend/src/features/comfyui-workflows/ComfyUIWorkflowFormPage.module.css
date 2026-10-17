@@ -238,81 +238,52 @@
 }
 
 /* カードの列と、図の領域(ADR-0052 4章。図は第3段で足す)。 */
-.bindingLayout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+/* 差し込み先の表示の切り替え(一覧 / 図) */
+.viewSwitch {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
-.cardsColumn {
+.viewSwitch button {
+  min-height: 32px;
+  padding: 4px 16px;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.viewSwitch button[aria-pressed='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* 図の表示の右のパネルのタブ */
+.panelTabs {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-
-/* 差し込み先の行・公開パラメーター・詳細設定(狭い幅では図の後ろに回す) */
-.lateGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-  order: 2;
-}
-
-.diagramColumn {
-  min-width: 0;
-  order: 1;
-}
-
-.diagramColumn:focus {
-  outline: none;
-}
-
-/* 「図で選ぶ」で移ったとき、上に留まるヘッダーに隠れないように */
-.diagramColumn {
-  scroll-margin-top: 72px;
-}
-
-/* 図があり、2列にできない幅: カードの列をほどいて、図を差し込み先の行の上に置く(ADR-0052 4章)。 */
-.bindingLayout[data-has-diagram='true'] .cardsColumn {
-  display: contents;
-}
-
-/* 広い幅: カードの左、図の右。図はスクロールしても見えるように上に留める。 */
-@container settings-page (min-width: 1100px) {
-  .bindingLayout[data-has-diagram='true'] {
-    grid-template-columns: minmax(0, 1fr) minmax(420px, 1.05fr);
-    align-items: start;
-  }
-
-  .bindingLayout[data-has-diagram='true'] .cardsColumn {
-    display: flex;
-  }
-
-  .bindingLayout[data-has-diagram='true'] .diagramColumn {
-    position: sticky;
-    top: 72px;
-    max-height: calc(100dvh - 88px);
-    overflow-y: auto;
-  }
-}
-
-/* 768px 未満: 図はカードの下に畳む(見るだけ)。 */
-@media (max-width: 767px) {
-  .diagramColumn {
-    order: 3;
-  }
-}
-
-.diagramDetails {
-  background: var(--color-bg-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
-.diagramDetails[open] > summary {
+  gap: 4px;
   border-bottom: 1px solid var(--color-border);
+}
+
+.panelTab {
+  min-height: 34px;
+  padding: 4px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.panelTab[aria-selected='true'] {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
 }
 
 /* 詳細設定(今までの2段のドロップダウン) */

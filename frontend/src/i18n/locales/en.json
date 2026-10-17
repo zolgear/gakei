@@ -2718,9 +2718,8 @@
     },
     "map": {
       "heading": "Workflow diagram",
-      "lead": "A read-only diagram. Select a node to see its inputs and choose, per input, whether GAKEI fills it in, exposes it, or keeps it fixed. Template values and wiring are never changed.",
-      "leadReadOnly": "A read-only diagram. Assign roles with the cards.",
-      "mobileSummary": "Show the workflow diagram",
+      "lead": "A read-only diagram. Select a node to list its inputs under “Node” on the right and choose, per input, whether GAKEI fills it in, exposes it, or keeps it fixed. Template values and wiring are never changed. Zoom with the buttons, a pinch, or Ctrl+wheel; drag to move.",
+      "leadReadOnly": "A read-only diagram. Assign roles with the cards under “Bindings” below. Drag to move.",
       "viewLabel": "Diagram view",
       "viewCollapsed": "Collapsed",
       "viewFull": "All nodes",
@@ -2780,7 +2779,13 @@
       "removeOutput": "Remove from outputs",
       "makeFinalPrompt": "Use as final prompt",
       "removeFinalPrompt": "Remove as final prompt",
-      "noInputs": "No inputs with values."
+      "noInputs": "No inputs with values.",
+      "viewSwitchLabel": "Bindings view",
+      "viewList": "List",
+      "viewMap": "Diagram",
+      "panelLabel": "Bindings and nodes",
+      "tabBindings": "Bindings",
+      "tabNode": "Node"
     }
   },
   "sdwebui": {
