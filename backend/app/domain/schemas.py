@@ -19,7 +19,14 @@ from pydantic import (
 )
 
 from app.domain import prompt_templates
-from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
+from app.domain.comfy_analyze import BindingReading, ParamTierInfo
+from app.domain.comfy_graph import NodeState
+from app.domain.comfy_workflow import (
+    Bindings,
+    ExposedParam,
+    SuggestedBindings,
+    ValidationIssue,
+)
 from app.providers.base import ProviderCapabilities
 
 # -- Capabilities (ADR-0013: 複数プロバイダー) -------------------------------
@@ -1783,6 +1790,8 @@ class ComfyNodeInfo(BaseModel):
     class_type: str | None = None
     title: str | None = None
     inputs: list[ComfyNodeInputInfo] = Field(default_factory=list)
+    # 出力につながる(live)/ 表示だけ(display)/ 使われない(unused)。ADR-0052 2章。
+    state: NodeState = "live"
 
 
 class ComfyAnalyzeRequest(BaseModel):
@@ -1797,6 +1806,12 @@ class ComfyAnalyzeResponse(BaseModel):
     suggested_operation: Literal["generate", "edit"]
     candidate_params: list[ExposedParam] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # 項目ごとの読み取り(確信度・理由・道筋・候補・問い。ADR-0052 2章)。
+    readings: list[BindingReading] = Field(default_factory=list)
+    # 公開パラメーターの候補の段(推奨 / その他 / 公開しない)。
+    param_tiers: list[ParamTierInfo] = Field(default_factory=list)
+    # 提案した差し込み先に、保存時と同じ検証を掛けた結果(ADR-0052 3章)。
+    validation: list[ValidationIssue] = Field(default_factory=list)
 
 
 class ComfyWorkflowCreateRequest(BaseModel):
@@ -1836,6 +1851,9 @@ class ComfyWorkflowDetail(ComfyWorkflowSummary):
     template: dict[str, Any]
     bindings: Bindings
     exposed_params: list[ExposedParam] = Field(default_factory=list)
+    # 保存時の検証の結果(ADR-0052 3章)。作成・更新の応答では警告だけ(エラーなら 422)。
+    # 取得では、保存済みの差し込み先を今の検証に掛けた結果(古い登録のエラーも出る)。
+    validation_issues: list[ValidationIssue] = Field(default_factory=list)
 
 
 class ComfyWorkflowListResponse(BaseModel):

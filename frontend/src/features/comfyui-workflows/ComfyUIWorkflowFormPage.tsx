@@ -48,6 +48,7 @@ import {
   applyAnalyzedTemplate,
   changedWorkflowFormKeys,
   isOpenedFromComfyUIPage,
+  issueMessages,
   withOperation,
   workflowFormBackDestination,
   workflowFormFromSaved,
@@ -124,6 +125,8 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
         const initial = workflowFormFromSaved(wf, result)
         setSaved(initial)
         setValues(initial)
+        // 保存済みの差し込み先を今の検証に掛けた結果(古い推定で保存した誤りに気付く入口)。
+        setWarnings(issueMessages(wf.validation_issues))
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -147,11 +150,18 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
         ? updateComfyWorkflow(workflowId as string, buildWorkflowUpdateRequest(args))
         : createComfyWorkflow(buildWorkflowCreateRequest(args))
     },
-    onSuccess: (_result, input) => {
+    onSuccess: (result, input) => {
       queryClient.invalidateQueries({ queryKey: ['capabilities'] })
       queryClient.invalidateQueries({ queryKey: ['comfyui-workflows'] })
       if (isEdit) queryClient.invalidateQueries({ queryKey: ['comfyui-workflow', workflowId] })
-      toast.show({ message: t.settings.frame.savedToast })
+      // 保存はできたが確かめてほしい点(使われない枝の入力など。ADR-0052 3章)はトーストに添える。
+      const saveWarnings = issueMessages(result.validation_issues)
+      toast.show({
+        message:
+          saveWarnings.length > 0
+            ? fmt(f.savedWithWarnings, { warnings: saveWarnings.join(f.listSeparator) })
+            : t.settings.frame.savedToast,
+      })
       setSaved(input)
       setLeaveAfterSave(true)
     },
@@ -237,7 +247,8 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
         onSuccess: (result) => {
           const applied = applyAnalyzedTemplate(values, templateObj, result)
           change(() => applied.values)
-          setWarnings(result.warnings ?? [])
+          // 提案した差し込み先に保存時と同じ検証を掛けた結果も、同じ警告の一覧に出す。
+          setWarnings([...(result.warnings ?? []), ...issueMessages(result.validation)])
           if (applied.cleared.length > 0) {
             setNotice(fmt(f.clearedFieldsNotice, { cleared: applied.cleared.join(f.listSeparator) }))
           }

@@ -13,6 +13,7 @@ const NODES: ComfyNodeInfo[] = [
   {
     id: '3',
     class_type: 'KSampler',
+    state: 'live',
     title: null,
     inputs: [
       { name: 'seed', value: 0, linked: false },
@@ -22,6 +23,7 @@ const NODES: ComfyNodeInfo[] = [
   {
     id: '6',
     class_type: 'CLIPTextEncode',
+    state: 'live',
     title: 'gakei:prompt',
     inputs: [{ name: 'text', value: '', linked: false }],
   },

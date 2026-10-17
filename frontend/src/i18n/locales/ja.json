@@ -2445,6 +2445,7 @@
       "jsonParseFailed": "JSON として読み込めませんでした。",
       "clearedFieldsNotice": "新しいファイルに存在しない差し込み先を未設定に戻しました: {cleared}",
       "listSeparator": "、",
+      "savedWithWarnings": "保存しました。次の点を確かめてください: {warnings}",
       "analyzeFailed": "解析に失敗しました。",
       "fileReadFailed": "ファイルを読み込めませんでした。",
       "loading": "読み込み中...",

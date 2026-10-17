@@ -130,6 +130,91 @@
       "noDetails": "詳細不明",
       "nodeExecutionFailed": "ノード {node} の実行に失敗しました({detail})。",
       "historyErrorNoDetails": "ComfyUI の実行がエラーで終了しました(詳細不明)。"
+    },
+    "analyze": {
+      "marked": "タイトル「{title}」で指定されています。",
+      "sharedWith": "ノード {node} の入力 {input} は {field} と同じ差し込み先なので、ここでは使いません。",
+      "question": {
+        "prompt": "プロンプトを入れる場所はどれですか。",
+        "negative_prompt": "ネガティブプロンプトを入れる場所はどれですか。",
+        "size": "どの latent の大きさ(幅・高さ・枚数)を使いますか。",
+        "images": "画像の枠の順番を確かめてください。",
+        "mask": "どのマスクを使いますか。"
+      },
+      "prompt": {
+        "unique": "サンプラーの条件付けから遡った文字列の根が1つだけです(ノード {node} の {input})。",
+        "ranked": "文字列の根が {count} 件あり、ノード {node} の {input} が最も有力です(タイトル・種類・書式の位置で順位を付けました)。",
+        "ask": "文字列の根が {count} 件あり、順位の差が小さいため決めきれません。",
+        "noSampler": "出力につながるサンプラーが見つかりません。",
+        "noEncoder": "サンプラーの条件付けからエンコーダーまで辿れません。",
+        "noRoot": "エンコーダーに入る文字列の直値が見つかりません。"
+      },
+      "negative": {
+        "unique": "サンプラーの negative から遡った文字列の根です(ノード {node} の {input})。",
+        "ranked": "negative の文字列の根が {count} 件あり、ノード {node} の {input} が最も有力です。",
+        "ask": "negative の文字列の根が {count} 件あり、決めきれません。",
+        "noInput": "サンプラーに negative の入力がありません。",
+        "zeroed": "negative は ConditioningZeroOut で空にされています。",
+        "sameAsPositive": "negative は positive と同じ条件付けを使っています。",
+        "noRoot": "negative のエンコーダーに入る文字列の直値が見つかりません。"
+      },
+      "seed": {
+        "unique": {
+          "one": "出力につながるノードの seed です。",
+          "other": "出力につながるノードの seed を {count} 件にまとめました(同じ参照は1つにしています)。"
+        },
+        "absent": "出力につながるノードに seed がありません。"
+      },
+      "size": {
+        "direct": "サンプラーの latent の元 {node}({class_type})の {input} です。",
+        "primitive": "latent の元 {latent} の {input} は、Primitive のノード {node} から配線されています。その値を差し込み先にします。",
+        "computed": "{input} は計算するノード {node}({class_type})から配線されているため差し込みません。そのノードの入力を公開パラメーターに薦めます。",
+        "fromImage": "latent はノード {node}({class_type})から来ており、大きさは入力画像に従います。",
+        "noLatent": "出力につながるサンプラーの latent が見つかりません。",
+        "ask": "切り替えを解けず、latent の元が {count} 件あります。",
+        "inputMissing": "latent の元 {node} に {input} の直値がありません。"
+      },
+      "images": {
+        "numbered": "出力につながる LoadImage {count} 件を、受け側の番号の順に並べました。",
+        "single": "出力につながる LoadImage は1つです(ノード {node})。",
+        "idOrder": "番号付きの入力が無いため、出力につながる LoadImage {count} 件をノードの id の順に並べました。",
+        "absent": "出力につながる LoadImage がありません。"
+      },
+      "mask": {
+        "loadImageMask": "出力につながる LoadImageMask です(ノード {node})。",
+        "imageAlpha": "枠1の LoadImage の MASK が {consumer} で部分編集に使われています。",
+        "alphaOnly": "枠1の LoadImage の MASK は {consumers} に入るだけで、部分編集には使われません(透過を保つためのもの)。マスクは対応付けません。",
+        "absent": "部分編集に使うマスクが見つかりません。",
+        "generate": "生成(generate)では入力画像とマスクを使いません。"
+      },
+      "outputs": {
+        "found": {
+          "one": "出力につながる保存ノードです({nodes})。",
+          "other": "出力につながる保存ノードが {count} 件あります({nodes})。"
+        },
+        "previewOnly": "保存ノードが無く、表示だけのノード(PreviewImage など)しかありません。",
+        "absent": "生成した画像を受ける保存ノードが見つかりません。"
+      },
+      "finalPrompt": {
+        "found": "エンコーダーに入る文字列を表示するノードです(ノード {node})。",
+        "nearest": "プロンプトの経路の途中を表示するノードです(ノード {node})。エンコーダーに入る文字列と違うことがあります。",
+        "absent": "エンコーダーに入る文字列を表示するノードはありません。"
+      }
+    },
+    "validation": {
+      "kind": {
+        "string": "文字列",
+        "int": "整数",
+        "float": "数値",
+        "bool": "真偽値",
+        "enum": "選択肢"
+      },
+      "typeMismatch": "{label}: ノード {node} の入力 {input} は{expected}の値ではありません。",
+      "wiredInput": "{label}: ノード {node} の入力 {input} は配線されています。配線された入力は差し込み先・公開パラメーターにできません(実行時に配線を値で上書きしてしまうため)。",
+      "outputNoGeneratedImage": "出力ノード {node} に、生成した画像が届きません。",
+      "unusedBranch": "{label}: ノード {node} の入力 {input} は、今の設定では出力につながらない(使われない)枝にあります。",
+      "maskNotInpaint": "マスク(image_alpha): 枠1の LoadImage(ノード {node})の MASK が部分編集に使われていません。塗った範囲が透明な画像として渡ります。",
+      "displayOnlyOutput": "出力ノード {node}({class_type})は表示だけのノードです。保存ノードを選んでください。"
     }
   },
   "sdwebui": {

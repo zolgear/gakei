@@ -130,6 +130,91 @@
       "noDetails": "no details",
       "nodeExecutionFailed": "Node {node} failed to execute ({detail}).",
       "historyErrorNoDetails": "Execution on ComfyUI ended with an error (no details available)."
+    },
+    "analyze": {
+      "marked": "Specified by the title \"{title}\".",
+      "sharedWith": "Input {input} of node {node} is the same target as {field}, so it is not used here.",
+      "question": {
+        "prompt": "Where should the prompt go?",
+        "negative_prompt": "Where should the negative prompt go?",
+        "size": "Which latent's size (width, height, count) should be used?",
+        "images": "Check the order of the image slots.",
+        "mask": "Which mask should be used?"
+      },
+      "prompt": {
+        "unique": "There is exactly one string root traced back from the sampler's conditioning (input {input} of node {node}).",
+        "ranked": "There are {count} string roots; input {input} of node {node} is the most likely (ranked by title, node type and position in the format).",
+        "ask": "There are {count} string roots and their ranks are too close to decide.",
+        "noSampler": "No sampler connected to the output was found.",
+        "noEncoder": "Could not trace the sampler's conditioning back to an encoder.",
+        "noRoot": "No literal string value feeding the encoder was found."
+      },
+      "negative": {
+        "unique": "String root traced back from the sampler's negative (input {input} of node {node}).",
+        "ranked": "There are {count} string roots for the negative; input {input} of node {node} is the most likely.",
+        "ask": "There are {count} string roots for the negative and they cannot be told apart.",
+        "noInput": "The sampler has no negative input.",
+        "zeroed": "The negative is emptied by ConditioningZeroOut.",
+        "sameAsPositive": "The negative uses the same conditioning as the positive.",
+        "noRoot": "No literal string value feeding the negative encoder was found."
+      },
+      "seed": {
+        "unique": {
+          "one": "The seed of a node connected to the output.",
+          "other": "Collected {count} seeds of nodes connected to the output (identical references merged)."
+        },
+        "absent": "No node connected to the output has a seed."
+      },
+      "size": {
+        "direct": "The {input} of {node} ({class_type}), the source of the sampler's latent.",
+        "primitive": "The {input} of the latent source {latent} is wired from the Primitive node {node}; its value is used as the target.",
+        "computed": "{input} is wired from the computing node {node} ({class_type}), so it is not set directly. That node's inputs are recommended as exposed parameters instead.",
+        "fromImage": "The latent comes from node {node} ({class_type}); its size follows the input image.",
+        "noLatent": "No sampler latent connected to the output was found.",
+        "ask": "The switch cannot be resolved; there are {count} latent sources.",
+        "inputMissing": "The latent source {node} has no literal value for {input}."
+      },
+      "images": {
+        "numbered": "Ordered {count} LoadImage nodes connected to the output by the number of the receiving input.",
+        "single": "There is one LoadImage connected to the output (node {node}).",
+        "idOrder": "No numbered inputs, so {count} LoadImage nodes connected to the output are ordered by node id.",
+        "absent": "No LoadImage connected to the output."
+      },
+      "mask": {
+        "loadImageMask": "A LoadImageMask connected to the output (node {node}).",
+        "imageAlpha": "The MASK of the slot 1 LoadImage is used for partial editing in {consumer}.",
+        "alphaOnly": "The MASK of the slot 1 LoadImage only goes into {consumers} and is not used for partial editing (it keeps transparency). No mask is bound.",
+        "absent": "No mask used for partial editing was found.",
+        "generate": "Generate does not use input images or masks."
+      },
+      "outputs": {
+        "found": {
+          "one": "The save node connected to the output ({nodes}).",
+          "other": "There are {count} save nodes connected to the output ({nodes})."
+        },
+        "previewOnly": "There is no save node, only display nodes (such as PreviewImage).",
+        "absent": "No save node receiving the generated image was found."
+      },
+      "finalPrompt": {
+        "found": "A node that displays the string going into the encoder (node {node}).",
+        "nearest": "A node that displays a point along the prompt path (node {node}). It may differ from the string going into the encoder.",
+        "absent": "No node displays the string going into the encoder."
+      }
+    },
+    "validation": {
+      "kind": {
+        "string": "a string",
+        "int": "an integer",
+        "float": "a number",
+        "bool": "a boolean",
+        "enum": "a choice"
+      },
+      "typeMismatch": "{label}: input {input} of node {node} is not {expected}.",
+      "wiredInput": "{label}: input {input} of node {node} is wired. A wired input cannot be a binding or an exposed parameter (the value would overwrite the wire at run time).",
+      "outputNoGeneratedImage": "The generated image does not reach output node {node}.",
+      "unusedBranch": "{label}: input {input} of node {node} is on a branch that does not reach the output with the current settings (unused).",
+      "maskNotInpaint": "Mask (image_alpha): the MASK of the slot 1 LoadImage (node {node}) is not used for partial editing. The painted area will be passed as transparent pixels.",
+      "displayOnlyOutput": "Output node {node} ({class_type}) only displays images. Choose a save node."
     }
   },
   "sdwebui": {

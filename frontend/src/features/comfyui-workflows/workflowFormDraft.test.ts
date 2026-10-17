@@ -6,6 +6,7 @@ import {
   applyAnalyzedTemplate,
   changedWorkflowFormKeys,
   isOpenedFromComfyUIPage,
+  issueMessages,
   FROM_COMFYUI_PAGE_STATE,
   withOperation,
   workflowFormBackDestination,
@@ -15,9 +16,9 @@ import {
 } from './workflowFormDraft'
 
 const NODES: ComfyNodeInfo[] = [
-  { id: '1', class_type: 'CLIPTextEncode', title: null, inputs: [{ name: 'text', value: '', linked: false }] },
-  { id: '2', class_type: 'KSampler', title: null, inputs: [{ name: 'seed', value: 0, linked: false }] },
-  { id: '3', class_type: 'SaveImage', title: null, inputs: [] },
+  { id: '1', class_type: 'CLIPTextEncode', state: 'live', title: null, inputs: [{ name: 'text', value: '', linked: false }] },
+  { id: '2', class_type: 'KSampler', state: 'live', title: null, inputs: [{ name: 'seed', value: 0, linked: false }] },
+  { id: '3', class_type: 'SaveImage', state: 'live', title: null, inputs: [] },
 ]
 
 const STEPS: ComfyExposedParam = { name: 'steps', node: '2', input: 'steps', type: 'int', label: 'steps', default: 20 }
@@ -176,5 +177,13 @@ describe('isOpenedFromComfyUIPage', () => {
     expect(isOpenedFromComfyUIPage(FROM_COMFYUI_PAGE_STATE)).toBe(true)
     expect(isOpenedFromComfyUIPage(null)).toBe(false)
     expect(isOpenedFromComfyUIPage({ fromSettingsToc: true })).toBe(false)
+  })
+})
+
+describe('issueMessages', () => {
+  it('検証の結果を文の並びにし、同じ文は1つにまとめる', () => {
+    expect(issueMessages([{ message: 'a' }, { message: 'b' }, { message: 'a' }])).toEqual(['a', 'b'])
+    expect(issueMessages(undefined)).toEqual([])
+    expect(issueMessages(null)).toEqual([])
   })
 })

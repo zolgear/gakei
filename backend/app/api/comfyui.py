@@ -21,12 +21,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.auth.deps import require_admin
 from app.config import Settings
 from app.deps import get_registry, get_runner, get_session, get_session_factory, get_settings
+from app.domain.comfy_analyze import analyze_workflow
 from app.domain.comfy_workflow import (
     SEED_MAX,
     Bindings,
     ExposedParam,
+    ValidationIssue,
     WorkflowValidationError,
-    analyze_workflow,
+    check_workflow,
     compute_template_sha256,
     is_api_format_template,
     is_ui_format_template,
@@ -82,9 +84,10 @@ def _check_template_format(template: dict) -> None:
 
 def _validate_or_422(
     template: dict, operation: str, bindings: Bindings, exposed_params: list[ExposedParam]
-) -> None:
+) -> list[ValidationIssue]:
+    """保存時の検証(ADR-0052 3章)。エラーは 422(複数なら改行でつなぐ)、警告は返す。"""
     try:
-        validate_workflow(template, operation, bindings, exposed_params)  # type: ignore[arg-type]
+        return validate_workflow(template, operation, bindings, exposed_params)  # type: ignore[arg-type]
     except WorkflowValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -101,13 +104,26 @@ def _to_summary(wf: ComfyWorkflow) -> ComfyWorkflowSummary:
     )
 
 
-def _to_detail(wf: ComfyWorkflow) -> ComfyWorkflowDetail:
+def _to_detail(
+    wf: ComfyWorkflow, validation_issues: list[ValidationIssue] | None = None
+) -> ComfyWorkflowDetail:
+    """`validation_issues` を省くと、保存済みの差し込み先を今の検証に掛けた結果を入れる
+    (古い推定で保存した誤りに気付く入口。ADR-0052 3章。自動で書き換えはしない)。"""
     summary = _to_summary(wf)
+    bindings = Bindings.model_validate(wf.bindings)
+    exposed_params = [ExposedParam.model_validate(p) for p in wf.exposed_params]
+    if validation_issues is None:
+        validation_issues = (
+            check_workflow(wf.template, wf.operation, bindings, exposed_params)  # type: ignore[arg-type]
+            if is_api_format_template(wf.template)
+            else []
+        )
     return ComfyWorkflowDetail(
         **summary.model_dump(),
         template=wf.template,
-        bindings=Bindings.model_validate(wf.bindings),
-        exposed_params=[ExposedParam.model_validate(p) for p in wf.exposed_params],
+        bindings=bindings,
+        exposed_params=exposed_params,
+        validation_issues=validation_issues,
     )
 
 
@@ -521,6 +537,9 @@ def analyze(
         suggested_operation=result.suggested_operation,
         candidate_params=candidate_params,
         warnings=result.warnings,
+        readings=result.readings,
+        param_tiers=result.param_tiers,
+        validation=result.validation,
     )
 
 
@@ -535,7 +554,7 @@ def create_workflow(
     body: ComfyWorkflowCreateRequest, db: Session = Depends(get_session)
 ) -> ComfyWorkflowDetail:
     _check_template_format(body.template)
-    _validate_or_422(body.template, body.operation, body.bindings, body.exposed_params)
+    warnings = _validate_or_422(body.template, body.operation, body.bindings, body.exposed_params)
 
     now = _utcnow()
     wf = ComfyWorkflow(
@@ -551,7 +570,7 @@ def create_workflow(
     )
     db.add(wf)
     db.commit()
-    return _to_detail(wf)
+    return _to_detail(wf, warnings)
 
 
 @router.get(
@@ -603,7 +622,7 @@ def update_workflow(
     )
 
     _check_template_format(template)
-    _validate_or_422(template, operation, bindings, exposed_params)
+    warnings = _validate_or_422(template, operation, bindings, exposed_params)
 
     wf.name = name
     wf.operation = operation
@@ -617,7 +636,7 @@ def update_workflow(
         wf.locality = body.locality or "unset"
     wf.updated_at = _utcnow()
     db.commit()
-    return _to_detail(wf)
+    return _to_detail(wf, warnings)
 
 
 @router.delete(

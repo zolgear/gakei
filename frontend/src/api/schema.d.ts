@@ -3772,6 +3772,46 @@ export interface components {
             crop?: components["schemas"]["CropRect"] | null;
         };
         /**
+         * BindingCandidate
+         * @description `ask` / `ranked` の項目の候補(順位の高い順)。
+         */
+        BindingCandidate: {
+            /** Node */
+            node: string;
+            /** Input */
+            input?: string | null;
+            /** Score */
+            score: number;
+            /** Label */
+            label: string;
+            /** Path */
+            path?: components["schemas"]["PathStep"][];
+        };
+        /**
+         * BindingReading
+         * @description 差し込み先1項目の読み取り結果。値そのものは `suggested_bindings` にある。
+         */
+        BindingReading: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "marked" | "unique" | "ranked" | "ask" | "absent";
+            /** Reason */
+            reason: string;
+            /** Paths */
+            paths?: components["schemas"]["PathStep"][][];
+            /** Candidates */
+            candidates?: components["schemas"]["BindingCandidate"][];
+            /** Question */
+            question?: string | null;
+        };
+        /**
          * Bindings
          * @description テンプレートへの差し込み先。
          */
@@ -3865,6 +3905,12 @@ export interface components {
             candidate_params?: components["schemas"]["ExposedParam"][];
             /** Warnings */
             warnings?: string[];
+            /** Readings */
+            readings?: components["schemas"]["BindingReading"][];
+            /** Param Tiers */
+            param_tiers?: components["schemas"]["ParamTierInfo"][];
+            /** Validation */
+            validation?: components["schemas"]["ValidationIssue"][];
         };
         /** ComfyNodeInfo */
         ComfyNodeInfo: {
@@ -3876,6 +3922,12 @@ export interface components {
             title?: string | null;
             /** Inputs */
             inputs?: components["schemas"]["ComfyNodeInputInfo"][];
+            /**
+             * State
+             * @default live
+             * @enum {string}
+             */
+            state: "live" | "display" | "unused";
         };
         /** ComfyNodeInputInfo */
         ComfyNodeInputInfo: {
@@ -4018,6 +4070,8 @@ export interface components {
             bindings: components["schemas"]["Bindings"];
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][];
+            /** Validation Issues */
+            validation_issues?: components["schemas"]["ValidationIssue"][];
         };
         /** ComfyWorkflowListResponse */
         ComfyWorkflowListResponse: {
@@ -5617,6 +5671,23 @@ export interface components {
             /** Mask Only */
             mask_only?: boolean | null;
         };
+        /**
+         * ParamTierInfo
+         * @description 公開パラメーターの候補の段(推奨 / その他 / 公開しない)。
+         */
+        ParamTierInfo: {
+            /** Name */
+            name: string;
+            /** Node */
+            node: string;
+            /** Input */
+            input: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "recommended" | "other" | "hidden";
+        };
         /** ParameterSetCreateRequest */
         ParameterSetCreateRequest: {
             /** Name */
@@ -5684,6 +5755,18 @@ export interface components {
             params?: {
                 [key: string]: boolean | number | string;
             } | null;
+        };
+        /**
+         * PathStep
+         * @description 道筋の1段。`input` はそのノードに入ってきた入力名(先頭は差し込み先の入力名)。
+         */
+        PathStep: {
+            /** Node */
+            node: string;
+            /** Class Type */
+            class_type?: string | null;
+            /** Input */
+            input?: string | null;
         };
         /** PriceEstimate */
         PriceEstimate: {
@@ -7741,6 +7824,30 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * ValidationIssue
+         * @description 保存時の検証の結果1件。`error` は保存しない(422)、`warning` は保存して画面に残す。
+         */
+        ValidationIssue: {
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "error" | "warning";
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "node_missing" | "input_missing" | "duplicate" | "wired_input" | "type_mismatch" | "output_missing" | "output_no_image" | "final_prompt_missing" | "edit_requires_image" | "generate_has_image" | "exposed_param_duplicate" | "unused_branch" | "mask_not_inpaint" | "display_only_output";
+            /** Message */
+            message: string;
+            /** Field */
+            field?: string | null;
+            /** Node */
+            node?: string | null;
+            /** Input */
+            input?: string | null;
         };
     };
     responses: never;

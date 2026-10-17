@@ -2445,6 +2445,7 @@
       "jsonParseFailed": "Could not read this as JSON.",
       "clearedFieldsNotice": "Cleared bindings that no longer exist in the new file: {cleared}",
       "listSeparator": ", ",
+      "savedWithWarnings": "Saved. Please check the following: {warnings}",
       "analyzeFailed": "Failed to analyze.",
       "fileReadFailed": "Could not read the file.",
       "loading": "Loading...",
