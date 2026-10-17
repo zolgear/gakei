@@ -38,12 +38,16 @@
 }
 
 .sourceRef {
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.defaultHint {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
 
