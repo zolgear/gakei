@@ -532,3 +532,130 @@ def test_create_inpaint_workflow_with_mask(client: TestClient) -> None:
         "node": "12",
         "input": "image",
     }
+
+
+# -- ADR-0052: 読み取りの応答と、保存時の検証(エラーと警告) ---------------------------------
+
+
+def test_analyze_returns_readings_states_tiers_and_validation(client: TestClient) -> None:
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {"class_type": "PreviewImage", "inputs": {"images": ["8", 0]}}
+    response = client.post("/api/comfyui/workflows/analyze", json={"template": graph})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    readings = {r["field"]: r for r in body["readings"]}
+    assert readings["prompt"]["confidence"] == "unique"
+    assert readings["prompt"]["reason"]
+    path = readings["prompt"]["paths"][0]
+    assert path[0] == {"node": "6", "class_type": "CLIPTextEncode", "input": "text"}
+    assert path[-1]["node"] == "9"
+    assert readings["images"]["confidence"] == "absent"
+    states = {n["id"]: n["state"] for n in body["nodes"]}
+    assert states["3"] == "live"
+    assert states["20"] == "display"
+    tiers = {(p["node"], p["input"]): p["tier"] for p in body["param_tiers"]}
+    assert tiers[("3", "steps")] == "recommended"
+    assert tiers[("4", "ckpt_name")] == "hidden"
+    assert body["validation"] == []
+
+
+def test_create_workflow_rejects_wired_binding(client: TestClient) -> None:
+    bindings = _t2i_bindings_body()
+    bindings["prompt"] = {"node": "3", "input": "positive"}
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "配線",
+            "operation": "generate",
+            "template": clone(T2I_GRAPH),
+            "bindings": bindings,
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 422
+    assert "配線" in response.json()["detail"]
+
+
+def test_create_workflow_rejects_type_mismatch_and_output_without_image(
+    client: TestClient,
+) -> None:
+    bindings = _t2i_bindings_body()
+    bindings["seed"] = [{"node": "3", "input": "sampler_name"}]
+    bindings["outputs"] = ["4"]
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "型",
+            "operation": "generate",
+            "template": clone(T2I_GRAPH),
+            "bindings": bindings,
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    # エラーが複数なら改行でつなぐ。
+    assert "整数" in detail
+    assert "生成した画像" in detail
+
+
+def test_create_workflow_keeps_warnings_in_response(client: TestClient) -> None:
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {"class_type": "PreviewImage", "inputs": {"images": ["8", 0]}}
+    bindings = _t2i_bindings_body()
+    bindings["outputs"] = ["9", "20"]
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "警告",
+            "operation": "generate",
+            "template": graph,
+            "bindings": bindings,
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 201, response.text
+    issues = response.json()["validation_issues"]
+    assert [(i["level"], i["code"], i["node"]) for i in issues] == [
+        ("warning", "display_only_output", "20")
+    ]
+    # 取得でも、保存済みの差し込み先を今の検証に掛けた結果が出る。
+    fetched = client.get(f"/api/comfyui/workflows/{response.json()['id']}").json()
+    assert [i["code"] for i in fetched["validation_issues"]] == ["display_only_output"]
+
+
+def test_patch_workflow_rejects_wired_exposed_param_and_returns_warnings(
+    client: TestClient,
+) -> None:
+    created = _create_t2i_workflow(client)
+    assert created["validation_issues"] == []
+    response = client.patch(
+        f"/api/comfyui/workflows/{created['id']}",
+        json={
+            "exposed_params": [
+                {
+                    "name": "latent",
+                    "node": "3",
+                    "input": "latent_image",
+                    "type": "text",
+                    "label": "x",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 422
+    assert "配線" in response.json()["detail"]
+
+    graph = clone(T2I_GRAPH)
+    graph["30"] = {"class_type": "EmptyLatentImage", "inputs": {"width": 64, "height": 64}}
+    response = client.patch(
+        f"/api/comfyui/workflows/{created['id']}",
+        json={
+            "template": graph,
+            "exposed_params": [
+                {"name": "spare_width", "node": "30", "input": "width", "type": "int", "label": "w"}
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert [i["code"] for i in response.json()["validation_issues"]] == ["unused_branch"]

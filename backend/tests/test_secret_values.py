@@ -6,7 +6,7 @@ import copy
 
 import pytest
 
-from app.domain.comfy_workflow import analyze_workflow
+from app.domain.comfy_analyze import analyze_workflow
 from app.domain.secret_values import (
     REDACTED,
     SecretInput,
