@@ -118,6 +118,11 @@
     gap: 8px;
   }
 
+  /* 図を横に並べるページ(`SettingsPageFrame` の `wide`)では本文の列を広げる。 */
+  .layout:has(.page[data-wide]) {
+    grid-template-columns: 200px minmax(0, 1480px);
+  }
+
   .layout[data-view] .toc,
   .layout[data-view] .content {
     display: block;
@@ -146,6 +151,11 @@
   max-width: 760px;
   padding: 0 20px 20px;
   padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+
+/* 図を横に並べるページ(ComfyUI のワークフローの登録・編集。ADR-0052 4章) */
+.page[data-wide] {
+  max-width: 1480px;
 }
 
 /* スクロールしても上に残す(スマホも上。ADR-0031 3章)。スクロールするのは <main>。 */

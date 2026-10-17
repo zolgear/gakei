@@ -514,8 +514,6 @@
 }
 
 .pickerList {
-  max-height: 320px;
-  overflow-y: auto;
   padding-bottom: 6px;
 }
 
@@ -1022,4 +1020,11 @@ button.cand:hover {
   .linkButton {
     min-height: 44px;
   }
+}
+
+/* 行を開いたときの操作(読み取りの値にする、図で選ぶ) */
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }

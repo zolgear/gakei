@@ -18,6 +18,9 @@ function StateFlag({ state }: { state: ComfyNodeInfo['state'] }) {
   return null
 }
 
+/** 「ほかの入力」を出す数(多いときは絞り込みを促す)。 */
+const INLINE_LIMIT = 20
+
 interface InlineInputPickerProps {
   field: FieldKey
   nodes: readonly ComfyNodeInfo[]
@@ -35,7 +38,8 @@ export function InlineInputPicker({ field, nodes, candidates, value, onSelect, a
   const c = t.comfyui.cards
   const [query, setQuery] = useState('')
   const name = useId()
-  const options = pickerOptions(nodes, field, candidates, query.trim())
+  // 一覧はページのスクロールで読む(入れ物の中のスクロールを作らない)ので、ほかの入力は先頭だけ出す。
+  const options = pickerOptions(nodes, field, candidates, query.trim(), INLINE_LIMIT)
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const isSelected = (opt: PickerOption) => value?.node === opt.node && value?.input === opt.input
 
@@ -117,7 +121,9 @@ export function InlineNodePicker({ field, nodes, readingNodes, multiple, value, 
   const c = t.comfyui.cards
   const [query, setQuery] = useState('')
   const name = useId()
-  const { candidates, others } = nodePickerOptions(nodes, field, readingNodes, query.trim())
+  const { candidates, others: allOthers } = nodePickerOptions(nodes, field, readingNodes, query.trim())
+  const others = allOthers.slice(0, INLINE_LIMIT)
+  const hiddenCount = allOthers.length - others.length
 
   function toggle(id: string, checked: boolean) {
     if (!multiple) {
@@ -178,6 +184,7 @@ export function InlineNodePicker({ field, nodes, readingNodes, multiple, value, 
         ) : (
           <ul className={styles.optList}>{others.map(renderNode)}</ul>
         )}
+        {hiddenCount > 0 && <p className={styles.pickerEmpty}>{fmt(c.pickerMore, { count: hiddenCount })}</p>}
       </div>
     </div>
   )

@@ -635,7 +635,7 @@ export function effectiveExposedRows(rows: readonly ExposedParamRow[], bindings:
 }
 
 /** analyze の結果のうち、カードの画面が使う部分。 */
-export type CardAnalysis = Pick<ComfyAnalyzeResponse, 'readings' | 'param_tiers' | 'suggested_bindings'>
+export type CardAnalysis = Pick<ComfyAnalyzeResponse, 'readings' | 'param_tiers' | 'suggested_bindings' | 'edges'>
 
 /** 保存の直後に開いた印(新規登録の保存で編集画面へ移ったとき、保存後のカードを出す)。 */
 export function isJustSaved(state: unknown): boolean {

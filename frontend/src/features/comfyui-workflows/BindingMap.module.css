@@ -1,0 +1,637 @@
+/* 差し込み先の図(ADR-0052 4章)。GAKEI のダーク基調のトークンを使う(ADR-0009)。
+   スクロールの入れ物は作らない: 図はページのスクロールに付いて上に留まり、パネルはページと一緒に流れる。 */
+
+/* 左に図、右にパネル。狭い枠では図の下にパネル。 */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: 16px;
+  align-items: start;
+}
+
+@container settings-page (max-width: 719px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  scroll-margin-top: 72px;
+}
+
+.panel:focus {
+  outline: none;
+}
+
+.map {
+  --map-number: #b9a2e6;
+  --map-wire: #5b616b;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  /* 上に留める。高さは画面の高さからヘッダーなどを引いたもの(中はスクロールしない)。 */
+  position: sticky;
+  top: 72px;
+  height: calc(100dvh - 92px);
+  overflow: hidden;
+}
+
+/* 狭い枠(図の下にパネル): 留めずに高さを固定する。 */
+@container settings-page (max-width: 719px) {
+  .map {
+    position: static;
+    height: min(560px, 70svh);
+  }
+}
+
+.mapHead {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-sunken);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.mapTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.mapTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mapLead {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmented button {
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  min-height: 28px;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend i {
+  display: inline-block;
+  width: 22px;
+  height: 0;
+  border-top: 2px solid var(--map-wire);
+}
+
+.legend .legendDisplay {
+  border-top-style: dashed;
+}
+
+.legend .legendUnused {
+  border-top-style: dashed;
+  opacity: 0.4;
+}
+
+.legend .legendPath {
+  border-top: 3px solid var(--color-accent);
+}
+
+.legend .legendEvidence {
+  border-top: 2px dashed var(--color-danger);
+}
+
+.pickBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: rgba(227, 179, 65, 0.12);
+  border-bottom: 1px solid var(--color-accent);
+}
+
+.pickMessage {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--color-warning);
+}
+
+.canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* React Flow の操作ボタンを GAKEI の色に合わせる */
+.canvas :global(.react-flow__controls) {
+  box-shadow: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.canvas :global(.react-flow__controls-button) {
+  background: var(--color-bg-raised);
+  border-bottom: 1px solid var(--color-border);
+  fill: var(--color-text);
+  color: var(--color-text);
+  width: 28px;
+  height: 28px;
+}
+
+.canvas :global(.react-flow__controls-button:hover) {
+  background: var(--color-header-band);
+}
+
+/* ---------- 箱 ---------- */
+
+.box {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 7px 10px;
+  background: #22252a;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.box:hover {
+  border-color: var(--color-text-muted);
+}
+
+.box[data-state='display'] {
+  border-style: dashed;
+}
+
+.box[data-state='unused'] {
+  border-style: dashed;
+  background: var(--color-bg-sunken);
+  opacity: 0.45;
+}
+
+.box[data-on-path] {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+  opacity: 1;
+}
+
+.box[data-evidence] {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 1px var(--color-danger);
+  opacity: 1;
+}
+
+.box[data-selected] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.box[data-pickable='true'] {
+  border: 2px dashed var(--color-accent);
+  background: rgba(227, 179, 65, 0.1);
+  opacity: 1;
+}
+
+.box[data-pickable='false'] {
+  opacity: 0.25;
+}
+
+.boxHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.boxTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.boxCount {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-header-band);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.boxSub {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.roleBadge {
+  --tone: var(--color-accent);
+  max-width: 100%;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 20%, transparent);
+}
+
+.roleBadge[data-tone='image'] {
+  --tone: var(--color-edit);
+}
+
+.roleBadge[data-tone='number'] {
+  --tone: var(--map-number);
+}
+
+.roleBadge[data-tone='output'] {
+  --tone: var(--color-success);
+}
+
+.roleBadge[data-tone='exposed'] {
+  --tone: var(--color-text-muted);
+}
+
+.handle {
+  width: 4px;
+  height: 4px;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  border: 0;
+  opacity: 0;
+}
+
+/* ---------- 配線 ---------- */
+
+.edge :global(.react-flow__edge-path) {
+  stroke: var(--map-wire);
+  stroke-width: 1.4;
+}
+
+.edgeDisplay :global(.react-flow__edge-path) {
+  stroke-dasharray: 5 4;
+}
+
+.edgeUnused :global(.react-flow__edge-path) {
+  stroke-dasharray: 5 4;
+  opacity: 0.35;
+}
+
+.edgePath :global(.react-flow__edge-path) {
+  stroke: var(--color-accent);
+  stroke-width: 2.6;
+  stroke-dasharray: none;
+  opacity: 1;
+}
+
+.edgeEvidence :global(.react-flow__edge-path) {
+  stroke: var(--color-danger);
+  stroke-width: 2.2;
+  stroke-dasharray: 6 3;
+  opacity: 1;
+}
+
+/* ---------- 入力の一覧 ---------- */
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  min-width: 0;
+}
+
+.inspectorEmpty,
+.inspectorLead {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.inspectorHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inspectorTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.stateLine {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-sunken);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.stateDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+.stateLine[data-state='display'] .stateDot {
+  background: var(--color-text-muted);
+}
+
+.stateLine[data-state='unused'] .stateDot {
+  background: var(--color-text-faint);
+}
+
+.nodeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.smallButton {
+  min-height: 30px;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.smallButton:hover {
+  border-color: var(--color-text-muted);
+}
+
+.smallButton[data-primary='true'] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+
+.linkButton {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--color-accent);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.inputsHeading {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.inputList,
+.memberList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inputRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  grid-template-areas:
+    'head control'
+    'value control'
+    'pick pick';
+  gap: 2px 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+.inputRow[data-use='bound'] {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+.inputRow[data-use='exposed'] {
+  border-color: var(--color-border-strong);
+}
+
+.inputRow[data-pick] {
+  border: 1px dashed var(--color-accent);
+  background: rgba(227, 179, 65, 0.08);
+}
+
+.inputHead {
+  grid-area: head;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.inputName {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.inputMark {
+  font-size: 10px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px dashed var(--color-text-faint);
+  color: var(--color-text-muted);
+}
+
+.inputValue {
+  grid-area: value;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.inputValue[data-wired] {
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+.inputRow > select,
+.inputRow > .useChip {
+  grid-area: control;
+  justify-self: stretch;
+}
+
+.inputRow > button {
+  grid-area: pick;
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.useSelect {
+  width: 100%;
+  min-height: 30px;
+  font-size: 12px;
+  color: var(--color-text);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.useSelect[data-use='bound'] {
+  border-color: var(--color-accent);
+}
+
+.useChip {
+  justify-self: start;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.useChip[data-use='bound'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.useChip[data-use='wired'] {
+  border-style: dashed;
+  color: var(--color-text-faint);
+}
+
+.memberButton {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 6px 8px;
+  text-align: left;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.memberButton:hover {
+  border-color: var(--color-text-muted);
+}
+
+.memberButton[data-state='unused'] {
+  opacity: 0.6;
+}
+
+.memberButton[data-pickable] {
+  border: 1px dashed var(--color-accent);
+}
+
+.memberMeta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 767px) {
+  .inputRow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'head'
+      'value'
+      'control'
+      'pick';
+  }
+
+  .useSelect {
+    font-size: 16px;
+  }
+}

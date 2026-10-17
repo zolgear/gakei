@@ -103,6 +103,28 @@ class BindingReading(BaseModel):
     candidates: list[BindingCandidate] = Field(default_factory=list)
     # `ask` のときの問いの文。
     question: str | None = None
+    # 差し込まない(`absent`)理由の根拠になったノードと入力名(図で示す。ADR-0052 4章)。
+    # 例: マスクの MASK が入る `JoinImageWithAlpha.alpha`、選ばれていない切り替えの枝。
+    evidence: list[PathStep] = Field(default_factory=list)
+
+
+class AnalyzeEdge(BaseModel):
+    """配線1本(図に使う。ADR-0052 4章)。`source` の `output` 番目の出力が `target.input` に入る。
+
+    `followed` は、切り替え(`ComfySwitchNode` など)で選ばれなかった枝なら False。
+    `output_type` は `/object_info` があるときだけ(`IMAGE`、`MASK` など)。
+    """
+
+    source: str
+    output: int
+    target: str
+    input: str
+    followed: bool = True
+    output_type: str | None = None
+
+
+# 図で残す錨の種類(ADR-0052 4章)。読み取りの規則と同じ判定で付ける。
+NodeKind = Literal["save", "display", "sampler", "encoder", "image_source", "switch"]
 
 
 class AnalyzeWarning(BaseModel):
@@ -137,6 +159,7 @@ class AnalyzeResult:
     readings: list[BindingReading] = field(default_factory=list)
     param_tiers: list[ParamTierInfo] = field(default_factory=list)
     validation: list[ValidationIssue] = field(default_factory=list)
+    edges: list[AnalyzeEdge] = field(default_factory=list)
 
 
 # -- 判定の表 -------------------------------------------------------------------
@@ -305,6 +328,11 @@ class _Reader:
         # 正のエンコーダーの (ノード, 入力名) と、その文字列の遡り。最終プロンプトにも使う。
         self.positive_inputs: list[tuple[str, str]] = []
         self.positive_traces: list[_StringTrace] = []
+        # 図の錨(サンプラーとエンコーダー)。
+        self.sampler_ids: set[str] = set()
+        self.encoder_ids: set[str] = set()
+        # 幅・高さ・枚数を遡るときに越えた切り替えの根拠(切り替え、選ばれなかった枝の配線元)。
+        self.latent_evidence: list[tuple[str, str | None]] = []
 
     # -- 共通 --------------------------------------------------------------------
 
@@ -332,6 +360,7 @@ class _Reader:
         paths: list[list[PathStep]] | None = None,
         candidates: list[BindingCandidate] | None = None,
         question: str | None = None,
+        evidence: list[tuple[str, str | None]] | None = None,
     ) -> None:
         self.readings[field_name] = BindingReading(
             field=field_name,
@@ -340,6 +369,11 @@ class _Reader:
             paths=paths or [],
             candidates=candidates or [],
             question=question,
+            evidence=[
+                PathStep(node=nid, class_type=self.g.class_type(nid) or None, input=name)
+                for nid, name in (evidence or [])
+                if self.g.has(nid)
+            ],
         )
 
     def _claim(self, field_name: BindingField, ref: InputRef) -> str | None:
@@ -393,6 +427,7 @@ class _Reader:
                 if is_wire(inputs.get(name)):
                     found.append((nid, name, negative if name != "conditioning" else None))
                     break
+        self.sampler_ids.update(nid for nid, _p, _n in found)
         return found
 
     def _conditioning_input(self, node_id: str) -> str | None:
@@ -441,6 +476,7 @@ class _Reader:
             if self.g.class_type(nid) == "ConditioningZeroOut":
                 return None, 0, "zeroed"
             if self._encoder_text_inputs(nid):
+                self.encoder_ids.add(nid)
                 return nid, index, "ok"
             inputs = self.g.inputs(nid)
             if is_wire(inputs.get("positive")) and is_wire(inputs.get("negative")):
@@ -808,6 +844,7 @@ class _Reader:
                         found.extend(self._trace_latent(inputs.get(name), depth + 1))
                     return found
                 wire = inputs.get(chosen)
+                self._note_latent_switch(nid, chosen)
                 hops += 1
                 continue
             class_type = self.g.class_type(nid)
@@ -824,6 +861,20 @@ class _Reader:
             wire = inputs[next_name]
             hops += 1
         return []
+
+    def _note_latent_switch(self, switch: str, chosen: str) -> None:
+        """latent の遡りで解いた切り替えを根拠に記録する(選ばれなかった枝の配線元も)。"""
+        unchosen = "on_false" if chosen == "on_true" else "on_true"
+        steps: list[tuple[str, str | None]] = [(switch, unchosen)]
+        control = self.g.switch_control(switch)
+        if control is not None and control[0] != switch:
+            steps.append((control[0], control[1]))
+        other = self.g.inputs(switch).get(unchosen)
+        if is_wire(other):
+            steps.append((other[0], None))
+        for step in steps:
+            if step not in self.latent_evidence:
+                self.latent_evidence.append(step)
 
     def read_size(self) -> tuple[InputRef | None, InputRef | None, InputRef | None]:
         results: list[tuple[str, str]] = []
@@ -865,8 +916,9 @@ class _Reader:
                 )
             else:
                 reason = t("comfyui.analyze.size.noLatent")
+            evidence = [(other, None) for other in others[:1]] + self.latent_evidence
             for field_name in ("width", "height", "batch_size"):
-                self._set(field_name, "absent", reason)  # type: ignore[arg-type]
+                self._set(field_name, "absent", reason, evidence=evidence)  # type: ignore[arg-type]
             return None, None, None
 
         latent = empties[0]
@@ -1117,7 +1169,10 @@ class _Reader:
                     f"{nid}.{name}({self.g.class_type(nid) or '?'})" for nid, name in other
                 )
                 self._set(
-                    "mask", "absent", t("comfyui.analyze.mask.alphaOnly", consumers=consumers)
+                    "mask",
+                    "absent",
+                    t("comfyui.analyze.mask.alphaOnly", consumers=consumers),
+                    evidence=[(first, None), *other],
                 )
                 return None
         self._set("mask", "absent", t("comfyui.analyze.mask.absent"))
@@ -1328,9 +1383,26 @@ def _build_candidate_params(
     return candidates
 
 
-def _build_analyze_nodes(
-    graph: WorkflowGraph, states: dict[str, NodeState]
-) -> list[dict[str, Any]]:
+def _node_kind(reader: _Reader, node_id: str) -> NodeKind | None:
+    """図で残す錨の種類。読み取りで見つけたサンプラー・エンコーダーと、グラフの判定を使う。"""
+    g = reader.g
+    if g.is_save_node(node_id):
+        return "save"
+    if node_id in reader.sampler_ids:
+        return "sampler"
+    if node_id in reader.encoder_ids:
+        return "encoder"
+    if g.is_switch(node_id):
+        return "switch"
+    if g.is_display_node(node_id):
+        return "display"
+    if g.is_image_source(node_id):
+        return "image_source"
+    return None
+
+
+def _build_analyze_nodes(reader: _Reader) -> list[dict[str, Any]]:
+    graph = reader.g
     nodes: list[dict[str, Any]] = []
     for node_id, node in graph.template.items():
         if not isinstance(node, dict):
@@ -1345,10 +1417,38 @@ def _build_analyze_nodes(
                 "class_type": node.get("class_type"),
                 "title": graph.title(node_id),
                 "inputs": inputs_info,
-                "state": states.get(node_id, "unused"),
+                "state": reader.states.get(node_id, "unused"),
+                "kind": _node_kind(reader, node_id),
+                "output_types": graph.output_types(node_id),
             }
         )
     return nodes
+
+
+def _build_edges(graph: WorkflowGraph) -> list[AnalyzeEdge]:
+    """配線の一覧(図に使う)。テンプレートに無いノードからの配線は除く。"""
+    edges: list[AnalyzeEdge] = []
+    for node_id in graph.ids:
+        for name, value in graph.inputs(node_id).items():
+            if not is_wire(value) or not graph.has(value[0]):
+                continue
+            output_types = graph.output_types(value[0])
+            output_type = (
+                output_types[value[1]]
+                if output_types is not None and 0 <= value[1] < len(output_types)
+                else None
+            )
+            edges.append(
+                AnalyzeEdge(
+                    source=value[0],
+                    output=value[1],
+                    target=node_id,
+                    input=name,
+                    followed=graph.is_live_edge(node_id, name),
+                    output_type=output_type,
+                )
+            )
+    return edges
 
 
 def _format_candidate(graph: WorkflowGraph, candidate: BindingCandidate) -> str:
@@ -1504,7 +1604,7 @@ def analyze_workflow(
     validation = check_workflow(template, suggested_operation, suggested_bindings, [], object_info)
 
     return AnalyzeResult(
-        nodes=_build_analyze_nodes(g, reader.states),
+        nodes=_build_analyze_nodes(reader),
         suggested_bindings=suggested_bindings,
         suggested_operation=suggested_operation,
         candidate_params=candidate_params,
@@ -1513,4 +1613,5 @@ def analyze_workflow(
         readings=[reader.readings[name] for name in _FIELD_ORDER if name in reader.readings],
         param_tiers=param_tiers,
         validation=validation,
+        edges=_build_edges(g),
     )

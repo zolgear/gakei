@@ -21,7 +21,7 @@
  * 未接続(`enabled === false`)でも登録・編集はできるが、analyze の `/object_info` 補完が
  * 効かず、保存してもモデルの選択肢には出ないので、その旨を警告として出す(ADR-0013 7章)。
  */
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, type Location, type NavigateFunction } from 'react-router'
 import {
@@ -34,10 +34,12 @@ import {
   updateComfyWorkflow,
   validateComfyWorkflow,
   type ComfyBindingCandidate,
+  type ComfyBindingReading,
   type ComfyOperation,
   type ComfyValidationIssue,
 } from '../../api/client'
 import { useRunFormContext } from '../../context/useRunFormContext'
+import { useIsMobileViewport } from '../../lib/viewport'
 import { fmt, useI18n, type Messages } from '../../i18n'
 import { canSaveDraft } from '../settings/settingsDraft'
 import { SettingsPageFrame } from '../settings/SettingsPageFrame'
@@ -97,6 +99,17 @@ import { BindingQuestionCard } from './BindingQuestionCard'
 import { BindingIssues } from './BindingIssues'
 import { ReadingSummary } from './ReadingSummary'
 import { ExposedParamsTiers } from './ExposedParamsTiers'
+import { BindingMap } from './BindingMap'
+import { BindingMapInspector } from './BindingMapInspector'
+import {
+  assignInputRole,
+  mapEdges,
+  setInputExposed,
+  toggleFinalPrompt,
+  toggleOutput,
+  withoutInputRef,
+  type InputChoice,
+} from './bindingGraph'
 import { WorkflowSavedCard } from './WorkflowSavedCard'
 import { NodeInputPicker } from './NodeInputPicker'
 import { NodeMultiPicker } from './NodeMultiPicker'
@@ -119,6 +132,31 @@ function goToComfyUIPage(navigate: NavigateFunction, location: Pick<Location, 's
   if (dest.type === 'back') void navigate(-1)
   else void navigate(dest.path, { replace: true })
 }
+
+/** 差し込み先の表示(一覧 / 図)を覚えておく localStorage のキー。 */
+const VIEW_STORAGE_KEY = 'gakei.comfyui.workflowBindingView'
+
+type BindingView = 'list' | 'map'
+type PanelTab = 'bindings' | 'node'
+
+function loadBindingView(): BindingView {
+  try {
+    return window.localStorage.getItem(VIEW_STORAGE_KEY) === 'map' ? 'map' : 'list'
+  } catch {
+    return 'list'
+  }
+}
+
+function storeBindingView(view: BindingView) {
+  try {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, view)
+  } catch {
+    // 覚えられなくても表示は切り替わる。
+  }
+}
+
+/** 読み取りが無いときの図の読み取り(毎回新しい配列を作らない)。 */
+const NO_READINGS: ComfyBindingReading[] = []
 
 /** 画面の値が変わったら検証の API を呼び直すまでの待ち(ミリ秒)。 */
 const VALIDATE_DEBOUNCE_MS = 350
@@ -157,6 +195,15 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
   const [origins, setOrigins] = useState<RowOrigins>(() => initialOrigins(isEdit ? 'saved' : 'reading'))
   const [expanded, setExpanded] = useState<ReadonlySet<FieldKey>>(new Set())
   const [flashField, setFlashField] = useState<FieldKey | null>(null)
+  // 図(ADR-0052 4章): 道筋を強調する項目、「図で選ぶ」の項目、選んでいるノードか束。
+  const [mapFocus, setMapFocus] = useState<FieldKey | null>(null)
+  const [pickField, setPickField] = useState<FieldKey | null>(null)
+  const [mapSelected, setMapSelected] = useState<string | null>(null)
+  const isMobile = useIsMobileViewport()
+  // 差し込み先の表示: 一覧(カード)か図か。どちらも同じ状態(差し込み先・公開パラメーター・検証)を使う。
+  const [bindingView, setBindingView] = useState<BindingView>(loadBindingView)
+  // 図の表示の右のパネルのタブ。
+  const [panelTab, setPanelTab] = useState<PanelTab>('bindings')
   // サーバーの検証の結果(エラーと警告)。値を変えるたびに取り直す。
   const [issues, setIssues] = useState<ComfyValidationIssue[]>([])
   const [confirming, setConfirming] = useState(false)
@@ -188,14 +235,11 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
         setIssues(wf.validation_issues ?? [])
         // 保存済みの値が今の読み取りと違う行は開いておく(古い推定で保存した誤りに気付く入口)。
         const savedReadings = readingsByField(result.readings)
-        setExpanded(
-          new Set(
-            visibleFields(wf.operation).filter(
-              (field) =>
-                savedComparison(initial.bindings, result.suggested_bindings, savedReadings[field], field) === 'differ',
-            ),
-          ),
+        const differing = visibleFields(wf.operation).filter(
+          (field) => savedComparison(initial.bindings, result.suggested_bindings, savedReadings[field], field) === 'differ',
         )
+        setExpanded(new Set(differing))
+        setMapFocus(differing[0] ?? null)
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -247,9 +291,10 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
   const resetSaveError = saveMutation.reset
 
   const changedKeys = saved ? changedWorkflowFormKeys(saved, values) : []
+  const diagramEdges = useMemo(() => mapEdges(values.nodes, analysis?.edges), [values.nodes, analysis])
   const dirty = changedKeys.length > 0
   const { name, operation, template, nodes, bindings, exposedRows } = values
-  const effectiveRows = effectiveExposedRows(exposedRows, bindings)
+  const effectiveRows = useMemo(() => effectiveExposedRows(exposedRows, bindings), [exposedRows, bindings])
   const clientErrors = validateWorkflowForm({
     name,
     operation,
@@ -363,12 +408,84 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
   }
 
   function toggleRow(field: FieldKey) {
+    const opening = !expanded.has(field)
     setExpanded((prev) => {
       const next = new Set(prev)
       if (next.has(field)) next.delete(field)
       else next.add(field)
       return next
     })
+    // 開いた項目の道筋を図で強調する。閉じたら、ほかに開いている項目があればそれに移す。
+    if (opening) setMapFocus(field)
+    else if (mapFocus === field) setMapFocus(fields.find((f) => f !== field && expanded.has(f)) ?? null)
+  }
+
+  /** カードの行の「図で選ぶ」。選べるノードを図で示す(図は上に留まっているので、ページは動かさない)。 */
+  function startPickInMap(field: FieldKey) {
+    setPickField(field)
+    setMapFocus(field)
+    setMapSelected(null)
+  }
+
+  function changeBindingView(next: BindingView) {
+    setBindingView(next)
+    storeBindingView(next)
+    setPickField(null)
+  }
+
+  /** 図でノードを選んだ。右のパネルを「ノード」にして、その位置までページを動かす。 */
+  function selectMapNode(id: string | null) {
+    setMapSelected(id)
+    if (id === null) return
+    setPanelTab('node')
+    window.requestAnimationFrame(() => {
+      const el = document.getElementById('binding-map-panel')
+      if (!el) return
+      const top = el.getBoundingClientRect().top
+      // パネルの先頭が画面の上(ヘッダーの下)より上にあるか、画面の外にあるときだけ動かす。
+      if (top < 80 || top > window.innerHeight - 120) el.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  /** 図の入力の一覧で、入力の扱い(差し込む・公開・固定)を選んだ。テンプレートの値は変えない。 */
+  function chooseInputFromMap(nodeId: string, inputName: string, choice: InputChoice) {
+    const node = nodes.find((n) => n.id === nodeId)
+    const input = node?.inputs?.find((i) => i.name === inputName)
+    if (!node || !input || input.linked) return
+    const ref = { node: nodeId, input: inputName }
+    if (choice.kind === 'bind') {
+      changeBindings((b) => assignInputRole(b, choice.field, ref), [choice.field])
+      updateExposedRows((rows) => setInputExposed(rows, node, input, false))
+      setMapFocus(choice.field)
+      if (pickField !== null) {
+        setPickField(null)
+        setFlashField(choice.field)
+        setPanelTab('bindings')
+      }
+      return
+    }
+    changeBindings((b) => withoutInputRef(b, ref))
+    updateExposedRows((rows) => setInputExposed(rows, node, input, choice.kind === 'exposed'))
+  }
+
+  function toggleOutputFromMap(nodeId: string) {
+    changeBindings((b) => toggleOutput(b, nodeId), ['outputs'])
+    setMapFocus('outputs')
+    if (pickField === 'outputs') {
+      setPickField(null)
+      setFlashField('outputs')
+      setPanelTab('bindings')
+    }
+  }
+
+  function toggleFinalPromptFromMap(nodeId: string) {
+    changeBindings((b) => toggleFinalPrompt(b, nodeId), ['final_prompt'])
+    setMapFocus('final_prompt')
+    if (pickField === 'final_prompt') {
+      setPickField(null)
+      setFlashField('final_prompt')
+      setPanelTab('bindings')
+    }
   }
 
   function focusElement(id: string) {
@@ -445,7 +562,9 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
             next = { ...next, exposedRows: enableRecommendedRows(next.exposedRows, result.param_tiers) }
             setOrigins(initialOrigins('reading'))
             const nextReadings = readingsByField(result.readings)
-            setExpanded(new Set(FIELD_ORDER.filter((field) => initiallyExpanded(nextReadings[field], 'reading'))))
+            const opened = FIELD_ORDER.filter((field) => initiallyExpanded(nextReadings[field], 'reading'))
+            setExpanded(new Set(opened))
+            setMapFocus(opened[0] ?? null)
           } else {
             setOrigins((prev) =>
               originsAfterReplace(prev, next.bindings, result.suggested_bindings, isEdit ? 'saved' : 'manual'),
@@ -501,6 +620,87 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
   const headerStatus =
     template !== null && blockerCount > 0 ? fmt(c.headerBlocked, { count: blockerCount }) : undefined
 
+  // 図はノードがあるときだけ選べる(読み取りに失敗した編集画面でも、ノードの入力の配線から描く)。
+  const canShowMap = template !== null && nodes.length > 0
+  const showMap = canShowMap && bindingView === 'map'
+
+  const renderRows = (onPickInMap?: (field: FieldKey) => void) => (
+    <BindingRows
+      fields={fields}
+      operation={operation}
+      readings={readings}
+      origins={origins}
+      bindings={bindings}
+      nodes={nodes}
+      suggested={analysis?.suggested_bindings ?? null}
+      issues={issues}
+      questions={questions}
+      expanded={expanded}
+      onToggle={toggleRow}
+      onChange={(field, update) => changeBindings(update, [field])}
+      onUseReading={adoptReading}
+      flashField={flashField}
+      onGoToQuestion={(id) => focusElement(questionCardId(id))}
+      onPickInMap={onPickInMap}
+    />
+  )
+
+  const mapWorkspace = showMap ? (
+    <BindingMap
+      nodes={nodes}
+      edges={diagramEdges}
+      bindings={bindings}
+      exposedRows={effectiveRows}
+      readings={analysis?.readings ?? NO_READINGS}
+      focusField={mapFocus}
+      pickField={isMobile ? null : pickField}
+      onCancelPick={() => setPickField(null)}
+      selected={mapSelected}
+      onSelect={selectMapNode}
+      readOnly={isMobile}
+      onChooseInput={chooseInputFromMap}
+      onToggleOutput={toggleOutputFromMap}
+      onToggleFinalPrompt={toggleFinalPromptFromMap}
+      renderPanel={(graph) => (
+        <>
+          <div className={styles.panelTabs} role="tablist" aria-label={t.comfyui.map.panelLabel}>
+            {(['bindings', 'node'] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={panelTab === tab}
+                className={styles.panelTab}
+                onClick={() => setPanelTab(tab)}
+              >
+                {tab === 'bindings' ? t.comfyui.map.tabBindings : t.comfyui.map.tabNode}
+              </button>
+            ))}
+          </div>
+          {panelTab === 'bindings' ? (
+            renderRows(isMobile ? undefined : startPickInMap)
+          ) : (
+            <BindingMapInspector
+              selected={mapSelected}
+              graph={graph}
+              nodes={nodes}
+              edges={diagramEdges}
+              bindings={bindings}
+              exposedRows={effectiveRows}
+              operation={operation}
+              pickField={isMobile ? null : pickField}
+              readOnly={isMobile}
+              onSelect={selectMapNode}
+              onChooseInput={chooseInputFromMap}
+              onToggleOutput={toggleOutputFromMap}
+              onToggleFinalPrompt={toggleFinalPromptFromMap}
+            />
+          )}
+        </>
+      )}
+    />
+  ) : null
+
   return (
     <SettingsPageFrame
       pageId="comfyui"
@@ -508,6 +708,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
       draft={loading || loadFailed ? undefined : draft}
       status={headerStatus}
       onBack={() => goToComfyUIPage(navigate, location)}
+      wide={showMap}
     >
       {loading && <p className={settingsStyles.placeholder}>{f.loading}</p>}
       {loadFailed && <p className={settingsStyles.errorText}>{f.workflowLoadError}</p>}
@@ -633,55 +834,55 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
               </SettingsSection>
 
               {/*
-                カードの列と図の領域(ADR-0052 4章)。読むだけの図(第3段)はカードの横に置くので、
-                ここでは列を分けられる形だけを用意しておく(`data-has-diagram`)。
+                差し込み先(ADR-0052 4章)。読み取りの要約・問い・検証の一覧は共通。その下は「一覧(カード)」と
+                「図」のどちらか一方を出す(状態は共有する)。図の表示は左に図、右にパネル。スクロールはページだけ。
               */}
-              <div className={styles.bindingLayout} data-has-diagram="false">
-                <div className={styles.cardsColumn}>
-                  <SettingsSection heading={c.readingHeading}>
-                    <p className={settingsStyles.helpText}>{c.readingLead}</p>
-                    <ReadingSummary summary={summary} differCount={differCount} noReading={analysis === null} />
-                  </SettingsSection>
+              <SettingsSection heading={c.readingHeading}>
+                <p className={settingsStyles.helpText}>{c.readingLead}</p>
+                <ReadingSummary summary={summary} differCount={differCount} noReading={analysis === null} />
+                {canShowMap && (
+                  <div className={styles.viewSwitch} role="group" aria-label={t.comfyui.map.viewSwitchLabel}>
+                    {(['list', 'map'] as const).map((view) => (
+                      <button
+                        key={view}
+                        type="button"
+                        aria-pressed={bindingView === view}
+                        onClick={() => changeBindingView(view)}
+                      >
+                        {view === 'list' ? t.comfyui.map.viewList : t.comfyui.map.viewMap}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </SettingsSection>
 
-                  {questions.map((question) => (
-                    <BindingQuestionCard
-                      key={question.id}
-                      question={question}
-                      nodes={nodes}
-                      onAnswer={(candidate) => answerQuestion(question, candidate)}
-                      onNeither={() => neitherQuestion(question)}
-                    />
-                  ))}
+              {questions.map((question) => (
+                <BindingQuestionCard
+                  key={question.id}
+                  question={question}
+                  nodes={nodes}
+                  onAnswer={(candidate) => answerQuestion(question, candidate)}
+                  onNeither={() => neitherQuestion(question)}
+                />
+              ))}
 
-                  <BindingIssues
-                    issues={issues}
-                    clientErrors={dirty ? clientErrorsShown : []}
-                    onJump={handleJump}
-                    confirming={confirming}
-                    saving={saveMutation.isPending}
-                    onConfirmSave={saveNow}
-                    onCancelConfirm={() => setConfirming(false)}
-                  />
+              <BindingIssues
+                issues={issues}
+                clientErrors={dirty ? clientErrorsShown : []}
+                onJump={handleJump}
+                confirming={confirming}
+                saving={saveMutation.isPending}
+                onConfirmSave={saveNow}
+                onCancelConfirm={() => setConfirming(false)}
+              />
 
+              {showMap ? (
+                mapWorkspace
+              ) : (
+                <>
                   <SettingsSection heading={f.bindingsHeading}>
                     <p className={settingsStyles.helpText}>{c.bindingsLead}</p>
-                    <BindingRows
-                      fields={fields}
-                      operation={operation}
-                      readings={readings}
-                      origins={origins}
-                      bindings={bindings}
-                      nodes={nodes}
-                      suggested={analysis?.suggested_bindings ?? null}
-                      issues={issues}
-                      questions={questions}
-                      expanded={expanded}
-                      onToggle={toggleRow}
-                      onChange={(field, update) => changeBindings(update, [field])}
-                      onUseReading={adoptReading}
-                      flashField={flashField}
-                      onGoToQuestion={(id) => focusElement(questionCardId(id))}
-                    />
+                    {renderRows()}
                   </SettingsSection>
 
                   <SettingsSection heading={f.exposedParamsHeading} id="exposed-params">
@@ -709,8 +910,8 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
                       onChange={(update) => changeBindings(update)}
                     />
                   </details>
-                </div>
-              </div>
+                </>
+              )}
             </>
           )}
         </>

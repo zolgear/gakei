@@ -2505,6 +2505,30 @@ export interface components {
             commit?: string | null;
         };
         /**
+         * AnalyzeEdge
+         * @description 配線1本(図に使う。ADR-0052 4章)。`source` の `output` 番目の出力が `target.input` に入る。
+         *
+         *     `followed` は、切り替え(`ComfySwitchNode` など)で選ばれなかった枝なら False。
+         *     `output_type` は `/object_info` があるときだけ(`IMAGE`、`MASK` など)。
+         */
+        AnalyzeEdge: {
+            /** Source */
+            source: string;
+            /** Output */
+            output: number;
+            /** Target */
+            target: string;
+            /** Input */
+            input: string;
+            /**
+             * Followed
+             * @default true
+             */
+            followed: boolean;
+            /** Output Type */
+            output_type?: string | null;
+        };
+        /**
          * AnalyzeWarning
          * @description analyze の警告1件。`reading` は読み取り(`readings`)で同じことを示している警告で、
          *     カードの画面では出さない。`general` は読み取りでは扱わない警告(秘密に見える値など)。
@@ -3848,6 +3872,8 @@ export interface components {
             candidates?: components["schemas"]["BindingCandidate"][];
             /** Question */
             question?: string | null;
+            /** Evidence */
+            evidence?: components["schemas"]["PathStep"][];
         };
         /**
          * Bindings
@@ -3959,6 +3985,8 @@ export interface components {
             param_tiers?: components["schemas"]["ParamTierInfo"][];
             /** Validation */
             validation?: components["schemas"]["ValidationIssue"][];
+            /** Edges */
+            edges?: components["schemas"]["AnalyzeEdge"][];
         };
         /** ComfyNodeInfo */
         ComfyNodeInfo: {
@@ -3976,6 +4004,10 @@ export interface components {
              * @enum {string}
              */
             state: "live" | "display" | "unused";
+            /** Kind */
+            kind?: ("save" | "display" | "sampler" | "encoder" | "image_source" | "switch") | null;
+            /** Output Types */
+            output_types?: string[] | null;
         };
         /** ComfyNodeInputInfo */
         ComfyNodeInputInfo: {

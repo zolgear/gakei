@@ -238,24 +238,52 @@
 }
 
 /* カードの列と、図の領域(ADR-0052 4章。図は第3段で足す)。 */
-.bindingLayout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+/* 差し込み先の表示の切り替え(一覧 / 図) */
+.viewSwitch {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
-/* 図の領域があるときだけ2列にする(第3段)。広い幅でもカードの列は潰さない。 */
-@container settings-page (min-width: 1100px) {
-  .bindingLayout[data-has-diagram='true'] {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
-  }
+.viewSwitch button {
+  min-height: 32px;
+  padding: 4px 16px;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
 }
 
-.cardsColumn {
+.viewSwitch button[aria-pressed='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* 図の表示の右のパネルのタブ */
+.panelTabs {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panelTab {
+  min-height: 34px;
+  padding: 4px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.panelTab[aria-selected='true'] {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
 }
 
 /* 詳細設定(今までの2段のドロップダウン) */
