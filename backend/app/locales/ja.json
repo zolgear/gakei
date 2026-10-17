@@ -62,7 +62,8 @@
       "lockedDetach": "ComfyUI の Run が実行中または待機中のため、切り離せません。",
       "lockedDisable": "ComfyUI の Run が実行中または待機中のため、無効にできません。",
       "lockedEnable": "ComfyUI の Run が実行中または待機中のため、有効にできません。",
-      "notConnected": "ComfyUI に接続していません。"
+      "notConnected": "ComfyUI に接続していません。",
+      "analyzeTemplateOrWorkflow": "template と workflow_id のどちらか一方を指定してください。"
     },
     "workflow": {
       "uiFormatMessage": "UI 形式(nodes/links を含む)のファイルです。ComfyUI の「Export (API)」で書き出した API 形式の JSON を登録してください。",

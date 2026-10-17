@@ -14,6 +14,7 @@ import type {
 import { fmt, useI18n, type Messages } from '../../i18n'
 import {
   bindingRowId,
+  questionCardId,
   issuesForField,
   questionForField,
   REQUIRED_FIELDS,
@@ -64,6 +65,8 @@ interface BindingRowsProps {
   onUseReading: (field: FieldKey) => void
   /** 少しの間、強調する行(検証の一覧から移動したとき)。 */
   flashField: FieldKey | null
+  /** 問いのカードへ移る(問いがある行から)。 */
+  onGoToQuestion: (id: PendingQuestion['id']) => void
 }
 
 export function BindingRows(props: BindingRowsProps) {
@@ -91,6 +94,7 @@ function BindingRow({
   onChange,
   onUseReading,
   flashField,
+  onGoToQuestion,
 }: BindingRowsProps & { field: FieldKey }) {
   const { t } = useI18n()
   const c = t.comfyui.cards
@@ -104,7 +108,22 @@ function BindingRow({
   const comparison = origin === 'saved' && suggested ? savedComparison(bindings, suggested, reading, field) : null
 
   let why: ReactNode
-  if (question) why = c.whyQuestion
+  if (question)
+    why = (
+      <>
+        {c.whyQuestion}{' '}
+        <a
+          href={`#${questionCardId(question.id)}`}
+          className={styles.inlineLink}
+          onClick={(e) => {
+            e.preventDefault()
+            onGoToQuestion(question.id)
+          }}
+        >
+          {c.goToQuestion}
+        </a>
+      </>
+    )
   else if (origin === 'manual') why = c.whyManual
   else if (origin === 'saved') why = c.whySaved
   else why = reading?.reason ?? c.whyNoReading

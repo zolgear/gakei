@@ -43,6 +43,11 @@ export function visibleFields(operation: ComfyOperation): FieldKey[] {
   return FIELD_ORDER.filter((field) => operation === 'edit' || (field !== 'images' && field !== 'mask'))
 }
 
+/** 問いのカードの要素の id(行から問いへ移動するのに使う)。 */
+export function questionCardId(id: QuestionId): string {
+  return `question-${id}`
+}
+
 /** 行の要素の id(検証の一覧・問いのカードから移動するのに使う)。 */
 export function bindingRowId(field: FieldKey): string {
   return `binding-row-${field}`
@@ -78,10 +83,11 @@ export function readingsByField(
   return map
 }
 
-/** 最初から開いておく行(外れうる行だけ。ADR-0052 4章の試作)。 */
+/** 最初から開いておく行(外れうる推定の行だけ。ADR-0052 4章の試作)。 */
 export function initiallyExpanded(reading: ComfyBindingReading | undefined, origin: RowOrigin): boolean {
+  // ask の行は問いのカードで答えるので開かない(「どれでもない」で開く)。
   if (origin !== 'reading' || !reading) return false
-  return reading.confidence === 'ranked' || reading.confidence === 'ask'
+  return reading.confidence === 'ranked'
 }
 
 // -- 値の比べ方 ---------------------------------------------------------------
@@ -634,4 +640,16 @@ export type CardAnalysis = Pick<ComfyAnalyzeResponse, 'readings' | 'param_tiers'
 /** 保存の直後に開いた印(新規登録の保存で編集画面へ移ったとき、保存後のカードを出す)。 */
 export function isJustSaved(state: unknown): boolean {
   return typeof state === 'object' && state !== null && (state as Record<string, unknown>).justSaved === true
+}
+
+/**
+ * analyze の警告のうち、ファイルの節に出すもの。読み取り(`readings`)で同じことを示している警告
+ * (プロンプトの候補が複数、出力が見つからない、など)はカードと重なるので出さない。
+ */
+export function generalWarningMessages(items: ComfyAnalyzeResponse['warning_items']): string[] {
+  const messages: string[] = []
+  for (const item of items ?? []) {
+    if (item.kind === 'general' && !messages.includes(item.message)) messages.push(item.message)
+  }
+  return messages
 }

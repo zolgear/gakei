@@ -2617,6 +2617,7 @@
       "bindingsLead": "Values from the GAKEI form go here on every run.",
       "exposedLead": "Inputs shown under \"Other\" on the generate screen, so values other than the insertion points can change per run.",
       "whyQuestion": "There are several candidates and none could be chosen. Answer the question above.",
+      "goToQuestion": "Go to the question",
       "whyManual": "Chosen on this screen.",
       "whySaved": "The value saved earlier.",
       "whyNoReading": "No reading result.",

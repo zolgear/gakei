@@ -2504,6 +2504,22 @@ export interface components {
             /** Commit */
             commit?: string | null;
         };
+        /**
+         * AnalyzeWarning
+         * @description analyze の警告1件。`reading` は読み取り(`readings`)で同じことを示している警告で、
+         *     カードの画面では出さない。`general` は読み取りでは扱わない警告(秘密に見える値など)。
+         */
+        AnalyzeWarning: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "reading" | "general";
+            /** Field */
+            field?: ("prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt") | null;
+            /** Message */
+            message: string;
+        };
         /** AnnotationBackfillResponse */
         AnnotationBackfillResponse: {
             /** Queued */
@@ -3906,12 +3922,20 @@ export interface components {
             providers?: components["schemas"]["ProviderEntry"][];
             embeddings: components["schemas"]["EmbeddingCapabilities"];
         };
-        /** ComfyAnalyzeRequest */
+        /**
+         * ComfyAnalyzeRequest
+         * @description `template` か `workflow_id`(登録済みのワークフローの保存したテンプレート)のどちらか一方。
+         *
+         *     `workflow_id` は編集画面で使う。ブラウザで JSON を読み直すと `1.0` が `1` になり、公開
+         *     パラメーターの型(FLOAT)が分からなくなるため、保存したテンプレートをサーバーで読む。
+         */
         ComfyAnalyzeRequest: {
             /** Template */
-            template: {
+            template?: {
                 [key: string]: unknown;
-            };
+            } | null;
+            /** Workflow Id */
+            workflow_id?: string | null;
         };
         /** ComfyAnalyzeResponse */
         ComfyAnalyzeResponse: {
@@ -3927,6 +3951,8 @@ export interface components {
             candidate_params?: components["schemas"]["ExposedParam"][];
             /** Warnings */
             warnings?: string[];
+            /** Warning Items */
+            warning_items?: components["schemas"]["AnalyzeWarning"][];
             /** Readings */
             readings?: components["schemas"]["BindingReading"][];
             /** Param Tiers */

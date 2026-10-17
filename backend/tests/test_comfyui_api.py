@@ -724,3 +724,38 @@ def test_analyze_param_tiers_carry_hidden_reason(client: TestClient) -> None:
     tiers = {(p["node"], p["input"]): p for p in response.json()["param_tiers"]}
     assert tiers[("4", "ckpt_name")]["hidden_reason"] == "file_or_model"
     assert tiers[("3", "steps")]["hidden_reason"] is None
+
+
+# -- 公開パラメーターの型(1.0 を FLOAT のまま読む)と、保存したテンプレートの読み取り -------------
+
+
+def test_analyze_keeps_float_type_for_integral_float_values(client: TestClient) -> None:
+    # T2I_GRAPH の cfg は 8.0、denoise は 1.0。JSON の 1.0 は Python では float のまま読める。
+    response = client.post("/api/comfyui/workflows/analyze", json={"template": clone(T2I_GRAPH)})
+    params = {(p["node"], p["input"]): p for p in response.json()["candidate_params"]}
+    assert params[("3", "cfg")]["type"] == "float"
+    assert params[("3", "denoise")]["type"] == "float"
+    assert params[("3", "steps")]["type"] == "int"
+
+
+def test_analyze_by_workflow_id_reads_saved_template(client: TestClient) -> None:
+    created = _create_t2i_workflow(client)
+    response = client.post("/api/comfyui/workflows/analyze", json={"workflow_id": created["id"]})
+    assert response.status_code == 200, response.text
+    params = {(p["node"], p["input"]): p for p in response.json()["candidate_params"]}
+    assert params[("3", "denoise")]["type"] == "float"
+
+
+def test_analyze_requires_exactly_one_of_template_or_workflow_id(client: TestClient) -> None:
+    assert client.post("/api/comfyui/workflows/analyze", json={}).status_code == 422
+    created = _create_t2i_workflow(client)
+    response = client.post(
+        "/api/comfyui/workflows/analyze",
+        json={"template": clone(T2I_GRAPH), "workflow_id": created["id"]},
+    )
+    assert response.status_code == 422
+    missing = client.post(
+        "/api/comfyui/workflows/analyze",
+        json={"workflow_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    assert missing.status_code == 404

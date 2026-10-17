@@ -26,7 +26,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, type Location, type NavigateFunction } from 'react-router'
 import {
   ApiError,
-  analyzeComfyWorkflow,
+  analyzeComfyWorkflowText,
+  analyzeSavedComfyWorkflow,
   createComfyWorkflow,
   getComfyUIStatus,
   getComfyWorkflow,
@@ -67,11 +68,13 @@ import {
   FIELD_ORDER,
   applyAnswer,
   bindingRowId,
+  questionCardId,
   buildValidateRequest,
   savedComparison,
   effectiveExposedRows,
   enableRecommendedRows,
   fieldIsSet,
+  generalWarningMessages,
   initialOrigins,
   initiallyExpanded,
   isJustSaved,
@@ -174,7 +177,8 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
     if (!isEdit || !workflowQuery.data || saved !== null) return
     const wf = workflowQuery.data
     let cancelled = false
-    analyzeComfyWorkflow(wf.template)
+    // 保存したテンプレートをサーバーで読む(ブラウザで読み直すと 1.0 が 1 になり、型が変わるため)。
+    analyzeSavedComfyWorkflow(workflowId as string)
       .then((result) => {
         if (cancelled) return
         const initial = workflowFormFromSaved(wf, result)
@@ -204,9 +208,10 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
     return () => {
       cancelled = true
     }
-  }, [isEdit, workflowQuery.data, saved, f.templateParseFailed])
+  }, [isEdit, workflowId, workflowQuery.data, saved, f.templateParseFailed])
 
-  const analyzeMutation = useMutation({ mutationFn: analyzeComfyWorkflow })
+  // ファイルの JSON の文字列のまま読み取る(`1.0` を FLOAT のまま推定させる)。
+  const analyzeMutation = useMutation({ mutationFn: analyzeComfyWorkflowText })
 
   const saveMutation = useMutation({
     mutationFn: (input: WorkflowFormValues) => {
@@ -216,9 +221,12 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
         template: input.template,
         exposedRows: effectiveExposedRows(input.exposedRows, input.bindings),
       }
-      return isEdit
-        ? updateComfyWorkflow(workflowId as string, buildWorkflowUpdateRequest(args))
-        : createComfyWorkflow(buildWorkflowCreateRequest(args))
+      if (!isEdit) return createComfyWorkflow(buildWorkflowCreateRequest(args), input.templateText)
+      // テンプレートを差し替えていなければ送らない(保存済みのテンプレートの数の型を保つ)。
+      const templateChanged = saved === null || saved.template !== input.template
+      const body = buildWorkflowUpdateRequest(args)
+      if (!templateChanged) delete body.template
+      return updateComfyWorkflow(workflowId as string, body, templateChanged ? input.templateText : null)
     },
     onSuccess: (result, input) => {
       queryClient.invalidateQueries({ queryKey: ['capabilities'] })
@@ -425,12 +433,13 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
         return
       }
       const templateObj = parsed as Record<string, unknown>
+      const templateText = String(reader.result)
 
-      analyzeMutation.mutate(templateObj, {
+      analyzeMutation.mutate(templateText, {
         onSuccess: (result) => {
           const first = values.template === null
           const applied = applyAnalyzedTemplate(values, templateObj, result)
-          let next = applied.values
+          let next: WorkflowFormValues = { ...applied.values, templateText }
           if (first) {
             // 新規登録: 推奨の段の公開パラメーターは最初から公開する(ADR-0052 2章)。
             next = { ...next, exposedRows: enableRecommendedRows(next.exposedRows, result.param_tiers) }
@@ -446,7 +455,8 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
           setAnalysis(result)
           setFileName(file.name)
           setIssues(result.validation ?? [])
-          setWarnings(result.warnings ?? [])
+          // 読み取り(カード)で示す警告は重ねて出さない。
+          setWarnings(generalWarningMessages(result.warning_items))
           if (applied.cleared.length > 0) {
             setNotice(fmt(f.clearedFieldsNotice, { cleared: applied.cleared.join(f.listSeparator) }))
           }
@@ -670,6 +680,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
                       onChange={(field, update) => changeBindings(update, [field])}
                       onUseReading={adoptReading}
                       flashField={flashField}
+                      onGoToQuestion={(id) => focusElement(questionCardId(id))}
                     />
                   </SettingsSection>
 

@@ -72,6 +72,17 @@
   opacity: 0.4;
 }
 
+.inlineLink {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.question {
+  outline: none;
+}
+
 .linkButton {
   padding: 0;
   background: none;

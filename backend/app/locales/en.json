@@ -62,7 +62,8 @@
       "lockedDetach": "Cannot detach while a ComfyUI run is in progress or queued.",
       "lockedDisable": "Cannot disable while a ComfyUI run is in progress or queued.",
       "lockedEnable": "Cannot enable while a ComfyUI run is in progress or queued.",
-      "notConnected": "ComfyUI is not connected."
+      "notConnected": "ComfyUI is not connected.",
+      "analyzeTemplateOrWorkflow": "Specify either template or workflow_id."
     },
     "workflow": {
       "uiFormatMessage": "This file is in UI format (it contains nodes/links). Export it from ComfyUI with \"Export (API)\" and register the resulting API-format JSON instead.",

@@ -6,6 +6,7 @@ import {
   compareWithReading,
   effectiveExposedRows,
   enableRecommendedRows,
+  generalWarningMessages,
   initialOrigins,
   initiallyExpanded,
   isJustSaved,
@@ -125,9 +126,9 @@ describe('行のバッジと開き方', () => {
     expect(rowBadge(undefined, 'reading')).toBe('absent')
   })
 
-  it('ranked と ask の行だけ最初から開く', () => {
+  it('ranked の行だけ最初から開く(ask は問いのカードで答える)', () => {
     expect(initiallyExpanded(reading('prompt', 'ranked'), 'reading')).toBe(true)
-    expect(initiallyExpanded(reading('prompt', 'ask'), 'reading')).toBe(true)
+    expect(initiallyExpanded(reading('prompt', 'ask'), 'reading')).toBe(false)
     expect(initiallyExpanded(reading('prompt', 'unique'), 'reading')).toBe(false)
     expect(initiallyExpanded(reading('prompt', 'ask'), 'saved')).toBe(false)
   })
@@ -359,5 +360,18 @@ describe('保存の直後の印', () => {
     expect(isJustSaved({ justSaved: true })).toBe(true)
     expect(isJustSaved({ fromComfyUISettings: true })).toBe(false)
     expect(isJustSaved(null)).toBe(false)
+  })
+})
+
+describe('ファイルの節に出す警告', () => {
+  it('読み取りで扱う警告は出さず、それ以外(秘密に見える値など)だけを出す', () => {
+    expect(
+      generalWarningMessages([
+        { kind: 'reading', field: 'prompt', message: 'プロンプトの候補' },
+        { kind: 'general', field: null, message: '秘密に見える値' },
+        { kind: 'general', field: null, message: '秘密に見える値' },
+      ]),
+    ).toEqual(['秘密に見える値'])
+    expect(generalWarningMessages(undefined)).toEqual([])
   })
 })

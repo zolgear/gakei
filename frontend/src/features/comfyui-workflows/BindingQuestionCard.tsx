@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import type { ComfyBindingCandidate, ComfyNodeInfo } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
-import { nodeDisplayTitle, valuePreview, type PendingQuestion } from './bindingCards'
+import { nodeDisplayTitle, questionCardId, valuePreview, type PendingQuestion } from './bindingCards'
 import { ConfidenceBadge } from './BindingRows'
 import { NodeIdChip, NodeName, NodePath } from './NodeName'
 import styles from './BindingCards.module.css'
@@ -43,7 +43,7 @@ export function BindingQuestionCard({ question, nodes, onAnswer, onNeither }: Bi
   const headingId = `question-${question.id}`
 
   return (
-    <section className={styles.question} aria-labelledby={headingId}>
+    <section id={questionCardId(question.id)} className={styles.question} aria-labelledby={headingId} tabIndex={-1}>
       <div className={styles.questionHead}>
         <ConfidenceBadge badge="ask" />
         <h3 id={headingId} className={styles.questionTitle}>

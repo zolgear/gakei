@@ -21,6 +21,11 @@ export interface WorkflowFormValues {
   name: string
   operation: ComfyOperation
   template: Record<string, unknown> | null
+  /**
+   * 読み込んだファイルの JSON の文字列(保存のときにそのまま送り、`1.0` などの数の型を保つ)。
+   * 編集画面で差し替えていないときは無い(保存済みのテンプレートのまま送らない)。変更の件数には数えない。
+   */
+  templateText?: string | null
   /** テンプレートの analyze で得たノード(選択肢)。変更の件数には数えない。 */
   nodes: ComfyNodeInfo[]
   bindings: BindingsFormState
