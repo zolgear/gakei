@@ -19,7 +19,13 @@ from pydantic import (
 )
 
 from app.domain import prompt_templates
-from app.domain.comfy_analyze import AnalyzeWarning, BindingReading, ParamTierInfo
+from app.domain.comfy_analyze import (
+    AnalyzeEdge,
+    AnalyzeWarning,
+    BindingReading,
+    NodeKind,
+    ParamTierInfo,
+)
 from app.domain.comfy_graph import NodeState
 from app.domain.comfy_workflow import (
     Bindings,
@@ -1792,6 +1798,11 @@ class ComfyNodeInfo(BaseModel):
     inputs: list[ComfyNodeInputInfo] = Field(default_factory=list)
     # 出力につながる(live)/ 表示だけ(display)/ 使われない(unused)。ADR-0052 2章。
     state: NodeState = "live"
+    # 図で残す錨の種類(保存、表示、サンプラー、エンコーダー、画像の読み込み、切り替え)。
+    # どれでもなければ null。ADR-0052 4章。
+    kind: NodeKind | None = None
+    # 出力の型(`/object_info` に接続できたときだけ。無ければ null)。
+    output_types: list[str] | None = None
 
 
 class ComfyAnalyzeRequest(BaseModel):
@@ -1821,6 +1832,8 @@ class ComfyAnalyzeResponse(BaseModel):
     param_tiers: list[ParamTierInfo] = Field(default_factory=list)
     # 提案した差し込み先に、保存時と同じ検証を掛けた結果(ADR-0052 3章)。
     validation: list[ValidationIssue] = Field(default_factory=list)
+    # 配線の一覧(読むだけの図に使う。ADR-0052 4章)。切り替えで選ばれなかった枝は followed=false。
+    edges: list[AnalyzeEdge] = Field(default_factory=list)
 
 
 class ComfyValidateRequest(BaseModel):

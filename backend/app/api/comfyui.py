@@ -548,6 +548,7 @@ def analyze(
         readings=result.readings,
         param_tiers=result.param_tiers,
         validation=result.validation,
+        edges=result.edges,
     )
 
 

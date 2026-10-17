@@ -590,3 +590,72 @@ def test_paths_follow_positive_and_negative_outputs_of_shared_encoder() -> None:
     tiers = {(p.node, p.input): p.tier for p in result.param_tiers}
     assert tiers[("13", "aspect_ratio")] == "recommended"
     assert result.suggested_bindings.width is None
+
+
+# -- 図に使う情報(配線・錨の種類・根拠。ADR-0052 4章) -------------------------------------
+
+
+def test_edges_mark_unchosen_switch_branch() -> None:
+    result = analyze_workflow(_switch_t2i_graph())
+    edges = {(e.source, e.target, e.input): e for e in result.edges}
+    # テンプレートの配線がすべて並ぶ。
+    wired = sum(
+        1
+        for node in _switch_t2i_graph().values()
+        for value in node["inputs"].values()
+        if isinstance(value, list)
+    )
+    assert len(result.edges) == wired
+    # transparent=False: on_false(30)が選ばれ、on_true(31)は辿らない。
+    assert edges[("30", "32", "on_false")].followed is True
+    assert edges[("31", "32", "on_true")].followed is False
+    assert edges[("40", "41", "samples")].output == 0
+    assert edges[("23", "40", "negative")].output == 1
+    # /object_info が無ければ出力の型は分からない。
+    assert all(e.output_type is None for e in result.edges)
+
+
+def test_nodes_carry_anchor_kind() -> None:
+    result = analyze_workflow(_switch_t2i_graph())
+    kinds = {n["id"]: n["kind"] for n in result.nodes}
+    assert kinds["40"] == "sampler"
+    assert kinds["23"] == "encoder"
+    assert kinds["42"] == "save"
+    assert kinds["22"] == "display"
+    assert kinds["32"] == "switch"
+    assert kinds["10"] is None
+    edit = analyze_workflow(_qwen_edit_alpha_graph())
+    edit_kinds = {n["id"]: n["kind"] for n in edit.nodes}
+    assert edit_kinds["10"] == "image_source"
+    # 正と負のエンコーダーはどちらも錨。
+    assert edit_kinds["459:474"] == "encoder"
+    assert edit_kinds["459:475"] == "encoder"
+
+
+def test_absent_mask_names_the_transparency_wire_as_evidence() -> None:
+    result = analyze_workflow(_qwen_edit_alpha_graph())
+    evidence = [(s.node, s.input) for s in _reading(result, "mask").evidence]
+    assert evidence == [("10", None), ("459:479", "alpha")]
+
+
+def test_absent_size_names_unchosen_latent_branch_as_evidence() -> None:
+    graph = _qwen_edit_alpha_graph()
+    graph["459:490"] = N("EmptySD3LatentImage", width=1024, height=1024, batch_size=1)
+    graph["459:491"] = N(
+        "ComfySwitchNode", switch=False, on_true=W("459:490"), on_false=W("459:476")
+    )
+    graph["459:477"]["inputs"]["latent_image"] = W("459:491")
+    result = analyze_workflow(graph)
+    assert result.suggested_bindings.width is None
+    for field_name in ("width", "height", "batch_size"):
+        reading = _reading(result, field_name)
+        assert reading.confidence == "absent"
+        evidence = [(s.node, s.input) for s in reading.evidence]
+        assert evidence == [("459:476", None), ("459:491", "on_true"), ("459:490", None)]
+    states = {n["id"]: n["state"] for n in result.nodes}
+    assert states["459:490"] == "unused"
+
+
+def test_found_items_have_no_evidence() -> None:
+    result = analyze_workflow(copy.deepcopy(SYNTH["S1_sd15_t2i"]))
+    assert all(r.evidence == [] for r in result.readings if r.confidence != "absent")

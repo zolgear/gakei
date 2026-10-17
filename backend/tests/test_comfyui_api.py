@@ -557,6 +557,16 @@ def test_analyze_returns_readings_states_tiers_and_validation(client: TestClient
     assert tiers[("3", "steps")] == "recommended"
     assert tiers[("4", "ckpt_name")] == "hidden"
     assert body["validation"] == []
+    # 読むだけの図に使う配線と錨の種類(ADR-0052 4章)。
+    edges = {(e["source"], e["target"], e["input"]) for e in body["edges"]}
+    assert ("6", "3", "positive") in edges
+    assert ("8", "20", "images") in edges
+    assert all(e["followed"] for e in body["edges"])
+    kinds = {n["id"]: n["kind"] for n in body["nodes"]}
+    assert kinds["3"] == "sampler"
+    assert kinds["9"] == "save"
+    assert kinds["20"] == "display"
+    assert readings["mask"]["evidence"] == []
 
 
 def test_create_workflow_rejects_wired_binding(client: TestClient) -> None:
