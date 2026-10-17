@@ -13,12 +13,12 @@ import {
 import type { ComfyBindings, ComfyNodeInfo, ComfySuggestedBindings } from '../../api/client'
 
 const NODES: ComfyNodeInfo[] = [
-  { id: '1', class_type: 'CLIPTextEncode', title: null, inputs: [{ name: 'text', value: '', linked: false }] },
-  { id: '2', class_type: 'KSampler', title: null, inputs: [{ name: 'seed', value: 0, linked: false }] },
-  { id: '3', class_type: 'SaveImage', title: null, inputs: [] },
-  { id: '4', class_type: 'LoadImage', title: null, inputs: [{ name: 'image', value: '', linked: false }] },
-  { id: '5', class_type: 'LoadImageMask', title: null, inputs: [{ name: 'image', value: '', linked: false }] },
-  { id: '6', class_type: 'LoadImage', title: null, inputs: [{ name: 'image', value: '', linked: false }] },
+  { id: '1', class_type: 'CLIPTextEncode', state: 'live', title: null, inputs: [{ name: 'text', value: '', linked: false }] },
+  { id: '2', class_type: 'KSampler', state: 'live', title: null, inputs: [{ name: 'seed', value: 0, linked: false }] },
+  { id: '3', class_type: 'SaveImage', state: 'live', title: null, inputs: [] },
+  { id: '4', class_type: 'LoadImage', state: 'live', title: null, inputs: [{ name: 'image', value: '', linked: false }] },
+  { id: '5', class_type: 'LoadImageMask', state: 'live', title: null, inputs: [{ name: 'image', value: '', linked: false }] },
+  { id: '6', class_type: 'LoadImage', state: 'live', title: null, inputs: [{ name: 'image', value: '', linked: false }] },
 ]
 
 function form(overrides: Partial<BindingsFormState> = {}): BindingsFormState {

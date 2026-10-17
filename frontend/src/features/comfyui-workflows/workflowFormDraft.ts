@@ -148,3 +148,15 @@ export function workflowFormBackDestination(params: {
     ? { type: 'back' }
     : { type: 'replace', path: COMFYUI_SETTINGS_PATH }
 }
+
+/**
+ * 検証の結果(analyze の `validation`、保存・取得の `validation_issues`。ADR-0052 3章)を、
+ * 画面の警告の一覧に出す文にする。同じ文は1つにまとめる。
+ */
+export function issueMessages(issues: readonly { message: string }[] | null | undefined): string[] {
+  const messages: string[] = []
+  for (const issue of issues ?? []) {
+    if (!messages.includes(issue.message)) messages.push(issue.message)
+  }
+  return messages
+}
