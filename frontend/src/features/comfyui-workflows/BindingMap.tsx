@@ -10,13 +10,21 @@
  * React Flow はパン・ズーム・描画だけに使う。ノードのドラッグ・接続・選択は無効にし、配置は保存しない。
  * テンプレートの値と配線は変えない(ADR-0001 の非ゴールの線引き)。
  */
-import { useMemo, useRef, useState } from 'react'
-import { Background, Controls, ReactFlow, ReactFlowProvider, type Edge, type Node } from '@xyflow/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Background,
+  Controls,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  type Edge,
+  type Node,
+} from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { ComfyBindingReading, ComfyNodeInfo, ComfyOperation } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { inputFitsField, nodePickable, type InputChoice, type MapEdge } from './bindingGraph'
-import { buildMapView, initialViewport, type MapEdgeData, type MapMode, type MapNodeData } from './bindingMapView'
+import { buildMapView, mapFrame, type MapEdgeData, type MapMode, type MapNodeData } from './bindingMapView'
 import type { FieldKey } from './bindingCards'
 import type { BindingsFormState } from './bindingsForm'
 import type { ExposedParamRow } from './exposedParamsForm'
@@ -81,6 +89,26 @@ function BindingMapInner({
   const [mode, setMode] = useState<MapMode>('collapsed')
   const [pickMessage, setPickMessage] = useState<string | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const { setViewport } = useReactFlow()
+  // 枠の幅(高さと最初の表示の計算に使う)と、画面の高さ(枠の高さの上限)。
+  const [canvasWidth, setCanvasWidth] = useState(0)
+  const [screenHeight, setScreenHeight] = useState(() => (typeof window === 'undefined' ? 800 : window.innerHeight))
+  useEffect(() => {
+    const el = canvasRef.current
+    if (!el) return
+    const update = () => {
+      setCanvasWidth(Math.round(el.getBoundingClientRect().width))
+      setScreenHeight(window.innerHeight)
+    }
+    update()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    observer?.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
 
   const view = useMemo(
     () =>
@@ -104,6 +132,24 @@ function BindingMapInner({
       }),
     [view.flowEdges],
   )
+
+  // 枠の高さは中身に合わせる(上限は画面の高さ程度)。最初の表示は `mapFrame` が決める。
+  const maxHeight = readOnly ? Math.round(screenHeight * 0.6) : Math.min(720, Math.max(320, screenHeight - 200))
+  const frame = mapFrame(canvasWidth, { width: view.width, height: view.height, rects: view.rects }, view.focus, {
+    maxHeight,
+  })
+  const resetKey = `${mode}:${nodes.length}:${nodes[0]?.id ?? ''}`
+  // 表示を切り替えたとき・テンプレートを差し替えたとき・枠の幅が変わったときだけ、最初の表示に戻す
+  // (割り当てで箱が変わるたびに戻すと、見ている場所がずれるため)。
+  const frameRef = useRef(frame)
+  // 描画のあとに最新の表示を覚える(下の effect より先に走る)。
+  useEffect(() => {
+    frameRef.current = frame
+  })
+  useEffect(() => {
+    if (canvasWidth <= 0) return
+    void setViewport(frameRef.current.viewport)
+  }, [resetKey, canvasWidth, setViewport])
 
   const boxById = useMemo(() => new Map(view.graph.boxes.map((b) => [b.id, b])), [view.graph.boxes])
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
@@ -216,19 +262,21 @@ function BindingMapInner({
         </p>
       )}
 
-      <div className={styles.canvas} aria-label={m.canvasLabel} role="figure" ref={canvasRef}>
+      <div
+        className={styles.canvas}
+        aria-label={m.canvasLabel}
+        role="figure"
+        ref={canvasRef}
+        style={{ height: frame.height }}
+      >
         <ReactFlow
           // 表示を切り替えたとき・テンプレートを差し替えたときは、最初の表示からやり直す。
-          key={`${mode}:${nodes.length}:${nodes[0]?.id ?? ''}`}
+          key={resetKey}
           nodes={view.flowNodes as Node<MapNodeData>[]}
           edges={flowEdges}
           nodeTypes={nodeTypes}
           onInit={(instance) => {
-            const rect = canvasRef.current?.getBoundingClientRect()
-            if (!rect) return
-            void instance.setViewport(
-              initialViewport({ width: rect.width, height: rect.height }, { width: view.width, height: view.height }),
-            )
+            if (canvasWidth > 0) void instance.setViewport(frameRef.current.viewport)
           }}
           minZoom={0.15}
           maxZoom={1.6}
@@ -245,7 +293,7 @@ function BindingMapInner({
           }}
         >
           <Background gap={20} color="#2a2e34" />
-          <Controls showInteractive={false} fitViewOptions={FIT_OPTIONS} position="top-right" />
+          <Controls showInteractive={false} fitViewOptions={FIT_OPTIONS} position="bottom-left" />
         </ReactFlow>
       </div>
 

@@ -165,28 +165,89 @@ export interface MapView {
   /** 配置した図の大きさ。 */
   width: number
   height: number
+  /** 主要な道筋(プロンプト・サンプラー・保存の箱)の横の範囲。無ければ null。 */
+  focus: { minX: number; maxX: number } | null
+  /** 箱の位置と大きさ(最初の表示の計算に使う)。 */
+  rects: MapRect[]
 }
 
-/** 最初に見せる位置と倍率の下限(これより小さくすると字が読めない)。 */
-export const MAP_MIN_READABLE_ZOOM = 0.65
+/**
+ * 倍率の下限。箱のタイトル(14px)が画面で 11px 以上、クラス名・id(11px)が 9px 以上になる倍率。
+ * 最初の表示はこれより小さくしない(「全体を表示」のボタンはこれより小さくできる)。
+ */
+export const MAP_MIN_READABLE_ZOOM = 0.82
+
+export interface MapFrame {
+  /** 図の枠の高さ(px)。 */
+  height: number
+  viewport: { x: number; y: number; zoom: number }
+}
+
+export interface MapRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 /**
- * 最初の表示。図が枠に収まる倍率(最大 1)にするが、字が読めなくなるほど小さくはしない。
- * 収まらないときは左上(入力の側)から見せ、残りはスクロールで見る。
+ * 最初の表示(枠の高さ・位置・倍率)。
+ *
+ * - 倍率: 全体が収まる倍率(最大 1。高さは `maxHeight` まで伸ばせるとして計算)と、読める倍率の下限の大きい方。
+ * - 横: 収まれば中央。収まらないときは、主要な道筋(プロンプト → サンプラー → 保存)の範囲 `focus` が見える位置にする。
+ *   範囲が枠より広いときは右端(出力の側)をそろえる。保存ノードと、その手前のサンプラーが見えることを優先する
+ *   (入力の側はカードの行と道筋の文字列で確かめられ、パンでも見られるため)。
+ * - 枠の高さ: 横の位置で見えている箱が収まる高さ(空の領域を残さない)。`comfortHeight` を渡すと、図全体が
+ *   その高さまでなら全体を収める(既定は `minHeight` で、見えている箱だけに合わせる)。`minHeight`〜`maxHeight`。
+ * - 縦: 見えている箱の中央を枠の中央にそろえる(図の外の余白はなるべく見せない)。
  */
-export function initialViewport(
-  canvas: { width: number; height: number },
-  graph: { width: number; height: number },
-  minZoom = MAP_MIN_READABLE_ZOOM,
-): { x: number; y: number; zoom: number } {
-  if (graph.width <= 0 || graph.height <= 0 || canvas.width <= 0 || canvas.height <= 0) return { x: 0, y: 0, zoom: 1 }
-  const fit = Math.min(canvas.width / graph.width, canvas.height / graph.height, 1)
+export function mapFrame(
+  canvasWidth: number,
+  graph: { width: number; height: number; rects: readonly MapRect[] },
+  focus: { minX: number; maxX: number } | null,
+  options: { minHeight?: number; maxHeight?: number; comfortHeight?: number; minZoom?: number } = {},
+): MapFrame {
+  const minHeight = options.minHeight ?? 240
+  const comfortHeight = options.comfortHeight ?? minHeight
+  const padding = 16
+  const maxHeight = Math.max(minHeight, options.maxHeight ?? 640)
+  const minZoom = options.minZoom ?? MAP_MIN_READABLE_ZOOM
+  if (graph.width <= 0 || graph.height <= 0 || canvasWidth <= 0) {
+    return { height: minHeight, viewport: { x: 0, y: 0, zoom: 1 } }
+  }
+  const fit = Math.min(canvasWidth / graph.width, maxHeight / graph.height, 1)
   const zoom = Math.max(fit, minZoom)
   const w = graph.width * zoom
-  const h = graph.height * zoom
-  const x = w <= canvas.width ? (canvas.width - w) / 2 : 0
-  const y = h <= canvas.height ? (canvas.height - h) / 2 : 0
-  return { x, y, zoom }
+  let x: number
+  if (w <= canvasWidth) {
+    x = (canvasWidth - w) / 2
+  } else {
+    const range = focus ?? { minX: 0, maxX: graph.width }
+    const focusWidth = (range.maxX - range.minX) * zoom
+    x =
+      focusWidth <= canvasWidth
+        ? canvasWidth / 2 - ((range.minX + range.maxX) / 2) * zoom
+        : canvasWidth - range.maxX * zoom
+    // 図の外の余白は見せない。
+    x = Math.min(0, Math.max(canvasWidth - w, x))
+  }
+  // 横の位置で見えている箱の上下。
+  const left = -x / zoom
+  const right = (canvasWidth - x) / zoom
+  const visible = graph.rects.filter((r) => r.x + r.width > left && r.x < right)
+  const top = visible.length > 0 ? Math.min(...visible.map((r) => r.y)) - padding : 0
+  const bottom = visible.length > 0 ? Math.max(...visible.map((r) => r.y + r.height)) + padding : graph.height
+  const hVisible = (bottom - top) * zoom
+  const hFull = graph.height * zoom
+  // 枠の高さ: 見えている箱が収まる高さ。ただし図全体が `comfortHeight` までなら全体を収める
+  // (パンしたときに上下が切れにくいように)。空の領域は残さない。
+  const height = Math.round(
+    Math.min(maxHeight, Math.max(minHeight, hVisible, Math.min(hFull, comfortHeight))),
+  )
+  // 縦: 見えている箱の中央を枠の中央に。図の外の余白はなるべく見せない。
+  let y = height / 2 - ((top + bottom) / 2) * zoom
+  y = Math.min(Math.max(0, height - hFull), Math.max(Math.min(0, height - hFull), y))
+  return { height, viewport: { x, y, zoom } }
 }
 
 export function buildMapView(input: MapViewInput): MapView {
@@ -275,5 +336,18 @@ export function buildMapView(input: MapViewInput): MapView {
     }
   })
 
-  return { graph, flowNodes, flowEdges, width: layout.width, height: layout.height }
+  // 主要な道筋の範囲: プロンプトの値のノード、サンプラー、保存ノード(出力)を含む箱。
+  const keyNodes = new Set<string>(nodes.filter((n) => n.kind === 'sampler' || n.kind === 'save').map((n) => n.id))
+  for (const id of bindings.outputs) keyNodes.add(id)
+  if (bindings.prompt) keyNodes.add(bindings.prompt.node)
+  const keyBoxes = graph.boxes.filter((b) => b.nodeIds.some((id) => keyNodes.has(id)))
+  const xs = keyBoxes.map((b) => layout.positions.get(b.id)?.x ?? 0)
+  const focus = xs.length > 0 ? { minX: Math.min(...xs) - 16, maxX: Math.max(...xs) + MAP_NODE_WIDTH + 16 } : null
+  const rects = data.map((d) => ({
+    x: layout.positions.get(d.box.id)?.x ?? 0,
+    y: layout.positions.get(d.box.id)?.y ?? 0,
+    width: MAP_NODE_WIDTH,
+    height: d.height,
+  }))
+  return { graph, flowNodes, flowEdges, width: layout.width, height: layout.height, focus, rects }
 }
