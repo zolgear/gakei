@@ -175,15 +175,15 @@ describe('mapFrame', () => {
     expect(right).toBeGreaterThanOrEqual(2600)
   })
 
-  it('道筋の範囲が枠より広いときは出力の側(右端)をそろえる', () => {
+  it('道筋の範囲が枠より広いときは入力の側(左端。プロンプトの根)をそろえる', () => {
     const graph = row([16, 16, 16, 16, 16, 16, 16, 16, 16, 16])
     const f = mapFrame(500, graph, { minX: 0, maxX: graph.width }, { minHeight: 50 })
-    expect((500 - f.viewport.x) / f.viewport.zoom).toBeCloseTo(graph.width)
+    expect(f.viewport.x).toBe(0)
   })
 
   it('横に切れるときは、見えている箱に枠の高さを合わせて縦の中央に置く', () => {
-    // 左の箱は上、右の箱は下にある。図全体は高いが、右端に見えるのは下の箱だけ。
-    const graph = row([16, 16, 16, 16, 16, 16, 16, 1400, 1400, 1400])
+    // 左の箱は下、右の箱は上にある。図全体は高いが、左端に見えるのは下の箱だけ。
+    const graph = row([1400, 1400, 1400, 16, 16, 16, 16, 16, 16, 16])
     const f = mapFrame(500, graph, { minX: 0, maxX: graph.width }, { maxHeight: 600, comfortHeight: 300 })
     expect(f.height).toBe(300)
     const boxTop = 1400 * f.viewport.zoom + f.viewport.y
