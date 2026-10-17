@@ -53,6 +53,8 @@ BindingField = Literal[
     "final_prompt",
 ]
 ParamTier = Literal["recommended", "other", "hidden"]
+# 「公開しない」の理由(画面が文にする)。推奨・その他では None。
+HiddenReason = Literal["unused_branch", "secret", "fixed_setting", "file_or_model", "fixed_text"]
 
 _FIELD_ORDER: tuple[BindingField, ...] = (
     "prompt",
@@ -103,6 +105,15 @@ class BindingReading(BaseModel):
     question: str | None = None
 
 
+class AnalyzeWarning(BaseModel):
+    """analyze の警告1件。`reading` は読み取り(`readings`)で同じことを示している警告で、
+    カードの画面では出さない。`general` は読み取りでは扱わない警告(秘密に見える値など)。"""
+
+    kind: Literal["reading", "general"]
+    field: BindingField | None = None
+    message: str
+
+
 class ParamTierInfo(BaseModel):
     """公開パラメーターの候補の段(推奨 / その他 / 公開しない)。"""
 
@@ -110,6 +121,8 @@ class ParamTierInfo(BaseModel):
     node: str
     input: str
     tier: ParamTier
+    # `hidden` のときだけ、公開しない理由。
+    hidden_reason: HiddenReason | None = None
 
 
 @dataclass
@@ -119,6 +132,8 @@ class AnalyzeResult:
     suggested_operation: Literal["generate", "edit"]
     candidate_params: list[ExposedParam]
     warnings: list[str] = field(default_factory=list)
+    # `warnings` と同じ順・同じ文に、読み取りで扱っているかの種別を付けたもの。
+    warning_items: list[AnalyzeWarning] = field(default_factory=list)
     readings: list[BindingReading] = field(default_factory=list)
     param_tiers: list[ParamTierInfo] = field(default_factory=list)
     validation: list[ValidationIssue] = field(default_factory=list)
@@ -1224,26 +1239,29 @@ class _Reader:
                 if control is not None:
                     self.recommended.add(control)
 
-    def param_tier(self, node_id: str, input_name: str, value: Any, secrets: set) -> ParamTier:
+    def param_tier(
+        self, node_id: str, input_name: str, value: Any, secrets: set
+    ) -> tuple[ParamTier, HiddenReason | None]:
+        """候補の段と、公開しないときの理由。"""
         if (node_id, input_name) in self.recommended:
-            return "recommended"
+            return "recommended", None
         if self.live and self.states.get(node_id) != "live":
-            return "hidden"
+            return "hidden", "unused_branch"
         if (node_id, input_name) in secrets:
-            return "hidden"
+            return "hidden", "secret"
         if input_name in _HIDDEN_INPUTS:
-            return "hidden"
+            return "hidden", "fixed_setting"
         if input_name.endswith("_name") and input_name != "sampler_name":
-            return "hidden"
-        if isinstance(value, str) and (
-            _FILE_VALUE_RE.search(value) or len(value) > _FIXED_TEXT or "\n" in value
-        ):
-            return "hidden"
+            return "hidden", "file_or_model"
+        if isinstance(value, str) and _FILE_VALUE_RE.search(value):
+            return "hidden", "file_or_model"
+        if isinstance(value, str) and (len(value) > _FIXED_TEXT or "\n" in value):
+            return "hidden", "fixed_text"
         if self.g.class_type(node_id).startswith("Primitive") and self.g.has_custom_title(node_id):
-            return "recommended"
+            return "recommended", None
         if input_name in _RECOMMENDED_INPUTS:
-            return "recommended"
-        return "other"
+            return "recommended", None
+        return "other", None
 
 
 # -- 公開パラメーターの候補(ADR-0013 からの互換) -------------------------------------
@@ -1367,11 +1385,24 @@ def analyze_workflow(
     final_prompt = reader.read_final_prompt()
 
     warnings = reader.warnings
+    warning_items: list[AnalyzeWarning] = []
+
+    def _warn(message: str, field_name: BindingField | None = None) -> None:
+        # field を持つ警告は、その項目の読み取り(理由・問い)で同じことを示している。
+        warnings.append(message)
+        warning_items.append(
+            AnalyzeWarning(
+                kind="reading" if field_name is not None else "general",
+                field=field_name,
+                message=message,
+            )
+        )
+
     # -- これまでの警告(画面の既存の警告表示に出す) --
     if not output_ids:
         class_types = [g.class_type(nid) for nid in g.ids]
         if "PreviewImage" in class_types and not any("Save" in c for c in class_types):
-            warnings.append(t("comfyui.workflow.previewImageNotSupported"))
+            _warn(t("comfyui.workflow.previewImageNotSupported"), "outputs")
         else:
             referenced = {
                 value[0] for nid in g.ids for value in g.inputs(nid).values() if is_wire(value)
@@ -1384,11 +1415,12 @@ def analyze_workflow(
                 and "Compare" not in g.class_type(nid)
             ]
             if fallback:
-                warnings.append(
-                    t("comfyui.workflow.outputNodeNotFoundWithCandidates") + ", ".join(fallback)
+                _warn(
+                    t("comfyui.workflow.outputNodeNotFoundWithCandidates") + ", ".join(fallback),
+                    "outputs",
                 )
             else:
-                warnings.append(t("comfyui.workflow.outputNodeNotFound"))
+                _warn(t("comfyui.workflow.outputNodeNotFound"), "outputs")
 
     prompt_reading = reader.readings["prompt"]
     if prompt_ref is None:
@@ -1400,11 +1432,11 @@ def analyze_workflow(
             remainder = len(prompt_reading.candidates) - len(shown)
             if remainder > 0:
                 formatted += t("comfyui.workflow.moreCandidatesSuffix", count=remainder)
-            warnings.append(t("comfyui.workflow.promptBindingCandidates", candidates=formatted))
+            _warn(t("comfyui.workflow.promptBindingCandidates", candidates=formatted), "prompt")
         else:
-            warnings.append(t("comfyui.workflow.promptBindingNotFound"))
+            _warn(t("comfyui.workflow.promptBindingNotFound"), "prompt")
     if suggested_operation == "edit" and not image_refs:
-        warnings.append(t("comfyui.workflow.imageBindingNotFound"))
+        _warn(t("comfyui.workflow.imageBindingNotFound"), "images")
     # 決めきれない項目の問い(プロンプトは上の候補の一覧で出している)。
     asked: set[str] = set()
     for name in _FIELD_ORDER:
@@ -1413,7 +1445,7 @@ def analyze_workflow(
             continue
         if reading.question and reading.question not in asked:
             asked.add(reading.question)
-            warnings.append(reading.question)
+            _warn(reading.question, name)
 
     if suggested_operation == "edit" and mask_binding is None:
         # GAKEI の2方式(load_image_mask / image_alpha)のどちらにも当てはまらない方式
@@ -1422,13 +1454,13 @@ def analyze_workflow(
             any(marker in g.class_type(nid) for marker in _UNSUPPORTED_MASK_MARKERS)
             for nid in g.ids
         ):
-            warnings.append(t("comfyui.workflow.maskMethodUnsupported"))
+            _warn(t("comfyui.workflow.maskMethodUnsupported"))
 
     # 秘密に見える値(API キーなど)が書かれた入力。値そのものは出さない。登録は止めない
     # (判定は推測のため。ADR-0013 8章、2026-10-01 追記)。
     secrets = find_secret_inputs(template)
     for found in secrets:
-        warnings.append(
+        _warn(
             t(
                 "comfyui.workflow.secretValueFound",
                 node=found.node_id,
@@ -1454,17 +1486,20 @@ def analyze_workflow(
     candidate_params = _build_candidate_params(template, used)
     reader._collect_switch_controls()
     secret_keys = {(s.node_id, s.input) for s in secrets}
-    param_tiers = [
-        ParamTierInfo(
-            name=param.name,
-            node=param.node,
-            input=param.input,
-            tier=reader.param_tier(
-                param.node, param.input, g.inputs(param.node).get(param.input), secret_keys
-            ),
+    param_tiers: list[ParamTierInfo] = []
+    for param in candidate_params:
+        tier, hidden_reason = reader.param_tier(
+            param.node, param.input, g.inputs(param.node).get(param.input), secret_keys
         )
-        for param in candidate_params
-    ]
+        param_tiers.append(
+            ParamTierInfo(
+                name=param.name,
+                node=param.node,
+                input=param.input,
+                tier=tier,
+                hidden_reason=hidden_reason,
+            )
+        )
 
     validation = check_workflow(template, suggested_operation, suggested_bindings, [], object_info)
 
@@ -1474,6 +1509,7 @@ def analyze_workflow(
         suggested_operation=suggested_operation,
         candidate_params=candidate_params,
         warnings=warnings,
+        warning_items=warning_items,
         readings=[reader.readings[name] for name in _FIELD_ORDER if name in reader.readings],
         param_tiers=param_tiers,
         validation=validation,

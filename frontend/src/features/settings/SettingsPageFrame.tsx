@@ -20,12 +20,14 @@ interface SettingsPageFrameProps {
   title: string
   intro?: ReactNode
   draft?: SettingsDraftControls
+  /** ヘッダーの保存の横に出す短い状態(保存できない理由の件数など)。 */
+  status?: string
   /** 「戻る」を差し替える(省くと ADR-0031 3章の行き先)。 */
   onBack?: () => void
   children: ReactNode
 }
 
-export function SettingsPageFrame({ pageId, title, intro, draft, onBack, children }: SettingsPageFrameProps) {
+export function SettingsPageFrame({ pageId, title, intro, draft, status, onBack, children }: SettingsPageFrameProps) {
   const { t } = useI18n()
   const f = t.settings.frame
   const { isWide, reportDirty } = useSettingsShell()
@@ -62,6 +64,11 @@ export function SettingsPageFrame({ pageId, title, intro, draft, onBack, childre
           <h1 className={styles.pageTitle}>{title}</h1>
           {draft && (
             <div className={styles.headerActions}>
+              {status && (
+                <span className={styles.headerStatus} role="status">
+                  {status}
+                </span>
+              )}
               {draft.changedCount > 0 && (
                 <span className={styles.changeCount} role="status">
                   {fmt(f.changeCount, { count: draft.changedCount })}

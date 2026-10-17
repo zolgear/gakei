@@ -419,6 +419,13 @@ export type ComfyInputRef = components['schemas']['InputRef']
 export type ComfyMaskBinding = components['schemas']['MaskBinding']
 export type ComfyExposedParam = components['schemas']['ExposedParam']
 export type ComfyOperation = ComfyWorkflowSummary['operation']
+export type ComfyBindingReading = components['schemas']['BindingReading']
+export type ComfyBindingCandidate = components['schemas']['BindingCandidate']
+export type ComfyPathStep = components['schemas']['PathStep']
+export type ComfyParamTierInfo = components['schemas']['ParamTierInfo']
+export type ComfyValidationIssue = components['schemas']['ValidationIssue']
+export type ComfyValidateRequest = components['schemas']['ComfyValidateRequest']
+export type ComfyValidateResponse = components['schemas']['ComfyValidateResponse']
 export type ComfyParamType = ComfyExposedParam['type']
 
 export type PriceEstimateResponse = components['schemas']['PriceEstimate']
@@ -1035,6 +1042,43 @@ export function analyzeComfyWorkflow(
   })
 }
 
+/**
+ * 本文の `template` に、読み込んだファイルの JSON の文字列をそのまま入れる。ブラウザで JSON を
+ * 読み直すと `1.0` が `1` になり、サーバーが値から型(FLOAT)を推定できなくなるため(ADR-0052)。
+ * `text` は `JSON.parse` できることを呼び出し側で確かめておく。
+ */
+export function jsonBodyWithRawTemplate(rest: Record<string, unknown>, text: string): string {
+  const inner = JSON.stringify(rest).slice(1, -1)
+  return `{"template":${text}${inner ? `,${inner}` : ''}}`
+}
+
+/** ファイルの JSON の文字列のまま読み取る(数の型を保つ)。 */
+export function analyzeComfyWorkflowText(text: string): Promise<ComfyAnalyzeResponse> {
+  return request('/api/comfyui/workflows/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: jsonBodyWithRawTemplate({}, text),
+  })
+}
+
+/** 登録済みのワークフローの、保存したテンプレートを読み取る(編集画面。数の型を保つ)。 */
+export function analyzeSavedComfyWorkflow(workflowId: string): Promise<ComfyAnalyzeResponse> {
+  return request('/api/comfyui/workflows/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflow_id: workflowId }),
+  })
+}
+
+/** 保存せずに、保存時と同じ検証だけを掛ける(ADR-0052 3章)。画面が値を変えるたびに呼ぶ。 */
+export function validateComfyWorkflow(body: ComfyValidateRequest): Promise<ComfyValidateResponse> {
+  return request('/api/comfyui/workflows/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 export function listComfyWorkflows(): Promise<ComfyWorkflowListResponse> {
   return request('/api/comfyui/workflows')
 }
@@ -1045,23 +1089,39 @@ export function getComfyWorkflow(workflowId: string): Promise<ComfyWorkflowDetai
 
 export function createComfyWorkflow(
   body: ComfyWorkflowCreateRequest,
+  /** 読み込んだファイルの JSON の文字列(数の型を保って送る)。省くと `body.template` を送る。 */
+  templateText?: string | null,
 ): Promise<ComfyWorkflowDetail> {
   return request('/api/comfyui/workflows', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: comfyWorkflowBody(body, templateText),
   })
 }
 
+/**
+ * 更新。`template` を省くと保存済みのテンプレートのまま(数の型を保つ)。ファイルを差し替えたときは
+ * `templateText` にファイルの JSON の文字列を渡す。
+ */
 export function updateComfyWorkflow(
   workflowId: string,
   body: ComfyWorkflowUpdateRequest,
+  templateText?: string | null,
 ): Promise<ComfyWorkflowDetail> {
   return request(`/api/comfyui/workflows/${workflowId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: comfyWorkflowBody(body, templateText),
   })
+}
+
+function comfyWorkflowBody(
+  body: ComfyWorkflowCreateRequest | ComfyWorkflowUpdateRequest,
+  templateText: string | null | undefined,
+): string {
+  if (!templateText || body.template === undefined || body.template === null) return JSON.stringify(body)
+  const { template: _template, ...rest } = body
+  return jsonBodyWithRawTemplate(rest, templateText)
 }
 
 /** 論理削除。過去の Run の記録(run.params.comfyui_prompt に確定済みのグラフを保存済み)は変わらない。 */

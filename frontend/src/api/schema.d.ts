@@ -292,6 +292,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/comfyui/workflows/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate
+         * @description 保存せずに、保存時と同じ検証(ADR-0052 3章)だけを掛ける。画面が値を変えるたびに呼ぶ。
+         *
+         *     規則を画面に二重に持たないための口。`/object_info` は保存時と同じく使わない。
+         */
+        post: operations["validate_comfy_workflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfyui/workflows": {
         parameters: {
             query?: never;
@@ -2482,6 +2504,22 @@ export interface components {
             /** Commit */
             commit?: string | null;
         };
+        /**
+         * AnalyzeWarning
+         * @description analyze の警告1件。`reading` は読み取り(`readings`)で同じことを示している警告で、
+         *     カードの画面では出さない。`general` は読み取りでは扱わない警告(秘密に見える値など)。
+         */
+        AnalyzeWarning: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "reading" | "general";
+            /** Field */
+            field?: ("prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt") | null;
+            /** Message */
+            message: string;
+        };
         /** AnnotationBackfillResponse */
         AnnotationBackfillResponse: {
             /** Queued */
@@ -3884,12 +3922,20 @@ export interface components {
             providers?: components["schemas"]["ProviderEntry"][];
             embeddings: components["schemas"]["EmbeddingCapabilities"];
         };
-        /** ComfyAnalyzeRequest */
+        /**
+         * ComfyAnalyzeRequest
+         * @description `template` か `workflow_id`(登録済みのワークフローの保存したテンプレート)のどちらか一方。
+         *
+         *     `workflow_id` は編集画面で使う。ブラウザで JSON を読み直すと `1.0` が `1` になり、公開
+         *     パラメーターの型(FLOAT)が分からなくなるため、保存したテンプレートをサーバーで読む。
+         */
         ComfyAnalyzeRequest: {
             /** Template */
-            template: {
+            template?: {
                 [key: string]: unknown;
-            };
+            } | null;
+            /** Workflow Id */
+            workflow_id?: string | null;
         };
         /** ComfyAnalyzeResponse */
         ComfyAnalyzeResponse: {
@@ -3905,6 +3951,8 @@ export interface components {
             candidate_params?: components["schemas"]["ExposedParam"][];
             /** Warnings */
             warnings?: string[];
+            /** Warning Items */
+            warning_items?: components["schemas"]["AnalyzeWarning"][];
             /** Readings */
             readings?: components["schemas"]["BindingReading"][];
             /** Param Tiers */
@@ -4011,6 +4059,32 @@ export interface components {
             source: "setting" | "env" | "default";
             /** Default */
             default: number;
+        };
+        /**
+         * ComfyValidateRequest
+         * @description 登録・編集の画面で、保存の前に差し込み先と公開パラメーターを検証する(ADR-0052 3章)。
+         *
+         *     `bindings` は analyze の提案と同じ形で、まだ選んでいない必須項目(prompt、outputs)は問わない
+         *     (欠けは画面が別に示す)。保存はしない。
+         */
+        ComfyValidateRequest: {
+            /** Template */
+            template: {
+                [key: string]: unknown;
+            };
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "generate" | "edit";
+            bindings: components["schemas"]["SuggestedBindings"];
+            /** Exposed Params */
+            exposed_params?: components["schemas"]["ExposedParam"][];
+        };
+        /** ComfyValidateResponse */
+        ComfyValidateResponse: {
+            /** Issues */
+            issues?: components["schemas"]["ValidationIssue"][];
         };
         /** ComfyWorkflowCreateRequest */
         ComfyWorkflowCreateRequest: {
@@ -5687,6 +5761,8 @@ export interface components {
              * @enum {string}
              */
             tier: "recommended" | "other" | "hidden";
+            /** Hidden Reason */
+            hidden_reason?: ("unused_branch" | "secret" | "fixed_setting" | "file_or_model" | "fixed_text") | null;
         };
         /** ParameterSetCreateRequest */
         ParameterSetCreateRequest: {
@@ -8331,6 +8407,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComfyAnalyzeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_comfy_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComfyValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyValidateResponse"];
                 };
             };
             /** @description Validation Error */

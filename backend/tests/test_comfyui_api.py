@@ -659,3 +659,103 @@ def test_patch_workflow_rejects_wired_exposed_param_and_returns_warnings(
     )
     assert response.status_code == 200, response.text
     assert [i["code"] for i in response.json()["validation_issues"]] == ["unused_branch"]
+
+
+# -- /workflows/validate(保存せずに検証だけ。ADR-0052 3章) ------------------------------
+
+
+def test_validate_returns_errors_and_warnings_without_saving(client: TestClient) -> None:
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {"class_type": "PreviewImage", "inputs": {"images": ["8", 0]}}
+    bindings = _t2i_bindings_body()
+    bindings["prompt"] = {"node": "3", "input": "positive"}
+    bindings["outputs"] = ["9", "20"]
+    response = client.post(
+        "/api/comfyui/workflows/validate",
+        json={"template": graph, "operation": "generate", "bindings": bindings},
+    )
+    assert response.status_code == 200, response.text
+    issues = [(i["level"], i["code"], i["field"]) for i in response.json()["issues"]]
+    assert ("error", "wired_input", "prompt") in issues
+    assert ("warning", "display_only_output", "outputs") in issues
+    # 保存はしない。
+    assert client.get("/api/comfyui/workflows").json()["items"] == []
+
+
+def test_validate_accepts_missing_required_fields(client: TestClient) -> None:
+    # まだ選んでいない必須項目(prompt、outputs)は問わない(画面が別に示す)。
+    response = client.post(
+        "/api/comfyui/workflows/validate",
+        json={"template": clone(T2I_GRAPH), "operation": "generate", "bindings": {}},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["issues"] == []
+
+
+def test_validate_checks_exposed_params_and_rejects_ui_format(client: TestClient) -> None:
+    response = client.post(
+        "/api/comfyui/workflows/validate",
+        json={
+            "template": clone(T2I_GRAPH),
+            "operation": "generate",
+            "bindings": _t2i_bindings_body(),
+            "exposed_params": [
+                {"name": "steps", "node": "3", "input": "seed", "type": "int", "label": "s"}
+            ],
+        },
+    )
+    assert response.status_code == 200
+    codes = [(i["code"], i["field"]) for i in response.json()["issues"]]
+    assert ("duplicate", "exposed_params.steps") in codes
+
+    response = client.post(
+        "/api/comfyui/workflows/validate",
+        json={
+            "template": {"nodes": [], "links": []},
+            "operation": "generate",
+            "bindings": {},
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_analyze_param_tiers_carry_hidden_reason(client: TestClient) -> None:
+    response = client.post("/api/comfyui/workflows/analyze", json={"template": clone(T2I_GRAPH)})
+    tiers = {(p["node"], p["input"]): p for p in response.json()["param_tiers"]}
+    assert tiers[("4", "ckpt_name")]["hidden_reason"] == "file_or_model"
+    assert tiers[("3", "steps")]["hidden_reason"] is None
+
+
+# -- 公開パラメーターの型(1.0 を FLOAT のまま読む)と、保存したテンプレートの読み取り -------------
+
+
+def test_analyze_keeps_float_type_for_integral_float_values(client: TestClient) -> None:
+    # T2I_GRAPH の cfg は 8.0、denoise は 1.0。JSON の 1.0 は Python では float のまま読める。
+    response = client.post("/api/comfyui/workflows/analyze", json={"template": clone(T2I_GRAPH)})
+    params = {(p["node"], p["input"]): p for p in response.json()["candidate_params"]}
+    assert params[("3", "cfg")]["type"] == "float"
+    assert params[("3", "denoise")]["type"] == "float"
+    assert params[("3", "steps")]["type"] == "int"
+
+
+def test_analyze_by_workflow_id_reads_saved_template(client: TestClient) -> None:
+    created = _create_t2i_workflow(client)
+    response = client.post("/api/comfyui/workflows/analyze", json={"workflow_id": created["id"]})
+    assert response.status_code == 200, response.text
+    params = {(p["node"], p["input"]): p for p in response.json()["candidate_params"]}
+    assert params[("3", "denoise")]["type"] == "float"
+
+
+def test_analyze_requires_exactly_one_of_template_or_workflow_id(client: TestClient) -> None:
+    assert client.post("/api/comfyui/workflows/analyze", json={}).status_code == 422
+    created = _create_t2i_workflow(client)
+    response = client.post(
+        "/api/comfyui/workflows/analyze",
+        json={"template": clone(T2I_GRAPH), "workflow_id": created["id"]},
+    )
+    assert response.status_code == 422
+    missing = client.post(
+        "/api/comfyui/workflows/analyze",
+        json={"workflow_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    assert missing.status_code == 404

@@ -14,7 +14,39 @@
   background: var(--color-bg-sunken);
 }
 
+/* 読み込んだあとは1行のチップに縮める(ファイル名・ノード数・差し替え) */
+.fileRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.fileChip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 5px 10px;
+  min-width: 0;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.fileName {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fileMeta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
 /* ファイルを差し替えた(保存していない)とき */
+.fileRow[data-changed='true'] .fileChip,
 .dropZone[data-changed='true'] {
   border-color: var(--color-accent);
 }
@@ -203,4 +235,60 @@
   .reorderButtons button {
     min-height: 44px;
   }
+}
+
+/* カードの列と、図の領域(ADR-0052 4章。図は第3段で足す)。 */
+.bindingLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* 図の領域があるときだけ2列にする(第3段)。広い幅でもカードの列は潰さない。 */
+@container settings-page (min-width: 1100px) {
+  .bindingLayout[data-has-diagram='true'] {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  }
+}
+
+.cardsColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* 詳細設定(今までの2段のドロップダウン) */
+.advanced {
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.advancedSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.advancedTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.advancedSub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.advancedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 16px;
 }

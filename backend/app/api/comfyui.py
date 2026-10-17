@@ -55,6 +55,8 @@ from app.domain.schemas import (
     ComfyUIConnectionTestRequest,
     ComfyUIConnectionTestResponse,
     ComfyUIStatusResponse,
+    ComfyValidateRequest,
+    ComfyValidateResponse,
     ComfyWorkflowCreateRequest,
     ComfyWorkflowDetail,
     ComfyWorkflowListResponse,
@@ -510,7 +512,12 @@ def analyze(
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> ComfyAnalyzeResponse:
-    _check_template_format(body.template)
+    if (body.template is None) == (body.workflow_id is None):
+        raise HTTPException(status_code=422, detail=t("comfyui.api.analyzeTemplateOrWorkflow"))
+    template = (
+        body.template if body.template is not None else _get_active(db, body.workflow_id).template  # type: ignore[arg-type]
+    )
+    _check_template_format(template)
 
     # 接続できれば /object_info を先に取っておき、analyze_workflow 自体に渡す(seed・出力
     # ノードの推定にも使うため)。接続できない・失敗した場合は None のまま
@@ -524,12 +531,12 @@ def analyze(
         if available:
             object_info = _fetch_object_info(url)
 
-    result = analyze_workflow(body.template, object_info)
+    result = analyze_workflow(template, object_info)
 
     candidate_params = result.candidate_params
     if object_info is not None:
         # 型・choices・min/max/step も同じ /object_info から補う。
-        candidate_params = _enrich_candidate_params(candidate_params, body.template, object_info)
+        candidate_params = _enrich_candidate_params(candidate_params, template, object_info)
 
     return ComfyAnalyzeResponse(
         nodes=result.nodes,
@@ -537,10 +544,27 @@ def analyze(
         suggested_operation=result.suggested_operation,
         candidate_params=candidate_params,
         warnings=result.warnings,
+        warning_items=result.warning_items,
         readings=result.readings,
         param_tiers=result.param_tiers,
         validation=result.validation,
     )
+
+
+@router.post(
+    "/workflows/validate",
+    response_model=ComfyValidateResponse,
+    operation_id="validate_comfy_workflow",
+    dependencies=[Depends(require_admin)],
+)
+def validate(body: ComfyValidateRequest) -> ComfyValidateResponse:
+    """保存せずに、保存時と同じ検証(ADR-0052 3章)だけを掛ける。画面が値を変えるたびに呼ぶ。
+
+    規則を画面に二重に持たないための口。`/object_info` は保存時と同じく使わない。
+    """
+    _check_template_format(body.template)
+    issues = check_workflow(body.template, body.operation, body.bindings, body.exposed_params)
+    return ComfyValidateResponse(issues=issues)
 
 
 @router.post(

@@ -19,7 +19,7 @@ from pydantic import (
 )
 
 from app.domain import prompt_templates
-from app.domain.comfy_analyze import BindingReading, ParamTierInfo
+from app.domain.comfy_analyze import AnalyzeWarning, BindingReading, ParamTierInfo
 from app.domain.comfy_graph import NodeState
 from app.domain.comfy_workflow import (
     Bindings,
@@ -1795,7 +1795,14 @@ class ComfyNodeInfo(BaseModel):
 
 
 class ComfyAnalyzeRequest(BaseModel):
-    template: dict[str, Any]
+    """`template` か `workflow_id`(登録済みのワークフローの保存したテンプレート)のどちらか一方。
+
+    `workflow_id` は編集画面で使う。ブラウザで JSON を読み直すと `1.0` が `1` になり、公開
+    パラメーターの型(FLOAT)が分からなくなるため、保存したテンプレートをサーバーで読む。
+    """
+
+    template: dict[str, Any] | None = None
+    workflow_id: uuid.UUID | None = None
 
 
 class ComfyAnalyzeResponse(BaseModel):
@@ -1806,12 +1813,32 @@ class ComfyAnalyzeResponse(BaseModel):
     suggested_operation: Literal["generate", "edit"]
     candidate_params: list[ExposedParam] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # `warnings` に種別を付けたもの。`reading` は読み取り(readings)で同じことを示している。
+    warning_items: list[AnalyzeWarning] = Field(default_factory=list)
     # 項目ごとの読み取り(確信度・理由・道筋・候補・問い。ADR-0052 2章)。
     readings: list[BindingReading] = Field(default_factory=list)
     # 公開パラメーターの候補の段(推奨 / その他 / 公開しない)。
     param_tiers: list[ParamTierInfo] = Field(default_factory=list)
     # 提案した差し込み先に、保存時と同じ検証を掛けた結果(ADR-0052 3章)。
     validation: list[ValidationIssue] = Field(default_factory=list)
+
+
+class ComfyValidateRequest(BaseModel):
+    """登録・編集の画面で、保存の前に差し込み先と公開パラメーターを検証する(ADR-0052 3章)。
+
+    `bindings` は analyze の提案と同じ形で、まだ選んでいない必須項目(prompt、outputs)は問わない
+    (欠けは画面が別に示す)。保存はしない。
+    """
+
+    template: dict[str, Any]
+    operation: Literal["generate", "edit"]
+    bindings: SuggestedBindings
+    exposed_params: list[ExposedParam] = Field(default_factory=list)
+
+
+class ComfyValidateResponse(BaseModel):
+    # 保存時と同じ検証の結果(エラーと警告)。
+    issues: list[ValidationIssue] = Field(default_factory=list)
 
 
 class ComfyWorkflowCreateRequest(BaseModel):

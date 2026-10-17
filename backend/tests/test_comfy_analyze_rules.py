@@ -241,6 +241,10 @@ def test_qwen_edit_like_neutral_titles_ask() -> None:
         ("459:481", "value"),
     ]
     assert any("候補" in w for w in result.warnings)
+    # 問いと同じことを示す警告は、読み取りの種別(カードの画面では出さない)。
+    prompt_items = [w for w in result.warning_items if w.field == "prompt"]
+    assert prompt_items and all(w.kind == "reading" for w in prompt_items)
+    assert [w.message for w in result.warning_items] == result.warnings
 
 
 def test_image_alpha_on_transparency_mask_is_warned() -> None:
