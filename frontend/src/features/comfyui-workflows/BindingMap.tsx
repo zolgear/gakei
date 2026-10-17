@@ -318,12 +318,8 @@ function BindingMapInner({
             }}
           >
             <Background gap={20} color="#2a2e34" />
-            {/* 背骨(主要な道筋)に重ねない側に置く: 左 → 右は右端に出力が来るので左下、上 → 下は左に背骨が来るので右下。 */}
-            <Controls
-              showInteractive={false}
-              fitViewOptions={FIT_OPTIONS}
-              position={direction === 'TB' ? 'bottom-right' : 'bottom-left'}
-            />
+            {/* 最初の表示は入力の側(プロンプト)をそろえるので、どちらの向きでも右下に置いて重ねない。 */}
+            <Controls showInteractive={false} fitViewOptions={FIT_OPTIONS} position="bottom-right" />
           </ReactFlow>
         </div>
       </section>

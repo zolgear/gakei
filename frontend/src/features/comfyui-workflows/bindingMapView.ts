@@ -208,7 +208,7 @@ export interface MapRect {
  * - 倍率: 全体が収まる倍率(最大 1。高さは `maxHeight` まで伸ばせるとして計算)と、読める倍率の下限の大きい方。
  * - 左 → 右(横長の枠):
  *   - 横: 収まれば中央。収まらないときは主要な道筋(プロンプト → サンプラー → 保存)の範囲 `focus` を中央に、
- *     範囲が枠より広いときは右端(出力の側)をそろえる。
+ *     範囲が枠より広いときは左端(入力の側。プロンプトの根)をそろえる(プロンプトを優先して見せる)。
  *   - 枠の高さ: 横の位置で見えている箱が収まる高さ(空の領域を残さない)。`comfortHeight` を渡すと、図全体が
  *     その高さまでなら全体を収める。縦は見えている箱の中央。
  * - 上 → 下(縦長の枠):
@@ -250,7 +250,7 @@ export function mapFrame(
     x =
       focusWidth <= canvasWidth || direction === 'TB'
         ? canvasWidth / 2 - ((range.minX + range.maxX) / 2) * zoom
-        : canvasWidth - range.maxX * zoom
+        : padding - range.minX * zoom
     // 図の外の余白は見せない。
     x = Math.min(0, Math.max(canvasWidth - w, x))
   }
