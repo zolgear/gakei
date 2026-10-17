@@ -11,6 +11,9 @@
  * `pendingRunId` の status は `StudioReturnContext` へ報告する(タブを離れて Studio に
  * 戻ったときの復元判定に使う。ADR-0009)。
  *
+ * ComfyUI のワークフローを選んでいる間は「ワークフロー」も出す(ADR-0052 7章)。入力欄の「ワークフローを見る」
+ * (`workflowViewRequest.ts`)でも開く。中身は `WorkflowViewer`(読むだけの図と、今のフォームの値)。
+ *
  * ヘッダー右上には `StudioLayoutToggleButton`(入力欄の配置切り替え。ADR-0009 1章・
  * 2026-09-26 追記)を置く。狭い幅(<768px)では非表示にする(CSS 側)。
  */
@@ -55,6 +58,8 @@ import { computeInspectorWidthPx, resolveInspectorPlacement } from '../lineage/i
 import { parseNodeIdFromSearch } from '../lineage/nodeQueryParam'
 import type { InsertPromptFn } from '../run-form/promptInsertion'
 import { RunPromptActions } from './RunPromptActions'
+import { WorkflowViewer } from '../comfyui-workflows/WorkflowViewer'
+import { subscribeWorkflowView } from './workflowViewRequest'
 import { RunDetailContent } from '../run-detail/RunDetailContent'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ToastHost, useToast } from '../../components/Toast'
@@ -103,7 +108,7 @@ interface ResultPaneProps {
   onPendingRunSettled?: (runId: string, keepAssetId: string | null) => void
 }
 
-type ResultViewMode = 'preview' | 'detail' | 'graph'
+type ResultViewMode = 'preview' | 'detail' | 'graph' | 'workflow'
 
 function formatSize(size: unknown): string | null {
   return typeof size === 'string' && size.length > 0 ? size.replace('x', ' × ') : null
@@ -127,6 +132,9 @@ export function ResultPane({
   const { formState, setFormState } = useRunFormContext()
   const studioReturn = useStudioReturn()
   const capsQuery = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities })
+  // 選んでいる ComfyUI のワークフロー(ADR-0052 7章)。選んでいる間だけ「ワークフロー」を出す。
+  const comfyWorkflowId = formState.provider === 'comfyui' && formState.model !== '' ? formState.model : null
+  const showWorkflow = viewMode === 'workflow' && comfyWorkflowId !== null
 
   // 系列モードでノードをタップして選んだノード(Asset/Run 共通)。`?node=` と同期し、
   // 戻る/進むで再現する。ダブルタップ/「ノードをプレビュー」でプレビューモードへ切り替えたら
@@ -158,6 +166,24 @@ export function ResultPane({
     }
   }, [])
   const inspectorPlacement = resolveInspectorPlacement(paneMetrics.height, paneMetrics.viewportWidth)
+
+  // 入力欄の「ワークフローを見る」で「ワークフロー」を開く。狭い幅では結果エリアが入力欄の上にあるので、そこまで戻す。
+  useEffect(
+    () =>
+      subscribeWorkflowView(() => {
+        setViewMode('workflow')
+        if (window.innerWidth < 768) paneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }),
+    [],
+  )
+
+  // 「ワークフロー」を見ている間に生成したら、進み具合と結果を見られるようプレビューに戻す。
+  const lastPendingRunIdRef = useRef(pendingRunId)
+  useEffect(() => {
+    if (pendingRunId === lastPendingRunIdRef.current) return
+    lastPendingRunIdRef.current = pendingRunId
+    if (pendingRunId !== null) setViewMode((mode) => (mode === 'workflow' ? 'preview' : mode))
+  }, [pendingRunId])
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -505,7 +531,9 @@ export function ResultPane({
         <div className={styles.modeGroup} role="group" aria-label={rp.viewModeGroup}>
           <button
             type="button"
-            aria-pressed={viewMode === 'preview' || (viewMode === 'detail' && !showDetail)}
+            aria-pressed={
+              viewMode === 'preview' || (viewMode === 'detail' && !showDetail) || (viewMode === 'workflow' && !showWorkflow)
+            }
             className={styles.modeButton}
             onClick={() => {
               if (selectedNodeId) selectNode(null)
@@ -538,6 +566,19 @@ export function ResultPane({
           >
             {rp.lineage}
           </button>
+          {comfyWorkflowId !== null && (
+            <button
+              type="button"
+              aria-pressed={showWorkflow}
+              className={styles.modeButton}
+              onClick={() => {
+                if (selectedNodeId) selectNode(null)
+                setViewMode('workflow')
+              }}
+            >
+              {rp.workflow}
+            </button>
+          )}
         </div>
 
         {metaLineText && <span className={styles.metaLine}>{metaLineText}</span>}
@@ -600,7 +641,7 @@ export function ResultPane({
                 // 系列表示中は「表示中の画像」が視覚的に分かりにくい(グラフのどのノードが
                 // 対象か紛らわしい)ため無効にする。削除したいときはノードを選んでプレビュー
                 // に戻ってから。
-                disabled={deleteMutation.isPending || viewMode === 'graph'}
+                disabled={deleteMutation.isPending || viewMode === 'graph' || showWorkflow}
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path
@@ -620,7 +661,15 @@ export function ResultPane({
       {deleteError && <p className={styles.deleteError}>{deleteError}</p>}
       {restoreError && <p className={styles.deleteError}>{restoreError}</p>}
 
-      {showDetail ? (
+      {showWorkflow && comfyWorkflowId !== null ? (
+        <div className={styles.body}>
+          <WorkflowViewer
+            key={comfyWorkflowId}
+            workflowId={comfyWorkflowId}
+            form={{ prompt: formState.prompt, params: formState.params }}
+          />
+        </div>
+      ) : showDetail ? (
         <div className={styles.body}>
           <div className={styles.detailScroll}>
             {asset ? (

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.auth.deps import require_admin
+from app.auth.deps import require_admin, require_user
 from app.config import Settings
 from app.deps import get_registry, get_runner, get_session, get_session_factory, get_settings
 from app.domain.comfy_analyze import analyze_workflow
@@ -57,12 +57,17 @@ from app.domain.schemas import (
     ComfyUIStatusResponse,
     ComfyValidateRequest,
     ComfyValidateResponse,
+    ComfyViewExposedParam,
+    ComfyViewNode,
+    ComfyViewNodeInput,
     ComfyWorkflowCreateRequest,
     ComfyWorkflowDetail,
     ComfyWorkflowListResponse,
     ComfyWorkflowSummary,
     ComfyWorkflowUpdateRequest,
+    ComfyWorkflowViewResponse,
 )
+from app.domain.secret_values import find_secret_inputs, is_secret_input
 from app.i18n import t
 from app.providers.comfyui.client import check_available
 from app.providers.registry import ProviderRegistry, is_loopback_url
@@ -622,6 +627,92 @@ def list_workflows(db: Session = Depends(get_session)) -> ComfyWorkflowListRespo
 def get_workflow(workflow_id: uuid.UUID, db: Session = Depends(get_session)) -> ComfyWorkflowDetail:
     wf = _get_active(db, workflow_id)
     return _to_detail(wf)
+
+
+def _build_view(wf: ComfyWorkflow) -> ComfyWorkflowViewResponse:
+    """閲覧用の応答を組み立てる(ADR-0052 7章)。秘密に見える値(ADR-0013 8章の判定)は伏せる。
+
+    入れ子の入力(`images.image_1` など)の中に秘密があれば、その入力全体を伏せる。
+    """
+    template = wf.template
+    result = analyze_workflow(template)
+    secret_inputs = {(s.node_id, s.input.split(".", 1)[0]) for s in find_secret_inputs(template)}
+
+    nodes: list[ComfyViewNode] = []
+    for node in result.nodes:
+        inputs: list[ComfyViewNodeInput] = []
+        for item in node["inputs"]:
+            redacted = (node["id"], item["name"]) in secret_inputs
+            inputs.append(
+                ComfyViewNodeInput(
+                    name=item["name"],
+                    value=None if redacted else item["value"],
+                    linked=item["linked"],
+                    redacted=redacted,
+                )
+            )
+        nodes.append(
+            ComfyViewNode(
+                id=node["id"],
+                class_type=node["class_type"],
+                title=node["title"],
+                inputs=inputs,
+                state=node["state"],
+                kind=node["kind"],
+            )
+        )
+
+    exposed: list[ComfyViewExposedParam] = []
+    for raw in wf.exposed_params:
+        param = ExposedParam.model_validate(raw)
+        redacted = (param.node, param.input) in secret_inputs or is_secret_input(
+            param.input, param.default
+        )
+        exposed.append(
+            ComfyViewExposedParam(
+                name=param.name,
+                label=param.label,
+                node=param.node,
+                input=param.input,
+                type=param.type,
+                default=None if redacted else param.default,
+                default_redacted=redacted,
+            )
+        )
+
+    return ComfyWorkflowViewResponse(
+        id=wf.id,
+        name=wf.name,
+        operation=wf.operation,  # type: ignore[arg-type]
+        nodes=nodes,
+        edges=result.edges,
+        bindings=Bindings.model_validate(wf.bindings),
+        exposed_params=exposed,
+    )
+
+
+@router.get(
+    "/workflows/{workflow_id}/view",
+    response_model=ComfyWorkflowViewResponse,
+    operation_id="view_comfy_workflow",
+    dependencies=[Depends(require_user)],
+)
+def view_workflow(
+    workflow_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> ComfyWorkflowViewResponse:
+    """生成画面からの閲覧(ADR-0052 7章)。管理者以外にも見せる。図に要る構造と値だけを返し、
+    テンプレートの値のうち秘密に見えるものは伏せる。
+
+    ComfyUI の接続が無効(未設定・切り離し・無効)なら、生成画面に出ないワークフローなので 404。
+    """
+    if resolve_active_url(db, settings) is None:
+        raise HTTPException(status_code=404, detail=t("comfyui.api.workflowNotFound"))
+    wf = _get_active(db, workflow_id)
+    if not is_api_format_template(wf.template):
+        raise HTTPException(status_code=404, detail=t("comfyui.api.workflowNotFound"))
+    return _build_view(wf)
 
 
 @router.patch(

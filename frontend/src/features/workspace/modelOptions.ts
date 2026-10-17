@@ -50,3 +50,36 @@ export function filterModelOptions(
   }
   return groups
 }
+
+/** モデルの欄の下に添える案内(`ModelSelect.tsx`)。 */
+export interface ModelFieldLinks {
+  /** ComfyUI に接続できるのにワークフローが無い: 登録ページへ。 */
+  registerComfyWorkflow: boolean
+  /** ComfyUI のワークフローを選んでいる: 「ワークフローを見る」(ADR-0052 7章)。 */
+  viewComfyWorkflow: boolean
+  /**
+   * 管理者で、SD WebUI のモデルが無い(接続できない): 接続の設定ページへ。SD WebUI のモデルを選んでいるとき、
+   * または今の選択が一覧に無いときだけ出す(ComfyUI のワークフローなど、ほかのプロバイダーの選べる
+   * モデルを選んでいる間は出さない)。
+   */
+  checkSdWebuiConnection: boolean
+}
+
+export function modelFieldLinks(
+  providers: readonly ProviderEntry[],
+  selected: { provider: string; model: string },
+  admin: boolean,
+): ModelFieldLinks {
+  // 今の選択が一覧にあるモデルか(接続できない間も、一覧にあれば選べている扱い)。
+  const selectionListed = providers.some(
+    (p) => p.provider === selected.provider && p.models.some((m) => m.model === selected.model),
+  )
+  return {
+    registerComfyWorkflow: providers.some((p) => p.provider === 'comfyui' && p.available && p.models.length === 0),
+    viewComfyWorkflow: selected.provider === 'comfyui' && selected.model !== '' && selectionListed,
+    checkSdWebuiConnection:
+      admin &&
+      (selected.provider === 'sdwebui' || !selectionListed) &&
+      providers.some((p) => p.provider === 'sdwebui' && p.models.length === 0),
+  }
+}

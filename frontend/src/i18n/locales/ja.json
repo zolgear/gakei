@@ -1697,7 +1697,8 @@
       "operationUnsupported": "選んだモデルは、この操作(生成/編集)に対応していません",
       "maskRequired": "このモデルの実行にはマスクが必要です",
       "maskUnsupported": "選んだモデルはマスクに対応していません。マスクを外すか、マスク対応のモデルを選んでください",
-      "repeatInvalid": "繰り返し回数は {min}〜{max} の整数にしてください"
+      "repeatInvalid": "繰り返し回数は {min}〜{max} の整数にしてください",
+      "viewComfyWorkflow": "ワークフローを見る"
     },
     "resultPane": {
       "viewModeGroup": "表示",
@@ -1738,7 +1739,8 @@
       "deletedToast": "画像を削除しました",
       "undoAction": "元に戻す",
       "inputPrefix": "入力 · {width} × {height}",
-      "repeatProgress": "繰り返し {index} / {total}"
+      "repeatProgress": "繰り返し {index} / {total}",
+      "workflow": "ワークフロー"
     },
     "runPromptActions": {
       "insertIntoPrompt": "プロンプトに挿入",
@@ -2785,7 +2787,29 @@
       "viewMap": "図",
       "panelLabel": "差し込み先とノード",
       "tabBindings": "差し込み先",
-      "tabNode": "ノード"
+      "tabNode": "ノード",
+      "leadViewer": "読むだけの図です。ノードを選ぶと、入力ごとの扱い(差し込む・公開・固定)と値が出ます。移動はドラッグ、拡大縮小はボタン・ピンチ・Ctrl+ホイールです。",
+      "redactedValue": "(秘密に見える値のため伏せています)"
+    },
+    "viewer": {
+      "heading": "ワークフロー: {name}",
+      "lead": "このワークフローで GAKEI が差し込む入力と、生成画面で変えられる入力を確かめられます。値は今のフォームの値(未入力ならテンプレートの値)です。ここでは変更できません。",
+      "editLink": "登録画面で編集する",
+      "loading": "ワークフローを読み込み中...",
+      "loadFailed": "ワークフローを読み込めませんでした",
+      "notFound": "このワークフローは見られません。削除されたか、ComfyUI の接続が無効になっています。",
+      "entriesHeading": "差し込み先と公開パラメーター",
+      "exposedLabel": "公開: {label}",
+      "showNode": "図で示す",
+      "valueForm": "フォーム: {value}",
+      "valueDefault": "既定値: {value}",
+      "valueTemplate": "テンプレートの値: {value}",
+      "valueRandom": "未入力(実行のたびに決める)",
+      "valueImage": "入力画像の {slot} 枚目",
+      "valueMask": "入力画像に描いたマスク",
+      "valueRedacted": "伏せています(秘密に見える値)",
+      "valueEmpty": "(空)",
+      "nodeOnly": "ノード {node}"
     }
   },
   "sdwebui": {

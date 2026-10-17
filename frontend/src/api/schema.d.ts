@@ -351,6 +351,29 @@ export interface paths {
         patch: operations["update_comfy_workflow"];
         trace?: never;
     };
+    "/api/comfyui/workflows/{workflow_id}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * View Workflow
+         * @description 生成画面からの閲覧(ADR-0052 7章)。管理者以外にも見せる。図に要る構造と値だけを返し、
+         *     テンプレートの値のうち秘密に見えるものは伏せる。
+         *
+         *     ComfyUI の接続が無効(未設定・切り離し・無効)なら、生成画面に出ないワークフローなので 404。
+         */
+        get: operations["view_comfy_workflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sdwebui/status": {
         parameters: {
             query?: never;
@@ -4118,6 +4141,69 @@ export interface components {
             /** Issues */
             issues?: components["schemas"]["ValidationIssue"][];
         };
+        /**
+         * ComfyViewExposedParam
+         * @description 閲覧用の公開パラメーター。登録した既定値が秘密に見えれば伏せる(`default_redacted`)。
+         */
+        ComfyViewExposedParam: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Node */
+            node: string;
+            /** Input */
+            input: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "enum" | "int" | "float" | "bool" | "text";
+            /** Default */
+            default?: unknown | null;
+            /**
+             * Default Redacted
+             * @default false
+             */
+            default_redacted: boolean;
+        };
+        /** ComfyViewNode */
+        ComfyViewNode: {
+            /** Id */
+            id: string;
+            /** Class Type */
+            class_type?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Inputs */
+            inputs?: components["schemas"]["ComfyViewNodeInput"][];
+            /**
+             * State
+             * @default live
+             * @enum {string}
+             */
+            state: "live" | "display" | "unused";
+            /** Kind */
+            kind?: ("save" | "display" | "sampler" | "encoder" | "image_source" | "switch") | null;
+        };
+        /**
+         * ComfyViewNodeInput
+         * @description 閲覧用の入力1つ(ADR-0052 7章)。秘密に見える値(ADR-0013 8章)は `value` を返さず、
+         *     `redacted` を True にする。
+         */
+        ComfyViewNodeInput: {
+            /** Name */
+            name: string;
+            /** Value */
+            value?: unknown;
+            /** Linked */
+            linked: boolean;
+            /**
+             * Redacted
+             * @default false
+             */
+            redacted: boolean;
+        };
         /** ComfyWorkflowCreateRequest */
         ComfyWorkflowCreateRequest: {
             /** Name */
@@ -4235,6 +4321,34 @@ export interface components {
             exposed_params?: components["schemas"]["ExposedParam"][] | null;
             /** Locality */
             locality?: ("local" | "cloud" | "unset") | null;
+        };
+        /**
+         * ComfyWorkflowViewResponse
+         * @description 生成画面からの閲覧(`GET /api/comfyui/workflows/{id}/view`。ADR-0052 7章)。
+         *
+         *     図に要る構造と値だけを返す。テンプレートそのものは返さない。差し込み先(`bindings`)には
+         *     出力(`outputs`)と最終プロンプト(`final_prompt`)も含まれる。
+         */
+        ComfyWorkflowViewResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "generate" | "edit";
+            /** Nodes */
+            nodes?: components["schemas"]["ComfyViewNode"][];
+            /** Edges */
+            edges?: components["schemas"]["AnalyzeEdge"][];
+            bindings: components["schemas"]["Bindings"];
+            /** Exposed Params */
+            exposed_params?: components["schemas"]["ComfyViewExposedParam"][];
         };
         /** CompositionCanvas */
         CompositionCanvas: {
@@ -8641,6 +8755,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComfyWorkflowDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_comfy_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyWorkflowViewResponse"];
                 };
             };
             /** @description Validation Error */

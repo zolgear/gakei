@@ -2,7 +2,9 @@
  * 設定グリッドの1マス目「モデル」。`<optgroup>` でプロバイダーごとに分け(ADR-0013)、
  * ComfyUI でワークフロー未登録のプロバイダーには登録ページへのリンクを添える。
  * SD WebUI(ADR-0038)が有効なのに接続できずモデルが無いときは、管理者に接続の設定ページへの
- * リンクを添える。モデルが多いとき(SD WebUI のチェックポイントなど)は、名前で絞り込む欄を出す
+ * リンクを添える(SD WebUI のモデルを選んでいるとき、または選べるモデルが無いときだけ。ComfyUI のワークフローなど
+ * 別のプロバイダーのモデルを選んでいる間は出さない)。ComfyUI のワークフローを選んでいるときは「ワークフローを見る」
+ * を出し、結果エリアに「ワークフロー」の表示を開く(ADR-0052 7章)。モデルが多いとき(SD WebUI のチェックポイントなど)は、名前で絞り込む欄を出す
  * (`modelOptions.ts`)。
  * 下段配置(`InputPaneBottomLayout`)とサイドバー配置(予定)の両方から同じものを使う。
  */
@@ -13,7 +15,8 @@ import { useI18n } from '../../i18n'
 import { modelOptionValue, parseModelOptionValue } from '../../lib/capabilities'
 import { isAdmin, useAuth } from '../auth/authState'
 import fieldStyles from '../run-form/ParamField.module.css'
-import { filterModelOptions, shouldShowModelFilter } from './modelOptions'
+import { filterModelOptions, modelFieldLinks, shouldShowModelFilter } from './modelOptions'
+import { requestWorkflowView } from './workflowViewRequest'
 import styles from './InputPane.module.css'
 
 interface ModelSelectProps {
@@ -33,6 +36,7 @@ export function ModelSelect({ caps, provider, model, selectedModelDescription, o
   const providers = caps.providers ?? []
   const showFilter = shouldShowModelFilter(providers)
   const groups = filterModelOptions(providers, showFilter ? filter : '', { provider, model })
+  const links = modelFieldLinks(providers, { provider, model }, admin)
   return (
     <div className={`${fieldStyles.field} ${styles.spanTwo}`}>
       <label htmlFor="model" title="model">
@@ -76,12 +80,17 @@ export function ModelSelect({ caps, provider, model, selectedModelDescription, o
           </optgroup>
         ))}
       </select>
-      {providers.some((p) => p.provider === 'comfyui' && p.available && p.models.length === 0) && (
+      {links.registerComfyWorkflow && (
         <Link to="/settings/comfyui" className={styles.comfyWorkflowLink}>
           {ip.registerComfyWorkflow}
         </Link>
       )}
-      {admin && providers.some((p) => p.provider === 'sdwebui' && p.models.length === 0) && (
+      {links.viewComfyWorkflow && (
+        <button type="button" className={styles.comfyWorkflowLinkButton} onClick={() => requestWorkflowView()}>
+          {ip.viewComfyWorkflow}
+        </button>
+      )}
+      {links.checkSdWebuiConnection && (
         <Link to="/settings/sdwebui" className={styles.comfyWorkflowLink}>
           {ip.checkSdWebuiConnection}
         </Link>

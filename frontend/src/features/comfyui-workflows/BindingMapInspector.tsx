@@ -5,7 +5,11 @@
  *
  * 割り当ての結果は第2段と同じ差し込み先と公開パラメーターの行に入り、同じ検証の API に掛かる。
  * テンプレートの値は変えない(値を書き換える欄は作らない)。
+ *
+ * 生成画面からの閲覧(ADR-0052 7章)では `readOnly` で使い、`valueNote` で今のフォームの値を添える。
+ * 秘密に見える値として伏せた入力(閲覧の API の `redacted`)は、値の代わりに伏せたことを示す。
  */
+import type { ReactNode } from 'react'
 import type { ComfyNodeInfo, ComfyNodeInputInfo, ComfyOperation } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import {
@@ -20,6 +24,7 @@ import {
   nodeRoles,
   parseChoiceValue,
   type InputChoice,
+  type InputUse,
   type MapEdge,
   type MapGraph,
 } from './bindingGraph'
@@ -44,6 +49,13 @@ interface BindingMapInspectorProps {
   onChooseInput: (nodeId: string, input: string, choice: InputChoice) => void
   onToggleOutput: (nodeId: string) => void
   onToggleFinalPrompt: (nodeId: string) => void
+  /** 入力の値の下に添える一行(閲覧で、差し込む入力・公開パラメーターの今のフォームの値)。 */
+  valueNote?: (node: ComfyNodeInfo, input: ComfyNodeInputInfo, use: InputUse) => ReactNode
+}
+
+/** 閲覧の API が値を伏せた入力か(登録画面の analyze の入力には印が無い)。 */
+function isRedacted(input: ComfyNodeInputInfo): boolean {
+  return (input as ComfyNodeInputInfo & { redacted?: boolean }).redacted === true
 }
 
 export function BindingMapInspector(props: BindingMapInspectorProps) {
@@ -138,6 +150,7 @@ function NodeInputs({
   onChooseInput,
   onToggleOutput,
   onToggleFinalPrompt,
+  valueNote,
 }: BindingMapInspectorProps & { node: ComfyNodeInfo }) {
   const { t } = useI18n()
   const m = t.comfyui.map
@@ -201,21 +214,25 @@ function NodeInputs({
         <p className={styles.inspectorLead}>{m.noInputs}</p>
       ) : (
         <ul className={styles.inputList}>
-          {inputs.map((input) => (
-            <InputRow
-              key={input.name}
-              node={node}
-              input={input}
-              state={state}
-              use={inputUse(node, input, roles)}
-              nodes={nodes}
-              edges={edges}
-              operation={operation}
-              pickField={pickField}
-              readOnly={readOnly}
-              onChoose={(choice) => onChooseInput(node.id, input.name, choice)}
-            />
-          ))}
+          {inputs.map((input) => {
+            const use = inputUse(node, input, roles)
+            return (
+              <InputRow
+                key={input.name}
+                node={node}
+                input={input}
+                state={state}
+                use={use}
+                note={valueNote?.(node, input, use)}
+                nodes={nodes}
+                edges={edges}
+                operation={operation}
+                pickField={pickField}
+                readOnly={readOnly}
+                onChoose={(choice) => onChooseInput(node.id, input.name, choice)}
+              />
+            )
+          })}
         </ul>
       )}
     </div>
@@ -233,11 +250,13 @@ function InputRow({
   pickField,
   readOnly,
   onChoose,
+  note,
 }: {
   node: ComfyNodeInfo
   input: ComfyNodeInputInfo
   state: NonNullable<ComfyNodeInfo['state']>
   use: ReturnType<typeof inputUse>
+  note?: ReactNode
   nodes: readonly ComfyNodeInfo[]
   edges: readonly MapEdge[]
   operation: ComfyOperation
@@ -261,6 +280,8 @@ function InputRow({
     valueText = fmt(m.wiredFrom, {
       source: edge ? `${shortNodeId(edge.source)} ${nodeDisplayTitle(source) ?? source?.class_type ?? ''}`.trim() : '?',
     })
+  } else if (isRedacted(input)) {
+    valueText = m.redactedValue
   } else if (typeof input.value === 'string') {
     const preview = valuePreview(input.value, 80)
     valueText = preview === '' ? c.emptyValue : `「${preview}」`
@@ -289,8 +310,9 @@ function InputRow({
           </span>
         )}
       </div>
-      <div className={styles.inputValue} data-wired={input.linked || undefined}>
+      <div className={styles.inputValue} data-wired={input.linked || undefined} data-redacted={isRedacted(input) || undefined}>
         {valueText}
+        {note ? <span className={styles.inputNote}>{note}</span> : null}
       </div>
       {input.linked ? (
         <span className={styles.useChip} data-use="wired" title={m.wiredHelp}>

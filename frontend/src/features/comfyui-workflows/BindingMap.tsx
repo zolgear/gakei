@@ -10,6 +10,9 @@
  * - スクロールの入れ物を作らない: 図はページのスクロールに付いて上に留まり(768px 未満は高さ固定)、ホイールは
  *   ページのスクロールに渡す。拡大縮小はボタン・ピンチ・Ctrl(Mac は ⌘)+ホイール、移動はドラッグ。
  *
+ * 生成画面からの閲覧(ADR-0052 7章)は `variant="viewer"` で使う: 読むだけにし、メインエリアのスクロールの中に
+ * 置く(図はその入れ物の上に留まる。`BindingMap.module.css`)。開いた項目の道筋は出さない。
+ *
  * React Flow はパン・ズーム・描画だけに使う。ノードのドラッグ・接続・選択は無効にし、配置は保存しない。
  * テンプレートの値と配線は変えない(ADR-0001 の非ゴールの線引き)。
  */
@@ -67,6 +70,11 @@ export interface BindingMapProps {
   onChooseInput: (nodeId: string, input: string, choice: InputChoice) => void
   onToggleOutput: (nodeId: string) => void
   onToggleFinalPrompt: (nodeId: string) => void
+  /**
+   * `editor`(既定)は登録・編集画面。`viewer` は生成画面のメインエリアでの閲覧(ADR-0052 7章):
+   * 説明文と凡例を閲覧向けにし、置き場所(メインエリアのスクロール)に合わせた寸法にする。
+   */
+  variant?: 'editor' | 'viewer'
 }
 
 export function BindingMap(props: BindingMapProps) {
@@ -93,7 +101,9 @@ function BindingMapInner({
   onChooseInput,
   onToggleOutput,
   onToggleFinalPrompt,
+  variant = 'editor',
 }: BindingMapProps) {
+  const viewer = variant === 'viewer'
   const { t } = useI18n()
   const m = t.comfyui.map
   const [mode, setMode] = useState<MapMode>('collapsed')
@@ -207,7 +217,7 @@ function BindingMapInner({
   const boxCount = view.graph.boxes.length
 
   return (
-    <div className={styles.workspace} data-readonly={readOnly || undefined}>
+    <div className={styles.workspace} data-readonly={readOnly || undefined} data-variant={variant}>
       <section className={styles.map} aria-label={m.heading}>
         <div className={styles.mapHead}>
           <div className={styles.mapTitleRow}>
@@ -226,7 +236,7 @@ function BindingMapInner({
             </div>
           </div>
           <p className={styles.mapLead}>
-            {readOnly ? m.leadReadOnly : m.lead}{' '}
+            {viewer ? m.leadViewer : readOnly ? m.leadReadOnly : m.lead}{' '}
             {mode === 'full'
               ? fmt(m.summaryFull, { nodes: nodeCount })
               : fmt(m.summary, { nodes: nodeCount, boxes: boxCount })}
@@ -244,14 +254,18 @@ function BindingMapInner({
               <i className={styles.legendUnused} aria-hidden="true" />
               {m.legendUnused}
             </li>
-            <li>
-              <i className={styles.legendPath} aria-hidden="true" />
-              {m.legendPath}
-            </li>
-            <li>
-              <i className={styles.legendEvidence} aria-hidden="true" />
-              {m.legendEvidence}
-            </li>
+            {!viewer && (
+              <>
+                <li>
+                  <i className={styles.legendPath} aria-hidden="true" />
+                  {m.legendPath}
+                </li>
+                <li>
+                  <i className={styles.legendEvidence} aria-hidden="true" />
+                  {m.legendEvidence}
+                </li>
+              </>
+            )}
           </ul>
         </div>
 

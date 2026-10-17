@@ -164,3 +164,26 @@ def test_openai_key_not_exposed_even_to_admin(client_oidc: TestClient) -> None:
     user_response = client_oidc.get("/api/settings/openai-key")
     assert user_response.json()["configured"] is True
     assert "dmin" not in user_response.text
+
+
+# -- 生成画面からの閲覧(ADR-0052 7章)は一般ユーザーにも許す --------------------------
+
+
+def test_workflow_view_allowed_for_user_and_requires_login(client_oidc: TestClient) -> None:
+    _login_admin(client_oidc)
+    response = client_oidc.put("/api/comfyui/connection", json={"url": "http://127.0.0.1:8189"})
+    assert response.status_code == 200, response.text
+    client_oidc.post("/api/auth/logout")
+    workflow_id = _admin_workflow_id(client_oidc)
+
+    # 認証なしは 401。
+    response = client_oidc.get(f"/api/comfyui/workflows/{workflow_id}/view")
+    assert response.status_code == 401
+
+    _login_user(client_oidc)
+    response = client_oidc.get(f"/api/comfyui/workflows/{workflow_id}/view")
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == workflow_id
+    # 登録・編集の API は今までどおり管理者だけ。
+    analyze = client_oidc.post("/api/comfyui/workflows/analyze", json={"workflow_id": workflow_id})
+    assert analyze.status_code == 403
