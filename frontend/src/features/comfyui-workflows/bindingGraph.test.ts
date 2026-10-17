@@ -373,6 +373,55 @@ describe('layoutLayers', () => {
     }
   })
 
+  it('上 → 下の向きでは、配線は上から下へ流れ、同じ段の箱は横に重ならない', () => {
+    for (const template of [SD15, EDIT31, big100()]) {
+      const { graph } = collapsed(template)
+      const boxes = graph.boxes.map((b) => ({ id: b.id, width: 180, height: 40 + b.nodeIds.length, sink: b.state === 'unused' }))
+      const lr = layoutLayers(boxes, graph.boxEdges)
+      const tb = layoutLayers(boxes, graph.boxEdges, { direction: 'TB', columnGap: 40, rowGap: 14 })
+      for (const e of graph.boxEdges) {
+        expect(tb.positions.get(e.from)!.y).toBeLessThan(tb.positions.get(e.to)!.y)
+      }
+      // 段は向きによらず同じ。
+      expect([...tb.layers]).toEqual([...lr.layers])
+      const byY = new Map<number, { x: number; w: number }[]>()
+      for (const b of boxes) {
+        const p = tb.positions.get(b.id)!
+        byY.set(p.y, [...(byY.get(p.y) ?? []), { x: p.x, w: b.width }])
+      }
+      for (const row of byY.values()) {
+        row.sort((a, b) => a.x - b.x)
+        for (let i = 1; i < row.length; i += 1) expect(row[i].x).toBeGreaterThanOrEqual(row[i - 1].x + row[i - 1].w)
+      }
+      // 図の大きさは、箱がすべて入る大きさ。
+      for (const b of boxes) {
+        const p = tb.positions.get(b.id)!
+        expect(p.x + b.width).toBeLessThanOrEqual(tb.width)
+        expect(p.y + b.height).toBeLessThanOrEqual(tb.height)
+      }
+    }
+  })
+
+  it('背骨(主要な道筋)の箱は一直線に並び、段の先頭に来る', () => {
+    const boxes = ['a', 'b', 'c', 'x', 'y', 'z'].map((id) => ({ id, width: 100, height: 40 }))
+    const edges = [
+      { from: 'x', to: 'b' },
+      { from: 'y', to: 'b' },
+      { from: 'a', to: 'b' },
+      { from: 'b', to: 'c' },
+      { from: 'z', to: 'c' },
+    ]
+    for (const direction of ['LR', 'TB'] as const) {
+      const r = layoutLayers(boxes, edges, { direction, spine: ['a', 'b', 'c'] })
+      const cross = (id: string) => (direction === 'LR' ? r.positions.get(id)!.y : r.positions.get(id)!.x)
+      expect(cross('a')).toBe(cross('b'))
+      expect(cross('b')).toBe(cross('c'))
+      // 背骨は段の先頭(いちばん上、または左)。
+      expect(cross('a')).toBeLessThan(cross('x'))
+      expect(cross('a')).toBeLessThan(cross('y'))
+    }
+  })
+
   it('読み込みのノードは使う側の1つ前の段へ寄せる', () => {
     const result = layoutLayers(
       [

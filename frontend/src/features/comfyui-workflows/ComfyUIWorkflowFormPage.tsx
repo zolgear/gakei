@@ -132,6 +132,12 @@ function goToComfyUIPage(navigate: NavigateFunction, location: Pick<Location, 's
   else void navigate(dest.path, { replace: true })
 }
 
+/**
+ * カードと図を2列に並べる `.bindingLayout` の幅(px)。CSS のコンテナクエリ(設定のページの幅 1100px 以上)
+ * から、ページの左右の余白(20px × 2)を引いたもの。
+ */
+const TWO_COLUMN_MIN_WIDTH = 1060
+
 /** 読み取りが無いときの図の読み取り(毎回新しい配列を作らない)。 */
 const NO_READINGS: ComfyBindingReading[] = []
 
@@ -177,6 +183,19 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
   const [pickField, setPickField] = useState<FieldKey | null>(null)
   const [mapSelected, setMapSelected] = useState<string | null>(null)
   const isMobile = useIsMobileViewport()
+  // カードと図を2列に並べる幅か(`.bindingLayout` のコンテナクエリと同じ判定)。図の向きを決めるのに使う。
+  const layoutRef = useRef<HTMLDivElement | null>(null)
+  const [twoColumns, setTwoColumns] = useState(false)
+  const hasTemplate = values.template !== null
+  useEffect(() => {
+    const el = layoutRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const update = () => setTwoColumns(el.getBoundingClientRect().width >= TWO_COLUMN_MIN_WIDTH)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasTemplate])
   // サーバーの検証の結果(エラーと警告)。値を変えるたびに取り直す。
   const [issues, setIssues] = useState<ComfyValidationIssue[]>([])
   const [confirming, setConfirming] = useState(false)
@@ -587,6 +606,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
       selected={mapSelected}
       onSelect={setMapSelected}
       readOnly={isMobile}
+      direction={isMobile || twoColumns ? 'TB' : 'LR'}
       onChooseInput={chooseInputFromMap}
       onToggleOutput={toggleOutputFromMap}
       onToggleFinalPrompt={toggleFinalPromptFromMap}
@@ -730,7 +750,11 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
                 上に図を置く(カードの列を `display: contents` にして並べ替える)。768px 未満は図をカードの下に畳み、
                 見るだけにする(割り当てはカードで行う)。
               */}
-              <div className={styles.bindingLayout} data-has-diagram={showDiagram ? 'true' : 'false'}>
+              <div
+                className={styles.bindingLayout}
+                data-has-diagram={showDiagram ? 'true' : 'false'}
+                ref={layoutRef}
+              >
                 <div className={styles.cardsColumn}>
                   <SettingsSection heading={c.readingHeading}>
                     <p className={settingsStyles.helpText}>{c.readingLead}</p>

@@ -20,7 +20,7 @@ export function BindingMapNode({ data }: NodeProps) {
       data-pickable={d.pickable === null ? undefined : String(d.pickable)}
       title={d.tooltip}
     >
-      <Handle type="target" position={Position.Left} className={styles.handle} isConnectable={false} />
+      <Handle type="target" position={d.vertical ? Position.Top : Position.Left} className={styles.handle} isConnectable={false} />
       <div className={styles.boxHead}>
         <span className={styles.boxTitle}>{d.title}</span>
         {d.count > 1 && <span className={styles.boxCount}>{d.countLabel}</span>}
@@ -35,7 +35,7 @@ export function BindingMapNode({ data }: NodeProps) {
           ))}
         </div>
       )}
-      <Handle type="source" position={Position.Right} className={styles.handle} isConnectable={false} />
+      <Handle type="source" position={d.vertical ? Position.Bottom : Position.Right} className={styles.handle} isConnectable={false} />
     </div>
   )
 }

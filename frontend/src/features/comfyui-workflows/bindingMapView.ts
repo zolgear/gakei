@@ -13,6 +13,7 @@ import {
   fullGraph,
   keptNodeIds,
   nodeCategory,
+  pathToTargets,
   nodePickable,
   nodeRoles,
   type MapEdge,
@@ -26,6 +27,9 @@ import type { BindingsFormState } from './bindingsForm'
 import type { ExposedParamRow } from './exposedParamsForm'
 
 export type MapMode = 'collapsed' | 'full'
+
+/** 図の向き。`LR` は左 → 右(横長の枠)、`TB` は上 → 下(縦長の枠)。 */
+export type MapDirection = 'LR' | 'TB'
 
 export type BadgeTone = 'text' | 'image' | 'number' | 'output' | 'exposed'
 
@@ -49,6 +53,8 @@ export interface MapNodeData {
   selected: boolean
   /** 「図で選ぶ」の間、選べる箱か(選べない箱は薄くする)。null は選んでいない。 */
   pickable: boolean | null
+  /** 上 → 下の配置か(辺の付く位置が上下になる)。 */
+  vertical: boolean
   [key: string]: unknown
 }
 
@@ -59,14 +65,15 @@ export interface MapEdgeData {
   [key: string]: unknown
 }
 
-export const MAP_NODE_WIDTH = 184
-const HEADER_HEIGHT = 46
-const BADGE_ROW = 20
+/** 箱の幅。文字の大きさ(倍率 1 でタイトル 14px、クラス名・id と札 11px)に合わせる。 */
+export const MAP_NODE_WIDTH = 210
+const HEADER_HEIGHT = 56
+const BADGE_ROW = 24
 
-/** 札の幅の目安(日本語は 1 文字 11px、ほかは 6.5px)。 */
+/** 札の幅の目安(11px の字で、日本語は 1 文字 11px、ほかは 6.8px)。 */
 function badgeWidth(label: string): number {
-  let w = 14
-  for (const ch of label) w += /[　-鿿＀-￯]/.test(ch) ? 11 : 6.5
+  let w = 16
+  for (const ch of label) w += /[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 11 : 6.8
   return w
 }
 
@@ -156,6 +163,8 @@ export interface MapViewInput {
   pickField: FieldKey | null
   /** 選んでいるノードか束の id。 */
   selected: string | null
+  /** 図の向き(省くと左 → 右)。 */
+  direction?: MapDirection
 }
 
 export interface MapView {
@@ -194,19 +203,29 @@ export interface MapRect {
  * 最初の表示(枠の高さ・位置・倍率)。
  *
  * - 倍率: 全体が収まる倍率(最大 1。高さは `maxHeight` まで伸ばせるとして計算)と、読める倍率の下限の大きい方。
- * - 横: 収まれば中央。収まらないときは、主要な道筋(プロンプト → サンプラー → 保存)の範囲 `focus` が見える位置にする。
- *   範囲が枠より広いときは右端(出力の側)をそろえる。保存ノードと、その手前のサンプラーが見えることを優先する
- *   (入力の側はカードの行と道筋の文字列で確かめられ、パンでも見られるため)。
- * - 枠の高さ: 横の位置で見えている箱が収まる高さ(空の領域を残さない)。`comfortHeight` を渡すと、図全体が
- *   その高さまでなら全体を収める(既定は `minHeight` で、見えている箱だけに合わせる)。`minHeight`〜`maxHeight`。
- * - 縦: 見えている箱の中央を枠の中央にそろえる(図の外の余白はなるべく見せない)。
+ * - 左 → 右(横長の枠):
+ *   - 横: 収まれば中央。収まらないときは主要な道筋(プロンプト → サンプラー → 保存)の範囲 `focus` を中央に、
+ *     範囲が枠より広いときは右端(出力の側)をそろえる。
+ *   - 枠の高さ: 横の位置で見えている箱が収まる高さ(空の領域を残さない)。`comfortHeight` を渡すと、図全体が
+ *     その高さまでなら全体を収める。縦は見えている箱の中央。
+ * - 上 → 下(縦長の枠):
+ *   - 枠の高さ: 図全体の高さ(`maxHeight` まで)。収まらないときは上(入力の側)から見せ、下はスクロールで見る。
+ *   - 横: 収まれば中央。収まらないときは主要な道筋の範囲の中央を枠の中央にそろえる。
+ * どちらも、図の外の余白はなるべく見せない。
  */
 export function mapFrame(
   canvasWidth: number,
   graph: { width: number; height: number; rects: readonly MapRect[] },
   focus: { minX: number; maxX: number } | null,
-  options: { minHeight?: number; maxHeight?: number; comfortHeight?: number; minZoom?: number } = {},
+  options: {
+    direction?: MapDirection
+    minHeight?: number
+    maxHeight?: number
+    comfortHeight?: number
+    minZoom?: number
+  } = {},
 ): MapFrame {
+  const direction = options.direction ?? 'LR'
   const minHeight = options.minHeight ?? 240
   const comfortHeight = options.comfortHeight ?? minHeight
   const padding = 16
@@ -218,19 +237,27 @@ export function mapFrame(
   const fit = Math.min(canvasWidth / graph.width, maxHeight / graph.height, 1)
   const zoom = Math.max(fit, minZoom)
   const w = graph.width * zoom
+  const hFull = graph.height * zoom
+  const range = focus ?? { minX: 0, maxX: graph.width }
+  const focusWidth = (range.maxX - range.minX) * zoom
   let x: number
   if (w <= canvasWidth) {
     x = (canvasWidth - w) / 2
   } else {
-    const range = focus ?? { minX: 0, maxX: graph.width }
-    const focusWidth = (range.maxX - range.minX) * zoom
     x =
-      focusWidth <= canvasWidth
+      focusWidth <= canvasWidth || direction === 'TB'
         ? canvasWidth / 2 - ((range.minX + range.maxX) / 2) * zoom
         : canvasWidth - range.maxX * zoom
     // 図の外の余白は見せない。
     x = Math.min(0, Math.max(canvasWidth - w, x))
   }
+
+  if (direction === 'TB') {
+    const height = Math.round(Math.min(maxHeight, Math.max(minHeight, hFull)))
+    const y = hFull <= height ? (height - hFull) / 2 : 0
+    return { height, viewport: { x, y, zoom } }
+  }
+
   // 横の位置で見えている箱の上下。
   const left = -x / zoom
   const right = (canvasWidth - x) / zoom
@@ -238,21 +265,37 @@ export function mapFrame(
   const top = visible.length > 0 ? Math.min(...visible.map((r) => r.y)) - padding : 0
   const bottom = visible.length > 0 ? Math.max(...visible.map((r) => r.y + r.height)) + padding : graph.height
   const hVisible = (bottom - top) * zoom
-  const hFull = graph.height * zoom
-  // 枠の高さ: 見えている箱が収まる高さ。ただし図全体が `comfortHeight` までなら全体を収める
-  // (パンしたときに上下が切れにくいように)。空の領域は残さない。
   const height = Math.round(
     Math.min(maxHeight, Math.max(minHeight, hVisible, Math.min(hFull, comfortHeight))),
   )
-  // 縦: 見えている箱の中央を枠の中央に。図の外の余白はなるべく見せない。
   let y = height / 2 - ((top + bottom) / 2) * zoom
   y = Math.min(Math.max(0, height - hFull), Math.max(Math.min(0, height - hFull), y))
   return { height, viewport: { x, y, zoom } }
 }
 
+/** 主要な道筋(プロンプトの値 → 出力)が通る箱の id(入力 → 出力の順)。プロンプトが無ければ空。 */
+export function mainPathBoxes(
+  graph: MapGraph,
+  nodes: readonly ComfyNodeInfo[],
+  edges: readonly MapEdge[],
+  bindings: BindingsFormState,
+): string[] {
+  if (!bindings.prompt || bindings.prompt.node === '') return []
+  const outputs = bindings.outputs.length > 0 ? bindings.outputs : nodes.filter((n) => n.kind === 'save').map((n) => n.id)
+  const path = pathToTargets(bindings.prompt.node, edges, new Set(outputs))
+  if (!path) return []
+  const boxes: string[] = []
+  for (const id of path.nodes) {
+    const box = graph.boxOf.get(id)
+    if (box && boxes[boxes.length - 1] !== box) boxes.push(box)
+  }
+  return boxes
+}
+
 export function buildMapView(input: MapViewInput): MapView {
   const t = msg().comfyui
   const { nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected } = input
+  const direction = input.direction ?? 'LR'
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const roles = nodeRoles(bindings, exposedRows)
   const graph =
@@ -294,14 +337,19 @@ export function buildMapView(input: MapViewInput): MapView {
             return n !== undefined && nodePickable(n, pickField)
           })
         : null,
+      vertical: direction === 'TB',
     }
     return { box, nodeData, height: mapNodeHeight(badges) }
   })
 
+  // 背骨: プロンプトの値から出力(無ければ保存ノード)までの道筋の箱。
+  const spine = mainPathBoxes(graph, nodes, edges, bindings)
   const layout = layoutLayers(
     data.map((d) => ({ id: d.box.id, width: MAP_NODE_WIDTH, height: d.height, sink: d.box.state === 'unused' })),
     graph.boxEdges,
-    { columnGap: 64, rowGap: 14, padding: 16 },
+    direction === 'TB'
+      ? { direction, spine, columnGap: 40, rowGap: 14, padding: 16 }
+      : { direction, spine, columnGap: 64, rowGap: 14, padding: 16 },
   )
 
   const flowNodes: Node<MapNodeData>[] = data.map((d) => ({
@@ -340,7 +388,10 @@ export function buildMapView(input: MapViewInput): MapView {
   const keyNodes = new Set<string>(nodes.filter((n) => n.kind === 'sampler' || n.kind === 'save').map((n) => n.id))
   for (const id of bindings.outputs) keyNodes.add(id)
   if (bindings.prompt) keyNodes.add(bindings.prompt.node)
-  const keyBoxes = graph.boxes.filter((b) => b.nodeIds.some((id) => keyNodes.has(id)))
+  const keyBoxes =
+    spine.length > 0
+      ? graph.boxes.filter((b) => spine.includes(b.id))
+      : graph.boxes.filter((b) => b.nodeIds.some((id) => keyNodes.has(id)))
   const xs = keyBoxes.map((b) => layout.positions.get(b.id)?.x ?? 0)
   const focus = xs.length > 0 ? { minX: Math.min(...xs) - 16, maxX: Math.max(...xs) + MAP_NODE_WIDTH + 16 } : null
   const rects = data.map((d) => ({

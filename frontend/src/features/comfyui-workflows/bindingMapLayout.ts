@@ -1,9 +1,10 @@
 /**
- * 差し込み先の図の配置(ADR-0052 4章)。層別(左 → 右)を自前で計算する純粋関数。配置は保存しない。
+ * 差し込み先の図の配置(ADR-0052 4章)。層別(左 → 右、または上 → 下)を自前で計算する純粋関数。配置は保存しない。
  *
  * 1. 段: 入力側からの最長の道の長さ。そのあと、後ろにつながる箱は「後ろの箱の最小の段 - 1」まで
  *    右へ寄せる(読み込みのノードが左端に固まって、長い配線が横切らないように)。
- * 2. 段の中の並び: 前後の箱の位置の平均(重心)で、左右に数回並べ替える。`sink` の箱(使われない束など)は段の下へ。
+ * 2. 段の中の並び: 前後の箱の位置の平均(重心)で、左右に数回並べ替える。背骨(`spine`)の箱は段の先頭、
+ *    `sink` の箱(使われない束など)は段の下へ。
  * 3. 座標: 段ごとに、前の箱の中心の平均に合わせて縦に置き、重ならないように下へずらす。
  *    最初の段は後ろの箱に合わせて置き直す。
  */
@@ -22,6 +23,16 @@ export interface LayoutEdge {
 }
 
 export interface LayoutOptions {
+  /**
+   * 向き。`LR` は段を左 → 右に並べる(既定)。`TB` は段を上 → 下に並べる(縦長の枠向け)。
+   * `TB` のときの `columnGap` は段の間(縦)、`rowGap` は段の中の箱の間(横)。
+   */
+  direction?: 'LR' | 'TB'
+  /**
+   * 背骨にする箱(主要な道筋。入力 → 出力の順)。各段の先頭(上、`TB` では左)に置き、背骨の前の箱に
+   * そろえて一直線にする(プロンプトの根 → サンプラー → 保存を、まとめて見られるように)。
+   */
+  spine?: readonly string[]
   columnGap?: number
   rowGap?: number
   padding?: number
@@ -39,6 +50,16 @@ export function layoutLayers(
   edges: readonly LayoutEdge[],
   options: LayoutOptions = {},
 ): LayoutResult {
+  if (options.direction === 'TB') {
+    // 幅と高さ、x と y を入れ替えて左 → 右で並べ、戻す。
+    const swapped = layoutLayers(
+      boxes.map((b) => ({ ...b, width: b.height, height: b.width })),
+      edges,
+      { ...options, direction: 'LR' },
+    )
+    const positions = new Map([...swapped.positions].map(([id, p]) => [id, { x: p.y, y: p.x }]))
+    return { positions, layers: swapped.layers, width: swapped.height, height: swapped.width }
+  }
   const columnGap = options.columnGap ?? 56
   const rowGap = options.rowGap ?? 16
   const padding = options.padding ?? 16
@@ -47,6 +68,7 @@ export function layoutLayers(
   if (boxes.length === 0) return { positions, layers, width: 0, height: 0 }
 
   const byId = new Map(boxes.map((b) => [b.id, b]))
+  const spine = new Set((options.spine ?? []).filter((id) => byId.has(id)))
   const preds = new Map<string, string[]>(boxes.map((b) => [b.id, []]))
   const succs = new Map<string, string[]>(boxes.map((b) => [b.id, []]))
   const seenEdge = new Set<string>()
@@ -99,6 +121,7 @@ export function layoutLayers(
       const keys = new Map(col.map((b) => [b.id, barycenter(b.id, neighbors)]))
       col.sort(
         (a, b) =>
+          Number(!spine.has(a.id)) - Number(!spine.has(b.id)) ||
           Number(a.sink === true) - Number(b.sink === true) ||
           (keys.get(a.id) ?? 0) - (keys.get(b.id) ?? 0) ||
           a.id.localeCompare(b.id),
@@ -119,7 +142,9 @@ export function layoutLayers(
   const placeColumn = (col: LayoutBox[], index: number, neighbors: Map<string, string[]>) => {
     let bottom = Number.NEGATIVE_INFINITY
     for (const b of col) {
-      const placed = (neighbors.get(b.id) ?? []).filter((n) => centerY.has(n))
+      let placed = (neighbors.get(b.id) ?? []).filter((n) => centerY.has(n))
+      // 背骨の箱は、背骨の前後の箱にだけそろえる(一直線にする)。
+      if (spine.has(b.id) && placed.some((n) => spine.has(n))) placed = placed.filter((n) => spine.has(n))
       const want =
         placed.length > 0
           ? placed.reduce((a, n) => a + (centerY.get(n) ?? 0), 0) / placed.length - b.height / 2

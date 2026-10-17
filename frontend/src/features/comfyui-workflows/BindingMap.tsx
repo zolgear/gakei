@@ -24,7 +24,14 @@ import '@xyflow/react/dist/style.css'
 import type { ComfyBindingReading, ComfyNodeInfo, ComfyOperation } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { inputFitsField, nodePickable, type InputChoice, type MapEdge } from './bindingGraph'
-import { buildMapView, mapFrame, type MapEdgeData, type MapMode, type MapNodeData } from './bindingMapView'
+import {
+  buildMapView,
+  mapFrame,
+  type MapDirection,
+  type MapEdgeData,
+  type MapMode,
+  type MapNodeData,
+} from './bindingMapView'
 import type { FieldKey } from './bindingCards'
 import type { BindingsFormState } from './bindingsForm'
 import type { ExposedParamRow } from './exposedParamsForm'
@@ -54,6 +61,8 @@ export interface BindingMapProps {
   onSelect: (id: string | null) => void
   /** 見るだけ(768px 未満)。割り当てはカードで行う。 */
   readOnly: boolean
+  /** 図の向き。縦長の枠(カードの右の列、768px 未満)は上 → 下、横長の枠は左 → 右。 */
+  direction: MapDirection
   onChooseInput: (nodeId: string, input: string, choice: InputChoice) => void
   onToggleOutput: (nodeId: string) => void
   onToggleFinalPrompt: (nodeId: string) => void
@@ -80,6 +89,7 @@ function BindingMapInner({
   selected,
   onSelect,
   readOnly,
+  direction,
   onChooseInput,
   onToggleOutput,
   onToggleFinalPrompt,
@@ -112,8 +122,8 @@ function BindingMapInner({
 
   const view = useMemo(
     () =>
-      buildMapView({ nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected }),
-    [nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected],
+      buildMapView({ nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected, direction }),
+    [nodes, edges, bindings, exposedRows, readings, mode, focusField, pickField, selected, direction],
   )
 
   const flowEdges: Edge[] = useMemo(
@@ -133,12 +143,18 @@ function BindingMapInner({
     [view.flowEdges],
   )
 
-  // 枠の高さは中身に合わせる(上限は画面の高さ程度)。最初の表示は `mapFrame` が決める。
-  const maxHeight = readOnly ? Math.round(screenHeight * 0.6) : Math.min(720, Math.max(320, screenHeight - 200))
+  // 枠の高さは中身に合わせる。上限は画面の高さ程度(縦向きの右の列は、ヘッダーと図の見出しを除いた高さ。
+  // 768px 未満は、ページのスクロールを妨げないよう画面の 65%)。最初の表示は `mapFrame` が決める。
+  const maxHeight = readOnly
+    ? Math.round(screenHeight * 0.65)
+    : direction === 'TB'
+      ? Math.max(320, screenHeight - 230)
+      : Math.min(720, Math.max(320, screenHeight - 200))
   const frame = mapFrame(canvasWidth, { width: view.width, height: view.height, rects: view.rects }, view.focus, {
+    direction,
     maxHeight,
   })
-  const resetKey = `${mode}:${nodes.length}:${nodes[0]?.id ?? ''}`
+  const resetKey = `${mode}:${direction}:${nodes.length}:${nodes[0]?.id ?? ''}`
   // 表示を切り替えたとき・テンプレートを差し替えたとき・枠の幅が変わったときだけ、最初の表示に戻す
   // (割り当てで箱が変わるたびに戻すと、見ている場所がずれるため)。
   const frameRef = useRef(frame)
@@ -293,7 +309,12 @@ function BindingMapInner({
           }}
         >
           <Background gap={20} color="#2a2e34" />
-          <Controls showInteractive={false} fitViewOptions={FIT_OPTIONS} position="bottom-left" />
+          {/* 背骨(主要な道筋)に重ねない側に置く: 左 → 右は右端に出力が来るので左下、上 → 下は左に背骨が来るので右下。 */}
+          <Controls
+            showInteractive={false}
+            fitViewOptions={FIT_OPTIONS}
+            position={direction === 'TB' ? 'bottom-right' : 'bottom-left'}
+          />
         </ReactFlow>
       </div>
 

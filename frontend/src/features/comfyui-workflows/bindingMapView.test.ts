@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ComfyNodeInfo } from '../../api/client'
 import { mapEdges } from './bindingGraph'
-import { MAP_MIN_READABLE_ZOOM, buildMapView, mapFrame, mapNodeHeight } from './bindingMapView'
+import { MAP_MIN_READABLE_ZOOM, buildMapView, mainPathBoxes, mapFrame, mapNodeHeight } from './bindingMapView'
 import { EMPTY_BINDINGS_FORM, type BindingsFormState } from './bindingsForm'
 import type { ExposedParamRow } from './exposedParamsForm'
 
@@ -187,6 +187,24 @@ describe('mapFrame', () => {
     expect(f.viewport.y).toBeCloseTo(300 - graph.height * f.viewport.zoom)
   })
 
+  it('上 → 下: 全体が入れば全体の高さの枠にし、横は中央', () => {
+    const graph = { width: 400, height: 600, rects: [{ x: 16, y: 16, width: 200, height: 50 }] }
+    const f = mapFrame(800, graph, null, { direction: 'TB', maxHeight: 900 })
+    expect(f.viewport.zoom).toBe(1)
+    expect(f.height).toBe(600)
+    expect(f.viewport).toEqual({ x: 200, y: 0, zoom: 1 })
+  })
+
+  it('上 → 下: 入らないときは上(入力の側)から見せ、横は主要な道筋の中央にそろえる', () => {
+    const graph = { width: 1200, height: 3000, rects: [] }
+    const f = mapFrame(600, graph, { minX: 500, maxX: 900 }, { direction: 'TB', maxHeight: 700 })
+    expect(f.viewport.zoom).toBe(MAP_MIN_READABLE_ZOOM)
+    expect(f.height).toBe(700)
+    expect(f.viewport.y).toBe(0)
+    // 道筋の範囲の中央(700)が枠の中央(300)に来る。
+    expect(f.viewport.x + 700 * f.viewport.zoom).toBeCloseTo(300)
+  })
+
   it('読める倍率の下限で、タイトル 14px は 11px 以上、クラス名 11px は 9px 以上になる', () => {
     expect(14 * MAP_MIN_READABLE_ZOOM).toBeGreaterThanOrEqual(11)
     expect(11 * MAP_MIN_READABLE_ZOOM).toBeGreaterThanOrEqual(9)
@@ -194,6 +212,31 @@ describe('mapFrame', () => {
 
   it('幅が分からないときは倍率 1', () => {
     expect(mapFrame(0, { width: 10, height: 10, rects: [] }, null).viewport).toEqual({ x: 0, y: 0, zoom: 1 })
+  })
+})
+
+describe('buildMapView の向き', () => {
+  it('上 → 下では辺が上から下へ流れ、箱に縦向きの印を付ける', () => {
+    const v = view({ direction: 'TB' })
+    for (const e of v.flowEdges) {
+      const a = v.flowNodes.find((n) => n.id === e.source)!
+      const b = v.flowNodes.find((n) => n.id === e.target)!
+      expect(a.position.y).toBeLessThan(b.position.y)
+    }
+    expect(v.flowNodes.every((n) => n.data.vertical)).toBe(true)
+    expect(view().flowNodes.every((n) => !n.data.vertical)).toBe(true)
+    expect(v.height).toBeGreaterThan(v.width / 2)
+  })
+})
+
+describe('mainPathBoxes', () => {
+  it('プロンプトの値から保存までの箱を、入力 → 出力の順に返す', () => {
+    const v = view({ direction: 'TB' })
+    expect(mainPathBoxes(v.graph, NODES, EDGES, BINDINGS)).toEqual(['6', '3', '8', '9'])
+    expect(mainPathBoxes(v.graph, NODES, EDGES, { ...BINDINGS, prompt: null })).toEqual([])
+    // 上 → 下では背骨が一直線(同じ x)。
+    const xs = ['6', '3', '8', '9'].map((id) => v.flowNodes.find((n) => n.id === id)!.position.x)
+    expect(new Set(xs).size).toBe(1)
   })
 })
 
