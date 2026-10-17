@@ -433,6 +433,9 @@ export type ComfyValidationIssue = components['schemas']['ValidationIssue']
 export type ComfyValidateRequest = components['schemas']['ComfyValidateRequest']
 export type ComfyValidateResponse = components['schemas']['ComfyValidateResponse']
 export type ComfyParamType = ComfyExposedParam['type']
+export type ComfySuggestResponse = components['schemas']['ComfySuggestResponse']
+export type ComfySuggestItem = components['schemas']['ComfySuggestItem']
+export type ComfySuggestDiscarded = components['schemas']['ComfySuggestDiscarded']
 
 export type PriceEstimateResponse = components['schemas']['PriceEstimate']
 export type PriceEstimateInputImage = components['schemas']['InputImageEstimateResponse']
@@ -1073,6 +1076,27 @@ export function analyzeSavedComfyWorkflow(workflowId: string): Promise<ComfyAnal
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workflow_id: workflowId }),
+  })
+}
+
+/**
+ * アシスタント(LLM)で差し込み先を推定する(ADR-0052 6章。保存しない)。`workflowId` があれば
+ * 保存したテンプレートを、無ければ `templateText`(読み込んだファイルの JSON の文字列のまま)を使う。
+ */
+export function suggestComfyWorkflowBindings(input: {
+  workflowId: string | null
+  templateText: string | null
+  name: string
+}): Promise<ComfySuggestResponse> {
+  const name = input.name.trim().slice(0, 100) || null
+  const body =
+    input.workflowId !== null
+      ? JSON.stringify({ workflow_id: input.workflowId, name })
+      : jsonBodyWithRawTemplate({ name }, input.templateText ?? '{}')
+  return request('/api/comfyui/workflows/suggest-bindings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
   })
 }
 

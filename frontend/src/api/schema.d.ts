@@ -314,6 +314,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/comfyui/workflows/suggest-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Bindings
+         * @description アシスタント(LLM)で差し込み先を推定する(ADR-0052 6章)。保存はしない。
+         *
+         *     サーバーで作ったノードの要約(テンプレートの JSON そのものではない)を、アシスタントの接続先と
+         *     モデルに Structured Outputs で送る。送る前に Mod の `ai.before_send`(目的 `workflow_analysis`。
+         *     ADR-0051)を呼ぶ。提案は保存時と同じ検証に掛け、通らない項目は `discarded` に入れて捨てる。
+         *     アシスタントの1時間の上限に数える。
+         *
+         *     断るとき(`detail` は `{code, message}`):
+         *
+         *     - 409 `disabled`: アシスタントが無効
+         *     - 409 `unsupported`: 接続先が Structured Outputs に対応しない
+         *     - 409 `connection_missing`: 接続先・キーが無い
+         *     - 429 `rate_limited`: 1時間の上限
+         *     - 409 `hook_denied`: Mod が送信を止めた(理由は `message`)
+         *     - 502 `llm_error`: LLM の呼び出しに失敗した・応答を読めなかった
+         */
+        post: operations["suggest_comfy_workflow_bindings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfyui/workflows": {
         parameters: {
             query?: never;
@@ -3541,6 +3575,11 @@ export interface components {
             hourly_run_limit_max: number;
             /** Usable */
             usable: boolean;
+            /**
+             * Structured Outputs
+             * @default false
+             */
+            structured_outputs: boolean;
             /** Requests Last Hour */
             requests_last_hour: number;
             /** Runs Last Hour */
@@ -4040,6 +4079,94 @@ export interface components {
             value?: unknown;
             /** Linked */
             linked: boolean;
+        };
+        /**
+         * ComfySuggestDiscarded
+         * @description 検証を通らずに捨てた提案。`target` は `seed[1]`、`outputs.9` のように、どの値か。
+         */
+        ComfySuggestDiscarded: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            /** Target */
+            target: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ComfySuggestItem
+         * @description 提案した項目1つ。値は `ComfySuggestResponse.suggested_bindings` の同じ項目にある。
+         */
+        ComfySuggestItem: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Matches Reading */
+            matches_reading: boolean;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
+         * ComfySuggestRequest
+         * @description アシスタントでの推定(ADR-0052 6章)。`template` か `workflow_id` のどちらか一方(analyze と
+         *     同じ)。`name` は登録画面で入力中の名前(`ai.before_send` の `params` に載せる)。保存はしない。
+         */
+        ComfySuggestRequest: {
+            /** Template */
+            template?: {
+                [key: string]: unknown;
+            } | null;
+            /** Workflow Id */
+            workflow_id?: string | null;
+            /** Name */
+            name?: string | null;
+        };
+        /**
+         * ComfySuggestResponse
+         * @description アシスタントの提案(ADR-0052 6章)。`items` にある項目だけが提案で、`suggested_bindings` の
+         *     ほかの項目は使わない。LLM が申告する確信度は返さない。
+         */
+        ComfySuggestResponse: {
+            /**
+             * Suggested Operation
+             * @enum {string}
+             */
+            suggested_operation: "generate" | "edit";
+            /**
+             * Operation Reason
+             * @default
+             */
+            operation_reason: string;
+            /** Operation Matches Reading */
+            operation_matches_reading: boolean;
+            suggested_bindings: components["schemas"]["SuggestedBindings"];
+            /** Items */
+            items?: components["schemas"]["ComfySuggestItem"][];
+            /** Discarded */
+            discarded?: components["schemas"]["ComfySuggestDiscarded"][];
+            /** Model */
+            model: string;
+            usage?: components["schemas"]["ComfySuggestUsage"];
+        };
+        /** ComfySuggestUsage */
+        ComfySuggestUsage: {
+            /** Input Tokens */
+            input_tokens?: number | null;
+            /** Output Tokens */
+            output_tokens?: number | null;
+            /** Reasoning Tokens */
+            reasoning_tokens?: number | null;
+            /** Total Tokens */
+            total_tokens?: number | null;
         };
         /**
          * ComfyUIConnectionRequest
@@ -8588,6 +8715,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComfyValidateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_comfy_workflow_bindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComfySuggestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfySuggestResponse"];
                 };
             };
             /** @description Validation Error */

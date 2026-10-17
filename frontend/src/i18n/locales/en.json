@@ -2811,6 +2811,31 @@
       "valueRedacted": "Hidden (looks like a secret)",
       "valueEmpty": "(empty)",
       "nodeOnly": "Node {node}"
+    },
+    "suggest": {
+      "button": "Suggest with assistant",
+      "rerun": "Suggest again",
+      "running": "Suggesting…",
+      "sendNote": "What is sent: a summary of the node graph (types, titles, wiring and values; text is cut to the first 60 characters and values that look secret are hidden). The workflow JSON itself is not sent.",
+      "validateNote": "Suggestions go through the same checks as saving, and those that fail are not used. You choose which items to take.",
+      "waiting": "Asking the assistant (this takes a few seconds).",
+      "errorDenied": "Sending was blocked. You can keep using the rule-based reading.",
+      "errorLimit": "The limit has been reached.",
+      "errorFailed": "Could not get a suggestion.",
+      "resultDiffer": "{count} items differ from the current values.",
+      "resultSameCount": "Same as current: {count}",
+      "resultAllSame": "All suggestions match the current values ({count} items).",
+      "colCurrent": "Current",
+      "colSuggested": "Suggested",
+      "colReason": "Reason",
+      "adopt": "Use suggestion",
+      "operationLabel": "Operation",
+      "noReason": "(no reason given)",
+      "warning": "Warning: {message}",
+      "discardedSummary": "Suggestions that failed the checks: {count} (not used)",
+      "discardedItem": "{field} ({target}): {message}",
+      "meta": "{model} · {tokens} tokens",
+      "close": "Close"
     }
   },
   "sdwebui": {
