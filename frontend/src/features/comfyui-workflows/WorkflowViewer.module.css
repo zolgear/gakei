@@ -1,0 +1,133 @@
+/* 生成画面のメインエリアの「ワークフロー」(ADR-0052 7章)。 */
+
+/* メインエリアのスクロール(結果エリアの「詳細」の .detailScroll と同じ役割)。ほかに縦のスクロールは作らない。
+   size のコンテナにして、図の高さ(100cqh)と狭い枠の判定(`BindingMap.module.css` の viewer)に使う。 */
+.scroll {
+  flex-grow: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  container: workflow-view / size;
+}
+
+/* 768px 未満: 結果エリアは中身に合わせて伸び、ページと一緒に流れる(この入れ物はスクロールしない)。 */
+@media (max-width: 767px) {
+  .scroll {
+    overflow: visible;
+    container-type: inline-size;
+    padding: 12px;
+  }
+}
+
+.status {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--color-text-faint);
+  font-size: 13px;
+  text-align: center;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.editLink {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--color-accent);
+}
+
+.lead {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.entries {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.entriesHeading {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.entryList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entryButton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  text-align: left;
+  background: var(--color-bg);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.entryButton[data-kind='exposed'] {
+  border-color: var(--color-border-strong);
+}
+
+.entryButton[data-kind='node'] {
+  border-color: var(--color-border);
+}
+
+.entryButton:hover {
+  border-color: var(--color-text-muted);
+}
+
+.entryButton[aria-pressed='true'] {
+  background: rgba(227, 179, 65, 0.08);
+}
+
+.entryLabel {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.entryNode {
+  font-size: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.entryValue {
+  font-size: 11px;
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+}
+
+/* 一覧から選んだときに、入力の一覧の頭を見せる位置。 */
+.inspectorAnchor {
+  scroll-margin-top: 12px;
+}

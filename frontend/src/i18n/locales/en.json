@@ -1697,7 +1697,8 @@
       "operationUnsupported": "The selected model does not support this operation (generate/edit)",
       "maskRequired": "This model requires a mask to run",
       "maskUnsupported": "The selected model does not support masks. Remove the mask or choose a model that supports masks.",
-      "repeatInvalid": "Repeat must be a whole number from {min} to {max}"
+      "repeatInvalid": "Repeat must be a whole number from {min} to {max}",
+      "viewComfyWorkflow": "View workflow"
     },
     "resultPane": {
       "viewModeGroup": "View",
@@ -1738,7 +1739,8 @@
       "deletedToast": "Image deleted",
       "undoAction": "Undo",
       "inputPrefix": "Input · {width} × {height}",
-      "repeatProgress": "Repeat {index} / {total}"
+      "repeatProgress": "Repeat {index} / {total}",
+      "workflow": "Workflow"
     },
     "runPromptActions": {
       "insertIntoPrompt": "Insert into prompt",
@@ -2785,7 +2787,29 @@
       "viewMap": "Diagram",
       "panelLabel": "Bindings and nodes",
       "tabBindings": "Bindings",
-      "tabNode": "Node"
+      "tabNode": "Node",
+      "leadViewer": "A read-only diagram. Select a node to see how each input is used (filled in, exposed, or fixed) and its value. Drag to move; zoom with the buttons, a pinch, or Ctrl+wheel.",
+      "redactedValue": "(Hidden because it looks like a secret)"
+    },
+    "viewer": {
+      "heading": "Workflow: {name}",
+      "lead": "Check which inputs GAKEI fills in for this workflow and which inputs you can change on the Generate screen. Values are the current form values (the template values when left empty). Nothing can be changed here.",
+      "editLink": "Edit in the registration screen",
+      "loading": "Loading the workflow...",
+      "loadFailed": "Could not load the workflow",
+      "notFound": "This workflow cannot be viewed. It was deleted, or the ComfyUI connection is disabled.",
+      "entriesHeading": "Filled-in inputs and exposed parameters",
+      "exposedLabel": "Exposed: {label}",
+      "showNode": "Show in diagram",
+      "valueForm": "Form: {value}",
+      "valueDefault": "Default: {value}",
+      "valueTemplate": "Template value: {value}",
+      "valueRandom": "Empty (decided on each run)",
+      "valueImage": "Input image {slot}",
+      "valueMask": "The mask drawn on the input image",
+      "valueRedacted": "Hidden (looks like a secret)",
+      "valueEmpty": "(empty)",
+      "nodeOnly": "Node {node}"
     }
   },
   "sdwebui": {
