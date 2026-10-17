@@ -36,6 +36,7 @@ GAKEI が決まった時点(イベント)で、外部のシステム(Webhook)や
 | `annotation` | 自動タイトル・タグで LLM・VLM を呼ぶ前(タグの訳を含む)。ローカルの WD Tagger は呼ばない | その画像の自動付与は失敗になる |
 | `assistant` | アシスタントが LLM を呼ぶたび(道具の呼び出しの往復を含む) | その回の応答を止め、理由をチャットに出す |
 | `embedding` | リモートの埋め込みを呼ぶ前(画像・文章)。ローカルの ONNX は呼ばない | その埋め込みは失敗になる |
+| `workflow_analysis` | 管理者が ComfyUI のワークフローの登録・編集画面で「アシスタントで推定」を押したとき | 推定は止まり、理由が画面に出る(規則による読み取りはそのまま使える) |
 
 管理者設定の「接続を確認」は、検査用の固定の文しか送らないので対象にしない。MCP から作った Run も `image_run` を通る。繰り返しの実行は Run ごとに呼ぶ。
 
@@ -105,6 +106,7 @@ Webhook と Python の Mod は同じ中身を受け取る。すべてのイベ�
 - `text` の `role` は `prompt`、`negative_prompt`、`system`、`user`、`assistant`、`tool`、`tags`、`query` など。
 - `images` の `role` は `primary`(主たる入力)、`reference`(参照)、`mask`、`attachment`(アシスタントへの添付)。画像で探すときの画像のように Asset でないものは `asset_id` が `null`。
 - `run_id` は `image_run` のとき、`asset_id` は自動タイトル・タグの対象の画像。
+- `workflow_analysis` のとき: `target` はアシスタントの接続先とモデル。`text` は LLM への指示(`role` が `system`)と、ワークフローのノードの要約(`role` が `workflow`。1行が1ノードで、id・種類・タイトル・配線・直値。文字列は先頭 60 文字まで、秘密に見える値は `***`)。テンプレートの JSON そのものは送らない。`params` は `workflow_id`(登録前は `null`)、`workflow_name`、`model`、`reasoning_effort`。画像は送らない。
 - ComfyUI の Run の `params` は、共有リンクと同じ規則で秘密に見える値を伏せる。
 
 ### `asset.ingested` の `subject`
@@ -155,6 +157,7 @@ uv run python -m app.tools.export_mod_schema mods-schema.json   # - なら標準
 `schema_version` の互換性の規則:
 
 - **項目を足すときは、版を上げない。** 受ける側は、知らない項目を無視すること。
+- `purpose` などの値の種類を足すときも、版を上げない(2026-10-17 に `workflow_analysis` を足した)。受ける側は、知らない値を受けても壊れないようにし、許可するか拒否するかは Mod の方針で決める。
 - **項目を消す・意味を変えるときは、`schema_version` を上げる。** 受ける側は、知らない版を受けたら、何もしないか拒否する。
 - Python の Mod の関数の呼ばれ方の版は、マニフェストの `api_version`(今は `1`)。合わない Mod は読み込みエラーになる。
 

@@ -973,7 +973,8 @@
         "image_run": "画像の生成",
         "annotation": "自動タイトル・タグ",
         "assistant": "アシスタント",
-        "embedding": "リモートの埋め込み"
+        "embedding": "リモートの埋め込み",
+        "workflow_analysis": "ワークフローの推定(ComfyUI)"
       },
       "sourcesLabel": "取り込みの経路(asset.ingested)",
       "sources": {
@@ -2810,6 +2811,30 @@
       "valueRedacted": "伏せています(秘密に見える値)",
       "valueEmpty": "(空)",
       "nodeOnly": "ノード {node}"
+    },
+    "suggest": {
+      "button": "アシスタントで推定",
+      "rerun": "もう一度推定",
+      "running": "推定しています…",
+      "sendNote": "送るもの: ノードの構成の要約(種類・タイトル・配線・値。文は先頭 60 文字まで、秘密に見える値は伏せます)。ワークフローの JSON そのものは送りません。",
+      "validateNote": "提案も保存の前の検証に掛け、通らない提案は使いません。採るかどうかは項目ごとに選べます。",
+      "waiting": "アシスタントに問い合わせています(数秒かかります)。",
+      "errorDenied": "規則による読み取りはそのまま使えます。",
+      "errorFailed": "推定できませんでした。",
+      "resultDiffer": "{count} 項目が今の値と違います。",
+      "resultSameCount": "今の値と同じ項目: {count}",
+      "resultAllSame": "提案は今の値とすべて同じです({count} 項目)。",
+      "colCurrent": "今",
+      "colSuggested": "提案",
+      "colReason": "理由",
+      "adopt": "提案を使う",
+      "operationLabel": "操作",
+      "noReason": "(理由なし)",
+      "warning": "警告: {message}",
+      "discardedSummary": "検証を通らなかった提案: {count} 件(使いません)",
+      "discardedItem": "{field}({target}): {message}",
+      "meta": "{model}・{tokens} トークン",
+      "close": "閉じる"
     }
   },
   "sdwebui": {

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.domain import llm_connections
 from app.domain.general_settings import GeneralSettingsValidationError, _get_raw_value, _save
 from app.domain.llm_connections import BUILTIN_CONNECTION_ID, LlmTarget
+from app.domain.locality import host_of
 from app.domain.models import RUN_ORIGIN_ASSISTANT, Run
 from app.i18n import t
 
@@ -189,3 +190,22 @@ def count_recent_runs(db: Session, user_id: uuid.UUID | None, now: datetime | No
         .select_from(Run)
         .where(Run.origin == RUN_ORIGIN_ASSISTANT, owner, Run.queued_at >= since)
     ).scalar_one()
+
+
+# -- Structured Outputs(ADR-0052 6章) ---------------------------------------------------
+
+# Structured Outputs(JSON Schema の strict)に対応するとみなす接続先のホスト。GAKEI は接続先に
+# 対応を問い合わせないので、確かな OpenAI の公式だけにする。
+STRUCTURED_OUTPUTS_HOSTS = frozenset({"api.openai.com"})
+
+
+def structured_outputs_supported(db: Session, config: AssistantConfig, settings: Settings) -> bool:
+    """アシスタントの接続先が Structured Outputs に対応するとみなせるか(ComfyUI のワークフローの
+    推定に使えるか)。組み込みの接続先で Base URL を変えていなければ OpenAI の公式。"""
+    connection = llm_connections.find_connection(llm_connections.load(db), config.connection_id)
+    if connection is None:
+        return False
+    base_url = llm_connections.display_base_url(connection, settings)
+    if base_url is None:
+        return connection.builtin
+    return host_of(base_url) in STRUCTURED_OUTPUTS_HOSTS

@@ -38,8 +38,15 @@ HANDLER_NAMES: dict[str, str] = {
     RUN_FINISHED: "on_run_finished",
 }
 
-# `ai.before_send` の目的(ADR-0051 2章)。
-PURPOSES: tuple[str, ...] = ("image_run", "annotation", "assistant", "embedding")
+# `ai.before_send` の目的(ADR-0051 2章)。`workflow_analysis` は ComfyUI のワークフローの推定
+# (ADR-0052 6章)。値を足すのは項目の追加と同じ扱いで、`SCHEMA_VERSION` は上げない。
+PURPOSES: tuple[str, ...] = (
+    "image_run",
+    "annotation",
+    "assistant",
+    "embedding",
+    "workflow_analysis",
+)
 # `asset.ingested` の取り込みの経路。
 SOURCES: tuple[str, ...] = (
     "upload",

@@ -21,6 +21,7 @@ const DATA: AssistantSettingsResponse = {
   hourly_run_limit_default: 60,
   hourly_run_limit_max: 1000,
   usable: false,
+  structured_outputs: false,
   requests_last_hour: 0,
   runs_last_hour: 0,
 }

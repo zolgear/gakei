@@ -216,6 +216,16 @@
       "unusedBranch": "{label}: input {input} of node {node} is on a branch that does not reach the output with the current settings (unused).",
       "maskNotInpaint": "Mask (image_alpha): the MASK of the slot 1 LoadImage (node {node}) is not used for partial editing. The painted area will be passed as transparent pixels.",
       "displayOnlyOutput": "Output node {node} ({class_type}) only displays images. Choose a save node."
+    },
+    "suggest": {
+      "badShape": "The suggestion has an unexpected shape",
+      "maskNeedsImage": "There is no image slot, so the input image's transparency cannot be used as the mask",
+      "emptyResponse": "The assistant returned an empty response",
+      "invalidResponse": "Could not read the assistant's response",
+      "refused": "The assistant refused to respond: {reason}",
+      "disabled": "The assistant is disabled (an admin can enable it under \"Assistant\" in the admin settings)",
+      "unsupported": "The assistant's connection does not support Structured Outputs, so it cannot be used for this (only the official OpenAI endpoint is supported)",
+      "llmError": "Assistant suggestion failed: {error}"
     }
   },
   "sdwebui": {

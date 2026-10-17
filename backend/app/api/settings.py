@@ -977,6 +977,12 @@ def _assistant_settings_response(
         hourly_run_limit_default=assistant_settings.DEFAULT_HOURLY_RUN_LIMIT,
         hourly_run_limit_max=assistant_settings.HOURLY_RUN_LIMIT_MAX,
         usable=usable,
+        structured_outputs=(
+            not runtime.structured.requires_target
+            or assistant_settings.structured_outputs_supported(
+                db, config, request.app.state.settings
+            )
+        ),
         requests_last_hour=runtime.requests.count(user_key(user.id)),
         runs_last_hour=assistant_settings.count_recent_runs(db, user.id),
     )
