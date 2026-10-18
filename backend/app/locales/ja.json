@@ -493,7 +493,7 @@
       "invalidLimit": "{name} は{min}〜{max}の整数である必要があります"
     },
     "locality": {
-      "invalid": "送り先の区分は local・cloud・unset のどれかを指定してください"
+      "invalid": "接続先は external・local のどちらかを指定してください"
     }
   },
   "runValidation": {

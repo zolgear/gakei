@@ -66,7 +66,7 @@ export const ASSISTANT_SETTINGS_QUERY_KEY = ['assistant-settings'] as const
 
 /**
  * `GET /api/settings/provider-localities`(ADR-0051 3章)。OpenAI・ComfyUI・SD WebUI のページの
- * 「送り先の区分」のカードが読む。
+ * 「接続先」のカードが読む。
  */
 export const PROVIDER_LOCALITIES_QUERY_KEY = ['provider-localities'] as const
 

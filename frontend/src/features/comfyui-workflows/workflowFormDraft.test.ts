@@ -39,7 +39,7 @@ describe('changedWorkflowFormKeys', () => {
     expect(changedWorkflowFormKeys(EMPTY_WORKFLOW_FORM, values)).toEqual(['name', 'operation', 'template'])
   })
 
-  it('送り先の区分(ADR-0051 3章)も変えた欄に数える。既定は「接続の設定に従う」(unset)', () => {
+  it('接続先(ADR-0051 3章)も変えた欄に数える。既定は「接続の設定に従う」(unset)', () => {
     expect(EMPTY_WORKFLOW_FORM.locality).toBe('unset')
     expect(changedWorkflowFormKeys(EMPTY_WORKFLOW_FORM, form({ name: 'a', locality: 'local' }))).toEqual([
       'name',
@@ -82,9 +82,9 @@ describe('workflowFormFromSaved', () => {
     expect(values.exposedRows.map((r) => [r.name, r.enabled])).toEqual([['steps', true]])
   })
 
-  it('保存済みの送り先の区分を初期値にする(無ければ unset)', () => {
+  it('保存済みの接続先を初期値にする(無ければ unset)', () => {
     expect(workflowFormFromSaved(wf, null).locality).toBe('unset')
-    expect(workflowFormFromSaved({ ...wf, locality: 'cloud' }, null).locality).toBe('cloud')
+    expect(workflowFormFromSaved({ ...wf, locality: 'external' }, null).locality).toBe('external')
   })
 
   it('analyze に失敗しても保存済みの値は残す', () => {

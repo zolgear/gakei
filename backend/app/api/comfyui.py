@@ -54,7 +54,7 @@ from app.domain.comfyui_connection import (
     validate_connection_url,
 )
 from app.domain.llm_connections import ConnectionNotFoundError, LlmTarget
-from app.domain.locality import normalize_or_unset
+from app.domain.locality import read_workflow
 from app.domain.models import ComfyWorkflow, Run, RunStatus
 from app.domain.schemas import (
     ComfyAnalyzeRequest,
@@ -123,7 +123,7 @@ def _to_summary(wf: ComfyWorkflow) -> ComfyWorkflowSummary:
         name=wf.name,
         operation=wf.operation,  # type: ignore[arg-type]
         template_sha256=wf.template_sha256,
-        locality=normalize_or_unset(wf.locality),
+        locality=read_workflow(wf.locality),
         created_at=wf.created_at,
         updated_at=wf.updated_at,
     )
@@ -933,7 +933,7 @@ def update_workflow(
     wf.bindings = bindings.model_dump(mode="json")
     wf.exposed_params = [p.model_dump(mode="json") for p in exposed_params]
     if "locality" in fields_set:
-        # null は既定(`unset`)に戻す。
+        # null は既定(`unset` = 接続の設定に従う)に戻す。
         wf.locality = body.locality or "unset"
     wf.updated_at = _utcnow()
     db.commit()

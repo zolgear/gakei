@@ -24,7 +24,7 @@ function connection(overrides: Partial<LlmConnectionView> = {}): LlmConnectionVi
     base_url: null,
     api_style: 'responses',
     api_key_set: true,
-    locality: 'cloud',
+    locality: 'external',
     locality_source: 'default',
     used_by: ['annotation'],
     ...overrides,
@@ -97,11 +97,11 @@ describe('接続先のフォーム', () => {
     })
   })
 
-  it('送り先の区分(ADR-0051 3章)は、新しい接続先では未設定から始め、変えたときだけ送る', () => {
-    expect(emptyConnectionForm().locality).toBe('unset')
-    const view = { ...OLLAMA, locality: 'unset' as const }
+  it('接続先(ADR-0051 3章)は、新しい接続先では外部から始め、変えたときだけ送る', () => {
+    expect(emptyConnectionForm().locality).toBe('external')
+    const view = { ...OLLAMA, locality: 'external' as const }
     const form = connectionFormFromView(view)
-    expect(form.locality).toBe('unset')
+    expect(form.locality).toBe('external')
     expect(diffConnectionForm(form, view)).toEqual({})
     expect(diffConnectionForm({ ...form, locality: 'local' }, view)).toEqual({ locality: 'local' })
   })

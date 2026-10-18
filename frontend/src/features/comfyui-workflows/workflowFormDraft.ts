@@ -6,7 +6,7 @@
  * - analyze の結果をフォームに当てはめる(初回の読み込みと、ファイルの差し替え)。
  * - 「戻る」と保存後の行き先は ComfyUI のページ。そこから開いたなら1つ戻る。
  */
-import type { ComfyAnalyzeResponse, ComfyNodeInfo, ComfyOperation, ComfyWorkflowDetail, Locality } from '../../api/client'
+import type { ComfyAnalyzeResponse, ComfyNodeInfo, ComfyOperation, ComfyWorkflowDetail, WorkflowLocality } from '../../api/client'
 import { isSameDraftValue } from '../settings/settingsDraft'
 import {
   bindingsFormFromApi,
@@ -30,8 +30,8 @@ export interface WorkflowFormValues {
   nodes: ComfyNodeInfo[]
   bindings: BindingsFormState
   exposedRows: ExposedParamRow[]
-  /** 送り先の区分(ADR-0051 3章)。`unset` は「接続の設定に従う」。 */
-  locality: Locality
+  /** 接続先(ADR-0051 3章)。`unset` は「接続の設定に従う」。 */
+  locality: WorkflowLocality
 }
 
 /** 変更の件数に数える欄(画面に出る順)。 */

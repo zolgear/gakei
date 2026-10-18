@@ -277,8 +277,8 @@ def delete_openai_base_url(
     return _base_url_status_response(settings)
 
 
-# -- 送り先の区分(ADR-0051 3章) ------------------------------------------------
-# 画像のプロバイダーの接続(OpenAI、ComfyUI、SD WebUI)ごとに、ローカルかクラウドかを決める。
+# -- 接続先(`locality`。ADR-0051 3章) -------------------------------------------
+# 画像のプロバイダーの接続(OpenAI、ComfyUI、SD WebUI)ごとに、外部かローカルかを決める。
 # Mod を1つも有効にしていなくても設定できる。
 
 

@@ -1701,13 +1701,16 @@ export function updateAssistantSettings(body: AssistantSettingsUpdateRequest): P
   })
 }
 
-// -- 送り先の区分(ADR-0051 3章。管理者のみ) ---------------------------------------
+// -- 接続先(`locality`。ADR-0051 3章。管理者のみ) ---------------------------------
 
 export type ProviderLocalitiesResponse = components['schemas']['ProviderLocalitiesResponse']
 export type ProviderLocalitySetting = components['schemas']['ProviderLocalitySetting']
 export type ProviderLocalitiesUpdateRequest = components['schemas']['ProviderLocalitiesUpdateRequest']
+/** 接続の接続先(外部 / ローカル)。 */
 export type Locality = ProviderLocalitySetting['value']
-/** 区分を設定できる画像のプロバイダー。 */
+/** ワークフローの接続先。`unset` は「接続の設定に従う」。 */
+export type WorkflowLocality = NonNullable<ComfyWorkflowSummary['locality']>
+/** 接続先を設定できる画像のプロバイダー。 */
 export type LocalityProvider = keyof ProviderLocalitiesResponse
 
 export function getProviderLocalities(): Promise<ProviderLocalitiesResponse> {

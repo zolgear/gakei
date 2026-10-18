@@ -107,7 +107,7 @@ def test_image_run_denied_marks_run_failed(client: TestClient) -> None:
     assert subject["text"] == [{"role": "prompt", "text": "secret project apple"}]
     assert subject["params"]["size"] == "1024x1024"
     assert subject["target"]["provider"] == "fake"
-    assert subject["target"]["locality"] == "unset"
+    assert subject["target"]["locality"] == "external"
     # API キーは載せない。
     assert "key" not in json.dumps(subject["target"]).lower()
 
@@ -203,7 +203,7 @@ def test_annotation_denied_marks_annotation_failed(client: TestClient) -> None:
     assert subject["asset_id"] == asset["id"]
     assert [i["asset_id"] for i in subject["images"]] == [asset["id"]]
     assert subject["target"]["connection"] == {"id": "openai", "name": None, "builtin": True}
-    assert subject["target"]["locality"] == "cloud"
+    assert subject["target"]["locality"] == "external"
 
 
 # -- assistant ------------------------------------------------------------------------

@@ -4348,7 +4348,7 @@ export interface components {
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][];
             /** Locality */
-            locality?: ("local" | "cloud" | "unset") | null;
+            locality?: ("external" | "local" | "unset") | null;
         };
         /** ComfyWorkflowDetail */
         ComfyWorkflowDetail: {
@@ -4371,7 +4371,7 @@ export interface components {
              * @default unset
              * @enum {string}
              */
-            locality: "local" | "cloud" | "unset";
+            locality: "external" | "local" | "unset";
             /**
              * Created At
              * Format: date-time
@@ -4418,7 +4418,7 @@ export interface components {
              * @default unset
              * @enum {string}
              */
-            locality: "local" | "cloud" | "unset";
+            locality: "external" | "local" | "unset";
             /**
              * Created At
              * Format: date-time
@@ -4447,7 +4447,7 @@ export interface components {
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][] | null;
             /** Locality */
-            locality?: ("local" | "cloud" | "unset") | null;
+            locality?: ("external" | "local" | "unset") | null;
         };
         /**
          * ComfyWorkflowViewResponse
@@ -5372,7 +5372,7 @@ export interface components {
             /** Api Key */
             api_key?: string | null;
             /** Locality */
-            locality?: ("local" | "cloud" | "unset") | null;
+            locality?: ("external" | "local") | null;
         };
         /**
          * LlmConnectionUpdateRequest
@@ -5387,7 +5387,7 @@ export interface components {
             /** Api Style */
             api_style?: string | null;
             /** Locality */
-            locality?: ("local" | "cloud" | "unset") | null;
+            locality?: ("external" | "local") | null;
         };
         /**
          * LlmConnectionView
@@ -5411,10 +5411,10 @@ export interface components {
             api_key_set: boolean;
             /**
              * Locality
-             * @default unset
+             * @default external
              * @enum {string}
              */
-            locality: "local" | "cloud" | "unset";
+            locality: "external" | "local";
             /**
              * Locality Source
              * @default default
@@ -6606,22 +6606,22 @@ export interface components {
          */
         ProviderLocalitiesUpdateRequest: {
             /** Openai */
-            openai?: ("local" | "cloud" | "unset") | null;
+            openai?: ("external" | "local") | null;
             /** Comfyui */
-            comfyui?: ("local" | "cloud" | "unset") | null;
+            comfyui?: ("external" | "local") | null;
             /** Sdwebui */
-            sdwebui?: ("local" | "cloud" | "unset") | null;
+            sdwebui?: ("external" | "local") | null;
         };
         /**
          * ProviderLocalitySetting
-         * @description 画像のプロバイダーの接続の送り先の区分(ADR-0051 3章)。
+         * @description 画像のプロバイダーの接続の接続先(`locality`。ADR-0051 3章)。
          */
         ProviderLocalitySetting: {
             /**
              * Value
              * @enum {string}
              */
-            value: "local" | "cloud" | "unset";
+            value: "external" | "local";
             /**
              * Source
              * @enum {string}
@@ -6631,7 +6631,7 @@ export interface components {
              * Default
              * @enum {string}
              */
-            default: "local" | "cloud" | "unset";
+            default: "external" | "local";
         };
         /** PublicShareAsset */
         PublicShareAsset: {

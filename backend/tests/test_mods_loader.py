@@ -133,7 +133,7 @@ def _subject(text: str) -> contract.BeforeSendSubject:
             provider="fake",
             model="m",
             host=None,
-            locality="unset",
+            locality="external",
             locality_source="default",
         ),
         text=[contract.TextPart(role="prompt", text=text)],
