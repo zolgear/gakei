@@ -216,6 +216,16 @@
       "unusedBranch": "{label}: ノード {node} の入力 {input} は、今の設定では出力につながらない(使われない)枝にあります。",
       "maskNotInpaint": "マスク(image_alpha): 枠1の LoadImage(ノード {node})の MASK が部分編集に使われていません。塗った範囲が透明な画像として渡ります。",
       "displayOnlyOutput": "出力ノード {node}({class_type})は表示だけのノードです。保存ノードを選んでください。"
+    },
+    "suggest": {
+      "badShape": "提案の形が合いません",
+      "maskNeedsImage": "画像の枠が無いので、入力画像の透過をマスクにする形は使えません",
+      "emptyResponse": "アシスタントの応答が空でした",
+      "invalidResponse": "アシスタントの応答を読めませんでした",
+      "refused": "アシスタントが応答を断りました: {reason}",
+      "disabled": "アシスタントは無効です(管理者設定の「アシスタント」で有効にできます)",
+      "unsupported": "アシスタントの接続先が Structured Outputs に対応していないため、推定に使えません(OpenAI の公式の接続先だけに対応します)",
+      "llmError": "アシスタントでの推定に失敗しました: {error}"
     }
   },
   "sdwebui": {

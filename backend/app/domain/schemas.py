@@ -22,6 +22,7 @@ from app.domain import prompt_templates
 from app.domain.comfy_analyze import (
     AnalyzeEdge,
     AnalyzeWarning,
+    BindingField,
     BindingReading,
     NodeKind,
     ParamTierInfo,
@@ -1854,6 +1855,56 @@ class ComfyValidateResponse(BaseModel):
     issues: list[ValidationIssue] = Field(default_factory=list)
 
 
+class ComfySuggestRequest(BaseModel):
+    """アシスタントでの推定(ADR-0052 6章)。`template` か `workflow_id` のどちらか一方(analyze と
+    同じ)。`name` は登録画面で入力中の名前(`ai.before_send` の `params` に載せる)。保存はしない。"""
+
+    template: dict[str, Any] | None = None
+    workflow_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, max_length=100)
+
+
+class ComfySuggestItem(BaseModel):
+    """提案した項目1つ。値は `ComfySuggestResponse.suggested_bindings` の同じ項目にある。"""
+
+    field: BindingField
+    # LLM が書いた理由の文(無ければ空)。
+    reason: str = ""
+    # 規則の読み取り(analyze)と同じ値か。
+    matches_reading: bool
+    # 保存時の検証の警告(保存はできる)。
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ComfySuggestDiscarded(BaseModel):
+    """検証を通らずに捨てた提案。`target` は `seed[1]`、`outputs.9` のように、どの値か。"""
+
+    field: BindingField
+    target: str
+    message: str
+
+
+class ComfySuggestUsage(BaseModel):
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class ComfySuggestResponse(BaseModel):
+    """アシスタントの提案(ADR-0052 6章)。`items` にある項目だけが提案で、`suggested_bindings` の
+    ほかの項目は使わない。LLM が申告する確信度は返さない。"""
+
+    suggested_operation: Literal["generate", "edit"]
+    operation_reason: str = ""
+    operation_matches_reading: bool
+    suggested_bindings: SuggestedBindings
+    items: list[ComfySuggestItem] = Field(default_factory=list)
+    discarded: list[ComfySuggestDiscarded] = Field(default_factory=list)
+    model: str
+    usage: ComfySuggestUsage = Field(default_factory=ComfySuggestUsage)
+
+
 class ComfyWorkflowCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     operation: Literal["generate", "edit"]
@@ -2897,6 +2948,9 @@ class AssistantSettingsResponse(BaseModel):
     hourly_run_limit_max: int
     # 有効で、接続先とキーがそろっている(パネルを出してよい)。
     usable: bool
+    # 接続先が Structured Outputs に対応するとみなせる(ComfyUI のワークフローの推定に使える。
+    # ADR-0052 6章)。`usable` と両方が真のときだけ、登録・編集画面にボタンを出す。
+    structured_outputs: bool = False
     # 見ている利用者の、直近1時間の LLM のリクエスト数と、アシスタントが作った Run の数。
     requests_last_hour: int
     runs_last_hour: int
@@ -2916,7 +2970,7 @@ class AssistantSettingsUpdateRequest(BaseModel):
 # -- Mod とフック(ADR-0051) ---------------------------------------------------------
 
 ModEvent = Literal["asset.ingested", "ai.before_send", "run.finished"]
-ModPurpose = Literal["image_run", "annotation", "assistant", "embedding"]
+ModPurpose = Literal["image_run", "annotation", "assistant", "embedding", "workflow_analysis"]
 ModSource = Literal["upload", "url", "sketch", "mask", "composite", "generated", "import", "mcp"]
 ModOnFailure = Literal["block", "allow"]
 

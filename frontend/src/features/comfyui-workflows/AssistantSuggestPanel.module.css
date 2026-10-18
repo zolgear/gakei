@@ -1,0 +1,195 @@
+/*
+ * 「アシスタントで推定」(ADR-0052 6章)。読み取りの要約の下の小さな枠。結果の表は、広い幅では
+ * 「今 / 提案 / 理由 / 提案を使う」の列、狭い幅(768px 未満)では縦に積む。縦にスクロールする入れ物は
+ * 作らない(ページのスクロールだけ)。
+ */
+
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.linkButton {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sameCount {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.table {
+  min-width: 0;
+}
+
+/* 広い幅の列の見出し。各行の .cells と同じ列の幅にする。 */
+.columns,
+.cells {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  gap: 4px 12px;
+}
+
+.columns {
+  padding: 0 8px 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-raised);
+  min-width: 0;
+}
+
+.field {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* 列の見出しがある広い幅では、セルごとの見出しは出さない。 */
+.cellLabel {
+  display: none;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.reason {
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.warning {
+  color: var(--color-warning);
+  line-height: 1.6;
+}
+
+.action {
+  display: flex;
+  align-items: flex-start;
+}
+
+.adoptButton {
+  min-height: 30px;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+
+.adoptButton:hover {
+  background: var(--color-accent-hover);
+}
+
+.discarded > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.discarded ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .columns {
+    display: none;
+  }
+
+  .cells {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .cellLabel {
+    display: block;
+  }
+
+  .adoptButton {
+    min-height: 36px;
+  }
+}

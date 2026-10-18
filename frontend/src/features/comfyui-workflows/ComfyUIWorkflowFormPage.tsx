@@ -11,6 +11,8 @@
  * - 検証の規則はサーバーにだけある。値を変えるたびに検証の API(保存しない)を呼び、結果を出す。
  *   エラーは保存を止め、警告は画面内の確認を経て残したまま保存できる。
  * - 保存後は、生成画面で試すへ誘導する(検証だけの実行は作らない)。
+ * - アシスタントが使えて接続先が Structured Outputs に対応するときだけ、読み取りの要約の下に
+ *   「アシスタントで推定」を出す(ADR-0052 6章。`AssistantSuggestPanel`)。採った項目は「手で選択」。
  * 編集時は保存済みの bindings/exposed_params を初期値にし(analyze の提案では上書きしない)、
  * 今の読み取りと違う行に印を付ける(自動では書き換えない)。
  *
@@ -29,6 +31,7 @@ import {
   analyzeComfyWorkflowText,
   analyzeSavedComfyWorkflow,
   createComfyWorkflow,
+  getAssistantSettings,
   getComfyUIStatus,
   getComfyWorkflow,
   updateComfyWorkflow,
@@ -36,6 +39,7 @@ import {
   type ComfyBindingCandidate,
   type ComfyBindingReading,
   type ComfyOperation,
+  type ComfySuggestResponse,
   type ComfyValidationIssue,
 } from '../../api/client'
 import { useRunFormContext } from '../../context/useRunFormContext'
@@ -45,6 +49,7 @@ import { canSaveDraft } from '../settings/settingsDraft'
 import { SettingsPageFrame } from '../settings/SettingsPageFrame'
 import { LocalityHelp, LocalitySelect } from '../settings/LocalityParts'
 import { SettingsSection } from '../settings/SettingsParts'
+import { ASSISTANT_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import { useSettingsShell } from '../settings/settingsShell'
 import type { SettingsDraftControls } from '../settings/useSettingsDraft'
 import settingsStyles from '../settings/settings.module.css'
@@ -111,6 +116,8 @@ import {
   type InputChoice,
 } from './bindingGraph'
 import { WorkflowSavedCard } from './WorkflowSavedCard'
+import { AssistantSuggestPanel } from './AssistantSuggestPanel'
+import { adoptSuggestion } from './assistantSuggest'
 import { NodeInputPicker } from './NodeInputPicker'
 import { NodeMultiPicker } from './NodeMultiPicker'
 import { NodeSelectPicker } from './NodeSelectPicker'
@@ -186,6 +193,10 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
 
   const statusQuery = useQuery({ queryKey: ['comfyui-status'], queryFn: getComfyUIStatus })
   const disconnectedNotice = statusQuery.data ? formDisconnectedNotice(statusQuery.data.enabled) : null
+  // アシスタントでの推定(ADR-0052 6章)は、アシスタントが使えて、接続先が Structured Outputs に
+  // 対応するときだけ出す。
+  const assistantQuery = useQuery({ queryKey: ASSISTANT_SETTINGS_QUERY_KEY, queryFn: getAssistantSettings })
+  const canSuggest = Boolean(assistantQuery.data?.usable && assistantQuery.data?.structured_outputs)
 
   // 保存済みの値(編集画面では読み込みと analyze が済むまで null)と、画面の値。
   const [saved, setSaved] = useState<WorkflowFormValues | null>(isEdit ? null : EMPTY_WORKFLOW_FORM)
@@ -524,6 +535,12 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
     change((v) => ({ ...v, bindings: next }))
   }
 
+  /** アシスタントの提案を1項目採る。出どころは「手で選択」にし、同じ検証に掛かる。 */
+  function adoptSuggestedField(response: ComfySuggestResponse, field: FieldKey) {
+    changeBindings((b) => adoptSuggestion(b, response, field), [field])
+    setFlashField(field)
+  }
+
   function tryInStudio() {
     if (!workflowId) return
     // 生成画面のフォームで、このワークフローを選んだ状態にする(ふつうの Run として試す)。
@@ -853,6 +870,19 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
                       </button>
                     ))}
                   </div>
+                )}
+                {canSuggest && (
+                  <AssistantSuggestPanel
+                    workflowId={isEdit && !values.templateText ? (workflowId ?? null) : null}
+                    templateText={values.templateText ?? JSON.stringify(template)}
+                    template={template}
+                    name={name}
+                    operation={operation}
+                    bindings={bindings}
+                    nodes={nodes}
+                    onAdopt={adoptSuggestedField}
+                    onAdoptOperation={(next) => change((v) => withOperation(v, next))}
+                  />
                 )}
               </SettingsSection>
 

@@ -224,7 +224,7 @@ function RefValue({ value, nodes }: { value: InputRefValue | null; nodes: readon
   return <NodeName id={value.node} node={nodes.find((n) => n.id === value.node)} input={value.input} showValue />
 }
 
-function FieldValue({
+export function FieldValue({
   field,
   bindings,
   nodes,
