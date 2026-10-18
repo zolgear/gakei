@@ -160,8 +160,15 @@ def test_upload_and_cancel_are_queued(client_no_runner: TestClient) -> None:
         run_id,
         "canceled",
     )
-    with client.app.state.session_factory() as db:
-        statuses = {r.status for r in db.execute(select(ModDelivery)).scalars()}
+    # フックが呼ばれた後に配達の行が done になるので、少し待つ(遅い環境で delivering が残る)
+    statuses: set[str] = set()
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        with client.app.state.session_factory() as db:
+            statuses = {r.status for r in db.execute(select(ModDelivery)).scalars()}
+        if statuses == {"done"}:
+            break
+        time.sleep(0.05)
     assert statuses == {"done"}
 
 
