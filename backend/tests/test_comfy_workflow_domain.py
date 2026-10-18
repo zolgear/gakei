@@ -11,6 +11,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
+from app.domain.comfy_analyze import analyze_workflow
 from app.domain.comfy_workflow import (
     SEED_MAX,
     Bindings,
@@ -19,7 +20,6 @@ from app.domain.comfy_workflow import (
     MaskBinding,
     SuggestedBindings,
     WorkflowValidationError,
-    analyze_workflow,
     compute_template_sha256,
     is_api_format_template,
     is_ui_format_template,
@@ -195,24 +195,21 @@ def test_analyze_missing_prompt_warns() -> None:
     assert any("プロンプト" in w for w in result.warnings)
 
 
-def test_analyze_prompt_enhancer_warns_with_candidates() -> None:
+def test_analyze_prompt_enhancer_ranks_candidates() -> None:
     """正規表現置換やテキスト生成ノードを挟んで複数の固定文字列ノードに行き着く
-    「プロンプト強化」型のワークフローは、既存のヒューリスティックでは特定できない。
-    その場合、探索が辿り着いた先の直値の文字列入力を手動選択の候補として警告に列挙する。
+    「プロンプト強化」型のワークフロー。ADR-0052 2章で、文字列の根(478・479・480)を
+    タイトルの語などで順位付けし、差がはっきりしていれば最上位(利用者の編集指示)を選ぶ
+    (以前は特定できず、候補を警告に並べるだけだった)。
     """
     result = analyze_workflow(clone(PROMPT_ENHANCER_GRAPH))
-    assert result.suggested_bindings.prompt is None
-
-    warning = next(w for w in result.warnings if "候補" in w)
-    assert "479" in warning
-    assert "編集指示" in warning
-    assert "478" in warning
-    assert "PE system prompt" in warning
-    assert "480" in warning
-    assert "PE suffix" in warning
+    assert result.suggested_bindings.prompt == InputRef(node="479", input="value")
+    reading = next(r for r in result.readings if r.field == "prompt")
+    assert reading.confidence == "ranked"
+    assert [c.node for c in reading.candidates][0] == "479"
+    assert {c.node for c in reading.candidates} == {"478", "479", "480"}
     # 設定値(regex_pattern/replace/delimiter やサンプリング設定)は候補に出ない。
-    assert "regex_pattern" not in warning
-    assert "text-gen-model" not in warning
+    assert all(c.input == "value" for c in reading.candidates)
+    assert not any("候補" in w for w in result.warnings)
 
 
 def test_analyze_prompt_search_without_candidates_keeps_old_warning() -> None:
@@ -398,15 +395,11 @@ def test_edit_missing_mask_warns_when_graph_has_unsupported_mask_node() -> None:
     assert any("マスク" in w and "GAKEI" in w for w in result.warnings)
 
 
-def test_two_load_image_nodes_suggests_both_as_ordered_slots_without_warning() -> None:
-    # 番号付きの可変長入力もタイトルも無い場合は、テンプレート内の出現順(id 順に相当)で
-    # 両方を枠として提案する。2枚以上の入力画像であること自体は警告しない
-    # (ADR-0013 3節フォローアップ: 枠の数だけ要求すればよい)。
+def test_two_load_image_nodes_only_wired_one_is_a_slot() -> None:
+    # TWO_LOAD_IMAGE_GRAPH の 15 はどこにも配線されていない。ADR-0052 2章で、出力に届く
+    # LoadImage だけを枠にする(以前は出現順で両方を枠にしていた)。
     result = analyze_workflow(clone(TWO_LOAD_IMAGE_GRAPH))
-    assert result.suggested_bindings.images == [
-        InputRef(node="10", input="image"),
-        InputRef(node="15", input="image"),
-    ]
+    assert result.suggested_bindings.images == [InputRef(node="10", input="image")]
     assert not any("1枚" in w for w in result.warnings)
 
 

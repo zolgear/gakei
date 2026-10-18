@@ -21,12 +21,14 @@ from app.deps import (
     get_annotator,
     get_embedder,
     get_focal_worker,
+    get_mods,
     get_session,
     get_settings,
     get_store,
 )
 from app.domain import (
     annotation_settings,
+    content_withholding,
     derivatives,
     embedding_settings,
     focal_points,
@@ -77,6 +79,8 @@ from app.domain.visibility import (
     get_visible_group,
 )
 from app.i18n import t
+from app.mods.gate import ingest_gate
+from app.mods.runtime import ModRuntime
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
 from app.worker.focal import FocalPointWorker
@@ -114,6 +118,7 @@ def _to_summary(
         title=title,
         focal_point=focal_point,
         content_rating=content_rating,  # type: ignore[arg-type]
+        **content_withholding.summary_fields(asset),
     )
 
 
@@ -210,6 +215,8 @@ def _to_detail(
         **annotations_domain.annotation_fields(db, asset.id),
         **content_rating_domain.detail_fields(db, asset.id),
         composition=compositions_domain.composition_view(db, asset, checker, store),
+        **content_withholding.summary_fields(asset),
+        **content_withholding.withheld_fields(db, asset),
     )
 
 
@@ -244,6 +251,7 @@ def create_asset(
     annotator: Annotator = Depends(get_annotator),
     embedder: Embedder = Depends(get_embedder),
     focal_worker: FocalPointWorker | None = Depends(get_focal_worker),
+    mods: ModRuntime | None = Depends(get_mods),
 ) -> AssetUploadResponse:
     data = file.file.read()
     try:
@@ -256,6 +264,8 @@ def create_asset(
             replaces_asset_id=replaces_asset_id,
             composition=composition,
             viewer=user,
+            # ADR-0051 2章: 「判定を待つ」購読があれば、原本を書く前に呼ぶ。
+            gate=ingest_gate(mods, ingest_hooks.source_for_kind(kind)),
         )
     except IngestError as e:
         db.rollback()
@@ -264,12 +274,16 @@ def create_asset(
     # 既存の Asset を返す場合(`matched_existing`)は重ねて待ち行列に入れない。
     queued = ingest_hooks.IngestQueued()
     if result.outcome == "created":
-        queued = ingest_hooks.enqueue_after_ingest(db, result.asset, settings)
+        queued = ingest_hooks.enqueue_after_ingest(
+            db, result.asset, settings, source=ingest_hooks.source_for_kind(kind), mods=mods
+        )
     db.commit()
     # 応答は worker を起こす前に作る(annotate_asset と同じ理由)。
     detail = _to_detail(db, result.asset, produced_by_run=None, user=user, store=store)
     response = AssetUploadResponse(**detail.model_dump(), ingest_outcome=result.outcome)
-    ingest_hooks.notify_workers(queued, annotator=annotator, embedder=embedder, focal=focal_worker)
+    ingest_hooks.notify_workers(
+        queued, annotator=annotator, embedder=embedder, focal=focal_worker, mods=mods
+    )
     return response
 
 
@@ -452,6 +466,23 @@ def get_asset_content(
     )
 
 
+def _reject_withheld(asset: Asset) -> None:
+    """画像を残さなかった Asset(ADR-0051 4章)は、画像から作る処理(推定・判定・埋め込み)を
+    受け付けない(409)。"""
+    if asset.content_withheld_at is not None:
+        raise HTTPException(status_code=409, detail=t("mods.contentWithheld"))
+
+
+def raise_if_withheld(db: Session, asset: Asset, *, include_verdict: bool) -> None:
+    """画像を残さなかった Asset(ADR-0051 4章)の画像は返さない(410)。理由の文には、判定を
+    見せてよい相手(`include_verdict`)にだけ判定の label と message を付ける。"""
+    if asset.content_withheld_at is not None:
+        raise HTTPException(
+            status_code=410,
+            detail=content_withholding.withheld_message(db, asset, include_verdict=include_verdict),
+        )
+
+
 def asset_content_response(
     db: Session,
     store: AssetStore,
@@ -470,6 +501,9 @@ def asset_content_response(
 
     ローカルFSは `FileResponse`(Range 要求に応える)、オブジェクトストレージは読み出した
     チャンクをそのまま流す(`Content-Length` 付き、Range には応えない。ADR-0028 4章)。"""
+    # ADR-0051 4章: 画像を残さなかった Asset は 410(どの variant も。共有リンクでは判定を
+    # 見せない)。
+    raise_if_withheld(db, asset, include_verdict=viewer is not None)
     # ADR-0014(2026-09-24 追記): original をダウンロードする PNG にだけ、系列情報
     # (gakei チャンク)を埋め込んで返す。保存している原本・画面表示用の
     # original/thumb/preview(download=0)は変えない(ETag も区別する)。
@@ -646,6 +680,7 @@ def annotate_asset(
     """この Asset の(再)推定を待ち行列に入れる。人が決めたタイトルとタグは保つ。
     使えるエンジンが無ければ 409。既に待ち行列にあれば何もしない。"""
     asset = _annotation_target(db, user, asset_id)
+    _reject_withheld(asset)
     config = annotation_settings.load(db)
     if not annotations_domain.usable_engines(config, settings):
         raise HTTPException(status_code=409, detail=t("annotations.noEngine"))
@@ -712,6 +747,7 @@ def judge_asset_content_rating(
     """この Asset のレーティングの(再)判定を待ち行列に入れる。人が選んだ段階は保つ。
     判定が無効、またはモデルが無ければ 409。既に待ち行列にあれば何もしない。"""
     asset = _content_rating_target(db, user, asset_id)
+    _reject_withheld(asset)
     config = annotation_settings.load(db)
     if not content_rating_domain.usable(config, settings):
         raise HTTPException(status_code=409, detail=t("contentRating.notUsable"))
@@ -747,6 +783,7 @@ def request_asset_embedding(
         raise HTTPException(status_code=409, detail=t("embeddings.maskNotSupported"))
     if asset.deleted_at is not None:
         raise HTTPException(status_code=409, detail=t("embeddings.assetDeleted"))
+    _reject_withheld(asset)
     config = embedding_settings.load(db)
     if not embedding_settings.usable(config, settings):
         raise HTTPException(status_code=409, detail=t("embeddings.notUsable"))

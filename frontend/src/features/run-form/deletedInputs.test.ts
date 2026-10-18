@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findDeletedInputAssetIds } from './deletedInputs'
+import { findBlockedInputAssetIds, findDeletedInputAssetIds } from './deletedInputs'
 import type { AssetDetail } from '../../api/client'
 import type { RunInputItem } from './types'
 
@@ -17,6 +17,7 @@ function asset(id: string, deletedAt: string | null): AssetDetail {
     deleted_at: deletedAt,
     restorable: false,
     used_as_input: false,
+    content_withheld: false,
   }
 }
 
@@ -53,5 +54,32 @@ describe('findDeletedInputAssetIds', () => {
     const inputs: RunInputItem[] = [{ inputId: 'in-m', assetId: 'm', role: 'mask', position: 0 }]
     const details = new Map([['m', asset('m', '2026-01-02T00:00:00Z')]])
     expect(findDeletedInputAssetIds(inputs, details)).toEqual(['m'])
+  })
+})
+
+describe('findBlockedInputAssetIds(ADR-0051 4章)', () => {
+  const verdict = (v: 'ok' | 'flag' | 'deny') => ({
+    id: `v-${v}`,
+    mod_kind: 'python' as const,
+    mod_id: 'm',
+    mod_name: 'M',
+    verdict: v,
+    propagated: false,
+    created_at: '2026-01-01T00:00:00Z',
+  })
+
+  it('画像を残さなかった Asset と、最新の判定に deny がある Asset を返す', () => {
+    const inputs = [img('a', 0), img('b', 1), img('c', 2), img('d', 3)]
+    const details = new Map([
+      ['a', { ...asset('a', null), content_withheld: true }],
+      ['b', { ...asset('b', null), verdicts: [verdict('ok'), verdict('deny')] }],
+      ['c', { ...asset('c', null), verdicts: [verdict('flag')] }],
+      ['d', asset('d', null)],
+    ])
+    expect(findBlockedInputAssetIds(inputs, details)).toEqual(['a', 'b'])
+  })
+
+  it('詳細がまだ無い入力は止めない(取得を待つ)', () => {
+    expect(findBlockedInputAssetIds([img('a', 0)], new Map())).toEqual([])
   })
 })

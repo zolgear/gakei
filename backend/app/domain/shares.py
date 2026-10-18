@@ -478,6 +478,8 @@ def build_public_response(db: Session, share: Share) -> PublicShareResponse:
             run_id=a.produced_by_run_id if a.produced_by_run_id in runs_by_id else None,
             depth=depth_by_id[a.id],
             focal_point=focals.get(a.id),
+            # 判定(label や message)は組織の内部の情報なので含めない(ADR-0051 9章)。
+            content_withheld=a.content_withheld_at is not None,
             allow_original=original_allowed(
                 db,
                 share,

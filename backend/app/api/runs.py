@@ -4,6 +4,7 @@ POST /api/runs はサーバー側で capabilities に照らして検証する。
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 
@@ -15,8 +16,15 @@ from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.config import Settings
-from app.deps import get_progress_bus, get_registry, get_runner, get_session, get_settings
-from app.domain import content_rating, focal_points
+from app.deps import (
+    get_mods,
+    get_progress_bus,
+    get_registry,
+    get_runner,
+    get_session,
+    get_settings,
+)
+from app.domain import content_rating, content_withholding, focal_points
 from app.domain import run_create as run_create_domain
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
@@ -34,8 +42,10 @@ from app.domain.run_views import (
     bulk_output_refs,
     bulk_parent_content_ratings,
     bulk_parent_focal_points,
+    bulk_parent_withheld,
     bulk_users,
     run_summary_fields,
+    visible_runs_query,
 )
 from app.domain.schemas import (
     RunCancelResponse,
@@ -48,8 +58,9 @@ from app.domain.schemas import (
     RunListResponse,
     RunSummary,
 )
-from app.domain.visibility import get_visible_run, run_visible, visible_asset_ids
+from app.domain.visibility import get_visible_run, visible_asset_ids
 from app.i18n import t
+from app.mods.runtime import ModRuntime
 from app.providers.registry import ProviderRegistry
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
@@ -83,6 +94,16 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
     focals = focal_points.bulk_get(db, [i.asset_id for i in inputs])
     # レーティング(ADR-0049)も入力と主たる親の分をまとめて引く。
     ratings = content_rating.bulk_levels(db, [i.asset_id for i in inputs])
+    # 画像を残さなかった入力(ADR-0051 4章)。
+    withheld = set(
+        db.execute(
+            select(Asset.id).where(
+                Asset.id.in_([i.asset_id for i in inputs]), Asset.content_withheld_at.is_not(None)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return RunDetail(
         **run_summary_fields(
             run,
@@ -98,6 +119,7 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
             primary_parent_content_rating=ratings.get(primary_parent_asset_id)
             if primary_parent_asset_id is not None
             else None,
+            primary_parent_content_withheld=primary_parent_asset_id in withheld,
         ),
         deployment=run.deployment,
         provider_request_id=run.provider_request_id,
@@ -110,10 +132,13 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
                 position=i.position,
                 focal_point=focals.get(i.asset_id),
                 content_rating=ratings.get(i.asset_id),
+                content_withheld=i.asset_id in withheld,
             )
             for i in inputs
         ],
         imported=_import_info(db, run),
+        verdicts=content_withholding.verdict_views(db, run_id=run.id),
+        mod_invocations=content_withholding.run_invocation_views(db, run.id),
     )
 
 
@@ -169,7 +194,7 @@ def list_runs(
     user: CurrentUser = Depends(require_user),
 ) -> RunListResponse:
     # ADR-0025: 見える Run だけ(App バーの実行中・待機中の件数もこの一覧から数える)。
-    query = select(Run).where(Run.deleted_at.is_(None), run_visible(user))
+    query = visible_runs_query(user)
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)
@@ -181,7 +206,7 @@ def list_runs(
                 and_(Run.queued_at == moment, Run.id < cursor_id),
             )
         )
-    query = query.order_by(Run.queued_at.desc(), Run.id.desc()).limit(limit + 1)
+    query = query.limit(limit + 1)
 
     rows = list(db.execute(query).scalars().all())
     has_more = len(rows) > limit
@@ -196,6 +221,7 @@ def list_runs(
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], user)
     parent_focals = bulk_parent_focal_points(db, inputs_map)
     parent_ratings = bulk_parent_content_ratings(db, inputs_map)
+    parent_withheld = bulk_parent_withheld(db, inputs_map)
     items = [
         RunSummary(
             **run_summary_fields(
@@ -207,6 +233,7 @@ def list_runs(
                 groups_map.get(r.asset_group_id),
                 primary_parent_focal_point=parent_focals.get(inputs_map[r.id][1]),
                 primary_parent_content_rating=parent_ratings.get(inputs_map[r.id][1]),
+                primary_parent_content_withheld=inputs_map[r.id][1] in parent_withheld,
             )
         )
         for r in rows
@@ -265,6 +292,7 @@ async def cancel_run(
     db: Session = Depends(get_session),
     bus: ProgressBus = Depends(get_progress_bus),
     user: CurrentUser = Depends(require_user),
+    mods: ModRuntime | None = Depends(get_mods),
 ) -> RunCancelResponse:
     run = get_visible_run(db, user, run_id)
     if run is None:
@@ -286,6 +314,10 @@ async def cancel_run(
             status_code=409,
             detail=t("runs.cannotCancelAlreadyRunning"),
         )
+
+    # ADR-0051: 取り消しも Run の終わり(`run.finished`)として Mod に知らせる。
+    if mods is not None:
+        await asyncio.to_thread(mods.enqueue_runs_finished, [run_id])
 
     # このハンドラは async のため、イベントループ上で安全に asyncio.Queue へ publish できる。
     await bus.publish(run_id, {"type": "status", "status": "canceled"})

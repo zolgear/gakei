@@ -16,6 +16,7 @@ describe('embeddingErrorKind', () => {
     expect(embeddingErrorKind(conflict('embedding_missing'))).toBe('missing')
     expect(embeddingErrorKind(conflict('embedding_failed'))).toBe('failed')
     expect(embeddingErrorKind(conflict('embedding_not_supported'))).toBe('notSupported')
+    expect(embeddingErrorKind(conflict('content_withheld'))).toBe('withheld')
   })
 
   it('知らない code、code の無い 409、409 以外、ApiError 以外は null', () => {

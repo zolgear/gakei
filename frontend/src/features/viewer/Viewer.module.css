@@ -29,6 +29,9 @@
   border-radius: var(--radius);
   color: var(--color-text);
   font-size: 12px;
+  /* 狭い幅でツールバー行に押されて「← 戻る」が2行に折れないようにする。 */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .backButton:hover {
@@ -68,7 +71,8 @@
   padding: 8px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* ボタンは右寄せ。左端の「Generated の詳細」の有無で、ほかのボタンの位置は変わらない。 */
+  justify-content: flex-end;
   gap: 8px;
   background: var(--color-bg-raised);
 }
@@ -80,14 +84,25 @@
 }
 
 .heading {
-  margin: 0;
-  font-size: 15px;
+  /* 見出しは画面に出さず、読み上げだけに残す(ボタンの行を幅いっぱいに使う)。 */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* ボタンは折り返さず1行に並べる(折り返すとボタンの位置が画像ごとに変わる)。 */
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 /* 文字ラベルは置かず、アイコン + title(ツールチップ)で説明する。 */
@@ -112,14 +127,6 @@
 
 .iconButton:disabled {
   opacity: 0.4;
-}
-
-.subheading {
-  margin: 12px 0 4px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
 }
 
 /* 同じ Generated(Run)の他の出力への切り替え(出力が2つ以上のときだけ表示)。 */
@@ -200,46 +207,6 @@
   height: 100%;
   object-fit: cover;
   display: block;
-}
-
-.metaList {
-  margin: 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 8px;
-  font-size: 12px;
-}
-
-.metaList dt {
-  color: var(--color-text-faint);
-}
-
-.metaList dd {
-  margin: 0;
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
-
-.runPrompt {
-  margin: 0;
-  font-size: 12px;
-}
-
-.runMeta {
-  margin: 4px 0;
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-/* 最終プロンプト(ADR-0030)。見出しの上の余白は .subheading と揃える。 */
-.finalPrompt {
-  margin-top: 12px;
-}
-
-.runLink {
-  font-size: 12px;
 }
 
 /* 末尾に残す操作は削除だけ(よく使う操作は見出しの行のアイコン)。 */
@@ -349,6 +316,7 @@
 
   .backButton {
     min-height: 44px;
+    padding: 0 8px;
   }
 
   /* パネルが画像の下に回り、ページ全体がスクロールするので見出しの行は固定しない。 */
@@ -357,18 +325,30 @@
     gap: 8px;
   }
 
-  /* アイコンが 44px になると 6 個(共有を有効にしたとき)で1行に収まらないので、折り返して右に寄せる。 */
+  /* ボタンが6個並ぶと幅 320px では行に収まらない(44px × 6 + 間隔)。幅だけ行に合わせて詰める
+     (並びと右寄せは変えない。高さは 44px のまま)。 */
+  /* 行の幅いっぱいに広げてから右寄せで並べる(中身の幅に合わせると、ボタンが基準の 44px ではなく
+     アイコンの幅まで縮む)。 */
   .headerActions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .iconButton {
-    width: 44px;
+    width: auto;
+    flex: 0 1 44px;
+    min-width: 0;
     height: 44px;
   }
 
   .deleteButton {
     min-height: 44px;
   }
+}
+
+/* Mod の判定の印(ADR-0051 5章)。見出しの行の左端に置き、ボタンの並びは右寄せのまま。 */
+.verdictMark {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-right: auto;
 }

@@ -36,6 +36,20 @@ describe('buildWorkflowCreateRequest / buildWorkflowUpdateRequest', () => {
     expect(body.bindings.prompt).toEqual({ node: '1', input: 'text' })
     expect(body.exposed_params).toHaveLength(1)
     expect(body.exposed_params?.[0].name).toBe('steps')
+    // 接続先を省いたら「接続の設定に従う」(ADR-0051 3章)。
+    expect(body.locality).toBe('unset')
+  })
+
+  it('接続先をそのまま送る', () => {
+    const body = buildWorkflowUpdateRequest({
+      name: 'w',
+      operation: 'generate',
+      template,
+      bindings,
+      exposedRows: [],
+      locality: 'local',
+    })
+    expect(body.locality).toBe('local')
   })
 
   it('always includes final_prompt in bindings (null when none), so an update does not drop it', () => {

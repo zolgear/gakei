@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import threading
 import uuid
@@ -59,6 +60,7 @@ from app.domain.run_views import (
     bulk_output_refs,
     bulk_parent_content_ratings,
     bulk_parent_focal_points,
+    bulk_parent_withheld,
     bulk_users,
     run_summary_fields,
 )
@@ -92,6 +94,8 @@ from app.domain.visibility import get_visible_asset, get_visible_group
 from app.embedding.base import EmbeddingError, composite_on_white, l2_normalize
 from app.embedding.catalog import CLIP_MODELS, InputVariant
 from app.i18n import t
+from app.mods.api import Actor, ImageRef, TextPart
+from app.mods.events import actor_from_user
 
 if TYPE_CHECKING:
     from app.config import Settings
@@ -211,13 +215,19 @@ def embed_query(
     text: str,
     engines: EmbeddingEngines,
     cache: QueryVectorCache,
+    *,
+    actor: Actor | None = None,
 ) -> np.ndarray:
-    """検索の文章のベクトル(同期。呼び出し側がスレッドで呼ぶ)。"""
+    """検索の文章のベクトル(同期。呼び出し側がスレッドで呼ぶ)。リモートのエンジンなら、送る前に
+    Mod の `ai.before_send` を呼ぶ(ADR-0051。覚えたベクトルを使うときは送らないので呼ばない)。"""
     cached = cache.get(active.model_key, text)
     if cached is not None:
         return cached
     try:
         engine = engines.engine_for(db, active.config)
+        denial = engines.before_send(engine, text=[TextPart(role="query", text=text)], actor=actor)
+        if denial is not None:
+            raise EmbeddingsEngineError(denial.message)
         vectors = engine.embed_texts([text])
     except EmbeddingError as e:
         raise EmbeddingsEngineError(str(e)) from e
@@ -326,6 +336,7 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> l
     groups_map = bulk_asset_groups(db, [r.asset_group_id for r in runs.values()], viewer)
     parent_focals = bulk_parent_focal_points(db, inputs_map)
     parent_ratings = bulk_parent_content_ratings(db, inputs_map)
+    parent_withheld = bulk_parent_withheld(db, inputs_map)
     output_ids = [a.id for a in outputs.values()]
     titles = annotations_domain.bulk_titles(db, output_ids)
     focals = focal_points.bulk_get(db, output_ids)
@@ -372,6 +383,7 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> l
                         groups_map.get(run.asset_group_id),
                         primary_parent_focal_point=parent_focals.get(inputs_map[run.id][1]),
                         primary_parent_content_rating=parent_ratings.get(inputs_map[run.id][1]),
+                        primary_parent_content_withheld=inputs_map[run.id][1] in parent_withheld,
                     )
                 ),
             )
@@ -406,7 +418,7 @@ def semantic_search(
             raise EmbeddingsInvalidQueryError(t("embeddings.promptSearchNotSupported"))
         if group_id is not None or tag is not None or kind is not None:
             raise EmbeddingsInvalidQueryError(t("embeddings.promptSearchFilters"))
-        vector = embed_query(db, active, text, engines, cache)
+        vector = embed_query(db, active, text, engines, cache, actor=actor_from_user(viewer))
         run_hits = index.prompt_top_k(db, active.model_key, vector, RunFilter(viewer), limit)
         return SemanticSearchResponse(
             target="prompt",
@@ -417,7 +429,7 @@ def semantic_search(
             runs=_hits_to_runs(db, run_hits, viewer),
         )
     flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
-    vector = embed_query(db, active, text, engines, cache)
+    vector = embed_query(db, active, text, engines, cache, actor=actor_from_user(viewer))
     hits = index.top_k(db, active.model_key, vector, flt, limit)
     return SemanticSearchResponse(
         query=text,
@@ -472,14 +484,49 @@ def decode_query_image(data: bytes, variant: InputVariant = "thumb") -> Image.Im
     return composite_on_white(thumb)
 
 
+def _query_image_mime(data: bytes) -> str:
+    """画像で探す画像の形式(ヘッダーだけを読む)。分からなければ octet-stream。"""
+    try:
+        with Image.open(io.BytesIO(data)) as probe:
+            return Image.MIME.get(probe.format or "", "application/octet-stream")
+    except (PillowUnidentifiedImageError, OSError, ValueError):
+        return "application/octet-stream"
+
+
 def embed_query_image(
-    db: Session, active: ActiveModel, image: Image.Image, engines: EmbeddingEngines
+    db: Session,
+    active: ActiveModel,
+    image: Image.Image,
+    engines: EmbeddingEngines,
+    *,
+    actor: Actor | None = None,
+    data: bytes | None = None,
 ) -> np.ndarray:
     """画像で探す画像のベクトル(同期。呼び出し側がスレッドで呼ぶ)。利用者が待っているので、
     ローカルのエンジンでは優先の区間で推論する(文章での検索と同じ。ADR-0033 2章)。
     画像は毎回違うので覚えない。"""
     try:
         engine = engines.engine_for(db, active.config)
+        # ADR-0051: リモートに送る前のチェック。画像は Asset ではないので、元のバイト列を渡す。
+        images: list[ImageRef] = []
+        extras: dict[str, bytes] = {}
+        if data is not None:
+            digest = hashlib.sha256(data).hexdigest()
+            extras[digest] = data
+            images.append(
+                ImageRef(
+                    asset_id=None,
+                    sha256=digest,
+                    width=image.width,
+                    height=image.height,
+                    bytes=len(data),
+                    mime=_query_image_mime(data),
+                    role="attachment",
+                )
+            )
+        denial = engines.before_send(engine, images=images, actor=actor, extra_images=extras)
+        if denial is not None:
+            raise EmbeddingsImageEngineError(denial.message)
         vectors = engine.embed_images([image], priority=True)
     except EmbeddingError as e:
         raise EmbeddingsImageEngineError(str(e)) from e
@@ -508,7 +555,9 @@ def search_by_image(
     with _QUERY_IMAGE_SLOTS:
         image = decode_query_image(data, embedding_settings.input_variant(active.config))
         try:
-            vector = embed_query_image(db, active, image, engines)
+            vector = embed_query_image(
+                db, active, image, engines, actor=actor_from_user(viewer), data=data
+            )
         finally:
             image.close()
     hits = index.top_k(db, active.model_key, vector, flt, limit)
@@ -548,6 +597,9 @@ def similar_assets(
     asset = get_visible_asset(db, viewer, asset_id)
     if asset is None:
         raise EmbeddingsNotFoundError(t("assets.notFound"))
+    # 画像を残さなかった Asset(ADR-0051 4章)は、埋め込みも消してあるので起点にできない。
+    if asset.content_withheld_at is not None:
+        raise EmbeddingsConflictError("content_withheld", t("mods.contentWithheld"))
     active = require_active(db, settings)
     flt = build_filter(db, viewer, group_id=group_id, tags=_single_tag(tag), kind=kind)
     hits = neighbors(index, db, active.model_key, asset.id, flt, limit)
@@ -842,7 +894,7 @@ def graph_scores(
     total = len(all_ids)
     # `build_graph` と同じ順序・同じ行列を使う(位置が一致する)。
     ordered, matrix = index.subset(db, active.model_key, all_ids[:limit])
-    vector = embed_query(db, active, text, engines, cache)
+    vector = embed_query(db, active, text, engines, cache, actor=actor_from_user(viewer))
     scores: list[float] = []
     if ordered:
         # 保存されているベクトルは正規化済みなので、検索の文章の側だけを正規化して内積を取ると

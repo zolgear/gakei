@@ -1,5 +1,7 @@
 /**
- * スタジオ上段(結果エリア)。「プレビュー / 系列」を切り替える。プレビューは表示中の Asset
+ * スタジオ上段(結果エリア)。「プレビュー / 詳細 / 系列」を切り替える。詳細は表示中の Asset の
+ * `AssetDetailSections`(ビューアの情報欄と同じ。ADR-0009 1章 2026-10-15 追記)をスクロールできる
+ * 領域に出す。プレビューは表示中の Asset
  * (`displayedAssetId`。URL の `?asset=` と同期、親が管理)か、実行中/直前の Run
  * (`pendingRunId`。URL の `?run=` と同期、親が管理)の進捗・結果を表示する。系列は
  * `LineageGraph` を埋め込み、ノードのタップ= 選択(遷移しない。`?node=` と同期)、
@@ -9,12 +11,15 @@
  * `pendingRunId` の status は `StudioReturnContext` へ報告する(タブを離れて Studio に
  * 戻ったときの復元判定に使う。ADR-0009)。
  *
+ * ComfyUI のワークフローを選んでいる間は「ワークフロー」も出す(ADR-0052 7章)。入力欄の「ワークフローを見る」
+ * (`workflowViewRequest.ts`)でも開く。中身は `WorkflowViewer`(読むだけの図と、今のフォームの値)。
+ *
  * ヘッダー右上には `StudioLayoutToggleButton`(入力欄の配置切り替え。ADR-0009 1章・
  * 2026-09-26 追記)を置く。狭い幅(<768px)では非表示にする(CSS 側)。
  */
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import {
   ApiError,
   cancelRun,
@@ -27,7 +32,6 @@ import {
   restoreAsset,
 } from '../../api/client'
 import { assetUrl, runPartialUrl } from '../../api/assetUrl'
-import { RunDetailIcon } from '../../components/icons'
 import { fmt, useI18n } from '../../i18n'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
@@ -42,6 +46,8 @@ import { describeError } from '../run-status/errorMessages'
 import { AssetCanvas } from '../viewer/AssetCanvas'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { contentRatingPollInterval } from '../content-rating/contentRating'
+import { annotationPollInterval } from '../annotations/annotationStatus'
+import { AssetDetailSections } from '../viewer/AssetDetailSections'
 import { useRefreshListsWhenJudged } from '../content-rating/contentRatingRefresh'
 import { LineageGraph } from '../lineage/LineageGraph'
 import { LineageInspectorPanel } from '../lineage/LineageInspectorPanel'
@@ -52,6 +58,8 @@ import { computeInspectorWidthPx, resolveInspectorPlacement } from '../lineage/i
 import { parseNodeIdFromSearch } from '../lineage/nodeQueryParam'
 import type { InsertPromptFn } from '../run-form/promptInsertion'
 import { RunPromptActions } from './RunPromptActions'
+import { WorkflowViewer } from '../comfyui-workflows/WorkflowViewer'
+import { subscribeWorkflowView } from './workflowViewRequest'
 import { RunDetailContent } from '../run-detail/RunDetailContent'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ToastHost, useToast } from '../../components/Toast'
@@ -62,8 +70,10 @@ import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/
 import { addAsInput, isUsedAsInput } from './useAsInputToggle'
 import { addImageInputs } from '../run-form/editInputs'
 import { resolveResultOrigin } from './resultOrigin'
+import { setStudioResultAssetId } from './studioResultStore'
 import { buildStudioPath } from './assetQueryParam'
 import { invalidateAssetGroupQueries } from '../stock/groups/assetGroupQueries'
+import { isSendBlocked, isWithheld } from '../mods/modVerdicts'
 import styles from './ResultPane.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -98,6 +108,8 @@ interface ResultPaneProps {
   onPendingRunSettled?: (runId: string, keepAssetId: string | null) => void
 }
 
+type ResultViewMode = 'preview' | 'detail' | 'graph' | 'workflow'
+
 function formatSize(size: unknown): string | null {
   return typeof size === 'string' && size.length > 0 ? size.replace('x', ' × ') : null
 }
@@ -115,11 +127,14 @@ export function ResultPane({
   const rp = t.workspace.resultPane
   const navigate = useNavigate()
   const location = useLocation()
-  const [viewMode, setViewMode] = useState<'preview' | 'graph'>('preview')
+  const [viewMode, setViewMode] = useState<ResultViewMode>('preview')
   const queryClient = useQueryClient()
   const { formState, setFormState } = useRunFormContext()
   const studioReturn = useStudioReturn()
   const capsQuery = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities })
+  // 選んでいる ComfyUI のワークフロー(ADR-0052 7章)。選んでいる間だけ「ワークフロー」を出す。
+  const comfyWorkflowId = formState.provider === 'comfyui' && formState.model !== '' ? formState.model : null
+  const showWorkflow = viewMode === 'workflow' && comfyWorkflowId !== null
 
   // 系列モードでノードをタップして選んだノード(Asset/Run 共通)。`?node=` と同期し、
   // 戻る/進むで再現する。ダブルタップ/「ノードをプレビュー」でプレビューモードへ切り替えたら
@@ -151,6 +166,24 @@ export function ResultPane({
     }
   }, [])
   const inspectorPlacement = resolveInspectorPlacement(paneMetrics.height, paneMetrics.viewportWidth)
+
+  // 入力欄の「ワークフローを見る」で「ワークフロー」を開く。狭い幅では結果エリアが入力欄の上にあるので、そこまで戻す。
+  useEffect(
+    () =>
+      subscribeWorkflowView(() => {
+        setViewMode('workflow')
+        if (window.innerWidth < 768) paneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }),
+    [],
+  )
+
+  // 「ワークフロー」を見ている間に生成したら、進み具合と結果を見られるようプレビューに戻す。
+  const lastPendingRunIdRef = useRef(pendingRunId)
+  useEffect(() => {
+    if (pendingRunId === lastPendingRunIdRef.current) return
+    lastPendingRunIdRef.current = pendingRunId
+    if (pendingRunId !== null) setViewMode((mode) => (mode === 'workflow' ? 'preview' : mode))
+  }, [pendingRunId])
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -323,6 +356,13 @@ export function ResultPane({
     if (effectiveAssetId) setOriginAssetId(effectiveAssetId)
   }, [effectiveAssetId, setOriginAssetId])
 
+  // アシスタントの `view_result` に、結果エリアに出ている画像を伝える(ADR-0048 12章)。
+  // 実行中の Run・Run 詳細・空状態では null。スタジオから離れたら(外れたら)null に戻す。
+  useEffect(() => {
+    setStudioResultAssetId(effectiveAssetId)
+  }, [effectiveAssetId])
+  useEffect(() => () => setStudioResultAssetId(null), [])
+
   // 系列モードのインスペクター用: 選択中ノードが Run/Asset のどちらかをグラフのノード一覧から
   // 判定する(`LineageGraph` 自身のクエリと同じ queryKey なのでキャッシュを共有する)。
   const lineageQuery = useQuery({
@@ -349,17 +389,24 @@ export function ResultPane({
     else navigate(target.path)
   }
 
+  // 詳細タブは表示中の Asset があるときだけ。無いとき(生成中など)はプレビューの中身を出す
+  // (タブの選択は残し、出力に切り替わったら詳細に戻る)。
+  const showDetail = viewMode === 'detail' && effectiveAssetId !== null
+
   // 「入力の主たる親」を表示しているときは、その Asset に生成元 Run があっても Run の情報
   // ではなく「入力」であることを示す(ユーザーが今から使う入力の確認が目的のため)。
   const isInputPreview = origin.kind === 'primary-input'
 
   // --- 表示中の Asset ---
   // レーティングの判定中(ADR-0049)は終わるまで取り直し、終わったら一覧(この Run の出力など)も取り直す。
+  // 詳細タブではタイトル・タグの推定中(ADR-0024)もビューアと同じく取り直す。
   const assetQuery = useQuery({
     queryKey: ['asset', effectiveAssetId],
     queryFn: () => getAsset(effectiveAssetId as string),
     enabled: effectiveAssetId !== null,
-    refetchInterval: (query) => contentRatingPollInterval(query.state.data),
+    refetchInterval: (query) =>
+      (viewMode === 'detail' ? annotationPollInterval(query.state.data) : 0) ||
+      contentRatingPollInterval(query.state.data),
   })
   const asset = assetQuery.data
   useRefreshListsWhenJudged(asset?.content_rating_detail?.status)
@@ -426,10 +473,13 @@ export function ResultPane({
   // 「入力に使う」の上限は、現在フォームで選ばれているモデルの edit 上限を使う。
   const maxInputImagesForToggle = editMaxInputImages(capsQuery.data, formState.provider, formState.model)
   const usedAsInput = effectiveAssetId ? isUsedAsInput(formState.inputs, effectiveAssetId) : false
+  // 画像を残さなかった Asset(ADR-0051 4章)と、入力に使えない Asset(画像なし、または deny の判定)。
+  const withheld = isWithheld(asset)
+  const sendBlocked = isSendBlocked(asset)
 
   // 追加のみ。使用中のときはボタンを無効にし、外すのは入力欄のチップから行う。
   function handleUseAsInput() {
-    if (!effectiveAssetId || usedAsInput) return
+    if (!effectiveAssetId || usedAsInput || sendBlocked) return
     setToggleError(null)
     const result = addAsInput(formState.inputs, effectiveAssetId, maxInputImagesForToggle)
     setFormState({ ...formState, inputs: result.inputs })
@@ -481,7 +531,9 @@ export function ResultPane({
         <div className={styles.modeGroup} role="group" aria-label={rp.viewModeGroup}>
           <button
             type="button"
-            aria-pressed={viewMode === 'preview'}
+            aria-pressed={
+              viewMode === 'preview' || (viewMode === 'detail' && !showDetail) || (viewMode === 'workflow' && !showWorkflow)
+            }
             className={styles.modeButton}
             onClick={() => {
               if (selectedNodeId) selectNode(null)
@@ -489,6 +541,18 @@ export function ResultPane({
             }}
           >
             {rp.preview}
+          </button>
+          <button
+            type="button"
+            aria-pressed={showDetail}
+            className={styles.modeButton}
+            onClick={() => {
+              if (selectedNodeId) selectNode(null)
+              setViewMode('detail')
+            }}
+            disabled={!effectiveAssetId}
+          >
+            {rp.detail}
           </button>
           <button
             type="button"
@@ -502,6 +566,19 @@ export function ResultPane({
           >
             {rp.lineage}
           </button>
+          {comfyWorkflowId !== null && (
+            <button
+              type="button"
+              aria-pressed={showWorkflow}
+              className={styles.modeButton}
+              onClick={() => {
+                if (selectedNodeId) selectNode(null)
+                setViewMode('workflow')
+              }}
+            >
+              {rp.workflow}
+            </button>
+          )}
         </div>
 
         {metaLineText && <span className={styles.metaLine}>{metaLineText}</span>}
@@ -534,20 +611,9 @@ export function ResultPane({
 
         <StudioLayoutToggleButton className={`${styles.headerIconButton} ${styles.layoutToggle}`} />
 
-        {/* スタジオ内では Run 詳細ページへ移動せず、結果エリアに Run 詳細を出す(`?run=`)。
-            既に Run 詳細を表示中なら出さない。フルページの Run 詳細は履歴から開ける。 */}
-        {headerRun && !showRunDetail && (
-          <Link
-            to={buildStudioPath(null, null, headerRun.id)}
-            className={styles.headerIconButton}
-            aria-label={t.common.openGeneratedDetail}
-            title={t.common.openGeneratedDetail}
-          >
-            <RunDetailIcon />
-          </Link>
-        )}
         {asset && (
           <>
+            {!withheld && (
             <a
               className={styles.headerIconButton}
               aria-label={rp.downloadOriginal}
@@ -564,6 +630,7 @@ export function ResultPane({
                 />
               </svg>
             </a>
+            )}
             {!asset.deleted_at && (
               <button
                 type="button"
@@ -574,7 +641,7 @@ export function ResultPane({
                 // 系列表示中は「表示中の画像」が視覚的に分かりにくい(グラフのどのノードが
                 // 対象か紛らわしい)ため無効にする。削除したいときはノードを選んでプレビュー
                 // に戻ってから。
-                disabled={deleteMutation.isPending || viewMode === 'graph'}
+                disabled={deleteMutation.isPending || viewMode === 'graph' || showWorkflow}
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path
@@ -594,7 +661,36 @@ export function ResultPane({
       {deleteError && <p className={styles.deleteError}>{deleteError}</p>}
       {restoreError && <p className={styles.deleteError}>{restoreError}</p>}
 
-      {viewMode === 'graph' ? (
+      {showWorkflow && comfyWorkflowId !== null ? (
+        <div className={styles.body}>
+          <WorkflowViewer
+            key={comfyWorkflowId}
+            workflowId={comfyWorkflowId}
+            form={{ prompt: formState.prompt, params: formState.params }}
+          />
+        </div>
+      ) : showDetail ? (
+        <div className={styles.body}>
+          <div className={styles.detailScroll}>
+            {asset ? (
+              <div className={styles.detailContent}>
+                {/* Generated の詳細は、スタジオを離れず結果エリアに Run 詳細を出す(`?run=`)。
+                    元になった画像・似た画像も結果エリアに出す(`?asset=`)。 */}
+                <AssetDetailSections
+                  asset={asset}
+                  runDetailTo={(runId) => buildStudioPath(null, null, runId)}
+                  assetLinkTo={(assetId) => buildStudioPath(assetId)}
+                  renderPromptActions={(prompt) => (
+                    <RunPromptActions prompt={prompt} currentPrompt={formState.prompt} insertPrompt={insertPrompt} />
+                  )}
+                />
+              </div>
+            ) : (
+              <p className={styles.emptyState}>{assetQuery.isError ? rp.assetLoadFailed : rp.loading}</p>
+            )}
+          </div>
+        </div>
+      ) : viewMode === 'graph' ? (
         effectiveAssetId ? (
           <div className={styles.body}>
             <div className={styles.graphCanvasWrap}>
@@ -636,18 +732,26 @@ export function ResultPane({
           {effectiveAssetId && asset && (
             <>
               <div className={styles.canvasWrap}>
-                <AssetCanvas asset={asset} contentRating={asset.content_rating ?? null} />
+                <AssetCanvas
+                  asset={asset}
+                  contentRating={asset.content_rating ?? null}
+                  withheld={withheld}
+                  withheldLabel={asset.content_withheld_verdict?.label}
+                  withheldMessage={asset.content_withheld_verdict?.message}
+                  onImageError={() => queryClient.invalidateQueries({ queryKey: ['asset', asset.id] })}
+                />
                 <div className={styles.canvasActionBar}>
                   <button
                     type="button"
                     className={styles.canvasUseAsInputButton}
                     data-active={usedAsInput}
-                    disabled={usedAsInput}
-                    title={usedAsInput ? rp.inUseHint : undefined}
+                    disabled={usedAsInput || sendBlocked}
+                    title={usedAsInput ? rp.inUseHint : sendBlocked ? t.mods.cannotUseAsInput : undefined}
                     onClick={handleUseAsInput}
                   >
                     {usedAsInput ? rp.inUse : rp.useAsInput}
                   </button>
+                  {!withheld && (
                   <a
                     className={styles.canvasIconButton}
                     aria-label={rp.downloadOriginal}
@@ -664,6 +768,7 @@ export function ResultPane({
                       />
                     </svg>
                   </a>
+                  )}
                 </div>
               </div>
               {/* サイドバー配置では右のストックと役割が重なり、「入力に使う」も画像下の
@@ -687,6 +792,7 @@ export function ResultPane({
                           assetId={output.asset_id}
                           rating={output.content_rating}
                           badge
+                          withheld={output.content_withheld}
                           className={styles.thumbImage}
                           style={focalStyle(output.focal_point)}
                           alt=""
@@ -698,6 +804,8 @@ export function ResultPane({
                         type="button"
                         className={styles.thumbAddButton}
                         aria-label={rp.addToInputAria}
+                        disabled={output.content_withheld}
+                        title={output.content_withheld ? t.mods.cannotUseAsInput : undefined}
                         onClick={() => handleAddThumbnailAsInput(output.asset_id)}
                       >
                         +
@@ -717,6 +825,7 @@ export function ResultPane({
                           assetId={item.id}
                           rating={item.content_rating}
                           badge
+                          withheld={item.content_withheld}
                           className={styles.thumbImage}
                           style={focalStyle(item.focal_point)}
                           alt=""
@@ -727,6 +836,8 @@ export function ResultPane({
                         type="button"
                         className={styles.thumbAddButton}
                         aria-label={rp.addToInputAria}
+                        disabled={item.content_withheld}
+                        title={item.content_withheld ? t.mods.cannotUseAsInput : undefined}
                         onClick={() => handleAddThumbnailAsInput(item.id)}
                       >
                         +
@@ -739,8 +850,8 @@ export function ResultPane({
                     type="button"
                     className={styles.useAsInputButton}
                     data-active={usedAsInput}
-                    disabled={usedAsInput}
-                    title={usedAsInput ? rp.inUseHint : undefined}
+                    disabled={usedAsInput || sendBlocked}
+                    title={usedAsInput ? rp.inUseHint : sendBlocked ? t.mods.cannotUseAsInput : undefined}
                     onClick={handleUseAsInput}
                   >
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -875,7 +986,7 @@ export function ResultPane({
       <ConfirmDialog
         open={deleteConfirmOpen}
         message={rp.deleteConfirmMessage}
-        previewImageUrl={asset ? assetUrl(asset.id, 'thumb') : undefined}
+        previewImageUrl={asset && !withheld ? assetUrl(asset.id, 'thumb') : undefined}
         previewFocalPoint={asset?.focal_point}
         previewDetail={asset ? `${asset.width} × ${asset.height}` : undefined}
         onConfirm={() => deleteMutation.mutate()}

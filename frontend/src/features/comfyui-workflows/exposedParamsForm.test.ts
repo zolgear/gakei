@@ -80,7 +80,7 @@ describe('exposedParamRowToApi', () => {
 
 describe('reconcileExposedParamsOnReplace', () => {
   const nodes: ComfyNodeInfo[] = [
-    { id: '3', class_type: 'KSampler', title: null, inputs: [{ name: 'steps', value: 20, linked: false }] },
+    { id: '3', class_type: 'KSampler', state: 'live', title: null, inputs: [{ name: 'steps', value: 20, linked: false }] },
   ]
 
   it('drops rows whose (node, input) disappeared and reports enabled ones', () => {

@@ -39,6 +39,7 @@ import { useAssetMaskState } from '../content-rating/useAssetMasked'
 import { RatingBadge } from '../content-rating/RatingBadge'
 import { CanvasRemaskButton } from '../content-rating/CanvasRemaskButton'
 import { hideAsset, revealAsset } from '../content-rating/revealStore'
+import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
 import styles from './CompareCanvas.module.css'
 import ratingStyles from '../content-rating/ContentRating.module.css'
 
@@ -71,6 +72,12 @@ interface CompareCanvasProps {
    */
   beforeRating?: ContentRatingLevel | null
   afterRating?: ContentRatingLevel | null
+  /**
+   * 画像を残さなかった(ADR-0051 4章)。どちらかが true なら重ねて比べられないので、2枚を
+   * 並べるだけの表示にし、画像の無い側は「画像なし(拒否)」の表示にする(読みに行かない)。
+   */
+  beforeWithheld?: boolean
+  afterWithheld?: boolean
 }
 
 function nextVariant(current: Variant, effectiveScale: number, image: CanvasImage, allowOriginal: boolean): Variant {
@@ -256,7 +263,52 @@ function SplitHandle({
   )
 }
 
-export function CompareCanvas({
+export function CompareCanvas({ beforeWithheld = false, afterWithheld = false, ...props }: CompareCanvasProps) {
+  if (beforeWithheld || afterWithheld) {
+    return <WithheldCompare {...props} beforeWithheld={beforeWithheld} afterWithheld={afterWithheld} />
+  }
+  return <ImageCompareCanvas {...props} />
+}
+
+/** どちらかの画像が無いときの比較。2枚を並べ、画像のある側は preview を枠に収めて出す。 */
+function WithheldCompare({
+  before,
+  after,
+  urlFor = assetUrl,
+  beforeLabel,
+  afterLabel,
+  beforeWithheld,
+  afterWithheld,
+}: CompareCanvasProps) {
+  const { t } = useI18n()
+  const sides = [
+    { key: 'before', asset: before, label: beforeLabel ?? t.compare.before, withheld: beforeWithheld },
+    { key: 'after', asset: after, label: afterLabel ?? t.compare.after, withheld: afterWithheld },
+  ]
+  return (
+    <div className={styles.withheldCompare}>
+      {sides.map((side) => (
+        <figure key={side.key} className={styles.withheldSide}>
+          <figcaption className={styles.withheldSideLabel}>{side.label}</figcaption>
+          <div className={styles.withheldSideBody}>
+            {side.withheld ? (
+              <WithheldPlaceholder variant="canvas" />
+            ) : (
+              <img
+                className={styles.withheldSideImage}
+                src={urlFor(side.asset.id, 'preview')}
+                alt={side.label}
+                draggable={false}
+              />
+            )}
+          </div>
+        </figure>
+      ))}
+    </div>
+  )
+}
+
+function ImageCompareCanvas({
   before,
   after,
   mode,
@@ -267,7 +319,7 @@ export function CompareCanvas({
   frameBasis = 'after',
   beforeRating,
   afterRating,
-}: CompareCanvasProps) {
+}: Omit<CompareCanvasProps, 'beforeWithheld' | 'afterWithheld'>) {
   const { t } = useI18n()
   const { masked: beforeMasked, revealed: beforeRevealed } = useAssetMaskState(before.id, beforeRating)
   const { masked: afterMasked, revealed: afterRevealed } = useAssetMaskState(after.id, afterRating)

@@ -6,6 +6,7 @@
  * その場で送る(ページの保存は無い)。キーは一部も表示しない(設定済みかどうかだけ)。
  */
 import type {
+  Locality,
   LlmApiStyle,
   LlmConnectionCreateRequest,
   LlmConnectionFeature,
@@ -24,14 +25,22 @@ export interface ConnectionForm {
   base_url: string
   api_style: LlmApiStyle
   api_key: string
+  /** 接続先(ADR-0051 3章)。組み込みの接続先は OpenAI の接続と同じ値。 */
+  locality: Locality
 }
 
 export function emptyConnectionForm(): ConnectionForm {
-  return { name: '', base_url: '', api_style: 'responses', api_key: '' }
+  return { name: '', base_url: '', api_style: 'responses', api_key: '', locality: 'external' }
 }
 
 export function connectionFormFromView(view: LlmConnectionView): ConnectionForm {
-  return { name: view.name, base_url: view.base_url ?? '', api_style: view.api_style, api_key: '' }
+  return {
+    name: view.name,
+    base_url: view.base_url ?? '',
+    api_style: view.api_style,
+    api_key: '',
+    locality: view.locality,
+  }
 }
 
 export type ConnectionFormErrors = Partial<Record<'name' | 'base_url', true>>
@@ -75,6 +84,7 @@ export function connectionCreateBody(form: ConnectionForm): LlmConnectionCreateR
     name: form.name.trim(),
     base_url: form.base_url.trim(),
     api_style: form.api_style,
+    locality: form.locality,
   }
   const key = form.api_key.trim()
   if (key) body.api_key = key
@@ -95,6 +105,7 @@ export function diffConnectionForm(
   const baseUrl = form.base_url.trim()
   if (baseUrl.replace(/\/+$/, '') !== (view.base_url ?? '').replace(/\/+$/, '')) body.base_url = baseUrl
   if (form.api_style !== view.api_style) body.api_style = form.api_style
+  if (form.locality !== view.locality) body.locality = form.locality
   return body
 }
 

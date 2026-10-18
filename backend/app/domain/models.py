@@ -299,6 +299,11 @@ class Asset(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
+    # Mod の `deny` の判定で画像(原本と派生)を残さなかった時刻と、その判定(`mod_verdict.id`。
+    # ADR-0051 4章)。`deleted_at` と同じく状態の列で、来歴の列ではない。外部キーは張らない。
+    content_withheld_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    content_withheld_verdict_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+
     produced_by_run: Mapped[Run | None] = relationship(
         "Run", foreign_keys=[produced_by_run_id], back_populates="outputs"
     )
@@ -736,6 +741,11 @@ class ComfyWorkflow(Base):
     # domain/comfy_workflow.py の ExposedParam のリストを model_dump(mode="json") した list。
     exposed_params: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
     template_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 接続先(ADR-0051 3章)。`external` / `local` / `unset`。`unset` は「接続の設定に従う」で、
+    # それ以外なら ComfyUI の接続の値より優先する(`app/domain/locality.py`)。
+    locality: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="unset", server_default="unset"
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
@@ -1098,3 +1108,96 @@ class TagDictionaryTranslation(Base):
     translation: Mapped[str] = mapped_column(Text, nullable=False)
     translations: Mapped[str] = mapped_column(Text, nullable=False)
     search_key: Mapped[str] = mapped_column(SearchKeyText, nullable=False)
+
+
+class ModInvocation(Base):
+    """Mod の呼び出しの記録(ADR-0051 5章)。追記のみ(ADR-0003 1項)。
+
+    `ai.before_send` は許可も拒否もすべて残す。`outcome` は Mod の答え(`allow` / `deny` /
+    `ok` / `error` / `timeout` / `skipped`)、`effective` は GAKEI がそれをどう扱ったか
+    (`ai.before_send` の失敗時の扱いを当てた後の `allow` / `deny`。非同期のイベントは null)。
+    Run・Asset には外部キーを張らない(メンテナンスのツールが Run や Asset を消しても、
+    記録は残す)。
+    """
+
+    __tablename__ = "mod_invocation"
+    __table_args__ = (Index("ix_mod_invocation_mod", "mod_kind", "mod_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    event: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
+    # webhook | python
+    mod_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    mod_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 呼んだ時点の Mod の名前(後で名前を変えても、記録は呼んだときのまま)。
+    mod_name: Mapped[str] = mapped_column(Text, nullable=False)
+    # `ai.before_send` の目的(image_run / annotation / assistant / embedding / workflow_analysis)。
+    purpose: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    effective: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 失敗のときの中身(HTTP の状態、例外の種類など。利用者には見せない運用の情報)。
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime(), nullable=False, default=_utcnow, index=True
+    )
+
+
+class ModVerdict(Base):
+    """Mod が返した判定(ADR-0051 4章)。追記のみで、同じ Mod・同じ対象の最新を使う。"""
+
+    __tablename__ = "mod_verdict"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    mod_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    mod_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    mod_name: Mapped[str] = mapped_column(Text, nullable=False)
+    invocation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    event_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    # 対象は Asset か Run のどちらか一方。
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    # ok | flag | deny
+    verdict: Mapped[str] = mapped_column(String(8), nullable=False)
+    label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 同じ内容(sha256)のほかの Asset に `deny` を及ぼしたときに足した行なら、元の判定の id
+    # (ADR-0051 4章)。Mod が返した判定そのものは null。
+    propagated_from_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class ModDelivery(Base):
+    """非同期のイベントの配達の待ち行列(ADR-0051 5章)。状態の行で、証跡ではない(古い `done`
+    は消してよい)。`queued → delivering → done | failed`。
+
+    `payload` は送るイベントの JSON(契約の形。`app/mods/api.py`)。積んだ時点の中身を送る。
+    """
+
+    __tablename__ = "mod_delivery"
+    __table_args__ = (Index("ix_mod_delivery_status_next", "status", "next_attempt_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    event: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    mod_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    mod_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    payload: Mapped[dict] = mapped_column(JsonType, nullable=False)
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    # queued | delivering | done | failed
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)

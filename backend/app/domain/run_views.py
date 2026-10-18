@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, Select, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
@@ -28,6 +28,7 @@ from app.domain.models import (
     AssetContentRating,
     AssetFocalPoint,
     AssetGroup,
+    AssetGroupMember,
     Run,
     RunInput,
     RunInputRole,
@@ -37,11 +38,46 @@ from app.domain.schemas import AssetGroupRef, CreatedBy, FocalPoint, RunOutputRe
 from app.domain.visibility import asset_visible, group_visible, run_visible
 
 
-def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[RunOutputRef]]:
-    """run_id ごとの出力 Asset 参照。複数 run_id を1つの IN 句でまとめて取る。"""
+def visible_runs_query(viewer: CurrentUser) -> Select[tuple[Run]]:
+    """`viewer` に見える、削除されていない Run を新しい順に並べる問い合わせ(ADR-0025)。
+
+    REST の Run の一覧、MCP の `list_runs`、アシスタントの `list_recent_results` の共通の土台。
+    呼ぶ側はここに絞り込み・カーソル・件数を足す。
+    """
+    return (
+        select(Run)
+        .where(Run.deleted_at.is_(None), run_visible(viewer))
+        .order_by(Run.queued_at.desc(), Run.id.desc())
+    )
+
+
+def run_in_group(group_id: uuid.UUID) -> ColumnElement[bool]:
+    """Run がグループに属する条件。出力を入れる先にそのグループを選んだ Run と、出力が今その
+    グループのメンバーである Run(後からグループを移した出力を含む)。グループの見える範囲は
+    呼ぶ側が `get_visible_group` で確かめる。"""
+    members = (
+        select(Asset.produced_by_run_id)
+        .join(AssetGroupMember, AssetGroupMember.asset_id == Asset.id)
+        .where(
+            AssetGroupMember.asset_group_id == group_id,
+            Asset.produced_by_run_id.is_not(None),
+            Asset.deleted_at.is_(None),
+        )
+    )
+    return or_(Run.asset_group_id == group_id, Run.id.in_(members))
+
+
+def bulk_output_refs(
+    db: Session, run_ids: list[uuid.UUID], *, exclude_deleted: bool = False
+) -> dict[uuid.UUID, list[RunOutputRef]]:
+    """run_id ごとの出力 Asset 参照。複数 run_id を1つの IN 句でまとめて取る。
+    `exclude_deleted` で論理削除済みの出力を除く(既定は含める。一覧の画面の従来の動き)。"""
     result: dict[uuid.UUID, list[RunOutputRef]] = {rid: [] for rid in run_ids}
     if not run_ids:
         return result
+    condition = Asset.produced_by_run_id.in_(run_ids)
+    if exclude_deleted:
+        condition = condition & Asset.deleted_at.is_(None)
     rows = db.execute(
         select(
             Asset.produced_by_run_id,
@@ -51,15 +87,16 @@ def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, l
             AssetFocalPoint.x,
             AssetFocalPoint.y,
             AssetContentRating.level,
+            Asset.content_withheld_at,
         )
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         # サムネイルの焦点(ADR-0043)とレーティング(ADR-0049)も同じ問い合わせで引く。
         .outerjoin(AssetFocalPoint, AssetFocalPoint.asset_id == Asset.id)
         .outerjoin(AssetContentRating, AssetContentRating.asset_id == Asset.id)
-        .where(Asset.produced_by_run_id.in_(run_ids))
+        .where(condition)
         .order_by(Asset.output_index)
     ).all()
-    for produced_by_run_id, asset_id, output_index, title, x, y, level in rows:
+    for produced_by_run_id, asset_id, output_index, title, x, y, level, withheld_at in rows:
         result[produced_by_run_id].append(
             RunOutputRef(
                 asset_id=asset_id,
@@ -67,6 +104,7 @@ def bulk_output_refs(db: Session, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, l
                 title=title,
                 focal_point=focal_points.to_schema(x, y),
                 content_rating=level,
+                content_withheld=withheld_at is not None,
             )
         )
     return result
@@ -84,6 +122,22 @@ def bulk_parent_content_ratings(
 ) -> dict[uuid.UUID, str]:
     """`bulk_input_summary` の主たる親のレーティング(ADR-0049)。親の asset_id ごと。"""
     return content_rating.bulk_levels(db, [p for _count, p in inputs_map.values() if p is not None])
+
+
+def bulk_parent_withheld(
+    db: Session, inputs_map: dict[uuid.UUID, tuple[int, uuid.UUID | None]]
+) -> set[uuid.UUID]:
+    """`bulk_input_summary` の主たる親のうち、画像を残さなかったもの(ADR-0051 4章)の asset_id。"""
+    parent_ids = {p for _count, p in inputs_map.values() if p is not None}
+    if not parent_ids:
+        return set()
+    return set(
+        db.execute(
+            select(Asset.id).where(Asset.id.in_(parent_ids), Asset.content_withheld_at.is_not(None))
+        )
+        .scalars()
+        .all()
+    )
 
 
 def bulk_input_summary(
@@ -118,6 +172,25 @@ def bulk_input_summary(
             if asset_id is not None and asset_id not in visible:
                 primary[run_id] = None
     return {rid: (counts[rid], primary[rid]) for rid in run_ids}
+
+
+def bulk_input_refs(
+    db: Session, run_ids: list[uuid.UUID], viewer: CurrentUser
+) -> dict[uuid.UUID, list[tuple[uuid.UUID, str, int]]]:
+    """run_id ごとの入力 (asset_id, 役割, 位置) を役割・位置の順に。`viewer` に見えない Asset と
+    論理削除済みの Asset は除く(ADR-0025)。"""
+    result: dict[uuid.UUID, list[tuple[uuid.UUID, str, int]]] = {rid: [] for rid in run_ids}
+    if not run_ids:
+        return result
+    rows = db.execute(
+        select(RunInput.run_id, RunInput.asset_id, RunInput.role, RunInput.position)
+        .join(Asset, Asset.id == RunInput.asset_id)
+        .where(RunInput.run_id.in_(run_ids), Asset.deleted_at.is_(None), asset_visible(viewer))
+        .order_by(RunInput.role, RunInput.position)
+    ).all()
+    for run_id, asset_id, role, position in rows:
+        result[run_id].append((asset_id, str(role), position))
+    return result
 
 
 def bulk_descendant_run_counts(
@@ -239,6 +312,7 @@ def run_summary_fields(
     *,
     primary_parent_focal_point: FocalPoint | None = None,
     primary_parent_content_rating: str | None = None,
+    primary_parent_content_withheld: bool = False,
 ) -> dict[str, Any]:
     """`RunSummary(**...)` にそのまま渡せる辞書を作る。`created_by` は呼び出し側が
     `bulk_users()` で、`asset_group` は `bulk_asset_groups()` で引いた値を渡す
@@ -263,6 +337,7 @@ def run_summary_fields(
         "primary_parent_asset_id": primary_parent_asset_id,
         "primary_parent_focal_point": primary_parent_focal_point,
         "primary_parent_content_rating": primary_parent_content_rating,
+        "primary_parent_content_withheld": primary_parent_content_withheld,
         "input_count": input_count,
         "descendant_run_count": descendant_run_count,
         "deleted_at": run.deleted_at,

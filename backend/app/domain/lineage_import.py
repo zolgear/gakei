@@ -35,7 +35,7 @@ import uuid
 import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import IO, Any, Literal
+from typing import IO, TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
@@ -58,6 +58,10 @@ from app.domain.schemas import CompositionRecipe
 from app.domain.storage import AssetStore
 from app.domain.text_safety import sanitize_external
 from app.i18n import t
+from app.mods.gate import ingest_gate
+
+if TYPE_CHECKING:
+    from app.mods.runtime import ModRuntime
 
 # -- 上限(管理者設定は作らず定数。ADR-0037 2章) ----------------------------------
 
@@ -125,7 +129,10 @@ class ManifestAsset(_Model):
     output_index: int | None = Field(default=None, ge=0, le=1000)
     source_asset_id: uuid.UUID | None = None
     composition: ManifestComposition | None = None
-    file: str = Field(max_length=200)
+    # 書き出し元が画像を残さなかった Asset(ADR-0051 9章)は `content_withheld` が true で、
+    # `file` は null(ZIP に画像が無い)。
+    file: str | None = Field(default=None, max_length=200)
+    content_withheld: bool = False
 
 
 class ManifestRun(_Model):
@@ -229,7 +236,10 @@ def _check_manifest_consistency(manifest: Manifest) -> None:
         if asset.id in assets_by_id:
             raise _fail(t("lineageImport.invalidManifest", reason="duplicate asset id"))
         assets_by_id[asset.id] = asset
-        if asset.file != asset_file_name(asset.id, asset.mime):
+        if asset.content_withheld:
+            if asset.file is not None:
+                raise _fail(t("lineageImport.invalidManifest", reason="withheld asset has a file"))
+        elif asset.file != asset_file_name(asset.id, asset.mime):
             raise _fail(t("lineageImport.invalidManifest", reason="unexpected file name"))
         if asset.bytes >= MAX_FILE_BYTES:
             raise _fail(t("lineageImport.fileTooLarge"))
@@ -375,6 +385,8 @@ def open_archive(fileobj: IO[bytes]) -> ValidatedArchive:
 
         entries: dict[uuid.UUID, zipfile.ZipInfo] = {}
         for asset in manifest.assets:
+            if asset.content_withheld or asset.file is None:
+                continue
             try:
                 info = zf.getinfo(asset.file)
             except KeyError as e:
@@ -398,7 +410,8 @@ def _read_asset(archive: ValidatedArchive, asset: ManifestAsset) -> bytes:
 def verify_contents(archive: ValidatedArchive) -> None:
     """各原本の大きさと sha256 が manifest と一致するかを、何も書く前にすべて確かめる。"""
     for asset in archive.manifest.assets:
-        _read_asset(archive, asset)
+        if not asset.content_withheld:
+            _read_asset(archive, asset)
 
 
 # -- 取り込み -----------------------------------------------------------------------
@@ -498,9 +511,14 @@ def import_archive(
     archive: ValidatedArchive,
     *,
     now: datetime | None = None,
+    mods: ModRuntime | None = None,
 ) -> ImportResult:
     """検証済みの ZIP を取り込む(flush まで。commit は呼び出し側)。失敗したら
-    `LineageImportError`(呼び出し側で rollback)。"""
+    `LineageImportError`(呼び出し側で rollback)。
+
+    ADR-0051: 画像を取り込む前に「判定を待つ」購読(`asset.ingested`、経路 `import`)を呼ぶ
+    (`mods`)。書き出し元が画像を残さなかった Asset は、画像の無いノード(画像を残さなかった
+    Asset)として作る。"""
     manifest = archive.manifest
     imported_at = now or datetime.now(UTC)
 
@@ -576,34 +594,53 @@ def import_archive(
                         raise _fail(t("lineageImport.conflictsWithEarlierImport"))
                     asset_map[masset.id] = existing.id
                     continue
-            data = _read_asset(archive, masset)
             mrun = runs_by_source[masset.produced_by_run_id]
-            asset = _ingest(
-                db,
-                store,
-                data,
-                AssetKind.GENERATED,
-                produced_by_run_id=run.id,
-                output_index=masset.output_index,
-                created_by_user_id=viewer.id,
-                provider=mrun.provider,
-                model=_storage_model(mrun),
-            )
+            if masset.content_withheld:
+                asset = _withheld(
+                    db,
+                    masset,
+                    AssetKind.GENERATED,
+                    produced_by_run_id=run.id,
+                    output_index=masset.output_index,
+                    created_by_user_id=viewer.id,
+                    provider=mrun.provider,
+                    model=_storage_model(mrun),
+                )
+            else:
+                data = _read_asset(archive, masset)
+                asset = _ingest(
+                    db,
+                    store,
+                    data,
+                    AssetKind.GENERATED,
+                    produced_by_run_id=run.id,
+                    output_index=masset.output_index,
+                    created_by_user_id=viewer.id,
+                    provider=mrun.provider,
+                    model=_storage_model(mrun),
+                    gate=ingest_gate(mods, "import", mrun.provider),
+                )
         else:
             existing = _find_own_asset(db, viewer, kind.value, masset.sha256)
             if existing is not None:
                 asset_map[masset.id] = existing.id
                 continue
-            data = _read_asset(archive, masset)
             source = asset_map.get(masset.source_asset_id) if masset.source_asset_id else None
-            asset = _ingest(
-                db,
-                store,
-                data,
-                kind,
-                source_asset_id=source,
-                created_by_user_id=viewer.id,
-            )
+            if masset.content_withheld:
+                asset = _withheld(
+                    db, masset, kind, source_asset_id=source, created_by_user_id=viewer.id
+                )
+            else:
+                data = _read_asset(archive, masset)
+                asset = _ingest(
+                    db,
+                    store,
+                    data,
+                    kind,
+                    source_asset_id=source,
+                    created_by_user_id=viewer.id,
+                    gate=ingest_gate(mods, "import"),
+                )
             if kind == AssetKind.COMPOSITE and masset.composition is not None:
                 _save_imported_composition(db, asset, masset.composition, asset_map, imported_at)
         asset_map[masset.id] = asset.id
@@ -671,6 +708,20 @@ def _storage_model(mrun: ManifestRun) -> str:
     if isinstance(workflow, dict) and isinstance(workflow.get("name"), str):
         return workflow["name"]
     return mrun.model
+
+
+def _withheld(db: Session, masset: ManifestAsset, kind: AssetKind, **kwargs: Any) -> Asset:
+    """画像の無いノード(書き出し元が画像を残さなかった Asset。ADR-0051 9章)。"""
+    return assets_domain.create_withheld_placeholder(
+        db,
+        kind=kind,
+        sha256=masset.sha256,
+        mime=masset.mime,
+        width=masset.width,
+        height=masset.height,
+        size=masset.bytes,
+        **kwargs,
+    )
 
 
 def _ingest(db: Session, store: AssetStore, data: bytes, kind: AssetKind, **kwargs: Any) -> Asset:

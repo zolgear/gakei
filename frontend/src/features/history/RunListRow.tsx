@@ -47,6 +47,7 @@ export function RunListRow({ run, ariaLabel, score }: RunListRowProps) {
             <AssetThumb
               assetId={firstOutput.asset_id}
               rating={firstOutput.content_rating}
+              withheld={firstOutput.content_withheld}
               badge
               className={`${styles.thumb} checkerboard`}
               style={focalStyle(firstOutput.focal_point)}

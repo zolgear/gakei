@@ -604,3 +604,33 @@ def test_missing_database_aborts(tmp_path: Path) -> None:
     settings = Settings(_env_file=None, data_dir=tmp_path / "nothing")
     with pytest.raises(tool.ReconcileAbortedError):
         tool.reconcile(settings)
+
+
+def test_withheld_assets_are_not_targets(env: Env) -> None:
+    """ADR-0051 4章: Mod の `deny` の判定で画像を残さなかった Asset は、原本が無くても消さない。
+    その Asset だけを出力に持つ Run も消さない。"""
+    with env.factory() as db:
+        run = _run(db)
+        withheld = _asset(
+            env,
+            db,
+            run=run,
+            index=0,
+            blob_key="assets/fake/m/2026-10/withheld.png",
+            sha256="f" * 64,
+            content_withheld_at=datetime(2026, 10, 2, tzinfo=UTC),
+        )
+        missing = _asset(env, db, kind="upload")
+        db.commit()
+        withheld_id, run_id, missing_id = withheld.id, run.id, missing.id
+        missing_key = missing.blob_key
+    env.store.delete(missing_key)
+
+    result = tool.reconcile(env.settings, apply=True)
+
+    assert withheld_id not in result.plan.asset_ids
+    assert missing_id in result.plan.asset_ids
+    assert "assets/fake/m/2026-10/withheld.png" not in result.plan.missing_keys
+    assert _exists(env, Asset, withheld_id)
+    assert _exists(env, Run, run_id)
+    assert not _exists(env, Asset, missing_id)

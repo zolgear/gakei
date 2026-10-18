@@ -12,8 +12,9 @@ from __future__ import annotations
 import hashlib
 import io
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal, NamedTuple
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from PIL import Image
 from PIL import UnidentifiedImageError as PillowUnidentifiedImageError
@@ -21,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain import compositions, derivatives
+from app.domain import compositions, content_withholding, derivatives
 from app.domain.embedded_meta import (
     get_instance_id,
     read_gakei_meta,
@@ -31,9 +32,13 @@ from app.domain.embedded_meta import (
 from app.domain.generation_meta import extract_generation_meta
 from app.domain.models import Asset, AssetKind, Run, RunInput
 from app.domain.schemas import CompositionRecipe
-from app.domain.storage import AssetStore, OriginalKeyInfo
+from app.domain.storage import AssetStore, OriginalKeyInfo, original_key_base
 from app.domain.visibility import get_visible_asset
 from app.i18n import t
+
+if TYPE_CHECKING:
+    from app.domain.models import ModVerdict
+    from app.mods.gate import IngestGate
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_MASK_BYTES = 4 * 1024 * 1024
@@ -65,32 +70,25 @@ class IngestError(ValueError):
     """アップロードされたバイト列が画像として不正、または制約を満たさない場合。"""
 
 
-def ingest(
-    session: Session,
-    store: AssetStore,
-    data: bytes,
-    kind: AssetKind,
-    *,
-    produced_by_run_id: uuid.UUID | None = None,
-    output_index: int | None = None,
-    source_asset_id: uuid.UUID | None = None,
-    created_by_user_id: uuid.UUID | None = None,
-    provider: str | None = None,
-    model: str | None = None,
-) -> Asset:
-    """画像バイトを検証して保存し、Asset 行を作る。
+@dataclass
+class PreparedImage:
+    """形式と大きさを確かめ、sha256 と寸法を求めた画像(まだ保存していない)。Asset の id と
+    作成時刻もここで決める(「判定を待つ」購読に、保存の前に id を渡すため。ADR-0051 2章)。"""
 
-    `provider` と `model` は kind=generated のときの原本の保存先(ADR-0026 1章)を決める。
-    ComfyUI では `model` にワークフロー名を渡す。他の kind では使わない。
-    """
-    # ADR-0010(2026-09-23 追記): 上描きスケッチの下地 Asset。kind=sketch のときだけ許す。
-    if source_asset_id is not None:
-        if kind != AssetKind.SKETCH:
-            raise IngestError(t("assets.sourceAssetOnlyForSketch"))
-        source_asset = session.get(Asset, source_asset_id)
-        if source_asset is None or source_asset.deleted_at is not None:
-            raise IngestError(t("assets.baseAssetNotFound"))
+    data: bytes
+    image: Image.Image
+    kind: AssetKind
+    mime: str
+    ext: str
+    sha256: str
+    width: int
+    height: int
+    asset_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    created_at: datetime = field(default_factory=_utcnow)
 
+
+def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
+    """画像バイトを検証する(メモリの中だけ。DB と保存先には触れない)。不正なら IngestError。"""
     if kind == AssetKind.UPLOAD and len(data) >= MAX_UPLOAD_BYTES:
         raise IngestError(t("assets.uploadTooLarge"))
     if kind == AssetKind.MASK and len(data) >= MAX_MASK_BYTES:
@@ -119,42 +117,208 @@ def ingest(
         raise IngestError(t("assets.compositeMustBePng"))
 
     mime, ext = ALLOWED_UPLOAD_FORMATS[fmt]
-    sha256 = hashlib.sha256(data).hexdigest()
+    return PreparedImage(
+        data=data,
+        image=image,
+        kind=kind,
+        mime=mime,
+        ext=ext,
+        sha256=hashlib.sha256(data).hexdigest(),
+        width=image.width,
+        height=image.height,
+    )
+
+
+def ingest(
+    session: Session,
+    store: AssetStore,
+    data: bytes,
+    kind: AssetKind,
+    *,
+    produced_by_run_id: uuid.UUID | None = None,
+    output_index: int | None = None,
+    source_asset_id: uuid.UUID | None = None,
+    created_by_user_id: uuid.UUID | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    gate: IngestGate | None = None,
+    prepared: PreparedImage | None = None,
+    denial: ModVerdict | None = None,
+) -> Asset:
+    """画像バイトを検証して保存し、Asset 行を作る。
+
+    `provider` と `model` は kind=generated のときの原本の保存先(ADR-0026 1章)を決める。
+    ComfyUI では `model` にワークフロー名を渡す。他の kind では使わない。
+
+    ADR-0051 4章: 画像を残さない場合は、原本と派生を書かずに Asset の行だけを作る
+    (`content_withheld_at` を入れる)。
+    - 同じ内容(sha256)の画像を残さなかった Asset があれば、その判定を及ぼす。
+    - `gate`(「判定を待つ」購読)があれば、原本を書く前に Mod を呼び、`deny` なら残さない。
+    - `denial` は、呼び出し側が先に判定を待った結果(生成の出力。`prepared` と一緒に渡す)。
+    """
+    # ADR-0010(2026-09-23 追記): 上描きスケッチの下地 Asset。kind=sketch のときだけ許す。
+    if source_asset_id is not None:
+        if kind != AssetKind.SKETCH:
+            raise IngestError(t("assets.sourceAssetOnlyForSketch"))
+        source_asset = session.get(Asset, source_asset_id)
+        if source_asset is None or source_asset.deleted_at is not None:
+            raise IngestError(t("assets.baseAssetNotFound"))
+
+    if prepared is None:
+        prepared = prepare_image(data, kind)
+    image = prepared.image
+    sha256 = prepared.sha256
     # ADR-0026: ファイル名に Asset の id と作成時刻を使うので、保存の前に決めておく。
-    asset_id = uuid.uuid4()
-    created_at = _utcnow()
+    asset_id = prepared.asset_id
+    created_at = prepared.created_at
+    key_info = OriginalKeyInfo(
+        kind=AssetKind(kind).value,
+        asset_id=asset_id,
+        created_at=created_at,
+        provider=provider,
+        model=model,
+    )
+
+    withheld_verdict_id: uuid.UUID | None = None
+    withheld_blob_key: str | None = None
+    twin = content_withholding.find_withheld_twin(session, sha256)
+    if twin is not None:
+        withheld_verdict_id = content_withholding.inherit_from_twin(session, twin, asset_id)
+        withheld_blob_key = twin.blob_key
+    else:
+        if denial is None and gate is not None:
+            denial = gate.judge(
+                session,
+                prepared,
+                produced_by_run_id=produced_by_run_id,
+                created_by_user_id=created_by_user_id,
+            )
+        if denial is not None:
+            withheld_verdict_id = denial.id
+
+    if twin is not None or denial is not None:
+        # 原本は一度も書かない。キーは、書いていたら使ったはずの名前にする(ファイルは無い)。
+        if withheld_blob_key is None:
+            folder, stem, ext = original_key_base(key_info, prepared.ext)
+            withheld_blob_key = f"{folder}/{stem}.{ext}"
+        asset = _new_asset(
+            prepared,
+            kind,
+            withheld_blob_key,
+            produced_by_run_id=produced_by_run_id,
+            output_index=output_index,
+            source_asset_id=source_asset_id,
+            created_by_user_id=created_by_user_id,
+        )
+        asset.content_withheld_at = _utcnow()
+        asset.content_withheld_verdict_id = withheld_verdict_id
+        session.add(asset)
+        session.flush()
+        return asset
+
     blob_key = _find_shared_blob_key(session, store, sha256)
     if blob_key is None:
-        blob_key = store.write_original(
-            data,
-            ext,
-            OriginalKeyInfo(
-                kind=AssetKind(kind).value,
-                asset_id=asset_id,
-                created_at=created_at,
-                provider=provider,
-                model=model,
-            ),
-        )
+        blob_key = store.write_original(prepared.data, prepared.ext, key_info)
 
     # 今の版の派生を作る(ADR-0036 2章。作り方は `derivatives.ensure_derived` の作り直しと同じ)。
     for variant in derivatives.DERIVED_VARIANTS:
         store.write_derived(sha256, variant, derivatives.make_derived(image, variant))
 
+    asset = _new_asset(
+        prepared,
+        kind,
+        blob_key,
+        produced_by_run_id=produced_by_run_id,
+        output_index=output_index,
+        source_asset_id=source_asset_id,
+        created_by_user_id=created_by_user_id,
+    )
+    session.add(asset)
+    session.flush()
+    return asset
+
+
+def _new_asset(
+    prepared: PreparedImage,
+    kind: AssetKind,
+    blob_key: str,
+    *,
+    produced_by_run_id: uuid.UUID | None,
+    output_index: int | None,
+    source_asset_id: uuid.UUID | None,
+    created_by_user_id: uuid.UUID | None,
+) -> Asset:
+    return Asset(
+        id=prepared.asset_id,
+        kind=kind,
+        sha256=prepared.sha256,
+        blob_key=blob_key,
+        mime=prepared.mime,
+        width=prepared.width,
+        height=prepared.height,
+        bytes=len(prepared.data),
+        produced_by_run_id=produced_by_run_id,
+        output_index=output_index,
+        source_asset_id=source_asset_id,
+        created_by_user_id=created_by_user_id,
+        created_at=prepared.created_at,
+    )
+
+
+def create_withheld_placeholder(
+    session: Session,
+    *,
+    kind: AssetKind,
+    sha256: str,
+    mime: str,
+    width: int,
+    height: int,
+    size: int,
+    produced_by_run_id: uuid.UUID | None = None,
+    output_index: int | None = None,
+    source_asset_id: uuid.UUID | None = None,
+    created_by_user_id: uuid.UUID | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> Asset:
+    """画像の無いノード(系列の ZIP で、書き出し元が画像を残さなかった Asset。ADR-0051 9章)を
+    取り込む。原本は書かず、画像を残さなかった Asset として作る(判定はこの GAKEI に無いので、
+    同じ内容の判定があればそれを及ぼし、無ければ判定なし)。"""
+    asset_id = uuid.uuid4()
+    created_at = _utcnow()
+    ext = {v[0]: v[1] for v in ALLOWED_UPLOAD_FORMATS.values()}.get(mime, "bin")
+    folder, stem, ext = original_key_base(
+        OriginalKeyInfo(
+            kind=AssetKind(kind).value,
+            asset_id=asset_id,
+            created_at=created_at,
+            provider=provider,
+            model=model,
+        ),
+        ext,
+    )
+    blob_key = f"{folder}/{stem}.{ext}"
+    verdict_id: uuid.UUID | None = None
+    twin = content_withholding.find_withheld_twin(session, sha256)
+    if twin is not None:
+        verdict_id = content_withholding.inherit_from_twin(session, twin, asset_id)
+        blob_key = twin.blob_key
     asset = Asset(
         id=asset_id,
         kind=kind,
         sha256=sha256,
         blob_key=blob_key,
         mime=mime,
-        width=image.width,
-        height=image.height,
-        bytes=len(data),
+        width=width,
+        height=height,
+        bytes=size,
         produced_by_run_id=produced_by_run_id,
         output_index=output_index,
         source_asset_id=source_asset_id,
         created_by_user_id=created_by_user_id,
         created_at=created_at,
+        content_withheld_at=created_at,
+        content_withheld_verdict_id=verdict_id,
     )
     session.add(asset)
     session.flush()
@@ -216,6 +380,7 @@ def _ingest_replacement(
     *,
     viewer: CurrentUser,
     composition: CompositionRecipe | None = None,
+    gate: IngestGate | None = None,
 ) -> IngestResult:
     """未使用スケッチ・未使用マスク・未使用の配置の再編集(ADR-0010、2026-09-25 追記。配置は
     ADR-0050 3章)。`kind` は `sketch`・`mask`・`composite`。置き換え元は同じ `kind` である
@@ -247,6 +412,7 @@ def _ingest_replacement(
             kind,
             source_asset_id=chained_source,
             created_by_user_id=created_by_user_id,
+            gate=gate,
         )
         if composition is not None:
             compositions.save_composition(session, asset, composition)
@@ -260,6 +426,7 @@ def _ingest_replacement(
         kind,
         source_asset_id=inherited_source,
         created_by_user_id=created_by_user_id,
+        gate=gate,
     )
     if composition is not None:
         compositions.save_composition(session, asset, composition)
@@ -278,6 +445,7 @@ def ingest_upload(
     replaces_asset_id: uuid.UUID | None = None,
     composition: str | None = None,
     viewer: CurrentUser,
+    gate: IngestGate | None = None,
 ) -> IngestResult:
     """`POST /api/assets` から呼ぶ ingest(ADR-0014 4章・6章、ADR-0010 2026-09-25 追記)。
 
@@ -334,7 +502,14 @@ def ingest_upload(
         if source_asset_id is not None:
             raise IngestError(t("assets.cannotCombineSourceAndReplaces"))
         return _ingest_replacement(
-            session, store, data, kind, replaces_asset_id, viewer=viewer, composition=recipe
+            session,
+            store,
+            data,
+            kind,
+            replaces_asset_id,
+            viewer=viewer,
+            composition=recipe,
+            gate=gate,
         )
 
     if kind != AssetKind.UPLOAD:
@@ -345,6 +520,7 @@ def ingest_upload(
             kind,
             source_asset_id=source_asset_id,
             created_by_user_id=created_by_user_id,
+            gate=gate,
         )
         if recipe is not None:
             compositions.save_composition(session, asset, recipe)
@@ -397,6 +573,7 @@ def ingest_upload(
         kind,
         source_asset_id=source_asset_id,
         created_by_user_id=created_by_user_id,
+        gate=gate,
     )
     embedded_meta = extract_generation_meta(data)
     if embedded_meta is not None:

@@ -49,6 +49,10 @@ def test_all_non_auth_endpoints_require_login(client_oidc: TestClient) -> None:
         # ログイン不要の共有リンク(ADR-0029 6章)。見せる範囲は tests/test_shares.py で確かめる。
         if path.startswith("/api/public/"):
             continue
+        # Mod の判定の受付(ADR-0051 8章)。認証は Webhook の鍵による署名で、署名・時刻・対象の
+        # 確かめは tests/test_mods_verdicts.py で行う。
+        if path.startswith("/api/mods/"):
+            continue
         # 生存確認(Issue #43)。ログイン不要で、応答は tests/test_health_api.py で確かめる。
         if path == "/api/health":
             continue

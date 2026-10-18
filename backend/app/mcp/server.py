@@ -75,6 +75,7 @@ from app.domain.models import (
 )
 from app.domain.pricing import EstimateResult, cost_from_usage
 from app.domain.pricing import estimate_cost as estimate_cost_domain
+from app.domain.run_views import visible_runs_query
 from app.domain.schemas import (
     AssetGroupCreate,
     PromptSetListResponse,
@@ -89,10 +90,10 @@ from app.domain.visibility import (
     get_visible_asset,
     get_visible_group,
     get_visible_run,
-    run_visible,
     visible_asset_ids,
 )
 from app.mcp.context import McpRequestContext, find_mcp_context, get_mcp_context
+from app.mods.gate import ingest_gate
 from app.providers.openai_pricing import PRICING_CHECKED_AT, PRICING_SOURCE_URL
 from app.version import get_version
 
@@ -205,6 +206,8 @@ def _asset_brief(mc: McpRequestContext, asset: Asset) -> dict[str, Any]:
         "bytes": asset.bytes,
         "created_at": asset.created_at.isoformat(),
         "deleted": asset.deleted_at is not None,
+        # Mod の `deny` の判定で画像を残さなかったか(ADR-0051 4章)。true なら画像は返さない。
+        "content_withheld": asset.content_withheld_at is not None,
         **_asset_urls(mc, asset.id),
     }
 
@@ -731,6 +734,10 @@ async def cancel_run(
             db.commit()
             if result.rowcount == 0:
                 raise ToolError(f"Run {run_id} has already started and cannot be canceled.")
+        # ADR-0051: 取り消しも Run の終わり(`run.finished`)として Mod に知らせる。
+        mods = getattr(mc.state, "mods", None)
+        if mods is not None:
+            mods.enqueue_runs_finished([run_id])
 
     await _in_thread(_cancel)
     await mc.state.progress_bus.publish(run_id, {"type": "status", "status": "canceled"})
@@ -928,6 +935,8 @@ async def get_image(
             asset = get_visible_asset(db, mc.user, asset_id)
             if asset is None:
                 raise ToolError(f"Asset {asset_id} not found.")
+            if asset.content_withheld_at is not None:
+                raise ToolError(_withheld_error(asset_id))
             db.expunge(asset)
         store: AssetStore = mc.state.store
         transparency = _transparency(store, asset)
@@ -979,6 +988,8 @@ async def create_download_url(
             asset = get_visible_asset(db, mc.user, asset_id)
             if asset is None:
                 raise ToolError(f"Asset {asset_id} not found.")
+            if asset.content_withheld_at is not None:
+                raise ToolError(_withheld_error(asset_id))
             info = {
                 "asset_id": str(asset.id),
                 "mime": asset.mime,
@@ -1014,8 +1025,18 @@ async def create_download_url(
     )
 
 
+def _withheld_error(asset_id: uuid.UUID) -> str:
+    return (
+        f"The image of asset {asset_id} was not kept because a GAKEI Mod denied it "
+        "(content withheld). Its record and lineage remain, but the image cannot be viewed, "
+        "downloaded or used as an input."
+    )
+
+
 def _transparency(store: AssetStore, asset: Asset) -> dict[str, Any]:
     """原本から数えた透過の情報(ADR-0023 7章 4)。原本が読めなければ null。"""
+    if asset.content_withheld_at is not None:
+        return {"has_alpha": None, "transparent_ratio": None}
     try:
         stats = alpha_stats(asset.sha256, lambda: store.read(asset.blob_key))
     except (OSError, ValueError):
@@ -1066,6 +1087,8 @@ async def upload_image(
                     data,
                     AssetKind.UPLOAD,
                     viewer=mc.user,
+                    # ADR-0051 2章: 「判定を待つ」購読があれば、原本を書く前に呼ぶ。
+                    gate=ingest_gate(getattr(mc.state, "mods", None), "mcp"),
                 )
             except IngestError as e:
                 db.rollback()
@@ -1074,13 +1097,20 @@ async def upload_image(
             # 新しく作ったときだけ)。
             queued = ingest_hooks.IngestQueued()
             if result.outcome == "created":
-                queued = ingest_hooks.enqueue_after_ingest(db, result.asset, mc.state.settings)
+                queued = ingest_hooks.enqueue_after_ingest(
+                    db,
+                    result.asset,
+                    mc.state.settings,
+                    source="mcp",
+                    mods=getattr(mc.state, "mods", None),
+                )
             db.commit()
             ingest_hooks.notify_workers(
                 queued,
                 annotator=mc.state.annotator,
                 embedder=getattr(mc.state, "embedder", None),
                 focal=getattr(mc.state, "focal_worker", None),
+                mods=getattr(mc.state, "mods", None),
             )
             return _asset_brief(mc, result.asset), result.outcome
 
@@ -1194,7 +1224,7 @@ async def list_runs(
     def _list() -> tuple[dict[str, Any], list[ImageContent]]:
         with _session(mc) as db:
             # ADR-0025: 常に本人の Run だけ(個人モードは全件が本人のもの)。
-            q = select(Run).where(Run.deleted_at.is_(None), run_visible(mc.user))
+            q = visible_runs_query(mc.user)
             if origin == "mcp":
                 q = q.where(Run.origin == mcp_settings.ORIGIN_MCP)
             elif origin == "web":
@@ -1204,7 +1234,7 @@ async def list_runs(
                 q = q.where(Run.queued_at >= moment.astimezone(UTC))
             if status:
                 q = q.where(Run.status.in_(status))
-            q = q.order_by(Run.queued_at.desc(), Run.id.desc()).limit(limit + 1)
+            q = q.limit(limit + 1)
             runs = list(db.execute(q).scalars().all())
             truncated = len(runs) > limit
             items: list[dict[str, Any]] = []

@@ -129,6 +129,9 @@ def set_avatar_from_asset(
     asset = get_visible_asset(db, user, body.asset_id)
     if asset is None or asset.deleted_at is not None:
         raise HTTPException(status_code=422, detail=t("users.avatar.assetNotFound"))
+    # 画像を残さなかった Asset(ADR-0051 4章)には画像が無い。
+    if asset.content_withheld_at is not None:
+        raise HTTPException(status_code=410, detail=t("mods.contentWithheld"))
     data = store.read(asset.blob_key)
     return _apply_new_avatar(db, settings, user, data, body.crop)
 

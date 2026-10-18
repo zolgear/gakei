@@ -68,13 +68,15 @@ export function CompositeAddDialog({ open, inputAssetIds, remaining, onAdd, onCl
                     aria-pressed={selected}
                     aria-label={fmt(d.inputAria, { n: index + 1 })}
                     title={fmt(d.inputAria, { n: index + 1 })}
-                    disabled={!selected && !canSelectMore}
+                    // 画像を残さなかった入力(ADR-0051 4章)は素材にできない。
+                    disabled={detail?.content_withheld === true || (!selected && !canSelectMore)}
                     onClick={() => toggle(id)}
                   >
                     <span className={styles.thumbFrame}>
                       <AssetThumb
                         assetId={id}
                         rating={detail ? (detail.content_rating ?? null) : undefined}
+                        withheld={detail?.content_withheld === true}
                         className={styles.thumbImage}
                         alt=""
                         draggable={false}

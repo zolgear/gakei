@@ -16,6 +16,8 @@
   ID を出さないよう、素材の一覧からもレシピのレイヤーからも除く(主たる素材が範囲の外なら、
   残ったレイヤーの最初の素材を主にする)。範囲の中の素材が1つも無ければ `composition` は null。
 - 原本は保存しているバイト列のまま入れる(系列情報を埋め込まない。sha256 で照合できるように)。
+- Mod の `deny` の判定で画像を残さなかった Asset(ADR-0051 9章)は、ノードとして入れ、画像は
+  入れない(`file` は null、`content_withheld` は true)。判定は入れない。
 - タイトル・タグ・グループ・埋め込みベクトルは入れない。
 
 - 実行者の表示名(`created_by_name`)は、書き出すときに選んだときだけ入れる(既定は入れない。
@@ -82,6 +84,11 @@ EXT_BY_MIME: dict[str, str] = {
 
 class ExportTargetNotFoundError(Exception):
     """起点の Asset が存在しない・見えない・削除済み(API 層で 404)。"""
+
+
+class ExportRootWithheldError(Exception):
+    """起点の Asset が Mod の判定で画像を残さなかったもの(ADR-0051。API 層で 409)。範囲の途中に
+    ある画像なしの Asset は、ノードとして書き出す。"""
 
 
 class ExportContentMissingError(Exception):
@@ -183,7 +190,8 @@ def build_export(
     null にする(ADR-0037 4章。既定は含めない)。
     `include_graph` が真なら、ZIP に入る Asset と Run だけの系列グラフ(`plan.graph`)も作る
     (書き出し前のプレビュー。2026-10-07)。
-    起点が `viewer` に見えない・削除済みなら `ExportTargetNotFoundError`。
+    起点が `viewer` に見えない・削除済みなら `ExportTargetNotFoundError`、画像なしなら
+    `ExportRootWithheldError`。
     """
     from app.domain.shares import ShareTargetNotFoundError
 
@@ -194,6 +202,8 @@ def build_export(
 
     exported_at = now or datetime.now(UTC)
     assets = [asset for asset, _depth in result.assets]
+    if any(a.id == root_asset_id and a.content_withheld_at is not None for a in assets):
+        raise ExportRootWithheldError(root_asset_id)
     asset_ids = {a.id for a in assets}
 
     # `descendants` では、起点を生んだ Run を範囲の外とする(子孫を生んだ Run が起点を生むことは
@@ -249,7 +259,10 @@ def build_export(
     manifest_assets: list[dict[str, Any]] = []
     files: list[ExportFile] = []
     for asset in assets:
-        name = asset_file_name(asset.id, asset.mime)
+        # ADR-0051 9章: 画像を残さなかった Asset はノードとして入れ、画像は入れない
+        # (`file` は null。判定は組織の内部の情報なので入れない)。
+        withheld = asset.content_withheld_at is not None
+        name = None if withheld else asset_file_name(asset.id, asset.mime)
         manifest_assets.append(
             {
                 "id": str(asset.id),
@@ -276,11 +289,15 @@ def build_export(
                     else None
                 ),
                 "file": name,
+                "content_withheld": withheld,
             }
         )
-        files.append(
-            ExportFile(name=name, blob_key=asset.blob_key, sha256=asset.sha256, size=asset.bytes)
-        )
+        if name is not None:
+            files.append(
+                ExportFile(
+                    name=name, blob_key=asset.blob_key, sha256=asset.sha256, size=asset.bytes
+                )
+            )
 
     manifest_runs: list[dict[str, Any]] = []
     for run in runs:

@@ -12,6 +12,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { LineageNode, RunStatus } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import { msg, useI18n } from '../../i18n'
 import { shortSha256 } from '../run-detail/comfyuiPromptDisplay'
 import { assetKindLabel, formatDateTime, statusLabel } from '../../lib/format'
@@ -95,7 +96,7 @@ function AssetSection({ node, detail }: { node: LineageNode; detail: Record<stri
   return (
     <>
       {resolvedAssetId ? (
-        <img
+        <AssetImage
           className={`${styles.preview} checkerboard`}
           src={assetUrl(resolvedAssetId, 'preview')}
           alt=""

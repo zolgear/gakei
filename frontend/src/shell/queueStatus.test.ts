@@ -13,6 +13,7 @@ function run(status: RunSummary['status']): RunSummary {
     queued_at: '2026-01-01T00:00:00Z',
     input_count: 0,
     descendant_run_count: 0,
+    primary_parent_content_withheld: false,
   }
 }
 

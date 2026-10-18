@@ -292,6 +292,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/comfyui/workflows/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate
+         * @description 保存せずに、保存時と同じ検証(ADR-0052 3章)だけを掛ける。画面が値を変えるたびに呼ぶ。
+         *
+         *     規則を画面に二重に持たないための口。`/object_info` は保存時と同じく使わない。
+         */
+        post: operations["validate_comfy_workflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/comfyui/workflows/suggest-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Bindings
+         * @description アシスタント(LLM)で差し込み先を推定する(ADR-0052 6章)。保存はしない。
+         *
+         *     サーバーで作ったノードの要約(テンプレートの JSON そのものではない)を、アシスタントの接続先と
+         *     モデルに Structured Outputs で送る。送る前に Mod の `ai.before_send`(目的 `workflow_analysis`。
+         *     ADR-0051)を呼ぶ。提案は保存時と同じ検証に掛け、通らない項目は `discarded` に入れて捨てる。
+         *     アシスタントの1時間の上限に数える。
+         *
+         *     断るとき(`detail` は `{code, message}`):
+         *
+         *     - 409 `disabled`: アシスタントが無効
+         *     - 409 `unsupported`: 接続先が Structured Outputs に対応しない
+         *     - 409 `connection_missing`: 接続先・キーが無い
+         *     - 429 `rate_limited`: 1時間の上限
+         *     - 409 `hook_denied`: Mod が送信を止めた(理由は `message`)
+         *     - 502 `llm_error`: LLM の呼び出しに失敗した・応答を読めなかった
+         */
+        post: operations["suggest_comfy_workflow_bindings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/comfyui/workflows": {
         parameters: {
             query?: never;
@@ -327,6 +383,29 @@ export interface paths {
         head?: never;
         /** Update Workflow */
         patch: operations["update_comfy_workflow"];
+        trace?: never;
+    };
+    "/api/comfyui/workflows/{workflow_id}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * View Workflow
+         * @description 生成画面からの閲覧(ADR-0052 7章)。管理者以外にも見せる。図に要る構造と値だけを返し、
+         *     テンプレートの値のうち秘密に見えるものは伏せる。
+         *
+         *     ComfyUI の接続が無効(未設定・切り離し・無効)なら、生成画面に出ないワークフローなので 404。
+         */
+        get: operations["view_comfy_workflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/sdwebui/status": {
@@ -1481,6 +1560,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/provider-localities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Provider Localities */
+        get: operations["get_provider_localities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Provider Localities */
+        patch: operations["update_provider_localities"];
+        trace?: never;
+    };
     "/api/settings/general": {
         parameters: {
             query?: never;
@@ -1918,6 +2015,173 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/mods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Mods */
+        get: operations["get_mods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Mods */
+        patch: operations["update_mods"];
+        trace?: never;
+    };
+    "/api/settings/mods/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Webhook */
+        post: operations["create_mod_webhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/webhooks/{webhook_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Webhook */
+        delete: operations["delete_mod_webhook"];
+        options?: never;
+        head?: never;
+        /** Update Webhook */
+        patch: operations["update_mod_webhook"];
+        trace?: never;
+    };
+    "/api/settings/mods/webhooks/{webhook_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Webhook
+         * @description ダミーのイベントを送り、応答と所要時間を返す(有効でなくても送れる)。
+         */
+        post: operations["test_mod_webhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/python/{mod_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Python Mod */
+        patch: operations["update_python_mod"];
+        trace?: never;
+    };
+    "/api/settings/mods/python/{mod_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Python Mod
+         * @description ダミーのイベントで Mod の関数を呼び、応答と所要時間を返す(有効にしたものだけ)。
+         */
+        post: operations["test_python_mod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Order */
+        put: operations["update_mod_order"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/invocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Invocations
+         * @description 直近の呼び出し(新しい順)。
+         */
+        get: operations["list_mod_invocations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mods/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deliveries
+         * @description 配達の一覧(新しい順)。既定は送れなかったもの。
+         */
+        get: operations["list_mod_deliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/me/avatar": {
         parameters: {
             query?: never;
@@ -2224,6 +2488,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mods/{mod_id}/verdicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Receive Mod Verdicts */
+        post: operations["receive_mod_verdicts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/shares/{token}": {
         parameters: {
             query?: never;
@@ -2279,6 +2560,46 @@ export interface components {
             version: string;
             /** Commit */
             commit?: string | null;
+        };
+        /**
+         * AnalyzeEdge
+         * @description 配線1本(図に使う。ADR-0052 4章)。`source` の `output` 番目の出力が `target.input` に入る。
+         *
+         *     `followed` は、切り替え(`ComfySwitchNode` など)で選ばれなかった枝なら False。
+         *     `output_type` は `/object_info` があるときだけ(`IMAGE`、`MASK` など)。
+         */
+        AnalyzeEdge: {
+            /** Source */
+            source: string;
+            /** Output */
+            output: number;
+            /** Target */
+            target: string;
+            /** Input */
+            input: string;
+            /**
+             * Followed
+             * @default true
+             */
+            followed: boolean;
+            /** Output Type */
+            output_type?: string | null;
+        };
+        /**
+         * AnalyzeWarning
+         * @description analyze の警告1件。`reading` は読み取り(`readings`)で同じことを示している警告で、
+         *     カードの画面では出さない。`general` は読み取りでは扱わない警告(秘密に見える値など)。
+         */
+        AnalyzeWarning: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "reading" | "general";
+            /** Field */
+            field?: ("prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt") | null;
+            /** Message */
+            message: string;
         };
         /** AnnotationBackfillResponse */
         AnnotationBackfillResponse: {
@@ -2633,6 +2954,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -2663,6 +2991,9 @@ export interface components {
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
             content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
             composition?: components["schemas"]["AssetComposition"] | null;
+            /** Verdicts */
+            verdicts?: components["schemas"]["ModVerdictView"][];
+            content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
         };
         /**
          * AssetEmbeddingStatus
@@ -2844,6 +3175,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
         };
         /**
          * AssetTagAddRequest
@@ -2907,6 +3245,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -2937,6 +3282,9 @@ export interface components {
             annotation?: components["schemas"]["AnnotationStatusView"] | null;
             content_rating_detail?: components["schemas"]["ContentRatingDetail"] | null;
             composition?: components["schemas"]["AssetComposition"] | null;
+            /** Verdicts */
+            verdicts?: components["schemas"]["ModVerdictView"][];
+            content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -3023,7 +3371,8 @@ export interface components {
         /**
          * AssistantErrorEvent
          * @description 処理を止めた理由。`llm_error`(LLM の呼び出しの失敗)、`rate_limited`(LLM の1時間の
-         *     上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`internal`(その他)。
+         *     上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`hook_denied`(Mod が送る前の
+         *     チェックで止めた。ADR-0051)、`internal`(その他)。
          */
         AssistantErrorEvent: {
             /**
@@ -3035,7 +3384,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "llm_error" | "rate_limited" | "tool_limit" | "internal";
+            code: "llm_error" | "rate_limited" | "tool_limit" | "hook_denied" | "internal";
             /** Message */
             message: string;
         };
@@ -3076,6 +3425,8 @@ export interface components {
             inputs?: components["schemas"]["AssistantFormInput"][];
             /** Asset Group Id */
             asset_group_id?: string | null;
+            /** Result Asset Id */
+            result_asset_id?: string | null;
         };
         /** AssistantMessageCreateRequest */
         AssistantMessageCreateRequest: {
@@ -3224,6 +3575,11 @@ export interface components {
             hourly_run_limit_max: number;
             /** Usable */
             usable: boolean;
+            /**
+             * Structured Outputs
+             * @default false
+             */
+            structured_outputs: boolean;
             /** Requests Last Hour */
             requests_last_hour: number;
             /** Runs Last Hour */
@@ -3540,6 +3896,48 @@ export interface components {
             crop?: components["schemas"]["CropRect"] | null;
         };
         /**
+         * BindingCandidate
+         * @description `ask` / `ranked` の項目の候補(順位の高い順)。
+         */
+        BindingCandidate: {
+            /** Node */
+            node: string;
+            /** Input */
+            input?: string | null;
+            /** Score */
+            score: number;
+            /** Label */
+            label: string;
+            /** Path */
+            path?: components["schemas"]["PathStep"][];
+        };
+        /**
+         * BindingReading
+         * @description 差し込み先1項目の読み取り結果。値そのものは `suggested_bindings` にある。
+         */
+        BindingReading: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "marked" | "unique" | "ranked" | "ask" | "absent";
+            /** Reason */
+            reason: string;
+            /** Paths */
+            paths?: components["schemas"]["PathStep"][][];
+            /** Candidates */
+            candidates?: components["schemas"]["BindingCandidate"][];
+            /** Question */
+            question?: string | null;
+            /** Evidence */
+            evidence?: components["schemas"]["PathStep"][];
+        };
+        /**
          * Bindings
          * @description テンプレートへの差し込み先。
          */
@@ -3612,12 +4010,20 @@ export interface components {
             providers?: components["schemas"]["ProviderEntry"][];
             embeddings: components["schemas"]["EmbeddingCapabilities"];
         };
-        /** ComfyAnalyzeRequest */
+        /**
+         * ComfyAnalyzeRequest
+         * @description `template` か `workflow_id`(登録済みのワークフローの保存したテンプレート)のどちらか一方。
+         *
+         *     `workflow_id` は編集画面で使う。ブラウザで JSON を読み直すと `1.0` が `1` になり、公開
+         *     パラメーターの型(FLOAT)が分からなくなるため、保存したテンプレートをサーバーで読む。
+         */
         ComfyAnalyzeRequest: {
             /** Template */
-            template: {
+            template?: {
                 [key: string]: unknown;
-            };
+            } | null;
+            /** Workflow Id */
+            workflow_id?: string | null;
         };
         /** ComfyAnalyzeResponse */
         ComfyAnalyzeResponse: {
@@ -3633,6 +4039,16 @@ export interface components {
             candidate_params?: components["schemas"]["ExposedParam"][];
             /** Warnings */
             warnings?: string[];
+            /** Warning Items */
+            warning_items?: components["schemas"]["AnalyzeWarning"][];
+            /** Readings */
+            readings?: components["schemas"]["BindingReading"][];
+            /** Param Tiers */
+            param_tiers?: components["schemas"]["ParamTierInfo"][];
+            /** Validation */
+            validation?: components["schemas"]["ValidationIssue"][];
+            /** Edges */
+            edges?: components["schemas"]["AnalyzeEdge"][];
         };
         /** ComfyNodeInfo */
         ComfyNodeInfo: {
@@ -3644,6 +4060,16 @@ export interface components {
             title?: string | null;
             /** Inputs */
             inputs?: components["schemas"]["ComfyNodeInputInfo"][];
+            /**
+             * State
+             * @default live
+             * @enum {string}
+             */
+            state: "live" | "display" | "unused";
+            /** Kind */
+            kind?: ("save" | "display" | "sampler" | "encoder" | "image_source" | "switch") | null;
+            /** Output Types */
+            output_types?: string[] | null;
         };
         /** ComfyNodeInputInfo */
         ComfyNodeInputInfo: {
@@ -3653,6 +4079,94 @@ export interface components {
             value?: unknown;
             /** Linked */
             linked: boolean;
+        };
+        /**
+         * ComfySuggestDiscarded
+         * @description 検証を通らずに捨てた提案。`target` は `seed[1]`、`outputs.9` のように、どの値か。
+         */
+        ComfySuggestDiscarded: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            /** Target */
+            target: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ComfySuggestItem
+         * @description 提案した項目1つ。値は `ComfySuggestResponse.suggested_bindings` の同じ項目にある。
+         */
+        ComfySuggestItem: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Matches Reading */
+            matches_reading: boolean;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
+         * ComfySuggestRequest
+         * @description アシスタントでの推定(ADR-0052 6章)。`template` か `workflow_id` のどちらか一方(analyze と
+         *     同じ)。`name` は登録画面で入力中の名前(`ai.before_send` の `params` に載せる)。保存はしない。
+         */
+        ComfySuggestRequest: {
+            /** Template */
+            template?: {
+                [key: string]: unknown;
+            } | null;
+            /** Workflow Id */
+            workflow_id?: string | null;
+            /** Name */
+            name?: string | null;
+        };
+        /**
+         * ComfySuggestResponse
+         * @description アシスタントの提案(ADR-0052 6章)。`items` にある項目だけが提案で、`suggested_bindings` の
+         *     ほかの項目は使わない。LLM が申告する確信度は返さない。
+         */
+        ComfySuggestResponse: {
+            /**
+             * Suggested Operation
+             * @enum {string}
+             */
+            suggested_operation: "generate" | "edit";
+            /**
+             * Operation Reason
+             * @default
+             */
+            operation_reason: string;
+            /** Operation Matches Reading */
+            operation_matches_reading: boolean;
+            suggested_bindings: components["schemas"]["SuggestedBindings"];
+            /** Items */
+            items?: components["schemas"]["ComfySuggestItem"][];
+            /** Discarded */
+            discarded?: components["schemas"]["ComfySuggestDiscarded"][];
+            /** Model */
+            model: string;
+            usage?: components["schemas"]["ComfySuggestUsage"];
+        };
+        /** ComfySuggestUsage */
+        ComfySuggestUsage: {
+            /** Input Tokens */
+            input_tokens?: number | null;
+            /** Output Tokens */
+            output_tokens?: number | null;
+            /** Reasoning Tokens */
+            reasoning_tokens?: number | null;
+            /** Total Tokens */
+            total_tokens?: number | null;
         };
         /**
          * ComfyUIConnectionRequest
@@ -3728,6 +4242,95 @@ export interface components {
             /** Default */
             default: number;
         };
+        /**
+         * ComfyValidateRequest
+         * @description 登録・編集の画面で、保存の前に差し込み先と公開パラメーターを検証する(ADR-0052 3章)。
+         *
+         *     `bindings` は analyze の提案と同じ形で、まだ選んでいない必須項目(prompt、outputs)は問わない
+         *     (欠けは画面が別に示す)。保存はしない。
+         */
+        ComfyValidateRequest: {
+            /** Template */
+            template: {
+                [key: string]: unknown;
+            };
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "generate" | "edit";
+            bindings: components["schemas"]["SuggestedBindings"];
+            /** Exposed Params */
+            exposed_params?: components["schemas"]["ExposedParam"][];
+        };
+        /** ComfyValidateResponse */
+        ComfyValidateResponse: {
+            /** Issues */
+            issues?: components["schemas"]["ValidationIssue"][];
+        };
+        /**
+         * ComfyViewExposedParam
+         * @description 閲覧用の公開パラメーター。登録した既定値が秘密に見えれば伏せる(`default_redacted`)。
+         */
+        ComfyViewExposedParam: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Node */
+            node: string;
+            /** Input */
+            input: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "enum" | "int" | "float" | "bool" | "text";
+            /** Default */
+            default?: unknown | null;
+            /**
+             * Default Redacted
+             * @default false
+             */
+            default_redacted: boolean;
+        };
+        /** ComfyViewNode */
+        ComfyViewNode: {
+            /** Id */
+            id: string;
+            /** Class Type */
+            class_type?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Inputs */
+            inputs?: components["schemas"]["ComfyViewNodeInput"][];
+            /**
+             * State
+             * @default live
+             * @enum {string}
+             */
+            state: "live" | "display" | "unused";
+            /** Kind */
+            kind?: ("save" | "display" | "sampler" | "encoder" | "image_source" | "switch") | null;
+        };
+        /**
+         * ComfyViewNodeInput
+         * @description 閲覧用の入力1つ(ADR-0052 7章)。秘密に見える値(ADR-0013 8章)は `value` を返さず、
+         *     `redacted` を True にする。
+         */
+        ComfyViewNodeInput: {
+            /** Name */
+            name: string;
+            /** Value */
+            value?: unknown;
+            /** Linked */
+            linked: boolean;
+            /**
+             * Redacted
+             * @default false
+             */
+            redacted: boolean;
+        };
         /** ComfyWorkflowCreateRequest */
         ComfyWorkflowCreateRequest: {
             /** Name */
@@ -3744,6 +4347,8 @@ export interface components {
             bindings: components["schemas"]["Bindings"];
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][];
+            /** Locality */
+            locality?: ("external" | "local" | "unset") | null;
         };
         /** ComfyWorkflowDetail */
         ComfyWorkflowDetail: {
@@ -3762,6 +4367,12 @@ export interface components {
             /** Template Sha256 */
             template_sha256: string;
             /**
+             * Locality
+             * @default unset
+             * @enum {string}
+             */
+            locality: "external" | "local" | "unset";
+            /**
              * Created At
              * Format: date-time
              */
@@ -3778,6 +4389,8 @@ export interface components {
             bindings: components["schemas"]["Bindings"];
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][];
+            /** Validation Issues */
+            validation_issues?: components["schemas"]["ValidationIssue"][];
         };
         /** ComfyWorkflowListResponse */
         ComfyWorkflowListResponse: {
@@ -3800,6 +4413,12 @@ export interface components {
             operation: "generate" | "edit";
             /** Template Sha256 */
             template_sha256: string;
+            /**
+             * Locality
+             * @default unset
+             * @enum {string}
+             */
+            locality: "external" | "local" | "unset";
             /**
              * Created At
              * Format: date-time
@@ -3827,6 +4446,36 @@ export interface components {
             bindings?: components["schemas"]["Bindings"] | null;
             /** Exposed Params */
             exposed_params?: components["schemas"]["ExposedParam"][] | null;
+            /** Locality */
+            locality?: ("external" | "local" | "unset") | null;
+        };
+        /**
+         * ComfyWorkflowViewResponse
+         * @description 生成画面からの閲覧(`GET /api/comfyui/workflows/{id}/view`。ADR-0052 7章)。
+         *
+         *     図に要る構造と値だけを返す。テンプレートそのものは返さない。差し込み先(`bindings`)には
+         *     出力(`outputs`)と最終プロンプト(`final_prompt`)も含まれる。
+         */
+        ComfyWorkflowViewResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "generate" | "edit";
+            /** Nodes */
+            nodes?: components["schemas"]["ComfyViewNode"][];
+            /** Edges */
+            edges?: components["schemas"]["AnalyzeEdge"][];
+            bindings: components["schemas"]["Bindings"];
+            /** Exposed Params */
+            exposed_params?: components["schemas"]["ComfyViewExposedParam"][];
         };
         /** CompositionCanvas */
         CompositionCanvas: {
@@ -3869,15 +4518,18 @@ export interface components {
         };
         /**
          * CompositionRecipe
-         * @description 配置の記録(レシピ。版 1。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
+         * @description 配置の記録(レシピ。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
          *     複数のレイヤーに使ってよい。`primary_source_asset_id` はレイヤーの素材のどれか。
+         *
+         *     `version` は作り方の版。1 は四隅を射影変換で描いたもの、2 は双一次の写像で描いたもの
+         *     (ADR-0050 1章の描画の改訂)。四隅の座標の形は同じなので、どちらも受け付ける。
          */
         CompositionRecipe: {
             /**
              * Version
-             * @constant
+             * @enum {integer}
              */
-            version: 1;
+            version: 1 | 2;
             canvas: components["schemas"]["CompositionCanvas"];
             /**
              * Primary Source Asset Id
@@ -4012,6 +4664,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Max Score */
             max_score: number;
             /** Hash Missing */
@@ -4133,13 +4792,14 @@ export interface components {
          *     - `embedding_failed`: その画像のベクトルの計算に失敗した
          *     - `embedding_missing`: その画像のベクトルがまだ無い(計算を頼んでいない)
          *     - `embedding_not_supported`: マスクは対象外
+         *     - `content_withheld`: Mod の `deny` の判定で画像を残さなかった(ADR-0051 4章)
          */
         EmbeddingErrorDetail: {
             /**
              * Code
              * @enum {string}
              */
-            code: "embeddings_unavailable" | "embedding_pending" | "embedding_failed" | "embedding_missing" | "embedding_not_supported";
+            code: "embeddings_unavailable" | "embedding_pending" | "embedding_failed" | "embedding_missing" | "embedding_not_supported" | "content_withheld";
             /** Message */
             message: string;
         };
@@ -4520,6 +5180,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
         };
         /**
          * LineageEdge
@@ -4704,6 +5371,8 @@ export interface components {
             api_style: string;
             /** Api Key */
             api_key?: string | null;
+            /** Locality */
+            locality?: ("external" | "local") | null;
         };
         /**
          * LlmConnectionUpdateRequest
@@ -4717,6 +5386,8 @@ export interface components {
             base_url?: string | null;
             /** Api Style */
             api_style?: string | null;
+            /** Locality */
+            locality?: ("external" | "local") | null;
         };
         /**
          * LlmConnectionView
@@ -4738,6 +5409,18 @@ export interface components {
             api_style: "responses" | "chat";
             /** Api Key Set */
             api_key_set: boolean;
+            /**
+             * Locality
+             * @default external
+             * @enum {string}
+             */
+            locality: "external" | "local";
+            /**
+             * Locality Source
+             * @default default
+             * @enum {string}
+             */
+            locality_source: "connection" | "default";
             /** Used By */
             used_by?: ("annotation" | "embedding" | "assistant")[];
         };
@@ -4796,6 +5479,354 @@ export interface components {
             /** Hourly Run Limit */
             hourly_run_limit?: number | null;
         };
+        /** ModDeliveryListResponse */
+        ModDeliveryListResponse: {
+            /** Items */
+            items: components["schemas"]["ModDeliveryView"][];
+        };
+        /** ModDeliveryView */
+        ModDeliveryView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Event
+             * @enum {string}
+             */
+            event: "asset.ingested" | "ai.before_send" | "run.finished";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Mod Kind
+             * @enum {string}
+             */
+            mod_kind: "webhook" | "python";
+            /** Mod Id */
+            mod_id: string;
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "delivering" | "done" | "failed";
+            /** Attempts */
+            attempts: number;
+            /** Last Error */
+            last_error?: string | null;
+            /**
+             * Next Attempt At
+             * Format: date-time
+             */
+            next_attempt_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at?: string | null;
+        };
+        /**
+         * ModFilters
+         * @description 購読の絞り込み。空のリストは絞らない。
+         */
+        ModFilters: {
+            /** Purposes */
+            purposes?: ("image_run" | "annotation" | "assistant" | "embedding" | "workflow_analysis")[];
+            /** Sources */
+            sources?: ("upload" | "url" | "sketch" | "mask" | "composite" | "generated" | "import" | "mcp")[];
+            /** Providers */
+            providers?: string[];
+        };
+        /** ModInvocationListResponse */
+        ModInvocationListResponse: {
+            /** Items */
+            items: components["schemas"]["ModInvocationView"][];
+        };
+        /** ModInvocationView */
+        ModInvocationView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Event
+             * @enum {string}
+             */
+            event: "asset.ingested" | "ai.before_send" | "run.finished";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Mod Kind
+             * @enum {string}
+             */
+            mod_kind: "webhook" | "python";
+            /** Mod Id */
+            mod_id: string;
+            /** Mod Name */
+            mod_name: string;
+            /** Purpose */
+            purpose?: ("image_run" | "annotation" | "assistant" | "embedding" | "workflow_analysis") | null;
+            /** Run Id */
+            run_id?: string | null;
+            /** Asset Id */
+            asset_id?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "allow" | "deny" | "ok" | "error" | "timeout" | "skipped";
+            /** Effective */
+            effective?: ("allow" | "deny") | null;
+            /** Reason */
+            reason?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ModOrderItem */
+        ModOrderItem: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "webhook" | "python";
+            /** Id */
+            id: string;
+        };
+        /**
+         * ModOrderRequest
+         * @description `PUT /api/settings/mods/order`。この並びの順に呼ぶ(並びに無い Mod の順番は変えない)。
+         */
+        ModOrderRequest: {
+            /** Items */
+            items: components["schemas"]["ModOrderItem"][];
+        };
+        /**
+         * ModSettingFieldView
+         * @description Python の Mod のマニフェストに書いた設定の項目。秘密の項目は値を返さず、`secret_set`
+         *     だけ返す。
+         */
+        ModSettingFieldView: {
+            /** Key */
+            key: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "string" | "number" | "bool" | "path" | "secret";
+            /** Label */
+            label: string;
+            /** Default */
+            default?: unknown;
+            /** Value */
+            value?: unknown;
+            /** Secret Set */
+            secret_set?: boolean | null;
+        };
+        /**
+         * ModTestRequest
+         * @description テスト送信で送るダミーのイベント。
+         */
+        ModTestRequest: {
+            /**
+             * Event
+             * @default ai.before_send
+             * @enum {string}
+             */
+            event: "asset.ingested" | "ai.before_send" | "run.finished";
+        };
+        /**
+         * ModTestResponse
+         * @description テスト送信の結果。記録(`mod_invocation`)には残さない。
+         */
+        ModTestResponse: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "allow" | "deny" | "ok" | "error" | "timeout";
+            /** Duration Ms */
+            duration_ms: number;
+            /** Status Code */
+            status_code?: number | null;
+            /** Response */
+            response?: unknown;
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * ModVerdictReceiveResponse
+         * @description `POST /api/mods/{mod_id}/verdicts` の応答(ADR-0051 8章)。
+         */
+        ModVerdictReceiveResponse: {
+            /** Accepted */
+            accepted: number;
+        };
+        /**
+         * ModVerdictView
+         * @description Mod の判定(ADR-0051 4章・5章)。Mod ごとの最新だけを返す。
+         */
+        ModVerdictView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mod Kind
+             * @enum {string}
+             */
+            mod_kind: "webhook" | "python";
+            /** Mod Id */
+            mod_id: string;
+            /** Mod Name */
+            mod_name: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "ok" | "flag" | "deny";
+            /** Label */
+            label?: string | null;
+            /** Score */
+            score?: number | null;
+            /** Message */
+            message?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Url */
+            url?: string | null;
+            /**
+             * Propagated
+             * @default false
+             */
+            propagated: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * ModWebhookCreateRequest
+         * @description `POST /api/settings/mods/webhooks`。署名の鍵は必須(応答には返さない)。
+         */
+        ModWebhookCreateRequest: {
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+            /** Secret */
+            secret: string;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Events */
+            events?: ("asset.ingested" | "ai.before_send" | "run.finished")[];
+            filters?: components["schemas"]["ModFilters"];
+            /**
+             * Send Images
+             * @default false
+             */
+            send_images: boolean;
+            /**
+             * Timeout Seconds
+             * @default 10
+             */
+            timeout_seconds: number;
+            /**
+             * On Failure
+             * @default block
+             * @enum {string}
+             */
+            on_failure: "block" | "allow";
+            /**
+             * Wait For Verdict
+             * @default false
+             */
+            wait_for_verdict: boolean;
+        };
+        /**
+         * ModWebhookUpdateRequest
+         * @description `PATCH /api/settings/mods/webhooks/{id}`。省略した項目は変えない。`secret` を送ると鍵を
+         *     差し替える。
+         */
+        ModWebhookUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Secret */
+            secret?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Events */
+            events?: ("asset.ingested" | "ai.before_send" | "run.finished")[] | null;
+            filters?: components["schemas"]["ModFilters"] | null;
+            /** Send Images */
+            send_images?: boolean | null;
+            /** Timeout Seconds */
+            timeout_seconds?: number | null;
+            /** On Failure */
+            on_failure?: ("block" | "allow") | null;
+            /** Wait For Verdict */
+            wait_for_verdict?: boolean | null;
+        };
+        /**
+         * ModWebhookView
+         * @description Webhook 1つ。署名の鍵の値は一部も返さず、設定済みかどうか(`secret_set`)だけ返す。
+         */
+        ModWebhookView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Events */
+            events: ("asset.ingested" | "ai.before_send" | "run.finished")[];
+            filters: components["schemas"]["ModFilters"];
+            /** Send Images */
+            send_images: boolean;
+            /** Timeout Seconds */
+            timeout_seconds: number;
+            /**
+             * On Failure
+             * @enum {string}
+             */
+            on_failure: "block" | "allow";
+            /** Wait For Verdict */
+            wait_for_verdict: boolean;
+            /** Order */
+            order?: number | null;
+            /** Secret Set */
+            secret_set: boolean;
+        };
         /** ModelCapabilities */
         ModelCapabilities: {
             /** Model */
@@ -4829,6 +5860,26 @@ export interface components {
              * @enum {string}
              */
             default: "auto" | "low";
+        };
+        /**
+         * ModsResponse
+         * @description `GET /api/settings/mods`(管理者だけ)。
+         */
+        ModsResponse: {
+            /** Instance Name */
+            instance_name?: string | null;
+            /** Webhooks */
+            webhooks: components["schemas"]["ModWebhookView"][];
+            /** Python Mods */
+            python_mods: components["schemas"]["PythonModView"][];
+        };
+        /**
+         * ModsUpdateRequest
+         * @description `PATCH /api/settings/mods`。null・空はインスタンスの名前を消す。
+         */
+        ModsUpdateRequest: {
+            /** Instance Name */
+            instance_name?: string | null;
         };
         /** OnnxDownloadRequest */
         OnnxDownloadRequest: {
@@ -4967,6 +6018,25 @@ export interface components {
             /** Mask Only */
             mask_only?: boolean | null;
         };
+        /**
+         * ParamTierInfo
+         * @description 公開パラメーターの候補の段(推奨 / その他 / 公開しない)。
+         */
+        ParamTierInfo: {
+            /** Name */
+            name: string;
+            /** Node */
+            node: string;
+            /** Input */
+            input: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "recommended" | "other" | "hidden";
+            /** Hidden Reason */
+            hidden_reason?: ("unused_branch" | "secret" | "fixed_setting" | "file_or_model" | "fixed_text") | null;
+        };
         /** ParameterSetCreateRequest */
         ParameterSetCreateRequest: {
             /** Name */
@@ -5034,6 +6104,18 @@ export interface components {
             params?: {
                 [key: string]: boolean | number | string;
             } | null;
+        };
+        /**
+         * PathStep
+         * @description 道筋の1段。`input` はそのノードに入ってきた入力名(先頭は差し込み先の入力名)。
+         */
+        PathStep: {
+            /** Node */
+            node: string;
+            /** Class Type */
+            class_type?: string | null;
+            /** Input */
+            input?: string | null;
         };
         /** PriceEstimate */
         PriceEstimate: {
@@ -5511,6 +6593,46 @@ export interface components {
             /** Supports Pricing */
             supports_pricing: boolean;
         };
+        /** ProviderLocalitiesResponse */
+        ProviderLocalitiesResponse: {
+            openai: components["schemas"]["ProviderLocalitySetting"];
+            comfyui: components["schemas"]["ProviderLocalitySetting"];
+            sdwebui: components["schemas"]["ProviderLocalitySetting"];
+        };
+        /**
+         * ProviderLocalitiesUpdateRequest
+         * @description `PATCH /api/settings/provider-localities`。省略した項目は変えず、明示的な `null` は保存した
+         *     値を消して既定に戻す。
+         */
+        ProviderLocalitiesUpdateRequest: {
+            /** Openai */
+            openai?: ("external" | "local") | null;
+            /** Comfyui */
+            comfyui?: ("external" | "local") | null;
+            /** Sdwebui */
+            sdwebui?: ("external" | "local") | null;
+        };
+        /**
+         * ProviderLocalitySetting
+         * @description 画像のプロバイダーの接続の接続先(`locality`。ADR-0051 3章)。
+         */
+        ProviderLocalitySetting: {
+            /**
+             * Value
+             * @enum {string}
+             */
+            value: "external" | "local";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "connection" | "default";
+            /**
+             * Default
+             * @enum {string}
+             */
+            default: "external" | "local";
+        };
         /** PublicShareAsset */
         PublicShareAsset: {
             /**
@@ -5546,6 +6668,11 @@ export interface components {
             /** Allow Original */
             allow_original: boolean;
             focal_point?: components["schemas"]["FocalPoint"] | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
         };
         /**
          * PublicShareEdge
@@ -5641,6 +6768,78 @@ export interface components {
             created_at: string;
             /** Text Outputs */
             text_outputs?: components["schemas"]["RunTextOutput"][] | null;
+        };
+        /**
+         * PythonModUpdateRequest
+         * @description `PATCH /api/settings/mods/python/{id}`。省略した項目は変えない。
+         *
+         *     `events` の null はマニフェストのイベントすべてに戻す。`values` は秘密でない項目の値
+         *     (null は既定に戻す)。`secrets` は秘密の項目の値(null は消す。値は応答に返さない)。
+         */
+        PythonModUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Events */
+            events?: ("asset.ingested" | "ai.before_send" | "run.finished")[] | null;
+            filters?: components["schemas"]["ModFilters"] | null;
+            /** Timeout Seconds */
+            timeout_seconds?: number | null;
+            /** On Failure */
+            on_failure?: ("block" | "allow") | null;
+            /** Wait For Verdict */
+            wait_for_verdict?: boolean | null;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
+            /** Secrets */
+            secrets?: {
+                [key: string]: string | null;
+            } | null;
+        };
+        /**
+         * PythonModView
+         * @description `MODS_DIR` に置いた Python の Mod 1つ。マニフェストが読めない・import できないものも
+         *     `error` を付けて返す(読み込みエラー)。
+         */
+        PythonModView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /** Version */
+            version?: string | null;
+            /** Api Version */
+            api_version?: number | null;
+            /** Available Events */
+            available_events?: ("asset.ingested" | "ai.before_send" | "run.finished")[];
+            /** Error */
+            error?: string | null;
+            /** Loaded */
+            loaded: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Events */
+            events?: ("asset.ingested" | "ai.before_send" | "run.finished")[] | null;
+            filters: components["schemas"]["ModFilters"];
+            /** Timeout Seconds */
+            timeout_seconds: number;
+            /**
+             * On Failure
+             * @enum {string}
+             */
+            on_failure: "block" | "allow";
+            /** Wait For Verdict */
+            wait_for_verdict: boolean;
+            /**
+             * Returns Verdicts
+             * @default true
+             */
+            returns_verdicts: boolean;
+            /** Order */
+            order?: number | null;
+            /** Settings */
+            settings?: components["schemas"]["ModSettingFieldView"][];
         };
         /** RunCancelResponse */
         RunCancelResponse: {
@@ -5765,6 +6964,11 @@ export interface components {
             /** Primary Parent Content Rating */
             primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
+             * Primary Parent Content Withheld
+             * @default false
+             */
+            primary_parent_content_withheld: boolean;
+            /**
              * Input Count
              * @default 0
              */
@@ -5795,6 +6999,10 @@ export interface components {
             /** Inputs */
             inputs?: components["schemas"]["RunInputRef"][];
             imported?: components["schemas"]["RunImportInfo"] | null;
+            /** Verdicts */
+            verdicts?: components["schemas"]["ModVerdictView"][];
+            /** Mod Invocations */
+            mod_invocations?: components["schemas"]["RunModInvocationView"][];
         };
         /**
          * RunEvent
@@ -5887,6 +7095,11 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
         };
         /** RunListResponse */
         RunListResponse: {
@@ -5894,6 +7107,46 @@ export interface components {
             items: components["schemas"]["RunSummary"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /**
+         * RunModInvocationView
+         * @description Mod の呼び出しの記録(ADR-0051 5章)。Run の詳細には `ai.before_send` のものだけを返す。
+         *     運用の情報(HTTP の状態、例外の種類)は含めない。
+         */
+        RunModInvocationView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mod Kind
+             * @enum {string}
+             */
+            mod_kind: "webhook" | "python";
+            /** Mod Id */
+            mod_id: string;
+            /** Mod Name */
+            mod_name: string;
+            /** Event */
+            event: string;
+            /** Purpose */
+            purpose?: string | null;
+            /** Outcome */
+            outcome: string;
+            /** Effective */
+            effective?: ("allow" | "deny") | null;
+            /** Reason */
+            reason?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** RunOutputRef */
         RunOutputRef: {
@@ -5909,6 +7162,11 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
         };
         /**
          * RunPromptTemplate
@@ -5978,6 +7236,11 @@ export interface components {
             primary_parent_focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Primary Parent Content Rating */
             primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Primary Parent Content Withheld
+             * @default false
+             */
+            primary_parent_content_withheld: boolean;
             /**
              * Input Count
              * @default 0
@@ -6242,6 +7505,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Produced By Run Id */
             produced_by_run_id: string | null;
             /**
@@ -6345,6 +7615,11 @@ export interface components {
             /** Primary Parent Content Rating */
             primary_parent_content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
             /**
+             * Primary Parent Content Withheld
+             * @default false
+             */
+            primary_parent_content_withheld: boolean;
+            /**
              * Input Count
              * @default 0
              */
@@ -6418,6 +7693,13 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
+            /** Content Withheld At */
+            content_withheld_at?: string | null;
             /** Score */
             score: number;
         };
@@ -6527,6 +7809,11 @@ export interface components {
             height: number;
             /** Title */
             title?: string | null;
+            /**
+             * Content Withheld
+             * @default false
+             */
+            content_withheld: boolean;
         };
         /** SharePreviewRequest */
         SharePreviewRequest: {
@@ -6580,6 +7867,11 @@ export interface components {
              * @default false
              */
             root_deleted: boolean;
+            /**
+             * Root Content Withheld
+             * @default false
+             */
+            root_content_withheld: boolean;
             /** Root Title */
             root_title?: string | null;
             /**
@@ -6881,6 +8173,30 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * ValidationIssue
+         * @description 保存時の検証の結果1件。`error` は保存しない(422)、`warning` は保存して画面に残す。
+         */
+        ValidationIssue: {
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "error" | "warning";
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "node_missing" | "input_missing" | "duplicate" | "wired_input" | "type_mismatch" | "output_missing" | "output_no_image" | "final_prompt_missing" | "edit_requires_image" | "generate_has_image" | "exposed_param_duplicate" | "unused_branch" | "mask_not_inpaint" | "display_only_output";
+            /** Message */
+            message: string;
+            /** Field */
+            field?: string | null;
+            /** Node */
+            node?: string | null;
+            /** Input */
+            input?: string | null;
         };
     };
     responses: never;
@@ -7377,6 +8693,76 @@ export interface operations {
             };
         };
     };
+    validate_comfy_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComfyValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyValidateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_comfy_workflow_bindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComfySuggestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfySuggestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_comfy_workflows: {
         parameters: {
             query?: never;
@@ -7531,6 +8917,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComfyWorkflowDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_comfy_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyWorkflowViewResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10429,6 +11848,72 @@ export interface operations {
             };
         };
     };
+    get_provider_localities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderLocalitiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_provider_localities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderLocalitiesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderLocalitiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_general_settings: {
         parameters: {
             query?: never;
@@ -11591,6 +13076,393 @@ export interface operations {
             };
         };
     };
+    get_mods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_mod_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModWebhookCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_mod_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                webhook_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mod_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                webhook_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModWebhookUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_mod_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                webhook_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModTestRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_python_mod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mod_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PythonModUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_python_mod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mod_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModTestRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mod_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mod_invocations: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description true なら失敗(error・timeout)と拒否(deny)だけ。 */
+                failed_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModInvocationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mod_deliveries: {
+        parameters: {
+            query?: {
+                /** @description 配達の状態で絞る。省くと失敗(failed)だけ。 */
+                status?: ("queued" | "delivering" | "done" | "failed") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModDeliveryListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_avatar: {
         parameters: {
             query?: never;
@@ -12271,6 +14143,56 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    receive_mod_verdicts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mod_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModVerdictReceiveResponse"];
+                };
+            };
+            /** @description 署名が無い・合わない、または時刻が古い */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description その Mod に届けていない Asset・Run への判定を含む */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook が無い、または無効 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 本文が判定の配列の形でない */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

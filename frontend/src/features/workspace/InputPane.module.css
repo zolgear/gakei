@@ -265,6 +265,22 @@
   color: var(--color-accent);
 }
 
+/* 「ワークフローを見る」(ADR-0052 7章)。リンクと同じ見た目のボタン(結果エリアの表示を切り替えるだけで遷移しない)。 */
+.comfyWorkflowLinkButton {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  border: 0;
+  font-size: 10.5px;
+  color: var(--color-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.comfyWorkflowLinkButton:hover {
+  color: var(--color-text);
+}
+
 .capsError {
   padding: 20px;
   color: var(--color-text-muted);
@@ -302,6 +318,11 @@
   .submitButton {
     width: 100%;
     min-height: 44px;
+  }
+
+  .comfyWorkflowLinkButton {
+    min-height: 32px;
+    font-size: 13px;
   }
 }
 

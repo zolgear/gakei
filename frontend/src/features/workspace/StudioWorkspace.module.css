@@ -75,9 +75,15 @@
     overflow-y: auto;
   }
 
+  /* 高さは中身(結果エリア)に合わせる(StudioWorkspace.tsx は狭い幅では比率の flex を付けない)。
+     中身が短いモード(進捗、失敗、系列など)が潰れないよう、既定の比率(splitRatio.ts の
+     DEFAULT_TOP_RATIO)と同じだけの高さは取り、ResultPane(.pane)をその高さまで伸ばす。 */
   .top {
-    flex-shrink: 0;
+    flex: 0 0 auto;
     height: auto;
+    min-height: 56%;
+    display: flex;
+    flex-direction: column;
   }
 
   .divider {

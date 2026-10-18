@@ -24,6 +24,8 @@ function connection(overrides: Partial<LlmConnectionView> = {}): LlmConnectionVi
     base_url: null,
     api_style: 'responses',
     api_key_set: true,
+    locality: 'external',
+    locality_source: 'default',
     used_by: ['annotation'],
     ...overrides,
   }
@@ -65,11 +67,18 @@ describe('接続先のフォーム', () => {
   })
 
   it('追加の本文は前後の空白を除き、空のキーは送らない', () => {
-    const form = { name: ' Ollama ', base_url: ' http://127.0.0.1:11434/v1 ', api_style: 'chat' as const, api_key: '  ' }
+    const form = {
+      name: ' Ollama ',
+      base_url: ' http://127.0.0.1:11434/v1 ',
+      api_style: 'chat' as const,
+      api_key: '  ',
+      locality: 'local' as const,
+    }
     expect(connectionCreateBody(form)).toEqual({
       name: 'Ollama',
       base_url: 'http://127.0.0.1:11434/v1',
       api_style: 'chat',
+      locality: 'local',
     })
     expect(connectionCreateBody({ ...form, api_key: ' sk-x ' }).api_key).toBe('sk-x')
   })
@@ -86,6 +95,15 @@ describe('接続先のフォーム', () => {
     expect(diffConnectionForm({ ...form, base_url: 'http://10.0.0.2:11434/v1' }, OLLAMA)).toEqual({
       base_url: 'http://10.0.0.2:11434/v1',
     })
+  })
+
+  it('接続先(ADR-0051 3章)は、新しい接続先では外部から始め、変えたときだけ送る', () => {
+    expect(emptyConnectionForm().locality).toBe('external')
+    const view = { ...OLLAMA, locality: 'external' as const }
+    const form = connectionFormFromView(view)
+    expect(form.locality).toBe('external')
+    expect(diffConnectionForm(form, view)).toEqual({})
+    expect(diffConnectionForm({ ...form, locality: 'local' }, view)).toEqual({ locality: 'local' })
   })
 })
 

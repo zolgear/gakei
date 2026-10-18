@@ -531,54 +531,30 @@
 }
 
 @media (max-width: 767px) {
+  /* 狭い幅の上段(StudioWorkspace の .top)は高さを中身に合わせるので、100% ではなく
+     上段の最小の高さまで伸ばす(中身がそれより長ければ、ページ全体がスクロールする)。 */
+  .pane {
+    height: auto;
+    flex: 1 0 auto;
+  }
+
   .body {
     flex-direction: column;
   }
 
+  /* iOS の Safari の vh はアドレスバーを畳んだときの高さなので、svh(畳む前の見えている高さ)を
+     使えるブラウザではそちらにする。 */
   .canvasWrap {
     height: 50vh;
+    height: 50svh;
     min-height: 220px;
     flex-shrink: 0;
   }
 
+  /* 狭い幅では「出力 · 直近」の行を出さない(ユーザーの判断)。入力に使うのは画像の上の操作バー、
+     ほかの画像は入力の「追加」とサイドバーのストックから選ぶ。 */
   .sidebarThumbs {
-    width: 100%;
-    flex-direction: row;
-    padding: 10px 12px;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .thumbsHeading {
     display: none;
-  }
-
-  /* ラッパーの箱を消して、中身(タイル/フッターの中身)を直接 .sidebarThumbs の横並びの
-     一員にする(縦スクロール用の3段構成をやめ、以前どおり1行の横スクロールに戻す)。 */
-  .thumbsScroll,
-  .thumbsFooter {
-    display: contents;
-  }
-
-  .thumbTile {
-    margin-left: 0;
-    width: 96px;
-    flex-shrink: 0;
-  }
-
-  .thumbButton {
-    width: 100%;
-  }
-
-  /* タッチ端末はホバーが無いので常時表示する(指示により、あえて小さいまま)。 */
-  .thumbAddButton {
-    opacity: 1;
-  }
-
-  .useAsInputButton {
-    margin-left: 8px;
-    width: 96px;
-    flex-shrink: 0;
   }
 
   .canvasActionBar {
@@ -596,4 +572,22 @@
   .layoutToggle {
     display: none;
   }
+}
+
+/* 「詳細」タブ(ADR-0009 1章 2026-10-15 追記)。ビューアの情報欄と同じ中身を縦にスクロールして読む。 */
+.detailScroll {
+  flex-grow: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+/* 並びと間隔はビューアの情報欄(.sidebar)に合わせる。広い画面でも読みやすい幅に留める。 */
+.detailContent {
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }

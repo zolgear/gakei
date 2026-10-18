@@ -2,6 +2,7 @@
  * 送信のたびに送る、今の生成フォームの状態(ADR-0048 5章。サーバーはフォームの状態を持たない)。
  * RunFormContext の `formState`(スタジオが書き込む最新値。スタジオの外ではリロード後も
  * localStorage から復元した値)から作る。操作(Generate / Edit)は入力画像から導く(ADR-0009)。
+ * スタジオの結果エリアに出ている画像の ID(`result_asset_id`。12章)も一緒に送る。
  */
 import type { AssistantFormState } from '../../api/client'
 import { deriveOperation } from '../run-form/deriveOperation'
@@ -14,7 +15,10 @@ export const ASSISTANT_TEXT_MAX = 20_000
 /** 会話の名前の長さの上限(ASSISTANT_TITLE_MAX)。 */
 export const ASSISTANT_TITLE_MAX = 100
 
-export function assistantFormState(form: RunFormState): AssistantFormState {
+export function assistantFormState(
+  form: RunFormState,
+  resultAssetId: string | null = null,
+): AssistantFormState {
   const operation = deriveOperation(form.inputs)
   return {
     provider: form.provider || null,
@@ -30,6 +34,8 @@ export function assistantFormState(form: RunFormState): AssistantFormState {
             .map((input) => ({ asset_id: input.assetId, role: input.role }))
         : [],
     asset_group_id: form.assetGroupId,
+    // 結果エリアに画像が無い・スタジオを開いていないときは null(ADR-0048 12章)。
+    result_asset_id: resultAssetId,
   }
 }
 

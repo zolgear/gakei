@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProviderEntry } from '../../api/client'
-import { filterModelOptions, MODEL_FILTER_THRESHOLD, shouldShowModelFilter } from './modelOptions'
+import { filterModelOptions, MODEL_FILTER_THRESHOLD, modelFieldLinks, shouldShowModelFilter } from './modelOptions'
 
 function provider(name: string, models: string[]): ProviderEntry {
   return {
@@ -51,5 +51,32 @@ describe('filterModelOptions', () => {
     const empty = provider('comfyui', [])
     const groups = filterModelOptions([openai, empty], 'zzz', selected)
     expect(groups.map((g) => g.provider.provider)).toEqual(['openai', 'comfyui'])
+  })
+})
+
+describe('modelFieldLinks', () => {
+  const comfy = provider('comfyui', ['wf-1'])
+  const sdDown = { ...provider('sdwebui', []), available: false } as ProviderEntry
+
+  it('ComfyUI のワークフローを選んでいる間は「ワークフローを見る」を出し、SD WebUI の案内は出さない', () => {
+    const links = modelFieldLinks([openai, comfy, sdDown], { provider: 'comfyui', model: 'wf-1' }, true)
+    expect(links.viewComfyWorkflow).toBe(true)
+    expect(links.checkSdWebuiConnection).toBe(false)
+  })
+
+  it('SD WebUI のモデルが無いときの案内は、SD WebUI を選んでいる・選択が無効なときだけ(管理者)', () => {
+    expect(modelFieldLinks([openai, sdDown], { provider: 'sdwebui', model: 'gone.safetensors' }, true).checkSdWebuiConnection).toBe(true)
+    expect(modelFieldLinks([openai, sdDown], { provider: '', model: '' }, true).checkSdWebuiConnection).toBe(true)
+    expect(modelFieldLinks([openai, sdDown], { provider: 'openai', model: 'gpt-image-2' }, true).checkSdWebuiConnection).toBe(false)
+    expect(modelFieldLinks([openai, sdDown], { provider: 'sdwebui', model: 'gone.safetensors' }, false).checkSdWebuiConnection).toBe(false)
+  })
+
+  it('ComfyUI 以外・選べないワークフローでは「ワークフローを見る」を出さない', () => {
+    expect(modelFieldLinks([openai, comfy], { provider: 'openai', model: 'gpt-image-2' }, false).viewComfyWorkflow).toBe(false)
+    expect(modelFieldLinks([openai, comfy], { provider: 'comfyui', model: 'deleted' }, false).viewComfyWorkflow).toBe(false)
+  })
+
+  it('ワークフロー未登録の ComfyUI には登録の案内', () => {
+    expect(modelFieldLinks([openai, provider('comfyui', [])], { provider: 'openai', model: 'gpt-image-2' }, false).registerComfyWorkflow).toBe(true)
   })
 })

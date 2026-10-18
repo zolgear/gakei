@@ -20,6 +20,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
+import { usePreventPageZoom } from '../../lib/usePreventPageZoom'
 import { loadImage } from '../mask/canvasUtils'
 import { setLayerQuad } from './editorDoc'
 import {
@@ -104,6 +105,8 @@ export function CompositeStage({
   onTextureError,
 }: CompositeStageProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  // 2本指でページ全体が拡大されないようにする(iOS の Safari。lib/usePreventPageZoom.ts)。
+  usePreventPageZoom(containerRef)
   const glCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const rendererRef = useRef<CompositeRenderer | null>(null)

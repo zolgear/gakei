@@ -4,6 +4,7 @@
  */
 import { useLayoutEffect, useRef } from 'react'
 import { assetUrl } from '../../api/assetUrl'
+import { AssetImage } from '../mods/AssetImage'
 import { useI18n } from '../../i18n'
 import { AssetsCard } from './AssetsCard'
 import { FormWriteCard } from './FormWriteCard'
@@ -66,7 +67,7 @@ export function MessageList({ items, conversationKey, emptyText, onAttach }: Mes
                 {(item.message.attachments ?? []).length > 0 && (
                   <div className={styles.attachments}>
                     {(item.message.attachments ?? []).map((id) => (
-                      <img key={id} className={`${styles.attachmentThumb} checkerboard`} src={assetUrl(id, 'thumb')} alt="" />
+                      <AssetImage key={id} className={`${styles.attachmentThumb} checkerboard`} src={assetUrl(id, 'thumb')} alt="" />
                     ))}
                   </div>
                 )}

@@ -19,8 +19,22 @@ from pydantic import (
 )
 
 from app.domain import prompt_templates
-from app.domain.comfy_workflow import Bindings, ExposedParam, SuggestedBindings
-from app.providers.base import ProviderCapabilities
+from app.domain.comfy_analyze import (
+    AnalyzeEdge,
+    AnalyzeWarning,
+    BindingField,
+    BindingReading,
+    NodeKind,
+    ParamTierInfo,
+)
+from app.domain.comfy_graph import NodeState
+from app.domain.comfy_workflow import (
+    Bindings,
+    ExposedParam,
+    SuggestedBindings,
+    ValidationIssue,
+)
+from app.providers.base import ParamType, ProviderCapabilities
 
 # -- Capabilities (ADR-0013: 複数プロバイダー) -------------------------------
 
@@ -389,6 +403,52 @@ class AssetSummary(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049)。未判定なら null。
     content_rating: ContentRatingLevel | None = None
+    # Mod の `deny` の判定で画像(原本と派生)を残さなかったか(ADR-0051 4章)。true なら
+    # `/content` は 410 で、画面は「画像なし(拒否)」の置き換えの表示にする。
+    content_withheld: bool = False
+    content_withheld_at: datetime | None = None
+
+
+class ModVerdictView(BaseModel):
+    """Mod の判定(ADR-0051 4章・5章)。Mod ごとの最新だけを返す。"""
+
+    id: uuid.UUID
+    mod_kind: Literal["webhook", "python"]
+    mod_id: str
+    # 判定を記録した時点の Mod の名前。
+    mod_name: str
+    verdict: Literal["ok", "flag", "deny"]
+    label: str | None = None
+    # 0〜1(任意)。
+    score: float | None = None
+    message: str | None = None
+    # 外部のシステムの受付番号など。
+    reference: str | None = None
+    # 外部の詳細へのリンク(http / https)。
+    url: str | None = None
+    # 同じ内容(sha256)のほかの Asset への判定を及ぼしたものなら true。
+    propagated: bool = False
+    created_at: datetime
+
+
+class RunModInvocationView(BaseModel):
+    """Mod の呼び出しの記録(ADR-0051 5章)。Run の詳細には `ai.before_send` のものだけを返す。
+    運用の情報(HTTP の状態、例外の種類)は含めない。"""
+
+    id: uuid.UUID
+    mod_kind: Literal["webhook", "python"]
+    mod_id: str
+    mod_name: str
+    event: str
+    purpose: str | None = None
+    # Mod の答え(allow / deny / ok / error / timeout / skipped)。
+    outcome: str
+    # GAKEI がそれをどう扱ったか(失敗時の扱いを当てた後の allow / deny)。
+    effective: Literal["allow", "deny"] | None = None
+    reason: str | None = None
+    reference: str | None = None
+    duration_ms: int
+    created_at: datetime
 
 
 class AssetTagRef(BaseModel):
@@ -651,12 +711,15 @@ class CompositionLayer(BaseModel):
 
 
 class CompositionRecipe(BaseModel):
-    """配置の記録(レシピ。版 1。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
-    複数のレイヤーに使ってよい。`primary_source_asset_id` はレイヤーの素材のどれか。"""
+    """配置の記録(レシピ。ADR-0050 3章)。`layers` は重ね順(下から上)。同じ素材を
+    複数のレイヤーに使ってよい。`primary_source_asset_id` はレイヤーの素材のどれか。
+
+    `version` は作り方の版。1 は四隅を射影変換で描いたもの、2 は双一次の写像で描いたもの
+    (ADR-0050 1章の描画の改訂)。四隅の座標の形は同じなので、どちらも受け付ける。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1]
+    version: Literal[1, 2]
     canvas: CompositionCanvas
     primary_source_asset_id: uuid.UUID
     layers: list[CompositionLayer] = Field(min_length=1, max_length=COMPOSITION_MAX_LAYERS)
@@ -731,6 +794,11 @@ class AssetDetail(AssetSummary):
     # 配置の結果(kind=composite)のレシピと素材(ADR-0050)。それ以外、またはレシピの無い配置
     # (素材を範囲の外にして書き出した ZIP から取り込んだものなど)は null。
     composition: AssetComposition | None = None
+    # Mod の判定(ADR-0051 4章)。Mod ごとの最新で、新しい順。
+    verdicts: list[ModVerdictView] = Field(default_factory=list)
+    # 画像を残さなかった理由の判定(`content_withheld` が true のときだけ。系列の ZIP から
+    # 画像の無いノードとして取り込んだものなど、判定が無ければ null)。
+    content_withheld_verdict: ModVerdictView | None = None
 
 
 class AssetUploadResponse(AssetDetail):
@@ -994,6 +1062,8 @@ class RunInputRef(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049)。未判定・マスクは null。
     content_rating: ContentRatingLevel | None = None
+    # 画像を残さなかったか(ADR-0051 4章)。
+    content_withheld: bool = False
 
 
 class RunOutputRef(BaseModel):
@@ -1005,6 +1075,8 @@ class RunOutputRef(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049)。未判定なら null。
     content_rating: ContentRatingLevel | None = None
+    # 画像を残さなかったか(ADR-0051 4章)。
+    content_withheld: bool = False
 
 
 class RunSummary(BaseModel):
@@ -1034,6 +1106,8 @@ class RunSummary(BaseModel):
     primary_parent_focal_point: FocalPoint | None = None
     # 主たる親のレーティングの段階(ADR-0049)。未判定なら null。
     primary_parent_content_rating: ContentRatingLevel | None = None
+    # 主たる親の画像を残さなかったか(ADR-0051 4章。履歴のカードの親の小さな画像用)。
+    primary_parent_content_withheld: bool = False
     # role=image の入力枚数(mask/reference は含まない)。
     input_count: int = 0
     # この Run の出力を入力に使っている、削除されていない Run の数。削除の警告に使う。
@@ -1075,6 +1149,10 @@ class RunDetail(RunSummary):
     inputs: list[RunInputRef] = Field(default_factory=list)
     # 系列の ZIP から取り込んだ Run(`origin = 'import'`)だけ。それ以外は null(ADR-0037)。
     imported: RunImportInfo | None = None
+    # Run に対する Mod の判定(ADR-0051 4章)。Mod ごとの最新で、新しい順。
+    verdicts: list[ModVerdictView] = Field(default_factory=list)
+    # `ai.before_send` の呼び出しの結果(ADR-0051 5章)。古い順。
+    mod_invocations: list[RunModInvocationView] = Field(default_factory=list)
 
 
 class RunListResponse(BaseModel):
@@ -1126,6 +1204,9 @@ class LineageAssetInfo(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049)。焦点と同じく、埋め込みノードは対応付いたときだけ。
     content_rating: ContentRatingLevel | None = None
+    # 画像を残さなかったか(ADR-0051 4章)。埋め込みノードは常に false。
+    content_withheld: bool = False
+    content_withheld_at: datetime | None = None
 
 
 class LineageRunInfo(BaseModel):
@@ -1499,6 +1580,31 @@ class GeneralSettingsResponse(BaseModel):
     sdwebui_timeout_seconds: SdWebuiTimeoutSetting
 
 
+class ProviderLocalitySetting(BaseModel):
+    """画像のプロバイダーの接続の接続先(`locality`。ADR-0051 3章)。"""
+
+    # 実効の値(保存した値、無ければ既定)。
+    value: Literal["external", "local"]
+    # connection = 画面で決めた値、default = 既定(すべて external)。
+    source: Literal["connection", "default"]
+    default: Literal["external", "local"]
+
+
+class ProviderLocalitiesResponse(BaseModel):
+    openai: ProviderLocalitySetting
+    comfyui: ProviderLocalitySetting
+    sdwebui: ProviderLocalitySetting
+
+
+class ProviderLocalitiesUpdateRequest(BaseModel):
+    """`PATCH /api/settings/provider-localities`。省略した項目は変えず、明示的な `null` は保存した
+    値を消して既定に戻す。"""
+
+    openai: Literal["external", "local"] | None = None
+    comfyui: Literal["external", "local"] | None = None
+    sdwebui: Literal["external", "local"] | None = None
+
+
 class GeneralSettingsUpdateRequest(BaseModel):
     """`PATCH /api/settings/general` の本文。項目を省略すると変更せず、明示的な `null` は
     保存済みの値を削除して環境変数・既定値に戻す(`model_fields_set` で区別する)。
@@ -1691,10 +1797,24 @@ class ComfyNodeInfo(BaseModel):
     class_type: str | None = None
     title: str | None = None
     inputs: list[ComfyNodeInputInfo] = Field(default_factory=list)
+    # 出力につながる(live)/ 表示だけ(display)/ 使われない(unused)。ADR-0052 2章。
+    state: NodeState = "live"
+    # 図で残す錨の種類(保存、表示、サンプラー、エンコーダー、画像の読み込み、切り替え)。
+    # どれでもなければ null。ADR-0052 4章。
+    kind: NodeKind | None = None
+    # 出力の型(`/object_info` に接続できたときだけ。無ければ null)。
+    output_types: list[str] | None = None
 
 
 class ComfyAnalyzeRequest(BaseModel):
-    template: dict[str, Any]
+    """`template` か `workflow_id`(登録済みのワークフローの保存したテンプレート)のどちらか一方。
+
+    `workflow_id` は編集画面で使う。ブラウザで JSON を読み直すと `1.0` が `1` になり、公開
+    パラメーターの型(FLOAT)が分からなくなるため、保存したテンプレートをサーバーで読む。
+    """
+
+    template: dict[str, Any] | None = None
+    workflow_id: uuid.UUID | None = None
 
 
 class ComfyAnalyzeResponse(BaseModel):
@@ -1705,6 +1825,84 @@ class ComfyAnalyzeResponse(BaseModel):
     suggested_operation: Literal["generate", "edit"]
     candidate_params: list[ExposedParam] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # `warnings` に種別を付けたもの。`reading` は読み取り(readings)で同じことを示している。
+    warning_items: list[AnalyzeWarning] = Field(default_factory=list)
+    # 項目ごとの読み取り(確信度・理由・道筋・候補・問い。ADR-0052 2章)。
+    readings: list[BindingReading] = Field(default_factory=list)
+    # 公開パラメーターの候補の段(推奨 / その他 / 公開しない)。
+    param_tiers: list[ParamTierInfo] = Field(default_factory=list)
+    # 提案した差し込み先に、保存時と同じ検証を掛けた結果(ADR-0052 3章)。
+    validation: list[ValidationIssue] = Field(default_factory=list)
+    # 配線の一覧(読むだけの図に使う。ADR-0052 4章)。切り替えで選ばれなかった枝は followed=false。
+    edges: list[AnalyzeEdge] = Field(default_factory=list)
+
+
+class ComfyValidateRequest(BaseModel):
+    """登録・編集の画面で、保存の前に差し込み先と公開パラメーターを検証する(ADR-0052 3章)。
+
+    `bindings` は analyze の提案と同じ形で、まだ選んでいない必須項目(prompt、outputs)は問わない
+    (欠けは画面が別に示す)。保存はしない。
+    """
+
+    template: dict[str, Any]
+    operation: Literal["generate", "edit"]
+    bindings: SuggestedBindings
+    exposed_params: list[ExposedParam] = Field(default_factory=list)
+
+
+class ComfyValidateResponse(BaseModel):
+    # 保存時と同じ検証の結果(エラーと警告)。
+    issues: list[ValidationIssue] = Field(default_factory=list)
+
+
+class ComfySuggestRequest(BaseModel):
+    """アシスタントでの推定(ADR-0052 6章)。`template` か `workflow_id` のどちらか一方(analyze と
+    同じ)。`name` は登録画面で入力中の名前(`ai.before_send` の `params` に載せる)。保存はしない。"""
+
+    template: dict[str, Any] | None = None
+    workflow_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, max_length=100)
+
+
+class ComfySuggestItem(BaseModel):
+    """提案した項目1つ。値は `ComfySuggestResponse.suggested_bindings` の同じ項目にある。"""
+
+    field: BindingField
+    # LLM が書いた理由の文(無ければ空)。
+    reason: str = ""
+    # 規則の読み取り(analyze)と同じ値か。
+    matches_reading: bool
+    # 保存時の検証の警告(保存はできる)。
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ComfySuggestDiscarded(BaseModel):
+    """検証を通らずに捨てた提案。`target` は `seed[1]`、`outputs.9` のように、どの値か。"""
+
+    field: BindingField
+    target: str
+    message: str
+
+
+class ComfySuggestUsage(BaseModel):
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class ComfySuggestResponse(BaseModel):
+    """アシスタントの提案(ADR-0052 6章)。`items` にある項目だけが提案で、`suggested_bindings` の
+    ほかの項目は使わない。LLM が申告する確信度は返さない。"""
+
+    suggested_operation: Literal["generate", "edit"]
+    operation_reason: str = ""
+    operation_matches_reading: bool
+    suggested_bindings: SuggestedBindings
+    items: list[ComfySuggestItem] = Field(default_factory=list)
+    discarded: list[ComfySuggestDiscarded] = Field(default_factory=list)
+    model: str
+    usage: ComfySuggestUsage = Field(default_factory=ComfySuggestUsage)
 
 
 class ComfyWorkflowCreateRequest(BaseModel):
@@ -1713,6 +1911,9 @@ class ComfyWorkflowCreateRequest(BaseModel):
     template: dict[str, Any]
     bindings: Bindings
     exposed_params: list[ExposedParam] = Field(default_factory=list)
+    # 接続先(ADR-0051 3章)。`unset` は「接続の設定に従う」で、それ以外なら ComfyUI の接続の
+    # 値より優先する。省略・null は `unset`。
+    locality: Literal["external", "local", "unset"] | None = None
 
 
 class ComfyWorkflowUpdateRequest(BaseModel):
@@ -1723,6 +1924,7 @@ class ComfyWorkflowUpdateRequest(BaseModel):
     template: dict[str, Any] | None = None
     bindings: Bindings | None = None
     exposed_params: list[ExposedParam] | None = None
+    locality: Literal["external", "local", "unset"] | None = None
 
 
 class ComfyWorkflowSummary(BaseModel):
@@ -1730,6 +1932,8 @@ class ComfyWorkflowSummary(BaseModel):
     name: str
     operation: Literal["generate", "edit"]
     template_sha256: str
+    # 接続先(ADR-0051 3章)。`unset` は「接続の設定に従う」。
+    locality: Literal["external", "local", "unset"] = "unset"
     created_at: datetime
     updated_at: datetime
 
@@ -1738,10 +1942,61 @@ class ComfyWorkflowDetail(ComfyWorkflowSummary):
     template: dict[str, Any]
     bindings: Bindings
     exposed_params: list[ExposedParam] = Field(default_factory=list)
+    # 保存時の検証の結果(ADR-0052 3章)。作成・更新の応答では警告だけ(エラーなら 422)。
+    # 取得では、保存済みの差し込み先を今の検証に掛けた結果(古い登録のエラーも出る)。
+    validation_issues: list[ValidationIssue] = Field(default_factory=list)
 
 
 class ComfyWorkflowListResponse(BaseModel):
     items: list[ComfyWorkflowSummary] = Field(default_factory=list)
+
+
+class ComfyViewNodeInput(BaseModel):
+    """閲覧用の入力1つ(ADR-0052 7章)。秘密に見える値(ADR-0013 8章)は `value` を返さず、
+    `redacted` を True にする。"""
+
+    name: str
+    value: Any = None
+    linked: bool
+    redacted: bool = False
+
+
+class ComfyViewNode(BaseModel):
+    id: str
+    class_type: str | None = None
+    title: str | None = None
+    inputs: list[ComfyViewNodeInput] = Field(default_factory=list)
+    # 出力につながる(live)/ 表示だけ(display)/ 使われない(unused)。ADR-0052 2章。
+    state: NodeState = "live"
+    kind: NodeKind | None = None
+
+
+class ComfyViewExposedParam(BaseModel):
+    """閲覧用の公開パラメーター。登録した既定値が秘密に見えれば伏せる(`default_redacted`)。"""
+
+    name: str
+    label: str
+    node: str
+    input: str
+    type: ParamType
+    default: Any | None = None
+    default_redacted: bool = False
+
+
+class ComfyWorkflowViewResponse(BaseModel):
+    """生成画面からの閲覧(`GET /api/comfyui/workflows/{id}/view`。ADR-0052 7章)。
+
+    図に要る構造と値だけを返す。テンプレートそのものは返さない。差し込み先(`bindings`)には
+    出力(`outputs`)と最終プロンプト(`final_prompt`)も含まれる。
+    """
+
+    id: uuid.UUID
+    name: str
+    operation: Literal["generate", "edit"]
+    nodes: list[ComfyViewNode] = Field(default_factory=list)
+    edges: list[AnalyzeEdge] = Field(default_factory=list)
+    bindings: Bindings
+    exposed_params: list[ComfyViewExposedParam] = Field(default_factory=list)
 
 
 # -- About (ADR-0021 3章) ---------------------------------------------------
@@ -1969,6 +2224,9 @@ class LlmConnectionView(BaseModel):
     api_style: Literal["responses", "chat"]
     # キーを設定しているか(組み込みの接続先は OpenAI のキーの有無)。
     api_key_set: bool
+    # 接続先(ADR-0051 3章)と、どこで決まったか。組み込みの接続先は OpenAI の接続の値。
+    locality: Literal["external", "local"] = "external"
+    locality_source: Literal["connection", "default"] = "default"
     # この接続先を使っている機能。空でなければ削除できない。
     used_by: list[LlmConnectionFeature] = Field(default_factory=list)
 
@@ -1987,6 +2245,8 @@ class LlmConnectionCreateRequest(BaseModel):
     base_url: str
     api_style: str = "responses"
     api_key: str | None = None
+    # 接続先(ADR-0051 3章)。省略・null は既定(`external`)。
+    locality: Literal["external", "local"] | None = None
 
 
 class LlmConnectionUpdateRequest(BaseModel):
@@ -1996,6 +2256,8 @@ class LlmConnectionUpdateRequest(BaseModel):
     name: str | None = None
     base_url: str | None = None
     api_style: str | None = None
+    # 接続先(ADR-0051 3章)。null は既定(`external`)に戻す。
+    locality: Literal["external", "local"] | None = None
 
 
 class LlmConnectionApiKeyUpdateRequest(BaseModel):
@@ -2239,6 +2501,7 @@ class EmbeddingErrorDetail(BaseModel):
     - `embedding_failed`: その画像のベクトルの計算に失敗した
     - `embedding_missing`: その画像のベクトルがまだ無い(計算を頼んでいない)
     - `embedding_not_supported`: マスクは対象外
+    - `content_withheld`: Mod の `deny` の判定で画像を残さなかった(ADR-0051 4章)
     """
 
     code: Literal[
@@ -2247,6 +2510,7 @@ class EmbeddingErrorDetail(BaseModel):
         "embedding_failed",
         "embedding_missing",
         "embedding_not_supported",
+        "content_withheld",
     ]
     message: str
 
@@ -2378,6 +2642,8 @@ class SharePreviewAsset(BaseModel):
     width: int
     height: int
     title: str | None = None
+    # 画像を残さなかったか(ADR-0051 4章)。true ならサムネイルは出さない(410 になる)。
+    content_withheld: bool = False
 
 
 class SharePreviewResponse(BaseModel):
@@ -2396,6 +2662,8 @@ class ShareRow(BaseModel):
     root_asset_id: uuid.UUID
     # 起点の画像が削除されている(共有のページは 404 になっている)。
     root_deleted: bool = False
+    # 起点の画像を残さなかった(ADR-0051 4章。サムネイルは出さない)。
+    root_content_withheld: bool = False
     root_title: str | None = None
     scope: ShareScope
     allow_original: bool
@@ -2426,6 +2694,8 @@ class PublicShareAsset(BaseModel):
     allow_original: bool
     # サムネイルの焦点(ADR-0043)。
     focal_point: FocalPoint | None = None
+    # 画像を残さなかったか(ADR-0051 9章)。true なら画像は返さない(判定は含めない)。
+    content_withheld: bool = False
 
 
 class PublicShareRun(BaseModel):
@@ -2555,6 +2825,10 @@ class AssistantFormState(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     inputs: list[AssistantFormInput] = Field(default_factory=list, max_length=32)
     asset_group_id: uuid.UUID | None = None
+    # スタジオの結果エリアに出ている画像(ADR-0048 12章)。画像が無いとき・スタジオを開いて
+    # いないときは null。`view_result` が引数の無いときに見る。フォームの値ではないので
+    # `update_form` では変わらない。
+    result_asset_id: uuid.UUID | None = None
 
 
 class AssistantMessageCreateRequest(BaseModel):
@@ -2626,10 +2900,11 @@ class AssistantRunCreatedEvent(BaseModel):
 
 class AssistantErrorEvent(BaseModel):
     """処理を止めた理由。`llm_error`(LLM の呼び出しの失敗)、`rate_limited`(LLM の1時間の
-    上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`internal`(その他)。"""
+    上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`hook_denied`(Mod が送る前の
+    チェックで止めた。ADR-0051)、`internal`(その他)。"""
 
     type: Literal["error"] = "error"
-    code: Literal["llm_error", "rate_limited", "tool_limit", "internal"]
+    code: Literal["llm_error", "rate_limited", "tool_limit", "hook_denied", "internal"]
     message: str
 
 
@@ -2673,6 +2948,9 @@ class AssistantSettingsResponse(BaseModel):
     hourly_run_limit_max: int
     # 有効で、接続先とキーがそろっている(パネルを出してよい)。
     usable: bool
+    # 接続先が Structured Outputs に対応するとみなせる(ComfyUI のワークフローの推定に使える。
+    # ADR-0052 6章)。`usable` と両方が真のときだけ、登録・編集画面にボタンを出す。
+    structured_outputs: bool = False
     # 見ている利用者の、直近1時間の LLM のリクエスト数と、アシスタントが作った Run の数。
     requests_last_hour: int
     runs_last_hour: int
@@ -2687,3 +2965,221 @@ class AssistantSettingsUpdateRequest(BaseModel):
     hourly_request_limit: StrictInt | None = None
     runs_per_message_limit: StrictInt | None = None
     hourly_run_limit: StrictInt | None = None
+
+
+# -- Mod とフック(ADR-0051) ---------------------------------------------------------
+
+ModEvent = Literal["asset.ingested", "ai.before_send", "run.finished"]
+ModPurpose = Literal["image_run", "annotation", "assistant", "embedding", "workflow_analysis"]
+ModSource = Literal["upload", "url", "sketch", "mask", "composite", "generated", "import", "mcp"]
+ModOnFailure = Literal["block", "allow"]
+
+
+class ModFilters(BaseModel):
+    """購読の絞り込み。空のリストは絞らない。"""
+
+    purposes: list[ModPurpose] = Field(default_factory=list)
+    sources: list[ModSource] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
+
+
+class ModWebhookView(BaseModel):
+    """Webhook 1つ。署名の鍵の値は一部も返さず、設定済みかどうか(`secret_set`)だけ返す。"""
+
+    id: str
+    name: str
+    url: str
+    enabled: bool
+    events: list[ModEvent]
+    filters: ModFilters
+    send_images: bool
+    timeout_seconds: float
+    on_failure: ModOnFailure
+    # 「判定を待つ」(ADR-0051 2章)。`asset.ingested` と `run.finished` を、原本をストレージに
+    # 書く前に同期で呼ぶ。
+    wait_for_verdict: bool
+    order: int | None = None
+    secret_set: bool
+
+
+class ModSettingFieldView(BaseModel):
+    """Python の Mod のマニフェストに書いた設定の項目。秘密の項目は値を返さず、`secret_set`
+    だけ返す。"""
+
+    key: str
+    type: Literal["string", "number", "bool", "path", "secret"]
+    # 画面の言語の名前(マニフェストに言語ごとの名前があれば、その言語のもの)。
+    label: str
+    default: Any = None
+    value: Any = None
+    secret_set: bool | None = None
+
+
+class PythonModView(BaseModel):
+    """`MODS_DIR` に置いた Python の Mod 1つ。マニフェストが読めない・import できないものも
+    `error` を付けて返す(読み込みエラー)。"""
+
+    id: str
+    name: str | None = None
+    version: str | None = None
+    api_version: int | None = None
+    # マニフェストに書いた購読できるイベント。
+    available_events: list[ModEvent] = Field(default_factory=list)
+    # 読み込みエラー(マニフェストの不正、import の失敗)。
+    error: str | None = None
+    # import 済みか(有効にして、読み込めたもの)。
+    loaded: bool
+    enabled: bool
+    # 購読するイベント。null はマニフェストのイベントすべて。
+    events: list[ModEvent] | None = None
+    filters: ModFilters
+    timeout_seconds: float
+    on_failure: ModOnFailure
+    wait_for_verdict: bool
+    # 判定を返す Mod か(マニフェストの `returns_verdicts`)。false なら「判定を待つ」を選べない。
+    returns_verdicts: bool = True
+    order: int | None = None
+    settings: list[ModSettingFieldView] = Field(default_factory=list)
+
+
+class ModsResponse(BaseModel):
+    """`GET /api/settings/mods`(管理者だけ)。"""
+
+    # イベントの `instance.name`(管理者が決めた名前。未設定なら null)。
+    instance_name: str | None = None
+    webhooks: list[ModWebhookView]
+    python_mods: list[PythonModView]
+
+
+class ModsUpdateRequest(BaseModel):
+    """`PATCH /api/settings/mods`。null・空はインスタンスの名前を消す。"""
+
+    instance_name: str | None = None
+
+
+class ModWebhookCreateRequest(BaseModel):
+    """`POST /api/settings/mods/webhooks`。署名の鍵は必須(応答には返さない)。"""
+
+    name: str
+    url: str
+    secret: str
+    enabled: bool = False
+    events: list[ModEvent] = Field(default_factory=list)
+    filters: ModFilters = Field(default_factory=ModFilters)
+    send_images: bool = False
+    timeout_seconds: float = 10.0
+    on_failure: ModOnFailure = "block"
+    wait_for_verdict: bool = False
+
+
+class ModWebhookUpdateRequest(BaseModel):
+    """`PATCH /api/settings/mods/webhooks/{id}`。省略した項目は変えない。`secret` を送ると鍵を
+    差し替える。"""
+
+    name: str | None = None
+    url: str | None = None
+    secret: str | None = None
+    enabled: bool | None = None
+    events: list[ModEvent] | None = None
+    filters: ModFilters | None = None
+    send_images: bool | None = None
+    timeout_seconds: float | None = None
+    on_failure: ModOnFailure | None = None
+    wait_for_verdict: bool | None = None
+
+
+class PythonModUpdateRequest(BaseModel):
+    """`PATCH /api/settings/mods/python/{id}`。省略した項目は変えない。
+
+    `events` の null はマニフェストのイベントすべてに戻す。`values` は秘密でない項目の値
+    (null は既定に戻す)。`secrets` は秘密の項目の値(null は消す。値は応答に返さない)。"""
+
+    enabled: bool | None = None
+    events: list[ModEvent] | None = None
+    filters: ModFilters | None = None
+    timeout_seconds: float | None = None
+    on_failure: ModOnFailure | None = None
+    wait_for_verdict: bool | None = None
+    values: dict[str, Any] | None = None
+    secrets: dict[str, str | None] | None = None
+
+
+class ModOrderItem(BaseModel):
+    kind: Literal["webhook", "python"]
+    id: str
+
+
+class ModOrderRequest(BaseModel):
+    """`PUT /api/settings/mods/order`。この並びの順に呼ぶ(並びに無い Mod の順番は変えない)。"""
+
+    items: list[ModOrderItem]
+
+
+class ModTestRequest(BaseModel):
+    """テスト送信で送るダミーのイベント。"""
+
+    event: ModEvent = "ai.before_send"
+
+
+class ModTestResponse(BaseModel):
+    """テスト送信の結果。記録(`mod_invocation`)には残さない。"""
+
+    # allow / deny / ok / error / timeout
+    outcome: Literal["allow", "deny", "ok", "error", "timeout"]
+    duration_ms: int
+    # Webhook の HTTP の状態(Python の Mod と、届かなかったときは null)。
+    status_code: int | None = None
+    # 応答の本文(JSON。契約に合わなくても、読めたものを返す)。
+    response: Any = None
+    error: str | None = None
+
+
+class ModInvocationView(BaseModel):
+    id: uuid.UUID
+    event: ModEvent
+    event_id: uuid.UUID
+    mod_kind: Literal["webhook", "python"]
+    mod_id: str
+    mod_name: str
+    purpose: ModPurpose | None = None
+    run_id: uuid.UUID | None = None
+    asset_id: uuid.UUID | None = None
+    outcome: Literal["allow", "deny", "ok", "error", "timeout", "skipped"]
+    # `ai.before_send` で GAKEI が実際にどう扱ったか(失敗時の扱いを当てた後)。
+    effective: Literal["allow", "deny"] | None = None
+    reason: str | None = None
+    reference: str | None = None
+    error: str | None = None
+    duration_ms: int
+    created_at: datetime
+
+
+class ModInvocationListResponse(BaseModel):
+    items: list[ModInvocationView]
+
+
+class ModDeliveryView(BaseModel):
+    id: uuid.UUID
+    event: ModEvent
+    event_id: uuid.UUID
+    mod_kind: Literal["webhook", "python"]
+    mod_id: str
+    asset_id: uuid.UUID | None = None
+    run_id: uuid.UUID | None = None
+    status: Literal["queued", "delivering", "done", "failed"]
+    attempts: int
+    last_error: str | None = None
+    next_attempt_at: datetime
+    created_at: datetime
+    finished_at: datetime | None = None
+
+
+class ModDeliveryListResponse(BaseModel):
+    items: list[ModDeliveryView]
+
+
+class ModVerdictReceiveResponse(BaseModel):
+    """`POST /api/mods/{mod_id}/verdicts` の応答(ADR-0051 8章)。"""
+
+    # 記録した判定の数。
+    accepted: int

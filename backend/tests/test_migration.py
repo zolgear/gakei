@@ -50,6 +50,9 @@ def test_migration_creates_expected_tables(client: TestClient) -> None:
         "assistant_message",
         "asset_content_rating",
         "user_preference",
+        "mod_invocation",
+        "mod_verdict",
+        "mod_delivery",
         "alembic_version",
     } <= tables
 
@@ -1459,4 +1462,197 @@ def test_migration_0035_adds_composition_tables(empty_database_url: str) -> None
     tables = set(sa_inspect(engine).get_table_names())
     assert "asset_composition" not in tables
     assert "asset_composition_source" not in tables
+    engine.dispose()
+
+
+def test_migration_0036_adds_mod_tables_and_columns(empty_database_url: str) -> None:
+    """Mod とフック(ADR-0051): 0035 の DB に upgrade head で呼び出し・判定・配達の表と、
+    Asset の「画像なし(拒否)」の列、ワークフローの接続先(`locality`)が加わり、downgrade で
+    消えること。既存のワークフローの値は `unset` になる。"""
+    import uuid
+    from datetime import UTC, datetime
+
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0035")
+    engine = create_engine(empty_database_url)
+    now = datetime.now(UTC)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO comfy_workflow (id, name, operation, template, bindings,"
+                " exposed_params, template_sha256, created_at, updated_at)"
+                " VALUES (:id, 'wf', 'generate', '{}', '{}', '[]', :sha, :now, :now)"
+            ),
+            {
+                "id": uuid.uuid4().hex if engine.dialect.name == "sqlite" else str(uuid.uuid4()),
+                "sha": "0" * 64,
+                "now": now,
+            },
+        )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    assert {"mod_invocation", "mod_verdict", "mod_delivery"} <= set(inspector.get_table_names())
+    asset_columns = {c["name"] for c in inspector.get_columns("asset")}
+    assert {"content_withheld_at", "content_withheld_verdict_id"} <= asset_columns
+    assert "locality" in {c["name"] for c in inspector.get_columns("comfy_workflow")}
+    assert "ix_mod_delivery_status_next" in {
+        i["name"] for i in inspector.get_indexes("mod_delivery")
+    }
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT locality FROM comfy_workflow")).scalar_one() == "unset"
+    engine.dispose()
+
+    command.downgrade(cfg, "0035")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    tables = set(inspector.get_table_names())
+    assert not {"mod_invocation", "mod_verdict", "mod_delivery"} & tables
+    assert "content_withheld_at" not in {c["name"] for c in inspector.get_columns("asset")}
+    assert "locality" not in {c["name"] for c in inspector.get_columns("comfy_workflow")}
+    engine.dispose()
+
+
+def test_migration_0037_adds_verdict_propagation(empty_database_url: str) -> None:
+    """Mod の判定の波及(ADR-0051 4章): `mod_verdict.propagated_from_id` が加わり、downgrade で
+    消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0036")
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    columns = {c["name"] for c in sa_inspect(engine).get_columns("mod_verdict")}
+    assert "propagated_from_id" in columns
+    engine.dispose()
+
+    command.downgrade(cfg, "0036")
+    engine = create_engine(empty_database_url)
+    columns = {c["name"] for c in sa_inspect(engine).get_columns("mod_verdict")}
+    assert "propagated_from_id" not in columns
+    engine.dispose()
+
+
+def test_migration_0038_renames_locality_values(empty_database_url: str) -> None:
+    """接続先(ADR-0051 3章、2026-10-18 の改訂): `cloud` は `external` に、接続の `unset` は
+    消して既定(`external`)に戻すこと。ワークフローの `unset` は残す。downgrade で `cloud` に
+    戻る。"""
+    import uuid
+    from datetime import UTC, datetime
+
+    import sqlalchemy as sa
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    from app.main import alembic_config
+
+    app_setting = sa.table(
+        "app_setting",
+        sa.column("key", sa.String(100)),
+        sa.column("value", sa.JSON().with_variant(JSONB(), "postgresql")),
+        sa.column("updated_at", sa.DateTime(timezone=True)),
+    )
+
+    def settings_values(engine: sa.Engine) -> dict[str, object]:
+        with engine.connect() as conn:
+            rows = conn.execute(sa.select(app_setting.c.key, app_setting.c.value)).all()
+        return {row.key: row.value["value"] for row in rows}
+
+    def workflow_localities(engine: sa.Engine) -> dict[str, str]:
+        with engine.connect() as conn:
+            rows = conn.execute(text("SELECT name, locality FROM comfy_workflow")).all()
+        return {row.name: row.locality for row in rows}
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0037")
+    engine = create_engine(empty_database_url)
+    now = datetime.now(UTC)
+    with engine.begin() as conn:
+        conn.execute(
+            app_setting.insert(),
+            [
+                {
+                    "key": "providers.locality",
+                    "value": {"value": {"openai": "cloud", "comfyui": "unset", "sdwebui": "local"}},
+                    "updated_at": now,
+                },
+                {
+                    "key": "annotation.connections",
+                    "value": {
+                        "value": [
+                            {"id": "a", "name": "A", "base_url": "http://a", "locality": "cloud"},
+                            {"id": "b", "name": "B", "base_url": "http://b", "locality": "unset"},
+                            {"id": "c", "name": "C", "base_url": "http://c", "locality": "local"},
+                            {"id": "d", "name": "D", "base_url": "http://d"},
+                        ]
+                    },
+                    "updated_at": now,
+                },
+            ],
+        )
+        for name, locality in (("wf-cloud", "cloud"), ("wf-unset", "unset"), ("wf-local", "local")):
+            conn.execute(
+                text(
+                    "INSERT INTO comfy_workflow (id, name, operation, template, bindings,"
+                    " exposed_params, template_sha256, locality, created_at, updated_at)"
+                    " VALUES (:id, :name, 'generate', '{}', '{}', '[]', :sha, :locality,"
+                    " :now, :now)"
+                ),
+                {
+                    "id": (
+                        uuid.uuid4().hex if engine.dialect.name == "sqlite" else str(uuid.uuid4())
+                    ),
+                    "name": name,
+                    "sha": "0" * 64,
+                    "locality": locality,
+                    "now": now,
+                },
+            )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    values = settings_values(engine)
+    assert values["providers.locality"] == {"openai": "external", "sdwebui": "local"}
+    assert [c.get("locality") for c in values["annotation.connections"]] == [  # type: ignore[union-attr]
+        "external",
+        None,
+        "local",
+        None,
+    ]
+    assert workflow_localities(engine) == {
+        "wf-cloud": "external",
+        "wf-unset": "unset",
+        "wf-local": "local",
+    }
+    engine.dispose()
+
+    command.downgrade(cfg, "0037")
+    engine = create_engine(empty_database_url)
+    values = settings_values(engine)
+    assert values["providers.locality"] == {"openai": "cloud", "sdwebui": "local"}
+    assert [c.get("locality") for c in values["annotation.connections"]] == [  # type: ignore[union-attr]
+        "cloud",
+        None,
+        "local",
+        None,
+    ]
+    assert workflow_localities(engine) == {
+        "wf-cloud": "cloud",
+        "wf-unset": "unset",
+        "wf-local": "local",
+    }
     engine.dispose()

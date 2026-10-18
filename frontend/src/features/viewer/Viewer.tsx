@@ -5,15 +5,12 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { ApiError, deleteAsset, getAsset, getRun, getShareSettings, restoreAsset } from '../../api/client'
-import { runSeedDisplay } from '../run-detail/runSeedDisplay'
 import { assetUrl } from '../../api/assetUrl'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { useResourcePanel } from '../../context/useResourcePanel'
 import { useBackNavigate } from '../../lib/useBackNavigate'
-import { isMobileViewport } from '../../lib/viewport'
+import { isMobileViewport, useIsMobileViewport } from '../../lib/viewport'
 import { useAddToInputs } from '../run-form/useAddToInputs'
-import { useOpenInArrange } from '../composite/useOpenInArrange'
-import { ArrangeIcon } from '../composite/compositeIcons'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import {
@@ -26,29 +23,21 @@ import {
   TrashIcon,
 } from '../../components/icons'
 import { ToastHost, useToast } from '../../components/Toast'
-import { formatBytes, formatDateTime } from '../../lib/format'
+import { formatDateTime } from '../../lib/format'
 import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/assetRestore'
 import { fmt, useI18n } from '../../i18n'
-import { EmbeddedMetaSection } from '../lineage/EmbeddedMetaSection'
-import { OriginRecipeSection } from '../lineage/OriginRecipeSection'
-import { AssetGroupsSection } from './AssetGroupsSection'
-import { SimilarAssetsSection } from './SimilarAssetsSection'
-import { supportsSimilar } from '../embeddings/similarAssets'
-import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
-import { AssetTagsSection, AssetTitleSection } from './AssetAnnotationSection'
-import { annotationPollInterval, supportsAnnotation } from '../annotations/annotationStatus'
+import { annotationPollInterval } from '../annotations/annotationStatus'
 import { contentRatingPollInterval } from '../content-rating/contentRating'
-import { ContentRatingSection } from '../content-rating/ContentRatingSection'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
+import { AssetDetailSections } from './AssetDetailSections'
 import { ShareDialog } from '../share/ShareDialog'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import { importToastFromState } from '../lineage-transfer/lineageTransfer'
-import { FinalPromptSection } from '../run-detail/FinalPromptSection'
-import { baselineNegativePrompt } from '../run-detail/finalPrompt'
-import { StudioPromptActions } from '../workspace/StudioPromptActions'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
+import { hasDenyVerdict, hasFlagVerdict, isSendBlocked, isWithheld } from '../mods/modVerdicts'
+import { VerdictBadge } from '../mods/VerdictList'
 import styles from './Viewer.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -57,9 +46,8 @@ interface ViewerProps {
 }
 
 /**
- * 生成元 Run の詳細を取得する共通フック。主たる親 Asset(role=image かつ position=0 の入力)と、
- * 出力一覧(他の出力への切り替え用)の両方をこの1回の fetch から導く(queryKey を共有し、
- * 二重に取得しない)。
+ * 生成元 Run の詳細を取得する共通フック。出力一覧(他の出力への切り替え用)を導く。queryKey は
+ * `AssetDetailSections`(主たる親 Asset と seed)と共有し、二重に取得しない。
  */
 function useRun(runId: string | undefined) {
   return useQuery({
@@ -78,6 +66,7 @@ function isEditableTarget(el: Element | null): boolean {
 
 export function Viewer({ assetId }: ViewerProps) {
   const { t } = useI18n()
+  const isMobile = useIsMobileViewport()
   // 推定中(ADR-0024)とレーティングの判定中(ADR-0049)は、終わるまで取り直す。
   const assetQuery = useQuery({
     queryKey: ['asset', assetId],
@@ -91,7 +80,6 @@ export function Viewer({ assetId }: ViewerProps) {
   const navigate = useNavigate()
   const addToInputs = useAddToInputs()
   // 「配置で開く」(ADR-0050 5章)。保存するとフォームの入力に置いてスタジオへ移る。
-  const arrange = useOpenInArrange()
   const queryClient = useQueryClient()
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -102,8 +90,6 @@ export function Viewer({ assetId }: ViewerProps) {
   // 共有リンク(ADR-0029)は管理者設定で有効なときだけ「共有」を出す。
   const shareSettingsQuery = useQuery({ queryKey: SHARE_SETTINGS_QUERY_KEY, queryFn: getShareSettings })
   const shareEnabled = shareSettingsQuery.data?.enabled === true
-  // 似た画像(ADR-0033)は埋め込みが使えるときだけ出す。
-  const embeddingCaps = useEmbeddingCapabilities()
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteAsset(assetId),
@@ -154,11 +140,6 @@ export function Viewer({ assetId }: ViewerProps) {
 
   const asset = assetQuery.data
   const runQuery = useRun(asset?.produced_by_run?.id)
-  // ComfyUI / SD WebUI の Run だけ、実際に使った seed を出す(runSeedDisplay.ts)。
-  const seed = runQuery.data ? runSeedDisplay(runQuery.data, asset?.output_index) : null
-  const primaryParentAssetId = runQuery.data?.inputs?.find(
-    (i) => i.role === 'image' && i.position === 0,
-  )?.asset_id
   const outputNav =
     asset && runQuery.data?.outputs ? resolveRunOutputNav(runQuery.data.outputs, asset.id) : null
 
@@ -184,6 +165,10 @@ export function Viewer({ assetId }: ViewerProps) {
   }, [outputNav, deleteConfirmOpen, addToInputs.isPending, shareOpen, exportOpen, navigate])
 
   const isReady = !assetQuery.isLoading && !assetQuery.isError && asset !== undefined
+  // 画像を残さなかった(ADR-0051 4章)。画像を使う操作(ダウンロード、共有、入力に使う)を止める。
+  const withheld = isWithheld(asset)
+  // 入力に使えない(画像なし、または最新の判定に deny がある)。
+  const sendBlocked = isSendBlocked(asset)
 
   return (
     <div className={styles.page}>
@@ -203,6 +188,13 @@ export function Viewer({ assetId }: ViewerProps) {
           <AssetCanvas
             asset={asset}
             contentRating={asset.content_rating ?? null}
+            withheld={withheld}
+            withheldLabel={asset.content_withheld_verdict?.label}
+            withheldMessage={asset.content_withheld_verdict?.message}
+            onImageError={() => queryClient.invalidateQueries({ queryKey: ['asset', asset.id] })}
+            // 狭い幅では画像の枠の下に情報欄が続くので、枠の上でもページを縦にスクロールできるように
+            // する(全体表示のときだけ。拡大したらパン)。
+            pageScrollWhenFit={isMobile}
             toolbarLeading={
               <button type="button" className={styles.backButton} onClick={goBack}>
                 {t.viewer.back}
@@ -242,38 +234,15 @@ export function Viewer({ assetId }: ViewerProps) {
             {/* 見出しの行はパネルの上端に固定し、よく使う操作をアイコンで並べる(削除だけは末尾)。 */}
             <div className={styles.headerRow}>
               <h2 className={styles.heading}>Asset</h2>
+              {/* Mod の判定の印(ADR-0051 5章)。拒否を優先し、無ければ要確認。 */}
+              {(hasDenyVerdict(asset) || hasFlagVerdict(asset)) && (
+                <span className={styles.verdictMark} title={hasDenyVerdict(asset) ? undefined : t.mods.flagMark}>
+                  <VerdictBadge verdict={hasDenyVerdict(asset) ? 'deny' : 'flag'} />
+                </span>
+              )}
               <div className={styles.headerActions}>
-                <a
-                  className={styles.iconButton}
-                  href={assetUrl(asset.id, 'original', { download: true })}
-                  aria-label={t.viewer.downloadOriginal}
-                  title={t.viewer.downloadOriginal}
-                >
-                  <DownloadIcon />
-                </a>
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label={t.viewer.useAsInput}
-                  title={t.viewer.useAsInput}
-                  onClick={() => addToInputs.request(asset.id)}
-                  disabled={Boolean(asset.deleted_at)}
-                >
-                  <AddToInputIcon />
-                </button>
-                {asset.kind !== 'mask' && (
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label={t.composite.openWith}
-                    title={t.composite.openWith}
-                    onClick={() => arrange.open([asset.id])}
-                    disabled={Boolean(asset.deleted_at)}
-                  >
-                    <ArrangeIcon />
-                  </button>
-                )}
-                {/* 生成元の Run があるときだけ、その詳細へ直接移る(下の文字のリンクと同じ遷移先)。 */}
+                {/* 生成元の Run の詳細へ直接移る(下の文字のリンクと同じ遷移先)。生成元がある画像
+                    だけに出る。並びは右寄せなので、左端に置けば有無でほかのボタンの位置は変わらない。 */}
                 {asset.produced_by_run && (
                   <Link
                     to={`/runs/${asset.produced_by_run.id}`}
@@ -284,6 +253,37 @@ export function Viewer({ assetId }: ViewerProps) {
                     <RunDetailIcon />
                   </Link>
                 )}
+                {withheld ? (
+                  // 画像が無いのでダウンロードできない(位置を変えないよう、押せないボタンで残す)。
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label={t.viewer.downloadOriginal}
+                    title={t.mods.withheldUnavailable}
+                    disabled
+                  >
+                    <DownloadIcon />
+                  </button>
+                ) : (
+                  <a
+                    className={styles.iconButton}
+                    href={assetUrl(asset.id, 'original', { download: true })}
+                    aria-label={t.viewer.downloadOriginal}
+                    title={t.viewer.downloadOriginal}
+                  >
+                    <DownloadIcon />
+                  </a>
+                )}
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={t.viewer.useAsInput}
+                  title={sendBlocked ? t.mods.cannotUseAsInput : t.viewer.useAsInput}
+                  onClick={() => addToInputs.request(asset.id)}
+                  disabled={Boolean(asset.deleted_at) || sendBlocked}
+                >
+                  <AddToInputIcon />
+                </button>
                 <Link
                   to={`/lineage/${asset.id}`}
                   className={styles.iconButton}
@@ -301,25 +301,27 @@ export function Viewer({ assetId }: ViewerProps) {
                 >
                   <LineageIcon />
                 </Link>
-                {/* 系列を ZIP に書き出す(ADR-0037)。共有リンクと違い管理者設定は無い。 */}
-                {!asset.deleted_at && (
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label={t.lineageTransfer.export.button}
-                    title={t.lineageTransfer.export.buttonTooltip}
-                    onClick={() => setExportOpen(true)}
-                  >
-                    <ExportArchiveIcon />
-                  </button>
-                )}
-                {shareEnabled && !asset.deleted_at && (
+                {/* 系列を ZIP に書き出す(ADR-0037)。共有リンクと違い管理者設定は無い。
+                    削除済みと画像なし(ADR-0051)では押せない状態で残す(アイコンの位置を変えないため)。 */}
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={t.lineageTransfer.export.button}
+                  title={withheld ? t.mods.withheldUnavailable : t.lineageTransfer.export.buttonTooltip}
+                  onClick={() => setExportOpen(true)}
+                  disabled={Boolean(asset.deleted_at) || withheld}
+                >
+                  <ExportArchiveIcon />
+                </button>
+                {/* 共有は管理者が無効にしていれば出さない(画像によらず同じなので並びは変わらない)。 */}
+                {shareEnabled && (
                   <button
                     type="button"
                     className={styles.iconButton}
                     aria-label={t.share.button}
-                    title={t.share.buttonTooltip}
+                    title={withheld ? t.mods.withheldUnavailable : t.share.buttonTooltip}
                     onClick={() => setShareOpen(true)}
+                    disabled={Boolean(asset.deleted_at) || withheld}
                   >
                     <ShareLinkIcon />
                   </button>
@@ -380,6 +382,7 @@ export function Viewer({ assetId }: ViewerProps) {
                       <AssetThumb
                         assetId={output.asset_id}
                         rating={output.content_rating}
+                        withheld={output.content_withheld}
                         style={focalStyle(output.focal_point)}
                         alt=""
                         loading="lazy"
@@ -390,75 +393,8 @@ export function Viewer({ assetId }: ViewerProps) {
                 </div>
               </div>
             )}
-            {supportsAnnotation(asset) && <AssetTitleSection asset={asset} />}
-            <dl className={styles.metaList}>
-              <dt>{t.viewer.dimensions}</dt>
-              <dd>
-                {asset.width} × {asset.height} px
-              </dd>
-              <dt>{t.viewer.format}</dt>
-              <dd>{asset.mime}</dd>
-              <dt>{t.viewer.size}</dt>
-              <dd>{formatBytes(asset.bytes)}</dd>
-              <dt>sha256</dt>
-              <dd className={styles.mono}>{asset.sha256.slice(0, 16)}...</dd>
-              <dt>{t.viewer.created}</dt>
-              <dd>{formatDateTime(asset.created_at)}</dd>
-            </dl>
-
-            {asset.produced_by_run && (
-              <>
-                <h3 className={styles.subheading}>{t.viewer.promptHeading}</h3>
-                <p className={styles.runPrompt}>{asset.produced_by_run.prompt.slice(0, 80)}</p>
-                <p className={styles.runMeta}>
-                  {runQuery.data?.model_label ?? asset.produced_by_run.model} ・ {asset.produced_by_run.operation}
-                </p>
-                {seed && (
-                  <p className={styles.runMeta} title={seed.tooltip}>
-                    {seed.text}
-                  </p>
-                )}
-                <Link to={`/runs/${asset.produced_by_run.id}`} className={styles.runLink}>
-                  {t.viewer.viewRunDetail}
-                </Link>
-                {primaryParentAssetId && (
-                  <p className={styles.runMeta}>
-                    {t.viewer.sourceImage}{' '}
-                    <Link to={`/assets/${primaryParentAssetId}`} className={styles.runLink}>
-                      {t.viewer.view}
-                    </Link>{' '}
-                    ・{' '}
-                    <Link
-                      to={`/runs/${asset.produced_by_run.id}/compare?before=${primaryParentAssetId}&after=${asset.id}`}
-                      className={styles.runLink}
-                    >
-                      {t.viewer.compareWithOriginal}
-                    </Link>
-                  </p>
-                )}
-                {/* 最終プロンプト(ADR-0030 3章)と、この画像の展開後のプロンプト(ADR-0038 7章)。
-                    挿入・置き換えはスタジオへ移って反映する。 */}
-                <FinalPromptSection
-                  className={styles.finalPrompt}
-                  textOutputs={asset.produced_by_run.text_outputs}
-                  outputIndex={asset.output_index ?? null}
-                  prompt={asset.produced_by_run.prompt}
-                  negativePrompt={runQuery.data ? baselineNegativePrompt(runQuery.data.params) : undefined}
-                  headingClassName={styles.subheading}
-                  renderActions={(text) => <StudioPromptActions prompt={text} />}
-                />
-              </>
-            )}
-
-            {/* タグはプロンプトの下(Run が無い画像では大きさ・形式の下)。多いと畳む。
-                レーティング(ADR-0049 4章)はタグの下。 */}
-            {supportsAnnotation(asset) && <AssetTagsSection asset={asset} />}
-            <ContentRatingSection asset={asset} />
-
-            {asset.origin && <OriginRecipeSection origin={asset.origin} />}
-            {asset.embedded_meta && <EmbeddedMetaSection meta={asset.embedded_meta} assetId={asset.id} />}
-            <AssetGroupsSection assetId={asset.id} group={asset.group ?? null} />
-            {embeddingCaps && supportsSimilar(asset) && <SimilarAssetsSection key={asset.id} assetId={asset.id} />}
+            {/* タイトル、寸法など、生成元、タグ、レーティングなど(スタジオの「詳細」タブ・系列インスペクターと共通)。 */}
+            <AssetDetailSections asset={asset} />
 
             {!asset.deleted_at && (
               <div className={styles.actions}>
@@ -478,7 +414,6 @@ export function Viewer({ assetId }: ViewerProps) {
         )}
       </aside>
 
-      {arrange.editor}
       <AddToInputsDialog
         open={addToInputs.isPending}
         onAdd={() => addToInputs.resolve('add')}
@@ -489,7 +424,7 @@ export function Viewer({ assetId }: ViewerProps) {
         <ConfirmDialog
           open={deleteConfirmOpen}
           message={t.viewer.deleteConfirmMessage}
-          previewImageUrl={assetUrl(asset.id, 'thumb')}
+          previewImageUrl={withheld ? undefined : assetUrl(asset.id, 'thumb')}
           previewFocalPoint={asset.focal_point}
           previewDetail={`${asset.width} × ${asset.height}`}
           onConfirm={() => deleteMutation.mutate()}

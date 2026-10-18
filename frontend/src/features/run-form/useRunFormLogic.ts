@@ -56,7 +56,7 @@ import {
   isProviderUsable,
   providerUnavailableMessage,
 } from './submitChecks'
-import { useDeletedInputAssetIds } from './useDeletedInputAssetIds'
+import { useUnusableInputAssetIds } from './useDeletedInputAssetIds'
 import { computePromptInsertion, type PromptInsertMode } from './promptInsertion'
 import { applyMention } from '../prompt-sets/mentionQuery'
 import { useAssetGroups } from '../stock/groups/assetGroupQueries'
@@ -177,6 +177,8 @@ export interface RunFormLogic {
   maxMaskBytes: number
   imageInputCount: number
   hasDeletedInputs: boolean
+  /** 入力に、Mod の判定で使えない画像(画像なし、または deny)がある(ADR-0051 4章)。 */
+  hasBlockedInputs: boolean
   /**
    * 選んだモデルの edit が「ちょうどN枚」を要求するときの N(min_input_images === max_input_images
    * かつ 1 より大きいとき。ComfyUI の画像の枠)。それ以外(OpenAI/Fake 等、枚数に幅がある)は null。
@@ -417,8 +419,10 @@ export function useRunFormLogic(
   }
   const editInputsValid = imageInputCount <= maxInputImages
   const inputCountRequirementReason = inputCountRequirementMessage(opCaps, operation, imageInputCount)
-  const deletedInputAssetIds = useDeletedInputAssetIds(formState.inputs)
-  const hasDeletedInputs = deletedInputAssetIds.length > 0
+  const unusableInputAssetIds = useUnusableInputAssetIds(formState.inputs)
+  const hasDeletedInputs = unusableInputAssetIds.deleted.length > 0
+  // Mod の判定で入力に使えない画像(ADR-0051 4章)。サーバーは 409 にするので、送る前に止める。
+  const hasBlockedInputs = unusableInputAssetIds.blocked.length > 0
 
   const operationSupported = isOperationSupported(opCaps)
   const maskRequired = opCaps?.requires_mask ?? false
@@ -641,6 +645,13 @@ export function useRunFormLogic(
     },
     onError: (err: unknown) => {
       setSubmitError(err instanceof ApiError ? err.message : msg().runForm.runFormLogic.submitFailedDefault)
+      // 409 は、入力の画像が Mod の判定で使えなくなった(ADR-0051 4章)ことがある。入力の詳細を
+      // 取り直し、該当する入力を「画像なし(拒否)」などの表示に切り替える。
+      if (err instanceof ApiError && err.status === 409) {
+        for (const input of formState.inputs) {
+          void queryClient.invalidateQueries({ queryKey: ['asset', input.assetId] })
+        }
+      }
     },
   })
 
@@ -684,6 +695,7 @@ export function useRunFormLogic(
     editInputsValid &&
     isInputCountSatisfied(opCaps, operation, imageInputCount) &&
     !hasDeletedInputs &&
+    !hasBlockedInputs &&
     provider !== '' &&
     model !== '' &&
     operationSupported &&
@@ -774,6 +786,7 @@ export function useRunFormLogic(
     maxMaskBytes: providerEntry?.max_mask_bytes ?? 10 * 1024 * 1024,
     imageInputCount,
     hasDeletedInputs,
+    hasBlockedInputs,
     exactInputImagesRequired,
     inputCountRequirementReason,
     inputs: formState.inputs,

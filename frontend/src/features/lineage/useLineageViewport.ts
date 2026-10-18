@@ -5,13 +5,20 @@
  * React Flow の `fitView`(プロパティ)は全体を収めるだけで、倍率の下限で止めたときに注目する
  * ノードへ寄せられない。そこで `fitView()`(関数)は「ノードの大きさを測り終えた」合図として
  * だけ使い、それが済んでから自前で倍率と位置を決め直す(ノードの配列を制御している
- * (`onNodesChange` を渡さない)ため、`useNodesInitialized` は真にならない)。どちらも同じ描画の
- * 前に済むので、全体を収めた状態が一瞬見えることはない。
+ * (`onNodesChange` を渡さない)ため、`useNodesInitialized` は真にならない)。
+ *
+ * `fitView()` の解決は描画の後になることがある。React Flow のストアにノードが入るのは
+ * `useLayoutEffect` より後なので、最初の表示は実際にはキャンバスの ResizeObserver から走り、
+ * そのときノードはもう測り終えていて変化が無いため、React Flow は `requestAnimationFrame` を
+ * 1回待ってから解決する。その間は既定の位置(左上、倍率 1)のままノードが描かれ、小さい
+ * ノードが左上に一瞬見えてから拡大されるように見える。そこで系列(`fitKey`)ごとに最初の
+ * 自動の表示が済むまでは `viewportReady` を偽にし、呼び出し側はノードとエッジを隠す
+ * (`LineageGraph.module.css` の `.viewportPending`)。
  *
  * ノードを選ぶたびにノードの配列は作り直されるので、最初の表示は `fitKey`(系列が変わったとき
  * だけ変わる値)ごとに1回だけにする。
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { useReactFlow, useStoreApi } from '@xyflow/react'
 import {
   LINEAGE_DEFAULT_FIT_PADDING,
@@ -21,6 +28,12 @@ import {
   computeFullFitViewport,
   type LineageFitOptions,
 } from './lineageViewport'
+
+/**
+ * 最初の自動の表示がいつまでも済まないとき(キャンバスの幅が 0 のままなど)に、隠したままに
+ * しないための猶予(ms)。
+ */
+const VIEWPORT_READY_FALLBACK_MS = 1000
 
 interface UseLineageViewportArgs {
   /** キャンバス(React Flow の入れ物)。大きさの変化を見張る。 */
@@ -48,10 +61,13 @@ export function useLineageViewport({
   const store = useStoreApi()
 
   // ResizeObserver のコールバックや非同期の続きからは最新の値を読む。
-  const latest = useRef({ focusNodeId, inspectorWidthPx, options })
+  const latest = useRef({ fitKey, focusNodeId, inspectorWidthPx, options })
   useLayoutEffect(() => {
-    latest.current = { focusNodeId, inspectorWidthPx, options }
+    latest.current = { fitKey, focusNodeId, inspectorWidthPx, options }
   })
+
+  // 自動の表示を一度でも済ませた系列(`fitKey`)。これと今の `fitKey` が違う間はノードを隠す。
+  const [fittedKey, setFittedKey] = useState<string | null>(null)
 
   const measure = useCallback(() => {
     const { width, height } = store.getState()
@@ -84,6 +100,8 @@ export function useLineageViewport({
         }),
         { duration: 0 },
       )
+      // 倍率と位置を決めてから見せる(`duration: 0` なので `setViewport` は同期で済む)。
+      setFittedKey(current.fitKey)
     })
   }, [fitView, measure, getNodes, getNodesBounds, setViewport])
 
@@ -121,5 +139,15 @@ export function useLineageViewport({
     return () => observer.disconnect()
   }, [canvasRef, autoFit, fitKey])
 
-  return { fitAll }
+  // 万一 `fitView()` が解決しないままでも、いつまでも隠したままにはしない。
+  useEffect(() => {
+    if (nodeCount === 0) return
+    const timer = window.setTimeout(() => setFittedKey(fitKey), VIEWPORT_READY_FALLBACK_MS)
+    return () => window.clearTimeout(timer)
+  }, [fitKey, nodeCount])
+
+  /** 系列ごとの最初の自動の表示が済んだか。偽の間はノードとエッジを隠す。 */
+  const viewportReady = fittedKey === fitKey
+
+  return { fitAll, viewportReady }
 }

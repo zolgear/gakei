@@ -1,6 +1,7 @@
 /**
  * `/settings/comfyui`(管理者。ADR-0013 7章、ADR-0031)。
  * - 「接続」: `ComfyUIConnectionCard`(カード + ダイアログ。ページの保存には混ぜない)。
+ * - 「接続」: 接続先(`locality`。ADR-0051 3章。`ProviderLocalityCard`)。ダイアログでその場で送る。
  * - 「保存で反映」: 1回の実行を待つ上限(タイムアウト、2026-09-24)。画面では分で入力し、保存時に秒へ
  *   変換して `PATCH /api/settings/general` の `comfyui_timeout_seconds` だけを送る。「既定値に戻す」は
  *   下書きに null を入れる。環境変数(`COMFYUI_TIMEOUT_SECONDS`)由来でも入力欄はロックしない。
@@ -22,6 +23,7 @@ import {
   minutesToSeconds,
   secondsToDisplayMinutes,
 } from '../generalSettings'
+import { ProviderLocalityCard } from '../LocalityParts'
 import { GENERAL_SETTINGS_QUERY_KEY } from '../queryKeys'
 import type { DraftErrors } from '../settingsDraft'
 import { SettingsPageFrame } from '../SettingsPageFrame'
@@ -72,6 +74,7 @@ export function ComfyUISettingsPage() {
     <SettingsPageFrame pageId="comfyui" title={t.settings.pages.comfyui} intro={c.intro} draft={draft}>
       <SettingsSection heading={c.connectionHeading}>
         <ComfyUIConnectionCard />
+        <ProviderLocalityCard provider="comfyui" />
       </SettingsSection>
 
       <SettingsSection heading={c.runHeading}>

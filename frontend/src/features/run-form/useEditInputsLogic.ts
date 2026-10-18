@@ -6,7 +6,7 @@
  * `addAssets`(2026-09-26 追加)は「入力画像を追加」ダイアログのストック選択専用で、
  * アップロードを伴わず既存 Asset の id をそのまま入力に足す。
  */
-import { useState, type ClipboardEvent, type DragEvent } from 'react'
+import { useState, type DragEvent } from 'react'
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
 import { ApiError, createAsset, getAsset, type AssetDetail, type AssetUploadResponse } from '../../api/client'
 import { fmt, msg } from '../../i18n'
@@ -19,7 +19,7 @@ import {
   setMaskInput,
 } from './editInputs'
 import { validateInputFile } from './inputValidation'
-import { findDeletedInputAssetIds } from './deletedInputs'
+import { findBlockedInputAssetIds, findDeletedInputAssetIds } from './deletedInputs'
 import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData } from './dragDropAssets'
 import { pickPastedImageFiles } from './clipboardImages'
 import type { RunInputItem } from './types'
@@ -45,6 +45,8 @@ export interface EditInputsLogic {
   detailsByAssetId: Map<string, AssetDetail>
   notFoundAssetIds: Set<string>
   deletedAssetIds: Set<string>
+  /** 入力に使えない Asset(画像なし、または Mod の判定で deny。ADR-0051 4章)。 */
+  blockedAssetIds: Set<string>
   positionZeroAsset: AssetDetail | undefined
   uploadErrors: string[]
   /** アップロードが既存 Asset に一致した(ADR-0014)ときの案内。エラーとは別枠で出す。 */
@@ -56,7 +58,7 @@ export interface EditInputsLogic {
    * (2026-09-26 追加)。アップロードは発生しない。既に入力済みの id は無視する。 */
   addAssets: (assetIds: string[]) => void
   /** 貼り付けに画像があればアップロードして入力に追加する(その場合だけ既定動作を止める)。 */
-  handlePaste: (e: ClipboardEvent<HTMLElement>) => void
+  handlePaste: (e: ClipboardEvent) => void
   /** 入力1件を inputId で指して並べ替える。 */
   handleMove: (inputId: string, direction: 'up' | 'down') => void
   /** 入力1件を inputId で指して取り除く(同じ画像の他の入力は残る)。 */
@@ -120,6 +122,7 @@ export function useEditInputsLogic(
     else if (query?.isError) notFoundAssetIds.add(id)
   })
   const deletedAssetIds = new Set(findDeletedInputAssetIds(inputs, detailsByAssetId))
+  const blockedAssetIds = new Set(findBlockedInputAssetIds(inputs, detailsByAssetId))
   const positionZeroAsset = images[0] ? detailsByAssetId.get(images[0].assetId) : undefined
 
   const uploadMutation = useMutation({
@@ -215,7 +218,8 @@ export function useEditInputsLogic(
     // kind === 'none'(image/* 以外だけがドロップされた)場合は何もしない。エラー表示もしない。
   }
 
-  function handlePaste(e: ClipboardEvent<HTMLElement>) {
+  function handlePaste(e: ClipboardEvent) {
+    if (!e.clipboardData) return
     const files = pickPastedImageFiles(Array.from(e.clipboardData.items))
     if (files.length === 0) return
     // 画像の貼り付け。テキストの貼り付けとしては扱わない(プロンプト欄にファイル名等が入らないように)。
@@ -346,6 +350,7 @@ export function useEditInputsLogic(
     detailsByAssetId,
     notFoundAssetIds,
     deletedAssetIds,
+    blockedAssetIds,
     positionZeroAsset,
     uploadErrors,
     uploadNotice,

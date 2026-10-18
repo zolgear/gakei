@@ -171,7 +171,13 @@ def composition_view(
     sources: list[AssetCompositionSourceView] = []
     for row in composition_sources(db, asset.id):
         source = db.get(Asset, row.source_asset_id)
-        available = source is not None and source.deleted_at is None and checker.asset(source)
+        available = (
+            source is not None
+            and source.deleted_at is None
+            # 画像を残さなかった素材(ADR-0051 4章)は読めない。
+            and source.content_withheld_at is None
+            and checker.asset(source)
+        )
         if available and store is not None and source is not None:
             try:
                 available = store.exists(source.blob_key)

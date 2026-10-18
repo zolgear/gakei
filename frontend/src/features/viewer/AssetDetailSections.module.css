@@ -1,0 +1,66 @@
+/* Asset の詳細(AssetDetailSections)。ビューアの情報欄の見た目をそのまま持ってきたもの。 */
+
+.subheading {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.metaList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.metaList dt {
+  color: var(--color-text-faint);
+}
+
+.metaList dd {
+  margin: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.runPrompt {
+  margin: 0;
+  font-size: 12px;
+}
+
+.runMeta {
+  margin: 4px 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* 最終プロンプト(ADR-0030)。見出しの上の余白は .subheading と揃える。 */
+.finalPrompt {
+  margin-top: 12px;
+}
+
+.runLink {
+  font-size: 12px;
+}
+
+/* 系列インスペクターで開くとき(onOpenRun)はボタンにするが、見た目はリンクのままにする */
+button.runLink {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.runLink:hover {
+  color: var(--color-accent-hover);
+}

@@ -26,6 +26,7 @@ import {
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { getLocale, msg } from '../../i18n'
 import { assistantFormState } from './assistantForm'
+import { getStudioResultAssetId } from '../workspace/studioResultStore'
 import { assistantSessionReducer, initialAssistantSession } from './assistantSession'
 import { applyFormWrite, formWriteFromStreamEvent, type FormWriteRecord } from './formWrite'
 import { readAssistantStream } from './assistantStream'
@@ -163,7 +164,7 @@ export function AssistantSessionProvider({ children }: { children: ReactNode }) 
           {
             text,
             attachments,
-            form: assistantFormState(formStateRef.current),
+            form: assistantFormState(formStateRef.current, getStudioResultAssetId()),
             locale: getLocale(),
           },
           controller.signal,

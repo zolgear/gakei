@@ -11,7 +11,7 @@ import {
   validateExposedParamName,
   type ExposedParamRow,
 } from './exposedParamsForm'
-import { nodeOptionLabel } from './nodeOptions'
+import { NodeName } from './NodeName'
 import type { ComfyNodeInfo, ComfyParamType } from '../../api/client'
 import { fmt, useI18n, type Messages } from '../../i18n'
 import styles from './ExposedParamsTable.module.css'
@@ -55,8 +55,11 @@ export function ExposedParamsTable({ rows, nodes, onChange }: ExposedParamsTable
                 {t.comfyui.exposedParamsTable.enable}
               </label>
               <span className={styles.sourceRef} title={fmt(t.comfyui.exposedParamsTable.sourceRefTitle, { node: row.node, input: row.input })}>
-                {node ? nodeOptionLabel(node) : row.node} / {row.input}
+                <NodeName id={row.node} node={node} input={row.input} />
               </span>
+              {!row.enabled && row.default !== null && row.default !== undefined && (
+                <span className={styles.defaultHint}>{fmt(t.comfyui.cards.defaultValue, { value: String(row.default) })}</span>
+              )}
             </div>
 
             {row.enabled && (

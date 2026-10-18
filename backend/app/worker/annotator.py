@@ -17,6 +17,9 @@ api プロセス内の asyncio タスクが1件ずつ(古い依頼から)処理�
   画像」の組、それ以外(アップロード、スケッチ、ほかのプロバイダー)は「既定」の組から決める
   (ADR-0024 8章)。別の組の接続先で失敗しても既定の組には切り替えず `failed` にする。
 - 推定に失敗したら `failed` と理由を記録し、自動では再試行しない。
+- LLM・VLM を呼ぶたびに、その直前に Mod の `ai.before_send`(目的 `annotation`。ADR-0051 2章)を
+  呼ぶ。拒否されたら、その Asset の推定を `failed` にして理由を残す。ローカルの WD Tagger(ONNX)は
+  外へ送らないので呼ばない。
 
 実行順(ADR-0024 6章): LLM(タイトル)は API の応答待ちなので ONNX と並行して動かす。ONNX
 (`asyncio.to_thread`)を先に終え、そのタグを VLM に渡す(同じ意味のタグを付け直さない。
@@ -64,7 +67,13 @@ from app.annotation.engines import (
     wants_translation,
 )
 from app.annotation.wd_tagger import WdTagger
-from app.domain import annotation_settings, derivatives, llm_connections, tag_dictionaries
+from app.domain import (
+    annotation_settings,
+    content_withholding,
+    derivatives,
+    llm_connections,
+    tag_dictionaries,
+)
 from app.domain import annotations as annotations_domain
 from app.domain import content_rating as content_rating_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
@@ -76,9 +85,12 @@ from app.domain.text_safety import (
     sanitize_external_text_or_none,
 )
 from app.i18n import t
+from app.mods import events as mods_events
+from app.mods.api import AI_BEFORE_SEND, Actor, BeforeSendSubject, TextPart
 
 if TYPE_CHECKING:
     from app.config import Settings
+    from app.mods.runtime import ModRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +238,8 @@ class _Job:
     title_locked: bool
     sibling_title: str | None
     image_bytes: bytes | None
+    # 実行したユーザー(Asset を取り込んだ人、または Run を実行した人。ADR-0051 3章の actor)。
+    actor_user_id: uuid.UUID | None = None
 
 
 class Annotator:
@@ -237,10 +251,14 @@ class Annotator:
         store: AssetStore,
         settings: Settings,
         engines: AnnotationEngines | None = None,
+        *,
+        mods: ModRuntime | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.store = store
         self.settings = settings
+        # ADR-0051: LLM・VLM を呼ぶ前のチェック(`ai.before_send`)。
+        self.mods = mods
         # テストでは差し替えてよい(呼び出し回数を数えるなど)。
         self.engines: AnnotationEngines = engines or (
             FakeEngines() if settings.fake_provider else OpenAIEngines(WdTagger(settings.data_dir))
@@ -416,6 +434,9 @@ class Annotator:
                 return t("annotations.assetDeleted")
             if asset.kind == AssetKind.MASK:
                 return t("annotations.maskNotSupported")
+            # ADR-0051 4章: `deny` の判定を受けた・画像を残さなかった画像は VLM・LLM に送らない。
+            if content_withholding.blocked_asset_ids(session, [asset.id]):
+                return t("mods.contentWithheld")
             config = annotation_settings.load(session)
             engines = annotations_domain.usable_engines(config, self.settings)
             if not engines:
@@ -423,10 +444,13 @@ class Annotator:
 
             prompt: str | None = None
             provider: str | None = None
+            actor_user_id = asset.created_by_user_id
             if asset.kind == AssetKind.GENERATED and asset.produced_by_run_id is not None:
                 run = session.get(Run, asset.produced_by_run_id)
                 prompt = run.prompt if run is not None else None
                 provider = run.provider if run is not None else None
+                if run is not None and actor_user_id is None:
+                    actor_user_id = run.created_by_user_id
             elif isinstance(asset.embedded_meta, dict):
                 value = asset.embedded_meta.get("prompt")
                 prompt = value if isinstance(value, str) else None
@@ -495,7 +519,57 @@ class Annotator:
                 title_locked=title_locked,
                 sibling_title=sibling_title,
                 image_bytes=image_bytes,
+                actor_user_id=actor_user_id,
             )
+
+    async def _check_before_send(
+        self,
+        job: _Job,
+        target: annotation_settings.Target,
+        *,
+        text: list[TextPart],
+        params: dict[str, object],
+        with_image: bool,
+    ) -> None:
+        """LLM・VLM を呼ぶ直前の `ai.before_send`(ADR-0051)。拒否されたら
+        AnnotationEngineError(理由は Mod の名前と、Mod が返した文)。有効な購読が無ければ何も
+        しない(DB にも触れない)。"""
+        mods = self.mods
+        if mods is None or not mods.wants(AI_BEFORE_SEND, purpose="annotation"):
+            return
+
+        def build() -> tuple[BeforeSendSubject, Actor | None]:
+            with self.session_factory() as session:
+                connection = llm_connections.find_connection(
+                    job.config.all_connections(), target.connection_id
+                ) or llm_connections.ConnectionConfig(
+                    id=target.connection_id, name="", base_url=target.base_url
+                )
+                images = []
+                if with_image:
+                    asset = session.get(Asset, job.asset_id)
+                    if asset is not None:
+                        images.append(mods_events.image_ref(asset, "primary"))
+                subject = BeforeSendSubject(
+                    purpose="annotation",
+                    target=mods_events.llm_target(
+                        session,
+                        self.settings,
+                        connection,
+                        model=target.model,
+                        base_url=target.base_url,
+                    ),
+                    text=text,
+                    params=dict(params),
+                    images=images,
+                    asset_id=str(job.asset_id),
+                )
+                return subject, mods_events.actor_for_user_id(session, job.actor_user_id)
+
+        subject, actor = await asyncio.to_thread(build)
+        denial = await mods.before_send(subject, actor=actor)
+        if denial is not None:
+            raise AnnotationEngineError(denial.message)
 
     async def _process(self, asset_id: uuid.UUID) -> bool:
         """1件を処理する。1時間の上限で `queued` に戻したら True。"""
@@ -573,7 +647,14 @@ class Annotator:
 
         title_task: asyncio.Task[str] | None = None
         if call_llm_title:
-            assert job.prompt is not None and llm_id is not None
+            assert job.prompt is not None and llm_id is not None and job.llm is not None
+            await self._check_before_send(
+                job,
+                job.llm,
+                text=[TextPart(role="prompt", text=job.prompt)],
+                params={"task": "title", "model": job.llm.model},
+                with_image=False,
+            )
             self._record_call(llm_id)
             title_task = asyncio.create_task(self.engines.title_from_prompt(job.prompt, ctx))
         elif use_llm_title:
@@ -612,7 +693,17 @@ class Annotator:
             if use_vlm:
                 assert image is not None
                 want_title = not job.title_locked and not job.prompt
-                assert vlm_id is not None
+                assert vlm_id is not None and job.vlm is not None
+                vlm_text = [TextPart(role="prompt", text=job.prompt)] if job.prompt else []
+                if onnx_names:
+                    vlm_text.append(TextPart(role="tags", text=", ".join(onnx_names)))
+                await self._check_before_send(
+                    job,
+                    job.vlm,
+                    text=vlm_text,
+                    params={"task": "describe_image", "model": job.vlm.model},
+                    with_image=True,
+                )
                 self._record_call(vlm_id)
                 image_jpeg = await asyncio.to_thread(image_to_jpeg, image)
                 result = await self.engines.describe_image(
@@ -623,7 +714,14 @@ class Annotator:
                 vlm_tags = [(name, None) for name in result.tags]
                 translations = result.translations
             elif translate_by_llm and untranslated:
-                assert llm_id is not None
+                assert llm_id is not None and job.llm is not None
+                await self._check_before_send(
+                    job,
+                    job.llm,
+                    text=[TextPart(role="tags", text=", ".join(untranslated))],
+                    params={"task": "translate_tags", "model": job.llm.model},
+                    with_image=False,
+                )
                 self._record_call(llm_id)
                 translations = await self.engines.translate_tags(untranslated, ctx)
                 llm_translated = True
@@ -702,6 +800,8 @@ class Annotator:
                 return t("contentRating.assetDeleted")
             if asset.kind == AssetKind.MASK:
                 return t("contentRating.maskNotSupported")
+            if asset.content_withheld_at is not None:
+                return t("mods.contentWithheld")
             config = annotation_settings.load(session)
             if not content_rating_domain.usable(config, self.settings):
                 return t("contentRating.notUsable")

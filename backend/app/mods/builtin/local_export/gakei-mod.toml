@@ -1,0 +1,35 @@
+# GAKEI に同梱の Mod「ローカルに保存」(ADR-0051 7章)。Python の Mod の例を兼ねる。
+# 使える置き換えと設定の意味は docs/mods.md の「同梱の『ローカルに保存』」。
+id = "local-export"
+name = { ja = "ローカルに保存", en = "Save to a local folder" }
+version = "1.0.0"
+api_version = 1
+module = "main"
+events = ["run.finished", "asset.ingested"]
+# 書き出すだけで判定は返さない。「判定を待つ」を選べないようにする(書き込みの失敗を deny にしない)。
+returns_verdicts = false
+
+[settings.folder]
+type = "path"
+label = { ja = "保存先のフォルダ(GAKEI のサーバーの上の絶対パス)", en = "Destination folder (absolute path on the GAKEI server)" }
+default = ""
+
+[settings.filename]
+type = "string"
+label = { ja = "ファイル名のひな形", en = "File name template" }
+default = "{date}/{time}_{run_id8}_{index}.{ext}"
+
+[settings.embed_lineage]
+type = "bool"
+label = { ja = "PNG に系列の情報を埋め込む(ダウンロードと同じ)", en = "Embed lineage in PNG files (same as downloads)" }
+default = true
+
+[settings.write_json]
+type = "bool"
+label = { ja = "Run の情報の JSON を横に置く", en = "Write a JSON file with the run details next to each image" }
+default = false
+
+[settings.ingested_sources]
+type = "string"
+label = { ja = "取り込みも保存する経路(カンマ区切り。例: upload,url。空なら生成の出力だけ)", en = "Also save imported images from these sources (comma-separated, e.g. upload,url; empty saves generated outputs only)" }
+default = ""

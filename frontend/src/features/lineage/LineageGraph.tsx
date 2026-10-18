@@ -76,7 +76,7 @@ function LineageGraphInner({
   // 開いたとき・キャンバスの大きさが変わったときの表示と「全体を表示」(`lineageViewport.ts`)。
   // ノードが多いと全体を収める倍率では字が読めないので、自動の表示は読める倍率で止め、
   // 強調しているノード(無ければ起点)を中央に置く。
-  const { fitAll } = useLineageViewport({
+  const { fitAll, viewportReady } = useLineageViewport({
     canvasRef,
     fitKey: `${assetId}:${nodes.length}`,
     nodeCount: nodes.length,
@@ -136,6 +136,7 @@ function LineageGraphInner({
     <div className={styles.wrap}>
       <div className={styles.canvas} ref={canvasRef}>
         <ReactFlow
+          className={viewportReady ? undefined : styles.viewportPending}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}

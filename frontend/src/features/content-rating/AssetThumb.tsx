@@ -16,8 +16,13 @@
  *   入るので `<button>` ではなく `role="button"` の要素にし(リンクやボタンの入れ子にしない)、
  *   マスクと同じく下のカードへクリックとポインタを渡さない。
  * - `rating` が `undefined`(応答に段階の欄が無い)ならマスクもバッジも出さない。
+ * - `withheld`(Mod の `deny` の判定で画像を残さなかった。ADR-0051 4章)なら `<img>` を読みに行かず、
+ *   同じ className・style で「画像なし(拒否)」の置き換えの表示を描く(410 を何度も取りに行かない)。
+ *   マスクとバッジも出さない(見せる画像が無い)。応答の項目が無い・古い(一覧を取った後に非同期の
+ *   判定で画像が消えた)ときのために、読み込みが 410 で失敗したら同じ表示に切り替える
+ *   (`withheldFallback`)。
  */
-import type { CSSProperties, ImgHTMLAttributes, KeyboardEvent, MouseEvent } from 'react'
+import type { CSSProperties, ImgHTMLAttributes, KeyboardEvent, MouseEvent, SyntheticEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
 import type { ContentRatingLevel } from '../../api/client'
 import { EyeOffIcon } from '../../components/icons'
@@ -26,6 +31,8 @@ import { RatingBadge } from './RatingBadge'
 import { isActivationKey, remaskFromEvent } from './remask'
 import { revealAsset } from './revealStore'
 import { useAssetMaskState } from './useAssetMasked'
+import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
+import { useWithheldFallback } from '../mods/withheldFallback'
 import styles from './ContentRating.module.css'
 
 /** ぼかした `<img>` に足す style。はみ出したぼかしを要素の枠で切る。 */
@@ -46,6 +53,10 @@ interface AssetThumbProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src
   badge?: boolean
   /** 隅のバッジの位置。既定は左下(ほかの印やボタンと重なる画面で変える)。 */
   badgePosition?: BadgePosition
+  /** 画像を残さなかった Asset(ADR-0051)。true なら `<img>` の代わりに置き換えの表示にする。 */
+  withheld?: boolean
+  /** 置き換えの表示に添える判定の label(広いときだけ出る)。 */
+  withheldLabel?: string | null
 }
 
 export function AssetThumb({
@@ -55,10 +66,26 @@ export function AssetThumb({
   badge = false,
   badgePosition = 'bottom-left',
   style,
+  withheld = false,
+  withheldLabel,
+  onError,
   ...imgProps
 }: AssetThumbProps) {
   const { t } = useI18n()
-  const { masked, revealed } = useAssetMaskState(assetId, rating)
+  const imageSrc = src ?? assetUrl(assetId, 'thumb')
+  // 応答の項目で分からなくても、読み込みが 410 で失敗したら置き換えの表示に切り替える(安全網)。
+  const fallback = useWithheldFallback(withheld ? undefined : imageSrc)
+  const isWithheld = withheld || fallback.withheld
+  const { masked, revealed } = useAssetMaskState(assetId, isWithheld ? undefined : rating)
+
+  if (isWithheld) {
+    return <WithheldPlaceholder className={imgProps.className} style={style} label={withheldLabel} />
+  }
+
+  function handleError(e: SyntheticEvent<HTMLImageElement>) {
+    onError?.(e)
+    fallback.onError()
+  }
 
   function reveal(e: MouseEvent) {
     e.preventDefault()
@@ -74,7 +101,8 @@ export function AssetThumb({
     <>
       <img
         {...imgProps}
-        src={src ?? assetUrl(assetId, 'thumb')}
+        src={imageSrc}
+        onError={handleError}
         style={masked ? { ...style, ...MASKED_IMAGE_STYLE } : style}
         data-rating-masked={masked ? 'true' : undefined}
         draggable={masked ? false : imgProps.draggable}

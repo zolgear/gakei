@@ -14,6 +14,7 @@ from app.domain.semantic_search import QueryVectorCache
 from app.domain.storage import AssetStore
 from app.domain.vector_index import VectorIndex
 from app.embedding.catalog import ClipModelDownloader
+from app.mods.runtime import ModRuntime
 from app.providers.base import ImageProvider
 from app.providers.registry import ProviderRegistry
 from app.worker.annotator import Annotator
@@ -115,3 +116,8 @@ def get_vector_index(request: Request) -> VectorIndex:
 def get_query_vector_cache(request: Request) -> QueryVectorCache:
     """ADR-0033 6章: 検索の文章のベクトルの LRU。"""
     return request.app.state.query_vector_cache
+
+
+def get_mods(request: Request) -> ModRuntime | None:
+    """ADR-0051: Mod とフック。"""
+    return getattr(request.app.state, "mods", None)

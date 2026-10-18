@@ -1,7 +1,8 @@
 """ComfyUI 関連の API(ADR-0013)。
 
 `/status` は ComfyUI の到達性を返す。`/workflows*` は登録済みワークフローの CRUD と、
-登録画面向けの提案(`analyze`、保存はしない)。`ComfyUIProvider` 自体(実行)はここでは
+登録画面向けの提案(`analyze`、保存はしない)と、アシスタント(LLM)での推定
+(`suggest-bindings`。ADR-0052 6章。保存はしない)。`ComfyUIProvider` 自体(実行)はここでは
 扱わない。
 """
 
@@ -13,20 +14,28 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import anyio.to_thread
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.auth.deps import require_admin
+from app.assistant.engine import AssistantEngineError
+from app.assistant.runtime import AssistantRuntime, user_key
+from app.assistant.structured import StructuredRequest
+from app.auth.deps import require_admin, require_user
+from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_registry, get_runner, get_session, get_session_factory, get_settings
+from app.domain import assistant_settings, comfy_suggest, llm_connections
+from app.domain.comfy_analyze import analyze_workflow
 from app.domain.comfy_workflow import (
     SEED_MAX,
     Bindings,
     ExposedParam,
+    ValidationIssue,
     WorkflowValidationError,
-    analyze_workflow,
+    check_workflow,
     compute_template_sha256,
     is_api_format_template,
     is_ui_format_template,
@@ -44,21 +53,37 @@ from app.domain.comfyui_connection import (
     save_disabled,
     validate_connection_url,
 )
+from app.domain.llm_connections import ConnectionNotFoundError, LlmTarget
+from app.domain.locality import read_workflow
 from app.domain.models import ComfyWorkflow, Run, RunStatus
 from app.domain.schemas import (
     ComfyAnalyzeRequest,
     ComfyAnalyzeResponse,
+    ComfySuggestDiscarded,
+    ComfySuggestItem,
+    ComfySuggestRequest,
+    ComfySuggestResponse,
+    ComfySuggestUsage,
     ComfyUIConnectionRequest,
     ComfyUIConnectionTestRequest,
     ComfyUIConnectionTestResponse,
     ComfyUIStatusResponse,
+    ComfyValidateRequest,
+    ComfyValidateResponse,
+    ComfyViewExposedParam,
+    ComfyViewNode,
+    ComfyViewNodeInput,
     ComfyWorkflowCreateRequest,
     ComfyWorkflowDetail,
     ComfyWorkflowListResponse,
     ComfyWorkflowSummary,
     ComfyWorkflowUpdateRequest,
+    ComfyWorkflowViewResponse,
 )
-from app.i18n import t
+from app.domain.secret_values import find_secret_inputs, is_secret_input
+from app.i18n import current_locale, t
+from app.mods import events as mods_events
+from app.mods.api import AI_BEFORE_SEND, BeforeSendSubject, TextPart
 from app.providers.comfyui.client import check_available
 from app.providers.registry import ProviderRegistry, is_loopback_url
 from app.worker.runner import Runner
@@ -66,6 +91,9 @@ from app.worker.runner import Runner
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/comfyui", tags=["comfyui"])
+
+# アシスタントでの推定の reasoning effort(ADR-0052 6章。検証では low で全問正解だった)。
+_SUGGEST_REASONING_EFFORT = "low"
 
 
 def _utcnow() -> datetime:
@@ -81,9 +109,10 @@ def _check_template_format(template: dict) -> None:
 
 def _validate_or_422(
     template: dict, operation: str, bindings: Bindings, exposed_params: list[ExposedParam]
-) -> None:
+) -> list[ValidationIssue]:
+    """保存時の検証(ADR-0052 3章)。エラーは 422(複数なら改行でつなぐ)、警告は返す。"""
     try:
-        validate_workflow(template, operation, bindings, exposed_params)  # type: ignore[arg-type]
+        return validate_workflow(template, operation, bindings, exposed_params)  # type: ignore[arg-type]
     except WorkflowValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -94,18 +123,32 @@ def _to_summary(wf: ComfyWorkflow) -> ComfyWorkflowSummary:
         name=wf.name,
         operation=wf.operation,  # type: ignore[arg-type]
         template_sha256=wf.template_sha256,
+        locality=read_workflow(wf.locality),
         created_at=wf.created_at,
         updated_at=wf.updated_at,
     )
 
 
-def _to_detail(wf: ComfyWorkflow) -> ComfyWorkflowDetail:
+def _to_detail(
+    wf: ComfyWorkflow, validation_issues: list[ValidationIssue] | None = None
+) -> ComfyWorkflowDetail:
+    """`validation_issues` を省くと、保存済みの差し込み先を今の検証に掛けた結果を入れる
+    (古い推定で保存した誤りに気付く入口。ADR-0052 3章。自動で書き換えはしない)。"""
     summary = _to_summary(wf)
+    bindings = Bindings.model_validate(wf.bindings)
+    exposed_params = [ExposedParam.model_validate(p) for p in wf.exposed_params]
+    if validation_issues is None:
+        validation_issues = (
+            check_workflow(wf.template, wf.operation, bindings, exposed_params)  # type: ignore[arg-type]
+            if is_api_format_template(wf.template)
+            else []
+        )
     return ComfyWorkflowDetail(
         **summary.model_dump(),
         template=wf.template,
-        bindings=Bindings.model_validate(wf.bindings),
-        exposed_params=[ExposedParam.model_validate(p) for p in wf.exposed_params],
+        bindings=bindings,
+        exposed_params=exposed_params,
+        validation_issues=validation_issues,
     )
 
 
@@ -492,7 +535,12 @@ def analyze(
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> ComfyAnalyzeResponse:
-    _check_template_format(body.template)
+    if (body.template is None) == (body.workflow_id is None):
+        raise HTTPException(status_code=422, detail=t("comfyui.api.analyzeTemplateOrWorkflow"))
+    template = (
+        body.template if body.template is not None else _get_active(db, body.workflow_id).template  # type: ignore[arg-type]
+    )
+    _check_template_format(template)
 
     # 接続できれば /object_info を先に取っておき、analyze_workflow 自体に渡す(seed・出力
     # ノードの推定にも使うため)。接続できない・失敗した場合は None のまま
@@ -506,12 +554,12 @@ def analyze(
         if available:
             object_info = _fetch_object_info(url)
 
-    result = analyze_workflow(body.template, object_info)
+    result = analyze_workflow(template, object_info)
 
     candidate_params = result.candidate_params
     if object_info is not None:
         # 型・choices・min/max/step も同じ /object_info から補う。
-        candidate_params = _enrich_candidate_params(candidate_params, body.template, object_info)
+        candidate_params = _enrich_candidate_params(candidate_params, template, object_info)
 
     return ComfyAnalyzeResponse(
         nodes=result.nodes,
@@ -519,6 +567,194 @@ def analyze(
         suggested_operation=result.suggested_operation,
         candidate_params=candidate_params,
         warnings=result.warnings,
+        warning_items=result.warning_items,
+        readings=result.readings,
+        param_tiers=result.param_tiers,
+        validation=result.validation,
+        edges=result.edges,
+    )
+
+
+@router.post(
+    "/workflows/validate",
+    response_model=ComfyValidateResponse,
+    operation_id="validate_comfy_workflow",
+    dependencies=[Depends(require_admin)],
+)
+def validate(body: ComfyValidateRequest) -> ComfyValidateResponse:
+    """保存せずに、保存時と同じ検証(ADR-0052 3章)だけを掛ける。画面が値を変えるたびに呼ぶ。
+
+    規則を画面に二重に持たないための口。`/object_info` は保存時と同じく使わない。
+    """
+    _check_template_format(body.template)
+    issues = check_workflow(body.template, body.operation, body.bindings, body.exposed_params)
+    return ComfyValidateResponse(issues=issues)
+
+
+_SUGGEST_DOC = """アシスタント(LLM)で差し込み先を推定する(ADR-0052 6章)。保存はしない。
+
+サーバーで作ったノードの要約(テンプレートの JSON そのものではない)を、アシスタントの接続先と
+モデルに Structured Outputs で送る。送る前に Mod の `ai.before_send`(目的 `workflow_analysis`。
+ADR-0051)を呼ぶ。提案は保存時と同じ検証に掛け、通らない項目は `discarded` に入れて捨てる。
+アシスタントの1時間の上限に数える。
+
+断るとき(`detail` は `{code, message}`):
+
+- 409 `disabled`: アシスタントが無効
+- 409 `unsupported`: 接続先が Structured Outputs に対応しない
+- 409 `connection_missing`: 接続先・キーが無い
+- 429 `rate_limited`: 1時間の上限
+- 409 `hook_denied`: Mod が送信を止めた(理由は `message`)
+- 502 `llm_error`: LLM の呼び出しに失敗した・応答を読めなかった
+"""
+
+
+def _suggest_error(status: int, code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=status, detail={"code": code, "message": message})
+
+
+@router.post(
+    "/workflows/suggest-bindings",
+    response_model=ComfySuggestResponse,
+    operation_id="suggest_comfy_workflow_bindings",
+    description=_SUGGEST_DOC,
+)
+async def suggest_bindings(
+    body: ComfySuggestRequest,
+    request: Request,
+    user: CurrentUser = Depends(require_admin),
+) -> ComfySuggestResponse:
+    state = request.app.state
+    runtime: AssistantRuntime = state.assistant
+    engine = runtime.structured
+    if (body.template is None) == (body.workflow_id is None):
+        raise HTTPException(status_code=422, detail=t("comfyui.api.analyzeTemplateOrWorkflow"))
+
+    def _prepare() -> tuple[
+        dict[str, Any],
+        str | None,
+        assistant_settings.AssistantConfig,
+        LlmTarget | None,
+        llm_connections.ConnectionConfig | None,
+    ]:
+        with state.session_factory() as db:
+            if body.template is not None:
+                template, name = body.template, body.name
+            else:
+                wf = _get_active(db, body.workflow_id)  # type: ignore[arg-type]
+                template, name = wf.template, body.name or wf.name
+            _check_template_format(template)
+            config = assistant_settings.load(db)
+            if not config.enabled:
+                raise _suggest_error(409, "disabled", t("comfyui.suggest.disabled"))
+            target: LlmTarget | None = None
+            if engine.requires_target:
+                try:
+                    target = assistant_settings.resolve_target(db, config, state.settings)
+                except ConnectionNotFoundError as e:
+                    raise _suggest_error(
+                        409, "connection_missing", t("assistant.connectionMissing")
+                    ) from e
+                if not assistant_settings.structured_outputs_supported(db, config, state.settings):
+                    raise _suggest_error(409, "unsupported", t("comfyui.suggest.unsupported"))
+                if not target.api_key:
+                    raise _suggest_error(409, "connection_missing", t("assistant.apiKeyMissing"))
+            connection = llm_connections.find_connection(
+                llm_connections.load(db), config.connection_id
+            )
+        return template, name, config, target, connection
+
+    template, name, config, target, connection = await anyio.to_thread.run_sync(_prepare)
+    # 規則の読み取り(違いを示す基準。`/object_info` は保存時の検証と同じく使わない)と、送る要約。
+    analysis = await anyio.to_thread.run_sync(lambda: analyze_workflow(template))
+    summary = comfy_suggest.summarize_template(template)
+    locale = current_locale()
+    instructions = comfy_suggest.instructions(locale)
+    input_text = comfy_suggest.build_input(summary)
+
+    if not runtime.requests.try_acquire(user_key(user.id), config.hourly_request_limit):
+        raise _suggest_error(
+            429,
+            "rate_limited",
+            t("assistant.hourlyLimitReached", limit=config.hourly_request_limit),
+        )
+
+    # ADR-0051: 外部の AI へ送る直前のチェック(目的 `workflow_analysis`)。
+    mods = getattr(state, "mods", None)
+    if mods is not None and mods.wants(AI_BEFORE_SEND, purpose="workflow_analysis"):
+
+        def _subject() -> BeforeSendSubject:
+            with state.session_factory() as db:
+                conn = connection or llm_connections.ConnectionConfig(
+                    id=config.connection_id, name="", base_url=None
+                )
+                base_url = (
+                    target.base_url
+                    if target is not None
+                    else llm_connections.display_base_url(conn, state.settings)
+                )
+                return BeforeSendSubject(
+                    purpose="workflow_analysis",
+                    target=mods_events.llm_target(
+                        db, state.settings, conn, model=config.model, base_url=base_url
+                    ),
+                    text=[
+                        TextPart(role="system", text=instructions),
+                        TextPart(role="workflow", text=summary),
+                    ],
+                    params={
+                        "workflow_id": str(body.workflow_id) if body.workflow_id else None,
+                        "workflow_name": name,
+                        "model": config.model,
+                        "reasoning_effort": _SUGGEST_REASONING_EFFORT,
+                    },
+                )
+
+        subject = await anyio.to_thread.run_sync(_subject)
+        denial = await mods.before_send(subject, actor=mods_events.actor_from_user(user))
+        if denial is not None:
+            raise _suggest_error(409, "hook_denied", denial.message)
+
+    try:
+        result = await engine.complete(
+            StructuredRequest(
+                target=target,
+                instructions=instructions,
+                input_text=input_text,
+                schema_name=comfy_suggest.SCHEMA_NAME,
+                schema=comfy_suggest.RESPONSE_SCHEMA,
+                reasoning_effort=_SUGGEST_REASONING_EFFORT,
+                fake_response=comfy_suggest.fake_response(analysis, locale),
+            )
+        )
+    except AssistantEngineError as e:
+        raise _suggest_error(502, "llm_error", t("comfyui.suggest.llmError", error=str(e))) from e
+
+    outcome = await anyio.to_thread.run_sync(
+        lambda: comfy_suggest.interpret(
+            template, result.data, analysis.suggested_bindings, analysis.suggested_operation
+        )
+    )
+    return ComfySuggestResponse(
+        suggested_operation=outcome.operation,
+        operation_reason=outcome.operation_reason,
+        operation_matches_reading=outcome.operation == analysis.suggested_operation,
+        suggested_bindings=outcome.bindings,
+        items=[
+            ComfySuggestItem(
+                field=item.field,
+                reason=item.reason,
+                matches_reading=item.matches_reading,
+                warnings=item.warnings,
+            )
+            for item in outcome.items
+        ],
+        discarded=[
+            ComfySuggestDiscarded(field=d.field, target=d.target, message=d.message)
+            for d in outcome.discarded
+        ],
+        model=result.model or config.model,
+        usage=ComfySuggestUsage(**result.usage),
     )
 
 
@@ -533,7 +769,7 @@ def create_workflow(
     body: ComfyWorkflowCreateRequest, db: Session = Depends(get_session)
 ) -> ComfyWorkflowDetail:
     _check_template_format(body.template)
-    _validate_or_422(body.template, body.operation, body.bindings, body.exposed_params)
+    warnings = _validate_or_422(body.template, body.operation, body.bindings, body.exposed_params)
 
     now = _utcnow()
     wf = ComfyWorkflow(
@@ -543,12 +779,13 @@ def create_workflow(
         bindings=body.bindings.model_dump(mode="json"),
         exposed_params=[p.model_dump(mode="json") for p in body.exposed_params],
         template_sha256=compute_template_sha256(body.template),
+        locality=body.locality or "unset",
         created_at=now,
         updated_at=now,
     )
     db.add(wf)
     db.commit()
-    return _to_detail(wf)
+    return _to_detail(wf, warnings)
 
 
 @router.get(
@@ -577,6 +814,92 @@ def get_workflow(workflow_id: uuid.UUID, db: Session = Depends(get_session)) -> 
     return _to_detail(wf)
 
 
+def _build_view(wf: ComfyWorkflow) -> ComfyWorkflowViewResponse:
+    """閲覧用の応答を組み立てる(ADR-0052 7章)。秘密に見える値(ADR-0013 8章の判定)は伏せる。
+
+    入れ子の入力(`images.image_1` など)の中に秘密があれば、その入力全体を伏せる。
+    """
+    template = wf.template
+    result = analyze_workflow(template)
+    secret_inputs = {(s.node_id, s.input.split(".", 1)[0]) for s in find_secret_inputs(template)}
+
+    nodes: list[ComfyViewNode] = []
+    for node in result.nodes:
+        inputs: list[ComfyViewNodeInput] = []
+        for item in node["inputs"]:
+            redacted = (node["id"], item["name"]) in secret_inputs
+            inputs.append(
+                ComfyViewNodeInput(
+                    name=item["name"],
+                    value=None if redacted else item["value"],
+                    linked=item["linked"],
+                    redacted=redacted,
+                )
+            )
+        nodes.append(
+            ComfyViewNode(
+                id=node["id"],
+                class_type=node["class_type"],
+                title=node["title"],
+                inputs=inputs,
+                state=node["state"],
+                kind=node["kind"],
+            )
+        )
+
+    exposed: list[ComfyViewExposedParam] = []
+    for raw in wf.exposed_params:
+        param = ExposedParam.model_validate(raw)
+        redacted = (param.node, param.input) in secret_inputs or is_secret_input(
+            param.input, param.default
+        )
+        exposed.append(
+            ComfyViewExposedParam(
+                name=param.name,
+                label=param.label,
+                node=param.node,
+                input=param.input,
+                type=param.type,
+                default=None if redacted else param.default,
+                default_redacted=redacted,
+            )
+        )
+
+    return ComfyWorkflowViewResponse(
+        id=wf.id,
+        name=wf.name,
+        operation=wf.operation,  # type: ignore[arg-type]
+        nodes=nodes,
+        edges=result.edges,
+        bindings=Bindings.model_validate(wf.bindings),
+        exposed_params=exposed,
+    )
+
+
+@router.get(
+    "/workflows/{workflow_id}/view",
+    response_model=ComfyWorkflowViewResponse,
+    operation_id="view_comfy_workflow",
+    dependencies=[Depends(require_user)],
+)
+def view_workflow(
+    workflow_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> ComfyWorkflowViewResponse:
+    """生成画面からの閲覧(ADR-0052 7章)。管理者以外にも見せる。図に要る構造と値だけを返し、
+    テンプレートの値のうち秘密に見えるものは伏せる。
+
+    ComfyUI の接続が無効(未設定・切り離し・無効)なら、生成画面に出ないワークフローなので 404。
+    """
+    if resolve_active_url(db, settings) is None:
+        raise HTTPException(status_code=404, detail=t("comfyui.api.workflowNotFound"))
+    wf = _get_active(db, workflow_id)
+    if not is_api_format_template(wf.template):
+        raise HTTPException(status_code=404, detail=t("comfyui.api.workflowNotFound"))
+    return _build_view(wf)
+
+
 @router.patch(
     "/workflows/{workflow_id}",
     response_model=ComfyWorkflowDetail,
@@ -600,7 +923,7 @@ def update_workflow(
     )
 
     _check_template_format(template)
-    _validate_or_422(template, operation, bindings, exposed_params)
+    warnings = _validate_or_422(template, operation, bindings, exposed_params)
 
     wf.name = name
     wf.operation = operation
@@ -609,9 +932,12 @@ def update_workflow(
         wf.template_sha256 = compute_template_sha256(template)
     wf.bindings = bindings.model_dump(mode="json")
     wf.exposed_params = [p.model_dump(mode="json") for p in exposed_params]
+    if "locality" in fields_set:
+        # null は既定(`unset` = 接続の設定に従う)に戻す。
+        wf.locality = body.locality or "unset"
     wf.updated_at = _utcnow()
     db.commit()
-    return _to_detail(wf)
+    return _to_detail(wf, warnings)
 
 
 @router.delete(

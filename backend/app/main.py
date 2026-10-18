@@ -33,6 +33,8 @@ from app.api import events as events_api
 from app.api import health as health_api
 from app.api import lineage_transfer as lineage_transfer_api
 from app.api import llm_connections as llm_connections_api
+from app.api import mod_verdicts as mod_verdicts_api
+from app.api import mods as mods_api
 from app.api import parameter_sets as parameter_sets_api
 from app.api import pricing as pricing_api
 from app.api import prompt_sets as prompt_sets_api
@@ -63,10 +65,12 @@ from app.embedding.catalog import ClipModelDownloader
 from app.i18n import console_t, parse_accept_language, set_locale, t
 from app.mcp.endpoint import McpEndpoint
 from app.mcp.server import build_mcp_server, build_session_manager
+from app.mods.runtime import ModRuntime
 from app.providers.registry import build_registry, is_loopback_url
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
 from app.worker.focal import FocalPointWorker
+from app.worker.mod_delivery import ModDeliveryWorker
 from app.worker.progress import ProgressBus
 from app.worker.runner import Runner
 from app.worker.tag_dictionary_importer import TagDictionaryImporter
@@ -335,8 +339,16 @@ def _build_lifespan(settings: Settings):
         store = open_store(settings)
         registry = build_registry(settings, session_factory)
         progress_bus = ProgressBus()
+        # ADR-0051: Mod とフック。Python の Mod のマニフェストを読み、有効な購読を作る(有効な
+        # Python の Mod はここで import する。失敗してもその Mod をエラーにするだけで、起動は
+        # 止めない)。非同期のイベントは配達の worker が配る。
+        mods = ModRuntime(session_factory, store, settings)
+        mods.scan()
+        with session_factory() as session:
+            mods.reload(session)
+        mod_delivery = ModDeliveryWorker(session_factory, mods)
         # ADR-0024: 自動タイトル・タグの推定の worker と、ONNX タガーのモデルのダウンロード。
-        annotator = Annotator(session_factory, store, settings)
+        annotator = Annotator(session_factory, store, settings, mods=mods)
         wd_downloader = WdModelDownloader(settings.data_dir, fake=settings.fake_provider)
         # ADR-0033: 画像の埋め込み。PostgreSQL では pgvector を使えるかを見て、使うモデルの
         # 索引を作る。
@@ -348,6 +360,7 @@ def _build_lifespan(settings: Settings):
             pgvector=embedding_index_backend == embedding_index.BACKEND_PGVECTOR,
             db_engine=engine,
         )
+        embedder.engines.mods = mods
         if embedder.pgvector:
             embedder.ensure_active_index()
         # ADR-0033 6章: 近傍検索。numpy の方式は、worker がベクトルを書くたびに上げる版で
@@ -365,6 +378,7 @@ def _build_lifespan(settings: Settings):
             annotator=annotator,
             embedder=embedder,
             focal_worker=focal_worker,
+            mods=mods,
         )
 
         app.state.settings = settings
@@ -384,6 +398,8 @@ def _build_lifespan(settings: Settings):
         app.state.query_vector_cache = QueryVectorCache()
         app.state.auth_runtime = auth_runtime
         app.state.tag_dictionary_importer = tag_dictionary_importer
+        app.state.mods = mods
+        app.state.mod_delivery = mod_delivery
         # ADR-0048: 生成のアシスタント(エンジン、1時間の上限の記録、進行中の会話)。
         app.state.assistant = build_assistant_runtime(settings.fake_provider)
 
@@ -392,6 +408,8 @@ def _build_lifespan(settings: Settings):
         mcp_session_manager = build_session_manager(build_mcp_server())
         app.state.mcp_session_manager = mcp_session_manager
 
+        # 配達の worker を先に動かす(runner の起動時の後始末で積んだ `run.finished` を配るため)。
+        await mod_delivery.start()
         await runner.start()
         await annotator.start()
         await embedder.start()
@@ -401,6 +419,7 @@ def _build_lifespan(settings: Settings):
                 yield
         finally:
             await runner.stop()
+            await mod_delivery.stop()
             await annotator.stop()
             await embedder.stop()
             await focal_worker.stop()
@@ -622,6 +641,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ADR-0034: 認証の設定(各ルートで `require_admin`)。
     app.include_router(auth_settings_api.router, dependencies=auth_dep)
     app.include_router(llm_connections_api.router, dependencies=auth_dep)
+    # ADR-0051: Mod とフック(各ルートで `require_admin`)。
+    app.include_router(mods_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
     app.include_router(shares_api.router, dependencies=auth_dep)
@@ -635,6 +656,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(uploads_api.router)
     # ADR-0023 8章 3: 原本の1回限りのダウンロード URL(URL のトークン自体が認可)。
     app.include_router(downloads_api.router)
+
+    # ADR-0051 8章: 外部からの判定の受付。認証は Webhook の鍵による署名(ルートの中で確かめる)
+    # なので `require_user` は掛けない。
+    app.include_router(mod_verdicts_api.router)
 
     # ADR-0029 6章: ログイン不要の共有リンク。`require_user` を掛けず、見せてよいかは
     # `app/domain/shares.resolve_public_share` だけで確かめる。

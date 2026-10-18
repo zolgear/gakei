@@ -62,7 +62,8 @@
       "lockedDetach": "Cannot detach while a ComfyUI run is in progress or queued.",
       "lockedDisable": "Cannot disable while a ComfyUI run is in progress or queued.",
       "lockedEnable": "Cannot enable while a ComfyUI run is in progress or queued.",
-      "notConnected": "ComfyUI is not connected."
+      "notConnected": "ComfyUI is not connected.",
+      "analyzeTemplateOrWorkflow": "Specify either template or workflow_id."
     },
     "workflow": {
       "uiFormatMessage": "This file is in UI format (it contains nodes/links). Export it from ComfyUI with \"Export (API)\" and register the resulting API-format JSON instead.",
@@ -130,6 +131,101 @@
       "noDetails": "no details",
       "nodeExecutionFailed": "Node {node} failed to execute ({detail}).",
       "historyErrorNoDetails": "Execution on ComfyUI ended with an error (no details available)."
+    },
+    "analyze": {
+      "marked": "Specified by the title \"{title}\".",
+      "sharedWith": "Input {input} of node {node} is the same target as {field}, so it is not used here.",
+      "question": {
+        "prompt": "Where should the prompt go?",
+        "negative_prompt": "Where should the negative prompt go?",
+        "size": "Which latent's size (width, height, count) should be used?",
+        "images": "Check the order of the image slots.",
+        "mask": "Which mask should be used?"
+      },
+      "prompt": {
+        "unique": "There is exactly one string root traced back from the sampler's conditioning (input {input} of node {node}).",
+        "ranked": "There are {count} string roots; input {input} of node {node} is the most likely (ranked by title, node type and position in the format).",
+        "ask": "There are {count} string roots and their ranks are too close to decide.",
+        "noSampler": "No sampler connected to the output was found.",
+        "noEncoder": "Could not trace the sampler's conditioning back to an encoder.",
+        "noRoot": "No literal string value feeding the encoder was found."
+      },
+      "negative": {
+        "unique": "String root traced back from the sampler's negative (input {input} of node {node}).",
+        "ranked": "There are {count} string roots for the negative; input {input} of node {node} is the most likely.",
+        "ask": "There are {count} string roots for the negative and they cannot be told apart.",
+        "noInput": "The sampler has no negative input.",
+        "zeroed": "The negative is emptied by ConditioningZeroOut.",
+        "sameAsPositive": "The negative uses the same conditioning as the positive.",
+        "noRoot": "No literal string value feeding the negative encoder was found."
+      },
+      "seed": {
+        "unique": {
+          "one": "The seed of a node connected to the output.",
+          "other": "Collected {count} seeds of nodes connected to the output (identical references merged)."
+        },
+        "absent": "No node connected to the output has a seed."
+      },
+      "size": {
+        "direct": "The {input} of {node} ({class_type}), the source of the sampler's latent.",
+        "primitive": "The {input} of the latent source {latent} is wired from the Primitive node {node}; its value is used as the target.",
+        "computed": "{input} is wired from the computing node {node} ({class_type}), so it is not set directly. That node's inputs are recommended as exposed parameters instead.",
+        "fromImage": "The latent comes from node {node} ({class_type}); its size follows the input image.",
+        "noLatent": "No sampler latent connected to the output was found.",
+        "ask": "The switch cannot be resolved; there are {count} latent sources.",
+        "inputMissing": "The latent source {node} has no literal value for {input}."
+      },
+      "images": {
+        "numbered": "Ordered {count} LoadImage nodes connected to the output by the number of the receiving input.",
+        "single": "There is one LoadImage connected to the output (node {node}).",
+        "idOrder": "No numbered inputs, so {count} LoadImage nodes connected to the output are ordered by node id.",
+        "absent": "No LoadImage connected to the output."
+      },
+      "mask": {
+        "loadImageMask": "A LoadImageMask connected to the output (node {node}).",
+        "imageAlpha": "The MASK of the slot 1 LoadImage is used for partial editing in {consumer}.",
+        "alphaOnly": "The MASK of the slot 1 LoadImage only goes into {consumers} and is not used for partial editing (it keeps transparency). No mask is bound.",
+        "absent": "No mask used for partial editing was found.",
+        "generate": "Generate does not use input images or masks."
+      },
+      "outputs": {
+        "found": {
+          "one": "The save node connected to the output ({nodes}).",
+          "other": "There are {count} save nodes connected to the output ({nodes})."
+        },
+        "previewOnly": "There is no save node, only display nodes (such as PreviewImage).",
+        "absent": "No save node receiving the generated image was found."
+      },
+      "finalPrompt": {
+        "found": "A node that displays the string going into the encoder (node {node}).",
+        "nearest": "A node that displays a point along the prompt path (node {node}). It may differ from the string going into the encoder.",
+        "absent": "No node displays the string going into the encoder."
+      }
+    },
+    "validation": {
+      "kind": {
+        "string": "a string",
+        "int": "an integer",
+        "float": "a number",
+        "bool": "a boolean",
+        "enum": "a choice"
+      },
+      "typeMismatch": "{label}: input {input} of node {node} is not {expected}.",
+      "wiredInput": "{label}: input {input} of node {node} is wired. A wired input cannot be a binding or an exposed parameter (the value would overwrite the wire at run time).",
+      "outputNoGeneratedImage": "The generated image does not reach output node {node}.",
+      "unusedBranch": "{label}: input {input} of node {node} is on a branch that does not reach the output with the current settings (unused).",
+      "maskNotInpaint": "Mask (image_alpha): the MASK of the slot 1 LoadImage (node {node}) is not used for partial editing. The painted area will be passed as transparent pixels.",
+      "displayOnlyOutput": "Output node {node} ({class_type}) only displays images. Choose a save node."
+    },
+    "suggest": {
+      "badShape": "The suggestion has an unexpected shape",
+      "maskNeedsImage": "There is no image slot, so the input image's transparency cannot be used as the mask",
+      "emptyResponse": "The assistant returned an empty response",
+      "invalidResponse": "Could not read the assistant's response",
+      "refused": "The assistant refused to respond: {reason}",
+      "disabled": "The assistant is disabled (an admin can enable it under \"Assistant\" in the admin settings)",
+      "unsupported": "The assistant's connection does not support Structured Outputs, so it cannot be used for this (only the official OpenAI endpoint is supported)",
+      "llmError": "Assistant suggestion failed: {error}"
     }
   },
   "sdwebui": {
@@ -395,6 +491,9 @@
       "unknownConnection": "The specified connection does not exist",
       "invalidModel": "The model name must be 1 to {max} characters",
       "invalidLimit": "{name} must be an integer from {min} to {max}"
+    },
+    "locality": {
+      "invalid": "The connection type must be external or local"
     }
   },
   "runValidation": {
@@ -810,6 +909,7 @@
     "runNotTarget": "Only the prompts of runs that succeeded and produced images are embedded"
   },
   "lineageExport": {
+    "rootWithheld": "Cannot export a lineage from an image that was not kept because of a mod verdict",
     "contentMissing": "Cannot export: an original image in this lineage is missing from storage",
     "delivery": {
       "title": "Image lineage record",
@@ -919,7 +1019,8 @@
         "sourceVersion": "Source GAKEI version"
       },
       "footerFiles": "assets/ holds the original images, and manifest.json holds the same record in machine-readable form. This ZIP, including manifest.json, can be imported into GAKEI with \"Import lineage\".",
-      "footerMadeWith": "Exported with GAKEI (a self-hosted image generation tool)."
+      "footerMadeWith": "Exported with GAKEI (a self-hosted image generation tool).",
+      "contentWithheld": "No image (denied)"
     },
     "readme": {
       "body": "GAKEI image lineage record (delivery ZIP)\n\nThis ZIP is a record of an image lineage exported from GAKEI.\nGAKEI is a self-hosted web tool for using image generation APIs such as OpenAI's.\nRepository: {repo_url}\n\nContents of this ZIP:\n  index.html     A page for reading this record. Extract the ZIP, then open it in a browser (no internet connection needed).\n  assets/        The original images, byte for byte as they were generated or stored.\n  manifest.json  The same record in machine-readable form ({format}). It can be imported into GAKEI with \"Import lineage\".\n  README.txt     This file.\n\nMain image ID: {root}\nExported at (UTC): {exported_at}\nGAKEI version: {version}\n\nThis ZIP has no tamper detection or signature. The sha256 of every image is listed in index.html and manifest.json; compute an image file's sha256 and compare to confirm that the image has not been replaced.\n  Windows: certutil -hashfile <file> SHA256\n  macOS / Linux: shasum -a 256 <file>"
@@ -980,5 +1081,38 @@
     "undoConflict": "Cannot undo: the target has been changed or deleted since",
     "undoNotAvailable": "This message is not a write that can be undone",
     "undoAlreadyDone": "Already undone"
+  },
+  "mods": {
+    "denied": "{mod} blocked sending: {reason}",
+    "checkFailed": "The check before sending failed",
+    "deniedNoReason": "No reason was given",
+    "notFound": "Mod not found",
+    "loadFailed": "Cannot load the mod: {error}",
+    "manifestInvalid": "The manifest of this mod cannot be read, so its settings cannot be saved",
+    "invalidName": "The name must be 1 to {max} characters",
+    "invalidInstanceName": "The instance name must be at most {max} characters",
+    "invalidUrl": "The URL must be http or https (user name, password and # are not allowed)",
+    "invalidSecret": "The signing secret must be 1 to {max} characters",
+    "invalidEvents": "Invalid events",
+    "invalidFilters": "Invalid filters",
+    "invalidTimeout": "The timeout must be between {min} and {max} seconds",
+    "invalidOnFailure": "On failure must be block or allow",
+    "invalidOrder": "Invalid order",
+    "invalidEnabled": "Must be true or false",
+    "tooManyWebhooks": "You can register up to {max} webhooks",
+    "unknownSetting": "This mod has no setting {key}",
+    "invalidSettingValue": "The value of the setting {key} has the wrong type",
+    "enableFirst": "Enable the mod first",
+    "waitForVerdictUnsupported": "This mod does not return verdicts, so it cannot wait for a verdict",
+    "contentWithheld": "This image was not kept because a Mod denied it",
+    "contentWithheldWithVerdict": "This image was not kept because a Mod denied it ({mod}: {label} — {message})",
+    "assetDenied": "Image {id} was denied by a Mod and cannot be sent to an external AI",
+    "inputDenied": "Input image {id} was denied by a Mod and cannot be used",
+    "checkFailedLabel": "Check failed",
+    "attachmentDenied": "An attached image was denied by a Mod and cannot be sent",
+    "verdictUnauthorized": "The signature is missing or invalid, or the timestamp is too old",
+    "verdictTooLarge": "The request body is too large",
+    "verdictInvalid": "The verdicts are not in a valid form: {error}",
+    "verdictTargetNotAllowed": "Verdicts are accepted only for items delivered to this Mod: {target}"
   }
 }

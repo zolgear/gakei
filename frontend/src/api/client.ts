@@ -419,7 +419,23 @@ export type ComfyInputRef = components['schemas']['InputRef']
 export type ComfyMaskBinding = components['schemas']['MaskBinding']
 export type ComfyExposedParam = components['schemas']['ExposedParam']
 export type ComfyOperation = ComfyWorkflowSummary['operation']
+export type ComfyBindingReading = components['schemas']['BindingReading']
+export type ComfyBindingCandidate = components['schemas']['BindingCandidate']
+export type ComfyPathStep = components['schemas']['PathStep']
+export type ComfyAnalyzeEdge = components['schemas']['AnalyzeEdge']
+export type ComfyNodeKind = NonNullable<ComfyNodeInfo['kind']>
+export type ComfyWorkflowView = components['schemas']['ComfyWorkflowViewResponse']
+export type ComfyViewNode = components['schemas']['ComfyViewNode']
+export type ComfyViewNodeInput = components['schemas']['ComfyViewNodeInput']
+export type ComfyViewExposedParam = components['schemas']['ComfyViewExposedParam']
+export type ComfyParamTierInfo = components['schemas']['ParamTierInfo']
+export type ComfyValidationIssue = components['schemas']['ValidationIssue']
+export type ComfyValidateRequest = components['schemas']['ComfyValidateRequest']
+export type ComfyValidateResponse = components['schemas']['ComfyValidateResponse']
 export type ComfyParamType = ComfyExposedParam['type']
+export type ComfySuggestResponse = components['schemas']['ComfySuggestResponse']
+export type ComfySuggestItem = components['schemas']['ComfySuggestItem']
+export type ComfySuggestDiscarded = components['schemas']['ComfySuggestDiscarded']
 
 export type PriceEstimateResponse = components['schemas']['PriceEstimate']
 export type PriceEstimateInputImage = components['schemas']['InputImageEstimateResponse']
@@ -1035,6 +1051,64 @@ export function analyzeComfyWorkflow(
   })
 }
 
+/**
+ * 本文の `template` に、読み込んだファイルの JSON の文字列をそのまま入れる。ブラウザで JSON を
+ * 読み直すと `1.0` が `1` になり、サーバーが値から型(FLOAT)を推定できなくなるため(ADR-0052)。
+ * `text` は `JSON.parse` できることを呼び出し側で確かめておく。
+ */
+export function jsonBodyWithRawTemplate(rest: Record<string, unknown>, text: string): string {
+  const inner = JSON.stringify(rest).slice(1, -1)
+  return `{"template":${text}${inner ? `,${inner}` : ''}}`
+}
+
+/** ファイルの JSON の文字列のまま読み取る(数の型を保つ)。 */
+export function analyzeComfyWorkflowText(text: string): Promise<ComfyAnalyzeResponse> {
+  return request('/api/comfyui/workflows/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: jsonBodyWithRawTemplate({}, text),
+  })
+}
+
+/** 登録済みのワークフローの、保存したテンプレートを読み取る(編集画面。数の型を保つ)。 */
+export function analyzeSavedComfyWorkflow(workflowId: string): Promise<ComfyAnalyzeResponse> {
+  return request('/api/comfyui/workflows/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflow_id: workflowId }),
+  })
+}
+
+/**
+ * アシスタント(LLM)で差し込み先を推定する(ADR-0052 6章。保存しない)。`workflowId` があれば
+ * 保存したテンプレートを、無ければ `templateText`(読み込んだファイルの JSON の文字列のまま)を使う。
+ */
+export function suggestComfyWorkflowBindings(input: {
+  workflowId: string | null
+  templateText: string | null
+  name: string
+}): Promise<ComfySuggestResponse> {
+  const name = input.name.trim().slice(0, 100) || null
+  const body =
+    input.workflowId !== null
+      ? JSON.stringify({ workflow_id: input.workflowId, name })
+      : jsonBodyWithRawTemplate({ name }, input.templateText ?? '{}')
+  return request('/api/comfyui/workflows/suggest-bindings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  })
+}
+
+/** 保存せずに、保存時と同じ検証だけを掛ける(ADR-0052 3章)。画面が値を変えるたびに呼ぶ。 */
+export function validateComfyWorkflow(body: ComfyValidateRequest): Promise<ComfyValidateResponse> {
+  return request('/api/comfyui/workflows/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 export function listComfyWorkflows(): Promise<ComfyWorkflowListResponse> {
   return request('/api/comfyui/workflows')
 }
@@ -1043,25 +1117,46 @@ export function getComfyWorkflow(workflowId: string): Promise<ComfyWorkflowDetai
   return request(`/api/comfyui/workflows/${workflowId}`)
 }
 
+/** 生成画面からの閲覧(ADR-0052 7章)。図に要る構造と値だけで、秘密に見える値は伏せてある。 */
+export function viewComfyWorkflow(workflowId: string): Promise<ComfyWorkflowView> {
+  return request(`/api/comfyui/workflows/${encodeURIComponent(workflowId)}/view`)
+}
+
 export function createComfyWorkflow(
   body: ComfyWorkflowCreateRequest,
+  /** 読み込んだファイルの JSON の文字列(数の型を保って送る)。省くと `body.template` を送る。 */
+  templateText?: string | null,
 ): Promise<ComfyWorkflowDetail> {
   return request('/api/comfyui/workflows', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: comfyWorkflowBody(body, templateText),
   })
 }
 
+/**
+ * 更新。`template` を省くと保存済みのテンプレートのまま(数の型を保つ)。ファイルを差し替えたときは
+ * `templateText` にファイルの JSON の文字列を渡す。
+ */
 export function updateComfyWorkflow(
   workflowId: string,
   body: ComfyWorkflowUpdateRequest,
+  templateText?: string | null,
 ): Promise<ComfyWorkflowDetail> {
   return request(`/api/comfyui/workflows/${workflowId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: comfyWorkflowBody(body, templateText),
   })
+}
+
+function comfyWorkflowBody(
+  body: ComfyWorkflowCreateRequest | ComfyWorkflowUpdateRequest,
+  templateText: string | null | undefined,
+): string {
+  if (!templateText || body.template === undefined || body.template === null) return JSON.stringify(body)
+  const { template: _template, ...rest } = body
+  return jsonBodyWithRawTemplate(rest, templateText)
 }
 
 /** 論理削除。過去の Run の記録(run.params.comfyui_prompt に確定済みのグラフを保存済み)は変わらない。 */
@@ -1604,4 +1699,132 @@ export function updateAssistantSettings(body: AssistantSettingsUpdateRequest): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+// -- 接続先(`locality`。ADR-0051 3章。管理者のみ) ---------------------------------
+
+export type ProviderLocalitiesResponse = components['schemas']['ProviderLocalitiesResponse']
+export type ProviderLocalitySetting = components['schemas']['ProviderLocalitySetting']
+export type ProviderLocalitiesUpdateRequest = components['schemas']['ProviderLocalitiesUpdateRequest']
+/** 接続の接続先(外部 / ローカル)。 */
+export type Locality = ProviderLocalitySetting['value']
+/** ワークフローの接続先。`unset` は「接続の設定に従う」。 */
+export type WorkflowLocality = NonNullable<ComfyWorkflowSummary['locality']>
+/** 接続先を設定できる画像のプロバイダー。 */
+export type LocalityProvider = keyof ProviderLocalitiesResponse
+
+export function getProviderLocalities(): Promise<ProviderLocalitiesResponse> {
+  return request('/api/settings/provider-localities')
+}
+
+/** 省略したプロバイダーは変えない。`null` は保存した値を消して既定に戻す。 */
+export function updateProviderLocalities(body: ProviderLocalitiesUpdateRequest): Promise<ProviderLocalitiesResponse> {
+  return request('/api/settings/provider-localities', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+// -- Mod とフック(ADR-0051 7章。管理者のみ) -----------------------------------------
+
+export type ModsResponse = components['schemas']['ModsResponse']
+export type ModWebhookView = components['schemas']['ModWebhookView']
+export type PythonModView = components['schemas']['PythonModView']
+export type ModSettingFieldView = components['schemas']['ModSettingFieldView']
+export type ModFilters = components['schemas']['ModFilters']
+export type ModWebhookCreateRequest = components['schemas']['ModWebhookCreateRequest']
+export type ModWebhookUpdateRequest = components['schemas']['ModWebhookUpdateRequest']
+export type PythonModUpdateRequest = components['schemas']['PythonModUpdateRequest']
+export type ModOrderItem = components['schemas']['ModOrderItem']
+export type ModTestResponse = components['schemas']['ModTestResponse']
+export type ModInvocationView = components['schemas']['ModInvocationView']
+export type ModDeliveryView = components['schemas']['ModDeliveryView']
+export type ModEvent = ModWebhookView['events'][number]
+export type ModPurpose = NonNullable<ModFilters['purposes']>[number]
+export type ModSource = NonNullable<ModFilters['sources']>[number]
+export type ModOnFailure = ModWebhookView['on_failure']
+export type ModKind = ModOrderItem['kind']
+/** Asset・Run の判定(ADR-0051 4章・5章。Mod ごとの最新)。 */
+export type ModVerdictView = components['schemas']['ModVerdictView']
+/** Run の詳細の送る前のチェックの記録(`ai.before_send` だけ)。 */
+export type RunModInvocationView = components['schemas']['RunModInvocationView']
+
+export function getMods(): Promise<ModsResponse> {
+  return request('/api/settings/mods')
+}
+
+export function updateMods(body: components['schemas']['ModsUpdateRequest']): Promise<ModsResponse> {
+  return request('/api/settings/mods', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** Webhook を足す。署名の鍵は必須で、応答には返らない(設定済みかどうかだけ)。 */
+export function createModWebhook(body: ModWebhookCreateRequest): Promise<ModsResponse> {
+  return request('/api/settings/mods/webhooks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 書いた項目だけ変える。`secret` を送ると鍵を差し替える。 */
+export function updateModWebhook(webhookId: string, body: ModWebhookUpdateRequest): Promise<ModsResponse> {
+  return request(`/api/settings/mods/webhooks/${encodeURIComponent(webhookId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteModWebhook(webhookId: string): Promise<ModsResponse> {
+  return request(`/api/settings/mods/webhooks/${encodeURIComponent(webhookId)}`, { method: 'DELETE' })
+}
+
+export function updatePythonMod(modId: string, body: PythonModUpdateRequest): Promise<ModsResponse> {
+  return request(`/api/settings/mods/python/${encodeURIComponent(modId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/** ダミーのイベントを送り、応答と所要時間を返す(記録には残らない)。Python の Mod は有効にしたものだけ。 */
+export function testMod(kind: ModKind, modId: string, event: ModEvent): Promise<ModTestResponse> {
+  const segment = kind === 'webhook' ? 'webhooks' : 'python'
+  return request(`/api/settings/mods/${segment}/${encodeURIComponent(modId)}/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event }),
+  })
+}
+
+/** 呼ぶ順番。この並びの順に呼ぶ。 */
+export function updateModOrder(items: ModOrderItem[]): Promise<ModsResponse> {
+  return request('/api/settings/mods/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+}
+
+/** 直近の呼び出し(新しい順)。`failedOnly` は失敗・時間切れ・拒否だけ。 */
+export function listModInvocations(params: { failedOnly?: boolean; limit?: number } = {}): Promise<{
+  items: ModInvocationView[]
+}> {
+  const q = new URLSearchParams()
+  if (params.failedOnly) q.set('failed_only', 'true')
+  if (params.limit !== undefined) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return request(`/api/settings/mods/invocations${qs ? `?${qs}` : ''}`)
+}
+
+/** 配達の失敗(新しい順)。 */
+export function listModDeliveryFailures(limit?: number): Promise<{ items: ModDeliveryView[] }> {
+  const q = new URLSearchParams({ status: 'failed' })
+  if (limit !== undefined) q.set('limit', String(limit))
+  return request(`/api/settings/mods/deliveries?${q.toString()}`)
 }

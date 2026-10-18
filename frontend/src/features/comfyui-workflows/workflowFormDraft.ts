@@ -6,7 +6,7 @@
  * - analyze の結果をフォームに当てはめる(初回の読み込みと、ファイルの差し替え)。
  * - 「戻る」と保存後の行き先は ComfyUI のページ。そこから開いたなら1つ戻る。
  */
-import type { ComfyAnalyzeResponse, ComfyNodeInfo, ComfyOperation, ComfyWorkflowDetail } from '../../api/client'
+import type { ComfyAnalyzeResponse, ComfyNodeInfo, ComfyOperation, ComfyWorkflowDetail, WorkflowLocality } from '../../api/client'
 import { isSameDraftValue } from '../settings/settingsDraft'
 import {
   bindingsFormFromApi,
@@ -21,14 +21,21 @@ export interface WorkflowFormValues {
   name: string
   operation: ComfyOperation
   template: Record<string, unknown> | null
+  /**
+   * 読み込んだファイルの JSON の文字列(保存のときにそのまま送り、`1.0` などの数の型を保つ)。
+   * 編集画面で差し替えていないときは無い(保存済みのテンプレートのまま送らない)。変更の件数には数えない。
+   */
+  templateText?: string | null
   /** テンプレートの analyze で得たノード(選択肢)。変更の件数には数えない。 */
   nodes: ComfyNodeInfo[]
   bindings: BindingsFormState
   exposedRows: ExposedParamRow[]
+  /** 接続先(ADR-0051 3章)。`unset` は「接続の設定に従う」。 */
+  locality: WorkflowLocality
 }
 
 /** 変更の件数に数える欄(画面に出る順)。 */
-export const WORKFLOW_FORM_DRAFT_KEYS = ['name', 'operation', 'template', 'bindings', 'exposedRows'] as const
+export const WORKFLOW_FORM_DRAFT_KEYS = ['name', 'operation', 'locality', 'template', 'bindings', 'exposedRows'] as const
 
 export type WorkflowFormDraftKey = (typeof WORKFLOW_FORM_DRAFT_KEYS)[number]
 
@@ -40,6 +47,7 @@ export const EMPTY_WORKFLOW_FORM: WorkflowFormValues = {
   nodes: [],
   bindings: EMPTY_BINDINGS_FORM,
   exposedRows: [],
+  locality: 'unset',
 }
 
 /** 保存済みの値と違う欄。テンプレートは同じオブジェクトなら中身を比べない(大きいことがある)。 */
@@ -52,7 +60,8 @@ export function changedWorkflowFormKeys(saved: WorkflowFormValues, values: Workf
  * analyze に失敗したとき(`analyzed` が null)も、保存済みの値はそのまま残す(保存で消さないため)。
  */
 export function workflowFormFromSaved(
-  wf: Pick<ComfyWorkflowDetail, 'name' | 'operation' | 'template' | 'bindings' | 'exposed_params'>,
+  wf: Pick<ComfyWorkflowDetail, 'name' | 'operation' | 'template' | 'bindings' | 'exposed_params'> &
+    Partial<Pick<ComfyWorkflowDetail, 'locality'>>,
   analyzed: Pick<ComfyAnalyzeResponse, 'nodes' | 'candidate_params'> | null,
 ): WorkflowFormValues {
   return {
@@ -62,6 +71,7 @@ export function workflowFormFromSaved(
     nodes: analyzed?.nodes ?? [],
     bindings: bindingsFormFromApi(wf.bindings),
     exposedRows: buildExposedParamRows(analyzed?.candidate_params ?? [], wf.exposed_params ?? []),
+    locality: wf.locality ?? 'unset',
   }
 }
 
@@ -142,4 +152,16 @@ export function workflowFormBackDestination(params: {
   return params.openedFromComfyUIPage && params.locationKey !== 'default'
     ? { type: 'back' }
     : { type: 'replace', path: COMFYUI_SETTINGS_PATH }
+}
+
+/**
+ * 検証の結果(analyze の `validation`、保存・取得の `validation_issues`。ADR-0052 3章)を、
+ * 画面の警告の一覧に出す文にする。同じ文は1つにまとめる。
+ */
+export function issueMessages(issues: readonly { message: string }[] | null | undefined): string[] {
+  const messages: string[] = []
+  for (const issue of issues ?? []) {
+    if (!messages.includes(issue.message)) messages.push(issue.message)
+  }
+  return messages
 }

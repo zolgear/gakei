@@ -62,7 +62,8 @@
       "lockedDetach": "ComfyUI の Run が実行中または待機中のため、切り離せません。",
       "lockedDisable": "ComfyUI の Run が実行中または待機中のため、無効にできません。",
       "lockedEnable": "ComfyUI の Run が実行中または待機中のため、有効にできません。",
-      "notConnected": "ComfyUI に接続していません。"
+      "notConnected": "ComfyUI に接続していません。",
+      "analyzeTemplateOrWorkflow": "template と workflow_id のどちらか一方を指定してください。"
     },
     "workflow": {
       "uiFormatMessage": "UI 形式(nodes/links を含む)のファイルです。ComfyUI の「Export (API)」で書き出した API 形式の JSON を登録してください。",
@@ -130,6 +131,101 @@
       "noDetails": "詳細不明",
       "nodeExecutionFailed": "ノード {node} の実行に失敗しました({detail})。",
       "historyErrorNoDetails": "ComfyUI の実行がエラーで終了しました(詳細不明)。"
+    },
+    "analyze": {
+      "marked": "タイトル「{title}」で指定されています。",
+      "sharedWith": "ノード {node} の入力 {input} は {field} と同じ差し込み先なので、ここでは使いません。",
+      "question": {
+        "prompt": "プロンプトを入れる場所はどれですか。",
+        "negative_prompt": "ネガティブプロンプトを入れる場所はどれですか。",
+        "size": "どの latent の大きさ(幅・高さ・枚数)を使いますか。",
+        "images": "画像の枠の順番を確かめてください。",
+        "mask": "どのマスクを使いますか。"
+      },
+      "prompt": {
+        "unique": "サンプラーの条件付けから遡った文字列の根が1つだけです(ノード {node} の {input})。",
+        "ranked": "文字列の根が {count} 件あり、ノード {node} の {input} が最も有力です(タイトル・種類・書式の位置で順位を付けました)。",
+        "ask": "文字列の根が {count} 件あり、順位の差が小さいため決めきれません。",
+        "noSampler": "出力につながるサンプラーが見つかりません。",
+        "noEncoder": "サンプラーの条件付けからエンコーダーまで辿れません。",
+        "noRoot": "エンコーダーに入る文字列の直値が見つかりません。"
+      },
+      "negative": {
+        "unique": "サンプラーの negative から遡った文字列の根です(ノード {node} の {input})。",
+        "ranked": "negative の文字列の根が {count} 件あり、ノード {node} の {input} が最も有力です。",
+        "ask": "negative の文字列の根が {count} 件あり、決めきれません。",
+        "noInput": "サンプラーに negative の入力がありません。",
+        "zeroed": "negative は ConditioningZeroOut で空にされています。",
+        "sameAsPositive": "negative は positive と同じ条件付けを使っています。",
+        "noRoot": "negative のエンコーダーに入る文字列の直値が見つかりません。"
+      },
+      "seed": {
+        "unique": {
+          "one": "出力につながるノードの seed です。",
+          "other": "出力につながるノードの seed を {count} 件にまとめました(同じ参照は1つにしています)。"
+        },
+        "absent": "出力につながるノードに seed がありません。"
+      },
+      "size": {
+        "direct": "サンプラーの latent の元 {node}({class_type})の {input} です。",
+        "primitive": "latent の元 {latent} の {input} は、Primitive のノード {node} から配線されています。その値を差し込み先にします。",
+        "computed": "{input} は計算するノード {node}({class_type})から配線されているため差し込みません。そのノードの入力を公開パラメーターに薦めます。",
+        "fromImage": "latent はノード {node}({class_type})から来ており、大きさは入力画像に従います。",
+        "noLatent": "出力につながるサンプラーの latent が見つかりません。",
+        "ask": "切り替えを解けず、latent の元が {count} 件あります。",
+        "inputMissing": "latent の元 {node} に {input} の直値がありません。"
+      },
+      "images": {
+        "numbered": "出力につながる LoadImage {count} 件を、受け側の番号の順に並べました。",
+        "single": "出力につながる LoadImage は1つです(ノード {node})。",
+        "idOrder": "番号付きの入力が無いため、出力につながる LoadImage {count} 件をノードの id の順に並べました。",
+        "absent": "出力につながる LoadImage がありません。"
+      },
+      "mask": {
+        "loadImageMask": "出力につながる LoadImageMask です(ノード {node})。",
+        "imageAlpha": "枠1の LoadImage の MASK が {consumer} で部分編集に使われています。",
+        "alphaOnly": "枠1の LoadImage の MASK は {consumers} に入るだけで、部分編集には使われません(透過を保つためのもの)。マスクは対応付けません。",
+        "absent": "部分編集に使うマスクが見つかりません。",
+        "generate": "生成(generate)では入力画像とマスクを使いません。"
+      },
+      "outputs": {
+        "found": {
+          "one": "出力につながる保存ノードです({nodes})。",
+          "other": "出力につながる保存ノードが {count} 件あります({nodes})。"
+        },
+        "previewOnly": "保存ノードが無く、表示だけのノード(PreviewImage など)しかありません。",
+        "absent": "生成した画像を受ける保存ノードが見つかりません。"
+      },
+      "finalPrompt": {
+        "found": "エンコーダーに入る文字列を表示するノードです(ノード {node})。",
+        "nearest": "プロンプトの経路の途中を表示するノードです(ノード {node})。エンコーダーに入る文字列と違うことがあります。",
+        "absent": "エンコーダーに入る文字列を表示するノードはありません。"
+      }
+    },
+    "validation": {
+      "kind": {
+        "string": "文字列",
+        "int": "整数",
+        "float": "数値",
+        "bool": "真偽値",
+        "enum": "選択肢"
+      },
+      "typeMismatch": "{label}: ノード {node} の入力 {input} は{expected}の値ではありません。",
+      "wiredInput": "{label}: ノード {node} の入力 {input} は配線されています。配線された入力は差し込み先・公開パラメーターにできません(実行時に配線を値で上書きしてしまうため)。",
+      "outputNoGeneratedImage": "出力ノード {node} に、生成した画像が届きません。",
+      "unusedBranch": "{label}: ノード {node} の入力 {input} は、今の設定では出力につながらない(使われない)枝にあります。",
+      "maskNotInpaint": "マスク(image_alpha): 枠1の LoadImage(ノード {node})の MASK が部分編集に使われていません。塗った範囲が透明な画像として渡ります。",
+      "displayOnlyOutput": "出力ノード {node}({class_type})は表示だけのノードです。保存ノードを選んでください。"
+    },
+    "suggest": {
+      "badShape": "提案の形が合いません",
+      "maskNeedsImage": "画像の枠が無いので、入力画像の透過をマスクにする形は使えません",
+      "emptyResponse": "アシスタントの応答が空でした",
+      "invalidResponse": "アシスタントの応答を読めませんでした",
+      "refused": "アシスタントが応答を断りました: {reason}",
+      "disabled": "アシスタントは無効です(管理者設定の「アシスタント」で有効にできます)",
+      "unsupported": "アシスタントの接続先が Structured Outputs に対応していないため、推定に使えません(OpenAI の公式の接続先だけに対応します)",
+      "llmError": "アシスタントでの推定に失敗しました: {error}"
     }
   },
   "sdwebui": {
@@ -395,6 +491,9 @@
       "unknownConnection": "指定した接続先がありません",
       "invalidModel": "モデル名は1〜{max}文字で指定してください",
       "invalidLimit": "{name} は{min}〜{max}の整数である必要があります"
+    },
+    "locality": {
+      "invalid": "接続先は external・local のどちらかを指定してください"
     }
   },
   "runValidation": {
@@ -810,6 +909,7 @@
     "runNotTarget": "成功して画像を出力した実行のプロンプトだけを埋め込みます"
   },
   "lineageExport": {
+    "rootWithheld": "Mod の判定で画像を残さなかった画像からは、系列を書き出せません",
     "contentMissing": "系列に含まれる画像の原本が保存先に見つからないため、書き出せません",
     "delivery": {
       "title": "画像の系列の記録",
@@ -919,7 +1019,8 @@
         "sourceVersion": "書き出し元の GAKEI の版"
       },
       "footerFiles": "assets/ に画像の原本、manifest.json に機械で読める同じ記録があります。manifest.json を含むこの ZIP は、GAKEI の「系列を取り込む」で取り込めます。",
-      "footerMadeWith": "GAKEI(セルフホストの画像生成ツール)で書き出しました。"
+      "footerMadeWith": "GAKEI(セルフホストの画像生成ツール)で書き出しました。",
+      "contentWithheld": "画像なし(拒否)"
     },
     "readme": {
       "body": "GAKEI 画像の系列の記録(納品用 ZIP)\n\nこの ZIP は、GAKEI で書き出した画像の系列の記録です。\nGAKEI は、OpenAI などの画像生成 API をセルフホストで使うための Web ツールです。\nリポジトリ: {repo_url}\n\nZIP の中身:\n  index.html     この記録を読むためのページです。ZIP を展開してから、ブラウザで開いてください(インターネットへの接続は要りません)。\n  assets/        画像の原本です。生成・保存したときのバイト列のままです。\n  manifest.json  同じ記録を機械で読める形にしたもの({format})です。GAKEI の「系列を取り込む」で取り込めます。\n  README.txt     このファイルです。\n\n主画像の ID: {root}\n書き出した日時(UTC): {exported_at}\nGAKEI の版: {version}\n\nこの ZIP には改ざんを検出する仕組みや署名はありません。各画像の sha256 は index.html と manifest.json に載せているので、画像ファイルの sha256 を計算して比べれば、画像が差し替わっていないことを確かめられます。\n  Windows: certutil -hashfile <ファイル> SHA256\n  macOS / Linux: shasum -a 256 <ファイル>"
@@ -980,5 +1081,38 @@
     "undoConflict": "その後に対象が変わったか削除されたため、元に戻せません",
     "undoNotAvailable": "このメッセージは元に戻せる書き込みではありません",
     "undoAlreadyDone": "既に元に戻しています"
+  },
+  "mods": {
+    "denied": "{mod} が送信を止めました: {reason}",
+    "checkFailed": "送る前のチェックに失敗しました",
+    "deniedNoReason": "理由は示されていません",
+    "notFound": "Mod が見つかりません",
+    "loadFailed": "Mod を読み込めません: {error}",
+    "manifestInvalid": "この Mod のマニフェストを読めないので、設定の値を保存できません",
+    "invalidName": "名前は1〜{max}文字で指定してください",
+    "invalidInstanceName": "インスタンスの名前は{max}文字以内で指定してください",
+    "invalidUrl": "URL は http または https で指定してください(ユーザー名・パスワード・# は含められません)",
+    "invalidSecret": "署名の鍵は1〜{max}文字で指定してください",
+    "invalidEvents": "購読するイベントが不正です",
+    "invalidFilters": "絞り込みの指定が不正です",
+    "invalidTimeout": "待つ時間は{min}〜{max}秒で指定してください",
+    "invalidOnFailure": "失敗したときの扱いは block か allow を指定してください",
+    "invalidOrder": "順番の指定が不正です",
+    "invalidEnabled": "真偽値で指定してください",
+    "tooManyWebhooks": "Webhook は{max}件まで登録できます",
+    "unknownSetting": "設定の項目 {key} はこの Mod にありません",
+    "invalidSettingValue": "設定の項目 {key} の値の型が合いません",
+    "enableFirst": "先に Mod を有効にしてください",
+    "waitForVerdictUnsupported": "この Mod は判定を返さないため、判定を待つ設定にできません",
+    "contentWithheld": "Mod の判定(拒否)により、この画像は保存していません",
+    "contentWithheldWithVerdict": "Mod の判定(拒否)により、この画像は保存していません({mod}: {label} — {message})",
+    "assetDenied": "画像 {id} は Mod の判定で拒否されたため、外部の AI に送れません",
+    "inputDenied": "入力の画像 {id} は Mod の判定で拒否されたため、使えません",
+    "checkFailedLabel": "チェックの失敗",
+    "attachmentDenied": "添付した画像は Mod の判定で拒否されたため、送れません",
+    "verdictUnauthorized": "署名が無いか、正しくないか、時刻が古すぎます",
+    "verdictTooLarge": "本文が大きすぎます",
+    "verdictInvalid": "判定の形が正しくありません: {error}",
+    "verdictTargetNotAllowed": "この Mod に届けていない対象への判定は受け付けません: {target}"
   }
 }

@@ -21,6 +21,7 @@ from app.deps import get_annotator, get_session, get_settings
 
 # annotation_settings と embedding_settings は、読み込むと使っている機能を登録する(上の docstring)。
 from app.domain import annotation_settings, assistant_settings, embedding_settings, llm_connections
+from app.domain import locality as locality_domain
 from app.domain.schemas import (
     LlmConnectionApiKeyUpdateRequest,
     LlmConnectionCreateRequest,
@@ -38,6 +39,9 @@ def _response(db: Session, settings: Settings) -> LlmConnectionsResponse:
     used_by = llm_connections.features_using(db)
     views: list[LlmConnectionView] = []
     for connection in llm_connections.load(db):
+        locality, locality_source = locality_domain.connection_locality(
+            db, settings, builtin=connection.builtin, value=connection.locality
+        )
         views.append(
             LlmConnectionView(
                 id=connection.id,
@@ -51,6 +55,8 @@ def _response(db: Session, settings: Settings) -> LlmConnectionsResponse:
                 api_style=connection.api_style,
                 api_key_set=llm_connections.connection_key_set(connection, settings),
                 used_by=used_by.get(connection.id, []),  # type: ignore[arg-type]
+                locality=locality,
+                locality_source=locality_source,  # type: ignore[arg-type]
             )
         )
     return LlmConnectionsResponse(connections=views)
@@ -123,7 +129,9 @@ def create_llm_connection(
     """接続先を足す。足した接続先は一覧の末尾に入る。キーは任意(ローカルのサーバー向けに任意の
     文字列を受け付けるため、有効性の確認はしない)。"""
     try:
-        connection_id = llm_connections.add_connection(db, body.name, body.base_url, body.api_style)
+        connection_id = llm_connections.add_connection(
+            db, body.name, body.base_url, body.api_style, body.locality
+        )
     except _CONNECTION_ERRORS as exc:
         _raise_connection_error(exc)
     key = (body.api_key or "").strip()

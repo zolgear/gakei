@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.domain import api_key as api_key_domain
-from app.domain import prompt_templates
+from app.domain import content_withholding, prompt_templates
 from app.domain.models import Run, RunInput, RunStatus
 from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
 from app.domain.schemas import RunCreateRequest
@@ -123,10 +123,15 @@ def create_runs(
     caps = provider.capabilities()
 
     input_metas: list[RunInputMeta] = []
+    # ADR-0051 4章: `deny` の判定を受けた・画像を残さなかった Asset は入力に使えない(外部の
+    # AI へ送らない)。見える Asset だけを確かめる(見えないものは下で「無い」と同じ扱い)。
+    blocked = content_withholding.blocked_asset_ids(db, [item.asset_id for item in body.inputs])
     for item in body.inputs:
         asset = get_visible_asset(db, viewer, item.asset_id)
         if asset is None or asset.deleted_at is not None:
             raise RunCreateError("invalid", t("runs.assetNotFound", id=item.asset_id))
+        if asset.id in blocked:
+            raise RunCreateError("conflict", t("mods.inputDenied", id=item.asset_id))
         input_metas.append(
             RunInputMeta(
                 asset_id=item.asset_id,

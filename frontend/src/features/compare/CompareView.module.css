@@ -106,7 +106,8 @@
   overflow: hidden;
 }
 
-.chip img {
+.chip img,
+.chip .chipThumb {
   width: 100%;
   height: 100%;
   object-fit: cover;

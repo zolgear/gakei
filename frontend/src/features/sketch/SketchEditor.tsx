@@ -42,6 +42,7 @@ import { MODAL_BODY_ATTRIBUTE } from '../../components/modalFocus'
 import { useModalFocus } from '../../components/useModalFocus'
 import * as sketchLayerStore from './sketchLayerStore'
 import styles from './SketchEditor.module.css'
+import { usePreventPageZoom } from '../../lib/usePreventPageZoom'
 
 const MAX_LONG_EDGE = 2048
 const MAX_HISTORY = 12
@@ -175,6 +176,8 @@ export function SketchEditor({ base, onSave, onCancel }: SketchEditorProps) {
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lineCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  // 2本指でページ全体が拡大されないようにする(iOS の Safari。lib/usePreventPageZoom.ts)。
+  usePreventPageZoom(containerRef)
   const cursorRef = useRef<HTMLDivElement | null>(null)
   const baseImageRef = useRef<HTMLImageElement | null>(null)
   const historyRef = useRef<ImageData[]>([])

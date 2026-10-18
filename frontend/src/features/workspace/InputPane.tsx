@@ -268,6 +268,25 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     }
   }
 
+  // 画像の貼り付けはスタジオの画面のどこでも受ける(プロンプトのテキスト欄だけでなく、タグのモードの
+  // 入力欄、入力画像のタイル、何も選んでいないとき、「入力画像を追加」のダイアログの中でも)。
+  // ほかのダイアログ(配置・スケッチ・マスクなど)の中では受けない。画像を含まない貼り付けは
+  // handlePaste が何もしないので、テキストの貼り付けはそのまま入る。
+  const handlePasteRef = useRef(editLogic.handlePaste)
+  handlePasteRef.current = editLogic.handlePaste
+  const addDialogOpenRef = useRef(addDialogOpen)
+  addDialogOpenRef.current = addDialogOpen
+  useEffect(() => {
+    function handleWindowPaste(e: ClipboardEvent) {
+      if (e.defaultPrevented) return
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('[role="dialog"]') && !addDialogOpenRef.current) return
+      handlePasteRef.current(e)
+    }
+    window.addEventListener('paste', handleWindowPaste)
+    return () => window.removeEventListener('paste', handleWindowPaste)
+  }, [])
+
   function handlePaneDrop(e: ReactDragEvent<HTMLDivElement>) {
     // 下段全体でもドロップを受ける(チップ行の外にドロップされた場合の保険)。関係ないドラッグ
     // (テキスト選択など)まで奪わないよう、Files・アプリ内マーカー・text/uri-list のときだけ処理する。
@@ -349,6 +368,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (!form.sizeValid) blockReasons.push(...form.sizeErrors)
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
+  if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
   if (form.imageInputCount > form.maxInputImages) {
     blockReasons.push(fmt(ip.maxInputImagesExceeded, { max: form.maxInputImages }))
   }
@@ -431,7 +451,6 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
               updateMentionFromCursor(e.currentTarget)
             }}
             onClick={(e) => updateMentionFromCursor(e.currentTarget)}
-            onPaste={editLogic.handlePaste}
             placeholder={ip.promptPlaceholder}
           />
           {mention === null && tagAssist.popover}

@@ -46,6 +46,7 @@ from app.domain import annotations as annotations_domain
 from app.domain import api_key as api_key_domain
 from app.domain import content_rating as content_rating_domain
 from app.domain import embeddings as embeddings_domain
+from app.domain import locality as locality_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.schemas import (
     AnnotationBackfillResponse,
@@ -75,6 +76,9 @@ from app.domain.schemas import (
     OpenAIBaseUrlUpdateRequest,
     OpenAIKeyStatusResponse,
     OpenAIKeyUpdateRequest,
+    ProviderLocalitiesResponse,
+    ProviderLocalitiesUpdateRequest,
+    ProviderLocalitySetting,
     SdWebuiTimeoutSetting,
     ShareSettingsResponse,
     ShareSettingsUpdateRequest,
@@ -271,6 +275,57 @@ def delete_openai_base_url(
     _reject_if_base_url_env_locked(settings)
     api_key_domain.delete_file_base_url(settings.data_dir)
     return _base_url_status_response(settings)
+
+
+# -- 接続先(`locality`。ADR-0051 3章) -------------------------------------------
+# 画像のプロバイダーの接続(OpenAI、ComfyUI、SD WebUI)ごとに、外部かローカルかを決める。
+# Mod を1つも有効にしていなくても設定できる。
+
+
+def _provider_localities_response(db: Session, settings: Settings) -> ProviderLocalitiesResponse:
+    def setting(provider: str) -> ProviderLocalitySetting:
+        value, source = locality_domain.provider_locality(db, settings, provider)
+        return ProviderLocalitySetting(
+            value=value,
+            source="connection" if source == "connection" else "default",
+            default=locality_domain.default_provider_locality(provider, settings),
+        )
+
+    return ProviderLocalitiesResponse(
+        openai=setting("openai"), comfyui=setting("comfyui"), sdwebui=setting("sdwebui")
+    )
+
+
+@router.get(
+    "/provider-localities",
+    response_model=ProviderLocalitiesResponse,
+    operation_id="get_provider_localities",
+)
+def get_provider_localities(
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    _user: CurrentUser = Depends(require_admin),
+) -> ProviderLocalitiesResponse:
+    return _provider_localities_response(db, settings)
+
+
+@router.patch(
+    "/provider-localities",
+    response_model=ProviderLocalitiesResponse,
+    operation_id="update_provider_localities",
+)
+def update_provider_localities(
+    body: ProviderLocalitiesUpdateRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    _user: CurrentUser = Depends(require_admin),
+) -> ProviderLocalitiesResponse:
+    updates = {name: getattr(body, name) for name in body.model_fields_set}
+    try:
+        locality_domain.save_provider_localities(db, updates)
+    except locality_domain.LocalityValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return _provider_localities_response(db, settings)
 
 
 # -- 全般設定(ADR-0009、ADR-0013 7章) ------------------------------------------
@@ -922,6 +977,12 @@ def _assistant_settings_response(
         hourly_run_limit_default=assistant_settings.DEFAULT_HOURLY_RUN_LIMIT,
         hourly_run_limit_max=assistant_settings.HOURLY_RUN_LIMIT_MAX,
         usable=usable,
+        structured_outputs=(
+            not runtime.structured.requires_target
+            or assistant_settings.structured_outputs_supported(
+                db, config, request.app.state.settings
+            )
+        ),
         requests_last_hour=runtime.requests.count(user_key(user.id)),
         runs_last_hour=assistant_settings.count_recent_runs(db, user.id),
     )

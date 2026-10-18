@@ -532,3 +532,355 @@ def test_create_inpaint_workflow_with_mask(client: TestClient) -> None:
         "node": "12",
         "input": "image",
     }
+
+
+# -- ADR-0052: 読み取りの応答と、保存時の検証(エラーと警告) ---------------------------------
+
+
+def test_analyze_returns_readings_states_tiers_and_validation(client: TestClient) -> None:
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {"class_type": "PreviewImage", "inputs": {"images": ["8", 0]}}
+    response = client.post("/api/comfyui/workflows/analyze", json={"template": graph})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    readings = {r["field"]: r for r in body["readings"]}
+    assert readings["prompt"]["confidence"] == "unique"
+    assert readings["prompt"]["reason"]
+    path = readings["prompt"]["paths"][0]
+    assert path[0] == {"node": "6", "class_type": "CLIPTextEncode", "input": "text"}
+    assert path[-1]["node"] == "9"
+    assert readings["images"]["confidence"] == "absent"
+    states = {n["id"]: n["state"] for n in body["nodes"]}
+    assert states["3"] == "live"
+    assert states["20"] == "display"
+    tiers = {(p["node"], p["input"]): p["tier"] for p in body["param_tiers"]}
+    assert tiers[("3", "steps")] == "recommended"
+    assert tiers[("4", "ckpt_name")] == "hidden"
+    assert body["validation"] == []
+    # 読むだけの図に使う配線と錨の種類(ADR-0052 4章)。
+    edges = {(e["source"], e["target"], e["input"]) for e in body["edges"]}
+    assert ("6", "3", "positive") in edges
+    assert ("8", "20", "images") in edges
+    assert all(e["followed"] for e in body["edges"])
+    kinds = {n["id"]: n["kind"] for n in body["nodes"]}
+    assert kinds["3"] == "sampler"
+    assert kinds["9"] == "save"
+    assert kinds["20"] == "display"
+    assert readings["mask"]["evidence"] == []
+
+
+def test_create_workflow_rejects_wired_binding(client: TestClient) -> None:
+    bindings = _t2i_bindings_body()
+    bindings["prompt"] = {"node": "3", "input": "positive"}
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "配線",
+            "operation": "generate",
+            "template": clone(T2I_GRAPH),
+            "bindings": bindings,
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 422
+    assert "配線" in response.json()["detail"]
+
+
+def test_create_workflow_rejects_type_mismatch_and_output_without_image(
+    client: TestClient,
+) -> None:
+    bindings = _t2i_bindings_body()
+    bindings["seed"] = [{"node": "3", "input": "sampler_name"}]
+    bindings["outputs"] = ["4"]
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "型",
+            "operation": "generate",
+            "template": clone(T2I_GRAPH),
+            "bindings": bindings,
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    # エラーが複数なら改行でつなぐ。
+    assert "整数" in detail
+    assert "生成した画像" in detail
+
+
+def test_create_workflow_keeps_warnings_in_response(client: TestClient) -> None:
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {"class_type": "PreviewImage", "inputs": {"images": ["8", 0]}}
+    bindings = _t2i_bindings_body()
+    bindings["outputs"] = ["9", "20"]
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "警告",
+            "operation": "generate",
+            "template": graph,
+            "bindings": bindings,
+            "exposed_params": [],
+        },
+    )
+    assert response.status_code == 201, response.text
+    issues = response.json()["validation_issues"]
+    assert [(i["level"], i["code"], i["node"]) for i in issues] == [
+        ("warning", "display_only_output", "20")
+    ]
+    # 取得でも、保存済みの差し込み先を今の検証に掛けた結果が出る。
+    fetched = client.get(f"/api/comfyui/workflows/{response.json()['id']}").json()
+    assert [i["code"] for i in fetched["validation_issues"]] == ["display_only_output"]
+
+
+def test_patch_workflow_rejects_wired_exposed_param_and_returns_warnings(
+    client: TestClient,
+) -> None:
+    created = _create_t2i_workflow(client)
+    assert created["validation_issues"] == []
+    response = client.patch(
+        f"/api/comfyui/workflows/{created['id']}",
+        json={
+            "exposed_params": [
+                {
+                    "name": "latent",
+                    "node": "3",
+                    "input": "latent_image",
+                    "type": "text",
+                    "label": "x",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 422
+    assert "配線" in response.json()["detail"]
+
+    graph = clone(T2I_GRAPH)
+    graph["30"] = {"class_type": "EmptyLatentImage", "inputs": {"width": 64, "height": 64}}
+    response = client.patch(
+        f"/api/comfyui/workflows/{created['id']}",
+        json={
+            "template": graph,
+            "exposed_params": [
+                {"name": "spare_width", "node": "30", "input": "width", "type": "int", "label": "w"}
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert [i["code"] for i in response.json()["validation_issues"]] == ["unused_branch"]
+
+
+# -- /workflows/validate(保存せずに検証だけ。ADR-0052 3章) ------------------------------
+
+
+def test_validate_returns_errors_and_warnings_without_saving(client: TestClient) -> None:
+    graph = clone(T2I_GRAPH)
+    graph["20"] = {"class_type": "PreviewImage", "inputs": {"images": ["8", 0]}}
+    bindings = _t2i_bindings_body()
+    bindings["prompt"] = {"node": "3", "input": "positive"}
+    bindings["outputs"] = ["9", "20"]
+    response = client.post(
+        "/api/comfyui/workflows/validate",
+        json={"template": graph, "operation": "generate", "bindings": bindings},
+    )
+    assert response.status_code == 200, response.text
+    issues = [(i["level"], i["code"], i["field"]) for i in response.json()["issues"]]
+    assert ("error", "wired_input", "prompt") in issues
+    assert ("warning", "display_only_output", "outputs") in issues
+    # 保存はしない。
+    assert client.get("/api/comfyui/workflows").json()["items"] == []
+
+
+def test_validate_accepts_missing_required_fields(client: TestClient) -> None:
+    # まだ選んでいない必須項目(prompt、outputs)は問わない(画面が別に示す)。
+    response = client.post(
+        "/api/comfyui/workflows/validate",
+        json={"template": clone(T2I_GRAPH), "operation": "generate", "bindings": {}},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["issues"] == []
+
+
+def test_validate_checks_exposed_params_and_rejects_ui_format(client: TestClient) -> None:
+    response = client.post(
+        "/api/comfyui/workflows/validate",
+        json={
+            "template": clone(T2I_GRAPH),
+            "operation": "generate",
+            "bindings": _t2i_bindings_body(),
+            "exposed_params": [
+                {"name": "steps", "node": "3", "input": "seed", "type": "int", "label": "s"}
+            ],
+        },
+    )
+    assert response.status_code == 200
+    codes = [(i["code"], i["field"]) for i in response.json()["issues"]]
+    assert ("duplicate", "exposed_params.steps") in codes
+
+    response = client.post(
+        "/api/comfyui/workflows/validate",
+        json={
+            "template": {"nodes": [], "links": []},
+            "operation": "generate",
+            "bindings": {},
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_analyze_param_tiers_carry_hidden_reason(client: TestClient) -> None:
+    response = client.post("/api/comfyui/workflows/analyze", json={"template": clone(T2I_GRAPH)})
+    tiers = {(p["node"], p["input"]): p for p in response.json()["param_tiers"]}
+    assert tiers[("4", "ckpt_name")]["hidden_reason"] == "file_or_model"
+    assert tiers[("3", "steps")]["hidden_reason"] is None
+
+
+# -- 公開パラメーターの型(1.0 を FLOAT のまま読む)と、保存したテンプレートの読み取り -------------
+
+
+def test_analyze_keeps_float_type_for_integral_float_values(client: TestClient) -> None:
+    # T2I_GRAPH の cfg は 8.0、denoise は 1.0。JSON の 1.0 は Python では float のまま読める。
+    response = client.post("/api/comfyui/workflows/analyze", json={"template": clone(T2I_GRAPH)})
+    params = {(p["node"], p["input"]): p for p in response.json()["candidate_params"]}
+    assert params[("3", "cfg")]["type"] == "float"
+    assert params[("3", "denoise")]["type"] == "float"
+    assert params[("3", "steps")]["type"] == "int"
+
+
+def test_analyze_by_workflow_id_reads_saved_template(client: TestClient) -> None:
+    created = _create_t2i_workflow(client)
+    response = client.post("/api/comfyui/workflows/analyze", json={"workflow_id": created["id"]})
+    assert response.status_code == 200, response.text
+    params = {(p["node"], p["input"]): p for p in response.json()["candidate_params"]}
+    assert params[("3", "denoise")]["type"] == "float"
+
+
+def test_analyze_requires_exactly_one_of_template_or_workflow_id(client: TestClient) -> None:
+    assert client.post("/api/comfyui/workflows/analyze", json={}).status_code == 422
+    created = _create_t2i_workflow(client)
+    response = client.post(
+        "/api/comfyui/workflows/analyze",
+        json={"template": clone(T2I_GRAPH), "workflow_id": created["id"]},
+    )
+    assert response.status_code == 422
+    missing = client.post(
+        "/api/comfyui/workflows/analyze",
+        json={"workflow_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    assert missing.status_code == 404
+
+
+# -- 生成画面からの閲覧(ADR-0052 7章) ------------------------------------------------
+
+# テスト用の、形だけそれらしい値(実在のキーではない)。
+_FAKE_KEY = "sk-proj-" + "Ab3dEf6hIj9kLm2nOp5qRs8t"
+
+
+def _connect(client: TestClient) -> None:
+    response = client.put("/api/comfyui/connection", json={"url": "http://127.0.0.1:8189"})
+    assert response.status_code == 200, response.text
+
+
+def _create_workflow_with_secret(client: TestClient) -> dict:
+    template = clone(T2I_GRAPH)
+    # 出力に届かないカスタムノードに、秘密に見える値を2通り(名前と値の形)で書く。
+    template["90"] = {
+        "class_type": "ExternalApiNode",
+        "inputs": {"api_key": "plain-looking", "note": f"use {_FAKE_KEY}", "count": 3},
+        "_meta": {"title": "外部 API"},
+    }
+    response = client.post(
+        "/api/comfyui/workflows",
+        json={
+            "name": "秘密入り",
+            "operation": "generate",
+            "template": template,
+            "bindings": _t2i_bindings_body(),
+            "exposed_params": [
+                {
+                    "name": "steps",
+                    "node": "3",
+                    "input": "steps",
+                    "type": "int",
+                    "label": "ステップ数",
+                },
+                {
+                    "name": "note",
+                    "node": "90",
+                    "input": "note",
+                    "type": "text",
+                    "label": "メモ",
+                    "default": f"use {_FAKE_KEY}",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_view_returns_structure_and_redacts_secrets(client: TestClient) -> None:
+    _connect(client)
+    workflow = _create_workflow_with_secret(client)
+
+    response = client.get(f"/api/comfyui/workflows/{workflow['id']}/view")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "plain-looking" not in response.text
+    assert _FAKE_KEY not in response.text
+    # テンプレートそのものは返さない。
+    assert "template" not in body
+    assert body["name"] == "秘密入り"
+    assert body["operation"] == "generate"
+
+    nodes = {n["id"]: n for n in body["nodes"]}
+    assert nodes["3"]["kind"] == "sampler"
+    assert nodes["3"]["state"] == "live"
+    assert nodes["90"]["state"] == "unused"
+    inputs = {i["name"]: i for i in nodes["90"]["inputs"]}
+    assert inputs["api_key"] == {
+        "name": "api_key",
+        "value": None,
+        "linked": False,
+        "redacted": True,
+    }
+    assert inputs["note"]["redacted"] is True and inputs["note"]["value"] is None
+    assert inputs["count"] == {"name": "count", "value": 3, "linked": False, "redacted": False}
+    sampler_inputs = {i["name"]: i for i in nodes["3"]["inputs"]}
+    assert sampler_inputs["model"]["linked"] is True
+    assert sampler_inputs["model"]["value"] == ["4", 0]
+
+    assert any(e["source"] == "3" and e["target"] == "8" for e in body["edges"])
+    assert body["bindings"]["prompt"] == {"node": "6", "input": "text"}
+    assert body["bindings"]["outputs"] == ["9"]
+
+    params = {p["name"]: p for p in body["exposed_params"]}
+    assert params["steps"]["default_redacted"] is False
+    assert params["steps"]["label"] == "ステップ数"
+    assert params["note"]["default"] is None
+    assert params["note"]["default_redacted"] is True
+
+
+def test_view_returns_404_when_connection_inactive_or_workflow_deleted(
+    client: TestClient,
+) -> None:
+    # 接続が無い(未設定)間は、生成画面に出ないので閲覧もできない。
+    workflow = _create_t2i_workflow(client)
+    response = client.get(f"/api/comfyui/workflows/{workflow['id']}/view")
+    assert response.status_code == 404
+
+    _connect(client)
+    assert client.get(f"/api/comfyui/workflows/{workflow['id']}/view").status_code == 200
+
+    # 無効にした接続。
+    assert client.post("/api/comfyui/connection/disable").status_code == 200
+    assert client.get(f"/api/comfyui/workflows/{workflow['id']}/view").status_code == 404
+    assert client.post("/api/comfyui/connection/enable").status_code == 200
+    assert client.get(f"/api/comfyui/workflows/{workflow['id']}/view").status_code == 200
+
+    # 削除したワークフロー・無いワークフロー。
+    assert client.delete(f"/api/comfyui/workflows/{workflow['id']}").status_code == 204
+    assert client.get(f"/api/comfyui/workflows/{workflow['id']}/view").status_code == 404
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert client.get(f"/api/comfyui/workflows/{unknown}/view").status_code == 404

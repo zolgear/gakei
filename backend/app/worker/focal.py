@@ -142,6 +142,9 @@ class FocalPointWorker:
             asset = session.get(Asset, asset_id)
             if asset is None or asset.kind == AssetKind.MASK:
                 return False
+            # 画像を残さなかった Asset(ADR-0051 4章)は焦点を求めない。
+            if asset.content_withheld_at is not None:
+                return False
             if not focal_points.needs_compute(session, asset_id):
                 return False
             point = focal_points.detect_for_asset(self.store, asset)

@@ -67,7 +67,9 @@ export function StockTile({
   const { t } = useI18n()
   // mask は入力画像として追加できないので、ドラッグ元にもしない(「+」を出さないのと同じ条件)。
   // 選択モード中もドラッグしない。
-  const draggable = !selectionMode && asset.kind !== 'mask'
+  // 画像を残さなかった Asset(ADR-0051 4章)は入力に使えないので、「+」もドラッグも出さない。
+  const withheld = asset.content_withheld === true
+  const draggable = !selectionMode && asset.kind !== 'mask' && !withheld
 
   return (
     <div className={styles.tile} data-selected={selectionMode && isSelected}>
@@ -84,6 +86,7 @@ export function StockTile({
           assetId={asset.id}
           rating={asset.content_rating}
           badge
+          withheld={withheld}
           className={`${styles.tileImage} checkerboard`}
           style={focalStyle(asset.focal_point)}
           alt=""
@@ -110,7 +113,7 @@ export function StockTile({
           <CrossIcon />
         </button>
       )}
-      {!selectionMode && asset.kind !== 'mask' && (
+      {!selectionMode && asset.kind !== 'mask' && !withheld && (
         <button
           type="button"
           className={`${styles.overlayButton} ${styles.addButton}`}

@@ -83,6 +83,9 @@ def test_create_update_delete_connection(client: TestClient, data_dir: Path) -> 
         "api_style": "chat",
         "api_key_set": True,
         "used_by": [],
+        # 接続先(ADR-0051 3章)。決めていなければ既定の external。
+        "locality": "external",
+        "locality_source": "default",
     }
     # キーは DB ではなく secrets.json に置き、API では返さない。保存先の名前は変えていない。
     secrets = json.loads((data_dir / "secrets.json").read_text())

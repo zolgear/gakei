@@ -6,7 +6,7 @@ import copy
 
 import pytest
 
-from app.domain.comfy_workflow import analyze_workflow
+from app.domain.comfy_analyze import analyze_workflow
 from app.domain.secret_values import (
     REDACTED,
     SecretInput,
@@ -290,6 +290,9 @@ def test_analyze_warns_secret_inputs_without_values() -> None:
     text = "\n".join(result.warnings)
     assert "my-plain-secret" not in text
     assert BEARER not in text
+    # 秘密に見える値は読み取りでは扱わないので、カードの画面でも出す種別にする。
+    secret_items = [w for w in result.warning_items if "秘密" in w.message]
+    assert [w.kind for w in secret_items] == ["general", "general"]
 
 
 def test_analyze_has_no_secret_warning_for_plain_graph() -> None:

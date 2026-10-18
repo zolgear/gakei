@@ -14,13 +14,13 @@ import {
 function makeRun(overrides: Partial<RunDetail> = {}): Pick<RunDetail, 'inputs' | 'outputs'> {
   return {
     inputs: [
-      { asset_id: 'in-primary', role: 'image', position: 0 },
-      { asset_id: 'in-mask', role: 'mask', position: 0 },
-      { asset_id: 'in-ref', role: 'reference', position: 1 },
+      { asset_id: 'in-primary', role: 'image', position: 0, content_withheld: false },
+      { asset_id: 'in-mask', role: 'mask', position: 0, content_withheld: false },
+      { asset_id: 'in-ref', role: 'reference', position: 1, content_withheld: false },
     ],
     outputs: [
-      { asset_id: 'out-1', output_index: 0 },
-      { asset_id: 'out-2', output_index: 1 },
+      { asset_id: 'out-1', output_index: 0, content_withheld: false },
+      { asset_id: 'out-2', output_index: 1, content_withheld: false },
     ],
     ...overrides,
   }
@@ -69,8 +69,8 @@ describe('buildComparePath', () => {
 describe('compareInputCandidates', () => {
   it('マスクを除いた image/reference を返す', () => {
     expect(compareInputCandidates(makeRun())).toEqual([
-      { assetId: 'in-primary', role: 'image', position: 0, focalPoint: null, contentRating: null },
-      { assetId: 'in-ref', role: 'reference', position: 1, focalPoint: null, contentRating: null },
+      { assetId: 'in-primary', role: 'image', position: 0, focalPoint: null, contentRating: null, withheld: false },
+      { assetId: 'in-ref', role: 'reference', position: 1, focalPoint: null, contentRating: null, withheld: false },
     ])
   })
 
@@ -82,8 +82,8 @@ describe('compareInputCandidates', () => {
 describe('compareOutputCandidates', () => {
   it('出力一覧をそのまま返す', () => {
     expect(compareOutputCandidates(makeRun())).toEqual([
-      { assetId: 'out-1', outputIndex: 0, focalPoint: null, contentRating: null },
-      { assetId: 'out-2', outputIndex: 1, focalPoint: null, contentRating: null },
+      { assetId: 'out-1', outputIndex: 0, focalPoint: null, contentRating: null, withheld: false },
+      { assetId: 'out-2', outputIndex: 1, focalPoint: null, contentRating: null, withheld: false },
     ])
   })
 })
@@ -94,7 +94,7 @@ describe('primaryParentAssetId', () => {
   })
 
   it('無ければ null', () => {
-    expect(primaryParentAssetId({ inputs: [{ asset_id: 'x', role: 'reference', position: 0 }] })).toBeNull()
+    expect(primaryParentAssetId({ inputs: [{ asset_id: 'x', role: 'reference', position: 0, content_withheld: false }] })).toBeNull()
   })
 })
 
@@ -109,7 +109,7 @@ describe('hasComparableInput', () => {
   })
 
   it('マスクしか無ければ false', () => {
-    expect(hasComparableInput({ inputs: [{ asset_id: 'm', role: 'mask', position: 0 }] })).toBe(false)
+    expect(hasComparableInput({ inputs: [{ asset_id: 'm', role: 'mask', position: 0, content_withheld: false }] })).toBe(false)
   })
 })
 
@@ -143,7 +143,7 @@ describe('resolveComparison', () => {
   })
 
   it('主たる親が無ければ最初の候補入力を使う', () => {
-    const run = makeRun({ inputs: [{ asset_id: 'in-ref', role: 'reference', position: 0 }] })
+    const run = makeRun({ inputs: [{ asset_id: 'in-ref', role: 'reference', position: 0, content_withheld: false }] })
     expect(resolveComparison(run, { before: null, after: null }).before).toBe('in-ref')
   })
 

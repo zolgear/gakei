@@ -41,6 +41,7 @@ export const GAKEI_STORAGE_KEYS = {
   'gakei.runForm.promptEditMode': 'プロンプト欄の「テキスト / タグ」(モデルごと)',
   'gakei.runForm.v1': '生成フォームの下書き(プロンプト・パラメーター・入力画像)',
   'gakei:last-asset-group': '生成フォームで最後に選んだグループ',
+  'gakei.comfyui.workflowBindingView': 'ComfyUI のワークフローの登録画面で、差し込み先を一覧と図のどちらで出すか',
 } as const satisfies Record<string, string>
 
 export function isGakeiStorageKey(key: string): boolean {

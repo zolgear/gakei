@@ -21,6 +21,8 @@
   `gakei.db.bak-<日時>` に写す。PostgreSQL ならバックアップ(`pg_dump` など)を促す。
 - DB の変更は1つのトランザクションで行う。派生画像(すべての版)は、DB を commit した後で
   消す(消せずに残っても害は無い)。
+- Mod の `deny` の判定で画像を残さなかった Asset(`content_withheld_at`。ADR-0051 4章)は、
+  原本が無いのが正しい状態なので対象から外す。
 - ADR-0003 の「追記のみ」「論理削除のみ」の例外にあたる保守の手段で、画面や API からは呼べない。
 """
 
@@ -211,9 +213,16 @@ def plan_reconcile(
     """
     plan = ReconcilePlan(include_runs_without_outputs=include_runs_without_outputs)
     with session_factory() as session:
+        # ADR-0051 4章: Mod の `deny` の判定で画像を残さなかった Asset(`content_withheld_at`)は
+        # 原本が無いのが正しい状態なので、対象から外す(原本の有無も調べない)。
         assets = session.execute(
             select(
-                Asset.id, Asset.sha256, Asset.blob_key, Asset.deleted_at, Asset.produced_by_run_id
+                Asset.id,
+                Asset.sha256,
+                Asset.blob_key,
+                Asset.deleted_at,
+                Asset.produced_by_run_id,
+                Asset.content_withheld_at,
             ).order_by(Asset.created_at, Asset.id)
         ).all()
 
@@ -221,6 +230,8 @@ def plan_reconcile(
         present: dict[str, bool] = {}
         try:
             for row in assets:
+                if row.content_withheld_at is not None:
+                    continue
                 if row.blob_key not in present:
                     present[row.blob_key] = store.content_exists(
                         row.blob_key, row.sha256, "original"
@@ -239,7 +250,7 @@ def plan_reconcile(
 
         outputs: dict[uuid.UUID, list[uuid.UUID]] = {}
         for row in assets:
-            if not present[row.blob_key]:
+            if row.content_withheld_at is None and not present[row.blob_key]:
                 plan.asset_ids.add(row.id)
                 if row.deleted_at is not None:
                     plan.logically_deleted += 1
