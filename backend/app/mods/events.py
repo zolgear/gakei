@@ -70,7 +70,7 @@ def run_params(run: Run) -> dict[str, Any]:
 
 
 def _workflow(db: Session, run: Run) -> tuple[contract.WorkflowRef | None, str | None]:
-    """ComfyUI の Run のワークフローと、その送り先の区分。"""
+    """ComfyUI の Run のワークフローと、その接続先(`locality`)。"""
     if run.provider != "comfyui":
         return None, None
     row: ComfyWorkflow | None = None
@@ -82,7 +82,7 @@ def _workflow(db: Session, run: Run) -> tuple[contract.WorkflowRef | None, str |
     name = row.name if row is not None else None
     if name is None and isinstance(recorded, dict) and isinstance(recorded.get("name"), str):
         name = recorded["name"]
-    locality = locality_domain.normalize_or_unset(row.locality) if row is not None else None
+    locality = locality_domain.read_workflow(row.locality) if row is not None else None
     return contract.WorkflowRef(id=run.model, name=name), locality
 
 
@@ -97,13 +97,13 @@ def _provider_host(db: Session, settings: Settings, provider: str) -> str | None
 
 
 def run_target(db: Session, settings: Settings, run: Run) -> contract.Target:
-    """画像の生成の Run の送り先。ワークフローの区分は、`unset` でなければ接続の区分より
-    優先する。"""
+    """画像の生成の Run の送り先。ワークフローの接続先は、`unset`(接続の設定に従う)でなければ
+    接続の値より優先する。"""
     workflow, workflow_locality = _workflow(db, run)
     if run.provider in locality_domain.PROVIDERS:
         connection = locality_domain.provider_locality(db, settings, run.provider)
     else:
-        connection = (locality_domain.UNSET, "default")
+        connection = (locality_domain.DEFAULT, "default")
     locality, source = locality_domain.resolve(connection, workflow_locality)  # type: ignore[arg-type]
     return contract.Target(
         provider=run.provider,

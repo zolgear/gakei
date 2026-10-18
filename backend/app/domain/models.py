@@ -741,8 +741,8 @@ class ComfyWorkflow(Base):
     # domain/comfy_workflow.py の ExposedParam のリストを model_dump(mode="json") した list。
     exposed_params: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
     template_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    # 送り先の区分(ADR-0051 3章)。`local` / `cloud` / `unset`。`unset` でなければ ComfyUI の
-    # 接続の値より優先する(`app/domain/locality.py`)。
+    # 接続先(ADR-0051 3章)。`external` / `local` / `unset`。`unset` は「接続の設定に従う」で、
+    # それ以外なら ComfyUI の接続の値より優先する(`app/domain/locality.py`)。
     locality: Mapped[str] = mapped_column(
         String(8), nullable=False, default="unset", server_default="unset"
     )

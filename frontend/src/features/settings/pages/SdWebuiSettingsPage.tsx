@@ -2,7 +2,7 @@
  * `/settings/sdwebui`(管理者。ADR-0038 6章、ADR-0031)。作りは ComfyUI のページに合わせる。
  * - 「接続」: `SdWebuiConnectionCard`(カード + ダイアログ。一覧の読み直しもここ)。ページの保存には混ぜない。
  * - 「Basic 認証」: `SdWebuiCredentialsCard`(カード + ダイアログ)。ページの保存には混ぜない。
- * - 「接続」: 送り先の区分(ADR-0051 3章。`ProviderLocalityCard`)。ダイアログでその場で送る。
+ * - 「接続」: 接続先(`locality`。ADR-0051 3章。`ProviderLocalityCard`)。ダイアログでその場で送る。
  * - 「保存で反映」: 1回の実行を待つ上限(タイムアウト)。画面では分で入力し、保存時に秒へ変換して
  *   `PATCH /api/settings/general` の `sdwebui_timeout_seconds` だけを送る。「既定値に戻す」は
  *   下書きに null を入れる。環境変数(`SDWEBUI_TIMEOUT_SECONDS`)由来でも入力欄はロックしない。

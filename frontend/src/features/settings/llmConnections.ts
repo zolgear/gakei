@@ -25,12 +25,12 @@ export interface ConnectionForm {
   base_url: string
   api_style: LlmApiStyle
   api_key: string
-  /** 送り先の区分(ADR-0051 3章)。組み込みの接続先は OpenAI の接続の区分と同じ値。 */
+  /** 接続先(ADR-0051 3章)。組み込みの接続先は OpenAI の接続と同じ値。 */
   locality: Locality
 }
 
 export function emptyConnectionForm(): ConnectionForm {
-  return { name: '', base_url: '', api_style: 'responses', api_key: '', locality: 'unset' }
+  return { name: '', base_url: '', api_style: 'responses', api_key: '', locality: 'external' }
 }
 
 export function connectionFormFromView(view: LlmConnectionView): ConnectionForm {

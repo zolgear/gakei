@@ -1,5 +1,5 @@
 """ADR-0051: Mod とフックの土台(契約、署名、multipart、呼ぶ順番、失敗時の扱い、時間切れ、
-配達の待ち行列、送り先の区分)。Webhook は `httpx.MockTransport` で受け、実際には送らない。"""
+配達の待ち行列、接続先(`locality`))。Webhook は `httpx.MockTransport` で受け、実際には送らない。"""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def _subject(provider: str = "openai", purpose: str = "image_run") -> contract.B
             provider=provider,
             model="m",
             host="api.openai.com",
-            locality="cloud",
+            locality="external",
             locality_source="default",
         ),
         text=[contract.TextPart(role="prompt", text="a cat")],
@@ -613,27 +613,33 @@ def test_enqueue_without_subscribers_adds_nothing(
     assert _deliveries(db_session_factory) == []
 
 
-# -- 送り先の区分 ---------------------------------------------------------------------
+# -- 接続先(`locality`) ---------------------------------------------------------------
 
 
 def test_locality_defaults_and_priority(db_session_factory, tmp_path: Path) -> None:  # noqa: ANN001
     settings = _settings(tmp_path)
     with db_session_factory() as db:
-        # OpenAI の公式の接続先だけ cloud。ほかは unset。
-        assert locality_domain.provider_locality(db, settings, "openai") == ("cloud", "default")
-        assert locality_domain.provider_locality(db, settings, "comfyui") == ("unset", "default")
-        assert locality_domain.provider_locality(db, settings, "sdwebui") == ("unset", "default")
-        # Base URL を変えた OpenAI は unset。
+        # 接続の既定はすべて external。
+        assert locality_domain.provider_locality(db, settings, "openai") == ("external", "default")
+        assert locality_domain.provider_locality(db, settings, "comfyui") == ("external", "default")
+        assert locality_domain.provider_locality(db, settings, "sdwebui") == ("external", "default")
+        # Base URL を変えた OpenAI も external(公式かどうかで変えない)。
         proxied = _settings(tmp_path, openai_base_url="http://proxy.local/v1")
-        assert locality_domain.provider_locality(db, proxied, "openai") == ("unset", "default")
+        assert locality_domain.provider_locality(db, proxied, "openai") == ("external", "default")
 
-        locality_domain.save_provider_localities(db, {"comfyui": "local", "openai": "unset"})
+        # 接続に unset は無い。
+        with pytest.raises(locality_domain.LocalityValidationError):
+            locality_domain.save_provider_localities(db, {"openai": "unset"})  # type: ignore[dict-item]
+        locality_domain.save_provider_localities(db, {"comfyui": "local", "openai": "external"})
         assert locality_domain.provider_locality(db, settings, "comfyui") == ("local", "connection")
-        assert locality_domain.provider_locality(db, settings, "openai") == ("unset", "default")
+        assert locality_domain.provider_locality(db, settings, "openai") == (
+            "external",
+            "connection",
+        )
         locality_domain.save_provider_localities(db, {"openai": None})
-        assert locality_domain.provider_locality(db, settings, "openai") == ("cloud", "default")
+        assert locality_domain.provider_locality(db, settings, "openai") == ("external", "default")
 
-        # ワークフローの値は unset でなければ接続より優先する。
+        # ワークフローの値は unset(接続の設定に従う)でなければ接続より優先する。
         workflow = ComfyWorkflow(
             name="wf",
             operation=RunOperation.GENERATE,
@@ -657,10 +663,45 @@ def test_locality_defaults_and_priority(db_session_factory, tmp_path: Path) -> N
         target = mods_events.run_target(db, settings, run)
         assert (target.locality, target.locality_source) == ("local", "connection")
         assert target.workflow == contract.WorkflowRef(id=str(workflow.id), name="wf")
+        workflow.locality = "external"
+        db.commit()
+        target = mods_events.run_target(db, settings, run)
+        assert (target.locality, target.locality_source) == ("external", "workflow")
+        # 旧い値(cloud)が残っていても external として読む。
         workflow.locality = "cloud"
         db.commit()
         target = mods_events.run_target(db, settings, run)
-        assert (target.locality, target.locality_source) == ("cloud", "workflow")
+        assert (target.locality, target.locality_source) == ("external", "workflow")
+
+
+def test_locality_reads_legacy_and_broken_values(db_session_factory) -> None:  # noqa: ANN001
+    """マイグレーション 0038 より前の値や壊れた値が残っていても読めること。"""
+    from app.domain.general_settings import _save
+
+    assert locality_domain.read_saved("cloud") == "external"
+    assert locality_domain.read_saved("unset") is None
+    assert locality_domain.read_saved(None) is None
+    assert locality_domain.read_saved(3) is None
+    assert locality_domain.read_workflow("cloud") == "external"
+    assert locality_domain.read_workflow("broken") == "unset"
+    assert locality_domain.read_workflow("local") == "local"
+    with db_session_factory() as db:
+        _save(
+            db,
+            locality_domain.PROVIDERS_KEY,
+            {"openai": "cloud", "comfyui": "unset", "sdwebui": "far", "other": "local"},
+        )
+        assert locality_domain.provider_locality(db, None, "openai") == ("external", "connection")
+        assert locality_domain.provider_locality(db, None, "comfyui") == ("external", "default")
+        assert locality_domain.provider_locality(db, None, "sdwebui") == ("external", "default")
+        assert locality_domain.connection_locality(db, None, builtin=False, value="unset") == (
+            "external",
+            "default",
+        )
+        assert locality_domain.connection_locality(db, None, builtin=False, value="cloud") == (
+            "external",
+            "connection",
+        )
 
 
 def test_llm_connection_locality(db_session_factory, tmp_path: Path) -> None:  # noqa: ANN001
@@ -677,7 +718,7 @@ def test_llm_connection_locality(db_session_factory, tmp_path: Path) -> None:  #
         assert (target.provider, target.host, target.locality, target.locality_source) == (
             "openai",
             "api.openai.com",
-            "cloud",
+            "external",
             "default",
         )
         target = mods_events.llm_target(db, settings, user, model="q", base_url=user.base_url)
@@ -687,28 +728,29 @@ def test_llm_connection_locality(db_session_factory, tmp_path: Path) -> None:  #
             "local",
             "connection",
         )
-        # 組み込みの接続先の区分は、OpenAI の接続の区分そのもの。
+        # 組み込みの接続先の値は、OpenAI の接続の値そのもの。
         llm_connections.update_connection(db, "openai", {"locality": "local"})
         assert locality_domain.provider_locality(db, settings, "openai") == ("local", "connection")
 
 
 def test_locality_settings_api(client: TestClient) -> None:
     body = client.get("/api/settings/provider-localities").json()
-    assert body["openai"] == {"value": "cloud", "source": "default", "default": "cloud"}
-    assert body["comfyui"]["value"] == "unset"
+    assert body["openai"] == {"value": "external", "source": "default", "default": "external"}
+    assert body["comfyui"]["value"] == "external"
     response = client.patch(
-        "/api/settings/provider-localities", json={"comfyui": "local", "sdwebui": "cloud"}
+        "/api/settings/provider-localities", json={"comfyui": "local", "sdwebui": "external"}
     )
     assert response.status_code == 200, response.text
     assert response.json()["comfyui"] == {
         "value": "local",
         "source": "connection",
-        "default": "unset",
+        "default": "external",
     }
-    assert (
-        client.patch("/api/settings/provider-localities", json={"comfyui": "far"}).status_code
-        == 422
-    )
+    for invalid in ("far", "cloud", "unset"):
+        assert (
+            client.patch("/api/settings/provider-localities", json={"comfyui": invalid}).status_code
+            == 422
+        )
     reset = client.patch("/api/settings/provider-localities", json={"comfyui": None}).json()
     assert reset["comfyui"]["source"] == "default"
 
@@ -720,3 +762,29 @@ def test_locality_settings_api(client: TestClient) -> None:
     views = {c["name"]: c for c in created.json()["connections"]}
     assert views["local llm"]["locality"] == "local"
     assert views["local llm"]["locality_source"] == "connection"
+
+    # 接続先を省いた接続先は既定の external。null で既定に戻す。
+    created = client.post(
+        "/api/settings/llm-connections",
+        json={"name": "remote llm", "base_url": "http://llm.example/v1"},
+    )
+    assert created.status_code == 201, created.text
+    views = {c["name"]: c for c in created.json()["connections"]}
+    assert (views["remote llm"]["locality"], views["remote llm"]["locality_source"]) == (
+        "external",
+        "default",
+    )
+    local_id = views["local llm"]["id"]
+    assert (
+        client.patch(f"/api/settings/llm-connections/{local_id}", json={"locality": "unset"})
+    ).status_code == 422
+    reset_views = {
+        c["name"]: c
+        for c in client.patch(
+            f"/api/settings/llm-connections/{local_id}", json={"locality": None}
+        ).json()["connections"]
+    }
+    assert (reset_views["local llm"]["locality"], reset_views["local llm"]["locality_source"]) == (
+        "external",
+        "default",
+    )

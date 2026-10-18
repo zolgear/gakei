@@ -1581,13 +1581,13 @@ class GeneralSettingsResponse(BaseModel):
 
 
 class ProviderLocalitySetting(BaseModel):
-    """画像のプロバイダーの接続の送り先の区分(ADR-0051 3章)。"""
+    """画像のプロバイダーの接続の接続先(`locality`。ADR-0051 3章)。"""
 
     # 実効の値(保存した値、無ければ既定)。
-    value: Literal["local", "cloud", "unset"]
-    # connection = 画面で決めた値、default = 既定(OpenAI の公式の接続先は cloud、ほかは unset)。
+    value: Literal["external", "local"]
+    # connection = 画面で決めた値、default = 既定(すべて external)。
     source: Literal["connection", "default"]
-    default: Literal["local", "cloud", "unset"]
+    default: Literal["external", "local"]
 
 
 class ProviderLocalitiesResponse(BaseModel):
@@ -1600,9 +1600,9 @@ class ProviderLocalitiesUpdateRequest(BaseModel):
     """`PATCH /api/settings/provider-localities`。省略した項目は変えず、明示的な `null` は保存した
     値を消して既定に戻す。"""
 
-    openai: Literal["local", "cloud", "unset"] | None = None
-    comfyui: Literal["local", "cloud", "unset"] | None = None
-    sdwebui: Literal["local", "cloud", "unset"] | None = None
+    openai: Literal["external", "local"] | None = None
+    comfyui: Literal["external", "local"] | None = None
+    sdwebui: Literal["external", "local"] | None = None
 
 
 class GeneralSettingsUpdateRequest(BaseModel):
@@ -1911,9 +1911,9 @@ class ComfyWorkflowCreateRequest(BaseModel):
     template: dict[str, Any]
     bindings: Bindings
     exposed_params: list[ExposedParam] = Field(default_factory=list)
-    # 送り先の区分(ADR-0051 3章)。`unset` でなければ ComfyUI の接続の値より優先する。
-    # 省略・null は `unset`。
-    locality: Literal["local", "cloud", "unset"] | None = None
+    # 接続先(ADR-0051 3章)。`unset` は「接続の設定に従う」で、それ以外なら ComfyUI の接続の
+    # 値より優先する。省略・null は `unset`。
+    locality: Literal["external", "local", "unset"] | None = None
 
 
 class ComfyWorkflowUpdateRequest(BaseModel):
@@ -1924,7 +1924,7 @@ class ComfyWorkflowUpdateRequest(BaseModel):
     template: dict[str, Any] | None = None
     bindings: Bindings | None = None
     exposed_params: list[ExposedParam] | None = None
-    locality: Literal["local", "cloud", "unset"] | None = None
+    locality: Literal["external", "local", "unset"] | None = None
 
 
 class ComfyWorkflowSummary(BaseModel):
@@ -1932,8 +1932,8 @@ class ComfyWorkflowSummary(BaseModel):
     name: str
     operation: Literal["generate", "edit"]
     template_sha256: str
-    # 送り先の区分(ADR-0051 3章)。
-    locality: Literal["local", "cloud", "unset"] = "unset"
+    # 接続先(ADR-0051 3章)。`unset` は「接続の設定に従う」。
+    locality: Literal["external", "local", "unset"] = "unset"
     created_at: datetime
     updated_at: datetime
 
@@ -2224,8 +2224,8 @@ class LlmConnectionView(BaseModel):
     api_style: Literal["responses", "chat"]
     # キーを設定しているか(組み込みの接続先は OpenAI のキーの有無)。
     api_key_set: bool
-    # 送り先の区分(ADR-0051 3章)と、どこで決まったか。組み込みの接続先は OpenAI の接続の値。
-    locality: Literal["local", "cloud", "unset"] = "unset"
+    # 接続先(ADR-0051 3章)と、どこで決まったか。組み込みの接続先は OpenAI の接続の値。
+    locality: Literal["external", "local"] = "external"
     locality_source: Literal["connection", "default"] = "default"
     # この接続先を使っている機能。空でなければ削除できない。
     used_by: list[LlmConnectionFeature] = Field(default_factory=list)
@@ -2245,8 +2245,8 @@ class LlmConnectionCreateRequest(BaseModel):
     base_url: str
     api_style: str = "responses"
     api_key: str | None = None
-    # 送り先の区分(ADR-0051 3章)。省略・null は `unset`。
-    locality: Literal["local", "cloud", "unset"] | None = None
+    # 接続先(ADR-0051 3章)。省略・null は既定(`external`)。
+    locality: Literal["external", "local"] | None = None
 
 
 class LlmConnectionUpdateRequest(BaseModel):
@@ -2256,8 +2256,8 @@ class LlmConnectionUpdateRequest(BaseModel):
     name: str | None = None
     base_url: str | None = None
     api_style: str | None = None
-    # 送り先の区分(ADR-0051 3章)。null は既定に戻す(組み込みの接続先は OpenAI の既定)。
-    locality: Literal["local", "cloud", "unset"] | None = None
+    # 接続先(ADR-0051 3章)。null は既定(`external`)に戻す。
+    locality: Literal["external", "local"] | None = None
 
 
 class LlmConnectionApiKeyUpdateRequest(BaseModel):

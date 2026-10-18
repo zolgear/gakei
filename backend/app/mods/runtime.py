@@ -1270,7 +1270,7 @@ def dummy_subject(event_name: str, image_data: bytes) -> contract.Subject:
                 provider="openai",
                 model="gpt-image-1",
                 host="api.openai.com",
-                locality="cloud",
+                locality="external",
                 locality_source="default",
             ),
             text=[contract.TextPart(role="prompt", text="GAKEI test event")],

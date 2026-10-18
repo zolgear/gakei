@@ -58,8 +58,8 @@ SOURCES: tuple[str, ...] = (
     "import",
     "mcp",
 )
-# 送り先の区分と、それがどこで決まったか(ADR-0051 3章)。
-LOCALITIES: tuple[str, ...] = ("local", "cloud", "unset")
+# 接続先(外部かローカルか)と、それがどこで決まったか(ADR-0051 3章)。
+LOCALITIES: tuple[str, ...] = ("external", "local")
 LOCALITY_SOURCES: tuple[str, ...] = ("workflow", "connection", "default")
 # 送る画像の使い方。
 IMAGE_ROLES: tuple[str, ...] = ("primary", "reference", "mask", "attachment")

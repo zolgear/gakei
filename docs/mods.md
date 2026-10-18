@@ -84,8 +84,8 @@ Webhook と Python の Mod は同じ中身を受け取る。すべてのイベ�
     "provider": "comfyui",
     "model": "3f0e…",
     "host": "192.168.1.20",
-    "locality": "unset",
-    "locality_source": "default",
+    "locality": "local",
+    "locality_source": "workflow",
     "workflow": { "id": "3f0e…", "name": "edit-qwen" },
     "connection": null
   },
@@ -238,21 +238,22 @@ uv run python -m app.tools.export_mod_schema mods-schema.json   # - なら標準
 - 配る時点でその Mod を無効にしていたら、送らずに済ませる(記録は `skipped`)。
 - 呼び出しは、許可・拒否・失敗をすべて記録する。管理者設定の「Mod」に、直近の呼び出しと配達の失敗が出る。Run の詳細には `ai.before_send` の結果、ビューアの詳細には判定が出る。
 
-## 7. 送り先の区分(locality)
+## 7. 接続先(locality)
 
-送り先が組織の中か外かを、管理者が設定で決める。値は `local`(組織の中で処理する)、`cloud`(組織の外のサービスへ送る)、`unset`(決めていない)。
+送り先が外部かローカルかを、管理者が設定で決める。値は `external`(外部。組織の外のサービスへ送る)と `local`(ローカル。組織の中で処理する)の2つ。
 
 - **GAKEI は自動で判定しない。** ホスト名が手元でも、ComfyUI のワークフローに外部の API を呼ぶノードがあれば、データは外に出る。逆に、OpenAI 互換の接続先が組織の中のサーバーのこともある。
-- **GAKEI はこの値で動作を変えない。** `ai.before_send` の `target.locality` に載せるだけで、判断は Mod に任せる(例: 「`cloud` と `unset` だけ検査する」「`unset` は拒否する」)。
-- 既定値: OpenAI の公式の接続先は `cloud`、それ以外は `unset`。
-- ワークフローの値は、`unset` でなければ接続の値より優先する。どこで決まったかを `target.locality_source`(`workflow` / `connection` / `default`)で送る。
+- **GAKEI はこの値で動作を変えない。** `ai.before_send` の `target.locality` に載せるだけで、判断は Mod に任せる(例: 「`external` だけ検査する」)。
+- 既定値: 接続はすべて `external`(決めていない接続を、安全な側に倒す)。OpenAI の公式の接続先かどうかでは変えない。
+- ComfyUI のワークフローの既定は「接続の設定に従う」。`external` か `local` を選べば、接続の値より優先する。`target.locality` に載るのは `external` か `local` だけ。
+- どこで決まったかを `target.locality_source`(`workflow` / `connection` / `default`)で送る。
 
 設定する場所(どれも Mod を有効にしていなくても出る。後から Mod を足したときに設定し直さなくて済むように):
 
 | 対象 | 場所 |
 |---|---|
-| OpenAI、ComfyUI、SD WebUI の接続 | 管理者設定のそれぞれのページの「送り先の区分」 |
-| ComfyUI のワークフロー | ワークフローの登録・編集(「接続の設定に従う」なら接続の区分を使う) |
+| OpenAI、ComfyUI、SD WebUI の接続 | 管理者設定のそれぞれのページの「接続先」 |
+| ComfyUI のワークフロー | ワークフローの登録・編集の「接続先」(「接続の設定に従う」なら ComfyUI の接続の値を使う) |
 | LLM・VLM の接続先 | 管理者設定の LLM の接続先の登録・編集 |
 | リモートの埋め込みの接続先 | 同上(埋め込みが使う接続先) |
 

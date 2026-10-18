@@ -1,30 +1,39 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { setLocale } from '../../i18n'
-import { LOCALITY_VALUES, isLocality, localityLabel } from './locality'
+import { LOCALITY_VALUES, WORKFLOW_LOCALITY_VALUES, isLocality, isWorkflowLocality, localityLabel } from './locality'
 
-describe('送り先の区分(ADR-0051 3章)', () => {
+describe('接続先(ADR-0051 3章)', () => {
   afterEach(() => setLocale('ja'))
 
-  it('値は local / cloud / unset の3つ', () => {
-    expect(LOCALITY_VALUES).toEqual(['local', 'cloud', 'unset'])
-    expect(isLocality('cloud')).toBe(true)
-    expect(isLocality('remote')).toBe(false)
+  it('接続の値は external / local の2つ(外部 → ローカルの順)', () => {
+    expect(LOCALITY_VALUES).toEqual(['external', 'local'])
+    expect(isLocality('external')).toBe(true)
+    expect(isLocality('cloud')).toBe(false)
+    expect(isLocality('unset')).toBe(false)
     expect(isLocality(null)).toBe(false)
   })
 
-  it('表示の名前。ワークフローの unset は「接続の設定に従う」', () => {
+  it('ワークフローは「接続の設定に従う」(unset)を先頭に選べる', () => {
+    expect(WORKFLOW_LOCALITY_VALUES).toEqual(['unset', 'external', 'local'])
+    expect(isWorkflowLocality('unset')).toBe(true)
+    expect(isWorkflowLocality('cloud')).toBe(false)
+  })
+
+  it('表示の名前は括弧の補足なし。unset は「接続の設定に従う」', () => {
     setLocale('ja')
-    expect(localityLabel('local')).toBe('ローカル(組織の中で処理)')
-    expect(localityLabel('cloud')).toBe('クラウド(組織の外へ送る)')
-    expect(localityLabel('unset')).toBe('未設定')
-    expect(localityLabel('unset', { inherit: true })).toBe('接続の設定に従う')
+    expect(localityLabel('external')).toBe('外部')
+    expect(localityLabel('local')).toBe('ローカル')
+    expect(localityLabel('unset')).toBe('接続の設定に従う')
+    setLocale('en')
+    expect(localityLabel('external')).toBe('External')
+    expect(localityLabel('local')).toBe('Local')
   })
 
   it('既定の値には「(既定)」を添える', () => {
     setLocale('ja')
-    expect(localityLabel('cloud', { defaultValue: 'cloud' })).toBe('クラウド(組織の外へ送る)(既定)')
-    expect(localityLabel('local', { defaultValue: 'cloud' })).toBe('ローカル(組織の中で処理)')
+    expect(localityLabel('external', { defaultValue: 'external' })).toBe('外部(既定)')
+    expect(localityLabel('local', { defaultValue: 'external' })).toBe('ローカル')
     setLocale('en')
-    expect(localityLabel('unset', { defaultValue: 'unset' })).toBe('Not set (default)')
+    expect(localityLabel('external', { defaultValue: 'external' })).toBe('External (default)')
   })
 })

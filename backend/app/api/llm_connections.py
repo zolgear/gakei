@@ -130,7 +130,7 @@ def create_llm_connection(
     文字列を受け付けるため、有効性の確認はしない)。"""
     try:
         connection_id = llm_connections.add_connection(
-            db, body.name, body.base_url, body.api_style, body.locality or "unset"
+            db, body.name, body.base_url, body.api_style, body.locality
         )
     except _CONNECTION_ERRORS as exc:
         _raise_connection_error(exc)

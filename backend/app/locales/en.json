@@ -493,7 +493,7 @@
       "invalidLimit": "{name} must be an integer from {min} to {max}"
     },
     "locality": {
-      "invalid": "The locality must be local, cloud or unset"
+      "invalid": "The connection type must be external or local"
     }
   },
   "runValidation": {

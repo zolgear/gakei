@@ -47,7 +47,7 @@ import { useIsMobileViewport } from '../../lib/viewport'
 import { fmt, useI18n, type Messages } from '../../i18n'
 import { canSaveDraft } from '../settings/settingsDraft'
 import { SettingsPageFrame } from '../settings/SettingsPageFrame'
-import { LocalityHelp, LocalitySelect } from '../settings/LocalityParts'
+import { WorkflowLocalitySelect } from '../settings/LocalityParts'
 import { SettingsSection } from '../settings/SettingsParts'
 import { ASSISTANT_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import { useSettingsShell } from '../settings/settingsShell'
@@ -837,15 +837,12 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
                     <label htmlFor="wf-locality" className={styles.fieldLabel}>
                       {t.settings.locality.label}
                     </label>
-                    <LocalitySelect
+                    <WorkflowLocalitySelect
                       id="wf-locality"
-                      inherit
                       className={`${settingsStyles.select} ${styles.fullWidth}`}
                       value={values.locality}
-                      describedBy="wf-locality-help"
                       onChange={(next) => change((v) => ({ ...v, locality: next }))}
                     />
-                    <LocalityHelp id="wf-locality-help" inherit />
                   </div>
                 </div>
               </SettingsSection>

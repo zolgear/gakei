@@ -7,7 +7,7 @@ import type {
   ComfyOperation,
   ComfyWorkflowCreateRequest,
   ComfyWorkflowUpdateRequest,
-  Locality,
+  WorkflowLocality,
 } from '../../api/client'
 import { bindingsFormToApi, type BindingsFormState } from './bindingsForm'
 import { exposedParamRowToApi, type ExposedParamRow } from './exposedParamsForm'
@@ -18,8 +18,8 @@ export interface WorkflowSaveInput {
   template: Record<string, unknown>
   bindings: BindingsFormState
   exposedRows: ExposedParamRow[]
-  /** 送り先の区分(ADR-0051 3章)。省くと `unset`(接続の設定に従う)。 */
-  locality?: Locality
+  /** 接続先(ADR-0051 3章)。省くと `unset`(接続の設定に従う)。 */
+  locality?: WorkflowLocality
 }
 
 export function buildWorkflowCreateRequest(input: WorkflowSaveInput): ComfyWorkflowCreateRequest {

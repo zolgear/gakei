@@ -92,8 +92,9 @@ class ConnectionConfig:
     name: str
     base_url: str | None
     api_style: ApiStyle = "responses"
-    # 送り先の区分(ADR-0051 3章)。組み込みの接続先では使わない(OpenAI の接続の値を使う)。
-    locality: str = "unset"
+    # 接続先(ADR-0051 3章)。None は既定(`external`)。組み込みの接続先では使わない
+    # (OpenAI の接続の値を使う)。
+    locality: str | None = None
 
     @property
     def builtin(self) -> bool:
@@ -156,13 +157,16 @@ def _normalize_locality(value: object) -> str:
 
 
 def connection_to_json(connection: ConnectionConfig) -> dict[str, Any]:
-    return {
+    data: dict[str, Any] = {
         "id": connection.id,
         "name": connection.name,
         "base_url": connection.base_url,
         "api_style": connection.api_style,
-        "locality": connection.locality,
     }
+    # 既定(None)のときは書かない。
+    if connection.locality is not None:
+        data["locality"] = connection.locality
+    return data
 
 
 def connections_from_json(raw: object) -> tuple[ConnectionConfig, ...]:
@@ -188,7 +192,7 @@ def connections_from_json(raw: object) -> tuple[ConnectionConfig, ...]:
                 name=normalize_connection_name(item.get("name")),
                 base_url=normalize_connection_base_url(item.get("base_url")),
                 api_style=normalize_api_style(item.get("api_style", "responses")),
-                locality=locality_domain.normalize_or_unset(item.get("locality")),
+                locality=locality_domain.read_saved(item.get("locality")),
             )
         except LlmConnectionValidationError:
             continue
@@ -230,7 +234,7 @@ def add_connection(
     name: object,
     base_url: object,
     api_style: object,
-    locality: object = "unset",
+    locality: object = None,
 ) -> str:
     """接続先を足して、その id を返す。"""
     current = load_user_connections(db)
@@ -244,7 +248,7 @@ def add_connection(
         name=normalize_connection_name(name),
         base_url=normalized_url,
         api_style=normalize_api_style(api_style),
-        locality=_normalize_locality(locality),
+        locality=_normalize_locality(locality) if locality is not None else None,
     )
     api_key_domain.warn_if_insecure_base_url(normalized_url)
     _save_connections(db, (*current, connection))
@@ -252,9 +256,9 @@ def add_connection(
 
 
 def update_connection(db: Session, connection_id: str, updates: dict[str, Any]) -> None:
-    """接続先の名前・Base URL・API 形式・送り先の区分を変える(書いた項目だけ)。組み込みの接続先は
-    API 形式と送り先の区分だけ変えられる。組み込みの区分は OpenAI の接続の区分そのもの
-    (ADR-0051 3章)で、None は既定に戻す。"""
+    """接続先の名前・Base URL・API 形式・`locality` を変える(書いた項目だけ)。組み込みの接続先は
+    API 形式と `locality` だけ変えられる。組み込みの `locality` は OpenAI の接続の値そのもの
+    (ADR-0051 3章)。None は既定に戻す。"""
     if connection_id == BUILTIN_CONNECTION_ID:
         if set(updates) - {"api_style", "locality"}:
             raise ConnectionReservedError
@@ -277,10 +281,10 @@ def update_connection(db: Session, connection_id: str, updates: dict[str, Any]) 
     if "api_style" in updates:
         changed = replace(changed, api_style=normalize_api_style(updates["api_style"]))
     if "locality" in updates:
-        # None は既定(`unset`)に戻す。
+        # None は既定(`external`)に戻す。
         value = updates["locality"]
         changed = replace(
-            changed, locality=_normalize_locality(value) if value is not None else "unset"
+            changed, locality=_normalize_locality(value) if value is not None else None
         )
     if changed.base_url and changed.base_url != current.base_url:
         api_key_domain.warn_if_insecure_base_url(changed.base_url)
