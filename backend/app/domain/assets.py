@@ -228,11 +228,17 @@ def ingest(
         return asset
 
     blob_key = _find_shared_blob_key(session, store, sha256)
+    shared = blob_key is not None
     if blob_key is None:
         blob_key = store.write_original(prepared.data, prepared.ext, key_info)
 
     # 今の版の派生を作る(ADR-0036 2章。作り方は `derivatives.ensure_derived` の作り直しと同じ)。
+    # 同じ内容の原本を共有するときは、今の版の派生が既にあれば書き直さない。派生のキーは
+    # sha256 と版だけで決まるので中身は同じで、書き直すと Windows では開かれている派生の
+    # 置き換えに失敗しうる。
     for variant in derivatives.DERIVED_VARIANTS:
+        if shared and store.content_exists(blob_key, sha256, variant):
+            continue
         store.write_derived(sha256, variant, derivatives.make_derived(image, variant))
 
     asset = _new_asset(

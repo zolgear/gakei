@@ -27,9 +27,11 @@ variant からキーを解決する関数は `content_key` の1か所に閉じ�
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
+import time
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -39,6 +41,8 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 if TYPE_CHECKING:
     from app.config import Settings
+
+logger = logging.getLogger(__name__)
 
 Variant = Literal["original", "thumb", "preview"]
 OriginalKind = Literal["generated", "upload", "mask", "sketch", "composite"]
@@ -239,6 +243,38 @@ class AssetStore(Protocol):
         ...
 
 
+# 派生の置き換え(`os.replace`)が PermissionError になったときのやり直しの間隔(秒)。
+# Windows では、置き換え先を他のハンドル(配信中の応答、プロセス内 worker、ウイルス対策の
+# 走査など)が開いていると置き換えられない。合計 0.75 秒、最初の試みと合わせて 5 回まで試す。
+_DERIVED_REPLACE_RETRY_DELAYS: tuple[float, ...] = (0.05, 0.1, 0.2, 0.4)
+
+
+def _replace_derived(tmp_path: Path, path: Path) -> None:
+    """一時ファイルで派生を置き換える。置き換え先が開かれていて置き換えられないときに備える。
+
+    やり直しても置き換えられず、置き換え先が既にあるなら、警告を出して諦める(例外にしない)。
+    派生は原本から作り直せるもので、読むときは必ず `ensure_derived` を通り版を確かめる
+    (ADR-0036)。同じキーなら同じ版の作り方なので、残ったものもそのまま使える。
+    置き換え先が無いのに置き換えられないときは、例外をそのまま上げる。
+    一時ファイルは呼び出し側が消す。
+    """
+    delays = iter(_DERIVED_REPLACE_RETRY_DELAYS)
+    while True:
+        try:
+            os.replace(tmp_path, path)
+            return
+        except PermissionError:
+            delay = next(delays, None)
+            if delay is None:
+                if path.is_file():
+                    logger.warning(
+                        "派生を置き換えられないため、既存のものを残します: %s", path, exc_info=True
+                    )
+                    return
+                raise
+            time.sleep(delay)
+
+
 class LocalFsStore:
     """ローカルファイルシステム実装。原本のキー規則は ADR-0026。"""
 
@@ -287,7 +323,7 @@ class LocalFsStore:
         try:
             with os.fdopen(fd, "wb") as f:
                 f.write(data)
-            os.replace(tmp_path, path)
+            _replace_derived(tmp_path, path)
         finally:
             tmp_path.unlink(missing_ok=True)
 
