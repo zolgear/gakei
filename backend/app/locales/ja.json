@@ -19,6 +19,10 @@
     "storageConditionalWriteIgnored": "画像の保存先が条件付きの書き込み(If-None-Match: *)の条件を無視しました。同じ名前の原本は上書きされえますが、名前に Asset の id の先頭 8 文字が入るので、実際に同名になることはまずありません。",
     "nulInRequest": "入力に NUL 文字(\\u0000)が含まれているため受け付けられません(場所: {location})。NUL 文字を取り除いてから送ってください。"
   },
+  "httpGuard": {
+    "hostNotAllowed": "このホスト名では開けません。個人モード(認証なし)では、IP アドレスか localhost で開いてください。ホスト名で開くときは、ALLOWED_HOSTS にホスト名を加えてください。",
+    "originNotAllowed": "別のサイト(Origin)からの更新の要求は受け付けません。"
+  },
   "auth": {
     "required": "ログインが必要です。",
     "adminRequired": "この操作には管理者権限が必要です。",

@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     # https なら Cookie に Secure を付ける(`public_base_is_https`)。
     public_base_url: str | None = Field(default=None, alias="PUBLIC_BASE_URL")
 
+    # 個人モード(認証なし)で受け付ける `Host` のホスト名(カンマ区切り、大文字小文字は無視)。
+    # IP アドレス・`localhost`・`PUBLIC_BASE_URL` のホストは書かなくても通る。DNS リバインディング
+    # 対策(ADR-0019 2章、2026-10-19 追記。`app.http_guard`)。ホスト名で開くときに足す。
+    allowed_hosts: str = Field(default="", alias="ALLOWED_HOSTS")
+
     # カンマ区切りのメールアドレス。大文字小文字は無視し、ログインのたびに再評価する
     # (IdP のクレームは使わない。ADR-0019)。
     auth_admin_emails: str = Field(default="", alias="AUTH_ADMIN_EMAILS")
@@ -143,6 +148,10 @@ class Settings(BaseSettings):
     def allowed_email_domain_list(self) -> list[str]:
         """`AUTH_ALLOWED_EMAIL_DOMAINS` を小文字化・trim した一覧(先頭の `@` は取る)。"""
         return _split_csv(self.auth_allowed_email_domains, strip_at=True)
+
+    def allowed_host_list(self) -> list[str]:
+        """`ALLOWED_HOSTS` を小文字化・trim した一覧(末尾の `.` は取る)。"""
+        return [h.rstrip(".") for h in _split_csv(self.allowed_hosts) if h.rstrip(".")]
 
     @property
     def db_path(self) -> Path:

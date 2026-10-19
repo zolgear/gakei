@@ -375,15 +375,19 @@ def test_origin_mismatch_is_403(client: TestClient) -> None:
     assert response.status_code == 403
 
 
-def test_origin_rebinding_hostname_is_403(client: TestClient) -> None:
-    """DNS リバインディングでは Origin と Host がどちらも攻撃者のドメイン名になる。"""
+def test_origin_rebinding_hostname_is_rejected(client: TestClient) -> None:
+    """DNS リバインディングでは Origin と Host がどちらも攻撃者のドメイン名になる。
+
+    個人モードでは、`/mcp` の Origin の判定より手前の `Host` の確認(ADR-0019 2章、
+    2026-10-19 追記)で 421 になる。`origin_allowed` 自体の判定は下の表で確かめる。"""
     _enable(client)
     response = _rpc(
         client,
         "tools/list",
         headers={"Origin": "http://evil.example:8000", "Host": "evil.example:8000"},
     )
-    assert response.status_code == 403
+    assert response.status_code == 421
+    assert not origin_allowed("http://evil.example:8000", "evil.example:8000", None)
 
 
 def test_origin_same_ip_host_is_allowed(client: TestClient) -> None:
