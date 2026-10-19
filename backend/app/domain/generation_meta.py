@@ -19,7 +19,6 @@ import json
 import logging
 import re
 import struct
-import zlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -27,7 +26,12 @@ import cbor2
 from PIL import Image, UnidentifiedImageError
 
 from app.domain.comfy_workflow import is_api_format_template
-from app.domain.embedded_meta import PNG_SIGNATURE, iter_png_chunks, split_itxt
+from app.domain.embedded_meta import (
+    PNG_SIGNATURE,
+    decompress_limited,
+    iter_png_chunks,
+    split_itxt,
+)
 from app.domain.schemas import EmbeddedGenerationMeta
 from app.domain.text_safety import sanitize_external
 
@@ -103,10 +107,8 @@ def _is_png(data: bytes) -> bool:
 
 
 def _decompress_limited(data: bytes, max_length: int = _MAX_ZLIB_DECOMPRESS) -> bytes | None:
-    try:
-        return zlib.decompressobj().decompress(data, max_length)
-    except zlib.error:
-        return None
+    """展開後が `max_length` を超える・壊れているときは None(`embedded_meta` と共通)。"""
+    return decompress_limited(data, max_length)
 
 
 def _parse_text_chunk(data: bytes) -> tuple[str, str] | None:

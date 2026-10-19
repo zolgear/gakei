@@ -131,6 +131,21 @@ def test_delete_workflow_forbidden_for_user_allowed_for_admin(client_oidc: TestC
     assert response.status_code == 204, response.text
 
 
+def test_get_workflow_detail_forbidden_for_user_allowed_for_admin(client_oidc: TestClient) -> None:
+    """詳細はテンプレートを伏せずに返すので管理者だけ。一般ユーザーは `/view`(ADR-0052 7章)。"""
+    workflow_id = _admin_workflow_id(client_oidc)
+
+    _login_user(client_oidc)
+    response = client_oidc.get(f"/api/comfyui/workflows/{workflow_id}")
+    assert response.status_code == 403
+    client_oidc.post("/api/auth/logout")
+
+    _login_admin(client_oidc)
+    response = client_oidc.get(f"/api/comfyui/workflows/{workflow_id}")
+    assert response.status_code == 200, response.text
+    assert "template" in response.json()
+
+
 # -- GET は全ログイン者に許す ---------------------------------------------------
 
 

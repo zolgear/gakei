@@ -86,11 +86,12 @@ def generate_derived(
         logger.warning("派生を作る原本がありません: %s", blob_key)
         return None
     try:
-        # 取り込み(`assets.ingest`)と同じく、開いた画像をそのまま縮める。
+        # 取り込み(`assets.ingest`)と同じく、開いた画像をそのまま縮める。原本は取り込み時に
+        # 画素数の上限(`image_limits.MAX_IMAGE_PIXELS`)を確かめてあるので、ここでは確かめない。
         with Image.open(io.BytesIO(data)) as image:
             image.load()
             made = {variant: make_derived(image, variant) for variant in dict.fromkeys(variants)}
-    except (PillowUnidentifiedImageError, OSError, Image.DecompressionBombError):
+    except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
         logger.warning("派生を作る原本を画像として読めません: %s", blob_key, exc_info=True)
         return None
     for variant, derived in made.items():

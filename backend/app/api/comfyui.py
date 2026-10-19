@@ -808,6 +808,8 @@ def list_workflows(db: Session = Depends(get_session)) -> ComfyWorkflowListRespo
     "/workflows/{workflow_id}",
     response_model=ComfyWorkflowDetail,
     operation_id="get_comfy_workflow",
+    # テンプレートを伏せずに返すので管理者だけ。一般ユーザーは秘密を伏せた `/view`(ADR-0052 7章)。
+    dependencies=[Depends(require_admin)],
 )
 def get_workflow(workflow_id: uuid.UUID, db: Session = Depends(get_session)) -> ComfyWorkflowDetail:
     wf = _get_active(db, workflow_id)

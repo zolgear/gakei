@@ -544,6 +544,7 @@
     "uploadTooLarge": "Uploaded images must be under 50MB",
     "maskTooLarge": "Masks must be under 4MB",
     "cannotReadImage": "Could not read this as an image",
+    "tooManyPixels": "The image is too large (up to {max} pixels)",
     "unsupportedFormat": "Unsupported image format: {format}",
     "maskMustBePng": "Masks must be in PNG format",
     "sketchMustBePng": "Sketches must be in PNG format",
@@ -630,6 +631,7 @@
     "avatar": {
       "tooLarge": "Avatar images must be 20MB or smaller",
       "cannotReadImage": "Could not read this as an image",
+      "tooManyPixels": "The image is too large (up to {max} pixels)",
       "assetNotFound": "The source image was not found",
       "notFound": "Avatar not found",
       "invalidCrop": "The crop rectangle is malformed",
@@ -1114,5 +1116,9 @@
     "verdictTooLarge": "The request body is too large",
     "verdictInvalid": "The verdicts are not in a valid form: {error}",
     "verdictTargetNotAllowed": "Verdicts are accepted only for items delivered to this Mod: {target}"
+  },
+  "llm": {
+    "authFailed": "Authentication with the LLM connection failed. Check the connection's API key.",
+    "permissionDenied": "The LLM connection does not allow this request. Check the connection's API key and model."
   }
 }

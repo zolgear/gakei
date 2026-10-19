@@ -544,6 +544,7 @@
     "uploadTooLarge": "アップロード画像は50MB未満である必要があります",
     "maskTooLarge": "マスクは4MB未満である必要があります",
     "cannotReadImage": "画像として読み込めませんでした",
+    "tooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
     "unsupportedFormat": "対応していない画像形式です: {format}",
     "maskMustBePng": "マスクはPNG形式である必要があります",
     "sketchMustBePng": "スケッチはPNG形式である必要があります",
@@ -630,6 +631,7 @@
     "avatar": {
       "tooLarge": "アバター画像は20MB以下である必要があります",
       "cannotReadImage": "画像として読み込めませんでした",
+      "tooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
       "assetNotFound": "元になる画像が見つかりません",
       "notFound": "アバターが見つかりません",
       "invalidCrop": "切り出す範囲の指定が壊れています",
@@ -1114,5 +1116,9 @@
     "verdictTooLarge": "本文が大きすぎます",
     "verdictInvalid": "判定の形が正しくありません: {error}",
     "verdictTargetNotAllowed": "この Mod に届けていない対象への判定は受け付けません: {target}"
+  },
+  "llm": {
+    "authFailed": "LLM の接続先の認証に失敗しました。接続先の API キーを確認してください。",
+    "permissionDenied": "LLM の接続先に、この操作の権限がありません。接続先の API キーとモデルを確認してください。"
   }
 }
