@@ -40,6 +40,7 @@ from app.annotation.wd_tagger import InsufficientMemoryError, WdTagger
 from app.domain.annotation_settings import AnnotationConfig, Target
 from app.i18n import t
 from app.llm.clients import LlmClientCache
+from app.llm.errors import safe_api_message
 
 logger = logging.getLogger(__name__)
 
@@ -370,12 +371,6 @@ def build_vlm_instructions(
     return text
 
 
-def _safe_api_message(e: openai.APIError) -> str:
-    label = getattr(e, "code", None) or getattr(e, "type", None) or e.__class__.__name__
-    detail = getattr(e, "message", None) or str(e)
-    return f"{label}: {detail}"
-
-
 # -- OpenAI 互換 API と ONNX を使う本物のエンジン --------------------------------------
 
 
@@ -444,7 +439,7 @@ class OpenAIEngines:
             )
             return response.output_text or ""
         except openai.APIError as e:
-            raise AnnotationEngineError(_safe_api_message(e)) from e
+            raise AnnotationEngineError(safe_api_message(e)) from e
 
     async def title_from_prompt(self, prompt: str, ctx: EngineContext) -> str:
         language = ctx.config.language

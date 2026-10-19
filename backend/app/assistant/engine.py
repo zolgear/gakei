@@ -32,6 +32,7 @@ import openai
 from app.domain.llm_connections import LlmTarget
 from app.i18n import t
 from app.llm.clients import LlmClientCache
+from app.llm.errors import safe_api_message
 
 logger = logging.getLogger(__name__)
 
@@ -126,12 +127,6 @@ def parse_arguments(raw: str | None) -> tuple[dict[str, Any], str | None]:
     if not isinstance(value, dict):
         return {}, "Arguments must be a JSON object."
     return value, None
-
-
-def _safe_api_message(e: openai.APIError) -> str:
-    label = getattr(e, "code", None) or getattr(e, "type", None) or e.__class__.__name__
-    detail = getattr(e, "message", None) or str(e)
-    return f"{label}: {detail}"
 
 
 # -- メッセージの変換 --------------------------------------------------------------
@@ -293,7 +288,7 @@ class OpenAIAssistantEngine:
                 async for event in self._stream_responses(client, target, request):
                     yield event
         except openai.APIError as e:
-            raise AssistantEngineError(_safe_api_message(e)) from e
+            raise AssistantEngineError(safe_api_message(e)) from e
 
     async def _stream_chat(
         self, client: Any, target: LlmTarget, request: EngineRequest

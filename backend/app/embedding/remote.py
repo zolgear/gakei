@@ -26,6 +26,7 @@ import httpx
 import numpy as np
 from PIL import Image
 
+from app.domain.secret_values import redact_secret_text
 from app.embedding.base import EmbeddingError, composite_on_white, l2_normalize
 from app.i18n import t
 
@@ -129,7 +130,10 @@ class InfinityEngine:
         except httpx.HTTPError as e:
             raise EmbeddingError(t("embeddings.remoteUnavailable", error=type(e).__name__)) from e
         if response.status_code != 200:
-            body = response.text.strip().replace("\n", " ")[:_ERROR_BODY_MAX]
+            # 本文にキーの断片が含まれることがあるので、切り詰める前に伏せる(画面に出る文言)。
+            # 伏せる処理に巨大な本文を渡さないよう、先に長さを抑えておく。
+            raw = response.text[: _ERROR_BODY_MAX * 8].strip().replace("\n", " ")
+            body = redact_secret_text(raw)[:_ERROR_BODY_MAX]
             raise EmbeddingError(
                 t("embeddings.remoteHttpError", status=response.status_code, body=body)
             )

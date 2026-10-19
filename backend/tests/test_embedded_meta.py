@@ -21,9 +21,11 @@ from app.auth.identity import LOCAL_ADMIN
 from app.domain.assets import ingest
 from app.domain.embedded_meta import (
     MAX_LINEAGE_NODES,
+    MAX_LINEAGE_READ_BYTES,
     SCHEMA_V1,
     SCHEMA_V2,
     build_lineage_meta,
+    decompress_limited,
     embed_gakei_chunk,
     get_instance_id,
     normalize_lineage_meta,
@@ -33,6 +35,7 @@ from app.domain.embedded_meta import (
 from app.domain.models import AssetKind, Run, RunInput, RunInputRole, RunOperation, RunStatus
 from app.domain.storage import LocalFsStore
 from tests.conftest import extra_database_url, make_png_bytes
+from tests.png_bombs import png_with_gakei_zlib_bomb, with_itxt
 
 _SAMPLE_META = {
     "schema": "gakei.lineage/1",
@@ -174,6 +177,53 @@ def test_read_returns_none_for_malformed_json_in_chunk() -> None:
     iend_index = data.index(b"IEND") - 4
     malformed = data[:iend_index] + chunk + data[iend_index:]
     assert read_gakei_meta(malformed) is None
+
+
+def test_read_returns_none_for_zlib_bomb_without_using_much_memory() -> None:
+    """圧縮された gakei iTXt が上限を超えて展開されるものは、途中で打ち切って None にする。"""
+    import tracemalloc
+
+    # 64 MiB の 0(圧縮後は数十 KB)。上限(MAX_LINEAGE_READ_BYTES)の 32 倍。
+    data = png_with_gakei_zlib_bomb(64 * 1024 * 1024)
+    assert len(data) < 1024 * 1024
+
+    tracemalloc.start()
+    try:
+        assert read_gakei_meta(data) is None
+        _current, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    # 展開は上限 + 1 バイトで止まる(64 MiB は確保しない)。
+    assert peak < MAX_LINEAGE_READ_BYTES * 4
+
+
+def test_read_accepts_compressed_meta_within_limit() -> None:
+    """上限に収まる圧縮された gakei iTXt は、これまでどおり読める。"""
+    text = json.dumps(_SAMPLE_META).encode("utf-8")
+    itxt = b"gakei\x00" + bytes([1, 0]) + b"\x00" + b"\x00" + zlib.compress(text)
+    assert read_gakei_meta(with_itxt(make_png_bytes(), itxt)) == _SAMPLE_META
+
+
+def test_read_returns_none_for_truncated_compressed_meta() -> None:
+    text = json.dumps(_SAMPLE_META).encode("utf-8")
+    itxt = b"gakei\x00" + bytes([1, 0]) + b"\x00" + b"\x00" + zlib.compress(text)[:-6]
+    assert read_gakei_meta(with_itxt(make_png_bytes(), itxt)) is None
+
+
+def test_read_returns_none_for_oversized_uncompressed_chunk() -> None:
+    """圧縮されていない本文も、上限を超える長さなら JSON として読まずに None にする。"""
+    padding = " " * (MAX_LINEAGE_READ_BYTES + 1)
+    text = (json.dumps(_SAMPLE_META)[:-1] + padding + "}").encode("utf-8")
+    itxt = b"gakei\x00" + bytes([0, 0]) + b"\x00" + b"\x00" + text
+    assert read_gakei_meta(with_itxt(make_png_bytes(), itxt)) is None
+
+
+def test_decompress_limited_bounds_output() -> None:
+    payload = zlib.compress(b"a" * 1000)
+    assert decompress_limited(payload, 1000) == b"a" * 1000
+    assert decompress_limited(payload, 999) is None
+    assert decompress_limited(b"not zlib", 1000) is None
+    assert decompress_limited(payload[:-4], 1000, require_end=True) is None
 
 
 def test_read_returns_none_when_schema_mismatches() -> None:

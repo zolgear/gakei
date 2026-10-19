@@ -51,6 +51,12 @@ _EXCLUDED_PARAM_KEYS = {"comfyui_prompt", "comfyui_outputs", "sdwebui_request"}
 MAX_LINEAGE_NODES = 1000
 MAX_LINEAGE_BYTES = 1024 * 1024  # 1 MiB
 
+# 読み取る `gakei` チャンクの本文の上限(圧縮されていれば展開後、されていなければチャンクの
+# データの長さ)。書き込む側は MAX_LINEAGE_BYTES に収めるので、別の設定の GAKEI が書いた
+# ものや丸めの誤差を見込んで2倍までは読み、それを超えるものは展開の途中で打ち切って読まない
+# (zlib の展開の爆弾を避ける)。
+MAX_LINEAGE_READ_BYTES = 2 * MAX_LINEAGE_BYTES
+
 _VALID_RUN_STATUSES = {"queued", "running", "succeeded", "failed", "canceled"}
 _VALID_RUN_INPUT_ROLES = {"image", "mask", "reference"}
 _VALID_EDGE_KINDS = {"input", "output", "sketch_source", "composite_source", "origin"}
@@ -76,6 +82,25 @@ class PngChunk:
 
 def _is_png(data: bytes) -> bool:
     return data[:8] == PNG_SIGNATURE
+
+
+def decompress_limited(data: bytes, max_length: int, *, require_end: bool = False) -> bytes | None:
+    """zlib の展開を `max_length` バイトまでに抑える。超える・壊れているときは None。
+
+    展開後の大きさを先に知る方法は無いので、`max_length + 1` バイトまで展開して超えたかを見る
+    (それ以上はメモリに載せない)。`require_end` なら、ストリームが終わっていない(途中で
+    切れている)ものも None にする。`generation_meta.py`(ADR-0018)とここで共有する。
+    """
+    decompressor = zlib.decompressobj()
+    try:
+        out = decompressor.decompress(data, max_length + 1)
+    except zlib.error:
+        return None
+    if len(out) > max_length:
+        return None
+    if require_end and not decompressor.eof:
+        return None
+    return out
 
 
 def iter_png_chunks(data: bytes) -> list[PngChunk]:
@@ -215,11 +240,18 @@ def read_gakei_meta(data: bytes) -> dict[str, Any] | None:
         if parsed is None:
             return None
         _keyword, compression_flag, _method, _lang, _trans, text_bytes = parsed
+        # 展開する前のチャンクの長さも上限で断る(圧縮されていなくても、巨大な JSON を
+        # 読み込まないように)。
+        if len(text_bytes) > MAX_LINEAGE_READ_BYTES:
+            return None
+        if compression_flag == 1:
+            decompressed = decompress_limited(text_bytes, MAX_LINEAGE_READ_BYTES, require_end=True)
+            if decompressed is None:
+                return None
+            text_bytes = decompressed
         try:
-            if compression_flag == 1:
-                text_bytes = zlib.decompress(text_bytes)
             meta = json.loads(text_bytes.decode("utf-8"))
-        except (zlib.error, UnicodeDecodeError, json.JSONDecodeError):
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
             return None
         if not isinstance(meta, dict) or meta.get("schema") not in _KNOWN_SCHEMAS:
             return None

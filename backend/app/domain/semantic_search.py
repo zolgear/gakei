@@ -45,6 +45,7 @@ from app.domain import (
 )
 from app.domain import embeddings as embeddings_domain
 from app.domain.assets import ALLOWED_UPLOAD_FORMATS, MAX_UPLOAD_BYTES
+from app.domain.image_limits import MAX_IMAGE_PIXELS
 from app.domain.models import (
     Asset,
     AssetKind,
@@ -120,9 +121,9 @@ DUPLICATES_MAX_GROUPS = 500
 
 QUERY_CACHE_SIZE = 128
 
-# 画像で探すときの画素数の上限。Pillow の既定の `Image.MAX_IMAGE_PIXELS`(約 8950 万画素。超えると
-# 警告、2倍で例外)と同じ値を、展開する前の寸法で確かめて 413 にする(展開の爆弾を避ける)。
-QUERY_IMAGE_MAX_PIXELS = 89_478_485
+# 画像で探すときの画素数の上限。取り込みと同じ値(`image_limits.MAX_IMAGE_PIXELS`)を、展開する
+# 前の寸法で確かめて 413 にする(展開の爆弾を避ける)。テストから差し替えられるよう、ここにも置く。
+QUERY_IMAGE_MAX_PIXELS = MAX_IMAGE_PIXELS
 # 画像で探すときに、同時に展開・推論する数。大きな画像の展開はメモリを使うので1つずつにする。
 _QUERY_IMAGE_SLOTS = threading.BoundedSemaphore(1)
 
