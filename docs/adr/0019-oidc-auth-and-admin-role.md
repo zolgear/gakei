@@ -30,7 +30,11 @@
 - Cookie を使う理由: 画像の配信(`<img src="/api/assets/{id}/content">`)と進捗の SSE(`EventSource`)はリクエストヘッダーを付けられない。Bearer トークンでは、この2つの経路(ADR-0004 の配信方針)が通らない。
 - Cookie の属性: `HttpOnly`、`SameSite=Lax`、`Path=/`。`Secure` は `PUBLIC_BASE_URL` が `https` のときだけ付ける(ローカルの `http://127.0.0.1` でも試せるように)。
 - Authlib が state / nonce / code_verifier を一時的に置く場所として、Starlette の `SessionMiddleware`(署名付き Cookie `gakei_oidc`、有効 10 分)を oidc モードのときだけ追加する。この Cookie はログイン手続き中しか使わず、ログイン済みセッションとは別物。`SessionMiddleware` は純粋 ASGI で本文をバッファしないため、SSE に影響しない(`BaseHTTPMiddleware` を避ける方針は `main.py` の `LocaleMiddleware` と同じ)。
-- CSRF: Cookie が `SameSite=Lax` で、更新系の呼び出しはすべて `fetch`(JSON か multipart)なので、別途トークンは導入しない。
+- CSRF: ~~Cookie が `SameSite=Lax` で、更新系の呼び出しはすべて `fetch`(JSON か multipart)なので、別途トークンは導入しない。~~
+  - **2026-10-19 追記(セキュリティレビュー):** 上の前提は oidc モードにしか当てはまらなかった。個人モード(`none`)には Cookie が無いので `SameSite` の防御が働かず、別のサイトの HTML フォーム(multipart)や本文の無い POST がそのまま通っていた。また、待ち受けが `127.0.0.1` でも、DNS リバインディング(攻撃者のドメイン名を `127.0.0.1` に付け替えて同一オリジンにする)で管理者 API を呼べた(例: OpenAI 互換の接続先を攻撃者の URL に変え、保存済みのキーで確認の要求を送らせる)。CSRF のトークンは引き続き導入せず、全リクエストの入口の純粋 ASGI のミドルウェア 1 か所(`app/http_guard.py`)で次を確かめる。
+    1. **`Host` の確認(個人モードだけ、全パス):** 実効の認証モードが `none` のとき、`Host` のホスト部が IP アドレス(`[::1]` のような IPv6 も)、`localhost`、`PUBLIC_BASE_URL` のホスト、`ALLOWED_HOSTS`(カンマ区切り、大文字小文字は無視)のどれでもなければ、421 Misdirected Request で断る。`Host` が無い要求も断る。リバインディングでは `Host` が攻撃者のドメイン名になるので、ここで止まる。ホスト名で開く使い方では、そのホスト名を `ALLOWED_HOSTS` に書く。oidc モードでは確かめない(リバースプロキシが `Host` を書き換えることがあり、ログインの Cookie はホスト名に縛られているので、リバインディングでは Cookie が送られない)。
+    2. **`Origin` の確認(全モード、更新系だけ):** POST / PUT / PATCH / DELETE に `Origin` ヘッダーがあり、GAKEI 自身の origin でなければ 403。自身の origin とは、`PUBLIC_BASE_URL` の origin か、`Host` と同じ host:port でホストが IP アドレス・`localhost`・`ALLOWED_HOSTS` のもの(`/mcp` と同じ判定。ADR-0023)。`Origin: null` は断る。`Origin` が無い要求(curl、Mod の判定受付 `POST /api/mods/{id}/verdicts` などブラウザ以外)は通す。
+    3. 実効のモードと `PUBLIC_BASE_URL` は `AuthRuntime` から要求のたびに読む(画面で再起動なしに切り替わる。ADR-0034)。`BaseHTTPMiddleware` は使わない(SSE を壊すため)。断る応答は `{"detail": ...}` の JSON で、理由をログに 1 行出す。
 - ログアウトは `POST /api/auth/logout`。セッションを消したうえで、IdP の `end_session_endpoint` に `post_logout_redirect_uri` と `client_id` を付けた URL を返し、画面がそこへ遷移する(Keycloak は `id_token_hint` が無くても `client_id` で受ける。ID トークンはサーバーに保存しない)。`end_session_endpoint` が無い IdP では `/` に戻るだけにする。
 
 ### 3. ロールは `user` と `admin` の2つ。Admin は `.env` のメール一覧で決める

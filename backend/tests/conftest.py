@@ -56,6 +56,10 @@ def _isolate_from_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COMFYUI_URL", "")
     # ADR-0038: 実物の SD WebUI にも接続しない。
     monkeypatch.setenv("SDWEBUI_URL", "")
+    # ADR-0019 2章(2026-10-19 追記): 個人モードは `Host` のホスト名を確かめる。TestClient の
+    # 既定の `Host` は `testserver` なので、本番の判定は緩めずに許可の一覧へ載せておく
+    # (`test_host_origin_guard.py` は自分で `ALLOWED_HOSTS` を決める)。
+    monkeypatch.setenv("ALLOWED_HOSTS", "testserver")
 
 
 # --- DB の切り替え(ADR-0027 6章) ------------------------------------------------

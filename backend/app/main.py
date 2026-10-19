@@ -62,6 +62,7 @@ from app.domain.semantic_search import QueryVectorCache
 from app.domain.storage import open_store
 from app.domain.vector_index import build_index as build_vector_index
 from app.embedding.catalog import ClipModelDownloader
+from app.http_guard import HostOriginGuardMiddleware
 from app.i18n import console_t, parse_accept_language, set_locale, t
 from app.mcp.endpoint import McpEndpoint
 from app.mcp.server import build_mcp_server, build_session_manager
@@ -581,6 +582,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         https_only=False,
     )
     app.add_middleware(OidcCookieSecureMiddleware)
+
+    # ADR-0019 2章(2026-10-19 追記): DNS リバインディングと CSRF の対策。最後に足す(一番外側)
+    # ので、断る要求はセッションの Cookie の処理や圧縮に入らない。言語は自分で選ぶ。
+    allowed_hosts = resolved_settings.allowed_host_list()
+    app.state.allowed_hosts = frozenset(allowed_hosts)
+    app.add_middleware(HostOriginGuardMiddleware, allowed_hosts=allowed_hosts)
 
     # I-1(2026-09-27 追記)・ADR-0034 4章: oidc モードでは /docs・/redoc・/openapi.json も
     # 未ログインで読めてしまうため 404 にする(API の形はレスポンス自体からも推測できるが、

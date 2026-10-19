@@ -19,6 +19,10 @@
     "storageConditionalWriteIgnored": "The image storage ignored the condition of a conditional write (If-None-Match: *). Originals with the same name could be overwritten, but this is unlikely in practice because names include the first 8 characters of the asset ID.",
     "nulInRequest": "The request contains a NUL character (\\u0000) and cannot be accepted (at: {location}). Remove the NUL character and try again."
   },
+  "httpGuard": {
+    "hostNotAllowed": "GAKEI cannot be opened by this host name. In personal mode (no authentication), open it by IP address or localhost. To use a host name, add it to ALLOWED_HOSTS.",
+    "originNotAllowed": "Update requests from another site (Origin) are not accepted."
+  },
   "auth": {
     "required": "Login required.",
     "adminRequired": "This action requires administrator privileges.",

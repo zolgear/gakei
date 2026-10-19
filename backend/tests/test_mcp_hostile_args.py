@@ -356,6 +356,9 @@ def shared_client(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClie
         fake_provider=True,
         database_url=database_url,
         comfyui_url="",
+        # module スコープなので、conftest が関数ごとに入れる `ALLOWED_HOSTS` より先に作られる。
+        # TestClient の既定の `Host`(`testserver`)をここで許す(ADR-0019 2章、2026-10-19 追記)。
+        allowed_hosts="testserver",
     )
     try:
         with TestClient(create_app(settings)) as client:

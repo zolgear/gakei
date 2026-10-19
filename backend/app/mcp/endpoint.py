@@ -8,13 +8,12 @@
    読み取りのみのトークンで使えないツールは `server.GakeiMcpServer` が隠し、拒否する。
 
 SDK の transport security(Host/Origin の許可リスト)は使わない。待ち受けのホスト名を事前に
-列挙できない(LAN の IP で開く使い方がある)ため、Origin の判定をここで行う。
+列挙できない(LAN の IP で開く使い方がある)ため、Origin の判定をここで行う。判定の関数は REST と
+共通(`app.http_guard.origin_allowed`。REST は更新系だけを全体のミドルウェアで確かめ、`/mcp` は
+GET を含む全メソッドをここで確かめる。ADR-0023 の 2026-10-19 追記)。
 """
 
 from __future__ import annotations
-
-import ipaddress
-from urllib.parse import urlsplit
 
 import anyio.to_thread
 from starlette.requests import Request
@@ -26,51 +25,9 @@ from app.auth.identity import LOCAL_ADMIN
 from app.auth.runtime import AuthRuntime
 from app.domain import api_tokens as api_tokens_domain
 from app.domain import mcp_settings
+from app.http_guard import origin_allowed
 from app.i18n import t
 from app.mcp.context import SCOPE_KEY, McpRequestContext, current_mcp_context
-
-
-def _origin_of(url: str) -> str | None:
-    parts = urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.netloc:
-        return None
-    return f"{parts.scheme}://{parts.netloc}".lower()
-
-
-def _is_ip_or_localhost(hostname: str | None) -> bool:
-    if not hostname:
-        return False
-    if hostname == "localhost":
-        return True
-    try:
-        ipaddress.ip_address(hostname)
-    except ValueError:
-        return False
-    return True
-
-
-def origin_allowed(
-    origin: str | None, host_header: str | None, public_base_url: str | None
-) -> bool:
-    """`Origin` が GAKEI 自身の origin かどうか。`Origin` が無い(ブラウザ以外の)呼び出しは通す。
-
-    - `PUBLIC_BASE_URL` の origin と一致すれば許す。
-    - `Host` ヘッダーと同じ host:port でも許すが、IP アドレスか `localhost` の場合に限る。
-      DNS リバインディングでは攻撃者のドメイン名が GAKEI の IP を指すため、`Origin` と `Host`
-      はどちらも攻撃者のドメイン名になり、単純な一致では防げない。IP・localhost で開いている
-      場合はこの攻撃が成り立たない。ホスト名で公開するときは `PUBLIC_BASE_URL` を設定する。
-    """
-    if not origin:
-        return True
-    normalized = _origin_of(origin)
-    if normalized is None:
-        return False
-    if public_base_url and _origin_of(public_base_url) == normalized:
-        return True
-    parts = urlsplit(origin)
-    if host_header and parts.netloc.lower() == host_header.lower():
-        return _is_ip_or_localhost(parts.hostname)
-    return False
 
 
 class McpEndpoint:
@@ -93,7 +50,10 @@ class McpEndpoint:
             return
 
         if not origin_allowed(
-            request.headers.get("origin"), request.headers.get("host"), runtime.public_base_url
+            request.headers.get("origin"),
+            request.headers.get("host"),
+            runtime.public_base_url,
+            getattr(state, "allowed_hosts", ()),
         ):
             await JSONResponse({"detail": t("mcp.originForbidden")}, status_code=403)(
                 scope, receive, send
