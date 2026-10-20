@@ -56,6 +56,6 @@
 | ADR-0050 | [0050-composite-input.md](0050-composite-input.md) | 入力画像の配置(複数の画像を移動・回転・拡大縮小して1枚の入力にする) | Proposed |
 | ADR-0051 | [0051-mods-and-hooks.md](0051-mods-and-hooks.md) | Mod とフック(取り込み・AI へ送る前・生成後に、外部のシステムや手元の処理をつなぐ) | Accepted |
 | ADR-0052 | [0052-comfyui-binding-map.md](0052-comfyui-binding-map.md) | ComfyUI ワークフローの読み取りと差し込み先の図 | Accepted |
-| ADR-0053 | [0053-region-boxes.md](0053-region-boxes.md) | 領域の指示(入力画像に四角を描き、四角ごとに指示を書く。四角の検出は VLM) | Proposed |
+| ADR-0053 | [0053-region-boxes.md](0053-region-boxes.md) | 領域の指示(入力画像に四角を描き、四角ごとに指示を書く。四角の検出は VLM) | Accepted |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

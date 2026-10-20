@@ -200,7 +200,7 @@ def _embedded_node(
 
     if node_type == "asset":
         kind = enode.get("kind")
-        if kind not in ("upload", "generated", "mask", "sketch", "composite"):
+        if kind not in ("upload", "generated", "mask", "sketch", "composite", "regions"):
             kind = None
         width = enode.get("width")
         height = enode.get("height")

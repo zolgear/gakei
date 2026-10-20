@@ -96,7 +96,10 @@ def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
         raise IngestError(t("assets.maskTooLarge"))
     # ADR-0010: スケッチは保存後は通常の入力画像として扱うので、マスクの4MB制限は
     # 課さずアップロード画像と同じ上限(MAX_UPLOAD_BYTES)を使う。形式はマスクと同じくPNGのみ。
-    if kind in (AssetKind.SKETCH, AssetKind.COMPOSITE) and len(data) >= MAX_UPLOAD_BYTES:
+    if (
+        kind in (AssetKind.SKETCH, AssetKind.COMPOSITE, AssetKind.REGIONS)
+        and len(data) >= MAX_UPLOAD_BYTES
+    ):
         raise IngestError(t("assets.uploadTooLarge"))
 
     # ValueError: Pillow がテキストチャンクの展開の上限(`PngImagePlugin.MAX_TEXT_CHUNK`)を
@@ -126,6 +129,9 @@ def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
     # ADR-0050 3章: 配置の結果も、スケッチと同じく PNG だけ。
     if kind == AssetKind.COMPOSITE and fmt != "PNG":
         raise IngestError(t("assets.compositeMustBePng"))
+    # ADR-0053 4章: 領域の四角を描いた画像はサーバーが PNG で描く。
+    if kind == AssetKind.REGIONS and fmt != "PNG":
+        raise IngestError(t("assets.regionsMustBePng"))
 
     mime, ext = ALLOWED_UPLOAD_FORMATS[fmt]
     return PreparedImage(
@@ -168,8 +174,9 @@ def ingest(
     - `denial` は、呼び出し側が先に判定を待った結果(生成の出力。`prepared` と一緒に渡す)。
     """
     # ADR-0010(2026-09-23 追記): 上描きスケッチの下地 Asset。kind=sketch のときだけ許す。
+    # 領域の四角を描いた画像(ADR-0053 4章)も、主たる入力をスケッチと同じく指す。
     if source_asset_id is not None:
-        if kind != AssetKind.SKETCH:
+        if kind not in (AssetKind.SKETCH, AssetKind.REGIONS):
             raise IngestError(t("assets.sourceAssetOnlyForSketch"))
         source_asset = session.get(Asset, source_asset_id)
         if source_asset is None or source_asset.deleted_at is not None:

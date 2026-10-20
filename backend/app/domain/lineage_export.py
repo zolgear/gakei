@@ -326,6 +326,8 @@ def build_export(
                     for i in included
                 ],
                 "omitted_input_count": len(inputs_by_run[run.id]) - len(included),
+                # 領域の指示の四角(ADR-0053 8章)。四角を付けた Run だけ。
+                **({"regions": run.regions} if isinstance(run.regions, dict) else {}),
             }
         )
 

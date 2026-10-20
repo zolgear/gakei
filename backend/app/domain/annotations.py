@@ -346,7 +346,8 @@ def request_annotation(db: Session, asset: Asset) -> None:
 def enqueue_on_ingest(db: Session, asset: Asset, settings: Settings) -> bool:
     """取り込み時の自動実行(ADR-0024 4章)。設定がオフ、使えるエンジンが無い、マスクなら何も
     しない。待ち行列に入れたら True(呼び出し側は commit 後に worker を起こす)。"""
-    if asset.kind == AssetKind.MASK or asset.deleted_at is not None:
+    # 領域の四角を描いた画像(ADR-0053 4章)は、主たる入力と同じ絵なので自動では推定しない。
+    if asset.kind in (AssetKind.MASK, AssetKind.REGIONS) or asset.deleted_at is not None:
         return False
     if asset.content_withheld_at is not None:
         return False
@@ -362,7 +363,7 @@ def _pending_condition() -> Any:
     return and_(
         Asset.deleted_at.is_(None),
         Asset.content_withheld_at.is_(None),
-        Asset.kind != AssetKind.MASK,
+        Asset.kind.not_in((AssetKind.MASK, AssetKind.REGIONS)),
         or_(AssetAnnotation.asset_id.is_(None), AssetAnnotation.auto_status.is_(None)),
     )
 

@@ -562,7 +562,8 @@
     "notFound": "Asset not found",
     "contentNotFound": "Content not found",
     "notDeleted": "Not deleted",
-    "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run."
+    "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run.",
+    "regionsMustBePng": "Region images must be in PNG format"
   },
   "runs": {
     "unknownProvider": "Unknown provider: {provider}",
@@ -573,6 +574,40 @@
     "cannotCancelStatus": "Cannot cancel: status={status}",
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
     "partialNotFound": "Partial image not found"
+  },
+  "runRegions": {
+    "editOnly": "Region instructions can only be used with Edit",
+    "notSupported": "This provider or model does not accept region instructions",
+    "primaryRequired": "Region instructions require a first input image",
+    "instructionRequired": "Enter an instruction, text to draw, or a reference image for box {number}",
+    "tooManyInputs": "With the images added for region instructions there would be {count} input images, more than the limit of {max}. Remove some input or reference images",
+    "overlayFailed": "Could not create the image with the boxes drawn",
+    "colors": {
+      "red": "red",
+      "blue": "blue",
+      "green": "green",
+      "yellow": "yellow",
+      "magenta": "magenta",
+      "cyan": "cyan",
+      "orange": "orange",
+      "purple": "purple"
+    },
+    "prompt": {
+      "header": "Region instructions: image {overlay} is image 1 with numbered colored boxes drawn on top. The boxes show the approximate location and size. Edit image 1 and follow the instruction for each numbered box.",
+      "where": " (x {left}–{right}%, y {top}–{bottom}% of the image)",
+      "kind": {
+        "change": "Change the area in the box{where}.",
+        "add": "Add something new in the box{where}.",
+        "keep": "Keep the area in the box{where} exactly as it is.",
+        "remove": "Remove what is in the box{where} and fill the area in naturally to match the surroundings.",
+        "move": "Move what is in the dashed box{source} to the solid box{target}. Fill the original spot in naturally to match the surroundings."
+      },
+      "instruction": "Instruction: {instruction}",
+      "text": "Draw the text \"{text}\" exactly as written.",
+      "reference": "Use image {image} as a reference.",
+      "item": "- Box {number} ({color}): {body}",
+      "footer": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image."
+    }
   },
   "promptSets": {
     "notFound": "Prompt set not found",
@@ -973,7 +1008,8 @@
         "generated": "Generated",
         "mask": "Mask",
         "sketch": "Sketch",
-        "composite": "Arrangement"
+        "composite": "Arrangement",
+        "regions": "Regions"
       },
       "operations": {
         "generate": "Generate",

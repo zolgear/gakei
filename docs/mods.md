@@ -106,6 +106,7 @@ Webhook と Python の Mod は同じ中身を受け取る。すべてのイベ�
 - `text` の `role` は `prompt`、`negative_prompt`、`system`、`user`、`assistant`、`tool`、`tags`、`query` など。
 - `images` の `role` は `primary`(主たる入力)、`reference`(参照)、`mask`、`attachment`(アシスタントへの添付)。画像で探すときの画像のように Asset でないものは `asset_id` が `null`。
 - `run_id` は `image_run` のとき、`asset_id` は自動タイトル・タグの対象の画像。
+- `image_run` で領域の指示の四角(ADR-0053)を付けたとき: `region_count` が四角の数(付けていなければ `null`)。`text` に、四角ごとの指示(`role` が `region`)と描く文字(`role` が `region_text`)が入る。四角を描いた画像は `images` に `reference` として入る。
 - `workflow_analysis` のとき: `target` はアシスタントの接続先とモデル。`text` は LLM への指示(`role` が `system`)と、ワークフローのノードの要約(`role` が `workflow`。1行が1ノードで、id・種類・タイトル・配線・直値。文字列は先頭 60 文字まで、秘密に見える値は `***`)。テンプレートの JSON そのものは送らない。`params` は `workflow_id`(登録前は `null`)、`workflow_name`、`model`、`reasoning_effort`。画像は送らない。
 - ComfyUI の Run の `params` は、共有リンクと同じ規則で秘密に見える値を伏せる。
 

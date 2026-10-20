@@ -391,7 +391,7 @@ class ContentRatingDetail(BaseModel):
 
 class AssetSummary(BaseModel):
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
     mime: str
     width: int
     height: int
@@ -1015,6 +1015,72 @@ class RunInputCreate(BaseModel):
 # 繰り返し回数の上限(ADR-0042 1章)。
 REPEAT_MAX = 20
 
+# 領域の指示(ADR-0053 3章)。四角の数と文字の長さの上限。
+REGIONS_MAX = 16
+REGION_INSTRUCTION_MAX_LENGTH = 2000
+REGION_TEXT_MAX_LENGTH = 200
+
+RegionKind = Literal["change", "add", "keep", "remove", "move"]
+
+
+def _check_region_box(value: list[float]) -> list[float]:
+    """主たる入力に対する割合(0〜1)で、左上を原点にした `[x0, y0, x1, y1]`。"""
+    x0, y0, x1, y1 = value
+    for v in value:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("box values must be within [0, 1]")
+    if not (x0 < x1 and y0 < y1):
+        raise ValueError("box must satisfy x0 < x1 and y0 < y1")
+    return [float(v) for v in value]
+
+
+class RegionBox(BaseModel):
+    """領域の指示の四角1つ(ADR-0053 3章)。どのモデルにも依らない形で持ち、渡すときに変換する。"""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    # 画面のバッジの番号(1 から)。プロンプトの文と四角を描いた画像の番号もこれ。
+    number: int = Field(ge=1, le=REGIONS_MAX)
+    kind: RegionKind = "change"
+    # 四角(「動かす」では移す先)。
+    box: list[float] = Field(min_length=4, max_length=4)
+    # 元の四角。「動かす」だけが持つ(ほかの種類では付けられない)。
+    source_box: list[float] | None = Field(default=None, min_length=4, max_length=4)
+    instruction: str = Field(default="", max_length=REGION_INSTRUCTION_MAX_LENGTH)
+    # 描かせる文字(看板など)。指示とは分け、そのまま渡す。
+    text: str | None = Field(default=None, max_length=REGION_TEXT_MAX_LENGTH)
+    # その四角に使う画像。Run の入力(role = image)として送る。
+    reference_asset_id: uuid.UUID | None = None
+
+    @field_validator("box")
+    @classmethod
+    def _box(cls, value: list[float]) -> list[float]:
+        return _check_region_box(value)
+
+    @field_validator("source_box")
+    @classmethod
+    def _source_box(cls, value: list[float] | None) -> list[float] | None:
+        return None if value is None else _check_region_box(value)
+
+    @field_validator("instruction")
+    @classmethod
+    def _instruction(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("text")
+    @classmethod
+    def _text(cls, value: str | None) -> str | None:
+        # 描く文字は前後の空白も含めてそのまま渡す。空なら無しと同じ。
+        return value if value else None
+
+    @model_validator(mode="after")
+    def _source_box_only_for_move(self) -> RegionBox:
+        if self.kind == "move" and self.source_box is None:
+            raise ValueError("source_box is required for kind=move")
+        if self.kind != "move" and self.source_box is not None:
+            raise ValueError("source_box is only allowed for kind=move")
+        return self
+
 
 class RunCreateRequest(BaseModel):
     operation: Literal["generate", "edit"]
@@ -1033,6 +1099,16 @@ class RunCreateRequest(BaseModel):
     # ないので `run.params` には入れない(ADR-0003 ルール4)。テンプレートと併用したときは
     # Run ごとに組み立て直す(意味の通ったガチャになる)。
     repeat: int = Field(default=1, ge=1, le=REPEAT_MAX)
+    # 領域の指示の四角(ADR-0053 3章)。Edit で、主たる入力があり、プロバイダーが四角を受ける
+    # ときだけ付けられる(`OperationCapabilities.supports_regions`)。番号は重ねられない。
+    regions: list[RegionBox] = Field(default_factory=list, max_length=REGIONS_MAX)
+
+    @model_validator(mode="after")
+    def _unique_region_numbers(self) -> RunCreateRequest:
+        numbers = [r.number for r in self.regions]
+        if len(numbers) != len(set(numbers)):
+            raise ValueError("region numbers must be unique")
+        return self
 
     @model_validator(mode="after")
     def _prompt_xor_template(self) -> RunCreateRequest:
@@ -1077,6 +1153,21 @@ class RunOutputRef(BaseModel):
     content_rating: ContentRatingLevel | None = None
     # 画像を残さなかったか(ADR-0051 4章)。
     content_withheld: bool = False
+
+
+class RunRegions(BaseModel):
+    """`run.regions` の形(ADR-0053 4章)。"""
+
+    # 変換の版。四角を文と画像に変える作り方を変えたら上げる。
+    version: int
+    # どの渡し方で送ったか(ADR-0053 5章)。
+    delivery: Literal["image_and_text"]
+    regions: list[RegionBox]
+    # プロンプトの後ろに足した文(`run.prompt` の末尾)。再実行では、プロンプトからこの文を除いて
+    # フォームに戻す。
+    appended_text: str = ""
+    # 四角を描いた画像の Asset(種類 `regions`)。
+    overlay_asset_id: uuid.UUID | None = None
 
 
 class RunSummary(BaseModel):
@@ -1127,6 +1218,9 @@ class RunSummary(BaseModel):
     # 実行時にワークフローが作ったテキスト(ADR-0030。ComfyUI の最終プロンプト)。
     # 成功した Run のうち、記録があるものだけ。それ以外は null。
     text_outputs: list[RunTextOutput] | None = None
+    # 領域の指示の四角(ADR-0053 4章。`run.regions`)。四角を付けた Run だけ。再実行でフォームに
+    # 四角を戻すのに使う。
+    regions: RunRegions | None = None
 
 
 class RunImportInfo(BaseModel):
@@ -1195,7 +1289,7 @@ class RunEvent(BaseModel):
 class LineageAssetInfo(BaseModel):
     # 埋め込み(未検証)ノードは kind/width/height/mime が分からないことがある
     # (ADR-0014 6章。`gakei.lineage/1` から変換した入力 Asset など)。
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"] | None = None
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"] | None = None
     width: int | None = None
     height: int | None = None
     mime: str | None = None
@@ -2638,7 +2732,7 @@ class SharePreviewAsset(BaseModel):
     """共有に含まれる画像1件(作る前の確認用。サムネイルは本人向けの配信 URL で出す)。"""
 
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
     width: int
     height: int
     title: str | None = None
@@ -2679,7 +2773,7 @@ class ShareListResponse(BaseModel):
 
 class PublicShareAsset(BaseModel):
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
     mime: str
     width: int
     height: int
