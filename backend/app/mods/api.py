@@ -164,6 +164,9 @@ class BeforeSendSubject:
     run_id: str | None = None
     # 自動タイトル・タグのとき、対象の Asset。
     asset_id: str | None = None
+    # 画像の生成で、領域の指示の四角を付けたときの四角の数(ADR-0053 8章)。四角ごとの文は
+    # `text` の `region`(指示)と `region_text`(描く文字)。四角が無ければ null。
+    region_count: int | None = None
 
 
 @dataclass(frozen=True)

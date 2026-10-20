@@ -166,6 +166,9 @@ def _operation_capabilities(model: str, operation: str) -> OperationCapabilities
         max_input_images=MAX_INPUT_IMAGES,
         min_input_images=1,
         supports_mask=True,
+        # ADR-0053 5章: 四角を描いた画像と、番号ごとの指示の文で渡す。
+        supports_regions=True,
+        regions_delivery="image_and_text",
     )
 
 

@@ -7,27 +7,32 @@ REST(`POST /api/runs`)と MCP(`generate_image`。ADR-0023)の両方から呼ぶ�
 
 from __future__ import annotations
 
+import io
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.domain import api_key as api_key_domain
+from app.domain import assets as assets_domain
 from app.domain import content_withholding, prompt_templates
-from app.domain.models import Run, RunInput, RunStatus
+from app.domain import regions as regions_domain
+from app.domain.models import Asset, AssetKind, Run, RunInput, RunInputRole, RunStatus
 from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
 from app.domain.schemas import RunCreateRequest
+from app.domain.storage import AssetStore
 from app.domain.visibility import (
     get_visible_asset,
     get_visible_group,
     get_visible_prompt_template,
 )
 from app.i18n import t
-from app.providers.base import ProviderUnavailableError, RunDraft
+from app.providers.base import ProviderCapabilities, ProviderUnavailableError, RunDraft
 from app.providers.registry import ProviderRegistry
 from app.worker.runner import Runner
 
@@ -151,6 +156,15 @@ def create_runs(
     # 意味の通ったガチャになる)。`prompt` と `prompt_template` の排他はスキーマで断っている。
     prompts, builds = _resolve_prompts(db, body, viewer=viewer, repeat=repeat)
 
+    # ADR-0053: 領域の指示の四角を「画像と文」に変える。四角を描いた画像と参照画像は、利用者の
+    # 入力の後ろに role=image で足し(role=reference はプロバイダーに送らないため)、文は
+    # プロンプトの後ろに足す。四角を描いた画像の保存は、検証がすべて通った後に行う。
+    plan: _RegionsPlan | None = None
+    if body.regions:
+        plan = _plan_regions(db, caps, body, input_metas, viewer=viewer, store=runner.store)
+        input_metas = [*input_metas, *plan.extra_metas]
+        prompts = [prompt + plan.appended_text for prompt in prompts]
+
     for index in range(repeat):
         try:
             validate_run_request(
@@ -190,6 +204,25 @@ def create_runs(
         except ProviderUnavailableError as e:
             raise RunCreateError("conflict", str(e)) from e
 
+    extra_inputs: list[tuple[uuid.UUID, int]] = []
+    regions_json: dict[str, Any] | None = None
+    if plan is not None:
+        overlay = assets_domain.ingest(
+            db,
+            runner.store,
+            plan.overlay.data,
+            AssetKind.REGIONS,
+            source_asset_id=plan.primary_asset_id,
+            created_by_user_id=viewer.id,
+            prepared=plan.overlay,
+        )
+        extra_inputs = [(overlay.id, plan.overlay_position), *plan.reference_inputs]
+        regions_json = regions_domain.RegionsRecord(
+            regions=regions_domain.ordered(body.regions),
+            appended_text=plan.appended_text,
+            overlay_asset_id=overlay.id,
+        ).to_json()
+
     # 積んだ順を queued_at で保つ(runner も履歴も queued_at 順。同じ時刻だと id の順になり、
     # 順番が崩れる)。時計の分解能が粗い環境でも並ぶよう、1マイクロ秒ずつずらす。
     queued_base = datetime.now(UTC)
@@ -206,6 +239,8 @@ def create_runs(
             params=params,
             # プロンプトテンプレート(実験)で組み立てたときの内訳。作成時に一度だけ書く。
             prompt_build=builds[index],
+            # 領域の指示の四角(ADR-0053 4章)。作成時に一度だけ書く。
+            regions=regions_json,
             status=RunStatus.QUEUED,
             queued_at=queued_base + timedelta(microseconds=index),
             created_by_user_id=viewer.id,
@@ -219,6 +254,12 @@ def create_runs(
             db.add(
                 RunInput(
                     run_id=run.id, asset_id=item.asset_id, role=item.role, position=item.position
+                )
+            )
+        for asset_id, position in extra_inputs:
+            db.add(
+                RunInput(
+                    run_id=run.id, asset_id=asset_id, role=RunInputRole.IMAGE, position=position
                 )
             )
         runs.append(run)
@@ -260,3 +301,125 @@ def _resolve_prompts(
         prompts.append(result.prompt)
         builds.append(result.build)
     return prompts, builds
+
+
+@dataclass(frozen=True)
+class _RegionsPlan:
+    """領域の指示を送るための準備(ADR-0053 5章「画像と文」)。DB と保存先にはまだ書いていない。"""
+
+    primary_asset_id: uuid.UUID
+    # 四角を描いた画像(検証済み。保存は Run の挿入の直前)。
+    overlay: assets_domain.PreparedImage
+    overlay_position: int
+    # 利用者の入力に無い参照画像(asset_id, position)。四角を描いた画像の後ろに足す。
+    reference_inputs: list[tuple[uuid.UUID, int]]
+    # 検証に使う、足した入力(四角を描いた画像と参照画像)。
+    extra_metas: list[RunInputMeta]
+    appended_text: str
+
+
+def _plan_regions(
+    db: Session,
+    caps: ProviderCapabilities,
+    body: RunCreateRequest,
+    input_metas: list[RunInputMeta],
+    *,
+    viewer: CurrentUser,
+    store: AssetStore,
+) -> _RegionsPlan:
+    """四角を検証し、四角を描いた画像と足す文を作る。断るときは `RunCreateError`。"""
+    if body.operation != "edit":
+        raise RunCreateError("invalid", t("runRegions.editOnly"))
+    model_caps = next((m for m in caps.models if m.model == body.model), None)
+    if model_caps is None:
+        raise RunCreateError("invalid", t("runValidation.unknownModel", model=body.model))
+    op_caps = next((o for o in model_caps.operations if o.operation == body.operation), None)
+    if op_caps is None or not op_caps.supports_regions:
+        raise RunCreateError("invalid", t("runRegions.notSupported"))
+
+    image_metas = sorted((m for m in input_metas if m.role == "image"), key=lambda m: m.position)
+    primary_meta = next((m for m in image_metas if m.position == 0), None)
+    if primary_meta is None:
+        raise RunCreateError("invalid", t("runRegions.primaryRequired"))
+
+    # 入力の何枚目か(1 から。プロバイダーに送る順 = role=image の position の順)。
+    image_numbers = {m.asset_id: index + 1 for index, m in enumerate(image_metas)}
+    next_position = image_metas[-1].position + 1
+    overlay_position = next_position
+    overlay_number = len(image_metas) + 1
+
+    # 参照画像。利用者の入力にあればその画像を指し、無ければ四角を描いた画像の後ろに足す。
+    reference_ids: list[uuid.UUID] = []
+    for region in regions_domain.ordered(body.regions):
+        ref = region.reference_asset_id
+        if ref is not None and ref not in image_numbers and ref not in reference_ids:
+            reference_ids.append(ref)
+    blocked = content_withholding.blocked_asset_ids(db, reference_ids)
+    reference_assets: list[Asset] = []
+    for ref in reference_ids:
+        asset = get_visible_asset(db, viewer, ref)
+        if asset is None or asset.deleted_at is not None or asset.kind == AssetKind.MASK:
+            raise RunCreateError("invalid", t("runs.assetNotFound", id=ref))
+        if asset.id in blocked:
+            raise RunCreateError("conflict", t("mods.inputDenied", id=ref))
+        reference_assets.append(asset)
+
+    # ADR-0053 5章: 足す画像も Edit の入力の枚数の上限に数える。超えるなら Run を作らない。
+    total = len(image_metas) + 1 + len(reference_assets)
+    if total > op_caps.max_input_images:
+        raise RunCreateError(
+            "invalid",
+            t("runRegions.tooManyInputs", max=op_caps.max_input_images, count=total),
+        )
+
+    primary = db.get(Asset, primary_meta.asset_id)
+    assert primary is not None  # 入力の検証で見える・削除されていないことを確かめている
+    try:
+        with Image.open(io.BytesIO(store.read(primary.blob_key))) as image:
+            data = regions_domain.render_overlay(image, body.regions)
+        overlay = assets_domain.prepare_image(data, AssetKind.REGIONS)
+    except (OSError, ValueError, assets_domain.IngestError) as e:
+        raise RunCreateError("invalid", t("runRegions.overlayFailed")) from e
+
+    extra_metas = [
+        RunInputMeta(
+            asset_id=overlay.asset_id,
+            role="image",
+            position=overlay_position,
+            width=overlay.width,
+            height=overlay.height,
+            sha256=overlay.sha256,
+            mime=overlay.mime,
+        )
+    ]
+    reference_inputs: list[tuple[uuid.UUID, int]] = []
+    reference_numbers = dict(image_numbers)
+    for offset, asset in enumerate(reference_assets, start=1):
+        position = overlay_position + offset
+        reference_inputs.append((asset.id, position))
+        reference_numbers[asset.id] = overlay_number + offset
+        extra_metas.append(
+            RunInputMeta(
+                asset_id=asset.id,
+                role="image",
+                position=position,
+                width=asset.width,
+                height=asset.height,
+                sha256=asset.sha256,
+                mime=asset.mime,
+            )
+        )
+
+    appended = regions_domain.build_prompt_text(
+        body.regions,
+        overlay_image_number=overlay_number,
+        reference_image_numbers=reference_numbers,
+    )
+    return _RegionsPlan(
+        primary_asset_id=primary.id,
+        overlay=overlay,
+        overlay_position=overlay_position,
+        reference_inputs=reference_inputs,
+        extra_metas=extra_metas,
+        appended_text=appended,
+    )

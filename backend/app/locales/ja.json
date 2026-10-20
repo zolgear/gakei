@@ -562,7 +562,8 @@
     "notFound": "asset が見つかりません",
     "contentNotFound": "content が見つかりません",
     "notDeleted": "削除されていません",
-    "cannotRestoreDeletedRunOutput": "削除された実行の出力は復元できません。"
+    "cannotRestoreDeletedRunOutput": "削除された実行の出力は復元できません。",
+    "regionsMustBePng": "領域の画像はPNG形式である必要があります"
   },
   "runs": {
     "unknownProvider": "未知の provider です: {provider}",
@@ -573,6 +574,41 @@
     "cannotCancelStatus": "status={status} のため cancel できません",
     "cannotCancelAlreadyRunning": "すでに実行が開始されているため cancel できません",
     "partialNotFound": "途中経過が見つかりません"
+  },
+  "runRegions": {
+    "editOnly": "領域の指示は編集(Edit)でだけ使えます",
+    "notSupported": "このプロバイダー・モデルは領域の指示を受けられません",
+    "primaryRequired": "領域の指示には、1枚目の入力画像が必要です",
+    "tooManyInputs": "領域の指示で足す画像を含めると入力画像が {count} 枚になり、上限の {max} 枚を超えます。入力画像か参照画像を減らしてください",
+    "overlayFailed": "四角を描いた画像を作れませんでした",
+    "colors": {
+      "red": "赤",
+      "blue": "青",
+      "green": "緑",
+      "yellow": "黄",
+      "magenta": "マゼンタ",
+      "cyan": "水色",
+      "orange": "オレンジ",
+      "purple": "紫"
+    },
+    "prompt": {
+      "header": "領域の指示: {overlay}枚目の画像は、1枚目の画像の上に番号付きの色の四角を重ねたものです。四角は場所と大きさの目安です。1枚目の画像を編集してください。上の文で四角が番号(「四角 1」など)か名前で書かれていたら、次の一覧のその四角の場所を指します。四角に指示があるときは、そのとおりにしてください。",
+      "where": "(横 {left}〜{right}%、縦 {top}〜{bottom}% の範囲)",
+      "area": "横 {left}〜{right}%、縦 {top}〜{bottom}% の範囲。",
+      "kind": {
+        "change": "四角の中{where}を変える。",
+        "add": "四角の中{where}に新しく足す。",
+        "keep": "四角の中{where}は変えずに、そのまま残す。",
+        "remove": "四角の中{where}にある物を消し、周りに合わせて自然に埋める。",
+        "move": "点線の四角{source}にある物を、実線の四角{target}へ動かす。元の場所は周りに合わせて自然に埋める。"
+      },
+      "instruction": "指示: {instruction}",
+      "text": "文字「{text}」を、一字一句そのまま描く。",
+      "reference": "{image}枚目の画像を参考にする。",
+      "item": "- 四角 {number}({color}): {body}",
+      "itemNamed": "- 四角 {number}({color}、{label}): {body}",
+      "footer": "四角・番号・線・矢印は指示のための印です。出力の画像には描かないでください。"
+    }
   },
   "promptSets": {
     "notFound": "プロンプトセットが見つかりません",
@@ -973,7 +1009,8 @@
         "generated": "生成",
         "mask": "マスク",
         "sketch": "スケッチ",
-        "composite": "配置"
+        "composite": "配置",
+        "regions": "領域"
       },
       "operations": {
         "generate": "生成",

@@ -296,7 +296,8 @@ def create_asset(
 
 @router.get("", response_model=AssetListResponse, operation_id="list_assets")
 def list_assets(
-    kind: list[Literal["upload", "generated", "mask", "sketch", "composite"]] | None = Query(
+    kind: list[Literal["upload", "generated", "mask", "sketch", "composite", "regions"]]
+    | None = Query(
         default=None,
         description="繰り返して指定できる(`?kind=generated&kind=upload`)。指定した種類の"
         "どれかに当たる Asset に絞る。省くと全種類(ADR-0035)。",
