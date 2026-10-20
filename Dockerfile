@@ -2,13 +2,15 @@
 # 引き続き ADR-0012 の起動スクリプト(run.sh / run.bat)。
 # ADR-0021: このイメージは GHCR にも公開する。$BUILDPLATFORM、GAKEI_COMMIT、
 # OCI ラベル、LICENSE / NOTICE の同梱はそのための追加。
+# ベースイメージ(と uv)はマルチアーキテクチャのインデックスのダイジェストで固定する。
+# 更新は Dependabot の PR で行う(.github/dependabot.yml、docs/release.md)。
 
 # --- 1段目: フロントのビルド(Node) -----------------------------------------
 # frontend/dist を作るためだけに使う。実行イメージには Node を含めない。
 # ADR-0021: --platform=$BUILDPLATFORM でビルド元(≒ CI ランナー)のアーキテクチャで
 # 常に1回だけ動かす。QEMU 上で npm ci / vite build を動かすと数倍遅く、
 # 成果物(dist)は実行段のアーキテクチャに依らず同じものが使える。
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS frontend-build
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS frontend-build
 WORKDIR /src/frontend
 
 # 依存関係だけ先にコピーしてレイヤーキャッシュを効かせる。
@@ -19,7 +21,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- 2段目: バックエンド(Python + uv) ---------------------------------------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS runtime
 
 # ADR-0021: リリースのワークフローがコミットの SHA を渡す(未指定なら空文字のまま
 # 環境変数になり、app 側は空文字を null として扱う)。
@@ -33,7 +35,7 @@ LABEL org.opencontainers.image.title="GAKEI" \
 
 # uv 本体だけをコピーする(uv のインストーラーは使わない)。バージョンは
 # ローカルで `uv --version` を確認して固定している。
-COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1 /uv /usr/local/bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \

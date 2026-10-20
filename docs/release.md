@@ -96,6 +96,12 @@ private リポジトリから push した場合だけ private になる。その
 
    理由: `ghcr.io/zolgear/gakei` という名前は公開リポジトリでも同じになる。旧(private)リポジトリに紐づいたパッケージやリリースを残すと、公開後にどちらが正式なものか混乱する。
 
+## Action とベースイメージの固定
+
+- ワークフローの `uses:` は Action のコミットの SHA で固定し、行末のコメントに版を書く(`uses: actions/checkout@<SHA> # v5.1.0`)。
+- `Dockerfile` のベースイメージ(と `COPY --from` の uv)は `image:tag@sha256:...` で固定する。ダイジェストは `linux/amd64` と `linux/arm64` を含むインデックスのもの(`docker buildx imagetools inspect <image:tag>` の `Digest`)。
+- 更新は手で書き換えず、Dependabot(`.github/dependabot.yml`。週1回、`dev` 宛て)の PR で行う。CI が通ることを確かめてマージする。Node のメジャーと Python のマイナーは Dependabot の対象から外しているので、上げるときは手で PR を作る。
+
 ## `compose.yaml` との関係
 
 リポジトリの `compose.yaml` は、clone してソースからビルドする人向けのまま(`image:` は変えない)。公開イメージ(`ghcr.io/zolgear/gakei`)で起動したい場合は、README の `docker run` の例か、README に載せている compose の最小例を使う。

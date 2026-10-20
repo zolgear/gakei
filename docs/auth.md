@@ -64,12 +64,12 @@ Google には `end_session_endpoint` が無いので、GAKEI のログアウト�
 #### 1. Keycloak を起動する(ローカルで試す場合)
 
 ```bash
-docker run --rm -p 8080:8080 \
+docker run --rm -p 127.0.0.1:8080:8080 \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
   quay.io/keycloak/keycloak:26.2 start-dev
 ```
 
-`http://localhost:8080` の管理コンソールに `admin` / `admin` で入る(この `http://localhost:8080` はローカルの確認用。本番では https にする)。
+`http://localhost:8080` の管理コンソールに `admin` / `admin` で入る(この `http://localhost:8080` はローカルの確認用。本番では https にする)。この起動例は同じ PC での確認用なので `127.0.0.1` だけで待ち受ける。既定の管理者のパスワード(`admin`)のまま LAN やインターネットに出さない。
 
 #### 2. レルムとクライアントを作る
 

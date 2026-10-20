@@ -1,0 +1,26 @@
+# Action とベースイメージはコミットの SHA / ダイジェストで固定している
+# (docs/release.md)。固定した値の更新は、このファイルの設定で Dependabot が
+# dev 宛ての PR として出す。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    ignore:
+      # Node のメジャー(24)と Python のマイナー(3.12)は、追従を人が決める。
+      # ダイジェストの更新と uv の版の更新だけを PR にする。
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
