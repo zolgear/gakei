@@ -23,13 +23,19 @@ from starlette.types import Receive, Scope, Send
 from app.auth.deps import bearer_token
 from app.auth.identity import LOCAL_ADMIN
 from app.auth.runtime import AuthRuntime
+from app.body_guard import body_policy
 from app.domain import api_tokens as api_tokens_domain
 from app.domain import mcp_settings
 from app.http_guard import origin_allowed
 from app.i18n import t
 from app.mcp.context import SCOPE_KEY, McpRequestContext, current_mcp_context
+from app.mcp.server import MAX_REQUEST_BODY_BYTES
 
 
+# 本文の上限と、ログインの前に本文を読んでよいこと(`app/body_guard.py`)。認証は Cookie ではなく
+# アクセストークンで、本文を読む前にここで確かめる。上限は SDK に渡すものと同じ
+# (`server.MAX_REQUEST_BODY_BYTES`。SDK の側も本文を読みながら数えて 413 にする)。
+@body_policy(max_bytes=MAX_REQUEST_BODY_BYTES, before_login=True)
 class McpEndpoint:
     """`/mcp` の ASGI アプリ。セッションマネージャーは lifespan が `app.state` に置く。"""
 

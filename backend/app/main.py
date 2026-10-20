@@ -53,6 +53,7 @@ from app.assistant.runtime import build_runtime as build_assistant_runtime
 from app.auth.deps import require_user
 from app.auth.runtime import AuthRuntime
 from app.auth.secret import load_or_create_auth_secret
+from app.body_guard import RequestBodyGuardMiddleware
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
 from app.domain import annotation_settings, embedding_index, tag_dictionaries
@@ -582,6 +583,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         https_only=False,
     )
     app.add_middleware(OidcCookieSecureMiddleware)
+
+    # ADR-0019 2章(2026-10-20 追記): 本文の上限と、oidc モードで本文を読む前の認証の足切り。
+    # `HostOriginGuardMiddleware` のすぐ内側に置く(`Host` / `Origin` で断るものは先に断る)。
+    # ルートごとの上限と足切りの対象外は、エンドポイントの `body_policy` の印で決める。
+    app.add_middleware(RequestBodyGuardMiddleware)
 
     # ADR-0019 2章(2026-10-19 追記): DNS リバインディングと CSRF の対策。最後に足す(一番外側)
     # ので、断る要求はセッションの Cookie の処理や圧縮に入らない。言語は自分で選ぶ。
