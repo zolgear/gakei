@@ -34,6 +34,7 @@ Issue [#7](https://github.com/zolgear/gakei/issues/7)。GAKEI の中でエージ
 - DNS リバインディング対策として、`/mcp` は `Origin` ヘッダーがあるとき、次のどちらかに当たらなければ 403 で拒否する(MCP 仕様の推奨)。`Origin` が無い呼び出し(ブラウザ以外のエージェント)は通す。
   - `PUBLIC_BASE_URL` の origin と一致する。
   - `Host` ヘッダーと同じ host:port で、ホストが IP アドレスか `localhost`。ホスト名との単純な一致は許さない(リバインディングでは `Origin` と `Host` がどちらも攻撃者のドメイン名になるため)。ホスト名で公開し、ブラウザで動く MCP クライアントを使うときは `PUBLIC_BASE_URL` を設定する。
+  - **2026-10-19 追記:** この判定を REST と共通にした(`app/http_guard.py` の `origin_allowed`。ADR-0019 2章の同日の追記)。REST は全体のミドルウェアで更新系だけを確かめ、`/mcp` は GET を含む全メソッドを引き続き自分で確かめる。`ALLOWED_HOSTS` に載せたホスト名も、IP アドレス・`localhost` と同じく `Host` との一致で許す。個人モードでは、その手前で `Host` 自体を確かめる(知らないホスト名なら 421)。
 - SDK の transport security(Host/Origin の許可リスト)は使わない。LAN の IP で開く使い方があり、待ち受けのホスト名を事前に列挙できないため(2026-09-28 実装時に決定)。
 
 ```

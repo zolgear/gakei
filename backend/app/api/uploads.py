@@ -19,6 +19,7 @@ from starlette.datastructures import UploadFile
 
 from app.auth.runtime import get_auth_runtime, public_base_for
 from app.auth.sessions import viewer_for_issuer
+from app.body_guard import MULTIPART_OVERHEAD, body_policy
 from app.config import Settings
 from app.deps import get_session, get_settings, get_store
 from app.domain import ingest_hooks, mcp_settings
@@ -31,8 +32,9 @@ from app.mods.gate import ingest_gate
 
 router = APIRouter(tags=["uploads"])
 
-# multipart の包み(境界やヘッダー)の分の余裕。
-_MULTIPART_OVERHEAD = 1024 * 1024
+# 本文の上限(`RequestBodyGuardMiddleware`)。multipart の包みの分の余裕を足す。URL のトークン
+# 自体が認可なので、ログインの前に本文を読んでよい。
+_BODY_POLICY = body_policy(max_bytes=MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD, before_login=True)
 
 
 class UploadByUrlResponse(BaseModel):
@@ -60,7 +62,7 @@ async def _read_body(request: Request) -> bytes:
     content_type = request.headers.get("content-type", "")
     length = request.headers.get("content-length")
     if content_type.startswith("multipart/form-data"):
-        if length and length.isdigit() and int(length) >= MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD:
+        if length and length.isdigit() and int(length) >= MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD:
             raise _too_large()
         form = await request.form()
         for value in form.values():
@@ -193,6 +195,7 @@ async def _upload(
     operation_id="upload_by_url",
     openapi_extra=_OPENAPI_BODY,
 )
+@_BODY_POLICY
 async def upload_by_url(
     token: str,
     request: Request,
@@ -212,6 +215,7 @@ async def upload_by_url(
     operation_id="upload_by_url_post",
     openapi_extra=_OPENAPI_BODY,
 )
+@_BODY_POLICY
 async def upload_by_url_post(
     token: str,
     request: Request,

@@ -170,6 +170,8 @@ IdP が落ちた、管理者のアカウントを失ったなどで誰もログ�
 
 `PUBLIC_BASE_URL`(画面でも同じ名前)は「利用者がブラウザで開く URL」で、IdP に登録した redirect URI と一致している必要がある。`run.sh` / `run.bat`(と `python -m app`)は `http://{HOST}:{PORT}/`、既定では `http://127.0.0.1:8000/` をブラウザで開くので、ローカルで試すときはこの形(`localhost` ではなく `127.0.0.1`)に揃える。`localhost` で開きたい場合は、`PUBLIC_BASE_URL` と IdP の redirect URI の両方を `localhost` にする(ブラウザの URL、`PUBLIC_BASE_URL`、redirect URI の3つが一致していればどちらでもよい)。リバースプロキシの後ろに置くなら、プロキシの外側の URL(`https://gakei.example.com`)を書く。`https` のとき、セッション Cookie に `Secure` が付く。
 
+リバースプロキシの後ろに置くときは、プロキシの本文の上限(nginx の `client_max_body_size` など)を、受けたい大きさに合わせる。GAKEI の上限は、JSON が 16MiB、画像の取り込みが 50MB 未満の画像 + 1MiB、系列の ZIP の取り込みが 1GiB + 1MiB で、これを超える本文は GAKEI が 413 で断る。認証を有効にしている間は、ログインしていない要求の本文は読まずに 401 で断る(Mod の判定の受付、1回限りのアップロード URL、`/mcp` を除く)。
+
 ## 確認
 
 - 管理者(管理者のメールに載せた人)でログインすると、設定画面の目次に「管理者設定」(OpenAI、LLM の接続先、自動タイトル・タグ、ComfyUI、MCP、共有リンクの公開、認証)が出る。
@@ -187,6 +189,8 @@ IdP が落ちた、管理者のアカウントを失ったなどで誰もログ�
 `PUBLIC_BASE_URL` はホスト側で開く URL(`GAKEI_BIND` / `GAKEI_PORT` で決まる。例: `http://192.168.1.10:8000`)にする。Google のような外部の IdP ならこれだけでよい。ホストで動かす Keycloak を使う場合は、コンテナの中からも、ブラウザからも、同じ名前で IdP に届く必要がある(`localhost` はコンテナの中では別物になるので、ホストの IP アドレス `http://192.168.1.10:8080/realms/gakei` などにする)。
 
 LAN の別の PC から設定画面を開いて有効にするときは、その間は個人モードで LAN に出ていることになる。作業は短く済ませ、終わるまで信頼できない人が入れる場所に出さない。
+
+個人モードの間は、IP アドレス(例: `http://192.168.1.10:8000`)か `localhost` で開く。ホスト名(例: `http://gakei.lan:8000`)で開くと、そのホスト名が `PUBLIC_BASE_URL` のホストか `ALLOWED_HOSTS` に載っていない限り、421 で断られる(DNS リバインディング対策。[configuration.md](configuration.md))。認証を有効にした後は `Host` を確かめない。どちらのモードでも、別のサイト(`Origin` が GAKEI 自身でないもの)からの更新の要求は 403 で断る。
 
 ## Entra ID
 

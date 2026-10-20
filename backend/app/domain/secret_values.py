@@ -148,6 +148,25 @@ def looks_like_secret_value(value: str) -> bool:
     return False
 
 
+# エラーの文言から伏せるときだけ足す、広めの形。外部の API の 401 の本文は、キーの途中を `*` で
+# 伏せて先頭と末尾を残すことがある(`sk-proj-****abcd`)ので、`*` を含む断片も当てる。
+_MESSAGE_SECRET_RES: tuple[re.Pattern[str], ...] = (
+    *_SECRET_VALUE_RES,
+    re.compile(_BEFORE + r"(?:sk|hf|r8|gh[pousr]|github_pat|xox[abprs])[-_][A-Za-z0-9_\-*.]{4,}"),
+)
+
+
+def redact_secret_text(text: str) -> str:
+    """文章(外部の API のエラーの文言など)に含まれる、キーの形の文字列を `***` に置き換える。
+
+    画面・API の応答に、API キーを一部(末尾の数文字)でも出さないために使う。値の判定
+    (`looks_like_secret_value`)と違い、数字を含まない断片も伏せる(取りこぼすより伏せすぎる側に)。
+    """
+    for pattern in _MESSAGE_SECRET_RES:
+        text = pattern.sub(REDACTED, text)
+    return text
+
+
 def is_secret_input(name: Any, value: Any) -> bool:
     """1つの入力(名前と値)が秘密に見えるか。値が文字列でないもの・空のものは当てない。"""
     if not isinstance(value, str) or not value.strip():

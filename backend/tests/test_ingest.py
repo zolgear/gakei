@@ -11,9 +11,11 @@ from PIL import Image
 from sqlalchemy.orm import sessionmaker
 
 from app.domain.assets import IngestError, ingest
+from app.domain.image_limits import MAX_IMAGE_PIXELS
 from app.domain.models import Asset, AssetKind
 from app.domain.storage import LocalFsStore
 from tests.conftest import make_png_bytes
+from tests.png_bombs import large_bilevel_png
 
 pytestmark = pytest.mark.windows
 
@@ -50,6 +52,51 @@ def test_ingest_rejects_decompression_bomb(
     """Pillow の上限を超える寸法は、想定外の例外ではなく IngestError にする(Issue #82)。"""
     with db_session_factory() as session, pytest.raises(IngestError):
         ingest(session, local_store, png_with_declared_size(60_000, 60_000), AssetKind.UPLOAD)
+
+
+def test_ingest_rejects_image_over_pixel_limit_before_decoding(
+    db_session_factory: sessionmaker, local_store: LocalFsStore
+) -> None:
+    """Pillow の既定の上限より小さくても、取り込みの上限(64M 画素)を超える寸法は断る。"""
+    side = 8193  # 8193 x 8193 = 67,125,249 > 67,108,864
+    assert side * side > MAX_IMAGE_PIXELS
+    data = large_bilevel_png(side, side)
+    assert len(data) < 300 * 1024
+    with db_session_factory() as session, pytest.raises(IngestError):
+        ingest(session, local_store, data, AssetKind.UPLOAD)
+
+
+def test_ingest_pixel_limit_boundary(
+    db_session_factory: sessionmaker, local_store: LocalFsStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """上限ちょうどの寸法は通し、1 画素でも超えたら断る。"""
+    from app.domain import assets, image_limits
+
+    data = make_png_bytes(64, 32, (1, 2, 3))
+    monkeypatch.setattr(
+        assets, "exceeds_pixel_limit", lambda img: image_limits.exceeds_pixel_limit(img, 64 * 32)
+    )
+    with db_session_factory() as session:
+        asset = ingest(session, local_store, data, AssetKind.UPLOAD)
+        assert (asset.width, asset.height) == (64, 32)
+    monkeypatch.setattr(
+        assets,
+        "exceeds_pixel_limit",
+        lambda img: image_limits.exceeds_pixel_limit(img, 64 * 32 - 1),
+    )
+    with db_session_factory() as session, pytest.raises(IngestError):
+        ingest(session, local_store, data, AssetKind.UPLOAD)
+
+
+def test_upload_api_rejects_image_over_pixel_limit(client) -> None:
+    data = large_bilevel_png(8193, 8193)
+    response = client.post(
+        "/api/assets",
+        files={"file": ("big.png", data, "image/png")},
+        data={"kind": "upload"},
+    )
+    assert response.status_code == 422, response.text
+    assert "67,108,864" in response.json()["detail"]
 
 
 def test_ingest_rejects_non_image_bytes(

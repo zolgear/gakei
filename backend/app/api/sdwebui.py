@@ -29,6 +29,7 @@ from starlette.formparsers import MultiPartException, MultiPartParser
 
 from app.auth.deps import require_admin, require_user
 from app.auth.identity import CurrentUser
+from app.body_guard import MULTIPART_OVERHEAD, body_policy
 from app.config import Settings
 from app.deps import (
     get_registry,
@@ -434,9 +435,8 @@ def list_loras(registry: ProviderRegistry = Depends(get_registry)) -> SdWebuiLor
 
 # -- 画像の生成情報をフォームに読み込む(ADR-0038 9章) ---------------------------------------
 
-# multipart の境界やヘッダーの分の余裕(`app/api/uploads.py` と同じ)
-_MULTIPART_OVERHEAD = 1024 * 1024
-_BODY_LIMIT = MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD
+# multipart の境界やヘッダーの分の余裕を足した本文の上限(`app/api/uploads.py` と同じ)
+_BODY_LIMIT = MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD
 
 
 class _InMemoryMultiPartParser(MultiPartParser):
@@ -594,6 +594,7 @@ _IMPORT_OPENAPI: dict[str, Any] = {
         422: {"description": "A1111 形式の生成情報が無い、または本文が不正"},
     },
 )
+@body_policy(max_bytes=_BODY_LIMIT)
 async def import_params(
     request: Request,
     db: Session = Depends(get_session),

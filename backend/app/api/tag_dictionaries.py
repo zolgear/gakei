@@ -25,6 +25,7 @@ from starlette.formparsers import MultiPartException, MultiPartParser
 
 from app.auth.deps import require_admin
 from app.auth.identity import CurrentUser
+from app.body_guard import body_policy
 from app.deps import get_session, get_session_factory
 from app.domain import tag_dictionaries as dictionaries
 from app.domain.models import TagDictionary
@@ -196,6 +197,7 @@ def _create_rows(
         422: {"description": "ファイルが無い、種類を判定できない、文字コードや zip が不正"},
     },
 )
+@body_policy(max_bytes=_BODY_LIMIT)
 async def upload_tag_dictionary(
     request: Request,
     session_factory: sessionmaker[Session] = Depends(get_session_factory),

@@ -40,6 +40,7 @@ from app.auth.sessions import (
     revoke,
     upsert_user,
 )
+from app.body_guard import body_policy
 from app.config import Settings
 from app.deps import get_session, get_settings
 from app.domain import auth_settings
@@ -312,6 +313,7 @@ def _test_result_page(*, ok: bool, error: TestLoginError | None) -> HTMLResponse
 
 
 @router.post("/logout", response_model=AuthLogoutResponse, operation_id="logout")
+@body_policy(before_login=True)
 async def logout(
     response: Response,
     runtime: AuthRuntime = Depends(get_auth_runtime),

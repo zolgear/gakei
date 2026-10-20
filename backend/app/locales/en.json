@@ -19,6 +19,11 @@
     "storageConditionalWriteIgnored": "The image storage ignored the condition of a conditional write (If-None-Match: *). Originals with the same name could be overwritten, but this is unlikely in practice because names include the first 8 characters of the asset ID.",
     "nulInRequest": "The request contains a NUL character (\\u0000) and cannot be accepted (at: {location}). Remove the NUL character and try again."
   },
+  "httpGuard": {
+    "hostNotAllowed": "GAKEI cannot be opened by this host name. In personal mode (no authentication), open it by IP address or localhost. To use a host name, add it to ALLOWED_HOSTS.",
+    "originNotAllowed": "Update requests from another site (Origin) are not accepted.",
+    "bodyTooLarge": "The request body is too large."
+  },
   "auth": {
     "required": "Login required.",
     "adminRequired": "This action requires administrator privileges.",
@@ -544,6 +549,7 @@
     "uploadTooLarge": "Uploaded images must be under 50MB",
     "maskTooLarge": "Masks must be under 4MB",
     "cannotReadImage": "Could not read this as an image",
+    "tooManyPixels": "The image is too large (up to {max} pixels)",
     "unsupportedFormat": "Unsupported image format: {format}",
     "maskMustBePng": "Masks must be in PNG format",
     "sketchMustBePng": "Sketches must be in PNG format",
@@ -630,6 +636,7 @@
     "avatar": {
       "tooLarge": "Avatar images must be 20MB or smaller",
       "cannotReadImage": "Could not read this as an image",
+      "tooManyPixels": "The image is too large (up to {max} pixels)",
       "assetNotFound": "The source image was not found",
       "notFound": "Avatar not found",
       "invalidCrop": "The crop rectangle is malformed",
@@ -1114,5 +1121,9 @@
     "verdictTooLarge": "The request body is too large",
     "verdictInvalid": "The verdicts are not in a valid form: {error}",
     "verdictTargetNotAllowed": "Verdicts are accepted only for items delivered to this Mod: {target}"
+  },
+  "llm": {
+    "authFailed": "Authentication with the LLM connection failed. Check the connection's API key.",
+    "permissionDenied": "The LLM connection does not allow this request. Check the connection's API key and model."
   }
 }

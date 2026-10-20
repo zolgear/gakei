@@ -30,6 +30,7 @@ from app.domain.embedded_meta import (
     strip_gakei_chunk,
 )
 from app.domain.generation_meta import extract_generation_meta
+from app.domain.image_limits import MAX_IMAGE_PIXELS, exceeds_pixel_limit
 from app.domain.models import Asset, AssetKind, Run, RunInput
 from app.domain.schemas import CompositionRecipe
 from app.domain.storage import AssetStore, OriginalKeyInfo, original_key_base
@@ -98,11 +99,21 @@ def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
     if kind in (AssetKind.SKETCH, AssetKind.COMPOSITE) and len(data) >= MAX_UPLOAD_BYTES:
         raise IngestError(t("assets.uploadTooLarge"))
 
+    # ValueError: Pillow がテキストチャンクの展開の上限(`PngImagePlugin.MAX_TEXT_CHUNK`)を
+    # 超えたときなど。想定外の 500 にせず、読めない画像として断る。
     try:
         image = Image.open(io.BytesIO(data))
-        image.load()  # ヘッダーだけでなく実際にデコードして検証する
-    except (PillowUnidentifiedImageError, OSError, Image.DecompressionBombError) as e:
+    except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
         # 寸法が Pillow の上限(`Image.MAX_IMAGE_PIXELS` の2倍)を超える画像は開く時点で断られる。
+        raise IngestError(t("assets.cannotReadImage")) from e
+    # 展開する前に、ヘッダーの寸法で断る(展開の爆弾を避ける。上限と理由は image_limits)。
+    # 派生・焦点は取り込み済みの原本しか開かないので、ここでの確認で足りる。
+    if exceeds_pixel_limit(image):
+        image.close()
+        raise IngestError(t("assets.tooManyPixels", max=f"{MAX_IMAGE_PIXELS:,}"))
+    try:
+        image.load()  # ヘッダーだけでなく実際にデコードして検証する
+    except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
         raise IngestError(t("assets.cannotReadImage")) from e
 
     fmt = image.format
@@ -217,11 +228,17 @@ def ingest(
         return asset
 
     blob_key = _find_shared_blob_key(session, store, sha256)
+    shared = blob_key is not None
     if blob_key is None:
         blob_key = store.write_original(prepared.data, prepared.ext, key_info)
 
     # 今の版の派生を作る(ADR-0036 2章。作り方は `derivatives.ensure_derived` の作り直しと同じ)。
+    # 同じ内容の原本を共有するときは、今の版の派生が既にあれば書き直さない。派生のキーは
+    # sha256 と版だけで決まるので中身は同じで、書き直すと Windows では開かれている派生の
+    # 置き換えに失敗しうる。
     for variant in derivatives.DERIVED_VARIANTS:
+        if shared and store.content_exists(blob_key, sha256, variant):
+            continue
         store.write_derived(sha256, variant, derivatives.make_derived(image, variant))
 
     asset = _new_asset(
@@ -526,6 +543,9 @@ def ingest_upload(
             compositions.save_composition(session, asset, recipe)
         return IngestResult(asset, "created")
 
+    # 埋め込まれたメタ情報は、画像として正しいことを確かめてから読む(壊れた・巨大な画像の
+    # チャンクを先に解かない)。確かめた結果はそのまま `ingest` に渡し、二度は展開しない。
+    prepared = prepare_image(data, kind)
     meta = read_gakei_meta(data)
     origin_meta: dict | None = None
     origin_asset_id: uuid.UUID | None = None
@@ -574,6 +594,7 @@ def ingest_upload(
         source_asset_id=source_asset_id,
         created_by_user_id=created_by_user_id,
         gate=gate,
+        prepared=prepared,
     )
     embedded_meta = extract_generation_meta(data)
     if embedded_meta is not None:

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
+from app.body_guard import MULTIPART_OVERHEAD, body_policy
 from app.config import Settings
 from app.deps import (
     get_annotator,
@@ -156,6 +157,7 @@ def export_lineage(
     status_code=201,
     operation_id="import_lineage",
 )
+@body_policy(max_bytes=import_domain.MAX_ZIP_BYTES + MULTIPART_OVERHEAD)
 def import_lineage(
     file: UploadFile = File(...),
     db: Session = Depends(get_session),

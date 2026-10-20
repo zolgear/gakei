@@ -38,7 +38,11 @@ def _utcnow() -> datetime:
 
 
 def detect_from_bytes(data: bytes) -> detect.FocalPoint | None:
-    """画像のバイト列から焦点を求める。画像として読めなければ None。"""
+    """画像のバイト列から焦点を求める。画像として読めなければ None。
+
+    渡すのは取り込み済みの原本だけ(取り込み時に画素数の上限 `image_limits.MAX_IMAGE_PIXELS`
+    を確かめてある)なので、ここでは寸法を確かめない。
+    """
     try:
         with Image.open(io.BytesIO(data)) as image:
             image.load()

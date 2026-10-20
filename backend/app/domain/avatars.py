@@ -6,8 +6,8 @@
 範囲の指定が無ければ中央の正方形(拡大・回転は作らない。ADR-0001の非ゴール「高機能な画像編集」)。
 
 画像の検証は既存のアップロード(`domain/assets.py`)と同じ方針: Pillow でデコードできること、
-拡張子ではなく中身で判定する。`Image.MAX_IMAGE_PIXELS` の既定の上限を超える巨大画像は
-`PIL.Image.DecompressionBombError` になるので、そのまま `AvatarError` として扱う。
+拡張子ではなく中身で判定する。寸法が取り込みと同じ上限(`image_limits.MAX_IMAGE_PIXELS`)を
+超える画像は、展開する前に `AvatarError` にする。
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from PIL import Image, ImageOps
 from PIL import UnidentifiedImageError as PillowUnidentifiedImageError
 
 from app.domain import derivatives
+from app.domain.image_limits import MAX_IMAGE_PIXELS, exceeds_pixel_limit
 from app.domain.schemas import CropRect
 from app.i18n import t
 
@@ -76,8 +77,15 @@ def make_avatar_webp(data: bytes, crop: CropRect | None = None) -> bytes:
     """
     try:
         image = Image.open(io.BytesIO(data))
+    except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
+        raise AvatarError(t("users.avatar.cannotReadImage")) from e
+    # 展開する前に、取り込みと同じ上限で寸法を確かめる(展開の爆弾を避ける)。
+    if exceeds_pixel_limit(image):
+        image.close()
+        raise AvatarError(t("users.avatar.tooManyPixels", max=f"{MAX_IMAGE_PIXELS:,}"))
+    try:
         image.load()  # ヘッダーだけでなく実際にデコードして検証する(domain/assets.py と同じ)
-    except (PillowUnidentifiedImageError, OSError, Image.DecompressionBombError) as e:
+    except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
         raise AvatarError(t("users.avatar.cannotReadImage")) from e
 
     image = ImageOps.exif_transpose(image) or image

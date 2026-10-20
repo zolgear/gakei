@@ -19,6 +19,11 @@
     "storageConditionalWriteIgnored": "画像の保存先が条件付きの書き込み(If-None-Match: *)の条件を無視しました。同じ名前の原本は上書きされえますが、名前に Asset の id の先頭 8 文字が入るので、実際に同名になることはまずありません。",
     "nulInRequest": "入力に NUL 文字(\\u0000)が含まれているため受け付けられません(場所: {location})。NUL 文字を取り除いてから送ってください。"
   },
+  "httpGuard": {
+    "hostNotAllowed": "このホスト名では開けません。個人モード(認証なし)では、IP アドレスか localhost で開いてください。ホスト名で開くときは、ALLOWED_HOSTS にホスト名を加えてください。",
+    "originNotAllowed": "別のサイト(Origin)からの更新の要求は受け付けません。",
+    "bodyTooLarge": "リクエストの本文が大きすぎます。"
+  },
   "auth": {
     "required": "ログインが必要です。",
     "adminRequired": "この操作には管理者権限が必要です。",
@@ -544,6 +549,7 @@
     "uploadTooLarge": "アップロード画像は50MB未満である必要があります",
     "maskTooLarge": "マスクは4MB未満である必要があります",
     "cannotReadImage": "画像として読み込めませんでした",
+    "tooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
     "unsupportedFormat": "対応していない画像形式です: {format}",
     "maskMustBePng": "マスクはPNG形式である必要があります",
     "sketchMustBePng": "スケッチはPNG形式である必要があります",
@@ -630,6 +636,7 @@
     "avatar": {
       "tooLarge": "アバター画像は20MB以下である必要があります",
       "cannotReadImage": "画像として読み込めませんでした",
+      "tooManyPixels": "画像が大きすぎます(画素数は {max} までです)",
       "assetNotFound": "元になる画像が見つかりません",
       "notFound": "アバターが見つかりません",
       "invalidCrop": "切り出す範囲の指定が壊れています",
@@ -1114,5 +1121,9 @@
     "verdictTooLarge": "本文が大きすぎます",
     "verdictInvalid": "判定の形が正しくありません: {error}",
     "verdictTargetNotAllowed": "この Mod に届けていない対象への判定は受け付けません: {target}"
+  },
+  "llm": {
+    "authFailed": "LLM の接続先の認証に失敗しました。接続先の API キーを確認してください。",
+    "permissionDenied": "LLM の接続先に、この操作の権限がありません。接続先の API キーとモデルを確認してください。"
   }
 }

@@ -11,6 +11,8 @@
   だけ。対象外が1つでもあれば、何も記録せずに 403。
 - 受けた判定は配達の応答と同じ扱い(`mod_verdict` に追記し、`deny` なら画像を残さない)。
 - 無効にした Webhook と、無い Webhook は 404。
+- 本文は `_BODY_MAX_BYTES` までを読みながら数え、超えた時点で打ち切って 413(`Content-Length`
+  が超えていれば読まずに 413)。全体のミドルウェア(`app/body_guard.py`)にも同じ上限を印で渡す。
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from app.body_guard import body_policy
 from app.domain.schemas import ModVerdictReceiveResponse
 from app.i18n import t
 from app.mods import api as contract
@@ -42,6 +45,25 @@ def _unauthorized() -> HTTPException:
 
 def _not_found() -> HTTPException:
     return HTTPException(status_code=404, detail=t("mods.notFound"))
+
+
+def _too_large() -> HTTPException:
+    return HTTPException(status_code=413, detail=t("mods.verdictTooLarge"))
+
+
+async def _read_body(request: Request) -> bytes:
+    """本文を読む。`_BODY_MAX_BYTES` を超えた時点で読むのをやめて 413 にする。"""
+    length = request.headers.get("content-length")
+    if length and length.isdigit() and int(length) > _BODY_MAX_BYTES:
+        raise _too_large()
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > _BODY_MAX_BYTES:
+            raise _too_large()
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def verify_signature(
@@ -71,11 +93,11 @@ def verify_signature(
         422: {"description": "本文が判定の配列の形でない"},
     },
 )
+# 認証はログインではなく署名なので、ログインの前に本文を読んでよい(ADR-0051 8章)。
+@body_policy(max_bytes=_BODY_MAX_BYTES, before_login=True)
 async def receive_mod_verdicts(mod_id: str, request: Request) -> ModVerdictReceiveResponse:
     runtime: ModRuntime = request.app.state.mods
-    body = await request.body()
-    if len(body) > _BODY_MAX_BYTES:
-        raise HTTPException(status_code=413, detail=t("mods.verdictTooLarge"))
+    body = await _read_body(request)
 
     def _lookup() -> tuple[mods_config.WebhookConfig | None, str | None]:
         with request.app.state.session_factory() as db:

@@ -21,10 +21,11 @@ from typing import Any, Protocol
 
 import openai
 
-from app.assistant.engine import AssistantEngineError, _safe_api_message
+from app.assistant.engine import AssistantEngineError
 from app.domain.llm_connections import LlmTarget
 from app.i18n import t
 from app.llm.clients import LlmClientCache
+from app.llm.errors import safe_api_message
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ class OpenAIStructuredEngine:
                 return await self._chat(client, target, request)
             return await self._responses(client, target, request)
         except openai.APIError as e:
-            raise AssistantEngineError(_safe_api_message(e)) from e
+            raise AssistantEngineError(safe_api_message(e)) from e
 
     async def _responses(
         self, client: Any, target: LlmTarget, request: StructuredRequest

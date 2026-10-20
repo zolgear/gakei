@@ -10,7 +10,13 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app.domain.avatars import MAX_AVATAR_BYTES, CropError, crop_image
+from app.domain.avatars import (
+    MAX_AVATAR_BYTES,
+    AvatarError,
+    CropError,
+    crop_image,
+    make_avatar_webp,
+)
 from app.domain.schemas import CropRect
 from tests.conftest import login_as, make_png_bytes, wait_for_run_terminal
 
@@ -480,3 +486,11 @@ def test_crop_image_starting_outside_image_raises_crop_error() -> None:
     image = Image.new("RGB", (100, 100), (0, 0, 0))
     with pytest.raises(CropError):
         crop_image(image, CropRect(x=100, y=100, width=1, height=1))
+
+
+def test_make_avatar_rejects_image_over_pixel_limit_before_decoding() -> None:
+    """取り込みと同じ画素数の上限(64M 画素)を超える寸法は、展開する前に断る。"""
+    from tests.png_bombs import large_bilevel_png
+
+    with pytest.raises(AvatarError):
+        make_avatar_webp(large_bilevel_png(8193, 8193))

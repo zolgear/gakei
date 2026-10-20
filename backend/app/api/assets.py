@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user, require_user_or_api_token
 from app.auth.identity import CurrentUser
+from app.body_guard import MULTIPART_OVERHEAD, body_policy
 from app.config import Settings
 from app.deps import (
     get_annotator,
@@ -40,7 +41,12 @@ from app.domain import content_rating as content_rating_domain
 from app.domain import embeddings as embeddings_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.asset_groups import group_for_asset
-from app.domain.assets import IngestError, asset_is_used_as_input, is_restorable
+from app.domain.assets import (
+    MAX_UPLOAD_BYTES,
+    IngestError,
+    asset_is_used_as_input,
+    is_restorable,
+)
 from app.domain.assets import ingest_upload as ingest_asset
 from app.domain.avatars import avatar_url
 from app.domain.embedded_meta import build_lineage_meta, embed_gakei_chunk, get_instance_id
@@ -221,6 +227,7 @@ def _to_detail(
 
 
 @router.post("", response_model=AssetUploadResponse, status_code=201, operation_id="create_asset")
+@body_policy(max_bytes=MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD)
 def create_asset(
     file: UploadFile = File(...),
     kind: Literal["upload", "mask", "sketch", "composite"] = Form(...),

@@ -509,3 +509,37 @@ def test_unmodified_import_is_not_duplicated_across_three_instances(
         body = _get_lineage(client_c, z_local)
         nodes_by_id = {n["id"]: n for n in body["nodes"]}
         assert nodes_by_id[y_id]["resolved_asset_id"] == c_local
+
+
+def test_upload_with_gakei_zlib_bomb_is_rejected(client: TestClient) -> None:
+    """圧縮された gakei iTXt が上限を超えて展開されるものは、500 ではなく 422 で断る
+    (Pillow もテキストチャンクの展開の上限で読まない。系列のメタ情報はその前に読まない)。"""
+    from tests.png_bombs import png_with_gakei_zlib_bomb
+
+    data = png_with_gakei_zlib_bomb(64 * 1024 * 1024)
+    response = client.post(
+        "/api/assets",
+        files={"file": ("bomb.png", data, "image/png")},
+        data={"kind": "upload"},
+    )
+    assert response.status_code == 422, response.text
+    assert client.get("/api/assets").json()["items"] == []
+
+
+def test_upload_with_gakei_meta_over_read_limit_ignores_meta(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pillow が読める大きさでも、系列のメタ情報の読み取りの上限を超えるものは読まずに取り込む。"""
+    import json
+    import zlib
+
+    from app.domain import embedded_meta
+    from tests.png_bombs import with_itxt
+
+    meta = {"schema": "gakei.lineage/2", "instance": str(uuid.uuid4()), "nodes": [], "edges": []}
+    text = json.dumps(meta).encode("utf-8")
+    monkeypatch.setattr(embedded_meta, "MAX_LINEAGE_READ_BYTES", len(text) - 1)
+    itxt = b"gakei\x00" + bytes([1, 0]) + b"\x00" + b"\x00" + zlib.compress(text)
+    result = _upload(client, kind="upload", data=with_itxt(make_png_bytes(), itxt))
+    assert result["ingest_outcome"] == "created"
+    assert result["origin"] is None

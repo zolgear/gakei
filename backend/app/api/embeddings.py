@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
+from app.body_guard import MULTIPART_OVERHEAD, body_policy
 from app.config import Settings
 from app.deps import (
     get_embedder,
@@ -141,6 +142,7 @@ def semantic_search_endpoint(
         503: {"description": "画像の埋め込みを計算できない(メモリ不足、推論サーバーに届かない)"},
     },
 )
+@body_policy(max_bytes=MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD)
 def search_by_image_endpoint(
     file: UploadFile = File(..., description="探す元の画像(PNG / JPEG / WebP)。保存しない"),
     limit: int = Query(default=domain.SEARCH_DEFAULT_LIMIT, ge=1, le=domain.SEARCH_MAX_LIMIT),

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.auth.runtime import AuthRuntime, get_auth_runtime
+from app.body_guard import MULTIPART_OVERHEAD, body_policy
 from app.config import Settings
 from app.deps import get_session, get_settings, get_store
 from app.domain import user_preferences
@@ -99,6 +100,7 @@ def _apply_new_avatar(
 
 
 @router.post("/me/avatar", response_model=AuthUser, operation_id="upload_avatar")
+@body_policy(max_bytes=MAX_AVATAR_BYTES + MULTIPART_OVERHEAD)
 def upload_avatar(
     file: UploadFile = File(...),
     crop: str | None = Form(None),
