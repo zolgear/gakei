@@ -974,11 +974,15 @@ export function getOpenAiBaseUrlStatus(): Promise<OpenAIBaseUrlStatus> {
 }
 
 /** 有効なキーがあれば OpenAI 互換 API への確認を行うため、最大15秒程度かかることがある。 */
-export function setOpenAiBaseUrl(baseUrl: string): Promise<OpenAIBaseUrlStatus> {
+/**
+ * 接続先(Base URL)を確かめてから保存する。`apiKey` を渡すと、そのキーで確かめて両方を保存する。画面で保存した
+ * キーがあり、オリジンが変わるときは必須(省くと 422)。
+ */
+export function setOpenAiBaseUrl(baseUrl: string, apiKey?: string): Promise<OpenAIBaseUrlStatus> {
   return request('/api/settings/openai-base-url', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base_url: baseUrl }),
+    body: JSON.stringify(apiKey ? { base_url: baseUrl, api_key: apiKey } : { base_url: baseUrl }),
   })
 }
 
@@ -1203,12 +1207,20 @@ export function testSdWebuiConnection(params: {
   })
 }
 
-/** 接続・URL の変更。ループバック以外は `allowNonLoopback` が要る(422)。SD WebUI の Run が待機中・実行中なら 409。 */
-export function setSdWebuiConnection(url: string, allowNonLoopback = false): Promise<SdWebuiStatus> {
+/**
+ * 接続・URL の変更。ループバック以外は `allowNonLoopback` が要る(422)。SD WebUI の Run が待機中・実行中なら 409。
+ * `credentials` を渡すと、接続先と一緒に保存する(この URL のオリジンに結び付ける)。保存済みの資格情報があり、
+ * オリジンが変わるときは必須(省くと 422)。
+ */
+export function setSdWebuiConnection(
+  url: string,
+  allowNonLoopback = false,
+  credentials?: { username: string; password: string },
+): Promise<SdWebuiStatus> {
   return request('/api/sdwebui/connection', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, allow_non_loopback: allowNonLoopback }),
+    body: JSON.stringify({ url, allow_non_loopback: allowNonLoopback, ...(credentials ?? {}) }),
   })
 }
 

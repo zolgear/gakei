@@ -40,6 +40,7 @@ from app.domain.schemas import (
     AuthTextSetting,
     AuthVerifiedView,
 )
+from app.domain.url_origin import same_origin
 from app.i18n import t
 from app.providers.registry import is_loopback_url
 
@@ -73,16 +74,23 @@ async def _fetch_discovery_live(issuer: str) -> dict:
             timeout=_DISCOVERY_TIMEOUT_SECONDS, follow_redirects=False
         ) as client:
             response = await client.get(url, headers={"Accept": "application/json"})
+    # 理由は固定の区分(届かない / 応答が想定外)だけを返す。発行者の URL は管理者が入れた任意の
+    # URL なので、例外の種類や状態コードを返すと、サーバーの側のネットワークのようすが分かって
+    # しまうため。詳細はサーバーのログに出す。
     except httpx.HTTPError as exc:
-        raise DiscoveryError("failed", type(exc).__name__) from exc
+        logger.warning("Discovery 文書(%s)を取得できませんでした: %r", url, exc)
+        raise DiscoveryError("failed", t("settings.auth.discoveryReason.unreachable")) from exc
     if response.status_code != 200:
-        raise DiscoveryError("failed", f"HTTP {response.status_code}")
+        logger.warning("Discovery 文書(%s)の応答が HTTP %s でした", url, response.status_code)
+        raise DiscoveryError("failed", t("settings.auth.discoveryReason.unexpected"))
     try:
         document = response.json()
     except ValueError as exc:
-        raise DiscoveryError("invalid", "not JSON") from exc
+        logger.warning("Discovery 文書(%s)が JSON ではありませんでした", url)
+        raise DiscoveryError("invalid", t("settings.auth.discoveryReason.unexpected")) from exc
     if not isinstance(document, dict):
-        raise DiscoveryError("invalid", "not a JSON object")
+        logger.warning("Discovery 文書(%s)が JSON のオブジェクトではありませんでした", url)
+        raise DiscoveryError("invalid", t("settings.auth.discoveryReason.unexpected"))
     return document
 
 
@@ -248,8 +256,18 @@ async def set_auth_connection(
         pending = auth_settings.get_pending(db)
         if pending is not None:
             secret = pending.to_connection(settings.data_dir).client_secret
+            secret_issuer: str | None = pending.issuer
         else:
             secret = runtime.config.client_secret
+            secret_issuer = runtime.config.issuer.value
+        if secret and not same_origin(issuer, secret_issuer):
+            # 保存済みのシークレットを、保存したときと別のオリジンの IdP へ送らない(入れ直させる)。
+            raise _error(
+                422,
+                "client_secret_reentry",
+                t("settings.auth.clientSecretReentry"),
+                "client_secret",
+            )
     elif body.client_secret == "":
         secret = None
     else:

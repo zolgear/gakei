@@ -62,7 +62,7 @@ def _mark_status_check_available(
     """
     monkeypatch.setattr(
         "app.api.comfyui.check_available",
-        lambda base_url, timeout=1.0: (
+        lambda base_url, timeout=1.0, **_kw: (
             available,
             None if available else "使用できません",
             {"system": {"comfyui_version": "1.0.0-test"}, "devices": []},

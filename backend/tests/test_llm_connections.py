@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from app.domain import api_key as api_key_domain
 from app.domain import llm_connections
 from app.domain.general_settings import _get_raw_value
+from app.i18n import t
 from tests.conftest import login_as
 
 BASE = "/api/settings/llm-connections"
@@ -102,9 +103,14 @@ def test_create_update_delete_connection(client: TestClient, data_dir: Path) -> 
             "name": "LiteLLM",
             "base_url": "https://llm.example.com/v1/",
             "api_style": "responses",
+            # オリジンが変わるので、キーを入れ直す
+            "api_key": "sk-remote-abcd",
         },
     )
     assert response.status_code == 200, response.text
+    secrets = json.loads((data_dir / "secrets.json").read_text())
+    assert secrets[f"annotation_connection_key.{connection_id}"] == "sk-remote-abcd"
+    assert "abcd" not in response.text
     view = _connection(response.json(), connection_id)
     assert (view["name"], view["base_url"], view["api_style"]) == (
         "LiteLLM",
@@ -122,6 +128,49 @@ def test_create_update_delete_connection(client: TestClient, data_dir: Path) -> 
         not in json.loads((data_dir / "secrets.json").read_text())
     )
     assert client.delete(f"{BASE}/{connection_id}").status_code == 404
+
+
+def test_base_url_origin_change_requires_key_reentry(client: TestClient, data_dir: Path) -> None:
+    """保存済みのキーを、保存したときと別のオリジンへ送らない(入れ直させる)。"""
+    connection_id = add_llm_connection(client, api_key="sk-local-wxyz")
+    secret_field = f"annotation_connection_key.{connection_id}"
+
+    # 別のオリジン(ホスト・ポート・スキームのどれかが違う)で、キーを入れ直さなければ 422
+    for url in (
+        "https://llm.example.com/v1",
+        "http://127.0.0.1:11435/v1",
+        "https://127.0.0.1:11434/v1",
+    ):
+        response = client.patch(f"{BASE}/{connection_id}", json={"base_url": url})
+        assert response.status_code == 422, url
+        assert response.json()["detail"] == t("settings.llmConnections.reenterKey")
+    # 断ったときは何も変えない
+    view = _connection(client.get(BASE).json(), connection_id)
+    assert view["base_url"] == LOCAL_URL
+    secrets = json.loads((data_dir / "secrets.json").read_text())
+    assert secrets[secret_field] == "sk-local-wxyz"
+
+    # 同じオリジンでパスだけ変えるなら、キーはそのまま
+    response = client.patch(
+        f"{BASE}/{connection_id}", json={"base_url": "http://127.0.0.1:11434/api/v1"}
+    )
+    assert response.status_code == 200, response.text
+    assert _connection(response.json(), connection_id)["api_key_set"] is True
+    secrets = json.loads((data_dir / "secrets.json").read_text())
+    assert secrets[secret_field] == "sk-local-wxyz"
+
+    # キーを消せば、キーなしでオリジンを変えられる
+    assert client.delete(f"{BASE}/{connection_id}/api-key").status_code == 200
+    response = client.patch(
+        f"{BASE}/{connection_id}", json={"base_url": "https://llm.example.com/v1"}
+    )
+    assert response.status_code == 200, response.text
+    assert _connection(response.json(), connection_id)["api_key_set"] is False
+
+
+def test_builtin_connection_rejects_api_key_in_update(client: TestClient) -> None:
+    response = client.patch(f"{BASE}/openai", json={"api_key": "sk-x"})
+    assert response.status_code == 409
 
 
 def test_connection_key_set_and_delete(client: TestClient) -> None:

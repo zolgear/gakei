@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 import openai
@@ -39,6 +40,7 @@ from app.domain import (
     assistant_settings,
     embedding_settings,
     general_settings,
+    llm_connections,
     mcp_settings,
     share_settings,
 )
@@ -83,12 +85,15 @@ from app.domain.schemas import (
     ShareSettingsResponse,
     ShareSettingsUpdateRequest,
 )
+from app.domain.url_origin import same_origin
 from app.embedding.catalog import CLIP_MODELS, ClipModelDownloader, onnx_model_key
 from app.embedding.catalog import is_downloaded as clip_is_downloaded
 from app.i18n import t
 from app.providers.base import ImageProvider
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -120,16 +125,23 @@ async def _validate_key_live(api_key: str, base_url: str | None) -> None:
         # 画像の権限があるかは、課金なしでは確かめられないので実行時に分かる。
         return
     except openai.APIError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=t("openai.keyVerifyFailed", detail=_safe_message(e)),
-        ) from e
+        # 応答には固定の区分(届かない / 応答が想定外)だけを返す。確かめる先は管理者が入れた
+        # 任意の URL なので、例外の文言や相手の応答の中身を返すと、サーバーの側のネットワークの
+        # ようすが分かってしまうため。詳細はサーバーのログに出す(キーは含めない)。
+        logger.warning(
+            "OpenAI の接続先(%s)でキーを確かめられませんでした: %s",
+            base_url or "OpenAI",
+            _log_detail(e),
+        )
+        if isinstance(e, openai.APIConnectionError):
+            raise HTTPException(status_code=502, detail=t("openai.keyVerifyUnreachable")) from e
+        raise HTTPException(status_code=502, detail=t("openai.keyVerifyUnexpected")) from e
 
 
-def _safe_message(e: openai.APIError) -> str:
+def _log_detail(e: openai.APIError) -> str:
     label = e.code or e.type or e.__class__.__name__
-    detail = getattr(e, "message", None) or str(e)
-    return f"{label}: {detail}"
+    status = getattr(e, "status_code", None)
+    return f"{label} (status={status})" if status is not None else str(label)
 
 
 def get_key_validator() -> KeyValidator:
@@ -253,14 +265,32 @@ async def set_openai_base_url(
 
     api_key_domain.warn_if_insecure_base_url(normalized)
 
-    # 有効なキーがあれば、その URL に対してキーの確認を行う。キーが無ければ形式の確認だけで
-    # 保存する(ADR-0017 2章)。
-    api_key, _key_source = api_key_domain.resolve_key(settings)
-    if api_key:
-        await validate_key(api_key, normalized)
+    api_key, key_source = api_key_domain.resolve_key(settings)
+    new_key = (body.api_key or "").strip() or None
+    if new_key is not None and key_source == "env":
+        raise HTTPException(status_code=409, detail=t("openai.envKeyLocked"))
+    if api_key and new_key is None and not same_origin(normalized, _current_base_url(settings)):
+        # 保存済みのキーを、保存したときと別のオリジンへ送らない(確かめの1回も含めて)。
+        if key_source == "env":
+            raise HTTPException(status_code=422, detail=t("openai.baseUrl.originChangeEnvKey"))
+        raise HTTPException(status_code=422, detail=t("openai.baseUrl.reenterKey"))
 
+    # 有効なキー(入れ直したならそのキー)があれば、その URL に対してキーの確認を行う。キーが
+    # 無ければ形式の確認だけで保存する(ADR-0017 2章)。
+    key_to_check = new_key or api_key
+    if key_to_check:
+        await validate_key(key_to_check, normalized)
+
+    if new_key is not None:
+        api_key_domain.write_file_key(settings.data_dir, new_key)
     api_key_domain.write_file_base_url(settings.data_dir, normalized)
     return _base_url_status_response(settings)
+
+
+def _current_base_url(settings: Settings) -> str:
+    """今キーを送っている先(Base URL が未設定なら OpenAI 本体)。"""
+    base_url, _source = api_key_domain.resolve_base_url(settings)
+    return base_url or llm_connections.OPENAI_DEFAULT_BASE_URL
 
 
 @router.delete(
@@ -273,6 +303,12 @@ def delete_openai_base_url(
     _user: CurrentUser = Depends(require_admin),
 ) -> OpenAIBaseUrlStatusResponse:
     _reject_if_base_url_env_locked(settings)
+    _api_key, key_source = api_key_domain.resolve_key(settings)
+    fallback = settings.openai_base_url or llm_connections.OPENAI_DEFAULT_BASE_URL
+    if key_source == "file" and not same_origin(fallback, _current_base_url(settings)):
+        # 画面で保存したキーを、別のオリジン(既定の接続先)へ送らない。環境変数のキーは、既定の
+        # 接続先へ送るものなので戻してよい。
+        raise HTTPException(status_code=422, detail=t("openai.baseUrl.clearNeedsKeyRemoval"))
     api_key_domain.delete_file_base_url(settings.data_dir)
     return _base_url_status_response(settings)
 

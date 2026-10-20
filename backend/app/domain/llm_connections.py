@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from app.domain import api_key as api_key_domain
 from app.domain import locality as locality_domain
 from app.domain.general_settings import GeneralSettingsValidationError, _get_raw_value, _save
+from app.domain.url_origin import same_origin
 from app.i18n import t
 
 if TYPE_CHECKING:
@@ -255,10 +256,20 @@ def add_connection(
     return connection.id
 
 
-def update_connection(db: Session, connection_id: str, updates: dict[str, Any]) -> None:
+def update_connection(
+    db: Session,
+    connection_id: str,
+    updates: dict[str, Any],
+    data_dir: Path | None = None,
+) -> None:
     """接続先の名前・Base URL・API 形式・`locality` を変える(書いた項目だけ)。組み込みの接続先は
     API 形式と `locality` だけ変えられる。組み込みの `locality` は OpenAI の接続の値そのもの
-    (ADR-0051 3章)。None は既定に戻す。"""
+    (ADR-0051 3章)。None は既定に戻す。
+
+    `api_key` は Base URL と一緒に入れ直すキー(`data_dir` が要る)。保存済みのキーは、保存した
+    ときの Base URL と同じオリジン(scheme + host + port)にだけ送る。キーがあって Base URL の
+    オリジンが変わるときは `api_key` が必須で、無ければ LlmConnectionValidationError。同じ
+    オリジンでパスだけ変えるならキーはそのまま使う。"""
     if connection_id == BUILTIN_CONNECTION_ID:
         if set(updates) - {"api_style", "locality"}:
             raise ConnectionReservedError
@@ -269,6 +280,9 @@ def update_connection(db: Session, connection_id: str, updates: dict[str, Any]) 
         if "locality" in updates:
             locality_domain.save_provider_localities(db, {"openai": updates["locality"]})
         return
+    updates = dict(updates)
+    raw_key = updates.pop("api_key", None)
+    new_key = raw_key.strip() if isinstance(raw_key, str) else None
     connections = load_user_connections(db)
     current = find_connection(connections, connection_id)
     if current is None:
@@ -288,7 +302,17 @@ def update_connection(db: Session, connection_id: str, updates: dict[str, Any]) 
         )
     if changed.base_url and changed.base_url != current.base_url:
         api_key_domain.warn_if_insecure_base_url(changed.base_url)
+    if (
+        not new_key
+        and data_dir is not None
+        and not same_origin(changed.base_url, current.base_url)
+        and read_connection_key(data_dir, connection_id) is not None
+    ):
+        # 保存済みのキーを、保存したときと別のオリジンへ送らない(入れ直させる)。
+        raise LlmConnectionValidationError(t("settings.llmConnections.reenterKey"))
     _save_connections(db, tuple(changed if c.id == connection_id else c for c in connections))
+    if new_key and data_dir is not None:
+        write_connection_key(data_dir, connection_id, new_key)
 
 
 def delete_connection(db: Session, data_dir: Path, connection_id: str) -> None:

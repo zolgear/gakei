@@ -476,7 +476,10 @@
         "change": "Change base URL",
         "dialogTitle": "Change base URL",
         "verifyHelp": "Before registering, GAKEI connects to this URL to check that it works (this can take about 15 seconds). To go back to OpenAI itself, use \"Reset to default\".",
-        "verifyAndRegister": "Verify and register"
+        "verifyAndRegister": "Verify and register",
+        "keyRequiredLabel": "API key (enter again)",
+        "keyRequiredHelp": "The connection's origin (scheme, host and port) changes, so the saved API key is not sent. Enter the API key to use with the new connection. It is verified with this key and registered together with the connection.",
+        "envKeyOriginLocked": "The API key comes from the OPENAI_API_KEY environment variable (.env), so a connection with a different origin (scheme, host and port) cannot be registered from the screen. Set OPENAI_BASE_URL in .env instead."
       },
       "sourceLabel": "Source",
       "register": "Register key",
@@ -561,7 +564,9 @@
         "assistant": "Assistant",
         "region_detection": "Region detection"
       },
-      "deleteDisabledInUse": "Cannot be deleted while a feature uses it."
+      "deleteDisabledInUse": "Cannot be deleted while a feature uses it.",
+      "apiKeyRequiredLabel": "Key (enter again)",
+      "apiKeyRequiredHelp": "The Base URL's origin (scheme, host and port) changes, so the saved key is not sent. Enter the key to use with the new connection (if it needs no key, delete the key first)."
     },
     "annotation": {
       "intro": "Adds titles and tags to images automatically. Titles are inferred from the prompt with an LLM, and tags from the image with a VLM or the ONNX tagger. Titles and tags set by people are never overwritten. All engines are disabled by default.",
@@ -1294,7 +1299,8 @@
         "publicBaseUrlHelp": "The address users open GAKEI at in their browser. The redirect URI is built from it.",
         "submit": "Verify and register",
         "submitting": "Verifying…",
-        "registered": "Registered as pending. Register the redirect URI in your IdP, then run the test sign-in."
+        "registered": "Registered as pending. Register the redirect URI in your IdP, then run the test sign-in.",
+        "secretReentryRequired": "The issuer's origin (scheme, host and port) changes, so the saved client secret is not sent. Enter the client secret again (for a public client, choose \"Do not use a secret\")."
       },
       "mode": {
         "label": "Require sign-in (OIDC)",
@@ -2943,7 +2949,8 @@
       "disableConfirmMessage": "This disables SD WebUI.",
       "disableConfirmWarning": "The settings are kept, but SD WebUI models can no longer be selected.",
       "dialogDisabledNote": "The URL is saved while staying disabled. Pressing \"Enable\" connects to this URL.",
-      "urlSavedWhileDisabled": "URL saved (still disabled)."
+      "urlSavedWhileDisabled": "URL saved (still disabled).",
+      "dialogCredentialsRequired": "The connection's origin (scheme, host and port) changes, so the saved credentials are not sent. Enter the user name and password again (if the new connection needs no authentication, delete the credentials first)."
     },
     "credentials": {
       "cardTitle": "Credentials (--api-auth)",

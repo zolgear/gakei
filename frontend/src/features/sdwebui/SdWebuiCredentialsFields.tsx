@@ -11,6 +11,10 @@ interface Props {
   username: string
   password: string
   disabled?: boolean
+  /** 入れ直しが要る(接続先のオリジンが変わる)とき。必須として示す。 */
+  required?: boolean
+  /** 必須の理由の説明の要素の id。 */
+  describedBy?: string
   onUsernameChange: (value: string) => void
   onPasswordChange: (value: string) => void
 }
@@ -20,6 +24,8 @@ export function SdWebuiCredentialsFields({
   username,
   password,
   disabled,
+  required,
+  describedBy,
   onUsernameChange,
   onPasswordChange,
 }: Props) {
@@ -39,6 +45,9 @@ export function SdWebuiCredentialsFields({
         autoComplete="off"
         spellCheck={false}
         disabled={disabled}
+        required={required}
+        aria-invalid={required && username === '' ? true : undefined}
+        aria-describedby={describedBy}
       />
       <label htmlFor={`${idPrefix}-password`} className={settingsStyles.rowLabel}>
         {c.passwordLabel}
@@ -51,6 +60,9 @@ export function SdWebuiCredentialsFields({
         onChange={(e) => onPasswordChange(e.target.value)}
         autoComplete="new-password"
         disabled={disabled}
+        required={required}
+        aria-invalid={required && password === '' ? true : undefined}
+        aria-describedby={describedBy}
       />
     </>
   )

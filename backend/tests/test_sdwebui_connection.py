@@ -103,3 +103,18 @@ def test_build_registry_registers_sdwebui_from_env(
 def test_build_registry_without_url(db_session_factory: sessionmaker, data_dir: Path) -> None:
     registry = build_registry(_settings(data_dir), db_session_factory)
     assert registry.get("sdwebui") is None
+
+
+def test_credentials_are_bound_to_origin(data_dir: Path) -> None:
+    """保存したオリジンと違う URL へは、保存済みの資格情報を渡さない。"""
+    connection.save_credentials(
+        data_dir, "user-x", "secret-pass-123", origin="http://127.0.0.1:7860"
+    )
+    assert connection.read_credentials_for(data_dir, "http://127.0.0.1:7860/sub") == (
+        "user-x",
+        "secret-pass-123",
+    )
+    for url in ("http://127.0.0.1:7861", "https://127.0.0.1:7860", "http://localhost:7860"):
+        assert connection.read_credentials_for(data_dir, url) is None
+    connection.delete_credentials(data_dir)
+    assert connection.credentials_origin(data_dir) is None

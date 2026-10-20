@@ -230,7 +230,8 @@ class AuthSettingsErrorDetail(BaseModel):
 
     - 409: `env_locked` / `no_connection` / `not_verified` / `admin_emails_empty` /
       `verified_email_not_admin` / `self_not_admin`
-    - 422: `invalid_value`(入力の形)/ `discovery_invalid`(Discovery 文書の中身)
+    - 422: `invalid_value`(入力の形)/ `discovery_invalid`(Discovery 文書の中身)/
+      `client_secret_reentry`(発行者のオリジンが変わるのに、シークレットを入れ直していない)
     - 502: `discovery_failed`(Discovery 文書を取得できない)
     """
 
@@ -1654,7 +1655,15 @@ class OpenAIBaseUrlStatusResponse(BaseModel):
 
 
 class OpenAIBaseUrlUpdateRequest(BaseModel):
+    """`PUT /api/settings/openai-base-url`。
+
+    `api_key` は Base URL と一緒に入れ直すキー(確かめてから両方を保存する)。画面で保存した
+    キーがあり、Base URL のオリジン(scheme + host + port)が変わるときは必須で、省くと 422。
+    キーが環境変数(`.env`)のものなら、オリジンの変わる Base URL は画面から保存できない(422)。
+    """
+
     base_url: str
+    api_key: str | None = None
 
 
 # -- General settings (ADR-0009、ADR-0013 7章) -------------------------------
@@ -1863,7 +1872,9 @@ class SdWebuiConnectionTestRequest(BaseModel):
     """接続テスト(`POST /api/sdwebui/connection/test`)。
 
     url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
-    試す(保存はしない)。省くと保存済みの資格情報を使う。
+    試す(保存はしない)。省くと保存済みの資格情報を使う。ただし保存済みの資格情報は、保存した
+    ときと同じオリジン(scheme + host + port)にだけ送る。違うオリジンの URL を、資格情報を
+    入れずに試すと 422(入れ直すよう伝える)。
     """
 
     url: str | None = None
@@ -1882,10 +1893,18 @@ class SdWebuiConnectionTestResponse(BaseModel):
 
 
 class SdWebuiConnectionRequest(BaseModel):
-    """接続・変更(`PUT /api/sdwebui/connection`)。"""
+    """接続・変更(`PUT /api/sdwebui/connection`)。
+
+    username と password は両方そろえて指定すると、接続先と一緒に保存する(この URL のオリジンに
+    結び付ける)。保存済みの資格情報があり、URL のオリジン(scheme + host + port)が変わるときは
+    必須で、省くと 422(資格情報を入れ直すか、先に削除する)。同じオリジンでパスだけ変えるなら
+    省いてよい。
+    """
 
     url: str
     allow_non_loopback: bool = False
+    username: str | None = None
+    password: str | None = None
 
 
 class SdWebuiCredentialsRequest(BaseModel):
@@ -2367,6 +2386,9 @@ class LlmConnectionUpdateRequest(BaseModel):
     api_style: str | None = None
     # 接続先(ADR-0051 3章)。null は既定(`external`)に戻す。
     locality: Literal["external", "local"] | None = None
+    # Base URL と一緒に入れ直すキー。保存済みのキーがあり、Base URL のオリジン(scheme + host +
+    # port)が変わるときは必須(省くと 422)。同じオリジンでパスだけ変えるなら省いてよい。
+    api_key: str | None = None
 
 
 class LlmConnectionApiKeyUpdateRequest(BaseModel):
