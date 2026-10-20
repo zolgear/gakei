@@ -21,7 +21,8 @@
   },
   "httpGuard": {
     "hostNotAllowed": "GAKEI cannot be opened by this host name. In personal mode (no authentication), open it by IP address or localhost. To use a host name, add it to ALLOWED_HOSTS.",
-    "originNotAllowed": "Update requests from another site (Origin) are not accepted."
+    "originNotAllowed": "Update requests from another site (Origin) are not accepted.",
+    "bodyTooLarge": "The request body is too large."
   },
   "auth": {
     "required": "Login required.",

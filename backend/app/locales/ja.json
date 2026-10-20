@@ -21,7 +21,8 @@
   },
   "httpGuard": {
     "hostNotAllowed": "このホスト名では開けません。個人モード(認証なし)では、IP アドレスか localhost で開いてください。ホスト名で開くときは、ALLOWED_HOSTS にホスト名を加えてください。",
-    "originNotAllowed": "別のサイト(Origin)からの更新の要求は受け付けません。"
+    "originNotAllowed": "別のサイト(Origin)からの更新の要求は受け付けません。",
+    "bodyTooLarge": "リクエストの本文が大きすぎます。"
   },
   "auth": {
     "required": "ログインが必要です。",

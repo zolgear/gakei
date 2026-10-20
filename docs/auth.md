@@ -170,6 +170,8 @@ IdP が落ちた、管理者のアカウントを失ったなどで誰もログ�
 
 `PUBLIC_BASE_URL`(画面でも同じ名前)は「利用者がブラウザで開く URL」で、IdP に登録した redirect URI と一致している必要がある。`run.sh` / `run.bat`(と `python -m app`)は `http://{HOST}:{PORT}/`、既定では `http://127.0.0.1:8000/` をブラウザで開くので、ローカルで試すときはこの形(`localhost` ではなく `127.0.0.1`)に揃える。`localhost` で開きたい場合は、`PUBLIC_BASE_URL` と IdP の redirect URI の両方を `localhost` にする(ブラウザの URL、`PUBLIC_BASE_URL`、redirect URI の3つが一致していればどちらでもよい)。リバースプロキシの後ろに置くなら、プロキシの外側の URL(`https://gakei.example.com`)を書く。`https` のとき、セッション Cookie に `Secure` が付く。
 
+リバースプロキシの後ろに置くときは、プロキシの本文の上限(nginx の `client_max_body_size` など)を、受けたい大きさに合わせる。GAKEI の上限は、JSON が 16MiB、画像の取り込みが 50MB 未満の画像 + 1MiB、系列の ZIP の取り込みが 1GiB + 1MiB で、これを超える本文は GAKEI が 413 で断る。認証を有効にしている間は、ログインしていない要求の本文は読まずに 401 で断る(Mod の判定の受付、1回限りのアップロード URL、`/mcp` を除く)。
+
 ## 確認
 
 - 管理者(管理者のメールに載せた人)でログインすると、設定画面の目次に「管理者設定」(OpenAI、LLM の接続先、自動タイトル・タグ、ComfyUI、MCP、共有リンクの公開、認証)が出る。
