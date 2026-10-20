@@ -499,6 +499,12 @@
     },
     "locality": {
       "invalid": "The connection type must be external or local"
+    },
+    "regionDetection": {
+      "invalidBool": "{name} must be true or false",
+      "unknownConnection": "The specified connection does not exist",
+      "invalidModel": "The model name must be 1 to {max} characters",
+      "invalidLimit": "{name} must be an integer from {min} to {max}"
     }
   },
   "runValidation": {
@@ -1162,5 +1168,23 @@
   "llm": {
     "authFailed": "Authentication with the LLM connection failed. Check the connection's API key.",
     "permissionDenied": "The LLM connection does not allow this request. Check the connection's API key and model."
+  },
+  "regionDetection": {
+    "disabled": "Box detection is disabled (an administrator can enable it under \"Region detection\" in the admin settings)",
+    "unsupported": "The detection connection does not support Structured Outputs, so it cannot be used for detection (only the official OpenAI endpoint is supported for now)",
+    "hourlyLimitReached": "The hourly detection limit ({limit}) has been reached. Please wait and try again",
+    "llmError": "Box detection failed: {error}",
+    "maskNotSupported": "Detection is not available for mask images",
+    "assetDeleted": "Detection is not available for deleted images",
+    "imageWithheld": "A Mod's verdict does not allow this image to be sent to external AI",
+    "imageMissing": "The image file was not found",
+    "imageUnreadable": "The image could not be read",
+    "fake": {
+      "person": "Person (dummy)",
+      "cup": "Cup (dummy)",
+      "window": "Window (dummy)"
+    },
+    "detectionNotFound": "The detection was not found",
+    "deleteForbidden": "Only the user who ran the detection or an administrator can delete it"
   }
 }

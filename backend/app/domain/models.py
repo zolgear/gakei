@@ -822,6 +822,34 @@ class AssetContentRating(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
+class AssetRegionDetection(Base):
+    """VLM での四角の検出の1回分(ADR-0053 7章の検出の履歴)。証跡ではない(ADR-0003 の来歴では
+    ない)ので、消してよい。1つの Asset に新しい方から `HISTORY_MAX` 回まで残す
+    (`app/domain/region_detection.py`)。見つからなかった結果(`regions` が空)も残す。
+    """
+
+    __tablename__ = "asset_region_detection"
+    __table_args__ = (
+        Index("ix_asset_region_detection_asset_id_created_at", "asset_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), nullable=False)
+    # 探した言葉(前後の空白を除く。言葉が無ければ NULL)
+    query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 使った LLM の接続先(ADR-0032)の id と、応答したモデル
+    connection_id: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    max_items: Mapped[int] = mapped_column(Integer, nullable=False)
+    # [{"label": ..., "box": [x0, y0, x1, y1]}, ...](0〜1 の割合、左上が原点。ADR-0053 3章)
+    regions: Mapped[list] = mapped_column(JsonType, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    # 検出した利用者(ADR-0019)。`none` モードは null。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+
+
 class UserPreference(Base):
     """ユーザーごとの設定(ADR-0049 6章)。キーと値の組で持つ。
 
@@ -1144,7 +1172,8 @@ class ModInvocation(Base):
     mod_id: Mapped[str] = mapped_column(String(100), nullable=False)
     # 呼んだ時点の Mod の名前(後で名前を変えても、記録は呼んだときのまま)。
     mod_name: Mapped[str] = mapped_column(Text, nullable=False)
-    # `ai.before_send` の目的(image_run / annotation / assistant / embedding / workflow_analysis)。
+    # `ai.before_send` の目的(image_run / annotation / assistant / embedding / workflow_analysis /
+    # region_detection)。
     purpose: Mapped[str | None] = mapped_column(String(32), nullable=True)
     run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
     asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)

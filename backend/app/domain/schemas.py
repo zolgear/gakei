@@ -2315,7 +2315,7 @@ class AnnotationSettingsUpdateRequest(BaseModel):
 # -- LLM の接続先(ADR-0032) --------------------------------------------------
 
 # 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
-LlmConnectionFeature = Literal["annotation", "embedding", "assistant"]
+LlmConnectionFeature = Literal["annotation", "embedding", "assistant", "region_detection"]
 
 
 class LlmConnectionView(BaseModel):
@@ -3079,7 +3079,9 @@ class AssistantSettingsUpdateRequest(BaseModel):
 # -- Mod とフック(ADR-0051) ---------------------------------------------------------
 
 ModEvent = Literal["asset.ingested", "ai.before_send", "run.finished"]
-ModPurpose = Literal["image_run", "annotation", "assistant", "embedding", "workflow_analysis"]
+ModPurpose = Literal[
+    "image_run", "annotation", "assistant", "embedding", "workflow_analysis", "region_detection"
+]
 ModSource = Literal["upload", "url", "sketch", "mask", "composite", "generated", "import", "mcp"]
 ModOnFailure = Literal["block", "allow"]
 
@@ -3292,3 +3294,82 @@ class ModVerdictReceiveResponse(BaseModel):
 
     # 記録した判定の数。
     accepted: int
+
+
+# -- 領域の四角の検出(ADR-0053 7章) -----------------------------------------------------
+
+
+class RegionDetectionSettingsResponse(BaseModel):
+    """`GET /api/settings/region-detection`。全ログイン者が読める(検出のボタンを出すかの判断)。"""
+
+    enabled: bool
+    connection_id: str
+    model: str
+    hourly_request_limit: int
+    hourly_request_limit_default: int
+    hourly_request_limit_max: int
+    # 有効で、接続先とキーがそろい、接続先が Structured Outputs に対応するとみなせる
+    # (検出のボタンを出してよい)。
+    usable: bool
+    # 見ている利用者の、直近1時間の検出の数。
+    requests_last_hour: int
+
+
+class RegionDetectionSettingsUpdateRequest(BaseModel):
+    """書いた項目だけ変える。null は不正な値(422)。"""
+
+    enabled: StrictBool | None = None
+    connection_id: StrictStr | None = None
+    model: StrictStr | None = None
+    hourly_request_limit: StrictInt | None = None
+
+
+class RegionDetectRequest(BaseModel):
+    """`POST /api/assets/{asset_id}/regions/detect` の本文。"""
+
+    # 探す物(「カップ」「左の人の服」など)。無ければ主な物を一通り挙げる。
+    query: str | None = Field(default=None, max_length=200)
+    # 挙げる数の上限。
+    max_items: int = Field(default=20, ge=1, le=20)
+
+
+class DetectedRegion(BaseModel):
+    """検出した四角の候補1つ。"""
+
+    label: str
+    # 主たる入力の画像に対する割合(0〜1)で、左上を原点にした [x0, y0, x1, y1](ADR-0053 3章)。
+    box: list[float] = Field(min_length=4, max_length=4)
+
+
+class RegionDetectUsage(BaseModel):
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class RegionDetectionView(BaseModel):
+    """保存した検出の1回分(ADR-0053 7章の検出の履歴)。"""
+
+    id: uuid.UUID
+    # 探した言葉(無ければ null)
+    query: str | None
+    model: str
+    created_at: datetime
+    # 見つからなければ空の配列
+    regions: list[DetectedRegion]
+
+
+class RegionDetectResponse(BaseModel):
+    """検出の結果。`detection` に保存した行を返す(`regions` と `model` はその写し)。"""
+
+    regions: list[DetectedRegion]
+    model: str
+    usage: RegionDetectUsage
+    detection: RegionDetectionView
+
+
+class RegionDetectionListResponse(BaseModel):
+    """`GET /api/assets/{asset_id}/regions/detections`。新しい順。"""
+
+    items: list[RegionDetectionView]
