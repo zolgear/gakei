@@ -166,7 +166,10 @@ def _badge(
 
 
 def render_overlay(image: Image.Image, regions: Sequence[RegionBox]) -> bytes:
-    """主たる入力に、四角と番号を重ねた PNG を返す。大きさは主たる入力と同じ。"""
+    """主たる入力に、四角と番号を重ねた PNG を返す。大きさは主たる入力と同じ。
+
+    四角の名前(`label`)は描かない。Pillow の既定のフォントには日本語の字形が無く、名前は
+    足す文で番号と並べて伝える。"""
     base = image.convert("RGBA")
     canvas = Image.new("RGBA", base.size, (255, 255, 255, 255))
     canvas.alpha_composite(base)
@@ -241,15 +244,37 @@ def _color_name(key: str) -> str:
     return names[key]()
 
 
-def _kind_text(kind: str, where: str) -> str:
-    """「動かす」以外の種類の文。"""
-    if kind == "add":
-        return t("runRegions.prompt.kind.add", where=where)
+def _area(box: Sequence[float]) -> str:
+    """名前の付いた目印(指示の無い「変える」「足す」)の文。場所だけを示す。"""
+    x0, y0, x1, y1 = box
+    return t(
+        "runRegions.prompt.area",
+        left=_percent(x0),
+        top=_percent(y0),
+        right=_percent(x1),
+        bottom=_percent(y1),
+    )
+
+
+def _kind_text(region: RegionBox) -> str:
+    """種類の文。「変える」「足す」で指示・描く文字・参照画像のどれも無ければ、場所だけを示す
+    (四角の定義と指示は分ける。全体のプロンプトから番号か名前で指すための目印)。"""
+    kind = region.kind
+    if kind == "move" and region.source_box is not None:
+        return t(
+            "runRegions.prompt.kind.move",
+            source=_where(region.source_box),
+            target=_where(region.box),
+        )
     if kind == "keep":
-        return t("runRegions.prompt.kind.keep", where=where)
+        return t("runRegions.prompt.kind.keep", where=_where(region.box))
     if kind == "remove":
-        return t("runRegions.prompt.kind.remove", where=where)
-    return t("runRegions.prompt.kind.change", where=where)
+        return t("runRegions.prompt.kind.remove", where=_where(region.box))
+    if not region.instruction and region.text is None and region.reference_asset_id is None:
+        return _area(region.box)
+    if kind == "add":
+        return t("runRegions.prompt.kind.add", where=_where(region.box))
+    return t("runRegions.prompt.kind.change", where=_where(region.box))
 
 
 def build_prompt_text(
@@ -267,17 +292,7 @@ def build_prompt_text(
     for index, region in enumerate(ordered(regions)):
         color_key, _rgb = color_for(index)
         color = _color_name(color_key)
-        parts: list[str] = []
-        if region.kind == "move" and region.source_box is not None:
-            parts.append(
-                t(
-                    "runRegions.prompt.kind.move",
-                    source=_where(region.source_box),
-                    target=_where(region.box),
-                )
-            )
-        else:
-            parts.append(_kind_text(region.kind, _where(region.box)))
+        parts: list[str] = [_kind_text(region)]
         if region.instruction:
             parts.append(t("runRegions.prompt.instruction", instruction=region.instruction))
         if region.text is not None:
@@ -286,9 +301,19 @@ def build_prompt_text(
             number = reference_image_numbers.get(region.reference_asset_id)
             if number is not None:
                 parts.append(t("runRegions.prompt.reference", image=number))
-        lines.append(
-            t("runRegions.prompt.item", number=region.number, color=color, body=" ".join(parts))
-        )
+        body = " ".join(parts)
+        if region.label:
+            lines.append(
+                t(
+                    "runRegions.prompt.itemNamed",
+                    number=region.number,
+                    color=color,
+                    label=region.label,
+                    body=body,
+                )
+            )
+        else:
+            lines.append(t("runRegions.prompt.item", number=region.number, color=color, body=body))
     lines.append(t("runRegions.prompt.footer", overlay=overlay_image_number))
     return "\n\n" + "\n".join(lines)
 

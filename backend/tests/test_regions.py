@@ -84,6 +84,9 @@ def _create(client: TestClient, body: dict[str, Any]) -> dict:
         {"number": 1, "box": [0.1, 0.2, 0.5, 0.6], "instruction": "x" * 2001},
         {"number": 1, "box": [0.1, 0.2, 0.5, 0.6], "text": "x" * 201},
         {"number": 1, "box": [0.1, 0.2, 0.5, 0.6], "unknown": 1},
+        {"number": 1, "box": [0.1, 0.2, 0.5, 0.6], "label": "x" * 101},
+        {"number": 1, "box": [0.1, 0.2, 0.5, 0.6], "label": "a\nb"},
+        {"number": 1, "box": [0.1, 0.2, 0.5, 0.6], "label": "a\x00b"},
     ],
 )
 def test_invalid_region_shape_is_422(client: TestClient, region: dict) -> None:
@@ -121,25 +124,33 @@ def test_regions_need_a_primary_input(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_change_without_any_instruction_is_rejected(client: TestClient) -> None:
+def test_boxes_without_any_instruction_are_allowed(client: TestClient) -> None:
+    """四角の定義(位置と名前)と指示は分ける。指示の無い四角は目印として送る(2026-10-21)。"""
     asset_id = _upload(client)
-    response = client.post(
-        "/api/runs", json=_body([asset_id], [{"number": 3, "box": [0.1, 0.1, 0.2, 0.2]}])
-    )
-    assert response.status_code == 422
-    assert "3" in response.json()["detail"]
-    # 「そのまま残す」「消す」は指示が無くてよい。
     detail = _create(
         client,
         _body(
             [asset_id],
             [
-                {"number": 1, "kind": "keep", "box": [0.1, 0.1, 0.2, 0.2]},
-                {"number": 2, "kind": "remove", "box": [0.3, 0.3, 0.4, 0.4]},
+                {"number": 1, "box": [0.1, 0.1, 0.2, 0.2], "label": "  白いカフス  "},
+                {"number": 2, "kind": "add", "box": [0.3, 0.3, 0.4, 0.4]},
+                {"number": 3, "kind": "keep", "box": [0.5, 0.5, 0.6, 0.6]},
+                {"number": 4, "kind": "remove", "box": [0.7, 0.7, 0.8, 0.8], "label": ""},
             ],
         ),
     )
     assert detail["status"] == "succeeded"
+    saved = detail["regions"]["regions"]
+    # 名前は前後の空白を除いて保存し、空は無しと同じ。再実行はここから戻す。
+    assert saved[0]["label"] == "白いカフス"
+    assert saved[1]["label"] is None
+    assert saved[3]["label"] is None
+    text = detail["regions"]["appended_text"]
+    assert "- 四角 1(赤、白いカフス): 横 10〜20%、縦 10〜20% の範囲。" in text
+    assert "- 四角 2(青): 横 30〜40%、縦 30〜40% の範囲。" in text
+    assert "変える" not in text and "新しく足す" not in text
+    assert "そのまま残す" in text
+    assert "消し" in text
 
 
 def test_unknown_reference_asset_is_rejected(client: TestClient) -> None:
@@ -310,6 +321,37 @@ def test_prompt_text_wording() -> None:
     assert "- 四角 2(青):" in text
     assert "指示: a cat" in text
     assert "横 0〜50%" in text
+    assert "番号(「四角 1」など)か名前" in text
+
+
+def test_prompt_text_with_labels() -> None:
+    regions = [
+        RegionBox(number=1, box=[0.1, 0.2, 0.3, 0.4], label="右手の白いカフス"),
+        RegionBox(number=2, box=[0.5, 0.5, 0.9, 0.9], label="帽子", instruction="赤くする"),
+        RegionBox(number=3, kind="keep", box=[0.0, 0.0, 0.1, 0.1], label="顔"),
+    ]
+    with use_locale("ja"):
+        text = regions_domain.build_prompt_text(
+            regions, overlay_image_number=2, reference_image_numbers={}
+        )
+    assert "- 四角 1(赤、右手の白いカフス): 横 10〜30%、縦 20〜40% の範囲。" in text
+    assert (
+        "- 四角 2(青、帽子): 四角の中(横 50〜90%、縦 50〜90% の範囲)を変える。 指示: 赤くする"
+        in text
+    )
+    assert "- 四角 3(緑、顔): 四角の中(横 0〜10%、縦 0〜10% の範囲)は変えずに" in text
+    with use_locale("en"):
+        text = regions_domain.build_prompt_text(
+            regions, overlay_image_number=2, reference_image_numbers={}
+        )
+    assert "- Box 1 (red, 右手の白いカフス): The area at x 10–30%, y 20–40% of the image." in text
+    assert "by its name" in text
+
+
+def test_label_is_trimmed_and_optional() -> None:
+    assert RegionBox(number=1, box=[0, 0, 1, 1], label="  a  ").label == "a"
+    assert RegionBox(number=1, box=[0, 0, 1, 1], label="   ").label is None
+    assert RegionBox(number=1, box=[0, 0, 1, 1]).label is None
 
 
 # -- 対応しないプロバイダー --------------------------------------------------------------

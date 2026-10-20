@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 import uuid
 from datetime import datetime
 from typing import Any, Literal
@@ -1019,6 +1020,7 @@ REPEAT_MAX = 20
 REGIONS_MAX = 16
 REGION_INSTRUCTION_MAX_LENGTH = 2000
 REGION_TEXT_MAX_LENGTH = 200
+REGION_LABEL_MAX_LENGTH = 100
 
 RegionKind = Literal["change", "add", "keep", "remove", "move"]
 
@@ -1046,6 +1048,9 @@ class RegionBox(BaseModel):
     box: list[float] = Field(min_length=4, max_length=4)
     # 元の四角。「動かす」だけが持つ(ほかの種類では付けられない)。
     source_box: list[float] | None = Field(default=None, min_length=4, max_length=4)
+    # 四角の名前(「右手の白いカフス」など。任意)。位置と合わせて四角の定義で、指示とは分ける。
+    # 指示が無い四角は名前の付いた目印になり、全体のプロンプトから番号か名前で指せる。
+    label: str | None = Field(default=None, max_length=REGION_LABEL_MAX_LENGTH)
     instruction: str = Field(default="", max_length=REGION_INSTRUCTION_MAX_LENGTH)
     # 描かせる文字(看板など)。指示とは分け、そのまま渡す。
     text: str | None = Field(default=None, max_length=REGION_TEXT_MAX_LENGTH)
@@ -1061,6 +1066,16 @@ class RegionBox(BaseModel):
     @classmethod
     def _source_box(cls, value: list[float] | None) -> list[float] | None:
         return None if value is None else _check_region_box(value)
+
+    @field_validator("label")
+    @classmethod
+    def _label(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if any(unicodedata.category(ch) == "Cc" for ch in value):
+            raise ValueError("label must not contain control characters")
+        value = value.strip()
+        return value or None
 
     @field_validator("instruction")
     @classmethod
