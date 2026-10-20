@@ -12,12 +12,14 @@ import styles from './RegionPromptAssist.module.css'
 
 interface RegionLabelChipsProps {
   items: readonly RegionChipItem[]
-  onInsert: (text: string) => void
+  onInsert: (text: string, item: RegionChipItem) => void
+  /** 検出の候補のチップの説明(まだ送られないこと)。 */
+  candidateTitle?: string
   onHighlight?: (highlight: RegionHighlight) => void
   ariaLabel: string
 }
 
-export function RegionLabelChips({ items, onInsert, onHighlight, ariaLabel }: RegionLabelChipsProps) {
+export function RegionLabelChips({ items, onInsert, candidateTitle, onHighlight, ariaLabel }: RegionLabelChipsProps) {
   if (items.length === 0) return null
   return (
     <div className={styles.chips} role="group" aria-label={ariaLabel}>
@@ -26,7 +28,8 @@ export function RegionLabelChips({ items, onInsert, onHighlight, ariaLabel }: Re
           key={item.key}
           type="button"
           className={styles.chip}
-          data-kind={item.colorIndex === undefined ? 'label' : 'region'}
+          data-kind={item.colorIndex === undefined ? (item.candidate ? 'candidate' : 'label') : 'region'}
+          title={item.candidate ? candidateTitle : undefined}
           // 入力欄のフォーカス(とキーボード)を保つ。
           onMouseDown={(e) => e.preventDefault()}
           onPointerEnter={(e) => e.pointerType === 'mouse' && onHighlight?.(item.highlight)}
@@ -34,7 +37,7 @@ export function RegionLabelChips({ items, onInsert, onHighlight, ariaLabel }: Re
           onPointerDown={(e) => e.pointerType !== 'mouse' && onHighlight?.(item.highlight)}
           onFocus={() => onHighlight?.(item.highlight)}
           onBlur={() => onHighlight?.(null)}
-          onClick={() => onInsert(item.text)}
+          onClick={() => onInsert(item.text, item)}
         >
           {item.colorIndex !== undefined && (
             <span

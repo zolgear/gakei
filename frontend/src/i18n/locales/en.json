@@ -3749,7 +3749,9 @@
       "reference": "Reference image",
       "noInstruction": "(no instruction)",
       "marker": "(no instruction; a marker showing the location and name)",
-      "overlayTag": "Regions"
+      "overlayTag": "Regions",
+      "overlayImage": "Image with boxes that was sent",
+      "appendedToggle": "Added text (region instructions)"
     },
     "assist": {
       "heading": "Regions and detected candidates",
@@ -3766,7 +3768,9 @@
       },
       "chipsHint": "Click to insert at the prompt cursor.",
       "chipsLabel": "Region and detection names",
-      "boxChip": "Box {n}"
+      "boxChip": "Box {n}",
+      "candidateChipTitle": "Detected candidate (not sent yet). Tap to insert the name and turn this candidate into a box",
+      "candidateNote": "Dashed candidates are not sent. Only candidates you turn into boxes, by tapping a chip or in the Regions screen, are sent as the image with boxes and the added text."
     }
   }
 }

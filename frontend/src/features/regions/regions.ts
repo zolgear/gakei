@@ -246,6 +246,50 @@ export function setRegionKind(regions: readonly EditorRegion[], key: string, kin
   })
 }
 
+// -- 検出の候補を四角にする(入力の補助のチップ) ----------------------------------------------
+
+/** 同じ四角か(割合の誤差は無視できるほど小さいものだけ同じとみなす)。 */
+export function sameBox(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === 4 && b.length === 4 && a.every((v, i) => Math.abs(v - b[i]) < 1e-6)
+}
+
+/** 候補と同じ四角の、付けた四角(無ければ undefined)。 */
+export function regionForCandidate<T extends Pick<RegionBox, 'box'>>(
+  regions: readonly T[],
+  candidate: { box: readonly number[] },
+): T | undefined {
+  return regions.find((r) => sameBox(r.box, candidate.box))
+}
+
+/**
+ * 検出の候補を、名前の付いた四角(種類は「変える」、指示なし)として足す。同じ四角がすでにあれば
+ * そのまま返す(押し直しても増やさない)。上限なら足さない(`number` は null)。点線の候補は送られ
+ * ないので、プロンプトで候補の名前を使ったら四角にして送る。
+ */
+export function promoteCandidate(
+  regions: readonly RegionBox[],
+  candidate: { box: readonly number[]; label: string },
+): { regions: RegionBox[]; number: number | null; added: boolean } {
+  const existing = regionForCandidate(regions, candidate)
+  if (existing) return { regions: [...regions], number: existing.number, added: false }
+  if (regions.length >= REGIONS_MAX || !isValidBox(candidate.box)) {
+    return { regions: [...regions], number: null, added: false }
+  }
+  const number = regions.reduce((max, r) => Math.max(max, r.number), 0) + 1
+  const label = candidate.label.trim()
+  const box: RegionBox = {
+    number,
+    kind: 'change',
+    box: [...candidate.box],
+    source_box: null,
+    instruction: '',
+    text: null,
+    reference_asset_id: null,
+    label: label === '' ? null : label.slice(0, REGION_LABEL_MAX_LENGTH),
+  }
+  return { regions: [...regions, box], number, added: true }
+}
+
 // -- 検証(サーバーの検証に合わせる) ------------------------------------------------------
 
 export type RegionProblem = 'labelTooLong' | 'instructionTooLong' | 'textTooLong' | 'invalidBox' | 'invalidSourceBox'

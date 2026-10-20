@@ -129,6 +129,12 @@
   border-style: solid;
 }
 
+/* 検出の候補(まだ送られない): 点線の枠で、文字を淡く。 */
+.chip[data-kind='candidate'] {
+  color: var(--color-text-muted);
+  background: transparent;
+}
+
 .chip:hover,
 .chip:focus-visible {
   border-color: var(--color-accent);

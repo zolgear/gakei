@@ -6,6 +6,9 @@
  * 書きながら見られるよう、プロンプトのすぐ上に置く(狭い幅では結果エリアが上にあり、入力の画像は
  * 小さなチップでしか見えないため)。1枚目が無い、四角を受けないモデル、四角も候補も無いときは出さない。
  * 開閉はブラウザごとに覚える(`regionAssistStore`)。
+ *
+ * 点線の候補は送られない。候補のチップを押すと、名前を入れるのと一緒に、その候補を名前の付いた四角
+ * (指示なし)にする(プロンプトで候補の名前を使ったら、その場所も送れるように)。押し直しても増やさない。
  */
 import { useState } from 'react'
 import { assetUrl } from '../../api/assetUrl'
@@ -14,8 +17,9 @@ import { Modal } from '../../components/Modal'
 import { fmt, useI18n } from '../../i18n'
 import { RegionOverlay, type RegionHighlight } from './RegionOverlay'
 import { RegionLabelChips } from './RegionLabelChips'
-import { labelChipItems, regionChipItems } from './regionChips'
+import { candidateChipItems, regionChipItems, type RegionChipItem } from './regionChips'
 import { setRegionAssistOpen, useRegionAssistOpen } from './regionAssistStore'
+import { promoteCandidate, regionForCandidate } from './regions'
 import { candidatesOf, useDetectionHistory } from './useRegionDetection'
 import styles from './RegionPromptAssist.module.css'
 
@@ -28,9 +32,11 @@ interface RegionPromptAssistProps {
   /** チップを出すか(プロンプトテンプレートのときは書く欄が無いので出さない)。 */
   showChips: boolean
   onInsert: (text: string) => void
+  /** 候補を四角にしたときに、四角の一覧(API の形)を返す。 */
+  onRegionsChange: (regions: RegionBox[]) => void
 }
 
-export function RegionPromptAssist({ asset, enabled, regions, showChips, onInsert }: RegionPromptAssistProps) {
+export function RegionPromptAssist({ asset, enabled, regions, showChips, onInsert, onRegionsChange }: RegionPromptAssistProps) {
   const { t } = useI18n()
   const a = t.regions.assist
   const open = useRegionAssistOpen()
@@ -42,7 +48,17 @@ export function RegionPromptAssist({ asset, enabled, regions, showChips, onInser
   const candidates = selected ? candidatesOf(selected) : []
   if (regions.length === 0 && candidates.length === 0) return null
 
-  const items = [...regionChipItems(t, regions), ...labelChipItems(candidates)]
+  const items = [...regionChipItems(t, regions), ...candidateChipItems(candidates, regions)]
+  // 四角にした候補は、点線では描かない(実線の四角になる)。
+  const overlayCandidates = candidates.filter((c) => !regionForCandidate(regions, c))
+
+  function pick(text: string, item: RegionChipItem) {
+    if (item.candidate) {
+      const result = promoteCandidate(regions, item.candidate)
+      if (result.added) onRegionsChange(result.regions)
+    }
+    onInsert(text)
+  }
   const summary = [
     regions.length > 0 ? fmt(a.boxCount, { count: regions.length }) : null,
     candidates.length > 0 ? fmt(a.candidateCount, { count: candidates.length }) : null,
@@ -55,7 +71,7 @@ export function RegionPromptAssist({ asset, enabled, regions, showChips, onInser
       width={asset.width}
       height={asset.height}
       regions={regions}
-      candidates={candidates}
+      candidates={overlayCandidates}
       highlight={highlight}
       textScale={scale}
     />
@@ -95,7 +111,14 @@ export function RegionPromptAssist({ asset, enabled, regions, showChips, onInser
           {showChips && (
             <div className={styles.chipsColumn}>
               <span className={styles.chipsHint}>{a.chipsHint}</span>
-              <RegionLabelChips items={items} onInsert={onInsert} onHighlight={setHighlight} ariaLabel={a.chipsLabel} />
+              <RegionLabelChips
+                items={items}
+                onInsert={pick}
+                candidateTitle={a.candidateChipTitle}
+                onHighlight={setHighlight}
+                ariaLabel={a.chipsLabel}
+              />
+              {candidates.length > 0 && <span className={styles.chipsHint}>{a.candidateNote}</span>}
             </div>
           )}
         </div>
@@ -110,10 +133,11 @@ export function RegionPromptAssist({ asset, enabled, regions, showChips, onInser
           {showChips && (
             <RegionLabelChips
               items={items}
-              onInsert={(text) => {
-                onInsert(text)
+              onInsert={(text, item) => {
+                pick(text, item)
                 setEnlarged(false)
               }}
+              candidateTitle={a.candidateChipTitle}
               onHighlight={setHighlight}
               ariaLabel={a.chipsLabel}
             />

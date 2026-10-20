@@ -255,10 +255,17 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
       <section className={styles.section}>
         <div className={styles.sectionHeaderRow}>
           <h2 className={styles.heading}>{t.runDetail.promptHeading}</h2>
-          <SaveToPromptSetButton text={run.prompt} />
+          <SaveToPromptSetButton text={userPrompt} />
         </div>
-        <p className={styles.prompt}>{run.prompt}</p>
-        {promptActions?.(run.prompt)}
+        {/* 領域の指示で足した文は、利用者のプロンプトと分けて、畳んで出す(ADR-0053 5章)。 */}
+        <p className={styles.prompt}>{userPrompt}</p>
+        {run.regions?.appended_text && userPrompt !== run.prompt && (
+          <details className={styles.appendedText}>
+            <summary>{t.regions.runDetail.appendedToggle}</summary>
+            <p className={styles.prompt}>{run.regions.appended_text.trim()}</p>
+          </details>
+        )}
+        {promptActions?.(userPrompt)}
       </section>
 
       {/* 領域の指示(ADR-0053 4章)。四角を付けた Run だけ。 */}

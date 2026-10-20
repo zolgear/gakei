@@ -11,6 +11,7 @@ import {
   isValidBox,
   moveBox,
   moveRegionOrder,
+  promoteCandidate,
   REGIONS_MAX,
   regionBadgeTextColor,
   regionColor,
@@ -250,5 +251,40 @@ describe('restoreRunRegions', () => {
 
   it('利用者が書き換えたプロンプト(末尾が違う)は除かない', () => {
     expect(restoreRunRegions({ prompt: 'edited', inputs: [], regions: record }).prompt).toBe('edited')
+  })
+})
+
+describe('promoteCandidate', () => {
+  const candidate = { box: [0.1, 0.2, 0.3, 0.4], label: ' 左のカバン ' }
+
+  it('候補を名前の付いた四角(変える、指示なし)として足す', () => {
+    const result = promoteCandidate([box({ number: 1 })], candidate)
+    expect(result.added).toBe(true)
+    expect(result.number).toBe(2)
+    expect(result.regions[1]).toEqual({
+      number: 2,
+      kind: 'change',
+      box: [0.1, 0.2, 0.3, 0.4],
+      source_box: null,
+      instruction: '',
+      text: null,
+      reference_asset_id: null,
+      label: '左のカバン',
+    })
+  })
+
+  it('同じ四角があれば足さずにその番号を返す', () => {
+    const first = promoteCandidate([], candidate)
+    const again = promoteCandidate(first.regions, candidate)
+    expect(again.added).toBe(false)
+    expect(again.number).toBe(1)
+    expect(again.regions).toHaveLength(1)
+  })
+
+  it('上限なら足さない', () => {
+    const full = Array.from({ length: REGIONS_MAX }, (_, i) => box({ number: i + 1, box: [0, 0, 0.5, 0.5] }))
+    const result = promoteCandidate(full, candidate)
+    expect(result.added).toBe(false)
+    expect(result.number).toBeNull()
   })
 })

@@ -28,6 +28,23 @@ export function RunRegionsSection({ regions, sectionClassName, headingClassName,
     <section className={sectionClassName}>
       <h2 className={headingClassName}>{m.heading}</h2>
       {regions.delivery === 'image_and_text' && <p className={styles.delivery}>{m.delivery}</p>}
+      {/* 送った四角の画像(Asset の種類 regions。入力の1枚として送った)。 */}
+      {regions.overlay_asset_id && (
+        <Link
+          to={nodeTargetPath({ id: regions.overlay_asset_id, type: 'asset' }, location.pathname)}
+          className={styles.overlay}
+        >
+          <AssetThumb
+            assetId={regions.overlay_asset_id}
+            rating={assetDetails.get(regions.overlay_asset_id)?.content_rating ?? undefined}
+            withheld={assetDetails.get(regions.overlay_asset_id)?.content_withheld === true}
+            className={styles.overlayThumb}
+            alt=""
+            draggable={false}
+          />
+          <span>{m.overlayImage}</span>
+        </Link>
+      )}
       <ol className={styles.list}>
         {items.map((region, index) => (
           <li key={region.number} className={styles.item}>

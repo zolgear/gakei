@@ -670,6 +670,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         regions={form.regions}
         showChips={form.promptTemplate === null}
         onInsert={insertRegionText}
+        onRegionsChange={form.setRegions}
       />
     ),
     promptTools,

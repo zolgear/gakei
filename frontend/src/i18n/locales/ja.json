@@ -3749,7 +3749,9 @@
       "reference": "参照画像",
       "noInstruction": "(指示なし)",
       "marker": "(指示なし。場所と名前を示す目印)",
-      "overlayTag": "領域"
+      "overlayTag": "領域",
+      "overlayImage": "送った四角の画像",
+      "appendedToggle": "足した文(領域の指示)"
     },
     "assist": {
       "heading": "領域と検出の候補",
@@ -3766,7 +3768,9 @@
       },
       "chipsHint": "押すと、プロンプトのカーソル位置に入れます。",
       "chipsLabel": "領域と検出の名前",
-      "boxChip": "四角 {n}"
+      "boxChip": "四角 {n}",
+      "candidateChipTitle": "検出の候補(まだ送られません)。押すと名前を入れ、この候補を四角にします",
+      "candidateNote": "点線の候補は送られません。チップを押すか領域の画面で四角にしたものだけが、四角を描いた画像と文として送られます。"
     }
   }
 }
