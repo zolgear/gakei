@@ -585,7 +585,6 @@
     "editOnly": "Region instructions can only be used with Edit",
     "notSupported": "This provider or model does not accept region instructions",
     "primaryRequired": "Region instructions require a first input image",
-    "instructionRequired": "Enter an instruction, text to draw, or a reference image for box {number}",
     "tooManyInputs": "With the images added for region instructions there would be {count} input images, more than the limit of {max}. Remove some input or reference images",
     "overlayFailed": "Could not create the image with the boxes drawn",
     "colors": {
@@ -599,8 +598,9 @@
       "purple": "purple"
     },
     "prompt": {
-      "header": "Region instructions: image {overlay} is image 1 with numbered colored boxes drawn on top. The boxes show the approximate location and size. Edit image 1 and follow the instruction for each numbered box.",
+      "header": "Region instructions: image {overlay} is image 1 with numbered colored boxes drawn on top. The boxes show the approximate location and size. Edit image 1. When the text above mentions a box by its number (such as \"Box 1\") or by its name, it means the area of that box in the list below. Where a box has its own instruction, follow it.",
       "where": " (x {left}–{right}%, y {top}–{bottom}% of the image)",
+      "area": "The area at x {left}–{right}%, y {top}–{bottom}% of the image.",
       "kind": {
         "change": "Change the area in the box{where}.",
         "add": "Add something new in the box{where}.",
@@ -612,6 +612,7 @@
       "text": "Draw the text \"{text}\" exactly as written.",
       "reference": "Use image {image} as a reference.",
       "item": "- Box {number} ({color}): {body}",
+      "itemNamed": "- Box {number} ({color}, {label}): {body}",
       "footer": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image."
     }
   },
