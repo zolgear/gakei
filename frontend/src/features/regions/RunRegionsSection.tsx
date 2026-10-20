@@ -1,13 +1,13 @@
 /**
- * Run 詳細の「領域の指示」(ADR-0053 4章)。`run.regions` の四角を番号と色の順に並べ、種類・指示・
- * 描く文字・参照画像を出す。送った文そのものはプロンプト(`run.prompt` の末尾)に入っている。
+ * Run 詳細の「領域の指示」(ADR-0053 4章)。`run.regions` の四角を番号と色の順に並べ、名前・種類・
+ * 指示・描く文字・参照画像を出す。送った文そのものはプロンプト(`run.prompt` の末尾)に入っている。
  */
 import { Link, useLocation } from 'react-router'
 import type { AssetDetail, RunRegions } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { nodeTargetPath } from '../lineage/nodeTargetPath'
-import { orderedRegions, regionBadgeTextColor, regionColor } from './regions'
+import { orderedRegions, regionBadgeTextColor, regionColor, regionLabel } from './regions'
 import styles from './RunRegionsSection.module.css'
 
 interface RunRegionsSectionProps {
@@ -39,8 +39,14 @@ export function RunRegionsSection({ regions, sectionClassName, headingClassName,
               {region.number}
             </span>
             <div className={styles.body}>
+              {regionLabel(region) && <span className={styles.label}>{regionLabel(region)}</span>}
               <span className={styles.kind}>{t.regions.kinds[region.kind]}</span>
-              <span className={styles.instruction}>{region.instruction || m.noInstruction}</span>
+              <span className={styles.instruction}>
+                {region.instruction ||
+                  ((region.kind === 'change' || region.kind === 'add') && !region.text && !region.reference_asset_id
+                    ? m.marker
+                    : m.noInstruction)}
+              </span>
               {region.text && <span className={styles.text}>{fmt(m.textLine, { text: region.text })}</span>}
             </div>
             {region.reference_asset_id && (

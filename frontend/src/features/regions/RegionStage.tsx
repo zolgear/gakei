@@ -31,6 +31,7 @@ import {
   type Point,
   type ResizeHandle,
 } from './regions'
+import { estimateTextWidth, placeCaptions, type CaptionRect, type CaptionRequest } from './captionLayout'
 import type { RegionCandidate } from './useRegionDetection'
 import styles from './RegionEditor.module.css'
 
@@ -71,6 +72,8 @@ type Gesture =
 
 /** これ以上動いたら「押した」ではなく「ドラッグ」とみなす(px)。 */
 const DRAG_THRESHOLD = 4
+/** 名前の文字の大きさ(px。`RegionEditor.module.css` の `.candidateLabel` と同じ)。 */
+const CAPTION_FONT = 11
 /** 画像の周りの余白(px)。 */
 const PAD = 12
 
@@ -286,10 +289,51 @@ export function RegionStage({
     return { x: box[0] * dispW, y: box[1] * dispH, w: (box[2] - box[0]) * dispW, h: (box[3] - box[1]) * dispH }
   }
 
-  function badge(box: Box, index: number, key: string, part: Part, faded: boolean, caption?: string) {
+  function badgePos(box: Box) {
     const r = px(box)
-    const x = Math.min(Math.max(0, r.x + 3), Math.max(0, dispW - badgeSize))
-    const y = Math.min(Math.max(0, r.y + 3), Math.max(0, dispH - badgeSize))
+    return {
+      x: Math.min(Math.max(0, r.x + 3), Math.max(0, dispW - badgeSize)),
+      y: Math.min(Math.max(0, r.y + 3), Math.max(0, dispH - badgeSize)),
+    }
+  }
+
+  // 四角と候補の名前の位置。近い四角の名前が重ならないよう、重なるときは上下にずらす。
+  const captionHeight = CAPTION_FONT * 1.3
+  const captionRequests: CaptionRequest[] = []
+  const badgeRects: CaptionRect[] = []
+  for (const region of regions) {
+    const b = badgePos(region.box)
+    badgeRects.push({ x: b.x, y: b.y, width: badgeSize, height: badgeSize })
+    if (region.kind === 'move' && region.sourceBox) {
+      const sb = badgePos(region.sourceBox)
+      badgeRects.push({ x: sb.x, y: sb.y, width: badgeSize, height: badgeSize })
+    }
+    const label = region.label.trim()
+    if (label) {
+      captionRequests.push({
+        key: `r:${region.key}`,
+        x: b.x + badgeSize + 4,
+        y: b.y + (badgeSize - captionHeight) / 2,
+        width: estimateTextWidth(label, CAPTION_FONT) + 4,
+        height: captionHeight,
+      })
+    }
+  }
+  for (const c of candidates) {
+    const r = px(c.box)
+    captionRequests.push({
+      key: `c:${c.key}`,
+      x: r.x + 4,
+      y: r.y + 4,
+      width: estimateTextWidth(c.label, CAPTION_FONT) + 4,
+      height: captionHeight,
+    })
+  }
+  const captions = placeCaptions(captionRequests, { width: dispW, height: dispH }, badgeRects)
+
+  function badge(box: Box, index: number, key: string, part: Part, faded: boolean, caption?: string) {
+    const { x, y } = badgePos(box)
+    const captionPos = caption ? captions.get(`r:${key}`) : undefined
     return (
       <g data-hit="box" data-key={key} data-part={part} opacity={faded ? 0.75 : 1} className={styles.grab}>
         <rect x={x} y={y} width={badgeSize} height={badgeSize} rx={3} fill={regionColor(index)} stroke="#ffffff" strokeWidth={1.5} />
@@ -305,9 +349,9 @@ export function RegionStage({
         >
           {index + 1}
         </text>
-        {/* 検出の候補から作った四角の名前(画面の中だけ。ADR-0053)。 */}
-        {caption && (
-          <text x={x + badgeSize + 4} y={y + badgeSize / 2} dominantBaseline="central" className={styles.candidateLabel}>
+        {/* 四角の名前(ADR-0053)。 */}
+        {caption && captionPos && (
+          <text x={captionPos.x} y={captionPos.y + 1} dominantBaseline="hanging" className={styles.candidateLabel}>
             {caption}
           </text>
         )}
@@ -414,11 +458,12 @@ export function RegionStage({
               <rect x={0} y={0} width={dispW} height={dispH} fill="transparent" />
               {candidates.map((c) => {
                 const r = px(c.box)
+                const pos = captions.get(`c:${c.key}`) ?? { x: r.x + 4, y: r.y + 4 }
                 return (
                   <g key={c.key} data-hit="candidate" data-ckey={c.key} className={styles.candidate}>
                     <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="rgba(255,255,255,0.04)" stroke="rgba(0,0,0,0.75)" strokeWidth={3} strokeDasharray="5 4" pointerEvents="all" />
                     <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="none" stroke="#ffffff" strokeWidth={1.5} strokeDasharray="5 4" pointerEvents="none" />
-                    <text x={r.x + 4} y={r.y + 4} dominantBaseline="hanging" className={styles.candidateLabel}>
+                    <text x={pos.x} y={pos.y + 1} dominantBaseline="hanging" className={styles.candidateLabel}>
                       {c.label}
                     </text>
                   </g>
@@ -438,7 +483,7 @@ export function RegionStage({
                       </>
                     )}
                     {frame(region.box, index, region.key, 'box', selected, false)}
-                    {badge(region.box, index, region.key, 'box', false, region.label)}
+                    {badge(region.box, index, region.key, 'box', false, region.label.trim() || undefined)}
                     {selected && isMove && region.sourceBox && handles(region.sourceBox, index, region.key, 'source')}
                     {selected && handles(region.box, index, region.key, 'box')}
                   </g>

@@ -1,6 +1,6 @@
 /**
- * 領域の指示(ADR-0053)の編集画面。主たる入力(1枚目)に四角を描き、四角ごとに種類・指示・描く文字・
- * 参照画像を書く全画面のモーダル。配置(ADR-0050)・スケッチ(ADR-0010)と同じ作り(アイコンのボタンと
+ * 領域の指示(ADR-0053)の編集画面。主たる入力(1枚目)に四角を描き、四角ごとに名前・種類・指示・
+ * 描く文字・参照画像を書く全画面のモーダル。四角の定義(位置と名前)と指示は分け、指示は任意。配置(ADR-0050)・スケッチ(ADR-0010)と同じ作り(アイコンのボタンと
  * ツールチップ、保存とキャンセル、Esc は何も変えていないときだけ閉じる)。
  *
  * - 状態(四角の並び。並び順が番号)は履歴(元に戻す・やり直す)で持つ。ドラッグ中は `draft` に置き、
@@ -30,6 +30,7 @@ import {
   moveBox,
   moveRegionOrder,
   REGION_INSTRUCTION_MAX_LENGTH,
+  REGION_LABEL_MAX_LENGTH,
   REGION_KINDS,
   REGION_TEXT_MAX_LENGTH,
   REGIONS_MAX,
@@ -40,9 +41,7 @@ import {
   removeRegion,
   setRegionKind,
   updateRegion,
-  labelsFromEditorRegions,
   type EditorRegion,
-  type RegionLabels,
   type RegionProblem,
 } from './regions'
 import { RegionLabelChips } from './RegionLabelChips'
@@ -55,15 +54,12 @@ export interface RegionEditorProps {
   /** 主たる入力(1枚目)。 */
   asset: AssetDetail
   initialRegions: readonly RegionBox[]
-  /** 四角の名前(番号 → 名前。検出の候補から作った四角)。画面の中だけのもの。 */
-  initialLabels?: RegionLabels
   /** 生成のフォームの入力の画像(参照画像の選択と、入力の枚数の確かめに使う)。 */
   inputAssetIds: readonly string[]
   maxInputImages: number
   /** 四角の渡し方(`image_and_text` なら、効き方の保証が無いことを示す)。 */
   delivery: string | null
-  /** `labels` は四角の名前(番号 → 名前)。サーバーには送らない。 */
-  onSave: (regions: RegionBox[], labels: RegionLabels) => void
+  onSave: (regions: RegionBox[]) => void
   onCancel: () => void
 }
 
@@ -81,8 +77,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
 function problemText(t: Messages, problem: RegionProblem): string {
   const p = t.regions.problems
   switch (problem) {
-    case 'instructionRequired':
-      return p.instructionRequired
+    case 'labelTooLong':
+      return fmt(p.labelTooLong, { max: REGION_LABEL_MAX_LENGTH })
     case 'instructionTooLong':
       return fmt(p.instructionTooLong, { max: REGION_INSTRUCTION_MAX_LENGTH })
     case 'textTooLong':
@@ -126,7 +122,6 @@ function ToolButton({
 export function RegionEditor({
   asset,
   initialRegions,
-  initialLabels = {},
   inputAssetIds,
   maxInputImages,
   delivery,
@@ -139,7 +134,7 @@ export function RegionEditor({
   const panelRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef(new Map<string, HTMLLIElement>())
 
-  const [history, setHistory] = useState<History<EditorRegion[]>>(() => initHistory(editorRegionsFromBoxes(initialRegions, initialLabels)))
+  const [history, setHistory] = useState<History<EditorRegion[]>>(() => initHistory(editorRegionsFromBoxes(initialRegions)))
   const [draft, setDraft] = useState<EditorRegion[] | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -148,11 +143,7 @@ export function RegionEditor({
   const [imageError, setImageError] = useState(false)
   const [detectQuery, setDetectQuery] = useState('')
   const editedRef = useRef(false)
-  // 「指示などが要る」は、札を触った後か保存を試みた後だけ出す(描いた直後に赤字を出さない)。
-  const [touchedKeys, setTouchedKeys] = useState<ReadonlySet<string>>(() => new Set())
   const [saveAttempted, setSaveAttempted] = useState(false)
-  const markTouched = (key: string) =>
-    setTouchedKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)))
   const lastCoalesceRef = useRef<string | null>(null)
 
   const detection = useRegionDetection(asset.id)
@@ -411,12 +402,11 @@ export function RegionEditor({
                     referenceDetail={region.referenceAssetId ? referenceDetails.get(region.referenceAssetId) : undefined}
                     onSelect={() => setSelectedKey(region.key)}
                     onKind={(kind) => apply((cur) => setRegionKind(cur, region.key, kind))}
+                    onLabel={(value) => apply((cur) => updateRegion(cur, region.key, { label: value }), `${region.key}:label`)}
                     onInstruction={(value) =>
                       apply((cur) => updateRegion(cur, region.key, { instruction: value }), `${region.key}:instruction`)
                     }
                     onText={(value) => apply((cur) => updateRegion(cur, region.key, { text: value }), `${region.key}:text`)}
-                    showAllProblems={saveAttempted || touchedKeys.has(region.key)}
-                    onTouched={() => markTouched(region.key)}
                     labelChips={labelChipItems(detection.allCandidates)}
                     onPickReference={() => setReferenceKey(region.key)}
                     onClearReference={() => apply((cur) => updateRegion(cur, region.key, { referenceAssetId: null }))}
@@ -455,7 +445,7 @@ export function RegionEditor({
                   setSaveAttempted(true)
                   return
                 }
-                onSave(boxesFromEditorRegions(history.present), labelsFromEditorRegions(history.present))
+                onSave(boxesFromEditorRegions(history.present))
               }}
             >
               {r.save}
@@ -589,9 +579,6 @@ function DetectionSection({
 
 interface RegionCardProps {
   ref: (el: HTMLLIElement | null) => void
-  /** 「指示などが要る」も出すか(札を触った後・保存を試みた後)。 */
-  showAllProblems: boolean
-  onTouched: () => void
   /** 検出の名前のチップ(押すと指示の欄のカーソル位置へ入れる)。 */
   labelChips: ReturnType<typeof labelChipItems>
   region: EditorRegion
@@ -601,6 +588,7 @@ interface RegionCardProps {
   referenceDetail: AssetDetail | undefined
   onSelect: () => void
   onKind: (kind: RegionKind) => void
+  onLabel: (value: string) => void
   onInstruction: (value: string) => void
   onText: (value: string) => void
   onPickReference: () => void
@@ -611,8 +599,6 @@ interface RegionCardProps {
 
 function RegionCard({
   ref,
-  showAllProblems,
-  onTouched,
   labelChips,
   region,
   index,
@@ -621,6 +607,7 @@ function RegionCard({
   referenceDetail,
   onSelect,
   onKind,
+  onLabel,
   onInstruction,
   onText,
   onPickReference,
@@ -633,7 +620,7 @@ function RegionCard({
   const id = useId()
   const instructionRef = useRef<HTMLTextAreaElement | null>(null)
   const lastCursorRef = useRef<number | null>(null)
-  const problems = regionProblems(region).filter((p) => showAllProblems || p !== 'instructionRequired')
+  const problems = regionProblems(region)
 
   function insertLabel(text: string) {
     const el = instructionRef.current
@@ -646,7 +633,12 @@ function RegionCard({
       if (el && document.activeElement === el) el.setSelectionRange(result.cursor, result.cursor)
     })
   }
-  const placeholder = region.label ? fmt(c.hintPlaceholder, { label: region.label }) : c.instructionPlaceholder[region.kind]
+  // 指示の無い「変える」「足す」は、名前の付いた目印として送る(全体のプロンプトから番号か名前で指す)。
+  const namedArea =
+    (region.kind === 'change' || region.kind === 'add') &&
+    region.instruction.trim() === '' &&
+    region.text === '' &&
+    region.referenceAssetId === null
   return (
     <li
       ref={ref}
@@ -655,7 +647,6 @@ function RegionCard({
       data-invalid={problems.length > 0 || undefined}
       aria-label={fmt(c.aria, { n: index + 1 })}
       onFocusCapture={onSelect}
-      onBlurCapture={onTouched}
       onPointerDown={onSelect}
     >
       <div className={styles.cardHeader}>
@@ -700,6 +691,18 @@ function RegionCard({
           </button>
         </div>
       </div>
+      <label className={styles.fieldLabel} htmlFor={`${id}-label`}>
+        {c.labelLabel}
+      </label>
+      <input
+        id={`${id}-label`}
+        type="text"
+        className={styles.textInput}
+        value={region.label}
+        maxLength={REGION_LABEL_MAX_LENGTH}
+        placeholder={c.labelPlaceholder}
+        onChange={(e) => onLabel(e.target.value)}
+      />
       {region.kind === 'move' && <p className={styles.hint}>{c.moveHint}</p>}
       <label className={styles.fieldLabel} htmlFor={`${id}-instruction`}>
         {c.instructionLabel}
@@ -714,10 +717,11 @@ function RegionCard({
         rows={2}
         value={region.instruction}
         maxLength={REGION_INSTRUCTION_MAX_LENGTH}
-        placeholder={placeholder}
+        placeholder={c.instructionPlaceholder[region.kind]}
         onChange={(e) => onInstruction(e.target.value)}
       />
       <RegionLabelChips items={labelChips} onInsert={insertLabel} ariaLabel={c.chipsLabel} />
+      {namedArea && <p className={styles.hint}>{fmt(c.namedAreaHint, { n: index + 1 })}</p>}
       <label className={styles.fieldLabel} htmlFor={`${id}-text`}>
         {c.textLabel}
       </label>

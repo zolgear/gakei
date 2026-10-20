@@ -7,10 +7,9 @@ describe('regionChipItems', () => {
     const items = regionChipItems(
       messagesFor('ja'),
       [
-        { number: 2, kind: 'add', box: [0, 0, 0.5, 0.5], instruction: 'x' },
+        { number: 2, kind: 'add', box: [0, 0, 0.5, 0.5], instruction: 'x', label: ' カップ ' },
         { number: 1, kind: 'change', box: [0, 0, 0.5, 0.5], instruction: 'y' },
       ],
-      { '2': 'カップ' },
     )
     expect(items.map((i) => [i.text, i.display, i.colorIndex])).toEqual([
       ['四角 1', '四角 1', 0],

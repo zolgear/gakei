@@ -38,6 +38,10 @@ interface StoredRunFormPayloadV1 {
    */
   regions?: RegionBox[]
   regionsAssetId?: string | null
+  /**
+   * 古い保存値だけが持つ、四角の名前(番号 → 名前)。今は四角の `label` に入れる。読むときに
+   * `label` へ移し、書くときは出さない。
+   */
   regionLabels?: Record<string, string>
 }
 
@@ -70,11 +74,12 @@ function isStoredRegionBox(value: unknown): value is RegionBox {
     (v.source_box === undefined || v.source_box === null || isNumberArray(v.source_box, 4)) &&
     typeof v.instruction === 'string' &&
     (v.text === undefined || v.text === null || typeof v.text === 'string') &&
-    (v.reference_asset_id === undefined || v.reference_asset_id === null || typeof v.reference_asset_id === 'string')
+    (v.reference_asset_id === undefined || v.reference_asset_id === null || typeof v.reference_asset_id === 'string') &&
+    (v.label === undefined || v.label === null || typeof v.label === 'string')
   )
 }
 
-/** 四角の名前(番号 → 名前)。文字列でない値は捨てる。 */
+/** 古い保存値の四角の名前(番号 → 名前)。文字列でない値は捨てる。 */
 function parseStoredRegionLabels(value: unknown): Record<string, string> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const labels: Record<string, string> = {}
@@ -87,15 +92,20 @@ function parseStoredRegionLabels(value: unknown): Record<string, string> {
 /** 四角と、四角を付けた主たる入力。どちらかが壊れていれば四角なしにする。 */
 function parseStoredRegions(
   payload: Record<string, unknown>,
-): Pick<RunFormState, 'regions' | 'regionsAssetId' | 'regionLabels'> {
+): Pick<RunFormState, 'regions' | 'regionsAssetId'> {
   const regions = payload.regions
   const assetId = payload.regionsAssetId
   if (!Array.isArray(regions) || regions.length === 0 || typeof assetId !== 'string') {
     return { regions: [], regionsAssetId: null }
   }
   if (!regions.every(isStoredRegionBox)) return { regions: [], regionsAssetId: null }
+  // 古い保存値の `regionLabels` は、四角に名前が無ければその四角の `label` に移す。
   const labels = parseStoredRegionLabels(payload.regionLabels)
-  return { regions, regionsAssetId: assetId, ...(Object.keys(labels).length > 0 ? { regionLabels: labels } : {}) }
+  const merged = regions.map((r) => {
+    const old = labels[String(r.number)]
+    return !r.label && old ? { ...r, label: old } : r
+  })
+  return { regions: merged, regionsAssetId: assetId }
 }
 
 function isParamValue(value: unknown): value is string | number | boolean {
@@ -159,7 +169,6 @@ export function serializeRunFormState(state: RunFormState): string {
     assetGroupId: state.assetGroupId,
     regions: state.regions,
     regionsAssetId: state.regionsAssetId,
-    ...(state.regionLabels && Object.keys(state.regionLabels).length > 0 ? { regionLabels: state.regionLabels } : {}),
   }
   return JSON.stringify(payload)
 }

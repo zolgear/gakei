@@ -198,10 +198,8 @@ export interface RunFormLogic {
    * 四角を受けないプロバイダー・モデルに切り替えると、自動で外して `regionsNotice` で知らせる。
    */
   regions: RegionBox[]
-  /** 四角の名前(検出の候補から作った四角。番号 → 名前)。画面の中だけで、サーバーには送らない。 */
-  regionLabels: Record<string, string>
-  /** 主たる入力に四角を付ける(空の配列なら外す)。`labels` は四角の名前(番号 → 名前)。 */
-  setRegions: (regions: RegionBox[], labels?: Record<string, string>) => void
+  /** 主たる入力に四角を付ける(空の配列なら外す)。 */
+  setRegions: (regions: RegionBox[]) => void
   clearRegions: () => void
   /** 選んだモデルの Edit が四角を受けるか(受けなければ「領域」を出さない)。 */
   regionsSupported: boolean
@@ -410,7 +408,6 @@ export function useRunFormLogic(
       assetGroupId,
       regions: formState.regions,
       regionsAssetId: formState.regionsAssetId,
-      regionLabels: formState.regionLabels,
     })
     // formState.inputs・regions はここでは変更しないので依存に含めない(無限ループ回避)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -485,24 +482,19 @@ export function useRunFormLogic(
   }
   useEffect(() => {
     if (regionsClearReason === null) return
-    setFormState({ ...formState, regions: [], regionsAssetId: null, regionLabels: undefined })
+    setFormState({ ...formState, regions: [], regionsAssetId: null })
     const rm = msg().regions.form
     setRegionsNotice(regionsClearReason === 'primaryChanged' ? rm.clearedPrimaryChanged : rm.clearedUnsupported)
   }, [regionsClearReason, formState, setFormState])
 
-  function setRegions(next: RegionBox[], labels: Record<string, string> = {}) {
+  function setRegions(next: RegionBox[]) {
     setRegionsNotice(null)
-    setFormState({
-      ...formState,
-      regions: next,
-      regionsAssetId: next.length > 0 ? primaryAssetId : null,
-      regionLabels: next.length > 0 && Object.keys(labels).length > 0 ? labels : undefined,
-    })
+    setFormState({ ...formState, regions: next, regionsAssetId: next.length > 0 ? primaryAssetId : null })
   }
 
   function clearRegions() {
     setRegionsNotice(null)
-    setFormState({ ...formState, regions: [], regionsAssetId: null, regionLabels: undefined })
+    setFormState({ ...formState, regions: [], regionsAssetId: null })
   }
 
   const regionsActive =
@@ -889,7 +881,6 @@ export function useRunFormLogic(
     inputs: formState.inputs,
     setInputs,
     regions: regionsClearReason === null ? formState.regions : [],
-    regionLabels: (regionsClearReason === null ? formState.regionLabels : undefined) ?? {},
     setRegions,
     clearRegions,
     regionsSupported,

@@ -165,7 +165,7 @@ describe('領域の指示の四角(ADR-0053)', () => {
     inputs: [{ inputId: 'in-1', assetId: 'A', role: 'image', position: 0 }],
     assetGroupId: null,
     regions: [
-      { number: 1, kind: 'move', box: [0.5, 0.1, 0.8, 0.4], source_box: [0.1, 0.1, 0.4, 0.4], instruction: 'x', text: null, reference_asset_id: 'R' },
+      { number: 1, kind: 'move', box: [0.5, 0.1, 0.8, 0.4], source_box: [0.1, 0.1, 0.4, 0.4], instruction: 'x', text: null, reference_asset_id: 'R', label: '帽子' },
     ],
     regionsAssetId: 'A',
   }
@@ -181,6 +181,17 @@ describe('領域の指示の四角(ADR-0053)', () => {
     expect(parsed?.regions).toEqual([])
     expect(parsed?.regionsAssetId).toBeNull()
     expect(parsed?.inputs).toHaveLength(1)
+  })
+
+  it('古い保存値の regionLabels は四角の label に移し、書くときは出さない', () => {
+    const raw = JSON.parse(serializeRunFormState(base))
+    expect(raw.regionLabels).toBeUndefined()
+    delete raw.regions[0].label
+    raw.regionLabels = { '1': 'カップ', '2': 'x', '3': 5 }
+    const parsed = parseStoredRunFormState(JSON.stringify(raw))
+    expect(parsed?.regions[0].label).toBe('カップ')
+    expect(parsed?.regions).toHaveLength(1)
+    expect(parsed && 'regionLabels' in parsed).toBe(false)
   })
 
   it('四角を付けた主たる入力が無ければ四角なし', () => {

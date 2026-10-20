@@ -4,6 +4,7 @@ import {
   addRegion,
   areRegionBoxesValid,
   boxFromPoints,
+  canSaveRegions,
   boxesFromEditorRegions,
   defaultMoveTarget,
   editorRegionsFromBoxes,
@@ -45,6 +46,7 @@ function region(overrides: Partial<EditorRegion> = {}): EditorRegion {
     instruction: 'x',
     text: '',
     referenceAssetId: null,
+    label: '',
     ...overrides,
   }
 }
@@ -114,6 +116,13 @@ describe('編集の操作', () => {
     expect(b.source_box).toBeNull()
   })
 
+  it('名前は前後の空白を除いて送り、空なら null。API の形から戻せる', () => {
+    expect(boxesFromEditorRegions([region({ label: '  白い襟 ' })])[0].label).toBe('白い襟')
+    expect(boxesFromEditorRegions([region({ label: '  ' })])[0].label).toBeNull()
+    expect(editorRegionsFromBoxes([box({ label: '帽子' })])[0].label).toBe('帽子')
+    expect(editorRegionsFromBoxes([box()])[0].label).toBe('')
+  })
+
   it('16 個までしか足せない', () => {
     let regions: EditorRegion[] = []
     for (let i = 0; i < REGIONS_MAX + 2; i += 1) regions = addRegion(regions, [0, 0, 0.5, 0.5])
@@ -137,8 +146,10 @@ describe('編集の操作', () => {
 })
 
 describe('検証', () => {
-  it('「変える」「足す」は指示・描く文字・参照画像のどれかが要る', () => {
-    expect(regionProblems(region({ instruction: '  ' }))).toContain('instructionRequired')
+  it('指示は任意(位置だけ・位置と名前だけの四角も保存できる)', () => {
+    expect(regionProblems(region({ instruction: '  ' }))).toEqual([])
+    expect(regionProblems(region({ kind: 'add', instruction: '', label: 'カフス' }))).toEqual([])
+    expect(canSaveRegions([region({ instruction: '' }), region({ key: 'k2', kind: 'add', instruction: '' })])).toBe(true)
     expect(regionProblems(region({ instruction: '', text: 'OPEN' }))).toEqual([])
     expect(regionProblems(region({ instruction: '', referenceAssetId: 'a1' }))).toEqual([])
     expect(regionProblems(region({ kind: 'keep', instruction: '' }))).toEqual([])
@@ -148,6 +159,7 @@ describe('検証', () => {
   it('文字数の上限と、潰れた四角', () => {
     expect(regionProblems(region({ instruction: 'a'.repeat(2001) }))).toContain('instructionTooLong')
     expect(regionProblems(region({ text: 'a'.repeat(201) }))).toContain('textTooLong')
+    expect(regionProblems(region({ label: 'a'.repeat(101) }))).toContain('labelTooLong')
     expect(regionProblems(region({ box: [0.3, 0.3, 0.3, 0.5] }))).toContain('invalidBox')
     expect(regionProblems(region({ kind: 'move', sourceBox: null }))).toContain('invalidSourceBox')
   })
@@ -187,7 +199,7 @@ describe('restoreRunRegions', () => {
     version: 1,
     delivery: 'image_and_text',
     regions: [
-      box({ number: 2, reference_asset_id: 'ref-new' }),
+      box({ number: 2, reference_asset_id: 'ref-new', label: 'カップ' }),
       box({ number: 1, reference_asset_id: 'user2' }),
     ],
     appended_text: '\n\nAPPENDED',
@@ -209,6 +221,8 @@ describe('restoreRunRegions', () => {
     expect(restored.prompt).toBe('user prompt')
     expect(restored.inputs.map((i) => i.asset_id)).toEqual(['user1', 'user2', 'mask1'])
     expect(restored.regions.map((r) => r.number)).toEqual([1, 2])
+    // 四角の名前も戻す(四角の定義の一部)。
+    expect(restored.regions[1].label).toBe('カップ')
     expect(restored.regionsAssetId).toBe('user1')
   })
 

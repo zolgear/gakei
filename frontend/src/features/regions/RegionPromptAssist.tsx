@@ -16,7 +16,6 @@ import { RegionOverlay, type RegionHighlight } from './RegionOverlay'
 import { RegionLabelChips } from './RegionLabelChips'
 import { labelChipItems, regionChipItems } from './regionChips'
 import { setRegionAssistOpen, useRegionAssistOpen } from './regionAssistStore'
-import type { RegionLabels } from './regions'
 import { candidatesOf, useDetectionHistory } from './useRegionDetection'
 import styles from './RegionPromptAssist.module.css'
 
@@ -26,13 +25,12 @@ interface RegionPromptAssistProps {
   /** 選んだモデルが四角を受けるか。 */
   enabled: boolean
   regions: readonly RegionBox[]
-  labels: RegionLabels
   /** チップを出すか(プロンプトテンプレートのときは書く欄が無いので出さない)。 */
   showChips: boolean
   onInsert: (text: string) => void
 }
 
-export function RegionPromptAssist({ asset, enabled, regions, labels, showChips, onInsert }: RegionPromptAssistProps) {
+export function RegionPromptAssist({ asset, enabled, regions, showChips, onInsert }: RegionPromptAssistProps) {
   const { t } = useI18n()
   const a = t.regions.assist
   const open = useRegionAssistOpen()
@@ -44,7 +42,7 @@ export function RegionPromptAssist({ asset, enabled, regions, labels, showChips,
   const candidates = selected ? candidatesOf(selected) : []
   if (regions.length === 0 && candidates.length === 0) return null
 
-  const items = [...regionChipItems(t, regions, labels), ...labelChipItems(candidates)]
+  const items = [...regionChipItems(t, regions), ...labelChipItems(candidates)]
   const summary = [
     regions.length > 0 ? fmt(a.boxCount, { count: regions.length }) : null,
     candidates.length > 0 ? fmt(a.candidateCount, { count: candidates.length }) : null,
@@ -57,7 +55,6 @@ export function RegionPromptAssist({ asset, enabled, regions, labels, showChips,
       width={asset.width}
       height={asset.height}
       regions={regions}
-      labels={labels}
       candidates={candidates}
       highlight={highlight}
       textScale={scale}

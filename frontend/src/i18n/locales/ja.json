@@ -3633,7 +3633,7 @@
   "regions": {
     "title": "領域",
     "button": "領域",
-    "buttonTitle": "1枚目の入力画像に四角を描き、四角ごとに指示を書く",
+    "buttonTitle": "1枚目の入力画像に四角を描き、四角ごとに名前や指示を付ける",
     "close": "閉じる",
     "cancel": "キャンセル",
     "save": "保存",
@@ -3665,7 +3665,9 @@
     "card": {
       "aria": "四角 {n}",
       "kindLabel": "種類",
-      "instructionLabel": "指示",
+      "labelLabel": "名前(任意)",
+      "labelPlaceholder": "この四角の物(例: 右手の白いカフス)",
+      "instructionLabel": "指示(任意)",
       "instructionPlaceholder": {
         "change": "この四角の中をどう変えるか(例: 赤い帽子にする)",
         "add": "この四角に足す物(例: 白い猫)",
@@ -3673,7 +3675,6 @@
         "remove": "(任意)消す物",
         "move": "(任意)動かす物"
       },
-      "hintPlaceholder": "検出: {label}(何をするかを書く)",
       "textLabel": "描く文字(任意)",
       "textPlaceholder": "看板などに描かせる文字",
       "referenceLabel": "参照画像(任意)",
@@ -3684,10 +3685,11 @@
       "moveDown": "番号を後ろへ",
       "remove": "この四角を外す",
       "moveHint": "点線の四角(元の位置)にある物を、実線の四角(移す先)へ動かします。",
+      "namedAreaHint": "指示が無い四角は、場所と名前だけを送る目印になります。プロンプトから「四角 {n}」か名前で指せます。",
       "chipsLabel": "検出の名前を指示に入れる"
     },
     "problems": {
-      "instructionRequired": "「変える」「足す」では、指示・描く文字・参照画像のどれかを入れてください。",
+      "labelTooLong": "名前は {max} 文字以内にしてください。",
       "instructionTooLong": "指示は {max} 文字以内にしてください。",
       "textTooLong": "描く文字は {max} 文字以内にしてください。",
       "invalidBox": "四角の位置が正しくありません。描き直してください。",
@@ -3746,6 +3748,7 @@
       "textLine": "描く文字: 「{text}」",
       "reference": "参照画像",
       "noInstruction": "(指示なし)",
+      "marker": "(指示なし。場所と名前を示す目印)",
       "overlayTag": "領域"
     },
     "assist": {

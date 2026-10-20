@@ -6974,6 +6974,8 @@ export interface components {
             box: number[];
             /** Source Box */
             source_box?: number[] | null;
+            /** Label */
+            label?: string | null;
             /**
              * Instruction
              * @default

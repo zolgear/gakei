@@ -3633,7 +3633,7 @@
   "regions": {
     "title": "Regions",
     "button": "Regions",
-    "buttonTitle": "Draw boxes on the first input image and write an instruction for each box",
+    "buttonTitle": "Draw boxes on the first input image and give each box a name or an instruction",
     "close": "Close",
     "cancel": "Cancel",
     "save": "Save",
@@ -3665,7 +3665,9 @@
     "card": {
       "aria": "Box {n}",
       "kindLabel": "Kind",
-      "instructionLabel": "Instruction",
+      "labelLabel": "Name (optional)",
+      "labelPlaceholder": "What is in this box (e.g. the white cuff on the right hand)",
+      "instructionLabel": "Instruction (optional)",
       "instructionPlaceholder": {
         "change": "How to change the inside of this box (e.g. make it a red hat)",
         "add": "What to add in this box (e.g. a white cat)",
@@ -3673,7 +3675,6 @@
         "remove": "(Optional) what to remove",
         "move": "(Optional) what to move"
       },
-      "hintPlaceholder": "Detected: {label} (write what to do)",
       "textLabel": "Text to draw (optional)",
       "textPlaceholder": "Text to draw, such as on a sign",
       "referenceLabel": "Reference image (optional)",
@@ -3684,10 +3685,11 @@
       "moveDown": "Move number later",
       "remove": "Remove this box",
       "moveHint": "Moves what is in the dashed box (the original position) to the solid box (the target).",
+      "namedAreaHint": "A box without an instruction is sent as a marker with only its location and name. Refer to it from the prompt as \"Box {n}\" or by its name.",
       "chipsLabel": "Insert a detected name into the instruction"
     },
     "problems": {
-      "instructionRequired": "For Change and Add, enter an instruction, text to draw, or a reference image.",
+      "labelTooLong": "Keep the name to {max} characters or fewer.",
       "instructionTooLong": "Keep the instruction within {max} characters.",
       "textTooLong": "Keep the text to draw within {max} characters.",
       "invalidBox": "The box position is not valid. Draw it again.",
@@ -3746,6 +3748,7 @@
       "textLine": "Text to draw: \"{text}\"",
       "reference": "Reference image",
       "noInstruction": "(no instruction)",
+      "marker": "(no instruction; a marker showing the location and name)",
       "overlayTag": "Regions"
     },
     "assist": {

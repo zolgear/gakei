@@ -13,6 +13,7 @@ import type { OperationCapabilities, RegionBox, RegionKind, RunRegions } from '.
 export const REGIONS_MAX = 16
 export const REGION_INSTRUCTION_MAX_LENGTH = 2000
 export const REGION_TEXT_MAX_LENGTH = 200
+export const REGION_LABEL_MAX_LENGTH = 100
 
 export const REGION_KINDS: readonly RegionKind[] = ['change', 'add', 'keep', 'remove', 'move']
 
@@ -152,10 +153,10 @@ export interface EditorRegion {
   text: string
   referenceAssetId: string | null
   /**
-   * 検出の候補から作ったときの名前。四角の見出しと指示の欄の目安に出す。画面の中(とフォームの状態)
-   * だけのもので、サーバーには送らない(`RegionBox` に名前の欄は無い)。
+   * 四角の名前(任意。検出の候補から作ったときは候補の名前が入る)。位置と合わせて四角の定義で、
+   * 指示とは分ける。サーバーにも送り(`RegionBox.label`)、再実行で戻る。
    */
-  label?: string
+  label: string
 }
 
 let keySeq = 0
@@ -164,17 +165,16 @@ export function newRegionKey(): string {
   return `r${Date.now().toString(36)}-${keySeq}`
 }
 
-/**
- * 四角の名前(検出の候補の名前)。キーは四角の番号。フォームの状態に四角と組で持ち、サーバーには
- * 送らない。
- */
-export type RegionLabels = Record<string, string>
+/** 四角の名前(前後の空白を除く。無ければ空文字)。 */
+export function regionLabel(box: Pick<RegionBox, 'label'>): string {
+  return box.label?.trim() ?? ''
+}
 
 /** フォームの値(API の形)から編集画面の状態を作る。番号の順に並べる。 */
-export function editorRegionsFromBoxes(boxes: readonly RegionBox[], labels: RegionLabels = {}): EditorRegion[] {
+export function editorRegionsFromBoxes(boxes: readonly RegionBox[]): EditorRegion[] {
   return orderedRegions(boxes).map((b) => ({
-    ...(labels[String(b.number)] ? { label: labels[String(b.number)] } : {}),
     key: newRegionKey(),
+    label: b.label ?? '',
     kind: b.kind,
     box: [...b.box] as Box,
     sourceBox: b.kind === 'move' && b.source_box ? ([...b.source_box] as Box) : null,
@@ -195,23 +195,16 @@ export function boxesFromEditorRegions(regions: readonly EditorRegion[]): Region
     // 描く文字は前後の空白も含めてそのまま渡す(サーバーと同じ)。空なら無し。
     text: r.text === '' ? null : r.text,
     reference_asset_id: r.referenceAssetId,
+    // 名前は前後の空白を除く。空なら無し(サーバーと同じ)。
+    label: r.label.trim() === '' ? null : r.label.trim(),
   }))
-}
-
-/** 編集画面の状態から、四角の名前(番号 → 名前)を作る。番号は並び順で 1 から。 */
-export function labelsFromEditorRegions(regions: readonly EditorRegion[]): RegionLabels {
-  const labels: RegionLabels = {}
-  regions.forEach((r, index) => {
-    if (r.label) labels[String(index + 1)] = r.label
-  })
-  return labels
 }
 
 export function addRegion(regions: readonly EditorRegion[], box: Box, extra: Partial<EditorRegion> = {}): EditorRegion[] {
   if (regions.length >= REGIONS_MAX) return [...regions]
   return [
     ...regions,
-    { key: newRegionKey(), kind: 'change', box, sourceBox: null, instruction: '', text: '', referenceAssetId: null, ...extra },
+    { key: newRegionKey(), kind: 'change', box, sourceBox: null, instruction: '', text: '', referenceAssetId: null, label: '', ...extra },
   ]
 }
 
@@ -255,25 +248,16 @@ export function setRegionKind(regions: readonly EditorRegion[], key: string, kin
 
 // -- 検証(サーバーの検証に合わせる) ------------------------------------------------------
 
-export type RegionProblem =
-  | 'instructionRequired'
-  | 'instructionTooLong'
-  | 'textTooLong'
-  | 'invalidBox'
-  | 'invalidSourceBox'
+export type RegionProblem = 'labelTooLong' | 'instructionTooLong' | 'textTooLong' | 'invalidBox' | 'invalidSourceBox'
 
-/** 四角1つの問題(無ければ空)。「変える」「足す」は、指示・描く文字・参照画像のどれかが要る。 */
+/**
+ * 四角1つの問題(無ければ空)。指示は任意(四角の定義と指示は分ける。指示の無い四角は名前の
+ * 付いた目印として送り、全体のプロンプトから番号か名前で指せる)。
+ */
 export function regionProblems(region: EditorRegion): RegionProblem[] {
   const problems: RegionProblem[] = []
   const instruction = region.instruction.trim()
-  if (
-    (region.kind === 'change' || region.kind === 'add') &&
-    instruction === '' &&
-    region.text === '' &&
-    region.referenceAssetId === null
-  ) {
-    problems.push('instructionRequired')
-  }
+  if (region.label.trim().length > REGION_LABEL_MAX_LENGTH) problems.push('labelTooLong')
   if (instruction.length > REGION_INSTRUCTION_MAX_LENGTH) problems.push('instructionTooLong')
   if (region.text.length > REGION_TEXT_MAX_LENGTH) problems.push('textTooLong')
   if (!isValidBox(region.box)) problems.push('invalidBox')

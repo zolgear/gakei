@@ -668,7 +668,6 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         asset={editLogic.positionZeroAsset}
         enabled={form.regionsSupported}
         regions={form.regions}
-        labels={form.regionLabels}
         showChips={form.promptTemplate === null}
         onInsert={insertRegionText}
       />
@@ -738,12 +737,11 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         <RegionEditor
           asset={editLogic.positionZeroAsset}
           initialRegions={form.regions}
-          initialLabels={form.regionLabels}
           inputAssetIds={editLogic.images.map((i) => i.assetId)}
           maxInputImages={form.maxInputImages}
           delivery={form.regionsDelivery}
-          onSave={(regions, labels) => {
-            form.setRegions(regions, labels)
+          onSave={(regions) => {
+            form.setRegions(regions)
             setRegionEditorOpen(false)
           }}
           onCancel={() => setRegionEditorOpen(false)}

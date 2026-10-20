@@ -2,7 +2,7 @@
 import type { RegionBox } from '../../api/client'
 import { fmt, type Messages } from '../../i18n'
 import type { RegionHighlight } from './RegionOverlay'
-import { orderedRegions, type RegionLabels } from './regions'
+import { orderedRegions, regionLabel } from './regions'
 import type { RegionCandidate } from './useRegionDetection'
 
 export interface RegionChipItem {
@@ -17,10 +17,10 @@ export interface RegionChipItem {
 }
 
 /** 「四角 1」…のチップ(番号の順)。名前があれば添えて見せる(入れるのは「四角 1」だけ)。 */
-export function regionChipItems(t: Messages, regions: readonly RegionBox[], labels: RegionLabels): RegionChipItem[] {
+export function regionChipItems(t: Messages, regions: readonly RegionBox[]): RegionChipItem[] {
   return orderedRegions(regions).map((r, index) => {
     const text = fmt(t.regions.assist.boxChip, { n: r.number })
-    const label = labels[String(r.number)]
+    const label = regionLabel(r)
     return {
       key: `region:${r.number}`,
       text,
