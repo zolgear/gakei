@@ -342,17 +342,6 @@ def _plan_regions(
     if primary_meta is None:
         raise RunCreateError("invalid", t("runRegions.primaryRequired"))
 
-    for region in body.regions:
-        if (
-            region.kind in ("change", "add")
-            and not region.instruction
-            and region.text is None
-            and region.reference_asset_id is None
-        ):
-            raise RunCreateError(
-                "invalid", t("runRegions.instructionRequired", number=region.number)
-            )
-
     # 入力の何枚目か(1 から。プロバイダーに送る順 = role=image の position の順)。
     image_numbers = {m.asset_id: index + 1 for index, m in enumerate(image_metas)}
     next_position = image_metas[-1].position + 1
