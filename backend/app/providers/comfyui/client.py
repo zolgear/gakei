@@ -407,7 +407,7 @@ class ComfyUIClient:
         except httpx.TransportError as exc:
             raise ComfyUIError(
                 "comfyuiUnavailable",
-                t("comfyui.client.connectFailed", error=exc),
+                t("comfyui.client.connectFailed", error=_error_kind(exc)),
             ) from exc
 
     def ws_events(self, client_id: str) -> AbstractAsyncContextManager[AsyncIterator[WsEvent]]:
@@ -448,8 +448,15 @@ class ComfyUIClient:
         except httpx.TransportError as exc:
             raise ComfyUIError(
                 "comfyuiUnavailable",
-                t("comfyui.client.connectFailed", error=exc),
+                t("comfyui.client.connectFailed", error=_error_kind(exc)),
             ) from exc
+
+
+def _error_kind(exc: BaseException) -> str:
+    """画面に出す失敗の種類(例外の種類の名前だけ)。例外の文言はアドレスや OS のエラーを含むので
+    ログにだけ出す(Issue #166)。"""
+    logger.warning("ComfyUI との通信に失敗しました: %s: %s", type(exc).__name__, exc)
+    return type(exc).__name__
 
 
 def _join(base_url: str, path: str) -> str:
@@ -486,7 +493,7 @@ async def _ws_events(
         except Exception as exc:
             raise ComfyUIError(
                 "comfyuiUnavailable",
-                t("comfyui.client.wsConnectFailed", error=exc),
+                t("comfyui.client.wsConnectFailed", error=_error_kind(exc)),
             ) from exc
         yield _consume(stream)
 
@@ -511,7 +518,7 @@ async def _consume(stream: AsyncIterator[str | bytes]) -> AsyncIterator[WsEvent]
     except Exception as exc:  # 途中切断をまとめて comfyuiUnavailable に変換する
         raise ComfyUIError(
             "comfyuiUnavailable",
-            t("comfyui.client.wsLost", error=exc),
+            t("comfyui.client.wsLost", error=_error_kind(exc)),
         ) from exc
 
 

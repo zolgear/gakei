@@ -11,13 +11,27 @@ SQLite は通すので、両方の DB で同じ振る舞いになるよう、入
   自動タイトル・タグの推定結果、IdP のクレーム)は、NUL を取り除き、UTF-8 にできない文字
   (対になっていないサロゲート)を置き換えてから保存する。拒むと Run の記録や取り込みが
   失敗するため。`sanitize_external_text` / `sanitize_external`。
+
+想定外の例外の文言(ライブラリ・OS・DB 由来。ファイルのパスや接続先、SQL を含みうる)は、画面や
+API の応答に出さない。Run などの失敗理由には例外の種類の名前と固定の文言だけを書き
+(`internal_error_text`)、詳細はサーバーのログに出す(Issue #166)。
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from app.i18n import t
+
 NUL = "\x00"
+
+
+def internal_error_text(e: BaseException) -> str:
+    """想定外の例外を、画面に出してよい文言にする(例外の種類の名前と、ログを見る案内だけ)。
+
+    呼び出し側は、例外の詳細(トレースバック)を `logger.exception` などでログに出しておく。
+    """
+    return t("worker.internalErrorDetail", error=type(e).__name__)
 
 
 def find_nul(value: Any, path: tuple[str | int, ...] = ()) -> tuple[str | int, ...] | None:

@@ -667,7 +667,8 @@
   },
   "worker": {
     "interruptedByRestart": "Interrupted by a server restart",
-    "providerNotRegistered": "provider={provider} is not registered"
+    "providerNotRegistered": "provider={provider} is not registered",
+    "internalErrorDetail": "{error} (see the server log for details)"
   },
   "launcher": {
     "nodeMissing": "Node.js was not found, or the version is too old (22.12+ required, 24.x recommended).\nInstall it from https://nodejs.org/.",

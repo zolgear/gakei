@@ -34,6 +34,7 @@ GAKEI は環境変数、またはリポジトリ直下の `.env` から設定を
 | `HOST` | `127.0.0.1` | 待ち受けるアドレス |
 | `PORT` | `8000` | 待ち受けるポート |
 | `ALLOWED_HOSTS` | 空 | 個人モード(認証なし)で受け付けるホスト名(カンマ区切り。大文字小文字は無視。例: `gakei.lan,photo-box`)。個人モードでは、ブラウザが送る `Host` のホストが IP アドレス、`localhost`、`PUBLIC_BASE_URL` のホスト、ここに書いたホスト名のどれでもない要求を 421 で断る(DNS リバインディング対策。ADR-0019 2章)。IP アドレスか `localhost` で開くなら指定は要らない。LAN の別の PC からホスト名で開くときに、そのホスト名を書く。oidc モードでは `Host` を確かめない |
+| `SECURITY_HEADERS` | `true` | 応答にセキュリティのヘッダーを付ける。全応答に `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`(フレームへの埋め込みを禁止)、`Referrer-Policy: same-origin`(別のサイトへ URL を Referer で渡さない。共有のページは ADR-0029 のとおり `no-referrer`)を、画面の HTML に Content-Security-Policy(スクリプトは同じオリジンのファイルだけ、`frame-ancestors 'none'` など)を付ける。リバースプロキシで自分の値を付けるときだけ `false` にする(共有のページの `no-referrer` は `false` でも付く)。GAKEI を他のページの `iframe` に埋め込むことはできない |
 | `DATABASE_URL` | なし(SQLite) | メタデータの DB を PostgreSQL にする場合の接続先(`postgresql://user:pass@host:5432/gakei`。ADR-0027)。指定しても、画像のために `DATA_DIR` は引き続き必要。詳しくは [postgresql.md](postgresql.md) |
 | `STORAGE_BACKEND` | `local` | 画像の原本と派生の保存先。`local`(`DATA_DIR`)、`azure_blob`(Azure Blob Storage)、`s3`(S3 互換ストレージ)。ADR-0028。`local` 以外でも、アバターや `secrets.json` などのために `DATA_DIR` は引き続き必要。詳しくは [object-storage.md](object-storage.md) |
 | `AZURE_STORAGE_CONTAINER` | なし | `azure_blob` のときのコンテナ名(必須)。コンテナは先に作っておく |

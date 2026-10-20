@@ -133,6 +133,11 @@ def _callback_result(client: TestClient) -> dict:
     assert response.headers["content-type"].startswith("text/html")
     assert response.headers["cache-control"] == "no-store"
     text = response.text
+    # Issue #166: インラインのスクリプトは、この応答だけの nonce で許す。
+    csp = response.headers["content-security-policy"]
+    nonce = csp.split("'nonce-", 1)[1].split("'", 1)[0]
+    assert f'<script nonce="{nonce}">' in text
+    assert "frame-ancestors 'none'" in csp
     start = text.index("var r=") + len("var r=")
     end = text.index(";if(window.opener)")
     return json.loads(text[start:end])

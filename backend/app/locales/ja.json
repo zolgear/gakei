@@ -667,7 +667,8 @@
   },
   "worker": {
     "interruptedByRestart": "サーバー再起動により中断されました",
-    "providerNotRegistered": "provider={provider} は登録されていません"
+    "providerNotRegistered": "provider={provider} は登録されていません",
+    "internalErrorDetail": "{error}(詳しくはサーバーのログを確認してください)"
   },
   "launcher": {
     "nodeMissing": "Node.js が見つからないか、バージョンが古すぎます(22.12 以上が必要、24 系を推奨)。\nhttps://nodejs.org/ からインストールしてください。",

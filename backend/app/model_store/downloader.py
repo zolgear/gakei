@@ -25,6 +25,7 @@ from typing import Protocol
 
 import httpx
 
+from app.domain.text_safety import internal_error_text
 from app.http_body_limit import BodyTooLarge, iter_limited
 from app.i18n import t
 
@@ -222,9 +223,17 @@ class ModelDownloader:
             state.status = "idle"
             state.error = None
         except Exception as e:  # noqa: BLE001 - 失敗は状態として画面に出す
-            logger.warning("モデル %s(%s)のダウンロードに失敗しました: %s", name, self.label, e)
+            logger.warning(
+                "モデル %s(%s)のダウンロードに失敗しました: %s",
+                name,
+                self.label,
+                e,
+                exc_info=not isinstance(e, DownloadError),
+            )
             state.status = "failed"
-            state.error = str(e)[:500]
+            # `DownloadError` は固定の文言。それ以外(httpx や OS の例外。パスや接続先を含みうる)は
+            # 種類の名前だけを出し、詳細はログに残す(Issue #166)。
+            state.error = (str(e) if isinstance(e, DownloadError) else internal_error_text(e))[:500]
 
     async def wait(self, name: str) -> None:
         """テスト用。実行中のダウンロードの終了を待つ。"""

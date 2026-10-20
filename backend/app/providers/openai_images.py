@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.domain import general_settings
 from app.domain.api_key import resolve_base_url, resolve_key
+from app.domain.secret_values import redact_secret_text
 from app.i18n import t
 from app.providers import openai_spec
 from app.providers.base import (
@@ -354,6 +355,8 @@ def _is_content_filter(e: openai.APIError) -> bool:
 
 
 def _safe_message(e: openai.APIError) -> str:
+    """OpenAI のエラーの文言(プロンプトの拒否の理由など、利用者に役立つ)は残し、キーの形の
+    文字列だけを伏せる(`app/llm/errors.py` の `safe_api_message` と同じ流儀)。"""
     label = e.code or e.type or e.__class__.__name__
     detail = getattr(e, "message", None) or str(e)
-    return t("openai.apiError", label=label, detail=detail)
+    return redact_secret_text(t("openai.apiError", label=label, detail=detail))
