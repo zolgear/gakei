@@ -374,11 +374,14 @@ class Annotator:
     # -- ループ ----------------------------------------------------------------
 
     async def _sleep(self) -> None:
+        # 起こされてから消す。先に消すと、待ち行列を見ている最中に来た notify や stop の合図が
+        # 消え、待ちの上限(`_POLL_INTERVAL_SECONDS`)まで寝てしまう(止めるのも遅れる)。
+        if not self._stop.is_set():
+            try:
+                await asyncio.wait_for(self._wake.wait(), timeout=_POLL_INTERVAL_SECONDS)
+            except TimeoutError:
+                pass
         self._wake.clear()
-        try:
-            await asyncio.wait_for(self._wake.wait(), timeout=_POLL_INTERVAL_SECONDS)
-        except TimeoutError:
-            pass
 
     async def _loop(self) -> None:
         while not self._stop.is_set():

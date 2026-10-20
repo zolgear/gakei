@@ -8,6 +8,7 @@ ADR-0027 6章: 環境変数 `GAKEI_TEST_DATABASE_URL`(PostgreSQL のサーバー
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import uuid
@@ -37,6 +38,44 @@ def make_png_bytes(
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+# --- CI の分割(Windows の全件の実行を、複数のジョブに分ける) ---------------------
+
+
+def _shard_from_env() -> tuple[int, int] | None:
+    """`GAKEI_TEST_SHARD_INDEX`(1 始まり)と `GAKEI_TEST_SHARD_TOTAL`。どちらも無ければ None。"""
+    index = os.environ.get("GAKEI_TEST_SHARD_INDEX", "").strip()
+    total = os.environ.get("GAKEI_TEST_SHARD_TOTAL", "").strip()
+    if not index and not total:
+        return None
+    shard_index, shard_total = int(index), int(total)
+    if shard_total < 1 or not 1 <= shard_index <= shard_total:
+        raise pytest.UsageError(
+            f"GAKEI_TEST_SHARD_INDEX={index} / GAKEI_TEST_SHARD_TOTAL={total} が範囲外です"
+        )
+    return shard_index, shard_total
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """分割の指定があれば、テストの ID のハッシュで自分の分だけを残す。
+
+    `hash()` は実行ごとに変わるので sha1 を使う(xdist の worker の間でも、ジョブの間でも同じ
+    分け方になる)。分割をまたいで、どのテストもちょうど1回だけ走る。
+    """
+    shard = _shard_from_env()
+    if shard is None:
+        return
+    shard_index, shard_total = shard
+    selected: list[pytest.Item] = []
+    deselected: list[pytest.Item] = []
+    for item in items:
+        digest = hashlib.sha1(item.nodeid.encode("utf-8")).digest()
+        bucket = int.from_bytes(digest[:8], "big") % shard_total
+        (selected if bucket == shard_index - 1 else deselected).append(item)
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = selected
 
 
 @pytest.fixture(autouse=True)
@@ -204,6 +243,75 @@ def _test_database(
         _drop_pg_database(name)
         while _extra_databases:
             _drop_pg_database(_extra_databases.pop())
+
+
+# --- SQLite の雛形(最新のスキーマまで上げたファイル) ------------------------------
+#
+# 起動(lifespan)は毎回 `run_migrations`(Alembic の `upgrade head`)を呼ぶ。空のファイルから
+# 0001 → head まで上げると1回 0.6 秒ほど(Windows の CI ではさらに遅い)かかり、アプリを起動する
+# テストのほぼすべてが払っていた。そこで worker ごとに1回だけ雛形のファイルを head まで上げて
+# おき、まだ DB のファイルが無い起動では、それを複製してから本物の `run_migrations` を呼ぶ
+# (すでに head なので検査だけで終わる)。マイグレーションに環境変数や DATA_DIR への依存は
+# 無いので、できる DB は空のファイルから上げたものと同じ。
+#
+# マイグレーションそのもの・空の DB からの起動を確かめるテストは、マーカー `fresh_database`
+# で外す(本物の `run_migrations` が空のファイルから上げる)。PostgreSQL は上の
+# `_pg_template_database` が同じ役目をする。
+
+
+def _sqlite_file_of(url: str) -> Path | None:
+    parsed = make_url(url)
+    if parsed.get_backend_name() != "sqlite" or not parsed.database:
+        return None
+    if parsed.database == ":memory:":
+        return None
+    return Path(parsed.database)
+
+
+@pytest.fixture(scope="session")
+def _sqlite_template_file(tmp_path_factory: pytest.TempPathFactory) -> Path | None:
+    """SQLite のとき、head まで上げた雛形のファイル(worker ごとに1つ)。"""
+    if _PG_SERVER_URL is not None:
+        return None
+    import sqlite3
+
+    from app.main import run_migrations
+
+    path = tmp_path_factory.mktemp("sqlite_template") / "gakei.db"
+    run_migrations(f"sqlite:///{path}")
+    # WAL に残った分を本体へ書き戻し、ファイル1つを複製すれば済むようにする。
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        connection.close()
+    return path
+
+
+@pytest.fixture(autouse=True)
+def _migrate_from_sqlite_template(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    _sqlite_template_file: Path | None,
+) -> None:
+    """起動時の `run_migrations` が、まだ無い SQLite のファイルを雛形の複製から始めるようにする。"""
+    template = _sqlite_template_file
+    if template is None or request.node.get_closest_marker("fresh_database"):
+        return
+    import shutil
+
+    import app.main as app_main
+
+    real_run_migrations = app_main.run_migrations
+
+    def _run_migrations(url: str) -> None:
+        path = _sqlite_file_of(url)
+        if path is not None and not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(template, path)
+        real_run_migrations(url)
+
+    monkeypatch.setattr(app_main, "run_migrations", _run_migrations)
 
 
 @pytest.fixture(autouse=True)
