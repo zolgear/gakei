@@ -12,6 +12,8 @@ const sampleState: RunFormState = {
     { inputId: 'in-2', assetId: '22222222-2222-2222-2222-222222222222', role: 'mask', position: 0 },
   ],
   assetGroupId: '33333333-3333-3333-3333-333333333333',
+  regions: [],
+  regionsAssetId: null,
 }
 
 describe('serializeRunFormState / parseStoredRunFormState', () => {
@@ -78,6 +80,8 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
       params: {},
       inputs: [{ inputId: 'in-x', assetId: 'maybe-deleted-or-missing', role: 'image', position: 0 }],
       assetGroupId: null,
+      regions: [],
+      regionsAssetId: null,
     }
     const raw = serializeRunFormState(state)
     expect(parseStoredRunFormState(raw)).toEqual(state)
@@ -121,7 +125,7 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
   })
 
   it('空の inputs/params でも往復できる', () => {
-    const state: RunFormState = { provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null }
+    const state: RunFormState = { provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null}
     expect(parseStoredRunFormState(serializeRunFormState(state))).toEqual(state)
   })
 
@@ -134,6 +138,8 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
       params: {},
       inputs: [],
       assetGroupId: null,
+      regions: [],
+      regionsAssetId: null,
     })
   })
 
@@ -147,5 +153,50 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
     expect(parseStoredRunFormState(JSON.stringify(base))?.assetGroupId).toBeNull()
     expect(parseStoredRunFormState(JSON.stringify({ ...base, assetGroupId: 42 }))?.assetGroupId).toBeNull()
     expect(parseStoredRunFormState(JSON.stringify({ ...base, assetGroupId: 'g1' }))?.assetGroupId).toBe('g1')
+  })
+})
+
+describe('領域の指示の四角(ADR-0053)', () => {
+  const base: RunFormState = {
+    provider: 'openai',
+    model: 'm',
+    prompt: '',
+    params: {},
+    inputs: [{ inputId: 'in-1', assetId: 'A', role: 'image', position: 0 }],
+    assetGroupId: null,
+    regions: [
+      { number: 1, kind: 'move', box: [0.5, 0.1, 0.8, 0.4], source_box: [0.1, 0.1, 0.4, 0.4], instruction: 'x', text: null, reference_asset_id: 'R', label: '帽子' },
+    ],
+    regionsAssetId: 'A',
+  }
+
+  it('四角と、四角を付けた主たる入力を往復できる', () => {
+    expect(parseStoredRunFormState(serializeRunFormState(base))).toEqual(base)
+  })
+
+  it('四角の形が壊れていれば、四角だけを捨てる', () => {
+    const raw = JSON.parse(serializeRunFormState(base))
+    raw.regions[0].box = 'broken'
+    const parsed = parseStoredRunFormState(JSON.stringify(raw))
+    expect(parsed?.regions).toEqual([])
+    expect(parsed?.regionsAssetId).toBeNull()
+    expect(parsed?.inputs).toHaveLength(1)
+  })
+
+  it('古い保存値の regionLabels は四角の label に移し、書くときは出さない', () => {
+    const raw = JSON.parse(serializeRunFormState(base))
+    expect(raw.regionLabels).toBeUndefined()
+    delete raw.regions[0].label
+    raw.regionLabels = { '1': 'カップ', '2': 'x', '3': 5 }
+    const parsed = parseStoredRunFormState(JSON.stringify(raw))
+    expect(parsed?.regions[0].label).toBe('カップ')
+    expect(parsed?.regions).toHaveLength(1)
+    expect(parsed && 'regionLabels' in parsed).toBe(false)
+  })
+
+  it('四角を付けた主たる入力が無ければ四角なし', () => {
+    const raw = JSON.parse(serializeRunFormState(base))
+    delete raw.regionsAssetId
+    expect(parseStoredRunFormState(JSON.stringify(raw))?.regions).toEqual([])
   })
 })

@@ -32,6 +32,19 @@ export function insertPromptText(
   return { text, cursor: before.length + insertText.length }
 }
 
+/**
+ * 名前(検出の名前や「四角 1」)を文の途中に差し込む。カーソル位置(不明なら末尾)へ入れ、直前が
+ * 空白・改行・先頭でなければ半角の空白を1つ挟む。
+ */
+export function insertInlineText(current: string, insertText: string, cursorPos: number | null): PromptInsertResult {
+  const clamped = cursorPos === null ? current.length : Math.max(0, Math.min(cursorPos, current.length))
+  const before = current.slice(0, clamped)
+  const after = current.slice(clamped)
+  const separator = before.length === 0 || /\s$/.test(before) ? '' : ' '
+  const inserted = separator + insertText
+  return { text: before + inserted + after, cursor: before.length + inserted.length }
+}
+
 /** 既存のプロンプトが空でなければ、置き換え前に確認が要る(2段階確認)。 */
 export function shouldConfirmReplace(current: string): boolean {
   return current.trim().length > 0
@@ -41,8 +54,9 @@ export function shouldConfirmReplace(current: string): boolean {
  * - insert: カーソル位置(無ければ末尾に改行を挟んで)に挿入
  * - replace: 全文を置き換え
  * - append-tags: 末尾に `, ` でつなぐ(画像のタグをプロンプトに使う。ADR-0039 1章)
+ * - inline: カーソル位置(無ければ末尾)に、前に空白を挟んで入れる(領域の名前。ADR-0053)
  */
-export type PromptInsertMode = 'insert' | 'replace' | 'append-tags'
+export type PromptInsertMode = 'insert' | 'replace' | 'append-tags' | 'inline'
 
 /** `useRunFormLogic` が公開する挿入/置き換え関数の型(ResultPane 側から呼ぶ)。 */
 export type InsertPromptFn = (text: string, mode: PromptInsertMode, cursorPos: number | null) => void
@@ -60,6 +74,7 @@ export function computePromptInsertion(
   if (mode === 'replace') {
     return { text: insertText, cursor: insertText.length }
   }
+  if (mode === 'inline') return insertInlineText(current, insertText, cursorPos)
   if (mode === 'append-tags') {
     const text = appendTagsText(current, insertText)
     return { text, cursor: text.length }

@@ -44,6 +44,7 @@ import { ShareLinksSettingsPage } from '../features/settings/pages/ShareLinksSet
 import { AnnotationSettingsPage } from '../features/settings/pages/AnnotationSettingsPage'
 import { EmbeddingSettingsPage } from '../features/settings/pages/EmbeddingSettingsPage'
 import { AssistantSettingsPage } from '../features/settings/pages/AssistantSettingsPage'
+import { RegionDetectionSettingsPage } from '../features/settings/pages/RegionDetectionSettingsPage'
 import { LlmConnectionsSettingsPage } from '../features/settings/pages/LlmConnectionsSettingsPage'
 import { AuthSettingsPage } from '../features/settings/pages/AuthSettingsPage'
 import {
@@ -65,6 +66,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   annotation: AnnotationSettingsPage,
   embeddings: EmbeddingSettingsPage,
   assistant: AssistantSettingsPage,
+  regionDetection: RegionDetectionSettingsPage,
   comfyui: ComfyUISettingsPage,
   sdwebui: SdWebuiSettingsPage,
   tagDictionary: TagDictionarySettingsPage,

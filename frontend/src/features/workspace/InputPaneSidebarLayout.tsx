@@ -12,6 +12,7 @@ import styles from './InputPaneSidebarLayout.module.css'
 export function InputPaneSidebarLayout({
   inputImages,
   promptEditor,
+  promptAssist,
   promptTools,
   submitControls,
   notices,
@@ -31,6 +32,7 @@ export function InputPaneSidebarLayout({
         </div>
         <div className={styles.section}>{inputImages}</div>
         <div className={`${styles.section} ${styles.prompt}`}>
+          {promptAssist}
           {promptEditor}
           <div className={styles.promptTools}>{promptTools}</div>
         </div>

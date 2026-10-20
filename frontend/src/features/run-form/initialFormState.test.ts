@@ -42,6 +42,8 @@ function model(overrides: Partial<ModelCapabilities> & Pick<ModelCapabilities, '
         min_input_images: 0,
         supports_mask: false,
         requires_mask: false,
+        supports_regions: false,
+        regions_delivery: null,
         params: [
           paramDef({
             name: 'quality',

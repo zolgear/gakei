@@ -10,6 +10,8 @@ import styles from './InputPane.module.css'
 interface InputPaneNoticesProps {
   submittedNotice: string | null
   droppedParamsNotice: string | null
+  /** 領域の指示を自動で外したときの案内(ADR-0053)。 */
+  regionsNotice: string | null
   blockReasons: string[]
   submitError: string | null
 }
@@ -17,6 +19,7 @@ interface InputPaneNoticesProps {
 export function InputPaneNotices({
   submittedNotice,
   droppedParamsNotice,
+  regionsNotice,
   blockReasons,
   submitError,
 }: InputPaneNoticesProps) {
@@ -30,6 +33,11 @@ export function InputPaneNotices({
         </p>
       )}
       {droppedParamsNotice && <p className={styles.blockReason}>{droppedParamsNotice}</p>}
+      {regionsNotice && (
+        <p className={styles.blockReason} role="status">
+          {regionsNotice}
+        </p>
+      )}
       {blockReasons.map((reason) => (
         <p key={reason} className={styles.blockReason}>
           {reason}

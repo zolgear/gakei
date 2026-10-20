@@ -213,3 +213,21 @@
     min-height: 44px;
   }
 }
+
+/* 領域の指示(ADR-0053)の数。押すと編集画面を開く。 */
+.regionsTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--color-edit);
+  background: transparent;
+  border: 1px solid var(--color-edit);
+  border-radius: 999px;
+}
+
+.regionsTag:hover {
+  background: var(--color-header-band);
+}

@@ -1,0 +1,635 @@
+/* 領域の指示の編集画面(ADR-0053)。モーダルの枠・ツールバー・フッターは配置(CompositeEditor.module.css)に合わせる。 */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 9, 11, 0.75);
+  padding: 16px;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(96vw, 1360px);
+  height: min(92dvh, 900px);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.modal:focus {
+  outline: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.closeButton {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  padding: 2px 6px;
+}
+
+.closeButton:hover {
+  color: var(--color-text);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.toolGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolButton {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+
+.toolButton:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-header-band);
+}
+
+.toolButton:disabled {
+  opacity: 0.4;
+}
+
+.toolButton[data-selected='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.countInline {
+  display: none;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.zoomText,
+.countText {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.countText {
+  margin-left: auto;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 10px;
+}
+
+.stageArea {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+  overflow: hidden;
+}
+
+.stageScroll {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* 四角を描く指で、ダイアログ・ページをスクロールやズームさせない。 */
+  overscroll-behavior: contain;
+}
+
+.stageScroll[data-zoomed='true'] {
+  overflow: auto;
+}
+
+.stageInner {
+  position: relative;
+}
+
+.imageFrame {
+  position: absolute;
+  box-shadow: 0 0 0 1px var(--color-border-strong);
+}
+
+.stageImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+.stageSvg {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+  overflow: visible;
+}
+
+.stageSvg[data-pan='true'] {
+  cursor: grab;
+}
+
+.stageSvg[data-panning='true'] {
+  cursor: grabbing;
+}
+
+.grab {
+  cursor: move;
+}
+
+.handle_nw,
+.handle_se {
+  cursor: nwse-resize;
+}
+
+.handle_ne,
+.handle_sw {
+  cursor: nesw-resize;
+}
+
+.handle_n,
+.handle_s {
+  cursor: ns-resize;
+}
+
+.handle_e,
+.handle_w {
+  cursor: ew-resize;
+}
+
+.badgeText {
+  pointer-events: none;
+  font-family: var(--font-mono);
+}
+
+.candidate {
+  cursor: pointer;
+}
+
+.candidateLabel {
+  font-size: 11px;
+  fill: #ffffff;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.sidePanel {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.mutedText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+}
+
+.sectionHeading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.fieldLabel {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.detectRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.detectRow > input,
+.detectRow > select {
+  flex: 1;
+  min-width: 0;
+}
+
+.historyRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.textInput,
+.textarea,
+.select {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 44px;
+  font-family: inherit;
+}
+
+.cardList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+}
+
+.card[data-selected='true'] {
+  border-color: var(--color-edit);
+}
+
+.card[data-invalid='true'] {
+  border-left: 3px solid var(--color-danger);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cardHeader .select {
+  flex: 1;
+  width: auto;
+}
+
+.cardBadge {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid #ffffff;
+}
+
+.cardButtons {
+  display: flex;
+  gap: 4px;
+}
+
+.iconButton {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+
+.iconButton:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-header-band);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+}
+
+.referenceRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.referenceThumb {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: block;
+}
+
+.smallButton {
+  padding: 3px 8px;
+  font-size: 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.problemList {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.footerNotes {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.footerButtons {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.mutedNote {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-faint);
+}
+
+.noteText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-warning);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.secondaryButton {
+  padding: 8px 14px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  padding: 8px 14px;
+  background: var(--color-accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #0c1116;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.primaryButton:disabled {
+  opacity: 0.5;
+}
+
+.detectRow .primaryButton,
+.detectRow .secondaryButton {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+/* 参照画像のダイアログ。 */
+.refInputsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.refInputsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.refInputTile {
+  padding: 2px;
+  background: transparent;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.refInputTile[data-selected='true'] {
+  border-color: var(--color-accent);
+}
+
+.refThumbFrame {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  display: block;
+}
+
+.refThumbImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 狭い幅(ADR-0009): 画面いっぱいにし、札の一覧は画像の下に並べる。 */
+@media (max-width: 767px) {
+  .backdrop {
+    padding: 0;
+  }
+
+  .modal {
+    width: 100dvw;
+    height: 100dvh;
+    border-radius: 0;
+    padding: 10px;
+    padding-top: max(10px, env(safe-area-inset-top));
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+    overflow-y: auto;
+  }
+
+  /* ツールバーは1行に収める(数は札の上に出す)。 */
+  .toolbar {
+    gap: 6px;
+    padding: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .toolGroup {
+    gap: 2px;
+  }
+
+  .toolButton,
+  .iconButton {
+    width: 40px;
+    height: 40px;
+  }
+
+  .zoomText,
+  .countText {
+    display: none;
+  }
+
+  .countInline {
+    display: block;
+  }
+
+  .body {
+    flex: none;
+    flex-direction: column;
+  }
+
+  /* 画像は横いっぱいにし、札を下へスクロールしても上に残す。 */
+  .stageArea {
+    flex: none;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    width: calc(100% + 20px);
+    margin: 0 -10px;
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+    aspect-ratio: var(--regions-aspect, 1);
+    min-height: 220px;
+    max-height: 50dvh;
+  }
+
+  .sidePanel {
+    width: auto;
+    overflow: visible;
+  }
+
+  .textInput,
+  .textarea,
+  .select {
+    font-size: 16px;
+    min-height: 40px;
+  }
+
+  .smallButton {
+    min-height: 40px;
+    padding: 0 14px;
+  }
+
+  .footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .footerButtons {
+    justify-content: flex-end;
+  }
+
+  .secondaryButton,
+  .primaryButton {
+    min-height: 44px;
+  }
+}

@@ -51,8 +51,8 @@ function sdModel(name: string): ModelCapabilities {
     description: '',
     quality_choices: [],
     operations: [
-      { operation: 'generate', params: generateDefs, max_input_images: 0, min_input_images: 0, supports_mask: false, requires_mask: false },
-      { operation: 'edit', params: editDefs, max_input_images: 1, min_input_images: 1, supports_mask: true, requires_mask: false },
+      { operation: 'generate', params: generateDefs, max_input_images: 0, min_input_images: 0, supports_mask: false, requires_mask: false, supports_regions: false, regions_delivery: null },
+      { operation: 'edit', params: editDefs, max_input_images: 1, min_input_images: 1, supports_mask: true, requires_mask: false, supports_regions: false, regions_delivery: null },
     ],
   }
 }
