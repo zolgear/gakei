@@ -26,7 +26,7 @@ from app.main import (
 )
 from tests.conftest import _fake_settings, using_postgresql
 
-pytestmark = pytest.mark.windows
+pytestmark = [pytest.mark.windows, pytest.mark.fresh_database]
 
 _FUTURE_REVISION = "9999"
 

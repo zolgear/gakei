@@ -8,7 +8,7 @@ from sqlalchemy import inspect
 
 from tests.conftest import requires_postgresql
 
-pytestmark = pytest.mark.windows
+pytestmark = [pytest.mark.windows, pytest.mark.fresh_database]
 
 
 def test_migration_creates_expected_tables(client: TestClient) -> None:
