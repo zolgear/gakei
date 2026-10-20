@@ -34,7 +34,14 @@ from app.domain.models import (
     RunInputRole,
 )
 from app.domain.pricing import cost_from_usage
-from app.domain.schemas import AssetGroupRef, CreatedBy, FocalPoint, RunOutputRef, RunTextOutput
+from app.domain.schemas import (
+    AssetGroupRef,
+    CreatedBy,
+    FocalPoint,
+    RunOutputRef,
+    RunRegions,
+    RunTextOutput,
+)
 from app.domain.visibility import asset_visible, group_visible, run_visible
 
 
@@ -293,6 +300,18 @@ def run_text_outputs(run: Run) -> list[RunTextOutput] | None:
     return items or None
 
 
+def run_regions(run: Run) -> RunRegions | None:
+    """`run.regions` を API の形にする(ADR-0053 4章)。形が崩れていれば(取り込んだ Run など)
+    None。"""
+    raw = run.regions
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return RunRegions.model_validate(raw)
+    except ValidationError:
+        return None
+
+
 def run_cost_usd(run: Run) -> float | None:
     """Run の実コスト(参考)。取り込んだ Run(ADR-0037)は、この GAKEI で料金が掛かっていない
     ので数えない(usage は記録として残すが、料金にはしない)。"""
@@ -347,4 +366,5 @@ def run_summary_fields(
         "asset_group": asset_group,
         "origin": run.origin,
         "text_outputs": run_text_outputs(run),
+        "regions": run_regions(run),
     }

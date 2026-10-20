@@ -77,6 +77,12 @@ class OperationCapabilities(BaseModel):
     supports_mask: bool = False
     # mask が無いと実行できない(ComfyUI の inpaint ワークフローなど)。
     requires_mask: bool = False
+    # 領域の指示の四角(ADR-0053 5章)を受けるか。受けないプロバイダーではフォームに「領域」を
+    # 出さず、`regions` を付けた Run を断る。
+    supports_regions: bool = False
+    # 四角の渡し方。`image_and_text` は、四角を描いた画像を入力に足し、指示を文でプロンプトに
+    # 足す(OpenAI の Edit)。受けないときは null。
+    regions_delivery: Literal["image_and_text"] | None = None
 
 
 class ModelCapabilities(BaseModel):

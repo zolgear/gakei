@@ -37,9 +37,11 @@ def _utcnow() -> datetime:
 
 
 def is_target(asset: Asset) -> bool:
-    """計算の対象か(マスクと削除済みと、画像を残さなかった Asset(ADR-0051 4章)は対象外)。"""
+    """計算の対象か(マスクと削除済みと、画像を残さなかった Asset(ADR-0051 4章)は対象外)。
+    領域の四角を描いた画像(ADR-0053 4章)も、主たる入力とほぼ同じ絵で重複の候補を増やすので
+    対象外にする。"""
     return (
-        asset.kind != AssetKind.MASK
+        asset.kind not in (AssetKind.MASK, AssetKind.REGIONS)
         and asset.deleted_at is None
         and asset.content_withheld_at is None
     )
@@ -107,7 +109,7 @@ def _pending_condition(model_key: str) -> Any:
     return and_(
         Asset.deleted_at.is_(None),
         Asset.content_withheld_at.is_(None),
-        Asset.kind != AssetKind.MASK,
+        Asset.kind.not_in((AssetKind.MASK, AssetKind.REGIONS)),
         or_(AssetEmbedding.asset_id.is_(None), AssetEmbedding.status == STATUS_FAILED),
     )
 

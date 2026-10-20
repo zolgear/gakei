@@ -90,6 +90,9 @@ class AssetKind(enum.StrEnum):
     SKETCH = "sketch"
     # 入力画像の配置(ADR-0050)。素材は `asset_composition_source` で指す。
     COMPOSITE = "composite"
+    # 領域の指示の四角を描いた画像(ADR-0053 4章)。サーバーが Run の作成時に描き、
+    # `source_asset_id` で主たる入力を指す(スケッチと同じ)。
+    REGIONS = "regions"
 
 
 class RunOperation(enum.StrEnum):
@@ -343,6 +346,12 @@ class Run(Base):
     # (`asset_group_id` や `origin` と同じ扱い。ADR-0003 の追記のみの規則に反しない)。
     # API に送った値ではないので `params` には入れない。
     prompt_build: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+
+    # 領域の指示の四角(ADR-0053 4章)。`{"version", "delivery", "regions": [...]}`。利用者が付けた
+    # 四角(主たる入力に対する割合)と、どの渡し方で送ったか。Run の作成時に一度だけ書き、UPDATE
+    # しない。四角を文に変えて送った分は、送った値として `prompt` と `params` に入る。再実行では
+    # ここから四角を戻す。
+    regions: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
 
     # 実行したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
     # (INSERT 時に設定し、UPDATE しない)。
