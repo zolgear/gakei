@@ -37,9 +37,16 @@ from urllib.parse import quote
 import httpx
 from websockets.asyncio.client import connect as _ws_connect_default
 
+from app.http_body_limit import BodyTooLarge, aread_limited
 from app.i18n import t
 
 logger = logging.getLogger(__name__)
+
+# `/view`(出力画像)の応答の上限。取り込める画像の上限(`app.domain.assets.MAX_UPLOAD_BYTES`)と
+# 同じ値(このモジュールは GAKEI の DB の側に依存しないので、値を写す。一致はテストで確かめる)。
+VIEW_MAX_BYTES = 50 * 1024 * 1024
+# 失敗の応答の本文(詳細として記録する)を読む上限。
+_ERROR_BODY_MAX_BYTES = 64 * 1024
 
 # websockets の既定(1 MiB)だと大きなプレビュー画像を受け取れないため広げる。
 _WS_MAX_SIZE = 32 * 1024 * 1024
@@ -248,30 +255,43 @@ def collect_output_texts(history_entry: dict[str, Any], node_id: str) -> str | N
 
 
 def check_available(
-    base_url: str, timeout: float = 1.0
+    base_url: str, timeout: float = 1.0, *, log_detail: bool = False
 ) -> tuple[bool, str | None, dict[str, Any] | None]:
-    """同期版の `/system_stats`。capabilities の `availability()` 用。"""
+    """同期版の `/system_stats`。capabilities の `availability()` と接続テスト用。
+
+    失敗の理由は固定の文言(届かない / 応答が想定外)だけにする。接続テストは管理者が入れた
+    任意の URL に向けて行うので、例外の文言や状態コード、時間切れかどうかを返すと、サーバーの
+    側のネットワークのようすが分かってしまうため。詳細はサーバーのログに出す(`log_detail` が
+    真なら警告、偽なら debug)。
+    """
     url = _join(base_url, "/system_stats")
     try:
         response = httpx.get(url, timeout=timeout)
-    except httpx.TimeoutException:
-        return (False, t("comfyui.client.connectTimeout"), None)
-    except httpx.TransportError as exc:
-        return (False, t("comfyui.client.connectFailed", error=_error_kind(exc)), None)
+    except httpx.HTTPError as exc:
+        _log_check(log_detail, base_url, f"{exc.__class__.__name__}: {exc}")
+        return (False, t("comfyui.client.checkUnreachable"), None)
 
     if response.status_code != 200:
-        return (
-            False,
-            t("comfyui.client.unexpectedResponse", status=response.status_code),
-            None,
-        )
+        _log_check(log_detail, base_url, f"HTTP {response.status_code}")
+        return (False, t("comfyui.client.checkUnexpectedResponse"), None)
     try:
         body = response.json()
     except ValueError:
-        return (False, t("comfyui.client.parseFailed"), None)
+        _log_check(log_detail, base_url, "not JSON")
+        return (False, t("comfyui.client.checkUnexpectedResponse"), None)
     if not isinstance(body, dict):
-        return (False, t("comfyui.client.parseFailed"), None)
+        _log_check(log_detail, base_url, "not a JSON object")
+        return (False, t("comfyui.client.checkUnexpectedResponse"), None)
     return True, None, body
+
+
+def _log_check(warn: bool, base_url: str, detail: str) -> None:
+    logger.log(
+        logging.WARNING if warn else logging.DEBUG,
+        "ComfyUI(%s)への接続の確認に失敗しました: %s",
+        base_url,
+        detail,
+    )
 
 
 class ComfyUIClient:
@@ -356,20 +376,39 @@ class ComfyUIClient:
         return body.get(prompt_id)
 
     async def view(self, ref: OutputImageRef) -> bytes:
+        """出力画像のバイト列。`VIEW_MAX_BYTES` を超える応答は、読みながら打ち切って失敗にする
+        (`Content-Length` が超えていれば読む前に断る)。"""
         params = {"filename": ref.filename, "subfolder": ref.subfolder, "type": ref.type}
-        response = await self._send(
-            "GET",
-            "/view",
-            unavailable_hint_key="comfyui.client.hintFetchOutput",
-            params=params,
-        )
-        if response.status_code != 200:
+        url = _join(self._base_url, "/view")
+        try:
+            async with self._http.stream("GET", url, params=params) as response:
+                if response.status_code != 200:
+                    try:
+                        detail = _safe_bytes(await aread_limited(response, _ERROR_BODY_MAX_BYTES))
+                    except BodyTooLarge:
+                        detail = None
+                    raise ComfyUIError(
+                        "comfyuiUnavailable",
+                        t("comfyui.client.fetchOutputFailed", status=response.status_code),
+                        detail=detail,
+                    )
+                try:
+                    return await aread_limited(response, VIEW_MAX_BYTES)
+                except BodyTooLarge as exc:
+                    raise ComfyUIError(
+                        "comfyuiUnavailable",
+                        t("comfyui.client.outputTooLarge", mb=VIEW_MAX_BYTES // (1024 * 1024)),
+                    ) from exc
+        except httpx.TimeoutException as exc:
             raise ComfyUIError(
                 "comfyuiUnavailable",
-                t("comfyui.client.fetchOutputFailed", status=response.status_code),
-                detail=_safe_body(response),
-            )
-        return response.content
+                t("comfyui.client.timedOutWhile", hint=t("comfyui.client.hintFetchOutput")),
+            ) from exc
+        except httpx.TransportError as exc:
+            raise ComfyUIError(
+                "comfyuiUnavailable",
+                t("comfyui.client.connectFailed", error=_error_kind(exc)),
+            ) from exc
 
     def ws_events(self, client_id: str) -> AbstractAsyncContextManager[AsyncIterator[WsEvent]]:
         """進捗とプレビューを受け取る WebSocket イベントの非同期イテレーター。
@@ -489,6 +528,14 @@ def _safe_json(response: httpx.Response) -> dict[str, Any]:
     except ValueError:
         return {}
     return body if isinstance(body, dict) else {}
+
+
+def _safe_bytes(content: bytes) -> Any:
+    """読んだ本文を、JSON なら値に、そうでなければ文字列にする(`_safe_body` と同じ扱い)。"""
+    try:
+        return json.loads(content)
+    except ValueError:
+        return content.decode("utf-8", errors="replace")
 
 
 def _safe_body(response: httpx.Response) -> Any:

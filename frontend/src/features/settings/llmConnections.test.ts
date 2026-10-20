@@ -10,6 +10,7 @@ import {
   diffConnectionForm,
   emptyConnectionForm,
   isConnectionInUse,
+  isKeyReentryRequired,
   isUsedBy,
   isValidConnectionBaseUrl,
   isValidConnectionName,
@@ -95,6 +96,28 @@ describe('接続先のフォーム', () => {
     expect(diffConnectionForm({ ...form, base_url: 'http://10.0.0.2:11434/v1' }, OLLAMA)).toEqual({
       base_url: 'http://10.0.0.2:11434/v1',
     })
+  })
+
+  it('キーがあり Base URL のオリジンが変わるときだけ、キーの入れ直しが要り、入れたキーを送る', () => {
+    const withKey = { ...OLLAMA, api_key_set: true }
+    const form = connectionFormFromView(withKey)
+    // パスだけの変更は入れ直し不要
+    expect(isKeyReentryRequired({ base_url: 'http://127.0.0.1:11434/api/v1' }, withKey)).toBe(false)
+    // ホスト・ポート・スキームが違えば要る
+    expect(isKeyReentryRequired({ base_url: 'http://10.0.0.2:11434/v1' }, withKey)).toBe(true)
+    expect(isKeyReentryRequired({ base_url: 'https://127.0.0.1:11434/v1' }, withKey)).toBe(true)
+    // キーが無い・組み込みなら要らない
+    expect(isKeyReentryRequired({ base_url: 'http://10.0.0.2:11434/v1' }, OLLAMA)).toBe(false)
+    expect(isKeyReentryRequired({ base_url: 'http://10.0.0.2/v1' }, connection())).toBe(false)
+
+    expect(diffConnectionForm({ ...form, base_url: 'http://10.0.0.2:11434/v1', api_key: ' sk-new ' }, withKey)).toEqual({
+      base_url: 'http://10.0.0.2:11434/v1',
+      api_key: 'sk-new',
+    })
+    // 入れ直しが要らないときは、キーの欄の値を送らない
+    expect(
+      diffConnectionForm({ ...form, base_url: 'http://127.0.0.1:11434/api/v1', api_key: 'sk-new' }, withKey),
+    ).toEqual({ base_url: 'http://127.0.0.1:11434/api/v1' })
   })
 
   it('接続先(ADR-0051 3章)は、新しい接続先では外部から始め、変えたときだけ送る', () => {

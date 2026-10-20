@@ -120,7 +120,10 @@
       "hintUpload": "画像のアップロード",
       "hintSubmit": "ワークフローの投入",
       "hintFetchOutput": "出力画像の取得",
-      "hintContact": "ComfyUI への問い合わせ"
+      "hintContact": "ComfyUI への問い合わせ",
+      "checkUnreachable": "ComfyUI に接続できません。URL と、ComfyUI が起動しているかを確かめてください。",
+      "checkUnexpectedResponse": "ComfyUI から想定外の応答がありました。URL が ComfyUI を指しているかを確かめてください。",
+      "outputTooLarge": "ComfyUI の出力画像が大きすぎます({mb}MB まで)。"
     },
     "provider": {
       "checking": "ComfyUI に接続できるか確かめています。",
@@ -242,7 +245,8 @@
     "credentials": {
       "invalid": "ユーザー名とパスワードは、それぞれ1〜256文字で、制御文字を含めずに指定してください。",
       "usernameColon": "ユーザー名に「:」は使えません。",
-      "bothRequired": "ユーザー名とパスワードは両方を指定してください。"
+      "bothRequired": "ユーザー名とパスワードは両方を指定してください。",
+      "reenterForNewOrigin": "接続先のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みの資格情報は送りません。ユーザー名とパスワードを入れ直すか、資格情報を削除してから接続してください。"
     },
     "api": {
       "connectionUrlMissing": "接続先の URL が指定されていません。",
@@ -264,7 +268,8 @@
       "requestTimeout": "SD WebUI の応答を待つ間にタイムアウトしました。",
       "parseFailed": "SD WebUI の応答を解釈できませんでした。",
       "rejectedNoDetails": "SD WebUI がリクエストを拒否しました(詳細不明)。",
-      "executionFailedNoDetails": "SD WebUI での実行に失敗しました(詳細不明)。"
+      "executionFailedNoDetails": "SD WebUI での実行に失敗しました(詳細不明)。",
+      "checkUnexpectedResponse": "SD WebUI から想定外の応答がありました。URL が SD WebUI(--api を付けて起動したもの)を指しているかを確かめてください。"
     },
     "provider": {
       "checking": "SD WebUI に接続できるか確かめています。",
@@ -403,14 +408,18 @@
     "contentFilterRejected": "コンテンツポリシーにより拒否されました。",
     "apiError": "OpenAI API エラー({label}): {detail}",
     "keyInvalid": "キーが無効です",
-    "keyVerifyFailed": "OpenAI への確認に失敗しました: {detail}",
     "envKeyLocked": "環境変数(.env)の OPENAI_API_KEY が優先されるため、画面からは変更・削除できません。.env の値を変更してください。",
     "keyEmpty": "APIキーを入力してください",
     "baseUrl": {
       "invalid": "接続先(Base URL)の形式が不正です。http または https のみで、ユーザー情報・クエリー・フラグメントは指定できません。",
       "empty": "接続先(Base URL)を入力してください",
-      "envLocked": "環境変数(.env)の OPENAI_BASE_URL が優先されるため、画面からは変更・削除できません。.env の値を変更してください。"
-    }
+      "envLocked": "環境変数(.env)の OPENAI_BASE_URL が優先されるため、画面からは変更・削除できません。.env の値を変更してください。",
+      "reenterKey": "接続先のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みの API キーは送りません。新しい接続先で使う API キーを入れ直してください",
+      "originChangeEnvKey": "API キーが環境変数(.env)の OPENAI_API_KEY から来ているため、オリジン(スキーム・ホスト・ポート)の違う接続先は画面から保存できません。.env の OPENAI_BASE_URL で設定してください",
+      "clearNeedsKeyRemoval": "既定の接続先に戻すとオリジン(スキーム・ホスト・ポート)が変わるため、保存済みの API キーは送りません。先に API キーを削除してから戻し、キーを登録し直してください"
+    },
+    "keyVerifyUnreachable": "接続先に届かなかったため、キーを確かめられませんでした。接続先の URL と、ネットワークを確かめてください",
+    "keyVerifyUnexpected": "接続先から想定外の応答があったため、キーを確かめられませんでした。接続先の URL が OpenAI 互換の API を指しているかを確かめてください"
   },
   "settings": {
     "general": {
@@ -449,7 +458,8 @@
         "annotation": "自動タイトル・タグ",
         "embedding": "埋め込み",
         "assistant": "アシスタント"
-      }
+      },
+      "reenterKey": "Base URL のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのキーは送りません。キーを入れ直してください(キーが要らない接続先なら、先にキーを削除してください)"
     },
     "share": {
       "invalidEnabled": "enabled は true か false である必要があります"
@@ -489,6 +499,11 @@
         "admin_emails_empty": "oidc では管理者のメールが1件以上必要です。",
         "verified_email_not_admin": "テストログインをしたメールアドレスが、管理者のメールに含まれていません。",
         "self_not_admin": "操作しているあなたのメールアドレスを管理者のメールから外すことはできません。"
+      },
+      "clientSecretReentry": "発行者のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのクライアントシークレットは送りません。クライアントシークレットを入れ直してください(公開クライアントなら空にしてください)",
+      "discoveryReason": {
+        "unreachable": "IdP に届きません",
+        "unexpected": "応答が想定外です"
       }
     },
     "assistant": {
@@ -928,7 +943,8 @@
   "modelStore": {
     "download": {
       "httpError": "{file} のダウンロードに失敗しました(HTTP {status})",
-      "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました"
+      "hashMismatch": "{file} のハッシュ(sha256)が一致しません。ダウンロードしたファイルは破棄しました",
+      "tooLarge": "{file} が想定の大きさを超えたため、ダウンロードを打ち切りました"
     }
   },
   "embeddings": {
@@ -937,8 +953,8 @@
     "connectionMissing": "埋め込みに使う接続先が見つかりません。管理者設定の「埋め込み」で接続先を選び直してください",
     "modelMissing": "埋め込みのモデル {model} が見つかりません。管理者設定からダウンロードしてください",
     "insufficientMemory": "空きメモリが足りないため、埋め込みのモデル {model} を読み込みませんでした(目安 約 {needed} GB、空き 約 {available} GB)",
-    "remoteUnavailable": "推論サーバーに接続できませんでした({error})",
-    "remoteHttpError": "推論サーバーがエラーを返しました(HTTP {status}): {body}",
+    "remoteUnavailable": "推論サーバーに接続できませんでした。接続先の URL と、推論サーバーが動いているかを確かめてください(詳細はサーバーのログにあります)",
+    "remoteHttpError": "推論サーバーが想定外の応答を返しました。モデル名と API の形式を確かめてください(詳細はサーバーのログにあります)",
     "remoteInvalidResponse": "推論サーバーの応答を埋め込みとして読めませんでした",
     "assetDeleted": "削除された画像の埋め込みは計算しません",
     "maskNotSupported": "マスクの埋め込みは計算しません",

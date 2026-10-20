@@ -221,7 +221,7 @@ def comfy_checks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """ComfyUI への到達確認を差し替え、問い合わせた URL を記録する。"""
     calls: list[str] = []
 
-    def check(base_url: str, timeout: float = 1.0) -> tuple[bool, str | None, dict]:
+    def check(base_url: str, timeout: float = 1.0, **_kw: object) -> tuple[bool, str | None, dict]:
         calls.append(base_url)
         return True, None, {"system": {"comfyui_version": "1.0.0-test"}, "devices": []}
 

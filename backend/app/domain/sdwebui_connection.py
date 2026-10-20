@@ -16,6 +16,11 @@ Basic 認証(WebUI の `--api-auth`)のユーザー名とパスワードは `DAT
 置く(`app/domain/api_key.py` の `write_secret_field` など)。値は API の応答・ログ・例外の
 メッセージに一部も出さず、「設定済みか」だけを返す。URL に `user:pass@` を含めることは
 受け付けない(ADR-0017 と同じ)。
+
+資格情報は、保存したときの接続先のオリジン(scheme + host + port)と組にして保存し、そのオリジン
+にだけ送る(`read_credentials_for`)。別のオリジンへ URL を変えるときは、資格情報を入れ直させる。
+オリジンを記録する前に保存した資格情報は、そのときの有効な接続先に結び付ける
+(`ensure_credentials_origin`)。
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.domain import api_key as secrets_store
 from app.domain.models import AppSetting
+from app.domain.url_origin import origin_of, same_origin
 from app.i18n import t
 from app.providers.registry import is_loopback_url
 
@@ -37,6 +43,9 @@ CONNECTION_KEY = "sdwebui.connection"
 DISABLED_KEY = "sdwebui.disabled"
 USERNAME_FIELD = "sdwebui_auth_username"
 PASSWORD_FIELD = "sdwebui_auth_password"
+# 資格情報を保存したときの接続先のオリジン(`app/domain/url_origin.py`)。資格情報はこのオリジンに
+# だけ送る。
+ORIGIN_FIELD = "sdwebui_auth_origin"
 
 # ユーザー名とパスワードの長さの上限(画面の入力ミスで巨大な値を保存しないため)。
 CREDENTIAL_MAX_LENGTH = 256
@@ -143,12 +152,65 @@ def normalize_connection_url(url: str, *, allow_non_loopback: bool) -> str:
 
 
 def read_credentials(data_dir: Path) -> tuple[str, str] | None:
-    """保存済みの (ユーザー名, パスワード)。どちらかが欠けていれば None。"""
+    """保存済みの (ユーザー名, パスワード)。どちらかが欠けていれば None。
+
+    送り先のオリジンを確かめないので、接続先へ送るときは `read_credentials_for` を使う。
+    """
     username = secrets_store.read_secret_field(data_dir, USERNAME_FIELD)
     password = secrets_store.read_secret_field(data_dir, PASSWORD_FIELD)
     if username is None or password is None:
         return None
     return username, password
+
+
+def credentials_origin(data_dir: Path) -> str | None:
+    """資格情報を結び付けたオリジン。記録が無ければ None。"""
+    return secrets_store.read_secret_field(data_dir, ORIGIN_FIELD)
+
+
+def read_credentials_for(data_dir: Path, url: str | None) -> tuple[str, str] | None:
+    """`url` へ送ってよい保存済みの資格情報。結び付けたオリジンと違えば None(送らない)。
+
+    オリジンの記録が無い(記録を始める前に保存した)資格情報は、有効な接続先へ送るものとして
+    そのまま返す。別の URL へ送る前の確かめは、呼び出し側が `bound_origin` で行う。
+    """
+    credentials = read_credentials(data_dir)
+    if credentials is None:
+        return None
+    origin = credentials_origin(data_dir)
+    if origin is not None and origin != origin_of(url):
+        return None
+    return credentials
+
+
+def bound_origin(db: Session, settings: Settings) -> str | None:
+    """保存済みの資格情報を送ってよいオリジン。記録が無ければ有効な接続先のオリジン。
+    資格情報が無い、または結び付ける先が無ければ None。"""
+    if read_credentials(settings.data_dir) is None:
+        return None
+    origin = credentials_origin(settings.data_dir)
+    if origin is not None:
+        return origin
+    url, _source = resolve_effective_url(db, settings)
+    return origin_of(url)
+
+
+def ensure_credentials_origin(db: Session, settings: Settings) -> None:
+    """オリジンの記録が無い資格情報を、今の有効な接続先に結び付ける(記録を始める前の資格情報)。"""
+    if read_credentials(settings.data_dir) is None:
+        return
+    if credentials_origin(settings.data_dir) is not None:
+        return
+    url, _source = resolve_effective_url(db, settings)
+    origin = origin_of(url)
+    if origin is not None:
+        secrets_store.write_secret_field(settings.data_dir, ORIGIN_FIELD, origin)
+
+
+def needs_credentials_reentry(db: Session, settings: Settings, url: str) -> bool:
+    """保存済みの資格情報があり、`url` がそれを結び付けたオリジンと違うか(入れ直しが要るか)。"""
+    origin = bound_origin(db, settings)
+    return origin is not None and not same_origin(origin, url)
 
 
 def credentials_set(data_dir: Path) -> bool:
@@ -168,12 +230,28 @@ def validate_credentials(username: str, password: str) -> None:
         raise SdWebuiConnectionValidationError(t("sdwebui.credentials.usernameColon"))
 
 
-def save_credentials(data_dir: Path, username: str, password: str) -> None:
+def save_credentials(
+    data_dir: Path, username: str, password: str, origin: str | None = None
+) -> None:
+    """資格情報を保存し、送ってよいオリジンと組にする(`origin` が None なら記録を消し、次に
+    接続先を決めたときに結び付ける)。"""
     validate_credentials(username, password)
     secrets_store.write_secret_field(data_dir, USERNAME_FIELD, username)
     secrets_store.write_secret_field(data_dir, PASSWORD_FIELD, password)
+    if origin is not None:
+        secrets_store.write_secret_field(data_dir, ORIGIN_FIELD, origin)
+    else:
+        secrets_store.delete_secret_field(data_dir, ORIGIN_FIELD)
+
+
+def bind_credentials_origin(data_dir: Path, url: str) -> None:
+    """保存済みの資格情報を `url` のオリジンに結び付ける(接続先を保存したとき)。"""
+    origin = origin_of(url)
+    if read_credentials(data_dir) is not None and origin is not None:
+        secrets_store.write_secret_field(data_dir, ORIGIN_FIELD, origin)
 
 
 def delete_credentials(data_dir: Path) -> None:
     secrets_store.delete_secret_field(data_dir, USERNAME_FIELD)
     secrets_store.delete_secret_field(data_dir, PASSWORD_FIELD)
+    secrets_store.delete_secret_field(data_dir, ORIGIN_FIELD)

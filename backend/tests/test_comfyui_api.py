@@ -64,7 +64,7 @@ def client_with_comfyui_url(
 def test_status_available_when_reachable(
     client_with_comfyui_url: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fake_check_available(base_url: str, timeout: float = 1.0):
+    def fake_check_available(base_url: str, timeout: float = 1.0, **_kwargs: object):
         assert base_url == "http://127.0.0.1:8188"
         return True, None, {"system": {"comfyui_version": "0.3.0"}, "devices": [{"name": "cuda:0"}]}
 
@@ -83,7 +83,7 @@ def test_status_available_when_reachable(
 def test_status_unavailable_when_unreachable(
     client_with_comfyui_url: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fake_check_available(base_url: str, timeout: float = 1.0):
+    def fake_check_available(base_url: str, timeout: float = 1.0, **_kwargs: object):
         return False, "ComfyUI に接続できません。", None
 
     monkeypatch.setattr("app.api.comfyui.check_available", fake_check_available)
@@ -131,7 +131,7 @@ def test_analyze_enriches_candidate_params_via_object_info_when_reachable(
     client_with_comfyui_url: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.api.comfyui.check_available", lambda base_url, timeout=1.0: (True, None, {})
+        "app.api.comfyui.check_available", lambda base_url, timeout=1.0, **_kw: (True, None, {})
     )
     object_info = {
         "CheckpointLoaderSimple": {
@@ -167,7 +167,7 @@ def test_analyze_keeps_guessed_params_when_object_info_unreachable(
 ) -> None:
     monkeypatch.setattr(
         "app.api.comfyui.check_available",
-        lambda base_url, timeout=1.0: (False, "unreachable", None),
+        lambda base_url, timeout=1.0, **_kw: (False, "unreachable", None),
     )
     response = client_with_comfyui_url.post(
         "/api/comfyui/workflows/analyze", json={"template": clone(T2I_GRAPH)}
@@ -201,7 +201,7 @@ def test_analyze_qwen_like_via_object_info_enriches_v3_combo_and_dynamiccombo(
     sampler_name の choices が、実物の /object_info の形のまま解釈できること。
     """
     monkeypatch.setattr(
-        "app.api.comfyui.check_available", lambda base_url, timeout=1.0: (True, None, {})
+        "app.api.comfyui.check_available", lambda base_url, timeout=1.0, **_kw: (True, None, {})
     )
     monkeypatch.setattr(
         "app.api.comfyui.httpx.get", lambda *a, **k: _FakeResponse(QWEN_LIKE_OBJECT_INFO)

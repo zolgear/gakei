@@ -11,6 +11,7 @@ import struct
 import httpx
 import pytest
 
+from app.i18n import t
 from app.providers.comfyui.client import (
     ComfyUIClient,
     ComfyUIError,
@@ -176,8 +177,21 @@ def test_check_available_connection_error(monkeypatch: pytest.MonkeyPatch) -> No
 
     ok, reason, body = check_available("http://127.0.0.1:8188")
     assert ok is False
-    assert reason is not None
+    # 例外の文言は応答に出さない(固定の文言だけ)
+    assert reason == t("comfyui.client.checkUnreachable")
+    assert "boom" not in reason
     assert body is None
+
+
+def test_check_available_timeout_is_same_as_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, timeout: float) -> httpx.Response:
+        raise httpx.ConnectTimeout("slow", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    ok, reason, _body = check_available("http://127.0.0.1:8188")
+    assert ok is False
+    assert reason == t("comfyui.client.checkUnreachable")
 
 
 def test_check_available_unexpected_status(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -188,7 +202,9 @@ def test_check_available_unexpected_status(monkeypatch: pytest.MonkeyPatch) -> N
 
     ok, reason, body = check_available("http://127.0.0.1:8188")
     assert ok is False
-    assert reason is not None
+    # 状態コードは応答に出さない
+    assert reason == t("comfyui.client.checkUnexpectedResponse")
+    assert "500" not in reason
     assert body is None
 
 

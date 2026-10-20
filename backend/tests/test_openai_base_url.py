@@ -21,6 +21,7 @@ from app.domain.api_key import (
     resolve_base_url,
     write_file_base_url,
 )
+from app.i18n import t
 from app.main import LegacyProviderAbortedError, check_legacy_provider_env, create_app
 
 pytestmark = pytest.mark.windows
@@ -242,30 +243,132 @@ def test_put_base_url_without_key_saves_after_format_check_only(
     assert calls == []  # キーが無いので確認は呼ばれない。
 
 
-def test_put_base_url_with_key_calls_validator_with_key_and_url(
-    client_no_key: TestClient,
-) -> None:
-    from app.domain.api_key import write_file_key
-
-    write_file_key(client_no_key.app.state.settings.data_dir, "sk-existing-key")
-
+def _put_base_url(client: TestClient, body: dict) -> tuple[object, list[tuple[str, str | None]]]:
     calls: list[tuple[str, str | None]] = []
 
     async def _tracking_validator(api_key: str, base_url: str | None) -> None:
         calls.append((api_key, base_url))
 
-    client_no_key.app.dependency_overrides[settings_api.get_key_validator] = lambda: (
-        _tracking_validator
-    )
+    client.app.dependency_overrides[settings_api.get_key_validator] = lambda: _tracking_validator
     try:
-        response = client_no_key.put(
-            "/api/settings/openai-base-url", json={"base_url": "http://127.0.0.1:4000/v1"}
-        )
+        response = client.put("/api/settings/openai-base-url", json=body)
     finally:
-        client_no_key.app.dependency_overrides.pop(settings_api.get_key_validator, None)
+        client.app.dependency_overrides.pop(settings_api.get_key_validator, None)
+    return response, calls
 
+
+def test_put_base_url_origin_change_requires_key_reentry(client_no_key: TestClient) -> None:
+    """画面で保存したキーを、保存したときと別のオリジンへ送らない(確かめの1回も含めて)。"""
+    from app.domain.api_key import read_file_key, write_file_key
+
+    data_dir = client_no_key.app.state.settings.data_dir
+    write_file_key(data_dir, "sk-existing-key")
+
+    # 既定(OpenAI 本体)から別のオリジンへ: キーを入れ直さなければ 422、確かめも呼ばない
+    response, calls = _put_base_url(client_no_key, {"base_url": "http://127.0.0.1:4000/v1"})
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == t("openai.baseUrl.reenterKey")
+    assert calls == []
+    assert read_file_base_url(data_dir) is None
+
+    # 入れ直したキーで確かめ、両方を保存する
+    response, calls = _put_base_url(
+        client_no_key, {"base_url": "http://127.0.0.1:4000/v1", "api_key": "sk-proxy-key"}
+    )
     assert response.status_code == 200, response.text
-    assert calls == [("sk-existing-key", "http://127.0.0.1:4000/v1")]
+    assert calls == [("sk-proxy-key", "http://127.0.0.1:4000/v1")]
+    assert read_file_key(data_dir) == "sk-proxy-key"
+    assert read_file_base_url(data_dir) == "http://127.0.0.1:4000/v1"
+
+    # 同じオリジンでパスだけ変えるなら、保存済みのキーで確かめる
+    response, calls = _put_base_url(client_no_key, {"base_url": "http://127.0.0.1:4000/api/v1"})
+    assert response.status_code == 200, response.text
+    assert calls == [("sk-proxy-key", "http://127.0.0.1:4000/api/v1")]
+
+
+def test_put_base_url_origin_change_rejected_for_env_key(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path
+) -> None:
+    """環境変数のキーは画面から入れ直せないので、オリジンの変わる Base URL は保存できない。"""
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    settings = Settings(_env_file=None, data_dir=data_dir, openai_api_key="sk-env-key")
+    with TestClient(create_app(settings)) as client:
+        response, calls = _put_base_url(client, {"base_url": "http://127.0.0.1:4000/v1"})
+        assert response.status_code == 422, response.text
+        assert response.json()["detail"] == t("openai.baseUrl.originChangeEnvKey")
+        assert calls == []
+        # 環境変数のキーがあるときは、画面からキーを入れられない
+        response, calls = _put_base_url(
+            client, {"base_url": "http://127.0.0.1:4000/v1", "api_key": "sk-x"}
+        )
+        assert response.status_code == 409
+        assert calls == []
+        # 同じオリジン(OpenAI 本体のまま)なら保存できる
+        response, calls = _put_base_url(client, {"base_url": "https://api.openai.com/v1/"})
+        assert response.status_code == 200, response.text
+        assert calls == [("sk-env-key", "https://api.openai.com/v1")]
+
+
+def test_delete_base_url_rejected_when_file_key_would_go_elsewhere(
+    client_no_key: TestClient,
+) -> None:
+    """画面で保存したキーを、既定の接続先(別のオリジン)へ送らない。"""
+    from app.domain.api_key import delete_file_key, write_file_key
+
+    data_dir = client_no_key.app.state.settings.data_dir
+    write_file_base_url(data_dir, "http://127.0.0.1:4000/v1")
+    write_file_key(data_dir, "sk-proxy-key")
+    response = client_no_key.delete("/api/settings/openai-base-url")
+    assert response.status_code == 422
+    assert response.json()["detail"] == t("openai.baseUrl.clearNeedsKeyRemoval")
+    assert read_file_base_url(data_dir) == "http://127.0.0.1:4000/v1"
+
+    # キーを消せば戻せる
+    delete_file_key(data_dir)
+    assert client_no_key.delete("/api/settings/openai-base-url").status_code == 200
+    assert read_file_base_url(data_dir) is None
+
+
+def test_key_validation_failure_returns_fixed_message(
+    client_no_key: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """確かめの失敗は固定の文言だけを返す(相手の応答や例外の文言を返さない)。"""
+    import httpx
+    import openai
+
+    class _Models:
+        def __init__(self, error: Exception) -> None:
+            self.error = error
+
+        async def list(self) -> None:
+            raise self.error
+
+    request = httpx.Request("GET", "http://127.0.0.1:4000/v1/models")
+    errors = {
+        "openai.keyVerifyUnreachable": openai.APIConnectionError(
+            message="Connection refused 10.0.0.5", request=request
+        ),
+        "openai.keyVerifyUnexpected": openai.InternalServerError(
+            "internal-host-banner",
+            response=httpx.Response(500, request=request),
+            body={"error": "internal-host-banner"},
+        ),
+    }
+    for key, error in errors.items():
+
+        class _Client:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                self.models = _Models(error)  # noqa: B023
+
+        monkeypatch.setattr(settings_api, "AsyncOpenAI", _Client)
+        response = client_no_key.put(
+            "/api/settings/openai-base-url",
+            json={"base_url": "http://127.0.0.1:4000/v1", "api_key": "sk-new"},
+        )
+        assert response.status_code == 502
+        assert response.json()["detail"] == t(key)
+        assert "10.0.0.5" not in response.text
+        assert "internal-host-banner" not in response.text
 
 
 def test_put_base_url_rejects_ftp_scheme(client_no_key: TestClient) -> None:

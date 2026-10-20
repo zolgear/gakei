@@ -120,7 +120,10 @@
       "hintUpload": "the image upload",
       "hintSubmit": "submitting the workflow",
       "hintFetchOutput": "fetching the output image",
-      "hintContact": "contacting ComfyUI"
+      "hintContact": "contacting ComfyUI",
+      "checkUnreachable": "Cannot connect to ComfyUI. Check the URL and that ComfyUI is running.",
+      "checkUnexpectedResponse": "ComfyUI returned an unexpected response. Check that the URL points to ComfyUI.",
+      "outputTooLarge": "The ComfyUI output image is too large (up to {mb} MB)."
     },
     "provider": {
       "checking": "Checking the connection to ComfyUI.",
@@ -242,7 +245,8 @@
     "credentials": {
       "invalid": "The user name and password must each be 1–256 characters long and contain no control characters.",
       "usernameColon": "The user name cannot contain \":\".",
-      "bothRequired": "Specify both the user name and the password."
+      "bothRequired": "Specify both the user name and the password.",
+      "reenterForNewOrigin": "The connection's origin (scheme, host and port) changes, so the saved credentials are not sent. Enter the user name and password again, or delete the credentials before connecting."
     },
     "api": {
       "connectionUrlMissing": "No connection URL was specified.",
@@ -264,7 +268,8 @@
       "requestTimeout": "Timed out while waiting for SD WebUI to respond.",
       "parseFailed": "Could not parse the response from SD WebUI.",
       "rejectedNoDetails": "SD WebUI rejected the request (no details).",
-      "executionFailedNoDetails": "Execution failed in SD WebUI (no details)."
+      "executionFailedNoDetails": "Execution failed in SD WebUI (no details).",
+      "checkUnexpectedResponse": "SD WebUI returned an unexpected response. Check that the URL points to SD WebUI started with --api."
     },
     "provider": {
       "checking": "Checking the connection to SD WebUI.",
@@ -403,14 +408,18 @@
     "contentFilterRejected": "Rejected by the content policy.",
     "apiError": "OpenAI API error ({label}): {detail}",
     "keyInvalid": "The key is invalid",
-    "keyVerifyFailed": "Could not verify the key with OpenAI: {detail}",
     "envKeyLocked": "The OPENAI_API_KEY environment variable (.env) takes priority, so it cannot be changed or removed from the app. Edit .env instead.",
     "keyEmpty": "Enter an API key",
     "baseUrl": {
       "invalid": "The base URL is not valid. Only http or https URLs are accepted, without userinfo, a query string, or a fragment.",
       "empty": "Enter a base URL",
-      "envLocked": "The OPENAI_BASE_URL environment variable (.env) takes priority, so it can't be changed or removed from the screen. Edit the value in .env instead."
-    }
+      "envLocked": "The OPENAI_BASE_URL environment variable (.env) takes priority, so it can't be changed or removed from the screen. Edit the value in .env instead.",
+      "reenterKey": "The connection's origin (scheme, host and port) changes, so the saved API key is not sent. Enter the API key to use with the new connection",
+      "originChangeEnvKey": "The API key comes from the OPENAI_API_KEY environment variable (.env), so a connection with a different origin (scheme, host and port) cannot be saved from the screen. Set OPENAI_BASE_URL in .env instead",
+      "clearNeedsKeyRemoval": "Going back to the default connection changes the origin (scheme, host and port), so the saved API key is not sent. Delete the API key first, then go back and register the key again"
+    },
+    "keyVerifyUnreachable": "Could not reach the connection, so the key was not verified. Check the connection URL and the network",
+    "keyVerifyUnexpected": "The connection returned an unexpected response, so the key was not verified. Check that the URL points to an OpenAI-compatible API"
   },
   "settings": {
     "general": {
@@ -449,7 +458,8 @@
         "annotation": "Auto titles and tags",
         "embedding": "Embeddings",
         "assistant": "Assistant"
-      }
+      },
+      "reenterKey": "The Base URL's origin (scheme, host and port) changes, so the saved key is not sent. Enter the key again (if the connection needs no key, delete the key first)"
     },
     "share": {
       "invalidEnabled": "enabled must be true or false"
@@ -489,6 +499,11 @@
         "admin_emails_empty": "oidc requires at least one admin email.",
         "verified_email_not_admin": "The email address used for the test sign-in is not in the admin emails.",
         "self_not_admin": "You cannot remove your own email address from the admin emails."
+      },
+      "clientSecretReentry": "The issuer's origin (scheme, host and port) changes, so the saved client secret is not sent. Enter the client secret again (leave it empty for a public client)",
+      "discoveryReason": {
+        "unreachable": "the IdP is unreachable",
+        "unexpected": "the response is unexpected"
       }
     },
     "assistant": {
@@ -928,7 +943,8 @@
   "modelStore": {
     "download": {
       "httpError": "Failed to download {file} (HTTP {status})",
-      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
+      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded",
+      "tooLarge": "{file} exceeded its expected size, so the download was stopped"
     }
   },
   "embeddings": {
@@ -937,8 +953,8 @@
     "connectionMissing": "The connection used for embeddings was not found. Choose it again under Admin settings > Embeddings",
     "modelMissing": "The embedding model {model} was not found. Download it from the admin settings",
     "insufficientMemory": "Did not load the embedding model {model} because there is not enough free memory (needs about {needed} GB, about {available} GB free)",
-    "remoteUnavailable": "Could not connect to the inference server ({error})",
-    "remoteHttpError": "The inference server returned an error (HTTP {status}): {body}",
+    "remoteUnavailable": "Could not connect to the inference server. Check the connection URL and that the server is running (details are in the server log)",
+    "remoteHttpError": "The inference server returned an unexpected response. Check the model name and the API format (details are in the server log)",
     "remoteInvalidResponse": "Could not read the inference server's response as embeddings",
     "assetDeleted": "Embeddings are not computed for deleted images",
     "maskNotSupported": "Embeddings are not computed for masks",

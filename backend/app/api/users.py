@@ -42,6 +42,7 @@ from app.domain.schemas import (
 )
 from app.domain.storage import AssetStore
 from app.domain.visibility import get_visible_asset
+from app.http_body_limit import read_file_limited
 from app.i18n import t
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -110,9 +111,12 @@ def upload_avatar(
     user: CurrentUser = Depends(require_user),
 ) -> AuthUser:
     _require_oidc_mode(runtime)
-    data = file.file.read()
-    if len(data) > MAX_AVATAR_BYTES:
-        raise HTTPException(status_code=413, detail=t("users.avatar.tooLarge"))
+    # 上限を超えると分かった時点で読むのをやめる。
+    data = read_file_limited(
+        file.file,
+        MAX_AVATAR_BYTES,
+        lambda: HTTPException(status_code=413, detail=t("users.avatar.tooLarge")),
+    )
     parsed_crop = _parse_crop(crop)
     return _apply_new_avatar(db, settings, user, data, parsed_crop)
 

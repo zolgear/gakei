@@ -14,12 +14,17 @@ import type {
   LlmConnectionView,
 } from '../../api/client'
 
+import { originChanges } from '../../lib/urlOrigin'
+
 /** `backend/app/domain/llm_connections.py` と同じ値。 */
 export const CONNECTION_NAME_MAX = 100
 /** 追加できる接続先の数(組み込みの「OpenAI の設定」は数えない)。 */
 export const CONNECTIONS_MAX = 50
 
-/** 接続先の追加・編集のフォーム。キーは追加のときだけ使う(編集ではキーを別に設定・削除する)。 */
+/**
+ * 接続先の追加・編集のフォーム。キーは追加のときと、編集で Base URL のオリジンが変わるとき(入れ直し)に
+ * 使う(それ以外の編集ではキーを別に設定・削除する)。
+ */
 export interface ConnectionForm {
   name: string
   base_url: string
@@ -93,7 +98,7 @@ export function connectionCreateBody(form: ConnectionForm): LlmConnectionCreateR
 
 /**
  * 編集の差分(PATCH の本文)。Base URL はサーバーが末尾の `/` を取るので、比べるときも取る
- * (`…/v1/` と入れ直しただけで差分にしないため)。
+ * (`…/v1/` と入れ直しただけで差分にしないため)。キーの入れ直しが要るときは、入れたキーも送る。
  */
 export function diffConnectionForm(
   form: ConnectionForm,
@@ -106,7 +111,21 @@ export function diffConnectionForm(
   if (baseUrl.replace(/\/+$/, '') !== (view.base_url ?? '').replace(/\/+$/, '')) body.base_url = baseUrl
   if (form.api_style !== view.api_style) body.api_style = form.api_style
   if (form.locality !== view.locality) body.locality = form.locality
+  const key = form.api_key.trim()
+  if (key && isKeyReentryRequired(form, view)) body.api_key = key
   return body
+}
+
+/**
+ * 編集で、キーの入れ直しが要るか。保存済みのキーは、保存したときの Base URL と同じオリジンにだけ送る
+ * (サーバーの `update_connection` と同じ規則)。組み込みの接続先は Base URL を変えられないので要らない。
+ */
+export function isKeyReentryRequired(
+  form: Pick<ConnectionForm, 'base_url'>,
+  view: Pick<LlmConnectionView, 'builtin' | 'api_key_set' | 'base_url'>,
+): boolean {
+  if (view.builtin || !view.api_key_set) return false
+  return originChanges(view.base_url, form.base_url)
 }
 
 /** 追加した接続先(組み込みを除く)がまだ上限に達していないか。 */

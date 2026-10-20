@@ -5497,6 +5497,8 @@ export interface components {
             api_style?: string | null;
             /** Locality */
             locality?: ("external" | "local") | null;
+            /** Api Key */
+            api_key?: string | null;
         };
         /**
          * LlmConnectionView
@@ -6038,10 +6040,19 @@ export interface components {
             /** Source */
             source?: ("file" | "env") | null;
         };
-        /** OpenAIBaseUrlUpdateRequest */
+        /**
+         * OpenAIBaseUrlUpdateRequest
+         * @description `PUT /api/settings/openai-base-url`。
+         *
+         *     `api_key` は Base URL と一緒に入れ直すキー(確かめてから両方を保存する)。画面で保存した
+         *     キーがあり、Base URL のオリジン(scheme + host + port)が変わるときは必須で、省くと 422。
+         *     キーが環境変数(`.env`)のものなら、オリジンの変わる Base URL は画面から保存できない(422)。
+         */
         OpenAIBaseUrlUpdateRequest: {
             /** Base Url */
             base_url: string;
+            /** Api Key */
+            api_key?: string | null;
         };
         /** OpenAIKeyStatusResponse */
         OpenAIKeyStatusResponse: {
@@ -7581,6 +7592,11 @@ export interface components {
         /**
          * SdWebuiConnectionRequest
          * @description 接続・変更(`PUT /api/sdwebui/connection`)。
+         *
+         *     username と password は両方そろえて指定すると、接続先と一緒に保存する(この URL のオリジンに
+         *     結び付ける)。保存済みの資格情報があり、URL のオリジン(scheme + host + port)が変わるときは
+         *     必須で、省くと 422(資格情報を入れ直すか、先に削除する)。同じオリジンでパスだけ変えるなら
+         *     省いてよい。
          */
         SdWebuiConnectionRequest: {
             /** Url */
@@ -7590,13 +7606,19 @@ export interface components {
              * @default false
              */
             allow_non_loopback: boolean;
+            /** Username */
+            username?: string | null;
+            /** Password */
+            password?: string | null;
         };
         /**
          * SdWebuiConnectionTestRequest
          * @description 接続テスト(`POST /api/sdwebui/connection/test`)。
          *
          *     url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
-         *     試す(保存はしない)。省くと保存済みの資格情報を使う。
+         *     試す(保存はしない)。省くと保存済みの資格情報を使う。ただし保存済みの資格情報は、保存した
+         *     ときと同じオリジン(scheme + host + port)にだけ送る。違うオリジンの URL を、資格情報を
+         *     入れずに試すと 422(入れ直すよう伝える)。
          */
         SdWebuiConnectionTestRequest: {
             /** Url */

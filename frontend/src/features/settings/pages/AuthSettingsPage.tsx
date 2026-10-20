@@ -23,6 +23,7 @@ import {
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { Modal } from '../../../components/Modal'
 import { fmt, useI18n, type Messages } from '../../../i18n'
+import { originChanges } from '../../../lib/urlOrigin'
 import { formatDateTime } from '../../../lib/format'
 import { useAuth } from '../../auth/authState'
 import {
@@ -441,11 +442,16 @@ function ConnectionDialog({ data, blockReason, onTestLogin, onClose }: Connectio
   }
 
   const hasCurrentSecret = data.pending ? data.pending.client_secret.configured : data.connection.client_secret.configured
+  // 保存済みのシークレットは、保存したときの発行者と同じオリジンにだけ送る(違えば入れ直してもらう)。
+  const secretIssuer = data.pending ? data.pending.issuer : data.connection.issuer.value
+  const secretReentryRequired = hasCurrentSecret && !noSecret && originChanges(secretIssuer, form.issuer)
+  const secretMissing = secretReentryRequired && secret === ''
   const complete =
     form.issuer.trim() !== '' &&
     form.client_id.trim() !== '' &&
     form.scopes.trim() !== '' &&
-    form.public_base_url.trim() !== ''
+    form.public_base_url.trim() !== '' &&
+    !secretMissing
   const pendingBusy = mutation.isPending
 
   if (registered !== null) {
@@ -520,7 +526,9 @@ function ConnectionDialog({ data, blockReason, onTestLogin, onClose }: Connectio
             autoComplete="new-password"
             spellCheck={false}
             disabled={pendingBusy || noSecret}
-            aria-invalid={errorField === 'client_secret' ? true : undefined}
+            required={secretReentryRequired}
+            aria-invalid={errorField === 'client_secret' || secretMissing ? true : undefined}
+            aria-describedby={secretReentryRequired ? 'gakei-auth-client-secret-reentry' : undefined}
             onChange={(e) => {
               setSecret(e.target.value)
               mutation.reset()
@@ -538,6 +546,11 @@ function ConnectionDialog({ data, blockReason, onTestLogin, onClose }: Connectio
             />
             <span>{d.noSecret}</span>
           </label>
+          {secretReentryRequired && (
+            <p className={styles.warningText} id="gakei-auth-client-secret-reentry">
+              {d.secretReentryRequired}
+            </p>
+          )}
           <p className={styles.helpText}>{d.secretHelp}</p>
           {fieldError('client_secret')}
         </div>

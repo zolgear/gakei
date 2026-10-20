@@ -230,14 +230,14 @@ class SdWebuiProvider:
     def from_settings(
         cls, base_url: str, settings: Settings, session_factory: sessionmaker
     ) -> SdWebuiProvider:
-        from app.domain.sdwebui_connection import read_credentials
+        from app.domain.sdwebui_connection import read_credentials_for
 
         data_dir = settings.data_dir
         return cls(
             base_url,
             session_factory,
             settings.sdwebui_timeout_seconds,
-            credentials_loader=lambda: read_credentials(data_dir),
+            credentials_loader=lambda: read_credentials_for(data_dir, base_url),
         )
 
     @property

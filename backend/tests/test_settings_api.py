@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from app.api import settings as settings_api
 from app.domain.api_key import read_file_key, write_file_key
+from app.i18n import t
 
 
 @pytest.fixture
@@ -308,7 +309,8 @@ def test_validate_passes_base_url_to_client(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_validate_failure_detail_hides_key_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Issue #166: 確認の失敗の文言に、エラー本文のキーの断片を出さない(`safe_api_message`)。"""
+    """Issue #166: 確認の失敗の文言に、エラー本文のキーの断片を出さない。応答は固定の区分の
+    文言だけで、相手の本文そのものも返さない。"""
     request = httpx.Request("GET", "https://api.openai.com/v1/models")
     error = openai.InternalServerError(
         "upstream rejected key sk-proj-****abcd1234",
@@ -320,4 +322,5 @@ def test_validate_failure_detail_hides_key_fragments(monkeypatch: pytest.MonkeyP
         asyncio.run(settings_api._validate_key_live("sk-test", None))
     assert exc.value.status_code == 502
     assert "abcd1234" not in str(exc.value.detail)
-    assert "upstream rejected key" in str(exc.value.detail)
+    assert "upstream rejected key" not in str(exc.value.detail)
+    assert exc.value.detail == t("openai.keyVerifyUnexpected")

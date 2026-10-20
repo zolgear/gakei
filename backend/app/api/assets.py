@@ -84,6 +84,7 @@ from app.domain.visibility import (
     get_visible_asset,
     get_visible_group,
 )
+from app.http_body_limit import read_file_limited
 from app.i18n import t
 from app.mods.gate import ingest_gate
 from app.mods.runtime import ModRuntime
@@ -260,7 +261,12 @@ def create_asset(
     focal_worker: FocalPointWorker | None = Depends(get_focal_worker),
     mods: ModRuntime | None = Depends(get_mods),
 ) -> AssetUploadResponse:
-    data = file.file.read()
+    # 上限(`MAX_UPLOAD_BYTES` 以上は断る)を超えると分かった時点で読むのをやめる。
+    data = read_file_limited(
+        file.file,
+        MAX_UPLOAD_BYTES - 1,
+        lambda: HTTPException(status_code=422, detail=t("assets.uploadTooLarge")),
+    )
     try:
         result = ingest_asset(
             db,

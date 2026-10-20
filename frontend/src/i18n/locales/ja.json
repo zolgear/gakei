@@ -476,7 +476,10 @@
         "change": "接続先を変更",
         "dialogTitle": "接続先を変更",
         "verifyHelp": "登録する前にこの接続先につないで、使えるか確かめます(15 秒ほどかかることがあります)。OpenAI 本体に戻すときは「既定に戻す」を使います。",
-        "verifyAndRegister": "確かめて登録"
+        "verifyAndRegister": "確かめて登録",
+        "keyRequiredLabel": "API キー(入れ直し)",
+        "keyRequiredHelp": "接続先のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みの API キーは送りません。新しい接続先で使う API キーを入れてください。このキーで確かめてから、接続先と一緒に登録します。",
+        "envKeyOriginLocked": "API キーが環境変数(.env)の OPENAI_API_KEY から来ているため、オリジン(スキーム・ホスト・ポート)の違う接続先は画面から登録できません。.env の OPENAI_BASE_URL で設定してください。"
       },
       "sourceLabel": "出どころ",
       "register": "キーを登録",
@@ -561,7 +564,9 @@
         "assistant": "アシスタント",
         "region_detection": "領域の検出"
       },
-      "deleteDisabledInUse": "使っている機能があるため削除できません。"
+      "deleteDisabledInUse": "使っている機能があるため削除できません。",
+      "apiKeyRequiredLabel": "キー(入れ直し)",
+      "apiKeyRequiredHelp": "Base URL のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのキーは送りません。新しい接続先で使うキーを入れてください(キーが要らない接続先なら、先にキーを削除してください)。"
     },
     "annotation": {
       "intro": "画像にタイトルとタグを自動で付けます。タイトルはプロンプトから LLM で推測し、タグは画像から VLM や ONNX タガーで推定します。人が付けたタイトルとタグは上書きしません。どのエンジンも既定では無効です。",
@@ -1295,7 +1300,8 @@
         "publicBaseUrlHelp": "利用者がブラウザで開く GAKEI のアドレスです。リダイレクト URI はここから作ります。",
         "submit": "確かめて仮登録",
         "submitting": "確かめています…",
-        "registered": "仮登録しました。IdP にリダイレクト URI を登録してから、テストログインしてください。"
+        "registered": "仮登録しました。IdP にリダイレクト URI を登録してから、テストログインしてください。",
+        "secretReentryRequired": "発行者のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのクライアントシークレットは送りません。クライアントシークレットを入れ直してください(公開クライアントなら「シークレットを使わない」を選んでください)。"
       },
       "mode": {
         "label": "ログインを必須にする(OIDC)",
@@ -2944,7 +2950,8 @@
       "disableConfirmMessage": "SD WebUI を無効にします。",
       "disableConfirmWarning": "設定は残したまま、SD WebUI のモデルを選べなくなります。",
       "dialogDisabledNote": "無効のまま URL を保存します。「有効にする」を押すと、この URL で接続します。",
-      "urlSavedWhileDisabled": "URL を保存しました(無効のままです)"
+      "urlSavedWhileDisabled": "URL を保存しました(無効のままです)",
+      "dialogCredentialsRequired": "接続先のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みの資格情報は送りません。ユーザー名とパスワードを入れ直してください(認証の要らない接続先なら、先に資格情報を削除してください)。"
     },
     "credentials": {
       "cardTitle": "資格情報(--api-auth)",
