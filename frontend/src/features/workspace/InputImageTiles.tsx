@@ -15,6 +15,7 @@ import { fmt, useI18n } from '../../i18n'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
+import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
 import type { InputImagesProps } from './InputChipsRow'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputImageTiles.module.css'
@@ -47,6 +48,7 @@ export function InputImageTiles({
   blankSketchSize,
   onPreviewAsset,
   onOpenAddDialog,
+  regions,
 }: InputImagesProps) {
   const { t } = useI18n()
   const c = t.workspace.inputChips
@@ -152,6 +154,28 @@ export function InputImageTiles({
                 detail && <span className={styles.dims}>{`${detail.width}×${detail.height}`}</span>
               )}
 
+              {isPrimary && regions.supported && regions.count > 0 && !isWithheld && (
+                <span className={styles.regionsBadge}>
+                  <button
+                    type="button"
+                    className={styles.regionsBadgeButton}
+                    title={t.regions.form.chipTitle}
+                    onClick={regions.onOpen}
+                  >
+                    {fmt(t.regions.form.chip, { count: regions.count })}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.regionsBadgeButton}
+                    aria-label={t.regions.form.clear}
+                    title={t.regions.form.clear}
+                    onClick={regions.onClear}
+                  >
+                    <RemoveIcon />
+                  </button>
+                </span>
+              )}
+
               {isPrimary && maskInput && (
                 <span className={styles.maskBadge}>
                   <AssetImage
@@ -212,6 +236,31 @@ export function InputImageTiles({
                     onClick={logic.handleRemoveMask}
                   >
                     <RemoveIcon />
+                  </button>
+                )}
+
+                {isPrimary && regions.supported && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
+                    title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.buttonTitle}
+                    onClick={regions.onOpen}
+                  >
+                    <RegionsIcon size={12} />
+                  </button>
+                )}
+
+                {isPrimary && regions.supported && regions.hasOverlay && !isWithheld && (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    aria-label={regions.overlayShown ? t.regions.assist.hide : t.regions.assist.show}
+                    aria-pressed={regions.overlayShown}
+                    title={regions.overlayShown ? t.regions.assist.hide : t.regions.assist.show}
+                    onClick={regions.onToggleOverlay}
+                  >
+                    <EyeIcon off={!regions.overlayShown} size={12} />
                   </button>
                 )}
 

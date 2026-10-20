@@ -499,6 +499,12 @@
     },
     "locality": {
       "invalid": "The connection type must be external or local"
+    },
+    "regionDetection": {
+      "invalidBool": "{name} must be true or false",
+      "unknownConnection": "The specified connection does not exist",
+      "invalidModel": "The model name must be 1 to {max} characters",
+      "invalidLimit": "{name} must be an integer from {min} to {max}"
     }
   },
   "runValidation": {
@@ -562,7 +568,8 @@
     "notFound": "Asset not found",
     "contentNotFound": "Content not found",
     "notDeleted": "Not deleted",
-    "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run."
+    "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run.",
+    "regionsMustBePng": "Region images must be in PNG format"
   },
   "runs": {
     "unknownProvider": "Unknown provider: {provider}",
@@ -573,6 +580,41 @@
     "cannotCancelStatus": "Cannot cancel: status={status}",
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
     "partialNotFound": "Partial image not found"
+  },
+  "runRegions": {
+    "editOnly": "Region instructions can only be used with Edit",
+    "notSupported": "This provider or model does not accept region instructions",
+    "primaryRequired": "Region instructions require a first input image",
+    "tooManyInputs": "With the images added for region instructions there would be {count} input images, more than the limit of {max}. Remove some input or reference images",
+    "overlayFailed": "Could not create the image with the boxes drawn",
+    "colors": {
+      "red": "red",
+      "blue": "blue",
+      "green": "green",
+      "yellow": "yellow",
+      "magenta": "magenta",
+      "cyan": "cyan",
+      "orange": "orange",
+      "purple": "purple"
+    },
+    "prompt": {
+      "header": "Region instructions: image {overlay} is image 1 with numbered colored boxes drawn on top. The boxes show the approximate location and size. Edit image 1. When the text above mentions a box by its number (such as \"Box 1\") or by its name, it means the area of that box in the list below. Where a box has its own instruction, follow it.",
+      "where": " (x {left}–{right}%, y {top}–{bottom}% of the image)",
+      "area": "The area at x {left}–{right}%, y {top}–{bottom}% of the image.",
+      "kind": {
+        "change": "Change the area in the box{where}.",
+        "add": "Add something new in the box{where}.",
+        "keep": "Keep the area in the box{where} exactly as it is.",
+        "remove": "Remove what is in the box{where} and fill the area in naturally to match the surroundings.",
+        "move": "Move what is in the dashed box{source} to the solid box{target}. Fill the original spot in naturally to match the surroundings."
+      },
+      "instruction": "Instruction: {instruction}",
+      "text": "Draw the text \"{text}\" exactly as written.",
+      "reference": "Use image {image} as a reference.",
+      "item": "- Box {number} ({color}): {body}",
+      "itemNamed": "- Box {number} ({color}, {label}): {body}",
+      "footer": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image."
+    }
   },
   "promptSets": {
     "notFound": "Prompt set not found",
@@ -973,7 +1015,8 @@
         "generated": "Generated",
         "mask": "Mask",
         "sketch": "Sketch",
-        "composite": "Arrangement"
+        "composite": "Arrangement",
+        "regions": "Regions"
       },
       "operations": {
         "generate": "Generate",
@@ -1125,5 +1168,23 @@
   "llm": {
     "authFailed": "Authentication with the LLM connection failed. Check the connection's API key.",
     "permissionDenied": "The LLM connection does not allow this request. Check the connection's API key and model."
+  },
+  "regionDetection": {
+    "disabled": "Box detection is disabled (an administrator can enable it under \"Region detection\" in the admin settings)",
+    "unsupported": "The detection connection does not support Structured Outputs, so it cannot be used for detection (only the official OpenAI endpoint is supported for now)",
+    "hourlyLimitReached": "The hourly detection limit ({limit}) has been reached. Please wait and try again",
+    "llmError": "Box detection failed: {error}",
+    "maskNotSupported": "Detection is not available for mask images",
+    "assetDeleted": "Detection is not available for deleted images",
+    "imageWithheld": "A Mod's verdict does not allow this image to be sent to external AI",
+    "imageMissing": "The image file was not found",
+    "imageUnreadable": "The image could not be read",
+    "fake": {
+      "person": "Person (dummy)",
+      "cup": "Cup (dummy)",
+      "window": "Window (dummy)"
+    },
+    "detectionNotFound": "The detection was not found",
+    "deleteForbidden": "Only the user who ran the detection or an administrator can delete it"
   }
 }

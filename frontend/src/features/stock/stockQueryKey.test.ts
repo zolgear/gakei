@@ -75,8 +75,13 @@ describe('ストックのパネルの種類(ADR-0035)', () => {
     expect(stockKindChoices(false)).toEqual(['all', 'generated', 'upload'])
   })
 
-  it('設定がオンならチップは 5 つ', () => {
-    expect(stockKindChoices(true)).toEqual(['all', 'generated', 'upload', 'sketch', 'composite', 'mask'])
+  it('設定がオンならチップは 6 つ(領域を含む。ADR-0053)', () => {
+    expect(stockKindChoices(true)).toEqual(['all', 'generated', 'upload', 'sketch', 'composite', 'regions', 'mask'])
+  })
+
+  it('領域を選んだまま設定をオフにすると「すべて」に戻す', () => {
+    expect(normalizeStockKindFilter('regions', false)).toBe('all')
+    expect(stockListKinds('regions', true)).toEqual(['regions'])
   })
 
   it('スケッチ・マスクを選んだまま設定をオフにすると「すべて」に戻す', () => {

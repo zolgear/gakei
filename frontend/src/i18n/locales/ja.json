@@ -41,7 +41,9 @@
       "upload": "アップロード",
       "generated": "生成",
       "mask": "マスク",
-      "sketch": "スケッチ"
+      "sketch": "スケッチ",
+      "composite": "配置",
+      "regions": "領域"
     },
     "lineagePage": {
       "title": "系列グラフ",
@@ -287,7 +289,8 @@
       "shareLinks": "共有リンクの公開",
       "about": "GAKEI について",
       "authentication": "認証",
-      "assistant": "アシスタント"
+      "assistant": "アシスタント",
+      "regionDetection": "領域の検出"
     },
     "frame": {
       "changeCount": {
@@ -339,7 +342,7 @@
         "help": "狭い幅(768px 未満)では、どちらを選んでも結果の下に入力欄が並びます。生成画面の結果エリア右上のボタンでも切り替えられます。"
       },
       "stockShowSketchMask": {
-        "label": "スケッチ・マスク・配置をストックに出す",
+        "label": "スケッチ・マスク・配置・領域をストックに出す",
         "help": "オフのときは、系列グラフと Run の詳細から開けます。"
       },
       "tagCompletion": {
@@ -555,7 +558,8 @@
       "features": {
         "annotation": "自動タイトル・タグ",
         "embedding": "埋め込み",
-        "assistant": "アシスタント"
+        "assistant": "アシスタント",
+        "region_detection": "領域の検出"
       },
       "deleteDisabledInUse": "使っている機能があるため削除できません。"
     },
@@ -974,7 +978,8 @@
         "annotation": "自動タイトル・タグ",
         "assistant": "アシスタント",
         "embedding": "リモートの埋め込み",
-        "workflow_analysis": "ワークフローの推定(ComfyUI)"
+        "workflow_analysis": "ワークフローの推定(ComfyUI)",
+        "region_detection": "領域の検出"
       },
       "sourcesLabel": "取り込みの経路(asset.ingested)",
       "sources": {
@@ -1365,6 +1370,34 @@
       "usageLabel": "あなたの直近 1 時間",
       "usageHelp": "LLM のリクエストの数と、アシスタントが作った Run の数です。",
       "usageValue": "リクエスト {requests} / {requestLimit}、Run {runs} / {runLimit}",
+      "errors": {
+        "connectionRequired": "接続先を選んでください",
+        "connectionUnknown": "この接続先は見つかりません。選び直してください",
+        "modelRequired": "モデル名を入力してください",
+        "modelTooLong": "{max} 文字以内で入力してください",
+        "limitInvalid": "{min}〜{max} の整数を入力してください"
+      }
+    },
+    "regionDetection": {
+      "intro": "生成のフォームの「領域」で、画像の中の物の四角を VLM に探させます。出した候補は利用者が選んで使います。画像を接続先へ送り、そのたびに費用がかかります。",
+      "loading": "読み込み中...",
+      "loadFailed": "領域の検出の設定を取得できませんでした。",
+      "retry": "再読み込み",
+      "enabledLabel": "領域の検出を有効にする",
+      "enabledHelp": "有効にすると、「領域」の画面に「検出」が出ます。無効でも四角は手で描けます。既定は無効です。",
+      "notUsable": "接続先かキーがそろっていない、または接続先が構造化出力に対応していないため、「検出」は出ていません。",
+      "connectionHeading": "VLM",
+      "connectionLabel": "接続先",
+      "connectionHelp": "画像を読めて、構造化出力(JSON のスキーマ)に対応した接続先を選びます。",
+      "connectionsLink": "LLM の接続先",
+      "modelLabel": "モデル名",
+      "modelHelp": "接続先に送るモデル名です。画像を読めるモデルを選びます。",
+      "limitsHeading": "上限",
+      "limitLabel": "検出(1 時間)",
+      "limitHelp": "利用者ごとに、直近 1 時間に検出できる数です({min}〜{max})。プロセスの中で数え、再起動で 0 に戻ります。",
+      "resetToDefault": "既定値({default})に戻す",
+      "usageLabel": "あなたの直近 1 時間",
+      "usageValue": "検出 {requests} / {limit}",
       "errors": {
         "connectionRequired": "接続先を選んでください",
         "connectionUnknown": "この接続先は見つかりません。選び直してください",
@@ -2291,7 +2324,8 @@
     "paramsHeading": "パラメーター",
     "importedBadge": "取り込み",
     "importedNodeTitle": "ZIP から取り込んだ記録(未検証)",
-    "exportLineage": "系列を書き出す"
+    "exportLineage": "系列を書き出す",
+    "assetRegions": "領域"
   },
   "stock": {
     "heading": "ストック",
@@ -2367,7 +2401,8 @@
       "clear": "選択を解除",
       "toggleTile": "選択を切り替える"
     },
-    "duplicatesLink": "重複の候補"
+    "duplicatesLink": "重複の候補",
+    "kindRegions": "領域"
   },
   "comfyui": {
     "connection": {
@@ -3594,5 +3629,148 @@
     "inputBlockedTitle": "Mod の判定で拒否された画像は、入力に使えません",
     "inputsBlockedPresent": "Mod の判定で拒否された入力画像があります。取り除いてください",
     "cannotUseAsInput": "Mod の判定で拒否された画像は、入力に使えません"
+  },
+  "regions": {
+    "title": "領域",
+    "button": "領域",
+    "buttonTitle": "1枚目の入力画像に四角を描き、四角ごとに名前や指示を付ける",
+    "close": "閉じる",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "loading": "読み込み中...",
+    "loadError": "画像を読み込めませんでした。",
+    "kinds": {
+      "change": "変える",
+      "add": "足す",
+      "keep": "そのまま残す",
+      "remove": "消す",
+      "move": "動かす"
+    },
+    "toolbar": {
+      "undo": "元に戻す",
+      "redo": "やり直す",
+      "zoomIn": "拡大",
+      "zoomOut": "縮小",
+      "fit": "全体を表示",
+      "pan": "画面を動かす(ドラッグで表示を動かす)",
+      "remove": "選んだ四角を外す"
+    },
+    "hint": "画像の上をドラッグして四角を描きます。四角を選ぶと、中をドラッグして動かし、角と辺のハンドルで大きさを変えられます。",
+    "count": {
+      "one": "四角 {count} / {max} 個",
+      "other": "四角 {count} / {max} 個"
+    },
+    "empty": "まだ四角がありません。画像の上をドラッグして描きます。",
+    "limitReached": "四角は {max} 個までです。",
+    "card": {
+      "aria": "四角 {n}",
+      "kindLabel": "種類",
+      "labelLabel": "名前(任意)",
+      "labelPlaceholder": "この四角の物(例: 右手の白いカフス)",
+      "instructionLabel": "指示(任意)",
+      "instructionPlaceholder": {
+        "change": "この四角の中をどう変えるか(例: 赤い帽子にする)",
+        "add": "この四角に足す物(例: 白い猫)",
+        "keep": "(任意)残す物",
+        "remove": "(任意)消す物",
+        "move": "(任意)動かす物"
+      },
+      "textLabel": "描く文字(任意)",
+      "textPlaceholder": "看板などに描かせる文字",
+      "referenceLabel": "参照画像(任意)",
+      "referenceNone": "なし",
+      "referencePick": "選ぶ",
+      "referenceRemove": "外す",
+      "moveUp": "番号を前へ",
+      "moveDown": "番号を後ろへ",
+      "remove": "この四角を外す",
+      "moveHint": "点線の四角(元の位置)にある物を、実線の四角(移す先)へ動かします。",
+      "namedAreaHint": "指示が無い四角は、場所と名前だけを送る目印になります。プロンプトから「四角 {n}」か名前で指せます。",
+      "chipsLabel": "検出の名前を指示に入れる"
+    },
+    "problems": {
+      "labelTooLong": "名前は {max} 文字以内にしてください。",
+      "instructionTooLong": "指示は {max} 文字以内にしてください。",
+      "textTooLong": "描く文字は {max} 文字以内にしてください。",
+      "invalidBox": "四角の位置が正しくありません。描き直してください。",
+      "invalidSourceBox": "元の位置の四角が正しくありません。描き直してください。"
+    },
+    "saveBlocked": "直すところがあるため保存できません。",
+    "notes": {
+      "imageAndText": "OpenAI には、四角を描いた画像を入力に足し、四角ごとの指示を文にしてプロンプトの後ろに足して送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
+      "countsTowardLimit": "四角を描いた画像と参照画像も、入力画像の枚数({max} 枚まで)に数えます。"
+    },
+    "detection": {
+      "heading": "検出",
+      "intro": "VLM で画像の中の物を探し、四角の候補(点線)を出します。候補を押すと四角になります。",
+      "queryLabel": "探す物(任意)",
+      "queryPlaceholder": "例: カップ、左の人の服(空なら主な物を一通り)",
+      "run": "検出",
+      "running": "検出中...(10 秒以上かかることがあります)",
+      "cancel": "取り消す",
+      "clear": "候補を隠す",
+      "candidates": {
+        "one": "候補 {count} 個",
+        "other": "候補 {count} 個"
+      },
+      "none": "候補は見つかりませんでした。",
+      "failed": "検出に失敗しました。",
+      "tallNote": "縦に長い物は、下の端が短く出ることがあります。四角を直してから使ってください。",
+      "historyLabel": "検出の履歴",
+      "historyAll": "一通り",
+      "historyEntry": "{query} · {time} · {count} 個",
+      "historyDelete": "この検出を履歴から消す",
+      "historyDeleteFailed": "履歴から消せませんでした。",
+      "historyLoadFailed": "検出の履歴を読み込めませんでした。"
+    },
+    "referenceDialog": {
+      "title": "参照画像を選ぶ",
+      "fromInputs": "入力の画像",
+      "fromStock": "ストック",
+      "inputAria": "入力 {n}",
+      "empty": "ストックに画像がありません。",
+      "loadFailed": "ストックを読み込めませんでした。",
+      "loadMore": "さらに読み込む",
+      "choose": "この画像を使う"
+    },
+    "form": {
+      "chip": "領域 {count}",
+      "chipTitle": "領域の指示を編集",
+      "clear": "領域の指示を外す",
+      "clearedPrimaryChanged": "1枚目の入力画像が変わったので、領域の指示を外しました。",
+      "clearedUnsupported": "選んだモデルは領域の指示に対応していないので、外しました。",
+      "invalid": "領域の指示に直すところがあります。「領域」を開いて確かめてください。",
+      "tooManyInputs": "領域の指示で画像を {extra} 枚足すため、入力画像が {count} 枚になり、上限({max} 枚)を超えます。"
+    },
+    "runDetail": {
+      "heading": "領域の指示",
+      "delivery": "四角を描いた画像を入力に足し、指示をプロンプトの後ろに足して送りました。",
+      "textLine": "描く文字: 「{text}」",
+      "reference": "参照画像",
+      "noInstruction": "(指示なし)",
+      "marker": "(指示なし。場所と名前を示す目印)",
+      "overlayTag": "領域",
+      "overlayImage": "送った四角の画像",
+      "appendedToggle": "足した文(領域の指示)"
+    },
+    "assist": {
+      "heading": "領域と検出の候補",
+      "show": "プロンプトの上に、領域と検出の候補を重ねたプレビューと名前を出す",
+      "hide": "プロンプトの上の、領域と検出の候補のプレビューを隠す",
+      "enlarge": "大きく見る",
+      "boxCount": {
+        "one": "四角 {count}",
+        "other": "四角 {count}"
+      },
+      "candidateCount": {
+        "one": "候補 {count}",
+        "other": "候補 {count}"
+      },
+      "chipsHint": "押すと、プロンプトのカーソル位置に入れます。",
+      "chipsLabel": "領域と検出の名前",
+      "boxChip": "四角 {n}",
+      "candidateChipTitle": "検出の候補(まだ送られません)。押すと名前を入れ、この候補を四角にします",
+      "candidateNote": "点線の候補は送られません。チップを押すか領域の画面で四角にしたものだけが、四角を描いた画像と文として送られます。"
+    }
   }
 }

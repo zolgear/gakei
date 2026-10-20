@@ -221,7 +221,7 @@ def _d(key: str, /, **params: Any) -> str:
 
 def _kind_label(kind: Any) -> str:
     value = str(kind)
-    if value in ("upload", "generated", "mask", "sketch", "composite"):
+    if value in ("upload", "generated", "mask", "sketch", "composite", "regions"):
         return _d(f"kinds.{value}")
     return value
 

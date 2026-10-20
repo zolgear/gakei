@@ -37,6 +37,7 @@ GAKEI が決まった時点(イベント)で、外部のシステム(Webhook)や
 | `assistant` | アシスタントが LLM を呼ぶたび(道具の呼び出しの往復を含む) | その回の応答を止め、理由をチャットに出す |
 | `embedding` | リモートの埋め込みを呼ぶ前(画像・文章)。ローカルの ONNX は呼ばない | その埋め込みは失敗になる |
 | `workflow_analysis` | 管理者が ComfyUI のワークフローの登録・編集画面で「アシスタントで推定」を押したとき | 推定は止まり、理由が画面に出る(規則による読み取りはそのまま使える) |
+| `region_detection` | 領域の四角の検出(ADR-0053 7章)で VLM を呼ぶ前。接続先がローカルでも呼ぶ | 検出は止まり、理由が画面に出る(四角は手で描ける) |
 
 管理者設定の「接続を確認」は、検査用の固定の文しか送らないので対象にしない。MCP から作った Run も `image_run` を通る。繰り返しの実行は Run ごとに呼ぶ。
 
@@ -105,8 +106,10 @@ Webhook と Python の Mod は同じ中身を受け取る。すべてのイベ�
 - `target` は送り先。API キーは含めない。`connection` は LLM・VLM・埋め込みの接続先のとき(`{ "id", "name", "builtin" }`)。
 - `text` の `role` は `prompt`、`negative_prompt`、`system`、`user`、`assistant`、`tool`、`tags`、`query` など。
 - `images` の `role` は `primary`(主たる入力)、`reference`(参照)、`mask`、`attachment`(アシスタントへの添付)。画像で探すときの画像のように Asset でないものは `asset_id` が `null`。
-- `run_id` は `image_run` のとき、`asset_id` は自動タイトル・タグの対象の画像。
+- `run_id` は `image_run` のとき、`asset_id` は自動タイトル・タグと領域の四角の検出の対象の画像。
+- `image_run` で領域の指示の四角(ADR-0053)を付けたとき: `region_count` が四角の数(付けていなければ `null`)。`text` に、四角ごとの指示(`role` が `region`)と描く文字(`role` が `region_text`)が入る。四角を描いた画像は `images` に `reference` として入る。
 - `workflow_analysis` のとき: `target` はアシスタントの接続先とモデル。`text` は LLM への指示(`role` が `system`)と、ワークフローのノードの要約(`role` が `workflow`。1行が1ノードで、id・種類・タイトル・配線・直値。文字列は先頭 60 文字まで、秘密に見える値は `***`)。テンプレートの JSON そのものは送らない。`params` は `workflow_id`(登録前は `null`)、`workflow_name`、`model`、`reasoning_effort`。画像は送らない。
+- `region_detection` のとき: `target` は検出の接続先とモデル。`text` は VLM への指示(`role` が `system`)と、探す物(`role` が `query`。言葉が無ければ `role` が `user` の決まった文)。`images` は対象の画像1枚(`role` が `primary`)、`asset_id` もその画像。実際に送るのは、その画像を長辺 1536px 以内に縮めた JPEG(`detail: high`)。`params` は `model`、`query`(無ければ `null`)、`max_items`、`image_max_side`、`image_detail`、`reasoning_effort`。
 - ComfyUI の Run の `params` は、共有リンクと同じ規則で秘密に見える値を伏せる。
 
 ### `asset.ingested` の `subject`
@@ -157,7 +160,7 @@ uv run python -m app.tools.export_mod_schema mods-schema.json   # - なら標準
 `schema_version` の互換性の規則:
 
 - **項目を足すときは、版を上げない。** 受ける側は、知らない項目を無視すること。
-- `purpose` などの値の種類を足すときも、版を上げない(2026-10-17 に `workflow_analysis` を足した)。受ける側は、知らない値を受けても壊れないようにし、許可するか拒否するかは Mod の方針で決める。
+- `purpose` などの値の種類を足すときも、版を上げない(2026-10-17 に `workflow_analysis`、2026-10-20 に `region_detection` を足した)。受ける側は、知らない値を受けても壊れないようにし、許可するか拒否するかは Mod の方針で決める。
 - **項目を消す・意味を変えるときは、`schema_version` を上げる。** 受ける側は、知らない版を受けたら、何もしないか拒否する。
 - Python の Mod の関数の呼ばれ方の版は、マニフェストの `api_version`(今は `1`)。合わない Mod は読み込みエラーになる。
 

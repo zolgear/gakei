@@ -25,5 +25,14 @@ export function clearFormContent(
 ): RunFormState {
   if (!caps) return { ...createEmptyFormState(), assetGroupId }
   const initial = computeInitialFormValues(caps)
-  return { provider: initial.provider, model: initial.model, prompt: '', params: initial.params, inputs: [], assetGroupId }
+  return {
+    provider: initial.provider,
+    model: initial.model,
+    prompt: '',
+    params: initial.params,
+    inputs: [],
+    assetGroupId,
+    regions: [],
+    regionsAssetId: null,
+  }
 }

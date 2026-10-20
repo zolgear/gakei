@@ -76,7 +76,8 @@ class AssetFilter:
             Asset.deleted_at.is_(None),
             # 画像を残さなかった Asset(ADR-0051 4章)は、似た画像・重複・マップから外す。
             Asset.content_withheld_at.is_(None),
-            Asset.kind != AssetKind.MASK,
+            # 領域の四角を描いた画像(ADR-0053 4章)も外す(埋め込みの対象外)。
+            Asset.kind.not_in((AssetKind.MASK, AssetKind.REGIONS)),
             asset_visible(self.viewer),
         ]
         if self.kind is not None:

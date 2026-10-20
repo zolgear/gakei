@@ -42,6 +42,7 @@ export const MOD_PURPOSES: readonly ModPurpose[] = [
   'assistant',
   'embedding',
   'workflow_analysis',
+  'region_detection',
 ]
 export const MOD_SOURCES: readonly ModSource[] = [
   'upload',

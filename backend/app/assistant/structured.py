@@ -1,7 +1,8 @@
 """アシスタントの接続先で、決まった形の JSON を1回だけ受け取る呼び出し(ADR-0052 6章)。
 
 会話(`engine.py`)とは別に、道具もストリーミングも使わず、Structured Outputs(JSON Schema の
-strict)で応答を受ける。今は ComfyUI のワークフローの推定だけが使う。
+strict)で応答を受ける。ComfyUI のワークフローの推定と、領域の四角の検出(ADR-0053 7章。画像を
+添える)が使う。
 
 - `OpenAIStructuredEngine`: OpenAI 互換 API を OpenAI Python SDK で呼ぶ。接続先の API 形式
   (ADR-0032)で、Responses API(`text.format`)と Chat Completions(`response_format`)を
@@ -14,10 +15,11 @@ strict)で応答を受ける。今は ComfyUI のワークフローの推定だ�
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import openai
 
@@ -33,6 +35,19 @@ logger = logging.getLogger(__name__)
 _TIMEOUT_SECONDS = 120.0
 
 
+@dataclass(frozen=True)
+class StructuredImage:
+    """要求に添える画像(VLM 向け)。呼び出し側が縮めて JPEG などにしたもの。"""
+
+    data: bytes
+    mime: str = "image/jpeg"
+    # 画像の細かさの指定(OpenAI の `detail`)。None なら付けない。
+    detail: Literal["low", "high", "auto"] | None = "high"
+
+    def data_url(self) -> str:
+        return f"data:{self.mime};base64," + base64.b64encode(self.data).decode("ascii")
+
+
 @dataclass
 class StructuredRequest:
     target: LlmTarget | None
@@ -43,6 +58,34 @@ class StructuredRequest:
     reasoning_effort: str | None = "low"
     # Fake が返す応答(FAKE_PROVIDER=1 用。実 API には送らない)。
     fake_response: dict[str, Any] | None = None
+    # 添える画像(文の後ろに、この順で送る)。空なら文だけを送る(今までと同じ形)。
+    images: tuple[StructuredImage, ...] = ()
+
+
+def _responses_input(request: StructuredRequest) -> Any:
+    """Responses API の `input`。画像が無ければ文そのもの。"""
+    if not request.images:
+        return request.input_text
+    parts: list[dict[str, Any]] = [{"type": "input_text", "text": request.input_text}]
+    for image in request.images:
+        part: dict[str, Any] = {"type": "input_image", "image_url": image.data_url()}
+        if image.detail is not None:
+            part["detail"] = image.detail
+        parts.append(part)
+    return [{"role": "user", "content": parts}]
+
+
+def _chat_user_content(request: StructuredRequest) -> Any:
+    """Chat Completions の利用者の発言の `content`。画像が無ければ文そのもの。"""
+    if not request.images:
+        return request.input_text
+    parts: list[dict[str, Any]] = [{"type": "text", "text": request.input_text}]
+    for image in request.images:
+        image_url: dict[str, Any] = {"url": image.data_url()}
+        if image.detail is not None:
+            image_url["detail"] = image.detail
+        parts.append({"type": "image_url", "image_url": image_url})
+    return parts
 
 
 @dataclass
@@ -141,7 +184,7 @@ class OpenAIStructuredEngine:
         kwargs: dict[str, Any] = {
             "model": target.model,
             "instructions": request.instructions,
-            "input": request.input_text,
+            "input": _responses_input(request),
             "text": {
                 "format": {
                     "type": "json_schema",
@@ -190,7 +233,7 @@ class OpenAIStructuredEngine:
             "model": target.model,
             "messages": [
                 {"role": "system", "content": request.instructions},
-                {"role": "user", "content": request.input_text},
+                {"role": "user", "content": _chat_user_content(request)},
             ],
             "response_format": {
                 "type": "json_schema",

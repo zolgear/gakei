@@ -39,13 +39,15 @@ HANDLER_NAMES: dict[str, str] = {
 }
 
 # `ai.before_send` の目的(ADR-0051 2章)。`workflow_analysis` は ComfyUI のワークフローの推定
-# (ADR-0052 6章)。値を足すのは項目の追加と同じ扱いで、`SCHEMA_VERSION` は上げない。
+# (ADR-0052 6章)、`region_detection` は領域の四角の検出(ADR-0053 7章)。値を足すのは項目の
+# 追加と同じ扱いで、`SCHEMA_VERSION` は上げない。
 PURPOSES: tuple[str, ...] = (
     "image_run",
     "annotation",
     "assistant",
     "embedding",
     "workflow_analysis",
+    "region_detection",
 )
 # `asset.ingested` の取り込みの経路。
 SOURCES: tuple[str, ...] = (
@@ -164,6 +166,9 @@ class BeforeSendSubject:
     run_id: str | None = None
     # 自動タイトル・タグのとき、対象の Asset。
     asset_id: str | None = None
+    # 画像の生成で、領域の指示の四角を付けたときの四角の数(ADR-0053 8章)。四角ごとの文は
+    # `text` の `region`(指示)と `region_text`(描く文字)。四角が無ければ null。
+    region_count: int | None = None
 
 
 @dataclass(frozen=True)

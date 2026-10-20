@@ -38,6 +38,10 @@ class Base(DeclarativeBase):
 # ADR-0027 2章: JSON の列は PostgreSQL では JSONB にする(`json` 型は等値比較ができず、
 # DISTINCT や重複の確認で失敗するため)。SQLite ではこれまでどおり JSON(TEXT)。
 JsonType = JSON().with_variant(JSONB(), "postgresql")
+# None を JSON の `null` ではなく SQL の NULL で書く型(列の型は JsonType と同じ。マイグレーション
+# は要らない)。「無い」を `IS NULL` で引けるようにしたい列に使う。前に `null` で書いた行も None で
+# 読める。
+NullableJsonType = JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
 
 # ADR-0027 2章: 文字列の列の型の分け方。
 # - 利用者や外部(IdP、プロバイダー、ComfyUI など)から来る文字列は、長さのない `Text`
@@ -90,6 +94,9 @@ class AssetKind(enum.StrEnum):
     SKETCH = "sketch"
     # 入力画像の配置(ADR-0050)。素材は `asset_composition_source` で指す。
     COMPOSITE = "composite"
+    # 領域の指示の四角を描いた画像(ADR-0053 4章)。サーバーが Run の作成時に描き、
+    # `source_asset_id` で主たる入力を指す(スケッチと同じ)。
+    REGIONS = "regions"
 
 
 class RunOperation(enum.StrEnum):
@@ -343,6 +350,12 @@ class Run(Base):
     # (`asset_group_id` や `origin` と同じ扱い。ADR-0003 の追記のみの規則に反しない)。
     # API に送った値ではないので `params` には入れない。
     prompt_build: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+
+    # 領域の指示の四角(ADR-0053 4章)。`{"version", "delivery", "regions": [...]}`。利用者が付けた
+    # 四角(主たる入力に対する割合)と、どの渡し方で送ったか。Run の作成時に一度だけ書き、UPDATE
+    # しない。四角を文に変えて送った分は、送った値として `prompt` と `params` に入る。再実行では
+    # ここから四角を戻す。
+    regions: Mapped[dict | None] = mapped_column(NullableJsonType, nullable=True)
 
     # 実行したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
     # (INSERT 時に設定し、UPDATE しない)。
@@ -809,6 +822,34 @@ class AssetContentRating(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
+class AssetRegionDetection(Base):
+    """VLM での四角の検出の1回分(ADR-0053 7章の検出の履歴)。証跡ではない(ADR-0003 の来歴では
+    ない)ので、消してよい。1つの Asset に新しい方から `HISTORY_MAX` 回まで残す
+    (`app/domain/region_detection.py`)。見つからなかった結果(`regions` が空)も残す。
+    """
+
+    __tablename__ = "asset_region_detection"
+    __table_args__ = (
+        Index("ix_asset_region_detection_asset_id_created_at", "asset_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), nullable=False)
+    # 探した言葉(前後の空白を除く。言葉が無ければ NULL)
+    query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 使った LLM の接続先(ADR-0032)の id と、応答したモデル
+    connection_id: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    max_items: Mapped[int] = mapped_column(Integer, nullable=False)
+    # [{"label": ..., "box": [x0, y0, x1, y1]}, ...](0〜1 の割合、左上が原点。ADR-0053 3章)
+    regions: Mapped[list] = mapped_column(JsonType, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    # 検出した利用者(ADR-0019)。`none` モードは null。
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+
+
 class UserPreference(Base):
     """ユーザーごとの設定(ADR-0049 6章)。キーと値の組で持つ。
 
@@ -1131,7 +1172,8 @@ class ModInvocation(Base):
     mod_id: Mapped[str] = mapped_column(String(100), nullable=False)
     # 呼んだ時点の Mod の名前(後で名前を変えても、記録は呼んだときのまま)。
     mod_name: Mapped[str] = mapped_column(Text, nullable=False)
-    # `ai.before_send` の目的(image_run / annotation / assistant / embedding / workflow_analysis)。
+    # `ai.before_send` の目的(image_run / annotation / assistant / embedding / workflow_analysis /
+    # region_detection)。
     purpose: Mapped[str | None] = mapped_column(String(32), nullable=True)
     run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
     asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)

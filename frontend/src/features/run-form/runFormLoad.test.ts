@@ -96,6 +96,8 @@ function rerunState(provider: string, model: string, params: Record<string, unkn
     params: paramsForRerun(params) as Record<string, string | number | boolean>,
     inputs: [],
     assetGroupId: null,
+    regions: [],
+    regionsAssetId: null,
   }
 }
 

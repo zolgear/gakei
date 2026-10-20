@@ -201,8 +201,16 @@ STRUCTURED_OUTPUTS_HOSTS = frozenset({"api.openai.com"})
 
 def structured_outputs_supported(db: Session, config: AssistantConfig, settings: Settings) -> bool:
     """アシスタントの接続先が Structured Outputs に対応するとみなせるか(ComfyUI のワークフローの
-    推定に使えるか)。組み込みの接続先で Base URL を変えていなければ OpenAI の公式。"""
-    connection = llm_connections.find_connection(llm_connections.load(db), config.connection_id)
+    推定に使えるか)。"""
+    return connection_supports_structured_outputs(db, config.connection_id, settings)
+
+
+def connection_supports_structured_outputs(
+    db: Session, connection_id: str, settings: Settings
+) -> bool:
+    """接続先が Structured Outputs に対応するとみなせるか。組み込みの接続先で Base URL を
+    変えていなければ OpenAI の公式。領域の四角の検出(ADR-0053 7章)も使う。"""
+    connection = llm_connections.find_connection(llm_connections.load(db), connection_id)
     if connection is None:
         return False
     base_url = llm_connections.display_base_url(connection, settings)
