@@ -29,6 +29,8 @@ export const MOD_NAME_MAX = 100
 export const MOD_INSTANCE_NAME_MAX = 100
 export const MOD_URL_MAX = 2000
 export const MOD_SECRET_MAX = 1000
+/** Webhook の署名の鍵の最小の長さ(新しく保存する鍵だけ。`WEBHOOK_SECRET_MIN`)。 */
+export const MOD_WEBHOOK_SECRET_MIN = 32
 export const MOD_SETTING_VALUE_MAX = 4000
 export const MOD_TIMEOUT_MIN_SECONDS = 1
 export const MOD_TIMEOUT_MAX_SECONDS = 300
@@ -164,13 +166,14 @@ export function isValidTimeoutInput(value: string): boolean {
   return Number.isFinite(n) && n >= MOD_TIMEOUT_MIN_SECONDS && n <= MOD_TIMEOUT_MAX_SECONDS
 }
 
-/** `isNew` のときは鍵が必須。編集では入れたときだけ確かめる。 */
+/** `isNew` のときは鍵が必須。編集では入れたときだけ確かめる。鍵は `MOD_WEBHOOK_SECRET_MIN` 文字以上。 */
 export function validateWebhookForm(form: WebhookForm, isNew: boolean): WebhookFormErrors {
   const errors: WebhookFormErrors = {}
   if (!isValidModName(form.name)) errors.name = true
   if (!isValidWebhookUrl(form.url)) errors.url = true
   const secret = form.secret.trim()
-  if ((isNew && !secret) || secret.length > MOD_SECRET_MAX) errors.secret = true
+  if (isNew && !secret) errors.secret = true
+  if (secret && (secret.length < MOD_WEBHOOK_SECRET_MIN || secret.length > MOD_SECRET_MAX)) errors.secret = true
   if (!isValidTimeoutInput(form.timeout)) errors.timeout = true
   return errors
 }

@@ -18,6 +18,7 @@ import {
   MOD_EVENTS,
   MOD_NAME_MAX,
   MOD_SECRET_MAX,
+  MOD_WEBHOOK_SECRET_MIN,
   MOD_WEBHOOKS_MAX,
   canAddWebhook,
   diffWebhookForm,
@@ -75,7 +76,19 @@ export function WebhooksSection({ webhooks }: { webhooks: ModWebhookView[] }) {
                 details={[
                   { label: w.urlLabel, value: <span className={own.breakable}>{view.url}</span>, mono: true },
                   { label: m.eventsLabel, value: <EventBadges events={view.events} /> },
-                  { label: w.secretLabel, value: <KeyStatus set={view.secret_set} /> },
+                  {
+                    label: w.secretLabel,
+                    value: (
+                      <>
+                        <KeyStatus set={view.secret_set} />
+                        {view.secret_too_short && (
+                          <span className={`${styles.warningText} ${own.secretWarning}`}>
+                            {fmt(w.secretTooShort, { min: MOD_WEBHOOK_SECRET_MIN })}
+                          </span>
+                        )}
+                      </>
+                    ),
+                  },
                   { label: w.sendImagesLabel, value: view.send_images ? m.yes : m.no },
                   {
                     label: m.onFailureLabel,
@@ -190,7 +203,7 @@ function WebhookDialog({ view, onClose }: { view?: ModWebhookView; onClose: () =
   // 入力を始める前から赤くしないよう、空の欄はエラーを出さない(ボタンは押せないまま)。
   const nameError = errors.name && form.name !== '' ? fmt(w.nameInvalid, { max: MOD_NAME_MAX }) : null
   const urlError = errors.url && form.url !== '' ? w.urlInvalid : null
-  const secretError = errors.secret && form.secret !== '' ? fmt(w.secretInvalid, { max: MOD_SECRET_MAX }) : null
+  const secretError = errors.secret && form.secret !== '' ? fmt(w.secretInvalid, { min: MOD_WEBHOOK_SECRET_MIN, max: MOD_SECRET_MAX }) : null
   const submitError = errorText(mutation.error, m.communicationFailed)
 
   const update = (patch: Partial<WebhookForm>) => {
@@ -247,6 +260,9 @@ function WebhookDialog({ view, onClose }: { view?: ModWebhookView; onClose: () =
             {isNew ? w.secretLabel : w.secretReplaceLabel}
           </label>
           {view && <KeyStatus set={view.secret_set} />}
+          {view?.secret_too_short && (
+            <p className={styles.warningText}>{fmt(w.secretTooShort, { min: MOD_WEBHOOK_SECRET_MIN })}</p>
+          )}
           <input
             id={`${idPrefix}-secret`}
             type="password"
@@ -259,7 +275,7 @@ function WebhookDialog({ view, onClose }: { view?: ModWebhookView; onClose: () =
             onChange={(e) => update({ secret: e.target.value })}
           />
           {secretError && <p className={styles.errorText}>{secretError}</p>}
-          <p className={styles.helpText}>{w.secretHelp}</p>
+          <p className={styles.helpText}>{fmt(w.secretHelp, { min: MOD_WEBHOOK_SECRET_MIN })}</p>
         </div>
 
         <SubscriptionFields

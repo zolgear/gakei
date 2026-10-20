@@ -11,6 +11,10 @@
   だけ。対象外が1つでもあれば、何も記録せずに 403。
 - 受けた判定は配達の応答と同じ扱い(`mod_verdict` に追記し、`deny` なら画像を残さない)。
 - 無効にした Webhook と、無い Webhook は 404。
+- 同じ要求(Mod の id、`X-Gakei-Timestamp`、本文が同じもの)は1度だけ受け付ける
+  (`app/mods/replay.py`)。受け付け済みの要求がもう一度届けば、記録せずに1回目と同じ応答を
+  `duplicate: true` を付けて返す(応答を受け取れなかった Mod の送り直しを成功として扱えるように)。
+  1回目を処理している間に届けば 409、記録が窓の中の要求で埋まっていれば 429。
 - 本文は `_BODY_MAX_BYTES` までを読みながら数え、超えた時点で打ち切って 413(`Content-Length`
   が超えていれば読まずに 413)。全体のミドルウェア(`app/body_guard.py`)にも同じ上限を印で渡す。
 """
@@ -30,12 +34,12 @@ from app.i18n import t
 from app.mods import api as contract
 from app.mods import config as mods_config
 from app.mods import webhook as webhook_send
+from app.mods.replay import MAX_SKEW_SECONDS, request_key
 from app.mods.runtime import ModRuntime, VerdictTargetError
 
 router = APIRouter(prefix="/api/mods", tags=["mods"])
 
-# 時刻のずれの許容(秒)。
-MAX_SKEW_SECONDS = 300
+__all__ = ["MAX_SKEW_SECONDS", "router", "verify_signature"]
 _BODY_MAX_BYTES = 1024 * 1024
 
 
@@ -90,7 +94,9 @@ def verify_signature(
         401: {"description": "署名が無い・合わない、または時刻が古い"},
         403: {"description": "その Mod に届けていない Asset・Run への判定を含む"},
         404: {"description": "Webhook が無い、または無効"},
+        409: {"description": "同じ要求を処理している"},
         422: {"description": "本文が判定の配列の形でない"},
+        429: {"description": "受け付けた要求の記録が上限に達している"},
     },
 )
 # 認証はログインではなく署名なので、ログインの前に本文を読んでよい(ADR-0051 8章)。
@@ -109,28 +115,47 @@ async def receive_mod_verdicts(mod_id: str, request: Request) -> ModVerdictRecei
     webhook, secret = await run_in_threadpool(_lookup)
     if webhook is None or not webhook.common.enabled:
         raise _not_found()
+    timestamp = request.headers.get("x-gakei-timestamp")
     if not secret or not verify_signature(
-        secret,
-        request.headers.get("x-gakei-timestamp"),
-        request.headers.get("x-gakei-signature"),
-        body,
-        now=time.time(),
+        secret, timestamp, request.headers.get("x-gakei-signature"), body, now=time.time()
     ):
         raise _unauthorized()
 
-    try:
-        raw = json.loads(body) if body.strip() else None
-        verdicts = contract.verdicts_from_json(raw)
-    except (ValueError, contract.ContractError) as e:
-        raise HTTPException(status_code=422, detail=t("mods.verdictInvalid", error=str(e))) from e
+    # 署名が合った要求だけを記録する(鍵を持たない人は記録を埋められない)。
+    guard = runtime.verdict_replay
+    reservation = guard.reserve(request_key(webhook.id, timestamp or "", body))
+    if reservation.outcome == "done":
+        return ModVerdictReceiveResponse(accepted=reservation.accepted or 0, duplicate=True)
+    if reservation.outcome == "in_progress":
+        raise HTTPException(status_code=409, detail=t("mods.verdictInProgress"))
+    if reservation.outcome == "full":
+        raise HTTPException(status_code=429, detail=t("mods.verdictTooMany"))
 
     try:
-        accepted = await run_in_threadpool(
-            runtime.receive_verdicts, mods_config.KIND_WEBHOOK, webhook.id, webhook.name, verdicts
-        )
-    except VerdictTargetError as e:
-        raise HTTPException(
-            status_code=403,
-            detail=t("mods.verdictTargetNotAllowed", target=f"{e.target_type} {e.target_id}"),
-        ) from e
+        try:
+            raw = json.loads(body) if body.strip() else None
+            verdicts = contract.verdicts_from_json(raw)
+        except (ValueError, contract.ContractError) as e:
+            raise HTTPException(
+                status_code=422, detail=t("mods.verdictInvalid", error=str(e))
+            ) from e
+
+        try:
+            accepted = await run_in_threadpool(
+                runtime.receive_verdicts,
+                mods_config.KIND_WEBHOOK,
+                webhook.id,
+                webhook.name,
+                verdicts,
+            )
+        except VerdictTargetError as e:
+            raise HTTPException(
+                status_code=403,
+                detail=t("mods.verdictTargetNotAllowed", target=f"{e.target_type} {e.target_id}"),
+            ) from e
+    except BaseException:
+        # 記録しなかった要求は覚えない(送り直せば同じ確認をもう一度する)。
+        guard.release(reservation.key)
+        raise
+    guard.complete(reservation.key, accepted)
     return ModVerdictReceiveResponse(accepted=accepted)

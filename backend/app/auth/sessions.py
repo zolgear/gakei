@@ -127,6 +127,18 @@ def find_user_for_token(
     if session.expires_at <= _utcnow():
         return None
 
+    return current_user_if_allowed(user, admin_emails, allowed_domains)
+
+
+def current_user_if_allowed(
+    user: AppUser, admin_emails: set[str], allowed_domains: set[str]
+) -> CurrentUser | None:
+    """`app_user` の行から、今の設定(`admin_emails` / `allowed_domains`。ADR-0034)で
+    `CurrentUser` を作る。許可ドメインから外れていれば None。
+
+    セッション(`find_user_for_token`)、アクセストークン(`api_tokens.authenticate`)、
+    1回限りの URL の発行者(`viewer_for_issuer`)が同じ判定を使う。
+    """
     email = user.email or ""
     if not is_email_allowed(email, allowed_domains, admin_emails):
         return None
@@ -178,24 +190,27 @@ def purge_expired(db: Session) -> None:
 
 
 def viewer_for_issuer(
-    db: Session, user_id: uuid.UUID | None, *, auth_mode: str, admin_emails: set[str]
+    db: Session,
+    user_id: uuid.UUID | None,
+    *,
+    auth_mode: str,
+    admin_emails: set[str],
+    allowed_domains: set[str],
 ) -> CurrentUser | None:
     """1回限りの URL(アップロード・ダウンロード。ADR-0023 7章 2・8章 3)を発行した利用者の
     `CurrentUser`(ADR-0025 の可視性の判定に使う)。
 
-    個人モード(発行者が null)は `LOCAL_ADMIN`。認証モードは `app_user` から作り、ロールは
-    ログイン時と同じく現在の `admin_emails` で決める。発行者が見つからなければ None。
+    個人モード(発行者が null)は `LOCAL_ADMIN`。認証モードは `app_user` から作り、セッションと
+    同じく今の `admin_emails` / `allowed_domains` で評価し直す(`current_user_if_allowed`)。
+    発行の後に許可ドメインから外した利用者の URL は、期限内でも使えない。発行者が見つからない
+    (削除された)・許可ドメインから外れていれば None。個人モードではドメインを確かめない
+    (ログインが無いので、許可ドメインは効いていない)。
     """
     if user_id is None:
         return LOCAL_ADMIN if auth_mode == "none" else None
     app_user = db.get(AppUser, user_id)
     if app_user is None:
         return None
-    email = (app_user.email or "").strip().lower()
-    return CurrentUser(
-        id=app_user.id,
-        name=app_user.name,
-        email=app_user.email,
-        role="admin" if email in admin_emails else "user",
-        avatar_sha256=app_user.avatar_sha256,
-    )
+    if auth_mode == "none":
+        return current_user_if_allowed(app_user, admin_emails, set())
+    return current_user_if_allowed(app_user, admin_emails, allowed_domains)

@@ -132,6 +132,7 @@ async def _upload(
             ticket.user_id,
             auth_mode=runtime.mode,
             admin_emails=runtime.admin_email_set(),
+            allowed_domains=runtime.allowed_email_domain_set(),
         )
         if viewer is None:
             db.rollback()

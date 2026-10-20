@@ -6,7 +6,8 @@ MCP の `create_upload_url` が発行し、REST の `PUT /api/uploads/{token}` �
 
 取り込み(`ingest_upload`)と「使用済み」の記録は同じトランザクションで行う。取り込みに
 失敗した(画像でない・大きすぎる)ときはロールバックするので、URL は期限内ならもう一度使える。
-同時に2回送られた場合は、条件付き UPDATE で片方だけが通る。
+同時に2回送られた場合は、条件付き UPDATE で片方だけが通る。発行した利用者が今もログインを
+許されるか(削除・許可ドメイン)は、受け口が `auth.sessions.viewer_for_issuer` で確かめ直す。
 """
 
 from __future__ import annotations
