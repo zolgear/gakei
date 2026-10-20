@@ -499,6 +499,12 @@
     },
     "locality": {
       "invalid": "接続先は external・local のどちらかを指定してください"
+    },
+    "regionDetection": {
+      "invalidBool": "{name} は true か false である必要があります",
+      "unknownConnection": "指定した接続先がありません",
+      "invalidModel": "モデル名は1〜{max}文字で指定してください",
+      "invalidLimit": "{name} は{min}〜{max}の整数である必要があります"
     }
   },
   "runValidation": {
@@ -1125,5 +1131,21 @@
   "llm": {
     "authFailed": "LLM の接続先の認証に失敗しました。接続先の API キーを確認してください。",
     "permissionDenied": "LLM の接続先に、この操作の権限がありません。接続先の API キーとモデルを確認してください。"
+  },
+  "regionDetection": {
+    "disabled": "四角の検出は無効です(管理者設定の「領域の検出」で有効にできます)",
+    "unsupported": "検出の接続先が Structured Outputs に対応していないため、検出に使えません(今は OpenAI の公式の接続先だけに対応します)",
+    "hourlyLimitReached": "1時間の検出の上限({limit} 回)に達しました。しばらく待ってから試してください",
+    "llmError": "四角の検出に失敗しました: {error}",
+    "maskNotSupported": "マスクの画像では検出できません",
+    "assetDeleted": "削除した画像では検出できません",
+    "imageWithheld": "この画像は Mod の判定により外部の AI へ送れません",
+    "imageMissing": "画像のファイルが見つかりません",
+    "imageUnreadable": "画像を読めませんでした",
+    "fake": {
+      "person": "人物(ダミー)",
+      "cup": "カップ(ダミー)",
+      "window": "窓(ダミー)"
+    }
   }
 }

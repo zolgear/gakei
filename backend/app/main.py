@@ -39,6 +39,7 @@ from app.api import parameter_sets as parameter_sets_api
 from app.api import pricing as pricing_api
 from app.api import prompt_sets as prompt_sets_api
 from app.api import prompt_templates as prompt_templates_api
+from app.api import region_detection as region_detection_api
 from app.api import runs as runs_api
 from app.api import sdwebui as sdwebui_api
 from app.api import search as search_api
@@ -636,6 +637,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ADR-0038: SD WebUI の設定(更新系は各ルートで `require_admin`)。
     app.include_router(sdwebui_api.router, dependencies=auth_dep)
     app.include_router(assets_api.router, dependencies=auth_dep)
+    # 領域の四角の検出(ADR-0053 7章)と、その設定。
+    app.include_router(region_detection_api.router, dependencies=auth_dep)
     app.include_router(asset_groups_api.router, dependencies=auth_dep)
     app.include_router(runs_api.router, dependencies=auth_dep)
     app.include_router(events_api.router, dependencies=auth_dep)
