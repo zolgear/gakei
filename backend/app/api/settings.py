@@ -86,6 +86,7 @@ from app.domain.schemas import (
 from app.embedding.catalog import CLIP_MODELS, ClipModelDownloader, onnx_model_key
 from app.embedding.catalog import is_downloaded as clip_is_downloaded
 from app.i18n import t
+from app.llm.errors import safe_api_message
 from app.providers.base import ImageProvider
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
@@ -122,14 +123,10 @@ async def _validate_key_live(api_key: str, base_url: str | None) -> None:
     except openai.APIError as e:
         raise HTTPException(
             status_code=502,
-            detail=t("openai.keyVerifyFailed", detail=_safe_message(e)),
+            # 401 の本文はキーの先頭と末尾を含むことがあるので、`safe_api_message` で固定の文言に
+            # する・キーの形の文字列を伏せる(Issue #166)。
+            detail=t("openai.keyVerifyFailed", detail=safe_api_message(e)),
         ) from e
-
-
-def _safe_message(e: openai.APIError) -> str:
-    label = e.code or e.type or e.__class__.__name__
-    detail = getattr(e, "message", None) or str(e)
-    return f"{label}: {detail}"
 
 
 def get_key_validator() -> KeyValidator:

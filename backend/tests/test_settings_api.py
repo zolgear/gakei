@@ -305,3 +305,19 @@ def test_validate_passes_base_url_to_client(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(settings_api, "AsyncOpenAI", _Client)
     asyncio.run(settings_api._validate_key_live("sk-test", "http://127.0.0.1:4000/v1"))
     assert captured["base_url"] == "http://127.0.0.1:4000/v1"
+
+
+def test_validate_failure_detail_hides_key_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #166: 確認の失敗の文言に、エラー本文のキーの断片を出さない(`safe_api_message`)。"""
+    request = httpx.Request("GET", "https://api.openai.com/v1/models")
+    error = openai.InternalServerError(
+        "upstream rejected key sk-proj-****abcd1234",
+        response=httpx.Response(500, request=request),
+        body=None,
+    )
+    _patch_models_list(monkeypatch, error)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(settings_api._validate_key_live("sk-test", None))
+    assert exc.value.status_code == 502
+    assert "abcd1234" not in str(exc.value.detail)
+    assert "upstream rejected key" in str(exc.value.detail)
