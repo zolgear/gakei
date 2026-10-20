@@ -126,7 +126,7 @@ Once it's running, open `http://127.0.0.1:8000`. A `.env` at the repository root
   ```bash
   docker run --rm -v gakei-data:/data -v "$PWD":/backup busybox tar czf /backup/gakei-data.tgz -C /data .
   ```
-- **Exposure:** defaults to `127.0.0.1` only. With `docker run`, change the `-p` mapping; with the repository's `compose.yaml`, use `GAKEI_BIND=0.0.0.0` (and `GAKEI_PORT`) to expose it to the LAN or the internet. Either way, there is no authentication by default, so if you expose it, enable login with `AUTH_MODE=oidc` ([docs/auth.md](docs/auth.md)) or put an authenticating reverse proxy in front.
+- **Exposure:** defaults to `127.0.0.1` only. With `docker run`, change the `-p` mapping; with the repository's `compose.yaml`, use `GAKEI_BIND=0.0.0.0` (and `GAKEI_PORT`) to expose it to the LAN or the internet. Either way, there is no authentication by default, so if you expose it, enable OIDC authentication in the admin settings under "Authentication" ([docs/auth.md](docs/auth.md)) or put an authenticating reverse proxy in front.
 - **ComfyUI:** connect to ComfyUI running on the same host at `http://host.docker.internal:8188` (Settings → ComfyUI). With plain `docker run`, add `--add-host=host.docker.internal:host-gateway` for this to resolve (the repository's `compose.yaml` already sets this up).
 - **Run only one replica.** Jobs run inside the api process, so whether the DB is SQLite or PostgreSQL, don't share the same DB / volume across multiple containers.
 
@@ -134,7 +134,7 @@ The version you're running is shown in Settings under "About GAKEI". See [Releas
 
 ## Notes
 
-- **There is no authentication by default.** GAKEI listens only on `127.0.0.1`, so it can be opened only from the same machine. For multiple users, set `AUTH_MODE=oidc` and the OIDC settings (e.g. Google or Keycloak) in `.env`; login is then required, and only the people listed in `AUTH_ADMIN_EMAILS` can change admin settings such as the API key. See [docs/auth.md](docs/auth.md).
+- **There is no authentication by default.** GAKEI listens only on `127.0.0.1`, so it can be opened only from the same machine. For multiple users, set up the OIDC connection (e.g. Google or Keycloak) and the admin emails in the admin settings under "Authentication", and enable authentication after a test sign-in succeeds; login is then required (no restart needed). Only the people listed in the admin emails can change admin settings such as the API key. These can also be set in `.env`, and if nobody can sign in, write `AUTH_MODE=none` in `.env` and restart to disable authentication temporarily. See [docs/auth.md](docs/auth.md).
 - **To use it from another machine, use an SSH port forward.** For example: `ssh -L 8000:127.0.0.1:8000 <server>`. If you expose it on the LAN with `--host 0.0.0.0`, anyone on the same network can generate images with your key or replace the key.
 - **The API key is stored in plain text in `data/secrets.json`.** Don't share `data/` with others.
 - **ComfyUI Desktop also uses port 8000 by default.** When running both, start GAKEI with something like `--port 8792`.

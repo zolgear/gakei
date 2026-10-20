@@ -43,14 +43,14 @@ jobs:
       # lint・フロントエンド・ランチャーの確認は、分けたうちの 1 番だけで行う(ADR-0012)。
       matrix: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') && fromJSON('{"include":[{"os":"ubuntu-latest","shard":1,"shard_total":1}]}') || (github.event_name == 'push' && github.ref == 'refs/heads/dev') && fromJSON('{"include":[{"os":"ubuntu-latest","shard":1,"shard_total":1},{"os":"windows-latest","shard":1,"shard_total":1}]}') || fromJSON('{"include":[{"os":"ubuntu-latest","shard":1,"shard_total":1},{"os":"windows-latest","shard":1,"shard_total":4},{"os":"windows-latest","shard":2,"shard_total":4},{"os":"windows-latest","shard":3,"shard_total":4},{"os":"windows-latest","shard":4,"shard_total":4}]}') }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       - name: Node.js のセットアップ
         if: matrix.shard == 1
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: npm
@@ -59,7 +59,7 @@ jobs:
       # setup-uv は v8 以降、動く major タグ(v8/v9/v10)を発行しなくなったため、
       # フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
 
@@ -264,14 +264,14 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
 
@@ -294,14 +294,14 @@ jobs:
         ports:
           - 10000:10000
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
 
@@ -321,7 +321,7 @@ jobs:
     name: docker build & smoke test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
