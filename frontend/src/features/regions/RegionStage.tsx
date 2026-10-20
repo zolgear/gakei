@@ -286,7 +286,7 @@ export function RegionStage({
     return { x: box[0] * dispW, y: box[1] * dispH, w: (box[2] - box[0]) * dispW, h: (box[3] - box[1]) * dispH }
   }
 
-  function badge(box: Box, index: number, key: string, part: Part, faded: boolean) {
+  function badge(box: Box, index: number, key: string, part: Part, faded: boolean, caption?: string) {
     const r = px(box)
     const x = Math.min(Math.max(0, r.x + 3), Math.max(0, dispW - badgeSize))
     const y = Math.min(Math.max(0, r.y + 3), Math.max(0, dispH - badgeSize))
@@ -305,6 +305,12 @@ export function RegionStage({
         >
           {index + 1}
         </text>
+        {/* 検出の候補から作った四角の名前(画面の中だけ。ADR-0053)。 */}
+        {caption && (
+          <text x={x + badgeSize + 4} y={y + badgeSize / 2} dominantBaseline="central" className={styles.candidateLabel}>
+            {caption}
+          </text>
+        )}
       </g>
     )
   }
@@ -432,7 +438,7 @@ export function RegionStage({
                       </>
                     )}
                     {frame(region.box, index, region.key, 'box', selected, false)}
-                    {badge(region.box, index, region.key, 'box', false)}
+                    {badge(region.box, index, region.key, 'box', false, region.label)}
                     {selected && isMove && region.sourceBox && handles(region.sourceBox, index, region.key, 'source')}
                     {selected && handles(region.box, index, region.key, 'box')}
                   </g>

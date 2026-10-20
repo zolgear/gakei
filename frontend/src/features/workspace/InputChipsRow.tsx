@@ -19,7 +19,7 @@ import type { EditInputsLogic } from '../run-form/useEditInputsLogic'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
-import { RegionsIcon } from '../regions/regionIcons'
+import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputChipsRow.module.css'
 import { focalStyle } from '../../lib/focalPoint'
@@ -57,6 +57,11 @@ export interface InputRegionsProps {
   count: number
   onOpen: () => void
   onClear: () => void
+  /** プロンプトの上に重ねて見せる物(四角か検出の候補)があるか。 */
+  hasOverlay: boolean
+  /** プロンプトの上のプレビュー(四角と検出の候補の重ね描き)を出しているか。 */
+  overlayShown: boolean
+  onToggleOverlay: () => void
 }
 
 export function InputChipsRow({
@@ -262,6 +267,19 @@ export function InputChipsRow({
                         <RegionsIcon size={12} />
                       </button>
                     )
+                  )}
+
+                  {isPrimary && regions.supported && regions.hasOverlay && !isWithheld && (
+                    <button
+                      type="button"
+                      className={styles.iconButton}
+                      aria-label={regions.overlayShown ? t.regions.assist.hide : t.regions.assist.show}
+                      aria-pressed={regions.overlayShown}
+                      title={regions.overlayShown ? t.regions.assist.hide : t.regions.assist.show}
+                      onClick={regions.onToggleOverlay}
+                    >
+                      <EyeIcon off={!regions.overlayShown} size={12} />
+                    </button>
                   )}
 
                   {detail?.kind === 'composite' && !isWithheld && (

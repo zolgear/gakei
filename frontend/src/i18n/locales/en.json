@@ -3683,7 +3683,8 @@
       "moveUp": "Move number earlier",
       "moveDown": "Move number later",
       "remove": "Remove this box",
-      "moveHint": "Moves what is in the dashed box (the original position) to the solid box (the target)."
+      "moveHint": "Moves what is in the dashed box (the original position) to the solid box (the target).",
+      "chipsLabel": "Insert a detected name into the instruction"
     },
     "problems": {
       "instructionRequired": "For Change and Add, enter an instruction, text to draw, or a reference image.",
@@ -3746,6 +3747,23 @@
       "reference": "Reference image",
       "noInstruction": "(no instruction)",
       "overlayTag": "Regions"
+    },
+    "assist": {
+      "heading": "Regions and detected candidates",
+      "show": "Show a preview with the regions and detected candidates, and their names, above the prompt",
+      "hide": "Hide the preview of the regions and detected candidates above the prompt",
+      "enlarge": "View larger",
+      "boxCount": {
+        "one": "{count} box",
+        "other": "{count} boxes"
+      },
+      "candidateCount": {
+        "one": "{count} candidate",
+        "other": "{count} candidates"
+      },
+      "chipsHint": "Click to insert at the prompt cursor.",
+      "chipsLabel": "Region and detection names",
+      "boxChip": "Box {n}"
     }
   }
 }

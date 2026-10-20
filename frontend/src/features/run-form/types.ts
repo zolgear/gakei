@@ -39,6 +39,11 @@ export interface RunFormState {
    */
   regions: RegionBox[]
   regionsAssetId: string | null
+  /**
+   * 四角の名前(検出の候補から作った四角だけ。キーは番号)。プレビューの見出しと入力の補助に使い、
+   * サーバーには送らない。無ければ名前なし。
+   */
+  regionLabels?: Record<string, string>
 }
 
 export function createEmptyFormState(): RunFormState {

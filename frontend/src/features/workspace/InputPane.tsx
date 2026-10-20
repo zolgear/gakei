@@ -35,6 +35,9 @@ import { SketchEditor, type SketchSaveOptions } from '../sketch/SketchEditor'
 import { SketchLoadingDialog } from '../sketch/SketchLoadingDialog'
 import { CompositeEditor } from '../composite/CompositeEditor'
 import { RegionEditor } from '../regions/RegionEditor'
+import { RegionPromptAssist } from '../regions/RegionPromptAssist'
+import { setRegionAssistOpen, useRegionAssistOpen } from '../regions/regionAssistStore'
+import { useDetectionHistory } from '../regions/useRegionDetection'
 import { recommendedSketchPrompt } from '../sketch/recommendedPrompt'
 import { MentionPopover } from '../prompt-sets/MentionPopover'
 import {
@@ -110,6 +113,10 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const { t } = useI18n()
   const ip = t.workspace.inputPane
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  // プロンプトの欄で最後にカーソルがあった位置(領域の名前のチップで、フォーカスが外れていても
+  // その位置へ入れるため。ADR-0053)。
+  const lastPromptCursorRef = useRef<number | null>(null)
+  const regionAssistOpen = useRegionAssistOpen()
   // 送信直後の案内。フォームは送信しても変わらない(ADR-0009「送信後のフォーム」2026-09-24
   // 改訂)ので、ここは「実行を開始した」ことだけ短く伝える。
   const [submittedNotice, setSubmittedNotice] = useState<string | null>(null)
@@ -132,6 +139,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     form.maxInputImages,
     form.maxInputImageBytes,
   )
+
+  // 1枚目の入力の検出の候補(プレビューの重ね描きを出せるか。`RegionPromptAssist` と同じキャッシュ)。
+  const primaryDetections = useDetectionHistory(editLogic.images[0]?.assetId ?? null, form.regionsSupported)
 
   // 1枚目の入力が無くなったら、領域の編集画面は閉じる(後で入力を足したときに勝手に開かないように)。
   if (regionEditorOpen && editLogic.images.length === 0) setRegionEditorOpen(false)
@@ -258,9 +268,14 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     const cursor = form.pendingCursor
     form.clearPendingCursor()
     setMention(null)
-    if (isMobileViewport()) return
     const el = promptTextareaRef.current
     if (!el) return
+    // モバイルではキーボードが出てしまうので自動ではフォーカスしない。ただし、すでにフォーカスがある
+    // (領域の名前のチップはフォーカスを奪わない)ときは、カーソル位置だけ合わせる。
+    if (isMobileViewport()) {
+      if (document.activeElement === el) el.setSelectionRange(cursor, cursor)
+      return
+    }
     el.focus()
     el.setSelectionRange(cursor, cursor)
     // form 全体を依存に含めると内容変更のたびに走ってしまうため、必要な値だけを見る。
@@ -350,6 +365,19 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     const el = document.getElementById('prompt')
     const hasFocus = el instanceof HTMLTextAreaElement && document.activeElement === el
     return hasFocus ? el.selectionStart : null
+  }
+
+  // 領域の名前のチップ(ADR-0053)。テキストのモードではカーソル位置(フォーカスが外れていれば最後の
+  // 位置、それも無ければ末尾)へ入れ、タグのモードでは末尾にタグとして足す。
+  function insertRegionText(text: string) {
+    setSubmittedNotice(null)
+    if (promptEditMode === 'tags') {
+      form.insertPrompt(text, 'append-tags', null)
+      return
+    }
+    const el = promptTextareaRef.current
+    const cursor = el && document.activeElement === el ? el.selectionStart : lastPromptCursorRef.current
+    form.insertPrompt(text, 'inline', cursor)
   }
 
   function handleSketchSave(
@@ -458,6 +486,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
               updateMentionFromCursor(e.currentTarget)
             }}
             onClick={(e) => updateMentionFromCursor(e.currentTarget)}
+            onSelect={(e) => {
+              lastPromptCursorRef.current = e.currentTarget.selectionStart
+            }}
             placeholder={ip.promptPlaceholder}
           />
           {mention === null && tagAssist.popover}
@@ -492,6 +523,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       count: form.regions.length,
       onOpen: () => setRegionEditorOpen(true),
       onClear: form.clearRegions,
+      hasOverlay: form.regions.length > 0 || (primaryDetections.selected?.regions.length ?? 0) > 0,
+      overlayShown: regionAssistOpen,
+      onToggleOverlay: () => setRegionAssistOpen(!regionAssistOpen),
     },
   }
   const inputImages =
@@ -629,6 +663,16 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const slots = {
     inputImages,
     promptEditor,
+    promptAssist: (
+      <RegionPromptAssist
+        asset={editLogic.positionZeroAsset}
+        enabled={form.regionsSupported}
+        regions={form.regions}
+        labels={form.regionLabels}
+        showChips={form.promptTemplate === null}
+        onInsert={insertRegionText}
+      />
+    ),
     promptTools,
     submitControls,
     notices,
@@ -694,11 +738,12 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         <RegionEditor
           asset={editLogic.positionZeroAsset}
           initialRegions={form.regions}
+          initialLabels={form.regionLabels}
           inputAssetIds={editLogic.images.map((i) => i.assetId)}
           maxInputImages={form.maxInputImages}
           delivery={form.regionsDelivery}
-          onSave={(regions) => {
-            form.setRegions(regions)
+          onSave={(regions, labels) => {
+            form.setRegions(regions, labels)
             setRegionEditorOpen(false)
           }}
           onCancel={() => setRegionEditorOpen(false)}

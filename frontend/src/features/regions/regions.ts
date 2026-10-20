@@ -151,8 +151,11 @@ export interface EditorRegion {
   instruction: string
   text: string
   referenceAssetId: string | null
-  /** 検出の候補から作ったときの名前(指示の欄の目安に出すだけ。保存しない)。 */
-  hint?: string
+  /**
+   * 検出の候補から作ったときの名前。四角の見出しと指示の欄の目安に出す。画面の中(とフォームの状態)
+   * だけのもので、サーバーには送らない(`RegionBox` に名前の欄は無い)。
+   */
+  label?: string
 }
 
 let keySeq = 0
@@ -161,9 +164,16 @@ export function newRegionKey(): string {
   return `r${Date.now().toString(36)}-${keySeq}`
 }
 
+/**
+ * 四角の名前(検出の候補の名前)。キーは四角の番号。フォームの状態に四角と組で持ち、サーバーには
+ * 送らない。
+ */
+export type RegionLabels = Record<string, string>
+
 /** フォームの値(API の形)から編集画面の状態を作る。番号の順に並べる。 */
-export function editorRegionsFromBoxes(boxes: readonly RegionBox[]): EditorRegion[] {
+export function editorRegionsFromBoxes(boxes: readonly RegionBox[], labels: RegionLabels = {}): EditorRegion[] {
   return orderedRegions(boxes).map((b) => ({
+    ...(labels[String(b.number)] ? { label: labels[String(b.number)] } : {}),
     key: newRegionKey(),
     kind: b.kind,
     box: [...b.box] as Box,
@@ -186,6 +196,15 @@ export function boxesFromEditorRegions(regions: readonly EditorRegion[]): Region
     text: r.text === '' ? null : r.text,
     reference_asset_id: r.referenceAssetId,
   }))
+}
+
+/** 編集画面の状態から、四角の名前(番号 → 名前)を作る。番号は並び順で 1 から。 */
+export function labelsFromEditorRegions(regions: readonly EditorRegion[]): RegionLabels {
+  const labels: RegionLabels = {}
+  regions.forEach((r, index) => {
+    if (r.label) labels[String(index + 1)] = r.label
+  })
+  return labels
 }
 
 export function addRegion(regions: readonly EditorRegion[], box: Box, extra: Partial<EditorRegion> = {}): EditorRegion[] {

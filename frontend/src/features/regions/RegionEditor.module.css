@@ -94,6 +94,14 @@
   color: var(--color-accent);
 }
 
+.countInline {
+  display: none;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
 .zoomText,
 .countText {
   font-family: var(--font-mono);
@@ -547,14 +555,30 @@
     overflow-y: auto;
   }
 
+  /* ツールバーは1行に収める(数は札の上に出す)。 */
   .toolbar {
-    gap: 8px;
+    gap: 6px;
+    padding: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .toolGroup {
+    gap: 2px;
   }
 
   .toolButton,
   .iconButton {
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .zoomText,
+  .countText {
+    display: none;
+  }
+
+  .countInline {
+    display: block;
   }
 
   .body {
@@ -562,12 +586,20 @@
     flex-direction: column;
   }
 
+  /* 画像は横いっぱいにし、札を下へスクロールしても上に残す。 */
   .stageArea {
     flex: none;
-    width: 100%;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    width: calc(100% + 20px);
+    margin: 0 -10px;
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
     aspect-ratio: var(--regions-aspect, 1);
     min-height: 220px;
-    max-height: 60dvh;
+    max-height: 50dvh;
   }
 
   .sidePanel {

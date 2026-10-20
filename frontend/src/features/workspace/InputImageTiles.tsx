@@ -15,7 +15,7 @@ import { fmt, useI18n } from '../../i18n'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
-import { RegionsIcon } from '../regions/regionIcons'
+import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
 import type { InputImagesProps } from './InputChipsRow'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputImageTiles.module.css'
@@ -248,6 +248,19 @@ export function InputImageTiles({
                     onClick={regions.onOpen}
                   >
                     <RegionsIcon size={12} />
+                  </button>
+                )}
+
+                {isPrimary && regions.supported && regions.hasOverlay && !isWithheld && (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    aria-label={regions.overlayShown ? t.regions.assist.hide : t.regions.assist.show}
+                    aria-pressed={regions.overlayShown}
+                    title={regions.overlayShown ? t.regions.assist.hide : t.regions.assist.show}
+                    onClick={regions.onToggleOverlay}
+                  >
+                    <EyeIcon off={!regions.overlayShown} size={12} />
                   </button>
                 )}
 

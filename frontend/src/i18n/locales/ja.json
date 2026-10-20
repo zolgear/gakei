@@ -3683,7 +3683,8 @@
       "moveUp": "番号を前へ",
       "moveDown": "番号を後ろへ",
       "remove": "この四角を外す",
-      "moveHint": "点線の四角(元の位置)にある物を、実線の四角(移す先)へ動かします。"
+      "moveHint": "点線の四角(元の位置)にある物を、実線の四角(移す先)へ動かします。",
+      "chipsLabel": "検出の名前を指示に入れる"
     },
     "problems": {
       "instructionRequired": "「変える」「足す」では、指示・描く文字・参照画像のどれかを入れてください。",
@@ -3746,6 +3747,23 @@
       "reference": "参照画像",
       "noInstruction": "(指示なし)",
       "overlayTag": "領域"
+    },
+    "assist": {
+      "heading": "領域と検出の候補",
+      "show": "プロンプトの上に、領域と検出の候補を重ねたプレビューと名前を出す",
+      "hide": "プロンプトの上の、領域と検出の候補のプレビューを隠す",
+      "enlarge": "大きく見る",
+      "boxCount": {
+        "one": "四角 {count}",
+        "other": "四角 {count}"
+      },
+      "candidateCount": {
+        "one": "候補 {count}",
+        "other": "候補 {count}"
+      },
+      "chipsHint": "押すと、プロンプトのカーソル位置に入れます。",
+      "chipsLabel": "領域と検出の名前",
+      "boxChip": "四角 {n}"
     }
   }
 }

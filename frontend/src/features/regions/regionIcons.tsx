@@ -67,3 +67,14 @@ export function ArrowDownIcon() {
     </svg>
   )
 }
+
+/** プレビューの重ね描きを出す・隠す。 */
+export function EyeIcon({ off = false, size = 14 }: { off?: boolean; size?: number }) {
+  return (
+    <svg {...common} width={size} height={size}>
+      <path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8Z" {...stroke} />
+      <circle cx="8" cy="8" r="2" {...stroke} />
+      {off && <path d="M2.5 13.5 13.5 2.5" {...stroke} />}
+    </svg>
+  )
+}

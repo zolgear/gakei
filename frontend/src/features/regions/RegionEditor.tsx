@@ -40,9 +40,14 @@ import {
   removeRegion,
   setRegionKind,
   updateRegion,
+  labelsFromEditorRegions,
   type EditorRegion,
+  type RegionLabels,
   type RegionProblem,
 } from './regions'
+import { RegionLabelChips } from './RegionLabelChips'
+import { labelChipItems } from './regionChips'
+import { insertInlineText } from '../run-form/promptInsertion'
 import { useRegionDetection, type RegionCandidate } from './useRegionDetection'
 import styles from './RegionEditor.module.css'
 
@@ -50,12 +55,15 @@ export interface RegionEditorProps {
   /** 主たる入力(1枚目)。 */
   asset: AssetDetail
   initialRegions: readonly RegionBox[]
+  /** 四角の名前(番号 → 名前。検出の候補から作った四角)。画面の中だけのもの。 */
+  initialLabels?: RegionLabels
   /** 生成のフォームの入力の画像(参照画像の選択と、入力の枚数の確かめに使う)。 */
   inputAssetIds: readonly string[]
   maxInputImages: number
   /** 四角の渡し方(`image_and_text` なら、効き方の保証が無いことを示す)。 */
   delivery: string | null
-  onSave: (regions: RegionBox[]) => void
+  /** `labels` は四角の名前(番号 → 名前)。サーバーには送らない。 */
+  onSave: (regions: RegionBox[], labels: RegionLabels) => void
   onCancel: () => void
 }
 
@@ -118,6 +126,7 @@ function ToolButton({
 export function RegionEditor({
   asset,
   initialRegions,
+  initialLabels = {},
   inputAssetIds,
   maxInputImages,
   delivery,
@@ -130,7 +139,7 @@ export function RegionEditor({
   const panelRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef(new Map<string, HTMLLIElement>())
 
-  const [history, setHistory] = useState<History<EditorRegion[]>>(() => initHistory(editorRegionsFromBoxes(initialRegions)))
+  const [history, setHistory] = useState<History<EditorRegion[]>>(() => initHistory(editorRegionsFromBoxes(initialRegions, initialLabels)))
   const [draft, setDraft] = useState<EditorRegion[] | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -139,6 +148,11 @@ export function RegionEditor({
   const [imageError, setImageError] = useState(false)
   const [detectQuery, setDetectQuery] = useState('')
   const editedRef = useRef(false)
+  // 「指示などが要る」は、札を触った後か保存を試みた後だけ出す(描いた直後に赤字を出さない)。
+  const [touchedKeys, setTouchedKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const [saveAttempted, setSaveAttempted] = useState(false)
+  const markTouched = (key: string) =>
+    setTouchedKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)))
   const lastCoalesceRef = useRef<string | null>(null)
 
   const detection = useRegionDetection(asset.id)
@@ -224,7 +238,7 @@ export function RegionEditor({
 
   function adoptCandidate(candidate: RegionCandidate) {
     if (history.present.length >= REGIONS_MAX) return
-    const next = addRegion(history.present, candidate.box, { hint: candidate.label })
+    const next = addRegion(history.present, candidate.box, { label: candidate.label })
     commit(next)
     setSelectedKey(next[next.length - 1].key)
     detection.markAdopted(candidate.key)
@@ -368,6 +382,7 @@ export function RegionEditor({
           </div>
 
           <aside className={styles.sidePanel}>
+            <p className={styles.countInline}>{fmt(r.count, { count: regions.length, max: REGIONS_MAX })}</p>
             <p className={styles.hint}>{r.hint}</p>
             {atLimit && <p className={styles.noteText}>{fmt(r.limitReached, { max: REGIONS_MAX })}</p>}
 
@@ -400,6 +415,9 @@ export function RegionEditor({
                       apply((cur) => updateRegion(cur, region.key, { instruction: value }), `${region.key}:instruction`)
                     }
                     onText={(value) => apply((cur) => updateRegion(cur, region.key, { text: value }), `${region.key}:text`)}
+                    showAllProblems={saveAttempted || touchedKeys.has(region.key)}
+                    onTouched={() => markTouched(region.key)}
+                    labelChips={labelChipItems(detection.allCandidates)}
                     onPickReference={() => setReferenceKey(region.key)}
                     onClearReference={() => apply((cur) => updateRegion(cur, region.key, { referenceAssetId: null }))}
                     onMove={(direction) => apply((cur) => moveRegionOrder(cur, region.key, direction))}
@@ -423,7 +441,7 @@ export function RegionEditor({
                 {fmt(t.regions.form.tooManyInputs, { extra, count: totalInputs, max: maxInputImages })}
               </p>
             )}
-            {!saveable && <p className={styles.errorText}>{r.saveBlocked}</p>}
+            {!saveable && saveAttempted && <p className={styles.errorText}>{r.saveBlocked}</p>}
           </div>
           <div className={styles.footerButtons}>
             <button type="button" className={styles.secondaryButton} onClick={onCancel}>
@@ -432,8 +450,13 @@ export function RegionEditor({
             <button
               type="button"
               className={styles.primaryButton}
-              disabled={!saveable}
-              onClick={() => onSave(boxesFromEditorRegions(history.present))}
+              onClick={() => {
+                if (!canSaveRegions(history.present)) {
+                  setSaveAttempted(true)
+                  return
+                }
+                onSave(boxesFromEditorRegions(history.present), labelsFromEditorRegions(history.present))
+              }}
             >
               {r.save}
             </button>
@@ -566,6 +589,11 @@ function DetectionSection({
 
 interface RegionCardProps {
   ref: (el: HTMLLIElement | null) => void
+  /** 「指示などが要る」も出すか(札を触った後・保存を試みた後)。 */
+  showAllProblems: boolean
+  onTouched: () => void
+  /** 検出の名前のチップ(押すと指示の欄のカーソル位置へ入れる)。 */
+  labelChips: ReturnType<typeof labelChipItems>
   region: EditorRegion
   index: number
   total: number
@@ -583,6 +611,9 @@ interface RegionCardProps {
 
 function RegionCard({
   ref,
+  showAllProblems,
+  onTouched,
+  labelChips,
   region,
   index,
   total,
@@ -600,8 +631,22 @@ function RegionCard({
   const { t } = useI18n()
   const c = t.regions.card
   const id = useId()
-  const problems = regionProblems(region)
-  const placeholder = region.hint ? fmt(c.hintPlaceholder, { label: region.hint }) : c.instructionPlaceholder[region.kind]
+  const instructionRef = useRef<HTMLTextAreaElement | null>(null)
+  const lastCursorRef = useRef<number | null>(null)
+  const problems = regionProblems(region).filter((p) => showAllProblems || p !== 'instructionRequired')
+
+  function insertLabel(text: string) {
+    const el = instructionRef.current
+    const cursor = el && document.activeElement === el ? el.selectionStart : lastCursorRef.current
+    const result = insertInlineText(region.instruction, text, cursor)
+    onInstruction(result.text.slice(0, REGION_INSTRUCTION_MAX_LENGTH))
+    lastCursorRef.current = result.cursor
+    // 入力の後にカーソルを入れた文字の後ろへ置く(フォーカスがあるときだけ。キーボードを勝手に出さない)。
+    requestAnimationFrame(() => {
+      if (el && document.activeElement === el) el.setSelectionRange(result.cursor, result.cursor)
+    })
+  }
+  const placeholder = region.label ? fmt(c.hintPlaceholder, { label: region.label }) : c.instructionPlaceholder[region.kind]
   return (
     <li
       ref={ref}
@@ -610,6 +655,7 @@ function RegionCard({
       data-invalid={problems.length > 0 || undefined}
       aria-label={fmt(c.aria, { n: index + 1 })}
       onFocusCapture={onSelect}
+      onBlurCapture={onTouched}
       onPointerDown={onSelect}
     >
       <div className={styles.cardHeader}>
@@ -659,14 +705,19 @@ function RegionCard({
         {c.instructionLabel}
       </label>
       <textarea
+        ref={instructionRef}
         id={`${id}-instruction`}
         className={styles.textarea}
+        onSelect={(e) => {
+          lastCursorRef.current = e.currentTarget.selectionStart
+        }}
         rows={2}
         value={region.instruction}
         maxLength={REGION_INSTRUCTION_MAX_LENGTH}
         placeholder={placeholder}
         onChange={(e) => onInstruction(e.target.value)}
       />
+      <RegionLabelChips items={labelChips} onInsert={insertLabel} ariaLabel={c.chipsLabel} />
       <label className={styles.fieldLabel} htmlFor={`${id}-text`}>
         {c.textLabel}
       </label>

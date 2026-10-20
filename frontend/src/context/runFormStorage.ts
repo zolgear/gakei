@@ -38,6 +38,7 @@ interface StoredRunFormPayloadV1 {
    */
   regions?: RegionBox[]
   regionsAssetId?: string | null
+  regionLabels?: Record<string, string>
 }
 
 /** 保存値の入力1件。inputId は issue #12・#13 の修正で追加したため、旧形式の保存値には無い。 */
@@ -73,15 +74,28 @@ function isStoredRegionBox(value: unknown): value is RegionBox {
   )
 }
 
+/** 四角の名前(番号 → 名前)。文字列でない値は捨てる。 */
+function parseStoredRegionLabels(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const labels: Record<string, string> = {}
+  for (const [key, label] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof label === 'string' && label) labels[key] = label
+  }
+  return labels
+}
+
 /** 四角と、四角を付けた主たる入力。どちらかが壊れていれば四角なしにする。 */
-function parseStoredRegions(payload: Record<string, unknown>): Pick<RunFormState, 'regions' | 'regionsAssetId'> {
+function parseStoredRegions(
+  payload: Record<string, unknown>,
+): Pick<RunFormState, 'regions' | 'regionsAssetId' | 'regionLabels'> {
   const regions = payload.regions
   const assetId = payload.regionsAssetId
   if (!Array.isArray(regions) || regions.length === 0 || typeof assetId !== 'string') {
     return { regions: [], regionsAssetId: null }
   }
   if (!regions.every(isStoredRegionBox)) return { regions: [], regionsAssetId: null }
-  return { regions, regionsAssetId: assetId }
+  const labels = parseStoredRegionLabels(payload.regionLabels)
+  return { regions, regionsAssetId: assetId, ...(Object.keys(labels).length > 0 ? { regionLabels: labels } : {}) }
 }
 
 function isParamValue(value: unknown): value is string | number | boolean {
@@ -145,6 +159,7 @@ export function serializeRunFormState(state: RunFormState): string {
     assetGroupId: state.assetGroupId,
     regions: state.regions,
     regionsAssetId: state.regionsAssetId,
+    ...(state.regionLabels && Object.keys(state.regionLabels).length > 0 ? { regionLabels: state.regionLabels } : {}),
   }
   return JSON.stringify(payload)
 }

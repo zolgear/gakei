@@ -22,6 +22,7 @@ import {
 import { msg } from '../../i18n'
 import { REGION_DETECTION_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import { isValidBox, type Box } from './regions'
+import { setSelectedDetection, useSelectedDetection } from './regionAssistStore'
 
 export interface RegionCandidate {
   key: string
@@ -49,6 +50,8 @@ export interface RegionDetection {
   selectedId: string | null
   select: (id: string | null) => void
   candidates: RegionCandidate[]
+  /** 出している検出のすべての候補(四角にした物も含む。名前のチップに使う)。 */
+  allCandidates: RegionCandidate[]
   /** 候補を四角にした(表示から外す)。 */
   markAdopted: (key: string) => void
   running: boolean
@@ -60,29 +63,35 @@ export interface RegionDetection {
   emptyResult: boolean
 }
 
-export function useRegionDetection(assetId: string): RegionDetection {
-  const queryClient = useQueryClient()
-  const settingsQuery = useQuery({ queryKey: REGION_DETECTION_SETTINGS_QUERY_KEY, queryFn: getRegionDetectionSettings })
+/**
+ * Asset の検出の履歴と、出す検出(「領域」の画面で選んだもの。選んでいなければいちばん新しいもの)。
+ * フォームの入力の補助(`RegionPromptAssist`)と「領域」の画面が同じキャッシュと選択を使う。
+ */
+export function useDetectionHistory(assetId: string | null, enabled = true) {
   const historyQuery = useQuery({
-    queryKey: regionDetectionsQueryKey(assetId),
-    queryFn: async () => (await listAssetRegionDetections(assetId)).items,
+    queryKey: regionDetectionsQueryKey(assetId ?? ''),
+    queryFn: async () => (await listAssetRegionDetections(assetId!)).items,
+    enabled: enabled && assetId !== null,
     staleTime: 0,
   })
   const history = historyQuery.data ?? []
+  const choice = useSelectedDetection(assetId)
+  const selected =
+    choice === undefined ? (history[0] ?? null) : choice === null ? null : (history.find((r) => r.id === choice) ?? null)
+  return { historyQuery, history, selected }
+}
 
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [autoSelected, setAutoSelected] = useState(false)
+export function useRegionDetection(assetId: string): RegionDetection {
+  const queryClient = useQueryClient()
+  const settingsQuery = useQuery({ queryKey: REGION_DETECTION_SETTINGS_QUERY_KEY, queryFn: getRegionDetectionSettings })
+  const { historyQuery, history, selected } = useDetectionHistory(assetId)
+  const setSelectedId = (id: string | null | undefined) => setSelectedDetection(assetId, id)
+
   const [adopted, setAdopted] = useState<Set<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
   const [emptyResult, setEmptyResult] = useState(false)
   const [running, setRunning] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
-
-  // 開いたときに、一番新しい検出の候補を出す(1回だけ。その後は利用者の選択に従う)。
-  if (!autoSelected && historyQuery.isSuccess) {
-    setAutoSelected(true)
-    if (history[0]) setSelectedId(history[0].id)
-  }
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
@@ -126,15 +135,16 @@ export function useRegionDetection(assetId: string): RegionDetection {
       queryClient.setQueryData<RegionDetectionRecord[]>(regionDetectionsQueryKey(assetId), (old) =>
         (old ?? []).filter((r) => r.id !== id),
       )
-      if (selectedId === id) setSelectedId(null)
+      // 出していた検出を消したら、いちばん新しい検出に戻す。
+      if (selected?.id === id) setSelectedId(undefined)
       setError(null)
     },
     onError: (err: unknown) =>
       setError(err instanceof ApiError ? err.message : msg().regions.detection.historyDeleteFailed),
   })
 
-  const selected = history.find((r) => r.id === selectedId) ?? null
-  const candidates = selected ? candidatesOf(selected).filter((c) => !adopted.has(c.key)) : []
+  const allCandidates = selected ? candidatesOf(selected) : []
+  const candidates = allCandidates.filter((c) => !adopted.has(c.key))
 
   return {
     usable: settingsQuery.data?.usable === true,
@@ -146,6 +156,7 @@ export function useRegionDetection(assetId: string): RegionDetection {
       setEmptyResult(false)
     },
     candidates,
+    allCandidates,
     markAdopted: (key) => setAdopted((prev) => new Set(prev).add(key)),
     running,
     run: (query) => void run(query),

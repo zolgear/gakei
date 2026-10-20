@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computePromptInsertion, insertPromptText, shouldConfirmReplace } from './promptInsertion'
+import { computePromptInsertion, insertInlineText, insertPromptText, shouldConfirmReplace } from './promptInsertion'
 
 describe('insertPromptText', () => {
   it('カーソル位置が分かれば、その位置に挿入する', () => {
@@ -78,5 +78,21 @@ describe('computePromptInsertion', () => {
       cursor: 33,
     })
     expect(computePromptInsertion('', 'sky', 'append-tags', null)).toEqual({ text: 'sky', cursor: 3 })
+  })
+})
+
+describe('insertInlineText(領域の名前のチップ)', () => {
+  it('直前が空白・先頭でなければ半角の空白を挟んで入れる', () => {
+    expect(insertInlineText('赤い', 'カップ', 2)).toEqual({ text: '赤い カップ', cursor: 6 })
+    expect(insertInlineText('', 'カップ', 0)).toEqual({ text: 'カップ', cursor: 3 })
+    expect(insertInlineText('a \nb', 'X', 2)).toEqual({ text: 'a X\nb', cursor: 3 })
+  })
+
+  it('カーソルが分からなければ末尾に入れる', () => {
+    expect(insertInlineText('猫', '四角 1', null)).toEqual({ text: '猫 四角 1', cursor: 6 })
+  })
+
+  it("computePromptInsertion の 'inline' も同じ", () => {
+    expect(computePromptInsertion('猫', 'X', 'inline', 0).text).toBe('X猫')
   })
 })
