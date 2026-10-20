@@ -65,7 +65,7 @@ Webhook と Python の Mod は同じ中身を受け取る。すべてのイベ�
   "event": "ai.before_send",
   "event_id": "0b6f4c1e-3f8a-4b7e-9c55-2d1a7a0c9e10",
   "occurred_at": "2026-10-16T03:04:05.123456+00:00",
-  "instance": { "version": "0.9.0", "name": "design-team" },
+  "instance": { "version": "0.9.1", "name": "design-team" },
   "actor": { "id": "5e0c…", "email": "user@example.com", "name": "山田" },
   "subject": { "…": "イベントごとの中身" }
 }
