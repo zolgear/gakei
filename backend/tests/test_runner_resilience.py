@@ -7,6 +7,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from app.domain.models import Asset
+from app.i18n import t
 from app.providers import openai_spec
 from app.providers.base import ProviderCapabilities, RunOutputImage, RunResult
 from tests.conftest import (
@@ -66,6 +67,10 @@ def test_missing_input_file_fails_run_but_runner_keeps_processing(client: TestCl
     detail = wait_for_run_terminal(client, run_id)
     assert detail["status"] == "failed"
     assert detail["error_code"] == "internalError"
+    # Issue #166: 想定外の例外の文言(ファイルのパスなど)は画面に出さない。種類の名前だけ。
+    assert str(blob_path.parent) not in detail["error_message"]
+    assert asset.sha256 not in detail["error_message"]
+    assert "Error" in detail["error_message"]
 
     # runner が生きていることを、次の(正常な)Runで確認する。
     next_run_id = _create_simple_generate_run(client, "runner is still alive")
@@ -107,6 +112,8 @@ def test_ingest_failure_on_success_path_fails_run_but_runner_keeps_processing(
         assert detail["status"] == "failed"
         assert detail["error_code"] == "internalError"
         assert detail["outputs"] == []
+        # 取り込みの検証の文言(固定の i18n)はそのまま見せる。
+        assert detail["error_message"] == t("assets.cannotReadImage")
 
     # runner を元の(正常な)providerに戻した後も、生きていることを確認する。
     next_run_id = _create_simple_generate_run(client, "runner is still alive after ingest failure")

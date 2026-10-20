@@ -64,6 +64,7 @@ from app.domain.schemas import (
     AssistantToolResultEvent,
     AssistantUserMessageEvent,
 )
+from app.domain.text_safety import internal_error_text
 from app.i18n import set_locale, t
 from app.mods import events as mods_events
 from app.mods.api import AI_BEFORE_SEND, BeforeSendSubject, TextPart
@@ -370,8 +371,9 @@ class AssistantTurn:
             except AssistantEngineError as e:
                 error = str(e)
             except Exception as e:  # noqa: BLE001 - 想定外の失敗も利用者に伝えて止める
+                # 想定外の例外の文言は画面に出さない(詳細はログ。Issue #166)。
                 logger.exception("アシスタントの LLM の呼び出しに失敗しました")
-                error = f"{e.__class__.__name__}: {e}"
+                error = internal_error_text(e)
 
             text = "".join(self._pending_text)
             self._pending_text = []

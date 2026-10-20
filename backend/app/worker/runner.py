@@ -39,6 +39,7 @@ from app.domain.models import (
 )
 from app.domain.storage import AssetStore
 from app.domain.text_safety import (
+    internal_error_text,
     sanitize_external,
     sanitize_external_text,
     sanitize_external_text_or_none,
@@ -558,9 +559,14 @@ class Runner:
             )
         except ProviderError as e:
             await self._mark_failed(run.id, e.code, e.message, e.request_id)
-        except Exception as e:  # noqa: BLE001 - どの段階の失敗もすべて記録する
-            logger.exception("run %s の処理中に予期しない例外が発生しました", run.id)
+        except assets_domain.IngestError as e:
+            # 出力の取り込みの検証(大きさ・形式)。文言は固定の i18n なので、そのまま見せる。
+            logger.warning("run %s の出力を取り込めませんでした: %s", run.id, e)
             await self._mark_failed(run.id, "internalError", str(e), None)
+        except Exception as e:  # noqa: BLE001 - どの段階の失敗もすべて記録する
+            # 想定外の例外の文言(パスや接続先を含みうる)は画面に出さず、ログに残す(Issue #166)。
+            logger.exception("run %s の処理中に予期しない例外が発生しました", run.id)
+            await self._mark_failed(run.id, "internalError", internal_error_text(e), None)
         else:
             await self.progress_bus.publish(
                 run.id,

@@ -70,6 +70,7 @@ from app.mcp.endpoint import McpEndpoint
 from app.mcp.server import build_mcp_server, build_session_manager
 from app.mods.runtime import ModRuntime
 from app.providers.registry import build_registry, is_loopback_url
+from app.security_headers import DOCS_CSP, SecurityHeadersMiddleware
 from app.worker.annotator import Annotator
 from app.worker.embedder import Embedder
 from app.worker.focal import FocalPointWorker
@@ -590,11 +591,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ルートごとの上限と足切りの対象外は、エンドポイントの `body_policy` の印で決める。
     app.add_middleware(RequestBodyGuardMiddleware)
 
-    # ADR-0019 2章(2026-10-19 追記): DNS リバインディングと CSRF の対策。最後に足す(一番外側)
-    # ので、断る要求はセッションの Cookie の処理や圧縮に入らない。言語は自分で選ぶ。
+    # ADR-0019 2章(2026-10-19 追記): DNS リバインディングと CSRF の対策。外側に置く(外には
+    # 応答のヘッダーを足すだけの `SecurityHeadersMiddleware` しか無い)ので、断る要求は
+    # セッションの Cookie の処理や圧縮に入らない。言語は自分で選ぶ。
     allowed_hosts = resolved_settings.allowed_host_list()
     app.state.allowed_hosts = frozenset(allowed_hosts)
     app.add_middleware(HostOriginGuardMiddleware, allowed_hosts=allowed_hosts)
+
+    # Issue #166: 応答のセキュリティのヘッダー(nosniff、X-Frame-Options、Referrer-Policy、HTML の
+    # CSP)。`HostOriginGuardMiddleware` が断った応答にも付くよう、一番外側に置く。共有のページの
+    # `no-referrer`(内側の `PublicShareHeadersMiddleware`)は上書きしない。
+    app.add_middleware(SecurityHeadersMiddleware, enabled=resolved_settings.security_headers)
 
     # I-1(2026-09-27 追記)・ADR-0034 4章: oidc モードでは /docs・/redoc・/openapi.json も
     # 未ログインで読めてしまうため 404 にする(API の形はレスポンス自体からも推測できるが、
@@ -613,12 +620,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/docs", include_in_schema=False)
     def swagger_ui(request: Request) -> HTMLResponse:
         _docs_available(request)
-        return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{app.title} - Swagger UI")
+        response = get_swagger_ui_html(
+            openapi_url="/openapi.json", title=f"{app.title} - Swagger UI"
+        )
+        # CDN のスクリプトを読むので、SPA の CSP ではなくこのページ用の値を付ける(Issue #166)。
+        if resolved_settings.security_headers:
+            response.headers["Content-Security-Policy"] = DOCS_CSP
+        return response
 
     @app.get("/redoc", include_in_schema=False)
     def redoc(request: Request) -> HTMLResponse:
         _docs_available(request)
-        return get_redoc_html(openapi_url="/openapi.json", title=f"{app.title} - ReDoc")
+        response = get_redoc_html(openapi_url="/openapi.json", title=f"{app.title} - ReDoc")
+        if resolved_settings.security_headers:
+            response.headers["Content-Security-Policy"] = DOCS_CSP
+        return response
 
     # `/api/auth` だけは認可を付けない(未ログインでも /me・/login・/callback は呼べる必要が
     # あるため)。他のルーターは `require_user` を通す(ADR-0019。`none` モードは常に

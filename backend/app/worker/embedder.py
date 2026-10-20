@@ -67,7 +67,7 @@ from app.domain.models import (
     RunPromptEmbedding,
 )
 from app.domain.storage import AssetStore
-from app.domain.text_safety import sanitize_external_text
+from app.domain.text_safety import internal_error_text, sanitize_external_text
 from app.embedding.base import (
     DocumentEmbeddingEngine,
     EmbeddingEngine,
@@ -553,7 +553,7 @@ class Embedder:
                 await asyncio.to_thread(
                     self._finish_failed,
                     job.model_key,
-                    [(i, f"internalError: {e}") for i in ids],
+                    [(i, f"internalError: {internal_error_text(e)}") for i in ids],
                 )
                 continue
             await asyncio.to_thread(
@@ -637,7 +637,7 @@ class Embedder:
                 await asyncio.to_thread(
                     self._finish_prompt_failed,
                     job.model_key,
-                    [(run_id, f"internalError: {e}")],
+                    [(run_id, f"internalError: {internal_error_text(e)}")],
                 )
                 continue
             await asyncio.to_thread(

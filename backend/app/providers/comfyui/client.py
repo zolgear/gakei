@@ -26,6 +26,7 @@ GAKEI の DB、Run、プロバイダーの仕組み(`app/providers/base.py` な�
 from __future__ import annotations
 
 import json
+import logging
 import struct
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
@@ -37,6 +38,8 @@ import httpx
 from websockets.asyncio.client import connect as _ws_connect_default
 
 from app.i18n import t
+
+logger = logging.getLogger(__name__)
 
 # websockets の既定(1 MiB)だと大きなプレビュー画像を受け取れないため広げる。
 _WS_MAX_SIZE = 32 * 1024 * 1024
@@ -254,7 +257,7 @@ def check_available(
     except httpx.TimeoutException:
         return (False, t("comfyui.client.connectTimeout"), None)
     except httpx.TransportError as exc:
-        return (False, t("comfyui.client.connectFailed", error=exc), None)
+        return (False, t("comfyui.client.connectFailed", error=_error_kind(exc)), None)
 
     if response.status_code != 200:
         return (
@@ -406,8 +409,15 @@ class ComfyUIClient:
         except httpx.TransportError as exc:
             raise ComfyUIError(
                 "comfyuiUnavailable",
-                t("comfyui.client.connectFailed", error=exc),
+                t("comfyui.client.connectFailed", error=_error_kind(exc)),
             ) from exc
+
+
+def _error_kind(exc: BaseException) -> str:
+    """画面に出す失敗の種類(例外の種類の名前だけ)。例外の文言はアドレスや OS のエラーを含むので
+    ログにだけ出す(Issue #166)。"""
+    logger.warning("ComfyUI との通信に失敗しました: %s: %s", type(exc).__name__, exc)
+    return type(exc).__name__
 
 
 def _join(base_url: str, path: str) -> str:
@@ -444,7 +454,7 @@ async def _ws_events(
         except Exception as exc:
             raise ComfyUIError(
                 "comfyuiUnavailable",
-                t("comfyui.client.wsConnectFailed", error=exc),
+                t("comfyui.client.wsConnectFailed", error=_error_kind(exc)),
             ) from exc
         yield _consume(stream)
 
@@ -469,7 +479,7 @@ async def _consume(stream: AsyncIterator[str | bytes]) -> AsyncIterator[WsEvent]
     except Exception as exc:  # 途中切断をまとめて comfyuiUnavailable に変換する
         raise ComfyUIError(
             "comfyuiUnavailable",
-            t("comfyui.client.wsLost", error=exc),
+            t("comfyui.client.wsLost", error=_error_kind(exc)),
         ) from exc
 
 
