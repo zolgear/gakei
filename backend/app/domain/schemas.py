@@ -3333,9 +3333,28 @@ class RegionDetectUsage(BaseModel):
     total_tokens: int | None = None
 
 
+class RegionDetectionView(BaseModel):
+    """保存した検出の1回分(ADR-0053 7章の検出の履歴)。"""
+
+    id: uuid.UUID
+    # 探した言葉(無ければ null)
+    query: str | None
+    model: str
+    created_at: datetime
+    # 見つからなければ空の配列
+    regions: list[DetectedRegion]
+
+
 class RegionDetectResponse(BaseModel):
-    """検出の結果。保存しない。"""
+    """検出の結果。`detection` に保存した行を返す(`regions` と `model` はその写し)。"""
 
     regions: list[DetectedRegion]
     model: str
     usage: RegionDetectUsage
+    detection: RegionDetectionView
+
+
+class RegionDetectionListResponse(BaseModel):
+    """`GET /api/assets/{asset_id}/regions/detections`。新しい順。"""
+
+    items: list[RegionDetectionView]

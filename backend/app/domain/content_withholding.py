@@ -36,6 +36,7 @@ from app.domain.models import (
     AssetEmbedding,
     AssetFocalPoint,
     AssetPerceptualHash,
+    AssetRegionDetection,
     ModInvocation,
     ModVerdict,
 )
@@ -278,13 +279,14 @@ def _copy_verdict(source: ModVerdict, asset_id: uuid.UUID, now: datetime) -> Mod
 
 
 def _drop_image_products(db: Session, asset_ids: list[uuid.UUID], now: datetime) -> None:
-    """画像から作ったもの(埋め込み、知覚ハッシュ、焦点)を消し、待ち行列にある自動タイトル・
+    """画像から作ったもの(埋め込み、知覚ハッシュ、焦点、四角の検出の履歴)を消し、待ち行列にある自動タイトル・
     タグとレーティングを失敗にする(文字の記録は残す)。"""
     if not asset_ids:
         return
     db.execute(delete(AssetEmbedding).where(AssetEmbedding.asset_id.in_(asset_ids)))
     db.execute(delete(AssetPerceptualHash).where(AssetPerceptualHash.asset_id.in_(asset_ids)))
     db.execute(delete(AssetFocalPoint).where(AssetFocalPoint.asset_id.in_(asset_ids)))
+    db.execute(delete(AssetRegionDetection).where(AssetRegionDetection.asset_id.in_(asset_ids)))
     message = t("mods.contentWithheld")
     for row in (
         db.execute(

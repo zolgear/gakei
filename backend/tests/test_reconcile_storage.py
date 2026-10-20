@@ -31,6 +31,7 @@ from app.domain.models import (
     AssetGroup,
     AssetGroupMember,
     AssetPerceptualHash,
+    AssetRegionDetection,
     AssetTag,
     Base,
     DownloadTicket,
@@ -405,6 +406,31 @@ def test_partial_missing(env: Env) -> None:
     again = tool.reconcile(env.settings, apply=True)
     assert again.plan.is_empty
     assert again.backup is None
+
+
+def test_region_detections_are_deleted_with_asset(env: Env) -> None:
+    """四角の検出の履歴(ADR-0053 7章)は、Asset と一緒に消える。残る Asset の履歴は残す。"""
+    sc = _build(env)
+    with env.factory() as db:
+        for asset_key in ("a1", "a2"):
+            db.add(
+                AssetRegionDetection(
+                    asset_id=sc.ids[asset_key],
+                    connection_id="openai",
+                    model="m",
+                    max_items=20,
+                    regions=[{"label": "x", "box": [0.1, 0.1, 0.5, 0.5]}],
+                )
+            )
+        db.commit()
+    env.store.delete(sc.keys["a1"])
+
+    plan = tool.reconcile(env.settings).plan
+    assert plan.rows["asset_region_detection"] == 1
+    tool.reconcile(env.settings, apply=True)
+
+    assert _count(env, AssetRegionDetection, asset_id=sc.ids["a1"]) == 0
+    assert _count(env, AssetRegionDetection, asset_id=sc.ids["a2"]) == 1
 
 
 def test_all_outputs_gone_deletes_run(env: Env) -> None:

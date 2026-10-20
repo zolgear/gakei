@@ -79,6 +79,8 @@ ASSET_REFERENCES: dict[tuple[str, str], str] = {
     ("asset_perceptual_hash", "asset_id"): DELETE,
     ("asset_focal_point", "asset_id"): DELETE,
     ("asset_content_rating", "asset_id"): DELETE,
+    # 四角の検出の履歴(ADR-0053 7章)。証跡ではない。
+    ("asset_region_detection", "asset_id"): DELETE,
     # 配置(ADR-0050)。消える配置の結果のレシピと素材の行を消す。消える素材を指す行も消す
     # (配置の結果とレシピは残る。素材は「読めない」として扱われる)。
     ("asset_composition", "asset_id"): DELETE,

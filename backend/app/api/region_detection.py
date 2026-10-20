@@ -3,8 +3,15 @@
 - `GET /api/settings/region-detection`: 設定と、検出を使えるか(`usable`)。全ログイン者が読める
   (画面が検出のボタンを出すかの判断に使う)。
 - `PATCH /api/settings/region-detection`: 設定を変える(管理者だけ)。
-- `POST /api/assets/{asset_id}/regions/detect`: 見える Asset の画像で四角を検出する。結果は保存
-  しない。
+- `POST /api/assets/{asset_id}/regions/detect`: 見える Asset の画像で四角を検出し、結果を検出の
+  履歴に保存する(いつも新しく検出する)。
+- `GET /api/assets/{asset_id}/regions/detections`: 検出の履歴(新しい順、20 回まで)。検出が
+  無効でも読める。
+- `DELETE /api/assets/{asset_id}/regions/detections/{detection_id}`: 履歴の1回を消す(検出した
+  本人と管理者)。
+
+履歴は証跡ではない(ADR-0003 の来歴ではない)。系列の ZIP、共有リンク、Mod の `subject` には
+入れない。
 
 検出は、管理者が選んだ LLM の接続先(ADR-0032)の VLM に、画像(`detail: high`)と指示を
 Structured Outputs で送る(生成のアシスタントの構造化出力のエンジンを使う)。送る前に Mod の
@@ -16,7 +23,7 @@ from __future__ import annotations
 import uuid
 
 import anyio.to_thread
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.assistant.engine import AssistantEngineError
@@ -29,11 +36,13 @@ from app.domain import content_withholding, derivatives, llm_connections
 from app.domain import region_detection as detection
 from app.domain import region_detection_settings as detection_settings
 from app.domain.llm_connections import ConnectionNotFoundError, LlmTarget
-from app.domain.models import Asset, AssetKind
+from app.domain.models import Asset, AssetKind, AssetRegionDetection
 from app.domain.schemas import (
     DetectedRegion,
+    RegionDetectionListResponse,
     RegionDetectionSettingsResponse,
     RegionDetectionSettingsUpdateRequest,
+    RegionDetectionView,
     RegionDetectRequest,
     RegionDetectResponse,
     RegionDetectUsage,
@@ -117,7 +126,9 @@ def update_region_detection_settings(
 
 # -- 検出 ------------------------------------------------------------------------------
 
-_DETECT_DOC = """見える Asset の画像で、四角の候補を検出する(ADR-0053 7章)。保存はしない。
+_DETECT_DOC = """見える Asset の画像で、四角の候補を検出する(ADR-0053 7章)。結果は検出の
+履歴に保存し(見つからなくても保存する)、保存した行を `detection` で返す。その Asset の履歴は
+新しい方から 20 回まで残し、古いものは消す。前の結果は使い回さず、いつも新しく検出する。
 
 `query` があれば、それに当てはまる物だけ(複数なら複数)を、無ければ主な物を一通り挙げる。
 四角は画像に対する割合(0〜1)で、左上を原点にした `[x0, y0, x1, y1]`。送る前に Mod の
@@ -142,6 +153,31 @@ def _error(status: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
+def _target_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
+    """検出と履歴の対象。見えなければ 404、マスク・削除済み・外部の AI へ送れない画像は 409。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    if asset.kind == AssetKind.MASK:
+        raise _error(409, "mask_not_supported", t("regionDetection.maskNotSupported"))
+    if asset.deleted_at is not None:
+        raise _error(409, "asset_deleted", t("regionDetection.assetDeleted"))
+    # ADR-0051 4章: 画像を残さなかった・`deny` の判定を受けた画像は外部の AI へ送らない。
+    if content_withholding.blocked_asset_ids(db, [asset.id]):
+        raise _error(409, "image_withheld", t("regionDetection.imageWithheld"))
+    return asset
+
+
+def _view(row: AssetRegionDetection) -> RegionDetectionView:
+    return RegionDetectionView(
+        id=row.id,
+        query=row.query,
+        model=row.model,
+        created_at=row.created_at,
+        regions=[DetectedRegion(label=r["label"], box=r["box"]) for r in row.regions or []],
+    )
+
+
 @router.post(
     "/api/assets/{asset_id}/regions/detect",
     response_model=RegionDetectResponse,
@@ -158,7 +194,7 @@ async def detect_regions(
     state = request.app.state
     runtime: AssistantRuntime = state.assistant
     engine = runtime.structured
-    query = (body.query or "").strip() or None
+    query = detection.normalize_query(body.query)
     max_items = min(body.max_items, detection.MAX_ITEMS)
 
     def _prepare() -> tuple[
@@ -169,16 +205,7 @@ async def detect_regions(
         bytes,
     ]:
         with state.session_factory() as db:
-            asset = get_visible_asset(db, user, asset_id)
-            if asset is None:
-                raise HTTPException(status_code=404, detail=t("assets.notFound"))
-            if asset.kind == AssetKind.MASK:
-                raise _error(409, "mask_not_supported", t("regionDetection.maskNotSupported"))
-            if asset.deleted_at is not None:
-                raise _error(409, "asset_deleted", t("regionDetection.assetDeleted"))
-            # ADR-0051 4章: 画像を残さなかった・`deny` の判定を受けた画像は外部の AI へ送らない。
-            if content_withholding.blocked_asset_ids(db, [asset.id]):
-                raise _error(409, "image_withheld", t("regionDetection.imageWithheld"))
+            asset = _target_asset(db, user, asset_id)
             config = detection_settings.load(db)
             if not config.enabled:
                 raise _error(409, "disabled", t("regionDetection.disabled"))
@@ -276,8 +303,73 @@ async def detect_regions(
         raise _error(502, "llm_error", t("regionDetection.llmError", error=str(e))) from e
 
     boxes = detection.interpret(result.data, max_items)
+    model = result.model or config.model
+
+    def _save() -> RegionDetectionView:
+        # 見つからなかった結果も残す(画面で「見つからなかった」と分かるように)。
+        with state.session_factory() as db:
+            row = detection.save_detection(
+                db,
+                asset_id=asset.id,
+                query=query,
+                connection_id=config.connection_id,
+                model=model,
+                max_items=max_items,
+                boxes=boxes,
+                user_id=user.id,
+            )
+            db.commit()
+            db.refresh(row)
+            return _view(row)
+
+    view = await anyio.to_thread.run_sync(_save)
     return RegionDetectResponse(
-        regions=[DetectedRegion(label=b.label, box=list(b.box)) for b in boxes],
-        model=result.model or config.model,
+        regions=view.regions,
+        model=model,
         usage=RegionDetectUsage(**result.usage),
+        detection=view,
     )
+
+
+@router.get(
+    "/api/assets/{asset_id}/regions/detections",
+    response_model=RegionDetectionListResponse,
+    operation_id="list_asset_region_detections",
+    tags=["assets"],
+)
+def list_region_detections(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> RegionDetectionListResponse:
+    """検出の履歴(新しい順、20 回まで)。検出が無効でも読める。見えなければ 404、マスク・
+    削除済み・外部の AI へ送れない画像は検出と同じく 409(`detail` は `{code, message}`)。"""
+    asset = _target_asset(db, user, asset_id)
+    return RegionDetectionListResponse(
+        items=[_view(row) for row in detection.list_detections(db, asset.id)]
+    )
+
+
+@router.delete(
+    "/api/assets/{asset_id}/regions/detections/{detection_id}",
+    status_code=204,
+    operation_id="delete_asset_region_detection",
+    tags=["assets"],
+)
+def delete_region_detection(
+    asset_id: uuid.UUID,
+    detection_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> Response:
+    """履歴の1回を消す。消せるのは検出した本人と管理者(403)。Asset が見えない・その Asset の
+    検出でなければ 404。"""
+    asset = get_visible_asset(db, user, asset_id)
+    row = db.get(AssetRegionDetection, detection_id)
+    if asset is None or row is None or row.asset_id != asset.id:
+        raise HTTPException(status_code=404, detail=t("regionDetection.detectionNotFound"))
+    if not user.is_admin and (user.id is None or row.created_by_user_id != user.id):
+        raise HTTPException(status_code=403, detail=t("regionDetection.deleteForbidden"))
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
