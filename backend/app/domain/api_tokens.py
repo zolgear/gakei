@@ -21,8 +21,8 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.identity import CurrentUser, Role
-from app.auth.sessions import hash_token, is_email_allowed
+from app.auth.identity import CurrentUser
+from app.auth.sessions import current_user_if_allowed, hash_token
 from app.domain.models import ApiToken, AppUser
 from app.i18n import t
 
@@ -161,20 +161,13 @@ def authenticate(
     now = _utcnow()
     if is_expired(token, now):
         raise ApiTokenExpiredError
-    email = user.email or ""
-    if not is_email_allowed(email, allowed_domains, admin_emails):
+    current = current_user_if_allowed(user, admin_emails, allowed_domains)
+    if current is None:
         return None
-    role: Role = "admin" if email.strip().lower() in admin_emails else "user"
     token.last_used_at = now
     db.flush()
     return TokenPrincipal(
-        user=CurrentUser(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            role=role,
-            avatar_sha256=user.avatar_sha256,
-        ),
+        user=current,
         token_id=token.id,
         # 想定外の値は、権限の狭いほう(読み取りのみ)に倒す。
         scope=SCOPE_FULL if token.scope == SCOPE_FULL else SCOPE_READ,

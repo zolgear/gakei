@@ -1143,6 +1143,7 @@
     "invalidInstanceName": "The instance name must be at most {max} characters",
     "invalidUrl": "The URL must be http or https (user name, password and # are not allowed)",
     "invalidSecret": "The signing secret must be 1 to {max} characters",
+    "invalidWebhookSecret": "The signing secret must be {min} to {max} characters",
     "invalidEvents": "Invalid events",
     "invalidFilters": "Invalid filters",
     "invalidTimeout": "The timeout must be between {min} and {max} seconds",
@@ -1163,7 +1164,9 @@
     "verdictUnauthorized": "The signature is missing or invalid, or the timestamp is too old",
     "verdictTooLarge": "The request body is too large",
     "verdictInvalid": "The verdicts are not in a valid form: {error}",
-    "verdictTargetNotAllowed": "Verdicts are accepted only for items delivered to this Mod: {target}"
+    "verdictTargetNotAllowed": "Verdicts are accepted only for items delivered to this Mod: {target}",
+    "verdictInProgress": "The same request is being processed. Wait for its response before sending it again",
+    "verdictTooMany": "Too many requests have been accepted recently. Try again later"
   },
   "llm": {
     "authFailed": "Authentication with the LLM connection failed. Check the connection's API key.",

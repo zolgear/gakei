@@ -5791,6 +5791,11 @@ export interface components {
         ModVerdictReceiveResponse: {
             /** Accepted */
             accepted: number;
+            /**
+             * Duplicate
+             * @default false
+             */
+            duplicate: boolean;
         };
         /**
          * ModVerdictView
@@ -5935,6 +5940,11 @@ export interface components {
             order?: number | null;
             /** Secret Set */
             secret_set: boolean;
+            /**
+             * Secret Too Short
+             * @default false
+             */
+            secret_too_short: boolean;
         };
         /** ModelCapabilities */
         ModelCapabilities: {
@@ -14629,8 +14639,22 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 同じ要求を処理している */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description 本文が判定の配列の形でない */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 受け付けた要求の記録が上限に達している */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

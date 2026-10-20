@@ -1143,6 +1143,7 @@
     "invalidInstanceName": "インスタンスの名前は{max}文字以内で指定してください",
     "invalidUrl": "URL は http または https で指定してください(ユーザー名・パスワード・# は含められません)",
     "invalidSecret": "署名の鍵は1〜{max}文字で指定してください",
+    "invalidWebhookSecret": "署名の鍵は{min}〜{max}文字で指定してください",
     "invalidEvents": "購読するイベントが不正です",
     "invalidFilters": "絞り込みの指定が不正です",
     "invalidTimeout": "待つ時間は{min}〜{max}秒で指定してください",
@@ -1163,7 +1164,9 @@
     "verdictUnauthorized": "署名が無いか、正しくないか、時刻が古すぎます",
     "verdictTooLarge": "本文が大きすぎます",
     "verdictInvalid": "判定の形が正しくありません: {error}",
-    "verdictTargetNotAllowed": "この Mod に届けていない対象への判定は受け付けません: {target}"
+    "verdictTargetNotAllowed": "この Mod に届けていない対象への判定は受け付けません: {target}",
+    "verdictInProgress": "同じ要求を処理しています。応答を待ってから送り直してください",
+    "verdictTooMany": "受け付けた要求が多すぎます。しばらくしてから送り直してください"
   },
   "llm": {
     "authFailed": "LLM の接続先の認証に失敗しました。接続先の API キーを確認してください。",

@@ -21,7 +21,7 @@ from sqlalchemy import select, update
 from app.domain import agent_images
 from app.domain.embedded_meta import read_gakei_meta
 from app.domain.models import AppUser, Asset, DownloadTicket
-from tests.conftest import login_as, make_png_bytes
+from tests.conftest import login_as, make_png_bytes, reload_auth_runtime
 from tests.test_mcp import _call, _enable, _error_text, _generate, _ok
 from tests.test_mcp_feedback import _issue_token, _path_of, _rgba_png, _upload_via_url
 
@@ -356,6 +356,32 @@ def test_download_url_invalid_after_token_revoked(client_oidc: TestClient) -> No
     assert client_oidc.delete(f"/api/users/me/api-tokens/{token_id}").status_code == 204
     client_oidc.cookies.clear()
     assert client_oidc.get(path).status_code == 404
+
+
+def test_ticket_urls_invalid_after_issuer_leaves_allowed_domains(client_oidc: TestClient) -> None:
+    """発行の後に許可ドメインから外した利用者の、期限内の1回限りの URL は使えない(セッションと
+    同じ判定)。ドメインを戻せば、使っていない URL は期限内ならまた使える。"""
+    login_as(client_oidc, "admin@example.com")
+    _enable(client_oidc)
+    alice = {"Authorization": f"Bearer {_issue_token(client_oidc, 'alice@corp.example.jp')}"}
+    first = _ok(_call(client_oidc, "create_upload_url", {}, alice))
+    asset_id = client_oidc.put(_path_of(first["upload_url"]), content=make_png_bytes()).json()[
+        "asset_id"
+    ]
+    download = _path_of(_download_url(client_oidc, asset_id, alice)["download_url"])
+    upload = _path_of(_ok(_call(client_oidc, "create_upload_url", {}, alice))["upload_url"])
+    client_oidc.cookies.clear()
+
+    client_oidc.app.state.settings.auth_allowed_email_domains = "other.example.jp"
+    reload_auth_runtime(client_oidc)
+    assert client_oidc.get(download).status_code == 404
+    other = make_png_bytes(20, 20)
+    assert client_oidc.put(upload, content=other).status_code == 404
+
+    client_oidc.app.state.settings.auth_allowed_email_domains = ""
+    reload_auth_runtime(client_oidc)
+    assert client_oidc.get(download).status_code == 200
+    assert client_oidc.put(upload, content=other).status_code == 201
 
 
 # -- 説明(8章 4) ---------------------------------------------------------------------

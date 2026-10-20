@@ -43,6 +43,7 @@ function webhook(overrides: Partial<ModWebhookView> = {}): ModWebhookView {
     wait_for_verdict: false,
     order: 1,
     secret_set: true,
+    secret_too_short: false,
     ...overrides,
   }
 }
@@ -95,10 +96,13 @@ describe('Webhook のフォーム', () => {
     expect(isValidTimeoutInput('abc')).toBe(false)
   })
 
-  it('追加では鍵が必須。編集では入れたときだけ確かめる', () => {
+  it('追加では鍵が必須。編集では入れたときだけ確かめる。鍵は 32 文字以上', () => {
     const form = { ...emptyWebhookForm(), name: 'a', url: 'https://h.example' }
     expect(validateWebhookForm(form, true)).toEqual({ secret: true })
-    expect(validateWebhookForm({ ...form, secret: 's' }, true)).toEqual({})
+    expect(validateWebhookForm({ ...form, secret: 'x'.repeat(32) }, true)).toEqual({})
+    expect(validateWebhookForm({ ...form, secret: 'x'.repeat(31) }, true)).toEqual({ secret: true })
+    expect(validateWebhookForm({ ...form, secret: 'x'.repeat(31) }, false)).toEqual({ secret: true })
+    expect(validateWebhookForm({ ...form, secret: ` ${'x'.repeat(31)} ` }, true)).toEqual({ secret: true })
     expect(validateWebhookForm(form, false)).toEqual({})
     expect(validateWebhookForm({ ...form, secret: 'x'.repeat(1001) }, false)).toEqual({ secret: true })
     expect(validateWebhookForm(emptyWebhookForm(), true)).toEqual({ name: true, url: true, secret: true })

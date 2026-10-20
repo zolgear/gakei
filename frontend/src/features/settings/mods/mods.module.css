@@ -255,3 +255,9 @@
 form .shortInput.shortInput {
   max-width: 140px;
 }
+
+/* 保存済みの鍵が短いときの注意(カードの「署名の鍵」の下に出す)。 */
+.secretWarning {
+  display: block;
+  margin-top: 2px;
+}

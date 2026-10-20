@@ -3111,6 +3111,9 @@ class ModWebhookView(BaseModel):
     wait_for_verdict: bool
     order: int | None = None
     secret_set: bool
+    # 保存済みの鍵が今の最小の長さ(32 文字)に満たないか。前に保存した短い鍵は動き続けるが、
+    # 差し替えを勧める。
+    secret_too_short: bool = False
 
 
 class ModSettingFieldView(BaseModel):
@@ -3294,6 +3297,8 @@ class ModVerdictReceiveResponse(BaseModel):
 
     # 記録した判定の数。
     accepted: int
+    # 受け付け済みの要求と同じ要求だったか。true なら何も記録せず、`accepted` は1回目の数。
+    duplicate: bool = False
 
 
 # -- 領域の四角の検出(ADR-0053 7章) -----------------------------------------------------
