@@ -25,11 +25,11 @@ from app.assistant.structured import (
     StructuredImage,
     StructuredRequest,
 )
-from app.domain import llm_connections
+from app.domain import content_withholding, llm_connections
 from app.domain import region_detection as detection
 from app.domain import region_detection_settings as detection_settings
 from app.domain.llm_connections import LlmTarget
-from app.domain.models import ModVerdict
+from app.domain.models import AppUser, AssetRegionDetection, ModVerdict
 from app.i18n import use_locale
 from tests.conftest import login_as, make_png_bytes
 from tests.test_mods_hooks import _Hook, _install
@@ -499,3 +499,191 @@ def test_detect_labels_follow_locale(client: TestClient) -> None:
     with use_locale("en"):
         assert body["regions"][0]["label"] == "Person (dummy)"
     assert "英語" in _engine(client).requests[-1].instructions
+
+
+# -- 検出の履歴 ------------------------------------------------------------------------
+
+
+def _detections_url(asset_id: str) -> str:
+    return f"/api/assets/{asset_id}/regions/detections"
+
+
+def test_detect_saves_history(client: TestClient) -> None:
+    _enable(client)
+    asset_id = _upload(client)
+    assert client.get(_detections_url(asset_id)).json() == {"items": []}
+    first = client.post(_detect_url(asset_id), json={}).json()
+    detection_row = first["detection"]
+    assert detection_row["query"] is None
+    assert detection_row["regions"] == first["regions"]
+    assert detection_row["model"] == first["model"]
+    assert detection_row["id"] and detection_row["created_at"]
+    # 見つからなかった結果も残す。言葉は前後の空白を除いて残す。
+    _engine(client).responses.append({"objects": []})
+    second = client.post(_detect_url(asset_id), json={"query": "  カップ  "}).json()
+    assert second["regions"] == []
+    assert second["detection"]["query"] == "カップ"
+    # 空白だけの言葉は言葉なし。
+    third = client.post(_detect_url(asset_id), json={"query": "   "}).json()
+    assert third["detection"]["query"] is None
+    assert "探している物だけ" not in _engine(client).requests[-1].instructions
+
+    items = client.get(_detections_url(asset_id)).json()["items"]
+    assert [i["id"] for i in items] == [
+        third["detection"]["id"],
+        second["detection"]["id"],
+        detection_row["id"],
+    ]
+    assert items[1]["regions"] == []
+    with client.app.state.session_factory() as db:
+        row = db.get(AssetRegionDetection, uuid.UUID(detection_row["id"]))
+        assert row is not None
+        assert row.connection_id == "openai" and row.max_items == 20
+        assert row.created_by_user_id is None
+
+
+def test_history_kept_while_disabled(client: TestClient) -> None:
+    _enable(client)
+    asset_id = _upload(client)
+    client.post(_detect_url(asset_id), json={})
+    assert client.patch(SETTINGS, json={"enabled": False}).status_code == 200
+    assert len(client.get(_detections_url(asset_id)).json()["items"]) == 1
+    assert client.post(_detect_url(asset_id), json={}).status_code == 409
+
+
+def test_history_is_pruned_to_max(client: TestClient) -> None:
+    asset_id = uuid.UUID(_upload(client))
+    other_id = uuid.UUID(_upload(client))
+    factory = client.app.state.session_factory
+    ids: list[uuid.UUID] = []
+    with factory() as db:
+        detection.save_detection(
+            db,
+            asset_id=other_id,
+            query=None,
+            connection_id="openai",
+            model="m",
+            max_items=20,
+            boxes=[],
+            user_id=None,
+        )
+        for i in range(detection.HISTORY_MAX + 2):
+            row = detection.save_detection(
+                db,
+                asset_id=asset_id,
+                query=f"q{i}",
+                connection_id="openai",
+                model="m",
+                max_items=20,
+                boxes=[detection.DetectedBox(label="x", box=(0.0, 0.0, 0.5, 0.5))],
+                user_id=None,
+            )
+            ids.append(row.id)
+            db.commit()
+    items = client.get(_detections_url(str(asset_id))).json()["items"]
+    assert len(items) == detection.HISTORY_MAX
+    # 古い2回が消え、新しい順に並ぶ。
+    assert [uuid.UUID(i["id"]) for i in items] == list(reversed(ids[2:]))
+    assert items[0]["regions"] == [{"label": "x", "box": [0.0, 0.0, 0.5, 0.5]}]
+    # ほかの Asset の履歴は消さない。
+    assert len(client.get(_detections_url(str(other_id))).json()["items"]) == 1
+
+
+def test_delete_detection(client: TestClient) -> None:
+    _enable(client)
+    asset_id = _upload(client)
+    other_id = _upload(client)
+    detection_id = client.post(_detect_url(asset_id), json={}).json()["detection"]["id"]
+    # ほかの Asset の id では消せない。
+    assert client.delete(f"{_detections_url(other_id)}/{detection_id}").status_code == 404
+    assert client.delete(f"{_detections_url(asset_id)}/{uuid.uuid4()}").status_code == 404
+    response = client.delete(f"{_detections_url(asset_id)}/{detection_id}")
+    assert response.status_code == 204
+    assert client.get(_detections_url(asset_id)).json()["items"] == []
+    assert client.delete(f"{_detections_url(asset_id)}/{detection_id}").status_code == 404
+
+
+def test_history_rejects_mask_and_unknown(client: TestClient) -> None:
+    assert client.get(_detections_url(str(uuid.uuid4()))).status_code == 404
+    mask_id = _upload(client, kind="mask")
+    response = client.get(_detections_url(mask_id))
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "mask_not_supported"
+
+
+def test_history_visibility_and_delete_permissions(client_oidc: TestClient) -> None:
+    login_as(client_oidc, "admin@example.com")
+    _enable(client_oidc)
+    login_as(client_oidc, "alice@example.com")
+    asset_id = _upload(client_oidc)
+    detection_id = client_oidc.post(_detect_url(asset_id), json={}).json()["detection"]["id"]
+    with client_oidc.app.state.session_factory() as db:
+        row = db.get(AssetRegionDetection, uuid.UUID(detection_id))
+        assert row is not None and row.created_by_user_id is not None
+        alice_id = row.created_by_user_id
+    assert len(client_oidc.get(_detections_url(asset_id)).json()["items"]) == 1
+    # 見えない利用者には、履歴も消す口も 404。
+    login_as(client_oidc, "bob@example.com")
+    assert client_oidc.get(_detections_url(asset_id)).status_code == 404
+    url = f"{_detections_url(asset_id)}/{detection_id}"
+    assert client_oidc.delete(url).status_code == 404
+    # 見えるが本人ではない(管理者でもない)なら 403。持ち主を別の人に変えて確かめる。
+    login_as(client_oidc, "alice@example.com")
+    factory = client_oidc.app.state.session_factory
+
+    def _set_owner(email: str | None, user_id: uuid.UUID | None = None) -> None:
+        with factory() as db:
+            row = db.get(AssetRegionDetection, uuid.UUID(detection_id))
+            assert row is not None
+            if email is not None:
+                user_id = db.query(AppUser).filter(AppUser.email == email).one().id
+            row.created_by_user_id = user_id
+            db.commit()
+
+    _set_owner("bob@example.com")
+    assert client_oidc.delete(url).status_code == 403
+    _set_owner(None, alice_id)
+    assert client_oidc.delete(url).status_code == 204
+
+
+def test_history_admin_can_delete_others(client_oidc: TestClient) -> None:
+    """管理者は、見える Asset の他人の検出を消せる。"""
+    login_as(client_oidc, "admin@example.com")
+    _enable(client_oidc)
+    asset_id = _upload(client_oidc)
+    detection_id = client_oidc.post(_detect_url(asset_id), json={}).json()["detection"]["id"]
+    with client_oidc.app.state.session_factory() as db:
+        db.add(AppUser(email="carol@example.com", name="Carol", subject="carol", issuer="test"))
+        db.flush()
+        carol = db.query(AppUser).filter(AppUser.email == "carol@example.com").one()
+        row = db.get(AssetRegionDetection, uuid.UUID(detection_id))
+        assert row is not None
+        row.created_by_user_id = carol.id
+        db.commit()
+    url = f"{_detections_url(asset_id)}/{detection_id}"
+    assert client_oidc.delete(url).status_code == 204
+
+
+def test_withholding_drops_history(client: TestClient) -> None:
+    """画像を残さなかった Asset(ADR-0051 4章)では、画像から作った検出の履歴も消す。"""
+    _enable(client)
+    asset_id = _upload(client)
+    client.post(_detect_url(asset_id), json={})
+    factory = client.app.state.session_factory
+    with factory() as db:
+        verdict = ModVerdict(
+            mod_kind="webhook",
+            mod_id="manual",
+            mod_name="check",
+            asset_id=uuid.UUID(asset_id),
+            verdict="deny",
+            label="x",
+            message="x",
+        )
+        db.add(verdict)
+        db.flush()
+        targets = content_withholding.apply_denials(db, [verdict])
+        db.commit()
+    content_withholding.purge(client.app.state.store, targets)
+    with factory() as db:
+        assert db.query(AssetRegionDetection).count() == 0

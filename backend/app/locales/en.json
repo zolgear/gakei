@@ -1182,6 +1182,8 @@
       "person": "Person (dummy)",
       "cup": "Cup (dummy)",
       "window": "Window (dummy)"
-    }
+    },
+    "detectionNotFound": "The detection was not found",
+    "deleteForbidden": "Only the user who ran the detection or an administrator can delete it"
   }
 }

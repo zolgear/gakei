@@ -4,18 +4,24 @@
 - 読み取りでは、範囲外の値・空の四角・形の合わない要素を捨て、同じ名前と四角の重複を除き、
   上限の数で切る。残った四角は 3章の形(0〜1 の割合、左上が原点の `[x0, y0, x1, y1]`)に直す。
 - 縦に長い物の下の端が短くなりがちだが、四角を自動で広げることはしない(候補は手で直す前提)。
-- 検出の結果は保存しない。
+- 検出の結果は Asset ごとの履歴として保存する(`asset_region_detection`。証跡ではない)。
+  1つの Asset に新しい方から HISTORY_MAX 回まで残し、超えたら古いものから消す。見つからなかった
+  結果も残す。検出のたびに新しく VLM を呼ぶ(前の結果を使い回さない)。
 """
 
 from __future__ import annotations
 
 import io
+import uuid
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from PIL import Image
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
 
 from app.annotation.engines import image_to_jpeg
+from app.domain.models import AssetRegionDetection
 from app.i18n import t, use_locale
 
 SCHEMA_NAME = "gakei_region_detection"
@@ -33,6 +39,8 @@ IMAGE_MAX_SIDE = 1536
 # 画像の細かさの指定(OpenAI の `detail`)。
 IMAGE_DETAIL: Literal["high"] = "high"
 REASONING_EFFORT = "low"
+# 1つの Asset に残す検出の履歴の数。
+HISTORY_MAX = 20
 
 _LANGUAGES = {"ja": "日本語", "en": "英語"}
 
@@ -187,3 +195,65 @@ def fake_response(locale: str, *, query: str | None, max_items: int) -> dict[str
             for label, box in zip(labels, _FAKE_BOXES, strict=True)
         ]
     return {"objects": objects[:max_items]}
+
+
+# -- 検出の履歴 ------------------------------------------------------------------------
+
+
+def normalize_query(query: str | None) -> str | None:
+    """探す言葉の前後の空白を除く。空なら None(言葉なし)。"""
+    if query is None:
+        return None
+    return query.strip() or None
+
+
+def save_detection(
+    db: Session,
+    *,
+    asset_id: uuid.UUID,
+    query: str | None,
+    connection_id: str,
+    model: str,
+    max_items: int,
+    boxes: list[DetectedBox],
+    user_id: uuid.UUID | None,
+) -> AssetRegionDetection:
+    """1回の検出を保存し、その Asset の古い履歴を HISTORY_MAX 回を超えた分だけ消す
+    (commit は呼び出し側)。"""
+    row = AssetRegionDetection(
+        asset_id=asset_id,
+        query=normalize_query(query),
+        connection_id=connection_id,
+        model=model,
+        max_items=max_items,
+        regions=[{"label": b.label, "box": list(b.box)} for b in boxes],
+        created_by_user_id=user_id,
+    )
+    db.add(row)
+    db.flush()
+    keep = select(AssetRegionDetection.id).where(AssetRegionDetection.asset_id == asset_id)
+    keep = keep.order_by(
+        AssetRegionDetection.created_at.desc(), AssetRegionDetection.id.desc()
+    ).limit(HISTORY_MAX)
+    kept = set(db.execute(keep).scalars().all())
+    kept.add(row.id)
+    db.execute(
+        delete(AssetRegionDetection).where(
+            AssetRegionDetection.asset_id == asset_id,
+            AssetRegionDetection.id.not_in(kept),
+        )
+    )
+    return row
+
+
+def list_detections(db: Session, asset_id: uuid.UUID) -> list[AssetRegionDetection]:
+    """その Asset の検出の履歴(新しい順)。"""
+    return list(
+        db.execute(
+            select(AssetRegionDetection)
+            .where(AssetRegionDetection.asset_id == asset_id)
+            .order_by(AssetRegionDetection.created_at.desc(), AssetRegionDetection.id.desc())
+        )
+        .scalars()
+        .all()
+    )
