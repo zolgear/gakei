@@ -328,6 +328,7 @@ def _bodies(w: World) -> dict[tuple[str, str], Any]:
         ("patch", "/api/assets/{asset_id}/title"): {"title": "hijack"},
         ("post", "/api/assets/{asset_id}/tags"): {"name": "hijack"},
         ("put", "/api/assets/{asset_id}/content-rating"): {"level": "xxx"},
+        ("post", "/api/assets/{asset_id}/regions/detect"): {},
         ("patch", "/api/assistant/conversations/{conversation_id}"): {"title": "hijack"},
         ("post", "/api/assistant/conversations/{conversation_id}/messages"): {"text": "hijack"},
     }
