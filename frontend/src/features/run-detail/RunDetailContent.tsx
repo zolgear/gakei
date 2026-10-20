@@ -21,6 +21,8 @@ import { allOperationDefs, buildRunSavePayload, runHasSeed } from '../parameter-
 import { buildParamLabelMap } from '../run-form/paramLabels'
 import { omitServerOnlyParams, paramsForRerun } from '../run-form/paramsBuilder'
 import { inputsFromRunInputs } from '../run-form/editInputs'
+import { restoreRunRegions, stripAppendedText } from '../regions/regions'
+import { RunRegionsSection } from '../regions/RunRegionsSection'
 import {
   comfyuiPromptDownloadFilename,
   extractComfyUiPrompt,
@@ -137,6 +139,8 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
     prompt: run.prompt,
     negativePrompt: baselineNegativePrompt(rawParams),
   }
+  // 利用者が書いたプロンプト(領域の指示で足した文を除く。ADR-0053 5章)。
+  const userPrompt = stripAppendedText(run.prompt, run.regions?.appended_text)
   const hasFinalPrompt = selectFinalPromptEntries(finalPromptProps).length > 0
 
   const thumbAssetDetails = new Map<string, AssetDetail>()
@@ -171,14 +175,19 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
     // サーバーは comfyui_* / sdwebui_* をクライアントからの入力として受け付けない(422)ので、
     // 「同じ設定で新規作成」ではフォームへ戻す前に取り除く(seed 等の公開パラメーターは残り、
     // 実際に使った seed があれば seed に戻す)。
+    // 領域の指示(ADR-0053 4章)。四角を戻し、サーバーが足した入力(四角を描いた画像と参照画像)と
+    // プロンプトの末尾の足した文を除く。
+    const restored = restoreRunRegions({ prompt: run.prompt, inputs, regions: run.regions })
     const state = {
       provider: run.provider,
       model: run.model,
-      prompt: run.prompt,
+      prompt: restored.prompt,
       params: paramsForRerun(rawParams) as Record<string, string | number | boolean>,
-      inputs: inputsFromRunInputs(inputs),
+      inputs: inputsFromRunInputs(restored.inputs),
       // 削除済みのグループなら null(=「なし」)で返ってくる。
       assetGroupId: run.asset_group?.id ?? null,
+      regions: restored.regions,
+      regionsAssetId: restored.regionsAssetId,
     }
     // context へ書くのは入力画像と、スタジオがまだマウントされていないときの初期値のため。
     // スタジオのフォームは context をマウント時にしか読まないので、結果エリアの Run 詳細
@@ -213,14 +222,15 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
           triggerClassName={styles.paramSetButton}
           buildPayload={(include) =>
             buildRunSavePayload(
-              { provider: run.provider, model: run.model, prompt: run.prompt, params: rawParams },
+              // 領域の指示で足した文は除く(四角は画像ごとのもので、パラメーターセットに入れない。ADR-0053 8章)。
+              { provider: run.provider, model: run.model, prompt: userPrompt, params: rawParams },
               include,
               allOperationDefs(capsQuery.data, run.provider, run.model),
             )
           }
           seedAvailable={runHasSeed(rawParams)}
           seedUnavailableMessage={t.parameterSets.save.seedUnavailableRun}
-          defaultName={suggestSetNameFromPrompt(run.prompt)}
+          defaultName={suggestSetNameFromPrompt(userPrompt)}
         />
         {(run.status === 'queued' || run.status === 'running') && (
           <Link to={buildStudioPath(null, null, run.id)} className={styles.lineageLink}>
@@ -250,6 +260,16 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
         <p className={styles.prompt}>{run.prompt}</p>
         {promptActions?.(run.prompt)}
       </section>
+
+      {/* 領域の指示(ADR-0053 4章)。四角を付けた Run だけ。 */}
+      {run.regions && (
+        <RunRegionsSection
+          regions={run.regions}
+          sectionClassName={styles.section}
+          headingClassName={styles.heading}
+          assetDetails={thumbAssetDetails}
+        />
+      )}
 
       {/* プロンプトテンプレート(実験)で組み立てた Run だけ。どのスロットに何が選ばれたか。 */}
       {run.prompt_build && (
@@ -493,6 +513,11 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
                   {input.role} #{input.position}
                   {input.role === 'image' && input.position === 0 && (
                     <span className={styles.primaryBadge}>{t.runDetail.primaryParent}</span>
+                  )}
+                  {/* 四角を描いた画像(ADR-0053 4章。サーバーが足した入力)。 */}
+                  {(input.asset_id === run.regions?.overlay_asset_id ||
+                    thumbAssetDetails.get(input.asset_id)?.kind === 'regions') && (
+                    <span className={styles.primaryBadge}>{t.regions.runDetail.overlayTag}</span>
                   )}
                   {thumbAssetDetails.get(input.asset_id)?.deleted_at && (
                     <span className={styles.deletedTag}>{t.runDetail.deletedTag}</span>

@@ -50,6 +50,8 @@ function kindLabel(t: Messages, kind: AssetSummary['kind']): string {
       return t.stock.kindMask
     case 'composite':
       return t.stock.kindComposite
+    case 'regions':
+      return t.stock.kindRegions
   }
 }
 

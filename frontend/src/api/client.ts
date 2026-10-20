@@ -37,6 +37,17 @@ export type RunEvent = components['schemas']['RunEvent']
 export type RunOutputRef = components['schemas']['RunOutputRef']
 export type RunTextOutput = components['schemas']['RunTextOutput']
 export type RunStatus = RunSummary['status']
+// 領域の指示(ADR-0053)。
+export type RegionBox = components['schemas']['RegionBox']
+export type RegionKind = RegionBox['kind']
+export type RunRegions = components['schemas']['RunRegions']
+export type DetectedRegion = components['schemas']['DetectedRegion']
+export type RegionDetectResponse = components['schemas']['RegionDetectResponse']
+export type RegionDetectionSettingsResponse = components['schemas']['RegionDetectionSettingsResponse']
+export type RegionDetectionSettingsUpdateRequest = components['schemas']['RegionDetectionSettingsUpdateRequest']
+/** 保存した検出1回分(Asset ごとの履歴)。 */
+export type RegionDetectionRecord = components['schemas']['RegionDetectionView']
+export type RegionDetectionListResponse = components['schemas']['RegionDetectionListResponse']
 
 export type AssetDetail = components['schemas']['AssetDetail']
 export type AssetSummary = components['schemas']['AssetSummary']
@@ -1699,6 +1710,51 @@ export function updateAssistantSettings(body: AssistantSettingsUpdateRequest): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+// -- 領域の四角の検出(ADR-0053 7章) ----------------------------------------------
+
+/** 全ログイン者が読める(検出のボタンを出すかの判断。`usable`)。 */
+export function getRegionDetectionSettings(): Promise<RegionDetectionSettingsResponse> {
+  return request('/api/settings/region-detection')
+}
+
+/** 管理者のみ。書いた項目だけ変える。不正な値は 422。 */
+export function updateRegionDetectionSettings(
+  body: RegionDetectionSettingsUpdateRequest,
+): Promise<RegionDetectionSettingsResponse> {
+  return request('/api/settings/region-detection', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/**
+ * 見える Asset の画像で四角の候補を検出する。結果は Asset の検出の履歴に保存し、応答の `detection` にも入る。10 秒を超えることがあるので、
+ * 取り消せるよう `signal` を受ける。断られたときの `ApiError.message` はサーバーの文言。
+ */
+export function detectAssetRegions(
+  assetId: string,
+  query: string | null,
+  signal?: AbortSignal,
+): Promise<RegionDetectResponse> {
+  return request(`/api/assets/${assetId}/regions/detect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: query && query.trim() ? query.trim() : null }),
+    signal,
+  })
+}
+
+/** Asset の検出の履歴(新しい順。最大 20 件)。検出が無効でも読める。 */
+export function listAssetRegionDetections(assetId: string): Promise<RegionDetectionListResponse> {
+  return request(`/api/assets/${assetId}/regions/detections`)
+}
+
+/** 検出の履歴から1件消す(検出した本人か管理者)。 */
+export function deleteAssetRegionDetection(assetId: string, detectionId: string): Promise<void> {
+  return request(`/api/assets/${assetId}/regions/detections/${detectionId}`, { method: 'DELETE' })
 }
 
 // -- 接続先(`locality`。ADR-0051 3章。管理者のみ) ---------------------------------

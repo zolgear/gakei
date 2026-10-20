@@ -3,6 +3,8 @@
  * 状態として持たず、inputs から `deriveOperation` で導出する。
  * params には「未指定」の項目を含めない(そのまま POST /api/runs の body になる)。
  */
+import type { RegionBox } from '../../api/client'
+
 export type Operation = 'generate' | 'edit'
 
 export interface RunInputItem {
@@ -30,6 +32,13 @@ export interface RunFormState {
    * (run.params は API に送った値そのもので、グループはプロバイダーに送る値ではないため)。
    */
   assetGroupId: string | null
+  /**
+   * ADR-0053: 主たる入力に付けた領域の指示の四角(API の形。番号の順)。inputs と同じく
+   * context に直接書き、localStorage にも保存する。四角は画像ごとのものなので、
+   * `regionsAssetId`(四角を付けた主たる入力の Asset)と組で持ち、主たる入力が変わったら外す。
+   */
+  regions: RegionBox[]
+  regionsAssetId: string | null
 }
 
 export function createEmptyFormState(): RunFormState {
@@ -40,5 +49,7 @@ export function createEmptyFormState(): RunFormState {
     params: {},
     inputs: [],
     assetGroupId: null,
+    regions: [],
+    regionsAssetId: null,
   }
 }

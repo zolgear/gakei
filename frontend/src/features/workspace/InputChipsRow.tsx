@@ -4,7 +4,8 @@
  * 出す(編集元を見ながらプロンプトを書けるように。ビューアへは移動しない)。番号 1 が主たる親(position 0)で、マスクが
  * あればそのチップ内に表示する。行末に枚数 `n/16` を出す。「+ 追加」の隣の「スケッチ」ボタンは
  * 白紙に描いて入力画像を作る(ADR-0010)。その隣の「配置」は、入力画像を並べて動かし1枚の入力にする
- * (ADR-0050)。配置の結果のチップには「配置を編集」を出す。
+ * (ADR-0050)。配置の結果のチップには「配置を編集」を出す。1枚目のチップには、四角を受けるモデルなら
+ * 「領域」(ADR-0053)を出し、四角を付けていれば「領域 3」のように数を出す。
  * ドロップはこの行と下段全体の両方で受ける(呼び出し側が `onDrop`/`onDragOver` を
  * このコンポーネントとコンテナの両方に配線する)。
  * 「+ 追加」は OS のファイル選択を直接開かず、`onOpenAddDialog` で `AddInputImagesDialog`
@@ -18,6 +19,7 @@ import type { EditInputsLogic } from '../run-form/useEditInputsLogic'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
+import { RegionsIcon } from '../regions/regionIcons'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputChipsRow.module.css'
 import { focalStyle } from '../../lib/focalPoint'
@@ -45,6 +47,16 @@ export interface InputImagesProps {
   onPreviewAsset: (assetId: string) => void
   /** 「+ 追加」ボタンが押されたとき、`AddInputImagesDialog` を開く(呼び出し側が状態を持つ)。 */
   onOpenAddDialog: () => void
+  /** 領域の指示(ADR-0053)。主たる入力のチップ・タイルに「領域」と、付けた四角の数を出す。 */
+  regions: InputRegionsProps
+}
+
+export interface InputRegionsProps {
+  /** 選んだモデルの Edit が四角を受けるか(受けなければ出さない)。 */
+  supported: boolean
+  count: number
+  onOpen: () => void
+  onClear: () => void
 }
 
 export function InputChipsRow({
@@ -56,6 +68,7 @@ export function InputChipsRow({
   blankSketchSize,
   onPreviewAsset,
   onOpenAddDialog,
+  regions,
 }: InputImagesProps) {
   const { t } = useI18n()
   const c = t.workspace.inputChips
@@ -215,6 +228,41 @@ export function InputChipsRow({
                         </button>
                       )
                     ))}
+
+                  {isPrimary && regions.supported && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
+                    regions.count > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          className={styles.regionsTag}
+                          title={t.regions.form.chipTitle}
+                          onClick={regions.onOpen}
+                        >
+                          <RegionsIcon size={12} />
+                          {fmt(t.regions.form.chip, { count: regions.count })}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.iconButton}
+                          aria-label={t.regions.form.clear}
+                          title={t.regions.form.clear}
+                          onClick={regions.onClear}
+                        >
+                          <RemoveIcon />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.iconButton}
+                        aria-label={t.regions.button}
+                        title={t.regions.buttonTitle}
+                        onClick={regions.onOpen}
+                      >
+                        <RegionsIcon size={12} />
+                      </button>
+                    )
+                  )}
 
                   {detail?.kind === 'composite' && !isWithheld && (
                     <button

@@ -10,6 +10,7 @@
  */
 import { ensureInputIds } from '../features/run-form/editInputs'
 import type { RunFormState, RunInputItem } from '../features/run-form/types'
+import type { RegionBox } from '../api/client'
 
 const STORAGE_KEY = 'gakei.runForm.v1'
 const STORAGE_VERSION = 1
@@ -31,6 +32,12 @@ interface StoredRunFormPayloadV1 {
    * なければ null=グループなし。存在確認は呼び出し側(useRunFormLogic)がグループ一覧で行う)。
    */
   assetGroupId?: string | null
+  /**
+   * ADR-0053 で追加。provider と同じ理由でバージョンは上げず optional にする(無い・形が壊れて
+   * いれば四角なし。四角だけを捨て、ほかの値は残す)。
+   */
+  regions?: RegionBox[]
+  regionsAssetId?: string | null
 }
 
 /** 保存値の入力1件。inputId は issue #12・#13 の修正で追加したため、旧形式の保存値には無い。 */
@@ -45,6 +52,36 @@ function isStoredRunInputItem(value: unknown): value is StoredRunInputItem {
     (v.role === 'image' || v.role === 'mask' || v.role === 'reference') &&
     typeof v.position === 'number'
   )
+}
+
+function isNumberArray(value: unknown, length: number): value is number[] {
+  return Array.isArray(value) && value.length === length && value.every((v) => typeof v === 'number')
+}
+
+/** 保存値の四角1つの形を確かめる(値の範囲の検証は送る前に `areRegionBoxesValid` が行う)。 */
+function isStoredRegionBox(value: unknown): value is RegionBox {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.number === 'number' &&
+    (v.kind === 'change' || v.kind === 'add' || v.kind === 'keep' || v.kind === 'remove' || v.kind === 'move') &&
+    isNumberArray(v.box, 4) &&
+    (v.source_box === undefined || v.source_box === null || isNumberArray(v.source_box, 4)) &&
+    typeof v.instruction === 'string' &&
+    (v.text === undefined || v.text === null || typeof v.text === 'string') &&
+    (v.reference_asset_id === undefined || v.reference_asset_id === null || typeof v.reference_asset_id === 'string')
+  )
+}
+
+/** 四角と、四角を付けた主たる入力。どちらかが壊れていれば四角なしにする。 */
+function parseStoredRegions(payload: Record<string, unknown>): Pick<RunFormState, 'regions' | 'regionsAssetId'> {
+  const regions = payload.regions
+  const assetId = payload.regionsAssetId
+  if (!Array.isArray(regions) || regions.length === 0 || typeof assetId !== 'string') {
+    return { regions: [], regionsAssetId: null }
+  }
+  if (!regions.every(isStoredRegionBox)) return { regions: [], regionsAssetId: null }
+  return { regions, regionsAssetId: assetId }
 }
 
 function isParamValue(value: unknown): value is string | number | boolean {
@@ -92,6 +129,7 @@ export function parseStoredRunFormState(raw: string | null): RunFormState | null
     // バージョンは上げない(provider と同じく、他の値まで巻き添えで破棄したくないため)。
     inputs: ensureInputIds(payload.inputs),
     assetGroupId: typeof payload.assetGroupId === 'string' ? payload.assetGroupId : null,
+    ...parseStoredRegions(payload),
   }
 }
 
@@ -105,6 +143,8 @@ export function serializeRunFormState(state: RunFormState): string {
     params: state.params,
     inputs: state.inputs,
     assetGroupId: state.assetGroupId,
+    regions: state.regions,
+    regionsAssetId: state.regionsAssetId,
   }
   return JSON.stringify(payload)
 }

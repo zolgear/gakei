@@ -63,6 +63,8 @@ import { useAssetGroups } from '../stock/groups/assetGroupQueries'
 import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
 import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import type { RunInputItem } from './types'
+import type { RegionBox } from '../../api/client'
+import { areRegionBoxesValid, regionExtraInputCount, regionsSupported as opSupportsRegions } from '../regions/regions'
 import {
   buildImportedRawParams,
   importTargetDefs,
@@ -190,6 +192,25 @@ export interface RunFormLogic {
 
   inputs: RunInputItem[]
   setInputs: (inputs: RunInputItem[]) => void
+
+  /**
+   * 領域の指示(ADR-0053)。主たる入力に付けた四角(API の形)。主たる入力が変わる、または
+   * 四角を受けないプロバイダー・モデルに切り替えると、自動で外して `regionsNotice` で知らせる。
+   */
+  regions: RegionBox[]
+  /** 主たる入力に四角を付ける(空の配列なら外す)。 */
+  setRegions: (regions: RegionBox[]) => void
+  clearRegions: () => void
+  /** 選んだモデルの Edit が四角を受けるか(受けなければ「領域」を出さない)。 */
+  regionsSupported: boolean
+  /** 四角の渡し方(`image_and_text` なら、画面に「画像と文で送る」ことを示す)。 */
+  regionsDelivery: string | null
+  /** 四角を自動で外したときの案内。 */
+  regionsNotice: string | null
+  /** 四角を付けたときにサーバーが入力に足す画像の数(四角を描いた画像と、入力に無い参照画像)。 */
+  regionExtraInputs: number
+  /** 送信を止める、四角についての理由(無ければ null)。 */
+  regionsBlockReason: string | null
 
   /**
    * プロンプトテンプレート(実験)。テンプレートを選んでいる間は「テンプレートモード」で、
@@ -378,8 +399,17 @@ export function useRunFormLogic(
       buildEnabledParams(defs, rawParams, conditionalParams, hasMask),
       sizeToParam(sizeState),
     )
-    setFormState({ provider, model, prompt, params, inputs: formState.inputs, assetGroupId })
-    // formState.inputs はここでは変更しないので依存に含めない(無限ループ回避)。
+    setFormState({
+      provider,
+      model,
+      prompt,
+      params,
+      inputs: formState.inputs,
+      assetGroupId,
+      regions: formState.regions,
+      regionsAssetId: formState.regionsAssetId,
+    })
+    // formState.inputs・regions はここでは変更しないので依存に含めない(無限ループ回避)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, model, prompt, rawParams, sizeState, defs, assetGroupId, hasMask, conditionalParams])
 
@@ -433,6 +463,58 @@ export function useRunFormLogic(
 
   function setInputs(next: RunInputItem[]) {
     setFormState({ ...formState, inputs: next })
+  }
+
+  // 領域の指示(ADR-0053)。四角は主たる入力(position 0 の画像)ごとのもの。
+  const primaryAssetId =
+    formState.inputs
+      .filter((i) => i.role === 'image')
+      .sort((a, b) => a.position - b.position)[0]?.assetId ?? null
+  const regionsSupported = opSupportsRegions(editOpCaps)
+  const regionsDelivery = editOpCaps?.regions_delivery ?? null
+  const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
+  // 主たる入力が変わった、または四角を受けないモデルに切り替えた(capabilities を読めてから判断する)
+  // ときは四角を外す。
+  let regionsClearReason: 'primaryChanged' | 'unsupported' | null = null
+  if (formState.regions.length > 0) {
+    if (formState.regionsAssetId !== primaryAssetId) regionsClearReason = 'primaryChanged'
+    else if (caps && modelCaps && !regionsSupported) regionsClearReason = 'unsupported'
+  }
+  useEffect(() => {
+    if (regionsClearReason === null) return
+    setFormState({ ...formState, regions: [], regionsAssetId: null })
+    const rm = msg().regions.form
+    setRegionsNotice(regionsClearReason === 'primaryChanged' ? rm.clearedPrimaryChanged : rm.clearedUnsupported)
+  }, [regionsClearReason, formState, setFormState])
+
+  function setRegions(next: RegionBox[]) {
+    setRegionsNotice(null)
+    setFormState({
+      ...formState,
+      regions: next,
+      regionsAssetId: next.length > 0 ? primaryAssetId : null,
+    })
+  }
+
+  function clearRegions() {
+    setRegionsNotice(null)
+    setFormState({ ...formState, regions: [], regionsAssetId: null })
+  }
+
+  const regionsActive =
+    regionsClearReason === null && formState.regions.length > 0 && regionsSupported && operation === 'edit'
+  const imageInputAssetIds = formState.inputs.filter((i) => i.role === 'image').map((i) => i.assetId)
+  const regionExtraInputs = regionsActive ? regionExtraInputCount(formState.regions, imageInputAssetIds) : 0
+  let regionsBlockReason: string | null = null
+  if (regionsActive) {
+    if (!areRegionBoxesValid(formState.regions)) regionsBlockReason = msg().regions.form.invalid
+    else if (imageInputCount + regionExtraInputs > maxInputImages) {
+      regionsBlockReason = fmt(msg().regions.form.tooManyInputs, {
+        max: maxInputImages,
+        extra: regionExtraInputs,
+        count: imageInputCount + regionExtraInputs,
+      })
+    }
   }
 
   // ref 経由で最新の prompt を読むことで、依存配列を空にして identity を安定させる
@@ -702,6 +784,7 @@ export function useRunFormLogic(
     isMaskSatisfied(opCaps, hasMask) &&
     isMaskSupported(opCaps, hasMask) &&
     providerAvailable &&
+    regionsBlockReason === null &&
     repeat !== null &&
     !mutation.isPending
 
@@ -731,7 +814,17 @@ export function useRunFormLogic(
         : { prompt }
     mutation.mutate(
       withAssetGroupId(
-        { operation, model, provider, params, inputs, repeat: repeat ?? 1, ...promptBody },
+        {
+          operation,
+          model,
+          provider,
+          params,
+          inputs,
+          repeat: repeat ?? 1,
+          ...promptBody,
+          // 領域の指示(ADR-0053)。受けるモデルの Edit で、四角があるときだけ送る。
+          ...(regionsActive ? { regions: formState.regions } : {}),
+        },
         resolvedAssetGroupId,
       ),
     )
@@ -791,6 +884,14 @@ export function useRunFormLogic(
     inputCountRequirementReason,
     inputs: formState.inputs,
     setInputs,
+    regions: regionsClearReason === null ? formState.regions : [],
+    setRegions,
+    clearRegions,
+    regionsSupported,
+    regionsDelivery,
+    regionsNotice,
+    regionExtraInputs,
+    regionsBlockReason,
     promptTemplate,
     setTemplateSelections,
     clearPromptTemplate,

@@ -251,6 +251,8 @@ describe('buildOriginFormState', () => {
       params: { quality: 'high' },
       inputs: [],
       assetGroupId: null,
+      regions: [],
+      regionsAssetId: null,
     })
   })
 
@@ -271,7 +273,7 @@ describe('buildOriginFormState', () => {
 
   it('provider/model が null(未検証・欠落)でも例外を出さず空文字になる', () => {
     const state = buildOriginFormState({ provider: null, model: null, prompt: null, params: {} })
-    expect(state).toEqual({ provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null })
+    expect(state).toEqual({ provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null})
   })
 
   it('渡したグループ(最後に選んだグループ)をそのまま使う', () => {

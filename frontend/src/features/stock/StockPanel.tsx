@@ -84,6 +84,8 @@ function kindLabel(t: Messages, kind: KindFilter): string {
       return t.stock.kindMask
     case 'composite':
       return t.stock.kindComposite
+    case 'regions':
+      return t.stock.kindRegions
   }
 }
 

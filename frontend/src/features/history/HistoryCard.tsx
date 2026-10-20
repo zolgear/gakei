@@ -18,6 +18,7 @@ import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { paramsForRerun } from '../run-form/paramsBuilder'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { inputsFromRunInputs } from '../run-form/editInputs'
+import { restoreRunRegions } from '../regions/regions'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { removeItemFromPagedData, type InfiniteQueryData } from '../../lib/queryCache'
 import {
@@ -148,17 +149,21 @@ export function HistoryCard({ run }: HistoryCardProps) {
       // comfyui_*(ADR-0013)はサーバーが 422 で拒否するので、フォームへ戻す前に取り除く。
       // 実際に使った seed(comfyui_seed)があれば seed として固定する(同じ画像を再現できる
       // ように。ランダムに戻すのは seed の専用欄のトグル1つ)。
+      // 領域の指示(ADR-0053 4章)。四角を戻し、サーバーが足した入力とプロンプトの末尾の文を除く。
+      const restored = restoreRunRegions({ prompt: detail.prompt, inputs: detail.inputs ?? [], regions: detail.regions })
       setFormState({
         provider: detail.provider,
         model: detail.model,
-        prompt: detail.prompt,
+        prompt: restored.prompt,
         params: paramsForRerun((detail.params ?? {}) as Record<string, unknown>) as Record<
           string,
           string | number | boolean
         >,
-        inputs: inputsFromRunInputs(detail.inputs ?? []),
+        inputs: inputsFromRunInputs(restored.inputs),
         // 削除済みのグループなら null(=「なし」)で返ってくる。
         assetGroupId: detail.asset_group?.id ?? null,
+        regions: restored.regions,
+        regionsAssetId: restored.regionsAssetId,
       })
       navigate('/studio')
     },

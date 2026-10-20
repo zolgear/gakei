@@ -34,6 +34,7 @@ import { MaskEditor } from '../mask/MaskEditor'
 import { SketchEditor, type SketchSaveOptions } from '../sketch/SketchEditor'
 import { SketchLoadingDialog } from '../sketch/SketchLoadingDialog'
 import { CompositeEditor } from '../composite/CompositeEditor'
+import { RegionEditor } from '../regions/RegionEditor'
 import { recommendedSketchPrompt } from '../sketch/recommendedPrompt'
 import { MentionPopover } from '../prompt-sets/MentionPopover'
 import {
@@ -114,6 +115,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const [submittedNotice, setSubmittedNotice] = useState<string | null>(null)
   // 「+ 追加」で開く入力画像追加ダイアログ(ADR-0009 1章・2026-09-26 追加)。
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  // 領域の指示(ADR-0053)の編集画面。
+  const [regionEditorOpen, setRegionEditorOpen] = useState(false)
   const form = useRunFormLogic(onRunCreated, () => {
     setSubmittedNotice(ip.submittedNotice)
     // 送信後もフォームは変わらないので、テキストエリアの内容やカーソル位置はそのまま。
@@ -129,6 +132,9 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     form.maxInputImages,
     form.maxInputImageBytes,
   )
+
+  // 1枚目の入力が無くなったら、領域の編集画面は閉じる(後で入力を足したときに勝手に開かないように)。
+  if (regionEditorOpen && editLogic.images.length === 0) setRegionEditorOpen(false)
 
   // `@` メンション呼び出し(プロンプトセット)。プロンプトセットの一覧はここでは
   // メンション中だけ取得すればよい(サイドバーのパネルが既に取得済みならキャッシュを共有する)。
@@ -383,6 +389,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (form.hasMask && !form.maskSupported) {
     blockReasons.push(ip.maskUnsupported)
   }
+  if (form.regionsBlockReason) blockReasons.push(form.regionsBlockReason)
 
   // プロンプトテンプレート(実験)。テンプレートを選んでいる間は、プロンプト欄の代わりに
   // スロットの選択と組み立て結果を出す(送るのは prompt ではなく prompt_template)。
@@ -480,6 +487,12 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     blankSketchSize: { width: blankSketchSize.width, height: blankSketchSize.height },
     onPreviewAsset,
     onOpenAddDialog: () => setAddDialogOpen(true),
+    regions: {
+      supported: form.regionsSupported,
+      count: form.regions.length,
+      onOpen: () => setRegionEditorOpen(true),
+      onClear: form.clearRegions,
+    },
   }
   const inputImages =
     layout === 'sidebar' ? <InputImageTiles {...inputImagesProps} /> : <InputChipsRow {...inputImagesProps} />
@@ -556,6 +569,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     <InputPaneNotices
       submittedNotice={submittedNotice}
       droppedParamsNotice={form.droppedParamsNotice}
+      regionsNotice={form.regionsNotice}
       blockReasons={blockReasons}
       submitError={form.submitError}
     />
@@ -673,6 +687,21 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
           base={{ kind: 'asset', asset: editLogic.sketchOverAsset }}
           onSave={(asset, options) => handleSketchSave(asset, options, sketchEditorState.inputId)}
           onCancel={editLogic.closeSketchEditor}
+        />
+      )}
+
+      {regionEditorOpen && editLogic.positionZeroAsset && (
+        <RegionEditor
+          asset={editLogic.positionZeroAsset}
+          initialRegions={form.regions}
+          inputAssetIds={editLogic.images.map((i) => i.assetId)}
+          maxInputImages={form.maxInputImages}
+          delivery={form.regionsDelivery}
+          onSave={(regions) => {
+            form.setRegions(regions)
+            setRegionEditorOpen(false)
+          }}
+          onCancel={() => setRegionEditorOpen(false)}
         />
       )}
 
