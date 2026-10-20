@@ -38,6 +38,10 @@ class Base(DeclarativeBase):
 # ADR-0027 2章: JSON の列は PostgreSQL では JSONB にする(`json` 型は等値比較ができず、
 # DISTINCT や重複の確認で失敗するため)。SQLite ではこれまでどおり JSON(TEXT)。
 JsonType = JSON().with_variant(JSONB(), "postgresql")
+# None を JSON の `null` ではなく SQL の NULL で書く型(列の型は JsonType と同じ。マイグレーション
+# は要らない)。「無い」を `IS NULL` で引けるようにしたい列に使う。前に `null` で書いた行も None で
+# 読める。
+NullableJsonType = JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
 
 # ADR-0027 2章: 文字列の列の型の分け方。
 # - 利用者や外部(IdP、プロバイダー、ComfyUI など)から来る文字列は、長さのない `Text`
@@ -351,7 +355,7 @@ class Run(Base):
     # 四角(主たる入力に対する割合)と、どの渡し方で送ったか。Run の作成時に一度だけ書き、UPDATE
     # しない。四角を文に変えて送った分は、送った値として `prompt` と `params` に入る。再実行では
     # ここから四角を戻す。
-    regions: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+    regions: Mapped[dict | None] = mapped_column(NullableJsonType, nullable=True)
 
     # 実行したユーザー(ADR-0019)。`none` モードでは常に null。追記のみ
     # (INSERT 時に設定し、UPDATE しない)。

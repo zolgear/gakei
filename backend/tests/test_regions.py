@@ -153,6 +153,30 @@ def test_boxes_without_any_instruction_are_allowed(client: TestClient) -> None:
     assert "消し" in text
 
 
+def test_run_without_regions_stores_sql_null(client: TestClient) -> None:
+    """四角の無い Run の `run.regions` は SQL の NULL(JSON の `null` ではない)。"""
+    from sqlalchemy import text
+
+    asset_id = _upload(client)
+    detail = _create(client, _body([asset_id], []))
+    assert detail["regions"] is None
+    with client.app.state.session_factory() as db:
+        run_id = uuid.UUID(detail["id"])
+        found = db.execute(
+            select(Run.id).where(Run.id == run_id, Run.regions.is_(None))
+        ).scalar_one_or_none()
+        assert found == run_id
+        # 前に JSON の `null` で書いた行も None で読める。
+        updated = db.execute(
+            text("UPDATE run SET regions = 'null' WHERE id = :id"),
+            {"id": run_id if db.bind.dialect.name == "postgresql" else run_id.hex},
+        )
+        assert updated.rowcount == 1
+        db.commit()
+        db.expire_all()
+        assert db.get(Run, run_id).regions is None
+
+
 def test_unknown_reference_asset_is_rejected(client: TestClient) -> None:
     asset_id = _upload(client)
     response = client.post(
