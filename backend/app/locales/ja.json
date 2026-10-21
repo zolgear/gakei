@@ -138,7 +138,9 @@
       "roleImageInputNotFound": "role={role} の入力画像が見つかりません(内部エラー)。",
       "noDetails": "詳細不明",
       "nodeExecutionFailed": "ノード {node} の実行に失敗しました({detail})。",
-      "historyErrorNoDetails": "ComfyUI の実行がエラーで終了しました(詳細不明)。"
+      "historyErrorNoDetails": "ComfyUI の実行がエラーで終了しました(詳細不明)。",
+      "boundingBoxesNodeMissing": "ComfyUI に {class_type} のノードが見つかりません。領域の指示の四角を差し込めないため、実行を止めました。ComfyUI を更新するか、四角を外してください。",
+      "boundingBoxesInputChanged": "ComfyUI の {class_type} の入力 {input} が文字列を受けない形に変わっています。領域の指示の四角を差し込めないため、実行を止めました。"
     },
     "analyze": {
       "marked": "タイトル「{title}」で指定されています。",
@@ -148,7 +150,8 @@
         "negative_prompt": "ネガティブプロンプトを入れる場所はどれですか。",
         "size": "どの latent の大きさ(幅・高さ・枚数)を使いますか。",
         "images": "画像の枠の順番を確かめてください。",
-        "mask": "どのマスクを使いますか。"
+        "mask": "どのマスクを使いますか。",
+        "bounding_boxes": "領域の指示の四角を、どの Create Bounding Boxes に差し込みますか。"
       },
       "prompt": {
         "unique": "サンプラーの条件付けから遡った文字列の根が1つだけです(ノード {node} の {input})。",
@@ -208,6 +211,11 @@
         "found": "エンコーダーに入る文字列を表示するノードです(ノード {node})。",
         "nearest": "プロンプトの経路の途中を表示するノードです(ノード {node})。エンコーダーに入る文字列と違うことがあります。",
         "absent": "エンコーダーに入る文字列を表示するノードはありません。"
+      },
+      "boundingBoxes": {
+        "absent": "四角を描くノード(Create Bounding Boxes)はありません。",
+        "unique": "出力につながる Create Bounding Boxes の bboxes 入力です(ノード {node})。領域の指示の四角を差し込みます。",
+        "ask": "出力につながる Create Bounding Boxes が {count} 個あります。"
       }
     },
     "validation": {
@@ -223,7 +231,8 @@
       "outputNoGeneratedImage": "出力ノード {node} に、生成した画像が届きません。",
       "unusedBranch": "{label}: ノード {node} の入力 {input} は、今の設定では出力につながらない(使われない)枝にあります。",
       "maskNotInpaint": "マスク(image_alpha): 枠1の LoadImage(ノード {node})の MASK が部分編集に使われていません。塗った範囲が透明な画像として渡ります。",
-      "displayOnlyOutput": "出力ノード {node}({class_type})は表示だけのノードです。保存ノードを選んでください。"
+      "displayOnlyOutput": "出力ノード {node}({class_type})は表示だけのノードです。保存ノードを選んでください。",
+      "boundingBoxesNotNode": "四角の差し込み先には、{class_type} の bboxes 入力だけを選べます(ノード {node} の入力 {input})。"
     },
     "suggest": {
       "badShape": "提案の形が合いません",
@@ -631,7 +640,9 @@
       "item": "- 四角 {number}({color}): {body}",
       "itemNamed": "- 四角 {number}({color}、{label}): {body}",
       "footer": "四角・番号・線・矢印は指示のための印です。出力の画像には描かないでください。"
-    }
+    },
+    "kindNotSupported": "四角 {number} の種類は、このプロバイダー・モデルでは使えません",
+    "referenceNotSupported": "四角 {number} の参照画像は、このプロバイダー・モデルでは使えません。参照画像を外してください"
   },
   "promptSets": {
     "notFound": "プロンプトセットが見つかりません",

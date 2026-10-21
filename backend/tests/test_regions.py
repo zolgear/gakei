@@ -393,7 +393,7 @@ def test_capabilities_flag(client: TestClient) -> None:
 
 
 def test_provider_without_regions_rejects(client: TestClient) -> None:
-    from app.domain.run_create import RunCreateError, _plan_regions
+    from app.domain.run_create import RunCreateError, _regions_op_caps
     from app.domain.schemas import RunCreateRequest
     from app.providers import openai_spec
 
@@ -402,8 +402,8 @@ def test_provider_without_regions_rejects(client: TestClient) -> None:
         for op in model.operations:
             op.supports_regions = False
     body = RunCreateRequest.model_validate(_body([str(uuid.uuid4())], [_box()]))
-    with client.app.state.session_factory() as db, pytest.raises(RunCreateError) as e:
-        _plan_regions(db, caps, body, [], viewer=None, store=None)  # type: ignore[arg-type]
+    with pytest.raises(RunCreateError) as e:
+        _regions_op_caps(caps, body)
     assert e.value.kind == "invalid"
 
 
