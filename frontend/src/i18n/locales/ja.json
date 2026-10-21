@@ -3733,7 +3733,8 @@
     "saveBlocked": "直すところがあるため保存できません。",
     "notes": {
       "imageAndText": "OpenAI には、四角を描いた画像を入力に足し、四角ごとの指示を文にしてプロンプトの後ろに足して送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
-      "countsTowardLimit": "四角を描いた画像と参照画像も、入力画像の枚数({max} 枚まで)に数えます。"
+      "countsTowardLimit": "四角を描いた画像と参照画像も、入力画像の枚数({max} 枚まで)に数えます。",
+      "comfyuiBboxes": "ComfyUI には、四角をワークフローの Create Bounding Boxes に差し込んで送ります。指示(無ければ名前)を四角の説明に、描く文字を文字の四角にします。選べる種類は「変える」「足す」だけです。"
     },
     "detection": {
       "heading": "検出",
@@ -3775,7 +3776,8 @@
       "clearedPrimaryChanged": "1枚目の入力画像が変わったので、領域の指示を外しました。",
       "clearedUnsupported": "選んだモデルは領域の指示に対応していないので、外しました。",
       "invalid": "領域の指示に直すところがあります。「領域」を開いて確かめてください。",
-      "tooManyInputs": "領域の指示で画像を {extra} 枚足すため、入力画像が {count} 枚になり、上限({max} 枚)を超えます。"
+      "tooManyInputs": "領域の指示で画像を {extra} 枚足すため、入力画像が {count} 枚になり、上限({max} 枚)を超えます。",
+      "clearedBlankReplaced": "入力画像を足したので、白紙に描いた領域の指示を外しました。"
     },
     "runDetail": {
       "heading": "領域の指示",
@@ -3786,7 +3788,9 @@
       "marker": "(指示なし。場所と名前を示す目印)",
       "overlayTag": "領域",
       "overlayImage": "送った四角の画像",
-      "appendedToggle": "足した文(領域の指示)"
+      "appendedToggle": "足した文(領域の指示)",
+      "deliveryComfyui": "四角を ComfyUI の Create Bounding Boxes に差し込んで送りました。",
+      "frameOutput": "入力画像が無いので、四角の位置は出力の大きさに対する割合です。"
     },
     "assist": {
       "heading": "領域と検出の候補",
@@ -3806,6 +3810,8 @@
       "boxChip": "四角 {n}",
       "candidateChipTitle": "検出の候補(まだ送られません)。押すと名前を入れ、この候補を四角にします",
       "candidateNote": "点線の候補は送られません。チップを押すか領域の画面で四角にしたものだけが、四角を描いた画像と文として送られます。"
-    }
+    },
+    "blankHint": "入力画像が無いので、出力の大きさ(幅 × 高さ)の白紙の上に描きます。四角は大きさに対する割合で持つので、幅・高さを変えても四角は一緒に伸び縮みします。入力画像を足すと、この四角は外れます。",
+    "blankButtonTitle": "出力の大きさの白紙に四角を描き、四角ごとに名前や指示を付ける"
   }
 }

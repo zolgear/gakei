@@ -330,6 +330,33 @@ export function InputImageTiles({
           <span>{c.sketch}</span>
         </button>
 
+        {/* 入力画像の無い Run の白紙の領域(ADR-0053 6章)。四角を付けたら数を出し、外すボタンを添える。 */}
+        {regions.blank && images.length === 0 && (
+          <div className={styles.blankRegionsTile}>
+            <button
+              type="button"
+              className={styles.addTile}
+              aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
+              title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.blankButtonTitle}
+              onClick={regions.onOpen}
+            >
+              <RegionsIcon />
+              <span>{regions.count > 0 ? fmt(t.regions.form.chip, { count: regions.count }) : t.regions.button}</span>
+            </button>
+            {regions.count > 0 && (
+              <button
+                type="button"
+                className={styles.actionButton}
+                aria-label={t.regions.form.clear}
+                title={t.regions.form.clear}
+                onClick={regions.onClear}
+              >
+                <RemoveIcon />
+              </button>
+            )}
+          </div>
+        )}
+
         <button
           type="button"
           className={styles.addTile}

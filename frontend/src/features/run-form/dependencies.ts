@@ -213,6 +213,23 @@ export function hiresTargetSize(defs: ParamDef[], raw: RawParamValues, size: Siz
   return { width, height, tooLarge: Math.max(width, height) > HIRES_MAX_LONG_EDGE }
 }
 
+/**
+ * 入力画像の無い Run で四角を描く白紙の大きさ(ADR-0053 6章)。幅・高さの項目を持つプロバイダー
+ * (ComfyUI)はその値(未指定ならワークフローの既定値)、持たなければ `fallback`(出力サイズの
+ * 設定から解いた値)。正の整数にならなければ `fallback`。四角は割合で持つので、ここは縦横比だけが効く。
+ */
+export function blankCanvasSize(
+  defs: ParamDef[],
+  raw: RawParamValues,
+  fallback: { width: number; height: number },
+): { width: number; height: number } {
+  if (!defs.some((d) => d.name === 'width') || !defs.some((d) => d.name === 'height')) return fallback
+  const width = Math.trunc(Number(effectiveValue(defs, raw, 'width')))
+  const height = Math.trunc(Number(effectiveValue(defs, raw, 'height')))
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return fallback
+  return { width, height }
+}
+
 /** SD WebUI の1つの Run の出力の上限(枚数 × バッチ回数。ADR-0038 2章。サーバーと同じ値)。 */
 export const SDWEBUI_MAX_TOTAL_OUTPUTS = 64
 

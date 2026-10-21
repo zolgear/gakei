@@ -34,7 +34,8 @@ import { MaskEditor } from '../mask/MaskEditor'
 import { SketchEditor, type SketchSaveOptions } from '../sketch/SketchEditor'
 import { SketchLoadingDialog } from '../sketch/SketchLoadingDialog'
 import { CompositeEditor } from '../composite/CompositeEditor'
-import { RegionEditor } from '../regions/RegionEditor'
+import { RegionEditor, type RegionCanvas } from '../regions/RegionEditor'
+import { blankCanvasSize } from '../run-form/dependencies'
 import { RegionPromptAssist } from '../regions/RegionPromptAssist'
 import { setRegionAssistOpen, useRegionAssistOpen } from '../regions/regionAssistStore'
 import { useDetectionHistory } from '../regions/useRegionDetection'
@@ -144,7 +145,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const primaryDetections = useDetectionHistory(editLogic.images[0]?.assetId ?? null, form.regionsSupported)
 
   // 1枚目の入力が無くなったら、領域の編集画面は閉じる(後で入力を足したときに勝手に開かないように)。
-  if (regionEditorOpen && editLogic.images.length === 0) setRegionEditorOpen(false)
+  // 入力画像が無くなったら閉じる(入力画像の無い Run で白紙に描けるモデルなら、白紙のまま開いておく)。
+  if (regionEditorOpen && editLogic.images.length === 0 && !form.regionsBlank) setRegionEditorOpen(false)
 
   // `@` メンション呼び出し(プロンプトセット)。プロンプトセットの一覧はここでは
   // メンション中だけ取得すればよい(サイドバーのパネルが既に取得済みならキャッシュを共有する)。
@@ -353,6 +355,14 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
   const sketchEditorState = editLogic.sketchEditor
 
+  // 領域の指示(ADR-0053)を描く下地。主たる入力、または入力画像の無い Run の白紙(出力の大きさ。
+  // ComfyUI は幅・高さの項目、ほかは出力サイズの設定から。6章)。
+  const regionCanvas: RegionCanvas | null = editLogic.positionZeroAsset
+    ? { kind: 'asset', asset: editLogic.positionZeroAsset }
+    : form.regionsBlank
+      ? { kind: 'blank', ...blankCanvasSize(form.defs, form.rawParams, blankSketchSize) }
+      : null
+
   // 配置(ADR-0050)のキャンバスの既定に使う、フォームで選んでいるサイズ(auto・未指定なら null)。
   const formSizeParam = sizeToParam(form.sizeState)
   const compositeFormSize =
@@ -526,6 +536,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       hasOverlay: form.regions.length > 0 || (primaryDetections.selected?.regions.length ?? 0) > 0,
       overlayShown: regionAssistOpen,
       onToggleOverlay: () => setRegionAssistOpen(!regionAssistOpen),
+      blank: form.regionsBlank,
     },
   }
   const inputImages =
@@ -734,13 +745,15 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         />
       )}
 
-      {regionEditorOpen && editLogic.positionZeroAsset && (
+      {regionEditorOpen && regionCanvas && (
         <RegionEditor
-          asset={editLogic.positionZeroAsset}
+          canvas={regionCanvas}
           initialRegions={form.regions}
           inputAssetIds={editLogic.images.map((i) => i.assetId)}
           maxInputImages={form.maxInputImages}
           delivery={form.regionsDelivery}
+          kinds={form.regionsKinds}
+          referenceImages={form.regionsReferenceImages}
           onSave={(regions) => {
             form.setRegions(regions)
             setRegionEditorOpen(false)

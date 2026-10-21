@@ -95,7 +95,8 @@ function parseStoredRegions(
 ): Pick<RunFormState, 'regions' | 'regionsAssetId'> {
   const regions = payload.regions
   const assetId = payload.regionsAssetId
-  if (!Array.isArray(regions) || regions.length === 0 || typeof assetId !== 'string') {
+  // 入力画像の無い Run の四角(白紙。ADR-0053 6章)は、主たる入力が無いので null。
+  if (!Array.isArray(regions) || regions.length === 0 || (typeof assetId !== 'string' && assetId !== null)) {
     return { regions: [], regionsAssetId: null }
   }
   if (!regions.every(isStoredRegionBox)) return { regions: [], regionsAssetId: null }

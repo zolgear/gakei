@@ -81,11 +81,18 @@ export function useDetectionHistory(assetId: string | null, enabled = true) {
   return { historyQuery, history, selected }
 }
 
-export function useRegionDetection(assetId: string): RegionDetection {
+export function useRegionDetection(assetId: string | null): RegionDetection {
+  // `assetId` が null(入力画像の無い Run の白紙。ADR-0053 6章)なら、画像が無いので検出は使えない。
   const queryClient = useQueryClient()
-  const settingsQuery = useQuery({ queryKey: REGION_DETECTION_SETTINGS_QUERY_KEY, queryFn: getRegionDetectionSettings })
+  const settingsQuery = useQuery({
+    queryKey: REGION_DETECTION_SETTINGS_QUERY_KEY,
+    queryFn: getRegionDetectionSettings,
+    enabled: assetId !== null,
+  })
   const { historyQuery, history, selected } = useDetectionHistory(assetId)
-  const setSelectedId = (id: string | null | undefined) => setSelectedDetection(assetId, id)
+  const setSelectedId = (id: string | null | undefined) => {
+    if (assetId !== null) setSelectedDetection(assetId, id)
+  }
 
   const [adopted, setAdopted] = useState<Set<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
@@ -96,6 +103,7 @@ export function useRegionDetection(assetId: string): RegionDetection {
   useEffect(() => () => abortRef.current?.abort(), [])
 
   async function run(query: string) {
+    if (assetId === null) return
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -130,9 +138,9 @@ export function useRegionDetection(assetId: string): RegionDetection {
   }
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteAssetRegionDetection(assetId, id),
+    mutationFn: (id: string) => deleteAssetRegionDetection(assetId ?? '', id),
     onSuccess: (_data, id) => {
-      queryClient.setQueryData<RegionDetectionRecord[]>(regionDetectionsQueryKey(assetId), (old) =>
+      queryClient.setQueryData<RegionDetectionRecord[]>(regionDetectionsQueryKey(assetId ?? ''), (old) =>
         (old ?? []).filter((r) => r.id !== id),
       )
       // 出していた検出を消したら、いちばん新しい検出に戻す。
@@ -147,7 +155,7 @@ export function useRegionDetection(assetId: string): RegionDetection {
   const candidates = allCandidates.filter((c) => !adopted.has(c.key))
 
   return {
-    usable: settingsQuery.data?.usable === true,
+    usable: assetId !== null && settingsQuery.data?.usable === true,
     history,
     historyError: historyQuery.isError,
     selectedId: selected ? selected.id : null,

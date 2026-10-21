@@ -7,6 +7,8 @@
  *   指を離したときに1回だけ履歴に積む。文字の入力は同じ欄が続く間は1つにまとめる。
  * - 検出(7章)は `useRegionDetection`。候補を押すと四角になる。候補は保存しない(履歴はサーバー)。
  * - 保存すると四角を API の形(番号を 1 から振り直す)でフォームに返す。キャンセルは捨てる。
+ * - 入力画像の無い Run(ComfyUI。6章)では、出力の幅×高さの縦横比の白紙の上に描く(`canvas` が
+ *   `blank`)。白紙では検出を出さない。選べる種類と参照画像の欄は、capabilities に合わせる。
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useQueries } from '@tanstack/react-query'
@@ -50,15 +52,22 @@ import { insertInlineText } from '../run-form/promptInsertion'
 import { useRegionDetection, type RegionCandidate } from './useRegionDetection'
 import styles from './RegionEditor.module.css'
 
+/** 四角を描く下地。主たる入力の画像か、出力の大きさの白紙(入力画像の無い Run)。 */
+export type RegionCanvas = { kind: 'asset'; asset: AssetDetail } | { kind: 'blank'; width: number; height: number }
+
 export interface RegionEditorProps {
-  /** 主たる入力(1枚目)。 */
-  asset: AssetDetail
+  /** 四角を描く下地(主たる入力、または白紙)。 */
+  canvas: RegionCanvas
   initialRegions: readonly RegionBox[]
   /** 生成のフォームの入力の画像(参照画像の選択と、入力の枚数の確かめに使う)。 */
   inputAssetIds: readonly string[]
   maxInputImages: number
   /** 四角の渡し方(`image_and_text` なら、効き方の保証が無いことを示す)。 */
   delivery: string | null
+  /** 札で選べる種類(capabilities の `regions_kinds`)。 */
+  kinds: readonly RegionKind[]
+  /** 四角ごとの参照画像を使えるか(使えなければ参照画像の欄を出さない)。 */
+  referenceImages: boolean
   onSave: (regions: RegionBox[]) => void
   onCancel: () => void
 }
@@ -120,11 +129,13 @@ function ToolButton({
 }
 
 export function RegionEditor({
-  asset,
+  canvas,
   initialRegions,
   inputAssetIds,
   maxInputImages,
   delivery,
+  kinds,
+  referenceImages,
   onSave,
   onCancel,
 }: RegionEditorProps) {
@@ -146,7 +157,14 @@ export function RegionEditor({
   const [saveAttempted, setSaveAttempted] = useState(false)
   const lastCoalesceRef = useRef<string | null>(null)
 
-  const detection = useRegionDetection(asset.id)
+  const asset = canvas.kind === 'asset' ? canvas.asset : null
+  const natural =
+    canvas.kind === 'asset'
+      ? { width: canvas.asset.width, height: canvas.asset.height }
+      : { width: canvas.width, height: canvas.height }
+  const detection = useRegionDetection(asset?.id ?? null)
+  // 「画像と文」だけが入力に画像を足す(四角を描いた画像と参照画像)。ComfyUI は足さない。
+  const addsInputs = delivery === 'image_and_text'
   const regions = draft ?? history.present
   const selected = regions.find((x) => x.key === selectedKey) ?? null
 
@@ -256,7 +274,7 @@ export function RegionEditor({
 
   const saveable = canSaveRegions(regions)
   const boxesNow = boxesFromEditorRegions(regions)
-  const extra = regionExtraInputCount(boxesNow, inputAssetIds)
+  const extra = addsInputs ? regionExtraInputCount(boxesNow, inputAssetIds) : 0
   const totalInputs = inputAssetIds.length + extra
   const atLimit = regions.length >= REGIONS_MAX
   const referenceRegion = regions.find((x) => x.key === referenceKey) ?? null
@@ -345,14 +363,14 @@ export function RegionEditor({
           <div
             className={styles.stageArea}
             // 狭い幅では、画像の縦横比に合わせた高さにする(横長の画像で上下に空きが出ないように)。
-            style={{ '--regions-aspect': `${asset.width} / ${asset.height}` } as React.CSSProperties}
+            style={{ '--regions-aspect': `${natural.width} / ${natural.height}` } as React.CSSProperties}
           >
             {imageError ? (
               <p className={styles.noteText}>{r.loadError}</p>
             ) : (
               <RegionStage
-                imageUrl={assetUrl(asset.id, 'preview')}
-                natural={{ width: asset.width, height: asset.height }}
+                imageUrl={asset ? assetUrl(asset.id, 'preview') : null}
+                natural={natural}
                 regions={regions}
                 selectedKey={selectedKey}
                 candidates={detection.candidates}
@@ -375,14 +393,17 @@ export function RegionEditor({
           <aside className={styles.sidePanel}>
             <p className={styles.countInline}>{fmt(r.count, { count: regions.length, max: REGIONS_MAX })}</p>
             <p className={styles.hint}>{r.hint}</p>
+            {canvas.kind === 'blank' && <p className={styles.hint}>{r.blankHint}</p>}
             {atLimit && <p className={styles.noteText}>{fmt(r.limitReached, { max: REGIONS_MAX })}</p>}
 
-            <DetectionSection
-              detection={detection}
-              query={detectQuery}
-              onQueryChange={setDetectQuery}
-              historyLabel={historyLabel}
-            />
+            {asset && (
+              <DetectionSection
+                detection={detection}
+                query={detectQuery}
+                onQueryChange={setDetectQuery}
+                historyLabel={historyLabel}
+              />
+            )}
 
             {regions.length === 0 ? (
               <p className={styles.mutedText}>{r.empty}</p>
@@ -408,6 +429,9 @@ export function RegionEditor({
                     }
                     onText={(value) => apply((cur) => updateRegion(cur, region.key, { text: value }), `${region.key}:text`)}
                     labelChips={labelChipItems(detection.allCandidates)}
+                    kinds={kinds}
+                    referenceImages={referenceImages}
+                    delivery={delivery}
                     onPickReference={() => setReferenceKey(region.key)}
                     onClearReference={() => apply((cur) => updateRegion(cur, region.key, { referenceAssetId: null }))}
                     onMove={(direction) => apply((cur) => moveRegionOrder(cur, region.key, direction))}
@@ -425,7 +449,8 @@ export function RegionEditor({
         <div className={styles.footer}>
           <div className={styles.footerNotes}>
             {delivery === 'image_and_text' && <p className={styles.mutedNote}>{r.notes.imageAndText}</p>}
-            <p className={styles.mutedNote}>{fmt(r.notes.countsTowardLimit, { max: maxInputImages })}</p>
+            {delivery === 'comfyui_bboxes' && <p className={styles.mutedNote}>{r.notes.comfyuiBboxes}</p>}
+            {addsInputs && <p className={styles.mutedNote}>{fmt(r.notes.countsTowardLimit, { max: maxInputImages })}</p>}
             {regions.length > 0 && totalInputs > maxInputImages && (
               <p className={styles.noteText}>
                 {fmt(t.regions.form.tooManyInputs, { extra, count: totalInputs, max: maxInputImages })}
@@ -595,6 +620,11 @@ interface RegionCardProps {
   onClearReference: () => void
   onMove: (direction: 'up' | 'down') => void
   onRemove: () => void
+  /** 選べる種類(今の種類が含まれなければ、それも選択肢に残す。送る前にフォームが止める)。 */
+  kinds: readonly RegionKind[]
+  referenceImages: boolean
+  /** 四角の渡し方(目印の案内は「画像と文」だけ。ComfyUI では名前を説明として送る)。 */
+  delivery: string | null
 }
 
 function RegionCard({
@@ -614,6 +644,9 @@ function RegionCard({
   onClearReference,
   onMove,
   onRemove,
+  kinds,
+  referenceImages,
+  delivery,
 }: RegionCardProps) {
   const { t } = useI18n()
   const c = t.regions.card
@@ -666,7 +699,7 @@ function RegionCard({
           value={region.kind}
           onChange={(e) => onKind(e.target.value as RegionKind)}
         >
-          {REGION_KINDS.map((kind) => (
+          {REGION_KINDS.filter((kind) => kinds.includes(kind) || kind === region.kind).map((kind) => (
             <option key={kind} value={kind}>
               {t.regions.kinds[kind]}
             </option>
@@ -721,7 +754,7 @@ function RegionCard({
         onChange={(e) => onInstruction(e.target.value)}
       />
       <RegionLabelChips items={labelChips} onInsert={insertLabel} ariaLabel={c.chipsLabel} />
-      {namedArea && <p className={styles.hint}>{fmt(c.namedAreaHint, { n: index + 1 })}</p>}
+      {namedArea && delivery !== 'comfyui_bboxes' && <p className={styles.hint}>{fmt(c.namedAreaHint, { n: index + 1 })}</p>}
       <label className={styles.fieldLabel} htmlFor={`${id}-text`}>
         {c.textLabel}
       </label>
@@ -734,31 +767,35 @@ function RegionCard({
         placeholder={c.textPlaceholder}
         onChange={(e) => onText(e.target.value)}
       />
-      <div className={styles.referenceRow}>
-        <span className={styles.fieldLabel}>{c.referenceLabel}</span>
-        {region.referenceAssetId ? (
-          <span className={styles.referenceThumb}>
-            <AssetThumb
-              assetId={region.referenceAssetId}
-              rating={referenceDetail ? (referenceDetail.content_rating ?? null) : undefined}
-              withheld={referenceDetail?.content_withheld === true}
-              className={styles.refThumbImage}
-              alt=""
-              draggable={false}
-            />
-          </span>
-        ) : (
-          <span className={styles.mutedText}>{c.referenceNone}</span>
-        )}
-        <button type="button" className={styles.smallButton} onClick={onPickReference}>
-          {c.referencePick}
-        </button>
-        {region.referenceAssetId && (
-          <button type="button" className={styles.smallButton} onClick={onClearReference}>
-            {c.referenceRemove}
-          </button>
-        )}
-      </div>
+      {(referenceImages || region.referenceAssetId) && (
+        <div className={styles.referenceRow}>
+          <span className={styles.fieldLabel}>{c.referenceLabel}</span>
+          {region.referenceAssetId ? (
+            <span className={styles.referenceThumb}>
+              <AssetThumb
+                assetId={region.referenceAssetId}
+                rating={referenceDetail ? (referenceDetail.content_rating ?? null) : undefined}
+                withheld={referenceDetail?.content_withheld === true}
+                className={styles.refThumbImage}
+                alt=""
+                draggable={false}
+              />
+            </span>
+          ) : (
+            <span className={styles.mutedText}>{c.referenceNone}</span>
+          )}
+          {referenceImages && (
+            <button type="button" className={styles.smallButton} onClick={onPickReference}>
+              {c.referencePick}
+            </button>
+          )}
+          {region.referenceAssetId && (
+            <button type="button" className={styles.smallButton} onClick={onClearReference}>
+              {c.referenceRemove}
+            </button>
+          )}
+        </div>
+      )}
       {problems.length > 0 && (
         <ul className={styles.problemList}>
           {problems.map((p) => (

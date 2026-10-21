@@ -51,6 +51,34 @@ export function regionsSupported(editOpCaps: OperationCapabilities | undefined):
   return editOpCaps?.supports_regions === true
 }
 
+/**
+ * 今の操作で四角を付けられるか(ADR-0053 5章・6章)。入力画像のある Run(edit)は主たる入力の上に、
+ * 入力画像の無い Run(generate)は、入力画像を要らないと答える操作(ComfyUI)だけ白紙の上に描く。
+ */
+export function regionsSupportedFor(
+  operation: 'generate' | 'edit',
+  opCaps: OperationCapabilities | undefined,
+): boolean {
+  if (opCaps?.supports_regions !== true) return false
+  return operation === 'edit' || opCaps.regions_requires_input_image !== true
+}
+
+/** 札で選べる種類(capabilities の `regions_kinds`。古いサーバーで空なら全種類)。 */
+export function allowedRegionKinds(opCaps: OperationCapabilities | undefined): readonly RegionKind[] {
+  const kinds = opCaps?.regions_kinds ?? []
+  return kinds.length > 0 ? REGION_KINDS.filter((k) => kinds.includes(k)) : REGION_KINDS
+}
+
+/**
+ * 付けた四角を、その操作がそのまま受けるか(選べない種類・使えない参照画像が無いか)。受けなければ、
+ * フォームは四角を外す(モデルを切り替えたとき。ADR-0053 6章)。
+ */
+export function regionsCompatible(boxes: readonly RegionBox[], opCaps: OperationCapabilities | undefined): boolean {
+  const kinds = allowedRegionKinds(opCaps)
+  const references = opCaps?.regions_reference_images !== false
+  return boxes.every((b) => kinds.includes(b.kind) && (references || !b.reference_asset_id))
+}
+
 // -- 幾何 -----------------------------------------------------------------------------
 
 export type Box = [number, number, number, number]
@@ -389,7 +417,9 @@ export function restoreRunRegions<T extends RunInputLike>(run: {
       )
     : [...run.inputs]
   const primary = inputs.find((i) => i.role === 'image' && i.position === 0)
-  const regions = primary ? orderedRegions(record.regions).map((r) => ({ ...r })) : []
+  // 入力画像の無い Run(ComfyUI。6章)の四角は、出力の大きさに対する割合で、主たる入力に付かない。
+  const blank = record.frame === 'output' && !primary
+  const regions = primary || blank ? orderedRegions(record.regions).map((r) => ({ ...r })) : []
   return {
     prompt: stripAppendedText(run.prompt, record.appended_text),
     inputs,
