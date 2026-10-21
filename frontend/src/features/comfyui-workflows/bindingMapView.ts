@@ -98,6 +98,7 @@ const ROLE_TONE: Record<RoleBadge['role'], BadgeTone> = {
   prompt: 'text',
   negative_prompt: 'text',
   final_prompt: 'text',
+  bounding_boxes: 'text',
   image: 'image',
   mask: 'image',
   seed: 'number',

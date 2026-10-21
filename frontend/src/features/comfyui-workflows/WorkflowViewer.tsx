@@ -24,7 +24,7 @@ import { fmt, useI18n } from '../../i18n'
 import { isAdmin, useAuth } from '../auth/authState'
 import { BindingMap } from './BindingMap'
 import { BindingMapInspector } from './BindingMapInspector'
-import { mapEdges, type InputField, type InputUse } from './bindingGraph'
+import { isNodeField, mapEdges, type InputField, type InputUse } from './bindingGraph'
 import { valuePreview } from './bindingCards'
 import { bindingsFormFromApi } from './bindingsForm'
 import { NodeName } from './NodeName'
@@ -109,7 +109,7 @@ export function WorkflowViewer({ workflowId, form }: WorkflowViewerProps) {
     if (use.kind === 'bound') {
       const slotIndex = bindings.images.findIndex((r) => r.node === node.id && r.input === input.name)
       shown = use.fields
-        .filter((f): f is InputField => f !== 'outputs' && f !== 'final_prompt')
+        .filter((f): f is InputField => !isNodeField(f))
         .map((f) => boundInputValue(f, form, viewInput, slotIndex >= 0 ? slotIndex + 1 : undefined))
     } else if (use.kind === 'exposed') {
       const param = view.exposed_params?.find((p) => p.node === node.id && p.input === input.name)
@@ -153,6 +153,7 @@ export function WorkflowViewer({ workflowId, form }: WorkflowViewerProps) {
         onChooseInput={noop}
         onToggleOutput={noop}
         onToggleFinalPrompt={noop}
+        onToggleBoundingBoxes={noop}
         renderPanel={(graph) => (
           <>
             <div className={styles.head}>
@@ -179,6 +180,7 @@ export function WorkflowViewer({ workflowId, form }: WorkflowViewerProps) {
                 onChooseInput={noop}
                 onToggleOutput={noop}
                 onToggleFinalPrompt={noop}
+                onToggleBoundingBoxes={noop}
                 valueNote={valueNote}
               />
             </div>

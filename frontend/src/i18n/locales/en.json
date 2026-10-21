@@ -2549,7 +2549,9 @@
       "finalPromptLabel": "Final prompt",
       "finalPromptHelp": "Choose the node that outputs the final prompt built at run time by a Prompt Enhancer or similar (such as PreviewAny). Its text is saved with the run and shown as \"Final prompt\" in the viewer and elsewhere. Leave it as \"None\" if you don't use one.",
       "exposedParamsHeading": "Exposed parameters",
-      "cannotSaveYet": "Fix the following to save."
+      "cannotSaveYet": "Fix the following to save.",
+      "boundingBoxesLabel": "Boxes (region instructions)",
+      "boundingBoxesHelp": "Boxes drawn in the studio form are inserted into the bboxes input of Create Bounding Boxes. Choosing one enables “Regions” for this workflow. Leave it as “None” if you don’t use it."
     },
     "list": {
       "newButton": "+ Register workflow",
@@ -2618,7 +2620,8 @@
         "width": "Width",
         "height": "Height",
         "batchSize": "Count",
-        "finalPrompt": "Final prompt"
+        "finalPrompt": "Final prompt",
+        "boundingBoxes": "Boxes (regions)"
       }
     },
     "exposedParamValidation": {
@@ -2645,7 +2648,8 @@
         "images": "Image slots",
         "mask": "Mask",
         "outputs": "Outputs",
-        "final_prompt": "Final prompt"
+        "final_prompt": "Final prompt",
+        "bounding_boxes": "Boxes (regions)"
       },
       "required": "Required",
       "badges": {
@@ -2850,7 +2854,9 @@
       "tabBindings": "Bindings",
       "tabNode": "Node",
       "leadViewer": "A read-only diagram. Select a node to see how each input is used (filled in, exposed, or fixed) and its value. Drag to move; zoom with the buttons, a pinch, or Ctrl+wheel.",
-      "redactedValue": "(Hidden because it looks like a secret)"
+      "redactedValue": "(Hidden because it looks like a secret)",
+      "makeBoundingBoxes": "Use as box destination",
+      "removeBoundingBoxes": "Remove as box destination"
     },
     "viewer": {
       "heading": "Workflow: {name}",

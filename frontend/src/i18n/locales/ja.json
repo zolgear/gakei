@@ -2549,7 +2549,9 @@
       "finalPromptLabel": "最終プロンプト",
       "finalPromptHelp": "Prompt Enhancer などが実行時に作った最終プロンプトを出すノード(PreviewAny など)を選ぶと、そのテキストを Run に記録し、ビューアなどに「最終プロンプト」として表示します。使わないときは「なし」のままにします。",
       "exposedParamsHeading": "公開パラメーター",
-      "cannotSaveYet": "次の点を直すと保存できます。"
+      "cannotSaveYet": "次の点を直すと保存できます。",
+      "boundingBoxesLabel": "四角(領域の指示)",
+      "boundingBoxesHelp": "生成のフォームで描いた四角を、Create Bounding Boxes の bboxes に差し込みます。選ぶと、このワークフローで「領域」が使えるようになります。使わないときは「なし」のままにします。"
     },
     "list": {
       "newButton": "+ ワークフローを登録",
@@ -2618,7 +2620,8 @@
         "width": "幅",
         "height": "高さ",
         "batchSize": "枚数",
-        "finalPrompt": "最終プロンプト"
+        "finalPrompt": "最終プロンプト",
+        "boundingBoxes": "四角(領域)"
       }
     },
     "exposedParamValidation": {
@@ -2645,7 +2648,8 @@
         "images": "画像の枠",
         "mask": "マスク",
         "outputs": "出力",
-        "final_prompt": "最終プロンプト"
+        "final_prompt": "最終プロンプト",
+        "bounding_boxes": "四角(領域)"
       },
       "required": "必須",
       "badges": {
@@ -2850,7 +2854,9 @@
       "tabBindings": "差し込み先",
       "tabNode": "ノード",
       "leadViewer": "読むだけの図です。ノードを選ぶと、入力ごとの扱い(差し込む・公開・固定)と値が出ます。移動はドラッグ、拡大縮小はボタン・ピンチ・Ctrl+ホイールです。",
-      "redactedValue": "(秘密に見える値のため伏せています)"
+      "redactedValue": "(秘密に見える値のため伏せています)",
+      "makeBoundingBoxes": "四角の差し込み先にする",
+      "removeBoundingBoxes": "四角の差し込み先から外す"
     },
     "viewer": {
       "heading": "ワークフロー: {name}",

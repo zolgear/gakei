@@ -2696,7 +2696,7 @@ export interface components {
              */
             kind: "reading" | "general";
             /** Field */
-            field?: ("prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt") | null;
+            field?: ("prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt" | "bounding_boxes") | null;
             /** Message */
             message: string;
         };
@@ -4021,7 +4021,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt" | "bounding_boxes";
             /**
              * Confidence
              * @enum {string}
@@ -4057,6 +4057,7 @@ export interface components {
             outputs: string[];
             /** Final Prompt */
             final_prompt?: string | null;
+            bounding_boxes?: components["schemas"]["InputRef"] | null;
         };
         /** Body_create_asset */
         Body_create_asset: {
@@ -4190,7 +4191,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt" | "bounding_boxes";
             /** Target */
             target: string;
             /** Message */
@@ -4205,7 +4206,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt";
+            field: "prompt" | "negative_prompt" | "seed" | "width" | "height" | "batch_size" | "images" | "mask" | "outputs" | "final_prompt" | "bounding_boxes";
             /**
              * Reason
              * @default
@@ -6124,7 +6125,19 @@ export interface components {
              */
             supports_regions: boolean;
             /** Regions Delivery */
-            regions_delivery?: "image_and_text" | null;
+            regions_delivery?: ("image_and_text" | "comfyui_bboxes") | null;
+            /** Regions Kinds */
+            regions_kinds?: ("change" | "add" | "keep" | "remove" | "move")[];
+            /**
+             * Regions Reference Images
+             * @default false
+             */
+            regions_reference_images: boolean;
+            /**
+             * Regions Requires Input Image
+             * @default false
+             */
+            regions_requires_input_image: boolean;
         };
         /**
          * ParamDef
@@ -7480,9 +7493,9 @@ export interface components {
             version: number;
             /**
              * Delivery
-             * @constant
+             * @enum {string}
              */
-            delivery: "image_and_text";
+            delivery: "image_and_text" | "comfyui_bboxes";
             /** Regions */
             regions: components["schemas"]["RegionBox"][];
             /**
@@ -7492,6 +7505,12 @@ export interface components {
             appended_text: string;
             /** Overlay Asset Id */
             overlay_asset_id?: string | null;
+            /**
+             * Frame
+             * @default input
+             * @enum {string}
+             */
+            frame: "input" | "output";
         };
         /**
          * RunSummary
@@ -8310,6 +8329,7 @@ export interface components {
             outputs?: string[];
             /** Final Prompt */
             final_prompt?: string | null;
+            bounding_boxes?: components["schemas"]["InputRef"] | null;
         };
         /** TagCount */
         TagCount: {
@@ -8514,7 +8534,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "node_missing" | "input_missing" | "duplicate" | "wired_input" | "type_mismatch" | "output_missing" | "output_no_image" | "final_prompt_missing" | "edit_requires_image" | "generate_has_image" | "exposed_param_duplicate" | "unused_branch" | "mask_not_inpaint" | "display_only_output";
+            code: "node_missing" | "input_missing" | "duplicate" | "wired_input" | "type_mismatch" | "output_missing" | "output_no_image" | "final_prompt_missing" | "edit_requires_image" | "generate_has_image" | "exposed_param_duplicate" | "unused_branch" | "mask_not_inpaint" | "display_only_output" | "bounding_boxes_not_node";
             /** Message */
             message: string;
             /** Field */

@@ -110,6 +110,8 @@ import {
   assignInputRole,
   mapEdges,
   setInputExposed,
+  nodeFitsBoundingBoxes,
+  toggleBoundingBoxes,
   toggleFinalPrompt,
   toggleOutput,
   withoutInputRef,
@@ -246,7 +248,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
         setIssues(wf.validation_issues ?? [])
         // 保存済みの値が今の読み取りと違う行は開いておく(古い推定で保存した誤りに気付く入口)。
         const savedReadings = readingsByField(result.readings)
-        const differing = visibleFields(wf.operation).filter(
+        const differing = visibleFields(wf.operation, initial.nodes).filter(
           (field) => savedComparison(initial.bindings, result.suggested_bindings, savedReadings[field], field) === 'differ',
         )
         setExpanded(new Set(differing))
@@ -313,7 +315,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
     bindings,
     exposedRows: effectiveRows,
   })
-  const fields = visibleFields(operation)
+  const fields = visibleFields(operation, nodes)
   const readings = readingsByField(analysis?.readings)
   const questions: PendingQuestion[] = pendingQuestions(fields, readings, origins)
   const { errors: serverErrors, warnings: serverWarnings } = splitIssues(issues)
@@ -499,6 +501,16 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
     }
   }
 
+  function toggleBoundingBoxesFromMap(nodeId: string) {
+    changeBindings((b) => toggleBoundingBoxes(b, nodeId), ['bounding_boxes'])
+    setMapFocus('bounding_boxes')
+    if (pickField === 'bounding_boxes') {
+      setPickField(null)
+      setFlashField('bounding_boxes')
+      setPanelTab('bindings')
+    }
+  }
+
   function focusElement(id: string) {
     // 描画のあとに移る(開いたばかりの行も含めて)。
     window.requestAnimationFrame(() => {
@@ -678,6 +690,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
       onChooseInput={chooseInputFromMap}
       onToggleOutput={toggleOutputFromMap}
       onToggleFinalPrompt={toggleFinalPromptFromMap}
+      onToggleBoundingBoxes={toggleBoundingBoxesFromMap}
       renderPanel={(graph) => (
         <>
           <div className={styles.panelTabs} role="tablist" aria-label={t.comfyui.map.panelLabel}>
@@ -711,6 +724,7 @@ export function ComfyUIWorkflowFormPage({ workflowId }: ComfyUIWorkflowFormPageP
               onChooseInput={chooseInputFromMap}
               onToggleOutput={toggleOutputFromMap}
               onToggleFinalPrompt={toggleFinalPromptFromMap}
+              onToggleBoundingBoxes={toggleBoundingBoxesFromMap}
             />
           )}
         </>
@@ -961,6 +975,8 @@ function AdvancedBindings({
 }) {
   const { t } = useI18n()
   const f = t.comfyui.form
+  // 四角の差し込み先は Create Bounding Boxes だけ(ADR-0053 6章)。無いテンプレートでは出さない。
+  const boundingBoxNodes = nodes.filter(nodeFitsBoundingBoxes)
   return (
     <div className={styles.advancedBody}>
       <div className={styles.bindingsGrid}>
@@ -1150,6 +1166,18 @@ function AdvancedBindings({
         />
         <p className={settingsStyles.helpText}>{f.finalPromptHelp}</p>
       </div>
+
+      {boundingBoxNodes.length > 0 && (
+        <div className={styles.subField}>
+          <NodeSelectPicker
+            label={f.boundingBoxesLabel}
+            nodes={boundingBoxNodes}
+            value={bindings.boundingBoxes}
+            onChange={(boundingBoxes) => onChange((b) => ({ ...b, boundingBoxes }))}
+          />
+          <p className={settingsStyles.helpText}>{f.boundingBoxesHelp}</p>
+        </div>
+      )}
     </div>
   )
 }

@@ -66,8 +66,8 @@ function model(name: string, defs: ParamDef[] = generateDefs): ModelCapabilities
     description: '',
     quality_choices: [],
     operations: [
-      { operation: 'generate', params: defs, max_input_images: 0, min_input_images: 0, supports_mask: false, requires_mask: false, supports_regions: false, regions_delivery: null },
-      { operation: 'edit', params: defs, max_input_images: 1, min_input_images: 1, supports_mask: true, requires_mask: false, supports_regions: false, regions_delivery: null },
+      { operation: 'generate', params: defs, max_input_images: 0, min_input_images: 0, supports_mask: false, requires_mask: false, supports_regions: false, regions_delivery: null, regions_kinds: [], regions_reference_images: false, regions_requires_input_image: false },
+      { operation: 'edit', params: defs, max_input_images: 1, min_input_images: 1, supports_mask: true, requires_mask: false, supports_regions: false, regions_delivery: null, regions_kinds: [], regions_reference_images: false, regions_requires_input_image: false },
     ],
   }
 }

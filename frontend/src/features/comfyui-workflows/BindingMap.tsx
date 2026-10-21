@@ -29,7 +29,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import type { ComfyBindingReading, ComfyNodeInfo } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
-import { inputFitsField, nodePickable, type InputChoice, type MapEdge, type MapGraph } from './bindingGraph'
+import { inputFitsField, isNodeField, nodePickable, type InputChoice, type MapEdge, type MapGraph } from './bindingGraph'
 import {
   buildMapView,
   chooseDirection,
@@ -70,6 +70,7 @@ export interface BindingMapProps {
   onChooseInput: (nodeId: string, input: string, choice: InputChoice) => void
   onToggleOutput: (nodeId: string) => void
   onToggleFinalPrompt: (nodeId: string) => void
+  onToggleBoundingBoxes: (nodeId: string) => void
   /**
    * `editor`(既定)は登録・編集画面。`viewer` は生成画面のメインエリアでの閲覧(ADR-0052 7章):
    * 説明文と凡例を閲覧向けにし、置き場所(メインエリアのスクロール)に合わせた寸法にする。
@@ -101,6 +102,7 @@ function BindingMapInner({
   onChooseInput,
   onToggleOutput,
   onToggleFinalPrompt,
+  onToggleBoundingBoxes,
   variant = 'editor',
 }: BindingMapProps) {
   const viewer = variant === 'viewer'
@@ -190,11 +192,13 @@ function BindingMapInner({
         setPickMessage(fmt(m.pickNone, { field: t.comfyui.cards.fields[pickField] }))
         return
       }
-      if (pickField === 'outputs' || pickField === 'final_prompt') {
+      if (isNodeField(pickField)) {
         if (pickable.length === 1) {
           if (pickField === 'outputs') {
             if (!bindings.outputs.includes(pickable[0].id)) onToggleOutput(pickable[0].id)
-          } else if (bindings.finalPrompt !== pickable[0].id) onToggleFinalPrompt(pickable[0].id)
+          } else if (pickField === 'final_prompt') {
+            if (bindings.finalPrompt !== pickable[0].id) onToggleFinalPrompt(pickable[0].id)
+          } else if (bindings.boundingBoxes !== pickable[0].id) onToggleBoundingBoxes(pickable[0].id)
           onCancelPick()
           return
         }

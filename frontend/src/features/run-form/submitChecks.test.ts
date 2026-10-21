@@ -20,6 +20,9 @@ function opCaps(overrides: Partial<OperationCapabilities> = {}): OperationCapabi
     requires_mask: false,
     supports_regions: false,
     regions_delivery: null,
+    regions_kinds: [],
+    regions_reference_images: false,
+    regions_requires_input_image: false,
     ...overrides,
   }
 }

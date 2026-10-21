@@ -199,6 +199,7 @@ describe('restoreRunRegions', () => {
   const record: RunRegions = {
     version: 1,
     delivery: 'image_and_text',
+    frame: 'input',
     regions: [
       box({ number: 2, reference_asset_id: 'ref-new', label: 'カップ' }),
       box({ number: 1, reference_asset_id: 'user2' }),
