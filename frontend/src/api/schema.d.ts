@@ -828,6 +828,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/region-detection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Region Detection Settings */
+        get: operations["get_region_detection_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Region Detection Settings */
+        patch: operations["update_region_detection_settings"];
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/regions/detect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Detect Regions
+         * @description 見える Asset の画像で、四角の候補を検出する(ADR-0053 7章)。結果は検出の
+         *     履歴に保存し(見つからなくても保存する)、保存した行を `detection` で返す。その Asset の履歴は
+         *     新しい方から 20 回まで残し、古いものは消す。前の結果は使い回さず、いつも新しく検出する。
+         *
+         *     `query` があれば、それに当てはまる物だけ(複数なら複数)を、無ければ主な物を一通り挙げる。
+         *     四角は画像に対する割合(0〜1)で、左上を原点にした `[x0, y0, x1, y1]`。送る前に Mod の
+         *     `ai.before_send`(目的 `region_detection`。ADR-0051)を呼ぶ。検出の1時間の上限に数える。
+         *     10 秒を超えることがある。
+         *
+         *     断るとき(404 以外の `detail` は `{code, message}`):
+         *
+         *     - 404: Asset が無い・見えない
+         *     - 409 `mask_not_supported` / `asset_deleted` / `image_withheld` / `image_missing`: その画像では
+         *       検出できない
+         *     - 409 `disabled`: 検出が無効
+         *     - 409 `unsupported`: 接続先が Structured Outputs に対応しない
+         *     - 409 `connection_missing`: 接続先・キーが無い
+         *     - 429 `rate_limited`: 1時間の上限
+         *     - 409 `hook_denied`: Mod が送信を止めた(理由は `message`)
+         *     - 502 `llm_error`: VLM の呼び出しに失敗した・応答を読めなかった
+         */
+        post: operations["detect_asset_regions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/regions/detections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Region Detections
+         * @description 検出の履歴(新しい順、20 回まで)。検出が無効でも読める。見えなければ 404、マスク・
+         *     削除済み・外部の AI へ送れない画像は検出と同じく 409(`detail` は `{code, message}`)。
+         */
+        get: operations["list_asset_region_detections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/regions/detections/{detection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Region Detection
+         * @description 履歴の1回を消す。消せるのは検出した本人と管理者(403)。Asset が見えない・その Asset の
+         *     検出でなければ 404。
+         */
+        delete: operations["delete_asset_region_detection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/asset-groups": {
         parameters: {
             query?: never;
@@ -2935,7 +3034,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite" | "regions";
             /** Mime */
             mime: string;
             /** Width */
@@ -3156,7 +3255,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite" | "regions";
             /** Mime */
             mime: string;
             /** Width */
@@ -3226,7 +3325,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite" | "regions";
             /** Mime */
             mime: string;
             /** Width */
@@ -4634,6 +4733,16 @@ export interface components {
             /** Height */
             height: number;
         };
+        /**
+         * DetectedRegion
+         * @description 検出した四角の候補1つ。
+         */
+        DetectedRegion: {
+            /** Label */
+            label: string;
+            /** Box */
+            box: number[];
+        };
         /** DuplicateAsset */
         DuplicateAsset: {
             /**
@@ -4645,7 +4754,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite" | "regions";
             /** Mime */
             mime: string;
             /** Width */
@@ -5165,7 +5274,7 @@ export interface components {
         /** LineageAssetInfo */
         LineageAssetInfo: {
             /** Kind */
-            kind?: ("upload" | "generated" | "mask" | "sketch" | "composite") | null;
+            kind?: ("upload" | "generated" | "mask" | "sketch" | "composite" | "regions") | null;
             /** Width */
             width?: number | null;
             /** Height */
@@ -5388,6 +5497,8 @@ export interface components {
             api_style?: string | null;
             /** Locality */
             locality?: ("external" | "local") | null;
+            /** Api Key */
+            api_key?: string | null;
         };
         /**
          * LlmConnectionView
@@ -5422,7 +5533,7 @@ export interface components {
              */
             locality_source: "connection" | "default";
             /** Used By */
-            used_by?: ("annotation" | "embedding" | "assistant")[];
+            used_by?: ("annotation" | "embedding" | "assistant" | "region_detection")[];
         };
         /**
          * LlmConnectionsResponse
@@ -5540,7 +5651,7 @@ export interface components {
          */
         ModFilters: {
             /** Purposes */
-            purposes?: ("image_run" | "annotation" | "assistant" | "embedding" | "workflow_analysis")[];
+            purposes?: ("image_run" | "annotation" | "assistant" | "embedding" | "workflow_analysis" | "region_detection")[];
             /** Sources */
             sources?: ("upload" | "url" | "sketch" | "mask" | "composite" | "generated" | "import" | "mcp")[];
             /** Providers */
@@ -5578,7 +5689,7 @@ export interface components {
             /** Mod Name */
             mod_name: string;
             /** Purpose */
-            purpose?: ("image_run" | "annotation" | "assistant" | "embedding" | "workflow_analysis") | null;
+            purpose?: ("image_run" | "annotation" | "assistant" | "embedding" | "workflow_analysis" | "region_detection") | null;
             /** Run Id */
             run_id?: string | null;
             /** Asset Id */
@@ -5682,6 +5793,11 @@ export interface components {
         ModVerdictReceiveResponse: {
             /** Accepted */
             accepted: number;
+            /**
+             * Duplicate
+             * @default false
+             */
+            duplicate: boolean;
         };
         /**
          * ModVerdictView
@@ -5826,6 +5942,11 @@ export interface components {
             order?: number | null;
             /** Secret Set */
             secret_set: boolean;
+            /**
+             * Secret Too Short
+             * @default false
+             */
+            secret_too_short: boolean;
         };
         /** ModelCapabilities */
         ModelCapabilities: {
@@ -5919,10 +6040,19 @@ export interface components {
             /** Source */
             source?: ("file" | "env") | null;
         };
-        /** OpenAIBaseUrlUpdateRequest */
+        /**
+         * OpenAIBaseUrlUpdateRequest
+         * @description `PUT /api/settings/openai-base-url`。
+         *
+         *     `api_key` は Base URL と一緒に入れ直すキー(確かめてから両方を保存する)。画面で保存した
+         *     キーがあり、Base URL のオリジン(scheme + host + port)が変わるときは必須で、省くと 422。
+         *     キーが環境変数(`.env`)のものなら、オリジンの変わる Base URL は画面から保存できない(422)。
+         */
         OpenAIBaseUrlUpdateRequest: {
             /** Base Url */
             base_url: string;
+            /** Api Key */
+            api_key?: string | null;
         };
         /** OpenAIKeyStatusResponse */
         OpenAIKeyStatusResponse: {
@@ -5970,6 +6100,13 @@ export interface components {
              * @default false
              */
             requires_mask: boolean;
+            /**
+             * Supports Regions
+             * @default false
+             */
+            supports_regions: boolean;
+            /** Regions Delivery */
+            regions_delivery?: "image_and_text" | null;
         };
         /**
          * ParamDef
@@ -6644,7 +6781,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite" | "regions";
             /** Mime */
             mime: string;
             /** Width */
@@ -6841,6 +6978,137 @@ export interface components {
             /** Settings */
             settings?: components["schemas"]["ModSettingFieldView"][];
         };
+        /**
+         * RegionBox
+         * @description 領域の指示の四角1つ(ADR-0053 3章)。どのモデルにも依らない形で持ち、渡すときに変換する。
+         */
+        RegionBox: {
+            /** Number */
+            number: number;
+            /**
+             * Kind
+             * @default change
+             * @enum {string}
+             */
+            kind: "change" | "add" | "keep" | "remove" | "move";
+            /** Box */
+            box: number[];
+            /** Source Box */
+            source_box?: number[] | null;
+            /** Label */
+            label?: string | null;
+            /**
+             * Instruction
+             * @default
+             */
+            instruction: string;
+            /** Text */
+            text?: string | null;
+            /** Reference Asset Id */
+            reference_asset_id?: string | null;
+        };
+        /**
+         * RegionDetectRequest
+         * @description `POST /api/assets/{asset_id}/regions/detect` の本文。
+         */
+        RegionDetectRequest: {
+            /** Query */
+            query?: string | null;
+            /**
+             * Max Items
+             * @default 20
+             */
+            max_items: number;
+        };
+        /**
+         * RegionDetectResponse
+         * @description 検出の結果。`detection` に保存した行を返す(`regions` と `model` はその写し)。
+         */
+        RegionDetectResponse: {
+            /** Regions */
+            regions: components["schemas"]["DetectedRegion"][];
+            /** Model */
+            model: string;
+            usage: components["schemas"]["RegionDetectUsage"];
+            detection: components["schemas"]["RegionDetectionView"];
+        };
+        /** RegionDetectUsage */
+        RegionDetectUsage: {
+            /** Input Tokens */
+            input_tokens?: number | null;
+            /** Output Tokens */
+            output_tokens?: number | null;
+            /** Reasoning Tokens */
+            reasoning_tokens?: number | null;
+            /** Total Tokens */
+            total_tokens?: number | null;
+        };
+        /**
+         * RegionDetectionListResponse
+         * @description `GET /api/assets/{asset_id}/regions/detections`。新しい順。
+         */
+        RegionDetectionListResponse: {
+            /** Items */
+            items: components["schemas"]["RegionDetectionView"][];
+        };
+        /**
+         * RegionDetectionSettingsResponse
+         * @description `GET /api/settings/region-detection`。全ログイン者が読める(検出のボタンを出すかの判断)。
+         */
+        RegionDetectionSettingsResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Connection Id */
+            connection_id: string;
+            /** Model */
+            model: string;
+            /** Hourly Request Limit */
+            hourly_request_limit: number;
+            /** Hourly Request Limit Default */
+            hourly_request_limit_default: number;
+            /** Hourly Request Limit Max */
+            hourly_request_limit_max: number;
+            /** Usable */
+            usable: boolean;
+            /** Requests Last Hour */
+            requests_last_hour: number;
+        };
+        /**
+         * RegionDetectionSettingsUpdateRequest
+         * @description 書いた項目だけ変える。null は不正な値(422)。
+         */
+        RegionDetectionSettingsUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Connection Id */
+            connection_id?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Hourly Request Limit */
+            hourly_request_limit?: number | null;
+        };
+        /**
+         * RegionDetectionView
+         * @description 保存した検出の1回分(ADR-0053 7章の検出の履歴)。
+         */
+        RegionDetectionView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Query */
+            query: string | null;
+            /** Model */
+            model: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Regions */
+            regions: components["schemas"]["DetectedRegion"][];
+        };
         /** RunCancelResponse */
         RunCancelResponse: {
             /**
@@ -6881,6 +7149,8 @@ export interface components {
              * @default 1
              */
             repeat: number;
+            /** Regions */
+            regions?: components["schemas"]["RegionBox"][];
         };
         /** RunCreateResponse */
         RunCreateResponse: {
@@ -6988,6 +7258,7 @@ export interface components {
             origin?: string | null;
             /** Text Outputs */
             text_outputs?: components["schemas"]["RunTextOutput"][] | null;
+            regions?: components["schemas"]["RunRegions"] | null;
             /** Deployment */
             deployment?: string | null;
             /** Provider Request Id */
@@ -7181,6 +7452,28 @@ export interface components {
             selections?: components["schemas"]["PromptSelections"];
         };
         /**
+         * RunRegions
+         * @description `run.regions` の形(ADR-0053 4章)。
+         */
+        RunRegions: {
+            /** Version */
+            version: number;
+            /**
+             * Delivery
+             * @constant
+             */
+            delivery: "image_and_text";
+            /** Regions */
+            regions: components["schemas"]["RegionBox"][];
+            /**
+             * Appended Text
+             * @default
+             */
+            appended_text: string;
+            /** Overlay Asset Id */
+            overlay_asset_id?: string | null;
+        };
+        /**
          * RunSummary
          * @description 履歴カード用。`params`/`usage`/`error_message` を含み、Edit の主たる親も分かる形。
          */
@@ -7261,6 +7554,7 @@ export interface components {
             origin?: string | null;
             /** Text Outputs */
             text_outputs?: components["schemas"]["RunTextOutput"][] | null;
+            regions?: components["schemas"]["RunRegions"] | null;
         };
         /**
          * RunTextOutput
@@ -7298,6 +7592,11 @@ export interface components {
         /**
          * SdWebuiConnectionRequest
          * @description 接続・変更(`PUT /api/sdwebui/connection`)。
+         *
+         *     username と password は両方そろえて指定すると、接続先と一緒に保存する(この URL のオリジンに
+         *     結び付ける)。保存済みの資格情報があり、URL のオリジン(scheme + host + port)が変わるときは
+         *     必須で、省くと 422(資格情報を入れ直すか、先に削除する)。同じオリジンでパスだけ変えるなら
+         *     省いてよい。
          */
         SdWebuiConnectionRequest: {
             /** Url */
@@ -7307,13 +7606,19 @@ export interface components {
              * @default false
              */
             allow_non_loopback: boolean;
+            /** Username */
+            username?: string | null;
+            /** Password */
+            password?: string | null;
         };
         /**
          * SdWebuiConnectionTestRequest
          * @description 接続テスト(`POST /api/sdwebui/connection/test`)。
          *
          *     url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
-         *     試す(保存はしない)。省くと保存済みの資格情報を使う。
+         *     試す(保存はしない)。省くと保存済みの資格情報を使う。ただし保存済みの資格情報は、保存した
+         *     ときと同じオリジン(scheme + host + port)にだけ送る。違うオリジンの URL を、資格情報を
+         *     入れずに試すと 422(入れ直すよう伝える)。
          */
         SdWebuiConnectionTestRequest: {
             /** Url */
@@ -7486,7 +7791,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite" | "regions";
             /** Mime */
             mime: string;
             /** Width */
@@ -7639,6 +7944,7 @@ export interface components {
             origin?: string | null;
             /** Text Outputs */
             text_outputs?: components["schemas"]["RunTextOutput"][] | null;
+            regions?: components["schemas"]["RunRegions"] | null;
             /** Snippet */
             snippet: string;
         };
@@ -7674,7 +7980,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite" | "regions";
             /** Mime */
             mime: string;
             /** Width */
@@ -7802,7 +8108,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "upload" | "generated" | "mask" | "sketch" | "composite";
+            kind: "upload" | "generated" | "mask" | "sketch" | "composite" | "regions";
             /** Width */
             width: number;
             /** Height */
@@ -9353,7 +9659,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description 繰り返して指定できる(`?kind=generated&kind=upload`)。指定した種類のどれかに当たる Asset に絞る。省くと全種類(ADR-0035)。 */
-                kind?: ("upload" | "generated" | "mask" | "sketch" | "composite")[] | null;
+                kind?: ("upload" | "generated" | "mask" | "sketch" | "composite" | "regions")[] | null;
                 /** @description 指定すると、そのグループのメンバーだけに絞る(ADR-0022)。 */
                 group_id?: string | null;
                 /** @description true なら、削除済みでないどのグループにも入っていない Asset だけに絞る(ストックの「グループなし」の節。ADR-0022)。`group_id` と同時には指定できない。 */
@@ -9805,11 +10111,179 @@ export interface operations {
             };
         };
     };
+    get_region_detection_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionDetectionSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_region_detection_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegionDetectionSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionDetectionSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detect_asset_regions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegionDetectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionDetectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_asset_region_detections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionDetectionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_asset_region_detection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+                detection_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_asset_groups: {
         parameters: {
             query?: {
                 /** @description 繰り返して指定できる。指定すると、`member_count` と `cover_asset_id` をその種類の Asset だけで数える(ADR-0035)。省くと種類を問わない。 */
-                kind?: ("upload" | "generated" | "mask" | "sketch" | "composite")[] | null;
+                kind?: ("upload" | "generated" | "mask" | "sketch" | "composite" | "regions")[] | null;
             };
             header?: never;
             path?: never;
@@ -14187,8 +14661,22 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 同じ要求を処理している */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description 本文が判定の配列の形でない */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 受け付けた要求の記録が上限に達している */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

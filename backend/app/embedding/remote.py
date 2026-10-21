@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import functools
 import io
+import logging
 import ssl
 from collections.abc import Callable
 from typing import Any
@@ -29,6 +30,8 @@ from PIL import Image
 from app.domain.secret_values import redact_secret_text
 from app.embedding.base import EmbeddingError, composite_on_white, l2_normalize
 from app.i18n import t
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 60.0
 IMAGE_BATCH_SIZE = 32
@@ -127,16 +130,26 @@ class InfinityEngine:
             headers["Authorization"] = f"Bearer {self._api_key}"
         try:
             response = client.post(f"{self.base_url}/embeddings", json=payload, headers=headers)
+        # 画面に出す文言は固定の区分(届かない / 想定外の応答)だけにする。接続先は管理者が入れた
+        # 任意の URL なので、例外の種類や相手の応答の本文を画面に返すと、サーバーの側のネットワーク
+        # のようすが分かってしまうため。詳細はサーバーのログに出す。
         except httpx.HTTPError as e:
-            raise EmbeddingError(t("embeddings.remoteUnavailable", error=type(e).__name__)) from e
+            logger.warning(
+                "推論サーバー(%s)に接続できませんでした: %s", self.base_url, type(e).__name__
+            )
+            raise EmbeddingError(t("embeddings.remoteUnavailable")) from e
         if response.status_code != 200:
-            # 本文にキーの断片が含まれることがあるので、切り詰める前に伏せる(画面に出る文言)。
+            # 本文にキーの断片が含まれることがあるので、切り詰める前に伏せる(ログに出す文言)。
             # 伏せる処理に巨大な本文を渡さないよう、先に長さを抑えておく。
             raw = response.text[: _ERROR_BODY_MAX * 8].strip().replace("\n", " ")
             body = redact_secret_text(raw)[:_ERROR_BODY_MAX]
-            raise EmbeddingError(
-                t("embeddings.remoteHttpError", status=response.status_code, body=body)
+            logger.warning(
+                "推論サーバー(%s)がエラーを返しました(HTTP %s): %s",
+                self.base_url,
+                response.status_code,
+                body,
             )
+            raise EmbeddingError(t("embeddings.remoteHttpError"))
         try:
             data = response.json()["data"]
             ordered = sorted(data, key=lambda item: int(item.get("index", 0)))

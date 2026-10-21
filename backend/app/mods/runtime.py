@@ -42,6 +42,7 @@ from app.mods import config as mods_config
 from app.mods import events as mods_events
 from app.mods import loader
 from app.mods import webhook as webhook_send
+from app.mods.replay import VerdictReplayGuard
 from app.version import get_version
 
 if TYPE_CHECKING:
@@ -280,6 +281,8 @@ class ModRuntime:
         self._loop: asyncio.AbstractEventLoop | None = None
         # 配達の worker を起こす関数(`app/worker/mod_delivery.py` が登録する)。
         self._wake: Callable[[], None] | None = None
+        # 判定の受付で、同じ要求の再送を受けないための記録(ADR-0051 8章)。
+        self.verdict_replay = VerdictReplayGuard()
 
     # -- 読み込み ------------------------------------------------------------------
 

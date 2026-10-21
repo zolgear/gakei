@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 import uuid
 from datetime import datetime
 from typing import Any, Literal
@@ -229,7 +230,8 @@ class AuthSettingsErrorDetail(BaseModel):
 
     - 409: `env_locked` / `no_connection` / `not_verified` / `admin_emails_empty` /
       `verified_email_not_admin` / `self_not_admin`
-    - 422: `invalid_value`(入力の形)/ `discovery_invalid`(Discovery 文書の中身)
+    - 422: `invalid_value`(入力の形)/ `discovery_invalid`(Discovery 文書の中身)/
+      `client_secret_reentry`(発行者のオリジンが変わるのに、シークレットを入れ直していない)
     - 502: `discovery_failed`(Discovery 文書を取得できない)
     """
 
@@ -391,7 +393,7 @@ class ContentRatingDetail(BaseModel):
 
 class AssetSummary(BaseModel):
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
     mime: str
     width: int
     height: int
@@ -1015,6 +1017,86 @@ class RunInputCreate(BaseModel):
 # 繰り返し回数の上限(ADR-0042 1章)。
 REPEAT_MAX = 20
 
+# 領域の指示(ADR-0053 3章)。四角の数と文字の長さの上限。
+REGIONS_MAX = 16
+REGION_INSTRUCTION_MAX_LENGTH = 2000
+REGION_TEXT_MAX_LENGTH = 200
+REGION_LABEL_MAX_LENGTH = 100
+
+RegionKind = Literal["change", "add", "keep", "remove", "move"]
+
+
+def _check_region_box(value: list[float]) -> list[float]:
+    """主たる入力に対する割合(0〜1)で、左上を原点にした `[x0, y0, x1, y1]`。"""
+    x0, y0, x1, y1 = value
+    for v in value:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("box values must be within [0, 1]")
+    if not (x0 < x1 and y0 < y1):
+        raise ValueError("box must satisfy x0 < x1 and y0 < y1")
+    return [float(v) for v in value]
+
+
+class RegionBox(BaseModel):
+    """領域の指示の四角1つ(ADR-0053 3章)。どのモデルにも依らない形で持ち、渡すときに変換する。"""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    # 画面のバッジの番号(1 から)。プロンプトの文と四角を描いた画像の番号もこれ。
+    number: int = Field(ge=1, le=REGIONS_MAX)
+    kind: RegionKind = "change"
+    # 四角(「動かす」では移す先)。
+    box: list[float] = Field(min_length=4, max_length=4)
+    # 元の四角。「動かす」だけが持つ(ほかの種類では付けられない)。
+    source_box: list[float] | None = Field(default=None, min_length=4, max_length=4)
+    # 四角の名前(「右手の白いカフス」など。任意)。位置と合わせて四角の定義で、指示とは分ける。
+    # 指示が無い四角は名前の付いた目印になり、全体のプロンプトから番号か名前で指せる。
+    label: str | None = Field(default=None, max_length=REGION_LABEL_MAX_LENGTH)
+    instruction: str = Field(default="", max_length=REGION_INSTRUCTION_MAX_LENGTH)
+    # 描かせる文字(看板など)。指示とは分け、そのまま渡す。
+    text: str | None = Field(default=None, max_length=REGION_TEXT_MAX_LENGTH)
+    # その四角に使う画像。Run の入力(role = image)として送る。
+    reference_asset_id: uuid.UUID | None = None
+
+    @field_validator("box")
+    @classmethod
+    def _box(cls, value: list[float]) -> list[float]:
+        return _check_region_box(value)
+
+    @field_validator("source_box")
+    @classmethod
+    def _source_box(cls, value: list[float] | None) -> list[float] | None:
+        return None if value is None else _check_region_box(value)
+
+    @field_validator("label")
+    @classmethod
+    def _label(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if any(unicodedata.category(ch) == "Cc" for ch in value):
+            raise ValueError("label must not contain control characters")
+        value = value.strip()
+        return value or None
+
+    @field_validator("instruction")
+    @classmethod
+    def _instruction(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("text")
+    @classmethod
+    def _text(cls, value: str | None) -> str | None:
+        # 描く文字は前後の空白も含めてそのまま渡す。空なら無しと同じ。
+        return value if value else None
+
+    @model_validator(mode="after")
+    def _source_box_only_for_move(self) -> RegionBox:
+        if self.kind == "move" and self.source_box is None:
+            raise ValueError("source_box is required for kind=move")
+        if self.kind != "move" and self.source_box is not None:
+            raise ValueError("source_box is only allowed for kind=move")
+        return self
+
 
 class RunCreateRequest(BaseModel):
     operation: Literal["generate", "edit"]
@@ -1033,6 +1115,16 @@ class RunCreateRequest(BaseModel):
     # ないので `run.params` には入れない(ADR-0003 ルール4)。テンプレートと併用したときは
     # Run ごとに組み立て直す(意味の通ったガチャになる)。
     repeat: int = Field(default=1, ge=1, le=REPEAT_MAX)
+    # 領域の指示の四角(ADR-0053 3章)。Edit で、主たる入力があり、プロバイダーが四角を受ける
+    # ときだけ付けられる(`OperationCapabilities.supports_regions`)。番号は重ねられない。
+    regions: list[RegionBox] = Field(default_factory=list, max_length=REGIONS_MAX)
+
+    @model_validator(mode="after")
+    def _unique_region_numbers(self) -> RunCreateRequest:
+        numbers = [r.number for r in self.regions]
+        if len(numbers) != len(set(numbers)):
+            raise ValueError("region numbers must be unique")
+        return self
 
     @model_validator(mode="after")
     def _prompt_xor_template(self) -> RunCreateRequest:
@@ -1077,6 +1169,21 @@ class RunOutputRef(BaseModel):
     content_rating: ContentRatingLevel | None = None
     # 画像を残さなかったか(ADR-0051 4章)。
     content_withheld: bool = False
+
+
+class RunRegions(BaseModel):
+    """`run.regions` の形(ADR-0053 4章)。"""
+
+    # 変換の版。四角を文と画像に変える作り方を変えたら上げる。
+    version: int
+    # どの渡し方で送ったか(ADR-0053 5章)。
+    delivery: Literal["image_and_text"]
+    regions: list[RegionBox]
+    # プロンプトの後ろに足した文(`run.prompt` の末尾)。再実行では、プロンプトからこの文を除いて
+    # フォームに戻す。
+    appended_text: str = ""
+    # 四角を描いた画像の Asset(種類 `regions`)。
+    overlay_asset_id: uuid.UUID | None = None
 
 
 class RunSummary(BaseModel):
@@ -1127,6 +1234,9 @@ class RunSummary(BaseModel):
     # 実行時にワークフローが作ったテキスト(ADR-0030。ComfyUI の最終プロンプト)。
     # 成功した Run のうち、記録があるものだけ。それ以外は null。
     text_outputs: list[RunTextOutput] | None = None
+    # 領域の指示の四角(ADR-0053 4章。`run.regions`)。四角を付けた Run だけ。再実行でフォームに
+    # 四角を戻すのに使う。
+    regions: RunRegions | None = None
 
 
 class RunImportInfo(BaseModel):
@@ -1195,7 +1305,7 @@ class RunEvent(BaseModel):
 class LineageAssetInfo(BaseModel):
     # 埋め込み(未検証)ノードは kind/width/height/mime が分からないことがある
     # (ADR-0014 6章。`gakei.lineage/1` から変換した入力 Asset など)。
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"] | None = None
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"] | None = None
     width: int | None = None
     height: int | None = None
     mime: str | None = None
@@ -1545,7 +1655,15 @@ class OpenAIBaseUrlStatusResponse(BaseModel):
 
 
 class OpenAIBaseUrlUpdateRequest(BaseModel):
+    """`PUT /api/settings/openai-base-url`。
+
+    `api_key` は Base URL と一緒に入れ直すキー(確かめてから両方を保存する)。画面で保存した
+    キーがあり、Base URL のオリジン(scheme + host + port)が変わるときは必須で、省くと 422。
+    キーが環境変数(`.env`)のものなら、オリジンの変わる Base URL は画面から保存できない(422)。
+    """
+
     base_url: str
+    api_key: str | None = None
 
 
 # -- General settings (ADR-0009、ADR-0013 7章) -------------------------------
@@ -1754,7 +1872,9 @@ class SdWebuiConnectionTestRequest(BaseModel):
     """接続テスト(`POST /api/sdwebui/connection/test`)。
 
     url を省くと現在の有効な URL。username と password は両方そろえて指定すると、その値で
-    試す(保存はしない)。省くと保存済みの資格情報を使う。
+    試す(保存はしない)。省くと保存済みの資格情報を使う。ただし保存済みの資格情報は、保存した
+    ときと同じオリジン(scheme + host + port)にだけ送る。違うオリジンの URL を、資格情報を
+    入れずに試すと 422(入れ直すよう伝える)。
     """
 
     url: str | None = None
@@ -1773,10 +1893,18 @@ class SdWebuiConnectionTestResponse(BaseModel):
 
 
 class SdWebuiConnectionRequest(BaseModel):
-    """接続・変更(`PUT /api/sdwebui/connection`)。"""
+    """接続・変更(`PUT /api/sdwebui/connection`)。
+
+    username と password は両方そろえて指定すると、接続先と一緒に保存する(この URL のオリジンに
+    結び付ける)。保存済みの資格情報があり、URL のオリジン(scheme + host + port)が変わるときは
+    必須で、省くと 422(資格情報を入れ直すか、先に削除する)。同じオリジンでパスだけ変えるなら
+    省いてよい。
+    """
 
     url: str
     allow_non_loopback: bool = False
+    username: str | None = None
+    password: str | None = None
 
 
 class SdWebuiCredentialsRequest(BaseModel):
@@ -2206,7 +2334,7 @@ class AnnotationSettingsUpdateRequest(BaseModel):
 # -- LLM の接続先(ADR-0032) --------------------------------------------------
 
 # 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
-LlmConnectionFeature = Literal["annotation", "embedding", "assistant"]
+LlmConnectionFeature = Literal["annotation", "embedding", "assistant", "region_detection"]
 
 
 class LlmConnectionView(BaseModel):
@@ -2258,6 +2386,9 @@ class LlmConnectionUpdateRequest(BaseModel):
     api_style: str | None = None
     # 接続先(ADR-0051 3章)。null は既定(`external`)に戻す。
     locality: Literal["external", "local"] | None = None
+    # Base URL と一緒に入れ直すキー。保存済みのキーがあり、Base URL のオリジン(scheme + host +
+    # port)が変わるときは必須(省くと 422)。同じオリジンでパスだけ変えるなら省いてよい。
+    api_key: str | None = None
 
 
 class LlmConnectionApiKeyUpdateRequest(BaseModel):
@@ -2638,7 +2769,7 @@ class SharePreviewAsset(BaseModel):
     """共有に含まれる画像1件(作る前の確認用。サムネイルは本人向けの配信 URL で出す)。"""
 
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
     width: int
     height: int
     title: str | None = None
@@ -2679,7 +2810,7 @@ class ShareListResponse(BaseModel):
 
 class PublicShareAsset(BaseModel):
     id: uuid.UUID
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
     mime: str
     width: int
     height: int
@@ -2970,7 +3101,9 @@ class AssistantSettingsUpdateRequest(BaseModel):
 # -- Mod とフック(ADR-0051) ---------------------------------------------------------
 
 ModEvent = Literal["asset.ingested", "ai.before_send", "run.finished"]
-ModPurpose = Literal["image_run", "annotation", "assistant", "embedding", "workflow_analysis"]
+ModPurpose = Literal[
+    "image_run", "annotation", "assistant", "embedding", "workflow_analysis", "region_detection"
+]
 ModSource = Literal["upload", "url", "sketch", "mask", "composite", "generated", "import", "mcp"]
 ModOnFailure = Literal["block", "allow"]
 
@@ -3000,6 +3133,9 @@ class ModWebhookView(BaseModel):
     wait_for_verdict: bool
     order: int | None = None
     secret_set: bool
+    # 保存済みの鍵が今の最小の長さ(32 文字)に満たないか。前に保存した短い鍵は動き続けるが、
+    # 差し替えを勧める。
+    secret_too_short: bool = False
 
 
 class ModSettingFieldView(BaseModel):
@@ -3183,3 +3319,84 @@ class ModVerdictReceiveResponse(BaseModel):
 
     # 記録した判定の数。
     accepted: int
+    # 受け付け済みの要求と同じ要求だったか。true なら何も記録せず、`accepted` は1回目の数。
+    duplicate: bool = False
+
+
+# -- 領域の四角の検出(ADR-0053 7章) -----------------------------------------------------
+
+
+class RegionDetectionSettingsResponse(BaseModel):
+    """`GET /api/settings/region-detection`。全ログイン者が読める(検出のボタンを出すかの判断)。"""
+
+    enabled: bool
+    connection_id: str
+    model: str
+    hourly_request_limit: int
+    hourly_request_limit_default: int
+    hourly_request_limit_max: int
+    # 有効で、接続先とキーがそろい、接続先が Structured Outputs に対応するとみなせる
+    # (検出のボタンを出してよい)。
+    usable: bool
+    # 見ている利用者の、直近1時間の検出の数。
+    requests_last_hour: int
+
+
+class RegionDetectionSettingsUpdateRequest(BaseModel):
+    """書いた項目だけ変える。null は不正な値(422)。"""
+
+    enabled: StrictBool | None = None
+    connection_id: StrictStr | None = None
+    model: StrictStr | None = None
+    hourly_request_limit: StrictInt | None = None
+
+
+class RegionDetectRequest(BaseModel):
+    """`POST /api/assets/{asset_id}/regions/detect` の本文。"""
+
+    # 探す物(「カップ」「左の人の服」など)。無ければ主な物を一通り挙げる。
+    query: str | None = Field(default=None, max_length=200)
+    # 挙げる数の上限。
+    max_items: int = Field(default=20, ge=1, le=20)
+
+
+class DetectedRegion(BaseModel):
+    """検出した四角の候補1つ。"""
+
+    label: str
+    # 主たる入力の画像に対する割合(0〜1)で、左上を原点にした [x0, y0, x1, y1](ADR-0053 3章)。
+    box: list[float] = Field(min_length=4, max_length=4)
+
+
+class RegionDetectUsage(BaseModel):
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class RegionDetectionView(BaseModel):
+    """保存した検出の1回分(ADR-0053 7章の検出の履歴)。"""
+
+    id: uuid.UUID
+    # 探した言葉(無ければ null)
+    query: str | None
+    model: str
+    created_at: datetime
+    # 見つからなければ空の配列
+    regions: list[DetectedRegion]
+
+
+class RegionDetectResponse(BaseModel):
+    """検出の結果。`detection` に保存した行を返す(`regions` と `model` はその写し)。"""
+
+    regions: list[DetectedRegion]
+    model: str
+    usage: RegionDetectUsage
+    detection: RegionDetectionView
+
+
+class RegionDetectionListResponse(BaseModel):
+    """`GET /api/assets/{asset_id}/regions/detections`。新しい順。"""
+
+    items: list[RegionDetectionView]

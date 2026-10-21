@@ -379,7 +379,7 @@ def test_connection(
     except ComfyUIConnectionValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    available, reason, body_ = check_available(url, timeout=2.0)
+    available, reason, body_ = check_available(url, timeout=2.0, log_detail=True)
     version, device = _extract_version_device(body_)
     return ComfyUIConnectionTestResponse(
         url=url,

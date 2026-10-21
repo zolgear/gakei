@@ -37,6 +37,7 @@ import {
   connectionDisplayName,
   connectionFormFromView,
   diffConnectionForm,
+  isKeyReentryRequired,
   emptyConnectionForm,
   isConnectionInUse,
   validateConnectionForm,
@@ -292,7 +293,10 @@ function ConnectionDialog({ view, onClose }: { view?: LlmConnectionView; onClose
 
   const errors = builtin ? {} : validateConnectionForm(form)
   const changed = view ? hasChanges(diffConnectionForm(form, view)) : true
-  const canSubmit = changed && Object.keys(errors).length === 0 && !busy
+  // 保存済みのキーは、保存したときと別のオリジンへは送らない(入れ直してもらう)。
+  const keyRequired = view ? isKeyReentryRequired(form, view) : false
+  const keyMissing = keyRequired && form.api_key.trim() === ''
+  const canSubmit = changed && Object.keys(errors).length === 0 && !busy && !keyMissing
   // 入力を始める前から赤くしないよう、空の欄はエラーを出さない(ボタンは押せないまま)。
   const nameError = errors.name && form.name !== '' ? fmt(m.nameInvalid, { max: CONNECTION_NAME_MAX }) : null
   const baseUrlError = errors.base_url && form.base_url !== '' ? m.baseUrlInvalid : null
@@ -386,6 +390,29 @@ function ConnectionDialog({ view, onClose }: { view?: LlmConnectionView; onClose
             />
             {builtin && <p className={styles.helpText}>{t.settings.locality.builtinNote}</p>}
           </div>
+          {view && keyRequired && (
+            <div className={styles.field}>
+              <label htmlFor={`${idPrefix}-reentry-key`} className={styles.rowLabel}>
+                {m.apiKeyRequiredLabel}
+              </label>
+              <input
+                id={`${idPrefix}-reentry-key`}
+                type="password"
+                className={styles.input}
+                placeholder={m.apiKeyPlaceholder}
+                autoComplete="off"
+                value={form.api_key}
+                disabled={busy}
+                required
+                aria-invalid={keyMissing ? true : undefined}
+                aria-describedby={`${idPrefix}-reentry-key-help`}
+                onChange={(e) => update({ api_key: e.target.value })}
+              />
+              <p className={styles.warningText} id={`${idPrefix}-reentry-key-help`}>
+                {m.apiKeyRequiredHelp}
+              </p>
+            </div>
+          )}
           {!view && (
             <div className={styles.field}>
               <label htmlFor={`${idPrefix}-key`} className={styles.rowLabel}>

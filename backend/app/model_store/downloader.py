@@ -3,7 +3,8 @@
 WD Tagger と埋め込み(CLIP 系)の両方が使う。モデルの一覧(カタログ)と置き場所は使う側が
 渡す。
 
-- 取得元のリビジョンを固定し、ファイルごとに sha256 と大きさを持つ。
+- 取得元のリビジョンを固定し、ファイルごとに sha256 と大きさを持つ。カタログの大きさを超える
+  応答は、読む前(`Content-Length`)か読みながら打ち切って失敗にする。
 - ダウンロードは同じディレクトリの一時ファイル(`.<name>.part`)に書き、sha256 が一致して
   から `os.replace` で置き換える。一致しなければ一時ファイルを消して失敗にする。
 - カタログのファイルがすべてそろっていれば「ダウンロード済み」。
@@ -24,11 +25,21 @@ from typing import Protocol
 
 import httpx
 
+from app.domain.text_safety import internal_error_text
+from app.http_body_limit import BodyTooLarge, iter_limited
 from app.i18n import t
 
 logger = logging.getLogger(__name__)
 
-_CHUNK = 1024 * 1024
+# カタログに大きさが無いファイル(`size` が 0 以下)の上限。今のカタログのファイルはすべて大きさを
+# 持つので、これは備え。最大のモデル(数 GB)より十分大きくする。
+MAX_MODEL_FILE_BYTES = 16 * 1024 * 1024 * 1024
+
+
+def max_file_bytes(expected: RemoteFile) -> int:
+    """ダウンロードを打ち切る大きさ。カタログの大きさ(sha256 と組で固定したもの)があればそれ、
+    無ければ `MAX_MODEL_FILE_BYTES`。"""
+    return expected.size if expected.size > 0 else MAX_MODEL_FILE_BYTES
 
 
 @dataclass(frozen=True)
@@ -120,11 +131,15 @@ async def download_file(
                         file=expected.name,
                     )
                 )
-            with tmp_path.open("wb") as f:
-                async for chunk in response.aiter_bytes(_CHUNK):
-                    f.write(chunk)
-                    digest.update(chunk)
-                    on_bytes(len(chunk))
+            limit = max_file_bytes(expected)
+            try:
+                with tmp_path.open("wb") as f:
+                    async for chunk in iter_limited(response, limit):
+                        f.write(chunk)
+                        digest.update(chunk)
+                        on_bytes(len(chunk))
+            except BodyTooLarge as exc:
+                raise DownloadError(t("modelStore.download.tooLarge", file=expected.name)) from exc
         actual = digest.hexdigest()
         if actual != expected.sha256:
             raise DownloadError(t("modelStore.download.hashMismatch", file=expected.name))
@@ -208,9 +223,17 @@ class ModelDownloader:
             state.status = "idle"
             state.error = None
         except Exception as e:  # noqa: BLE001 - 失敗は状態として画面に出す
-            logger.warning("モデル %s(%s)のダウンロードに失敗しました: %s", name, self.label, e)
+            logger.warning(
+                "モデル %s(%s)のダウンロードに失敗しました: %s",
+                name,
+                self.label,
+                e,
+                exc_info=not isinstance(e, DownloadError),
+            )
             state.status = "failed"
-            state.error = str(e)[:500]
+            # `DownloadError` は固定の文言。それ以外(httpx や OS の例外。パスや接続先を含みうる)は
+            # 種類の名前だけを出し、詳細はログに残す(Issue #166)。
+            state.error = (str(e) if isinstance(e, DownloadError) else internal_error_text(e))[:500]
 
     async def wait(self, name: str) -> None:
         """テスト用。実行中のダウンロードの終了を待つ。"""

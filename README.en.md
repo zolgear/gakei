@@ -13,6 +13,7 @@ All it needs is an OpenAI API key. Images are stored in a local directory and me
 - **Generate / Edit:** run with a chosen model, size (presets or any width × height), quality, output format, background, number of images, and so on. An estimated cost is shown before running.
 - **Edit inputs:** use past results, local images, or images pasted from the clipboard as input (up to 16, reorderable). Draw masks with a brush. Sketches drawn on a blank canvas or on top of an input image can also be used as input.
 - **Arranging input images:** lay out several images on one canvas, then move, scale, rotate, distort the corners (e.g. into a trapezoid), and flip them to make a single input image — a rough composition for Edit to finish. See [docs/composite-input.md](docs/composite-input.md) (Japanese, ADR-0050).
+- **Region instructions:** draw boxes on the first input image and give each box an instruction (change, add, keep, remove, or move) for Edit. Boxes can also be picked from candidates detected by a VLM (enable it in the admin settings under Region detection). OpenAI receives the boxes as an image plus text, so it may not always follow them. See [docs/regions.md](docs/regions.md) (Japanese, ADR-0053).
 - **History:** every run is recorded, including failures and cancellations. Re-running with the same settings is kept as a new run.
 - **Viewer:** zoom images up to 3840px, download the original, and compare an Edit's inputs and outputs.
 - **Stock / prompt sets / lineage graph:** open saved images, named prompts, and image parent-child relationships from the sidebar. Type `@` in the prompt field to insert a prompt set.
@@ -125,7 +126,7 @@ Once it's running, open `http://127.0.0.1:8000`. A `.env` at the repository root
   ```bash
   docker run --rm -v gakei-data:/data -v "$PWD":/backup busybox tar czf /backup/gakei-data.tgz -C /data .
   ```
-- **Exposure:** defaults to `127.0.0.1` only. With `docker run`, change the `-p` mapping; with the repository's `compose.yaml`, use `GAKEI_BIND=0.0.0.0` (and `GAKEI_PORT`) to expose it to the LAN or the internet. Either way, there is no authentication by default, so if you expose it, enable login with `AUTH_MODE=oidc` ([docs/auth.md](docs/auth.md)) or put an authenticating reverse proxy in front.
+- **Exposure:** defaults to `127.0.0.1` only. With `docker run`, change the `-p` mapping; with the repository's `compose.yaml`, use `GAKEI_BIND=0.0.0.0` (and `GAKEI_PORT`) to expose it to the LAN or the internet. Either way, there is no authentication by default, so if you expose it, enable OIDC authentication in the admin settings under "Authentication" ([docs/auth.md](docs/auth.md)) or put an authenticating reverse proxy in front.
 - **ComfyUI:** connect to ComfyUI running on the same host at `http://host.docker.internal:8188` (Settings → ComfyUI). With plain `docker run`, add `--add-host=host.docker.internal:host-gateway` for this to resolve (the repository's `compose.yaml` already sets this up).
 - **Run only one replica.** Jobs run inside the api process, so whether the DB is SQLite or PostgreSQL, don't share the same DB / volume across multiple containers.
 
@@ -133,7 +134,7 @@ The version you're running is shown in Settings under "About GAKEI". See [Releas
 
 ## Notes
 
-- **There is no authentication by default.** GAKEI listens only on `127.0.0.1`, so it can be opened only from the same machine. For multiple users, set `AUTH_MODE=oidc` and the OIDC settings (e.g. Google or Keycloak) in `.env`; login is then required, and only the people listed in `AUTH_ADMIN_EMAILS` can change admin settings such as the API key. See [docs/auth.md](docs/auth.md).
+- **There is no authentication by default.** GAKEI listens only on `127.0.0.1`, so it can be opened only from the same machine. For multiple users, set up the OIDC connection (e.g. Google or Keycloak) and the admin emails in the admin settings under "Authentication", and enable authentication after a test sign-in succeeds; login is then required (no restart needed). Only the people listed in the admin emails can change admin settings such as the API key. These can also be set in `.env`, and if nobody can sign in, write `AUTH_MODE=none` in `.env` and restart to disable authentication temporarily. See [docs/auth.md](docs/auth.md).
 - **To use it from another machine, use an SSH port forward.** For example: `ssh -L 8000:127.0.0.1:8000 <server>`. If you expose it on the LAN with `--host 0.0.0.0`, anyone on the same network can generate images with your key or replace the key.
 - **The API key is stored in plain text in `data/secrets.json`.** Don't share `data/` with others.
 - **ComfyUI Desktop also uses port 8000 by default.** When running both, start GAKEI with something like `--port 8792`.

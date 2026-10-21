@@ -6,15 +6,18 @@
  * `invalidateQueries({ queryKey: ['assets'] })` でストックのパネルとピッカーがまとめて作り直されるようにする。
  * ピッカーのキーは 2 番目に `'picker'` を置き、パネルの節のキー(2 番目は種類の集合)と取り違えないようにする。
  */
-export type StockAssetKind = 'generated' | 'upload' | 'sketch' | 'mask' | 'composite'
+export type StockAssetKind = 'generated' | 'upload' | 'sketch' | 'mask' | 'composite' | 'regions'
 export type StockKindFilter = 'all' | StockAssetKind
 
-/** 「スケッチ・マスク・配置をストックに出す」がオフのときに出さない種類(ADR-0035、ADR-0050 6章)。 */
-const SKETCH_MASK_KINDS: readonly StockKindFilter[] = ['sketch', 'mask', 'composite']
+/**
+ * 「スケッチ・マスク・配置・領域をストックに出す」がオフのときに出さない種類(ADR-0035、ADR-0050 6章、
+ * ADR-0053 4章)。
+ */
+const SKETCH_MASK_KINDS: readonly StockKindFilter[] = ['sketch', 'mask', 'composite', 'regions']
 /** 設定がオフのときに「すべて」で取る種類。 */
 const DEFAULT_VISIBLE_KINDS: readonly StockAssetKind[] = ['generated', 'upload']
 
-const PANEL_KIND_CHOICES: readonly StockKindFilter[] = ['all', 'generated', 'upload', 'sketch', 'composite', 'mask']
+const PANEL_KIND_CHOICES: readonly StockKindFilter[] = ['all', 'generated', 'upload', 'sketch', 'composite', 'regions', 'mask']
 
 /** ストックのパネルに出す種類のチップ(設定がオフならスケッチとマスクを外す)。 */
 export function stockKindChoices(showSketchMask: boolean): StockKindFilter[] {
@@ -65,7 +68,10 @@ export function stockAssetsQueryKey(
 
 // -- ストックピッカー(入力画像の追加とアバターの選択。ADR-0020) --------------------
 
-/** ピッカーのチップ。マスクは選ぶ対象にしないので常に出さない。 */
+/**
+ * ピッカーのチップ。マスクは選ぶ対象にしないので常に出さない。領域の指示の四角を描いた画像(`regions`。
+ * ADR-0053)も、主たる入力とほぼ同じ絵で入力に使うものではないので出さない。
+ */
 export type StockPickerKindFilter = 'all' | 'generated' | 'upload' | 'sketch' | 'composite'
 
 const PICKER_KIND_CHOICES: readonly StockPickerKindFilter[] = ['all', 'generated', 'upload', 'sketch', 'composite']

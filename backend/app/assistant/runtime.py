@@ -6,6 +6,8 @@
 - 進行中の会話(同じ会話で同時に2つの発言を処理しない)。
 - 決まった形の JSON を受ける呼び出しのエンジン(ComfyUI のワークフローの推定。ADR-0052 6章)。
   1時間の記録は会話と同じものに数える。
+- 領域の四角の検出(ADR-0053 7章)も同じエンジンを使う。1時間の記録は検出の設定の上限で、
+  会話とは別に数える(`detection_requests`)。
 """
 
 from __future__ import annotations
@@ -68,6 +70,8 @@ class AssistantRuntime:
         self.engine = engine
         self.structured: StructuredEngine = structured or FakeStructuredEngine()
         self.requests = HourlyRequestCounter()
+        # 領域の四角の検出の1時間の記録(ADR-0053 7章)。
+        self.detection_requests = HourlyRequestCounter()
         self._active: set[uuid.UUID] = set()
         self._active_lock = threading.Lock()
 

@@ -54,6 +54,8 @@ NAME_MAX = 100
 INSTANCE_NAME_MAX = 100
 URL_MAX = 2000
 SECRET_MAX = 1000
+# Webhook の署名の鍵の最小の長さ(新しく保存する鍵だけ。保存済みの短い鍵は使い続けられる)。
+WEBHOOK_SECRET_MIN = 32
 WEBHOOKS_MAX = 50
 SETTING_VALUE_MAX = 4000
 
@@ -158,6 +160,25 @@ def normalize_secret(value: object) -> str:
     if not isinstance(value, str) or not value.strip() or len(value.strip()) > SECRET_MAX:
         raise ModValidationError(t("mods.invalidSecret", max=SECRET_MAX))
     return value.strip()
+
+
+def normalize_webhook_secret(value: object) -> str:
+    """Webhook の署名の鍵。判定の受付(ADR-0051 8章)の認証にも使うので、`WEBHOOK_SECRET_MIN`
+    文字に満たない鍵は新しく保存させない。"""
+    if (
+        not isinstance(value, str)
+        or len(value.strip()) < WEBHOOK_SECRET_MIN
+        or len(value.strip()) > SECRET_MAX
+    ):
+        raise ModValidationError(
+            t("mods.invalidWebhookSecret", min=WEBHOOK_SECRET_MIN, max=SECRET_MAX)
+        )
+    return value.strip()
+
+
+def is_short_webhook_secret(secret: str | None) -> bool:
+    """保存済みの鍵が、今の最小の長さに満たないか(前に保存したもの)。"""
+    return secret is not None and len(secret) < WEBHOOK_SECRET_MIN
 
 
 def _normalize_choices(
@@ -391,7 +412,7 @@ def add_webhook(db: Session, data_dir: Path, values: dict[str, Any]) -> str:
     current = load_webhooks(db)
     if len(current) >= WEBHOOKS_MAX:
         raise ModValidationError(t("mods.tooManyWebhooks", max=WEBHOOKS_MAX))
-    secret = normalize_secret(values.get("secret"))
+    secret = normalize_webhook_secret(values.get("secret"))
     common = apply_common_updates(
         CommonConfig(events=()),
         {k: v for k, v in values.items() if k in COMMON_FIELDS},
@@ -433,7 +454,9 @@ def update_webhook(db: Session, data_dir: Path, webhook_id: str, updates: dict[s
     if common.events is None:
         common = replace(common, events=())
     changed = replace(changed, common=common)
-    secret = normalize_secret(updates["secret"]) if updates.get("secret") is not None else None
+    secret = (
+        normalize_webhook_secret(updates["secret"]) if updates.get("secret") is not None else None
+    )
     _save_webhooks(db, tuple(changed if w.id == webhook_id else w for w in webhooks))
     if secret is not None:
         write_webhook_secret(data_dir, webhook_id, secret)

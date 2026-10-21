@@ -242,3 +242,24 @@ def test_decode_and_parse_helpers() -> None:
     assert decode_base64_image(None) is None
     assert parse_info('{"seed": 1}') == {"seed": 1}
     assert parse_info("not json") == {}
+
+
+def test_check_available_hides_details() -> None:
+    """時間切れ・ほかの状態コード・読めない応答は、固定の区分と文言にまとめる。"""
+    import httpx
+
+    from app.i18n import t
+
+    def timeout(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("10.0.0.5 timed out", request=request)
+
+    result = SdWebuiClient(URL, transport=httpx.MockTransport(timeout)).check_available()
+    assert (result.reason, result.message) == ("unreachable", t("sdwebui.client.connectFailed"))
+
+    for response in (httpx.Response(502, text="banner"), httpx.Response(200, text="<html>")):
+        result = SdWebuiClient(
+            URL, transport=httpx.MockTransport(lambda _r, resp=response: resp)
+        ).check_available()
+        assert result.reason == "unexpectedResponse"
+        assert result.message == t("sdwebui.client.checkUnexpectedResponse")
+        assert "502" not in (result.message or "")

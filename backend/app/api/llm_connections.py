@@ -155,7 +155,7 @@ def update_llm_connection(
 ) -> LlmConnectionsResponse:
     updates = {name: getattr(body, name) for name in body.model_fields_set}
     try:
-        llm_connections.update_connection(db, connection_id, updates)
+        llm_connections.update_connection(db, connection_id, updates, settings.data_dir)
     except _CONNECTION_ERRORS as exc:
         _raise_connection_error(exc)
     # 送り先が変わったので、待ち行列を持つ worker を起こす(上限で止まっていた行を見直させる)。

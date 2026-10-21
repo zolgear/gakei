@@ -576,7 +576,7 @@ def unreachable_transport() -> httpx.MockTransport:
 def install_fake_factories(monkeypatch: Any, fake: FakeSdWebui) -> None:
     """`app/api/sdwebui.py` が作るクライアントとプロバイダーを、偽の WebUI につなぐ。
     以降の `PUT /api/sdwebui/connection` で、偽の WebUI を使うプロバイダーが登録される。"""
-    from app.domain.sdwebui_connection import read_credentials
+    from app.domain.sdwebui_connection import read_credentials_for
     from app.providers.sdwebui.client import SdWebuiClient
     from app.providers.sdwebui.provider import SdWebuiProvider
 
@@ -589,7 +589,7 @@ def install_fake_factories(monkeypatch: Any, fake: FakeSdWebui) -> None:
             url,
             session_factory,
             settings.sdwebui_timeout_seconds,
-            credentials_loader=lambda: read_credentials(data_dir),
+            credentials_loader=lambda: read_credentials_for(data_dir, url),
             transport=fake.transport(),
             progress_interval=0.05,
         )

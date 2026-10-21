@@ -80,6 +80,7 @@ from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.models import Asset, AssetAnnotation, AssetKind, Run
 from app.domain.storage import AssetStore
 from app.domain.text_safety import (
+    internal_error_text,
     sanitize_external,
     sanitize_external_text,
     sanitize_external_text_or_none,
@@ -374,11 +375,14 @@ class Annotator:
     # -- ループ ----------------------------------------------------------------
 
     async def _sleep(self) -> None:
+        # 起こされてから消す。先に消すと、待ち行列を見ている最中に来た notify や stop の合図が
+        # 消え、待ちの上限(`_POLL_INTERVAL_SECONDS`)まで寝てしまう(止めるのも遅れる)。
+        if not self._stop.is_set():
+            try:
+                await asyncio.wait_for(self._wake.wait(), timeout=_POLL_INTERVAL_SECONDS)
+            except TimeoutError:
+                pass
         self._wake.clear()
-        try:
-            await asyncio.wait_for(self._wake.wait(), timeout=_POLL_INTERVAL_SECONDS)
-        except TimeoutError:
-            pass
 
     async def _loop(self) -> None:
         while not self._stop.is_set():
@@ -580,7 +584,9 @@ class Annotator:
             return True
         except Exception as e:  # noqa: BLE001
             logger.exception("asset %s の推定の準備に失敗しました", asset_id)
-            await asyncio.to_thread(self._finish_failed, asset_id, f"internalError: {e}")
+            await asyncio.to_thread(
+                self._finish_failed, asset_id, f"internalError: {internal_error_text(e)}"
+            )
             return False
         if isinstance(job, str):
             await asyncio.to_thread(self._finish_failed, asset_id, job)
@@ -597,7 +603,9 @@ class Annotator:
             return False
         except Exception as e:  # noqa: BLE001 - どの段階の失敗も記録する
             logger.exception("asset %s の推定中に予期しない例外が発生しました", asset_id)
-            await asyncio.to_thread(self._finish_failed, asset_id, f"internalError: {e}")
+            await asyncio.to_thread(
+                self._finish_failed, asset_id, f"internalError: {internal_error_text(e)}"
+            )
             return False
 
         title, tags, ran, models = outcome
@@ -830,7 +838,9 @@ class Annotator:
             return
         except Exception as e:  # noqa: BLE001 - どの段階の失敗も記録する
             logger.exception("asset %s のレーティングの判定に失敗しました", asset_id)
-            await asyncio.to_thread(self._finish_rating_failed, asset_id, f"internalError: {e}")
+            await asyncio.to_thread(
+                self._finish_rating_failed, asset_id, f"internalError: {internal_error_text(e)}"
+            )
             return
         await asyncio.to_thread(self._write_rating, asset_id, analysis)
 

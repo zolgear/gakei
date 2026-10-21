@@ -57,6 +57,7 @@ from app.domain.schemas import (
     SdWebuiStatusResponse,
 )
 from app.domain.storage import AssetStore
+from app.domain.url_origin import origin_of
 from app.domain.visibility import get_visible_asset
 from app.i18n import t
 from app.providers.registry import ProviderRegistry, is_loopback_url
@@ -73,6 +74,19 @@ router = APIRouter(prefix="/api/sdwebui", tags=["sdwebui"])
 def _make_client(url: str, credentials: Credentials | None) -> SdWebuiClient:
     """テストで偽の WebUI を注入するための差し替え口。"""
     return SdWebuiClient(url, credentials=credentials)
+
+
+def _credentials_from_body(username: str | None, password: str | None) -> Credentials | None:
+    """要求に入れた資格情報(両方そろえて)。どちらも無ければ None。不正なら 422。"""
+    if username is None and password is None:
+        return None
+    if username is None or password is None:
+        raise HTTPException(status_code=422, detail=t("sdwebui.credentials.bothRequired"))
+    try:
+        connection.validate_credentials(username, password)
+    except connection.SdWebuiConnectionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return username, password
 
 
 def _make_provider(url: str, settings: Settings, session_factory: sessionmaker) -> SdWebuiProvider:
@@ -106,11 +120,15 @@ def _registered(registry: ProviderRegistry) -> SdWebuiProvider | None:
 
 
 def _probe(
-    client: SdWebuiClient, *, timeout: float, provider: SdWebuiProvider | None = None
+    client: SdWebuiClient,
+    *,
+    timeout: float,
+    provider: SdWebuiProvider | None = None,
+    log_detail: bool = False,
 ) -> tuple[Availability, int | None]:
     """到達性と、チェックポイントの数。登録中のプロバイダーが同じ接続先なら、その一覧の
     キャッシュを使う。"""
-    availability = client.check_available(timeout=timeout)
+    availability = client.check_available(timeout=timeout, log_detail=log_detail)
     target = provider if provider is not None and provider.base_url == client.base_url else None
     if target is not None:
         # capabilities が裏の問い合わせを待たずに使えるよう、確かめた結果を渡しておく
@@ -132,7 +150,9 @@ def _build_status(
 ) -> SdWebuiStatusResponse:
     url, source = connection.resolve_effective_url(db, settings)
     locked = _is_locked(db)
-    credentials = connection.read_credentials(settings.data_dir)
+    # 記録を始める前に保存した資格情報は、今の接続先に結び付ける(以後はそのオリジンにだけ送る)。
+    connection.ensure_credentials_origin(db, settings)
+    credentials = connection.read_credentials_for(settings.data_dir, url)
     disabled = connection.is_disabled(db)
     if url is None or disabled:
         # 未設定・切り離し・無効。無効の間は URL を見せるが、接続先には問い合わせない。
@@ -143,7 +163,7 @@ def _build_status(
             source=source,
             locked=locked,
             loopback=is_loopback_url(url) if url is not None else None,
-            credentials_set=credentials is not None,
+            credentials_set=connection.credentials_set(settings.data_dir),
             disabled=disabled and url is not None,
         )
     availability, count = _probe(
@@ -158,7 +178,7 @@ def _build_status(
         source=source,
         locked=locked,
         loopback=is_loopback_url(url),
-        credentials_set=credentials is not None,
+        credentials_set=connection.credentials_set(settings.data_dir),
         flavor=availability.flavor,
         checkpoint_count=count,
         disabled=False,
@@ -202,18 +222,16 @@ def test_connection(
     except connection.SdWebuiConnectionValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    if body.username is not None or body.password is not None:
-        if body.username is None or body.password is None:
-            raise HTTPException(status_code=422, detail=t("sdwebui.credentials.bothRequired"))
-        try:
-            connection.validate_credentials(body.username, body.password)
-        except connection.SdWebuiConnectionValidationError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        credentials: Credentials | None = (body.username, body.password)
-    else:
+    credentials = _credentials_from_body(body.username, body.password)
+    if credentials is None:
+        # 保存済みの資格情報は、保存したときと同じオリジンにだけ送る。
+        if connection.needs_credentials_reentry(db, settings, url):
+            raise HTTPException(
+                status_code=422, detail=t("sdwebui.credentials.reenterForNewOrigin")
+            )
         credentials = connection.read_credentials(settings.data_dir)
 
-    availability, count = _probe(_make_client(url, credentials), timeout=3.0)
+    availability, count = _probe(_make_client(url, credentials), timeout=3.0, log_detail=True)
     return SdWebuiConnectionTestResponse(
         url=url,
         available=availability.available,
@@ -254,6 +272,11 @@ async def set_connection(
     except connection.SdWebuiConnectionValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    credentials = _credentials_from_body(body.username, body.password)
+    if credentials is None and connection.needs_credentials_reentry(db, settings, url):
+        # 保存済みの資格情報を、保存したときと別のオリジンへ送らない。
+        raise HTTPException(status_code=422, detail=t("sdwebui.credentials.reenterForNewOrigin"))
+
     if not is_loopback_url(url):
         logger.warning(
             "SD WebUI の接続先にループバック以外のアドレスが設定されました(%s)。"
@@ -261,6 +284,10 @@ async def set_connection(
             url,
         )
 
+    if credentials is not None:
+        connection.save_credentials(settings.data_dir, *credentials, origin=origin_of(url))
+    else:
+        connection.bind_credentials_origin(settings.data_dir, url)
     connection.save_connection_url(db, url)
     if not connection.is_disabled(db):
         registry.set_provider(PROVIDER_NAME, _make_provider(url, settings, session_factory))
@@ -347,7 +374,11 @@ def set_credentials(
     """Basic 認証の資格情報を `secrets.json` に保存する。値は返さない。"""
     _reject_if_locked(db, t("sdwebui.api.lockedChangeCredentials"))
     try:
-        connection.save_credentials(settings.data_dir, body.username, body.password)
+        # 今の有効な接続先のオリジンに結び付ける(接続先が無ければ、次に接続したときに結び付ける)。
+        url, _source = connection.resolve_effective_url(db, settings)
+        connection.save_credentials(
+            settings.data_dir, body.username, body.password, origin=origin_of(url)
+        )
     except connection.SdWebuiConnectionValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     provider = _registered(registry)
@@ -394,7 +425,7 @@ def refresh(
     if connection.is_disabled(db):
         # 無効の間は接続先に問い合わせない
         raise HTTPException(status_code=409, detail=t("sdwebui.api.disabled"))
-    client = _make_client(url, connection.read_credentials(settings.data_dir))
+    client = _make_client(url, connection.read_credentials_for(settings.data_dir, url))
     try:
         client.refresh_checkpoints()
         client.refresh_loras()

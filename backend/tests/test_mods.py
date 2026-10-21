@@ -40,7 +40,7 @@ from app.mods.runtime import ModRuntime
 from app.worker.mod_delivery import ModDeliveryWorker, reset_delivering
 from tests.conftest import make_png_bytes
 
-SECRET = "test-signing-secret"
+SECRET = "test-signing-secret-0123456789-abcd"
 
 
 # -- 共通 -----------------------------------------------------------------------------

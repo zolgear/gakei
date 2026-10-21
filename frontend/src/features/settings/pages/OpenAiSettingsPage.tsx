@@ -30,6 +30,7 @@ import {
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { Modal } from '../../../components/Modal'
 import { fmt, useI18n } from '../../../i18n'
+import { originChanges } from '../../../lib/urlOrigin'
 import { apiKeyStatusView, canDeleteKey, isEnvLocked } from '../apiKeyStatus'
 import { baseUrlStatusView, canClearBaseUrl, isBaseUrlEnvLocked } from '../baseUrlStatus'
 import { canResetToDefault, isFromEnv } from '../generalSettings'
@@ -384,17 +385,28 @@ function OpenAiBaseUrlCard() {
   )
 }
 
+/** Base URL が未設定のときにキーを送っている先(OpenAI 本体。サーバーの `OPENAI_DEFAULT_BASE_URL`)。 */
+const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
+
+/**
+ * 接続先(Base URL)を変えるダイアログ。保存済みのキーは、保存したときと同じオリジンにだけ送る。
+ * オリジンが変わるときは、画面で保存したキーなら入れ直しを必須にし(そのキーで確かめて一緒に登録する)、
+ * 環境変数のキーなら画面からは登録できないことを示す。
+ */
 function OpenAiBaseUrlDialog({ status, onClose }: { status: OpenAIBaseUrlStatus; onClose: () => void }) {
   const { t } = useI18n()
   const b = t.settings.apiKey.baseUrl
   const { toast } = useSettingsShell()
   const queryClient = useQueryClient()
   const [input, setInput] = useState(status.value ?? '')
+  const [keyInput, setKeyInput] = useState('')
+  const keyQuery = useQuery({ queryKey: OPENAI_KEY_STATUS_QUERY_KEY, queryFn: getOpenAiKeyStatus })
 
   const mutation = useMutation({
-    mutationFn: setOpenAiBaseUrl,
+    mutationFn: (vars: { url: string; apiKey?: string }) => setOpenAiBaseUrl(vars.url, vars.apiKey),
     onSuccess: (data) => {
       queryClient.setQueryData(OPENAI_BASE_URL_STATUS_QUERY_KEY, data)
+      void queryClient.invalidateQueries({ queryKey: OPENAI_KEY_STATUS_QUERY_KEY })
       void queryClient.invalidateQueries({ queryKey: LLM_CONNECTIONS_QUERY_KEY })
       toast.show({ message: b.savedToast })
       onClose()
@@ -405,7 +417,13 @@ function OpenAiBaseUrlDialog({ status, onClose }: { status: OpenAIBaseUrlStatus;
   }, [mutation.isPending, onClose])
 
   const value = input.trim()
+  const key = keyInput.trim()
   const error = errorText(mutation.error, b.communicationFailed)
+  const keyStatus = keyQuery.data
+  const originChanged = value !== '' && originChanges(status.value ?? OPENAI_DEFAULT_BASE_URL, value)
+  const keyRequired = originChanged && keyStatus?.configured === true && keyStatus.source === 'file'
+  const envKeyBlocked = originChanged && keyStatus?.configured === true && keyStatus.source === 'env'
+  const canSubmit = value !== '' && !mutation.isPending && !envKeyBlocked && (!keyRequired || key !== '')
 
   return (
     <Modal open title={b.dialogTitle} onClose={close}>
@@ -413,7 +431,7 @@ function OpenAiBaseUrlDialog({ status, onClose }: { status: OpenAIBaseUrlStatus;
         className={styles.dialogForm}
         onSubmit={(e) => {
           e.preventDefault()
-          if (value) mutation.mutate(value)
+          if (canSubmit) mutation.mutate({ url: value, apiKey: keyRequired ? key : undefined })
         }}
       >
         <label htmlFor="gakei-openai-base-url-input" className={styles.rowLabel}>
@@ -435,12 +453,40 @@ function OpenAiBaseUrlDialog({ status, onClose }: { status: OpenAIBaseUrlStatus;
           disabled={mutation.isPending}
         />
         <p className={styles.helpText}>{b.verifyHelp}</p>
+        {envKeyBlocked && <p className={styles.errorText}>{b.envKeyOriginLocked}</p>}
+        {keyRequired && (
+          <>
+            <label htmlFor="gakei-openai-base-url-key-input" className={styles.rowLabel}>
+              {b.keyRequiredLabel}
+            </label>
+            <input
+              id="gakei-openai-base-url-key-input"
+              type="password"
+              className={styles.input}
+              value={keyInput}
+              onChange={(e) => {
+                setKeyInput(e.target.value)
+                mutation.reset()
+              }}
+              placeholder={t.settings.apiKey.inputPlaceholder}
+              autoComplete="off"
+              spellCheck={false}
+              required
+              aria-invalid={key === '' ? true : undefined}
+              aria-describedby="gakei-openai-base-url-key-help"
+              disabled={mutation.isPending}
+            />
+            <p className={styles.warningText} id="gakei-openai-base-url-key-help">
+              {b.keyRequiredHelp}
+            </p>
+          </>
+        )}
         {error && <p className={styles.errorText}>{error}</p>}
         <div className={styles.dialogActions}>
           <button type="button" className={styles.secondaryButton} onClick={close} disabled={mutation.isPending}>
             {t.common.cancel}
           </button>
-          <button type="submit" className={styles.primaryButton} disabled={value === '' || mutation.isPending}>
+          <button type="submit" className={styles.primaryButton} disabled={!canSubmit}>
             {mutation.isPending ? b.verifying : b.verifyAndRegister}
           </button>
         </div>

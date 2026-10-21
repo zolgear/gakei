@@ -38,13 +38,15 @@ from app.domain.models import (
 from app.domain.storage import LocalFsStore
 from app.domain.vector_index import AssetFilter
 from app.mods import api as contract
+from app.mods import config as mods_config
+from app.mods import replay
 from app.mods import webhook as webhook_send
 from app.mods.config import Filters
 from app.mods.runtime import Subscriber, VerdictTargetError
 from tests.conftest import make_png_bytes, wait_for_run_terminal
 
 MODS = "/api/settings/mods"
-SECRET = "verdict-secret-0123456789"
+SECRET = "verdict-secret-0123456789-abcdefgh"
 _MODEL = "gpt-image-2.5-sunburst"
 _LABEL = "類似の疑い"
 _MESSAGE = "既存の作品に似ています"
@@ -740,11 +742,116 @@ def test_receive_verdicts_with_valid_signature(client: TestClient) -> None:
         f"/api/mods/{mod_id}/verdicts", content=payload, headers=_signed(payload)
     )
     assert response.status_code == 200, response.text
-    assert response.json() == {"accepted": 1}
+    assert response.json() == {"accepted": 1, "duplicate": False}
     detail = client.get(f"/api/assets/{asset_id}").json()
     assert detail["content_withheld"] is True
     assert detail["verdicts"][0]["mod_name"] == "侵害チェック"
     assert not _has_files(client.app.state.store, _asset(client, asset_id))
+
+
+def _verdict_rows(client: TestClient) -> int:
+    with client.app.state.session_factory() as db:
+        return db.execute(select(func.count()).select_from(ModVerdict)).scalar_one()
+
+
+def test_receive_verdicts_accepts_same_request_only_once(client: TestClient) -> None:
+    """同じ要求(時刻と本文が同じ)の2回目は記録せず、1回目と同じ数を `duplicate: true` で返す。
+    時刻を変えて署名し直した要求は、別の要求として受ける。"""
+    mod_id, asset_id = _delivered_upload(client)
+    url = f"/api/mods/{mod_id}/verdicts"
+    payload = _verdict_body(asset_id, "flag")
+    headers = _signed(payload)
+    first = client.post(url, content=payload, headers=headers)
+    assert first.status_code == 200, first.text
+    assert first.json() == {"accepted": 1, "duplicate": False}
+    again = client.post(url, content=payload, headers=headers)
+    assert again.status_code == 200, again.text
+    assert again.json() == {"accepted": 1, "duplicate": True}
+    assert _verdict_rows(client) == 1
+
+    # 後の判定を、前の要求の再送で上書きさせない。
+    ok = _verdict_body(asset_id, "ok")
+    assert client.post(url, content=ok, headers=_signed(ok)).json()["duplicate"] is False
+    assert client.post(url, content=payload, headers=headers).json()["duplicate"] is True
+    detail = client.get(f"/api/assets/{asset_id}").json()
+    assert detail["verdicts"][0]["verdict"] == "ok"
+    assert _verdict_rows(client) == 2
+
+    # 時刻を変えて署名し直せば、別の要求。
+    later = _signed(payload, timestamp=int(time.time()) + 1)
+    assert client.post(url, content=payload, headers=later).json() == {
+        "accepted": 1,
+        "duplicate": False,
+    }
+    assert _verdict_rows(client) == 3
+
+
+def test_receive_verdicts_rejected_request_is_not_remembered(client: TestClient) -> None:
+    """記録しなかった要求(403・422)は覚えないので、送り直すと同じ確認をもう一度する。"""
+    mod_id, asset_id = _delivered_upload(client)
+    url = f"/api/mods/{mod_id}/verdicts"
+    payload = json.dumps(
+        [{"target": {"type": "asset", "id": str(uuid.uuid4())}, "verdict": "ok"}]
+    ).encode()
+    headers = _signed(payload)
+    assert client.post(url, content=payload, headers=headers).status_code == 403
+    assert client.post(url, content=payload, headers=headers).status_code == 403
+    broken = b'{"verdicts": 1}'
+    broken_headers = _signed(broken)
+    assert client.post(url, content=broken, headers=broken_headers).status_code == 422
+    assert client.post(url, content=broken, headers=broken_headers).status_code == 422
+    assert len(client.app.state.mods.verdict_replay) == 0
+
+
+def test_receive_verdicts_in_progress_and_full(client: TestClient) -> None:
+    """1回目を処理している間の同じ要求は 409。記録が窓の中の要求で埋まっていれば 429。"""
+    mod_id, asset_id = _delivered_upload(client)
+    url = f"/api/mods/{mod_id}/verdicts"
+    payload = _verdict_body(asset_id, "flag")
+    headers = _signed(payload)
+    guard = client.app.state.mods.verdict_replay
+    key = replay.request_key(mod_id, headers["X-Gakei-Timestamp"], payload)
+    assert guard.reserve(key).outcome == "reserved"
+    busy = client.post(url, content=payload, headers=headers)
+    assert busy.status_code == 409
+    assert "処理しています" in busy.json()["detail"]
+    guard.release(key)
+
+    guard.max_entries = 1
+    assert guard.reserve("someone-else").outcome == "reserved"
+    full = client.post(url, content=payload, headers=headers)
+    assert full.status_code == 429
+    assert _verdict_rows(client) == 0
+
+
+def test_replay_guard_forgets_after_ttl() -> None:
+    guard = replay.VerdictReplayGuard(ttl_seconds=10, max_entries=2)
+    assert guard.reserve("a", now=0).outcome == "reserved"
+    guard.complete("a", 3)
+    done = guard.reserve("a", now=5)
+    assert (done.outcome, done.accepted) == ("done", 3)
+    assert guard.reserve("b", now=5).outcome == "reserved"
+    # 窓の中の記録で埋まっていれば断る(古い記録を捨てて再送を通さない)。
+    assert guard.reserve("c", now=9).outcome == "full"
+    # 期限を過ぎた記録は捨てて、新しい要求を受ける。
+    assert guard.reserve("c", now=11).outcome == "reserved"
+    # 期限を過ぎた要求は、もう一度受ける(この時刻の要求は署名の確認で断られている)。
+    assert guard.reserve("a", now=16).outcome == "reserved"
+    assert replay.REPLAY_TTL_SECONDS == 2 * replay.MAX_SKEW_SECONDS
+
+
+def test_receive_verdicts_with_short_secret_saved_before(client: TestClient) -> None:
+    """最小の長さより前に保存した短い鍵は、そのまま署名の確認に使える(画面には短いと出す)。"""
+    mod_id, asset_id = _delivered_upload(client)
+    short = "short-secret"
+    mods_config.write_webhook_secret(client.app.state.mods.settings.data_dir, mod_id, short)
+    webhook = next(w for w in client.get(MODS).json()["webhooks"] if w["id"] == mod_id)
+    assert webhook["secret_set"] is True and webhook["secret_too_short"] is True
+    payload = _verdict_body(asset_id, "flag")
+    response = client.post(
+        f"/api/mods/{mod_id}/verdicts", content=payload, headers=_signed(payload, secret=short)
+    )
+    assert response.status_code == 200, response.text
 
 
 def test_receive_verdicts_rejects_bad_signature_and_old_timestamp(client: TestClient) -> None:

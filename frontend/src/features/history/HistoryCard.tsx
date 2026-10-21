@@ -18,6 +18,7 @@ import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { paramsForRerun } from '../run-form/paramsBuilder'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { inputsFromRunInputs } from '../run-form/editInputs'
+import { restoreRunRegions, stripAppendedText } from '../regions/regions'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { removeItemFromPagedData, type InfiniteQueryData } from '../../lib/queryCache'
 import {
@@ -114,6 +115,9 @@ export function HistoryCard({ run }: HistoryCardProps) {
   const hasInputs = run.input_count > 0
   const accentClass = hasInputs ? styles.dotEdit : styles.dotGenerate
   const paramChips = buildParamChips(run.params)
+  // 領域の指示(ADR-0053): 足した文はプロンプトから除いて見せ、四角を送ったことをチップで示す。
+  const shownPrompt = stripAppendedText(run.prompt, run.regions?.appended_text)
+  const regionCount = run.regions?.regions.length ?? 0
   const tokenLabel = formatTokenCount(run.usage)
   const parentAssetId = run.primary_parent_asset_id
   const extraInputCount = run.input_count > 1 ? run.input_count - 1 : 0
@@ -148,17 +152,21 @@ export function HistoryCard({ run }: HistoryCardProps) {
       // comfyui_*(ADR-0013)はサーバーが 422 で拒否するので、フォームへ戻す前に取り除く。
       // 実際に使った seed(comfyui_seed)があれば seed として固定する(同じ画像を再現できる
       // ように。ランダムに戻すのは seed の専用欄のトグル1つ)。
+      // 領域の指示(ADR-0053 4章)。四角を戻し、サーバーが足した入力とプロンプトの末尾の文を除く。
+      const restored = restoreRunRegions({ prompt: detail.prompt, inputs: detail.inputs ?? [], regions: detail.regions })
       setFormState({
         provider: detail.provider,
         model: detail.model,
-        prompt: detail.prompt,
+        prompt: restored.prompt,
         params: paramsForRerun((detail.params ?? {}) as Record<string, unknown>) as Record<
           string,
           string | number | boolean
         >,
-        inputs: inputsFromRunInputs(detail.inputs ?? []),
+        inputs: inputsFromRunInputs(restored.inputs),
         // 削除済みのグループなら null(=「なし」)で返ってくる。
         assetGroupId: detail.asset_group?.id ?? null,
+        regions: restored.regions,
+        regionsAssetId: restored.regionsAssetId,
       })
       navigate('/studio')
     },
@@ -310,10 +318,10 @@ export function HistoryCard({ run }: HistoryCardProps) {
               <p className={styles.title} title={firstOutput.title}>
                 {firstOutput.title}
               </p>
-              <p className={styles.promptOneLine}>{run.prompt || t.history.card.noPrompt}</p>
+              <p className={styles.promptOneLine}>{shownPrompt || t.history.card.noPrompt}</p>
             </div>
           ) : (
-            <p className={styles.prompt}>{run.prompt || t.history.card.noPrompt}</p>
+            <p className={styles.prompt}>{shownPrompt || t.history.card.noPrompt}</p>
           )}
         </Link>
         <div className={styles.meta}>
@@ -336,8 +344,13 @@ export function HistoryCard({ run }: HistoryCardProps) {
           )}
         </div>
 
-        {paramChips.length > 0 && (
+        {(paramChips.length > 0 || regionCount > 0) && (
           <div className={styles.chipRow}>
+            {regionCount > 0 && (
+              <span className={styles.chip} title={t.regions.runDetail.delivery}>
+                {fmt(t.regions.form.chip, { count: regionCount })}
+              </span>
+            )}
             {paramChips.map((chip) => (
               <span key={chip} className={styles.chip}>
                 {chip}

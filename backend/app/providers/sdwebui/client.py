@@ -32,6 +32,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -39,6 +40,8 @@ import httpx
 
 from app.i18n import t
 from app.providers.sdwebui.loras import LoraInfo, parse_loras
+
+logger = logging.getLogger(__name__)
 
 Flavor = Literal["forge", "a1111"]
 Credentials = tuple[str, str]
@@ -67,8 +70,9 @@ class SdWebuiError(Exception):
 class Availability:
     """接続の確認の結果。`reason` は機械可読のコード、`message` は利用者向けの文言。
 
-    reason: apiNotEnabled(404) / unauthorized(401・403) / unreachable(接続できない) /
-            timeout / unexpectedResponse / parseFailed
+    reason: apiNotEnabled(404) / unauthorized(401・403) / unreachable(接続できない。
+            時間切れも含む) / unexpectedResponse(ほかの状態コード、読めない応答)。
+            `timeout` と `parseFailed` は以前の区分で、今は返さない(応答の型には残す)。
     """
 
     available: bool
@@ -161,6 +165,19 @@ def _status_failure(status_code: int) -> Availability:
         return Availability(False, "unauthorized", t("sdwebui.client.unauthorized"))
     return Availability(
         False, "unexpectedResponse", t("sdwebui.client.unexpectedResponse", status=status_code)
+    )
+
+
+def _unexpected_check_response() -> Availability:
+    return Availability(False, "unexpectedResponse", t("sdwebui.client.checkUnexpectedResponse"))
+
+
+def _log_check(warn: bool, base_url: str, detail: str) -> None:
+    logger.log(
+        logging.WARNING if warn else logging.DEBUG,
+        "SD WebUI(%s)への接続の確認に失敗しました: %s",
+        base_url,
+        detail,
     )
 
 
@@ -402,24 +419,34 @@ class SdWebuiClient:
             kwargs["transport"] = self._transport
         return httpx.Client(**kwargs)
 
-    def check_available(self, timeout: float = 1.0) -> Availability:
-        """`GET /sdapi/v1/options` で到達性を確かめる。"""
+    def check_available(self, timeout: float = 1.0, *, log_detail: bool = False) -> Availability:
+        """`GET /sdapi/v1/options` で到達性を確かめる。
+
+        結果は固定の区分(unreachable / unauthorized / apiNotEnabled / unexpectedResponse)と
+        固定の文言だけにする。接続テストは管理者が入れた任意の URL に向けて行うので、例外の文言や
+        状態コード、時間切れかどうかを返すと、サーバーの側のネットワークのようすが分かってしまう
+        ため。詳細はサーバーのログに出す(`log_detail` が真なら警告、偽なら debug)。
+        """
         try:
             with self._sync_client(timeout) as http:
                 response = http.get(_join(self.base_url, "/sdapi/v1/options"))
-        except httpx.TimeoutException:
-            return Availability(False, "timeout", t("sdwebui.client.connectTimeout"))
-        except httpx.HTTPError:
-            # 例外の文字列は URL を含みうるが資格情報は含まない。それでも文言には出さない。
+        except httpx.HTTPError as exc:
+            # 例外の文字列は URL を含みうるが資格情報は含まない。それでも応答には出さない。
+            _log_check(log_detail, self.base_url, f"{exc.__class__.__name__}: {exc}")
             return Availability(False, "unreachable", t("sdwebui.client.connectFailed"))
-        if response.status_code != 200:
+        if response.status_code in (401, 403, 404):
             return _status_failure(response.status_code)
+        if response.status_code != 200:
+            _log_check(log_detail, self.base_url, f"HTTP {response.status_code}")
+            return _unexpected_check_response()
         try:
             body = response.json()
         except ValueError:
-            return Availability(False, "parseFailed", t("sdwebui.client.parseFailed"))
+            _log_check(log_detail, self.base_url, "not JSON")
+            return _unexpected_check_response()
         if not isinstance(body, dict):
-            return Availability(False, "parseFailed", t("sdwebui.client.parseFailed"))
+            _log_check(log_detail, self.base_url, "not a JSON object")
+            return _unexpected_check_response()
         flavor: Flavor = "forge" if "forge_additional_modules" in body else "a1111"
         return Availability(True, flavor=flavor)
 

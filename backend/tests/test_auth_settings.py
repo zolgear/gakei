@@ -133,6 +133,11 @@ def _callback_result(client: TestClient) -> dict:
     assert response.headers["content-type"].startswith("text/html")
     assert response.headers["cache-control"] == "no-store"
     text = response.text
+    # Issue #166: インラインのスクリプトは、この応答だけの nonce で許す。
+    csp = response.headers["content-security-policy"]
+    nonce = csp.split("'nonce-", 1)[1].split("'", 1)[0]
+    assert f'<script nonce="{nonce}">' in text
+    assert "frame-ancestors 'none'" in csp
     start = text.index("var r=") + len("var r=")
     end = text.index(";if(window.opener)")
     return json.loads(text[start:end])
@@ -362,6 +367,79 @@ def test_register_connection_secret_keep_clear_replace(
     response = client_none.delete("/api/settings/auth/connection/pending")
     assert response.status_code == 200
     assert response.json()["pending"] is None
+
+
+def test_register_connection_requires_secret_when_issuer_origin_changes(
+    client_none: TestClient, data_dir: Path
+) -> None:
+    """保存済みのシークレットを、保存したときと別のオリジンの IdP へ送らない。"""
+    _register(client_none, client_secret="first-secret")
+
+    # 同じオリジン(パスだけ違う)なら、省略で引き継ぐ。
+    body = _register(client_none, issuer="https://idp.test/realms/y", client_secret=None)
+    assert body["pending"]["client_secret"]["configured"] is True
+
+    # 別のオリジンへは、入れ直さなければ 422。仮登録は変わらない。
+    response = client_none.put(
+        "/api/settings/auth/connection",
+        json={
+            "issuer": "https://other-idp.test/realms/x",
+            "client_id": "gakei",
+            "scopes": "openid",
+            "public_base_url": "http://testserver",
+        },
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert (detail["code"], detail["field"]) == ("client_secret_reentry", "client_secret")
+    pending = client_none.get("/api/settings/auth").json()["pending"]
+    assert pending["issuer"] == "https://idp.test/realms/y"
+    assert read_secret_field(data_dir, auth_settings.PENDING_SECRET_FIELD) == "first-secret"
+
+    # 入れ直す(または空にして公開クライアントにする)なら登録できる。
+    body = _register(
+        client_none, issuer="https://other-idp.test/realms/x", client_secret="second-secret"
+    )
+    assert body["pending"]["issuer"] == "https://other-idp.test/realms/x"
+    body = _register(client_none, issuer="https://third-idp.test", client_secret="")
+    assert body["pending"]["client_secret"]["configured"] is False
+
+
+def test_live_discovery_errors_use_fixed_reasons(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Discovery の取得の失敗は、例外の種類や状態コードを返さず、固定の区分にする。"""
+    import asyncio
+
+    import httpx
+
+    from app.api import auth_settings as auth_settings_api
+    from app.i18n import t
+
+    real_client = httpx.AsyncClient
+
+    def use(handler):  # noqa: ANN001, ANN202
+        monkeypatch.setattr(
+            auth_settings_api.httpx,
+            "AsyncClient",
+            lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+        )
+
+    def refused(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("10.0.0.5 refused", request=request)
+
+    cases = [
+        (refused, "failed", t("settings.auth.discoveryReason.unreachable")),
+        (lambda _r: httpx.Response(404), "failed", t("settings.auth.discoveryReason.unexpected")),
+        (
+            lambda _r: httpx.Response(200, text="<html>"),
+            "invalid",
+            t("settings.auth.discoveryReason.unexpected"),
+        ),
+    ]
+    for handler, kind, reason in cases:
+        use(handler)
+        with pytest.raises(DiscoveryError) as excinfo:
+            asyncio.run(auth_settings_api._fetch_discovery_live(ISSUER))
+        assert (excinfo.value.kind, excinfo.value.reason) == (kind, reason)
 
 
 def test_pending_does_not_change_effective_connection(client_none: TestClient) -> None:

@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     # 対策(ADR-0019 2章、2026-10-19 追記。`app.http_guard`)。ホスト名で開くときに足す。
     allowed_hosts: str = Field(default="", alias="ALLOWED_HOSTS")
 
+    # 応答のセキュリティのヘッダー(nosniff、X-Frame-Options、Referrer-Policy、SPA の CSP。
+    # `app.security_headers`)。リバースプロキシで別の値を付けるときだけ false にする。
+    security_headers: bool = Field(default=True, alias="SECURITY_HEADERS")
+
     # カンマ区切りのメールアドレス。大文字小文字は無視し、ログインのたびに再評価する
     # (IdP のクレームは使わない。ADR-0019)。
     auth_admin_emails: str = Field(default="", alias="AUTH_ADMIN_EMAILS")

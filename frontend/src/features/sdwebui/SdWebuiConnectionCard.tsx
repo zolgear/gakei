@@ -3,7 +3,7 @@
  * `/settings/sdwebui` に置く。作りは ComfyUI の `ComfyUIConnectionCard` に合わせる。
  * - 状態(接続中/接続できない理由/未設定)、接続先の種類(Forge / AUTOMATIC1111)、チェックポイントの数。
  * - 接続する・URL を変えるときはダイアログで入力し、接続テストで確かめてから登録する。ダイアログでは
- *   Basic 認証の資格情報も入れられる(入れると接続の前に資格情報を保存する)。
+ *   Basic 認証の資格情報も入れられる(入れると接続先と一緒に保存する。URL のオリジンが変わるときは入れ直しが必須)。
  * - 「一覧を読み直す」(`POST /api/sdwebui/refresh`)。
  * - 「無効にする」「有効にする」(ADR-0038 6章)。URL・資格情報・待つ上限を残したまま使わない状態にし、
  *   同じ設定で戻す。無効の間も URL の変更と接続テストはできる(変えても無効のまま)。無効にするときは
@@ -21,7 +21,6 @@ import {
   getSdWebuiStatus,
   refreshSdWebui,
   setSdWebuiConnection,
-  setSdWebuiCredentials,
   testSdWebuiConnection,
   type SdWebuiConnectionTestResponse,
   type SdWebuiStatus,
@@ -29,6 +28,7 @@ import {
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Modal } from '../../components/Modal'
 import { fmt, useI18n, type Messages } from '../../i18n'
+import { originChanges } from '../../lib/urlOrigin'
 import { SDWEBUI_STATUS_QUERY_KEY } from '../settings/queryKeys'
 import { ConnectionCard, type ConnectionCardState, type ConnectionDetail } from '../settings/SettingsParts'
 import { useSettingsShell } from '../settings/settingsShell'
@@ -372,8 +372,9 @@ interface DialogProps {
 
 /**
  * 接続する・URL を変えるダイアログ。資格情報を入れたときは、接続テストもその値で試し、
- * 登録のときは資格情報を先に保存してから接続先を保存する(資格情報だけ保存されて接続先の保存に
- * 失敗したときは、エラーを出し、ダイアログを閉じない)。
+ * 登録のときは接続先と一緒に保存する(この URL のオリジンに結び付ける)。
+ * 保存済みの資格情報は、保存したときと同じオリジンにだけ送る。URL のオリジンが変わるときは
+ * 資格情報の欄を必須にし、入れ直すまで接続テストと接続を押せなくする。
  */
 function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: DialogProps) {
   const { t } = useI18n()
@@ -396,18 +397,8 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
   })
 
   const saveMutation = useMutation({
-    mutationFn: async (vars: {
-      url: string
-      allowNonLoopback: boolean
-      credentials?: { username: string; password: string }
-    }) => {
-      if (vars.credentials) {
-        const afterCredentials = await setSdWebuiCredentials(vars.credentials.username, vars.credentials.password)
-        // 接続先の保存に失敗しても、資格情報が保存済みになったことは画面に反映する。
-        onApplied(afterCredentials)
-      }
-      return setSdWebuiConnection(vars.url, vars.allowNonLoopback)
-    },
+    mutationFn: (vars: { url: string; allowNonLoopback: boolean; credentials?: { username: string; password: string } }) =>
+      setSdWebuiConnection(vars.url, vars.allowNonLoopback, vars.credentials),
     onSuccess: (data) => {
       onApplied(data)
       toast.show({ message: data.disabled ? c.urlSavedWhileDisabled : c.connected })
@@ -432,6 +423,9 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
   const trimmedUrl = urlInput.trim()
   const needsConfirm = trimmedUrl !== '' && !isLoopbackUrl(trimmedUrl)
   const credentialsPartial = credentials.kind === 'partial'
+  // 保存済みの資格情報は、保存したときと別のオリジンへは送らない(入れ直してもらう)。
+  const credentialsRequired = status.credentials_set && originChanges(status.url, trimmedUrl)
+  const credentialsMissing = credentialsRequired && credentials.kind !== 'filled'
   const testNotice = testSuccessNotice({
     enabled: status.enabled,
     disabled: status.disabled,
@@ -440,7 +434,11 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
     confirmNonLoopback,
   })
   const canConnect =
-    !status.locked && !pending && !credentialsPartial && canSaveConnection(urlInput, confirmNonLoopback)
+    !status.locked &&
+    !pending &&
+    !credentialsPartial &&
+    !credentialsMissing &&
+    canSaveConnection(urlInput, confirmNonLoopback)
 
   return (
     <Modal open title={hasConnectionUrl(status) ? c.changeDialogTitle : c.connectDialogTitle} onClose={close}>
@@ -494,14 +492,22 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
 
         <fieldset className={settingsStyles.fieldset}>
           <legend className={settingsStyles.rowLabel}>{c.dialogCredentialsHeading}</legend>
-          <p className={settingsStyles.helpText}>
-            {status.credentials_set ? c.dialogCredentialsHelpSet : c.dialogCredentialsHelp}
-          </p>
+          {credentialsRequired ? (
+            <p className={settingsStyles.warningText} id="gakei-sdwebui-connect-credentials-required">
+              {c.dialogCredentialsRequired}
+            </p>
+          ) : (
+            <p className={settingsStyles.helpText}>
+              {status.credentials_set ? c.dialogCredentialsHelpSet : c.dialogCredentialsHelp}
+            </p>
+          )}
           <SdWebuiCredentialsFields
             idPrefix="gakei-sdwebui-connect"
             username={username}
             password={password}
             disabled={pending}
+            required={credentialsRequired}
+            describedBy={credentialsRequired ? 'gakei-sdwebui-connect-credentials-required' : undefined}
             onUsernameChange={(v) => {
               setUsername(v)
               resetTest()
@@ -521,7 +527,7 @@ function SdWebuiConnectionDialog({ status, onClose, onApplied, onConflict }: Dia
           <button
             type="button"
             className={settingsStyles.secondaryButton}
-            disabled={testMutation.isPending || trimmedUrl === '' || credentialsPartial}
+            disabled={testMutation.isPending || trimmedUrl === '' || credentialsPartial || credentialsMissing}
             onClick={() => {
               setErrorMessage(null)
               testMutation.mutate(trimmedUrl)

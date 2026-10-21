@@ -27,6 +27,7 @@ from app.domain import upload_tickets as upload_tickets_domain
 from app.domain.assets import MAX_UPLOAD_BYTES, IngestError, ingest_upload
 from app.domain.models import AssetKind
 from app.domain.storage import AssetStore
+from app.http_body_limit import read_file_limited
 from app.i18n import t
 from app.mods.gate import ingest_gate
 
@@ -67,7 +68,10 @@ async def _read_body(request: Request) -> bytes:
         form = await request.form()
         for value in form.values():
             if isinstance(value, UploadFile):
-                return await value.read()
+                # 上限を超えると分かった時点で読むのをやめる(一時ファイルの読みはスレッドで)。
+                return await run_in_threadpool(
+                    read_file_limited, value.file, MAX_UPLOAD_BYTES - 1, _too_large
+                )
         raise HTTPException(status_code=422, detail=t("uploads.noFile"))
 
     if length and length.isdigit() and int(length) >= MAX_UPLOAD_BYTES:
@@ -132,6 +136,7 @@ async def _upload(
             ticket.user_id,
             auth_mode=runtime.mode,
             admin_emails=runtime.admin_email_set(),
+            allowed_domains=runtime.allowed_email_domain_set(),
         )
         if viewer is None:
             db.rollback()

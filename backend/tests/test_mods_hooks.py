@@ -15,10 +15,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.domain.models import ModDelivery, ModInvocation
+from app.mods import config as mods_config
 from tests.conftest import make_png_bytes, wait_for_run_terminal
 
 MODS = "/api/settings/mods"
-SECRET = "hook-secret-value-0123456789"
+SECRET = "hook-secret-value-0123456789-abcdefgh"
 
 
 class _Hook:
@@ -376,10 +377,11 @@ def test_mods_api_never_returns_the_secret(client: TestClient) -> None:
     listed = client.get(MODS)
     assert SECRET not in listed.text
     updated = client.patch(
-        f"{MODS}/webhooks/{webhook['id']}", json={"secret": "another-secret", "name": "renamed"}
+        f"{MODS}/webhooks/{webhook['id']}",
+        json={"secret": "another-secret-0123456789-abcdefghij", "name": "renamed"},
     )
     assert updated.status_code == 200
-    assert "another-secret" not in updated.text
+    assert "another-secret-0123456789-abcdefghij" not in updated.text
     assert updated.json()["webhooks"][0]["name"] == "renamed"
 
     # テスト送信: 応答と所要時間を返す。記録は残さない。
@@ -395,13 +397,30 @@ def test_mods_api_never_returns_the_secret(client: TestClient) -> None:
     assert client.delete(f"{MODS}/webhooks/{webhook['id']}").status_code == 404
 
 
+def test_webhook_secret_needs_minimum_length(client: TestClient) -> None:
+    """新しく保存する鍵は 32 文字以上。短ければ 422 で、保存済みの鍵は変えない。"""
+    short = "x" * (mods_config.WEBHOOK_SECRET_MIN - 1)
+    body = {"name": "x", "url": "https://x.test", "secret": short}
+    response = client.post(f"{MODS}/webhooks", json=body)
+    assert response.status_code == 422
+    assert "32" in response.json()["detail"]
+    created = client.post(f"{MODS}/webhooks", json={**body, "secret": "y" * 32})
+    assert created.status_code == 201, created.text
+    webhook = created.json()["webhooks"][0]
+    assert webhook["secret_too_short"] is False
+    patched = client.patch(f"{MODS}/webhooks/{webhook['id']}", json={"secret": short})
+    assert patched.status_code == 422
+    data_dir = client.app.state.mods.settings.data_dir
+    assert mods_config.read_webhook_secret(data_dir, webhook["id"]) == "y" * 32
+
+
 def test_mods_api_validation_and_lists(client: TestClient) -> None:
     for bad in (
-        {"name": "", "url": "https://x.test", "secret": "s"},
-        {"name": "x", "url": "ftp://x.test", "secret": "s"},
-        {"name": "x", "url": "https://user:pw@x.test", "secret": "s"},
+        {"name": "", "url": "https://x.test", "secret": SECRET},
+        {"name": "x", "url": "ftp://x.test", "secret": SECRET},
+        {"name": "x", "url": "https://user:pw@x.test", "secret": SECRET},
         {"name": "x", "url": "https://x.test", "secret": ""},
-        {"name": "x", "url": "https://x.test", "secret": "s", "timeout_seconds": 0},
+        {"name": "x", "url": "https://x.test", "secret": SECRET, "timeout_seconds": 0},
     ):
         assert client.post(f"{MODS}/webhooks", json=bad).status_code == 422, bad
     assert client.patch(MODS, json={"instance_name": "Studio A"}).json()["instance_name"] == (

@@ -120,7 +120,10 @@
       "hintUpload": "the image upload",
       "hintSubmit": "submitting the workflow",
       "hintFetchOutput": "fetching the output image",
-      "hintContact": "contacting ComfyUI"
+      "hintContact": "contacting ComfyUI",
+      "checkUnreachable": "Cannot connect to ComfyUI. Check the URL and that ComfyUI is running.",
+      "checkUnexpectedResponse": "ComfyUI returned an unexpected response. Check that the URL points to ComfyUI.",
+      "outputTooLarge": "The ComfyUI output image is too large (up to {mb} MB)."
     },
     "provider": {
       "checking": "Checking the connection to ComfyUI.",
@@ -242,7 +245,8 @@
     "credentials": {
       "invalid": "The user name and password must each be 1–256 characters long and contain no control characters.",
       "usernameColon": "The user name cannot contain \":\".",
-      "bothRequired": "Specify both the user name and the password."
+      "bothRequired": "Specify both the user name and the password.",
+      "reenterForNewOrigin": "The connection's origin (scheme, host and port) changes, so the saved credentials are not sent. Enter the user name and password again, or delete the credentials before connecting."
     },
     "api": {
       "connectionUrlMissing": "No connection URL was specified.",
@@ -264,7 +268,8 @@
       "requestTimeout": "Timed out while waiting for SD WebUI to respond.",
       "parseFailed": "Could not parse the response from SD WebUI.",
       "rejectedNoDetails": "SD WebUI rejected the request (no details).",
-      "executionFailedNoDetails": "Execution failed in SD WebUI (no details)."
+      "executionFailedNoDetails": "Execution failed in SD WebUI (no details).",
+      "checkUnexpectedResponse": "SD WebUI returned an unexpected response. Check that the URL points to SD WebUI started with --api."
     },
     "provider": {
       "checking": "Checking the connection to SD WebUI.",
@@ -403,14 +408,18 @@
     "contentFilterRejected": "Rejected by the content policy.",
     "apiError": "OpenAI API error ({label}): {detail}",
     "keyInvalid": "The key is invalid",
-    "keyVerifyFailed": "Could not verify the key with OpenAI: {detail}",
     "envKeyLocked": "The OPENAI_API_KEY environment variable (.env) takes priority, so it cannot be changed or removed from the app. Edit .env instead.",
     "keyEmpty": "Enter an API key",
     "baseUrl": {
       "invalid": "The base URL is not valid. Only http or https URLs are accepted, without userinfo, a query string, or a fragment.",
       "empty": "Enter a base URL",
-      "envLocked": "The OPENAI_BASE_URL environment variable (.env) takes priority, so it can't be changed or removed from the screen. Edit the value in .env instead."
-    }
+      "envLocked": "The OPENAI_BASE_URL environment variable (.env) takes priority, so it can't be changed or removed from the screen. Edit the value in .env instead.",
+      "reenterKey": "The connection's origin (scheme, host and port) changes, so the saved API key is not sent. Enter the API key to use with the new connection",
+      "originChangeEnvKey": "The API key comes from the OPENAI_API_KEY environment variable (.env), so a connection with a different origin (scheme, host and port) cannot be saved from the screen. Set OPENAI_BASE_URL in .env instead",
+      "clearNeedsKeyRemoval": "Going back to the default connection changes the origin (scheme, host and port), so the saved API key is not sent. Delete the API key first, then go back and register the key again"
+    },
+    "keyVerifyUnreachable": "Could not reach the connection, so the key was not verified. Check the connection URL and the network",
+    "keyVerifyUnexpected": "The connection returned an unexpected response, so the key was not verified. Check that the URL points to an OpenAI-compatible API"
   },
   "settings": {
     "general": {
@@ -449,7 +458,8 @@
         "annotation": "Auto titles and tags",
         "embedding": "Embeddings",
         "assistant": "Assistant"
-      }
+      },
+      "reenterKey": "The Base URL's origin (scheme, host and port) changes, so the saved key is not sent. Enter the key again (if the connection needs no key, delete the key first)"
     },
     "share": {
       "invalidEnabled": "enabled must be true or false"
@@ -489,6 +499,11 @@
         "admin_emails_empty": "oidc requires at least one admin email.",
         "verified_email_not_admin": "The email address used for the test sign-in is not in the admin emails.",
         "self_not_admin": "You cannot remove your own email address from the admin emails."
+      },
+      "clientSecretReentry": "The issuer's origin (scheme, host and port) changes, so the saved client secret is not sent. Enter the client secret again (leave it empty for a public client)",
+      "discoveryReason": {
+        "unreachable": "the IdP is unreachable",
+        "unexpected": "the response is unexpected"
       }
     },
     "assistant": {
@@ -499,6 +514,12 @@
     },
     "locality": {
       "invalid": "The connection type must be external or local"
+    },
+    "regionDetection": {
+      "invalidBool": "{name} must be true or false",
+      "unknownConnection": "The specified connection does not exist",
+      "invalidModel": "The model name must be 1 to {max} characters",
+      "invalidLimit": "{name} must be an integer from {min} to {max}"
     }
   },
   "runValidation": {
@@ -562,7 +583,8 @@
     "notFound": "Asset not found",
     "contentNotFound": "Content not found",
     "notDeleted": "Not deleted",
-    "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run."
+    "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run.",
+    "regionsMustBePng": "Region images must be in PNG format"
   },
   "runs": {
     "unknownProvider": "Unknown provider: {provider}",
@@ -573,6 +595,41 @@
     "cannotCancelStatus": "Cannot cancel: status={status}",
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
     "partialNotFound": "Partial image not found"
+  },
+  "runRegions": {
+    "editOnly": "Region instructions can only be used with Edit",
+    "notSupported": "This provider or model does not accept region instructions",
+    "primaryRequired": "Region instructions require a first input image",
+    "tooManyInputs": "With the images added for region instructions there would be {count} input images, more than the limit of {max}. Remove some input or reference images",
+    "overlayFailed": "Could not create the image with the boxes drawn",
+    "colors": {
+      "red": "red",
+      "blue": "blue",
+      "green": "green",
+      "yellow": "yellow",
+      "magenta": "magenta",
+      "cyan": "cyan",
+      "orange": "orange",
+      "purple": "purple"
+    },
+    "prompt": {
+      "header": "Region instructions: image {overlay} is image 1 with numbered colored boxes drawn on top. The boxes show the approximate location and size. Edit image 1. When the text above mentions a box by its number (such as \"Box 1\") or by its name, it means the area of that box in the list below. Where a box has its own instruction, follow it.",
+      "where": " (x {left}–{right}%, y {top}–{bottom}% of the image)",
+      "area": "The area at x {left}–{right}%, y {top}–{bottom}% of the image.",
+      "kind": {
+        "change": "Change the area in the box{where}.",
+        "add": "Add something new in the box{where}.",
+        "keep": "Keep the area in the box{where} exactly as it is.",
+        "remove": "Remove what is in the box{where} and fill the area in naturally to match the surroundings.",
+        "move": "Move what is in the dashed box{source} to the solid box{target}. Fill the original spot in naturally to match the surroundings."
+      },
+      "instruction": "Instruction: {instruction}",
+      "text": "Draw the text \"{text}\" exactly as written.",
+      "reference": "Use image {image} as a reference.",
+      "item": "- Box {number} ({color}): {body}",
+      "itemNamed": "- Box {number} ({color}, {label}): {body}",
+      "footer": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image."
+    }
   },
   "promptSets": {
     "notFound": "Prompt set not found",
@@ -610,7 +667,8 @@
   },
   "worker": {
     "interruptedByRestart": "Interrupted by a server restart",
-    "providerNotRegistered": "provider={provider} is not registered"
+    "providerNotRegistered": "provider={provider} is not registered",
+    "internalErrorDetail": "{error} (see the server log for details)"
   },
   "launcher": {
     "nodeMissing": "Node.js was not found, or the version is too old (22.12+ required, 24.x recommended).\nInstall it from https://nodejs.org/.",
@@ -885,7 +943,8 @@
   "modelStore": {
     "download": {
       "httpError": "Failed to download {file} (HTTP {status})",
-      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded"
+      "hashMismatch": "The hash (sha256) of {file} does not match. The downloaded file was discarded",
+      "tooLarge": "{file} exceeded its expected size, so the download was stopped"
     }
   },
   "embeddings": {
@@ -894,8 +953,8 @@
     "connectionMissing": "The connection used for embeddings was not found. Choose it again under Admin settings > Embeddings",
     "modelMissing": "The embedding model {model} was not found. Download it from the admin settings",
     "insufficientMemory": "Did not load the embedding model {model} because there is not enough free memory (needs about {needed} GB, about {available} GB free)",
-    "remoteUnavailable": "Could not connect to the inference server ({error})",
-    "remoteHttpError": "The inference server returned an error (HTTP {status}): {body}",
+    "remoteUnavailable": "Could not connect to the inference server. Check the connection URL and that the server is running (details are in the server log)",
+    "remoteHttpError": "The inference server returned an unexpected response. Check the model name and the API format (details are in the server log)",
     "remoteInvalidResponse": "Could not read the inference server's response as embeddings",
     "assetDeleted": "Embeddings are not computed for deleted images",
     "maskNotSupported": "Embeddings are not computed for masks",
@@ -973,7 +1032,8 @@
         "generated": "Generated",
         "mask": "Mask",
         "sketch": "Sketch",
-        "composite": "Arrangement"
+        "composite": "Arrangement",
+        "regions": "Regions"
       },
       "operations": {
         "generate": "Generate",
@@ -1100,6 +1160,7 @@
     "invalidInstanceName": "The instance name must be at most {max} characters",
     "invalidUrl": "The URL must be http or https (user name, password and # are not allowed)",
     "invalidSecret": "The signing secret must be 1 to {max} characters",
+    "invalidWebhookSecret": "The signing secret must be {min} to {max} characters",
     "invalidEvents": "Invalid events",
     "invalidFilters": "Invalid filters",
     "invalidTimeout": "The timeout must be between {min} and {max} seconds",
@@ -1120,10 +1181,30 @@
     "verdictUnauthorized": "The signature is missing or invalid, or the timestamp is too old",
     "verdictTooLarge": "The request body is too large",
     "verdictInvalid": "The verdicts are not in a valid form: {error}",
-    "verdictTargetNotAllowed": "Verdicts are accepted only for items delivered to this Mod: {target}"
+    "verdictTargetNotAllowed": "Verdicts are accepted only for items delivered to this Mod: {target}",
+    "verdictInProgress": "The same request is being processed. Wait for its response before sending it again",
+    "verdictTooMany": "Too many requests have been accepted recently. Try again later"
   },
   "llm": {
     "authFailed": "Authentication with the LLM connection failed. Check the connection's API key.",
     "permissionDenied": "The LLM connection does not allow this request. Check the connection's API key and model."
+  },
+  "regionDetection": {
+    "disabled": "Box detection is disabled (an administrator can enable it under \"Region detection\" in the admin settings)",
+    "unsupported": "The detection connection does not support Structured Outputs, so it cannot be used for detection (only the official OpenAI endpoint is supported for now)",
+    "hourlyLimitReached": "The hourly detection limit ({limit}) has been reached. Please wait and try again",
+    "llmError": "Box detection failed: {error}",
+    "maskNotSupported": "Detection is not available for mask images",
+    "assetDeleted": "Detection is not available for deleted images",
+    "imageWithheld": "A Mod's verdict does not allow this image to be sent to external AI",
+    "imageMissing": "The image file was not found",
+    "imageUnreadable": "The image could not be read",
+    "fake": {
+      "person": "Person (dummy)",
+      "cup": "Cup (dummy)",
+      "window": "Window (dummy)"
+    },
+    "detectionNotFound": "The detection was not found",
+    "deleteForbidden": "Only the user who ran the detection or an administrator can delete it"
   }
 }

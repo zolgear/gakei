@@ -12,6 +12,8 @@ const base: RunFormState = {
   params: { size: '1024x1024', quality: 'low', background: 'opaque' },
   inputs: [{ inputId: 'i1', assetId: 'a1', role: 'image', position: 0 }],
   assetGroupId: 'g1',
+  regions: [],
+  regionsAssetId: null,
 }
 
 function updateFormMessage(patch: Record<string, unknown>, formParams: Record<string, unknown> = {}, ok = true) {

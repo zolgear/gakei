@@ -54,7 +54,7 @@ from app.domain.models import (
     RunInput,
     RunStatus,
 )
-from app.domain.schemas import CompositionRecipe
+from app.domain.schemas import CompositionRecipe, RunRegions
 from app.domain.storage import AssetStore
 from app.domain.text_safety import sanitize_external
 from app.i18n import t
@@ -119,7 +119,7 @@ class ManifestComposition(_Model):
 class ManifestAsset(_Model):
     id: uuid.UUID
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    kind: Literal["upload", "generated", "mask", "sketch", "composite"]
+    kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
     mime: Literal["image/png", "image/jpeg", "image/webp"]
     width: int = Field(ge=1)
     height: int = Field(ge=1)
@@ -152,6 +152,9 @@ class ManifestRun(_Model):
     created_by_name: str | None = Field(default=None, max_length=500)
     inputs: list[ManifestRunInput] = Field(default_factory=list, max_length=1000)
     omitted_input_count: int = Field(default=0, ge=0)
+    # 領域の指示の四角(ADR-0053 8章。`run.regions`)。古い ZIP には無い。形が崩れていれば
+    # 取り込まない(Run は取り込む)。
+    regions: dict[str, Any] | None = None
 
 
 class Manifest(_Model):
@@ -270,7 +273,7 @@ def _check_manifest_consistency(manifest: Manifest) -> None:
                 t("lineageImport.invalidManifest", reason="only generated assets have a run")
             )
         if asset.source_asset_id is not None:
-            if asset.kind != "sketch" or asset.source_asset_id not in assets_by_id:
+            if asset.kind not in ("sketch", "regions") or asset.source_asset_id not in assets_by_id:
                 raise _fail(t("lineageImport.invalidManifest", reason="invalid sketch source"))
         if asset.composition is not None:
             _check_composition(asset, assets_by_id)
@@ -651,6 +654,9 @@ def import_archive(
         run = run_map[mrun.id]
         if run.id not in new_run_ids:
             continue
+        if mrun.regions is not None:
+            # 四角が指す Asset も付け替える(新しく作った Run に一度だけ書く。ADR-0053 4章)。
+            run.regions = _imported_regions(mrun.regions, asset_map)
         for run_input in sorted(mrun.inputs, key=lambda i: (i.position, i.role)):
             db.add(
                 RunInput(
@@ -729,3 +735,33 @@ def _ingest(db: Session, store: AssetStore, data: bytes, kind: AssetKind, **kwar
         return assets_domain.ingest(db, store, data, kind, **kwargs)
     except assets_domain.IngestError as e:
         raise LineageImportError(t("lineageImport.invalidImage", reason=str(e))) from e
+
+
+def _imported_regions(
+    raw: dict[str, Any], asset_map: dict[uuid.UUID, uuid.UUID]
+) -> dict[str, Any] | None:
+    """ZIP の `run.regions` を、取り込んだ Asset の id に付け替える。ZIP に無い Asset は null。"""
+    try:
+        record = RunRegions.model_validate(raw)
+    except ValidationError:
+        return None
+    overlay = record.overlay_asset_id
+    regions = [
+        region.model_copy(
+            update={
+                "reference_asset_id": (
+                    asset_map.get(region.reference_asset_id)
+                    if region.reference_asset_id is not None
+                    else None
+                )
+            }
+        )
+        for region in record.regions
+    ]
+    imported = record.model_copy(
+        update={
+            "regions": regions,
+            "overlay_asset_id": asset_map.get(overlay) if overlay is not None else None,
+        }
+    )
+    return imported.model_dump(mode="json")

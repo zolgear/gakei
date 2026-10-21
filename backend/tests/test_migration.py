@@ -8,7 +8,7 @@ from sqlalchemy import inspect
 
 from tests.conftest import requires_postgresql
 
-pytestmark = pytest.mark.windows
+pytestmark = [pytest.mark.windows, pytest.mark.fresh_database]
 
 
 def test_migration_creates_expected_tables(client: TestClient) -> None:
@@ -1655,4 +1655,46 @@ def test_migration_0038_renames_locality_values(empty_database_url: str) -> None
         "wf-unset": "unset",
         "wf-local": "local",
     }
+    engine.dispose()
+
+
+def test_migration_0040_adds_asset_region_detection(empty_database_url: str) -> None:
+    """四角の検出の履歴(ADR-0053 7章): 0039 の DB に upgrade head で表が加わり、downgrade で
+    消えること。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.main import alembic_config
+
+    cfg = alembic_config(empty_database_url)
+    command.upgrade(cfg, "0039")
+    engine = create_engine(empty_database_url)
+    assert "asset_region_detection" not in set(sa_inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(empty_database_url)
+    inspector = sa_inspect(engine)
+    columns = {c["name"] for c in inspector.get_columns("asset_region_detection")}
+    assert columns == {
+        "id",
+        "asset_id",
+        "query",
+        "connection_id",
+        "model",
+        "max_items",
+        "regions",
+        "created_at",
+        "created_by_user_id",
+    }
+    fks = {fk["referred_table"] for fk in inspector.get_foreign_keys("asset_region_detection")}
+    assert fks == {"asset", "app_user"}
+    indexes = {i["name"] for i in inspector.get_indexes("asset_region_detection")}
+    assert "ix_asset_region_detection_asset_id_created_at" in indexes
+    engine.dispose()
+
+    command.downgrade(cfg, "0039")
+    engine = create_engine(empty_database_url)
+    assert "asset_region_detection" not in set(sa_inspect(engine).get_table_names())
     engine.dispose()

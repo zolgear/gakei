@@ -21,6 +21,7 @@ from app.embedding.base import EmbeddingError, blob_to_vector, l2_normalize, vec
 from app.embedding.fake import FakeEmbeddingEngine
 from app.embedding.onnx_engine import OnnxClipEngine
 from app.embedding.remote import InfinityEngine, remote_model_key
+from app.i18n import t
 from app.model_store.residency import ModelResidency
 
 _FIXTURES = Path(__file__).parent / "fixtures"
@@ -410,13 +411,18 @@ def test_infinity_text_request_has_no_modality_and_no_key() -> None:
     assert "authorization" not in requests[0].headers
 
 
-def test_infinity_errors_become_embedding_errors_without_key() -> None:
+def test_infinity_errors_become_embedding_errors_without_key(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     requests: list[httpx.Request] = []
     engine = _infinity(requests, status=503)
-    with pytest.raises(EmbeddingError) as excinfo:
+    with caplog.at_level("WARNING"), pytest.raises(EmbeddingError) as excinfo:
         engine.embed_images([Image.new("RGB", (8, 8))])
     message = str(excinfo.value)
-    assert "503" in message and "model not loaded" in message
+    # 画面に出す文言は固定(状態コードや相手の本文は出さない)。詳細はサーバーのログへ。
+    assert message == t("embeddings.remoteHttpError")
+    assert "503" not in message and "model not loaded" not in message
+    assert "503" in caplog.text and "model not loaded" in caplog.text
     assert "sk-local" not in message
 
     def broken(request: httpx.Request) -> httpx.Response:
@@ -432,6 +438,7 @@ def test_infinity_errors_become_embedding_errors_without_key() -> None:
     with pytest.raises(EmbeddingError) as excinfo:
         engine.embed_texts(["a"])
     assert "sk-secret" not in str(excinfo.value)
+    assert str(excinfo.value) == t("embeddings.remoteUnavailable")
 
     def bad_json(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": [{"index": 0}]})

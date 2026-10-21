@@ -175,6 +175,28 @@ def run_texts(run: Run) -> list[contract.TextPart]:
     negative = (run.params or {}).get("negative_prompt")
     if isinstance(negative, str) and negative:
         parts.append(contract.TextPart(role="negative_prompt", text=negative))
+    parts.extend(region_texts(run))
+    return parts
+
+
+def region_texts(run: Run) -> list[contract.TextPart]:
+    """領域の指示の四角(ADR-0053 8章)。四角ごとに、指示(`region`)と描く文字(`region_text`)。
+
+    足した文はプロンプトにも入っているが、四角ごとの利用者の文を分けて検査できるように載せる。"""
+    record = run.regions if isinstance(run.regions, dict) else None
+    items = record.get("regions") if record is not None else None
+    if not isinstance(items, list):
+        return []
+    parts: list[contract.TextPart] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        instruction = item.get("instruction")
+        if isinstance(instruction, str) and instruction:
+            parts.append(contract.TextPart(role="region", text=instruction))
+        text = item.get("text")
+        if isinstance(text, str) and text:
+            parts.append(contract.TextPart(role="region_text", text=text))
     return parts
 
 
@@ -186,7 +208,14 @@ def image_run_subject(db: Session, settings: Settings, run: Run) -> contract.Bef
         params=run_params(run),
         images=run_inputs(db, run.id, sent_only=True),
         run_id=str(run.id),
+        region_count=region_count(run),
     )
+
+
+def region_count(run: Run) -> int | None:
+    record = run.regions if isinstance(run.regions, dict) else None
+    items = record.get("regions") if record is not None else None
+    return len(items) if isinstance(items, list) and items else None
 
 
 def asset_ingested_subject(db: Session, asset: Asset, source: str) -> contract.AssetIngestedSubject:

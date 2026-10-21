@@ -9,9 +9,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.i18n import t
 from tests.sdwebui_fake import FAKE_PATH_ROOT, FakeSdWebui, install_fake_factories
 
 LOCAL_URL = "http://127.0.0.1:7860"
@@ -154,6 +156,115 @@ def test_connection_test_with_explicit_credentials(client: TestClient, fake: Fak
     )
     assert response.status_code == 422
     assert client.get("/api/sdwebui/status").json()["enabled"] is False
+
+
+OTHER_ORIGIN_URL = "http://127.0.0.1:7861"
+
+
+def _auth_requests_to(fake: FakeSdWebui, url: str) -> list[httpx.Request]:
+    return [
+        r
+        for r in fake.requests
+        if str(r.url).startswith(url + "/") and "authorization" in r.headers
+    ]
+
+
+def test_saved_credentials_are_not_sent_to_another_origin(
+    client: TestClient, fake: FakeSdWebui, data_dir: Path
+) -> None:
+    """保存済みの資格情報は、保存したときと同じオリジンにだけ送る。"""
+    fake.credentials = ("user-x", SECRET)
+    client.put("/api/sdwebui/connection", json={"url": LOCAL_URL})
+    client.put("/api/sdwebui/credentials", json={"username": "user-x", "password": SECRET})
+    stored = json.loads((data_dir / "secrets.json").read_text(encoding="utf-8"))
+    assert stored["sdwebui_auth_origin"] == "http://127.0.0.1:7860"
+
+    # 別のオリジンの接続テストは、資格情報を入れ直さなければ 422(送らない)
+    response = client.post("/api/sdwebui/connection/test", json={"url": OTHER_ORIGIN_URL})
+    assert response.status_code == 422
+    assert response.json()["detail"] == t("sdwebui.credentials.reenterForNewOrigin")
+    # 別のオリジンへの接続の変更も同じ。設定は変わらない
+    response = client.put("/api/sdwebui/connection", json={"url": OTHER_ORIGIN_URL})
+    assert response.status_code == 422
+    assert response.json()["detail"] == t("sdwebui.credentials.reenterForNewOrigin")
+    assert client.get("/api/sdwebui/status").json()["url"] == LOCAL_URL
+    assert _auth_requests_to(fake, OTHER_ORIGIN_URL) == []
+
+    # 同じオリジンでパスだけ変えるなら、保存済みの資格情報をそのまま使う
+    response = client.post("/api/sdwebui/connection/test", json={"url": LOCAL_URL + "/sub"})
+    assert response.status_code == 200, response.text
+    assert _auth_requests_to(fake, LOCAL_URL + "/sub")
+
+    # 入れ直せば、新しいオリジンに結び付けて保存する
+    response = client.put(
+        "/api/sdwebui/connection",
+        json={"url": OTHER_ORIGIN_URL, "username": "user-x", "password": SECRET},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["available"] is True
+    assert SECRET not in response.text
+    stored = json.loads((data_dir / "secrets.json").read_text(encoding="utf-8"))
+    assert stored["sdwebui_auth_origin"] == "http://127.0.0.1:7861"
+
+
+def test_credentials_can_be_deleted_then_origin_changed(
+    client: TestClient, fake: FakeSdWebui
+) -> None:
+    client.put("/api/sdwebui/connection", json={"url": LOCAL_URL})
+    client.put("/api/sdwebui/credentials", json={"username": "user-x", "password": SECRET})
+    client.delete("/api/sdwebui/credentials")
+    response = client.put("/api/sdwebui/connection", json={"url": OTHER_ORIGIN_URL})
+    assert response.status_code == 200, response.text
+
+
+def test_detached_credentials_stay_bound_to_their_origin(
+    client: TestClient, fake: FakeSdWebui
+) -> None:
+    """切り離してから別の URL につなぐときも、資格情報は保存したときのオリジンにだけ送る。"""
+    client.put("/api/sdwebui/connection", json={"url": LOCAL_URL})
+    client.put("/api/sdwebui/credentials", json={"username": "user-x", "password": SECRET})
+    client.delete("/api/sdwebui/connection")
+    response = client.put("/api/sdwebui/connection", json={"url": OTHER_ORIGIN_URL})
+    assert response.status_code == 422
+
+
+def test_legacy_credentials_are_bound_to_current_url(
+    client: TestClient, fake: FakeSdWebui, data_dir: Path
+) -> None:
+    """オリジンを記録する前に保存した資格情報は、今の接続先に結び付ける。"""
+    from app.domain import sdwebui_connection as connection
+
+    client.put("/api/sdwebui/connection", json={"url": LOCAL_URL})
+    connection.save_credentials(data_dir, "user-x", SECRET)  # オリジンなし(以前の形)
+    assert connection.credentials_origin(data_dir) is None
+    client.get("/api/sdwebui/status")
+    assert connection.credentials_origin(data_dir) == "http://127.0.0.1:7860"
+    response = client.put("/api/sdwebui/connection", json={"url": OTHER_ORIGIN_URL})
+    assert response.status_code == 422
+
+
+def test_connection_test_reports_fixed_reasons(client: TestClient) -> None:
+    """届かない接続先の理由は固定の区分と文言だけ(例外の文言・時間切れかどうかを返さない)。"""
+    from app.providers.sdwebui.client import SdWebuiClient
+
+    def boom(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("10.0.0.5 timed out", request=request)
+
+    def make_client(url: str, credentials: object) -> SdWebuiClient:
+        return SdWebuiClient(url, credentials=None, transport=httpx.MockTransport(boom))
+
+    import app.api.sdwebui as sdwebui_api
+
+    original = sdwebui_api._make_client
+    sdwebui_api._make_client = make_client  # type: ignore[assignment]
+    try:
+        response = client.post("/api/sdwebui/connection/test", json={"url": LOCAL_URL})
+    finally:
+        sdwebui_api._make_client = original  # type: ignore[assignment]
+    body = response.json()
+    assert body["reason"] == "unreachable"
+    assert body["reason_message"] == t("sdwebui.client.connectFailed")
+    assert "10.0.0.5" not in response.text
 
 
 def test_connection_test_without_url(client: TestClient) -> None:

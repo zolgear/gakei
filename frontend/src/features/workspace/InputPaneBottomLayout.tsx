@@ -11,6 +11,8 @@ import styles from './InputPane.module.css'
 export interface InputPaneSlots {
   inputImages: ReactNode
   promptEditor: ReactNode
+  /** プロンプトの上に出す、領域の入力の補助(ADR-0053)。無ければ null。 */
+  promptAssist: ReactNode
   promptTools: ReactNode
   submitControls: ReactNode
   notices: ReactNode
@@ -26,6 +28,7 @@ export interface InputPaneSlots {
 export function InputPaneBottomLayout({
   inputImages,
   promptEditor,
+  promptAssist,
   promptTools,
   submitControls,
   notices,
@@ -42,6 +45,7 @@ export function InputPaneBottomLayout({
 
       <div className={styles.grid}>
         <div className={styles.promptColumn}>
+          {promptAssist}
           {promptEditor}
           <div className={styles.promptActionsRow}>
             {promptTools}

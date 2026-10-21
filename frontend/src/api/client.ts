@@ -37,6 +37,17 @@ export type RunEvent = components['schemas']['RunEvent']
 export type RunOutputRef = components['schemas']['RunOutputRef']
 export type RunTextOutput = components['schemas']['RunTextOutput']
 export type RunStatus = RunSummary['status']
+// 領域の指示(ADR-0053)。
+export type RegionBox = components['schemas']['RegionBox']
+export type RegionKind = RegionBox['kind']
+export type RunRegions = components['schemas']['RunRegions']
+export type DetectedRegion = components['schemas']['DetectedRegion']
+export type RegionDetectResponse = components['schemas']['RegionDetectResponse']
+export type RegionDetectionSettingsResponse = components['schemas']['RegionDetectionSettingsResponse']
+export type RegionDetectionSettingsUpdateRequest = components['schemas']['RegionDetectionSettingsUpdateRequest']
+/** 保存した検出1回分(Asset ごとの履歴)。 */
+export type RegionDetectionRecord = components['schemas']['RegionDetectionView']
+export type RegionDetectionListResponse = components['schemas']['RegionDetectionListResponse']
 
 export type AssetDetail = components['schemas']['AssetDetail']
 export type AssetSummary = components['schemas']['AssetSummary']
@@ -963,11 +974,15 @@ export function getOpenAiBaseUrlStatus(): Promise<OpenAIBaseUrlStatus> {
 }
 
 /** 有効なキーがあれば OpenAI 互換 API への確認を行うため、最大15秒程度かかることがある。 */
-export function setOpenAiBaseUrl(baseUrl: string): Promise<OpenAIBaseUrlStatus> {
+/**
+ * 接続先(Base URL)を確かめてから保存する。`apiKey` を渡すと、そのキーで確かめて両方を保存する。画面で保存した
+ * キーがあり、オリジンが変わるときは必須(省くと 422)。
+ */
+export function setOpenAiBaseUrl(baseUrl: string, apiKey?: string): Promise<OpenAIBaseUrlStatus> {
   return request('/api/settings/openai-base-url', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base_url: baseUrl }),
+    body: JSON.stringify(apiKey ? { base_url: baseUrl, api_key: apiKey } : { base_url: baseUrl }),
   })
 }
 
@@ -1192,12 +1207,20 @@ export function testSdWebuiConnection(params: {
   })
 }
 
-/** 接続・URL の変更。ループバック以外は `allowNonLoopback` が要る(422)。SD WebUI の Run が待機中・実行中なら 409。 */
-export function setSdWebuiConnection(url: string, allowNonLoopback = false): Promise<SdWebuiStatus> {
+/**
+ * 接続・URL の変更。ループバック以外は `allowNonLoopback` が要る(422)。SD WebUI の Run が待機中・実行中なら 409。
+ * `credentials` を渡すと、接続先と一緒に保存する(この URL のオリジンに結び付ける)。保存済みの資格情報があり、
+ * オリジンが変わるときは必須(省くと 422)。
+ */
+export function setSdWebuiConnection(
+  url: string,
+  allowNonLoopback = false,
+  credentials?: { username: string; password: string },
+): Promise<SdWebuiStatus> {
   return request('/api/sdwebui/connection', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, allow_non_loopback: allowNonLoopback }),
+    body: JSON.stringify({ url, allow_non_loopback: allowNonLoopback, ...(credentials ?? {}) }),
   })
 }
 
@@ -1699,6 +1722,51 @@ export function updateAssistantSettings(body: AssistantSettingsUpdateRequest): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+// -- 領域の四角の検出(ADR-0053 7章) ----------------------------------------------
+
+/** 全ログイン者が読める(検出のボタンを出すかの判断。`usable`)。 */
+export function getRegionDetectionSettings(): Promise<RegionDetectionSettingsResponse> {
+  return request('/api/settings/region-detection')
+}
+
+/** 管理者のみ。書いた項目だけ変える。不正な値は 422。 */
+export function updateRegionDetectionSettings(
+  body: RegionDetectionSettingsUpdateRequest,
+): Promise<RegionDetectionSettingsResponse> {
+  return request('/api/settings/region-detection', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/**
+ * 見える Asset の画像で四角の候補を検出する。結果は Asset の検出の履歴に保存し、応答の `detection` にも入る。10 秒を超えることがあるので、
+ * 取り消せるよう `signal` を受ける。断られたときの `ApiError.message` はサーバーの文言。
+ */
+export function detectAssetRegions(
+  assetId: string,
+  query: string | null,
+  signal?: AbortSignal,
+): Promise<RegionDetectResponse> {
+  return request(`/api/assets/${assetId}/regions/detect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: query && query.trim() ? query.trim() : null }),
+    signal,
+  })
+}
+
+/** Asset の検出の履歴(新しい順。最大 20 件)。検出が無効でも読める。 */
+export function listAssetRegionDetections(assetId: string): Promise<RegionDetectionListResponse> {
+  return request(`/api/assets/${assetId}/regions/detections`)
+}
+
+/** 検出の履歴から1件消す(検出した本人か管理者)。 */
+export function deleteAssetRegionDetection(assetId: string, detectionId: string): Promise<void> {
+  return request(`/api/assets/${assetId}/regions/detections/${detectionId}`, { method: 'DELETE' })
 }
 
 // -- 接続先(`locality`。ADR-0051 3章。管理者のみ) ---------------------------------

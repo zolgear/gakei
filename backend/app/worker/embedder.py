@@ -67,7 +67,7 @@ from app.domain.models import (
     RunPromptEmbedding,
 )
 from app.domain.storage import AssetStore
-from app.domain.text_safety import sanitize_external_text
+from app.domain.text_safety import internal_error_text, sanitize_external_text
 from app.embedding.base import (
     DocumentEmbeddingEngine,
     EmbeddingEngine,
@@ -327,11 +327,14 @@ class Embedder:
     # -- ループ ----------------------------------------------------------------
 
     async def _sleep(self) -> None:
+        # 起こされてから消す。先に消すと、待ち行列を見ている最中に来た notify や stop の合図が
+        # 消え、待ちの上限(`_POLL_INTERVAL_SECONDS`)まで寝てしまう(止めるのも遅れる)。
+        if not self._stop.is_set():
+            try:
+                await asyncio.wait_for(self._wake.wait(), timeout=_POLL_INTERVAL_SECONDS)
+            except TimeoutError:
+                pass
         self._wake.clear()
-        try:
-            await asyncio.wait_for(self._wake.wait(), timeout=_POLL_INTERVAL_SECONDS)
-        except TimeoutError:
-            pass
 
     async def _loop(self) -> None:
         # 先読みしたジョブ(`_prepare` を走らせているタスク)。1つだけ持つ。
@@ -550,7 +553,7 @@ class Embedder:
                 await asyncio.to_thread(
                     self._finish_failed,
                     job.model_key,
-                    [(i, f"internalError: {e}") for i in ids],
+                    [(i, f"internalError: {internal_error_text(e)}") for i in ids],
                 )
                 continue
             await asyncio.to_thread(
@@ -634,7 +637,7 @@ class Embedder:
                 await asyncio.to_thread(
                     self._finish_prompt_failed,
                     job.model_key,
-                    [(run_id, f"internalError: {e}")],
+                    [(run_id, f"internalError: {internal_error_text(e)}")],
                 )
                 continue
             await asyncio.to_thread(

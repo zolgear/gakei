@@ -239,3 +239,26 @@
   font-size: 11px;
   color: var(--color-success, #4ade80);
 }
+
+/* 領域の指示(ADR-0053)の数。タイルの右上に出し、押すと編集画面を開く。 */
+.regionsBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 1;
+}
+
+.regionsBadgeButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--color-edit);
+  background: rgba(23, 24, 27, 0.8);
+  border: 1px solid var(--color-edit);
+  border-radius: 999px;
+}

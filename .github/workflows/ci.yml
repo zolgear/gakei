@@ -27,24 +27,30 @@ permissions:
 
 jobs:
   test:
-    name: test (${{ matrix.os }})
+    # ジョブ名は分割しないとき `test (ubuntu-latest)` / `test (windows-latest)` のまま
+    # (`test (ubuntu-latest)` は main / dev のルールセットの必須チェック)。分割した Windows は
+    # `test (windows-latest, 1/4)` のように番号が付く。
+    name: test (${{ matrix.os }}${{ matrix.shard_total > 1 && format(', {0}/{1}', matrix.shard, matrix.shard_total) || '' }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        # Windows は pytest が Linux の5倍以上遅い(I/O とプロセス起動が遅い)ので、
-        # 作業ブランチの PR(base が main 以外)は Linux だけで速く回す。
-        # それ以外(main / dev への push、リリースの PR(base が main)、定期実行、手動実行)は
-        # Windows でも回す。Windows でテストを絞るかどうかは pytest のステップで決める(ADR-0012)。
-        os: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "windows-latest"]') }}
+      # Windows は pytest が Linux の5倍以上遅い(I/O とプロセス起動が遅い)ので、
+      # 作業ブランチの PR(base が main 以外)は Linux だけで速く回す。
+      # dev への push は Windows でも回すが、テストはマーカー windows に絞る(pytest のステップ)。
+      # Windows でも全部回すとき(main への push、リリースの PR(base が main)、定期実行、
+      # 手動実行)は、pytest を4つのジョブに分けて並べて走らせる(tests/conftest.py の
+      # GAKEI_TEST_SHARD_INDEX / GAKEI_TEST_SHARD_TOTAL。テストの ID のハッシュで分ける)。
+      # lint・フロントエンド・ランチャーの確認は、分けたうちの 1 番だけで行う(ADR-0012)。
+      matrix: ${{ (github.event_name == 'pull_request' && github.base_ref != 'main') && fromJSON('{"include":[{"os":"ubuntu-latest","shard":1,"shard_total":1}]}') || (github.event_name == 'push' && github.ref == 'refs/heads/dev') && fromJSON('{"include":[{"os":"ubuntu-latest","shard":1,"shard_total":1},{"os":"windows-latest","shard":1,"shard_total":1}]}') || fromJSON('{"include":[{"os":"ubuntu-latest","shard":1,"shard_total":1},{"os":"windows-latest","shard":1,"shard_total":4},{"os":"windows-latest","shard":2,"shard_total":4},{"os":"windows-latest","shard":3,"shard_total":4},{"os":"windows-latest","shard":4,"shard_total":4}]}') }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       - name: Node.js のセットアップ
-        uses: actions/setup-node@v7
+        if: matrix.shard == 1
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: npm
@@ -53,15 +59,17 @@ jobs:
       # setup-uv は v8 以降、動く major タグ(v8/v9/v10)を発行しなくなったため、
       # フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
 
       - name: backend ruff check
+        if: matrix.shard == 1
         working-directory: backend
         run: uv run --frozen ruff check .
 
       - name: backend ruff format --check
+        if: matrix.shard == 1
         working-directory: backend
         run: uv run --frozen ruff format --check .
 
@@ -75,6 +83,9 @@ jobs:
         shell: bash
         env:
           PYTEST_MARKER: ${{ (runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/dev') && 'windows' || '' }}
+          # 分けないときは 1/1(全部が自分の分になる)。
+          GAKEI_TEST_SHARD_INDEX: ${{ matrix.shard }}
+          GAKEI_TEST_SHARD_TOTAL: ${{ matrix.shard_total }}
         run: |
           if [ -n "$PYTEST_MARKER" ]; then
             uv run --frozen pytest -q -n auto -m "$PYTEST_MARKER"
@@ -83,25 +94,29 @@ jobs:
           fi
 
       - name: frontend npm ci
+        if: matrix.shard == 1
         working-directory: frontend
         run: npm ci
 
       - name: frontend lint
+        if: matrix.shard == 1
         working-directory: frontend
         run: npm run lint
 
       - name: frontend test
+        if: matrix.shard == 1
         working-directory: frontend
         run: npm test
 
       - name: frontend build
+        if: matrix.shard == 1
         working-directory: frontend
         run: npm run build
 
       # ここから起動スクリプト自体の確認。ビルド済みの dist をあえて消し、
       # run.sh / run.bat がフロントのビルドからサーバー起動まで面倒を見ることを確かめる。
       - name: ランチャーの起動確認(Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.shard == 1
         shell: bash
         run: |
           set -euo pipefail
@@ -156,12 +171,12 @@ jobs:
           kill "$(cat launcher.pid)" || true
 
       - name: ランチャーのログ(Linux, 失敗時)
-        if: runner.os == 'Linux' && failure()
+        if: runner.os == 'Linux' && matrix.shard == 1 && failure()
         shell: bash
         run: cat launcher.log || true
 
       - name: ランチャーの起動確認(Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && matrix.shard == 1
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force frontend\dist -ErrorAction SilentlyContinue
@@ -223,7 +238,7 @@ jobs:
           taskkill /PID $proc.Id /T /F 2>$null
 
       - name: ランチャーのログ(Windows, 失敗時)
-        if: runner.os == 'Windows' && failure()
+        if: runner.os == 'Windows' && matrix.shard == 1 && failure()
         shell: pwsh
         run: |
           Get-Content launcher-stdout.log -ErrorAction SilentlyContinue
@@ -249,14 +264,14 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
 
@@ -279,14 +294,14 @@ jobs:
         ports:
           - 10000:10000
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
 
       # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
 
@@ -306,7 +321,7 @@ jobs:
     name: docker build & smoke test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # 定期実行は既定ブランチ(main = リリース済み)で起動するので、開発中の dev を確かめる。
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}

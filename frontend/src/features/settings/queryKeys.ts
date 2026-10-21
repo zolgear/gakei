@@ -78,3 +78,9 @@ export const MOD_INVOCATIONS_QUERY_KEY = ['mod-invocations'] as const
 
 /** `GET /api/settings/mods/deliveries?status=failed`。配達の失敗。 */
 export const MOD_DELIVERY_FAILURES_QUERY_KEY = ['mod-delivery-failures'] as const
+
+/**
+ * `GET /api/settings/region-detection`(ADR-0053 7章)。管理者設定の「領域の検出」と、「領域」の
+ * 画面の検出のボタンの出し分けが同じキーを読む。
+ */
+export const REGION_DETECTION_SETTINGS_QUERY_KEY = ['region-detection-settings'] as const

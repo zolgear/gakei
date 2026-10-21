@@ -121,24 +121,27 @@ def _python_view(status: PythonModStatus, settings: Settings) -> PythonModView:
     )
 
 
+def _webhook_view(w: mods_config.WebhookConfig, settings: Settings) -> ModWebhookView:
+    secret = mods_config.read_webhook_secret(settings.data_dir, w.id)
+    return ModWebhookView(
+        id=w.id,
+        name=w.name,
+        url=w.url,
+        enabled=w.common.enabled,
+        events=list(w.common.events or ()),  # type: ignore[arg-type]
+        filters=_filters_view(w.common.filters),
+        send_images=w.send_images,
+        timeout_seconds=w.common.timeout_seconds,
+        on_failure=w.common.on_failure,
+        wait_for_verdict=w.common.wait_for_verdict,
+        order=w.common.order,
+        secret_set=secret is not None,
+        secret_too_short=mods_config.is_short_webhook_secret(secret),
+    )
+
+
 def _response(db: Session, settings: Settings, runtime: ModRuntime) -> ModsResponse:
-    webhooks = [
-        ModWebhookView(
-            id=w.id,
-            name=w.name,
-            url=w.url,
-            enabled=w.common.enabled,
-            events=list(w.common.events or ()),  # type: ignore[arg-type]
-            filters=_filters_view(w.common.filters),
-            send_images=w.send_images,
-            timeout_seconds=w.common.timeout_seconds,
-            on_failure=w.common.on_failure,
-            wait_for_verdict=w.common.wait_for_verdict,
-            order=w.common.order,
-            secret_set=mods_config.read_webhook_secret(settings.data_dir, w.id) is not None,
-        )
-        for w in mods_config.load_webhooks(db)
-    ]
+    webhooks = [_webhook_view(w, settings) for w in mods_config.load_webhooks(db)]
     return ModsResponse(
         instance_name=mods_config.load_instance_name(db),
         webhooks=webhooks,

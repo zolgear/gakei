@@ -286,6 +286,9 @@ _PARAM_SOURCES = {
     # 生成のアシスタント(ADR-0048)。A の会話と、A の会話の tool のメッセージ。
     "conversation_id": "a_conversation",
     "message_id": "a_assistant_message",
+    # 四角の検出の履歴(ADR-0053 7章)。Asset が見えなければ行の有無に関わらず 404。行の持ち主
+    # の確かめは tests/test_region_detection.py。
+    "detection_id": "literal:00000000-0000-4000-8000-000000000053",
 }
 
 # 利用者のデータではないので対象外のルート(ADR-0025 5章: 管理者設定は利用者のデータと別)。
@@ -328,6 +331,7 @@ def _bodies(w: World) -> dict[tuple[str, str], Any]:
         ("patch", "/api/assets/{asset_id}/title"): {"title": "hijack"},
         ("post", "/api/assets/{asset_id}/tags"): {"name": "hijack"},
         ("put", "/api/assets/{asset_id}/content-rating"): {"level": "xxx"},
+        ("post", "/api/assets/{asset_id}/regions/detect"): {},
         ("patch", "/api/assistant/conversations/{conversation_id}"): {"title": "hijack"},
         ("post", "/api/assistant/conversations/{conversation_id}/messages"): {"text": "hijack"},
     }

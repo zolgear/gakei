@@ -43,6 +43,8 @@ function model(overrides: Partial<ModelCapabilities> & Pick<ModelCapabilities, '
         min_input_images: 0,
         supports_mask: false,
         requires_mask: false,
+        supports_regions: false,
+        regions_delivery: null,
         params: [
           paramDef({
             name: 'quality',
@@ -128,6 +130,8 @@ describe('clearFormContent', () => {
       params: { quality: 'low', n: 1, size: '1024x1024' },
       inputs: [],
       assetGroupId: null,
+      regions: [],
+      regionsAssetId: null,
     })
   })
 

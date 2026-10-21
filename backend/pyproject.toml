@@ -1,6 +1,6 @@
 [project]
 name = "gakei-backend"
-version = "0.9.1"
+version = "0.10.0"
 description = "GAKEI ローカルMVP バックエンド"
 license = "Apache-2.0"
 authors = [
@@ -71,4 +71,6 @@ testpaths = ["tests"]
 addopts = ["--strict-markers"]
 markers = [
     "windows: OS の違いが出るテスト。Windows の CI で dev への push ごとに回す(ADR-0012)",
+    "fresh_database: 起動時のマイグレーションを、雛形の複製ではなく空の SQLite のファイルから行う(tests/conftest.py)",
+    "fresh_database: 起動時のマイグレーションを、雛形の複製ではなく空の SQLite のファイルから行う(tests/conftest.py)",
 ]

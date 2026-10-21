@@ -37,6 +37,7 @@ GAKEI が決まった時点(イベント)で、外部のシステム(Webhook)や
 | `assistant` | アシスタントが LLM を呼ぶたび(道具の呼び出しの往復を含む) | その回の応答を止め、理由をチャットに出す |
 | `embedding` | リモートの埋め込みを呼ぶ前(画像・文章)。ローカルの ONNX は呼ばない | その埋め込みは失敗になる |
 | `workflow_analysis` | 管理者が ComfyUI のワークフローの登録・編集画面で「アシスタントで推定」を押したとき | 推定は止まり、理由が画面に出る(規則による読み取りはそのまま使える) |
+| `region_detection` | 領域の四角の検出(ADR-0053 7章)で VLM を呼ぶ前。接続先がローカルでも呼ぶ | 検出は止まり、理由が画面に出る(四角は手で描ける) |
 
 管理者設定の「接続を確認」は、検査用の固定の文しか送らないので対象にしない。MCP から作った Run も `image_run` を通る。繰り返しの実行は Run ごとに呼ぶ。
 
@@ -105,8 +106,10 @@ Webhook と Python の Mod は同じ中身を受け取る。すべてのイベ�
 - `target` は送り先。API キーは含めない。`connection` は LLM・VLM・埋め込みの接続先のとき(`{ "id", "name", "builtin" }`)。
 - `text` の `role` は `prompt`、`negative_prompt`、`system`、`user`、`assistant`、`tool`、`tags`、`query` など。
 - `images` の `role` は `primary`(主たる入力)、`reference`(参照)、`mask`、`attachment`(アシスタントへの添付)。画像で探すときの画像のように Asset でないものは `asset_id` が `null`。
-- `run_id` は `image_run` のとき、`asset_id` は自動タイトル・タグの対象の画像。
+- `run_id` は `image_run` のとき、`asset_id` は自動タイトル・タグと領域の四角の検出の対象の画像。
+- `image_run` で領域の指示の四角(ADR-0053)を付けたとき: `region_count` が四角の数(付けていなければ `null`)。`text` に、四角ごとの指示(`role` が `region`)と描く文字(`role` が `region_text`)が入る。四角を描いた画像は `images` に `reference` として入る。
 - `workflow_analysis` のとき: `target` はアシスタントの接続先とモデル。`text` は LLM への指示(`role` が `system`)と、ワークフローのノードの要約(`role` が `workflow`。1行が1ノードで、id・種類・タイトル・配線・直値。文字列は先頭 60 文字まで、秘密に見える値は `***`)。テンプレートの JSON そのものは送らない。`params` は `workflow_id`(登録前は `null`)、`workflow_name`、`model`、`reasoning_effort`。画像は送らない。
+- `region_detection` のとき: `target` は検出の接続先とモデル。`text` は VLM への指示(`role` が `system`)と、探す物(`role` が `query`。言葉が無ければ `role` が `user` の決まった文)。`images` は対象の画像1枚(`role` が `primary`)、`asset_id` もその画像。実際に送るのは、その画像を長辺 1536px 以内に縮めた JPEG(`detail: high`)。`params` は `model`、`query`(無ければ `null`)、`max_items`、`image_max_side`、`image_detail`、`reasoning_effort`。
 - ComfyUI の Run の `params` は、共有リンクと同じ規則で秘密に見える値を伏せる。
 
 ### `asset.ingested` の `subject`
@@ -157,7 +160,7 @@ uv run python -m app.tools.export_mod_schema mods-schema.json   # - なら標準
 `schema_version` の互換性の規則:
 
 - **項目を足すときは、版を上げない。** 受ける側は、知らない項目を無視すること。
-- `purpose` などの値の種類を足すときも、版を上げない(2026-10-17 に `workflow_analysis` を足した)。受ける側は、知らない値を受けても壊れないようにし、許可するか拒否するかは Mod の方針で決める。
+- `purpose` などの値の種類を足すときも、版を上げない(2026-10-17 に `workflow_analysis`、2026-10-20 に `region_detection` を足した)。受ける側は、知らない値を受けても壊れないようにし、許可するか拒否するかは Mod の方針で決める。
 - **項目を消す・意味を変えるときは、`schema_version` を上げる。** 受ける側は、知らない版を受けたら、何もしないか拒否する。
 - Python の Mod の関数の呼ばれ方の版は、マニフェストの `api_version`(今は `1`)。合わない Mod は読み込みエラーになる。
 
@@ -261,7 +264,8 @@ uv run python -m app.tools.export_mod_schema mods-schema.json   # - なら標準
 
 管理者設定の「Mod」で登録する。名前、URL、署名の鍵、購読するイベントと絞り込み、画像を送るか、待つ時間、失敗のときの扱い、判定を待つか、を決める。
 
-- 鍵は GAKEI のサーバーの `DATA_DIR/secrets.json` に保存する。画面と API の応答には、一部も出さない(設定済みかどうかだけ)。
+- 鍵は 32 文字以上(1000 文字まで)。判定の受付(9章)の認証にも使うので、推測されにくい乱数にする(例: `openssl rand -hex 32`)。短い鍵は保存できない(422)。32 文字の決まりより前に保存した短い鍵はそのまま動くが、一覧と編集の画面に「鍵が短い」と出るので差し替える。
+- 鍵は GAKEI のサーバーの `DATA_DIR/secrets.json` に保存する。画面と API の応答には、一部も出さない(設定済みかどうかと、短いかどうかだけ)。
 - 要求は `POST`。リダイレクトは辿らない。2xx 以外と、JSON として読めない応答は失敗。応答の本文は 1 MB まで読む。
 - ヘッダー: `X-Gakei-Event`(イベント名)、`X-Gakei-Delivery`(`event_id`)、`X-Gakei-Timestamp`(UNIX 秒)、`X-Gakei-Signature`、`User-Agent: GAKEI/<版>`。
 
@@ -335,7 +339,9 @@ X-Gakei-Signature: sha256=<HMAC-SHA256(鍵, "<timestamp>." + 本文) の hex>
 - 認証は、その Webhook の署名の鍵による署名(ログインのセッションやアクセストークンではない)。署名の作り方は送るときと同じ。時刻が前後 300 秒を超えてずれていれば断る。
 - 本文は応答と同じ判定の配列(`{"verdicts": [...]}` も可)。1 MB まで(超えると 413)。
 - 送れる対象は、その Webhook の呼び出しで届いた Asset と Run だけ(`asset.ingested` で届いた Asset、`run.finished` で届いた Run とその出力の Asset)。対象外が1つでもあれば、何も記録せずに 403。
-- 応答: `{"accepted": <記録した数>}`。署名が無い・合わない・古いと 401、無効な・無い Webhook は 404、形が合わないと 422。
+- 同じ要求は1度だけ受け付ける。`X-Gakei-Timestamp` と本文が同じ要求が 300 秒の窓の中でもう一度届いても、記録しない(前の判定の再送で、後の判定を上書きさせない)。そのときは1回目と同じ `accepted` に `"duplicate": true` を付けて 200 を返すので、応答を受け取れずに送り直した Mod は成功として扱える。判定を新しく送るときは、その時点の時刻で署名し直す。
+- 応答: `{"accepted": <記録した数>, "duplicate": false}`。署名が無い・合わない・古いと 401、無効な・無い Webhook は 404、同じ要求を処理している間に送り直すと 409(1回目の応答を待つ)、形が合わないと 422、受け付けた要求の記録が上限(窓の中で 1 万件)に達すると 429。403・422 で断った要求は覚えないので、直して(または同じ要求をそのまま)送り直せる。
+- 受け付けた要求の記録はサーバーのメモリーに置く。GAKEI を再起動すると消えるので、再起動の前に受けた要求は、窓の中ならもう一度受け付ける(同じ判定が二重に記録されるだけで、効力は変わらない)。
 - `deny` は応答で返したときと同じく、画像を残さない(5章)。
 
 `curl` の例(鍵と本文はシェルの変数に入れる):

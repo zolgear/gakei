@@ -8,6 +8,8 @@ URL に含むトークン自体を認可とする(そのため `main.py` の `re
 取得の時点でも次を確かめ、どれかが満たされなければ 404(理由は区別しない):
 - MCP が有効
 - 期限内・未使用で、発行に使ったアクセストークンが失効していない
+- 発行した利用者が今もログインを許される(削除されていない・許可ドメインから外れていない。
+  セッションと同じ判定。`viewer_for_issuer`)
 - 発行した利用者に、その Asset が今も見える(ADR-0025)
 
 使用済みにしてから配信する。応答は `GET /api/assets/{id}/content?variant=original&download=1`
@@ -60,6 +62,7 @@ def download_by_url(
         ticket.user_id,
         auth_mode=runtime.mode,
         admin_emails=runtime.admin_email_set(),
+        allowed_domains=runtime.allowed_email_domain_set(),
     )
     if viewer is None:
         raise _not_found()

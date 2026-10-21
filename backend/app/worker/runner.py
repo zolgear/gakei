@@ -39,6 +39,7 @@ from app.domain.models import (
 )
 from app.domain.storage import AssetStore
 from app.domain.text_safety import (
+    internal_error_text,
     sanitize_external,
     sanitize_external_text,
     sanitize_external_text_or_none,
@@ -376,13 +377,35 @@ class Runner:
         }
         self._stop_event = asyncio.Event()
         self._tasks: list[asyncio.Task] = []
+        self._event_loop: asyncio.AbstractEventLoop | None = None
 
     def notify(self) -> None:
-        """新規 Run 投入時に呼ぶ。どのレーン宛かは分からないので、全レーンを起こす。"""
+        """新規 Run 投入時に呼ぶ。どのレーン宛かは分からないので、全レーンを起こす。
+
+        同期エンドポイント(スレッド)からも呼ばれる。`asyncio.Event.set` はスレッドセーフでは
+        なく、別のスレッドから呼ぶとイベントループが起きず、レーンは待ちの上限
+        (`_POLL_INTERVAL_SECONDS`)まで寝たままになる。ループの外からは
+        `call_soon_threadsafe` で渡す(annotator などの worker と同じ)。
+        """
+        loop = self._event_loop
+        if loop is None or loop.is_closed():
+            self._set_wake_events()
+            return
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        if current is loop:
+            self._set_wake_events()
+        else:
+            loop.call_soon_threadsafe(self._set_wake_events)
+
+    def _set_wake_events(self) -> None:
         for event in self._wake_events.values():
             event.set()
 
     async def start(self) -> int:
+        self._event_loop = asyncio.get_running_loop()
         reset_count = await asyncio.to_thread(
             reset_interrupted_runs, self.session_factory, self.mods
         )
@@ -439,11 +462,14 @@ class Runner:
                 continue
 
             if picked is None:
+                # 起こされてから消す(取り出しの最中に来た notify や stop を取りこぼさない。
+                # 先に消すと、その間に来た合図が消え、待ちの上限まで寝てしまう)。
+                if not self._stop_event.is_set():
+                    try:
+                        await asyncio.wait_for(wake_event.wait(), timeout=_POLL_INTERVAL_SECONDS)
+                    except TimeoutError:
+                        pass
                 wake_event.clear()
-                try:
-                    await asyncio.wait_for(wake_event.wait(), timeout=_POLL_INTERVAL_SECONDS)
-                except TimeoutError:
-                    pass
                 continue
 
             # 差し替え(テストでのスタブ差し込み含む)を実行のたびに反映できるよう、
@@ -533,9 +559,14 @@ class Runner:
             )
         except ProviderError as e:
             await self._mark_failed(run.id, e.code, e.message, e.request_id)
-        except Exception as e:  # noqa: BLE001 - どの段階の失敗もすべて記録する
-            logger.exception("run %s の処理中に予期しない例外が発生しました", run.id)
+        except assets_domain.IngestError as e:
+            # 出力の取り込みの検証(大きさ・形式)。文言は固定の i18n なので、そのまま見せる。
+            logger.warning("run %s の出力を取り込めませんでした: %s", run.id, e)
             await self._mark_failed(run.id, "internalError", str(e), None)
+        except Exception as e:  # noqa: BLE001 - どの段階の失敗もすべて記録する
+            # 想定外の例外の文言(パスや接続先を含みうる)は画面に出さず、ログに残す(Issue #166)。
+            logger.exception("run %s の処理中に予期しない例外が発生しました", run.id)
+            await self._mark_failed(run.id, "internalError", internal_error_text(e), None)
         else:
             await self.progress_bus.publish(
                 run.id,

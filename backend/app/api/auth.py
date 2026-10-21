@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import html
 import json
+import secrets
 from collections.abc import Callable
 from typing import Literal
 from urllib.parse import urlencode
@@ -300,16 +301,23 @@ def _test_result_page(*, ok: bool, error: TestLoginError | None) -> HTMLResponse
     script_payload = (
         json.dumps(payload).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     )
+    # インラインのスクリプトは、この応答だけの nonce で許す(SPA の CSP は外部のスクリプトしか
+    # 許さないので、このページは自分の CSP を付ける。Issue #166)。
+    nonce = secrets.token_urlsafe(16)
     body = (
         '<!doctype html><html><head><meta charset="utf-8">'
         f"<title>{html.escape(t('auth.testLogin.title'))}</title></head><body>"
         f"<p>{html.escape(message)}</p>"
-        "<script>(function(){var r="
+        f'<script nonce="{nonce}">(function(){{var r='
         + script_payload
         + ";if(window.opener){window.opener.postMessage(r,location.origin);window.close();}})();"
         "</script></body></html>"
     )
-    return HTMLResponse(body, headers={"Cache-Control": "no-store"})
+    csp = (
+        f"default-src 'none'; script-src 'nonce-{nonce}'; base-uri 'none'; "
+        "frame-ancestors 'none'; form-action 'none'"
+    )
+    return HTMLResponse(body, headers={"Cache-Control": "no-store", "Content-Security-Policy": csp})
 
 
 @router.post("/logout", response_model=AuthLogoutResponse, operation_id="logout")

@@ -6,7 +6,8 @@
 - 署名: `X-Gakei-Signature: sha256=<HMAC-SHA256(鍵, "<timestamp>." + 本文のバイト列) の hex>`、
   `X-Gakei-Timestamp` は UNIX 秒。受ける側は時刻の古さも確かめられる。multipart のときも、
   送るバイト列そのもの(境界を含む)に署名する。
-- 応答の本文は JSON として読む。2xx 以外と、JSON として読めない応答は失敗。
+- 応答の本文は JSON として読む。2xx 以外と、JSON として読めない応答は失敗。本文は上限
+  (`_RESPONSE_MAX_BYTES`)までだけ読み、超えたら読むのをやめて失敗にする。
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from typing import Any
 
 import httpx
 
+from app.http_body_limit import BodyTooLarge, aread_limited
 from app.version import get_version
 
 _RESPONSE_MAX_BYTES = 1024 * 1024
@@ -114,12 +116,22 @@ async def send(
         timeout=timeout, transport=transport, follow_redirects=False
     ) as client:
         try:
-            response = await client.send(request)
+            response = await client.send(request, stream=True)
         except httpx.TimeoutException:
             raise
         except httpx.HTTPError as e:
             raise WebhookError(f"{e.__class__.__name__}") from e
-        content = response.content[:_RESPONSE_MAX_BYTES]
+        try:
+            # 応答の本文は上限までだけ読む(超えたら読むのをやめて失敗にする)。
+            content = await aread_limited(response, _RESPONSE_MAX_BYTES)
+        except BodyTooLarge as e:
+            raise WebhookError("response too large", response.status_code) from e
+        except httpx.TimeoutException:
+            raise
+        except httpx.HTTPError as e:
+            raise WebhookError(f"{e.__class__.__name__}") from e
+        finally:
+            await response.aclose()
     if not (200 <= response.status_code < 300):
         raise WebhookError(f"HTTP {response.status_code}", response.status_code)
     if not content.strip():

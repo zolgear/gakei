@@ -69,7 +69,7 @@ def test_redact_secret_text_keeps_ordinary_words() -> None:
     assert "a1a1a1" not in redacted
 
 
-def test_remote_embedding_error_body_is_redacted() -> None:
+def test_remote_embedding_error_body_is_redacted(caplog: pytest.LogCaptureFixture) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(401, text=f'{{"detail": "invalid key {_MASKED_KEY}"}}')
 
@@ -80,7 +80,10 @@ def test_remote_embedding_error_body_is_redacted() -> None:
         api_key=_FULL_KEY,
         client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handler)),
     )
-    with pytest.raises(EmbeddingError) as excinfo:
+    with caplog.at_level("WARNING"), pytest.raises(EmbeddingError) as excinfo:
         engine.embed_texts(["hello"])
     _assert_no_fragment(str(excinfo.value))
-    assert "401" in str(excinfo.value)
+    # 画面に出す文言は固定(状態コードや本文は出さない)。詳細はログに、キーを伏せて出す。
+    assert str(excinfo.value) == t("embeddings.remoteHttpError")
+    assert "401" in caplog.text
+    _assert_no_fragment(caplog.text)

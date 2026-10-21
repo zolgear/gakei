@@ -70,6 +70,7 @@ export function AssetLineageNode({ id, data }: NodeProps) {
           {assetInfo.kind === 'mask' && ` · ${t.lineage.assetMask}`}
           {assetInfo.kind === 'sketch' && ` · ${t.lineage.assetSketch}`}
           {assetInfo.kind === 'composite' && ` · ${t.lineage.assetComposite}`}
+          {assetInfo.kind === 'regions' && ` · ${t.lineage.assetRegions}`}
         </span>
         {embedded && <span className={styles.embeddedBadge}>{t.lineage.embeddedBadge}</span>}
         {deleted && <span className={styles.deletedTag}>{t.lineage.deletedTag}</span>}
