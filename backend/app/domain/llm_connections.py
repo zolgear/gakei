@@ -5,13 +5,18 @@
 
 - 組み込みの接続先 `openai`(「OpenAI の設定」)は一覧に保存せず、常に先頭にあるものとして扱う。
   ADR-0017 のキーと Base URL をそのまま使い、名前・Base URL・キーは変えられず、削除もできない。
-  API 形式だけは変えられる。
+  API 形式、`locality`、構造化出力の対応だけは変えられる。
 - 利用者の接続先のキーは DB に入れず、`DATA_DIR/secrets.json` に接続先ごとに置く
   (`app/domain/api_key.py` と同じファイル・同じ書き込み)。キーが無ければダミーのキー
   (`PLACEHOLDER_API_KEY`)を送る(ローカルの Ollama などへ OpenAI のキーを漏らさないため。SDK は
   空のキーを受け付けない)。
 - どの機能が接続先を使っているかは、使う側が `register_usage` で登録した関数が答える。この
   モジュールは特定の機能を知らない。使われている接続先は削除できない。
+- 構造化出力(Structured Outputs、JSON のスキーマ)への対応は、接続先ごとに管理者が選ぶ
+  (`auto` / `supported` / `unsupported`。ADR-0032 の 2026-10-21 追記)。GAKEI は接続先に対応を
+  問い合わせない。`auto` は、OpenAI の公式(組み込みの接続先で Base URL を変えていないときを
+  含む)だけを対応とみなす。判定は `supports_structured_outputs` の1か所にまとめ、領域の検出
+  (ADR-0053)と ComfyUI のワークフローの推定(ADR-0052)が使う。
 
 **保存先の名前が `annotation` のままである理由(ADR-0032 4章)。** 接続先は、はじめ自動タイトル・
 タグの一部として作った(ADR-0024 8章)。そのため保存先は次の名前になっている。
@@ -46,10 +51,25 @@ if TYPE_CHECKING:
 # 保存先(上の docstring のとおり、名前は変えない)。
 CONNECTIONS_KEY = "annotation.connections"
 OPENAI_API_STYLE_KEY = "annotation.openai_api_style"
+# 組み込みの接続先の構造化出力の対応(2026-10-21 に足した。利用者の接続先は一覧の項目に持つ)。
+OPENAI_STRUCTURED_OUTPUTS_KEY = "llm_connections.openai_structured_outputs"
 _CONNECTION_SECRET_PREFIX = "annotation_connection_key."
 
 ApiStyle = Literal["responses", "chat"]
 API_STYLES: tuple[str, ...] = get_args(ApiStyle)
+
+# 構造化出力への対応。`auto` は GAKEI の判定(`STRUCTURED_OUTPUTS_HOSTS`)に任せる。
+StructuredOutputsMode = Literal["auto", "supported", "unsupported"]
+STRUCTURED_OUTPUTS_MODES: tuple[str, ...] = get_args(StructuredOutputsMode)
+
+# `auto` のとき、構造化出力(JSON Schema の strict)に対応するとみなす接続先のホスト。確かな
+# OpenAI の公式だけにする(ほかは管理者が `supported` を選ぶ)。
+STRUCTURED_OUTPUTS_HOSTS = frozenset({"api.openai.com"})
+
+# 接続先を使えない理由(`connection_problem`)。
+ConnectionProblem = Literal[
+    "connection_missing", "api_key_missing", "structured_outputs_unsupported"
+]
 
 # 組み込みの接続先(OpenAI の設定。ADR-0017)の id。利用者の接続先には使えない。
 BUILTIN_CONNECTION_ID = "openai"
@@ -96,21 +116,33 @@ class ConnectionConfig:
     # 接続先(ADR-0051 3章)。None は既定(`external`)。組み込みの接続先では使わない
     # (OpenAI の接続の値を使う)。
     locality: str | None = None
+    # 構造化出力への対応(管理者の指定。既定は `auto`)。
+    structured_outputs: StructuredOutputsMode = "auto"
 
     @property
     def builtin(self) -> bool:
         return self.id == BUILTIN_CONNECTION_ID
 
 
-def builtin_connection(api_style: ApiStyle = "responses") -> ConnectionConfig:
-    return ConnectionConfig(id=BUILTIN_CONNECTION_ID, name="", base_url=None, api_style=api_style)
+def builtin_connection(
+    api_style: ApiStyle = "responses", structured_outputs: StructuredOutputsMode = "auto"
+) -> ConnectionConfig:
+    return ConnectionConfig(
+        id=BUILTIN_CONNECTION_ID,
+        name="",
+        base_url=None,
+        api_style=api_style,
+        structured_outputs=structured_outputs,
+    )
 
 
 def all_connections(
-    user_connections: tuple[ConnectionConfig, ...], openai_api_style: ApiStyle
+    user_connections: tuple[ConnectionConfig, ...],
+    openai_api_style: ApiStyle,
+    openai_structured_outputs: StructuredOutputsMode = "auto",
 ) -> tuple[ConnectionConfig, ...]:
     """組み込みの接続先を先頭にした一覧。"""
-    return (builtin_connection(openai_api_style), *user_connections)
+    return (builtin_connection(openai_api_style, openai_structured_outputs), *user_connections)
 
 
 @dataclass(frozen=True)
@@ -130,6 +162,17 @@ def normalize_api_style(value: object) -> ApiStyle:
     if value not in API_STYLES:
         raise LlmConnectionValidationError(t("settings.llmConnections.invalidApiStyle"))
     return value  # type: ignore[return-value]
+
+
+def normalize_structured_outputs(value: object) -> StructuredOutputsMode:
+    if value not in STRUCTURED_OUTPUTS_MODES:
+        raise LlmConnectionValidationError(t("settings.llmConnections.invalidStructuredOutputs"))
+    return value  # type: ignore[return-value]
+
+
+def _read_structured_outputs(value: object) -> StructuredOutputsMode:
+    """保存された値を読む。無い・壊れている値は `auto`。"""
+    return value if value in STRUCTURED_OUTPUTS_MODES else "auto"  # type: ignore[return-value]
 
 
 def normalize_connection_name(value: object) -> str:
@@ -164,9 +207,11 @@ def connection_to_json(connection: ConnectionConfig) -> dict[str, Any]:
         "base_url": connection.base_url,
         "api_style": connection.api_style,
     }
-    # 既定(None)のときは書かない。
+    # 既定(None / `auto`)のときは書かない。
     if connection.locality is not None:
         data["locality"] = connection.locality
+    if connection.structured_outputs != "auto":
+        data["structured_outputs"] = connection.structured_outputs
     return data
 
 
@@ -194,6 +239,7 @@ def connections_from_json(raw: object) -> tuple[ConnectionConfig, ...]:
                 base_url=normalize_connection_base_url(item.get("base_url")),
                 api_style=normalize_api_style(item.get("api_style", "responses")),
                 locality=locality_domain.read_saved(item.get("locality")),
+                structured_outputs=_read_structured_outputs(item.get("structured_outputs")),
             )
         except LlmConnectionValidationError:
             continue
@@ -215,9 +261,15 @@ def load_openai_api_style(db: Session) -> ApiStyle:
     return raw if raw in API_STYLES else "responses"  # type: ignore[return-value]
 
 
+def load_openai_structured_outputs(db: Session) -> StructuredOutputsMode:
+    return _read_structured_outputs(_get_raw_value(db, OPENAI_STRUCTURED_OUTPUTS_KEY))
+
+
 def load(db: Session) -> tuple[ConnectionConfig, ...]:
     """組み込みを先頭にした接続先の一覧。追加した接続先は追加した順に並ぶ。"""
-    return all_connections(load_user_connections(db), load_openai_api_style(db))
+    return all_connections(
+        load_user_connections(db), load_openai_api_style(db), load_openai_structured_outputs(db)
+    )
 
 
 def find_connection(
@@ -236,8 +288,9 @@ def add_connection(
     base_url: object,
     api_style: object,
     locality: object = None,
+    structured_outputs: object = None,
 ) -> str:
-    """接続先を足して、その id を返す。"""
+    """接続先を足して、その id を返す。`structured_outputs` の None は既定(`auto`)。"""
     current = load_user_connections(db)
     if len(current) >= CONNECTIONS_MAX:
         raise LlmConnectionValidationError(
@@ -250,6 +303,11 @@ def add_connection(
         base_url=normalized_url,
         api_style=normalize_api_style(api_style),
         locality=_normalize_locality(locality) if locality is not None else None,
+        structured_outputs=(
+            normalize_structured_outputs(structured_outputs)
+            if structured_outputs is not None
+            else "auto"
+        ),
     )
     api_key_domain.warn_if_insecure_base_url(normalized_url)
     _save_connections(db, (*current, connection))
@@ -262,21 +320,33 @@ def update_connection(
     updates: dict[str, Any],
     data_dir: Path | None = None,
 ) -> None:
-    """接続先の名前・Base URL・API 形式・`locality` を変える(書いた項目だけ)。組み込みの接続先は
-    API 形式と `locality` だけ変えられる。組み込みの `locality` は OpenAI の接続の値そのもの
-    (ADR-0051 3章)。None は既定に戻す。
+    """接続先の名前・Base URL・API 形式・`locality`・`structured_outputs` を変える(書いた項目
+    だけ)。組み込みの接続先は API 形式と `locality` と `structured_outputs` だけ変えられる。
+    組み込みの `locality` は OpenAI の接続の値そのもの(ADR-0051 3章)。None は既定に戻す
+    (`structured_outputs` の None は不正な値)。
 
     `api_key` は Base URL と一緒に入れ直すキー(`data_dir` が要る)。保存済みのキーは、保存した
     ときの Base URL と同じオリジン(scheme + host + port)にだけ送る。キーがあって Base URL の
     オリジンが変わるときは `api_key` が必須で、無ければ LlmConnectionValidationError。同じ
     オリジンでパスだけ変えるならキーはそのまま使う。"""
     if connection_id == BUILTIN_CONNECTION_ID:
-        if set(updates) - {"api_style", "locality"}:
+        if set(updates) - {"api_style", "locality", "structured_outputs"}:
             raise ConnectionReservedError
+        # 先に全部を検証する(一部だけ保存される事態を避ける)。
         if "locality" in updates and updates["locality"] is not None:
             _normalize_locality(updates["locality"])
         if "api_style" in updates:
+            normalize_api_style(updates["api_style"])
+        if "structured_outputs" in updates:
+            normalize_structured_outputs(updates["structured_outputs"])
+        if "api_style" in updates:
             _save(db, OPENAI_API_STYLE_KEY, normalize_api_style(updates["api_style"]))
+        if "structured_outputs" in updates:
+            _save(
+                db,
+                OPENAI_STRUCTURED_OUTPUTS_KEY,
+                normalize_structured_outputs(updates["structured_outputs"]),
+            )
         if "locality" in updates:
             locality_domain.save_provider_localities(db, {"openai": updates["locality"]})
         return
@@ -299,6 +369,10 @@ def update_connection(
         value = updates["locality"]
         changed = replace(
             changed, locality=_normalize_locality(value) if value is not None else None
+        )
+    if "structured_outputs" in updates:
+        changed = replace(
+            changed, structured_outputs=normalize_structured_outputs(updates["structured_outputs"])
         )
     if changed.base_url and changed.base_url != current.base_url:
         api_key_domain.warn_if_insecure_base_url(changed.base_url)
@@ -430,6 +504,47 @@ def display_base_url(connection: ConnectionConfig, settings: Settings) -> str | 
         base_url, _ = api_key_domain.resolve_base_url(settings)
         return base_url
     return connection.base_url
+
+
+# -- 構造化出力 ----------------------------------------------------------------------
+
+
+def supports_structured_outputs(connection: ConnectionConfig, settings: Settings) -> bool:
+    """接続先が構造化出力(JSON のスキーマ)に対応するとみなせるか。管理者の指定が `auto` なら、
+    組み込みの接続先で Base URL を変えていないとき(OpenAI 本体)か、ホストが OpenAI の公式の
+    ときだけ対応とみなす。"""
+    if connection.structured_outputs == "supported":
+        return True
+    if connection.structured_outputs == "unsupported":
+        return False
+    base_url = display_base_url(connection, settings)
+    if base_url is None:
+        return connection.builtin
+    return locality_domain.host_of(base_url) in STRUCTURED_OUTPUTS_HOSTS
+
+
+def connection_supports_structured_outputs(
+    db: Session, connection_id: str, settings: Settings
+) -> bool:
+    """id で引いた接続先が構造化出力に対応するとみなせるか。接続先が無ければ False。"""
+    connection = find_connection(load(db), connection_id)
+    return connection is not None and supports_structured_outputs(connection, settings)
+
+
+def connection_problem(
+    db: Session, connection_id: str, settings: Settings, *, structured_outputs: bool
+) -> ConnectionProblem | None:
+    """接続先を使えない理由を1つ返す(使えるなら None)。見る順は、接続先が無い → キーが無い
+    (組み込みの接続先で OpenAI のキーが未設定) → 構造化出力に対応しない(`structured_outputs`
+    が真のときだけ)。"""
+    connection = find_connection(load(db), connection_id)
+    if connection is None:
+        return "connection_missing"
+    if resolve(connection, settings).api_key is None:
+        return "api_key_missing"
+    if structured_outputs and not supports_structured_outputs(connection, settings):
+        return "structured_outputs_unsupported"
+    return None
 
 
 # -- 使っている機能 ----------------------------------------------------------------

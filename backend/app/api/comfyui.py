@@ -655,10 +655,11 @@ async def suggest_bindings(
                     raise _suggest_error(
                         409, "connection_missing", t("assistant.connectionMissing")
                     ) from e
-                if not assistant_settings.structured_outputs_supported(db, config, state.settings):
-                    raise _suggest_error(409, "unsupported", t("comfyui.suggest.unsupported"))
+                # 見る順は領域の検出と同じ(キー → 構造化出力)。
                 if not target.api_key:
                     raise _suggest_error(409, "connection_missing", t("assistant.apiKeyMissing"))
+                if not assistant_settings.structured_outputs_supported(db, config, state.settings):
+                    raise _suggest_error(409, "unsupported", t("comfyui.suggest.unsupported"))
             connection = llm_connections.find_connection(
                 llm_connections.load(db), config.connection_id
             )

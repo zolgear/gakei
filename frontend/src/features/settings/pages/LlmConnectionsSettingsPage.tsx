@@ -3,7 +3,7 @@
  *
  * LLM・VLM の接続先の一覧。ADR-0031 2章の「接続」の型で、保存のボタンは無い。
  * - 接続先はカードで並べる。カードには、その接続先を使っている機能(今は「自動タイトル・タグ」)を出す。
- * - 追加・編集(組み込みの接続先は API の形式だけ)・キーの設定と削除はダイアログ(`ConnectionDialog`)で
+ * - 追加・編集(組み込みの接続先は API の形式・接続先・構造化出力の対応だけ)・キーの設定と削除はダイアログ(`ConnectionDialog`)で
  *   その場で送る。キーは一部も表示しない(設定済みかどうかだけ)。
  * - 削除は確認してからその場で行う。使っている機能がある接続先と組み込みの接続先は削除できない。
  *
@@ -24,6 +24,7 @@ import {
   type LlmConnectionFeature,
   type LlmConnectionView,
   type LlmConnectionsResponse,
+  type StructuredOutputsMode,
 } from '../../../api/client'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { Modal } from '../../../components/Modal'
@@ -40,13 +41,20 @@ import {
   isKeyReentryRequired,
   emptyConnectionForm,
   isConnectionInUse,
+  structuredOutputsDisplay,
   validateConnectionForm,
   type ConnectionForm,
 } from '../llmConnections'
 import { hasChanges } from '../annotationSettings'
 import { LocalitySelect } from '../LocalityParts'
 import { localityLabel } from '../locality'
-import { ANNOTATION_SETTINGS_QUERY_KEY, LLM_CONNECTIONS_QUERY_KEY, PROVIDER_LOCALITIES_QUERY_KEY } from '../queryKeys'
+import {
+  ANNOTATION_SETTINGS_QUERY_KEY,
+  ASSISTANT_SETTINGS_QUERY_KEY,
+  LLM_CONNECTIONS_QUERY_KEY,
+  PROVIDER_LOCALITIES_QUERY_KEY,
+  REGION_DETECTION_SETTINGS_QUERY_KEY,
+} from '../queryKeys'
 import { SettingsPageFrame } from '../SettingsPageFrame'
 import { ConnectionCard, QueryStatus, SettingsSection } from '../SettingsParts'
 import { useSettingsShell } from '../settingsShell'
@@ -58,7 +66,7 @@ function errorText(err: unknown, fallback: string): string | null {
   return err instanceof ApiError ? err.message : fallback
 }
 
-/** 変えた後の一覧でキャッシュを置き換え、接続先を参照する自動タイトル・タグの設定も取り直す。 */
+/** 変えた後の一覧でキャッシュを置き換え、接続先を参照する機能の設定(自動タイトル・タグなど)も取り直す。 */
 function useApplyConnections() {
   const queryClient = useQueryClient()
   return useCallback(
@@ -67,6 +75,9 @@ function useApplyConnections() {
       void queryClient.invalidateQueries({ queryKey: ANNOTATION_SETTINGS_QUERY_KEY })
       // 組み込みの接続先の `locality` は、画像のプロバイダーの OpenAI と同じ値(ADR-0051 3章)。
       void queryClient.invalidateQueries({ queryKey: PROVIDER_LOCALITIES_QUERY_KEY })
+      // 構造化出力の対応で、領域の検出とアシスタント(ComfyUI の推定)の使える状態が変わる。
+      void queryClient.invalidateQueries({ queryKey: REGION_DETECTION_SETTINGS_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: ASSISTANT_SETTINGS_QUERY_KEY })
     },
     [queryClient],
   )
@@ -141,6 +152,10 @@ function ConnectionsSection({ connections }: { connections: LlmConnectionView[] 
                   { label: m.apiStyleLabel, value: view.api_style === 'chat' ? m.apiStyleChat : m.apiStyleResponses },
                   { label: m.apiKeyLabel, value: <KeyStatus view={view} /> },
                   { label: t.settings.locality.label, value: localityLabel(view.locality) },
+                  {
+                    label: m.structuredOutputsLabel,
+                    value: m.structuredOutputsValue[structuredOutputsDisplay(view)],
+                  },
                   {
                     label: m.usedByLabel,
                     value:
@@ -389,6 +404,23 @@ function ConnectionDialog({ view, onClose }: { view?: LlmConnectionView; onClose
               onChange={(locality) => update({ locality })}
             />
             {builtin && <p className={styles.helpText}>{t.settings.locality.builtinNote}</p>}
+          </div>
+          <div className={styles.field}>
+            <label htmlFor={`${idPrefix}-structured-outputs`} className={styles.rowLabel}>
+              {m.structuredOutputsLabel}
+            </label>
+            <select
+              id={`${idPrefix}-structured-outputs`}
+              className={styles.select}
+              value={form.structured_outputs}
+              disabled={busy}
+              onChange={(e) => update({ structured_outputs: e.target.value as StructuredOutputsMode })}
+            >
+              <option value="auto">{m.structuredOutputsAuto}</option>
+              <option value="supported">{m.structuredOutputsSupported}</option>
+              <option value="unsupported">{m.structuredOutputsUnsupported}</option>
+            </select>
+            <p className={styles.helpText}>{m.structuredOutputsHelp}</p>
           </div>
           {view && keyRequired && (
             <div className={styles.field}>

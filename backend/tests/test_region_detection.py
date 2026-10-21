@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import io
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -25,9 +26,11 @@ from app.assistant.structured import (
     StructuredImage,
     StructuredRequest,
 )
+from app.domain import api_key as api_key_domain
 from app.domain import content_withholding, llm_connections
 from app.domain import region_detection as detection
 from app.domain import region_detection_settings as detection_settings
+from app.domain.general_settings import _save
 from app.domain.llm_connections import LlmTarget
 from app.domain.models import AppUser, AssetRegionDetection, ModVerdict
 from app.i18n import use_locale
@@ -433,6 +436,62 @@ def test_detect_unsupported_connection(client: TestClient) -> None:
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "connection_missing"
     assert client.get(SETTINGS).json()["usable"] is False
+
+
+class _RealLikeEngine(FakeStructuredEngine):
+    """接続先が要るエンジン(実物と同じ検証を通す。LLM は呼ばない)。"""
+
+    requires_target = True
+
+
+def _settings_reason(client: TestClient) -> tuple[bool, str | None]:
+    body = client.get(SETTINGS).json()
+    return body["usable"], body["unusable_reason"]
+
+
+def test_unusable_reason_codes(client: TestClient, data_dir: Path) -> None:
+    client.app.state.assistant.structured = _RealLikeEngine()
+    assert _settings_reason(client) == (False, "disabled")
+    _enable(client)
+    # 組み込みの接続先で OpenAI のキーが無い。
+    assert _settings_reason(client) == (False, "api_key_missing")
+    api_key_domain.write_file_key(data_dir, "sk-test")
+    # 組み込みで Base URL が既定のまま(OpenAI 本体)なら、自動で対応とみなす。
+    assert _settings_reason(client) == (True, None)
+    # 接続先が無い(保存の後でほかの手段で消えたとき)。
+    with client.app.state.session_factory() as db:
+        _save(db, "region_detection.connection_id", "missing")
+    assert _settings_reason(client) == (False, "connection_missing")
+
+
+def test_builtin_proxy_needs_structured_outputs_opt_in(client: TestClient, data_dir: Path) -> None:
+    """組み込みの接続先を OpenAI 互換のプロキシに向けたとき、自動では使えず、「対応する」を
+    指定すれば使える。「対応しない」なら公式でも使えない。"""
+    client.app.state.assistant.structured = _RealLikeEngine()
+    api_key_domain.write_file_key(data_dir, "sk-test")
+    api_key_domain.write_file_base_url(data_dir, "http://127.0.0.1:4000/v1")
+    _enable(client)
+    asset_id = _upload(client)
+    assert _settings_reason(client) == (False, "structured_outputs_unsupported")
+    response = client.post(_detect_url(asset_id), json={})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "unsupported"
+
+    builtin = f"{CONNECTIONS}/openai"
+    assert client.patch(builtin, json={"structured_outputs": "supported"}).status_code == 200
+    assert _settings_reason(client) == (True, None)
+    response = client.post(_detect_url(asset_id), json={})
+    assert response.status_code == 200, response.text
+
+    api_key_domain.delete_file_base_url(data_dir)
+    assert client.patch(builtin, json={"structured_outputs": "unsupported"}).status_code == 200
+    assert _settings_reason(client) == (False, "structured_outputs_unsupported")
+    response = client.post(_detect_url(asset_id), json={})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "unsupported"
+
+    assert client.patch(builtin, json={"structured_outputs": "auto"}).status_code == 200
+    assert _settings_reason(client) == (True, None)
 
 
 def test_detect_calls_before_send_and_stops_on_deny(client: TestClient) -> None:

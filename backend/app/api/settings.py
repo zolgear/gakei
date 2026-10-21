@@ -993,17 +993,16 @@ def _assistant_settings_response(
     db: Session, request: Request, user: CurrentUser
 ) -> AssistantSettingsResponse:
     from app.assistant.runtime import user_key
-    from app.domain.llm_connections import ConnectionNotFoundError
 
     config = assistant_settings.load(db)
     runtime = request.app.state.assistant
-    usable = config.enabled
-    if usable and runtime.engine.requires_target:
-        try:
-            target = assistant_settings.resolve_target(db, config, request.app.state.settings)
-            usable = bool(target.api_key)
-        except ConnectionNotFoundError:
-            usable = False
+    reason: str | None = None
+    if not config.enabled:
+        reason = "disabled"
+    elif runtime.engine.requires_target:
+        reason = llm_connections.connection_problem(
+            db, config.connection_id, request.app.state.settings, structured_outputs=False
+        )
     return AssistantSettingsResponse(
         **{name: getattr(config, name) for name in assistant_settings.FIELDS},
         hourly_request_limit_default=assistant_settings.DEFAULT_HOURLY_REQUEST_LIMIT,
@@ -1012,7 +1011,8 @@ def _assistant_settings_response(
         runs_per_message_limit_max=assistant_settings.RUNS_PER_MESSAGE_LIMIT_MAX,
         hourly_run_limit_default=assistant_settings.DEFAULT_HOURLY_RUN_LIMIT,
         hourly_run_limit_max=assistant_settings.HOURLY_RUN_LIMIT_MAX,
-        usable=usable,
+        usable=reason is None,
+        unusable_reason=reason,  # type: ignore[arg-type]
         structured_outputs=(
             not runtime.structured.requires_target
             or assistant_settings.structured_outputs_supported(

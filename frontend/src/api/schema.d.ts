@@ -3674,6 +3674,8 @@ export interface components {
             hourly_run_limit_max: number;
             /** Usable */
             usable: boolean;
+            /** Unusable Reason */
+            unusable_reason?: ("disabled" | "connection_missing" | "api_key_missing") | null;
             /**
              * Structured Outputs
              * @default false
@@ -5482,11 +5484,14 @@ export interface components {
             api_key?: string | null;
             /** Locality */
             locality?: ("external" | "local") | null;
+            /** Structured Outputs */
+            structured_outputs?: ("auto" | "supported" | "unsupported") | null;
         };
         /**
          * LlmConnectionUpdateRequest
          * @description `PATCH /api/settings/llm-connections/{id}`。省略した項目は変更しない。
-         *     組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。
+         *     組み込みの接続先(`openai`)は `api_style`、`locality`、`structured_outputs` だけ変えられる
+         *     (ほかを送ると 409)。
          */
         LlmConnectionUpdateRequest: {
             /** Name */
@@ -5497,6 +5502,8 @@ export interface components {
             api_style?: string | null;
             /** Locality */
             locality?: ("external" | "local") | null;
+            /** Structured Outputs */
+            structured_outputs?: ("auto" | "supported" | "unsupported") | null;
             /** Api Key */
             api_key?: string | null;
         };
@@ -5532,6 +5539,17 @@ export interface components {
              * @enum {string}
              */
             locality_source: "connection" | "default";
+            /**
+             * Structured Outputs
+             * @default auto
+             * @enum {string}
+             */
+            structured_outputs: "auto" | "supported" | "unsupported";
+            /**
+             * Structured Outputs Supported
+             * @default false
+             */
+            structured_outputs_supported: boolean;
             /** Used By */
             used_by?: ("annotation" | "embedding" | "assistant" | "region_detection")[];
         };
@@ -7070,6 +7088,8 @@ export interface components {
             hourly_request_limit_max: number;
             /** Usable */
             usable: boolean;
+            /** Unusable Reason */
+            unusable_reason?: ("disabled" | "connection_missing" | "api_key_missing" | "structured_outputs_unsupported") | null;
             /** Requests Last Hour */
             requests_last_hour: number;
         };

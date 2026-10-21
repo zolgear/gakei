@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,9 @@ def test_create_update_delete_connection(client: TestClient, data_dir: Path) -> 
         # 接続先(ADR-0051 3章)。決めていなければ既定の external。
         "locality": "external",
         "locality_source": "default",
+        # 構造化出力の対応。既定は自動で、公式でない接続先は対応とみなさない。
+        "structured_outputs": "auto",
+        "structured_outputs_supported": False,
     }
     # キーは DB ではなく secrets.json に置き、API では返さない。保存先の名前は変えていない。
     secrets = json.loads((data_dir / "secrets.json").read_text())
@@ -239,6 +243,91 @@ def test_builtin_connection_shows_openai_settings(client: TestClient, data_dir: 
     assert view["base_url"] == "http://127.0.0.1:4000/v1"
     assert view["api_key_set"] is True
     assert "uvwx" not in response.text
+
+
+# -- 構造化出力の対応(2026-10-21) -------------------------------------------------------
+
+
+def test_structured_outputs_on_user_connection(client: TestClient) -> None:
+    connection_id = add_llm_connection(client)
+    view = _connection(client.get(BASE).json(), connection_id)
+    # 既定は自動。公式でない接続先は対応とみなさない。
+    assert view["structured_outputs"] == "auto"
+    assert view["structured_outputs_supported"] is False
+    # 自動のときは保存先に書かない。
+    with client.app.state.session_factory() as db:
+        assert "structured_outputs" not in _get_raw_value(db, "annotation.connections")[0]
+
+    response = client.patch(f"{BASE}/{connection_id}", json={"structured_outputs": "supported"})
+    assert response.status_code == 200, response.text
+    view = _connection(response.json(), connection_id)
+    assert view["structured_outputs"] == "supported"
+    assert view["structured_outputs_supported"] is True
+    with client.app.state.session_factory() as db:
+        saved = _get_raw_value(db, "annotation.connections")[0]
+        assert saved["structured_outputs"] == "supported"
+        assert llm_connections.connection_supports_structured_outputs(
+            db, connection_id, client.app.state.settings
+        )
+
+    for bad in ("yes", None, True):
+        response = client.patch(f"{BASE}/{connection_id}", json={"structured_outputs": bad})
+        assert response.status_code == 422, bad
+    # 追加のときにも指定できる。
+    other = add_llm_connection(client, "proxy", structured_outputs="supported")
+    assert _connection(client.get(BASE).json(), other)["structured_outputs_supported"] is True
+    bad_create = {"name": "x", "base_url": LOCAL_URL, "structured_outputs": "maybe"}
+    assert client.post(BASE, json=bad_create).status_code == 422
+
+
+def test_structured_outputs_on_builtin_connection(client: TestClient, data_dir: Path) -> None:
+    base = f"{BASE}/openai"
+    # Base URL を変えていなければ(OpenAI 本体)、自動で対応とみなす。
+    view = _connection(client.get(BASE).json(), "openai")
+    assert (view["structured_outputs"], view["structured_outputs_supported"]) == ("auto", True)
+
+    # OpenAI 互換のプロキシに向けると、自動では対応とみなさない。
+    api_key_domain.write_file_base_url(data_dir, "http://127.0.0.1:4000/v1")
+    view = _connection(client.get(BASE).json(), "openai")
+    assert view["structured_outputs_supported"] is False
+
+    response = client.patch(base, json={"structured_outputs": "supported"})
+    assert response.status_code == 200, response.text
+    assert _connection(response.json(), "openai")["structured_outputs_supported"] is True
+    with client.app.state.session_factory() as db:
+        assert _get_raw_value(db, llm_connections.OPENAI_STRUCTURED_OUTPUTS_KEY) == "supported"
+
+    # 「対応しない」は公式の接続先でも対応とみなさない。
+    api_key_domain.delete_file_base_url(data_dir)
+    response = client.patch(base, json={"structured_outputs": "unsupported"})
+    assert _connection(response.json(), "openai")["structured_outputs_supported"] is False
+    assert client.patch(base, json={"structured_outputs": None}).status_code == 422
+    # 不正な値があれば、ほかの項目も保存しない。
+    response = client.patch(base, json={"api_style": "chat", "structured_outputs": "x"})
+    assert response.status_code == 422
+    assert _connection(client.get(BASE).json(), "openai")["api_style"] == "responses"
+
+
+def test_supports_structured_outputs_hosts(client: TestClient) -> None:
+    settings = client.app.state.settings
+    official = llm_connections.ConnectionConfig(
+        id="a", name="a", base_url="https://api.openai.com/v1"
+    )
+    local = llm_connections.ConnectionConfig(id="b", name="b", base_url=LOCAL_URL)
+    assert llm_connections.supports_structured_outputs(official, settings) is True
+    assert llm_connections.supports_structured_outputs(local, settings) is False
+    assert (
+        llm_connections.supports_structured_outputs(
+            replace(official, structured_outputs="unsupported"), settings
+        )
+        is False
+    )
+    assert (
+        llm_connections.supports_structured_outputs(
+            replace(local, structured_outputs="supported"), settings
+        )
+        is True
+    )
 
 
 # -- 使っている機能 -----------------------------------------------------------------

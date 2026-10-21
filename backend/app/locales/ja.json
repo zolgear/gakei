@@ -448,6 +448,7 @@
     "llmConnections": {
       "invalidName": "接続先の名前は1〜{max}文字で指定してください",
       "invalidApiStyle": "API 形式は responses か chat である必要があります",
+      "invalidStructuredOutputs": "構造化出力の対応は auto、supported、unsupported のどれかである必要があります",
       "tooMany": "接続先は{max}件までです",
       "notFound": "指定した接続先がありません",
       "builtinName": "OpenAI の設定",
@@ -457,7 +458,8 @@
       "features": {
         "annotation": "自動タイトル・タグ",
         "embedding": "埋め込み",
-        "assistant": "アシスタント"
+        "assistant": "アシスタント",
+        "region_detection": "領域の検出"
       },
       "reenterKey": "Base URL のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのキーは送りません。キーを入れ直してください(キーが要らない接続先なら、先にキーを削除してください)"
     },

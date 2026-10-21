@@ -2334,6 +2334,7 @@ class AnnotationSettingsUpdateRequest(BaseModel):
 # -- LLM の接続先(ADR-0032) --------------------------------------------------
 
 # 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
+StructuredOutputsMode = Literal["auto", "supported", "unsupported"]
 LlmConnectionFeature = Literal["annotation", "embedding", "assistant", "region_detection"]
 
 
@@ -2355,6 +2356,10 @@ class LlmConnectionView(BaseModel):
     # 接続先(ADR-0051 3章)と、どこで決まったか。組み込みの接続先は OpenAI の接続の値。
     locality: Literal["external", "local"] = "external"
     locality_source: Literal["connection", "default"] = "default"
+    # 構造化出力(JSON のスキーマ)への対応の指定(既定は `auto`)と、それで決まった判定。`auto` は
+    # OpenAI の公式(組み込みで Base URL を変えていないときを含む)だけを対応とみなす。
+    structured_outputs: StructuredOutputsMode = "auto"
+    structured_outputs_supported: bool = False
     # この接続先を使っている機能。空でなければ削除できない。
     used_by: list[LlmConnectionFeature] = Field(default_factory=list)
 
@@ -2375,17 +2380,22 @@ class LlmConnectionCreateRequest(BaseModel):
     api_key: str | None = None
     # 接続先(ADR-0051 3章)。省略・null は既定(`external`)。
     locality: Literal["external", "local"] | None = None
+    # 構造化出力への対応。省略・null は既定(`auto`)。
+    structured_outputs: StructuredOutputsMode | None = None
 
 
 class LlmConnectionUpdateRequest(BaseModel):
     """`PATCH /api/settings/llm-connections/{id}`。省略した項目は変更しない。
-    組み込みの接続先(`openai`)は `api_style` だけ変えられる(ほかを送ると 409)。"""
+    組み込みの接続先(`openai`)は `api_style`、`locality`、`structured_outputs` だけ変えられる
+    (ほかを送ると 409)。"""
 
     name: str | None = None
     base_url: str | None = None
     api_style: str | None = None
     # 接続先(ADR-0051 3章)。null は既定(`external`)に戻す。
     locality: Literal["external", "local"] | None = None
+    # 構造化出力への対応(null は不正な値で 422)。
+    structured_outputs: StructuredOutputsMode | None = None
     # Base URL と一緒に入れ直すキー。保存済みのキーがあり、Base URL のオリジン(scheme + host +
     # port)が変わるときは必須(省くと 422)。同じオリジンでパスだけ変えるなら省いてよい。
     api_key: str | None = None
@@ -3079,8 +3089,11 @@ class AssistantSettingsResponse(BaseModel):
     hourly_run_limit_max: int
     # 有効で、接続先とキーがそろっている(パネルを出してよい)。
     usable: bool
+    # 使えない理由(1つに絞る。使えるなら null)。
+    unusable_reason: Literal["disabled", "connection_missing", "api_key_missing"] | None = None
     # 接続先が Structured Outputs に対応するとみなせる(ComfyUI のワークフローの推定に使える。
-    # ADR-0052 6章)。`usable` と両方が真のときだけ、登録・編集画面にボタンを出す。
+    # ADR-0052 6章。判定は LLM の接続先の設定で、「対応する」にもできる)。`usable` と両方が真の
+    # ときだけ、登録・編集画面にボタンを出す。
     structured_outputs: bool = False
     # 見ている利用者の、直近1時間の LLM のリクエスト数と、アシスタントが作った Run の数。
     requests_last_hour: int
@@ -3326,6 +3339,11 @@ class ModVerdictReceiveResponse(BaseModel):
 # -- 領域の四角の検出(ADR-0053 7章) -----------------------------------------------------
 
 
+RegionDetectionUnusableReason = Literal[
+    "disabled", "connection_missing", "api_key_missing", "structured_outputs_unsupported"
+]
+
+
 class RegionDetectionSettingsResponse(BaseModel):
     """`GET /api/settings/region-detection`。全ログイン者が読める(検出のボタンを出すかの判断)。"""
 
@@ -3338,6 +3356,9 @@ class RegionDetectionSettingsResponse(BaseModel):
     # 有効で、接続先とキーがそろい、接続先が Structured Outputs に対応するとみなせる
     # (検出のボタンを出してよい)。
     usable: bool
+    # 使えない理由(1つに絞る。使えるなら null)。見る順は、無効 → 接続先が無い → キーが無い →
+    # 構造化出力に対応しない(LLM の接続先の設定で「対応する」にできる)。
+    unusable_reason: RegionDetectionUnusableReason | None = None
     # 見ている利用者の、直近1時間の検出の数。
     requests_last_hour: int
 
