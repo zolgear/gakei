@@ -158,6 +158,8 @@ export type LlmConnectionView = components['schemas']['LlmConnectionView']
 export type LlmConnectionCreateRequest = components['schemas']['LlmConnectionCreateRequest']
 export type LlmConnectionUpdateRequest = components['schemas']['LlmConnectionUpdateRequest']
 export type LlmApiStyle = LlmConnectionView['api_style']
+/** 接続先の構造化出力(JSON のスキーマ)への対応の指定。`auto` は OpenAI の公式だけを対応とみなす。 */
+export type StructuredOutputsMode = LlmConnectionView['structured_outputs']
 export type LlmConnectionFeature = NonNullable<LlmConnectionView['used_by']>[number]
 
 // -- MCP サーバーとアクセストークン(ADR-0023) ----------------------------------

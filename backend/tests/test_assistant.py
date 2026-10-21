@@ -103,6 +103,7 @@ def test_settings_defaults_and_update(client: TestClient) -> None:
     body = client.get(SETTINGS).json()
     assert body["enabled"] is False
     assert body["usable"] is False
+    assert body["unusable_reason"] == "disabled"
     assert body["connection_id"] == "openai"
     assert body["runs_per_message_limit"] == 20
     assert body["hourly_run_limit"] == 60
@@ -118,6 +119,7 @@ def test_settings_defaults_and_update(client: TestClient) -> None:
     assert body["enabled"] is True
     # FAKE_PROVIDER=1 ではキーが無くても使える(ダミーのエンジン)。
     assert body["usable"] is True
+    assert body["unusable_reason"] is None
     assert (body["model"], body["runs_per_message_limit"], body["hourly_run_limit"]) == (
         "local-model",
         3,

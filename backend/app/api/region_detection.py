@@ -42,6 +42,7 @@ from app.domain.schemas import (
     RegionDetectionListResponse,
     RegionDetectionSettingsResponse,
     RegionDetectionSettingsUpdateRequest,
+    RegionDetectionUnusableReason,
     RegionDetectionView,
     RegionDetectRequest,
     RegionDetectResponse,
@@ -58,21 +59,17 @@ router = APIRouter(tags=["region-detection"])
 # -- 設定 ------------------------------------------------------------------------------
 
 
-def _usable(
+def _unusable_reason(
     db: Session, request: Request, config: detection_settings.RegionDetectionConfig
-) -> bool:
+) -> RegionDetectionUnusableReason | None:
+    """検出を使えない理由を1つ(使えるなら None)。見る順は検出の API(`_prepare`)と同じ。"""
     if not config.enabled:
-        return False
+        return "disabled"
     runtime: AssistantRuntime = request.app.state.assistant
     if not runtime.structured.requires_target:
-        return True
-    settings = request.app.state.settings
-    try:
-        target = detection_settings.resolve_target(db, config, settings)
-    except ConnectionNotFoundError:
-        return False
-    return bool(target.api_key) and detection_settings.structured_outputs_supported(
-        db, config, settings
+        return None
+    return llm_connections.connection_problem(
+        db, config.connection_id, request.app.state.settings, structured_outputs=True
     )
 
 
@@ -81,11 +78,13 @@ def _settings_response(
 ) -> RegionDetectionSettingsResponse:
     config = detection_settings.load(db)
     runtime: AssistantRuntime = request.app.state.assistant
+    reason = _unusable_reason(db, request, config)
     return RegionDetectionSettingsResponse(
         **{name: getattr(config, name) for name in detection_settings.FIELDS},
         hourly_request_limit_default=detection_settings.DEFAULT_HOURLY_REQUEST_LIMIT,
         hourly_request_limit_max=detection_settings.HOURLY_REQUEST_LIMIT_MAX,
-        usable=_usable(db, request, config),
+        usable=reason is None,
+        unusable_reason=reason,
         requests_last_hour=runtime.detection_requests.count(user_key(user.id)),
     )
 
@@ -215,10 +214,11 @@ async def detect_regions(
                     target = detection_settings.resolve_target(db, config, state.settings)
                 except ConnectionNotFoundError as e:
                     raise _error(409, "connection_missing", t("assistant.connectionMissing")) from e
-                if not detection_settings.structured_outputs_supported(db, config, state.settings):
-                    raise _error(409, "unsupported", t("regionDetection.unsupported"))
+                # 見る順は設定の応答(`_unusable_reason`)と同じ(キー → 構造化出力)。
                 if not target.api_key:
                     raise _error(409, "connection_missing", t("assistant.apiKeyMissing"))
+                if not detection_settings.structured_outputs_supported(db, config, state.settings):
+                    raise _error(409, "unsupported", t("regionDetection.unsupported"))
             connection = llm_connections.find_connection(
                 llm_connections.load(db), config.connection_id
             )

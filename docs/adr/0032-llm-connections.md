@@ -84,6 +84,12 @@ LLM・VLM の接続先(名前、Base URL、キー、API 形式)は、ADR-0024 8�
 - LLM を使う機能を足すときは、`domain/llm_connections.py` の接続先を選ばせ、「使っている機能」に答える関数を足す。
 - ADR-0024 8章の「接続先(一覧)」の中身は変わらない。置き場所が、この ADR に移る。
 - 2026-10-03 追記(ADR-0033): 画像の埋め込みのリモートの推論サーバー(Infinity 形式)も、この接続先から選ぶ。使っている機能に「埋め込み」が加わる(`register_usage("embedding", ...)`)。接続先の API 形式(Responses / Chat Completions)は LLM の呼び方の設定なので、埋め込みでは使わない。埋め込みの API 形式は、埋め込みの設定に持つ。
+- 2026-10-21 追記: 接続先ごとに構造化出力(Structured Outputs、JSON のスキーマ)への対応を指定できる。値は「自動」(既定)/「対応する」/「対応しない」。OpenAI 互換のプロキシ経由で OpenAI のモデルにつなぐ構成のため(ホストが OpenAI の公式でないと、今までの判定では対応しないとみなされた)。
+  - 「自動」は今までの判定: 組み込みの接続先で Base URL を変えていないとき、またはホストが `api.openai.com` のときだけ対応とみなす。GAKEI は接続先に対応を問い合わせない。
+  - 組み込みの接続先(「OpenAI の設定」)でも指定できる。組み込みで変えられる項目は、API 形式、接続先の区分(ADR-0051 3章)、構造化出力の対応になる。
+  - 保存先: 利用者の接続先は `annotation.connections` の各項目の `structured_outputs`(「自動」のときは書かない)。組み込みの接続先は `app_setting` の `llm_connections.openai_structured_outputs`。どちらも DB の設定行なので、マイグレーションは要らない。
+  - API: 一覧の各接続先に `structured_outputs`(指定)と `structured_outputs_supported`(判定の結果)を返す。`POST` と `PATCH /{id}` で `structured_outputs` を受ける。
+  - 判定は `domain/llm_connections.py` の `supports_structured_outputs` の1か所にまとめ、領域の検出(ADR-0053 7章)と ComfyUI のワークフローの推定(ADR-0052 6章)が使う。
 
 ## Action Items
 

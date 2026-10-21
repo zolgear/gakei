@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -22,6 +23,7 @@ from app.assistant.structured import (
     OpenAIStructuredEngine,
     StructuredRequest,
 )
+from app.domain import api_key as api_key_domain
 from app.domain import comfy_suggest
 from app.domain.comfy_analyze import analyze_workflow
 from app.domain.llm_connections import LlmTarget
@@ -543,6 +545,34 @@ def test_suggest_unsupported_connection(client: TestClient) -> None:
     response = client.post(SUGGEST, json={"template": _t2i()})
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "connection_missing"
+
+
+def test_suggest_uses_connection_structured_outputs_setting(
+    client: TestClient, data_dir: Path
+) -> None:
+    """ComfyUI の推定も、LLM の接続先の構造化出力の指定で判定する(領域の検出と同じ)。"""
+    _enable(client)
+
+    class _RealLike(FakeStructuredEngine):
+        requires_target = True
+
+    client.app.state.assistant.structured = _RealLike()
+    api_key_domain.write_file_key(data_dir, "sk-test")
+    api_key_domain.write_file_base_url(data_dir, "http://127.0.0.1:4000/v1")
+    assert client.get(ASSISTANT_SETTINGS).json()["structured_outputs"] is False
+    response = client.post(SUGGEST, json={"template": _t2i()})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "unsupported"
+
+    builtin = "/api/settings/llm-connections/openai"
+    assert client.patch(builtin, json={"structured_outputs": "supported"}).status_code == 200
+    assert client.get(ASSISTANT_SETTINGS).json()["structured_outputs"] is True
+    response = client.post(SUGGEST, json={"template": _t2i()})
+    assert response.status_code != 409, response.text
+
+    api_key_domain.delete_file_base_url(data_dir)
+    assert client.patch(builtin, json={"structured_outputs": "unsupported"}).status_code == 200
+    assert client.get(ASSISTANT_SETTINGS).json()["structured_outputs"] is False
 
 
 def test_suggest_calls_before_send_and_stops_on_deny(client: TestClient) -> None:

@@ -512,7 +512,7 @@
       "communicationFailed": "通信に失敗しました",
       "builtinName": "OpenAI の設定",
       "builtinBadge": "組み込み",
-      "builtinHelp": "名前、Base URL、キーは OpenAI の設定を使います。変えられるのは API の形式だけです。",
+      "builtinHelp": "名前、Base URL、キーは OpenAI の設定を使います。変えられるのは API の形式、接続先、構造化出力の対応です。",
       "openAiSettingsLink": "OpenAI の設定を開く",
       "baseUrlLabel": "Base URL",
       "baseUrlOpenAiDefault": "OpenAI(既定)",
@@ -566,7 +566,18 @@
       },
       "deleteDisabledInUse": "使っている機能があるため削除できません。",
       "apiKeyRequiredLabel": "キー(入れ直し)",
-      "apiKeyRequiredHelp": "Base URL のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのキーは送りません。新しい接続先で使うキーを入れてください(キーが要らない接続先なら、先にキーを削除してください)。"
+      "apiKeyRequiredHelp": "Base URL のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのキーは送りません。新しい接続先で使うキーを入れてください(キーが要らない接続先なら、先にキーを削除してください)。",
+      "structuredOutputsLabel": "構造化出力",
+      "structuredOutputsHelp": "JSON のスキーマを指定した応答(Structured Outputs)に対応するかです。領域の検出と、ComfyUI のワークフローの推定に要ります。GAKEI は接続先に問い合わせないので、「自動」では OpenAI の公式の接続先だけを対応とみなします。OpenAI 互換のプロキシ経由で OpenAI のモデルにつなぐときなどは「対応する」を選びます。",
+      "structuredOutputsAuto": "自動",
+      "structuredOutputsSupported": "対応する",
+      "structuredOutputsUnsupported": "対応しない",
+      "structuredOutputsValue": {
+        "autoSupported": "自動(対応する)",
+        "autoUnsupported": "自動(対応しない)",
+        "supported": "対応する",
+        "unsupported": "対応しない"
+      }
     },
     "annotation": {
       "intro": "画像にタイトルとタグを自動で付けます。タイトルはプロンプトから LLM で推測し、タグは画像から VLM や ONNX タガーで推定します。人が付けたタイトルとタグは上書きしません。どのエンジンも既定では無効です。",
@@ -1349,7 +1360,6 @@
       "retry": "再読み込み",
       "enabledLabel": "アシスタントを有効にする",
       "enabledHelp": "有効にすると、アイコンレールに「アシスタント」のパネルが出ます。既定は無効です。",
-      "notUsable": "接続先かキーがそろっていないため、パネルは出ていません。接続先とキーを確かめてください。",
       "connectionHeading": "LLM",
       "connectionLabel": "接続先",
       "connectionHelp": "道具の呼び出し(tool calling)とストリーミングに対応した接続先を選びます。添付した画像を読ませるには、画像を読めるモデルが必要です。",
@@ -1383,7 +1393,13 @@
         "modelRequired": "モデル名を入力してください",
         "modelTooLong": "{max} 文字以内で入力してください",
         "limitInvalid": "{min}〜{max} の整数を入力してください"
-      }
+      },
+      "unusable": {
+        "connection_missing": "選んだ接続先が見つからないため、パネルは出ていません。接続先を選び直してください。",
+        "api_key_missing": "接続先のキーが設定されていないため、パネルは出ていません。OpenAI の設定でキーを登録してください。"
+      },
+      "structuredOutputsUnsupported": "接続先が構造化出力に対応するとみなせないため、ComfyUI のワークフローの「アシスタントで推定」は出ていません。対応している接続先なら、「LLM の接続先」でその接続先の「構造化出力」を「対応する」にしてください。",
+      "structuredOutputsLink": "LLM の接続先を開く"
     },
     "regionDetection": {
       "intro": "生成のフォームの「領域」で、画像の中の物の四角を VLM に探させます。出した候補は利用者が選んで使います。画像を接続先へ送り、そのたびに費用がかかります。",
@@ -1392,7 +1408,6 @@
       "retry": "再読み込み",
       "enabledLabel": "領域の検出を有効にする",
       "enabledHelp": "有効にすると、「領域」の画面に「検出」が出ます。無効でも四角は手で描けます。既定は無効です。",
-      "notUsable": "接続先かキーがそろっていない、または接続先が構造化出力に対応していないため、「検出」は出ていません。",
       "connectionHeading": "VLM",
       "connectionLabel": "接続先",
       "connectionHelp": "画像を読めて、構造化出力(JSON のスキーマ)に対応した接続先を選びます。",
@@ -1411,7 +1426,13 @@
         "modelRequired": "モデル名を入力してください",
         "modelTooLong": "{max} 文字以内で入力してください",
         "limitInvalid": "{min}〜{max} の整数を入力してください"
-      }
+      },
+      "unusable": {
+        "connection_missing": "選んだ接続先が見つからないため、「検出」は出ていません。接続先を選び直してください。",
+        "api_key_missing": "接続先のキーが設定されていないため、「検出」は出ていません。OpenAI の設定でキーを登録してください。",
+        "structured_outputs_unsupported": "接続先が構造化出力に対応するとみなせないため、「検出」は出ていません。対応している接続先なら、「LLM の接続先」でその接続先の「構造化出力」を「対応する」にしてください。"
+      },
+      "structuredOutputsLink": "LLM の接続先を開く"
     }
   },
   "promptSets": {

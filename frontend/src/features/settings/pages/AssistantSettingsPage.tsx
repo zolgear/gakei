@@ -3,8 +3,9 @@
  * - 「保存で反映」: 有効・無効、接続先(「LLM の接続先」の一覧から選ぶ。ADR-0032)、モデル名、
  *   LLM のリクエストの1時間の上限、1回の発言で作れる Run の数、1時間あたりに作れる Run の数。
  *   どれも下書きにして、ヘッダーの「保存」で変えた項目だけを1回の PATCH で送る。
- * - 表示だけ: 使える状態か(有効で、接続先とキーがそろっている)、見ている人の直近1時間の
- *   リクエスト数とアシスタントが作った Run の数。
+ * - 表示だけ: 使える状態か(有効で、接続先とキーがそろっている)と、使えない理由(サーバーが1つに
+ *   絞って返す)、接続先が構造化出力に対応しないとき(ComfyUI のワークフローの推定が出ない。ADR-0052)
+ *   の案内、見ている人の直近1時間のリクエスト数とアシスタントが作った Run の数。
  * 保存したら応答でキャッシュを置き換える(アイコンレールのパネルの出し分けも同じキーを読む)。
  * 接続先の「使っている機能」も変わるので、接続先の一覧も取り直す。
  */
@@ -176,7 +177,17 @@ function AssistantSettingsBody({ data, connections, values, draft }: BodyProps) 
             onChange={(checked) => draft.set('enabled', checked)}
             disabled={disabled}
           />
-          {data.enabled && !data.usable && !draft.dirty && <p className={styles.warningText}>{m.notUsable}</p>}
+          {data.enabled && !data.usable && !draft.dirty && (
+            <p className={styles.warningText}>
+              {data.unusable_reason === 'api_key_missing' ? m.unusable.api_key_missing : m.unusable.connection_missing}
+            </p>
+          )}
+          {data.enabled && data.usable && !data.structured_outputs && !draft.dirty && (
+            <p className={styles.helpText}>
+              {m.structuredOutputsUnsupported}{' '}
+              <Link to={settingsPagePath('llmConnections')}>{m.structuredOutputsLink}</Link>
+            </p>
+          )}
         </SettingsRow>
       </SettingsSection>
 

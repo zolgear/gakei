@@ -2,8 +2,9 @@
  * `/settings/region-detection`(管理者。ADR-0053 7章、ADR-0031 の「機能」のページ)。
  * - 「保存で反映」: 有効・無効、接続先(「LLM の接続先」の一覧から選ぶ。ADR-0032)、モデル名、検出の
  *   1時間の上限。どれも下書きにして、ヘッダーの「保存」で変えた項目だけを1回の PATCH で送る。
- * - 表示だけ: 使える状態か(有効で、接続先とキーがそろい、構造化出力に対応する)、見ている人の直近
- *   1時間の検出の数。
+ * - 表示だけ: 使える状態か(有効で、接続先とキーがそろい、構造化出力に対応する)と、使えない理由
+ *   (サーバーが1つに絞って返す)、見ている人の直近1時間の検出の数。構造化出力に対応しないときは、
+ *   「LLM の接続先」で「対応する」にできることを案内する。
  * 保存したら応答でキャッシュを置き換える(「領域」の画面の検出のボタンも同じキーを読む)。接続先の
  * 「使っている機能」も変わるので、接続先の一覧も取り直す。
  */
@@ -129,7 +130,7 @@ function RegionDetectionSettingsBody({ data, connections, values, draft }: BodyP
             onChange={(checked) => draft.set('enabled', checked)}
             disabled={disabled}
           />
-          {data.enabled && !data.usable && !draft.dirty && <p className={styles.warningText}>{m.notUsable}</p>}
+          {data.enabled && !data.usable && !draft.dirty && <UnusableNote reason={data.unusable_reason} />}
         </SettingsRow>
       </SettingsSection>
 
@@ -224,4 +225,20 @@ function RegionDetectionSettingsBody({ data, connections, values, draft }: BodyP
       </SettingsSection>
     </>
   )
+}
+
+/** 使えない理由ごとの文言。構造化出力のときは「LLM の接続先」へのリンクも出す。 */
+function UnusableNote({ reason }: { reason: RegionDetectionSettingsResponse['unusable_reason'] }) {
+  const { t } = useI18n()
+  const m = t.settings.regionDetection
+  if (reason === 'structured_outputs_unsupported') {
+    return (
+      <p className={styles.warningText}>
+        {m.unusable.structured_outputs_unsupported}{' '}
+        <Link to={settingsPagePath('llmConnections')}>{m.structuredOutputsLink}</Link>
+      </p>
+    )
+  }
+  const text = reason === 'api_key_missing' ? m.unusable.api_key_missing : m.unusable.connection_missing
+  return <p className={styles.warningText}>{text}</p>
 }
