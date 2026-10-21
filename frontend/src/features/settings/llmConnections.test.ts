@@ -14,6 +14,7 @@ import {
   isUsedBy,
   isValidConnectionBaseUrl,
   isValidConnectionName,
+  structuredOutputsDisplay,
   validateConnectionForm,
 } from './llmConnections'
 
@@ -27,6 +28,8 @@ function connection(overrides: Partial<LlmConnectionView> = {}): LlmConnectionVi
     api_key_set: true,
     locality: 'external',
     locality_source: 'default',
+    structured_outputs: 'auto',
+    structured_outputs_supported: true,
     used_by: ['annotation'],
     ...overrides,
   }
@@ -74,6 +77,7 @@ describe('接続先のフォーム', () => {
       api_style: 'chat' as const,
       api_key: '  ',
       locality: 'local' as const,
+      structured_outputs: 'auto' as const,
     }
     expect(connectionCreateBody(form)).toEqual({
       name: 'Ollama',
@@ -159,5 +163,37 @@ describe('使っている機能', () => {
   it('isUsedBy は機能ごとに答える', () => {
     expect(isUsedBy(connection(), 'annotation')).toBe(true)
     expect(isUsedBy(OLLAMA, 'annotation')).toBe(false)
+  })
+})
+
+describe('構造化出力の対応', () => {
+  it('追加の本文は、自動なら送らず、指定したときだけ送る', () => {
+    const form = { ...emptyConnectionForm(), name: 'proxy', base_url: 'http://127.0.0.1:4000/v1' }
+    expect(connectionCreateBody(form).structured_outputs).toBeUndefined()
+    expect(connectionCreateBody({ ...form, structured_outputs: 'supported' }).structured_outputs).toBe('supported')
+  })
+
+  it('編集の差分に、変えたときだけ入る(組み込みの接続先も)', () => {
+    const view = connection()
+    const form = connectionFormFromView(view)
+    expect(diffConnectionForm(form, view)).toEqual({})
+    expect(diffConnectionForm({ ...form, structured_outputs: 'supported' }, view)).toEqual({
+      structured_outputs: 'supported',
+    })
+  })
+
+  it('表示は、自動なら判定の結果を添える', () => {
+    expect(structuredOutputsDisplay({ structured_outputs: 'auto', structured_outputs_supported: true })).toBe(
+      'autoSupported',
+    )
+    expect(structuredOutputsDisplay({ structured_outputs: 'auto', structured_outputs_supported: false })).toBe(
+      'autoUnsupported',
+    )
+    expect(structuredOutputsDisplay({ structured_outputs: 'supported', structured_outputs_supported: true })).toBe(
+      'supported',
+    )
+    expect(
+      structuredOutputsDisplay({ structured_outputs: 'unsupported', structured_outputs_supported: false }),
+    ).toBe('unsupported')
   })
 })

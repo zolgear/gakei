@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
-from app.domain import assistant_settings, llm_connections
+from app.domain import llm_connections
 from app.domain.general_settings import GeneralSettingsValidationError, _get_raw_value, _save
 from app.domain.llm_connections import BUILTIN_CONNECTION_ID, LlmTarget
 from app.i18n import t
@@ -151,8 +151,8 @@ def resolve_target(db: Session, config: RegionDetectionConfig, settings: Setting
 def structured_outputs_supported(
     db: Session, config: RegionDetectionConfig, settings: Settings
 ) -> bool:
-    """接続先が Structured Outputs に対応するとみなせるか(第1段は OpenAI の公式だけ。手元の
-    VLM の緩い読み取りは後の段。ADR-0053 7章)。"""
-    return assistant_settings.connection_supports_structured_outputs(
+    """接続先が Structured Outputs に対応するとみなせるか(ADR-0053 7章。判定は LLM の接続先の
+    設定。`auto` なら OpenAI の公式だけ。手元の VLM の緩い読み取りは後の段)。"""
+    return llm_connections.connection_supports_structured_outputs(
         db, config.connection_id, settings
     )

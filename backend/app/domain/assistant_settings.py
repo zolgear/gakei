@@ -27,7 +27,6 @@ from sqlalchemy.orm import Session
 from app.domain import llm_connections
 from app.domain.general_settings import GeneralSettingsValidationError, _get_raw_value, _save
 from app.domain.llm_connections import BUILTIN_CONNECTION_ID, LlmTarget
-from app.domain.locality import host_of
 from app.domain.models import RUN_ORIGIN_ASSISTANT, Run
 from app.i18n import t
 
@@ -194,26 +193,10 @@ def count_recent_runs(db: Session, user_id: uuid.UUID | None, now: datetime | No
 
 # -- Structured Outputs(ADR-0052 6章) ---------------------------------------------------
 
-# Structured Outputs(JSON Schema の strict)に対応するとみなす接続先のホスト。GAKEI は接続先に
-# 対応を問い合わせないので、確かな OpenAI の公式だけにする。
-STRUCTURED_OUTPUTS_HOSTS = frozenset({"api.openai.com"})
-
 
 def structured_outputs_supported(db: Session, config: AssistantConfig, settings: Settings) -> bool:
     """アシスタントの接続先が Structured Outputs に対応するとみなせるか(ComfyUI のワークフローの
-    推定に使えるか)。"""
-    return connection_supports_structured_outputs(db, config.connection_id, settings)
-
-
-def connection_supports_structured_outputs(
-    db: Session, connection_id: str, settings: Settings
-) -> bool:
-    """接続先が Structured Outputs に対応するとみなせるか。組み込みの接続先で Base URL を
-    変えていなければ OpenAI の公式。領域の四角の検出(ADR-0053 7章)も使う。"""
-    connection = llm_connections.find_connection(llm_connections.load(db), connection_id)
-    if connection is None:
-        return False
-    base_url = llm_connections.display_base_url(connection, settings)
-    if base_url is None:
-        return connection.builtin
-    return host_of(base_url) in STRUCTURED_OUTPUTS_HOSTS
+    推定に使えるか)。判定は LLM の接続先の設定(`llm_connections.supports_structured_outputs`)。"""
+    return llm_connections.connection_supports_structured_outputs(
+        db, config.connection_id, settings
+    )

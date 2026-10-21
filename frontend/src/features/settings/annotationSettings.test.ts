@@ -32,6 +32,8 @@ function connection(overrides: Partial<LlmConnectionView> = {}): LlmConnectionVi
     api_key_set: true,
     locality: 'external',
     locality_source: 'default',
+    structured_outputs: 'auto',
+    structured_outputs_supported: true,
     used_by: ['annotation'],
     ...overrides,
   }

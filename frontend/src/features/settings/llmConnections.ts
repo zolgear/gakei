@@ -12,6 +12,7 @@ import type {
   LlmConnectionFeature,
   LlmConnectionUpdateRequest,
   LlmConnectionView,
+  StructuredOutputsMode,
 } from '../../api/client'
 
 import { originChanges } from '../../lib/urlOrigin'
@@ -32,10 +33,19 @@ export interface ConnectionForm {
   api_key: string
   /** 接続先(ADR-0051 3章)。組み込みの接続先は OpenAI の接続と同じ値。 */
   locality: Locality
+  /** 構造化出力への対応(既定は自動)。 */
+  structured_outputs: StructuredOutputsMode
 }
 
 export function emptyConnectionForm(): ConnectionForm {
-  return { name: '', base_url: '', api_style: 'responses', api_key: '', locality: 'external' }
+  return {
+    name: '',
+    base_url: '',
+    api_style: 'responses',
+    api_key: '',
+    locality: 'external',
+    structured_outputs: 'auto',
+  }
 }
 
 export function connectionFormFromView(view: LlmConnectionView): ConnectionForm {
@@ -45,6 +55,7 @@ export function connectionFormFromView(view: LlmConnectionView): ConnectionForm 
     api_style: view.api_style,
     api_key: '',
     locality: view.locality,
+    structured_outputs: view.structured_outputs,
   }
 }
 
@@ -91,6 +102,7 @@ export function connectionCreateBody(form: ConnectionForm): LlmConnectionCreateR
     api_style: form.api_style,
     locality: form.locality,
   }
+  if (form.structured_outputs !== 'auto') body.structured_outputs = form.structured_outputs
   const key = form.api_key.trim()
   if (key) body.api_key = key
   return body
@@ -111,6 +123,7 @@ export function diffConnectionForm(
   if (baseUrl.replace(/\/+$/, '') !== (view.base_url ?? '').replace(/\/+$/, '')) body.base_url = baseUrl
   if (form.api_style !== view.api_style) body.api_style = form.api_style
   if (form.locality !== view.locality) body.locality = form.locality
+  if (form.structured_outputs !== view.structured_outputs) body.structured_outputs = form.structured_outputs
   const key = form.api_key.trim()
   if (key && isKeyReentryRequired(form, view)) body.api_key = key
   return body
@@ -158,4 +171,15 @@ export function connectionDisplayName(
   builtinName: string,
 ): string {
   return view.builtin ? builtinName : view.name
+}
+
+/**
+ * カードに出す構造化出力の対応の表示の種類。自動のときは、判定の結果(対応する・しない)も添える。
+ */
+export function structuredOutputsDisplay(
+  view: Pick<LlmConnectionView, 'structured_outputs' | 'structured_outputs_supported'>,
+): 'autoSupported' | 'autoUnsupported' | 'supported' | 'unsupported' {
+  if (view.structured_outputs === 'supported') return 'supported'
+  if (view.structured_outputs === 'unsupported') return 'unsupported'
+  return view.structured_outputs_supported ? 'autoSupported' : 'autoUnsupported'
 }

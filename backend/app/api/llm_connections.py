@@ -19,8 +19,14 @@ from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.deps import get_annotator, get_session, get_settings
 
-# annotation_settings と embedding_settings は、読み込むと使っている機能を登録する(上の docstring)。
-from app.domain import annotation_settings, assistant_settings, embedding_settings, llm_connections
+# annotation_settings などは、読み込むと使っている機能を登録する(上の docstring)。
+from app.domain import (
+    annotation_settings,
+    assistant_settings,
+    embedding_settings,
+    llm_connections,
+    region_detection_settings,
+)
 from app.domain import locality as locality_domain
 from app.domain.schemas import (
     LlmConnectionApiKeyUpdateRequest,
@@ -57,6 +63,10 @@ def _response(db: Session, settings: Settings) -> LlmConnectionsResponse:
                 used_by=used_by.get(connection.id, []),  # type: ignore[arg-type]
                 locality=locality,
                 locality_source=locality_source,  # type: ignore[arg-type]
+                structured_outputs=connection.structured_outputs,
+                structured_outputs_supported=llm_connections.supports_structured_outputs(
+                    connection, settings
+                ),
             )
         )
     return LlmConnectionsResponse(connections=views)
@@ -70,6 +80,8 @@ def _feature_name(feature: str) -> str:
         return t("settings.llmConnections.features.embedding")
     if feature == assistant_settings.FEATURE_ID:
         return t("settings.llmConnections.features.assistant")
+    if feature == region_detection_settings.FEATURE_ID:
+        return t("settings.llmConnections.features.region_detection")
     return feature
 
 
@@ -130,7 +142,7 @@ def create_llm_connection(
     文字列を受け付けるため、有効性の確認はしない)。"""
     try:
         connection_id = llm_connections.add_connection(
-            db, body.name, body.base_url, body.api_style, body.locality
+            db, body.name, body.base_url, body.api_style, body.locality, body.structured_outputs
         )
     except _CONNECTION_ERRORS as exc:
         _raise_connection_error(exc)
