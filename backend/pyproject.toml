@@ -1,6 +1,6 @@
 [project]
 name = "gakei-backend"
-version = "0.10.1"
+version = "0.10.2"
 description = "GAKEI ローカルMVP バックエンド"
 license = "Apache-2.0"
 authors = [
