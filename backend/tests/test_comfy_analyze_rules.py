@@ -97,6 +97,7 @@ def test_synth_every_field_has_a_reading_with_reason() -> None:
         "mask",
         "outputs",
         "final_prompt",
+        "bounding_boxes",
     ]
     assert all(r.reason for r in result.readings)
 

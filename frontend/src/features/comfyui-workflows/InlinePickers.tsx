@@ -106,7 +106,7 @@ export function InlineInputPicker({ field, nodes, candidates, value, onSelect, a
 }
 
 interface InlineNodePickerProps {
-  field: 'outputs' | 'final_prompt'
+  field: 'outputs' | 'final_prompt' | 'bounding_boxes'
   nodes: readonly ComfyNodeInfo[]
   readingNodes: readonly string[]
   /** 複数選ぶ(出力)か、1つ(最終プロンプト)か。 */
@@ -178,13 +178,21 @@ export function InlineNodePicker({ field, nodes, readingNodes, multiple, value, 
             <ul className={styles.optList}>{candidates.map(renderNode)}</ul>
           </>
         )}
-        <p className={styles.optGroup}>{c.pickerOthers}</p>
-        {others.length === 0 ? (
-          <p className={styles.pickerEmpty}>{c.pickerNoMatch}</p>
-        ) : (
-          <ul className={styles.optList}>{others.map(renderNode)}</ul>
+        {/* 四角は Create Bounding Boxes にしか差し込めないので、ほかのノードの欄を出さない。 */}
+        {field !== 'bounding_boxes' && (
+          <>
+            <p className={styles.optGroup}>{c.pickerOthers}</p>
+            {others.length === 0 ? (
+              <p className={styles.pickerEmpty}>{c.pickerNoMatch}</p>
+            ) : (
+              <ul className={styles.optList}>{others.map(renderNode)}</ul>
+            )}
+            {hiddenCount > 0 && <p className={styles.pickerEmpty}>{fmt(c.pickerMore, { count: hiddenCount })}</p>}
+          </>
         )}
-        {hiddenCount > 0 && <p className={styles.pickerEmpty}>{fmt(c.pickerMore, { count: hiddenCount })}</p>}
+        {field === 'bounding_boxes' && candidates.length === 0 && (
+          <p className={styles.pickerEmpty}>{c.pickerNoMatch}</p>
+        )}
       </div>
     </div>
   )

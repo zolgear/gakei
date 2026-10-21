@@ -155,6 +155,18 @@
   box-shadow: 0 0 0 1px var(--color-border-strong);
 }
 
+/* 入力画像の無い Run の白紙(出力の大きさの縦横比。ADR-0053 6章)。四角の色が見えるよう、テーマに
+   よらず白にする(四角は送る画像には描かないので、下地の色は意味を持たない)。 */
+.blankCanvas {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  background-image: linear-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  background-size: 10% 10%;
+  pointer-events: none;
+}
+
 .stageImage {
   position: absolute;
   inset: 0;

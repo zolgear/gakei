@@ -35,7 +35,16 @@ export interface BindingsFormState {
    * 種類で絞らず、テンプレートのどのノードでも選べる。
    */
   finalPrompt: string | null
+  /**
+   * 領域の指示の四角を差し込む `CreateBoundingBoxes` のノード(ADR-0053 6章)。null は「なし」。
+   * 差し込む入力はいつも `bboxes`(`BOUNDING_BOXES_INPUT`)なので、ノードだけを持つ。
+   */
+  boundingBoxes: string | null
 }
+
+/** 四角を差し込むノードの種類と入力(バックエンドの `comfy_bounding_boxes` と同じ)。 */
+export const BOUNDING_BOXES_CLASS_TYPE = 'CreateBoundingBoxes'
+export const BOUNDING_BOXES_INPUT = 'bboxes'
 
 export const EMPTY_BINDINGS_FORM: BindingsFormState = {
   prompt: null,
@@ -49,6 +58,7 @@ export const EMPTY_BINDINGS_FORM: BindingsFormState = {
   maskRef: null,
   outputs: [],
   finalPrompt: null,
+  boundingBoxes: null,
 }
 
 export function bindingsFormFromApi(bindings: ComfyBindings): BindingsFormState {
@@ -68,6 +78,8 @@ export function bindingsFormFromApi(bindings: ComfyBindings): BindingsFormState 
     outputs: bindings.outputs ?? [],
     // 旧形式の bindings(final_prompt なし)は「なし」として読む(ADR-0030 1章)。
     finalPrompt: bindings.final_prompt ?? null,
+    // 旧形式(bounding_boxes なし)は「なし」。
+    boundingBoxes: bindings.bounding_boxes?.node ?? null,
   }
 }
 
@@ -97,6 +109,7 @@ export function bindingsFormFromSuggestion(
         : null,
     outputs: suggested.outputs ?? [],
     finalPrompt: suggested.final_prompt ?? null,
+    boundingBoxes: suggested.bounding_boxes?.node ?? null,
   }
 }
 
@@ -141,7 +154,13 @@ export function bindingsFormToApi(form: BindingsFormState): ComfyBindings {
     // bindings は丸ごと送り直すので、「なし」も null として必ず含める(省くと保存済みの値の
     // 扱いがサーバー任せになる)。
     final_prompt: form.finalPrompt,
+    bounding_boxes: boundingBoxesRef(form.boundingBoxes),
   }
+}
+
+/** 四角の差し込み先(ノード)を API の形にする。 */
+export function boundingBoxesRef(nodeId: string | null): { node: string; input: string } | null {
+  return nodeId ? { node: nodeId, input: BOUNDING_BOXES_INPUT } : null
 }
 
 /** 差し込み先として実際に使われている (node, input) の一覧(重複検出・再検証に使う)。 */
@@ -262,6 +281,12 @@ export function reconcileBindingsWithNodes(
     nextFinalPrompt = null
   }
 
+  let nextBoundingBoxes = form.boundingBoxes
+  if (nextBoundingBoxes !== null && !nodeExists(nextBoundingBoxes, nodes)) {
+    cleared.push(labels.boundingBoxes)
+    nextBoundingBoxes = null
+  }
+
   const nextMaskRef = form.maskMode === 'load_image_mask' ? check(form.maskRef, labels.mask) : form.maskRef
   const maskCleared = form.maskMode === 'load_image_mask' && form.maskRef !== null && nextMaskRef === null
 
@@ -278,6 +303,7 @@ export function reconcileBindingsWithNodes(
       maskRef: nextMaskRef,
       outputs: nextOutputs,
       finalPrompt: nextFinalPrompt,
+      boundingBoxes: nextBoundingBoxes,
     },
     clearedFields: cleared,
   }

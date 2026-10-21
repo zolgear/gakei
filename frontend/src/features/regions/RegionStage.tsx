@@ -78,7 +78,11 @@ const CAPTION_FONT = 11
 const PAD = 12
 
 export interface RegionStageProps {
-  imageUrl: string
+  /**
+   * 下に敷く画像。null なら白紙(入力画像の無い Run。出力の大きさの縦横比の白い面。ADR-0053 6章)。
+   * 白紙でも四角は `natural` に対する割合で持つ。
+   */
+  imageUrl: string | null
   natural: { width: number; height: number }
   regions: EditorRegion[]
   selectedKey: string | null
@@ -441,7 +445,11 @@ export function RegionStage({
             className={styles.imageFrame}
             style={{ width: dispW, height: dispH, left: (innerW - dispW) / 2, top: (innerH - dispH) / 2 }}
           >
-            <img className={styles.stageImage} src={imageUrl} alt="" draggable={false} onError={onImageError} />
+            {imageUrl === null ? (
+              <div className={styles.blankCanvas} aria-hidden="true" />
+            ) : (
+              <img className={styles.stageImage} src={imageUrl} alt="" draggable={false} onError={onImageError} />
+            )}
             <svg
               ref={svgRef}
               className={styles.stageSvg}

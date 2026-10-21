@@ -931,3 +931,59 @@ QWEN21_PE_GRAPH: dict[str, Any] = {
         "inputs": {"switch": ["4", 0], "on_false": ["474", 0], "on_true": ["481", 0]},
     },
 }
+
+
+# 領域の指示の四角(ADR-0053 6章)。Create Bounding Boxes の要素をレイアウトのプロンプトの
+# ノードで文字列にし、エンコーダーに渡す t2i。`bboxes` は配線しない(API 形式では任意の入力が
+# 書き出されない)。キャンバスの値(`editor_state`)は、配列を包んだ形(`__value__`)で持つ。
+BBOX_LAYOUT_GRAPH: dict[str, Any] = clone(T2I_GRAPH)
+BBOX_LAYOUT_GRAPH["20"] = {
+    "class_type": "CreateBoundingBoxes",
+    "inputs": {
+        "width": 1024,
+        "height": 1024,
+        "editor_state": {
+            "__value__": [
+                {
+                    "x": 0,
+                    "y": 0,
+                    "width": 512,
+                    "height": 512,
+                    "metadata": {"type": "obj", "text": "", "desc": "a box", "palette": []},
+                }
+            ]
+        },
+    },
+    "_meta": {"title": "Create Bounding Boxes"},
+}
+BBOX_LAYOUT_GRAPH["21"] = {
+    "class_type": "MOSSImageLayoutPrompt",
+    "inputs": {
+        "prompt": "a cozy room",
+        "element": ["20", 2],
+        "width": 1024,
+        "height": 1024,
+        "character_boxes": "",
+    },
+}
+BBOX_LAYOUT_GRAPH["6"]["inputs"]["text"] = ["21", 0]
+
+# `/object_info/CreateBoundingBoxes` の応答(必要な部分だけ)。複数の型を受ける入力は、型名を
+# `,` でつないだ文字列で返る。
+BBOX_OBJECT_INFO: dict[str, Any] = {
+    "input": {
+        "required": {
+            "width": ["INT", {"default": 1024, "min": 64, "max": 16384, "step": 16}],
+            "height": ["INT", {"default": 1024, "min": 64, "max": 16384, "step": 16}],
+            "editor_state": ["BOUNDING_BOXES", {}],
+        },
+        "optional": {
+            "background": ["IMAGE", {}],
+            "bboxes": ["BOUNDING_BOX,ARRAY,STRING", {}],
+            "last_incoming": ["BOUNDING_BOXES", {}],
+        },
+    },
+    "output": ["IMAGE", "BOUNDING_BOX", "ARRAY"],
+    "output_node": True,
+    "name": "CreateBoundingBoxes",
+}

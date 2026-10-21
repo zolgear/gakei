@@ -38,6 +38,7 @@ describe('bindingsFormFromApi / bindingsFormToApi', () => {
       mask: { mode: 'load_image_mask', node: '5', input: 'image' },
       outputs: ['3'],
       final_prompt: '7',
+      bounding_boxes: { node: '8', input: 'bboxes' },
     }
     const state = bindingsFormFromApi(api)
     expect(state.finalPrompt).toBe('7')

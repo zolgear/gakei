@@ -111,7 +111,7 @@ export function viewExposedRows(params: readonly ComfyViewExposedParam[]): Expos
 /** 差し込み先と公開パラメーターの一覧(パネルの「差し込み先」に出す順)。 */
 export type ViewEntry =
   | { kind: 'bound'; field: InputField; node: string; input: string; slot?: number }
-  | { kind: 'node'; field: Extract<FieldKey, 'outputs' | 'final_prompt'>; node: string }
+  | { kind: 'node'; field: Extract<FieldKey, 'outputs' | 'final_prompt' | 'bounding_boxes'>; node: string }
   | { kind: 'exposed'; param: ComfyViewExposedParam }
 
 export function viewEntries(
@@ -139,6 +139,7 @@ export function viewEntries(
   }
   for (const node of bindings.outputs) entries.push({ kind: 'node', field: 'outputs', node })
   if (bindings.finalPrompt) entries.push({ kind: 'node', field: 'final_prompt', node: bindings.finalPrompt })
+  if (bindings.boundingBoxes) entries.push({ kind: 'node', field: 'bounding_boxes', node: bindings.boundingBoxes })
   for (const param of params) entries.push({ kind: 'exposed', param })
   return entries
 }

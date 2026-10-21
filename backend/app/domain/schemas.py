@@ -35,7 +35,8 @@ from app.domain.comfy_workflow import (
     SuggestedBindings,
     ValidationIssue,
 )
-from app.providers.base import ParamType, ProviderCapabilities
+from app.providers.base import ParamType, ProviderCapabilities, RegionsDelivery
+from app.providers.base import RegionKind as _RegionKind
 
 # -- Capabilities (ADR-0013: 複数プロバイダー) -------------------------------
 
@@ -1023,7 +1024,7 @@ REGION_INSTRUCTION_MAX_LENGTH = 2000
 REGION_TEXT_MAX_LENGTH = 200
 REGION_LABEL_MAX_LENGTH = 100
 
-RegionKind = Literal["change", "add", "keep", "remove", "move"]
+RegionKind = _RegionKind
 
 
 def _check_region_box(value: list[float]) -> list[float]:
@@ -1115,8 +1116,9 @@ class RunCreateRequest(BaseModel):
     # ないので `run.params` には入れない(ADR-0003 ルール4)。テンプレートと併用したときは
     # Run ごとに組み立て直す(意味の通ったガチャになる)。
     repeat: int = Field(default=1, ge=1, le=REPEAT_MAX)
-    # 領域の指示の四角(ADR-0053 3章)。Edit で、主たる入力があり、プロバイダーが四角を受ける
-    # ときだけ付けられる(`OperationCapabilities.supports_regions`)。番号は重ねられない。
+    # 領域の指示の四角(ADR-0053 3章)。プロバイダーが四角を受けるときだけ付けられる
+    # (`OperationCapabilities.supports_regions`)。主たる入力があればそれに対する割合、入力画像の
+    # 無い Run(ComfyUI。6章)では出力の大きさに対する割合。番号は重ねられない。
     regions: list[RegionBox] = Field(default_factory=list, max_length=REGIONS_MAX)
 
     @model_validator(mode="after")
@@ -1176,14 +1178,18 @@ class RunRegions(BaseModel):
 
     # 変換の版。四角を文と画像に変える作り方を変えたら上げる。
     version: int
-    # どの渡し方で送ったか(ADR-0053 5章)。
-    delivery: Literal["image_and_text"]
+    # どの渡し方で送ったか(ADR-0053 5章)。`comfyui_bboxes` では、重ねた画像も足す文も無い
+    # (`appended_text` は空、`overlay_asset_id` は null。6章)。
+    delivery: RegionsDelivery
     regions: list[RegionBox]
     # プロンプトの後ろに足した文(`run.prompt` の末尾)。再実行では、プロンプトからこの文を除いて
     # フォームに戻す。
     appended_text: str = ""
     # 四角を描いた画像の Asset(種類 `regions`)。
     overlay_asset_id: uuid.UUID | None = None
+    # 四角の座標が何に対する割合か。`input` は主たる入力、`output` は出力の大きさ(入力画像の無い
+    # Run。ADR-0053 6章)。古い記録(キー無し)は `input`。
+    frame: Literal["input", "output"] = "input"
 
 
 class RunSummary(BaseModel):

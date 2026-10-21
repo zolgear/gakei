@@ -17,7 +17,7 @@ import type {
   ComfyParamType,
 } from '../../api/client'
 import type { FieldKey } from './bindingCards'
-import type { BindingsFormState } from './bindingsForm'
+import { BOUNDING_BOXES_CLASS_TYPE, type BindingsFormState } from './bindingsForm'
 import { validateExposedParamName, type ExposedParamRow } from './exposedParamsForm'
 import type { InputRefValue } from './nodeOptions'
 
@@ -118,6 +118,7 @@ export type MapRole =
   | 'mask'
   | 'output'
   | 'final_prompt'
+  | 'bounding_boxes'
   | 'exposed'
 
 export interface RoleBadge {
@@ -158,6 +159,7 @@ export function nodeRoles(
   }
   for (const id of bindings.outputs) push(id, { role: 'output', input: null })
   if (bindings.finalPrompt) push(bindings.finalPrompt, { role: 'final_prompt', input: null })
+  if (bindings.boundingBoxes) push(bindings.boundingBoxes, { role: 'bounding_boxes', input: null })
   for (const row of exposedRows) if (row.enabled) push(row.node, { role: 'exposed', input: row.input })
   return map
 }
@@ -195,8 +197,18 @@ export function inputUse(
 
 // -- 図で選べる入力 ----------------------------------------------------------------
 
-/** 入力を1つ選ぶ項目(ノードそのものを選ぶ出力・最終プロンプト以外)。 */
-export type InputField = Exclude<FieldKey, 'outputs' | 'final_prompt'>
+/**
+ * ノードそのものを選ぶ項目(出力、最終プロンプト、四角)。四角は Create Bounding Boxes の `bboxes`
+ * にしか差し込めないので、ノードだけを選ぶ(`bboxes` は任意の入力でテンプレートに無いこともある)。
+ */
+export type NodeField = Extract<FieldKey, 'outputs' | 'final_prompt' | 'bounding_boxes'>
+
+export function isNodeField(field: FieldKey): field is NodeField {
+  return field === 'outputs' || field === 'final_prompt' || field === 'bounding_boxes'
+}
+
+/** 入力を1つ選ぶ項目(ノードそのものを選ぶ項目以外)。 */
+export type InputField = Exclude<FieldKey, NodeField>
 
 export const INPUT_FIELDS: readonly InputField[] = [
   'prompt',
@@ -276,10 +288,16 @@ export function nodeFitsFinalPrompt(node: ComfyNodeInfo): boolean {
   return TEXT_DISPLAY_RE.test(node.class_type ?? '')
 }
 
+/** ノードそのものを四角の差し込み先にできるか(Create Bounding Boxes)。 */
+export function nodeFitsBoundingBoxes(node: ComfyNodeInfo): boolean {
+  return node.class_type === BOUNDING_BOXES_CLASS_TYPE
+}
+
 /** 「図で選ぶ」で選べるノードか。 */
 export function nodePickable(node: ComfyNodeInfo, field: FieldKey): boolean {
   if (field === 'outputs') return nodeFitsOutput(node)
   if (field === 'final_prompt') return nodeFitsFinalPrompt(node)
+  if (field === 'bounding_boxes') return nodeFitsBoundingBoxes(node)
   return (node.inputs ?? []).some((input) => inputFitsField(node, input, field))
 }
 
@@ -348,6 +366,11 @@ export function toggleOutput(bindings: BindingsFormState, nodeId: string): Bindi
 /** ノードを最終プロンプトにする・外す。 */
 export function toggleFinalPrompt(bindings: BindingsFormState, nodeId: string): BindingsFormState {
   return { ...bindings, finalPrompt: bindings.finalPrompt === nodeId ? null : nodeId }
+}
+
+/** ノードを四角の差し込み先にする・外す。 */
+export function toggleBoundingBoxes(bindings: BindingsFormState, nodeId: string): BindingsFormState {
+  return { ...bindings, boundingBoxes: bindings.boundingBoxes === nodeId ? null : nodeId }
 }
 
 function inferParamType(value: unknown): ComfyParamType | null {
@@ -790,6 +813,8 @@ export function fieldNodes(bindings: BindingsFormState, field: FieldKey): string
       return [...bindings.outputs]
     case 'final_prompt':
       return bindings.finalPrompt ? [bindings.finalPrompt] : []
+    case 'bounding_boxes':
+      return bindings.boundingBoxes ? [bindings.boundingBoxes] : []
   }
 }
 

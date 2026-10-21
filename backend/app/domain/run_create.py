@@ -32,7 +32,12 @@ from app.domain.visibility import (
     get_visible_prompt_template,
 )
 from app.i18n import t
-from app.providers.base import ProviderCapabilities, ProviderUnavailableError, RunDraft
+from app.providers.base import (
+    OperationCapabilities,
+    ProviderCapabilities,
+    ProviderUnavailableError,
+    RunDraft,
+)
 from app.providers.registry import ProviderRegistry
 from app.worker.runner import Runner
 
@@ -159,11 +164,21 @@ def create_runs(
     # ADR-0053: 領域の指示の四角を「画像と文」に変える。四角を描いた画像と参照画像は、利用者の
     # 入力の後ろに role=image で足し(role=reference はプロバイダーに送らないため)、文は
     # プロンプトの後ろに足す。四角を描いた画像の保存は、検証がすべて通った後に行う。
+    # ADR-0053 6章: ComfyUI(`comfyui_bboxes`)では、四角をそのままプロバイダーに渡し、ワークフローの
+    # Create Bounding Boxes に差し込ませる(重ねた画像も足す文も作らない)。
     plan: _RegionsPlan | None = None
+    draft_regions: list[Any] = []
+    regions_json: dict[str, Any] | None = None
     if body.regions:
-        plan = _plan_regions(db, caps, body, input_metas, viewer=viewer, store=runner.store)
-        input_metas = [*input_metas, *plan.extra_metas]
-        prompts = [prompt + plan.appended_text for prompt in prompts]
+        op_caps = _regions_op_caps(caps, body)
+        if op_caps.regions_delivery == regions_domain.DELIVERY_COMFYUI_BBOXES:
+            frame = _check_comfyui_regions(op_caps, body, input_metas)
+            draft_regions = regions_domain.ordered(body.regions)
+            regions_json = regions_domain.comfyui_record(draft_regions, frame=frame)
+        else:
+            plan = _plan_regions(db, op_caps, body, input_metas, viewer=viewer, store=runner.store)
+            input_metas = [*input_metas, *plan.extra_metas]
+            prompts = [prompt + plan.appended_text for prompt in prompts]
 
     for index in range(repeat):
         try:
@@ -196,6 +211,7 @@ def create_runs(
             prompt=prompts[index],
             params=params,
             inputs=input_metas,
+            regions=draft_regions,
         )
         try:
             finalized.append(provider.finalize_params(db, draft))
@@ -205,7 +221,6 @@ def create_runs(
             raise RunCreateError("conflict", str(e)) from e
 
     extra_inputs: list[tuple[uuid.UUID, int]] = []
-    regions_json: dict[str, Any] | None = None
     if plan is not None:
         overlay = assets_domain.ingest(
             db,
@@ -318,9 +333,57 @@ class _RegionsPlan:
     appended_text: str
 
 
+def _regions_op_caps(caps: ProviderCapabilities, body: RunCreateRequest) -> OperationCapabilities:
+    """四角を受ける操作の capabilities。受けなければ `RunCreateError`。"""
+    model_caps = next((m for m in caps.models if m.model == body.model), None)
+    if model_caps is None:
+        raise RunCreateError("invalid", t("runValidation.unknownModel", model=body.model))
+    op_caps = next((o for o in model_caps.operations if o.operation == body.operation), None)
+    if op_caps is None or not op_caps.supports_regions:
+        # 「画像と文」(OpenAI)は Edit だけが受ける。Generate にはそのことを伝える。
+        if body.operation != "edit" and _any_operation_supports_regions(model_caps.operations):
+            raise RunCreateError("invalid", t("runRegions.editOnly"))
+        raise RunCreateError("invalid", t("runRegions.notSupported"))
+    return op_caps
+
+
+def _any_operation_supports_regions(operations: list[OperationCapabilities]) -> bool:
+    return any(o.supports_regions for o in operations)
+
+
+def _check_region_options(op_caps: OperationCapabilities, body: RunCreateRequest) -> None:
+    """capabilities が受けない種類・参照画像の四角を断る(ADR-0053 6章)。"""
+    for region in regions_domain.ordered(body.regions):
+        if region.kind not in op_caps.regions_kinds:
+            raise RunCreateError(
+                "invalid",
+                t("runRegions.kindNotSupported", number=region.number),
+            )
+        if region.reference_asset_id is not None and not op_caps.regions_reference_images:
+            raise RunCreateError(
+                "invalid", t("runRegions.referenceNotSupported", number=region.number)
+            )
+
+
+def _check_comfyui_regions(
+    op_caps: OperationCapabilities, body: RunCreateRequest, input_metas: list[RunInputMeta]
+) -> Literal["input", "output"]:
+    """ComfyUI に差し込む四角を確かめ、座標が何に対する割合かを返す(ADR-0053 6章)。
+
+    選べる種類は「変える」「足す」だけ、参照画像は使えない(「動かす」の元の四角も持てない。
+    `source_box` は「動かす」だけが持つので、種類の確認で断られる)。主たる入力があればそれに対する
+    割合、無ければ出力の大きさに対する割合として受ける(検証はどちらも同じ 0〜1)。
+    """
+    _check_region_options(op_caps, body)
+    has_primary = any(m.role == "image" and m.position == 0 for m in input_metas)
+    if not has_primary and op_caps.regions_requires_input_image:
+        raise RunCreateError("invalid", t("runRegions.primaryRequired"))
+    return "input" if has_primary else "output"
+
+
 def _plan_regions(
     db: Session,
-    caps: ProviderCapabilities,
+    op_caps: OperationCapabilities,
     body: RunCreateRequest,
     input_metas: list[RunInputMeta],
     *,
@@ -330,12 +393,7 @@ def _plan_regions(
     """四角を検証し、四角を描いた画像と足す文を作る。断るときは `RunCreateError`。"""
     if body.operation != "edit":
         raise RunCreateError("invalid", t("runRegions.editOnly"))
-    model_caps = next((m for m in caps.models if m.model == body.model), None)
-    if model_caps is None:
-        raise RunCreateError("invalid", t("runValidation.unknownModel", model=body.model))
-    op_caps = next((o for o in model_caps.operations if o.operation == body.operation), None)
-    if op_caps is None or not op_caps.supports_regions:
-        raise RunCreateError("invalid", t("runRegions.notSupported"))
+    _check_region_options(op_caps, body)
 
     image_metas = sorted((m for m in input_metas if m.role == "image"), key=lambda m: m.position)
     primary_meta = next((m for m in image_metas if m.position == 0), None)

@@ -24,6 +24,8 @@ from app.i18n import t
 # `run.regions` の変換の版。四角を画像と文に変える作り方を変えたら上げる。
 VERSION = 1
 DELIVERY_IMAGE_AND_TEXT = "image_and_text"
+# ComfyUI の Create Bounding Boxes に差し込む(ADR-0053 6章。変換は `comfy_bounding_boxes`)。
+DELIVERY_COMFYUI_BBOXES = "comfyui_bboxes"
 
 # 四角の色(番号順に使い、9 個目からは繰り返す。番号で見分ける)。`key` は文言のキー
 # (`regions.colors.{key}`)。互いに見分けやすく、写真・イラストの上でも目立つ色。
@@ -337,4 +339,19 @@ class RegionsRecord:
             # プロンプトの後ろに足した文。再実行では、プロンプトからこの文を除いて戻す。
             "appended_text": self.appended_text,
             "overlay_asset_id": str(self.overlay_asset_id),
+            # 座標は主たる入力に対する割合(「画像と文」は入力画像のある Run だけ)。
+            "frame": "input",
         }
+
+
+def comfyui_record(regions: Sequence[RegionBox], *, frame: str) -> dict[str, Any]:
+    """ComfyUI に差し込んだ Run の `run.regions`(ADR-0053 6章)。重ねた画像も足す文も無い。
+
+    `frame` は座標が何に対する割合か(`input`: 主たる入力、`output`: 出力の大きさ)。
+    """
+    return {
+        "version": VERSION,
+        "delivery": DELIVERY_COMFYUI_BBOXES,
+        "regions": [r.model_dump(mode="json") for r in ordered(regions)],
+        "frame": frame,
+    }

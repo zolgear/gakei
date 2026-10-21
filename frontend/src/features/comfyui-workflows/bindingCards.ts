@@ -18,7 +18,13 @@ import type {
   ComfyValidateRequest,
   ComfyValidationIssue,
 } from '../../api/client'
-import { bindingRefsList, bindingsFormFromSuggestion, type BindingsFormState } from './bindingsForm'
+import {
+  BOUNDING_BOXES_CLASS_TYPE,
+  bindingRefsList,
+  bindingsFormFromSuggestion,
+  boundingBoxesRef,
+  type BindingsFormState,
+} from './bindingsForm'
 import { exposedParamRowToApi, validateExposedParamName, type ExposedParamRow } from './exposedParamsForm'
 import type { InputRefValue } from './nodeOptions'
 
@@ -36,11 +42,20 @@ export const FIELD_ORDER: readonly FieldKey[] = [
   'batch_size',
   'outputs',
   'final_prompt',
+  'bounding_boxes',
 ]
 
-/** 操作ごとに出す項目。generate は画像の枠とマスクを取らない(ADR-0013)。 */
-export function visibleFields(operation: ComfyOperation): FieldKey[] {
-  return FIELD_ORDER.filter((field) => operation === 'edit' || (field !== 'images' && field !== 'mask'))
+/**
+ * 操作ごとに出す項目。generate は画像の枠とマスクを取らない(ADR-0013)。四角の差し込み先
+ * (ADR-0053 6章)は、`nodes` を渡したとき、テンプレートに Create Bounding Boxes があるときだけ出す。
+ */
+export function visibleFields(operation: ComfyOperation, nodes?: readonly ComfyNodeInfo[]): FieldKey[] {
+  const hasBoundingBoxes = nodes === undefined || nodes.some((n) => n.class_type === BOUNDING_BOXES_CLASS_TYPE)
+  return FIELD_ORDER.filter(
+    (field) =>
+      (operation === 'edit' || (field !== 'images' && field !== 'mask')) &&
+      (field !== 'bounding_boxes' || hasBoundingBoxes),
+  )
 }
 
 /** 問いのカードの要素の id(行から問いへ移動するのに使う)。 */
@@ -125,6 +140,8 @@ export function fieldValueKey(form: BindingsFormState, field: FieldKey): string 
       return form.outputs.length > 0 ? [...form.outputs].sort().join('|') : null
     case 'final_prompt':
       return form.finalPrompt
+    case 'bounding_boxes':
+      return form.boundingBoxes
   }
 }
 
@@ -182,6 +199,8 @@ export function withReadingValue(
       return { ...form, outputs: reading.outputs }
     case 'final_prompt':
       return { ...form, finalPrompt: reading.finalPrompt }
+    case 'bounding_boxes':
+      return { ...form, boundingBoxes: reading.boundingBoxes }
   }
 }
 
@@ -389,6 +408,7 @@ export function buildValidateRequest(input: {
             : null,
       outputs: b.outputs,
       final_prompt: b.finalPrompt,
+      bounding_boxes: boundingBoxesRef(b.boundingBoxes),
     },
     exposed_params: input.exposedRows
       .filter((row) => row.enabled && validateExposedParamName(row.name) === null)
@@ -546,10 +566,10 @@ function stateRank(state: ComfyNodeInfo['state']): number {
   return state === 'live' ? 0 : state === 'display' ? 1 : 2
 }
 
-/** ノードそのものを選ぶピッカー(出力、最終プロンプト)の選択肢。候補が先。 */
+/** ノードそのものを選ぶピッカー(出力、最終プロンプト、四角)の選択肢。候補が先。 */
 export function nodePickerOptions(
   nodes: readonly ComfyNodeInfo[],
-  field: 'outputs' | 'final_prompt',
+  field: 'outputs' | 'final_prompt' | 'bounding_boxes',
   readingNodes: readonly string[],
   query: string,
 ): { candidates: ComfyNodeInfo[]; others: ComfyNodeInfo[] } {
@@ -557,10 +577,13 @@ export function nodePickerOptions(
     if (readingNodes.includes(node.id)) return true
     const cls = node.class_type ?? ''
     if (field === 'outputs') return /Save/.test(cls)
+    if (field === 'bounding_boxes') return cls === BOUNDING_BOXES_CLASS_TYPE
     return /PreviewAny|ShowText|PreviewText|DisplayText/i.test(cls)
   }
   const matches = (node: ComfyNodeInfo) => nodeMatches(node, '', query)
-  const ordered = [...nodes].sort((a, b) => stateRank(a.state) - stateRank(b.state))
+  // 四角は Create Bounding Boxes の `bboxes` にだけ差し込める(ほかのノードは出さない)。
+  const pool = field === 'bounding_boxes' ? nodes.filter(isCandidate) : nodes
+  const ordered = [...pool].sort((a, b) => stateRank(a.state) - stateRank(b.state))
   return {
     candidates: ordered.filter((n) => isCandidate(n) && matches(n)),
     others: ordered.filter((n) => !isCandidate(n) && matches(n)),

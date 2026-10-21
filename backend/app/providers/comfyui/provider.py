@@ -28,7 +28,7 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.domain import general_settings
+from app.domain import comfy_bounding_boxes, general_settings
 from app.domain.comfy_workflow import (
     SEED_MAX,
     Bindings,
@@ -212,6 +212,14 @@ class ComfyUIProvider:
             bindings, draft.inputs
         )
 
+        # ADR-0053 6章: 四角は Create Bounding Boxes の `bboxes` に要素の一覧で差し込む。四角が
+        # 無ければ差し込まない(テンプレートのキャンバスの値がそのまま使われる)。
+        bounding_boxes: str | None = None
+        if draft.regions:
+            if bindings.bounding_boxes is None:
+                raise RunValidationError(t("runRegions.notSupported"))
+            bounding_boxes = comfy_bounding_boxes.encode(draft.regions)
+
         graph = resolve_prompt(
             wf.template,
             bindings,
@@ -221,6 +229,7 @@ class ComfyUIProvider:
             seed=seed,
             image_names=image_names,
             mask_name=mask_resolve_name,
+            bounding_boxes=bounding_boxes,
         )
 
         uploads: dict[str, Any] = {}
@@ -245,6 +254,13 @@ class ComfyUIProvider:
             result["comfyui_final_prompt"] = bindings.final_prompt
         if bindings.mask is not None:
             result["comfyui_mask_mode"] = bindings.mask.mode
+        if bounding_boxes is not None and bindings.bounding_boxes is not None:
+            # 差し込んだ先(値そのものは `comfyui_prompt` の中にある)。実行の前に、このノードの形が
+            # 変わっていないかを `/object_info` で確かめる(ADR-0053 6章)。
+            result["comfyui_bounding_boxes"] = {
+                "node": bindings.bounding_boxes.node,
+                "input": bindings.bounding_boxes.input,
+            }
         return result
 
     def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
@@ -331,6 +347,8 @@ class ComfyUIProvider:
                     # 接続できなくても続行し、あとで /history のポーリングに切り替える。
                     events = None
 
+                if params.get("comfyui_bounding_boxes") is not None:
+                    await self._check_bounding_boxes_node(client)
                 await self._upload_inputs(client, run.inputs, uploads, mask_mode)
                 prompt_id = await client.queue_prompt(prompt_graph, client_id)
 
@@ -376,6 +394,31 @@ class ComfyUIProvider:
             provider_request_id=prompt_id,
             text_outputs=text_outputs,
         )
+
+    @staticmethod
+    async def _check_bounding_boxes_node(client: ComfyUIClient) -> None:
+        """四角を差し込む前に、Create Bounding Boxes があり `bboxes` が文字列を受けるかを確かめる
+        (ADR-0053 6章)。形が違えば、黙って違う形で送らずに Run を失敗にする。`/object_info` に
+        届かないときは、ほかの通信の失敗と同じく `ComfyUIError` のまま失敗にする。"""
+        info = await client.object_info(comfy_bounding_boxes.CLASS_TYPE)
+        problem = comfy_bounding_boxes.check_object_info(info)
+        if problem == "node_missing":
+            raise ProviderError(
+                "comfyuiRegionsUnsupported",
+                t(
+                    "comfyui.provider.boundingBoxesNodeMissing",
+                    class_type=comfy_bounding_boxes.CLASS_TYPE,
+                ),
+            )
+        if problem == "input_not_string":
+            raise ProviderError(
+                "comfyuiRegionsUnsupported",
+                t(
+                    "comfyui.provider.boundingBoxesInputChanged",
+                    class_type=comfy_bounding_boxes.CLASS_TYPE,
+                    input=comfy_bounding_boxes.BBOXES_INPUT,
+                ),
+            )
 
     @staticmethod
     async def _fetch_output(client: ComfyUIClient, ref: OutputImageRef) -> RunOutputImage:
