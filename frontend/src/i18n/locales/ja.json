@@ -133,7 +133,8 @@
       "loadMore": "さらに読み込む",
       "cardStyle": "カードの形",
       "cardStyleDetail": "詳細",
-      "cardStyleImage": "画像"
+      "cardStyleMasonry": "石積み",
+      "cardStyleRows": "行揃え"
     }
   },
   "runDetail": {

@@ -1,5 +1,5 @@
 /**
- * 履歴のカードの形(詳細 / 画像)。ブラウザごとの表示の好みなので localStorage に保存し、
+ * 履歴のカードの形(詳細 / 石積み / 行揃え)。ブラウザごとの表示の好みなので localStorage に保存し、
  * サーバーの設定にはしない。既定は「詳細」。
  * `stockPrefs.ts` と同じく、モジュールスコープに1つだけ状態を持ち、`useSyncExternalStore` で購読する。
  * localStorage が使えない環境(プライベートブラウジング等)でも壊れないよう try/catch で囲む。
@@ -8,11 +8,15 @@ import { useSyncExternalStore } from 'react'
 
 const STORAGE_KEY = 'gakei:history-card-style'
 
-export type HistoryCardStyle = 'detail' | 'image'
+/**
+ * 保存する値。`detail` は重ねるカード、`image` は石積みのギャラリー(最初は「画像」の形だった
+ * ので、利用者の保存値を壊さないよう値はそのまま)、`rows` は行揃えのギャラリー。
+ */
+export type HistoryCardStyle = 'detail' | 'image' | 'rows'
 
-/** 'image' のときだけ画像の形。それ以外(未設定の null、不正な値)は既定の詳細。 */
+/** 'image' と 'rows' はそのまま。それ以外(未設定の null、不正な値)は既定の詳細。 */
 export function parseHistoryCardStyle(raw: unknown): HistoryCardStyle {
-  return raw === 'image' ? 'image' : 'detail'
+  return raw === 'image' || raw === 'rows' ? raw : 'detail'
 }
 
 export function loadHistoryCardStyle(): HistoryCardStyle {

@@ -181,14 +181,26 @@ export function CardDetailIcon(props: IconProps) {
   )
 }
 
-/** 2x2 のマス: 履歴のカードを「画像」だけの形で並べる。 */
-export function CardImageGridIcon(props: IconProps) {
+/** 高さの違うマスが縦に並ぶ形: 履歴を石積み(列ごとに積む)のギャラリーで並べる。 */
+export function CardMasonryIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <rect x="2" y="2" width="5" height="5" rx="1" />
-      <rect x="9" y="2" width="5" height="5" rx="1" />
-      <rect x="2" y="9" width="5" height="5" rx="1" />
-      <rect x="9" y="9" width="5" height="5" rx="1" />
+      <rect x="2" y="2" width="5" height="7" rx="1" />
+      <rect x="2" y="11" width="5" height="3" rx="1" />
+      <rect x="9" y="2" width="5" height="3" rx="1" />
+      <rect x="9" y="7" width="5" height="7" rx="1" />
+    </Icon>
+  )
+}
+
+/** 幅の違うマスが横に並ぶ形: 履歴を行揃え(行の高さを揃える)のギャラリーで並べる。 */
+export function CardRowsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="2.5" width="7" height="5" rx="1" />
+      <rect x="11" y="2.5" width="3" height="5" rx="1" />
+      <rect x="2" y="9.5" width="3.5" height="4" rx="1" />
+      <rect x="7.5" y="9.5" width="6.5" height="4" rx="1" />
     </Icon>
   )
 }

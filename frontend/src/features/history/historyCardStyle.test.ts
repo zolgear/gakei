@@ -1,5 +1,5 @@
 /**
- * 履歴のカードの形(詳細 / 画像)。既定は詳細で、'image' のときだけ画像の形になる。
+ * 履歴のカードの形(詳細 / 石積み / 行揃え)。既定は詳細。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -17,8 +17,9 @@ describe('parseHistoryCardStyle', () => {
     expect(parseHistoryCardStyle(null)).toBe('detail')
   })
 
-  it("'image' と 'detail' はそのまま", () => {
+  it("'image'(石積み)、'rows'(行揃え)、'detail' はそのまま", () => {
     expect(parseHistoryCardStyle('image')).toBe('image')
+    expect(parseHistoryCardStyle('rows')).toBe('rows')
     expect(parseHistoryCardStyle('detail')).toBe('detail')
   })
 

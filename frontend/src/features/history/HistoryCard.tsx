@@ -14,9 +14,8 @@ import {
   shortenModelName,
   statusLabel,
 } from '../../lib/format'
-import { buildParamChips, formatTokenCount } from './historyChips'
+import { buildParamChips, buildParamChipsWithActualSize, formatTokenCount } from './historyChips'
 import { resolveHistoryCardNavigation } from './historyNavigation'
-import { formatPixelSize } from './galleryLayout'
 import { HistoryCardMedia } from './HistoryCardMedia'
 import { useHistoryRunActions } from './useHistoryRunActions'
 import { fmt, useI18n } from '../../i18n'
@@ -48,7 +47,11 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   const shownOutput = outputs[outputIndex] ?? outputs[0]
   const hasInputs = run.input_count > 0
   const accentClass = hasInputs ? styles.dotEdit : styles.dotGenerate
-  const paramChips = buildParamChips(run.params)
+  // 重ねるカードでは、サイズを出力の実寸と合わせてチップの1つにまとめる(従来のカードは今のまま)。
+  const paramChips =
+    variant === 'overlay' && run.status === 'succeeded'
+      ? buildParamChipsWithActualSize(run.params, shownOutput)
+      : buildParamChips(run.params)
   // 領域の指示(ADR-0053): 足した文はプロンプトから除いて見せ、四角を送ったことをチップで示す。
   const shownPrompt = stripAppendedText(run.prompt, run.regions?.appended_text)
   const regionCount = run.regions?.regions.length ?? 0
@@ -67,7 +70,6 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   })
 
   const runActions = useHistoryRunActions(run, shownOutput, nav)
-  const pixelSize = run.status === 'succeeded' ? formatPixelSize(shownOutput) : null
 
   const elapsed = run.status === 'running' ? formatElapsedSeconds(run.started_at) : null
 
@@ -112,11 +114,10 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
       </div>
 
       <div className={styles.body}>
-        {/* 重ねる形では、画像の左下は下の帯に隠れるので、親のサムネイルと出力の大きさを帯の先頭に置く。 */}
-        {variant === 'overlay' && (parentOverlay || pixelSize) && (
+        {/* 重ねる形では、画像の左下は下の帯に隠れるので、親のサムネイルを帯の先頭に置く(サイズはチップの行にまとめる)。 */}
+        {variant === 'overlay' && parentOverlay && (
           <div className={styles.overlayLead}>
             {parentOverlay}
-            {pixelSize && <span className={styles.pixelSize}>{pixelSize}</span>}
           </div>
         )}
         <Link

@@ -133,7 +133,8 @@
       "loadMore": "Load more",
       "cardStyle": "Card style",
       "cardStyleDetail": "Details",
-      "cardStyleImage": "Images"
+      "cardStyleMasonry": "Masonry",
+      "cardStyleRows": "Rows"
     }
   },
   "runDetail": {

@@ -1,8 +1,8 @@
 /**
  * 履歴ワークスペース。カード形式の一覧 + 状態フィルタ(クライアント側)+ カーソル読み込み。
  * ツールバーは左に表示の切り替え、右端に状態の絞り込み(アイコンのメニュー)。
- * 形は「詳細」(カードいっぱいに画像を敷き、情報と操作を重ねる)と「画像」(画像を元の縦横比で
- * 石積みに並べるギャラリー)をツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
+ * 形は「詳細」(カードいっぱいに画像を敷き、情報と操作を重ねる)、「石積み」「行揃え」(画像を
+ * 元の縦横比で並べるギャラリー)をツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
  * 見えたら自動で読み、失敗時と IntersectionObserver の無い環境のために「さらに読み込む」も残す。
  * 操作(Generate/Edit)の絞り込みは ADR-0009(UI で区別しない)により無い。
  *
@@ -26,7 +26,7 @@ import {
 } from '../features/history/historyCardStyle'
 import { useAutoLoadMore } from '../features/history/useAutoLoadMore'
 import { HistoryStatusFilterMenu } from '../features/history/HistoryStatusFilterMenu'
-import { CardDetailIcon, CardImageGridIcon } from '../components/icons'
+import { CardDetailIcon, CardMasonryIcon, CardRowsIcon } from '../components/icons'
 import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
 import { hasNewlySucceededRun } from '../features/run-status/assetInvalidation'
 import { hasActiveRuns, countQueue } from '../shell/queueStatus'
@@ -53,7 +53,8 @@ export function HistoryPage() {
   const cardStyle = useHistoryCardStyle()
   const CARD_STYLES: { id: HistoryCardStyle; label: string; icon: ReactNode }[] = [
     { id: 'detail', label: t.history.page.cardStyleDetail, icon: <CardDetailIcon size={16} /> },
-    { id: 'image', label: t.history.page.cardStyleImage, icon: <CardImageGridIcon size={16} /> },
+    { id: 'image', label: t.history.page.cardStyleMasonry, icon: <CardMasonryIcon size={16} /> },
+    { id: 'rows', label: t.history.page.cardStyleRows, icon: <CardRowsIcon size={16} /> },
   ]
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
@@ -145,8 +146,8 @@ export function HistoryPage() {
         {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
         {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
 
-        {cardStyle === 'image' ? (
-          <HistoryGallery cards={cards} />
+        {cardStyle !== 'detail' ? (
+          <HistoryGallery cards={cards} layout={cardStyle === 'rows' ? 'rows' : 'masonry'} />
         ) : (
           <div className={styles.grid}>
             {cards.map((card) => (

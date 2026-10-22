@@ -1,5 +1,6 @@
 /**
- * 履歴の「画像」の形(石積みのギャラリー)の1枚。画像を元の縦横比のまま列の幅いっぱいに出し、
+ * 履歴のギャラリー(石積み・行揃え)の1枚。画像を元の縦横比のまま出し(石積みは列の幅いっぱい、
+ * 行揃えは配置で決まった大きさ)、
  * ふだんは画像だけを見せる。マウスを載せたとき(またはキーボードで中に入ったとき)だけ、下からの
  * 薄いグラデーションに1行の帯(左にピクセルの大きさ、右に小さな操作)を出す。出力にタイトルが
  * あればその上に1行で出す(プロンプトは出さない)。タッチ端末(hover: none)では何も重ねず、
@@ -11,7 +12,7 @@
 import { Link } from 'react-router'
 import type { RunSummary } from '../../api/client'
 import { resolveHistoryCardNavigation } from './historyNavigation'
-import { formatPixelSize, galleryTileAspect } from './galleryLayout'
+import { formatPixelSize } from './galleryLayout'
 import { HistoryCardMedia } from './HistoryCardMedia'
 import { useHistoryRunActions } from './useHistoryRunActions'
 import styles from './HistoryCard.module.css'
@@ -19,9 +20,13 @@ import styles from './HistoryCard.module.css'
 interface HistoryGalleryTileProps {
   run: RunSummary
   outputIndex: number
+  /** 縦横比(`galleryTileAspect`)。石積みでは幅いっぱいにこの比で出す。 */
+  aspect: number
+  /** 行揃え(`layoutJustifiedRows`)で決まった大きさ(px)。無ければ幅いっぱいに縦横比で出す。 */
+  size?: { width: number; height: number }
 }
 
-export function HistoryGalleryTile({ run, outputIndex }: HistoryGalleryTileProps) {
+export function HistoryGalleryTile({ run, outputIndex, aspect, size }: HistoryGalleryTileProps) {
   const outputs = run.outputs ?? []
   const shownOutput = outputs[outputIndex] ?? outputs[0]
   const nav = resolveHistoryCardNavigation({
@@ -40,7 +45,7 @@ export function HistoryGalleryTile({ run, outputIndex }: HistoryGalleryTileProps
   return (
     <article
       className={styles.galleryTile}
-      style={{ aspectRatio: String(galleryTileAspect(run, shownOutput)) }}
+      style={size ? { width: size.width, height: size.height } : { width: '100%', aspectRatio: String(aspect) }}
       data-highlight={run.status === 'running'}
     >
       <HistoryCardMedia run={run} output={shownOutput} href={nav.mediaHref} variant="gallery" />
