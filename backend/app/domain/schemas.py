@@ -1279,6 +1279,33 @@ class RunListResponse(BaseModel):
     next_cursor: str | None = None
 
 
+HistorySort = Literal["group", "embedding"]
+
+
+class HistoryAssetItem(BaseModel):
+    """画像単位の履歴の1項目(ADR-0054 4章)。表示は日付の並びと同じく `run` と出力で描く。"""
+
+    asset_id: uuid.UUID
+    # 画像が入っている見えるグループ(`sort=group` のときだけ。グループなし・他の並べ方は null)。
+    group_id: uuid.UUID | None = None
+    run: RunSummary
+
+
+class HistoryGroupSection(BaseModel):
+    """グループの並びの節(バナーの名前と件数)。`id = null` は「グループなし」。"""
+
+    id: uuid.UUID | None = None
+    name: str | None = None
+    count: int
+
+
+class HistoryAssetListResponse(BaseModel):
+    items: list[HistoryAssetItem]
+    next_cursor: str | None = None
+    # `sort=group` のときだけ。グループの並び順で、画像のある節だけ。
+    groups: list[HistoryGroupSection] | None = None
+
+
 class RunCancelResponse(BaseModel):
     id: uuid.UUID
     status: Literal["canceled"]
