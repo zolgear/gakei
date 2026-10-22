@@ -22,6 +22,8 @@ CLASS_TYPE = "CreateBoundingBoxes"
 # 四角を差し込む入力と、ノードが「前回キャンバスを初期化した上流の値」を覚えておく入力。
 BBOXES_INPUT = "bboxes"
 LAST_INCOMING_INPUT = "last_incoming"
+# キャンバスの状態(ピクセルの四角の一覧)。PNG に埋め込まれたグラフを読み込み直すと、これが出る。
+EDITOR_STATE_INPUT = "editor_state"
 
 # ComfyUI で選べる種類(ADR-0053 6章)。「そのまま残す」「消す」はノードの形で表せず(送ると物を
 # 足す指示になる)、「動かす」は元の四角を持てない。
@@ -75,6 +77,55 @@ def encode(regions: Sequence[Any]) -> str:
     return json.dumps(to_elements(regions), ensure_ascii=False, separators=(",", ":"))
 
 
+def to_editor_state(elements: Sequence[dict[str, Any]], width: int, height: int) -> list[dict]:
+    """要素の一覧を、キャンバスの状態(`editor_state`)の四角の一覧(ピクセル)にする。
+
+    ノードの `elements_to_boxes` と同じ計算・同じ丸め(Python の `round`。偶数丸め)にする。
+    `width` / `height` はノードの入力(ピクセルの格子)。
+    """
+    boxes: list[dict[str, Any]] = []
+    for element in elements:
+        ymin, xmin, ymax, xmax = (float(v) / 1000.0 for v in element["bbox"])
+        etype = "text" if element.get("type") == "text" else "obj"
+        boxes.append(
+            {
+                "x": round(min(xmin, xmax) * width),
+                "y": round(min(ymin, ymax) * height),
+                "width": round(abs(xmax - xmin) * width),
+                "height": round(abs(ymax - ymin) * height),
+                "metadata": {
+                    "type": etype,
+                    "text": element.get("text", "") if etype == "text" else "",
+                    "desc": element.get("desc", ""),
+                    "palette": element.get("color_palette", []) or [],
+                },
+            }
+        )
+    return boxes
+
+
+def _int_constant(value: Any) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return None
+
+
+def _resolve_dimension(graph: dict[str, Any], value: Any) -> int | None:
+    """ノードの `width` / `height` の値を整数で決める。決められなければ None。
+
+    定数ならそのまま。配線(`[node_id, index]`)なら、配線先が入力 `value` に整数の定数を持つ
+    ノード(`PrimitiveInt` など)のときだけ辿る。
+    """
+    constant = _int_constant(value)
+    if constant is not None:
+        return constant
+    if isinstance(value, list) and len(value) == 2:
+        source = graph.get(str(value[0]))
+        if isinstance(source, dict) and isinstance(source.get("inputs"), dict):
+            return _int_constant(source["inputs"].get("value"))
+    return None
+
+
 def inject(graph: dict[str, Any], node_id: str, value: str) -> None:
     """グラフの `node_id` のノードに四角を差し込む(`graph` を書き換える)。
 
@@ -84,10 +135,20 @@ def inject(graph: dict[str, Any], node_id: str, value: str) -> None:
     空の配列は `{"__value__": []}` で包む。API 形式では配列の値が配線とみなされるため、ComfyUI は
     配列の値をこの形で送る(画面の書き出しと同じ形。実行時に中身が取り出される)。包みが取り出され
     なくても、ノードは配列でない `last_incoming` を空とみなすので、同じく差し込んだ値を使う。
+
+    `editor_state` にも同じ四角をピクセルで書く。出力 PNG に埋め込まれるのはこのグラフで、
+    ComfyUI に読み込み直すとソケットの `bboxes` は落ち、キャンバスにはこちらが出るため。
+    ノードの `width` / `height` が決められなければ、古い四角を残さないよう空にする。
     """
     inputs = graph[node_id]["inputs"]
     inputs[BBOXES_INPUT] = value
     inputs[LAST_INCOMING_INPUT] = {"__value__": []}
+    width = _resolve_dimension(graph, inputs.get("width"))
+    height = _resolve_dimension(graph, inputs.get("height"))
+    state: list[dict[str, Any]] = []
+    if width is not None and height is not None:
+        state = to_editor_state(json.loads(value), width, height)
+    inputs[EDITOR_STATE_INPUT] = {"__value__": state}
 
 
 ObjectInfoProblem = Literal["node_missing", "input_not_string"]
