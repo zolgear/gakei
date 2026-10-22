@@ -338,7 +338,8 @@
 
 @media (max-width: 767px) {
   .rerunButton,
-  .paramSetButton {
+  .paramSetButton,
+  .comfyuiDownloadLink {
     min-height: 44px;
   }
 }

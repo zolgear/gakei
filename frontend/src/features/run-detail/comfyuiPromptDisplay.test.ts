@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   comfyuiPromptDownloadFilename,
+  comfyuiPromptDownloadJson,
   extractComfyUiPrompt,
   comfyUiSeedTooltip,
   describeComfyUiSeed,
@@ -66,6 +67,26 @@ describe('shortSha256', () => {
 
   it('元の文字列が短ければそのまま', () => {
     expect(shortSha256('abc')).toBe('abc')
+  })
+})
+
+describe('comfyuiPromptDownloadJson', () => {
+  it('送ったグラフを2スペースで整形し、__value__ の包みを残す', () => {
+    const graph = {
+      '5': {
+        class_type: 'CreateBoundingBoxes',
+        inputs: { editor_state: { __value__: [{ x: 1, y: 2, width: 3, height: 4 }] }, width: 1024 },
+      },
+    }
+    const json = comfyuiPromptDownloadJson({ comfyui_prompt: graph, comfyui_seed: 1 })
+    expect(json).toBe(JSON.stringify(graph, null, 2))
+    expect(JSON.parse(json!)).toEqual(graph)
+    expect(json).toContain('"__value__"')
+  })
+
+  it('送ったグラフが無い Run では null(ボタンを出さない)', () => {
+    expect(comfyuiPromptDownloadJson({})).toBeNull()
+    expect(comfyuiPromptDownloadJson({ comfyui_prompt: null })).toBeNull()
   })
 })
 

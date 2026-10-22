@@ -63,6 +63,16 @@ export function shortSha256(sha: string, length = 12): string {
   return sha.slice(0, length)
 }
 
+/**
+ * 「JSON をダウンロード」の中身。送ったグラフ(API 形式)をそのまま2スペースで整形する。
+ * `{"__value__": [...]}` の包みも保存されたまま残す(ComfyUI に読み込むとキャンバスの四角が戻る。ADR-0053 6章)。
+ * グラフが無い Run では null(ボタンを出さない)。
+ */
+export function comfyuiPromptDownloadJson(params: Record<string, unknown>): string | null {
+  const prompt = extractComfyUiPrompt(params)
+  return prompt ? JSON.stringify(prompt, null, 2) : null
+}
+
 /** 「JSON をダウンロード」用のファイル名。 */
 export function comfyuiPromptDownloadFilename(runId: string): string {
   return `comfyui-prompt-${runId}.json`
