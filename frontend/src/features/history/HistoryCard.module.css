@@ -375,26 +375,179 @@
   }
 }
 
-/* 「画像」の形(HistoryTile)の小さいマス。エラーなどの文字を詰める。 */
-.mediaLink[data-compact='true'] .errorArea {
-  padding: 8px;
-  gap: 4px;
+
+/* ---- 重ねる形(variant="overlay"。履歴ページの「画像」の形) ----
+   詳細のカードと同じ大きさ(グリッドの行で揃う。高さは詳細の実寸に合わせる)のカードいっぱいに
+   画像を敷き、ヘッダーを上、プロンプト・メタ・チップ・操作を下に、暗いグラデーションの上に重ねる。
+   帯の空いたところは画像のリンクへクリックを通す。 */
+.card[data-variant='overlay'] {
+  position: relative;
+  height: 374px;
+  background: var(--color-bg);
 }
 
-.mediaLink[data-compact='true'] .errorCode {
-  font-size: 11px;
+.card[data-variant='overlay'] .media {
+  position: absolute;
+  inset: 0;
+  height: auto;
 }
 
-.mediaLink[data-compact='true'] .errorMessage {
+.card[data-variant='overlay'] .header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  height: 40px;
+  align-items: flex-start;
+  padding-top: 9px;
+  background: linear-gradient(to bottom, rgba(10, 11, 13, 0.82), rgba(10, 11, 13, 0));
+  pointer-events: none;
+}
+
+.card[data-variant='overlay'] .model,
+.card[data-variant='overlay'] .status:not([data-status='running']):not([data-status='succeeded']):not([data-status='failed']) {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.card[data-variant='overlay'] .header > *,
+.card[data-variant='overlay'] .body {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.card[data-variant='overlay'] .dot {
+  margin-top: 5px;
+}
+
+.card[data-variant='overlay'] .inputBadge {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(10, 11, 13, 0.45);
+}
+
+/* 何枚目か(1/2)のバッジは、上の帯(色点・状態)の下に下げ、小さくする。 */
+.card[data-variant='overlay'] .countBadge {
+  top: 40px;
+  padding: 1px 6px;
+  font-size: 10px;
+  background: rgba(10, 11, 13, 0.6);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.card[data-variant='overlay'] .body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  padding-top: 48px;
+  background: linear-gradient(
+    to top,
+    rgba(10, 11, 13, 0.92) 0%,
+    rgba(10, 11, 13, 0.82) 55%,
+    rgba(10, 11, 13, 0) 100%
+  );
+  color: #fff;
+  pointer-events: none;
+}
+
+.card[data-variant='overlay'] .body > * {
+  pointer-events: auto;
+}
+
+/* 帯の先頭の行。親のサムネイル(詳細と同じく左)と、出力のピクセルの大きさを並べる。 */
+.overlayLead {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pixelSize {
+  padding: 1px 6px;
+  background: rgba(10, 11, 13, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
   font-size: 10.5px;
-  -webkit-line-clamp: 2;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  text-shadow: none;
 }
 
-.mediaLink[data-compact='true'] .pendingText {
-  font-size: 10.5px;
+.card[data-variant='overlay'] .parentOverlay {
+  position: static;
+  min-width: 0;
+  background: rgba(10, 11, 13, 0.6);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
-.mediaLink[data-compact='true'] .countBadge {
-  right: 6px;
-  top: 6px;
+.card[data-variant='overlay'] .prompt,
+.card[data-variant='overlay'] .title {
+  color: #fff;
+}
+
+.card[data-variant='overlay'] .promptOneLine,
+.card[data-variant='overlay'] .meta {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.card[data-variant='overlay'] .chip {
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(10, 11, 13, 0.5);
+  text-shadow: none;
+}
+
+.card[data-variant='overlay'] .iconButton,
+.card[data-variant='overlay'] .textButton {
+  background: rgba(10, 11, 13, 0.55);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(4px);
+  text-shadow: none;
+}
+
+.card[data-variant='overlay'] .iconButtonEdit {
+  color: var(--color-edit);
+}
+
+.card[data-variant='overlay'] .iconButton:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
+.card[data-variant='overlay'] .iconButtonDanger:hover:not(:disabled),
+.card[data-variant='overlay'] .textButton:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* 画像の無い Run(失敗・待機・実行中・キャンセル)は、カード全体を背景にし、文字は上下の帯に
+   隠れない上寄りに置く。実行中の進捗バーは上端に出す。 */
+.card[data-variant='overlay'] .errorArea {
+  justify-content: flex-start;
+  padding: 52px 14px 0;
+}
+
+.card[data-variant='overlay'] .pendingArea {
+  align-items: flex-start;
+  padding-top: 30%;
+  box-sizing: border-box;
+}
+
+.card[data-variant='overlay'] .progressTrack {
+  top: 0;
+  bottom: auto;
+  z-index: 2;
+}
+
+@media (max-width: 767px) {
+  .card[data-variant='overlay'] {
+    height: 430px;
+  }
+
+  .card[data-variant='overlay'] .body {
+    padding: 40px 8px 8px;
+  }
 }

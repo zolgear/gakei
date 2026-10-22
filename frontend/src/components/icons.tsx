@@ -192,3 +192,12 @@ export function CardImageGridIcon(props: IconProps) {
     </Icon>
   )
 }
+
+/** じょうご: 一覧の絞り込み。 */
+export function FilterIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 3h11l-4.2 5.2v4.3l-2.6 1.3V8.2z" />
+    </Icon>
+  )
+}

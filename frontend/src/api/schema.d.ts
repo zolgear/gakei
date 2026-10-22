@@ -7514,6 +7514,10 @@ export interface components {
              * @default false
              */
             content_withheld: boolean;
+            /** Width */
+            width?: number | null;
+            /** Height */
+            height?: number | null;
         };
         /**
          * RunPromptTemplate

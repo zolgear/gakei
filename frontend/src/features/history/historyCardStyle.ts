@@ -56,3 +56,34 @@ export function subscribeHistoryCardStyle(listener: () => void): () => void {
 export function useHistoryCardStyle(): HistoryCardStyle {
   return useSyncExternalStore(subscribeHistoryCardStyle, getHistoryCardStyle, getHistoryCardStyle)
 }
+
+/** 一覧に並べる1枚のカード。 */
+export interface HistoryCardEntry<R> {
+  key: string
+  run: R
+  /** 見せる出力の添字(`run.outputs`)。 */
+  outputIndex: number
+}
+
+/**
+ * Run の並びを、並べるカードの並びにする。詳細の形は Run ごとに1枚。画像の形は、出力が複数ある
+ * Run を出力ごとの1枚ずつに展開する(key は Run と出力の組)。出力が1つ以下の Run は1枚のまま。
+ * 絞り込みは Run 単位で先に済ませておく(展開は表示だけで、読み込みの判定には関わらない)。
+ */
+export function expandHistoryCards<R extends { id: string; outputs?: { asset_id: string }[] | null }>(
+  runs: readonly R[],
+  style: HistoryCardStyle,
+): HistoryCardEntry<R>[] {
+  const entries: HistoryCardEntry<R>[] = []
+  for (const run of runs) {
+    const outputs = run.outputs ?? []
+    if (style === 'image' && outputs.length > 1) {
+      outputs.forEach((output, index) => {
+        entries.push({ key: `${run.id}:${output.asset_id}`, run, outputIndex: index })
+      })
+    } else {
+      entries.push({ key: run.id, run, outputIndex: 0 })
+    }
+  }
+  return entries
+}

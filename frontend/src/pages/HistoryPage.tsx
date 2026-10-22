@@ -1,6 +1,7 @@
 /**
  * 履歴ワークスペース。カード形式の一覧 + 状態フィルタ(クライアント側)+ カーソル読み込み。
- * カードは「詳細」(HistoryCard)と「画像」(HistoryTile。画像だけを詰めて並べる)の形を
+ * ツールバーは左に表示の切り替え、右端に状態の絞り込み(アイコンのメニュー)。
+ * カードは「詳細」と「画像」(同じ大きさのカードいっぱいに画像を敷き、情報を重ねる)の形を
  * ツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
  * 見えたら自動で読み、失敗時と IntersectionObserver の無い環境のために「さらに読み込む」も残す。
  * 操作(Generate/Edit)の絞り込みは ADR-0009(UI で区別しない)により無い。
@@ -16,13 +17,14 @@ import { useLocation, useNavigationType } from 'react-router'
 import { listRuns } from '../api/client'
 import { historyPlaceholder } from '../features/history/historyPlaceholder'
 import { HistoryCard } from '../features/history/HistoryCard'
-import { HistoryTile } from '../features/history/HistoryTile'
 import {
+  expandHistoryCards,
   setHistoryCardStyle,
   useHistoryCardStyle,
   type HistoryCardStyle,
 } from '../features/history/historyCardStyle'
 import { useAutoLoadMore } from '../features/history/useAutoLoadMore'
+import { HistoryStatusFilterMenu } from '../features/history/HistoryStatusFilterMenu'
 import { CardDetailIcon, CardImageGridIcon } from '../components/icons'
 import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
 import { hasNewlySucceededRun } from '../features/run-status/assetInvalidation'
@@ -41,11 +43,6 @@ const filterByLocationKey = new Map<string, StatusFilter>()
 
 export function HistoryPage() {
   const { t } = useI18n()
-  const STATUS_TABS: { id: StatusFilter; label: string }[] = [
-    { id: 'all', label: t.history.page.filterAll },
-    { id: 'succeeded', label: t.history.page.filterSucceeded },
-    { id: 'failed', label: t.history.page.filterFailed },
-  ]
   const location = useLocation()
   const navigationType = useNavigationType()
   const queryClient = useQueryClient()
@@ -89,6 +86,8 @@ export function HistoryPage() {
 
   const allRuns = useMemo(() => runsQuery.data?.pages.flatMap((p) => p.items) ?? [], [runsQuery.data])
   const filtered = useMemo(() => filterRuns(allRuns, statusFilter), [allRuns, statusFilter])
+  // 画像の形では、出力が複数の Run を出力ごとのカードに展開する(絞り込みは Run 単位で先に済ませる)。
+  const cards = useMemo(() => expandHistoryCards(filtered, cardStyle), [filtered, cardStyle])
   const placeholder = historyPlaceholder({
     isLoading: runsQuery.isLoading,
     isError: runsQuery.isError,
@@ -113,25 +112,10 @@ export function HistoryPage() {
   return (
     <div className={styles.page}>
       <div className={styles.toolbar}>
-        <h1 className={styles.title}>{t.history.page.title}</h1>
-        <div className={styles.count}>{allRuns.length} Generated</div>
+        {/* 見出しは上のナビで分かるので見せない(読み上げのために残す)。 */}
+        <h1 className={styles.srOnly}>{t.history.page.title}</h1>
 
-        <div role="group" aria-label={t.history.page.filterByStatus} className={styles.statusGroup}>
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              aria-pressed={statusFilter === tab.id}
-              className={styles.statusTab}
-              data-active={statusFilter === tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div role="group" aria-label={t.history.page.cardStyle} className={styles.cardStyleGroup}>
+        <div role="group" aria-label={t.history.page.cardStyle} className={styles.segmentGroup}>
           {CARD_STYLES.map((option) => (
             <button
               key={option.id}
@@ -139,13 +123,19 @@ export function HistoryPage() {
               aria-pressed={cardStyle === option.id}
               aria-label={option.label}
               title={option.label}
-              className={`${styles.statusTab} ${styles.cardStyleTab}`}
+              className={styles.segment}
               data-active={cardStyle === option.id}
               onClick={() => setHistoryCardStyle(option.id)}
             >
               {option.icon}
             </button>
           ))}
+        </div>
+
+        <div className={styles.count}>{allRuns.length} Generated</div>
+
+        <div className={styles.toolbarEnd}>
+          <HistoryStatusFilterMenu value={statusFilter} onChange={setStatusFilter} />
         </div>
       </div>
 
@@ -154,10 +144,15 @@ export function HistoryPage() {
         {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
         {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
 
-        <div className={styles.grid} data-card-style={cardStyle}>
-          {filtered.map((run) =>
-            cardStyle === 'image' ? <HistoryTile key={run.id} run={run} /> : <HistoryCard key={run.id} run={run} />,
-          )}
+        <div className={styles.grid}>
+          {cards.map((card) => (
+            <HistoryCard
+              key={card.key}
+              run={card.run}
+              variant={cardStyle === 'image' ? 'overlay' : 'detail'}
+              outputIndex={card.outputIndex}
+            />
+          ))}
         </div>
 
         <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />

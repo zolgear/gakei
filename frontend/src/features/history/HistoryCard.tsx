@@ -37,8 +37,22 @@ import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './HistoryCard.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
+/**
+ * カードの見た目。`detail` は上に画像、下にプロンプトと操作を並べる形。`overlay` は履歴ページの
+ * 「画像」の形で、同じ大きさのカードいっぱいに画像を敷き、ヘッダーとプロンプト・操作をその上に重ねる。
+ * 中身(行き先、操作、ダイアログ)は同じで、違いは CSS と親のサムネイルの置き場所だけ。
+ */
+export type HistoryCardVariant = 'detail' | 'overlay'
+
 interface HistoryCardProps {
   run: RunSummary
+  variant?: HistoryCardVariant
+  /**
+   * 見せる出力の番号(`run.outputs` の添字)。重ねる形では出力ごとにカードを分けて並べる
+   * (`expandHistoryCards`)。画像の行き先・タイトル・「入力に使う」はこの出力のもの。
+   * 削除などの操作は Run 単位のまま。
+   */
+  outputIndex?: number
 }
 
 function RerunIcon() {
@@ -98,7 +112,7 @@ function LineageIcon() {
   )
 }
 
-export function HistoryCard({ run }: HistoryCardProps) {
+export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: HistoryCardProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -111,7 +125,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const outputs = run.outputs ?? []
-  const firstOutput = outputs[0]
+  const shownOutput = outputs[outputIndex] ?? outputs[0]
   const hasInputs = run.input_count > 0
   const accentClass = hasInputs ? styles.dotEdit : styles.dotGenerate
   const paramChips = buildParamChips(run.params)
@@ -128,7 +142,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
   const nav = resolveHistoryCardNavigation({
     runId: run.id,
     status: run.status,
-    firstOutputAssetId: firstOutput?.asset_id ?? null,
+    firstOutputAssetId: shownOutput?.asset_id ?? null,
     primaryParentAssetId: parentAssetId ?? null,
   })
 
@@ -199,6 +213,11 @@ export function HistoryCard({ run }: HistoryCardProps) {
     }
   }
 
+  const pixelSize =
+    run.status === 'succeeded' && shownOutput?.width && shownOutput?.height
+      ? `${shownOutput.width}×${shownOutput.height}`
+      : null
+
   const elapsed = run.status === 'running' ? formatElapsedSeconds(run.started_at) : null
 
   const parentOverlay = parentAssetId && (
@@ -221,7 +240,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
   )
 
   return (
-    <article className={styles.card} data-highlight={run.status === 'running'}>
+    <article className={styles.card} data-highlight={run.status === 'running'} data-variant={variant}>
       <div className={styles.header}>
         <span className={`${styles.dot} ${accentClass}`} aria-hidden="true" />
         {hasInputs && (
@@ -236,12 +255,19 @@ export function HistoryCard({ run }: HistoryCardProps) {
       </div>
 
       <div className={styles.media}>
-        <HistoryCardMedia run={run} href={nav.mediaHref} />
+        <HistoryCardMedia run={run} output={shownOutput} href={nav.mediaHref} variant={variant} />
 
-        {parentOverlay}
+        {variant === 'detail' && parentOverlay}
       </div>
 
       <div className={styles.body}>
+        {/* 重ねる形では、画像の左下は下の帯に隠れるので、親のサムネイルと出力の大きさを帯の先頭に置く。 */}
+        {variant === 'overlay' && (parentOverlay || pixelSize) && (
+          <div className={styles.overlayLead}>
+            {parentOverlay}
+            {pixelSize && <span className={styles.pixelSize}>{pixelSize}</span>}
+          </div>
+        )}
         <Link
           to={nav.runHref}
           className={styles.promptLink}
@@ -253,10 +279,10 @@ export function HistoryCard({ run }: HistoryCardProps) {
         >
           {/* 先頭出力のタイトル(ADR-0024)。あればプロンプトを 1 行に縮め、2 行分の高さに収める
               (カードの高さを揃えたまま)。 */}
-          {firstOutput?.title ? (
+          {shownOutput?.title ? (
             <div className={styles.titledPrompt}>
-              <p className={styles.title} title={firstOutput.title}>
-                {firstOutput.title}
+              <p className={styles.title} title={shownOutput.title}>
+                {shownOutput.title}
               </p>
               <p className={styles.promptOneLine}>{shownPrompt || t.history.card.noPrompt}</p>
             </div>
@@ -342,12 +368,12 @@ export function HistoryCard({ run }: HistoryCardProps) {
               <RerunIcon />
             </button>
           )}
-          {run.status === 'succeeded' && firstOutput && (
+          {run.status === 'succeeded' && shownOutput && (
             <button
               type="button"
               className={`${styles.iconButton} ${styles.iconButtonEdit}`}
               aria-label={t.history.card.useAsInput}
-              onClick={() => addToInputs.request(firstOutput.asset_id)}
+              onClick={() => addToInputs.request(shownOutput.asset_id)}
             >
               <UseAsInputIcon />
             </button>
@@ -378,9 +404,9 @@ export function HistoryCard({ run }: HistoryCardProps) {
         open={deleteConfirmOpen}
         message={fmt(t.history.card.deleteConfirm.message, { count: outputs.length })}
         warning={buildRunDeleteWarning(run.descendant_run_count)}
-        previewImageUrl={firstOutput ? assetUrl(firstOutput.asset_id, 'thumb') : undefined}
-        previewWithheld={firstOutput?.content_withheld}
-        previewFocalPoint={firstOutput?.focal_point}
+        previewImageUrl={shownOutput ? assetUrl(shownOutput.asset_id, 'thumb') : undefined}
+        previewWithheld={shownOutput?.content_withheld}
+        previewFocalPoint={shownOutput?.focal_point}
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setDeleteConfirmOpen(false)}
       />

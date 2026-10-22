@@ -47,7 +47,7 @@ def test_generate_run_appears_in_list(client: TestClient) -> None:
             "operation": "generate",
             "model": "gpt-image-2.5-sunburst",
             "prompt": "a blue sky",
-            "params": {"n": 1},
+            "params": {"n": 1, "size": "1536x1024"},
         },
     )
     run_id = response.json()["id"]
@@ -57,6 +57,9 @@ def test_generate_run_appears_in_list(client: TestClient) -> None:
     assert listed.status_code == 200
     ids = [item["id"] for item in listed.json()["items"]]
     assert run_id in ids
+    # 出力の原本のピクセルの大きさ(履歴のカードの「画像」の形で出す)。
+    item = next(i for i in listed.json()["items"] if i["id"] == run_id)
+    assert (item["outputs"][0]["width"], item["outputs"][0]["height"]) == (1536, 1024)
 
 
 # -- moderation: サーバーが params へ入れる(フォームからは指定できない) --------------

@@ -3,6 +3,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  expandHistoryCards,
   getHistoryCardStyle,
   parseHistoryCardStyle,
   setHistoryCardStyle,
@@ -42,5 +43,34 @@ describe('historyCardStyle のストア', () => {
     unsubscribe()
     setHistoryCardStyle('detail')
     expect(listener).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('expandHistoryCards', () => {
+  const runs = [
+    { id: 'r1', outputs: [{ asset_id: 'a1' }, { asset_id: 'a2' }] },
+    { id: 'r2', outputs: [{ asset_id: 'b1' }] },
+    { id: 'r3', outputs: [] },
+    { id: 'r4', outputs: null },
+  ]
+
+  it('詳細の形は Run ごとに1枚', () => {
+    expect(expandHistoryCards(runs, 'detail').map((e) => [e.key, e.outputIndex])).toEqual([
+      ['r1', 0],
+      ['r2', 0],
+      ['r3', 0],
+      ['r4', 0],
+    ])
+  })
+
+  it('画像の形は出力が複数の Run を出力ごとに展開し、key は Run と出力の組', () => {
+    const entries = expandHistoryCards(runs, 'image')
+    expect(entries.map((e) => [e.key, e.run.id, e.outputIndex])).toEqual([
+      ['r1:a1', 'r1', 0],
+      ['r1:a2', 'r1', 1],
+      ['r2', 'r2', 0],
+      ['r3', 'r3', 0],
+      ['r4', 'r4', 0],
+    ])
   })
 })

@@ -95,6 +95,8 @@ def bulk_output_refs(
             AssetFocalPoint.y,
             AssetContentRating.level,
             Asset.content_withheld_at,
+            Asset.width,
+            Asset.height,
         )
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         # サムネイルの焦点(ADR-0043)とレーティング(ADR-0049)も同じ問い合わせで引く。
@@ -103,7 +105,18 @@ def bulk_output_refs(
         .where(condition)
         .order_by(Asset.output_index)
     ).all()
-    for produced_by_run_id, asset_id, output_index, title, x, y, level, withheld_at in rows:
+    for (
+        produced_by_run_id,
+        asset_id,
+        output_index,
+        title,
+        x,
+        y,
+        level,
+        withheld_at,
+        width,
+        height,
+    ) in rows:
         result[produced_by_run_id].append(
             RunOutputRef(
                 asset_id=asset_id,
@@ -112,6 +125,8 @@ def bulk_output_refs(
                 focal_point=focal_points.to_schema(x, y),
                 content_rating=level,
                 content_withheld=withheld_at is not None,
+                width=width,
+                height=height,
             )
         )
     return result

@@ -18,10 +18,16 @@
   background: rgba(23, 24, 27, 0.88);
 }
 
-.title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .count {
@@ -30,51 +36,43 @@
   color: var(--color-text-muted);
 }
 
-.statusGroup {
+.segmentGroup {
   display: flex;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   overflow: hidden;
 }
 
-.statusTab {
+.segment {
   height: 32px;
-  min-width: 56px;
-  padding: 0 12px;
-  background: transparent;
-  border: 0;
-  border-left: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
-
-.statusTab:first-child {
-  border-left: 0;
-}
-
-.statusTab[data-active='true'] {
-  background: var(--color-header-band);
-  color: var(--color-text);
-}
-
-.cardStyleGroup {
-  display: flex;
-  margin-left: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.cardStyleTab {
   min-width: 40px;
   padding: 0 10px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text-muted);
 }
 
-.cardStyleTab:hover:not([data-active='true']) {
+.segment:first-child {
+  border-left: 0;
+}
+
+.segment[data-active='true'] {
+  background: var(--color-header-band);
   color: var(--color-text);
+}
+
+.segment:hover:not([data-active='true']) {
+  color: var(--color-text);
+}
+
+.toolbarEnd {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
 }
 
 .scrollArea {
@@ -97,11 +95,6 @@
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
   align-content: start;
-}
-
-.grid[data-card-style='image'] {
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 6px;
 }
 
 /* 自動読み込みの番兵(useAutoLoadMore)。見えるかだけを使う。 */
@@ -134,16 +127,8 @@
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 
-  .grid[data-card-style='image'] {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 4px;
-  }
-
-  .cardStyleTab {
-    min-width: 44px;
-  }
-
-  .statusTab {
+  .segment {
     height: 36px;
+    min-width: 44px;
   }
 }

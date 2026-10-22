@@ -1171,6 +1171,9 @@ class RunOutputRef(BaseModel):
     content_rating: ContentRatingLevel | None = None
     # 画像を残さなかったか(ADR-0051 4章)。
     content_withheld: bool = False
+    # 原本のピクセルの大きさ(履歴のカードの「画像」の形で出す)。
+    width: int | None = None
+    height: int | None = None
 
 
 class RunRegions(BaseModel):

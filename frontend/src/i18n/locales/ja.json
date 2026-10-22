@@ -123,7 +123,7 @@
     },
     "page": {
       "title": "履歴",
-      "filterByStatus": "状態で絞り込み",
+      "filterByStatus": "状態で絞り込む",
       "filterAll": "すべて",
       "filterSucceeded": "成功",
       "filterFailed": "失敗",
