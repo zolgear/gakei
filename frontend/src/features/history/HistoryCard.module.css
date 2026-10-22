@@ -434,6 +434,12 @@
   border-color: rgba(255, 255, 255, 0.22);
 }
 
+/* 外した画像の「マスクに戻す」(左上の隅)も、上の帯と重ならないよう帯の下に下げる。 */
+.card[data-variant='overlay'] .mediaLink > [data-size='corner'] {
+  top: 40px;
+  left: 8px;
+}
+
 .card[data-variant='overlay'] .body {
   position: absolute;
   left: 0;
