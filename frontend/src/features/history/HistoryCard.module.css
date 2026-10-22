@@ -653,10 +653,8 @@
 }
 
 .galleryHover .actions > .galleryPixelSize {
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 0 4px;
   font-size: 10px;
 }
@@ -694,8 +692,9 @@
   display: block;
 }
 
-/* ピクセルの大きさと4つの操作が並ばない幅では、大きさを省いて操作を残す(途中で切れた表示にしない)。 */
-@container (max-width: 190px) {
+/* ピクセルの大きさと4つの操作が並ばない幅では、大きさを省いて操作を残す(途中で切れた表示にしない。
+   「1024×1536」と4つの操作は約 205px 要る)。 */
+@container (max-width: 210px) {
   .galleryHover .actions > .galleryPixelSize {
     display: none;
   }
