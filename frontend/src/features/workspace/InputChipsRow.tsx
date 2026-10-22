@@ -62,6 +62,11 @@ export interface InputRegionsProps {
   /** プロンプトの上のプレビュー(四角と検出の候補の重ね描き)を出しているか。 */
   overlayShown: boolean
   onToggleOverlay: () => void
+  /**
+   * 入力画像の無い Run で、出力の大きさの白紙に四角を描けるか(ADR-0053 6章。ComfyUI)。true なら、
+   * 追加のボタンの並びに「領域」を出す(入力画像を足すと、主たる入力のチップに移る)。
+   */
+  blank?: boolean
 }
 
 export function InputChipsRow({
@@ -354,6 +359,31 @@ export function InputChipsRow({
         <PencilIcon />
         {c.sketch}
       </button>
+      {regions.blank && images.length === 0 && (
+        <>
+          <button
+            type="button"
+            className={styles.addButton}
+            aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
+            title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.blankButtonTitle}
+            onClick={regions.onOpen}
+          >
+            <RegionsIcon size={12} />
+            {regions.count > 0 ? fmt(t.regions.form.chip, { count: regions.count }) : t.regions.button}
+          </button>
+          {regions.count > 0 && (
+            <button
+              type="button"
+              className={styles.iconButton}
+              aria-label={t.regions.form.clear}
+              title={t.regions.form.clear}
+              onClick={regions.onClear}
+            >
+              <RemoveIcon />
+            </button>
+          )}
+        </>
+      )}
       <button
         type="button"
         className={styles.addButton}

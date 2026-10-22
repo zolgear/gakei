@@ -462,6 +462,9 @@ def interpret(
         values["mask"] = None
         proposed.discard("mask")
 
+    # 四角の差し込み先は提案の項目に無い(規則で十分に見つかる。ADR-0053 6章)。規則の読み取りの
+    # 値をそのまま残す。
+    values["bounding_boxes"] = reading.bounding_boxes
     bindings = SuggestedBindings(**values)
 
     # 保存時の検証に掛け、エラーになった値を捨てる。捨てると「生きている部分」の判定(出力が錨)
@@ -559,6 +562,11 @@ def _drop_failed(
             if node is not None and node in bindings.outputs and node not in bad_outputs:
                 drop("outputs", f"outputs.{node}", issue.message)
                 bad_outputs.add(node)
+        elif target == "bounding_boxes":
+            # 規則の読み取りの値(提案の項目ではない)。ほかの項目と重なったときだけ外す。
+            if values["bounding_boxes"] is not None:
+                values["bounding_boxes"] = None
+                changed = True
         elif target == "final_prompt":
             if values["final_prompt"] is not None:
                 drop("final_prompt", "final_prompt", issue.message)

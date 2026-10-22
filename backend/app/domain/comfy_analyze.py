@@ -19,6 +19,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.domain import comfy_bounding_boxes
 from app.domain.comfy_graph import (
     NUMBERED_IMAGE_INPUT_RE,
     NodeState,
@@ -51,6 +52,7 @@ BindingField = Literal[
     "mask",
     "outputs",
     "final_prompt",
+    "bounding_boxes",
 ]
 ParamTier = Literal["recommended", "other", "hidden"]
 # 「公開しない」の理由(画面が文にする)。推奨・その他では None。
@@ -67,6 +69,7 @@ _FIELD_ORDER: tuple[BindingField, ...] = (
     "mask",
     "outputs",
     "final_prompt",
+    "bounding_boxes",
 )
 
 
@@ -1264,6 +1267,45 @@ class _Reader:
         )
         return node_id
 
+    def read_bounding_boxes(self) -> InputRef | None:
+        """四角の差し込み先(ADR-0053 6章)。生きている `CreateBoundingBoxes` の `bboxes` 入力。
+
+        `bboxes` は任意の入力なので、テンプレートに無くても、配線されていても候補にする(実行時に
+        定数で上書きする)。1つなら `unique`、複数なら `ask`。
+        """
+        class_type = comfy_bounding_boxes.CLASS_TYPE
+        nodes = [nid for nid in self.scope_ids if self.g.class_type(nid) == class_type]
+        refs = [InputRef(node=nid, input=comfy_bounding_boxes.BBOXES_INPUT) for nid in nodes]
+        if not refs:
+            self._set("bounding_boxes", "absent", t("comfyui.analyze.boundingBoxes.absent"))
+            return None
+        if len(refs) == 1:
+            return self._single(
+                "bounding_boxes",
+                refs[0],
+                "unique",
+                t("comfyui.analyze.boundingBoxes.unique", node=refs[0].node),
+            )
+        paths = [self._path(r.node, r.input) for r in refs]
+        self._set(
+            "bounding_boxes",
+            "ask",
+            t("comfyui.analyze.boundingBoxes.ask", count=len(refs)),
+            paths=paths,
+            candidates=[
+                BindingCandidate(
+                    node=r.node,
+                    input=r.input,
+                    score=float(len(refs) - i),
+                    label=self._label(r.node),
+                    path=p,
+                )
+                for i, (r, p) in enumerate(zip(refs, paths, strict=True))
+            ],
+            question=t("comfyui.analyze.question.bounding_boxes"),
+        )
+        return None
+
     def _same_string_wires(self, wire: Any) -> list[tuple[str, int]]:
         """エンコーダーに入る配線と、切り替え・文字列の表示だけを越えて遡った配線(どれも
         エンコーダーに入る文字列そのものを運ぶ)。"""
@@ -1483,6 +1525,7 @@ def analyze_workflow(
     mask_binding = reader.read_mask(image_refs, suggested_operation)
     output_ids = reader.read_outputs()
     final_prompt = reader.read_final_prompt()
+    bounding_boxes_ref = reader.read_bounding_boxes()
 
     warnings = reader.warnings
     warning_items: list[AnalyzeWarning] = []
@@ -1580,6 +1623,7 @@ def analyze_workflow(
         mask=mask_binding,
         outputs=output_ids,
         final_prompt=final_prompt,
+        bounding_boxes=bounding_boxes_ref,
     )
 
     used: set[tuple[str, str]] = set(reader.used)

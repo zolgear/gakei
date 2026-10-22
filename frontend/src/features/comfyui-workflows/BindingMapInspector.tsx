@@ -19,11 +19,14 @@ import {
   fieldsForInput,
   inputFitsField,
   inputUse,
+  isNodeField,
+  nodeFitsBoundingBoxes,
   nodeFitsFinalPrompt,
   nodeFitsOutput,
   nodeRoles,
   parseChoiceValue,
   type InputChoice,
+  type InputField,
   type InputUse,
   type MapEdge,
   type MapGraph,
@@ -49,6 +52,7 @@ interface BindingMapInspectorProps {
   onChooseInput: (nodeId: string, input: string, choice: InputChoice) => void
   onToggleOutput: (nodeId: string) => void
   onToggleFinalPrompt: (nodeId: string) => void
+  onToggleBoundingBoxes: (nodeId: string) => void
   /** 入力の値の下に添える一行(閲覧で、差し込む入力・公開パラメーターの今のフォームの値)。 */
   valueNote?: (node: ComfyNodeInfo, input: ComfyNodeInputInfo, use: InputUse) => ReactNode
 }
@@ -111,7 +115,9 @@ function GroupMembers({
               ? nodeFitsOutput(n)
               : pickField === 'final_prompt'
                 ? nodeFitsFinalPrompt(n)
-                : (n.inputs ?? []).some((i) => inputFitsField(n, i, pickField)))
+                : pickField === 'bounding_boxes'
+                  ? nodeFitsBoundingBoxes(n)
+                  : (n.inputs ?? []).some((i) => inputFitsField(n, i, pickField)))
           const roleCount = roles.get(n.id)?.length ?? 0
           return (
             <li key={n.id}>
@@ -150,6 +156,7 @@ function NodeInputs({
   onChooseInput,
   onToggleOutput,
   onToggleFinalPrompt,
+  onToggleBoundingBoxes,
   valueNote,
 }: BindingMapInspectorProps & { node: ComfyNodeInfo }) {
   const { t } = useI18n()
@@ -163,6 +170,8 @@ function NodeInputs({
   const isFinal = bindings.finalPrompt === node.id
   const canOutput = nodeFitsOutput(node) || isOutput
   const canFinal = nodeFitsFinalPrompt(node) || isFinal
+  const isBoxes = bindings.boundingBoxes === node.id
+  const canBoxes = nodeFitsBoundingBoxes(node) || isBoxes
 
   return (
     <div className={styles.inspector}>
@@ -184,7 +193,7 @@ function NodeInputs({
         </button>
       )}
 
-      {!readOnly && (canOutput || canFinal) && (
+      {!readOnly && (canOutput || canFinal || canBoxes) && (
         <div className={styles.nodeActions}>
           {canOutput && (
             <button
@@ -204,6 +213,16 @@ function NodeInputs({
               onClick={() => onToggleFinalPrompt(node.id)}
             >
               {isFinal ? m.removeFinalPrompt : m.makeFinalPrompt}
+            </button>
+          )}
+          {canBoxes && (
+            <button
+              type="button"
+              className={styles.smallButton}
+              data-primary={pickField === 'bounding_boxes' && !isBoxes ? 'true' : undefined}
+              onClick={() => onToggleBoundingBoxes(node.id)}
+            >
+              {isBoxes ? m.removeBoundingBoxes : m.makeBoundingBoxes}
             </button>
           )}
         </div>
@@ -270,7 +289,7 @@ function InputRow({
   const fields = fieldsForInput(node, input, operation)
   const choice = choiceOf(use)
   const pickHere =
-    !readOnly && pickField !== null && pickField !== 'outputs' && pickField !== 'final_prompt' && fields.includes(pickField)
+    !readOnly && pickField !== null && !isNodeField(pickField) && fields.includes(pickField)
   const id = `map-input-${node.id}-${input.name}`.replace(/[^a-zA-Z0-9_-]/g, '_')
 
   let valueText: string
@@ -360,7 +379,7 @@ function InputRow({
           type="button"
           className={styles.smallButton}
           data-primary="true"
-          onClick={() => onChoose({ kind: 'bind', field: pickField as Exclude<FieldKey, 'outputs' | 'final_prompt'> })}
+          onClick={() => onChoose({ kind: 'bind', field: pickField as InputField })}
         >
           {fmt(m.assignHere, { field: c.fields[pickField] })}
         </button>

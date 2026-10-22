@@ -2549,7 +2549,9 @@
       "finalPromptLabel": "Final prompt",
       "finalPromptHelp": "Choose the node that outputs the final prompt built at run time by a Prompt Enhancer or similar (such as PreviewAny). Its text is saved with the run and shown as \"Final prompt\" in the viewer and elsewhere. Leave it as \"None\" if you don't use one.",
       "exposedParamsHeading": "Exposed parameters",
-      "cannotSaveYet": "Fix the following to save."
+      "cannotSaveYet": "Fix the following to save.",
+      "boundingBoxesLabel": "Boxes (region instructions)",
+      "boundingBoxesHelp": "Boxes drawn in the studio form are inserted into the bboxes input of Create Bounding Boxes. Choosing one enables “Regions” for this workflow. Leave it as “None” if you don’t use it."
     },
     "list": {
       "newButton": "+ Register workflow",
@@ -2618,7 +2620,8 @@
         "width": "Width",
         "height": "Height",
         "batchSize": "Count",
-        "finalPrompt": "Final prompt"
+        "finalPrompt": "Final prompt",
+        "boundingBoxes": "Boxes (regions)"
       }
     },
     "exposedParamValidation": {
@@ -2645,7 +2648,8 @@
         "images": "Image slots",
         "mask": "Mask",
         "outputs": "Outputs",
-        "final_prompt": "Final prompt"
+        "final_prompt": "Final prompt",
+        "bounding_boxes": "Boxes (regions)"
       },
       "required": "Required",
       "badges": {
@@ -2850,7 +2854,9 @@
       "tabBindings": "Bindings",
       "tabNode": "Node",
       "leadViewer": "A read-only diagram. Select a node to see how each input is used (filled in, exposed, or fixed) and its value. Drag to move; zoom with the buttons, a pinch, or Ctrl+wheel.",
-      "redactedValue": "(Hidden because it looks like a secret)"
+      "redactedValue": "(Hidden because it looks like a secret)",
+      "makeBoundingBoxes": "Use as box destination",
+      "removeBoundingBoxes": "Remove as box destination"
     },
     "viewer": {
       "heading": "Workflow: {name}",
@@ -3727,7 +3733,8 @@
     "saveBlocked": "Fix the highlighted items to save.",
     "notes": {
       "imageAndText": "For OpenAI, an image with the boxes drawn on it is added to the inputs, and the instructions are added as text after the prompt. The model was not trained on boxes, so it may not always follow them.",
-      "countsTowardLimit": "The boxes image and the reference images count toward the input image limit (up to {max})."
+      "countsTowardLimit": "The boxes image and the reference images count toward the input image limit (up to {max}).",
+      "comfyuiBboxes": "For ComfyUI, the boxes are inserted into the workflow’s Create Bounding Boxes. The instruction (or the name, if there is none) becomes the box description, and text to draw makes it a text box. Only “Change” and “Add” can be used."
     },
     "detection": {
       "heading": "Detect",
@@ -3769,7 +3776,8 @@
       "clearedPrimaryChanged": "The first input image changed, so the region instructions were removed.",
       "clearedUnsupported": "The selected model does not support region instructions, so they were removed.",
       "invalid": "The region instructions need fixing. Open Regions to check them.",
-      "tooManyInputs": "The region instructions add {extra} images, making {count} input images, which exceeds the limit ({max})."
+      "tooManyInputs": "The region instructions add {extra} images, making {count} input images, which exceeds the limit ({max}).",
+      "clearedBlankReplaced": "An input image was added, so the region instructions drawn on the blank canvas were removed."
     },
     "runDetail": {
       "heading": "Region instructions",
@@ -3780,7 +3788,9 @@
       "marker": "(no instruction; a marker showing the location and name)",
       "overlayTag": "Regions",
       "overlayImage": "Image with boxes that was sent",
-      "appendedToggle": "Added text (region instructions)"
+      "appendedToggle": "Added text (region instructions)",
+      "deliveryComfyui": "The boxes were inserted into ComfyUI’s Create Bounding Boxes.",
+      "frameOutput": "There was no input image, so box positions are fractions of the output size."
     },
     "assist": {
       "heading": "Regions and detected candidates",
@@ -3800,6 +3810,8 @@
       "boxChip": "Box {n}",
       "candidateChipTitle": "Detected candidate (not sent yet). Tap to insert the name and turn this candidate into a box",
       "candidateNote": "Dashed candidates are not sent. Only candidates you turn into boxes, by tapping a chip or in the Regions screen, are sent as the image with boxes and the added text."
-    }
+    },
+    "blankHint": "There is no input image, so you draw on a blank canvas the size of the output (width × height). Boxes are kept as fractions of that size, so they stretch with it if you change the width or height. Adding an input image removes these boxes.",
+    "blankButtonTitle": "Draw boxes on a blank canvas the size of the output and give each box a name or an instruction"
   }
 }

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, NamedTuple, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,6 +20,11 @@ from sqlalchemy.orm import Session
 
 ParamType = Literal["enum", "int", "float", "bool", "text"]
 OperationName = Literal["generate", "edit"]
+# 領域の指示の四角の種類(ADR-0053 1章)。`app/domain/schemas.py` の `RegionKind` もこれを使う。
+RegionKind = Literal["change", "add", "keep", "remove", "move"]
+ALL_REGION_KINDS: tuple[RegionKind, ...] = ("change", "add", "keep", "remove", "move")
+# 四角の渡し方(ADR-0053 5章)。
+RegionsDelivery = Literal["image_and_text", "comfyui_bboxes"]
 
 
 class ParamDef(BaseModel):
@@ -81,8 +86,18 @@ class OperationCapabilities(BaseModel):
     # 出さず、`regions` を付けた Run を断る。
     supports_regions: bool = False
     # 四角の渡し方。`image_and_text` は、四角を描いた画像を入力に足し、指示を文でプロンプトに
-    # 足す(OpenAI の Edit)。受けないときは null。
-    regions_delivery: Literal["image_and_text"] | None = None
+    # 足す(OpenAI の Edit)。`comfyui_bboxes` は、ComfyUI の Create Bounding Boxes の `bboxes`
+    # 入力に四角の要素の一覧を差し込む(ADR-0053 6章)。受けないときは null。
+    regions_delivery: RegionsDelivery | None = None
+    # 札で選べる四角の種類(ADR-0053 6章)。フォームはこれ以外の種類を出さず、サーバーはこれ以外の
+    # 種類の四角を付けた Run を断る。四角を受けないときは空。
+    regions_kinds: list[RegionKind] = Field(default_factory=list)
+    # 四角ごとの参照画像を使えるか。使えなければフォームに参照画像の欄を出さず、サーバーは参照画像を
+    # 付けた四角を断る。
+    regions_reference_images: bool = False
+    # 四角を付けるのに入力画像(主たる入力)が要るか。要らなければ、入力画像の無い Run では出力の
+    # 大きさの白紙の上に四角を描き、座標は出力の大きさに対する割合になる(ADR-0053 6章)。
+    regions_requires_input_image: bool = False
 
 
 class ModelCapabilities(BaseModel):
@@ -150,6 +165,11 @@ class RunDraft:
     prompt: str
     params: dict[str, Any]
     inputs: list[RunInputMeta]
+    # 領域の指示の四角(`app.domain.schemas.RegionBox` の一覧。番号の順)。渡し方が
+    # `comfyui_bboxes` のときだけ入る(ADR-0053 6章。プロバイダーが差し込む)。`image_and_text`
+    # では画像と文に変えて `inputs` と `prompt` に入れてあるので、ここは空。型は循環 import を
+    # 避けて Any。
+    regions: list[Any] = field(default_factory=list)
 
 
 class InputImage(BaseModel):

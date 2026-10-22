@@ -1,6 +1,7 @@
 /**
  * Run 詳細の「領域の指示」(ADR-0053 4章)。`run.regions` の四角を番号と色の順に並べ、名前・種類・
  * 指示・描く文字・参照画像を出す。送った文そのものはプロンプト(`run.prompt` の末尾)に入っている。
+ * ComfyUI に差し込んだ Run(`comfyui_bboxes`。6章)は、重ねた画像も足した文も無いので四角の一覧だけ。
  */
 import { Link, useLocation } from 'react-router'
 import type { AssetDetail, RunRegions } from '../../api/client'
@@ -28,6 +29,8 @@ export function RunRegionsSection({ regions, sectionClassName, headingClassName,
     <section className={sectionClassName}>
       <h2 className={headingClassName}>{m.heading}</h2>
       {regions.delivery === 'image_and_text' && <p className={styles.delivery}>{m.delivery}</p>}
+      {regions.delivery === 'comfyui_bboxes' && <p className={styles.delivery}>{m.deliveryComfyui}</p>}
+      {regions.frame === 'output' && <p className={styles.delivery}>{m.frameOutput}</p>}
       {/* 送った四角の画像(Asset の種類 regions。入力の1枚として送った)。 */}
       {regions.overlay_asset_id && (
         <Link
@@ -60,7 +63,10 @@ export function RunRegionsSection({ regions, sectionClassName, headingClassName,
               <span className={styles.kind}>{t.regions.kinds[region.kind]}</span>
               <span className={styles.instruction}>
                 {region.instruction ||
-                  ((region.kind === 'change' || region.kind === 'add') && !region.text && !region.reference_asset_id
+                  (regions.delivery === 'image_and_text' &&
+                  (region.kind === 'change' || region.kind === 'add') &&
+                  !region.text &&
+                  !region.reference_asset_id
                     ? m.marker
                     : m.noInstruction)}
               </span>

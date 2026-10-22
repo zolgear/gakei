@@ -17,6 +17,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.domain import comfy_bounding_boxes
 from app.domain.comfy_graph import WorkflowGraph, is_wire
 from app.domain.models import ComfyWorkflow
 from app.i18n import t
@@ -107,6 +108,9 @@ class Bindings(BaseModel):
     # 最終プロンプト(PE の出力)を読むノードの id(ADR-0030 1章)。実行後に
     # `outputs[id].text` を `run.text_outputs` に記録する。旧形式(キー無し)は None。
     final_prompt: str | None = None
+    # 領域の指示の四角を差し込む先(ADR-0053 6章)。`CreateBoundingBoxes` の `bboxes` 入力。
+    # 配線されていても差し込める(実行時に定数で上書きする)。旧形式(キー無し)は None。
+    bounding_boxes: InputRef | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -130,6 +134,7 @@ class SuggestedBindings(BaseModel):
     mask: MaskBinding | None = None
     outputs: list[str] = Field(default_factory=list)
     final_prompt: str | None = None
+    bounding_boxes: InputRef | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -210,6 +215,7 @@ ValidationCode = Literal[
     "unused_branch",
     "mask_not_inpaint",
     "display_only_output",
+    "bounding_boxes_not_node",
 ]
 
 
@@ -394,6 +400,56 @@ def check_workflow(
                 ref.input,
             )
 
+    def _check_bounding_boxes(ref: InputRef) -> None:
+        """四角の差し込み先(ADR-0053 6章)。`CreateBoundingBoxes` の `bboxes` だけを受ける。
+        `bboxes` は任意の入力なので、テンプレートに無くても(配線されていても)差し込める。"""
+        field = "bounding_boxes"
+        if not graph.has(ref.node):
+            _error(
+                "node_missing",
+                t("comfyui.workflow.bindingNodeMissing", label=field, node=ref.node),
+                field,
+                ref.node,
+                ref.input,
+            )
+            return
+        if (
+            graph.class_type(ref.node) != comfy_bounding_boxes.CLASS_TYPE
+            or ref.input != comfy_bounding_boxes.BBOXES_INPUT
+        ):
+            _error(
+                "bounding_boxes_not_node",
+                t(
+                    "comfyui.validation.boundingBoxesNotNode",
+                    node=ref.node,
+                    input=ref.input,
+                    class_type=comfy_bounding_boxes.CLASS_TYPE,
+                ),
+                field,
+                ref.node,
+                ref.input,
+            )
+            return
+        key = (ref.node, ref.input)
+        if key in used:
+            _error(
+                "duplicate",
+                t("comfyui.workflow.bindingDuplicate", node=ref.node, input=ref.input),
+                field,
+                ref.node,
+                ref.input,
+            )
+            return
+        used.add(key)
+        if live and states.get(ref.node) != "live":
+            _warn(
+                "unused_branch",
+                t("comfyui.validation.unusedBranch", label=field, node=ref.node, input=ref.input),
+                field,
+                ref.node,
+                ref.input,
+            )
+
     if bindings.prompt is not None:
         _check_ref(bindings.prompt, "prompt", "prompt", "string")
     if bindings.negative_prompt is not None:
@@ -413,6 +469,9 @@ def check_workflow(
         _check_ref(
             InputRef(node=bindings.mask.node, input=bindings.mask.input), "mask", "mask", "image"
         )
+
+    if bindings.bounding_boxes is not None:
+        _check_bounding_boxes(bindings.bounding_boxes)
 
     for node_id in bindings.outputs:
         if not graph.has(node_id):
@@ -652,6 +711,7 @@ def workflow_model_capabilities(wf: ComfyWorkflow) -> ModelCapabilities:
         min_input_images=slot_count,
         supports_mask=bindings.mask is not None,
         requires_mask=bindings.mask is not None,
+        **_regions_capabilities(bindings),
     )
 
     return ModelCapabilities(
@@ -660,6 +720,24 @@ def workflow_model_capabilities(wf: ComfyWorkflow) -> ModelCapabilities:
         quality_choices=[],
         operations=[op_caps],
     )
+
+
+def _regions_capabilities(bindings: Bindings) -> dict[str, Any]:
+    """四角の差し込み先を持つワークフローの、領域の指示の capabilities(ADR-0053 6章)。
+
+    選べる種類は「変える」「足す」だけ、四角ごとの参照画像は使えない(ノードに入口が無い)。入力画像の
+    無い Run でも使える(出力の大きさの白紙の上に描く)。差し込み先が無ければ何も足さない(既定の
+    「受けない」のまま)。
+    """
+    if bindings.bounding_boxes is None:
+        return {}
+    return {
+        "supports_regions": True,
+        "regions_delivery": "comfyui_bboxes",
+        "regions_kinds": list(comfy_bounding_boxes.REGION_KINDS),
+        "regions_reference_images": False,
+        "regions_requires_input_image": False,
+    }
 
 
 # -- 値の差し込み ---------------------------------------------------------
@@ -675,8 +753,13 @@ def resolve_prompt(
     seed: int,
     image_names: list[str] | None,
     mask_name: str | None,
+    bounding_boxes: str | None = None,
 ) -> dict[str, Any]:
-    """template を書き換えず、値を差し込んだグラフ全体を新しく返す(決定的)。"""
+    """template を書き換えず、値を差し込んだグラフ全体を新しく返す(決定的)。
+
+    `bounding_boxes` は四角の要素の一覧の JSON の文字列(`comfy_bounding_boxes.encode`)。None
+    (四角の無い Run)なら差し込まず、テンプレートのキャンバスの値をそのまま使う(ADR-0053 6章)。
+    """
     graph = copy.deepcopy(template)
 
     def _set(ref: InputRef, value: Any) -> None:
@@ -706,6 +789,9 @@ def resolve_prompt(
         graph[bindings.mask.node]["inputs"][bindings.mask.input] = mask_name
     # image_alpha は枠1(images[0])の名前自体を合成済みの画像にすることで表現する
     # (呼び出し側の責務。ここでは追加の差し込みは不要)。
+
+    if bindings.bounding_boxes is not None and bounding_boxes is not None:
+        comfy_bounding_boxes.inject(graph, bindings.bounding_boxes.node, bounding_boxes)
 
     for exposed_param in exposed:
         ref = InputRef(node=exposed_param.node, input=exposed_param.input)

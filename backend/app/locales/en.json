@@ -138,7 +138,9 @@
       "roleImageInputNotFound": "No input image found for role={role} (internal error).",
       "noDetails": "no details",
       "nodeExecutionFailed": "Node {node} failed to execute ({detail}).",
-      "historyErrorNoDetails": "Execution on ComfyUI ended with an error (no details available)."
+      "historyErrorNoDetails": "Execution on ComfyUI ended with an error (no details available).",
+      "boundingBoxesNodeMissing": "ComfyUI has no {class_type} node. The run was stopped because the region boxes cannot be inserted. Update ComfyUI or remove the boxes.",
+      "boundingBoxesInputChanged": "The {input} input of {class_type} in ComfyUI no longer accepts a string. The run was stopped because the region boxes cannot be inserted."
     },
     "analyze": {
       "marked": "Specified by the title \"{title}\".",
@@ -148,7 +150,8 @@
         "negative_prompt": "Where should the negative prompt go?",
         "size": "Which latent's size (width, height, count) should be used?",
         "images": "Check the order of the image slots.",
-        "mask": "Which mask should be used?"
+        "mask": "Which mask should be used?",
+        "bounding_boxes": "Which Create Bounding Boxes should the region boxes go into?"
       },
       "prompt": {
         "unique": "There is exactly one string root traced back from the sampler's conditioning (input {input} of node {node}).",
@@ -208,6 +211,11 @@
         "found": "A node that displays the string going into the encoder (node {node}).",
         "nearest": "A node that displays a point along the prompt path (node {node}). It may differ from the string going into the encoder.",
         "absent": "No node displays the string going into the encoder."
+      },
+      "boundingBoxes": {
+        "absent": "There is no node that draws boxes (Create Bounding Boxes).",
+        "unique": "The bboxes input of the Create Bounding Boxes that reaches the output (node {node}). Region boxes are inserted here.",
+        "ask": "{count} Create Bounding Boxes nodes reach the output."
       }
     },
     "validation": {
@@ -223,7 +231,8 @@
       "outputNoGeneratedImage": "The generated image does not reach output node {node}.",
       "unusedBranch": "{label}: input {input} of node {node} is on a branch that does not reach the output with the current settings (unused).",
       "maskNotInpaint": "Mask (image_alpha): the MASK of the slot 1 LoadImage (node {node}) is not used for partial editing. The painted area will be passed as transparent pixels.",
-      "displayOnlyOutput": "Output node {node} ({class_type}) only displays images. Choose a save node."
+      "displayOnlyOutput": "Output node {node} ({class_type}) only displays images. Choose a save node.",
+      "boundingBoxesNotNode": "Only the bboxes input of {class_type} can be used as the box destination (input {input} of node {node})."
     },
     "suggest": {
       "badShape": "The suggestion has an unexpected shape",
@@ -631,7 +640,9 @@
       "item": "- Box {number} ({color}): {body}",
       "itemNamed": "- Box {number} ({color}, {label}): {body}",
       "footer": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image."
-    }
+    },
+    "kindNotSupported": "The type of box {number} cannot be used with this provider or model",
+    "referenceNotSupported": "Reference images on box {number} cannot be used with this provider or model. Remove the reference image"
   },
   "promptSets": {
     "notFound": "Prompt set not found",

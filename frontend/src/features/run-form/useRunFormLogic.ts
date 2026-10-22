@@ -63,8 +63,14 @@ import { useAssetGroups } from '../stock/groups/assetGroupQueries'
 import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
 import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import type { RunInputItem } from './types'
-import type { RegionBox } from '../../api/client'
-import { areRegionBoxesValid, regionExtraInputCount, regionsSupported as opSupportsRegions } from '../regions/regions'
+import type { RegionBox, RegionKind } from '../../api/client'
+import {
+  allowedRegionKinds,
+  areRegionBoxesValid,
+  regionExtraInputCount,
+  regionsCompatible,
+  regionsSupportedFor,
+} from '../regions/regions'
 import {
   buildImportedRawParams,
   importTargetDefs,
@@ -201,10 +207,22 @@ export interface RunFormLogic {
   /** 主たる入力に四角を付ける(空の配列なら外す)。 */
   setRegions: (regions: RegionBox[]) => void
   clearRegions: () => void
-  /** 選んだモデルの Edit が四角を受けるか(受けなければ「領域」を出さない)。 */
+  /**
+   * 今の操作で四角を付けられるか(受けなければ「領域」を出さない)。入力画像があれば Edit が受けるか、
+   * 無ければ入力画像の要らない操作(ComfyUI)が受けるか。
+   */
   regionsSupported: boolean
+  /**
+   * 四角を入力画像の無い白紙(出力の大きさ)に描くか(ADR-0053 6章)。true なら主たる入力に付かない
+   * (`regionsAssetId` は null)。
+   */
+  regionsBlank: boolean
   /** 四角の渡し方(`image_and_text` なら、画面に「画像と文で送る」ことを示す)。 */
   regionsDelivery: string | null
+  /** 札で選べる種類(capabilities の `regions_kinds`)。 */
+  regionsKinds: readonly RegionKind[]
+  /** 四角ごとの参照画像を使えるか。 */
+  regionsReferenceImages: boolean
   /** 四角を自動で外したときの案内。 */
   regionsNotice: string | null
   /** 四角を付けたときにサーバーが入力に足す画像の数(四角を描いた画像と、入力に無い参照画像)。 */
@@ -470,21 +488,37 @@ export function useRunFormLogic(
     formState.inputs
       .filter((i) => i.role === 'image')
       .sort((a, b) => a.position - b.position)[0]?.assetId ?? null
-  const regionsSupported = opSupportsRegions(editOpCaps)
-  const regionsDelivery = editOpCaps?.regions_delivery ?? null
+  // 四角は今の操作の capabilities で決める。入力画像があれば Edit(主たる入力の上)、無ければ
+  // Generate(出力の大きさの白紙の上。入力画像の要らない ComfyUI だけ。ADR-0053 6章)。
+  const regionOpCaps = operation === 'edit' ? editOpCaps : opCaps
+  const regionsSupported = regionsSupportedFor(operation, regionOpCaps)
+  const regionsBlank = regionsSupported && primaryAssetId === null
+  const regionsDelivery = regionOpCaps?.regions_delivery ?? null
+  const regionsKinds = allowedRegionKinds(regionOpCaps)
+  const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
   const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
-  // 主たる入力が変わった、または四角を受けないモデルに切り替えた(capabilities を読めてから判断する)
-  // ときは四角を外す。
-  let regionsClearReason: 'primaryChanged' | 'unsupported' | null = null
+  // 主たる入力が変わった(白紙の四角は入力画像を足したときも)、または四角を受けないモデル・選べない
+  // 種類や参照画像のあるモデルに切り替えた(capabilities を読めてから判断する)ときは四角を外す。
+  let regionsClearReason: 'primaryChanged' | 'blankReplaced' | 'unsupported' | null = null
   if (formState.regions.length > 0) {
-    if (formState.regionsAssetId !== primaryAssetId) regionsClearReason = 'primaryChanged'
-    else if (caps && modelCaps && !regionsSupported) regionsClearReason = 'unsupported'
+    if (formState.regionsAssetId !== primaryAssetId) {
+      regionsClearReason = formState.regionsAssetId === null ? 'blankReplaced' : 'primaryChanged'
+    }
+    else if (caps && modelCaps && (!regionsSupported || !regionsCompatible(formState.regions, regionOpCaps))) {
+      regionsClearReason = 'unsupported'
+    }
   }
   useEffect(() => {
     if (regionsClearReason === null) return
     setFormState({ ...formState, regions: [], regionsAssetId: null })
     const rm = msg().regions.form
-    setRegionsNotice(regionsClearReason === 'primaryChanged' ? rm.clearedPrimaryChanged : rm.clearedUnsupported)
+    setRegionsNotice(
+      regionsClearReason === 'primaryChanged'
+        ? rm.clearedPrimaryChanged
+        : regionsClearReason === 'blankReplaced'
+          ? rm.clearedBlankReplaced
+          : rm.clearedUnsupported,
+    )
   }, [regionsClearReason, formState, setFormState])
 
   function setRegions(next: RegionBox[]) {
@@ -497,10 +531,13 @@ export function useRunFormLogic(
     setFormState({ ...formState, regions: [], regionsAssetId: null })
   }
 
-  const regionsActive =
-    regionsClearReason === null && formState.regions.length > 0 && regionsSupported && operation === 'edit'
+  const regionsActive = regionsClearReason === null && formState.regions.length > 0 && regionsSupported
   const imageInputAssetIds = formState.inputs.filter((i) => i.role === 'image').map((i) => i.assetId)
-  const regionExtraInputs = regionsActive ? regionExtraInputCount(formState.regions, imageInputAssetIds) : 0
+  // 入力に画像を足すのは「画像と文」だけ(ComfyUI は四角をそのまま差し込む)。
+  const regionExtraInputs =
+    regionsActive && regionsDelivery === 'image_and_text'
+      ? regionExtraInputCount(formState.regions, imageInputAssetIds)
+      : 0
   let regionsBlockReason: string | null = null
   if (regionsActive) {
     if (!areRegionBoxesValid(formState.regions)) regionsBlockReason = msg().regions.form.invalid
@@ -818,7 +855,7 @@ export function useRunFormLogic(
           inputs,
           repeat: repeat ?? 1,
           ...promptBody,
-          // 領域の指示(ADR-0053)。受けるモデルの Edit で、四角があるときだけ送る。
+          // 領域の指示(ADR-0053)。今の操作が四角を受け、四角があるときだけ送る。
           ...(regionsActive ? { regions: formState.regions } : {}),
         },
         resolvedAssetGroupId,
@@ -884,7 +921,10 @@ export function useRunFormLogic(
     setRegions,
     clearRegions,
     regionsSupported,
+    regionsBlank,
     regionsDelivery,
+    regionsKinds,
+    regionsReferenceImages,
     regionsNotice,
     regionExtraInputs,
     regionsBlockReason,

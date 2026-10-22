@@ -15,6 +15,7 @@ from __future__ import annotations
 from app.domain import sizes
 from app.i18n import t
 from app.providers.base import (
+    ALL_REGION_KINDS,
     ConditionalParam,
     IncompatiblePair,
     ModelCapabilities,
@@ -169,6 +170,11 @@ def _operation_capabilities(model: str, operation: str) -> OperationCapabilities
         # ADR-0053 5章: 四角を描いた画像と、番号ごとの指示の文で渡す。
         supports_regions=True,
         regions_delivery="image_and_text",
+        # 文で伝えるので、どの種類も参照画像も使える。四角は主たる入力の上に描くので、入力画像が
+        # 要る。
+        regions_kinds=list(ALL_REGION_KINDS),
+        regions_reference_images=True,
+        regions_requires_input_image=True,
     )
 
 

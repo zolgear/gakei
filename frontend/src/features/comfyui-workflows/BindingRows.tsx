@@ -291,6 +291,12 @@ export function FieldValue({
       )
     case 'final_prompt':
       return bindings.finalPrompt ? <NodeName id={bindings.finalPrompt} node={find(bindings.finalPrompt)} /> : <NoValue />
+    case 'bounding_boxes':
+      return bindings.boundingBoxes ? (
+        <NodeName id={bindings.boundingBoxes} node={find(bindings.boundingBoxes)} />
+      ) : (
+        <NoValue />
+      )
   }
 }
 
@@ -385,6 +391,18 @@ function FieldEditor({
           value={bindings.finalPrompt ? [bindings.finalPrompt] : []}
           label={c.chooseOther}
           onChange={(ids) => onChange((b) => ({ ...b, finalPrompt: ids[0] ?? null }))}
+        />
+      )
+    case 'bounding_boxes':
+      return (
+        <InlineNodePicker
+          field="bounding_boxes"
+          nodes={nodes}
+          readingNodes={candidates.map((cand) => cand.node)}
+          multiple={false}
+          value={bindings.boundingBoxes ? [bindings.boundingBoxes] : []}
+          label={c.chooseOther}
+          onChange={(ids) => onChange((b) => ({ ...b, boundingBoxes: ids[0] ?? null }))}
         />
       )
   }
