@@ -5,7 +5,7 @@
  * - 行揃え(`rows`): 行の高さを揃えて左から詰める(`layoutJustifiedRows`)。目標の行の高さは
  *   768px 未満で低くする。各タイルの幅と高さは px で指定する。
  * コンテナの幅は ResizeObserver で追う。タイルの中身(ホバーの帯、マスクなど)は共通。
- * 区切りのバナー(年、グループ。ADR-0054)は1マス(縦横比 1:1)を占める。
+ * 区切りのバナー(日、グループ。ADR-0054)は1マス(縦横比 1:1)を占める。
  * 自動読み込みの番兵はこの一覧の後ろ(履歴ページ側)にあるので、並べ方に関わらず効く。
  */
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -108,7 +108,7 @@ function MasonryColumns({ cards, aspects, width, narrow }: LayoutProps) {
           {indexes.map((index) => {
             const card = cards[index]
             if (card.kind === 'banner') {
-              return <HistoryBannerCard key={card.key} title={card.title} count={card.count} layout="tile" />
+              return <HistoryBannerCard key={card.key} banner={card} layout="tile" />
             }
             return (
               <HistoryGalleryTile
@@ -116,7 +116,6 @@ function MasonryColumns({ cards, aspects, width, narrow }: LayoutProps) {
                 run={card.run}
                 outputIndex={card.outputIndex}
                 aspect={aspects[index]}
-                showDate={card.showDate}
               />
             )
           })}
@@ -145,7 +144,7 @@ function JustifiedRows({ cards, aspects, width, narrow }: LayoutProps) {
             const size = { width: tile.width, height: tile.height }
             if (card.kind === 'banner') {
               return (
-                <HistoryBannerCard key={card.key} title={card.title} count={card.count} layout="tile" size={size} />
+                <HistoryBannerCard key={card.key} banner={card} layout="tile" size={size} />
               )
             }
             return (
@@ -155,7 +154,6 @@ function JustifiedRows({ cards, aspects, width, narrow }: LayoutProps) {
                 outputIndex={card.outputIndex}
                 aspect={aspects[tile.index]}
                 size={size}
-                showDate={card.showDate}
               />
             )
           })}

@@ -47,6 +47,19 @@
   font-size: clamp(12px, 12cqi, 40px);
 }
 
+/* 題の上の年(年の最初の日のバナーだけ)。 */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* 題の下の曜日。 */
+.caption {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
 .count {
   font-family: var(--font-mono);
   font-size: 12px;

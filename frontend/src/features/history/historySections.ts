@@ -1,21 +1,26 @@
 /**
  * 履歴の一覧に並べる項目(カードとバナー)を作る純粋関数(ADR-0054 4章・5章)。
- * 区切り(年、グループ)はフロントで判定する。年は利用者の時間帯で決まるため。
+ * 区切り(日、グループ)はフロントで判定する。日と年は利用者の時間帯で決まるため。
  */
 import type { HistoryCardEntry } from './historyCardStyle'
 
-/** 画像のカード。`showDate` はギャラリーで右上に月日を出すか(日付の並びのときだけ)。 */
+/** 画像のカード。 */
 export interface HistoryCardItem<R> extends HistoryCardEntry<R> {
   kind: 'card'
-  showDate: boolean
 }
 
-/** 区切りのバナー。並びの中でカード1枚分(ギャラリーでは1マス)を占める。 */
+/**
+ * 区切りのバナー。並びの中でカード1枚分(ギャラリーでは1マス)を占める。
+ * `eyebrow` は題の上に小さく添える文(日のバナーの、年の最初の日だけの年)。`caption` は題の下に
+ * 小さく添える文(日のバナーの曜日)。`count` は分かるときだけの件数。
+ */
 export interface HistoryBannerItem {
   kind: 'banner'
   key: string
   title: string
   count: number | null
+  eyebrow?: string | null
+  caption?: string | null
 }
 
 export type HistoryListItem<R> = HistoryCardItem<R> | HistoryBannerItem
@@ -27,26 +32,52 @@ export function localYear(iso: string): number {
   return new Date(iso).getFullYear()
 }
 
-/** 右上に出す月日("10/23")。利用者の時間帯で。 */
+/** 利用者の時間帯での日("2026-10-23")。日の境目の判定に使う。 */
+export function localDayKey(iso: string): string {
+  const date = new Date(iso)
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
+}
+
+/** 日のバナーの題("10/23")。利用者の時間帯で。 */
 export function formatMonthDay(iso: string): string {
   const date = new Date(iso)
   return `${date.getMonth() + 1}/${date.getDate()}`
 }
 
+/** 曜日の短い表記(ja「木」、en「Thu」)。利用者の時間帯で。 */
+export function formatWeekday(iso: string, intlLocale: string): string {
+  return new Intl.DateTimeFormat(intlLocale, { weekday: 'short' }).format(new Date(iso))
+}
+
 /**
- * 日付の並び。展開済みのカードの、各年の最初(最初の年を含む)に年のバナーを置く。件数は出さない
- * (ページングで年の全件が分からないため)。
+ * 日付の並び。展開済みのカードの、日が変わる位置(最初の日を含む)に日のバナーを置く(ADR-0054 5章)。
+ * 年のバナーは別に置かず、各年の最初の日のバナーにだけ年を小さく添える。曜日も小さく添える。
+ * 件数は出さない(ページングで日の全件が分からないため)。日と年は利用者の時間帯で決める。
  */
-export function withYearBanners<R extends RunLike>(cards: readonly HistoryCardEntry<R>[]): HistoryListItem<R>[] {
+export function withDayBanners<R extends RunLike>(
+  cards: readonly HistoryCardEntry<R>[],
+  intlLocale: string,
+): HistoryListItem<R>[] {
   const items: HistoryListItem<R>[] = []
+  let day: string | null = null
   let year: number | null = null
   for (const card of cards) {
-    const cardYear = localYear(card.run.queued_at)
-    if (cardYear !== year) {
+    const queuedAt = card.run.queued_at
+    const cardDay = localDayKey(queuedAt)
+    if (cardDay !== day) {
+      day = cardDay
+      const cardYear = localYear(queuedAt)
+      items.push({
+        kind: 'banner',
+        key: `day:${cardDay}`,
+        title: formatMonthDay(queuedAt),
+        count: null,
+        eyebrow: cardYear !== year ? String(cardYear) : null,
+        caption: formatWeekday(queuedAt, intlLocale),
+      })
       year = cardYear
-      items.push({ kind: 'banner', key: `year:${cardYear}`, title: String(cardYear), count: null })
     }
-    items.push({ ...card, kind: 'card', showDate: true })
+    items.push({ ...card, kind: 'card' })
   }
   return items
 }
@@ -71,7 +102,6 @@ function cardOf<R extends RunLike>(item: AssetLikeItem<R>): HistoryCardItem<R> {
     key: `${item.run.id}:${item.asset_id}`,
     run: item.run,
     outputIndex: index >= 0 ? index : 0,
-    showDate: false,
   }
 }
 

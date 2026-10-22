@@ -1,7 +1,7 @@
 /**
  * 履歴ワークスペース。カード形式の一覧 + 状態フィルタ(クライアント側)+ カーソル読み込み。
  * ツールバーは左に表示の切り替え、右端に並べ替えと状態の絞り込み(アイコンのメニュー)。
- * 並べ替え(ADR-0054)は、日付(Run 単位。`GET /api/runs`。年の区切りを入れる)、グループと
+ * 並べ替え(ADR-0054)は、日付(Run 単位。`GET /api/runs`。日の区切りを入れる)、グループと
  * 似た順(画像単位。`GET /api/history/assets`。グループは区切りを入れる)。
  * 形は「詳細」(カードいっぱいに画像を敷き、情報と操作を重ねる)、「石積み」「行揃え」(画像を
  * 元の縦横比で並べるギャラリー)をツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
@@ -31,14 +31,14 @@ import { HistoryStatusFilterMenu } from '../features/history/HistoryStatusFilter
 import { HistorySortMenu } from '../features/history/HistorySortMenu'
 import { HistoryBannerCard } from '../features/history/HistoryBannerCard'
 import { effectiveHistorySort, setHistorySort, useHistorySort } from '../features/history/historySort'
-import { similarityCards, withGroupBanners, withYearBanners } from '../features/history/historySections'
+import { similarityCards, withDayBanners, withGroupBanners } from '../features/history/historySections'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { CardDetailIcon, CardMasonryIcon, CardRowsIcon } from '../components/icons'
 import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
 import { hasNewlySucceededRun } from '../features/run-status/assetInvalidation'
 import { hasActiveRuns, countQueue } from '../shell/queueStatus'
 import { useScrollRestoration } from '../shell/useScrollRestoration'
-import { useI18n } from '../i18n'
+import { intlLocale, useI18n } from '../i18n'
 import { invalidateAssetGroupQueries } from '../features/stock/groups/assetGroupQueries'
 import styles from './HistoryPage.module.css'
 
@@ -50,7 +50,7 @@ const RUNS_GC_TIME_MS = 30 * 60 * 1000
 const filterByLocationKey = new Map<string, StatusFilter>()
 
 export function HistoryPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const location = useLocation()
   const navigationType = useNavigationType()
   const queryClient = useQueryClient()
@@ -127,9 +127,9 @@ export function HistoryPage() {
   const { items, total, filteredCount } = useMemo(() => {
     if (!assetSort) {
       const filtered = filterRuns(allRuns, statusFilter)
-      // 出力が複数の Run は出力ごとのカードに展開し、各年の最初に年のバナーを置く。
+      // 出力が複数の Run は出力ごとのカードに展開し、日が変わる位置に日のバナーを置く。
       return {
-        items: withYearBanners(expandHistoryCards(filtered)),
+        items: withDayBanners(expandHistoryCards(filtered), intlLocale(locale)),
         total: allRuns.length,
         filteredCount: filtered.length,
       }
@@ -144,7 +144,7 @@ export function HistoryPage() {
       total: assetItems.length,
       filteredCount: filtered.length,
     }
-  }, [assetSort, allRuns, assetItems, statusFilter, groupSections, ungroupedLabel])
+  }, [assetSort, allRuns, assetItems, statusFilter, groupSections, ungroupedLabel, locale])
 
   const placeholder = historyPlaceholder({
     isLoading: activeQuery.isLoading,
@@ -211,7 +211,7 @@ export function HistoryPage() {
           <div className={styles.grid}>
             {items.map((item) =>
               item.kind === 'banner' ? (
-                <HistoryBannerCard key={item.key} title={item.title} count={item.count} layout="card" />
+                <HistoryBannerCard key={item.key} banner={item} layout="card" />
               ) : (
                 <HistoryCard key={item.key} run={item.run} variant="overlay" outputIndex={item.outputIndex} />
               ),

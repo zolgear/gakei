@@ -742,18 +742,3 @@
     font-size: 11px;
   }
 }
-
-/* 右上の月日(日付の並びのときだけ。ADR-0054 5章)。 */
-.galleryDate {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  padding: 1px 5px;
-  background: rgba(10, 11, 13, 0.55);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.9);
-  pointer-events: none;
-}
