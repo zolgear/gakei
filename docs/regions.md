@@ -155,7 +155,7 @@ ComfyUI 本体の Create Bounding Boxes(`CreateBoundingBoxes`)を含むワーク
 - 描く文字のある四角は `type` を `text` にし、`text` に描く文字を入れます。無ければ `obj` です。
 - ノードの `width` / `height` が決まるときは、四角をキャンバスの値(`editor_state`)にピクセルで書き、`bboxes` と `last_incoming` は消します。実行の結果は `bboxes` に入れたときと同じで、送ったグラフがテンプレートと同じ形になります。`width` / `height` は、公開パラメーターを差し込んだ後の値で、定数、整数の Primitive(`PrimitiveInt` など)への配線、Resolution Selector の出力への配線から求めます(2026-10-22)。
 - 決められないときは、要素を `bboxes` に入れ、同じノードの `last_incoming` を空(`{"__value__": []}`。API 形式では配列を `__value__` で包みます)にします。ノードは、前に受けた値と同じ値が来るとキャンバスの値を使うためです。キャンバスの値は古い四角を残さないよう空にします。
-- 出力 PNG を ComfyUI に読み込んでも、キャンバスに四角は戻りません。ComfyUI は実行時(`execution.py` の `validate_inputs`)に `__value__` の包みを外した値をグラフに書き戻し、PNG の `prompt` にはその書き換え後のグラフが入ります。ComfyUI の画面は API 形式の読み込みで配列の値を配線とみなすので、包みの無い `editor_state` は捨てられます。四角を戻したいときは、Run の詳細の「ComfyUI に送ったグラフ(JSON)」の「JSON をダウンロード」で送ったグラフ(包みが残っています)を保存し、ComfyUI に読み込んでください(2026-10-22)。
+- 出力 PNG を ComfyUI に読み込んでも、キャンバスに四角は戻りません。ComfyUI は実行時(`execution.py` の `validate_inputs`)に `__value__` の包みを外した値をグラフに書き戻し、PNG の `prompt` にはその書き換え後のグラフが入ります。ComfyUI の画面は API 形式の読み込みで配列の値を配線とみなすので、包みの無い `editor_state` は捨てられます(ComfyUI に報告済み: https://github.com/Comfy-Org/ComfyUI/issues/17294)。四角を戻したいときは、Run の詳細の「ComfyUI に送ったグラフ(JSON)」の「JSON をダウンロード」で送ったグラフ(包みが残っています)を保存し、ComfyUI に読み込んでください(2026-10-22)。
 - 四角が1つも無い Run では差し込みません。テンプレートのキャンバスの値がそのまま使われます。
 - 差し込んだ値は、Run の詳細の「ComfyUI に送ったグラフ」(`run.params`)で確かめられます。プロンプトに文は足さず、重ねた画像も作りません。Run の詳細の「領域の指示」には、四角の一覧だけが出ます。
 
