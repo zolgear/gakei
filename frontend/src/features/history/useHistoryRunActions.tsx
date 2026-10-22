@@ -35,10 +35,18 @@ interface HistoryRunActions {
   dialogs: ReactNode
 }
 
+export interface HistoryRunActionsOptions {
+  /** 「系列を見る」を出すか(既定は出す)。ギャラリーでは幅に収めるために外す。 */
+  showLineage?: boolean
+  /** 操作の行の左端に置くもの(ギャラリーのピクセルの大きさ)。 */
+  leading?: ReactNode
+}
+
 export function useHistoryRunActions(
   run: RunSummary,
   shownOutput: RunOutputRef | undefined,
   nav: HistoryCardNavigation,
+  { showLineage = true, leading }: HistoryRunActionsOptions = {},
 ): HistoryRunActions {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -121,6 +129,7 @@ export function useHistoryRunActions(
 
   const actions = (
     <div className={styles.actions}>
+      {leading}
       {run.status === 'queued' && (
         <button
           type="button"
@@ -132,6 +141,7 @@ export function useHistoryRunActions(
         </button>
       )}
       <span className={styles.actionsSpacer} />
+      {/* アイコンだけのボタンには、どれも aria-label と同じ文の title を付けてツールチップを揃える。 */}
       {/* プロンプトの文字のリンクと同じ遷移先(Run 詳細)を、アイコンからも開けるようにする。
           状態によらず出す(失敗・中止・実行中の Run にも詳細はある)。 */}
       <Link
@@ -142,11 +152,12 @@ export function useHistoryRunActions(
       >
         <RunDetailIcon size={15} />
       </Link>
-      {nav.showLineageButton && (
+      {showLineage && nav.showLineageButton && (
         <button
           type="button"
           className={styles.iconButton}
           aria-label={t.history.card.showLineage}
+          title={t.history.card.showLineage}
           onClick={handleShowLineage}
         >
           <LineageIcon />
@@ -157,6 +168,7 @@ export function useHistoryRunActions(
           type="button"
           className={styles.iconButton}
           aria-label={t.history.card.rerun}
+          title={t.history.card.rerun}
           onClick={() => rerunMutation.mutate()}
           disabled={rerunMutation.isPending}
         >
@@ -168,6 +180,7 @@ export function useHistoryRunActions(
           type="button"
           className={`${styles.iconButton} ${styles.iconButtonEdit}`}
           aria-label={t.history.card.useAsInput}
+          title={t.history.card.useAsInput}
           onClick={() => addToInputs.request(shownOutput.asset_id)}
         >
           <UseAsInputIcon />
@@ -178,6 +191,7 @@ export function useHistoryRunActions(
           type="button"
           className={`${styles.iconButton} ${styles.iconButtonDanger}`}
           aria-label={t.history.card.delete}
+          title={t.history.card.delete}
           onClick={() => setDeleteConfirmOpen(true)}
           disabled={deleteMutation.isPending}
         >

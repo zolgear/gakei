@@ -587,16 +587,9 @@
   -webkit-line-clamp: 2;
 }
 
-.galleryPixelSize {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  z-index: 2;
-  pointer-events: none;
-}
-
 /* マウスを載せたとき・キーボードで中に入ったときだけ出す(タッチ端末では出さない)。
-   下のピクセルの大きさは見えたままにするので、その分だけ下を空ける。 */
+   1行の帯(左にピクセルの大きさ、右に操作)と、タイトルがあればその上の1行だけ。グラデーションは
+   その行が読める最低限の高さにする。 */
 .galleryHover {
   display: none;
 }
@@ -610,9 +603,9 @@
     z-index: 1;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 36px 8px 34px;
-    background: linear-gradient(to top, rgba(10, 11, 13, 0.85), rgba(10, 11, 13, 0.55) 60%, rgba(10, 11, 13, 0));
+    gap: 4px;
+    padding: 20px 6px 6px;
+    background: linear-gradient(to top, rgba(10, 11, 13, 0.78), rgba(10, 11, 13, 0.5) 55%, rgba(10, 11, 13, 0));
     opacity: 0;
     transition: opacity 0.12s ease;
     pointer-events: none;
@@ -629,8 +622,9 @@
   }
 }
 
-.galleryPrompt {
+.galleryTitle {
   display: block;
+  padding: 0 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -641,13 +635,26 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
-/* 操作は小さく、半透明の背景で。狭い画面の 44px の格子(上の @media)より優先する。 */
+/* 操作は小さく、半透明の背景で1行に。狭い画面の 44px の格子(上の @media)より優先する。
+   幅が足りなければ、左のピクセルの大きさが縮んで(省略されて)操作を残す。 */
 .galleryHover .actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 4px;
   height: auto;
   min-height: 0;
+}
+
+.galleryHover .actions > * {
+  flex-shrink: 0;
+}
+
+.galleryHover .actions > .galleryPixelSize {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .galleryHover .actions .iconButton,
