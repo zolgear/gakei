@@ -193,8 +193,6 @@ export function HistoryPage() {
           ))}
         </div>
 
-        <div className={styles.count}>{total} Generated</div>
-
         <div className={styles.toolbarEnd}>
           <HistorySortMenu value={sort} onChange={setHistorySort} embeddingsAvailable={embeddingsAvailable} />
           <HistoryStatusFilterMenu value={statusFilter} onChange={setStatusFilter} />

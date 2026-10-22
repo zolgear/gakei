@@ -16,6 +16,8 @@ export function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<HistoryPage />} />
+        {/* 履歴は `/`。手で打った `/history` も空のページにせず、履歴へ移す。 */}
+        <Route path="/history" element={<Navigate to="/" replace />} />
         <Route path="/studio" element={<StudioWorkspace />} />
         {/* 生成/編集は UI 上で区別しない(ADR-0009)。旧ルートはブックマーク等のため残す。 */}
         <Route path="/generate" element={<Navigate to="/studio" replace />} />

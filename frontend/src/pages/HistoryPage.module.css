@@ -30,12 +30,6 @@
   border: 0;
 }
 
-.count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
 .segmentGroup {
   display: flex;
   border: 1px solid var(--color-border);
