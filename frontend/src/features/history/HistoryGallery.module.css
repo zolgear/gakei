@@ -1,0 +1,11 @@
+.gallery {
+  display: flex;
+  align-items: flex-start;
+}
+
+.column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}

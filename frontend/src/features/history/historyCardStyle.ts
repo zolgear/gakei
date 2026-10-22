@@ -66,18 +66,17 @@ export interface HistoryCardEntry<R> {
 }
 
 /**
- * Run の並びを、並べるカードの並びにする。詳細の形は Run ごとに1枚。画像の形は、出力が複数ある
- * Run を出力ごとの1枚ずつに展開する(key は Run と出力の組)。出力が1つ以下の Run は1枚のまま。
+ * Run の並びを、並べるカードの並びにする。出力が複数ある Run は出力ごとの1枚ずつに展開する
+ * (key は Run と出力の組。履歴ページの詳細と画像の形の両方)。出力が1つ以下の Run は1枚のまま。
  * 絞り込みは Run 単位で先に済ませておく(展開は表示だけで、読み込みの判定には関わらない)。
  */
 export function expandHistoryCards<R extends { id: string; outputs?: { asset_id: string }[] | null }>(
   runs: readonly R[],
-  style: HistoryCardStyle,
 ): HistoryCardEntry<R>[] {
   const entries: HistoryCardEntry<R>[] = []
   for (const run of runs) {
     const outputs = run.outputs ?? []
-    if (style === 'image' && outputs.length > 1) {
+    if (outputs.length > 1) {
       outputs.forEach((output, index) => {
         entries.push({ key: `${run.id}:${output.asset_id}`, run, outputIndex: index })
       })

@@ -1,5 +1,5 @@
 /**
- * 履歴のカードの画像部分(`HistoryCard` の詳細と重ねる形で共通)。
+ * 履歴のカードの画像部分(`HistoryCard` の従来の形と重ねる形、ギャラリーのタイルで共通)。
  * 成功なら出力のサムネイル(焦点に合わせて切り抜く。ドラッグで入力に足せる)、失敗ならエラー、
  * 実行中・待機中・キャンセルならその表示を出す。押したときの行き先は
  * `resolveHistoryCardNavigation` の `mediaHref` を受け取る。
@@ -8,6 +8,7 @@
  * - 重ねる形: 出力ごとにカードを分ける(`output` がそのカードの出力)ので、枚数の代わりに
  *   「1/2」のような何枚目かを出す。マスクしていない画像には隅のレーティングのバッジを出さない
  *   (マスクと、マスクに戻すボタンは AssetThumb のまま出る)。
+ * - ギャラリー: 画像だけ。何枚目かもレーティングの隅のバッジも出さない。
  */
 import { Link } from 'react-router'
 import type { RunOutputRef, RunSummary } from '../../api/client'
@@ -16,7 +17,6 @@ import { formatElapsedSeconds } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { focalStyle } from '../../lib/focalPoint'
-import type { HistoryCardVariant } from './HistoryCard'
 import styles from './HistoryCard.module.css'
 
 interface HistoryCardMediaProps {
@@ -24,8 +24,10 @@ interface HistoryCardMediaProps {
   /** 見せる出力(無ければ出力の無い Run の表示)。 */
   output: RunOutputRef | undefined
   href: string
-  variant: HistoryCardVariant
+  variant: HistoryCardMediaVariant
 }
+
+export type HistoryCardMediaVariant = 'detail' | 'overlay' | 'gallery'
 
 export function HistoryCardMedia({ run, output, href, variant }: HistoryCardMediaProps) {
   const { t } = useI18n()
@@ -40,7 +42,7 @@ export function HistoryCardMedia({ run, output, href, variant }: HistoryCardMedi
   const position = output ? outputs.findIndex((o) => o.asset_id === output.asset_id) + 1 : 0
 
   return (
-    <Link to={href} className={styles.mediaLink} aria-label={ariaLabel}>
+    <Link to={href} className={styles.mediaLink} aria-label={ariaLabel} data-variant={variant}>
       {run.status === 'succeeded' && output && (
         <>
           <AssetThumb
@@ -61,6 +63,7 @@ export function HistoryCardMedia({ run, output, href, variant }: HistoryCardMedi
             }}
           />
           {outputs.length > 1 &&
+            variant !== 'gallery' &&
             (variant === 'overlay' ? (
               <span className={styles.countBadge}>{`${position}/${outputs.length}`}</span>
             ) : (

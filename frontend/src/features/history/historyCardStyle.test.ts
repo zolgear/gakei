@@ -54,17 +54,8 @@ describe('expandHistoryCards', () => {
     { id: 'r4', outputs: null },
   ]
 
-  it('詳細の形は Run ごとに1枚', () => {
-    expect(expandHistoryCards(runs, 'detail').map((e) => [e.key, e.outputIndex])).toEqual([
-      ['r1', 0],
-      ['r2', 0],
-      ['r3', 0],
-      ['r4', 0],
-    ])
-  })
-
-  it('画像の形は出力が複数の Run を出力ごとに展開し、key は Run と出力の組', () => {
-    const entries = expandHistoryCards(runs, 'image')
+  it('出力が複数の Run を出力ごとに展開し、key は Run と出力の組', () => {
+    const entries = expandHistoryCards(runs)
     expect(entries.map((e) => [e.key, e.run.id, e.outputIndex])).toEqual([
       ['r1:a1', 'r1', 0],
       ['r1:a2', 'r1', 1],

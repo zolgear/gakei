@@ -1,8 +1,8 @@
 /**
  * 履歴ワークスペース。カード形式の一覧 + 状態フィルタ(クライアント側)+ カーソル読み込み。
  * ツールバーは左に表示の切り替え、右端に状態の絞り込み(アイコンのメニュー)。
- * カードは「詳細」と「画像」(同じ大きさのカードいっぱいに画像を敷き、情報を重ねる)の形を
- * ツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
+ * 形は「詳細」(カードいっぱいに画像を敷き、情報と操作を重ねる)と「画像」(画像を元の縦横比で
+ * 石積みに並べるギャラリー)をツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
  * 見えたら自動で読み、失敗時と IntersectionObserver の無い環境のために「さらに読み込む」も残す。
  * 操作(Generate/Edit)の絞り込みは ADR-0009(UI で区別しない)により無い。
  *
@@ -17,6 +17,7 @@ import { useLocation, useNavigationType } from 'react-router'
 import { listRuns } from '../api/client'
 import { historyPlaceholder } from '../features/history/historyPlaceholder'
 import { HistoryCard } from '../features/history/HistoryCard'
+import { HistoryGallery } from '../features/history/HistoryGallery'
 import {
   expandHistoryCards,
   setHistoryCardStyle,
@@ -86,8 +87,8 @@ export function HistoryPage() {
 
   const allRuns = useMemo(() => runsQuery.data?.pages.flatMap((p) => p.items) ?? [], [runsQuery.data])
   const filtered = useMemo(() => filterRuns(allRuns, statusFilter), [allRuns, statusFilter])
-  // 画像の形では、出力が複数の Run を出力ごとのカードに展開する(絞り込みは Run 単位で先に済ませる)。
-  const cards = useMemo(() => expandHistoryCards(filtered, cardStyle), [filtered, cardStyle])
+  // 出力が複数の Run は出力ごとのカードに展開する(絞り込みは Run 単位で先に済ませる)。
+  const cards = useMemo(() => expandHistoryCards(filtered), [filtered])
   const placeholder = historyPlaceholder({
     isLoading: runsQuery.isLoading,
     isError: runsQuery.isError,
@@ -144,16 +145,15 @@ export function HistoryPage() {
         {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
         {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
 
-        <div className={styles.grid}>
-          {cards.map((card) => (
-            <HistoryCard
-              key={card.key}
-              run={card.run}
-              variant={cardStyle === 'image' ? 'overlay' : 'detail'}
-              outputIndex={card.outputIndex}
-            />
-          ))}
-        </div>
+        {cardStyle === 'image' ? (
+          <HistoryGallery cards={cards} />
+        ) : (
+          <div className={styles.grid}>
+            {cards.map((card) => (
+              <HistoryCard key={card.key} run={card.run} variant="overlay" outputIndex={card.outputIndex} />
+            ))}
+          </div>
+        )}
 
         <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
 
