@@ -70,6 +70,39 @@ class ConditionalParam(BaseModel):
     depends_on_values: list[str]
 
 
+class OutputSizeOperand(BaseModel):
+    """出力の大きさを決める1つの値(ADR-0053 6章)。`param` があればフォームのその項目の値
+    (未指定なら項目の既定値)、無ければ定数の `value`。"""
+
+    param: str | None = None
+    value: int | float | str | None = None
+
+
+class OutputDimension(BaseModel):
+    """出力の幅か高さの決まり方(ADR-0053 6章)。
+
+    - `int`: 整数そのもの(`value`)。
+    - `resolution_selector`: ComfyUI 本体の Resolution Selector の出力(`output` が 0 なら幅、
+      1 なら高さ)。`aspect_ratio` / `megapixels` / `multiple` からノードと同じ式で計算する
+      (`app/domain/comfy_output_size.py`)。
+    """
+
+    source: Literal["int", "resolution_selector"]
+    value: OutputSizeOperand | None = None
+    output: int | None = None
+    aspect_ratio: OutputSizeOperand | None = None
+    megapixels: OutputSizeOperand | None = None
+    multiple: OutputSizeOperand | None = None
+
+
+class OutputSizeRule(BaseModel):
+    """出力の大きさの決まり方(ComfyUI のワークフロー。ADR-0053 6章)。フォームが今の値から
+    白紙のキャンバスの大きさを計算するのに使う。"""
+
+    width: OutputDimension
+    height: OutputDimension
+
+
 class OperationCapabilities(BaseModel):
     """generate / edit それぞれのパラメータ定義。"""
 
@@ -98,6 +131,10 @@ class OperationCapabilities(BaseModel):
     # 四角を付けるのに入力画像(主たる入力)が要るか。要らなければ、入力画像の無い Run では出力の
     # 大きさの白紙の上に四角を描き、座標は出力の大きさに対する割合になる(ADR-0053 6章)。
     regions_requires_input_image: bool = False
+    # 出力の大きさの決まり方(ComfyUI の四角の差し込み先のノードの幅・高さ。ADR-0053 6章)。
+    # 決められない、または使わないプロバイダーでは null(フォームは幅・高さの項目か出力サイズの
+    # 設定から決める)。
+    output_size: OutputSizeRule | None = None
 
 
 class ModelCapabilities(BaseModel):

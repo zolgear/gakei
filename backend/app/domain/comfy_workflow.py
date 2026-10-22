@@ -17,11 +17,19 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.domain import comfy_bounding_boxes
+from app.domain import comfy_bounding_boxes, comfy_output_size
 from app.domain.comfy_graph import WorkflowGraph, is_wire
 from app.domain.models import ComfyWorkflow
 from app.i18n import t
-from app.providers.base import ModelCapabilities, OperationCapabilities, ParamDef, ParamType
+from app.providers.base import (
+    ModelCapabilities,
+    OperationCapabilities,
+    OutputDimension,
+    OutputSizeOperand,
+    OutputSizeRule,
+    ParamDef,
+    ParamType,
+)
 
 SEED_MAX = 2**53 - 1
 
@@ -712,6 +720,7 @@ def workflow_model_capabilities(wf: ComfyWorkflow) -> ModelCapabilities:
         supports_mask=bindings.mask is not None,
         requires_mask=bindings.mask is not None,
         **_regions_capabilities(bindings),
+        output_size=_output_size_rule(template, bindings, exposed),
     )
 
     return ModelCapabilities(
@@ -738,6 +747,33 @@ def _regions_capabilities(bindings: Bindings) -> dict[str, Any]:
         "regions_reference_images": False,
         "regions_requires_input_image": False,
     }
+
+
+def _output_size_rule(
+    template: dict[str, Any], bindings: Bindings, exposed: list[ExposedParam]
+) -> OutputSizeRule | None:
+    """四角の差し込み先のノードの幅・高さの決まり方(白紙のキャンバスの大きさ。ADR-0053 6章)。
+
+    幅・高さの束縛が両方あれば、その項目の値(出力の大きさそのもの)。無ければ差し込み先のノードの
+    `width` / `height` を辿る。フォームの項目(公開パラメーター)が差し込む入力は、その項目の値として
+    表す。差し込み先が無いか、決められなければ None(フォームは今までどおり出力サイズの設定から
+    決める)。
+    """
+    if bindings.bounding_boxes is None:
+        return None
+    if bindings.width is not None and bindings.height is not None:
+        return OutputSizeRule(
+            width=OutputDimension(source="int", value=OutputSizeOperand(param="width")),
+            height=OutputDimension(source="int", value=OutputSizeOperand(param="height")),
+        )
+    targets: dict[tuple[str, str], str] = {}
+    if bindings.width is not None:
+        targets[(bindings.width.node, bindings.width.input)] = "width"
+    if bindings.height is not None:
+        targets[(bindings.height.node, bindings.height.input)] = "height"
+    for exposed_param in exposed:
+        targets[(exposed_param.node, exposed_param.input)] = exposed_param.name
+    return comfy_output_size.describe_size(template, bindings.bounding_boxes.node, targets)
 
 
 # -- 値の差し込み ---------------------------------------------------------
@@ -790,9 +826,6 @@ def resolve_prompt(
     # image_alpha は枠1(images[0])の名前自体を合成済みの画像にすることで表現する
     # (呼び出し側の責務。ここでは追加の差し込みは不要)。
 
-    if bindings.bounding_boxes is not None and bounding_boxes is not None:
-        comfy_bounding_boxes.inject(graph, bindings.bounding_boxes.node, bounding_boxes)
-
     for exposed_param in exposed:
         ref = InputRef(node=exposed_param.node, input=exposed_param.input)
         if exposed_param.name in params:
@@ -800,5 +833,11 @@ def resolve_prompt(
         elif exposed_param.default is not None:
             _set(ref, exposed_param.default)
         # デフォルトも無ければ template の値のまま(何もしない)。
+
+    # 四角は最後に差し込む。キャンバスの値(`editor_state`)のピクセルは差し込み先のノードの幅・高さ
+    # で決まり、それは公開パラメーター(幅・高さや Resolution Selector の aspect_ratio など)で
+    # 変わりうるため。差し込み先の `bboxes` などを公開パラメーターにしていても、四角が勝つ。
+    if bindings.bounding_boxes is not None and bounding_boxes is not None:
+        comfy_bounding_boxes.inject(graph, bindings.bounding_boxes.node, bounding_boxes)
 
     return graph

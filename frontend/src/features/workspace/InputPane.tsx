@@ -356,11 +356,12 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const sketchEditorState = editLogic.sketchEditor
 
   // 領域の指示(ADR-0053)を描く下地。主たる入力、または入力画像の無い Run の白紙(出力の大きさ。
-  // ComfyUI は幅・高さの項目、ほかは出力サイズの設定から。6章)。
+  // ComfyUI は出力の大きさの決まり方(幅・高さの項目や Resolution Selector)とフォームの今の値から、
+  // ほかは出力サイズの設定から。6章)。
   const regionCanvas: RegionCanvas | null = editLogic.positionZeroAsset
     ? { kind: 'asset', asset: editLogic.positionZeroAsset }
     : form.regionsBlank
-      ? { kind: 'blank', ...blankCanvasSize(form.defs, form.rawParams, blankSketchSize) }
+      ? { kind: 'blank', ...blankCanvasSize(form.defs, form.rawParams, blankSketchSize, form.regionsOutputSize) }
       : null
 
   // 配置(ADR-0050)のキャンバスの既定に使う、フォームで選んでいるサイズ(auto・未指定なら null)。

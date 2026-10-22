@@ -16,6 +16,7 @@ import math
 from collections.abc import Sequence
 from typing import Any, Literal
 
+from app.domain import comfy_output_size
 from app.providers.base import RegionKind
 
 CLASS_TYPE = "CreateBoundingBoxes"
@@ -104,28 +105,6 @@ def to_editor_state(elements: Sequence[dict[str, Any]], width: int, height: int)
     return boxes
 
 
-def _int_constant(value: Any) -> int | None:
-    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-        return value
-    return None
-
-
-def _resolve_dimension(graph: dict[str, Any], value: Any) -> int | None:
-    """ノードの `width` / `height` の値を整数で決める。決められなければ None。
-
-    定数ならそのまま。配線(`[node_id, index]`)なら、配線先が入力 `value` に整数の定数を持つ
-    ノード(`PrimitiveInt` など)のときだけ辿る。
-    """
-    constant = _int_constant(value)
-    if constant is not None:
-        return constant
-    if isinstance(value, list) and len(value) == 2:
-        source = graph.get(str(value[0]))
-        if isinstance(source, dict) and isinstance(source.get("inputs"), dict):
-            return _int_constant(source["inputs"].get("value"))
-    return None
-
-
 def inject(graph: dict[str, Any], node_id: str, value: str) -> None:
     """グラフの `node_id` のノードに四角を差し込む(`graph` を書き換える)。
 
@@ -138,13 +117,15 @@ def inject(graph: dict[str, Any], node_id: str, value: str) -> None:
 
     `editor_state` にも同じ四角をピクセルで書く。出力 PNG に埋め込まれるのはこのグラフで、
     ComfyUI に読み込み直すとソケットの `bboxes` は落ち、キャンバスにはこちらが出るため。
-    ノードの `width` / `height` が決められなければ、古い四角を残さないよう空にする。
+    ノードの `width` / `height` は値を差し込んだ後のグラフから決める(定数、整数の Primitive、
+    Resolution Selector。`comfy_output_size.resolve_int`)。決められなければ、古い四角を残さない
+    よう空にする。
     """
     inputs = graph[node_id]["inputs"]
     inputs[BBOXES_INPUT] = value
     inputs[LAST_INCOMING_INPUT] = {"__value__": []}
-    width = _resolve_dimension(graph, inputs.get("width"))
-    height = _resolve_dimension(graph, inputs.get("height"))
+    width = comfy_output_size.resolve_int(graph, inputs.get("width"))
+    height = comfy_output_size.resolve_int(graph, inputs.get("height"))
     state: list[dict[str, Any]] = []
     if width is not None and height is not None:
         state = to_editor_state(json.loads(value), width, height)

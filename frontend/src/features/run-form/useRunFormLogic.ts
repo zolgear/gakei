@@ -217,6 +217,11 @@ export interface RunFormLogic {
    * (`regionsAssetId` は null)。
    */
   regionsBlank: boolean
+  /**
+   * 出力の大きさの決まり方(capabilities の `output_size`。ComfyUI。ADR-0053 6章)。白紙の大きさを
+   * フォームの今の値から計算するのに使う。分からなければ null。
+   */
+  regionsOutputSize: import('../../api/client').OutputSizeRule | null
   /** 四角の渡し方(`image_and_text` なら、画面に「画像と文で送る」ことを示す)。 */
   regionsDelivery: string | null
   /** 札で選べる種類(capabilities の `regions_kinds`)。 */
@@ -494,6 +499,7 @@ export function useRunFormLogic(
   const regionsSupported = regionsSupportedFor(operation, regionOpCaps)
   const regionsBlank = regionsSupported && primaryAssetId === null
   const regionsDelivery = regionOpCaps?.regions_delivery ?? null
+  const regionsOutputSize = regionOpCaps?.output_size ?? null
   const regionsKinds = allowedRegionKinds(regionOpCaps)
   const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
   const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
@@ -922,6 +928,7 @@ export function useRunFormLogic(
     clearRegions,
     regionsSupported,
     regionsBlank,
+    regionsOutputSize,
     regionsDelivery,
     regionsKinds,
     regionsReferenceImages,

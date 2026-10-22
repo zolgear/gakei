@@ -6138,6 +6138,49 @@ export interface components {
              * @default false
              */
             regions_requires_input_image: boolean;
+            output_size?: components["schemas"]["OutputSizeRule"] | null;
+        };
+        /**
+         * OutputDimension
+         * @description 出力の幅か高さの決まり方(ADR-0053 6章)。
+         *
+         *     - `int`: 整数そのもの(`value`)。
+         *     - `resolution_selector`: ComfyUI 本体の Resolution Selector の出力(`output` が 0 なら幅、
+         *       1 なら高さ)。`aspect_ratio` / `megapixels` / `multiple` からノードと同じ式で計算する
+         *       (`app/domain/comfy_output_size.py`)。
+         */
+        OutputDimension: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "int" | "resolution_selector";
+            value?: components["schemas"]["OutputSizeOperand"] | null;
+            /** Output */
+            output?: number | null;
+            aspect_ratio?: components["schemas"]["OutputSizeOperand"] | null;
+            megapixels?: components["schemas"]["OutputSizeOperand"] | null;
+            multiple?: components["schemas"]["OutputSizeOperand"] | null;
+        };
+        /**
+         * OutputSizeOperand
+         * @description 出力の大きさを決める1つの値(ADR-0053 6章)。`param` があればフォームのその項目の値
+         *     (未指定なら項目の既定値)、無ければ定数の `value`。
+         */
+        OutputSizeOperand: {
+            /** Param */
+            param?: string | null;
+            /** Value */
+            value?: number | string | null;
+        };
+        /**
+         * OutputSizeRule
+         * @description 出力の大きさの決まり方(ComfyUI のワークフロー。ADR-0053 6章)。フォームが今の値から
+         *     白紙のキャンバスの大きさを計算するのに使う。
+         */
+        OutputSizeRule: {
+            width: components["schemas"]["OutputDimension"];
+            height: components["schemas"]["OutputDimension"];
         };
         /**
          * ParamDef
