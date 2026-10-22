@@ -103,10 +103,7 @@
       "noPrompt": "(プロンプトなし)",
       "cancel": "中止",
       "showLineage": "系列を見る",
-      "rerun": "同じ設定で新規作成",
-      "useAsInput": "入力に使う",
       "delete": "削除",
-      "rerunFailed": "再実行の準備に失敗しました",
       "deleteFailed": "削除に失敗しました",
       "by": "実行者: {name}",
       "deleteConfirm": {

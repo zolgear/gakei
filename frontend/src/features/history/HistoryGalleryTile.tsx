@@ -5,8 +5,8 @@
  * 薄いグラデーションに1行の帯(左にピクセルの大きさ、右に小さな操作)を出す。出力にタイトルが
  * あればその上に1行で出す(プロンプトは出さない)。タッチ端末(hover: none)では何も重ねず、
  * タップでビューアへ移る。
- * 操作は幅に収めるため「詳細」「再実行」(待機中はキャンセル)「入力に使う」「削除」だけにし、
- * 「系列」は外す。幅が足りなければピクセルの大きさを省いて操作を優先する。
+ * 操作は詳細のカードと同じ「詳細」「系列」「削除」(待機中はキャンセル)。幅が足りなければピクセルの
+ * 大きさを省いて操作を優先する。
  * 操作と行き先は詳細のカードと同じ(`useHistoryRunActions`、`resolveHistoryCardNavigation`)。
  */
 import { Link } from 'react-router'
@@ -37,7 +37,6 @@ export function HistoryGalleryTile({ run, outputIndex, aspect, size }: HistoryGa
   })
   const pixelSize = run.status === 'succeeded' ? formatPixelSize(shownOutput) : null
   const runActions = useHistoryRunActions(run, shownOutput, nav, {
-    showLineage: false,
     leading: pixelSize ? <span className={`${styles.pixelSize} ${styles.galleryPixelSize}`}>{pixelSize}</span> : null,
   })
   const title = shownOutput?.title

@@ -1,7 +1,7 @@
 /**
- * 履歴のカードの操作(詳細・系列・再実行・入力に使う・削除、待機中はキャンセル)と、その確認の
- * ダイアログ。詳細の形(重ねるカード、検索ページの従来のカード)と画像の形(ギャラリーのタイル)で
- * 同じロジックを使う。
+ * 履歴のカードの操作(詳細・系列・削除、待機中はキャンセル)と、削除の確認のダイアログ。詳細の形
+ * (重ねるカード、検索ページの従来のカード)と画像の形(ギャラリーのタイル)で同じロジックを使う。
+ * 再実行と「入力に使う」は置かない(Generated 詳細とビューアにある)。狭いカードでも1行に収める。
  *
  * 操作の並び(`actions`)、失敗の文(`errors`)、ダイアログ(`dialogs`)を別々に返す。ダイアログは
  * 画面に固定で出すので、ホバーのときだけ見える重ね表示の中ではなく、カードの直下に置く。
@@ -9,24 +9,18 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router'
-import { ApiError, cancelRun, deleteRun, getRun, type RunOutputRef, type RunSummary } from '../../api/client'
+import { ApiError, cancelRun, deleteRun, type RunOutputRef, type RunSummary } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
 import { RunDetailIcon } from '../../components/icons'
-import { useRunFormContext } from '../../context/useRunFormContext'
 import { useLineageOrigin } from '../../context/useLineageOrigin'
 import { useResourcePanel } from '../../context/useResourcePanel'
-import { useAddToInputs } from '../run-form/useAddToInputs'
-import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
-import { paramsForRerun } from '../run-form/paramsBuilder'
-import { inputsFromRunInputs } from '../run-form/editInputs'
-import { restoreRunRegions } from '../regions/regions'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { removeItemFromPagedData, type InfiniteQueryData } from '../../lib/queryCache'
 import { canDeleteRun } from './runDeletion'
 import { buildRunDeleteWarning } from './runDeleteWarning'
 import type { HistoryCardNavigation } from './historyNavigation'
 import { fmt, useI18n } from '../../i18n'
-import { LineageIcon, RerunIcon, TrashIcon, UseAsInputIcon } from './historyActionIcons'
+import { LineageIcon, TrashIcon } from './historyActionIcons'
 import styles from './HistoryCard.module.css'
 
 interface HistoryRunActions {
@@ -36,8 +30,6 @@ interface HistoryRunActions {
 }
 
 export interface HistoryRunActionsOptions {
-  /** 「系列を見る」を出すか(既定は出す)。ギャラリーでは幅に収めるために外す。 */
-  showLineage?: boolean
   /** 操作の行の左端に置くもの(ギャラリーのピクセルの大きさ)。 */
   leading?: ReactNode
 }
@@ -46,16 +38,13 @@ export function useHistoryRunActions(
   run: RunSummary,
   shownOutput: RunOutputRef | undefined,
   nav: HistoryCardNavigation,
-  { showLineage = true, leading }: HistoryRunActionsOptions = {},
+  { leading }: HistoryRunActionsOptions = {},
 ): HistoryRunActions {
   const { t } = useI18n()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { setFormState } = useRunFormContext()
   const { setOriginAssetId } = useLineageOrigin()
   const { openPanel } = useResourcePanel()
-  const addToInputs = useAddToInputs()
-  const [rerunError, setRerunError] = useState<string | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const outputs = run.outputs ?? []
@@ -64,36 +53,6 @@ export function useHistoryRunActions(
     mutationFn: () => cancelRun(run.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['runs'] })
-    },
-  })
-
-  const rerunMutation = useMutation({
-    mutationFn: () => getRun(run.id),
-    onSuccess: (detail) => {
-      setRerunError(null)
-      // comfyui_*(ADR-0013)はサーバーが 422 で拒否するので、フォームへ戻す前に取り除く。
-      // 実際に使った seed(comfyui_seed)があれば seed として固定する(同じ画像を再現できる
-      // ように。ランダムに戻すのは seed の専用欄のトグル1つ)。
-      // 領域の指示(ADR-0053 4章)。四角を戻し、サーバーが足した入力とプロンプトの末尾の文を除く。
-      const restored = restoreRunRegions({ prompt: detail.prompt, inputs: detail.inputs ?? [], regions: detail.regions })
-      setFormState({
-        provider: detail.provider,
-        model: detail.model,
-        prompt: restored.prompt,
-        params: paramsForRerun((detail.params ?? {}) as Record<string, unknown>) as Record<
-          string,
-          string | number | boolean
-        >,
-        inputs: inputsFromRunInputs(restored.inputs),
-        // 削除済みのグループなら null(=「なし」)で返ってくる。
-        assetGroupId: detail.asset_group?.id ?? null,
-        regions: restored.regions,
-        regionsAssetId: restored.regionsAssetId,
-      })
-      navigate('/studio')
-    },
-    onError: (err: unknown) => {
-      setRerunError(err instanceof ApiError ? err.message : t.history.card.rerunFailed)
     },
   })
 
@@ -154,7 +113,7 @@ export function useHistoryRunActions(
       >
         <RunDetailIcon size={15} />
       </Link>
-      {showLineage && nav.showLineageButton && (
+      {nav.showLineageButton && (
         <button
           type="button"
           className={styles.iconButton}
@@ -163,29 +122,6 @@ export function useHistoryRunActions(
           onClick={handleShowLineage}
         >
           <LineageIcon />
-        </button>
-      )}
-      {run.status !== 'queued' && run.status !== 'running' && (
-        <button
-          type="button"
-          className={styles.iconButton}
-          aria-label={t.history.card.rerun}
-          title={t.history.card.rerun}
-          onClick={() => rerunMutation.mutate()}
-          disabled={rerunMutation.isPending}
-        >
-          <RerunIcon />
-        </button>
-      )}
-      {run.status === 'succeeded' && shownOutput && (
-        <button
-          type="button"
-          className={`${styles.iconButton} ${styles.iconButtonEdit}`}
-          aria-label={t.history.card.useAsInput}
-          title={t.history.card.useAsInput}
-          onClick={() => addToInputs.request(shownOutput.asset_id)}
-        >
-          <UseAsInputIcon />
         </button>
       )}
       {canDeleteRun(run.status) && (
@@ -205,19 +141,12 @@ export function useHistoryRunActions(
 
   const errors = (
     <>
-      {rerunError && <p className={styles.errorText}>{rerunError}</p>}
       {deleteError && <p className={styles.errorText}>{deleteError}</p>}
     </>
   )
 
   const dialogs = (
     <>
-      <AddToInputsDialog
-        open={addToInputs.isPending}
-        onAdd={() => addToInputs.resolve('add')}
-        onReplace={() => addToInputs.resolve('replace')}
-        onCancel={addToInputs.cancel}
-      />
       <ConfirmDialog
         open={deleteConfirmOpen}
         message={fmt(t.history.card.deleteConfirm.message, { count: outputs.length })}

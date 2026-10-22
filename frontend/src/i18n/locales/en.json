@@ -103,10 +103,7 @@
       "noPrompt": "(no prompt)",
       "cancel": "Cancel",
       "showLineage": "View lineage",
-      "rerun": "Re-run with same settings",
-      "useAsInput": "Use as input",
       "delete": "Delete",
-      "rerunFailed": "Failed to prepare re-run.",
       "deleteFailed": "Failed to delete.",
       "by": "By {name}",
       "deleteConfirm": {

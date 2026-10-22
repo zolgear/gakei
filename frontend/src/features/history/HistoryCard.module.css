@@ -345,10 +345,6 @@
   color: var(--color-text);
 }
 
-.iconButtonEdit {
-  color: var(--color-edit);
-}
-
 .iconButtonDanger:hover:not(:disabled) {
   border-color: var(--color-danger);
   color: var(--color-danger);
@@ -367,23 +363,23 @@
     height: 44px;
   }
 
-  /* 2列のカードでは 44px のボタンが1行に収まらないので、カードの幅いっぱいの格子に並べる
-     (入る列数だけ並べ、ボタンは列の幅まで広げる。右寄せの折り返しだと左に空きが出る)。 */
+  /* 2列のカードでも操作は1行に収める(折り返してカードの画像を削らない)。幅が足りなければ
+     ボタンを 32px まで縮める。 */
   .actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
     gap: 4px;
-    height: auto;
-    min-height: 44px;
+    height: 44px;
+    flex-wrap: nowrap;
   }
 
-  .actions .iconButton,
+  .actions .iconButton {
+    flex: 0 1 44px;
+    min-width: 32px;
+  }
+
   .actions .textButton {
-    width: 100%;
-  }
-
-  .actionsSpacer {
-    display: none;
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
   }
 }
 
@@ -524,10 +520,6 @@
   color: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(4px);
   text-shadow: none;
-}
-
-.card[data-variant='overlay'] .iconButtonEdit {
-  color: var(--color-edit);
 }
 
 .card[data-variant='overlay'] .iconButton:hover:not(:disabled) {
@@ -673,6 +665,8 @@
 
 .galleryHover .actions .iconButton,
 .galleryHover .actions .textButton {
+  flex: none;
+  min-width: 0;
   width: 26px;
   height: 26px;
   background: rgba(10, 11, 13, 0.55);
@@ -683,10 +677,6 @@
 .galleryHover .actions .textButton {
   width: auto;
   padding: 0 8px;
-}
-
-.galleryHover .actions .iconButtonEdit {
-  color: var(--color-edit);
 }
 
 .galleryHover .actions .iconButton:hover:not(:disabled) {
@@ -704,16 +694,16 @@
   display: block;
 }
 
-/* ピクセルの大きさと4つの操作が並ばない幅では、大きさを省いて操作を残す(途中で切れた表示にしない。
-   「1024×1536」と4つの操作は約 205px 要る)。 */
-@container (max-width: 210px) {
+/* ピクセルの大きさと3つの操作が並ばない幅では、大きさを省いて操作を残す(途中で切れた表示にしない。
+   「1024×1536」と3つの操作は約 175px 要る)。 */
+@container (max-width: 180px) {
   .galleryHover .actions > .galleryPixelSize {
     display: none;
   }
 }
 
 /* 狭いタイル(縦長の画像で 100px 前後)。ピクセルの大きさを省き、操作を詰める。それでも入らない分は
-   右寄せのまま左側からはみ出させて切る(右の「入力に使う」「削除」を残す)。 */
+   右寄せのまま左側からはみ出させて切る(右の「削除」を残す)。 */
 @container (max-width: 170px) {
   .galleryHover {
     padding-left: 4px;
