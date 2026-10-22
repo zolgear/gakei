@@ -284,9 +284,10 @@ def test_resolve_prompt_injects_only_with_regions() -> None:
     injected = resolve_prompt(
         clone(BBOX_LAYOUT_GRAPH), bindings, [], **common, bounding_boxes=value
     )
-    assert injected["20"]["inputs"]["bboxes"] == value
-    assert injected["20"]["inputs"]["last_incoming"] == {"__value__": []}
-    # キャンバスの値にも同じ四角を書く(出力 PNG を ComfyUI に読み込み直したときに出る)。
+    # 大きさが決まるので、四角はキャンバスの値にだけ書く(出力 PNG を ComfyUI に読み込み直した
+    # ときに出る)。`bboxes` と `last_incoming` は残さない。
+    assert "bboxes" not in injected["20"]["inputs"]
+    assert "last_incoming" not in injected["20"]["inputs"]
     assert injected["20"]["inputs"]["editor_state"] == {
         "__value__": [
             {
@@ -478,13 +479,18 @@ def test_comfyui_run_injects_boxes_without_input_image(comfy_client: TestClient)
         '{"type":"text","bbox":[500,500,1000,1000],"text":"OPEN","desc":""}]'
     )
     # run.params に差し込んだ値が入る。プロンプトに文は足さない。
+    # 大きさが決まるので、キャンバスの値(ピクセル)にだけ書き、`bboxes` と `last_incoming` は消す。
     node = detail["params"]["comfyui_prompt"]["20"]["inputs"]
-    assert node["bboxes"] == expected
-    assert node["last_incoming"] == {"__value__": []}
+    assert "bboxes" not in node
+    assert "last_incoming" not in node
+    width, height = node["width"], node["height"]
+    assert node["editor_state"] == {
+        "__value__": bb.to_editor_state(json.loads(expected), width, height)
+    }
     assert detail["params"]["comfyui_bounding_boxes"] == {"node": "20", "input": "bboxes"}
     assert detail["prompt"] == "a cozy room"
     # 送ったグラフにも同じ値。
-    assert fake.queued_prompts[0]["prompt"]["20"]["inputs"]["bboxes"] == expected
+    assert fake.queued_prompts[0]["prompt"]["20"]["inputs"]["editor_state"] == node["editor_state"]
 
     record = detail["regions"]
     assert record["delivery"] == "comfyui_bboxes"
@@ -566,3 +572,16 @@ def test_comfyui_run_rejects_regions_without_binding(comfy_client: TestClient) -
     _install_fake(comfy_client, _fake_with_output())
     response = _run(comfy_client, workflow_id, [{"number": 1, "box": [0.1, 0.1, 0.4, 0.4]}])
     assert response.status_code == 422, response.text
+
+
+def test_inject_drops_bboxes_wire_when_size_known() -> None:
+    # 大きさが決まれば、上流の配線も外してキャンバスの値だけにする(読み込み直しで四角が戻る形)。
+    graph = clone(BBOX_LAYOUT_GRAPH)
+    graph["20"]["inputs"]["bboxes"] = ["30", 0]
+    graph["20"]["inputs"]["last_incoming"] = {"__value__": []}
+    value = bb.encode([_region(1, [0.0, 0.0, 0.5, 0.5], label="a cat")])
+    bb.inject(graph, "20", value)
+    inputs = graph["20"]["inputs"]
+    assert "bboxes" not in inputs
+    assert "last_incoming" not in inputs
+    assert len(inputs["editor_state"]["__value__"]) == 1

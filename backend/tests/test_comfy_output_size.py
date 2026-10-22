@@ -230,7 +230,9 @@ def test_resolve_prompt_boxes_win_over_exposed_bboxes() -> None:
         params={"raw": "[]"},
         bounding_boxes=value,
     )
-    assert graph["20"]["inputs"]["bboxes"] == value
+    # 大きさが決まるので、四角はキャンバスの値に書き、`bboxes` は消す。
+    assert "bboxes" not in graph["20"]["inputs"]
+    assert len(graph["20"]["inputs"]["editor_state"]["__value__"]) == 1
     # 四角の無い Run では公開パラメーターの値のまま。
     untouched = resolve_prompt(
         clone(BBOX_RESOLUTION_GRAPH),

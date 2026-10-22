@@ -108,28 +108,31 @@ def to_editor_state(elements: Sequence[dict[str, Any]], width: int, height: int)
 def inject(graph: dict[str, Any], node_id: str, value: str) -> None:
     """グラフの `node_id` のノードに四角を差し込む(`graph` を書き換える)。
 
-    `bboxes` が配線されていても定数で上書きする。`last_incoming` を空にして、ノードがキャンバスの
-    値(`editor_state`)ではなく差し込んだ値を使うようにする。
+    ノードの `width` / `height` が決まるなら(値を差し込んだ後のグラフから。定数、整数の Primitive、
+    Resolution Selector。`comfy_output_size.resolve_int`)、四角をキャンバスの値(`editor_state`)に
+    ピクセルで書き、`bboxes` と `last_incoming` は消す(配線も外す)。ノードは上流の値が無ければ
+    キャンバスの値を使うので、実行の結果は `bboxes` に入れたときと同じになる。出力 PNG に
+    埋め込まれるのはこのグラフで、`bboxes` や `last_incoming` が残っていると、ComfyUI に
+    読み込み直したときにキャンバスに四角が戻らない。
 
-    空の配列は `{"__value__": []}` で包む。API 形式では配列の値が配線とみなされるため、ComfyUI は
-    配列の値をこの形で送る(画面の書き出しと同じ形。実行時に中身が取り出される)。包みが取り出され
-    なくても、ノードは配列でない `last_incoming` を空とみなすので、同じく差し込んだ値を使う。
-
-    `editor_state` にも同じ四角をピクセルで書く。出力 PNG に埋め込まれるのはこのグラフで、
-    ComfyUI に読み込み直すとソケットの `bboxes` は落ち、キャンバスにはこちらが出るため。
-    ノードの `width` / `height` は値を差し込んだ後のグラフから決める(定数、整数の Primitive、
-    Resolution Selector。`comfy_output_size.resolve_int`)。決められなければ、古い四角を残さない
-    よう空にする。
+    決まらなければ、`bboxes` に要素の JSON の文字列を入れ、`last_incoming` を空にして、ノードが
+    差し込んだ値を使うようにする(`bboxes` が配線されていても定数で上書きする)。キャンバスの値は、
+    古い四角を残さないよう空にする。空の配列は `{"__value__": []}` で包む。API 形式では配列の値が
+    配線とみなされるため、ComfyUI は配列の値をこの形で送る(画面の書き出しと同じ形。実行時に中身が
+    取り出される)。
     """
     inputs = graph[node_id]["inputs"]
-    inputs[BBOXES_INPUT] = value
-    inputs[LAST_INCOMING_INPUT] = {"__value__": []}
     width = comfy_output_size.resolve_int(graph, inputs.get("width"))
     height = comfy_output_size.resolve_int(graph, inputs.get("height"))
-    state: list[dict[str, Any]] = []
     if width is not None and height is not None:
+        inputs.pop(BBOXES_INPUT, None)
+        inputs.pop(LAST_INCOMING_INPUT, None)
         state = to_editor_state(json.loads(value), width, height)
-    inputs[EDITOR_STATE_INPUT] = {"__value__": state}
+        inputs[EDITOR_STATE_INPUT] = {"__value__": state}
+        return
+    inputs[BBOXES_INPUT] = value
+    inputs[LAST_INCOMING_INPUT] = {"__value__": []}
+    inputs[EDITOR_STATE_INPUT] = {"__value__": []}
 
 
 ObjectInfoProblem = Literal["node_missing", "input_not_string"]
