@@ -1,6 +1,7 @@
 /**
- * 履歴の一覧に並べる項目(カードとバナー)を作る純粋関数(ADR-0054 4章・5章)。
+ * 履歴の一覧を節(見出しと、その下のカード)に分ける純粋関数(ADR-0054 4章・5章)。
  * 区切り(日、グループ)はフロントで判定する。日と年は利用者の時間帯で決まるため。
+ * 見出しは節の頭に全幅で置き、カードは節ごとに並べ直す(石積みは列を、行揃えは行を組み直す)。
  */
 import type { HistoryCardEntry } from './historyCardStyle'
 
@@ -9,28 +10,20 @@ export interface HistoryCardItem<R> extends HistoryCardEntry<R> {
   kind: 'card'
 }
 
-/**
- * 区切りのバナー。並びの中でカード1枚分(ギャラリーでは1マス)を占める。
- * `eyebrow` は題の上に小さく添える文(日のバナーの、年の最初の日だけの年)。`caption` は題の下に
- * 小さく添える文(日のバナーの曜日)。`count` は分かるときだけの件数。
- */
-export interface HistoryBannerItem {
-  kind: 'banner'
-  key: string
+/** 節の見出し。`count` は分かるときだけの件数(グループの並び)。 */
+export interface HistorySectionHeading {
   title: string
   count: number | null
-  eyebrow?: string | null
-  caption?: string | null
 }
 
-export type HistoryListItem<R> = HistoryCardItem<R> | HistoryBannerItem
+/** 節。見出しの無い節(似た順)は `heading` が null。 */
+export interface HistorySection<R> {
+  key: string
+  heading: HistorySectionHeading | null
+  cards: HistoryCardItem<R>[]
+}
 
 type RunLike = { id: string; queued_at: string; outputs?: { asset_id: string }[] | null }
-
-/** 利用者の時間帯での年。 */
-export function localYear(iso: string): number {
-  return new Date(iso).getFullYear()
-}
 
 /** 利用者の時間帯での日("2026-10-23")。日の境目の判定に使う。 */
 export function localDayKey(iso: string): string {
@@ -38,48 +31,47 @@ export function localDayKey(iso: string): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
 }
 
-/** 日のバナーの題("10/23")。利用者の時間帯で。 */
-export function formatMonthDay(iso: string): string {
+/**
+ * 日の見出し(ja「10月23日(金)」、en「Fri, Oct 23」)。今年でない日は年も入れる
+ * (ja「2025年3月3日(月)」、en「Mon, Mar 3, 2025」)。利用者の時間帯で。
+ */
+export function formatDayHeading(iso: string, intlLocale: string, currentYear: number): string {
   const date = new Date(iso)
-  return `${date.getMonth() + 1}/${date.getDate()}`
-}
-
-/** 曜日の短い表記(ja「木」、en「Thu」)。利用者の時間帯で。 */
-export function formatWeekday(iso: string, intlLocale: string): string {
-  return new Intl.DateTimeFormat(intlLocale, { weekday: 'short' }).format(new Date(iso))
+  return new Intl.DateTimeFormat(intlLocale, {
+    year: date.getFullYear() !== currentYear ? 'numeric' : undefined,
+    month: 'short',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(date)
 }
 
 /**
- * 日付の並び。展開済みのカードの、日が変わる位置(最初の日を含む)に日のバナーを置く(ADR-0054 5章)。
- * 年のバナーは別に置かず、各年の最初の日のバナーにだけ年を小さく添える。曜日も小さく添える。
- * 件数は出さない(ページングで日の全件が分からないため)。日と年は利用者の時間帯で決める。
+ * 日付の並び。展開済みのカードを、日が変わる位置で節に分け、日の見出しを付ける(ADR-0054 5章)。
+ * 件数は出さない(ページングで日の全件が分からないため)。`currentYear` は利用者の時間帯での今年。
  */
-export function withDayBanners<R extends RunLike>(
+export function daySections<R extends RunLike>(
   cards: readonly HistoryCardEntry<R>[],
   intlLocale: string,
-): HistoryListItem<R>[] {
-  const items: HistoryListItem<R>[] = []
+  currentYear: number,
+): HistorySection<R>[] {
+  const sections: HistorySection<R>[] = []
+  let current: HistorySection<R> | null = null
   let day: string | null = null
-  let year: number | null = null
   for (const card of cards) {
     const queuedAt = card.run.queued_at
     const cardDay = localDayKey(queuedAt)
-    if (cardDay !== day) {
+    if (current === null || cardDay !== day) {
       day = cardDay
-      const cardYear = localYear(queuedAt)
-      items.push({
-        kind: 'banner',
+      current = {
         key: `day:${cardDay}`,
-        title: formatMonthDay(queuedAt),
-        count: null,
-        eyebrow: cardYear !== year ? String(cardYear) : null,
-        caption: formatWeekday(queuedAt, intlLocale),
-      })
-      year = cardYear
+        heading: { title: formatDayHeading(queuedAt, intlLocale, currentYear), count: null },
+        cards: [],
+      }
+      sections.push(current)
     }
-    items.push({ ...card, kind: 'card' })
+    current.cards.push({ ...card, kind: 'card' })
   }
-  return items
+  return sections
 }
 
 export interface AssetLikeItem<R> {
@@ -116,35 +108,40 @@ function uniqueByAsset<R>(items: readonly AssetLikeItem<R>[]): AssetLikeItem<R>[
 }
 
 /**
- * グループの並び。グループが変わる位置に、グループ名と件数のバナーを置く。名前と件数は応答の
- * `groups` から引き、グループなし(`group_id` が null)は `ungroupedLabel`。
+ * グループの並び。グループが変わる位置で節に分け、グループ名と件数の見出しを付ける。名前と件数は
+ * 応答の `groups` から引き、グループなし(`group_id` が null)は `ungroupedLabel`。
  */
-export function withGroupBanners<R extends RunLike>(
+export function groupSections<R extends RunLike>(
   items: readonly AssetLikeItem<R>[],
   groups: readonly GroupSectionLike[] | null | undefined,
   ungroupedLabel: string,
-): HistoryListItem<R>[] {
-  const sections = new Map((groups ?? []).map((g) => [g.id ?? null, g]))
-  const result: HistoryListItem<R>[] = []
-  let current: string | null | undefined = undefined
+): HistorySection<R>[] {
+  const known = new Map((groups ?? []).map((g) => [g.id ?? null, g]))
+  const sections: HistorySection<R>[] = []
+  let current: HistorySection<R> | null = null
+  let currentGroup: string | null = null
   for (const item of uniqueByAsset(items)) {
     const groupId = item.group_id ?? null
-    if (groupId !== current) {
-      current = groupId
-      const section = sections.get(groupId)
-      result.push({
-        kind: 'banner',
+    if (current === null || groupId !== currentGroup) {
+      currentGroup = groupId
+      const section = known.get(groupId)
+      current = {
         key: `group:${groupId ?? 'none'}`,
-        title: groupId === null ? ungroupedLabel : (section?.name ?? ''),
-        count: section?.count ?? null,
-      })
+        heading: {
+          title: groupId === null ? ungroupedLabel : (section?.name ?? ''),
+          count: section?.count ?? null,
+        },
+        cards: [],
+      }
+      sections.push(current)
     }
-    result.push(cardOf(item))
+    current.cards.push(cardOf(item))
   }
-  return result
+  return sections
 }
 
-/** 似た順。区切りは無い。 */
-export function similarityCards<R extends RunLike>(items: readonly AssetLikeItem<R>[]): HistoryListItem<R>[] {
-  return uniqueByAsset(items).map(cardOf)
+/** 似た順。見出しの無い1つの節(空なら節も無い)。 */
+export function similaritySections<R extends RunLike>(items: readonly AssetLikeItem<R>[]): HistorySection<R>[] {
+  const cards = uniqueByAsset(items).map(cardOf)
+  return cards.length > 0 ? [{ key: 'similarity', heading: null, cards }] : []
 }

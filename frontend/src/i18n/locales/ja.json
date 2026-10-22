@@ -137,7 +137,7 @@
       "sortGroup": "グループ",
       "sortEmbedding": "似た順",
       "ungrouped": "グループなし",
-      "bannerCount": "{count} 枚"
+      "sectionCount": "{count} 枚"
     }
   },
   "runDetail": {

@@ -1,3 +1,14 @@
+/* 節の並び。節どうしの間を空けて区切る(見出しは節の頭)。 */
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.section {
+  min-width: 0;
+}
+
 .masonry {
   display: flex;
   align-items: flex-start;
@@ -18,4 +29,10 @@
 .row {
   display: flex;
   align-items: flex-start;
+}
+
+@media (max-width: 767px) {
+  .sections {
+    gap: 22px;
+  }
 }

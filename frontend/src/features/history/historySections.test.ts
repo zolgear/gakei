@@ -1,34 +1,38 @@
 /**
- * 履歴の区切り(日・グループ)と、画像単位の項目の組み立て(ADR-0054)。
+ * 履歴の節分け(日・グループ・似た順)と、画像単位の項目の組み立て(ADR-0054)。
  */
 import { describe, expect, it, vi } from 'vitest'
 import {
-  formatMonthDay,
-  localYear,
-  similarityCards,
-  withDayBanners,
-  withGroupBanners,
-  type HistoryListItem,
+  daySections,
+  formatDayHeading,
+  groupSections,
+  similaritySections,
+  type HistorySection,
 } from './historySections'
 
-// 年の境目は利用者の時間帯で決まるので、テストではその時間帯の正午で作る。
+// 日と年の境目は利用者の時間帯で決まるので、テストではその時間帯の正午で作る。
 function at(year: number, month: number, day: number): string {
   return new Date(year, month - 1, day, 12, 0, 0).toISOString()
-}
-
-function run(id: string, queuedAt: string, assets: string[] = [`${id}-a`]) {
-  return { id, queued_at: queuedAt, outputs: assets.map((asset_id) => ({ asset_id })) }
 }
 
 function at2(year: number, month: number, day: number, hour: number, minute = 0): string {
   return new Date(year, month - 1, day, hour, minute, 0).toISOString()
 }
 
-const label = (i: HistoryListItem<ReturnType<typeof run>>) =>
-  i.kind === 'banner' ? `[${i.eyebrow ? `${i.eyebrow} ` : ''}${i.title}]` : i.key
+function run(id: string, queuedAt: string, assets: string[] = [`${id}-a`]) {
+  return { id, queued_at: queuedAt, outputs: assets.map((asset_id) => ({ asset_id })) }
+}
 
-describe('withDayBanners', () => {
-  it('日が変わる位置(最初の日を含む)に日のバナーを置き、年は各年の最初の日のバナーにだけ添える', () => {
+/** 節を「[見出し] カードの key...」の配列にする。 */
+function outline<R>(sections: HistorySection<R>[]): string[][] {
+  return sections.map((s) => [
+    s.heading ? `[${s.heading.title}${s.heading.count != null ? `:${s.heading.count}` : ''}]` : '[]',
+    ...s.cards.map((c) => c.key),
+  ])
+}
+
+describe('daySections', () => {
+  it('日が変わる位置(最初の日を含む)で節に分ける。今年でない日だけ見出しに年を入れる', () => {
     const cards = [
       { key: 'r4', run: run('r4', at(2027, 1, 2)), outputIndex: 0 },
       { key: 'r3', run: run('r3', at(2026, 12, 31)), outputIndex: 0 },
@@ -36,29 +40,16 @@ describe('withDayBanners', () => {
       { key: 'r1', run: run('r1', at(2026, 6, 1)), outputIndex: 0 },
       { key: 'r0', run: run('r0', at(2025, 3, 3)), outputIndex: 0 },
     ]
-    const items = withDayBanners(cards, 'ja-JP')
-    expect(items.map(label)).toEqual([
-      '[2027 1/2]',
-      'r4',
-      '[2026 12/31]',
-      'r3',
-      'r2',
-      '[6/1]',
-      'r1',
-      '[2025 3/3]',
-      'r0',
+    const sections = daySections(cards, 'ja-JP', 2026)
+    expect(outline(sections)).toEqual([
+      ['[2027年1月2日(土)]', 'r4'],
+      ['[12月31日(木)]', 'r3', 'r2'],
+      ['[6月1日(月)]', 'r1'],
+      ['[2025年3月3日(月)]', 'r0'],
     ])
-    // 年のバナーと日のバナーを2枚続けない(バナーの数は日の数と同じ)。
-    expect(items.filter((i) => i.kind === 'banner')).toHaveLength(4)
-    expect(items[0]).toEqual({
-      kind: 'banner',
-      key: 'day:2027-1-2',
-      title: '1/2',
-      count: null,
-      eyebrow: '2027',
-      caption: '土',
-    })
-    expect(items[1]).toEqual({ kind: 'card', key: 'r4', run: cards[0].run, outputIndex: 0 })
+    expect(sections[0].key).toBe('day:2027-1-2')
+    expect(sections[0].heading).toEqual({ title: '2027年1月2日(土)', count: null })
+    expect(sections[0].cards[0]).toEqual({ kind: 'card', key: 'r4', run: cards[0].run, outputIndex: 0 })
   })
 
   it('日の境目は利用者の時間帯の0時', () => {
@@ -67,7 +58,10 @@ describe('withDayBanners', () => {
       { key: 'a', run: run('a', at2(2026, 10, 23, 23, 30)), outputIndex: 0 },
       { key: 'z', run: run('z', at2(2026, 10, 23, 0, 30)), outputIndex: 0 },
     ]
-    expect(withDayBanners(cards, 'ja-JP').map(label)).toEqual(['[2026 10/24]', 'b', '[10/23]', 'a', 'z'])
+    expect(outline(daySections(cards, 'ja-JP', 2026))).toEqual([
+      ['[10月24日(土)]', 'b'],
+      ['[10月23日(金)]', 'a', 'z'],
+    ])
   })
 
   it('時間帯が変わると、同じ時刻でも日が変わりうる', () => {
@@ -78,34 +72,32 @@ describe('withDayBanners', () => {
         { key: 'a', run: run('a', '2026-10-23T14:30:00Z'), outputIndex: 0 },
       ]
       vi.stubEnv('TZ', 'Asia/Tokyo')
-      expect(withDayBanners(cards, 'ja-JP').map(label)).toEqual(['[2026 10/24]', 'b', '[10/23]', 'a'])
+      expect(outline(daySections(cards, 'ja-JP', 2026))).toEqual([
+        ['[10月24日(土)]', 'b'],
+        ['[10月23日(金)]', 'a'],
+      ])
       vi.stubEnv('TZ', 'UTC')
-      expect(withDayBanners(cards, 'ja-JP').map(label)).toEqual(['[2026 10/23]', 'b', 'a'])
+      expect(outline(daySections(cards, 'ja-JP', 2026))).toEqual([['[10月23日(金)]', 'b', 'a']])
     } finally {
       vi.unstubAllEnvs()
     }
   })
 
-  it('曜日はロケールに合わせる', () => {
-    const cards = [{ key: 'a', run: run('a', at(2026, 10, 22)), outputIndex: 0 }]
-    expect(withDayBanners(cards, 'ja-JP')[0]).toMatchObject({ caption: '木' })
-    expect(withDayBanners(cards, 'en-US')[0]).toMatchObject({ caption: 'Thu' })
-  })
-
-  it('空なら空', () => {
-    expect(withDayBanners([], 'ja-JP')).toEqual([])
+  it('空なら節も無い', () => {
+    expect(daySections([], 'ja-JP', 2026)).toEqual([])
   })
 })
 
-describe('localYear と formatMonthDay', () => {
-  it('利用者の時間帯での年と月日', () => {
-    expect(localYear(at(2026, 10, 23))).toBe(2026)
-    expect(formatMonthDay(at(2026, 10, 23))).toBe('10/23')
-    expect(formatMonthDay(at(2026, 1, 5))).toBe('1/5')
+describe('formatDayHeading', () => {
+  it('ロケールに合わせ、今年でなければ年を入れる', () => {
+    expect(formatDayHeading(at(2026, 10, 22), 'ja-JP', 2026)).toBe('10月22日(木)')
+    expect(formatDayHeading(at(2026, 10, 22), 'en-US', 2026)).toBe('Thu, Oct 22')
+    expect(formatDayHeading(at(2025, 3, 3), 'ja-JP', 2026)).toBe('2025年3月3日(月)')
+    expect(formatDayHeading(at(2025, 3, 3), 'en-US', 2026)).toBe('Mon, Mar 3, 2025')
   })
 })
 
-describe('withGroupBanners', () => {
+describe('groupSections', () => {
   const groups = [
     { id: 'g1', name: 'Alpha', count: 2 },
     { id: 'g2', name: 'Beta', count: 1 },
@@ -115,8 +107,8 @@ describe('withGroupBanners', () => {
   const r2 = run('r2', at(2026, 1, 2), ['b1'])
   const r3 = run('r3', at(2026, 1, 3), ['c1'])
 
-  it('グループが変わる位置に、名前と件数のバナーを置く。グループなしは最後のラベル', () => {
-    const items = withGroupBanners(
+  it('グループが変わる位置で節に分け、名前と件数を見出しにする。グループなしは最後のラベル', () => {
+    const sections = groupSections(
       [
         { asset_id: 'a1', group_id: 'g1', run: r1 },
         { asset_id: 'a2', group_id: 'g1', run: r1 },
@@ -126,43 +118,45 @@ describe('withGroupBanners', () => {
       groups,
       'No group',
     )
-    expect(items.map((i) => (i.kind === 'banner' ? `[${i.title}:${i.count}]` : i.key))).toEqual([
-      '[Alpha:2]',
-      'r1:a1',
-      'r1:a2',
-      '[Beta:1]',
-      'r2:b1',
-      '[No group:1]',
-      'r3:c1',
+    expect(outline(sections)).toEqual([
+      ['[Alpha:2]', 'r1:a1', 'r1:a2'],
+      ['[Beta:1]', 'r2:b1'],
+      ['[No group:1]', 'r3:c1'],
     ])
     // 出力の番号は Run の出力の中の位置。
-    expect(items[2]).toMatchObject({ kind: 'card', outputIndex: 1 })
+    expect(sections[0].cards[1]).toMatchObject({ kind: 'card', outputIndex: 1 })
   })
 
-  it('ページをまたいで同じグループが続いても、バナーは1つ', () => {
+  it('ページをまたいで同じグループが続いても、節は1つ', () => {
     const page1 = [{ asset_id: 'a1', group_id: 'g1', run: r1 }]
     const page2 = [{ asset_id: 'a2', group_id: 'g1', run: r1 }]
-    const items = withGroupBanners([...page1, ...page2], groups, 'No group')
-    expect(items.filter((i) => i.kind === 'banner')).toHaveLength(1)
+    expect(groupSections([...page1, ...page2], groups, 'No group')).toHaveLength(1)
   })
 
   it('応答に節が無ければ件数は null', () => {
-    const items = withGroupBanners([{ asset_id: 'a1', group_id: 'g9', run: r1 }], [], 'No group')
-    expect(items[0]).toEqual({ kind: 'banner', key: 'group:g9', title: '', count: null })
+    const sections = groupSections([{ asset_id: 'a1', group_id: 'g9', run: r1 }], [], 'No group')
+    expect(sections[0].key).toBe('group:g9')
+    expect(sections[0].heading).toEqual({ title: '', count: null })
   })
 })
 
-describe('similarityCards', () => {
-  it('区切りを置かず、同じ画像は1回だけ', () => {
+describe('similaritySections', () => {
+  it('見出しの無い1つの節にし、同じ画像は1回だけ', () => {
     const r1 = run('r1', at(2026, 1, 1), ['a1', 'a2'])
-    const items = similarityCards([
+    const sections = similaritySections([
       { asset_id: 'a2', run: r1 },
       { asset_id: 'a1', run: r1 },
       { asset_id: 'a2', run: r1 },
     ])
-    expect(items.map((i) => (i.kind === 'card' ? [i.key, i.outputIndex] : null))).toEqual([
+    expect(sections).toHaveLength(1)
+    expect(sections[0].heading).toBeNull()
+    expect(sections[0].cards.map((c) => [c.key, c.outputIndex])).toEqual([
       ['r1:a2', 1],
       ['r1:a1', 0],
     ])
+  })
+
+  it('空なら節も無い', () => {
+    expect(similaritySections([])).toEqual([])
   })
 })

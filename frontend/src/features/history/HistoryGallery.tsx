@@ -5,13 +5,14 @@
  * - 行揃え(`rows`): 行の高さを揃えて左から詰める(`layoutJustifiedRows`)。目標の行の高さは
  *   768px 未満で低くする。各タイルの幅と高さは px で指定する。
  * コンテナの幅は ResizeObserver で追う。タイルの中身(ホバーの帯、マスクなど)は共通。
- * 区切りのバナー(日、グループ。ADR-0054)は1マス(縦横比 1:1)を占める。
+ * 節(日、グループ。ADR-0054)ごとに、見出しを全幅で置いてから配置をやり直す(石積みは列を組み直し、
+ * 行揃えは行を組む。節の最後の行は引き伸ばさない)。
  * 自動読み込みの番兵はこの一覧の後ろ(履歴ページ側)にあるので、並べ方に関わらず効く。
  */
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { RunSummary } from '../../api/client'
-import type { HistoryListItem } from './historySections'
-import { HistoryBannerCard } from './HistoryBannerCard'
+import type { HistoryCardItem, HistorySection } from './historySections'
+import { HistorySectionHeading } from './HistorySectionHeading'
 import { assignMasonryColumns, galleryTileAspect, layoutJustifiedRows, masonryColumnCount } from './galleryLayout'
 import { HistoryGalleryTile } from './HistoryGalleryTile'
 import styles from './HistoryGallery.module.css'
@@ -55,34 +56,50 @@ function useContainerWidth(ref: React.RefObject<HTMLElement | null>): { width: n
 }
 
 interface HistoryGalleryProps {
-  items: HistoryListItem<RunSummary>[]
+  sections: HistorySection<RunSummary>[]
   layout: HistoryGalleryLayout
 }
 
-export function HistoryGallery({ items: cards, layout }: HistoryGalleryProps) {
+export function HistoryGallery({ sections, layout }: HistoryGalleryProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const { width, narrow } = useContainerWidth(containerRef)
-  const aspects = useMemo(
-    () =>
-      cards.map((card) =>
-        card.kind === 'banner' ? 1 : galleryTileAspect(card.run, card.run.outputs?.[card.outputIndex]),
-      ),
-    [cards],
-  )
 
   return (
-    <div ref={containerRef}>
-      {layout === 'rows' ? (
-        <JustifiedRows cards={cards} aspects={aspects} width={width} narrow={narrow} />
-      ) : (
-        <MasonryColumns cards={cards} aspects={aspects} width={width} narrow={narrow} />
-      )}
+    <div ref={containerRef} className={styles.sections}>
+      {sections.map((section) => (
+        <section key={section.key} className={styles.section}>
+          {section.heading && <HistorySectionHeading heading={section.heading} />}
+          <GallerySection cards={section.cards} layout={layout} width={width} narrow={narrow} />
+        </section>
+      ))}
     </div>
   )
 }
 
+function GallerySection({
+  cards,
+  layout,
+  width,
+  narrow,
+}: {
+  cards: HistoryCardItem<RunSummary>[]
+  layout: HistoryGalleryLayout
+  width: number
+  narrow: boolean
+}) {
+  const aspects = useMemo(
+    () => cards.map((card) => galleryTileAspect(card.run, card.run.outputs?.[card.outputIndex])),
+    [cards],
+  )
+  return layout === 'rows' ? (
+    <JustifiedRows cards={cards} aspects={aspects} width={width} narrow={narrow} />
+  ) : (
+    <MasonryColumns cards={cards} aspects={aspects} width={width} narrow={narrow} />
+  )
+}
+
 interface LayoutProps {
-  cards: HistoryListItem<RunSummary>[]
+  cards: HistoryCardItem<RunSummary>[]
   aspects: number[]
   width: number
   narrow: boolean
@@ -107,9 +124,6 @@ function MasonryColumns({ cards, aspects, width, narrow }: LayoutProps) {
         <div key={columnIndex} className={styles.column} style={{ gap: GAP_PX }}>
           {indexes.map((index) => {
             const card = cards[index]
-            if (card.kind === 'banner') {
-              return <HistoryBannerCard key={card.key} banner={card} layout="tile" />
-            }
             return (
               <HistoryGalleryTile
                 key={card.key}
@@ -142,11 +156,6 @@ function JustifiedRows({ cards, aspects, width, narrow }: LayoutProps) {
           {row.tiles.map((tile) => {
             const card = cards[tile.index]
             const size = { width: tile.width, height: tile.height }
-            if (card.kind === 'banner') {
-              return (
-                <HistoryBannerCard key={card.key} banner={card} layout="tile" size={size} />
-              )
-            }
             return (
               <HistoryGalleryTile
                 key={card.key}

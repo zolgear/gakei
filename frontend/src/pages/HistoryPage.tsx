@@ -2,7 +2,8 @@
  * 履歴ワークスペース。カード形式の一覧 + 状態フィルタ(クライアント側)+ カーソル読み込み。
  * ツールバーは左に表示の切り替え、右端に並べ替えと状態の絞り込み(アイコンのメニュー)。
  * 並べ替え(ADR-0054)は、日付(Run 単位。`GET /api/runs`。日の区切りを入れる)、グループと
- * 似た順(画像単位。`GET /api/history/assets`。グループは区切りを入れる)。
+ * 似た順(画像単位。`GET /api/history/assets`。グループは区切りを入れる)。区切りは字だけの見出しで、
+ * 節ごとに並べ直す。
  * 形は「詳細」(カードいっぱいに画像を敷き、情報と操作を重ねる)、「石積み」「行揃え」(画像を
  * 元の縦横比で並べるギャラリー)をツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
  * 見えたら自動で読み、失敗時と IntersectionObserver の無い環境のために「さらに読み込む」も残す。
@@ -29,9 +30,9 @@ import {
 import { useAutoLoadMore } from '../features/history/useAutoLoadMore'
 import { HistoryStatusFilterMenu } from '../features/history/HistoryStatusFilterMenu'
 import { HistorySortMenu } from '../features/history/HistorySortMenu'
-import { HistoryBannerCard } from '../features/history/HistoryBannerCard'
+import { HistorySectionHeading } from '../features/history/HistorySectionHeading'
 import { effectiveHistorySort, setHistorySort, useHistorySort } from '../features/history/historySort'
-import { similarityCards, withDayBanners, withGroupBanners } from '../features/history/historySections'
+import { daySections, groupSections, similaritySections } from '../features/history/historySections'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { CardDetailIcon, CardMasonryIcon, CardRowsIcon } from '../components/icons'
 import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
@@ -120,16 +121,16 @@ export function HistoryPage() {
     () => assetsQuery.data?.pages.flatMap((p) => p.items) ?? [],
     [assetsQuery.data],
   )
-  const groupSections = assetsQuery.data?.pages[0]?.groups
+  const groupList = assetsQuery.data?.pages[0]?.groups
   const ungroupedLabel = t.history.page.ungrouped
 
   // 状態の絞り込みは、どの並べ方でも Run の状態で掛ける。
-  const { items, total, filteredCount } = useMemo(() => {
+  const { sections, total, filteredCount } = useMemo(() => {
     if (!assetSort) {
       const filtered = filterRuns(allRuns, statusFilter)
-      // 出力が複数の Run は出力ごとのカードに展開し、日が変わる位置に日のバナーを置く。
+      // 出力が複数の Run は出力ごとのカードに展開し、日が変わる位置で節に分ける。
       return {
-        items: withDayBanners(expandHistoryCards(filtered), intlLocale(locale)),
+        sections: daySections(expandHistoryCards(filtered), intlLocale(locale), new Date().getFullYear()),
         total: allRuns.length,
         filteredCount: filtered.length,
       }
@@ -137,14 +138,14 @@ export function HistoryPage() {
     const allowed = new Set(filterRuns(assetItems.map((item) => item.run), statusFilter).map((run) => run.id))
     const filtered = assetItems.filter((item) => allowed.has(item.run.id))
     return {
-      items:
+      sections:
         assetSort === 'group'
-          ? withGroupBanners(filtered, groupSections, ungroupedLabel)
-          : similarityCards(filtered),
+          ? groupSections(filtered, groupList, ungroupedLabel)
+          : similaritySections(filtered),
       total: assetItems.length,
       filteredCount: filtered.length,
     }
-  }, [assetSort, allRuns, assetItems, statusFilter, groupSections, ungroupedLabel, locale])
+  }, [assetSort, allRuns, assetItems, statusFilter, groupList, ungroupedLabel, locale])
 
   const placeholder = historyPlaceholder({
     isLoading: activeQuery.isLoading,
@@ -206,16 +207,19 @@ export function HistoryPage() {
         {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
 
         {cardStyle !== 'detail' ? (
-          <HistoryGallery items={items} layout={cardStyle === 'rows' ? 'rows' : 'masonry'} />
+          <HistoryGallery sections={sections} layout={cardStyle === 'rows' ? 'rows' : 'masonry'} />
         ) : (
-          <div className={styles.grid}>
-            {items.map((item) =>
-              item.kind === 'banner' ? (
-                <HistoryBannerCard key={item.key} banner={item} layout="card" />
-              ) : (
-                <HistoryCard key={item.key} run={item.run} variant="overlay" outputIndex={item.outputIndex} />
-              ),
-            )}
+          <div className={styles.sections}>
+            {sections.map((section) => (
+              <section key={section.key}>
+                {section.heading && <HistorySectionHeading heading={section.heading} />}
+                <div className={styles.grid}>
+                  {section.cards.map((card) => (
+                    <HistoryCard key={card.key} run={card.run} variant="overlay" outputIndex={card.outputIndex} />
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
         )}
 

@@ -137,7 +137,7 @@
       "sortGroup": "Group",
       "sortEmbedding": "Similar",
       "ungrouped": "No group",
-      "bannerCount": "{count} images"
+      "sectionCount": "{count} images"
     }
   },
   "runDetail": {
