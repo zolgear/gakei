@@ -29,6 +29,7 @@ export const GAKEI_STORAGE_KEYS = {
   'gakei:stock-group-open': 'ストックの各グループの開閉',
   'gakei:stock-groups-open': '(旧)ストックのグループの開閉',
   'gakei:stock-show-sketch-mask': 'スケッチとマスクをストックに出すか',
+  'gakei:history-card-style': '履歴のカードの形(詳細 / 画像)',
   'gakei:region-assist-open': 'プロンプトの上の、領域と検出の候補のプレビューを開いているか',
   'gakei:prompt-tag-completion': 'プロンプトのタグ補完(SD WebUI と ComfyUI のときだけ / 常に / 使わない)',
   'gakei:tag-translations': 'タグの日本語訳を表示するか',

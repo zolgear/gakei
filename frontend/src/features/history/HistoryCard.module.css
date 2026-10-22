@@ -374,3 +374,27 @@
     display: none;
   }
 }
+
+/* 「画像」の形(HistoryTile)の小さいマス。エラーなどの文字を詰める。 */
+.mediaLink[data-compact='true'] .errorArea {
+  padding: 8px;
+  gap: 4px;
+}
+
+.mediaLink[data-compact='true'] .errorCode {
+  font-size: 11px;
+}
+
+.mediaLink[data-compact='true'] .errorMessage {
+  font-size: 10.5px;
+  -webkit-line-clamp: 2;
+}
+
+.mediaLink[data-compact='true'] .pendingText {
+  font-size: 10.5px;
+}
+
+.mediaLink[data-compact='true'] .countBadge {
+  right: 6px;
+  top: 6px;
+}

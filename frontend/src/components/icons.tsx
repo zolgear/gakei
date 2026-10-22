@@ -170,3 +170,25 @@ export function EyeOffIcon(props: IconProps) {
     </Icon>
   )
 }
+
+/** 上に四角、下に2本の行: 履歴のカードを「詳細」(画像と文字の行)の形で並べる。 */
+export function CardDetailIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2.5" y="2" width="11" height="7" rx="1" />
+      <path d="M2.5 11.5h11M2.5 14h7" />
+    </Icon>
+  )
+}
+
+/** 2x2 のマス: 履歴のカードを「画像」だけの形で並べる。 */
+export function CardImageGridIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="2" width="5" height="5" rx="1" />
+      <rect x="9" y="2" width="5" height="5" rx="1" />
+      <rect x="2" y="9" width="5" height="5" rx="1" />
+      <rect x="9" y="9" width="5" height="5" rx="1" />
+    </Icon>
+  )
+}

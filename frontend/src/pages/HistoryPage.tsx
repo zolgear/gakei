@@ -1,5 +1,8 @@
 /**
  * 履歴ワークスペース。カード形式の一覧 + 状態フィルタ(クライアント側)+ カーソル読み込み。
+ * カードは「詳細」(HistoryCard)と「画像」(HistoryTile。画像だけを詰めて並べる)の形を
+ * ツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
+ * 見えたら自動で読み、失敗時と IntersectionObserver の無い環境のために「さらに読み込む」も残す。
  * 操作(Generate/Edit)の絞り込みは ADR-0009(UI で区別しない)により無い。
  *
  * スクロール位置と絞り込みは、戻る/進む(POP)で入ってきたときだけ復元する
@@ -7,12 +10,20 @@
  * 実際にスクロールしているのは window ではなく `.scrollArea`(このページ自身が持つ
  * 内側のスクロールコンテナ)なので、復元もそこに対して行う。
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigationType } from 'react-router'
 import { listRuns } from '../api/client'
 import { historyPlaceholder } from '../features/history/historyPlaceholder'
 import { HistoryCard } from '../features/history/HistoryCard'
+import { HistoryTile } from '../features/history/HistoryTile'
+import {
+  setHistoryCardStyle,
+  useHistoryCardStyle,
+  type HistoryCardStyle,
+} from '../features/history/historyCardStyle'
+import { useAutoLoadMore } from '../features/history/useAutoLoadMore'
+import { CardDetailIcon, CardImageGridIcon } from '../components/icons'
 import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
 import { hasNewlySucceededRun } from '../features/run-status/assetInvalidation'
 import { hasActiveRuns, countQueue } from '../shell/queueStatus'
@@ -39,7 +50,13 @@ export function HistoryPage() {
   const navigationType = useNavigationType()
   const queryClient = useQueryClient()
   const scrollAreaRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
   useScrollRestoration(scrollAreaRef, 'history')
+  const cardStyle = useHistoryCardStyle()
+  const CARD_STYLES: { id: HistoryCardStyle; label: string; icon: ReactNode }[] = [
+    { id: 'detail', label: t.history.page.cardStyleDetail, icon: <CardDetailIcon size={16} /> },
+    { id: 'image', label: t.history.page.cardStyleImage, icon: <CardImageGridIcon size={16} /> },
+  ]
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
     if (navigationType === 'POP') {
@@ -64,6 +81,11 @@ export function HistoryPage() {
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
+
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = runsQuery
+  // 末尾の番兵が見えたら続きを読む。状態の絞り込みで1ページ分が全部除かれても番兵は見えたままなので
+  // 続けて読む。失敗したら自動では読み直さず、下のボタンで読む。
+  useAutoLoadMore(scrollAreaRef, sentinelRef, { hasNextPage, isFetchingNextPage, isFetchNextPageError }, fetchNextPage)
 
   const allRuns = useMemo(() => runsQuery.data?.pages.flatMap((p) => p.items) ?? [], [runsQuery.data])
   const filtered = useMemo(() => filterRuns(allRuns, statusFilter), [allRuns, statusFilter])
@@ -108,6 +130,23 @@ export function HistoryPage() {
             </button>
           ))}
         </div>
+
+        <div role="group" aria-label={t.history.page.cardStyle} className={styles.cardStyleGroup}>
+          {CARD_STYLES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={cardStyle === option.id}
+              aria-label={option.label}
+              title={option.label}
+              className={`${styles.statusTab} ${styles.cardStyleTab}`}
+              data-active={cardStyle === option.id}
+              onClick={() => setHistoryCardStyle(option.id)}
+            >
+              {option.icon}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div ref={scrollAreaRef} className={styles.scrollArea}>
@@ -115,20 +154,22 @@ export function HistoryPage() {
         {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
         {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
 
-        <div className={styles.grid}>
-          {filtered.map((run) => (
-            <HistoryCard key={run.id} run={run} />
-          ))}
+        <div className={styles.grid} data-card-style={cardStyle}>
+          {filtered.map((run) =>
+            cardStyle === 'image' ? <HistoryTile key={run.id} run={run} /> : <HistoryCard key={run.id} run={run} />,
+          )}
         </div>
 
-        {runsQuery.hasNextPage && (
+        <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
+
+        {hasNextPage && (
           <button
             type="button"
             className={styles.loadMore}
-            onClick={() => runsQuery.fetchNextPage()}
-            disabled={runsQuery.isFetchingNextPage}
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
           >
-            {runsQuery.isFetchingNextPage ? t.history.page.loading : t.history.page.loadMore}
+            {isFetchingNextPage ? t.history.page.loading : t.history.page.loadMore}
           </button>
         )}
       </div>

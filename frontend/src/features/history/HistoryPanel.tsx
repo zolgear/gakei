@@ -4,18 +4,17 @@
  * それらは履歴ページ本体で行う)。ADR-0009 1章「履歴と検索のパネル」
  * (2026-09-26 追加)。
  *
- * 追加読み込みはストックパネルと同じパターン(末尾の番兵を IntersectionObserver で監視)。
+ * 追加読み込みは履歴ページと同じ `useAutoLoadMore`(末尾の番兵を IntersectionObserver で監視)。
  */
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { listRuns } from '../../api/client'
 import { RunListRow } from './RunListRow'
-import { shouldAutoFetchNextPage } from '../stock/sentinel'
+import { useAutoLoadMore } from './useAutoLoadMore'
 import { useI18n } from '../../i18n'
 import styles from './HistoryPanel.module.css'
 
 const supportsIntersectionObserver = typeof IntersectionObserver !== 'undefined'
-const SENTINEL_ROOT_MARGIN = '0px 0px 300px 0px'
 
 export function HistoryPanel() {
   const { t } = useI18n()
@@ -32,31 +31,7 @@ export function HistoryPanel() {
   const runs = runsQuery.data?.pages.flatMap((page) => page.items) ?? []
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = runsQuery
 
-  useEffect(() => {
-    if (!supportsIntersectionObserver) return
-    if (!hasNextPage || isFetchingNextPage || isFetchNextPageError) return
-    const sentinel = sentinelRef.current
-    const root = panelRef.current
-    if (!sentinel || !root) return
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (
-          shouldAutoFetchNextPage({
-            isIntersecting: entry?.isIntersecting ?? false,
-            hasNextPage,
-            isFetchingNextPage,
-            isFetchNextPageError,
-          })
-        ) {
-          fetchNextPage()
-        }
-      },
-      { root, rootMargin: SENTINEL_ROOT_MARGIN },
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage])
+  useAutoLoadMore(panelRef, sentinelRef, { hasNextPage, isFetchingNextPage, isFetchNextPageError }, fetchNextPage)
 
   const showEmpty = runs.length === 0 && !runsQuery.isLoading && !runsQuery.isError
   const showLoadError = runs.length === 0 && runsQuery.isError

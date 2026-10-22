@@ -16,7 +16,6 @@ import { useResourcePanel } from '../../context/useResourcePanel'
 import { useAddToInputs } from '../run-form/useAddToInputs'
 import { AddToInputsDialog } from '../run-form/AddToInputsDialog'
 import { paramsForRerun } from '../run-form/paramsBuilder'
-import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { inputsFromRunInputs } from '../run-form/editInputs'
 import { restoreRunRegions, stripAppendedText } from '../regions/regions'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -32,6 +31,7 @@ import { buildParamChips, formatTokenCount } from './historyChips'
 import { canDeleteRun } from './runDeletion'
 import { buildRunDeleteWarning } from './runDeleteWarning'
 import { resolveHistoryCardNavigation } from './historyNavigation'
+import { HistoryCardMedia } from './HistoryCardMedia'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './HistoryCard.module.css'
@@ -131,12 +131,6 @@ export function HistoryCard({ run }: HistoryCardProps) {
     firstOutputAssetId: firstOutput?.asset_id ?? null,
     primaryParentAssetId: parentAssetId ?? null,
   })
-  const isPending = run.status === 'running' || run.status === 'queued'
-  const mediaAriaLabel = firstOutput
-    ? t.history.card.showImage
-    : isPending
-      ? t.history.card.watchProgress
-      : t.history.card.viewDetail
 
   const cancelMutation = useMutation({
     mutationFn: () => cancelRun(run.id),
@@ -242,61 +236,7 @@ export function HistoryCard({ run }: HistoryCardProps) {
       </div>
 
       <div className={styles.media}>
-        <Link
-          to={nav.mediaHref}
-          className={styles.mediaLink}
-          aria-label={mediaAriaLabel}
-        >
-          {run.status === 'succeeded' && firstOutput && (
-            <>
-              <AssetThumb
-                assetId={firstOutput.asset_id}
-                rating={firstOutput.content_rating}
-                withheld={firstOutput.content_withheld}
-                badge
-                // 左下は親のサムネイル、右上は出力の枚数なので左上に置く。
-                badgePosition="top-left"
-                className={`${styles.mediaImage} checkerboard`}
-                style={focalStyle(firstOutput.focal_point)}
-                alt=""
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(GAKEI_ASSET_ID_DATA_TYPE, firstOutput.asset_id)
-                  e.dataTransfer.effectAllowed = 'copy'
-                }}
-              />
-              {outputs.length > 1 && (
-                <span className={styles.countBadge}>{fmt(t.history.card.outputCount, { count: outputs.length })}</span>
-              )}
-            </>
-          )}
-
-          {run.status === 'failed' && (
-            <div className={styles.errorArea}>
-              <span className={styles.errorCode}>{run.error_code ?? 'error'}</span>
-              {run.error_message && <span className={styles.errorMessage}>{run.error_message}</span>}
-            </div>
-          )}
-
-          {(run.status === 'running' || run.status === 'queued') && (
-            <div className={styles.pendingArea}>
-              <span className={styles.pendingText}>
-                {run.status === 'running' ? (elapsed ?? t.history.card.running) : t.history.card.queued}
-              </span>
-              {run.status === 'running' && (
-                <div className={styles.progressTrack}>
-                  <div className={styles.progressBar} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {run.status === 'canceled' && (
-            <div className={styles.pendingArea}>
-              <span className={styles.pendingText}>{t.history.card.canceled}</span>
-            </div>
-          )}
-        </Link>
+        <HistoryCardMedia run={run} href={nav.mediaHref} />
 
         {parentOverlay}
       </div>

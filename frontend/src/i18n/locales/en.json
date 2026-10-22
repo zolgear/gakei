@@ -130,7 +130,10 @@
       "loading": "Loading...",
       "loadError": "Failed to load history.",
       "noMatch": "No matching runs.",
-      "loadMore": "Load more"
+      "loadMore": "Load more",
+      "cardStyle": "Card style",
+      "cardStyleDetail": "Details",
+      "cardStyleImage": "Images"
     }
   },
   "runDetail": {

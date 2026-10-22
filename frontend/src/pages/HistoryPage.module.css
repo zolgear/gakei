@@ -57,6 +57,26 @@
   color: var(--color-text);
 }
 
+.cardStyleGroup {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cardStyleTab {
+  min-width: 40px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cardStyleTab:hover:not([data-active='true']) {
+  color: var(--color-text);
+}
+
 .scrollArea {
   flex-grow: 1;
   min-height: 0;
@@ -77,6 +97,16 @@
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
   align-content: start;
+}
+
+.grid[data-card-style='image'] {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+}
+
+/* 自動読み込みの番兵(useAutoLoadMore)。見えるかだけを使う。 */
+.sentinel {
+  height: 1px;
 }
 
 .loadMore {
@@ -102,6 +132,15 @@
 
   .grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+
+  .grid[data-card-style='image'] {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 4px;
+  }
+
+  .cardStyleTab {
+    min-width: 44px;
   }
 
   .statusTab {
