@@ -37,6 +37,11 @@
   overflow-wrap: break-word;
 }
 
+/* 詳細のカードは縦に余裕があるので、長いグループ名も途中で切らずに出す。 */
+.banner[data-layout='card'] .title {
+  -webkit-line-clamp: 5;
+}
+
 /* ギャラリーの1マスでは、マスの幅に合わせて文字を縮める。 */
 .banner[data-layout='tile'] .title {
   font-size: clamp(12px, 12cqi, 40px);
@@ -50,6 +55,6 @@
 
 @media (max-width: 767px) {
   .title {
-    font-size: 28px;
+    font-size: 24px;
   }
 }
