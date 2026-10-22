@@ -134,7 +134,13 @@
       "cardStyle": "Card style",
       "cardStyleDetail": "Details",
       "cardStyleMasonry": "Masonry",
-      "cardStyleRows": "Rows"
+      "cardStyleRows": "Rows",
+      "sort": "Sort",
+      "sortDate": "Date",
+      "sortGroup": "Group",
+      "sortEmbedding": "Similar",
+      "ungrouped": "No group",
+      "bannerCount": "{count} images"
     }
   },
   "runDetail": {

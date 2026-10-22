@@ -213,3 +213,12 @@ export function FilterIcon(props: IconProps) {
     </Icon>
   )
 }
+
+/** 長さの違う横線と下向きの矢印: 一覧の並べ替え。 */
+export function SortIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 4h7M2.5 8h5M2.5 12h3M12.5 3v10M10.5 11l2 2 2-2" />
+    </Icon>
+  )
+}

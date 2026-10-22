@@ -613,6 +613,17 @@ export function listRuns(
   return request(`/api/runs${toQuery(params)}`)
 }
 
+export type HistoryAssetItem = components['schemas']['HistoryAssetItem']
+export type HistoryAssetListResponse = components['schemas']['HistoryAssetListResponse']
+export type HistoryGroupSection = components['schemas']['HistoryGroupSection']
+
+/** 画像単位の履歴(グループ・似た画像の順。ADR-0054)。 */
+export function listHistoryAssets(
+  params: operations['list_history_assets']['parameters']['query'],
+): Promise<HistoryAssetListResponse> {
+  return request(`/api/history/assets${toQuery(params)}`)
+}
+
 export function getRun(runId: string): Promise<RunDetail> {
   return request(`/api/runs/${runId}`)
 }

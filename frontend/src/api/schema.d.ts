@@ -1079,6 +1079,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/history/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List History Assets
+         * @description 画像(生成された Asset)単位の履歴。画像の無い Run は出さない。
+         */
+        get: operations["list_history_assets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/events": {
         parameters: {
             query?: never;
@@ -5234,6 +5254,41 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /**
+         * HistoryAssetItem
+         * @description 画像単位の履歴の1項目(ADR-0054 4章)。表示は日付の並びと同じく `run` と出力で描く。
+         */
+        HistoryAssetItem: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Group Id */
+            group_id?: string | null;
+            run: components["schemas"]["RunSummary"];
+        };
+        /** HistoryAssetListResponse */
+        HistoryAssetListResponse: {
+            /** Items */
+            items: components["schemas"]["HistoryAssetItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Groups */
+            groups?: components["schemas"]["HistoryGroupSection"][] | null;
+        };
+        /**
+         * HistoryGroupSection
+         * @description グループの並びの節(バナーの名前と件数)。`id = null` は「グループなし」。
+         */
+        HistoryGroupSection: {
+            /** Id */
+            id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Count */
+            count: number;
         };
         /**
          * IncompatiblePair
@@ -10765,6 +10820,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunCancelResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_history_assets: {
+        parameters: {
+            query: {
+                /** @description group: グループごと / embedding: 似た画像の順 */
+                sort: "group" | "embedding";
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryAssetListResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
                 };
             };
             /** @description Validation Error */

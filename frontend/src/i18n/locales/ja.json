@@ -134,7 +134,13 @@
       "cardStyle": "カードの形",
       "cardStyleDetail": "詳細",
       "cardStyleMasonry": "石積み",
-      "cardStyleRows": "行揃え"
+      "cardStyleRows": "行揃え",
+      "sort": "並べ替え",
+      "sortDate": "日付",
+      "sortGroup": "グループ",
+      "sortEmbedding": "似た順",
+      "ungrouped": "グループなし",
+      "bannerCount": "{count} 枚"
     }
   },
   "runDetail": {

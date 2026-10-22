@@ -13,6 +13,7 @@ import { Link } from 'react-router'
 import type { RunSummary } from '../../api/client'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { formatPixelSize } from './galleryLayout'
+import { formatMonthDay } from './historySections'
 import { HistoryCardMedia } from './HistoryCardMedia'
 import { useHistoryRunActions } from './useHistoryRunActions'
 import styles from './HistoryCard.module.css'
@@ -24,9 +25,11 @@ interface HistoryGalleryTileProps {
   aspect: number
   /** 行揃え(`layoutJustifiedRows`)で決まった大きさ(px)。無ければ幅いっぱいに縦横比で出す。 */
   size?: { width: number; height: number }
+  /** 右上に月日を出すか(日付の並びのときだけ。ADR-0054 5章)。 */
+  showDate?: boolean
 }
 
-export function HistoryGalleryTile({ run, outputIndex, aspect, size }: HistoryGalleryTileProps) {
+export function HistoryGalleryTile({ run, outputIndex, aspect, size, showDate = false }: HistoryGalleryTileProps) {
   const outputs = run.outputs ?? []
   const shownOutput = outputs[outputIndex] ?? outputs[0]
   const nav = resolveHistoryCardNavigation({
@@ -49,6 +52,7 @@ export function HistoryGalleryTile({ run, outputIndex, aspect, size }: HistoryGa
       data-highlight={run.status === 'running'}
     >
       <HistoryCardMedia run={run} output={shownOutput} href={nav.mediaHref} variant="gallery" />
+      {showDate && <span className={styles.galleryDate}>{formatMonthDay(run.queued_at)}</span>}
       <div className={styles.galleryHover}>
         {title && (
           <Link to={nav.runHref} className={styles.galleryTitle} title={title}>

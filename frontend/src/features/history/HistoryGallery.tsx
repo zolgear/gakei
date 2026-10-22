@@ -5,11 +5,13 @@
  * - 行揃え(`rows`): 行の高さを揃えて左から詰める(`layoutJustifiedRows`)。目標の行の高さは
  *   768px 未満で低くする。各タイルの幅と高さは px で指定する。
  * コンテナの幅は ResizeObserver で追う。タイルの中身(ホバーの帯、マスクなど)は共通。
+ * 区切りのバナー(年、グループ。ADR-0054)は1マス(縦横比 1:1)を占める。
  * 自動読み込みの番兵はこの一覧の後ろ(履歴ページ側)にあるので、並べ方に関わらず効く。
  */
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { RunSummary } from '../../api/client'
-import type { HistoryCardEntry } from './historyCardStyle'
+import type { HistoryListItem } from './historySections'
+import { HistoryBannerCard } from './HistoryBannerCard'
 import { assignMasonryColumns, galleryTileAspect, layoutJustifiedRows, masonryColumnCount } from './galleryLayout'
 import { HistoryGalleryTile } from './HistoryGalleryTile'
 import styles from './HistoryGallery.module.css'
@@ -53,15 +55,18 @@ function useContainerWidth(ref: React.RefObject<HTMLElement | null>): { width: n
 }
 
 interface HistoryGalleryProps {
-  cards: HistoryCardEntry<RunSummary>[]
+  items: HistoryListItem<RunSummary>[]
   layout: HistoryGalleryLayout
 }
 
-export function HistoryGallery({ cards, layout }: HistoryGalleryProps) {
+export function HistoryGallery({ items: cards, layout }: HistoryGalleryProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const { width, narrow } = useContainerWidth(containerRef)
   const aspects = useMemo(
-    () => cards.map((card) => galleryTileAspect(card.run, card.run.outputs?.[card.outputIndex])),
+    () =>
+      cards.map((card) =>
+        card.kind === 'banner' ? 1 : galleryTileAspect(card.run, card.run.outputs?.[card.outputIndex]),
+      ),
     [cards],
   )
 
@@ -77,7 +82,7 @@ export function HistoryGallery({ cards, layout }: HistoryGalleryProps) {
 }
 
 interface LayoutProps {
-  cards: HistoryCardEntry<RunSummary>[]
+  cards: HistoryListItem<RunSummary>[]
   aspects: number[]
   width: number
   narrow: boolean
@@ -102,12 +107,16 @@ function MasonryColumns({ cards, aspects, width, narrow }: LayoutProps) {
         <div key={columnIndex} className={styles.column} style={{ gap: GAP_PX }}>
           {indexes.map((index) => {
             const card = cards[index]
+            if (card.kind === 'banner') {
+              return <HistoryBannerCard key={card.key} title={card.title} count={card.count} layout="tile" />
+            }
             return (
               <HistoryGalleryTile
                 key={card.key}
                 run={card.run}
                 outputIndex={card.outputIndex}
                 aspect={aspects[index]}
+                showDate={card.showDate}
               />
             )
           })}
@@ -133,13 +142,20 @@ function JustifiedRows({ cards, aspects, width, narrow }: LayoutProps) {
         <div key={cards[row.tiles[0].index].key} className={styles.row} style={{ gap: GAP_PX }}>
           {row.tiles.map((tile) => {
             const card = cards[tile.index]
+            const size = { width: tile.width, height: tile.height }
+            if (card.kind === 'banner') {
+              return (
+                <HistoryBannerCard key={card.key} title={card.title} count={card.count} layout="tile" size={size} />
+              )
+            }
             return (
               <HistoryGalleryTile
                 key={card.key}
                 run={card.run}
                 outputIndex={card.outputIndex}
                 aspect={aspects[tile.index]}
-                size={{ width: tile.width, height: tile.height }}
+                size={size}
+                showDate={card.showDate}
               />
             )
           })}
