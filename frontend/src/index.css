@@ -28,6 +28,12 @@
   --color-danger-bg: rgba(240, 119, 108, 0.12);
   --color-warning: #e3b341;
 
+  /* 種別のリボン(タイルの左下の三角の印)。生成(アクセント)・Edit(--color-edit)・レーティングの段階
+     (琥珀〜赤〜紫紅)と取り違えない色にする。取り込み(未検証)は自分の画像と分けて沈んだ色。 */
+  --color-kind-upload: #4a7fd4;
+  --color-kind-handmade: #8a6ad8;
+  --color-kind-imported: #5f6875;
+
   --radius-sm: 4px;
   --radius: 6px;
   --radius-lg: 8px;

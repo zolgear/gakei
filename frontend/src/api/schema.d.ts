@@ -3109,6 +3109,11 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Imported
+             * @default false
+             */
+            imported: boolean;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -3348,6 +3353,11 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Imported
+             * @default false
+             */
+            imported: boolean;
         };
         /**
          * AssetTagAddRequest
@@ -3423,6 +3433,11 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Imported
+             * @default false
+             */
+            imported: boolean;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -4860,6 +4875,11 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Imported
+             * @default false
+             */
+            imported: boolean;
             /** Max Score */
             max_score: number;
             /** Hash Missing */
@@ -8025,6 +8045,11 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Imported
+             * @default false
+             */
+            imported: boolean;
             /** Produced By Run Id */
             produced_by_run_id: string | null;
             /**
@@ -8219,6 +8244,11 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Imported
+             * @default false
+             */
+            imported: boolean;
             /** Score */
             score: number;
         };

@@ -119,6 +119,18 @@
   pointer-events: none;
 }
 
+/* 左下に種別のリボンがあるタイル: 操作の1行の左にリボンの幅だけ空ける。操作が多くて足りないときは
+   ボタンを少し縮め(タップの大きさは 26px まで)、それでも足りなければ操作のほうを上に重ねる
+   (リボンは操作より下の層)。 */
+.tile[data-ribbon='true'] .actions {
+  padding-left: 20px;
+}
+
+.tile[data-ribbon='true'] .actionButton {
+  flex-shrink: 1;
+  min-width: 26px;
+}
+
 .actionButton {
   flex: none;
   width: 28px;

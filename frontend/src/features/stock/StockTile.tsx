@@ -16,12 +16,16 @@
  *   あるときだけ、ホバーできない端末では常に線で出す。画像ボタンの外(兄弟の要素)なので、押してもタイルは
  *   開かずドラッグも始まらない。選択モードの間はタイルの選択を優先して出さない。
  *   選択モードの印は右下(選択モードの間は操作を出さないので重ならない)。
+ * - 左下の隅は種別のリボン(`AssetKindRibbon`。生成した画像には出ない)。下端の操作の1行より下の層に置き、
+ *   リボンがあるときは操作の1行の左にリボンの幅だけ空ける(右寄せの操作が多くて狭いときに重ねない)。
  */
 import type { AssetSummary } from '../../api/client'
 import { AddToInputIcon, CrossIcon, HeartIcon, TrashIcon } from '../../components/icons'
 import { useI18n } from '../../i18n'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { AssetThumb } from '../content-rating/AssetThumb'
+import { AssetKindRibbon } from '../asset-kind/AssetKindRibbon'
+import { kindRibbon } from '../asset-kind/kindRibbon'
 import { focalStyle } from '../../lib/focalPoint'
 import { stockTileActions, stockTilePixelSize } from './stockTileActions'
 import styles from './StockTile.module.css'
@@ -68,9 +72,11 @@ export function StockTile({
   })
   const pixelSize = stockTilePixelSize(asset.width, asset.height)
   const favorite = asset.favorite === true
+  const imported = asset.imported === true
+  const hasRibbon = kindRibbon(asset.kind, imported) !== null
 
   return (
-    <div className={styles.tile} data-selected={selectionMode && isSelected}>
+    <div className={styles.tile} data-selected={selectionMode && isSelected} data-ribbon={hasRibbon}>
       <button
         type="button"
         className={styles.tileImageButton}
@@ -105,6 +111,8 @@ export function StockTile({
           </span>
         )}
       </button>
+
+      <AssetKindRibbon kind={asset.kind} imported={imported} />
 
       {!selectionMode && (
         <button

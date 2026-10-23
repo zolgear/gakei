@@ -21,6 +21,7 @@ import { VIEWER_SIMILAR_LIMIT, similarAssetsQueryKey } from '../embeddings/simil
 import { buildSimilarSearchPath } from '../search/searchQuerySync'
 import { loadSimilarOpen, saveSimilarOpen } from './similarOpenStorage'
 import { AssetThumb } from '../content-rating/AssetThumb'
+import { AssetKindRibbon } from '../asset-kind/AssetKindRibbon'
 import styles from './SimilarAssetsSection.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -107,6 +108,7 @@ export function SimilarAssetsSection({
                           draggable={false}
                           className={`${styles.thumb} checkerboard`}
                         />
+                        <AssetKindRibbon kind={hit.kind} imported={hit.imported} />
                       </Link>
                     </li>
                   )

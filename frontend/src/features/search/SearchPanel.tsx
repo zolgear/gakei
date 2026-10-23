@@ -52,6 +52,7 @@ import { promptRunCards } from './promptSearchResults'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
+import { AssetKindRibbon } from '../asset-kind/AssetKindRibbon'
 import { thumbRating } from '../content-rating/contentRating'
 import styles from './SearchPanel.module.css'
 import { focalStyle } from '../../lib/focalPoint'
@@ -312,11 +313,13 @@ export function SearchPanel() {
                         rating={thumbRating(hit)}
                         withheld={hit.content_withheld}
                         badge
+                        badgePosition="bottom-right"
                         className={`${styles.assetThumb} checkerboard`}
                         style={focalStyle(hit.focal_point)}
                         alt=""
                         draggable={false}
                       />
+                      <AssetKindRibbon kind={hit.kind} imported={hit.imported} />
                     </div>
                     {hit.title && (
                       <span className={styles.assetTitle} title={hit.title}>
@@ -394,11 +397,13 @@ export function SearchPanel() {
                         rating={thumbRating(hit)}
                         withheld={hit.content_withheld}
                         badge
+                        badgePosition="bottom-right"
                         className={`${styles.assetThumb} checkerboard`}
                         style={focalStyle(hit.focal_point)}
                         alt=""
                         draggable={false}
                       />
+                      <AssetKindRibbon kind={hit.kind} imported={hit.imported} />
                       {hit.prompt_source === 'embedded' && (
                         <span className={styles.embeddedBadge} title={t.search.embeddedTitle}>
                           {t.search.embeddedBadge}

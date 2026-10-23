@@ -33,6 +33,7 @@ from app.domain import (
     derivatives,
     embedding_settings,
     focal_points,
+    imported_assets,
     ingest_hooks,
 )
 from app.domain import annotations as annotations_domain
@@ -116,6 +117,7 @@ def _to_summary(
     focal_point: FocalPoint | None = None,
     content_rating: str | None = None,
     favorite: bool = False,
+    imported: bool = False,
 ) -> AssetSummary:
     return AssetSummary(
         id=asset.id,
@@ -129,6 +131,7 @@ def _to_summary(
         focal_point=focal_point,
         content_rating=content_rating,  # type: ignore[arg-type]
         favorite=favorite,
+        imported=imported,
         **content_withholding.summary_fields(asset),
     )
 
@@ -229,6 +232,7 @@ def _to_detail(
         **content_withholding.summary_fields(asset),
         **content_withholding.withheld_fields(db, asset),
         favorite=favorites_domain.is_favorite(db, user, asset.id),
+        imported=imported_assets.is_imported(asset, produced_by_run),
     )
 
 
@@ -389,6 +393,7 @@ def list_assets(
     focals = focal_points.bulk_get(db, [a.id for a in rows])
     ratings = content_rating_domain.bulk_levels(db, [a.id for a in rows])
     favorite_ids = favorites_domain.bulk_favorite_ids(db, user, [a.id for a in rows])
+    imported_ids = imported_assets.bulk_imported_ids(db, rows)
     return AssetListResponse(
         items=[
             _to_summary(
@@ -397,6 +402,7 @@ def list_assets(
                 focals.get(a.id),
                 ratings.get(a.id),
                 favorite=a.id in favorite_ids,
+                imported=a.id in imported_ids,
             )
             for a in rows
         ],

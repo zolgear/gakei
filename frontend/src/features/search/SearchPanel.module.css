@@ -220,6 +220,9 @@
 
 .thumbWrap {
   position: relative;
+  /* サムネイルが低い(64px)ので、種別のリボンを小さくし、角丸を画像に合わせる。 */
+  --kind-ribbon-size: 18px;
+  --kind-ribbon-radius: var(--radius-sm);
 }
 
 .assetThumb {

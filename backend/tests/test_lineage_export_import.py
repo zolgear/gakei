@@ -719,3 +719,21 @@ def test_export_redacts_comfyui_secret_params(client: TestClient) -> None:
         run = db.get(Run, uuid.UUID(r0["id"]))
         assert run is not None
         assert run.params["comfyui_prompt"]["12"]["inputs"]["api_key"] == "plain-secret"
+
+
+def test_imported_flag_marks_generated_assets_of_imported_runs(client: TestClient) -> None:
+    """一覧と詳細の `imported`(タイルの種別のリボン)。取り込んだ Run が作った生成画像だけが
+    true で、元の生成画像と、取り込みで入ったアップロードは false。"""
+    upload = _upload(client, make_png_bytes(color=(10, 200, 30)))
+    edited = _run(client, "edit", [upload])
+    zip_bytes = _export(client, _out(edited), "ancestors")
+    result = _import_ok(client, zip_bytes)
+    imported_root = result["root_asset_id"]
+    assert imported_root != _out(edited)
+
+    items = {a["id"]: a for a in client.get("/api/assets").json()["items"]}
+    assert items[imported_root]["imported"] is True
+    assert items[_out(edited)]["imported"] is False
+    assert items[upload]["imported"] is False
+    assert client.get(f"/api/assets/{imported_root}").json()["imported"] is True
+    assert client.get(f"/api/assets/{_out(edited)}").json()["imported"] is False

@@ -1,0 +1,40 @@
+/* 種別のリボン。左下の隅に置く直角三角形(斜辺は右上から左下へ)。色は `data-tone` ごと
+   (`index.css` の `--color-kind-*`)。 */
+.ribbon {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--kind-ribbon-size, 24px);
+  height: var(--kind-ribbon-size, 24px);
+  border-bottom-left-radius: var(--kind-ribbon-radius, var(--radius));
+  clip-path: polygon(0 100%, 0 0, 100% 100%);
+  background: var(--kind-ribbon-color);
+  color: #fff;
+  pointer-events: none;
+}
+
+.ribbon[data-tone='upload'] {
+  --kind-ribbon-color: var(--color-kind-upload);
+}
+
+.ribbon[data-tone='handmade'] {
+  --kind-ribbon-color: var(--color-kind-handmade);
+}
+
+.ribbon[data-tone='imported'] {
+  --kind-ribbon-color: var(--color-kind-imported);
+}
+
+/* アイコンは三角の中の左下寄り(重心のあたり)に置く。 */
+.icon {
+  position: absolute;
+  left: calc(var(--kind-ribbon-size, 24px) * 0.1);
+  bottom: calc(var(--kind-ribbon-size, 24px) * 0.1);
+  display: flex;
+  line-height: 0;
+}
+
+/* 小さく描くので線を太くする(アイコンの既定は 1.5)。 */
+.icon svg {
+  stroke-width: 2.2;
+}

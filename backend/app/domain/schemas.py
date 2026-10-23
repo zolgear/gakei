@@ -413,6 +413,9 @@ class AssetSummary(BaseModel):
     # 見る人のお気に入りか(ADR-0055)。埋めるのはストックの一覧(`GET /api/assets`)だけで、
     # 検索の結果などほかの応答では常に false。
     favorite: bool = False
+    # 系列の取り込み(ADR-0037)で入った、取り込んだ Run が作った生成画像か(記録は未検証)。
+    # タイルの種別のリボンに使う。取り込みで入ったアップロードなどは種別のとおり false。
+    imported: bool = False
 
 
 class ModVerdictView(BaseModel):

@@ -37,6 +37,9 @@
     },
     "durationSeconds": "{seconds}秒",
     "elapsedSeconds": "{seconds}s 経過",
+    "assetKindRibbon": {
+      "imported": "取り込んだ画像(未検証)"
+    },
     "assetKindLabels": {
       "upload": "アップロード",
       "generated": "生成",
