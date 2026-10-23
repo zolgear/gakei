@@ -45,6 +45,27 @@ describe('stockAssetsQueryKey', () => {
   })
 })
 
+describe('stockAssetsQueryKey(お気に入りの絞り込み)', () => {
+  it('絞ると末尾に { favorite: true } を置き、絞らなければ今の形のまま', () => {
+    expect(stockAssetsQueryKey(null, { ungrouped: true }, null, true)).toEqual([
+      'assets',
+      'all',
+      'ungrouped',
+      { favorite: true },
+    ])
+    expect(stockAssetsQueryKey(null, { groupId: 'g1' }, 'cat', true)).toEqual([
+      'assets',
+      'all',
+      'group',
+      'g1',
+      'tag',
+      'cat',
+      { favorite: true },
+    ])
+    expect(stockAssetsQueryKey(null, { ungrouped: true }, null, false)).toEqual(['assets', 'all', 'ungrouped'])
+  })
+})
+
 describe('stockAssetsQueryKey(タグの絞り込み)', () => {
   it('タグで絞ると末尾に tag を足す', () => {
     expect(stockAssetsQueryKey(null, { ungrouped: true }, 'cat')).toEqual(['assets', 'all', 'ungrouped', 'tag', 'cat'])

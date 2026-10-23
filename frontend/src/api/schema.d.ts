@@ -3104,6 +3104,11 @@ export interface components {
             content_withheld: boolean;
             /** Content Withheld At */
             content_withheld_at?: string | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -3137,11 +3142,6 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
-            /**
-             * Favorite
-             * @default false
-             */
-            favorite: boolean;
         };
         /**
          * AssetEmbeddingStatus
@@ -3343,6 +3343,11 @@ export interface components {
             content_withheld: boolean;
             /** Content Withheld At */
             content_withheld_at?: string | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
         };
         /**
          * AssetTagAddRequest
@@ -3413,6 +3418,11 @@ export interface components {
             content_withheld: boolean;
             /** Content Withheld At */
             content_withheld_at?: string | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
             /** Sha256 */
             sha256: string;
             /** Output Index */
@@ -3446,11 +3456,6 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
-            /**
-             * Favorite
-             * @default false
-             */
-            favorite: boolean;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -4850,6 +4855,11 @@ export interface components {
             content_withheld: boolean;
             /** Content Withheld At */
             content_withheld_at?: string | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
             /** Max Score */
             max_score: number;
             /** Hash Missing */
@@ -8010,6 +8020,11 @@ export interface components {
             content_withheld: boolean;
             /** Content Withheld At */
             content_withheld_at?: string | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
             /** Produced By Run Id */
             produced_by_run_id: string | null;
             /**
@@ -8199,6 +8214,11 @@ export interface components {
             content_withheld: boolean;
             /** Content Withheld At */
             content_withheld_at?: string | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
             /** Score */
             score: number;
         };
@@ -9860,6 +9880,8 @@ export interface operations {
                 ungrouped?: boolean;
                 /** @description 指定すると、そのタグ(人が消したものを除く)が付いた Asset だけに絞る(ADR-0024)。名前は保存時と同じく正規化して比べる。 */
                 tag?: string | null;
+                /** @description true なら、見る人のお気に入りの Asset だけに絞る(ストックの絞り込み。ADR-0055)。 */
+                favorite?: boolean;
                 limit?: number;
                 cursor?: string | null;
             };

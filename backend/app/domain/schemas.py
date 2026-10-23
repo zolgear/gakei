@@ -410,6 +410,9 @@ class AssetSummary(BaseModel):
     # `/content` は 410 で、画面は「画像なし(拒否)」の置き換えの表示にする。
     content_withheld: bool = False
     content_withheld_at: datetime | None = None
+    # 見る人のお気に入りか(ADR-0055)。埋めるのはストックの一覧(`GET /api/assets`)だけで、
+    # 検索の結果などほかの応答では常に false。
+    favorite: bool = False
 
 
 class ModVerdictView(BaseModel):

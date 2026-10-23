@@ -115,6 +115,7 @@ def _to_summary(
     title: str | None = None,
     focal_point: FocalPoint | None = None,
     content_rating: str | None = None,
+    favorite: bool = False,
 ) -> AssetSummary:
     return AssetSummary(
         id=asset.id,
@@ -127,6 +128,7 @@ def _to_summary(
         title=title,
         focal_point=focal_point,
         content_rating=content_rating,  # type: ignore[arg-type]
+        favorite=favorite,
         **content_withholding.summary_fields(asset),
     )
 
@@ -324,6 +326,11 @@ def list_assets(
         description="指定すると、そのタグ(人が消したものを除く)が付いた Asset だけに絞る"
         "(ADR-0024)。名前は保存時と同じく正規化して比べる。",
     ),
+    favorite: bool = Query(
+        default=False,
+        description="true なら、見る人のお気に入りの Asset だけに絞る"
+        "(ストックの絞り込み。ADR-0055)。",
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
     db: Session = Depends(get_session),
@@ -343,6 +350,8 @@ def list_assets(
             query = query.where(annotations_domain.tag_filter(tag))
         except annotations_domain.TagNameError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
+    if favorite:
+        query = query.where(Asset.id.in_(favorites_domain.favorite_asset_ids(user)))
     if group_id is not None:
         query = query.join(
             AssetGroupMember,
@@ -379,8 +388,18 @@ def list_assets(
     titles = annotations_domain.bulk_titles(db, [a.id for a in rows])
     focals = focal_points.bulk_get(db, [a.id for a in rows])
     ratings = content_rating_domain.bulk_levels(db, [a.id for a in rows])
+    favorite_ids = favorites_domain.bulk_favorite_ids(db, user, [a.id for a in rows])
     return AssetListResponse(
-        items=[_to_summary(a, titles.get(a.id), focals.get(a.id), ratings.get(a.id)) for a in rows],
+        items=[
+            _to_summary(
+                a,
+                titles.get(a.id),
+                focals.get(a.id),
+                ratings.get(a.id),
+                favorite=a.id in favorite_ids,
+            )
+            for a in rows
+        ],
         next_cursor=next_cursor,
     )
 

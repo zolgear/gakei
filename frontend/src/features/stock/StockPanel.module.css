@@ -238,6 +238,17 @@
   color: var(--color-text);
 }
 
+/* お気に入りのチップ(ADR-0055)。ハートを添え、選んでいる間はハートをアクセント色で塗る。 */
+.favoriteChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.favoriteChip[data-active='true'] svg {
+  color: var(--color-accent);
+}
+
 /* 絞り込み中のタグ(× で解除)。 */
 .activeFilters {
   display: flex;

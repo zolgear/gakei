@@ -96,12 +96,51 @@ describe('お気に入りの付け外しとキャッシュ', () => {
   })
 })
 
+function stockItem(id: string, favorite = false) {
+  return { id, kind: 'generated', mime: 'image/png', width: 1, height: 1, favorite }
+}
+
+describe('ストックの一覧との同期', () => {
+  it('ストックで付けると履歴・Asset 1件にも出て、履歴で外すとストックでも外れる', async () => {
+    const client = seed()
+    const stockKey = ['assets', 'all', 'ungrouped']
+    client.setQueryData(stockKey, { pages: [{ items: [stockItem('a'), stockItem('b')] }], pageParams: [undefined] })
+    const stockFavorite = (id: string) =>
+      client
+        .getQueryData<Paged<{ id: string; favorite: boolean }>>(stockKey)
+        ?.pages[0].items.find((item) => item.id === id)?.favorite
+    const observer = new MutationObserver(client, favoriteMutationOptions(client, vi.fn(), vi.fn().mockResolvedValue({})))
+
+    await observer.mutate({ assetId: 'a', favorite: true })
+    expect(stockFavorite('a')).toBe(true)
+    expect(stockFavorite('b')).toBe(false)
+    expect(states(client, 'a')).toEqual({ runs: true, history: true, run: true, asset: true })
+
+    await observer.mutate({ assetId: 'a', favorite: false })
+    expect(stockFavorite('a')).toBe(false)
+    expect(states(client, 'a').runs).toBe(false)
+  })
+
+  it('お気に入りで絞ったストックの一覧は古いと印を付けるだけ(外したタイルはその場に残る)', async () => {
+    const client = seed()
+    const filteredKey = ['assets', 'all', 'ungrouped', { favorite: true }]
+    client.setQueryData(filteredKey, { pages: [{ items: [stockItem('a', true)] }], pageParams: [undefined] })
+    client.setQueryData(['assets', 'all', 'ungrouped'], { pages: [{ items: [stockItem('a', true)] }], pageParams: [undefined] })
+    const observer = new MutationObserver(client, favoriteMutationOptions(client, vi.fn(), vi.fn().mockResolvedValue({})))
+    await observer.mutate({ assetId: 'a', favorite: false })
+    expect(client.getQueryState(filteredKey)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(['assets', 'all', 'ungrouped'])?.isInvalidated).toBe(false)
+    expect(client.getQueryData<Paged<{ id: string }>>(filteredKey)?.pages[0].items).toHaveLength(1)
+  })
+})
+
 describe('対象のキー', () => {
   it('Asset 1件はその Asset のキーだけ、Run 1件は書き換えるが止めない', () => {
     expect(isFavoriteCacheKey(['asset', 'a'], 'a')).toBe(true)
     expect(isFavoriteCacheKey(['asset', 'b'], 'a')).toBe(false)
     expect(isFavoriteCacheKey(['asset', 'a', 'lineage'], 'a')).toBe(false)
-    expect(isFavoriteCacheKey(['assets', {}], 'a')).toBe(false)
+    expect(isFavoriteCacheKey(['assets', 'all', 'ungrouped'], 'a')).toBe(true)
+    expect(isFavoriteCancelKey(['assets', 'all', 'ungrouped'], 'a')).toBe(false)
     expect(isFavoriteCacheKey(['runs'], 'a')).toBe(true)
     expect(isFavoriteCacheKey(['run', 'r1'], 'a')).toBe(true)
     expect(isFavoriteCancelKey(['run', 'r1'], 'a')).toBe(false)

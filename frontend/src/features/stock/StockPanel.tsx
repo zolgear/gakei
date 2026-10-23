@@ -10,7 +10,7 @@
  * 見出しへドラッグするとそのグループへ移る(所属は 1 つだけ)。タッチ環境と一括操作向けに選択モードも持つ。
  *
  * パネル上部の sticky な見出し行は1行に詰める(画像に縦の場所を譲る): 左に「ストック」、右に
- * 絞り込み(じょうご。種類とタグをポップオーバーにまとめる。ADR-0024 5章)、画像を追加(アイコン)、
+ * 絞り込み(じょうご。種類・お気に入り・タグをポップオーバーにまとめる。ADR-0024 5章、ADR-0055)、画像を追加(アイコン)、
  * 「選択」、「⋯」(系列を取り込む、重複の候補)。ファイルのドロップはパネル全体で受け、ファイルを
  * ドラッグしている間だけパネル全体に枠を出す。
  *
@@ -70,6 +70,7 @@ import { isFileDragForUpload, isStockFilterActive } from './stockPanelFilters'
 import { TagChip } from '../annotations/TagChip'
 import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
 import { useImportLineage } from '../lineage-transfer/useImportLineage'
+import { useFavoriteToggle } from '../history/useFavoriteToggle'
 import styles from './StockPanel.module.css'
 
 type KindFilter = StockKindFilter
@@ -96,6 +97,8 @@ export function StockPanel() {
   const listKinds = stockListKinds(kind, showSketchMask)
   // タグの絞り込み(ADR-0024 5章)。ビューアのタグのチップからも設定されるので外部ストアに置く。
   const tag = useStockTagFilter()
+  // お気に入りの絞り込み(ADR-0055)。パネルを開き直すと解除される(種類と同じ)。
+  const [favoriteOnly, setFavoriteOnly] = useState(false)
   // 節ごとの開閉。初期値は localStorage から一度だけ読む(effect で読み直さない)。
   const [openMap, setOpenMap] = useState<GroupOpenMap>(loadGroupOpenMap)
   // 選択モード(ADR-0022 4章)。選択は「Asset id → 選んだ節のキー」の Map(`stockSelection.ts`)。
@@ -107,6 +110,9 @@ export function StockPanel() {
   const [isDragOver, setIsDragOver] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<AssetSummary | null>(null)
   const toast = useToast()
+  const showToast = toast.show
+  const favoriteFailed = t.history.card.favoriteFailed
+  const toggleFavorite = useFavoriteToggle(() => showToast({ message: favoriteFailed }))
   const importLineage = useImportLineage()
 
   const capsQuery = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities })
@@ -294,6 +300,7 @@ export function StockPanel() {
     onOpen: (asset) => navigate(nodeTargetPath({ id: asset.id, type: 'asset' }, location.pathname)),
     onUseAsInput: handleUseAsInput,
     onDelete: setDeleteTarget,
+    onToggleFavorite: toggleFavorite,
   }
 
   return (
@@ -313,7 +320,9 @@ export function StockPanel() {
               kind={kind}
               kindChoices={stockKindChoices(showSketchMask)}
               onKindChange={setKind}
-              active={isStockFilterActive(kind, tag)}
+              favoriteOnly={favoriteOnly}
+              onFavoriteOnlyChange={setFavoriteOnly}
+              active={isStockFilterActive(kind, tag, favoriteOnly)}
             />
             <button
               type="button"
@@ -383,6 +392,7 @@ export function StockPanel() {
         group={null}
         kinds={listKinds}
         tag={tag}
+        favoriteOnly={favoriteOnly}
         open={isSectionOpen(openMap, UNGROUPED_SECTION_KEY)}
         onToggleOpen={() => toggleSectionOpen(UNGROUPED_SECTION_KEY)}
         scrollRootRef={panelRef}
@@ -396,6 +406,7 @@ export function StockPanel() {
           group={group}
           kinds={listKinds}
           tag={tag}
+          favoriteOnly={favoriteOnly}
           open={isSectionOpen(openMap, group.id)}
           onToggleOpen={() => toggleSectionOpen(group.id)}
           scrollRootRef={panelRef}

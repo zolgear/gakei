@@ -2442,6 +2442,9 @@
     },
     "duplicatesLink": "重複の候補",
     "filter": "絞り込み",
+    "filterFavorite": "お気に入り",
+    "favoriteEmptyInSection": "お気に入りの画像はありません",
+    "filterEmptyInSection": "条件に合う画像はありません",
     "moreActions": "その他の操作",
     "kindRegions": "領域"
   },

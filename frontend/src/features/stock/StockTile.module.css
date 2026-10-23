@@ -2,6 +2,9 @@
    (履歴の詳細のカード・ギャラリーと同じ考え方)。 */
 .tile {
   position: relative;
+  /* 重ねるハートと操作の z-index をタイルの中に閉じ込め、sticky な見出し行と絞り込みのポップオーバーより
+     上に出さない。 */
+  isolation: isolate;
   aspect-ratio: 1;
   min-width: 0;
   border-radius: var(--radius);
@@ -40,7 +43,7 @@
   display: block;
 }
 
-/* 選択モードの印。右下に置く(左上は段階のバッジ、右上はお気に入りの印のために空けておく)。 */
+/* 選択モードの印。右下に置く(左上は段階のバッジ、右上はお気に入りのハート)。 */
 .checkBadge {
   position: absolute;
   right: 4px;
@@ -179,5 +182,61 @@
   .actionButton {
     width: 32px;
     height: 32px;
+  }
+}
+
+/* お気に入りのハート(ADR-0055)。右上に、画像ボタンとは別の要素として置く(履歴のギャラリーと同じ見た目)。
+   お気に入りはアクセント色で塗る。 */
+.favoriteButton {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(10, 11, 13, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-pill);
+  color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+}
+
+.favoriteButton:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
+.favoriteButton[data-favorite='true'] {
+  color: var(--color-accent);
+}
+
+.favoriteButton[data-favorite='true']:hover {
+  color: var(--color-accent-hover);
+}
+
+.favoriteButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* ホバーできる端末では、お気に入りでないものは操作の帯と同じく、マウスを載せたとき・中にフォーカスが
+   あるときだけ出す(見えない間は押せない)。ホバーできない端末(タッチ)では常に出す。 */
+@media (hover: hover) {
+  .favoriteButton[data-favorite='false'] {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+
+  .tile:not(:hover):not(:focus-within) .favoriteButton[data-favorite='false'] {
+    pointer-events: none;
+  }
+
+  .tile:hover .favoriteButton,
+  .tile:focus-within .favoriteButton {
+    opacity: 1;
   }
 }

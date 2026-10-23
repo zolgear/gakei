@@ -2442,6 +2442,9 @@
     },
     "duplicatesLink": "Duplicates",
     "filter": "Filter",
+    "filterFavorite": "Favorites",
+    "favoriteEmptyInSection": "No favorite images",
+    "filterEmptyInSection": "No matching images",
     "moreActions": "More actions",
     "kindRegions": "Regions"
   },
