@@ -791,6 +791,34 @@ export function addAssetsToGroup(groupId: string, assetIds: string[]): Promise<A
   })
 }
 
+// -- グループの提案(ADR-0056) ----------------------------------------------------------
+
+export type GroupSuggestion = components['schemas']['GroupSuggestion']
+export type GroupSuggestionsResponse = components['schemas']['GroupSuggestionsResponse']
+export type GroupSuggestionScope = GroupSuggestionsResponse['scope']
+export type GroupSuggestionGranularity = GroupSuggestionsResponse['granularity']
+
+/** グループの提案(埋め込みが使えなければ 409)。何も保存しない。 */
+export function listGroupSuggestions(
+  params: NonNullable<operations['list_group_suggestions']['parameters']['query']> = {},
+): Promise<GroupSuggestionsResponse> {
+  return request(`/api/asset-groups/suggestions${toQuery(params)}`)
+}
+
+/**
+ * 提案を受け入れる。`name` なら新しいグループを作って入れ、`target_group_id` ならそのグループへ移す
+ * (どちらか一方。1回のトランザクション)。
+ */
+export function acceptGroupSuggestion(
+  body: { asset_ids: string[] } & ({ name: string; target_group_id?: never } | { target_group_id: string; name?: never }),
+): Promise<AssetGroupRow> {
+  return request('/api/asset-groups/suggestions/accept', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 /** 入っていないものは無視される。 */
 export function removeAssetsFromGroup(groupId: string, assetIds: string[]): Promise<AssetGroupRow> {
   return request(`/api/asset-groups/${groupId}/assets/remove`, {

@@ -2449,6 +2449,7 @@
       "toggleTile": "選択を切り替える"
     },
     "duplicatesLink": "重複の候補",
+    "groupSuggestionsLink": "グループの提案",
     "filter": "絞り込み",
     "filterFavorite": "お気に入り",
     "favoriteEmptyInSection": "お気に入りの画像はありません",
@@ -3227,6 +3228,45 @@
     "undo": "元に戻す",
     "deleteFailed": "削除できませんでした。",
     "restoreFailed": "元に戻せませんでした。"
+  },
+  "groupSuggestions": {
+    "title": "グループの提案",
+    "scopeLabel": "対象",
+    "scopeUngrouped": "グループ外だけ",
+    "scopeAll": "すべて",
+    "granularityLabel": "粒度",
+    "granularityNormal": "標準",
+    "granularityFine": "細かく",
+    "summary": {
+      "one": "{count} 件の提案・{scanned} 枚",
+      "other": "{count} 件の提案・{scanned} 枚"
+    },
+    "truncatedNote": "画像が多いため、新しい {scanned} 枚だけを見ています。",
+    "loading": "読み込み中…",
+    "loadFailed": "グループの提案を読み込めませんでした。",
+    "empty": "提案はありません。",
+    "count": {
+      "one": "{count} 枚",
+      "other": "{count} 枚"
+    },
+    "franchise": "作品 {name} {rate}",
+    "addTo": "「{name}」に追加",
+    "nameLabel": "グループ名",
+    "create": "グループにする",
+    "moreMembers": "+{count}",
+    "showLess": "閉じる",
+    "exclude": "提案から外す",
+    "include": "提案に戻す",
+    "moveConfirm": {
+      "one": "{count} 枚を別のグループから移します。",
+      "other": "{count} 枚を別のグループから移します。"
+    },
+    "moveConfirmLabel": "移す",
+    "created": "「{name}」を作りました({count} 枚)",
+    "added": "「{name}」に {count} 枚を追加しました",
+    "acceptFailed": "グループにできませんでした。",
+    "outliers": "未分類",
+    "open": "ビューアで開く"
   },
   "map": {
     "title": "マップ",

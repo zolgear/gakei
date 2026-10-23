@@ -2449,6 +2449,7 @@
       "toggleTile": "Toggle selection"
     },
     "duplicatesLink": "Duplicates",
+    "groupSuggestionsLink": "Group suggestions",
     "filter": "Filter",
     "filterFavorite": "Favorites",
     "favoriteEmptyInSection": "No favorite images",
@@ -3227,6 +3228,45 @@
     "undo": "Undo",
     "deleteFailed": "Couldn't delete.",
     "restoreFailed": "Couldn't undo."
+  },
+  "groupSuggestions": {
+    "title": "Group suggestions",
+    "scopeLabel": "Images",
+    "scopeUngrouped": "Ungrouped only",
+    "scopeAll": "All",
+    "granularityLabel": "Granularity",
+    "granularityNormal": "Normal",
+    "granularityFine": "Fine",
+    "summary": {
+      "one": "{count} suggestion · {scanned} images",
+      "other": "{count} suggestions · {scanned} images"
+    },
+    "truncatedNote": "There are many images, so only the newest {scanned} are considered.",
+    "loading": "Loading…",
+    "loadFailed": "Couldn't load group suggestions.",
+    "empty": "No suggestions.",
+    "count": {
+      "one": "{count} image",
+      "other": "{count} images"
+    },
+    "franchise": "Series {name} {rate}",
+    "addTo": "Add to “{name}”",
+    "nameLabel": "Group name",
+    "create": "Create group",
+    "moreMembers": "+{count}",
+    "showLess": "Show less",
+    "exclude": "Remove from suggestion",
+    "include": "Put back in suggestion",
+    "moveConfirm": {
+      "one": "{count} image will be moved from another group.",
+      "other": "{count} images will be moved from other groups."
+    },
+    "moveConfirmLabel": "Move",
+    "created": "Created “{name}” ({count} images)",
+    "added": "Added {count} images to “{name}”",
+    "acceptFailed": "Couldn't create the group.",
+    "outliers": "Unclassified",
+    "open": "Open in viewer"
   },
   "map": {
     "title": "Map",

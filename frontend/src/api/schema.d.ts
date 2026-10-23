@@ -951,6 +951,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/asset-groups/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Group Suggestions
+         * @description 画像の埋め込みで集まりを見つけ、グループにする案を出す(大きい順)。
+         */
+        get: operations["list_group_suggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/asset-groups/suggestions/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Group Suggestion
+         * @description 提案を受け入れる。`name` なら新しいグループ(先頭に入る)を作って入れ、`target_group_id`
+         *     ならそのグループへ移す。見えない・削除済みの画像やグループを含めば 404 で全体を拒む。
+         */
+        post: operations["accept_group_suggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/asset-groups": {
         parameters: {
             query?: never;
@@ -5314,6 +5355,113 @@ export interface components {
             comfyui_timeout_seconds?: number | null;
             /** Sdwebui Timeout Seconds */
             sdwebui_timeout_seconds?: number | null;
+        };
+        /** GroupSuggestion */
+        GroupSuggestion: {
+            /** Id */
+            id: string;
+            /** Size */
+            size: number;
+            /** Member Ids */
+            member_ids: string[];
+            /** Cover Ids */
+            cover_ids: string[];
+            /** Top Tags */
+            top_tags?: components["schemas"]["GroupSuggestionTag"][];
+            franchise?: components["schemas"]["GroupSuggestionFranchise"] | null;
+            target_group?: components["schemas"]["GroupSuggestionTarget"] | null;
+            /**
+             * Moving Count
+             * @default 0
+             */
+            moving_count: number;
+            /** Moving Ids */
+            moving_ids?: string[];
+            /** Name */
+            name?: string | null;
+        };
+        /**
+         * GroupSuggestionAcceptRequest
+         * @description `POST /api/asset-groups/suggestions/accept`。`name`(新しいグループ)か
+         *     `target_group_id`(既存のグループへ移す)のどちらか一方。
+         */
+        GroupSuggestionAcceptRequest: {
+            /** Name */
+            name?: string | null;
+            /** Target Group Id */
+            target_group_id?: string | null;
+            /** Asset Ids */
+            asset_ids: string[];
+        };
+        /**
+         * GroupSuggestionFranchise
+         * @description 集まりで最も多い作品。`rate` は集まりの枚数に対する割合。`label` は訳(あれば)。
+         */
+        GroupSuggestionFranchise: {
+            /** Name */
+            name: string;
+            /** Label */
+            label?: string | null;
+            /** Rate */
+            rate: number;
+        };
+        /**
+         * GroupSuggestionTag
+         * @description 集まりに偏る英語のタグ。`label` はタグ辞書の訳(無ければタグのまま)。
+         */
+        GroupSuggestionTag: {
+            /** Tag */
+            tag: string;
+            /** Label */
+            label: string;
+            /** Rate */
+            rate: number;
+            /** Global Rate */
+            global_rate: number;
+        };
+        /**
+         * GroupSuggestionTarget
+         * @description 既存のグループへの追加の提案のときの追加先。`overlap` は集まりのうちそのグループに
+         *     入っている割合(0.5 以上)。
+         */
+        GroupSuggestionTarget: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Overlap */
+            overlap: number;
+        };
+        /**
+         * GroupSuggestionsResponse
+         * @description `GET /api/asset-groups/suggestions`。見るのは新しい順に `scanned` 件まで。
+         */
+        GroupSuggestionsResponse: {
+            /** Model Key */
+            model_key: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "ungrouped" | "all";
+            /**
+             * Granularity
+             * @enum {string}
+             */
+            granularity: "normal" | "fine";
+            /** Scanned */
+            scanned: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Suggestions */
+            suggestions?: components["schemas"]["GroupSuggestion"][];
+            /** Outlier Ids */
+            outlier_ids?: string[];
+            /** Assets */
+            assets?: components["schemas"]["AssetSummary"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -10579,6 +10727,86 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_group_suggestions: {
+        parameters: {
+            query?: {
+                /** @description ungrouped: グループ外の画像だけを提案に入れる / all: グループの画像も */
+                scope?: "ungrouped" | "all";
+                /** @description fine: 大きな集まりを細かく分ける */
+                granularity?: "normal" | "fine";
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupSuggestionsResponse"];
+                };
+            };
+            /** @description 埋め込みを使えない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_group_suggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupSuggestionAcceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetGroupRow"];
+                };
             };
             /** @description Validation Error */
             422: {
