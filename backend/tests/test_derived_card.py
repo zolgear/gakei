@@ -143,3 +143,21 @@ def test_openapi_lists_card_variant(client: TestClient) -> None:
         params = spec["paths"][path]["get"]["parameters"]
         variant = next(p for p in params if p["name"] == "variant")
         assert "card" in variant["schema"]["enum"], path
+
+
+def test_frontend_long_edges_match_backend() -> None:
+    """フロントの `DERIVED_LONG_EDGE`(assetUrl.ts。srcset の w を求める)とバックエンドの長辺が
+    一致する。"""
+    import re
+
+    source = (
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "assetUrl.ts"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"DERIVED_LONG_EDGE\s*=\s*\{([^}]*)\}", source)
+    assert match is not None, "assetUrl.ts に DERIVED_LONG_EDGE がありません"
+    edges = {k: int(v) for k, v in re.findall(r"(\w+)\s*:\s*(\d+)", match.group(1))}
+    assert edges == {
+        "thumb": derivatives.THUMB_LONG_EDGE,
+        "card": derivatives.CARD_LONG_EDGE,
+        "preview": derivatives.PREVIEW_LONG_EDGE,
+    }

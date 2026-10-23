@@ -9,6 +9,10 @@
  *   「1/2」のような何枚目かを出す。マスクしていない画像には隅のレーティングのバッジを出さない
  *   (マスクと、マスクに戻すボタンは AssetThumb のまま出る)。
  * - ギャラリー: 画像だけ。何枚目かもレーティングの隅のバッジも出さない。
+ *
+ * 画像は thumb(512px)と card(1024px)を `srcset` で並べ、表示する幅からブラウザに選ばせる
+ * (ADR-0036 5章)。詳細・重ねる形のカードは列の幅の目安(`historyCardSizes`)、ギャラリーは配置で
+ * 決まった幅を呼び出し側が `sizes` で渡す(渡さなければ thumb だけ)。
  */
 import { Link } from 'react-router'
 import type { RunOutputRef, RunSummary } from '../../api/client'
@@ -17,6 +21,8 @@ import { formatElapsedSeconds } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { focalStyle } from '../../lib/focalPoint'
+import { responsiveThumbProps } from '../../lib/derivedSrcSet'
+import { historyCardSizes } from './historyImageSizes'
 import styles from './HistoryCard.module.css'
 
 interface HistoryCardMediaProps {
@@ -25,11 +31,16 @@ interface HistoryCardMediaProps {
   output: RunOutputRef | undefined
   href: string
   variant: HistoryCardMediaVariant
+  /**
+   * `<img sizes>`。ギャラリーのタイルは配置で決まった幅から作って渡す。詳細・重ねる形のカードでは
+   * 省くと `historyCardSizes` の目安を使う。ギャラリーで省くと `srcset` を付けない(thumb だけ)。
+   */
+  sizes?: string
 }
 
 export type HistoryCardMediaVariant = 'detail' | 'overlay' | 'gallery'
 
-export function HistoryCardMedia({ run, output, href, variant }: HistoryCardMediaProps) {
+export function HistoryCardMedia({ run, output, href, variant, sizes }: HistoryCardMediaProps) {
   const { t } = useI18n()
   const outputs = run.outputs ?? []
   const isPending = run.status === 'running' || run.status === 'queued'
@@ -40,6 +51,8 @@ export function HistoryCardMedia({ run, output, href, variant }: HistoryCardMedi
       : t.history.card.viewDetail
   const elapsed = run.status === 'running' ? formatElapsedSeconds(run.started_at) : null
   const position = output ? outputs.findIndex((o) => o.asset_id === output.asset_id) + 1 : 0
+  const imageSizes = output && variant !== 'gallery' ? (sizes ?? historyCardSizes(variant, output)) : sizes
+  const responsive = output && imageSizes ? responsiveThumbProps(output.asset_id, output, imageSizes) : undefined
 
   return (
     <Link to={href} className={styles.mediaLink} aria-label={ariaLabel} data-variant={variant}>
@@ -55,6 +68,7 @@ export function HistoryCardMedia({ run, output, href, variant }: HistoryCardMedi
             badgePosition="top-left"
             className={`${styles.mediaImage} checkerboard`}
             style={focalStyle(output.focal_point)}
+            {...responsive}
             alt=""
             draggable
             onDragStart={(e) => {

@@ -27,6 +27,8 @@ import { AssetThumb } from '../content-rating/AssetThumb'
 import { AssetKindRibbon } from '../asset-kind/AssetKindRibbon'
 import { kindRibbon } from '../asset-kind/kindRibbon'
 import { focalStyle } from '../../lib/focalPoint'
+import { responsiveThumbProps } from '../../lib/derivedSrcSet'
+import { stockTileSizes } from './stockTileSizes'
 import { stockTileActions, stockTilePixelSize } from './stockTileActions'
 import styles from './StockTile.module.css'
 
@@ -94,6 +96,7 @@ export function StockTile({
           withheld={withheld}
           className={`${styles.tileImage} checkerboard`}
           style={focalStyle(asset.focal_point)}
+          {...responsiveThumbProps(asset.id, asset, stockTileSizes(asset))}
           alt=""
           draggable={draggable}
           onDragStart={
