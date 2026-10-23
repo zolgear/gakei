@@ -2377,7 +2377,6 @@
     "kindMask": "Mask",
     "kindComposite": "Arrangement",
     "tagFilter": {
-      "heading": "Tag",
       "placeholder": "Filter by tag",
       "suggestions": "Tag suggestions",
       "clear": "Clear the filter for tag \"{name}\"",
@@ -2388,7 +2387,7 @@
     "useAsInput": "Use as input",
     "delete": "Delete",
     "uploading": "Uploading...",
-    "addImage": "Add image / drop",
+    "addImage": "Add image",
     "loadMore": "Load more",
     "loadingMore": "Loading...",
     "retryLoadMore": "Retry",
@@ -2442,6 +2441,8 @@
       "toggleTile": "Toggle selection"
     },
     "duplicatesLink": "Duplicates",
+    "filter": "Filter",
+    "moreActions": "More actions",
     "kindRegions": "Regions"
   },
   "comfyui": {

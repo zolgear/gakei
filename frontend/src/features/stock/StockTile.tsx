@@ -1,43 +1,27 @@
 /**
  * ストックパネルのタイル 1 枚(ADR-0022 4章で節ごとに使い回すため `StockPanel` から切り出した)。
- * 画像ボタン(クリックでビューア/結果エリア、選択モードでは選択の切り替え)、ホバーで出る
- * 「+」(入力に追加。マスクは不可)と削除、グループの節でだけ出す「このグループから外す」(×)。
- * 768px 未満では削除だけ画像から外してキャプション行の右端に置く(「+」と重ならないように。issue #10)。
- * タイトル(ADR-0024)があればキャプションの上の行に 1 行で出す(長いものは省略)。
- * 画像はドラッグ元になり、入力欄やグループの節の見出しに落とせる(マスクと選択モード中は除く)。
+ * 履歴の詳細のカードと同じく、画像をタイルいっぱいに出し、情報と操作は画像の上に重ねる。
+ *
+ * - 画像ボタン(タイル全体): クリックでビューア/結果エリア、選択モードでは選択の切り替え。
+ *   画像はドラッグ元になり、入力欄やグループの節の見出しに落とせる(マスクと選択モード中は除く)。
+ * - 下端に重ねるアイコンの1行(`stockTileActions`): 入力に使う(マスクと画像を残さなかったものは除く)、
+ *   このグループから外す(グループの節だけ)、削除。どれも aria-label と同じ文の title を付ける。
+ *   ホバーできる端末ではホバー(とキーボードで中に入ったとき)だけ出し、ホバーできない端末
+ *   (`hover: none`)では常に出す。
+ * - ホバーできる端末では、操作の上の1行にタイトル(ADR-0024。あれば)と大きさ(幅×高さ)を出す。
+ *   大きさは縮めず(途中で切らず)、狭ければタイトルのほうを省略する。タッチ端末では操作の1行だけに
+ *   して、画像を隠さない(大きさの入る幅が無い)。
+ * - 段階のバッジ(ADR-0049)は左上。右上の隅は空けておく(お気に入りの印を置く予定)。
+ *   選択モードの印は右下(選択モードの間は操作を出さないので重ならない)。
  */
 import type { AssetSummary } from '../../api/client'
+import { AddToInputIcon, CrossIcon, TrashIcon } from '../../components/icons'
 import { useI18n } from '../../i18n'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { AssetThumb } from '../content-rating/AssetThumb'
-import styles from './StockTile.module.css'
 import { focalStyle } from '../../lib/focalPoint'
-
-function TrashIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M3 4.5h10M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M4.5 4.5v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-8M6.5 7.5v3.5M9.5 7.5v3.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function CrossIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function extFromMime(mime: string): string {
-  return mime.split('/')[1] ?? mime
-}
+import { stockTileActions, stockTilePixelSize } from './stockTileActions'
+import styles from './StockTile.module.css'
 
 interface StockTileProps {
   asset: AssetSummary
@@ -65,11 +49,18 @@ export function StockTile({
   onRemoveFromGroup,
 }: StockTileProps) {
   const { t } = useI18n()
-  // mask は入力画像として追加できないので、ドラッグ元にもしない(「+」を出さないのと同じ条件)。
+  // mask は入力画像として追加できないので、ドラッグ元にもしない(「入力に使う」を出さないのと同じ条件)。
   // 選択モード中もドラッグしない。
-  // 画像を残さなかった Asset(ADR-0051 4章)は入力に使えないので、「+」もドラッグも出さない。
+  // 画像を残さなかった Asset(ADR-0051 4章)は入力に使えないので、「入力に使う」もドラッグも出さない。
   const withheld = asset.content_withheld === true
   const draggable = !selectionMode && asset.kind !== 'mask' && !withheld
+  const actions = stockTileActions({
+    kind: asset.kind,
+    withheld,
+    selectionMode,
+    inGroup: onRemoveFromGroup !== undefined,
+  })
+  const pixelSize = stockTilePixelSize(asset.width, asset.height)
 
   return (
     <div className={styles.tile} data-selected={selectionMode && isSelected}>
@@ -86,6 +77,7 @@ export function StockTile({
           assetId={asset.id}
           rating={asset.content_rating}
           badge
+          badgePosition="top-left"
           withheld={withheld}
           className={`${styles.tileImage} checkerboard`}
           style={focalStyle(asset.focal_point)}
@@ -100,50 +92,73 @@ export function StockTile({
               : undefined
           }
         />
-        {selectionMode && isSelected && <span className={styles.checkBadge}>✓</span>}
-      </button>
-      {!selectionMode && onRemoveFromGroup && (
-        <button
-          type="button"
-          className={`${styles.overlayButton} ${styles.removeButton}`}
-          aria-label={t.stock.groups.removeFromThis}
-          title={t.stock.groups.removeFromThis}
-          onClick={() => onRemoveFromGroup(asset)}
-        >
-          <CrossIcon />
-        </button>
-      )}
-      {!selectionMode && asset.kind !== 'mask' && !withheld && (
-        <button
-          type="button"
-          className={`${styles.overlayButton} ${styles.addButton}`}
-          aria-label={t.stock.useAsInput}
-          onClick={() => onUseAsInput(asset)}
-        >
-          +
-        </button>
-      )}
-      {!selectionMode && (
-        <button
-          type="button"
-          className={`${styles.overlayButton} ${styles.deleteButton}`}
-          aria-label={t.stock.delete}
-          onClick={() => onDelete(asset)}
-        >
-          <TrashIcon />
-        </button>
-      )}
-      <span className={styles.caption}>
-        {/* タイトル(ADR-0024)。一覧の応答には自動か人かの区別が無いので、見た目は分けない。 */}
-        {asset.title && (
-          <span className={styles.captionTitle} title={asset.title}>
-            {asset.title}
+        {selectionMode && isSelected && (
+          <span className={styles.checkBadge} aria-hidden="true">
+            ✓
           </span>
         )}
-        <span className={styles.captionMeta}>
-          {asset.width}×{asset.height} · {extFromMime(asset.mime)}
-        </span>
-      </span>
+      </button>
+
+      {actions.length > 0 && (
+        <div className={styles.overlay}>
+          {(asset.title || pixelSize) && (
+            <div className={styles.info}>
+              {/* タイトル(ADR-0024)。一覧の応答には自動か人かの区別が無いので、見た目は分けない。 */}
+              {asset.title && (
+                <span className={styles.title} title={asset.title}>
+                  {asset.title}
+                </span>
+              )}
+              {pixelSize && <span className={styles.pixelSize}>{pixelSize}</span>}
+            </div>
+          )}
+          <div className={styles.actions}>
+            {actions.map((action) => {
+              switch (action) {
+                case 'useAsInput':
+                  return (
+                    <button
+                      key={action}
+                      type="button"
+                      className={styles.actionButton}
+                      aria-label={t.stock.useAsInput}
+                      title={t.stock.useAsInput}
+                      onClick={() => onUseAsInput(asset)}
+                    >
+                      <AddToInputIcon size={14} />
+                    </button>
+                  )
+                case 'removeFromGroup':
+                  return (
+                    <button
+                      key={action}
+                      type="button"
+                      className={styles.actionButton}
+                      aria-label={t.stock.groups.removeFromThis}
+                      title={t.stock.groups.removeFromThis}
+                      onClick={() => onRemoveFromGroup?.(asset)}
+                    >
+                      <CrossIcon size={13} />
+                    </button>
+                  )
+                case 'delete':
+                  return (
+                    <button
+                      key={action}
+                      type="button"
+                      className={`${styles.actionButton} ${styles.danger}`}
+                      aria-label={t.stock.delete}
+                      title={t.stock.delete}
+                      onClick={() => onDelete(asset)}
+                    >
+                      <TrashIcon size={14} />
+                    </button>
+                  )
+              }
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

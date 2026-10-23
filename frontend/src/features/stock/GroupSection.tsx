@@ -14,8 +14,9 @@
  *   その前、下半分なら後ろへ移る(`useGroupReorder`)。画像のドラッグとは `DataTransfer` の
  *   型で分け、見出し行はどちらか一方にだけ反応する。「グループなし」は先頭に固定で、掴めず
  *   落とし先にもならない。ドラッグできない環境向けに「⋯」に「上へ移動」「下へ移動」を置く。
- * - 本体(開いているときだけ取得・表示): 既存の 2 列のタイル。グループは最初の 30 件と
- *   「さらに表示」、「グループなし」は末尾の番兵で自動的に続きを読む(既存の無限スクロール)。
+ * - 本体(開いているときだけ取得・表示): 正方形のタイルのグリッド(列の数はサイドバーの幅に応じる)。
+ *   グループは最初の 30 件と「さらに表示」、「グループなし」は末尾の番兵で自動的に続きを読む
+ *   (既存の無限スクロール)。
  */
 import { useEffect, useId, useRef, useState, type DragEvent, type RefObject } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'

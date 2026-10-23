@@ -1,3 +1,11 @@
+/* パネルの外枠。スクロールはしない(中の .panel がスクロールする)。ファイルをドラッグしている間の枠
+   (.dropFrame)をスクロールに関わらず全体に重ねるための基準。 */
+.root {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+
 .panel {
   display: flex;
   flex-direction: column;
@@ -7,47 +15,120 @@
   padding: 0 14px 16px;
   overflow-y: auto;
   height: 100%;
+  box-sizing: border-box;
 }
 
-/* 見出し・種別チップ・メッセージ・アップロードバーをまとめてスクロール上端に固定する。
-   生成を続けてグリッドの行数が増えても、この一式は常にすぐ触れる位置にある。 */
+/* ファイルをドラッグしている間だけ、パネル全体に出す受け口の枠。 */
+.dropFrame {
+  position: absolute;
+  inset: 4px;
+  z-index: 3;
+  border: 2px dashed var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: rgba(227, 179, 65, 0.08);
+  pointer-events: none;
+}
+
+/* 見出しの行(と、絞り込み中のタグ・進み具合・メッセージ)をスクロール上端に固定する。
+   生成を続けてグリッドの行数が増えても、操作は常にすぐ触れる位置にある。画像に縦の場所を譲るため、
+   操作はすべて見出しの1行に収める。 */
 .header {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 0 8px;
+  gap: 8px;
+  padding: 10px 0 8px;
   /* 下の余白は、固定中にスクロールしてきたタイルがバーの縁に張り付かないため。 */
   margin-bottom: -8px;
   background: var(--color-bg-raised);
 }
 
+/* 絞り込みのポップオーバーは、この行の幅いっぱいに出す(位置の基準)。 */
 .headerRow {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 .heading {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--color-text-muted);
 }
 
-/* ヘッダーの右側のボタン(「重複の候補」「選択」)。 */
+/* 見出しの右側の操作(絞り込み、画像を追加、選択、⋯)。 */
 .headerButtons {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
-/* ヘッダーの「選択」。 */
-.headerButton {
-  height: 28px;
+/* アイコンだけのボタン(履歴のツールバーの `HistoryToolbarMenu` と同じ見た目)。 */
+.iconButton {
+  position: relative;
+  width: 32px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+}
+
+.iconButton:hover:not(:disabled),
+.iconButton[aria-expanded='true'] {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.iconButton:disabled {
+  opacity: 0.6;
+}
+
+/* 画像を追加の送信中。 */
+.iconButton[data-pending='true'] {
+  animation: gk-pulse 1.6s ease-in-out infinite;
+}
+
+/* 絞り込み中(種類が「すべて」以外か、タグで絞っている)。 */
+.iconButton[data-active='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.activeDot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.moreGlyph {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* 「選択」はよく使うので、短い文字のまま見つけやすくする(アイコンにしない)。 */
+.selectButton {
+  height: 30px;
   padding: 0 10px;
   white-space: nowrap;
   background: transparent;
@@ -57,18 +138,82 @@
   font-size: 12px;
 }
 
-.headerButton[data-active='true'] {
-  background: var(--color-header-band);
+.selectButton:hover {
   border-color: var(--color-border-strong);
   color: var(--color-text);
 }
 
-/* 「種類」の見出しはチップ行の上に左寄せで置く(チップの横に縦中央で並べない)。 */
-.kindFilter {
+.selectButton[data-active='true'] {
+  background: var(--color-header-band);
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+/* 開くボタンとメニュー・ポップオーバーをまとめる箱。絞り込みのポップオーバーは位置の基準を
+   見出しの行(.headerRow)に任せるので、ここは位置を持たない。 */
+.popoverRoot {
+  display: flex;
+}
+
+/* 「⋯」のメニューはボタンの右端に揃えて下に開く。 */
+.anchored {
+  position: relative;
+}
+
+.filterPopover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 150;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
+  padding: 10px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 150;
+  min-width: 150px;
+  max-width: calc(100vw - 28px);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.menuItem {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menuItem:hover:not(:disabled),
+.menuItem:focus-visible {
+  background: var(--color-header-band);
+  outline: none;
+}
+
+.menuItem:disabled {
+  color: var(--color-text-faint);
 }
 
 .chips {
@@ -93,6 +238,13 @@
   color: var(--color-text);
 }
 
+/* 絞り込み中のタグ(× で解除)。 */
+.activeFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .message {
   margin: 0;
   font-size: 11px;
@@ -105,31 +257,6 @@
   color: var(--color-success, #4ade80);
 }
 
-/* 細い破線のアップロードバー。パネル上部の sticky ヘッダーに常時表示する(D&D の受け口は
-   .panel 全体に広げているので、このバー自体はクリックでのファイル選択が主な役目)。 */
-.uploadBar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 36px;
-  background: transparent;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius);
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
-
-.uploadBar[data-drag-over='true'] {
-  border-color: var(--color-accent);
-  background: rgba(227, 179, 65, 0.08);
-  color: var(--color-text);
-}
-
-.uploadBar:disabled {
-  opacity: 0.7;
-}
-
 .hiddenFileInput {
   display: none;
 }
@@ -138,12 +265,13 @@
    768px 未満でも折り返して収まるようにする。 */
 .selectionFooter {
   position: sticky;
-  bottom: 0;
-  z-index: 1;
+  /* パネルの下の padding(16px)の分だけ下げ、下端に付ける(すき間からタイルが覗かないように)。 */
+  bottom: -16px;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 0 2px;
+  padding: 10px 0 18px;
   margin-top: -8px;
   background: var(--color-bg-raised);
   border-top: 1px solid var(--color-border);
@@ -175,12 +303,20 @@
 }
 
 @media (max-width: 767px) {
-  .uploadBar {
-    height: 44px;
-    font-size: 13px;
+  /* タップしやすい幅(44px)。高さは見出しの1行を低く保つため 36px にする(履歴のツールバーと同じ)。 */
+  .iconButton {
+    width: 44px;
+    height: 36px;
   }
 
-  .headerButton,
+  .selectButton {
+    height: 36px;
+  }
+
+  .menuItem {
+    height: 44px;
+  }
+
   .chip,
   .selectionButton {
     min-height: 44px;

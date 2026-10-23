@@ -2377,7 +2377,6 @@
     "kindMask": "マスク",
     "kindComposite": "配置",
     "tagFilter": {
-      "heading": "タグ",
       "placeholder": "タグで絞り込む",
       "suggestions": "タグの候補",
       "clear": "タグ「{name}」の絞り込みを解除",
@@ -2388,7 +2387,7 @@
     "useAsInput": "入力に使う",
     "delete": "削除",
     "uploading": "アップロード中...",
-    "addImage": "画像を追加 / ドロップ",
+    "addImage": "画像を追加",
     "loadMore": "さらに読み込む",
     "loadingMore": "読み込み中...",
     "retryLoadMore": "再読み込み",
@@ -2442,6 +2441,8 @@
       "toggleTile": "選択を切り替える"
     },
     "duplicatesLink": "重複の候補",
+    "filter": "絞り込み",
+    "moreActions": "その他の操作",
     "kindRegions": "領域"
   },
   "comfyui": {
