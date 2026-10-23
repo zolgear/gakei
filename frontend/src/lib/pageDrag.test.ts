@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { installPageDragTracking, isDragFromThisPage } from './pageDrag'
+import { insertsUrlIntoTextField, installPageDragTracking, isDragFromThisPage } from './pageDrag'
 
 describe('pageDrag', () => {
   it('ページの中で始まったドラッグを、終わるまで覚える', () => {
@@ -19,5 +19,18 @@ describe('pageDrag', () => {
     vi.runAllTimers()
     expect(isDragFromThisPage()).toBe(false)
     vi.useRealTimers()
+  })
+})
+
+describe('insertsUrlIntoTextField', () => {
+  it('リンク・画像・アプリの Asset は、入力欄に URL が入ってしまうものとみなす', () => {
+    expect(insertsUrlIntoTextField(['text/uri-list', 'text/plain'])).toBe(true)
+    expect(insertsUrlIntoTextField(['Files'])).toBe(true)
+    expect(insertsUrlIntoTextField(['application/x-gakei-asset-id', 'text/plain'])).toBe(true)
+  })
+
+  it('入力欄の中の文字を選んで動かすドラッグは止めない', () => {
+    expect(insertsUrlIntoTextField(['text/plain'])).toBe(false)
+    expect(insertsUrlIntoTextField(['text/plain', 'text/html'])).toBe(false)
   })
 })
