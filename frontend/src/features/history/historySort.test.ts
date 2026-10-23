@@ -29,6 +29,14 @@ describe('effectiveHistorySort', () => {
     expect(effectiveHistorySort('embedding', { available: false, loading: true })).toBe('embedding')
     expect(effectiveHistorySort('group', { available: false, loading: false })).toBe('group')
   })
+
+  it('一覧が 409 を返したら、使えると言われていても日付で見せる', () => {
+    expect(effectiveHistorySort('embedding', { available: true, loading: false, rejected: true })).toBe('date')
+    expect(effectiveHistorySort('group', { available: true, loading: false, rejected: true })).toBe('group')
+    expect(effectiveHistorySort('embedding', { available: true, loading: false, rejected: false })).toBe(
+      'embedding',
+    )
+  })
 })
 
 describe('historySort のストア', () => {
