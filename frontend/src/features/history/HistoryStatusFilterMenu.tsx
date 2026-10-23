@@ -1,6 +1,7 @@
 /**
- * 履歴の状態の絞り込み(すべて / 成功 / 失敗)。ふだんは使わないので、ツールバーにはアイコンの
- * ボタン1つだけを置き、押すと小さなメニューで選ぶ(`HistoryToolbarMenu`)。
+ * 履歴の絞り込み。状態(すべて / 成功 / 失敗)と、それとは独立のお気に入り(ADR-0055)。
+ * ふだんは使わないので、ツールバーにはアイコンのボタン1つだけを置き、押すと小さなメニューで選ぶ
+ * (`HistoryToolbarMenu`)。どちらかで絞っている間はボタンに印を付ける。
  */
 import { FilterIcon } from '../../components/icons'
 import { useI18n } from '../../i18n'
@@ -10,9 +11,16 @@ import { HistoryToolbarMenu } from './HistoryToolbarMenu'
 interface HistoryStatusFilterMenuProps {
   value: StatusFilter
   onChange: (value: StatusFilter) => void
+  favoriteOnly: boolean
+  onFavoriteOnlyChange: (value: boolean) => void
 }
 
-export function HistoryStatusFilterMenu({ value, onChange }: HistoryStatusFilterMenuProps) {
+export function HistoryStatusFilterMenu({
+  value,
+  onChange,
+  favoriteOnly,
+  onFavoriteOnlyChange,
+}: HistoryStatusFilterMenuProps) {
   const { t } = useI18n()
   return (
     <HistoryToolbarMenu
@@ -25,7 +33,15 @@ export function HistoryStatusFilterMenu({ value, onChange }: HistoryStatusFilter
       ]}
       value={value}
       onChange={onChange}
-      active={value !== 'all'}
+      active={value !== 'all' || favoriteOnly}
+      toggles={[
+        {
+          id: 'favorite',
+          label: t.history.page.filterFavorite,
+          checked: favoriteOnly,
+          onChange: onFavoriteOnlyChange,
+        },
+      ]}
     />
   )
 }

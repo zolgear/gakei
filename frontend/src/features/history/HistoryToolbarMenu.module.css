@@ -77,6 +77,12 @@
   outline: none;
 }
 
+.separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--color-border);
+}
+
 .check {
   width: 14px;
   color: var(--color-accent);

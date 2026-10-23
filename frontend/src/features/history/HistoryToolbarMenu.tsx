@@ -2,6 +2,8 @@
  * 履歴のツールバーの、アイコンのボタン1つと小さなメニュー(状態の絞り込み、並べ替え)。
  * 押すとメニューで選ぶ(`menuitemradio`)。既定以外を選んでいる間は、ボタンをアクセント色にして
  * 小さな点を付ける(文字のラベルは足さない)。
+ * 選択肢とは独立の切り替え(`toggles`。絞り込みの「お気に入り」。ADR-0055)は、区切り線の下に
+ * `menuitemcheckbox` で置く。
  * 外側のクリック(pointerdown)と Esc で閉じ、選んだら閉じる(`shell/UserMenu.tsx` と同じ作り)。
  * 上下の矢印キーで項目を移る。
  */
@@ -13,6 +15,13 @@ export interface HistoryToolbarMenuOption<T extends string> {
   label: string
 }
 
+export interface HistoryToolbarMenuToggle {
+  id: string
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}
+
 interface HistoryToolbarMenuProps<T extends string> {
   /** ボタンとメニューの aria-label・title。 */
   label: string
@@ -22,6 +31,8 @@ interface HistoryToolbarMenuProps<T extends string> {
   onChange: (value: T) => void
   /** 既定以外を選んでいるか(ボタンに印を付ける)。 */
   active: boolean
+  /** 選択肢の下に置く、独立の切り替え。 */
+  toggles?: HistoryToolbarMenuToggle[]
 }
 
 export function HistoryToolbarMenu<T extends string>({
@@ -31,6 +42,7 @@ export function HistoryToolbarMenu<T extends string>({
   value,
   onChange,
   active,
+  toggles = [],
 }: HistoryToolbarMenuProps<T>) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -61,7 +73,7 @@ export function HistoryToolbarMenu<T extends string>({
   function handleMenuKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
     e.preventDefault()
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])]
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitemcheckbox"]') ?? [])]
     const index = items.indexOf(document.activeElement as HTMLElement)
     const next = (index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
     items[next]?.focus()
@@ -69,6 +81,12 @@ export function HistoryToolbarMenu<T extends string>({
 
   function select(next: T) {
     onChange(next)
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
+
+  function toggle(item: HistoryToolbarMenuToggle) {
+    item.onChange(!item.checked)
     setOpen(false)
     triggerRef.current?.focus()
   }
@@ -105,6 +123,22 @@ export function HistoryToolbarMenu<T extends string>({
                 {value === option.id ? '✓' : ''}
               </span>
               {option.label}
+            </button>
+          ))}
+          {toggles.length > 0 && <div role="separator" className={styles.separator} />}
+          {toggles.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={item.checked}
+              className={styles.item}
+              onClick={() => toggle(item)}
+            >
+              <span className={styles.check} aria-hidden="true">
+                {item.checked ? '✓' : ''}
+              </span>
+              {item.label}
             </button>
           ))}
         </div>

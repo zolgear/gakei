@@ -3,17 +3,20 @@
  * 行揃えは配置で決まった大きさ)、
  * ふだんは画像だけを見せる。マウスを載せたとき(またはキーボードで中に入ったとき)だけ、下からの
  * 薄いグラデーションに1行の帯(左にピクセルの大きさ、右に小さな操作)を出す。出力にタイトルが
- * あればその上に1行で出す(プロンプトは出さない)。タッチ端末(hover: none)では何も重ねず、
+ * あればその上に1行で出す(プロンプトは出さない)。タッチ端末(hover: none)では帯を重ねず、
  * タップでビューアへ移る。
  * 操作は詳細のカードと同じ「詳細」「系列」「削除」(待機中はキャンセル)。幅が足りなければピクセルの
  * 大きさを省いて操作を優先する。
  * 操作と行き先は詳細のカードと同じ(`useHistoryRunActions`、`resolveHistoryCardNavigation`)。
+ * 右上のお気に入りのハート(ADR-0055)は、お気に入りなら常に、そうでなければホバーできる端末では帯と
+ * 同じときだけ、タッチ端末では常に出す(帯は出さないが、ハートはタップで切り替えられる)。
  */
 import { Link } from 'react-router'
 import type { RunSummary } from '../../api/client'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { formatPixelSize } from './galleryLayout'
 import { HistoryCardMedia } from './HistoryCardMedia'
+import { FavoriteButton } from './FavoriteButton'
 import { useHistoryRunActions } from './useHistoryRunActions'
 import styles from './HistoryCard.module.css'
 
@@ -48,6 +51,7 @@ export function HistoryGalleryTile({ run, outputIndex, aspect, size }: HistoryGa
       data-highlight={run.status === 'running'}
     >
       <HistoryCardMedia run={run} output={shownOutput} href={nav.mediaHref} variant="gallery" />
+      {run.status === 'succeeded' && shownOutput && <FavoriteButton output={shownOutput} variant="gallery" />}
       <div className={styles.galleryHover}>
         {title && (
           <Link to={nav.runHref} className={styles.galleryTitle} title={title}>
