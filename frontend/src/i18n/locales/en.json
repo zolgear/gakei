@@ -3304,10 +3304,6 @@
     "fitHelp": "Fit all images on screen, keeping the current angle.",
     "untitled": "(Untitled)",
     "selectionLabel": "Selected image",
-    "neighborsHighlighted": {
-      "one": "Highlighting {count} similar image",
-      "other": "Highlighting {count} similar images"
-    },
     "openInViewer": "Open in viewer",
     "lineageGraph": "Lineage graph",
     "similarInSearch": "See similar images in search",
