@@ -31,6 +31,8 @@ import { useAutoLoadMore } from '../features/history/useAutoLoadMore'
 import { HistoryStatusFilterMenu } from '../features/history/HistoryStatusFilterMenu'
 import { HistorySortMenu } from '../features/history/HistorySortMenu'
 import { HistorySectionHeading } from '../features/history/HistorySectionHeading'
+import { BackToTopButton } from '../features/history/BackToTopButton'
+import { onHistoryScrollTopRequest, scrollElementToTop } from '../features/history/backToTop'
 import { effectiveHistorySort, setHistorySort, useHistorySort } from '../features/history/historySort'
 import { daySections, groupSections, similaritySections } from '../features/history/historySections'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
@@ -58,6 +60,8 @@ export function HistoryPage() {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   useScrollRestoration(scrollAreaRef, 'history')
+  // App バーの「履歴」をもう一度押したら先頭へ戻す(タブの再タップと同じ慣習)。
+  useEffect(() => onHistoryScrollTopRequest(() => scrollElementToTop(scrollAreaRef.current)), [])
   const cardStyle = useHistoryCardStyle()
   const CARD_STYLES: { id: HistoryCardStyle; label: string; icon: ReactNode }[] = [
     { id: 'detail', label: t.history.page.cardStyleDetail, icon: <CardDetailIcon size={16} /> },
@@ -234,6 +238,8 @@ export function HistoryPage() {
           </button>
         )}
       </div>
+
+      <BackToTopButton scrollRef={scrollAreaRef} />
     </div>
   )
 }

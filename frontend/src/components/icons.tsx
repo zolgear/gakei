@@ -222,3 +222,12 @@ export function SortIcon(props: IconProps) {
     </Icon>
   )
 }
+
+/** 上向きの矢印: 一覧の先頭へ戻る。 */
+export function ArrowUpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" />
+    </Icon>
+  )
+}

@@ -137,7 +137,8 @@
       "sortGroup": "Group",
       "sortEmbedding": "Similar",
       "ungrouped": "No group",
-      "sectionCount": "{count} images"
+      "sectionCount": "{count} images",
+      "backToTop": "Back to top"
     }
   },
   "runDetail": {
