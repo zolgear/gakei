@@ -30,6 +30,16 @@ export type AuthAction =
   | { type: 'unauthenticated' }
   | { type: 'userUpdated'; user: AuthUser }
 
+/**
+ * `/api/auth/me` の失敗で「読み込めませんでした」の画面を出すか。出すのは最初の取得が終わる前だけ。
+ * 取得済みなら、フォーカスや再接続での取り直しが失敗しても(電波が一瞬途切れたなど)画面を保つ。
+ * 差し替えるとアプリ全体が外れて作り直され、開いていたドロワーやスクロールの位置が失われる。
+ * ログインが切れたときは 401 で `markUnauthenticated()` が呼ばれるので、そちらで戻す。
+ */
+export function showsLoadFailed(isError: boolean, state: AuthState): boolean {
+  return isError && state.status === 'loading'
+}
+
 const initialState: AuthState = { status: 'loading', mode: 'none', user: null }
 
 /**

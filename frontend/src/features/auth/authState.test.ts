@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAdmin, reduce, type AuthState } from './authState'
+import { isAdmin, reduce, showsLoadFailed, type AuthState } from './authState'
 
 const loading: AuthState = { status: 'loading', mode: 'none', user: null }
 
@@ -50,5 +50,20 @@ describe('isAdmin', () => {
 
   it('oidc モードで未ログイン(user: null)は false', () => {
     expect(isAdmin({ status: 'ready', mode: 'oidc', user: null })).toBe(false)
+  })
+})
+
+describe('showsLoadFailed', () => {
+  it('最初の取得が失敗したら、読み込めなかった画面を出す', () => {
+    expect(showsLoadFailed(true, loading)).toBe(true)
+  })
+
+  it('取得済みなら、取り直しの失敗では画面を差し替えない', () => {
+    const ready: AuthState = { status: 'ready', mode: 'none', user: null }
+    expect(showsLoadFailed(true, ready)).toBe(false)
+  })
+
+  it('失敗していなければ出さない', () => {
+    expect(showsLoadFailed(false, loading)).toBe(false)
   })
 })
