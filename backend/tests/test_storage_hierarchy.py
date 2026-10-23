@@ -303,7 +303,7 @@ def test_legacy_key_asset_is_served_and_downloadable(client: TestClient) -> None
     original = client.get(f"/api/assets/{asset_id}/content", params={"variant": "original"})
     assert original.status_code == 200
     assert original.content == data
-    for variant in ("thumb", "preview"):
+    for variant in ("thumb", "card", "preview"):
         derived = client.get(f"/api/assets/{asset_id}/content", params={"variant": variant})
         assert derived.status_code == 200
 

@@ -39,7 +39,7 @@
 | ADR-0033 | [0033-image-embeddings.md](0033-image-embeddings.md) | 画像の埋め込み(CLIP 系)で、文章での検索、似た画像、重複の検出、マップを作る | Proposed |
 | ADR-0034 | [0034-auth-settings-in-admin-ui.md](0034-auth-settings-in-admin-ui.md) | 認証の設定を管理者設定の画面から行う | Proposed |
 | ADR-0035 | [0035-hide-sketch-mask-in-stock.md](0035-hide-sketch-mask-in-stock.md) | スケッチとマスクをストックに出すかを選べるようにする(既定は出さない) | Proposed |
-| ADR-0036 | [0036-derived-image-version.md](0036-derived-image-version.md) | 派生画像(サムネイル・プレビュー)に版を持たせ、無ければその場で作る | Proposed |
+| ADR-0036 | [0036-derived-image-version.md](0036-derived-image-version.md) | 派生画像(サムネイル・カード・プレビュー)に版を持たせ、無ければその場で作る(2026-10-23: 長辺 1024px のカードを追加) | Proposed |
 | ADR-0037 | [0037-lineage-export-import.md](0037-lineage-export-import.md) | 系列の持ち出し(ZIP)と、別の利用者・インスタンスへの取り込み | Proposed |
 | ADR-0038 | [0038-sd-webui-provider.md](0038-sd-webui-provider.md) | Stable Diffusion WebUI(A1111 互換の API)をプロバイダーに加える | Proposed |
 | ADR-0039 | [0039-prompt-tag-editing.md](0039-prompt-tag-editing.md) | プロンプトをタグで編集する(画像のタグのコピーと、タグ編集モード) | Proposed |

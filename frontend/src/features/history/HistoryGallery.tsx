@@ -112,11 +112,11 @@ function MasonryColumns({ cards, aspects, width, narrow }: LayoutProps) {
     narrow,
     narrowColumns: NARROW_COLUMNS,
   })
+  const columnWidth = width > 0 ? (width - GAP_PX * (columnCount - 1)) / columnCount : 0
   const columns = useMemo(() => {
-    const columnWidth = width > 0 ? (width - GAP_PX * (columnCount - 1)) / columnCount : 0
     const gapRatio = columnWidth > 0 ? GAP_PX / columnWidth : 0
     return assignMasonryColumns(aspects, columnCount, gapRatio)
-  }, [aspects, columnCount, width])
+  }, [aspects, columnCount, columnWidth])
 
   return (
     <div className={styles.masonry} style={{ gap: GAP_PX }}>
@@ -130,6 +130,7 @@ function MasonryColumns({ cards, aspects, width, narrow }: LayoutProps) {
                 run={card.run}
                 outputIndex={card.outputIndex}
                 aspect={aspects[index]}
+                columnWidth={columnWidth}
               />
             )
           })}

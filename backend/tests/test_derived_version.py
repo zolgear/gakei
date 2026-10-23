@@ -72,6 +72,8 @@ def test_version_1_keys_are_unchanged() -> None:
     assert derivatives.DERIVED_VERSION == 1
     assert derived_key(sha, "thumb") == f"derived/{sha}/thumb.webp"
     assert derived_key(sha, "preview") == f"derived/{sha}/preview.webp"
+    assert derived_key(sha, "card") == f"derived/{sha}/card.webp"
+    assert derived_key(sha, "card", 2) == f"derived/{sha}/card.v2.webp"
     assert derived_key(sha, "thumb", 1) == f"derived/{sha}/thumb.webp"
     assert derived_key(sha, "thumb", 2) == f"derived/{sha}/thumb.v2.webp"
     assert derived_key(sha, "preview", 12) == f"derived/{sha}/preview.v12.webp"
@@ -88,6 +90,8 @@ def test_parse_derived_key() -> None:
     sha = "ef" * 32
     assert parse_derived_key(f"derived/{sha}/thumb.webp") == (sha, "thumb", 1)
     assert parse_derived_key(f"derived/{sha}/preview.v3.webp") == (sha, "preview", 3)
+    assert parse_derived_key(f"derived/{sha}/card.webp") == (sha, "card", 1)
+    assert parse_derived_key(f"derived/{sha}/card.v2.webp") == (sha, "card", 2)
     for key in (
         f"derived/{sha}/.tmp-abc.webp",
         f"derived/{sha}/thumb.v0.webp",
@@ -112,7 +116,7 @@ def test_frontend_version_matches_backend() -> None:
 def test_etag_contains_version(client: TestClient) -> None:
     uploaded = _upload(client)
     sha = _asset(client, uploaded["id"]).sha256
-    for variant in ("thumb", "preview"):
+    for variant in ("thumb", "card", "preview"):
         response = client.get(f"/api/assets/{uploaded['id']}/content?variant={variant}&dv=1")
         assert response.status_code == 200
         assert response.headers["etag"] == f'"{sha}-{variant}-d1"'

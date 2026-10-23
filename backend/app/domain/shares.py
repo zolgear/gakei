@@ -54,7 +54,7 @@ SCOPES: tuple[str, ...] = ("single", "ancestors", "lineage")
 # 足さない(ADR-0029 の範囲は変えない)。
 CollectScope = Literal["single", "ancestors", "lineage", "descendants"]
 
-Variant = Literal["thumb", "preview", "original"]
+Variant = Literal["thumb", "card", "preview", "original"]
 
 # 共有のページの URL(`{base}/s/{token}`)。
 SHARE_PATH_PREFIX = "/s/"

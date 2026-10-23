@@ -15,9 +15,10 @@ ADR-0028: `STORAGE_BACKEND` で Azure Blob Storage / S3 互換ストレージも
   以前の規則 `assets/{sha256の先頭2文字}/{sha256}.{拡張子}` で保存した原本は移さず、
   `asset.blob_key` のまま読み出す。
 派生: derived/{sha256}/thumb.webp, derived/{sha256}/preview.webp(内容から作り直せるので従来どおり)
+  カード(ADR-0036 5章、2026-10-23 追記)も同じ規則で derived/{sha256}/card.webp。
   ADR-0036: 派生の作り方の版(`derivatives.DERIVED_VERSION`)ごとにキーを分ける。版 1 は上の
   キーのまま、版 2 以降は derived/{sha256}/thumb.v{N}.webp, derived/{sha256}/preview.v{N}.webp。
-  `content_exists` / `open_content` の thumb / preview は今の版を指す。
+  `content_exists` / `open_content` の thumb / card / preview は今の版を指す。
 
 同じ内容の原本を共有するかどうか(ADR-0026 3章)は DB を持つ側(`domain/assets.py` の
 `ingest`)が決める。ストアはキーの決定と書き込み・読み出しだけを扱う。
@@ -45,12 +46,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-Variant = Literal["original", "thumb", "preview"]
+Variant = Literal["original", "thumb", "card", "preview"]
+DerivedVariant = Literal["thumb", "card", "preview"]
 OriginalKind = Literal["generated", "upload", "mask", "sketch", "composite", "regions"]
 
-_DERIVED_VARIANTS = ("thumb", "preview")
+_DERIVED_VARIANTS = ("thumb", "card", "preview")
 # 派生のファイル名(`thumb.webp` / `thumb.v2.webp` など。ADR-0036 1章)
-_DERIVED_NAME = re.compile(r"^(thumb|preview)(?:\.v([1-9][0-9]*))?\.webp$")
+_DERIVED_NAME = re.compile(r"^(thumb|card|preview)(?:\.v([1-9][0-9]*))?\.webp$")
 
 # 生成画像以外の種類ごとのフォルダ(ADR-0026 1章)
 _KIND_FOLDERS = {
@@ -140,9 +142,7 @@ def legacy_original_key(sha256: str, ext: str) -> str:
     return f"assets/{sha256[:2]}/{sha256}.{ext}"
 
 
-def derived_key(
-    sha256: str, variant: Literal["thumb", "preview"], version: int | None = None
-) -> str:
+def derived_key(sha256: str, variant: DerivedVariant, version: int | None = None) -> str:
     """派生のキー(ADR-0036 1章)。`version` を省くと今の版(`DERIVED_VERSION`)。
 
     版 1 は ADR-0036 より前からのキー(`thumb.webp`)のまま、版 2 以降は `thumb.v{N}.webp`。
@@ -215,8 +215,8 @@ class AssetStore(Protocol):
         """
         ...
 
-    def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
-        """派生画像(thumb/preview)を今の版のキーに保存する(上書きしてよい)。"""
+    def write_derived(self, sha256: str, variant: DerivedVariant, data: bytes) -> None:
+        """派生画像(thumb / card / preview)を今の版のキーに保存する(上書きしてよい)。"""
         ...
 
     def list_keys(self, prefix: str) -> Iterator[str]:
@@ -316,7 +316,7 @@ class LocalFsStore:
         finally:
             tmp_path.unlink(missing_ok=True)
 
-    def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
+    def write_derived(self, sha256: str, variant: DerivedVariant, data: bytes) -> None:
         path = self.root / derived_key(sha256, variant)
         path.parent.mkdir(parents=True, exist_ok=True)
         # 一時ファイルに書き切ってから置き換える。配信の途中で作り直す(ADR-0036 2章)ので、

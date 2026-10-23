@@ -109,7 +109,7 @@ def test_dry_run_counts_only(populated: TestClient, data_dir: Path, target: Any)
 
     originals = {a.blob_key for a in _assets(populated)}
     assert report.originals == len(originals) == 4
-    assert report.derived == 8  # 4枚 × (thumb, preview)
+    assert report.derived == 12  # 4枚 × (thumb, card, preview)
     assert report.total_bytes == sum(len(v) for v in files.values())
     assert report.copied == 0
     assert target.size_of(next(iter(originals))) is None
@@ -122,7 +122,7 @@ def test_migrate_copies_with_same_keys(
     files = _local_files(data_dir)
 
     report = migrate(_settings(data_dir), "s3")
-    assert report.copied == len(files) == 12
+    assert report.copied == len(files) == 16
     assert report.skipped == 0
     assert report.missing == []
     for key, data in files.items():
@@ -134,13 +134,13 @@ def test_migrate_copies_with_same_keys(
 
     # もう一度実行すると、全部飛ばす(続きからコピーできる)
     again = migrate(_settings(data_dir), "s3")
-    assert (again.copied, again.skipped) == (0, 12)
+    assert (again.copied, again.skipped) == (0, 16)
 
     # 移行先を保存先にしたアプリで、論理削除済み・古いキーを含めて配信できる
     monkeypatch.setattr(app_main, "open_store", lambda _settings: target)
     with TestClient(app_main.create_app(_fake_settings(data_dir))) as client:
         for asset in before:
-            for variant in ("original", "thumb", "preview"):
+            for variant in ("original", "thumb", "card", "preview"):
                 response = client.get(f"/api/assets/{asset.id}/content?variant={variant}")
                 assert response.status_code == 200, (asset.blob_key, variant)
 
@@ -197,7 +197,7 @@ def test_cli_dry_run_output(
     out = capsys.readouterr().out
     assert "移行先: s3 (gakei-test)" in out
     assert "原本: 4 件" in out
-    assert "--dry-run: 合計 12 件" in out
+    assert "--dry-run: 合計 16 件" in out
 
     with pytest.raises(SystemExit) as exc_info:
         migrate_storage.main(["--to", "local"])

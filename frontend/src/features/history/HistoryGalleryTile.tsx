@@ -16,6 +16,7 @@ import type { RunSummary } from '../../api/client'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { formatPixelSize } from './galleryLayout'
 import { HistoryCardMedia } from './HistoryCardMedia'
+import { galleryTileSizes } from './historyImageSizes'
 import { FavoriteButton } from './FavoriteButton'
 import { useHistoryRunActions } from './useHistoryRunActions'
 import styles from './HistoryCard.module.css'
@@ -27,9 +28,14 @@ interface HistoryGalleryTileProps {
   aspect: number
   /** 行揃え(`layoutJustifiedRows`)で決まった大きさ(px)。無ければ幅いっぱいに縦横比で出す。 */
   size?: { width: number; height: number }
+  /**
+   * 石積みの列の幅(px)。`<img sizes>`(thumb と card のどちらを読むか。ADR-0036 5章)に使う。
+   * 行揃えでは `size` を使う。どちらも無ければ thumb だけ。
+   */
+  columnWidth?: number
 }
 
-export function HistoryGalleryTile({ run, outputIndex, aspect, size }: HistoryGalleryTileProps) {
+export function HistoryGalleryTile({ run, outputIndex, aspect, size, columnWidth }: HistoryGalleryTileProps) {
   const outputs = run.outputs ?? []
   const shownOutput = outputs[outputIndex] ?? outputs[0]
   const nav = resolveHistoryCardNavigation({
@@ -43,6 +49,8 @@ export function HistoryGalleryTile({ run, outputIndex, aspect, size }: HistoryGa
     leading: pixelSize ? <span className={`${styles.pixelSize} ${styles.galleryPixelSize}`}>{pixelSize}</span> : null,
   })
   const title = shownOutput?.title
+  const tileSize = size ?? (columnWidth && columnWidth > 0 ? { width: columnWidth, height: columnWidth / aspect } : undefined)
+  const sizes = galleryTileSizes(tileSize, shownOutput)
 
   return (
     <article
@@ -50,7 +58,7 @@ export function HistoryGalleryTile({ run, outputIndex, aspect, size }: HistoryGa
       style={size ? { width: size.width, height: size.height } : { width: '100%', aspectRatio: String(aspect) }}
       data-highlight={run.status === 'running'}
     >
-      <HistoryCardMedia run={run} output={shownOutput} href={nav.mediaHref} variant="gallery" />
+      <HistoryCardMedia run={run} output={shownOutput} href={nav.mediaHref} variant="gallery" sizes={sizes} />
       {run.status === 'succeeded' && shownOutput && <FavoriteButton output={shownOutput} variant="gallery" />}
       <div className={styles.galleryHover}>
         {title && (

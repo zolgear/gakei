@@ -14842,7 +14842,7 @@ export interface operations {
     get_asset_content: {
         parameters: {
             query?: {
-                variant?: "thumb" | "preview" | "original";
+                variant?: "thumb" | "card" | "preview" | "original";
                 download?: number;
             };
             header?: never;
@@ -15079,7 +15079,7 @@ export interface operations {
     get_public_share_asset_content: {
         parameters: {
             query?: {
-                variant?: "thumb" | "preview" | "original";
+                variant?: "thumb" | "card" | "preview" | "original";
                 download?: number;
             };
             header?: never;
