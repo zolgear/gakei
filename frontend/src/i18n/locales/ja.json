@@ -38,7 +38,9 @@
     "durationSeconds": "{seconds}秒",
     "elapsedSeconds": "{seconds}s 経過",
     "assetKindRibbon": {
-      "imported": "取り込んだ画像(未検証)"
+      "imported": "インポートした画像(未検証)",
+      "upload": "ストック",
+      "importedShort": "インポート"
     },
     "assetKindLabels": {
       "upload": "アップロード",
@@ -2191,7 +2193,7 @@
     "created": "作成",
     "createdGenerated": "生成",
     "createdUpload": "アップロード",
-    "createdImported": "取り込み",
+    "createdImported": "インポート",
     "promptHeading": "プロンプト",
     "viewRunDetail": "Generated 詳細を見る",
     "sourceImage": "元になった画像:",

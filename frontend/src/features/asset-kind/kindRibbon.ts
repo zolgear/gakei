@@ -15,7 +15,7 @@ export type KindRibbonTone = 'upload' | 'handmade' | 'imported'
 export interface KindRibbon {
   tone: KindRibbonTone
   /**
-   * 文言のキー。`imported` は「取り込んだ画像(未検証)」、それ以外は `common.assetKindLabels` の種別。
+   * 文言のキー。呼び名は `kindRibbonLabel.ts`(アップロードは「ストック」、取り込みは「インポート」)。
    */
   label: 'imported' | 'upload' | 'sketch' | 'composite' | 'mask' | 'regions'
 }

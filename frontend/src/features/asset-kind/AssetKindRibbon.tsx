@@ -11,6 +11,7 @@
 import { ArrowUpIcon, DownloadIcon, PencilIcon } from '../../components/icons'
 import { useI18n } from '../../i18n'
 import { kindRibbon } from './kindRibbon'
+import { kindRibbonLabel } from './kindRibbonLabel'
 import styles from './AssetKindRibbon.module.css'
 
 interface AssetKindRibbonProps {
@@ -23,7 +24,7 @@ export function AssetKindRibbon({ kind, imported = false }: AssetKindRibbonProps
   const { t } = useI18n()
   const ribbon = kindRibbon(kind, imported)
   if (!ribbon) return null
-  const label = ribbon.label === 'imported' ? t.common.assetKindRibbon.imported : t.common.assetKindLabels[ribbon.label]
+  const label = kindRibbonLabel(t, ribbon.label)
   return (
     <span className={styles.ribbon} data-tone={ribbon.tone} role="img" aria-label={label} title={label}>
       <span className={styles.icon}>

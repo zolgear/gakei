@@ -38,7 +38,9 @@
     "durationSeconds": "{seconds}s",
     "elapsedSeconds": "{seconds}s elapsed",
     "assetKindRibbon": {
-      "imported": "Imported image (unverified)"
+      "imported": "Imported image (unverified)",
+      "upload": "Stock",
+      "importedShort": "Imported"
     },
     "assetKindLabels": {
       "upload": "Upload",

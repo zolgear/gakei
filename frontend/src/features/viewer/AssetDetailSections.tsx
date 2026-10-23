@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { getRun, type AssetDetail } from '../../api/client'
 import { useI18n } from '../../i18n'
+import { AssetKindBadge } from '../asset-kind/AssetKindBadge'
 import { createdLabel } from '../asset-kind/kindRibbon'
 import { formatBytes, formatDateTime } from '../../lib/format'
 import { runSeedDisplay } from '../run-detail/runSeedDisplay'
@@ -87,6 +88,7 @@ export function AssetDetailSections({
     <>
       {/* 画像を残さなかった理由(ADR-0051 5章)。いちばん上に出す。 */}
       <WithheldNotice asset={asset} />
+      <AssetKindBadge kind={asset.kind} imported={asset.imported} />
       {supportsAnnotation(asset) && <AssetTitleSection asset={asset} />}
       <dl className={styles.metaList}>
         <dt>{t.viewer.dimensions}</dt>
