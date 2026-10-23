@@ -58,5 +58,6 @@
 | ADR-0052 | [0052-comfyui-binding-map.md](0052-comfyui-binding-map.md) | ComfyUI ワークフローの読み取りと差し込み先の図 | Accepted |
 | ADR-0053 | [0053-region-boxes.md](0053-region-boxes.md) | 領域の指示(入力画像に四角を描き、四角ごとに指示を書く。四角の検出は VLM) | Accepted |
 | ADR-0054 | [0054-history-sort.md](0054-history-sort.md) | 履歴の並べ替え(日付・グループ・似た画像の順) | Proposed |
+| ADR-0055 | [0055-favorites.md](0055-favorites.md) | お気に入り(履歴の画像に印を付け、印で絞り込む。`asset_mark` の最初の実装) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

@@ -8,6 +8,9 @@
  * 元の縦横比で並べるギャラリー)をツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
  * 見えたら自動で読み、失敗時と IntersectionObserver の無い環境のために「さらに読み込む」も残す。
  * 操作(Generate/Edit)の絞り込みは ADR-0009(UI で区別しない)により無い。
+ * お気に入り(ADR-0055)は画像の右上のハートで付け外しし(楽観的に更新、失敗はトースト)、絞り込みの
+ * メニューの「お気に入り」でサーバー側で絞る(日付は `GET /api/runs?favorite=true`、画像単位は
+ * `GET /api/history/assets?favorite=true`)。絞り込みの中で外したカードは、切り替えるまで残す。
  *
  * スクロール位置と絞り込みは、戻る/進む(POP)で入ってきたときだけ復元する
  * (`location.key` を基準に判定。タブをタップして開いた PUSH では先頭から)。
@@ -38,6 +41,9 @@ import { daySections, groupSections, similaritySections } from '../features/hist
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { CardDetailIcon, CardMasonryIcon, CardRowsIcon } from '../components/icons'
 import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
+import { collectFavoriteIds, shownWhileFavoriteOnly } from '../features/history/favorites'
+import { FavoriteToggleContext, useFavoriteToggle } from '../features/history/useFavoriteToggle'
+import { ToastHost, useToast } from '../components/Toast'
 import { hasNewlySucceededRun } from '../features/run-status/assetInvalidation'
 import { hasActiveRuns, countQueue } from '../shell/queueStatus'
 import { useScrollRestoration } from '../shell/useScrollRestoration'
@@ -50,7 +56,8 @@ const ACTIVE_POLL_INTERVAL_MS = 4000
 const RUNS_GC_TIME_MS = 30 * 60 * 1000
 
 // 絞り込みの選択を location.key ごとに覚えておく(POPで戻ったときだけ読み戻す)。
-const filterByLocationKey = new Map<string, StatusFilter>()
+const filterByLocationKey = new Map<string, { status: StatusFilter; favoriteOnly: boolean }>()
+const EMPTY_IDS: ReadonlySet<string> = new Set()
 
 export function HistoryPage() {
   const { t, locale } = useI18n()
@@ -71,14 +78,22 @@ export function HistoryPage() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
     if (navigationType === 'POP') {
-      return filterByLocationKey.get(location.key) ?? 'all'
+      return filterByLocationKey.get(location.key)?.status ?? 'all'
     }
     return 'all'
   })
+  const [favoriteOnly, setFavoriteOnly] = useState<boolean>(() =>
+    navigationType === 'POP' ? (filterByLocationKey.get(location.key)?.favoriteOnly ?? false) : false,
+  )
 
   useEffect(() => {
-    filterByLocationKey.set(location.key, statusFilter)
-  }, [statusFilter, location.key])
+    filterByLocationKey.set(location.key, { status: statusFilter, favoriteOnly })
+  }, [statusFilter, favoriteOnly, location.key])
+
+  const toast = useToast()
+  const showToast = toast.show
+  const favoriteFailed = t.history.card.favoriteFailed
+  const toggleFavorite = useFavoriteToggle(() => showToast({ message: favoriteFailed }))
 
   const storedSort = useHistorySort()
   const { embeddings, isLoading: embeddingsLoading } = useEmbeddingCapabilitiesState()
@@ -101,26 +116,54 @@ export function HistoryPage() {
 
   // グループと似た順(画像単位)。
   const assetSort = sort === 'group' || sort === 'embedding' ? sort : null
-  const assetsQuery = useInfiniteQuery({
-    queryKey: ['history-assets', assetSort],
+
+  // お気に入りの絞り込み(ADR-0055)。日付の並びは別のキーで取る(上の ['runs'] はポーリングに使い続ける)。
+  const favoriteRunsQuery = useInfiniteQuery({
+    queryKey: ['runs', { favorite: true }],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      listHistoryAssets({ sort: assetSort ?? 'group', limit: 30, cursor: pageParam }),
+      listRuns({ limit: 30, cursor: pageParam, favorite: true }),
+    initialPageParam: undefined as string | undefined,
+    gcTime: RUNS_GC_TIME_MS,
+    enabled: favoriteOnly && !assetSort,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  })
+
+  const assetsQuery = useInfiniteQuery({
+    queryKey: favoriteOnly ? ['history-assets', assetSort, { favorite: true }] : ['history-assets', assetSort],
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      listHistoryAssets({
+        sort: assetSort ?? 'group',
+        limit: 30,
+        cursor: pageParam,
+        ...(favoriteOnly ? { favorite: true } : {}),
+      }),
     initialPageParam: undefined as string | undefined,
     gcTime: RUNS_GC_TIME_MS,
     enabled: assetSort === 'group' || (assetSort === 'embedding' && embeddingsAvailable),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
-  const activeQuery = assetSort ? assetsQuery : runsQuery
+  const dateQuery = favoriteOnly ? favoriteRunsQuery : runsQuery
+  const activeQuery = assetSort ? assetsQuery : dateQuery
 
   const hasNextPage = activeQuery.hasNextPage
   const isFetchingNextPage = activeQuery.isFetchingNextPage
   const isFetchNextPageError = activeQuery.isFetchNextPageError
-  const fetchNextPage = assetSort ? assetsQuery.fetchNextPage : runsQuery.fetchNextPage
+  const fetchNextPage = assetSort ? assetsQuery.fetchNextPage : dateQuery.fetchNextPage
   // 末尾の番兵が見えたら続きを読む。状態の絞り込みで1ページ分が全部除かれても番兵は見えたままなので
   // 続けて読む。失敗したら自動では読み直さず、下のボタンで読む。
   useAutoLoadMore(scrollAreaRef, sentinelRef, { hasNextPage, isFetchingNextPage, isFetchNextPageError }, fetchNextPage)
 
   const allRuns = useMemo(() => runsQuery.data?.pages.flatMap((p) => p.items) ?? [], [runsQuery.data])
+  const favoriteRuns = useMemo(
+    () => favoriteRunsQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [favoriteRunsQuery.data],
+  )
+  const dateRuns = favoriteOnly ? favoriteRuns : allRuns
+
+  // 絞り込みの中で一度でもお気に入りとして見えた出力。外してもその場に残す(切り替えたら忘れる)。
+  const [keptFavorites, setKeptFavorites] = useState<ReadonlySet<string>>(EMPTY_IDS)
+  const nextKeptFavorites = favoriteOnly && !assetSort ? collectFavoriteIds(keptFavorites, favoriteRuns) : EMPTY_IDS
+  if (nextKeptFavorites !== keptFavorites) setKeptFavorites(nextKeptFavorites)
   const assetItems = useMemo<HistoryAssetItem[]>(
     () => assetsQuery.data?.pages.flatMap((p) => p.items) ?? [],
     [assetsQuery.data],
@@ -131,12 +174,17 @@ export function HistoryPage() {
   // 状態の絞り込みは、どの並べ方でも Run の状態で掛ける。
   const { sections, total, filteredCount } = useMemo(() => {
     if (!assetSort) {
-      const filtered = filterRuns(allRuns, statusFilter)
-      // 出力が複数の Run は出力ごとのカードに展開し、日が変わる位置で節に分ける。
+      const filtered = filterRuns(dateRuns, statusFilter)
+      // 出力が複数の Run は出力ごとのカードに展開し、日が変わる位置で節に分ける。お気に入りで絞って
+      // いる間は、お気に入りの出力のカードだけ。
+      let cards = expandHistoryCards(filtered)
+      if (favoriteOnly) {
+        cards = cards.filter((card) => shownWhileFavoriteOnly(card.run.outputs?.[card.outputIndex], keptFavorites))
+      }
       return {
-        sections: daySections(expandHistoryCards(filtered), intlLocale(locale), new Date().getFullYear()),
-        total: allRuns.length,
-        filteredCount: filtered.length,
+        sections: daySections(cards, intlLocale(locale), new Date().getFullYear()),
+        total: dateRuns.length,
+        filteredCount: favoriteOnly ? cards.length : filtered.length,
       }
     }
     const allowed = new Set(filterRuns(assetItems.map((item) => item.run), statusFilter).map((run) => run.id))
@@ -149,7 +197,7 @@ export function HistoryPage() {
       total: assetItems.length,
       filteredCount: filtered.length,
     }
-  }, [assetSort, allRuns, assetItems, statusFilter, groupList, ungroupedLabel, locale])
+  }, [assetSort, dateRuns, favoriteOnly, keptFavorites, assetItems, statusFilter, groupList, ungroupedLabel, locale])
 
   const placeholder = historyPlaceholder({
     isLoading: activeQuery.isLoading,
@@ -157,7 +205,8 @@ export function HistoryPage() {
     hasData: activeQuery.data !== undefined,
     total,
     filteredCount,
-    filterActive: statusFilter !== 'all',
+    filterActive: statusFilter !== 'all' || favoriteOnly,
+    favoriteOnly,
   })
 
   // ポーリング中(実行中の Run がある間)に succeeded へ変わった Run を検出したら、
@@ -175,71 +224,80 @@ export function HistoryPage() {
   }, [allRuns, queryClient])
 
   return (
-    <div className={styles.page}>
-      <div className={styles.toolbar}>
-        {/* 見出しは上のナビで分かるので見せない(読み上げのために残す)。 */}
-        <h1 className={styles.srOnly}>{t.history.page.title}</h1>
+    <FavoriteToggleContext.Provider value={toggleFavorite}>
+      <div className={styles.page}>
+        <div className={styles.toolbar}>
+          {/* 見出しは上のナビで分かるので見せない(読み上げのために残す)。 */}
+          <h1 className={styles.srOnly}>{t.history.page.title}</h1>
 
-        <div role="group" aria-label={t.history.page.cardStyle} className={styles.segmentGroup}>
-          {CARD_STYLES.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={cardStyle === option.id}
-              aria-label={option.label}
-              title={option.label}
-              className={styles.segment}
-              data-active={cardStyle === option.id}
-              onClick={() => setHistoryCardStyle(option.id)}
-            >
-              {option.icon}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.toolbarEnd}>
-          <HistorySortMenu value={sort} onChange={setHistorySort} embeddingsAvailable={embeddingsAvailable} />
-          <HistoryStatusFilterMenu value={statusFilter} onChange={setStatusFilter} />
-        </div>
-      </div>
-
-      <div ref={scrollAreaRef} className={styles.scrollArea}>
-        {placeholder === 'loading' && <p className={styles.placeholder}>{t.history.page.loading}</p>}
-        {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
-        {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
-
-        {cardStyle !== 'detail' ? (
-          <HistoryGallery sections={sections} layout={cardStyle === 'rows' ? 'rows' : 'masonry'} />
-        ) : (
-          <div className={styles.sections}>
-            {sections.map((section) => (
-              <section key={section.key}>
-                {section.heading && <HistorySectionHeading heading={section.heading} />}
-                <div className={styles.grid}>
-                  {section.cards.map((card) => (
-                    <HistoryCard key={card.key} run={card.run} variant="overlay" outputIndex={card.outputIndex} />
-                  ))}
-                </div>
-              </section>
+          <div role="group" aria-label={t.history.page.cardStyle} className={styles.segmentGroup}>
+            {CARD_STYLES.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={cardStyle === option.id}
+                aria-label={option.label}
+                title={option.label}
+                className={styles.segment}
+                data-active={cardStyle === option.id}
+                onClick={() => setHistoryCardStyle(option.id)}
+              >
+                {option.icon}
+              </button>
             ))}
           </div>
-        )}
 
-        <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
+          <div className={styles.toolbarEnd}>
+            <HistorySortMenu value={sort} onChange={setHistorySort} embeddingsAvailable={embeddingsAvailable} />
+            <HistoryStatusFilterMenu
+              value={statusFilter}
+              onChange={setStatusFilter}
+              favoriteOnly={favoriteOnly}
+              onFavoriteOnlyChange={setFavoriteOnly}
+            />
+          </div>
+        </div>
 
-        {hasNextPage && (
-          <button
-            type="button"
-            className={styles.loadMore}
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-          >
-            {isFetchingNextPage ? t.history.page.loading : t.history.page.loadMore}
-          </button>
-        )}
+        <div ref={scrollAreaRef} className={styles.scrollArea}>
+          {placeholder === 'loading' && <p className={styles.placeholder}>{t.history.page.loading}</p>}
+          {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
+          {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
+          {placeholder === 'noFavorites' && <p className={styles.placeholder}>{t.history.page.noFavorites}</p>}
+
+          {cardStyle !== 'detail' ? (
+            <HistoryGallery sections={sections} layout={cardStyle === 'rows' ? 'rows' : 'masonry'} />
+          ) : (
+            <div className={styles.sections}>
+              {sections.map((section) => (
+                <section key={section.key}>
+                  {section.heading && <HistorySectionHeading heading={section.heading} />}
+                  <div className={styles.grid}>
+                    {section.cards.map((card) => (
+                      <HistoryCard key={card.key} run={card.run} variant="overlay" outputIndex={card.outputIndex} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+
+          <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
+
+          {hasNextPage && (
+            <button
+              type="button"
+              className={styles.loadMore}
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage ? t.history.page.loading : t.history.page.loadMore}
+            </button>
+          )}
+        </div>
+
+        <BackToTopButton scrollRef={scrollAreaRef} />
+        <ToastHost toast={toast.toast} onDismiss={toast.dismiss} />
       </div>
-
-      <BackToTopButton scrollRef={scrollAreaRef} />
-    </div>
+    </FavoriteToggleContext.Provider>
   )
 }

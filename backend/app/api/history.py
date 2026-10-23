@@ -33,6 +33,7 @@ def list_history_assets(
     sort: HistorySort = Query(..., description="group: グループごと / embedding: 似た画像の順"),
     limit: int = Query(default=30, ge=1, le=200),
     cursor: str | None = Query(default=None),
+    favorite: bool = Query(default=False, description="true: お気に入りの画像だけ(ADR-0055)"),
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
     index: VectorIndex = Depends(get_vector_index),
@@ -43,7 +44,7 @@ def list_history_assets(
     """画像(生成された Asset)単位の履歴。画像の無い Run は出さない。"""
     try:
         if sort == "group":
-            return domain.list_by_group(db, user, limit=limit, cursor=cursor)
+            return domain.list_by_group(db, user, limit=limit, cursor=cursor, favorite=favorite)
         return domain.list_by_embedding(
             db,
             user,
@@ -53,6 +54,7 @@ def list_history_assets(
             cache=cache,
             limit=limit,
             cursor=cursor,
+            favorite=favorite,
         )
     except domain.InvalidHistoryCursorError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

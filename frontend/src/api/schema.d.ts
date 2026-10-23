@@ -644,6 +644,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/favorite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Favorite Asset
+         * @description 見る人のお気に入りにする(ADR-0055)。既に付いていれば何もしない。
+         */
+        put: operations["favorite_asset"];
+        post?: never;
+        /**
+         * Unfavorite Asset
+         * @description 見る人のお気に入りから外す(ADR-0055)。付いていなければ何もしない。
+         */
+        delete: operations["unfavorite_asset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/restore": {
         parameters: {
             query?: never;
@@ -3113,6 +3137,11 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
         };
         /**
          * AssetEmbeddingStatus
@@ -3137,6 +3166,19 @@ export interface components {
             requested_at?: string | null;
             /** Finished At */
             finished_at?: string | null;
+        };
+        /**
+         * AssetFavoriteResponse
+         * @description お気に入りの付け外しの結果(ADR-0055)。
+         */
+        AssetFavoriteResponse: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Favorite */
+            favorite: boolean;
         };
         /** AssetGroupCreate */
         AssetGroupCreate: {
@@ -3404,6 +3446,11 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -7573,6 +7620,11 @@ export interface components {
             width?: number | null;
             /** Height */
             height?: number | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
         };
         /**
          * RunPromptTemplate
@@ -9938,6 +9990,72 @@ export interface operations {
             };
         };
     };
+    favorite_asset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetFavoriteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unfavorite_asset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetFavoriteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     restore_asset: {
         parameters: {
             query?: never;
@@ -10672,6 +10790,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 cursor?: string | null;
+                /** @description true: お気に入りの出力を1つ以上持つ Run だけ(ADR-0055) */
+                favorite?: boolean;
             };
             header?: never;
             path?: never;
@@ -10840,6 +10960,8 @@ export interface operations {
                 sort: "group" | "embedding";
                 limit?: number;
                 cursor?: string | null;
+                /** @description true: お気に入りの画像だけ(ADR-0055) */
+                favorite?: boolean;
             };
             header?: never;
             path?: never;

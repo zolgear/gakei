@@ -648,6 +648,13 @@ export function deleteRun(runId: string): Promise<void> {
   return request(`/api/runs/${runId}`, { method: 'DELETE' })
 }
 
+export type AssetFavoriteResponse = components['schemas']['AssetFavoriteResponse']
+
+/** 見る人のお気に入りにする・外す(冪等。ADR-0055)。 */
+export function setAssetFavorite(assetId: string, favorite: boolean): Promise<AssetFavoriteResponse> {
+  return request(`/api/assets/${assetId}/favorite`, { method: favorite ? 'PUT' : 'DELETE' })
+}
+
 export function getAsset(assetId: string): Promise<AssetDetail> {
   return request(`/api/assets/${assetId}`)
 }

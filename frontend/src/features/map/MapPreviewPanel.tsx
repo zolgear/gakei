@@ -26,6 +26,7 @@ import { RatingBadge } from '../content-rating/RatingBadge'
 import ratingStyles from '../content-rating/ContentRating.module.css'
 import styles from './MapPreviewPanel.module.css'
 import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
+import { AssetFavoriteButton } from '../history/AssetFavoriteButton'
 
 interface MapPreviewPanelProps {
   assetId: string
@@ -91,6 +92,15 @@ export function MapPreviewPanel({
         <h2 className={styles.title} title={title}>
           {title}
         </h2>
+        {/* お気に入り(ADR-0055)。詳細が届くまでは状態が分からないので出さない。 */}
+        {asset && (
+          <AssetFavoriteButton
+            assetId={assetId}
+            favorite={asset.favorite}
+            disabled={Boolean(asset.deleted_at)}
+            className={styles.iconButton}
+          />
+        )}
         <button
           ref={collapseRef}
           type="button"

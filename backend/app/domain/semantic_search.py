@@ -330,7 +330,7 @@ def _hits_to_runs(db: Session, hits: Sequence[RunHit], viewer: CurrentUser) -> l
     outputs = _first_outputs(db, ids)
     # 履歴のカード用の要約(キーワード検索の `_search_runs` と同じ集計)。
     run_ids = list(runs)
-    outputs_map = bulk_output_refs(db, run_ids)
+    outputs_map = bulk_output_refs(db, run_ids, viewer=viewer)
     inputs_map = bulk_input_summary(db, run_ids, viewer)
     descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
     users_map = bulk_users(db, [r.created_by_user_id for r in runs.values()])

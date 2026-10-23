@@ -73,6 +73,8 @@ ASSET_REFERENCES: dict[tuple[str, str], str] = {
     ("download_ticket", "asset_id"): DELETE,
     ("run_input", "asset_id"): DELETE,
     ("asset_group_member", "asset_id"): DELETE,
+    # お気に入りなどの印(ADR-0055)。証跡ではない。
+    ("asset_mark", "asset_id"): DELETE,
     ("asset_annotation", "asset_id"): DELETE,
     ("asset_tag", "asset_id"): DELETE,
     ("asset_embedding", "asset_id"): DELETE,

@@ -40,6 +40,7 @@ from app.domain.run_views import (
     bulk_descendant_run_counts,
     bulk_output_refs,
     bulk_users,
+    run_has_favorite_output,
     run_summary_fields,
     summarize_runs,
     visible_runs_query,
@@ -74,7 +75,7 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
         .scalars()
         .all()
     )
-    outputs = bulk_output_refs(db, [run.id])[run.id]
+    outputs = bulk_output_refs(db, [run.id], viewer=user)[run.id]
     input_count = sum(1 for i in inputs if i.role == RunInputRole.IMAGE)
     # ADR-0025: 見えない Asset(以前のデータで他人の Asset を入力にしていた場合)は、
     # 入力の一覧・主たる親に出さない(id も返さない)。枚数は Run 自身の情報なので数える。
@@ -186,11 +187,16 @@ def create_run(
 def list_runs(
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
+    favorite: bool = Query(
+        default=False, description="true: お気に入りの出力を1つ以上持つ Run だけ(ADR-0055)"
+    ),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> RunListResponse:
     # ADR-0025: 見える Run だけ(App バーの実行中・待機中の件数もこの一覧から数える)。
     query = visible_runs_query(user)
+    if favorite:
+        query = query.where(run_has_favorite_output(user))
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)

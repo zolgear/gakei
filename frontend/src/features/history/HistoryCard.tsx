@@ -17,6 +17,7 @@ import {
 import { buildParamChips, buildParamChipsWithActualSize, formatTokenCount } from './historyChips'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { HistoryCardMedia } from './HistoryCardMedia'
+import { FavoriteButton } from './FavoriteButton'
 import { useHistoryRunActions } from './useHistoryRunActions'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
@@ -111,6 +112,9 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
         <HistoryCardMedia run={run} output={shownOutput} href={nav.mediaHref} variant={variant} />
 
         {variant === 'detail' && parentOverlay}
+        {variant === 'overlay' && run.status === 'succeeded' && shownOutput && (
+          <FavoriteButton output={shownOutput} variant="overlay" />
+        )}
       </div>
 
       <div className={styles.body}>

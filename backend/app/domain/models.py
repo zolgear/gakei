@@ -25,6 +25,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -848,6 +849,42 @@ class AssetRegionDetection(Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("app_user.id"), nullable=True
     )
+
+
+MARK_FLAG_PICK = "pick"
+
+
+class AssetMark(Base):
+    """画像ごと・利用者ごとの印(ADR-0003 の `asset_mark`。ADR-0055)。証跡ではないので、
+    付け外しは自由で、外したら行を消す。
+
+    今の印はお気に入り(`flag = 'pick'`)だけ。`user_id` は認証モードの利用者で、個人モードは
+    NULL。1つの Asset に1人の行は1つだけ(NULL どうしは一意制約で重複とみなされないので、
+    個人モードの行は部分一意索引で1つに限る)。Asset の論理削除では行を残し、一覧で除く。
+    """
+
+    __tablename__ = "asset_mark"
+    __table_args__ = (
+        Index("ux_asset_mark_asset_id_user_id", "asset_id", "user_id", unique=True),
+        Index(
+            "ux_asset_mark_asset_id_local",
+            "asset_id",
+            unique=True,
+            sqlite_where=text("user_id IS NULL"),
+            postgresql_where=text("user_id IS NULL"),
+        ),
+        Index("ix_asset_mark_user_id_flag", "user_id", "flag"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    # 今は 'pick'(お気に入り)だけ。将来 rating / note だけの行のために NULL 可にしておく。
+    flag: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class UserPreference(Base):

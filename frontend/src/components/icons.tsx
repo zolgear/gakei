@@ -231,3 +231,15 @@ export function ArrowUpIcon(props: IconProps) {
     </Icon>
   )
 }
+
+/** ハート: お気に入り(ADR-0055)。`filled` で塗る(星は将来の評価に残す)。 */
+export function HeartIcon({ filled = false, ...props }: IconProps & { filled?: boolean }) {
+  return (
+    <Icon {...props}>
+      <path
+        d="M8 13.5S2 10 2 5.9A3.1 3.1 0 0 1 5.1 2.8c1.2 0 2.2.6 2.9 1.6.7-1 1.7-1.6 2.9-1.6A3.1 3.1 0 0 1 14 5.9C14 10 8 13.5 8 13.5z"
+        fill={filled ? 'currentColor' : 'none'}
+      />
+    </Icon>
+  )
+}
