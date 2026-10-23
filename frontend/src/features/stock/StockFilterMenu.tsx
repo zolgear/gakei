@@ -1,15 +1,16 @@
 /**
- * ストックの絞り込み(種類とタグ)。見出し行にはじょうごのアイコンのボタン1つだけを置き、押すと見出し行の
+ * ストックの絞り込み(種類、お気に入り、タグ)。見出し行にはじょうごのアイコンのボタン1つだけを置き、押すと見出し行の
  * 下に小さなポップオーバーを開く(履歴のツールバーの絞り込みと同じ考え方)。中身は種類のチップ
- * (「表示」の設定で出す種類だけ。ADR-0035)と、タグの入力(`StockTagFilter`。ADR-0024 5章)。
+ * (「表示」の設定で出す種類だけ。ADR-0035)、種類とは独立に切り替えるお気に入りのチップ(ADR-0055)、
+ * タグの入力(`StockTagFilter`。ADR-0024 5章)。
  * 見出しの文字は置かない。
  *
- * 絞り込み中(種類が「すべて」以外か、タグで絞っている)は、ボタンをアクセント色にして小さな点を付ける。
+ * 絞り込み中(種類が「すべて」以外か、お気に入りかタグで絞っている)は、ボタンをアクセント色にして小さな点を付ける。
  * ポップオーバーは見出し行(`position: relative`)の幅いっぱいに出す(狭いサイドバーでも右にはみ出さない)。
  * 種類を選んでも閉じない(続けてタグも選べるように)。外側の押下と Esc で閉じる。
  */
 import { useEffect, useRef } from 'react'
-import { FilterIcon } from '../../components/icons'
+import { FilterIcon, HeartIcon } from '../../components/icons'
 import { useI18n, type Messages } from '../../i18n'
 import type { StockKindFilter } from './stockQueryKey'
 import { StockTagFilter } from './StockTagFilter'
@@ -39,10 +40,19 @@ interface StockFilterMenuProps {
   kind: StockKindFilter
   kindChoices: StockKindFilter[]
   onKindChange: (kind: StockKindFilter) => void
+  favoriteOnly: boolean
+  onFavoriteOnlyChange: (value: boolean) => void
   active: boolean
 }
 
-export function StockFilterMenu({ kind, kindChoices, onKindChange, active }: StockFilterMenuProps) {
+export function StockFilterMenu({
+  kind,
+  kindChoices,
+  onKindChange,
+  favoriteOnly,
+  onFavoriteOnlyChange,
+  active,
+}: StockFilterMenuProps) {
   const { t } = useI18n()
   const label = t.stock.filter
   const { open, toggle, rootRef, triggerRef } = useHeaderPopover()
@@ -88,6 +98,18 @@ export function StockFilterMenu({ kind, kindChoices, onKindChange, active }: Sto
                 {kindLabel(t, id)}
               </button>
             ))}
+          </div>
+          <div className={styles.chips}>
+            <button
+              type="button"
+              aria-pressed={favoriteOnly}
+              className={`${styles.chip} ${styles.favoriteChip}`}
+              data-active={favoriteOnly}
+              onClick={() => onFavoriteOnlyChange(!favoriteOnly)}
+            >
+              <HeartIcon size={12} filled={favoriteOnly} />
+              {t.stock.filterFavorite}
+            </button>
           </div>
           <StockTagFilter />
         </div>

@@ -243,3 +243,13 @@ export function HeartIcon({ filled = false, ...props }: IconProps & { filled?: b
     </Icon>
   )
 }
+
+/** 鉛筆: 手で作った画像(スケッチ・配置・マスク・領域)の種別の印。 */
+export function PencilIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10.5 2.5l3 3-8 8H2.5v-3z" />
+      <path d="M9 4l3 3" />
+    </Icon>
+  )
+}

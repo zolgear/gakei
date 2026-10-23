@@ -10,6 +10,11 @@ describe('isStockFilterActive', () => {
     expect(isStockFilterActive('upload', null)).toBe(true)
     expect(isStockFilterActive('all', 'cat')).toBe(true)
   })
+
+  it('お気に入りで絞っていれば絞り込み中', () => {
+    expect(isStockFilterActive('all', null, true)).toBe(true)
+    expect(isStockFilterActive('all', null, false)).toBe(false)
+  })
 })
 
 describe('isFileDragForUpload', () => {

@@ -15,6 +15,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { getRun, type AssetDetail } from '../../api/client'
 import { useI18n } from '../../i18n'
+import { AssetKindBadge } from '../asset-kind/AssetKindBadge'
+import { createdLabel } from '../asset-kind/kindRibbon'
 import { formatBytes, formatDateTime } from '../../lib/format'
 import { runSeedDisplay } from '../run-detail/runSeedDisplay'
 import { FinalPromptSection } from '../run-detail/FinalPromptSection'
@@ -74,10 +76,19 @@ export function AssetDetailSections({
     (i) => i.role === 'image' && i.position === 0,
   )?.asset_id
 
+  // 日時の見出しを種別で言い分ける(生成・アップロード・取り込み・作成。kindRibbon.ts)。
+  const createdLabelText = {
+    generated: t.viewer.createdGenerated,
+    upload: t.viewer.createdUpload,
+    imported: t.viewer.createdImported,
+    created: t.viewer.created,
+  }[createdLabel(asset.kind, asset.imported)]
+
   return (
     <>
       {/* 画像を残さなかった理由(ADR-0051 5章)。いちばん上に出す。 */}
       <WithheldNotice asset={asset} />
+      <AssetKindBadge kind={asset.kind} imported={asset.imported} />
       {supportsAnnotation(asset) && <AssetTitleSection asset={asset} />}
       <dl className={styles.metaList}>
         <dt>{t.viewer.dimensions}</dt>
@@ -90,7 +101,7 @@ export function AssetDetailSections({
         <dd>{formatBytes(asset.bytes)}</dd>
         <dt>sha256</dt>
         <dd className={styles.mono}>{asset.sha256.slice(0, 16)}...</dd>
-        <dt>{t.viewer.created}</dt>
+        <dt>{createdLabelText}</dt>
         <dd>{formatDateTime(asset.created_at)}</dd>
       </dl>
 

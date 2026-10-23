@@ -40,6 +40,7 @@ from app.domain import (
     derivatives,
     embedding_settings,
     focal_points,
+    imported_assets,
     perceptual_hash,
     prompt_embeddings,
 )
@@ -280,6 +281,7 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
     titles = annotations_domain.bulk_titles(db, ids)
     focals = focal_points.bulk_get(db, ids)
     ratings = content_rating.bulk_levels(db, ids)
+    imported_ids = imported_assets.bulk_imported_ids(db, assets.values())
     result: list[SemanticAssetHit] = []
     for hit in hits:
         asset = assets.get(hit.asset_id)
@@ -297,6 +299,7 @@ def _hits_to_assets(db: Session, hits: Sequence[Hit]) -> list[SemanticAssetHit]:
                 title=titles.get(asset.id),
                 focal_point=focals.get(asset.id),
                 content_rating=ratings.get(asset.id),  # type: ignore[arg-type]
+                imported=asset.id in imported_ids,
                 score=round(hit.score, 6),
             )
         )
@@ -728,6 +731,7 @@ def find_duplicates(
     titles = annotations_domain.bulk_titles(db, member_ids)
     focals = focal_points.bulk_get(db, member_ids)
     ratings = content_rating.bulk_levels(db, member_ids)
+    imported_ids = imported_assets.bulk_imported_ids(db, assets.values())
     groups: list[DuplicateGroup] = []
     for leader, members in raw_groups:
         # 代表は、メンバーとの類似度の最大値。メンバーは代表との類似度。
@@ -749,6 +753,7 @@ def find_duplicates(
                     title=titles.get(asset.id),
                     focal_point=focals.get(asset.id),
                     content_rating=ratings.get(asset.id),  # type: ignore[arg-type]
+                    imported=asset.id in imported_ids,
                     max_score=round(score, 6),
                     hash_missing=by_position[x] is None,
                 )

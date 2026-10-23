@@ -11,14 +11,21 @@
  * - ホバーできる端末では、操作の上の1行にタイトル(ADR-0024。あれば)と大きさ(幅×高さ)を出す。
  *   大きさは縮めず(途中で切らず)、狭ければタイトルのほうを省略する。タッチ端末では操作の1行だけに
  *   して、画像を隠さない(大きさの入る幅が無い)。
- * - 段階のバッジ(ADR-0049)は左上。右上の隅は空けておく(お気に入りの印を置く予定)。
+ * - 段階のバッジ(ADR-0049)は左上。右上はお気に入りのハート(ADR-0055。履歴のギャラリーと同じ見せ方):
+ *   お気に入りなら常に塗りで出し、そうでなければホバーできる端末ではマウスを載せたとき・中にフォーカスが
+ *   あるときだけ、ホバーできない端末では常に線で出す。画像ボタンの外(兄弟の要素)なので、押してもタイルは
+ *   開かずドラッグも始まらない。選択モードの間はタイルの選択を優先して出さない。
  *   選択モードの印は右下(選択モードの間は操作を出さないので重ならない)。
+ * - 左下の隅は種別のリボン(`AssetKindRibbon`。生成した画像には出ない)。下端の操作の1行より下の層に置き、
+ *   リボンがあるときは操作の1行の左にリボンの幅だけ空ける(右寄せの操作が多くて狭いときに重ねない)。
  */
 import type { AssetSummary } from '../../api/client'
-import { AddToInputIcon, CrossIcon, TrashIcon } from '../../components/icons'
+import { AddToInputIcon, CrossIcon, HeartIcon, TrashIcon } from '../../components/icons'
 import { useI18n } from '../../i18n'
 import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
 import { AssetThumb } from '../content-rating/AssetThumb'
+import { AssetKindRibbon } from '../asset-kind/AssetKindRibbon'
+import { kindRibbon } from '../asset-kind/kindRibbon'
 import { focalStyle } from '../../lib/focalPoint'
 import { stockTileActions, stockTilePixelSize } from './stockTileActions'
 import styles from './StockTile.module.css'
@@ -33,6 +40,8 @@ interface StockTileProps {
   onToggleSelect: (asset: AssetSummary) => void
   onUseAsInput: (asset: AssetSummary) => void
   onDelete: (asset: AssetSummary) => void
+  /** お気に入りの付け外し(ADR-0055)。 */
+  onToggleFavorite: (assetId: string, favorite: boolean) => void
   /** グループの節でだけ渡す。渡すと「このグループから外す」(×)を出す。 */
   onRemoveFromGroup?: (asset: AssetSummary) => void
 }
@@ -46,6 +55,7 @@ export function StockTile({
   onToggleSelect,
   onUseAsInput,
   onDelete,
+  onToggleFavorite,
   onRemoveFromGroup,
 }: StockTileProps) {
   const { t } = useI18n()
@@ -61,9 +71,12 @@ export function StockTile({
     inGroup: onRemoveFromGroup !== undefined,
   })
   const pixelSize = stockTilePixelSize(asset.width, asset.height)
+  const favorite = asset.favorite === true
+  const imported = asset.imported === true
+  const hasRibbon = kindRibbon(asset.kind, imported) !== null
 
   return (
-    <div className={styles.tile} data-selected={selectionMode && isSelected}>
+    <div className={styles.tile} data-selected={selectionMode && isSelected} data-ribbon={hasRibbon}>
       <button
         type="button"
         className={styles.tileImageButton}
@@ -98,6 +111,25 @@ export function StockTile({
           </span>
         )}
       </button>
+
+      <AssetKindRibbon kind={asset.kind} imported={imported} />
+
+      {!selectionMode && (
+        <button
+          type="button"
+          className={styles.favoriteButton}
+          data-favorite={favorite}
+          aria-pressed={favorite}
+          aria-label={t.history.card.favorite}
+          title={t.history.card.favorite}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleFavorite(asset.id, !favorite)
+          }}
+        >
+          <HeartIcon size={16} filled={favorite} />
+        </button>
+      )}
 
       {actions.length > 0 && (
         <div className={styles.overlay}>

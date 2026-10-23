@@ -2,12 +2,13 @@
  * お気に入り(ADR-0055)の、react-query のキャッシュの書き換えと、絞り込み中の表示の判定。
  * 画面の部品から切り離した純粋関数にしてテストする。
  *
- * 書き換えるキャッシュの形は4つ。同じ Asset がどこに出ていても同じ状態に揃える。
+ * 書き換えるキャッシュの形は5つ。同じ Asset がどこに出ていても同じ状態に揃える。
  * - Run の一覧(`['runs', ...]`。ページの項目が `RunSummary`)
  * - 画像単位の履歴(`['history-assets', ...]`。ページの項目が `{ asset_id, run: RunSummary }`)
+ * - ストックの一覧(`['assets', ...]`。ページの項目が `AssetSummary`)
  * - Run 1件(`['run', id]`。`RunDetail`。ビューアの出力の切り替えなど)
  * - Asset 1件(`['asset', id]`。`AssetDetail`。ビューアや系列・マップのパネル)
- * Run を含むものは `run.outputs[].favorite`、Asset 1件は `favorite` を書き換える。
+ * Run を含むものは `run.outputs[].favorite`、Asset 1件とストックの項目は `favorite` を書き換える。
  */
 import type { RunOutputRef, RunSummary } from '../../api/client'
 
@@ -38,8 +39,23 @@ function isRunSummary(item: unknown): item is RunSummary {
   return typeof item === 'object' && item !== null && 'outputs' in item && 'status' in item
 }
 
+/** ストックの一覧の項目(`AssetSummary`)の形か。Asset 1件(`AssetDetail`)とは `sha256` の有無で分ける。 */
+function isAssetSummary(item: unknown): item is { id: string; favorite?: boolean } {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    typeof (item as { id?: unknown }).id === 'string' &&
+    'mime' in item &&
+    !('sha256' in item)
+  )
+}
+
 function updateItem(item: unknown, assetId: string, favorite: boolean): unknown {
   if (isRunSummary(item)) return updateRun(item, assetId, favorite)
+  if (isAssetSummary(item)) {
+    if (item.id !== assetId || Boolean(item.favorite) === favorite) return item
+    return { ...item, favorite }
+  }
   if (typeof item === 'object' && item !== null && 'run' in item && isRunSummary((item as { run: unknown }).run)) {
     const wrapped = item as { run: RunSummary }
     const run = updateRun(wrapped.run, assetId, favorite)

@@ -48,6 +48,22 @@ def favorite_asset_ids(viewer: CurrentUser) -> Select[tuple]:
     )
 
 
+def bulk_favorite_ids(
+    db: Session, viewer: CurrentUser, asset_ids: list[uuid.UUID]
+) -> set[uuid.UUID]:
+    """`asset_ids` のうち `viewer` がお気に入りにしたもの(1回の問い合わせ。ストックの一覧)。"""
+    if not asset_ids:
+        return set()
+    rows = db.execute(
+        select(AssetMark.asset_id).where(
+            AssetMark.asset_id.in_(asset_ids),
+            mark_owner_condition(viewer),
+            AssetMark.flag == MARK_FLAG_PICK,
+        )
+    )
+    return set(rows.scalars().all())
+
+
 def is_favorite(db: Session, viewer: CurrentUser, asset_id: uuid.UUID) -> bool:
     return (
         db.execute(

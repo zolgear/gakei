@@ -37,6 +37,11 @@
     },
     "durationSeconds": "{seconds}秒",
     "elapsedSeconds": "{seconds}s 経過",
+    "assetKindRibbon": {
+      "imported": "インポートした画像(未検証)",
+      "upload": "ストック",
+      "importedShort": "インポート"
+    },
     "assetKindLabels": {
       "upload": "アップロード",
       "generated": "生成",
@@ -2186,6 +2191,9 @@
     "format": "形式",
     "size": "サイズ",
     "created": "作成",
+    "createdGenerated": "生成",
+    "createdUpload": "アップロード",
+    "createdImported": "インポート",
     "promptHeading": "プロンプト",
     "viewRunDetail": "Generated 詳細を見る",
     "sourceImage": "元になった画像:",
@@ -2442,6 +2450,9 @@
     },
     "duplicatesLink": "重複の候補",
     "filter": "絞り込み",
+    "filterFavorite": "お気に入り",
+    "favoriteEmptyInSection": "お気に入りの画像はありません",
+    "filterEmptyInSection": "条件に合う画像はありません",
     "moreActions": "その他の操作",
     "kindRegions": "領域"
   },

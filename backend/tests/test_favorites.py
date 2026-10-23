@@ -347,3 +347,85 @@ def test_lists_do_not_query_per_item(client: TestClient) -> None:
         assert _favorite(client, _output_ids(run)[1]).status_code == 200
     large = measure()
     assert large == small
+
+
+# -- ストックの一覧(`GET /api/assets`) ----------------------------------------------
+
+
+def _stock_pages(client: TestClient, limit: int, **params: Any) -> list[dict]:
+    items: list[dict] = []
+    cursor: str | None = None
+    while True:
+        query: dict[str, Any] = {"limit": limit, **params}
+        if cursor:
+            query["cursor"] = cursor
+        response = client.get("/api/assets", params=query)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        items.extend(body["items"])
+        cursor = body["next_cursor"]
+        if not cursor:
+            return items
+
+
+def test_stock_list_shows_favorite_and_filters(client: TestClient) -> None:
+    picked: list[str] = []
+    others: list[str] = []
+    for i in range(3):
+        first, second = _output_ids(_run(client, f"stock {i}", n=2))
+        assert _favorite(client, first).status_code == 200
+        picked.append(first)
+        others.append(second)
+
+    listed = {a["id"]: a["favorite"] for a in _stock_pages(client, 50)}
+    assert listed == {**dict.fromkeys(picked, True), **dict.fromkeys(others, False)}
+
+    # 絞り込みは並び(新しい順)とカーソルを保つ。
+    filtered = _stock_pages(client, 2, favorite=True)
+    assert [a["id"] for a in filtered] == list(reversed(picked))
+    assert all(a["favorite"] for a in filtered)
+
+    # 削除した Asset は絞り込みにも出ない。
+    assert client.delete(f"/api/assets/{picked[0]}").status_code == 204
+    assert [a["id"] for a in _stock_pages(client, 50, favorite=True)] == list(reversed(picked[1:]))
+
+
+def test_stock_list_favorite_is_per_viewer(client_oidc: TestClient) -> None:
+    login_as(client_oidc, "alice@example.com")
+    (asset_id,) = _output_ids(_run(client_oidc, "alice"))
+    assert _favorite(client_oidc, asset_id).status_code == 200
+    assert [a["favorite"] for a in _stock_pages(client_oidc, 50)] == [True]
+    client_oidc.cookies.clear()
+
+    login_as(client_oidc, "bob@example.com")
+    (bob_asset,) = _output_ids(_run(client_oidc, "bob"))
+    assert [(a["id"], a["favorite"]) for a in _stock_pages(client_oidc, 50)] == [(bob_asset, False)]
+    assert _stock_pages(client_oidc, 50, favorite=True) == []
+
+
+def test_stock_list_does_not_query_per_item(client: TestClient) -> None:
+    from app.api import assets as assets_api
+
+    def call(favorite: bool) -> Callable[[Session], object]:
+        return lambda db: assets_api.list_assets(
+            kind=None,
+            group_id=None,
+            ungrouped=False,
+            tag=None,
+            favorite=favorite,
+            limit=50,
+            cursor=None,
+            db=db,
+            user=LOCAL_ADMIN,
+        )
+
+    def measure() -> tuple[int, int]:
+        return _count_queries(client, call(False)), _count_queries(client, call(True))
+
+    run = _run(client, "first", n=2)
+    assert _favorite(client, _output_ids(run)[0]).status_code == 200
+    small = measure()
+    for i in range(5):
+        run = _run(client, f"more {i}", n=2)
+        assert _favorite(client, _output_ids(run)[1]).status_code == 200
+    assert measure() == small

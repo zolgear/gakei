@@ -2,7 +2,7 @@
  * ストック一覧の種類の絞り込みと React Query キー。
  *
  * キーには、サーバーに `kind` で渡す種類の集合(ADR-0035)、節(各グループか「グループなし」。ADR-0022)、
- * タグの絞り込み(ADR-0024 5章)を含める。どのキーも `'assets'` で始め、
+ * タグの絞り込み(ADR-0024 5章)、お気に入りの絞り込み(ADR-0055。履歴と同じく `{ favorite: true }`)を含める。どのキーも `'assets'` で始め、
  * `invalidateQueries({ queryKey: ['assets'] })` でストックのパネルとピッカーがまとめて作り直されるようにする。
  * ピッカーのキーは 2 番目に `'picker'` を置き、パネルの節のキー(2 番目は種類の集合)と取り違えないようにする。
  */
@@ -52,18 +52,22 @@ export function stockKindsKey(kinds: readonly StockAssetKind[] | null): string {
 /** ストックパネルの節が何を一覧するか。 */
 export type StockSectionScope = { groupId: string } | { ungrouped: true }
 
-/** タグで絞っていなければ null(キーにも含めない。絞り込み前のキーと同じ形のまま)。 */
+/**
+ * タグで絞っていなければ null(キーにも含めない。絞り込み前のキーと同じ形のまま)。お気に入りで絞って
+ * いれば末尾に `{ favorite: true }` を置く(付け外しの後に古いと印を付ける対象。`useFavoriteToggle.ts`)。
+ */
 export function stockAssetsQueryKey(
   kinds: readonly StockAssetKind[] | null,
   scope: StockSectionScope,
   tag: string | null = null,
-) {
+  favoriteOnly = false,
+): readonly unknown[] {
   const kindsKey = stockKindsKey(kinds)
-  const base =
-    'groupId' in scope
-      ? (['assets', kindsKey, 'group', scope.groupId] as const)
-      : (['assets', kindsKey, 'ungrouped'] as const)
-  return tag ? ([...base, 'tag', tag] as const) : base
+  const base: unknown[] =
+    'groupId' in scope ? ['assets', kindsKey, 'group', scope.groupId] : ['assets', kindsKey, 'ungrouped']
+  if (tag) base.push('tag', tag)
+  if (favoriteOnly) base.push({ favorite: true })
+  return base
 }
 
 // -- ストックピッカー(入力画像の追加とアバターの選択。ADR-0020) --------------------

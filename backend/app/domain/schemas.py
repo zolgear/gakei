@@ -410,6 +410,12 @@ class AssetSummary(BaseModel):
     # `/content` は 410 で、画面は「画像なし(拒否)」の置き換えの表示にする。
     content_withheld: bool = False
     content_withheld_at: datetime | None = None
+    # 見る人のお気に入りか(ADR-0055)。埋めるのはストックの一覧(`GET /api/assets`)だけで、
+    # 検索の結果などほかの応答では常に false。
+    favorite: bool = False
+    # 系列の取り込み(ADR-0037)で入った、取り込んだ Run が作った生成画像か(記録は未検証)。
+    # タイルの種別のリボンに使う。取り込みで入ったアップロードなどは種別のとおり false。
+    imported: bool = False
 
 
 class ModVerdictView(BaseModel):

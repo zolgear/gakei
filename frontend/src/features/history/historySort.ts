@@ -17,12 +17,16 @@ export function parseHistorySort(raw: unknown): HistorySort {
 /**
  * 実際に使う並べ方。似た順は埋め込みが使えるときだけ(使えなければ日付。保存値は残す)。
  * 使えるかまだ分からない間は、似た順のまま待つ(一覧の取得は使えると分かってから)。
+ * capabilities では使えるのに一覧が 409(埋め込みを使えない)を返したとき(`rejected`。開いている間に
+ * 管理者が無効にしたなど)も日付で見せる。どちらも保存値は書き換えず、使えるようになれば似た順に戻る。
  */
 export function effectiveHistorySort(
   sort: HistorySort,
-  embeddings: { available: boolean; loading: boolean },
+  embeddings: { available: boolean; loading: boolean; rejected?: boolean },
 ): HistorySort {
-  if (sort === 'embedding' && !embeddings.available && !embeddings.loading) return 'date'
+  if (sort !== 'embedding') return sort
+  if (embeddings.rejected) return 'date'
+  if (!embeddings.available && !embeddings.loading) return 'date'
   return sort
 }
 

@@ -12,15 +12,19 @@
  * メニューの「お気に入り」でサーバー側で絞る(日付は `GET /api/runs?favorite=true`、画像単位は
  * `GET /api/history/assets?favorite=true`)。絞り込みの中で外したカードは、切り替えるまで残す。
  *
- * スクロール位置と絞り込みは、戻る/進む(POP)で入ってきたときだけ復元する
+ * 絞り込み(状態とお気に入り)は URL のクエリに置く(`historyFilterUrl.ts`)。リロードしても残り、
+ * 戻る/進むではその時の絞り込みに戻る。切り替えは履歴を積まない(replace)。App バーの「履歴」から
+ * 入り直すと `/` なので外れる(履歴を開いている間の再タップは先頭へ戻すだけで、絞り込みは残す)。
+ *
+ * スクロール位置は、戻る/進む(POP)で入ってきたときだけ復元する
  * (`location.key` を基準に判定。タブをタップして開いた PUSH では先頭から)。
  * 実際にスクロールしているのは window ではなく `.scrollArea`(このページ自身が持つ
  * 内側のスクロールコンテナ)なので、復元もそこに対して行う。
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { useLocation, useNavigationType } from 'react-router'
-import { listHistoryAssets, listRuns, type HistoryAssetItem } from '../api/client'
+import { useSearchParams } from 'react-router'
+import { ApiError, listHistoryAssets, listRuns, type HistoryAssetItem } from '../api/client'
 import { historyPlaceholder } from '../features/history/historyPlaceholder'
 import { HistoryCard } from '../features/history/HistoryCard'
 import { HistoryGallery } from '../features/history/HistoryGallery'
@@ -41,6 +45,7 @@ import { daySections, groupSections, similaritySections } from '../features/hist
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { CardDetailIcon, CardMasonryIcon, CardRowsIcon } from '../components/icons'
 import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
+import { historyFilterSearchParams, parseHistoryFilter } from '../features/history/historyFilterUrl'
 import { collectFavoriteIds, shownWhileFavoriteOnly } from '../features/history/favorites'
 import { FavoriteToggleContext, useFavoriteToggle } from '../features/history/useFavoriteToggle'
 import { ToastHost, useToast } from '../components/Toast'
@@ -55,14 +60,10 @@ const ACTIVE_POLL_INTERVAL_MS = 4000
 // 戻ってきたときに読み込み済みページが残っているよう、通常の(5分)より長く持たせる。
 const RUNS_GC_TIME_MS = 30 * 60 * 1000
 
-// 絞り込みの選択を location.key ごとに覚えておく(POPで戻ったときだけ読み戻す)。
-const filterByLocationKey = new Map<string, { status: StatusFilter; favoriteOnly: boolean }>()
 const EMPTY_IDS: ReadonlySet<string> = new Set()
 
 export function HistoryPage() {
   const { t, locale } = useI18n()
-  const location = useLocation()
-  const navigationType = useNavigationType()
   const queryClient = useQueryClient()
   const scrollAreaRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -76,19 +77,14 @@ export function HistoryPage() {
     { id: 'rows', label: t.history.page.cardStyleRows, icon: <CardRowsIcon size={16} /> },
   ]
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
-    if (navigationType === 'POP') {
-      return filterByLocationKey.get(location.key)?.status ?? 'all'
-    }
-    return 'all'
-  })
-  const [favoriteOnly, setFavoriteOnly] = useState<boolean>(() =>
-    navigationType === 'POP' ? (filterByLocationKey.get(location.key)?.favoriteOnly ?? false) : false,
-  )
-
-  useEffect(() => {
-    filterByLocationKey.set(location.key, { status: statusFilter, favoriteOnly })
-  }, [statusFilter, favoriteOnly, location.key])
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { status: statusFilter, favoriteOnly } = parseHistoryFilter(searchParams)
+  // 切り替えはブラウザの履歴を積まない(戻るで絞り込みを1つずつ戻すより、前の画面へ戻るほうが自然)。
+  const setFilter = (patch: { status?: StatusFilter; favoriteOnly?: boolean }) =>
+    setSearchParams(
+      (prev) => historyFilterSearchParams(prev, { ...parseHistoryFilter(prev), ...patch }),
+      { replace: true },
+    )
 
   const toast = useToast()
   const showToast = toast.show
@@ -98,7 +94,15 @@ export function HistoryPage() {
   const storedSort = useHistorySort()
   const { embeddings, isLoading: embeddingsLoading } = useEmbeddingCapabilitiesState()
   const embeddingsAvailable = embeddings !== null
-  const sort = effectiveHistorySort(storedSort, { available: embeddingsAvailable, loading: embeddingsLoading })
+  // 似た順の一覧が 409(埋め込みを使えない)を返したら、日付で見せる(保存値は残す)。下の effect で
+  // capabilities を取り直すので、使えないと分かればメニューからも似た順が消える。メニューで並べ方を
+  // 選び直したら、もう一度似た順を試す。
+  const [embeddingRejected, setEmbeddingRejected] = useState(false)
+  const sort = effectiveHistorySort(storedSort, {
+    available: embeddingsAvailable,
+    loading: embeddingsLoading,
+    rejected: embeddingRejected,
+  })
 
   // 日付の並びの元。並べ替えに関わらず取る(実行中の Run のポーリングと、成功の検出に使う)。
   const runsQuery = useInfiniteQuery({
@@ -140,8 +144,25 @@ export function HistoryPage() {
     initialPageParam: undefined as string | undefined,
     gcTime: RUNS_GC_TIME_MS,
     enabled: assetSort === 'group' || (assetSort === 'embedding' && embeddingsAvailable),
+    // 409(埋め込みを使えない)は繰り返しても変わらないので、すぐに日付へ切り替える。
+    retry: (failureCount, error) => !(error instanceof ApiError && error.status === 409) && failureCount < 3,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
+  const assetsError = assetsQuery.error
+  if (
+    !embeddingRejected &&
+    assetSort === 'embedding' &&
+    assetsError instanceof ApiError &&
+    assetsError.status === 409
+  ) {
+    setEmbeddingRejected(true)
+  }
+  useEffect(() => {
+    if (!embeddingRejected) return
+    // 失敗を覚えたままだと、選び直したときにすぐまた 409 と判定するので捨てる。
+    queryClient.removeQueries({ queryKey: ['history-assets', 'embedding'] })
+    void queryClient.invalidateQueries({ queryKey: ['capabilities'] })
+  }, [embeddingRejected, queryClient])
   const dateQuery = favoriteOnly ? favoriteRunsQuery : runsQuery
   const activeQuery = assetSort ? assetsQuery : dateQuery
 
@@ -248,12 +269,19 @@ export function HistoryPage() {
           </div>
 
           <div className={styles.toolbarEnd}>
-            <HistorySortMenu value={sort} onChange={setHistorySort} embeddingsAvailable={embeddingsAvailable} />
+            <HistorySortMenu
+              value={sort}
+              onChange={(next) => {
+                setEmbeddingRejected(false)
+                setHistorySort(next)
+              }}
+              embeddingsAvailable={embeddingsAvailable}
+            />
             <HistoryStatusFilterMenu
               value={statusFilter}
-              onChange={setStatusFilter}
+              onChange={(status) => setFilter({ status })}
               favoriteOnly={favoriteOnly}
-              onFavoriteOnlyChange={setFavoriteOnly}
+              onFavoriteOnlyChange={(value) => setFilter({ favoriteOnly: value })}
             />
           </div>
         </div>

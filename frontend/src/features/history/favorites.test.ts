@@ -49,6 +49,19 @@ describe('setFavoriteInCache', () => {
   })
 })
 
+describe('setFavoriteInCache(ストックの一覧)', () => {
+  it('AssetSummary の項目は id が合うものだけを書き換え、変わらなければ同じ参照', () => {
+    const a = { id: 'a', kind: 'generated', mime: 'image/png', favorite: false }
+    const b = { id: 'b', kind: 'upload', mime: 'image/png', favorite: false }
+    const data = { pages: [{ items: [a, b] }], pageParams: [undefined] }
+    const next = setFavoriteInCache(data, 'a', true)
+    expect(next.pages[0].items[0]).toEqual({ ...a, favorite: true })
+    expect(next.pages[0].items[1]).toBe(b)
+    expect(setFavoriteInCache(next, 'a', true)).toBe(next)
+    expect(setFavoriteInCache(data, 'z', true)).toBe(data)
+  })
+})
+
 describe('setFavoriteInCache の1件の形', () => {
   it('Asset 1件(AssetDetail)は id が合うときだけ favorite を書き換える', () => {
     const detail = { id: 'a', sha256: 'x', favorite: false }

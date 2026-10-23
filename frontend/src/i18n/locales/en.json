@@ -37,6 +37,11 @@
     },
     "durationSeconds": "{seconds}s",
     "elapsedSeconds": "{seconds}s elapsed",
+    "assetKindRibbon": {
+      "imported": "Imported image (unverified)",
+      "upload": "Stock",
+      "importedShort": "Imported"
+    },
     "assetKindLabels": {
       "upload": "Upload",
       "generated": "Generated",
@@ -2186,6 +2191,9 @@
     "format": "Format",
     "size": "Size",
     "created": "Created",
+    "createdGenerated": "Generated",
+    "createdUpload": "Uploaded",
+    "createdImported": "Imported",
     "promptHeading": "Prompt",
     "viewRunDetail": "View Generated details",
     "sourceImage": "Source image:",
@@ -2442,6 +2450,9 @@
     },
     "duplicatesLink": "Duplicates",
     "filter": "Filter",
+    "filterFavorite": "Favorites",
+    "favoriteEmptyInSection": "No favorite images",
+    "filterEmptyInSection": "No matching images",
     "moreActions": "More actions",
     "kindRegions": "Regions"
   },
