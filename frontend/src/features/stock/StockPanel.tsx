@@ -1,23 +1,24 @@
 /**
  * サイドバーの「ストック」パネル。ADR-0022 4章により、グループは絞り込みではなく「入れもの」
  * として見せる: パネルは先頭の「グループなし」の節と、続く各グループの節(利用者が決めた順。
- * 見出しのドラッグか「⋯」の「上へ / 下へ」で並べ替える)に分かれ、各節が既存の 2 列のタイルを
- * 持つ(`GroupSection`)。kind のチップは全節に共通の
- * 絞り込みとして残す。新しいグループは「グループなし」の見出し行の「+」から作る(グループの
- * 並びの起点に置く。パネルのヘッダーには置かない)。
+ * 見出しのドラッグか「⋯」の「上へ / 下へ」で並べ替える)に分かれ、各節がタイルのグリッドを
+ * 持つ(`GroupSection`)。種類とタグの絞り込みは全節に共通。新しいグループは「グループなし」の
+ * 見出し行の「+」から作る(グループの並びの起点に置く。パネルのヘッダーには置かない)。
  *
- * タイルクリックでビューアへ、タイル上の「+」で入力に追加する(常に追加のみ。置き換えの
- * 確認はビューア/履歴カードの「入力に使う」だけで行う。マスクは追加不可)。タイルを節の
+ * タイルクリックでビューアへ、タイルの下端に重ねた操作の「入力に使う」で入力に追加する(常に追加のみ。
+ * 置き換えの確認はビューア/履歴カードの「入力に使う」だけで行う。マスクは追加不可)。タイルを節の
  * 見出しへドラッグするとそのグループへ移る(所属は 1 つだけ)。タッチ環境と一括操作向けに選択モードも持つ。
- * 「画像を追加」と種別チップはパネル上部の sticky ヘッダーに常時表示する(生成を続けても
- * グリッドに押し流されないように)。種別の下に「タグで絞り込む」(ADR-0024 5章)を置き、選んだ
- * タグは種別と同じく全節に共通の絞り込みになる。
+ *
+ * パネル上部の sticky な見出し行は1行に詰める(画像に縦の場所を譲る): 左に「ストック」、右に
+ * 絞り込み(じょうご。種類とタグをポップオーバーにまとめる。ADR-0024 5章)、画像を追加(アイコン)、
+ * 「選択」、「⋯」(系列を取り込む、重複の候補)。ファイルのドロップはパネル全体で受け、ファイルを
+ * ドラッグしている間だけパネル全体に枠を出す。
  *
  * スケッチとマスクは、「表示」の設定(`stockPrefs.ts`。既定はオフ)でオンのときだけ出す(ADR-0035)。
  * オフのときは種別のチップから外し、「すべて」と各節の取得、グループの件数・表紙を生成画像と
  * アップロードに絞る(サーバーの `kind` で絞るので、ページングは崩れない)。
  */
-import { useId, useRef, useState, type DragEvent } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router'
 import {
@@ -39,7 +40,7 @@ import { useRunFormContext } from '../../context/useRunFormContext'
 import { isStudioPath, nodeTargetPath } from '../lineage/nodeTargetPath'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ToastHost, useToast } from '../../components/Toast'
-import { fmt, useI18n, type Messages } from '../../i18n'
+import { fmt, useI18n } from '../../i18n'
 import { AddToGroupPopover } from './groups/AddToGroupPopover'
 import { invalidateAssetGroupQueries, useAssetGroups } from './groups/assetGroupQueries'
 import { GAKEI_GROUP_ID_DATA_TYPE } from './groups/groupOrder'
@@ -62,32 +63,16 @@ import {
   type StockKindFilter,
 } from './stockQueryKey'
 import { useStockShowSketchMask } from './stockPrefs'
-import { StockTagFilter } from './StockTagFilter'
-import { useStockTagFilter } from './stockTagFilterStore'
+import { setStockTagFilter, useStockTagFilter } from './stockTagFilterStore'
+import { StockFilterMenu } from './StockFilterMenu'
+import { StockMoreMenu } from './StockMoreMenu'
+import { isFileDragForUpload, isStockFilterActive } from './stockPanelFilters'
+import { TagChip } from '../annotations/TagChip'
 import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
-import { ImportLineageButton } from '../lineage-transfer/ImportLineageButton'
+import { useImportLineage } from '../lineage-transfer/useImportLineage'
 import styles from './StockPanel.module.css'
 
 type KindFilter = StockKindFilter
-
-function kindLabel(t: Messages, kind: KindFilter): string {
-  switch (kind) {
-    case 'all':
-      return t.stock.kindAll
-    case 'generated':
-      return t.stock.kindGenerated
-    case 'upload':
-      return t.stock.kindUpload
-    case 'sketch':
-      return t.stock.kindSketch
-    case 'mask':
-      return t.stock.kindMask
-    case 'composite':
-      return t.stock.kindComposite
-    case 'regions':
-      return t.stock.kindRegions
-  }
-}
 
 export function StockPanel() {
   const { t } = useI18n()
@@ -111,7 +96,6 @@ export function StockPanel() {
   const listKinds = stockListKinds(kind, showSketchMask)
   // タグの絞り込み(ADR-0024 5章)。ビューアのタグのチップからも設定されるので外部ストアに置く。
   const tag = useStockTagFilter()
-  const kindHeadingId = useId()
   // 節ごとの開閉。初期値は localStorage から一度だけ読む(effect で読み直さない)。
   const [openMap, setOpenMap] = useState<GroupOpenMap>(loadGroupOpenMap)
   // 選択モード(ADR-0022 4章)。選択は「Asset id → 選んだ節のキー」の Map(`stockSelection.ts`)。
@@ -123,6 +107,7 @@ export function StockPanel() {
   const [isDragOver, setIsDragOver] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<AssetSummary | null>(null)
   const toast = useToast()
+  const importLineage = useImportLineage()
 
   const capsQuery = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities })
   // 重複の候補(ADR-0033 8章)は埋め込みが使えるときだけ入口を出す。
@@ -253,10 +238,13 @@ export function StockPanel() {
   }
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    const types = Array.from(e.dataTransfer.types)
     // グループの節の並べ替えはアップロードの受け口にしない(見出し行が自分で受ける)。
-    if (Array.from(e.dataTransfer.types).includes(GAKEI_GROUP_ID_DATA_TYPE)) return
+    if (types.includes(GAKEI_GROUP_ID_DATA_TYPE)) return
     e.preventDefault()
-    setIsDragOver(true)
+    // 枠はファイルを運んでいるときだけ出す(アプリ内のタイルのドラッグでは取り込まないので出さない)。
+    const fileDrag = isFileDragForUpload(types, [GAKEI_ASSET_ID_DATA_TYPE, GAKEI_GROUP_ID_DATA_TYPE])
+    if (fileDrag !== isDragOver) setIsDragOver(fileDrag)
   }
 
   function handleDragLeave(e: DragEvent<HTMLDivElement>) {
@@ -310,73 +298,72 @@ export function StockPanel() {
 
   return (
     <div
-      className={styles.panel}
-      ref={panelRef}
+      className={styles.root}
+      data-drag-over={isDragOver}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+    <div className={styles.panel} ref={panelRef}>
       <div className={styles.header}>
         <div className={styles.headerRow}>
           <h2 className={styles.heading}>{t.stock.heading}</h2>
           <div className={styles.headerButtons}>
-            {embeddingsAvailable && (
-              <button type="button" className={styles.headerButton} onClick={() => navigate('/stock/duplicates')}>
-                {t.stock.duplicatesLink}
-              </button>
-            )}
+            <StockFilterMenu
+              kind={kind}
+              kindChoices={stockKindChoices(showSketchMask)}
+              onKindChange={setKind}
+              active={isStockFilterActive(kind, tag)}
+            />
             <button
               type="button"
-              className={styles.headerButton}
+              className={styles.iconButton}
+              aria-label={uploadMutation.isPending ? t.stock.uploading : t.stock.addImage}
+              title={uploadMutation.isPending ? t.stock.uploading : t.stock.addImage}
+              data-pending={uploadMutation.isPending}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadMutation.isPending}
+            >
+              <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path
+                  d="M9 12V3M5.5 6.5L9 3l3.5 3.5M3 12.5V15h12v-2.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={styles.selectButton}
               data-active={selectionMode}
+              aria-pressed={selectionMode}
               onClick={handleToggleSelectionMode}
             >
               {selectionMode ? t.stock.selection.done : t.stock.selection.enter}
             </button>
+            <StockMoreMenu
+              onImportLineage={importLineage.pick}
+              importPending={importLineage.pending}
+              onOpenDuplicates={embeddingsAvailable ? () => navigate('/stock/duplicates') : undefined}
+            />
           </div>
         </div>
 
-        {/* グループの節の見出しと見分けがつくよう、kind のチップ行の上に見出しを付ける(ADR-0022 4章)。 */}
-        <div className={styles.kindFilter} role="group" aria-labelledby={kindHeadingId}>
-          <span className={styles.heading} id={kindHeadingId}>
-            {t.stock.kindHeading}
-          </span>
-          <div className={styles.chips}>
-            {stockKindChoices(showSketchMask).map((id) => (
-              <button
-                key={id}
-                type="button"
-                className={styles.chip}
-                data-active={kind === id}
-                onClick={() => setKind(id)}
-              >
-                {kindLabel(t, id)}
-              </button>
-            ))}
+        {/* タグはビューアのタグのチップからも設定されるので、絞っている間はチップで見せて外せるようにする。 */}
+        {tag && (
+          <div className={styles.activeFilters}>
+            <TagChip
+              name={tag}
+              source="user"
+              onRemove={() => setStockTagFilter(null)}
+              removeLabel={fmt(t.stock.tagFilter.clear, { name: tag })}
+            />
           </div>
-        </div>
-
-        <StockTagFilter headingClassName={styles.heading} />
-
+        )}
+        {importLineage.status}
         {message && <p className={styles.message}>{message}</p>}
         {notice && <p className={styles.notice}>{notice}</p>}
 
-        <button
-          type="button"
-          className={styles.uploadBar}
-          data-drag-over={isDragOver}
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploadMutation.isPending}
-        >
-          <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-            <path
-              d="M9 12V3M5.5 6.5L9 3l3.5 3.5M3 12.5V15h12v-2.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-          </svg>
-          {uploadMutation.isPending ? t.stock.uploading : t.stock.addImage}
-        </button>
         <input
           ref={fileInputRef}
           type="file"
@@ -388,8 +375,7 @@ export function StockPanel() {
             e.target.value = ''
           }}
         />
-        {/* 系列の ZIP の取り込み(ADR-0037)。画像の追加のすぐ下に置く。 */}
-        <ImportLineageButton />
+        {importLineage.input}
       </div>
 
       {/* 「グループなし」を先頭に置き、その見出し行の「+」で作ったグループが直後に並ぶ。 */}
@@ -467,6 +453,9 @@ export function StockPanel() {
         onCancel={() => setDeleteTarget(null)}
       />
       <ToastHost toast={toast.toast} onDismiss={toast.dismiss} />
+    </div>
+    {/* ファイルをドラッグしている間だけ、パネル全体に枠を出す(スクロールしても動かない)。 */}
+    {isDragOver && <div className={styles.dropFrame} aria-hidden="true" />}
     </div>
   )
 }
