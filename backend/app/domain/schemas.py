@@ -2744,6 +2744,91 @@ class DuplicatesResponse(BaseModel):
     groups_truncated: bool
 
 
+# -- グループの提案(ADR-0056) ----------------------------------------------------------
+
+
+class GroupSuggestionTag(BaseModel):
+    """集まりに偏る英語のタグ。`label` はタグ辞書の訳(無ければタグのまま)。"""
+
+    tag: str
+    label: str
+    # 集まりでの出現率と、対象全体での出現率(画像の枚数の割合)。
+    rate: float
+    global_rate: float
+
+
+class GroupSuggestionFranchise(BaseModel):
+    """集まりで最も多い作品。`rate` は集まりの枚数に対する割合。`label` は訳(あれば)。"""
+
+    name: str
+    label: str | None = None
+    rate: float
+
+
+class GroupSuggestionTarget(BaseModel):
+    """既存のグループへの追加の提案のときの追加先。`overlap` は集まりのうちそのグループに
+    入っている割合(0.5 以上)。"""
+
+    id: uuid.UUID
+    name: str
+    overlap: float
+
+
+class GroupSuggestion(BaseModel):
+    # 提案の画像と追加先から作る(同じ入力なら同じ)。
+    id: str
+    size: int
+    # 提案の画像(集まりの重心に近い順)。
+    member_ids: list[uuid.UUID]
+    # 表紙(`member_ids` の先頭 12)。
+    cover_ids: list[uuid.UUID]
+    top_tags: list[GroupSuggestionTag] = Field(default_factory=list)
+    franchise: GroupSuggestionFranchise | None = None
+    # 既存のグループへの追加の提案なら、その追加先。null なら新しいグループの提案。
+    target_group: GroupSuggestionTarget | None = None
+    # 受け入れると別のグループから移る枚数(`scope=all` のときだけ 1 以上になりうる)。
+    moving_count: int = 0
+    # そのうち、別のグループから移る画像(`member_ids` の部分集合)。
+    moving_ids: list[uuid.UUID] = Field(default_factory=list)
+    # 名前の提案(今は常に null。ADR-0056 6章)。
+    name: str | None = None
+
+
+class GroupSuggestionsResponse(BaseModel):
+    """`GET /api/asset-groups/suggestions`。見るのは新しい順に `scanned` 件まで。"""
+
+    model_key: str
+    scope: Literal["ungrouped", "all"]
+    granularity: Literal["normal", "fine"]
+    scanned: int
+    truncated: bool
+    suggestions: list[GroupSuggestion] = Field(default_factory=list)
+    # 未分類(どの提案にも入らなかった、グループ外の画像。新しい順)。
+    outlier_ids: list[uuid.UUID] = Field(default_factory=list)
+    # 提案と未分類に出る画像のサムネイルの項目。
+    assets: list[AssetSummary] = Field(default_factory=list)
+
+
+class GroupSuggestionAcceptRequest(BaseModel):
+    """`POST /api/asset-groups/suggestions/accept`。`name`(新しいグループ)か
+    `target_group_id`(既存のグループへ移す)のどちらか一方。"""
+
+    name: str | None = None
+    target_group_id: uuid.UUID | None = None
+    asset_ids: list[uuid.UUID] = Field(min_length=1, max_length=5000)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str | None) -> str | None:
+        return None if value is None else _normalize_group_name(value)
+
+    @model_validator(mode="after")
+    def _one_target(self) -> GroupSuggestionAcceptRequest:
+        if (self.name is None) == (self.target_group_id is None):
+            raise ValueError("specify exactly one of name and target_group_id")
+        return self
+
+
 class EmbeddingGraphNode(BaseModel):
     id: uuid.UUID
     kind: Literal["upload", "generated", "sketch", "composite"]
