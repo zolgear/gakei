@@ -15,7 +15,10 @@ export function isStockFilterActive(kind: StockKindFilter, tag: string | null, f
 export function isFileDragForUpload(
   types: readonly string[],
   appDataTypes: readonly string[],
+  fromThisPage = false,
 ): boolean {
+  // ページの中の画像(履歴やマップなど)のドラッグは、ブラウザが添える File を取り込まない。
+  if (fromThisPage) return false
   if (!types.includes('Files')) return false
   return !types.some((type) => appDataTypes.includes(type))
 }

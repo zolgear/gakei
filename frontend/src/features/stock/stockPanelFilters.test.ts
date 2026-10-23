@@ -33,3 +33,10 @@ describe('isFileDragForUpload', () => {
     expect(isFileDragForUpload(['text/plain', 'text/uri-list'], app)).toBe(false)
   })
 })
+
+describe('isFileDragForUpload(ページの中のドラッグ)', () => {
+  it('ページの中から運んだ画像は、File が添えられていても取り込まない', () => {
+    expect(isFileDragForUpload(['Files', 'text/uri-list'], [], true)).toBe(false)
+    expect(isFileDragForUpload(['Files'], [], false)).toBe(true)
+  })
+})

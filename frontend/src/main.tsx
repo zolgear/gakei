@@ -22,6 +22,7 @@ import { AuthGate } from './features/auth/AuthGate'
 import { PublicSharePage } from './features/share/PublicSharePage'
 import { parsePublicSharePath } from './features/share/publicSharePath'
 import { publicShareViewFromLocation } from './features/share/publicShareView'
+import { installPageDragTracking } from './lib/pageDrag'
 
 // 最初の描画より前に表示言語を決める(ADR-0015)。
 initLocale()
@@ -56,6 +57,9 @@ const router =
         },
       ])
     : null
+
+// ページの中で始まったドラッグを覚える(ストックが、ページの画像に添えられた File を取り込まないため)。
+installPageDragTracking()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
