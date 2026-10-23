@@ -145,7 +145,7 @@ def _search_runs(
     rows = rows[:limit]
 
     run_ids = [r.id for r in rows]
-    outputs_map = bulk_output_refs(db, run_ids)
+    outputs_map = bulk_output_refs(db, run_ids, viewer=viewer)
     inputs_map = bulk_input_summary(db, run_ids, viewer)
     descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])

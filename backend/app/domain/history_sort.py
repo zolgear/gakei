@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.config import Settings
+from app.domain.favorites import favorite_asset_ids
 from app.domain.models import Asset, AssetGroup, AssetGroupMember, AssetKind, Run
 from app.domain.run_views import summarize_runs
 from app.domain.schemas import HistoryAssetItem, HistoryAssetListResponse, HistoryGroupSection
@@ -43,14 +44,18 @@ class InvalidHistoryCursorError(ValueError):
 # -- 対象の画像 ---------------------------------------------------------------------
 
 
-def _base_conditions(viewer: CurrentUser) -> list[ColumnElement[bool]]:
-    """見える Run が作った、削除されていない生成画像(Run と結合して使う)。"""
-    return [
+def _base_conditions(viewer: CurrentUser, *, favorite: bool = False) -> list[ColumnElement[bool]]:
+    """見える Run が作った、削除されていない生成画像(Run と結合して使う)。`favorite` なら
+    `viewer` のお気に入りだけ(ADR-0055)。"""
+    conditions = [
         Asset.deleted_at.is_(None),
         Asset.kind == AssetKind.GENERATED,
         Run.deleted_at.is_(None),
         run_visible(viewer),
     ]
+    if favorite:
+        conditions.append(Asset.id.in_(favorite_asset_ids(viewer)))
+    return conditions
 
 
 def _items(
@@ -130,7 +135,7 @@ def _output_index() -> ColumnElement[int]:
     return func.coalesce(Asset.output_index, 0)
 
 
-def _grouped_query(viewer: CurrentUser) -> Any:
+def _grouped_query(viewer: CurrentUser, *, favorite: bool = False) -> Any:
     """画像と、その画像が入っている見えるグループ(無ければ NULL の列)。ADR-0022 により所属は1つ。"""
     return (
         select(
@@ -152,7 +157,7 @@ def _grouped_query(viewer: CurrentUser) -> Any:
                 group_visible(viewer),
             ),
         )
-        .where(*_base_conditions(viewer))
+        .where(*_base_conditions(viewer, favorite=favorite))
     )
 
 
@@ -192,8 +197,10 @@ def _after_cursor(cursor: GroupCursor) -> ColumnElement[bool]:
     )
 
 
-def group_sections(db: Session, viewer: CurrentUser) -> list[HistoryGroupSection]:
-    """グループの並び順の節と件数(画像のある節だけ)。「グループなし」は最後。"""
+def group_sections(
+    db: Session, viewer: CurrentUser, *, favorite: bool = False
+) -> list[HistoryGroupSection]:
+    """グループの並び順の節と件数(画像のある節だけ)。「グループなし」は最後。件数は絞り込みの後。"""
     counts = db.execute(
         select(AssetGroup.id, func.count(Asset.id))
         .select_from(Asset)
@@ -207,7 +214,7 @@ def group_sections(db: Session, viewer: CurrentUser) -> list[HistoryGroupSection
                 group_visible(viewer),
             ),
         )
-        .where(*_base_conditions(viewer))
+        .where(*_base_conditions(viewer, favorite=favorite))
         .group_by(AssetGroup.id)
     ).all()
     by_group = {group_id: count for group_id, count in counts}
@@ -227,9 +234,14 @@ def group_sections(db: Session, viewer: CurrentUser) -> list[HistoryGroupSection
 
 
 def list_by_group(
-    db: Session, viewer: CurrentUser, *, limit: int, cursor: str | None
+    db: Session,
+    viewer: CurrentUser,
+    *,
+    limit: int,
+    cursor: str | None,
+    favorite: bool = False,
 ) -> HistoryAssetListResponse:
-    query = _grouped_query(viewer)
+    query = _grouped_query(viewer, favorite=favorite)
     if cursor is not None:
         query = query.where(_after_cursor(GroupCursor.decode(cursor)))
     query = query.order_by(
@@ -257,7 +269,9 @@ def list_by_group(
             asset_id=last.id,
         ).encode()
     return HistoryAssetListResponse(
-        items=items, next_cursor=next_cursor, groups=group_sections(db, viewer)
+        items=items,
+        next_cursor=next_cursor,
+        groups=group_sections(db, viewer, favorite=favorite),
     )
 
 
@@ -354,12 +368,12 @@ class EmbeddingOrderCache:
     """並びの結果(Asset の id の列)をプロセスの中に持つ。直近の数件だけ(ADR-0054 3章)。"""
 
     def __init__(self, max_entries: int = 8) -> None:
-        self._entries: OrderedDict[tuple[str, int, str], list[uuid.UUID]] = OrderedDict()
+        self._entries: OrderedDict[tuple[str, int, str, str], list[uuid.UUID]] = OrderedDict()
         self._max = max_entries
         self._lock = threading.Lock()
 
     def get_or_build(
-        self, key: tuple[str, int, str], build: Callable[[], list[uuid.UUID]]
+        self, key: tuple[str, int, str, str], build: Callable[[], list[uuid.UUID]]
     ) -> list[uuid.UUID]:
         with self._lock:
             cached = self._entries.get(key)
@@ -393,8 +407,10 @@ def list_by_embedding(
     cache: EmbeddingOrderCache,
     limit: int,
     cursor: str | None,
+    favorite: bool = False,
 ) -> HistoryAssetListResponse:
-    """似た画像の順。埋め込みが無効・使えなければ `EmbeddingsConflictError`(409)。"""
+    """似た画像の順。埋め込みが無効・使えなければ `EmbeddingsConflictError`(409)。
+    `favorite` ならお気に入りの画像だけで並びを作る(全体の並びから抜き出すのではない。ADR-0055)。"""
     active = require_active(db, settings)
     offset = 0
     if cursor is not None:
@@ -409,7 +425,7 @@ def list_by_embedding(
     rows = db.execute(
         select(Asset.id, Asset.produced_by_run_id)
         .join(Run, Run.id == Asset.produced_by_run_id)
-        .where(*_base_conditions(viewer))
+        .where(*_base_conditions(viewer, favorite=favorite))
         .order_by(Asset.created_at.desc(), Asset.id.desc())
     ).all()
     run_of = {asset_id: run_id for asset_id, run_id in rows}
@@ -425,7 +441,9 @@ def list_by_embedding(
         # 埋め込みの無い画像は最後に、新しい順。
         return ordered + [asset_id for asset_id in newest_first if asset_id not in seen]
 
-    key = (active.model_key, version_of(active.model_key), _ids_digest(newest_first))
+    # 対象の集合の要約が変われば鍵も変わるが、絞り込みは意味として鍵に明示する(ADR-0055)。
+    scope = "favorite" if favorite else "all"
+    key = (active.model_key, version_of(active.model_key), scope, _ids_digest(newest_first))
     order = cache.get_or_build(key, build)
     page = order[offset : offset + limit]
     items = _items(db, viewer, [(asset_id, run_of[asset_id], None) for asset_id in page])

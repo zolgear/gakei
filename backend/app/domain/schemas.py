@@ -1174,6 +1174,15 @@ class RunOutputRef(BaseModel):
     # 原本のピクセルの大きさ(履歴のカードの「画像」の形で出す)。
     width: int | None = None
     height: int | None = None
+    # 見る人のお気に入りか(ADR-0055)。
+    favorite: bool = False
+
+
+class AssetFavoriteResponse(BaseModel):
+    """お気に入りの付け外しの結果(ADR-0055)。"""
+
+    asset_id: uuid.UUID
+    favorite: bool
 
 
 class RunRegions(BaseModel):

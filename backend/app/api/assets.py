@@ -39,6 +39,7 @@ from app.domain import annotations as annotations_domain
 from app.domain import compositions as compositions_domain
 from app.domain import content_rating as content_rating_domain
 from app.domain import embeddings as embeddings_domain
+from app.domain import favorites as favorites_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.asset_groups import group_for_asset
 from app.domain.assets import (
@@ -65,6 +66,7 @@ from app.domain.schemas import (
     AssetContentRatingUpdateRequest,
     AssetDetail,
     AssetEmbeddingStatus,
+    AssetFavoriteResponse,
     AssetLineageResponse,
     AssetListResponse,
     AssetOrigin,
@@ -413,6 +415,46 @@ def delete_asset(
 
     asset.deleted_at = _utcnow()
     db.commit()
+
+
+def _favorite_target(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
+    """お気に入りを付け外しできる Asset(見える、削除されていない)。それ以外は 404(ADR-0055)。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is None or asset.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    return asset
+
+
+@router.put(
+    "/{asset_id}/favorite",
+    response_model=AssetFavoriteResponse,
+    operation_id="favorite_asset",
+)
+def favorite_asset(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> AssetFavoriteResponse:
+    """見る人のお気に入りにする(ADR-0055)。既に付いていれば何もしない。"""
+    asset = _favorite_target(db, user, asset_id)
+    favorites_domain.set_favorite(db, user, asset, True)
+    return AssetFavoriteResponse(asset_id=asset_id, favorite=True)
+
+
+@router.delete(
+    "/{asset_id}/favorite",
+    response_model=AssetFavoriteResponse,
+    operation_id="unfavorite_asset",
+)
+def unfavorite_asset(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> AssetFavoriteResponse:
+    """見る人のお気に入りから外す(ADR-0055)。付いていなければ何もしない。"""
+    asset = _favorite_target(db, user, asset_id)
+    favorites_domain.set_favorite(db, user, asset, False)
+    return AssetFavoriteResponse(asset_id=asset_id, favorite=False)
 
 
 @router.post("/{asset_id}/restore", response_model=AssetDetail, operation_id="restore_asset")
