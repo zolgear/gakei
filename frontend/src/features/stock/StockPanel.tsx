@@ -67,6 +67,7 @@ import { setStockTagFilter, useStockTagFilter } from './stockTagFilterStore'
 import { StockFilterMenu } from './StockFilterMenu'
 import { StockMoreMenu } from './StockMoreMenu'
 import { isFileDragForUpload, isStockFilterActive } from './stockPanelFilters'
+import { isDragFromThisPage } from '../../lib/pageDrag'
 import { TagChip } from '../annotations/TagChip'
 import { useEmbeddingCapabilities } from '../embeddings/useEmbeddingCapabilities'
 import { useImportLineage } from '../lineage-transfer/useImportLineage'
@@ -249,7 +250,11 @@ export function StockPanel() {
     if (types.includes(GAKEI_GROUP_ID_DATA_TYPE)) return
     e.preventDefault()
     // 枠はファイルを運んでいるときだけ出す(アプリ内のタイルのドラッグでは取り込まないので出さない)。
-    const fileDrag = isFileDragForUpload(types, [GAKEI_ASSET_ID_DATA_TYPE, GAKEI_GROUP_ID_DATA_TYPE])
+    const fileDrag = isFileDragForUpload(
+      types,
+      [GAKEI_ASSET_ID_DATA_TYPE, GAKEI_GROUP_ID_DATA_TYPE],
+      isDragFromThisPage(),
+    )
     if (fileDrag !== isDragOver) setIsDragOver(fileDrag)
   }
 
@@ -268,6 +273,8 @@ export function StockPanel() {
     // してきた場合、ブラウザが自動生成する File(サムネイル画像そのもの)をアップロードして
     // しまわないようにする。既存 Asset の参照だった場合、ストックへ入れ直す意味は無いので
     // 何もしない(すでにストックにある)。
+    // 履歴やマップの画像など、ページの中から運んだ画像も取り込まない(ブラウザが添える File)。
+    if (isDragFromThisPage()) return
     const interpretation = interpretDroppedData({
       assetIdData: e.dataTransfer.getData(GAKEI_ASSET_ID_DATA_TYPE) || null,
       uriListData: e.dataTransfer.getData('text/uri-list') || null,
