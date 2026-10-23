@@ -17,10 +17,11 @@ from __future__ import annotations
 import logging
 import mimetypes
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from app.domain.storage import (
     CHUNK_SIZE,
+    DerivedVariant,
     OriginalKeyInfo,
     StorageConditionalWriteError,
     StorageIOError,
@@ -155,7 +156,7 @@ class AzureBlobStore:
     def write_original(self, data: bytes, ext: str, info: OriginalKeyInfo) -> str:
         return _write_original(self, data, ext, info)
 
-    def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
+    def write_derived(self, sha256: str, variant: DerivedVariant, data: bytes) -> None:
         self.overwrite(derived_key(sha256, variant), data)
 
     def overwrite(self, key: str, data: bytes) -> None:
@@ -331,7 +332,7 @@ class S3Store:
     def write_original(self, data: bytes, ext: str, info: OriginalKeyInfo) -> str:
         return _write_original(self, data, ext, info)
 
-    def write_derived(self, sha256: str, variant: Literal["thumb", "preview"], data: bytes) -> None:
+    def write_derived(self, sha256: str, variant: DerivedVariant, data: bytes) -> None:
         self.overwrite(derived_key(sha256, variant), data)
 
     def overwrite(self, key: str, data: bytes) -> None:

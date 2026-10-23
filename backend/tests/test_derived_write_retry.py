@@ -119,7 +119,7 @@ def test_ingest_same_content_twice_does_not_rewrite_derived(
 
     with db_session_factory() as session:
         first = ingest(session, local_store, data, AssetKind.UPLOAD)
-        assert written == ["thumb", "preview"]
+        assert written == ["thumb", "card", "preview"]
 
         written.clear()
         second = ingest(session, local_store, data, AssetKind.UPLOAD)

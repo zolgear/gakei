@@ -1,4 +1,4 @@
-"""今の版の派生画像(サムネイル・プレビュー)を前もって作る(ADR-0036 2章・4章)。
+"""今の版の派生画像(サムネイル・カード・プレビュー)を前もって作る(ADR-0036 2章・4章)。
 
 使い方:
     uv run python -m app.tools.regenerate_derivatives [--dry-run] [--prune]
@@ -6,7 +6,7 @@
 - 派生の作り方の版(`derivatives.DERIVED_VERSION`)を上げた直後は、一覧を開くたびに原本の
   デコードが走って重くなる。前もって作っておくためのツール。版を上げなくても、欠けた派生を
   作り直すのに使える。
-- DB の全 Asset(論理削除済みを含む)について、今の版の派生(thumb / preview)が無ければ原本
+- DB の全 Asset(論理削除済みを含む)について、今の版の派生(thumb / card / preview)が無ければ原本
   から作って保存する。同じ内容(sha256)の Asset は派生を共有するので、1回だけ作る。
 - `--prune` は、今の版以外の派生(`derived/` の下の、ほかの版のキー)を消す。原本と、今の版の
   派生には触れない。
@@ -58,7 +58,7 @@ class RegenerateReport:
     prune: bool
     # 対象の画像(sha256 の種類の数)
     images: int = 0
-    # 今の版の派生が無かった数(thumb / preview を別に数える)
+    # 今の版の派生が無かった数(thumb / card / preview を別に数える)
     missing: int = 0
     generated: int = 0
     # 原本が無い・読めないので作れなかった画像(sha256)

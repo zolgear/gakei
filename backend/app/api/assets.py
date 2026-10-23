@@ -525,7 +525,7 @@ def restore_asset(
 def get_asset_content(
     asset_id: uuid.UUID,
     request: Request,
-    variant: Literal["thumb", "preview", "original"] = Query(default="preview"),
+    variant: Literal["thumb", "card", "preview", "original"] = Query(default="preview"),
     download: int = Query(default=0),
     db: Session = Depends(get_session),
     store: AssetStore = Depends(get_store),
@@ -571,7 +571,7 @@ def asset_content_response(
     asset: Asset,
     *,
     viewer: CurrentUser | None,
-    variant: Literal["thumb", "preview", "original"],
+    variant: Literal["thumb", "card", "preview", "original"],
     download: bool,
     if_none_match: str | None = None,
     cache_control: str = "private, immutable, max-age=31536000",
@@ -588,7 +588,7 @@ def asset_content_response(
     raise_if_withheld(db, asset, include_verdict=viewer is not None)
     # ADR-0014(2026-09-24 追記): original をダウンロードする PNG にだけ、系列情報
     # (gakei チャンク)を埋め込んで返す。保存している原本・画面表示用の
-    # original/thumb/preview(download=0)は変えない(ETag も区別する)。
+    # original/thumb/card/preview(download=0)は変えない(ETag も区別する)。
     embed_meta = (
         viewer is not None and variant == "original" and download and asset.mime == "image/png"
     )

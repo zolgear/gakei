@@ -854,7 +854,7 @@
     "elapsed": "Elapsed: {seconds} s"
   },
   "regenerateDerivatives": {
-    "description": "Create the current version of the derived images (thumbnails and previews) from the originals for images that do not have them (ADR-0036). Logically deleted images are included. You can run this while GAKEI is running. The database is not modified and the originals are not touched.",
+    "description": "Create the current version of the derived images (thumbnails, cards, and previews) from the originals for images that do not have them (ADR-0036). Logically deleted images are included. You can run this while GAKEI is running. The database is not modified and the originals are not touched.",
     "dryRunHelp": "Only count what would be created (and, with --prune, deleted); write and delete nothing",
     "pruneHelp": "Delete derived images of other versions (the originals and the current version are never touched)",
     "databaseMissing": "Database file not found: {source}",

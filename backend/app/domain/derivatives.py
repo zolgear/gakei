@@ -1,4 +1,5 @@
-"""派生画像(サムネイル・プレビュー)の生成と読み出し。ADR-0004: 長辺512px / 長辺2048px の WebP。
+"""派生画像(サムネイル・カード・プレビュー)の生成と読み出し。ADR-0004: 長辺512px / 長辺1024px /
+長辺2048px の WebP(カードは ADR-0036 5章、2026-10-23 追記)。
 
 元画像がすでに目標サイズ以下の場合は拡大しない。透過(RGBA)は保持する。
 
@@ -22,8 +23,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DerivedVariant = Literal["thumb", "preview"]
-DERIVED_VARIANTS: tuple[DerivedVariant, ...] = ("thumb", "preview")
+DerivedVariant = Literal["thumb", "card", "preview"]
+DERIVED_VARIANTS: tuple[DerivedVariant, ...] = ("thumb", "card", "preview")
 
 # 派生の作り方の版(ADR-0036 1章)。版 1 は ADR-0036 より前から作っていた派生で、キーは
 # `derived/{sha256}/thumb.webp` のまま。作り方を変えたら 1 つ上げ、フロントの
@@ -31,6 +32,9 @@ DERIVED_VARIANTS: tuple[DerivedVariant, ...] = ("thumb", "preview")
 DERIVED_VERSION = 1
 
 THUMB_LONG_EDGE = 512
+# 画面いっぱいのカードや石積みのタイル用(ADR-0036 5章)。画面は srcset で thumb と選ばせる。
+# 足しただけで thumb / preview の作り方は変えないので、`DERIVED_VERSION` は上げない。
+CARD_LONG_EDGE = 1024
 PREVIEW_LONG_EDGE = 2048
 WEBP_QUALITY = 90
 
@@ -57,6 +61,11 @@ def make_thumb(image: Image.Image) -> bytes:
     return _to_webp_bytes(_resize_long_edge(image, THUMB_LONG_EDGE))
 
 
+def make_card(image: Image.Image) -> bytes:
+    """長辺1024pxのWebPを作る(品質と透過の扱いは thumb と同じ)。"""
+    return _to_webp_bytes(_resize_long_edge(image, CARD_LONG_EDGE))
+
+
 def make_preview(image: Image.Image) -> bytes:
     """長辺2048pxのWebPを作る。"""
     return _to_webp_bytes(_resize_long_edge(image, PREVIEW_LONG_EDGE))
@@ -66,6 +75,8 @@ def make_derived(image: Image.Image, variant: DerivedVariant) -> bytes:
     """variant に応じた派生を作る(取り込みとその場の作り直しで同じ作り方にする)。"""
     if variant == "thumb":
         return make_thumb(image)
+    if variant == "card":
+        return make_card(image)
     if variant == "preview":
         return make_preview(image)
     raise ValueError(f"派生ではない variant です: {variant}")

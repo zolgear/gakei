@@ -188,7 +188,7 @@ def get_public_share_asset_content(
     token: str,
     asset_id: str,
     request: Request,
-    variant: Literal["thumb", "preview", "original"] = Query(default="preview"),
+    variant: Literal["thumb", "card", "preview", "original"] = Query(default="preview"),
     download: int = Query(default=0),
     db: Session = Depends(get_session),
     store: AssetStore = Depends(get_store),

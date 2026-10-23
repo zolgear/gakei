@@ -84,7 +84,7 @@ def test_regenerate_and_prune(
     shas = sorted({a.sha256 for a in assets})
     assert len(shas) == 2
     originals = {a.blob_key: store.read(a.blob_key) for a in assets}
-    v1 = {f"derived/{sha}/{v}.webp" for sha in shas for v in ("thumb", "preview")}
+    v1 = {f"derived/{sha}/{v}.webp" for sha in shas for v in ("thumb", "card", "preview")}
     assert _derived(store) == v1
 
     # 今の版(1)の派生はそろっている。
@@ -92,20 +92,21 @@ def test_regenerate_and_prune(
     assert (report.version, report.images, report.missing) == (1, 2, 0)
 
     monkeypatch.setattr(derivatives, "DERIVED_VERSION", 2)
-    v2 = {f"derived/{sha}/{v}.v2.webp" for sha in shas for v in ("thumb", "preview")}
+    v2 = {f"derived/{sha}/{v}.v2.webp" for sha in shas for v in ("thumb", "card", "preview")}
 
     # --dry-run は数えるだけ。
     report = tool.regenerate(_settings(data_dir), dry_run=True, prune=True)
-    assert (report.version, report.images, report.missing, report.stale) == (2, 2, 4, 4)
+    assert (report.version, report.images, report.missing, report.stale) == (2, 2, 6, 6)
     assert (report.generated, report.pruned) == (0, 0)
     assert _derived(store) == v1
 
     # 作る(論理削除済みも含む)。版 1 の派生は残す。
     report = tool.regenerate(_settings(data_dir))
-    assert (report.missing, report.generated, report.failed) == (4, 4, [])
+    assert (report.missing, report.generated, report.failed) == (6, 6, [])
     assert _derived(store) == v1 | v2
     for sha in shas:
         assert store.read(f"derived/{sha}/thumb.v2.webp")[:4] == b"RIFF"
+        assert store.read(f"derived/{sha}/card.v2.webp")[:4] == b"RIFF"
 
     # 2 回目は作るものが無い。
     report = tool.regenerate(_settings(data_dir))
@@ -113,10 +114,46 @@ def test_regenerate_and_prune(
 
     # --prune は今の版以外の派生だけを消す。原本と今の版には触れない。
     report = tool.regenerate(_settings(data_dir), prune=True)
-    assert (report.stale, report.pruned) == (4, 4)
+    assert (report.stale, report.pruned) == (6, 6)
     assert _derived(store) == v2
     for key, data in originals.items():
         assert store.read(key) == data
+
+
+def test_regenerate_makes_missing_cards(
+    env: tuple[TestClient, Any], data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """カード(ADR-0036 5章)を足す前の Asset には card.webp が無い。版は 1 のまま、無いカード
+    だけを作る(thumb / preview は作り直さない)。"""
+    client, store = env
+    assets = _populate(client)
+    shas = sorted({a.sha256 for a in assets})
+    wait_for_background_reads(client)
+    for sha in shas:
+        store.delete(f"derived/{sha}/card.webp")
+    before = {key: store.read(key) for key in _derived(store)}
+
+    report = tool.regenerate(_settings(data_dir), dry_run=True)
+    assert (report.version, report.images, report.missing, report.generated) == (1, 2, 2, 0)
+
+    made: list[str] = []
+    real = derivatives.make_derived
+
+    def recording(image: Any, variant: Any) -> bytes:
+        made.append(variant)
+        return real(image, variant)
+
+    monkeypatch.setattr(derivatives, "make_derived", recording)
+    report = tool.regenerate(_settings(data_dir))
+    assert (report.missing, report.generated, report.failed) == (2, 2, [])
+    assert made == ["card", "card"]
+    for sha in shas:
+        assert store.read(f"derived/{sha}/card.webp")[:4] == b"RIFF"
+    for key, data in before.items():
+        assert store.read(key) == data
+    # --prune でも、今の版のカードは消さない。
+    report = tool.regenerate(_settings(data_dir), prune=True)
+    assert (report.stale, report.pruned) == (0, 0)
 
 
 def test_missing_original_is_reported(
@@ -133,7 +170,7 @@ def test_missing_original_is_reported(
     monkeypatch.setattr(derivatives, "DERIVED_VERSION", 2)
     report = tool.regenerate(_settings(data_dir))
     assert report.failed == [gone.sha256]
-    assert report.generated == 2
+    assert report.generated == 3
     assert store.exists(f"derived/{by_id[other_id].sha256}/thumb.v2.webp")
     assert not store.exists(f"derived/{gone.sha256}/thumb.v2.webp")
 
