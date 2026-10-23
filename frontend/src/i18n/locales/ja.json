@@ -3304,10 +3304,6 @@
     "fitHelp": "今の向きのまま、すべての画像が収まるようにします。",
     "untitled": "(無題)",
     "selectionLabel": "選んだ画像",
-    "neighborsHighlighted": {
-      "one": "似た画像 {count} 枚を強調しています",
-      "other": "似た画像 {count} 枚を強調しています"
-    },
     "openInViewer": "ビューアで開く",
     "lineageGraph": "系列グラフ",
     "similarInSearch": "似た画像を検索で見る",
