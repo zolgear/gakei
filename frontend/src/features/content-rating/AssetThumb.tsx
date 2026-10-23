@@ -57,6 +57,8 @@ interface AssetThumbProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src
   withheld?: boolean
   /** 置き換えの表示に添える判定の label(広いときだけ出る)。 */
   withheldLabel?: string | null
+  /** マスクの中央のバッジの縦位置。下に情報を重ねるカードでは `upper` にして隠れないようにする。 */
+  maskBadgeAlign?: 'center' | 'upper'
 }
 
 export function AssetThumb({
@@ -68,6 +70,7 @@ export function AssetThumb({
   style,
   withheld = false,
   withheldLabel,
+  maskBadgeAlign = 'center',
   onError,
   ...imgProps
 }: AssetThumbProps) {
@@ -111,6 +114,7 @@ export function AssetThumb({
       {masked && (
         <span
           className={styles.mask}
+          data-align={maskBadgeAlign}
           title={t.contentRating.revealHint}
           // ドラッグやパンの始まりも下へ渡さない(マスクの上からはドラッグしない)。
           onPointerDown={(e) => e.stopPropagation()}

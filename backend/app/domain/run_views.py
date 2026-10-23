@@ -40,6 +40,7 @@ from app.domain.schemas import (
     FocalPoint,
     RunOutputRef,
     RunRegions,
+    RunSummary,
     RunTextOutput,
 )
 from app.domain.visibility import asset_visible, group_visible, run_visible
@@ -95,6 +96,8 @@ def bulk_output_refs(
             AssetFocalPoint.y,
             AssetContentRating.level,
             Asset.content_withheld_at,
+            Asset.width,
+            Asset.height,
         )
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         # サムネイルの焦点(ADR-0043)とレーティング(ADR-0049)も同じ問い合わせで引く。
@@ -103,7 +106,18 @@ def bulk_output_refs(
         .where(condition)
         .order_by(Asset.output_index)
     ).all()
-    for produced_by_run_id, asset_id, output_index, title, x, y, level, withheld_at in rows:
+    for (
+        produced_by_run_id,
+        asset_id,
+        output_index,
+        title,
+        x,
+        y,
+        level,
+        withheld_at,
+        width,
+        height,
+    ) in rows:
         result[produced_by_run_id].append(
             RunOutputRef(
                 asset_id=asset_id,
@@ -112,6 +126,8 @@ def bulk_output_refs(
                 focal_point=focal_points.to_schema(x, y),
                 content_rating=level,
                 content_withheld=withheld_at is not None,
+                width=width,
+                height=height,
             )
         )
     return result
@@ -368,3 +384,32 @@ def run_summary_fields(
         "text_outputs": run_text_outputs(run),
         "regions": run_regions(run),
     }
+
+
+def summarize_runs(db: Session, rows: list[Run], viewer: CurrentUser) -> list[RunSummary]:
+    """Run の並びを、同じ並びの `RunSummary` にする(履歴の一覧。まとめて引いて N+1 を避ける)。"""
+    run_ids = [r.id for r in rows]
+    outputs_map = bulk_output_refs(db, run_ids)
+    inputs_map = bulk_input_summary(db, run_ids, viewer)
+    descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
+    users_map = bulk_users(db, [r.created_by_user_id for r in rows])
+    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], viewer)
+    parent_focals = bulk_parent_focal_points(db, inputs_map)
+    parent_ratings = bulk_parent_content_ratings(db, inputs_map)
+    parent_withheld = bulk_parent_withheld(db, inputs_map)
+    return [
+        RunSummary(
+            **run_summary_fields(
+                r,
+                outputs_map[r.id],
+                *inputs_map[r.id],
+                descendant_map[r.id],
+                users_map.get(r.created_by_user_id),
+                groups_map.get(r.asset_group_id),
+                primary_parent_focal_point=parent_focals.get(inputs_map[r.id][1]),
+                primary_parent_content_rating=parent_ratings.get(inputs_map[r.id][1]),
+                primary_parent_content_withheld=inputs_map[r.id][1] in parent_withheld,
+            )
+        )
+        for r in rows
+    ]

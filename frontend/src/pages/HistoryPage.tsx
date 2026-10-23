@@ -1,5 +1,12 @@
 /**
  * 履歴ワークスペース。カード形式の一覧 + 状態フィルタ(クライアント側)+ カーソル読み込み。
+ * ツールバーは左に表示の切り替え、右端に並べ替えと状態の絞り込み(アイコンのメニュー)。
+ * 並べ替え(ADR-0054)は、日付(Run 単位。`GET /api/runs`。日の区切りを入れる)、グループと
+ * 似た順(画像単位。`GET /api/history/assets`。グループは区切りを入れる)。区切りは字だけの見出しで、
+ * 節ごとに並べ直す。
+ * 形は「詳細」(カードいっぱいに画像を敷き、情報と操作を重ねる)、「石積み」「行揃え」(画像を
+ * 元の縦横比で並べるギャラリー)をツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
+ * 見えたら自動で読み、失敗時と IntersectionObserver の無い環境のために「さらに読み込む」も残す。
  * 操作(Generate/Edit)の絞り込みは ADR-0009(UI で区別しない)により無い。
  *
  * スクロール位置と絞り込みは、戻る/進む(POP)で入ってきたときだけ復元する
@@ -7,17 +14,34 @@
  * 実際にスクロールしているのは window ではなく `.scrollArea`(このページ自身が持つ
  * 内側のスクロールコンテナ)なので、復元もそこに対して行う。
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigationType } from 'react-router'
-import { listRuns } from '../api/client'
+import { listHistoryAssets, listRuns, type HistoryAssetItem } from '../api/client'
 import { historyPlaceholder } from '../features/history/historyPlaceholder'
 import { HistoryCard } from '../features/history/HistoryCard'
+import { HistoryGallery } from '../features/history/HistoryGallery'
+import {
+  expandHistoryCards,
+  setHistoryCardStyle,
+  useHistoryCardStyle,
+  type HistoryCardStyle,
+} from '../features/history/historyCardStyle'
+import { useAutoLoadMore } from '../features/history/useAutoLoadMore'
+import { HistoryStatusFilterMenu } from '../features/history/HistoryStatusFilterMenu'
+import { HistorySortMenu } from '../features/history/HistorySortMenu'
+import { HistorySectionHeading } from '../features/history/HistorySectionHeading'
+import { BackToTopButton } from '../features/history/BackToTopButton'
+import { onHistoryScrollTopRequest, scrollElementToTop } from '../features/history/backToTop'
+import { effectiveHistorySort, setHistorySort, useHistorySort } from '../features/history/historySort'
+import { daySections, groupSections, similaritySections } from '../features/history/historySections'
+import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
+import { CardDetailIcon, CardMasonryIcon, CardRowsIcon } from '../components/icons'
 import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
 import { hasNewlySucceededRun } from '../features/run-status/assetInvalidation'
 import { hasActiveRuns, countQueue } from '../shell/queueStatus'
 import { useScrollRestoration } from '../shell/useScrollRestoration'
-import { useI18n } from '../i18n'
+import { intlLocale, useI18n } from '../i18n'
 import { invalidateAssetGroupQueries } from '../features/stock/groups/assetGroupQueries'
 import styles from './HistoryPage.module.css'
 
@@ -29,17 +53,21 @@ const RUNS_GC_TIME_MS = 30 * 60 * 1000
 const filterByLocationKey = new Map<string, StatusFilter>()
 
 export function HistoryPage() {
-  const { t } = useI18n()
-  const STATUS_TABS: { id: StatusFilter; label: string }[] = [
-    { id: 'all', label: t.history.page.filterAll },
-    { id: 'succeeded', label: t.history.page.filterSucceeded },
-    { id: 'failed', label: t.history.page.filterFailed },
-  ]
+  const { t, locale } = useI18n()
   const location = useLocation()
   const navigationType = useNavigationType()
   const queryClient = useQueryClient()
   const scrollAreaRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
   useScrollRestoration(scrollAreaRef, 'history')
+  // App バーの「履歴」をもう一度押したら先頭へ戻す(タブの再タップと同じ慣習)。
+  useEffect(() => onHistoryScrollTopRequest(() => scrollElementToTop(scrollAreaRef.current)), [])
+  const cardStyle = useHistoryCardStyle()
+  const CARD_STYLES: { id: HistoryCardStyle; label: string; icon: ReactNode }[] = [
+    { id: 'detail', label: t.history.page.cardStyleDetail, icon: <CardDetailIcon size={16} /> },
+    { id: 'image', label: t.history.page.cardStyleMasonry, icon: <CardMasonryIcon size={16} /> },
+    { id: 'rows', label: t.history.page.cardStyleRows, icon: <CardRowsIcon size={16} /> },
+  ]
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
     if (navigationType === 'POP') {
@@ -52,6 +80,12 @@ export function HistoryPage() {
     filterByLocationKey.set(location.key, statusFilter)
   }, [statusFilter, location.key])
 
+  const storedSort = useHistorySort()
+  const { embeddings, isLoading: embeddingsLoading } = useEmbeddingCapabilitiesState()
+  const embeddingsAvailable = embeddings !== null
+  const sort = effectiveHistorySort(storedSort, { available: embeddingsAvailable, loading: embeddingsLoading })
+
+  // 日付の並びの元。並べ替えに関わらず取る(実行中の Run のポーリングと、成功の検出に使う)。
   const runsQuery = useInfiniteQuery({
     queryKey: ['runs'],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
@@ -65,14 +99,64 @@ export function HistoryPage() {
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
 
+  // グループと似た順(画像単位)。
+  const assetSort = sort === 'group' || sort === 'embedding' ? sort : null
+  const assetsQuery = useInfiniteQuery({
+    queryKey: ['history-assets', assetSort],
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      listHistoryAssets({ sort: assetSort ?? 'group', limit: 30, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    gcTime: RUNS_GC_TIME_MS,
+    enabled: assetSort === 'group' || (assetSort === 'embedding' && embeddingsAvailable),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  })
+  const activeQuery = assetSort ? assetsQuery : runsQuery
+
+  const hasNextPage = activeQuery.hasNextPage
+  const isFetchingNextPage = activeQuery.isFetchingNextPage
+  const isFetchNextPageError = activeQuery.isFetchNextPageError
+  const fetchNextPage = assetSort ? assetsQuery.fetchNextPage : runsQuery.fetchNextPage
+  // 末尾の番兵が見えたら続きを読む。状態の絞り込みで1ページ分が全部除かれても番兵は見えたままなので
+  // 続けて読む。失敗したら自動では読み直さず、下のボタンで読む。
+  useAutoLoadMore(scrollAreaRef, sentinelRef, { hasNextPage, isFetchingNextPage, isFetchNextPageError }, fetchNextPage)
+
   const allRuns = useMemo(() => runsQuery.data?.pages.flatMap((p) => p.items) ?? [], [runsQuery.data])
-  const filtered = useMemo(() => filterRuns(allRuns, statusFilter), [allRuns, statusFilter])
+  const assetItems = useMemo<HistoryAssetItem[]>(
+    () => assetsQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [assetsQuery.data],
+  )
+  const groupList = assetsQuery.data?.pages[0]?.groups
+  const ungroupedLabel = t.history.page.ungrouped
+
+  // 状態の絞り込みは、どの並べ方でも Run の状態で掛ける。
+  const { sections, total, filteredCount } = useMemo(() => {
+    if (!assetSort) {
+      const filtered = filterRuns(allRuns, statusFilter)
+      // 出力が複数の Run は出力ごとのカードに展開し、日が変わる位置で節に分ける。
+      return {
+        sections: daySections(expandHistoryCards(filtered), intlLocale(locale), new Date().getFullYear()),
+        total: allRuns.length,
+        filteredCount: filtered.length,
+      }
+    }
+    const allowed = new Set(filterRuns(assetItems.map((item) => item.run), statusFilter).map((run) => run.id))
+    const filtered = assetItems.filter((item) => allowed.has(item.run.id))
+    return {
+      sections:
+        assetSort === 'group'
+          ? groupSections(filtered, groupList, ungroupedLabel)
+          : similaritySections(filtered),
+      total: assetItems.length,
+      filteredCount: filtered.length,
+    }
+  }, [assetSort, allRuns, assetItems, statusFilter, groupList, ungroupedLabel, locale])
+
   const placeholder = historyPlaceholder({
-    isLoading: runsQuery.isLoading,
-    isError: runsQuery.isError,
-    hasData: runsQuery.data !== undefined,
-    total: allRuns.length,
-    filteredCount: filtered.length,
+    isLoading: activeQuery.isLoading,
+    isError: activeQuery.isError,
+    hasData: activeQuery.data !== undefined,
+    total,
+    filteredCount,
     filterActive: statusFilter !== 'all',
   })
 
@@ -84,6 +168,8 @@ export function HistoryPage() {
     if (prevRunStatusByIdRef.current && hasNewlySucceededRun(prevRunStatusByIdRef.current, allRuns)) {
       // 生成時に指定したグループ(ADR-0022)の枚数・表紙も変わるので、グループ一覧も取り直す。
       invalidateAssetGroupQueries(queryClient)
+      // 画像単位の並び(グループ・似た順)にも新しい画像が入る。
+      queryClient.invalidateQueries({ queryKey: ['history-assets'] })
     }
     prevRunStatusByIdRef.current = new Map(allRuns.map((run) => [run.id, run.status]))
   }, [allRuns, queryClient])
@@ -91,22 +177,29 @@ export function HistoryPage() {
   return (
     <div className={styles.page}>
       <div className={styles.toolbar}>
-        <h1 className={styles.title}>{t.history.page.title}</h1>
-        <div className={styles.count}>{allRuns.length} Generated</div>
+        {/* 見出しは上のナビで分かるので見せない(読み上げのために残す)。 */}
+        <h1 className={styles.srOnly}>{t.history.page.title}</h1>
 
-        <div role="group" aria-label={t.history.page.filterByStatus} className={styles.statusGroup}>
-          {STATUS_TABS.map((tab) => (
+        <div role="group" aria-label={t.history.page.cardStyle} className={styles.segmentGroup}>
+          {CARD_STYLES.map((option) => (
             <button
-              key={tab.id}
+              key={option.id}
               type="button"
-              aria-pressed={statusFilter === tab.id}
-              className={styles.statusTab}
-              data-active={statusFilter === tab.id}
-              onClick={() => setStatusFilter(tab.id)}
+              aria-pressed={cardStyle === option.id}
+              aria-label={option.label}
+              title={option.label}
+              className={styles.segment}
+              data-active={cardStyle === option.id}
+              onClick={() => setHistoryCardStyle(option.id)}
             >
-              {tab.label}
+              {option.icon}
             </button>
           ))}
+        </div>
+
+        <div className={styles.toolbarEnd}>
+          <HistorySortMenu value={sort} onChange={setHistorySort} embeddingsAvailable={embeddingsAvailable} />
+          <HistoryStatusFilterMenu value={statusFilter} onChange={setStatusFilter} />
         </div>
       </div>
 
@@ -115,23 +208,38 @@ export function HistoryPage() {
         {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
         {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
 
-        <div className={styles.grid}>
-          {filtered.map((run) => (
-            <HistoryCard key={run.id} run={run} />
-          ))}
-        </div>
+        {cardStyle !== 'detail' ? (
+          <HistoryGallery sections={sections} layout={cardStyle === 'rows' ? 'rows' : 'masonry'} />
+        ) : (
+          <div className={styles.sections}>
+            {sections.map((section) => (
+              <section key={section.key}>
+                {section.heading && <HistorySectionHeading heading={section.heading} />}
+                <div className={styles.grid}>
+                  {section.cards.map((card) => (
+                    <HistoryCard key={card.key} run={card.run} variant="overlay" outputIndex={card.outputIndex} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
 
-        {runsQuery.hasNextPage && (
+        <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
+
+        {hasNextPage && (
           <button
             type="button"
             className={styles.loadMore}
-            onClick={() => runsQuery.fetchNextPage()}
-            disabled={runsQuery.isFetchingNextPage}
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
           >
-            {runsQuery.isFetchingNextPage ? t.history.page.loading : t.history.page.loadMore}
+            {isFetchingNextPage ? t.history.page.loading : t.history.page.loadMore}
           </button>
         )}
       </div>
+
+      <BackToTopButton scrollRef={scrollAreaRef} />
     </div>
   )
 }

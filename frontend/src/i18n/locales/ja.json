@@ -103,10 +103,7 @@
       "noPrompt": "(プロンプトなし)",
       "cancel": "中止",
       "showLineage": "系列を見る",
-      "rerun": "同じ設定で新規作成",
-      "useAsInput": "入力に使う",
       "delete": "削除",
-      "rerunFailed": "再実行の準備に失敗しました",
       "deleteFailed": "削除に失敗しました",
       "by": "実行者: {name}",
       "deleteConfirm": {
@@ -123,14 +120,25 @@
     },
     "page": {
       "title": "履歴",
-      "filterByStatus": "状態で絞り込み",
+      "filterByStatus": "状態で絞り込む",
       "filterAll": "すべて",
       "filterSucceeded": "成功",
       "filterFailed": "失敗",
       "loading": "読み込み中...",
       "loadError": "履歴の取得に失敗しました",
       "noMatch": "該当する Generated がありません。",
-      "loadMore": "さらに読み込む"
+      "loadMore": "さらに読み込む",
+      "cardStyle": "カードの形",
+      "cardStyleDetail": "詳細",
+      "cardStyleMasonry": "石積み",
+      "cardStyleRows": "行揃え",
+      "sort": "並べ替え",
+      "sortDate": "日付",
+      "sortGroup": "グループ",
+      "sortEmbedding": "似た順",
+      "ungrouped": "グループなし",
+      "sectionCount": "{count} 枚",
+      "backToTop": "先頭へ戻る"
     }
   },
   "runDetail": {

@@ -1171,6 +1171,9 @@ class RunOutputRef(BaseModel):
     content_rating: ContentRatingLevel | None = None
     # 画像を残さなかったか(ADR-0051 4章)。
     content_withheld: bool = False
+    # 原本のピクセルの大きさ(履歴のカードの「画像」の形で出す)。
+    width: int | None = None
+    height: int | None = None
 
 
 class RunRegions(BaseModel):
@@ -1274,6 +1277,33 @@ class RunDetail(RunSummary):
 class RunListResponse(BaseModel):
     items: list[RunSummary]
     next_cursor: str | None = None
+
+
+HistorySort = Literal["group", "embedding"]
+
+
+class HistoryAssetItem(BaseModel):
+    """画像単位の履歴の1項目(ADR-0054 4章)。表示は日付の並びと同じく `run` と出力で描く。"""
+
+    asset_id: uuid.UUID
+    # 画像が入っている見えるグループ(`sort=group` のときだけ。グループなし・他の並べ方は null)。
+    group_id: uuid.UUID | None = None
+    run: RunSummary
+
+
+class HistoryGroupSection(BaseModel):
+    """グループの並びの節(バナーの名前と件数)。`id = null` は「グループなし」。"""
+
+    id: uuid.UUID | None = None
+    name: str | None = None
+    count: int
+
+
+class HistoryAssetListResponse(BaseModel):
+    items: list[HistoryAssetItem]
+    next_cursor: str | None = None
+    # `sort=group` のときだけ。グループの並び順で、画像のある節だけ。
+    groups: list[HistoryGroupSection] | None = None
 
 
 class RunCancelResponse(BaseModel):

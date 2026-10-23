@@ -109,6 +109,13 @@
   container-type: size;
 }
 
+/* 下に情報を重ねるカード(履歴の「画像」の形)では、バッジを上寄りに置く。 */
+.mask[data-align='upper'] {
+  align-items: flex-start;
+  box-sizing: border-box;
+  padding-top: 28%;
+}
+
 .mask:hover {
   background: rgba(16, 17, 20, 0.16);
 }

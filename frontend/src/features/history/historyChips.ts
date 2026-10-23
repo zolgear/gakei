@@ -24,6 +24,25 @@ export function buildParamChips(params: Record<string, unknown> | undefined): st
   return chips
 }
 
+/**
+ * 重ねるカード(履歴ページの「詳細」)のチップ。サイズはチップの行の1つにまとめる。
+ * パラメーターの size が出力の実寸と同じなら、今のチップのまま。size が無い・"auto"・実寸と違う
+ * ときは、出力の実寸("832x1216"。既存のチップと同じ `x` の表記)をサイズのチップにする
+ * (違うときは実寸だけを出し、同じ値を2つ並べない)。実寸が分からなければ今のチップのまま。
+ */
+export function buildParamChipsWithActualSize(
+  params: Record<string, unknown> | undefined,
+  output: { width?: number | null; height?: number | null } | undefined,
+): string[] {
+  const chips = buildParamChips(params)
+  if (!output?.width || !output?.height) return chips
+  const actual = `${output.width}x${output.height}`
+  const requested = typeof params?.size === 'string' ? params.size.trim().toLowerCase().replace('×', 'x') : ''
+  if (requested === actual) return chips
+  const rest = buildParamChips(params ? { ...params, size: undefined } : undefined)
+  return [actual, ...rest]
+}
+
 export function formatTokenCount(usage: Record<string, unknown> | null | undefined): string | null {
   if (!usage) return null
   const total = usage.total_tokens

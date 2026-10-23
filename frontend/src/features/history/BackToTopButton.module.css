@@ -1,0 +1,31 @@
+/* 履歴のページ(.page)の右下に固定する。画像の上に載るので、小さく半透明にする。 */
+.button {
+  position: absolute;
+  right: 16px;
+  bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+  z-index: 20;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 11, 13, 0.55);
+  backdrop-filter: blur(6px);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.button:hover {
+  background: rgba(10, 11, 13, 0.75);
+  color: #fff;
+}
+
+@media (max-width: 767px) {
+  .button {
+    width: 44px;
+    height: 44px;
+  }
+}

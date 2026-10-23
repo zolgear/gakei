@@ -38,13 +38,10 @@ from app.domain.models import (
 from app.domain.run_views import (
     bulk_asset_groups,
     bulk_descendant_run_counts,
-    bulk_input_summary,
     bulk_output_refs,
-    bulk_parent_content_ratings,
-    bulk_parent_focal_points,
-    bulk_parent_withheld,
     bulk_users,
     run_summary_fields,
+    summarize_runs,
     visible_runs_query,
 )
 from app.domain.schemas import (
@@ -56,7 +53,6 @@ from app.domain.schemas import (
     RunImportInfo,
     RunInputRef,
     RunListResponse,
-    RunSummary,
 )
 from app.domain.visibility import get_visible_run, visible_asset_ids
 from app.i18n import t
@@ -212,32 +208,8 @@ def list_runs(
     has_more = len(rows) > limit
     rows = rows[:limit]
 
-    # 1ページ分の run_id をまとめて引く(N+1 を避ける)。
-    run_ids = [r.id for r in rows]
-    outputs_map = bulk_output_refs(db, run_ids)
-    inputs_map = bulk_input_summary(db, run_ids, user)
-    descendant_map = bulk_descendant_run_counts(db, run_ids, user)
-    users_map = bulk_users(db, [r.created_by_user_id for r in rows])
-    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], user)
-    parent_focals = bulk_parent_focal_points(db, inputs_map)
-    parent_ratings = bulk_parent_content_ratings(db, inputs_map)
-    parent_withheld = bulk_parent_withheld(db, inputs_map)
-    items = [
-        RunSummary(
-            **run_summary_fields(
-                r,
-                outputs_map[r.id],
-                *inputs_map[r.id],
-                descendant_map[r.id],
-                users_map.get(r.created_by_user_id),
-                groups_map.get(r.asset_group_id),
-                primary_parent_focal_point=parent_focals.get(inputs_map[r.id][1]),
-                primary_parent_content_rating=parent_ratings.get(inputs_map[r.id][1]),
-                primary_parent_content_withheld=inputs_map[r.id][1] in parent_withheld,
-            )
-        )
-        for r in rows
-    ]
+    # 1ページ分をまとめて引く(N+1 を避ける)。
+    items = summarize_runs(db, rows, user)
 
     next_cursor = encode_cursor(rows[-1].queued_at, rows[-1].id) if has_more and rows else None
     return RunListResponse(items=items, next_cursor=next_cursor)

@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, NavLink, useNavigate } from 'react-router'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 import { getCapabilities } from '../api/client'
 import { CAPABILITIES_CHECKING_REFETCH_MS, hasCheckingProvider } from '../lib/capabilities'
 import { useRunFormContext } from '../context/useRunFormContext'
@@ -20,6 +20,7 @@ import { GakeiMark } from '../components/GakeiMark'
 import { useEmbeddingCapabilities } from '../features/embeddings/useEmbeddingCapabilities'
 import { useFaviconIconState } from '../features/favicon/useFaviconProgress'
 import { fmt, useI18n } from '../i18n'
+import { requestHistoryScrollTop } from '../features/history/backToTop'
 import { useQueueStatus } from './useQueueStatus'
 import { isNewRunShortcut } from './newRunShortcut'
 import { UserMenu } from './UserMenu'
@@ -33,6 +34,7 @@ interface AppBarProps {
 export function AppBar({ onToggleDrawer, drawerOpen }: AppBarProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
+  const location = useLocation()
   const queue = useQueueStatus()
   // favicon と同じ状態・同じ動き(ADR-0009 8章)。件数のバッジはこれまでどおり別に表示する。
   const faviconIconState = useFaviconIconState()
@@ -113,6 +115,13 @@ export function AppBar({ onToggleDrawer, drawerOpen }: AppBarProps) {
         <NavLink
           to="/"
           end
+          onClick={(event) => {
+            // 履歴を開いている間に押したら、移らずに先頭へ戻す。
+            if (location.pathname === '/') {
+              event.preventDefault()
+              requestHistoryScrollTop()
+            }
+          }}
           className={({ isActive }) => `${styles.tab} ${isActive ? styles.tabActive : ''}`}
         >
           {t.shell.appBar.historyTab}
