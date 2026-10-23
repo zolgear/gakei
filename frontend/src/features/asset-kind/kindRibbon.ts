@@ -28,3 +28,16 @@ export function kindRibbon(kind: string, imported = false): KindRibbon | null {
   if (HANDMADE_KINDS.has(kind)) return { tone: 'handmade', label: kind as KindRibbon['label'] }
   return null
 }
+
+/**
+ * 詳細の日時の行の見出し。日時は Asset を作った時刻なので、種別によって意味が変わる
+ * (生成した時刻、アップロードした時刻、取り込んだ時刻)。見出しで言い分け、どんな画像かも
+ * 日時の行で分かるようにする(別に「種別」の行は足さない)。
+ */
+export type CreatedLabel = 'generated' | 'upload' | 'imported' | 'created'
+
+export function createdLabel(kind: string, imported = false): CreatedLabel {
+  if (kind === 'generated') return imported ? 'imported' : 'generated'
+  if (kind === 'upload') return 'upload'
+  return 'created'
+}

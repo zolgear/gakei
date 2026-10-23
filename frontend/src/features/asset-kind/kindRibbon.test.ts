@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { kindRibbon } from './kindRibbon'
+import { createdLabel, kindRibbon } from './kindRibbon'
 
 describe('kindRibbon', () => {
   it('自分で生成した画像には何も付けない', () => {
@@ -24,5 +24,15 @@ describe('kindRibbon', () => {
 
   it('知らない種別には付けない', () => {
     expect(kindRibbon('something-new')).toBeNull()
+  })
+})
+
+describe('createdLabel', () => {
+  it('種別ごとに日時の行の見出しを言い分ける', () => {
+    expect(createdLabel('generated')).toBe('generated')
+    expect(createdLabel('generated', true)).toBe('imported')
+    expect(createdLabel('upload')).toBe('upload')
+    expect(createdLabel('sketch')).toBe('created')
+    expect(createdLabel('composite')).toBe('created')
   })
 })
