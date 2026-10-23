@@ -165,6 +165,38 @@ def test_others_assets_are_404_and_marks_are_per_user(client_oidc: TestClient) -
     assert len(rows) == 1 and rows[0] is not None
 
 
+def test_asset_detail_shows_viewers_favorite(client: TestClient) -> None:
+    run = _run(client, "detail")
+    (asset_id,) = _output_ids(run)
+    assert client.get(f"/api/assets/{asset_id}").json()["favorite"] is False
+    assert _favorite(client, asset_id).status_code == 200
+    assert client.get(f"/api/assets/{asset_id}").json()["favorite"] is True
+
+    # 削除済みでも詳細は返り、印は残っている。復元の応答も同じ値。
+    assert client.delete(f"/api/assets/{asset_id}").status_code == 204
+    assert client.get(f"/api/assets/{asset_id}").json()["favorite"] is True
+    restored = client.post(f"/api/assets/{asset_id}/restore")
+    assert restored.status_code == 200
+    assert restored.json()["favorite"] is True
+
+    assert _favorite(client, asset_id, on=False).status_code == 200
+    assert client.get(f"/api/assets/{asset_id}").json()["favorite"] is False
+
+
+def test_asset_detail_favorite_is_per_viewer(client_oidc: TestClient) -> None:
+    login_as(client_oidc, "alice@example.com")
+    (asset_id,) = _output_ids(_run(client_oidc, "alice"))
+    assert _favorite(client_oidc, asset_id).status_code == 200
+    assert client_oidc.get(f"/api/assets/{asset_id}").json()["favorite"] is True
+    client_oidc.cookies.clear()
+
+    # 他の利用者には Asset ごと見えない(ADR-0025)。自分の Asset には自分の印だけが出る。
+    login_as(client_oidc, "bob@example.com")
+    assert client_oidc.get(f"/api/assets/{asset_id}").status_code == 404
+    (bob_asset,) = _output_ids(_run(client_oidc, "bob"))
+    assert client_oidc.get(f"/api/assets/{bob_asset}").json()["favorite"] is False
+
+
 # -- 絞り込み ---------------------------------------------------------------------
 
 

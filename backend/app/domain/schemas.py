@@ -802,6 +802,8 @@ class AssetDetail(AssetSummary):
     # 画像を残さなかった理由の判定(`content_withheld` が true のときだけ。系列の ZIP から
     # 画像の無いノードとして取り込んだものなど、判定が無ければ null)。
     content_withheld_verdict: ModVerdictView | None = None
+    # 見る人のお気に入りか(ADR-0055)。他人の印は見えない。
+    favorite: bool = False
 
 
 class AssetUploadResponse(AssetDetail):

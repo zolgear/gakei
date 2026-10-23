@@ -32,6 +32,7 @@ import { AssetThumb } from '../content-rating/AssetThumb'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
 import { AssetDetailSections } from './AssetDetailSections'
+import { AssetFavoriteButton } from '../history/AssetFavoriteButton'
 import { ShareDialog } from '../share/ShareDialog'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import { importToastFromState } from '../lineage-transfer/lineageTransfer'
@@ -241,6 +242,14 @@ export function Viewer({ assetId }: ViewerProps) {
                 </span>
               )}
               <div className={styles.headerActions}>
+                {/* お気に入り(ADR-0055)。系列のパネルと同じく「Generated の詳細」の左に置く。
+                    削除済みには付け外しできないので押せない状態で残す。 */}
+                <AssetFavoriteButton
+                  assetId={asset.id}
+                  favorite={asset.favorite}
+                  disabled={Boolean(asset.deleted_at)}
+                  className={styles.iconButton}
+                />
                 {/* 生成元の Run の詳細へ直接移る(下の文字のリンクと同じ遷移先)。生成元がある画像
                     だけに出る。並びは右寄せなので、左端に置けば有無でほかのボタンの位置は変わらない。 */}
                 {asset.produced_by_run && (

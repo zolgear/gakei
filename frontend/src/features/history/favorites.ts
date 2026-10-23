@@ -2,9 +2,12 @@
  * お気に入り(ADR-0055)の、react-query のキャッシュの書き換えと、絞り込み中の表示の判定。
  * 画面の部品から切り離した純粋関数にしてテストする。
  *
- * キャッシュは Run の一覧(`['runs', ...]`。ページの項目が `RunSummary`)と画像単位の履歴
- * (`['history-assets', ...]`。ページの項目が `{ asset_id, run: RunSummary }`)の2つの形がある。
- * どちらも `run.outputs[].favorite` を書き換える(同じ Asset は Run の一覧にも画像単位の履歴にも出る)。
+ * 書き換えるキャッシュの形は4つ。同じ Asset がどこに出ていても同じ状態に揃える。
+ * - Run の一覧(`['runs', ...]`。ページの項目が `RunSummary`)
+ * - 画像単位の履歴(`['history-assets', ...]`。ページの項目が `{ asset_id, run: RunSummary }`)
+ * - Run 1件(`['run', id]`。`RunDetail`。ビューアの出力の切り替えなど)
+ * - Asset 1件(`['asset', id]`。`AssetDetail`。ビューアや系列・マップのパネル)
+ * Run を含むものは `run.outputs[].favorite`、Asset 1件は `favorite` を書き換える。
  */
 import type { RunOutputRef, RunSummary } from '../../api/client'
 
@@ -45,11 +48,25 @@ function updateItem(item: unknown, assetId: string, favorite: boolean): unknown 
   return item
 }
 
+/** Asset 1件(`AssetDetail`)の形か。一覧の項目(`AssetSummary`)とは `sha256` の有無で分ける。 */
+function isAssetDetailFor(data: unknown, assetId: string): data is { id: string; favorite?: boolean } {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { id?: unknown }).id === assetId &&
+    'sha256' in data
+  )
+}
+
 /**
- * キャッシュの値の中の、`assetId` の出力の `favorite` を書き換える。形の違う値(件数の問い合わせなど)や
+ * キャッシュの値の中の、`assetId` の `favorite` を書き換える。形の違う値(件数の問い合わせなど)や
  * 該当の無い値はそのまま返す(react-query が再描画しないよう、同じ参照を返す)。
  */
 export function setFavoriteInCache<T>(data: T, assetId: string, favorite: boolean): T {
+  if (isAssetDetailFor(data, assetId)) {
+    return Boolean(data.favorite) === favorite ? data : ({ ...data, favorite } as T)
+  }
+  if (isRunSummary(data)) return updateRun(data, assetId, favorite) as T
   if (!isPagedData(data)) return data
   let changed = false
   const pages = data.pages.map((page) => {

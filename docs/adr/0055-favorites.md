@@ -56,6 +56,7 @@ INDEX ix_asset_mark_user_id_flag (user_id, flag)
 | `PUT` | `/api/assets/{id}/favorite` | お気に入りにする → `{asset_id, favorite: true}`。既に付いていれば何もしない(冪等) |
 | `DELETE` | `/api/assets/{id}/favorite` | お気に入りを外す → `{asset_id, favorite: false}`。付いていなければ何もしない(冪等) |
 
+- 1枚の詳細に状態を載せる: `GET /api/assets/{id}`(`AssetDetail`)に `favorite: bool`(見る人の印)を足す。復元(`POST /api/assets/{id}/restore`)の応答も同じ。削除済みの Asset でも詳細は返るので、印が残っていれば `true` になる。
 - 一覧に状態を載せる: `RunSummary.outputs[]`(`RunOutputRef`)に `favorite: bool`(見る人の印)を足す。出力の参照をまとめて引く問い合わせ(`bulk_output_refs`)に結合して引き、ページの件数によらず問い合わせの数を増やさない(N+1 にしない)。`GET /api/runs`、`GET /api/runs/{id}`、`GET /api/history/assets`(項目の `run` の中)、検索の結果のどれでも同じ値になる。
 - 絞り込みはサーバーで行う。続きを自動で少しずつ読むので、読み込んだページの中だけで絞ると、お気に入りの少ない履歴では空のページを延々と読むことになる。
   - `GET /api/runs?favorite=true`: お気に入りの出力(削除されていない)を1つ以上持つ Run だけ。並びとカーソルは今のまま(`queued_at DESC, id DESC`)。
@@ -76,6 +77,16 @@ INDEX ix_asset_mark_user_id_flag (user_id, flag)
   - 絞り込みの中で外したカードは、絞り込みを切り替えるまでその場に残す(押し間違えをすぐに戻せるように)。
   - 該当が無いときは「お気に入りはありません」を出す。
 - 選択は状態の絞り込みと同じく、戻る/進むで戻ったときだけ復元する(保存はしない)。
+
+### 5. 画面(1枚の Asset を見る場所)
+
+- 次の3か所で、見出しの行にハートのボタンを置く。履歴と違い、どの画面から開いても出す。
+  - ビューア(`/assets/:id`): 見出しの行のアイコンの並びの先頭(「Generated の詳細」の左)。
+  - 系列グラフのパネル(`/lineage` とスタジオの系列のモードで Asset のノードを選んだとき。狭い幅では下からのシート): 「Generated の詳細」(ⓘ)の左。
+  - マップのプレビューのパネル: 畳むボタンの左。
+- 枠と大きさは、置く場所のほかのアイコンのボタンと同じ(狭い幅では 40〜44px)。お気に入りなら塗りのハートを履歴と同じアクセント色で、そうでなければ線で出す。`aria-pressed`、`aria-label` と `title` は履歴と同じ。
+- 詳細が届くまでは出さない(状態が分からないため)。削除済みの Asset には付け外しできないので、押せない状態で出す。
+- 押したら楽観的に表示を変え、失敗したら戻してトーストで知らせる。書き換えるキャッシュは、その Asset の詳細、Run の詳細、履歴の一覧(Run 単位・画像単位)のすべてで、履歴で付けたものはビューアやパネルでも、その逆も同じに見える。
 
 ## Options Considered
 
@@ -113,10 +124,12 @@ INDEX ix_asset_mark_user_id_flag (user_id, flag)
 - 新しい表 `asset_mark` とマイグレーションが増える。
 - `RunOutputRef` に `favorite` が増え、`GET /api/runs` と `GET /api/history/assets` に `favorite` の問い合わせの引数が増える。
 - 履歴の画像の右上にハートのボタンが増え、絞り込みのメニューに「お気に入り」が増える。
+- `AssetDetail` に `favorite` が増え、ビューア・系列グラフのパネル・マップのプレビューの見出しの行にハートのボタンが増える。
 
 ## Action Items
 
 1. バックエンド: `asset_mark` の表とマイグレーション、付け外しの API、一覧の `favorite`、絞り込み、ADR-0046 のツールの対象への追加、テスト。
 2. フロント: ハートのボタン(3つの表示の形)、楽観的な更新、絞り込みのメニューの切り替え、空の表示、文言(ja / en)。
 3. `npm run gen:api`。
-4. 候補(今回は作らない): ビューアと Run 詳細でのお気に入り、ストックの絞り込み、MCP のツール(一覧の `favorite` と絞り込み)、系列グラフでの印、不採用(`reject`)と評価(`rating`)。
+4. `AssetDetail` の `favorite`、ビューア・系列グラフのパネル・マップのプレビューのハートのボタン、キャッシュの同期(5章)。
+5. 候補(今回は作らない): Run 詳細と検索の結果の一覧でのお気に入り、ストックの絞り込み、MCP のツール(一覧の `favorite` と絞り込み)、系列グラフでの印、不採用(`reject`)と評価(`rating`)。

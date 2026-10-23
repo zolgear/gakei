@@ -3137,6 +3137,11 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
         };
         /**
          * AssetEmbeddingStatus
@@ -3441,6 +3446,11 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
             /**
              * Ingest Outcome
              * @enum {string}

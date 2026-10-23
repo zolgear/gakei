@@ -226,6 +226,7 @@ def _to_detail(
         composition=compositions_domain.composition_view(db, asset, checker, store),
         **content_withholding.summary_fields(asset),
         **content_withholding.withheld_fields(db, asset),
+        favorite=favorites_domain.is_favorite(db, user, asset.id),
     )
 
 

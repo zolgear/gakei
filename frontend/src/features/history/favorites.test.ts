@@ -49,6 +49,22 @@ describe('setFavoriteInCache', () => {
   })
 })
 
+describe('setFavoriteInCache の1件の形', () => {
+  it('Asset 1件(AssetDetail)は id が合うときだけ favorite を書き換える', () => {
+    const detail = { id: 'a', sha256: 'x', favorite: false }
+    expect(setFavoriteInCache(detail, 'a', true)).toEqual({ id: 'a', sha256: 'x', favorite: true })
+    expect(setFavoriteInCache(detail, 'a', false)).toBe(detail)
+    expect(setFavoriteInCache(detail, 'b', true)).toBe(detail)
+  })
+
+  it('Run 1件(RunDetail)は出力を書き換える', () => {
+    const detail = run('r1', [{ asset_id: 'a' }, { asset_id: 'b' }])
+    const next = setFavoriteInCache(detail, 'a', true)
+    expect(next.outputs?.map((o) => o.favorite)).toEqual([true, false])
+    expect(setFavoriteInCache(detail, 'zzz', true)).toBe(detail)
+  })
+})
+
 describe('絞り込み中の表示', () => {
   it('一度お気に入りとして見えた出力は、外しても残す', () => {
     const first = collectFavoriteIds(new Set(), [run('r1', [{ asset_id: 'a', favorite: true }, { asset_id: 'b' }])])
