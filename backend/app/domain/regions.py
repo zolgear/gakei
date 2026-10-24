@@ -1,7 +1,8 @@
 """領域の指示(ADR-0053)。四角を「画像と文」(5章)に変える。
 
 - 四角を描いた画像: 主たる入力に、四角と番号だけを重ねた別の画像(PNG)。Asset の種類 `regions`
-  として保存し、Run の入力(`role = image`)として利用者の入力の後ろに足す。
+  として保存し、Run の入力(`role = image`)として利用者の入力の後ろに足す。入力画像の無い Run では、
+  出力の大きさの白紙に描いた配置図を唯一の入力にする(`render_layout`)。
 - 文: 番号ごとの指示を、利用者の言語の文言(`regions.prompt.*`)でプロンプトの後ろに足す。
 
 どちらも同じ入力からは同じ結果になる(再実行・テストで同じ画像と文を作れるように)。DB と保存先には
@@ -26,6 +27,9 @@ VERSION = 1
 DELIVERY_IMAGE_AND_TEXT = "image_and_text"
 # ComfyUI の Create Bounding Boxes に差し込む(ADR-0053 6章。変換は `comfy_bounding_boxes`)。
 DELIVERY_COMFYUI_BBOXES = "comfyui_bboxes"
+# 入力画像の無い Run の配置図の大きさ(出力サイズが `auto`・未指定のとき。フロントの白紙の
+# キャンバスと同じ規則。ADR-0053 5章)。
+BLANK_AUTO_SIZE = (1024, 1024)
 
 # 四角の色(番号順に使い、9 個目からは繰り返す。番号で見分ける)。`key` は文言のキー
 # (`regions.colors.{key}`)。互いに見分けやすく、写真・イラストの上でも目立つ色。
@@ -213,6 +217,14 @@ def render_overlay(image: Image.Image, regions: Sequence[RegionBox]) -> bytes:
     return out.getvalue()
 
 
+def render_layout(width: int, height: int, regions: Sequence[RegionBox]) -> bytes:
+    """入力画像の無い Run の配置図(ADR-0053 5章)。
+
+    出力の大きさの白紙に、四角と番号だけを描いた PNG。"""
+    with Image.new("RGB", (width, height), (255, 255, 255)) as blank:
+        return render_overlay(blank, regions)
+
+
 # -- 文 -----------------------------------------------------------------------------
 
 
@@ -258,9 +270,12 @@ def _area(box: Sequence[float]) -> str:
     )
 
 
-def _kind_text(region: RegionBox) -> str:
+def _kind_text(region: RegionBox, *, blank: bool) -> str:
     """種類の文。「変える」「足す」で指示・描く文字・参照画像のどれも無ければ、場所だけを示す
-    (四角の定義と指示は分ける。全体のプロンプトから番号か名前で指すための目印)。"""
+    (四角の定義と指示は分ける。全体のプロンプトから番号か名前で指すための目印)。
+
+    `blank` は白紙の配置図(入力画像の無い Run)。変える物が無いので、「変える」は「描く」にする。
+    名前だけの四角も、白紙では名前の物を「描く」とする(目印にする相手が無いため)。"""
     kind = region.kind
     if kind == "move" and region.source_box is not None:
         return t(
@@ -273,9 +288,14 @@ def _kind_text(region: RegionBox) -> str:
     if kind == "remove":
         return t("runRegions.prompt.kind.remove", where=_where(region.box))
     if not region.instruction and region.text is None and region.reference_asset_id is None:
+        # 白紙では名前が描く物そのもの。場所だけの文では描かれにくかったので「描く」と伝える。
+        if blank and region.label:
+            return t("runRegions.prompt.kind.changeBlank", where=_where(region.box))
         return _area(region.box)
     if kind == "add":
         return t("runRegions.prompt.kind.add", where=_where(region.box))
+    if blank:
+        return t("runRegions.prompt.kind.changeBlank", where=_where(region.box))
     return t("runRegions.prompt.kind.change", where=_where(region.box))
 
 
@@ -284,17 +304,23 @@ def build_prompt_text(
     *,
     overlay_image_number: int,
     reference_image_numbers: dict[Any, int],
+    blank: bool = False,
 ) -> str:
     """プロンプトの後ろに足す文(前の改行を含む)。
 
     `overlay_image_number` は四角を描いた画像が何枚目の入力か(1 から)。
     `reference_image_numbers` は参照画像の Asset id → 何枚目の入力か。
+    `blank` は入力画像の無い Run(白紙の配置図が1枚目。ADR-0053 5章)。見出しと結びを分ける。
     """
-    lines = [t("runRegions.prompt.header", overlay=overlay_image_number)]
+    if blank:
+        header = t("runRegions.prompt.headerBlank")
+    else:
+        header = t("runRegions.prompt.header", overlay=overlay_image_number)
+    lines = [header]
     for index, region in enumerate(ordered(regions)):
         color_key, _rgb = color_for(index)
         color = _color_name(color_key)
-        parts: list[str] = [_kind_text(region)]
+        parts: list[str] = [_kind_text(region, blank=blank)]
         if region.instruction:
             parts.append(t("runRegions.prompt.instruction", instruction=region.instruction))
         if region.text is not None:
@@ -316,7 +342,10 @@ def build_prompt_text(
             )
         else:
             lines.append(t("runRegions.prompt.item", number=region.number, color=color, body=body))
-    lines.append(t("runRegions.prompt.footer", overlay=overlay_image_number))
+    if blank:
+        lines.append(t("runRegions.prompt.footerBlank"))
+    else:
+        lines.append(t("runRegions.prompt.footer", overlay=overlay_image_number))
     return "\n\n" + "\n".join(lines)
 
 
@@ -330,6 +359,9 @@ class RegionsRecord:
     regions: list[RegionBox]
     appended_text: str
     overlay_asset_id: Any
+    # 座標が何に対する割合か(`input`: 主たる入力、`output`: 出力の大きさ。入力画像の無い Run の
+    # 白紙の配置図)。
+    frame: str = "input"
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -339,8 +371,7 @@ class RegionsRecord:
             # プロンプトの後ろに足した文。再実行では、プロンプトからこの文を除いて戻す。
             "appended_text": self.appended_text,
             "overlay_asset_id": str(self.overlay_asset_id),
-            # 座標は主たる入力に対する割合(「画像と文」は入力画像のある Run だけ)。
-            "frame": "input",
+            "frame": self.frame,
         }
 
 

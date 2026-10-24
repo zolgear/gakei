@@ -117,6 +117,13 @@
   white-space: nowrap;
 }
 
+/* 出力サイズに合わせて配置を描き直している間(ADR-0050 5章)。 */
+.busyTag {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .iconButton {
   width: 22px;
   height: 22px;

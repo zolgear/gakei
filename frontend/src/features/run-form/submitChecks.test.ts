@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  compositeRedrawBlockReason,
   inputCountRequirementMessage,
   isInputCountSatisfied,
   isMaskSatisfied,
@@ -164,5 +165,13 @@ describe('isProviderUsable / providerUnavailableMessage(available=false は止�
   it('プロバイダーが未解決(読み込み中)なら妨げない', () => {
     expect(isProviderUsable(undefined)).toBe(true)
     expect(providerUnavailableMessage(undefined)).toBeNull()
+  })
+})
+
+describe('compositeRedrawBlockReason(配置の描き直し中は送信を止める)', () => {
+  it('描き直し中は理由を返し、そうでなければ null', () => {
+    expect(compositeRedrawBlockReason(true)).toEqual(expect.any(String))
+    expect(compositeRedrawBlockReason(true)).not.toBe('')
+    expect(compositeRedrawBlockReason(false)).toBeNull()
   })
 })

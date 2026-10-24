@@ -79,3 +79,11 @@ export function providerUnavailableMessage(providerEntry: ProviderEntry | undefi
   if (providerEntry === undefined || providerEntry.available) return null
   return providerEntry.unavailable_reason ?? msg().runForm.submitChecks.providerUnavailableDefault
 }
+
+/**
+ * 出力サイズに合わせて配置の結果を描き直している間は送信を止める(ADR-0050 5章、2026-10-24 追記)。
+ * 描き直しが終わると入力の1枚目が差し替わるので、古い配置で実行しないため。
+ */
+export function compositeRedrawBlockReason(redrawing: boolean): string | null {
+  return redrawing ? msg().runForm.submitChecks.compositeRedrawing : null
+}

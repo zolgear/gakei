@@ -155,6 +155,15 @@ def _operation_capabilities(model: str, operation: str) -> OperationCapabilities
             max_input_images=0,
             min_input_images=0,
             supports_mask=False,
+            # ADR-0053 5章: 入力画像の無い Run でも四角を使える。出力の大きさの白紙に四角を描いた
+            # 配置図を唯一の入力にして、Edit の API で送る(Run は operation=edit として記録する。
+            # run_create)。白紙には残す物・消す物・動かす物が無いので、種類は「変える」「足す」
+            # だけ。参照画像は配置図の後ろに入力として足せる。
+            supports_regions=True,
+            regions_delivery="image_and_text",
+            regions_kinds=["change", "add"],
+            regions_reference_images=True,
+            regions_requires_input_image=False,
         )
 
     # `input_fidelity` は載せない。2026-09-21 の実機確認で、gpt-image-2 / 2.5-sunburst /

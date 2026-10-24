@@ -47,13 +47,22 @@ export function orderedRegions<T extends { number: number }>(regions: readonly T
 }
 
 /** 今のプロバイダー・モデルの Edit が四角を受けるか(受けなければ「領域」を出さない。5章)。 */
+/**
+ * 白紙の配置図を入力にして送った Run か(OpenAI の入力画像の無い Run。ADR-0053 5章)。配置図は
+ * 記録上の入力・主たる親だが、利用者が選んだ画像ではないので、カードの親や比較には出さない。
+ */
+export function isLayoutSketchRun(regions: Pick<RunRegions, 'delivery' | 'frame'> | null | undefined): boolean {
+  return regions?.delivery === 'image_and_text' && regions.frame === 'output'
+}
+
 export function regionsSupported(editOpCaps: OperationCapabilities | undefined): boolean {
   return editOpCaps?.supports_regions === true
 }
 
 /**
  * 今の操作で四角を付けられるか(ADR-0053 5章・6章)。入力画像のある Run(edit)は主たる入力の上に、
- * 入力画像の無い Run(generate)は、入力画像を要らないと答える操作(ComfyUI)だけ白紙の上に描く。
+ * 入力画像の無い Run(generate)は、入力画像を要らないと答える操作(ComfyUI と OpenAI)だけ白紙の上に描く。
+ * OpenAI はサーバーが白紙の配置図を作り、Edit で送る(5章)。
  */
 export function regionsSupportedFor(
   operation: 'generate' | 'edit',
@@ -77,6 +86,26 @@ export function regionsCompatible(boxes: readonly RegionBox[], opCaps: Operation
   const kinds = allowedRegionKinds(opCaps)
   const references = opCaps?.regions_reference_images !== false
   return boxes.every((b) => kinds.includes(b.kind) && (references || !b.reference_asset_id))
+}
+
+/**
+ * 1枚目の入力・操作が変わったときに、付けた四角をどうするか(ADR-0053 1章「配置との併用」)。
+ * 四角は割合なので、1枚目が別の画像・白紙(`primaryAssetId` が null)に変わっても外さずに移す
+ * (`adopt`)。外す(`clear`)のは、capabilities を読めていて、今の操作が四角を受けない・選べない
+ * 種類や使えない参照画像があるときだけ(白紙では「残す」「消す」「動かす」を選べない)。
+ */
+export function regionsFollowAction(args: {
+  boxes: readonly RegionBox[]
+  regionsAssetId: string | null
+  primaryAssetId: string | null
+  capsLoaded: boolean
+  supported: boolean
+  opCaps: OperationCapabilities | undefined
+}): 'keep' | 'adopt' | 'clear' {
+  const { boxes, regionsAssetId, primaryAssetId, capsLoaded, supported, opCaps } = args
+  if (boxes.length === 0) return 'keep'
+  if (capsLoaded && (!supported || !regionsCompatible(boxes, opCaps))) return 'clear'
+  return regionsAssetId !== primaryAssetId ? 'adopt' : 'keep'
 }
 
 // -- 幾何 -----------------------------------------------------------------------------
@@ -228,6 +257,15 @@ export function boxesFromEditorRegions(regions: readonly EditorRegion[]): Region
   }))
 }
 
+/**
+ * 新しく描いた四角・候補から作った四角の種類の既定(ADR-0053 5章)。入力画像の上では「変える」、白紙
+ * (入力画像の無い Run)では変える物が無いので「足す」。
+ */
+export function defaultRegionKind(blank: boolean): RegionKind {
+  return blank ? 'add' : 'change'
+}
+
+/** 四角を1つ足す。種類は `extra.kind`(省けば「変える」。白紙では `defaultRegionKind(true)` を渡す)。 */
 export function addRegion(regions: readonly EditorRegion[], box: Box, extra: Partial<EditorRegion> = {}): EditorRegion[] {
   if (regions.length >= REGIONS_MAX) return [...regions]
   return [
@@ -417,7 +455,8 @@ export function restoreRunRegions<T extends RunInputLike>(run: {
       )
     : [...run.inputs]
   const primary = inputs.find((i) => i.role === 'image' && i.position === 0)
-  // 入力画像の無い Run(ComfyUI。6章)の四角は、出力の大きさに対する割合で、主たる入力に付かない。
+  // 入力画像の無い Run(ComfyUI と OpenAI。5章・6章)の四角は、出力の大きさに対する割合で、主たる
+  // 入力に付かない。OpenAI の Run はサーバーが足した白紙の配置図が主たる入力なので、上で外してから見る。
   const blank = record.frame === 'output' && !primary
   const regions = primary || blank ? orderedRegions(record.regions).map((r) => ({ ...r })) : []
   return {

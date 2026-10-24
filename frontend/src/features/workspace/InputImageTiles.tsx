@@ -16,6 +16,7 @@ import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
 import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
+import { LayoutSketchPreview } from '../regions/LayoutSketchPreview'
 import type { InputImagesProps } from './InputChipsRow'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputImageTiles.module.css'
@@ -116,6 +117,7 @@ export function InputImageTiles({
               data-primary={isPrimary}
               data-not-found={isNotFound}
               data-deleted={isDeleted || isBlocked}
+              data-redrawing={logic.compositeRedrawingInputId === item.inputId}
             >
               <button
                 type="button"
@@ -145,7 +147,11 @@ export function InputImageTiles({
                 <span className={styles.statusLabel}>{c.notFound}</span>
               ) : isDeleted ? (
                 <span className={styles.statusLabel}>{c.deleted}</span>
-              ) : isWithheld ? null : isBlocked ? (
+              ) : isWithheld ? null : logic.compositeRedrawingInputId === item.inputId ? (
+                <span className={styles.busyLabel} role="status" title={t.composite.redrawing}>
+                  {t.composite.redrawingShort}
+                </span>
+              ) : isBlocked ? (
                 // 画像なしはタイルの置き換えの表示が理由を示すので、ここは deny の判定だけのとき。
                 <span className={styles.statusLabel} title={t.mods.inputBlockedTitle}>
                   {t.mods.inputBlocked}
@@ -330,39 +336,64 @@ export function InputImageTiles({
           <span>{c.sketch}</span>
         </button>
 
-        {/* 入力画像の無い Run の白紙の領域(ADR-0053 6章)。四角を付けたら数を出し、外すボタンを添える。 */}
-        {regions.blank && images.length === 0 && (
-          <div className={styles.blankRegionsTile}>
+        {/* 入力画像の無い Run の白紙の領域(ADR-0053 6章)。四角を付けたら、入力画像のタイルと同じ形で
+            白紙の配置図のプレビューを出し、数と外すボタンを重ねる。 */}
+        {regions.blank && images.length === 0 &&
+          (regions.count > 0 && regions.boxes && regions.blankCanvas ? (
+            <div className={styles.tile}>
+              <button
+                type="button"
+                className={styles.thumbButton}
+                aria-label={t.regions.form.chipTitle}
+                title={t.regions.form.chipTitle}
+                onClick={regions.onOpen}
+              >
+                <LayoutSketchPreview
+                  className={styles.thumb}
+                  width={regions.blankCanvas.width}
+                  height={regions.blankCanvas.height}
+                  regions={regions.boxes}
+                />
+              </button>
+              <span className={styles.regionsBadge}>
+                <button
+                  type="button"
+                  className={styles.regionsBadgeButton}
+                  title={t.regions.form.chipTitle}
+                  onClick={regions.onOpen}
+                >
+                  {fmt(t.regions.form.chip, { count: regions.count })}
+                </button>
+                <button
+                  type="button"
+                  className={styles.regionsBadgeButton}
+                  aria-label={t.regions.form.clear}
+                  title={t.regions.form.clear}
+                  onClick={regions.onClear}
+                >
+                  <RemoveIcon />
+                </button>
+              </span>
+            </div>
+          ) : (
             <button
               type="button"
               className={styles.addTile}
-              aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
-              title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.blankButtonTitle}
+              aria-label={t.regions.button}
+              title={t.regions.blankButtonTitle}
               onClick={regions.onOpen}
             >
               <RegionsIcon />
-              <span>{regions.count > 0 ? fmt(t.regions.form.chip, { count: regions.count }) : t.regions.button}</span>
+              <span>{t.regions.button}</span>
             </button>
-            {regions.count > 0 && (
-              <button
-                type="button"
-                className={styles.actionButton}
-                aria-label={t.regions.form.clear}
-                title={t.regions.form.clear}
-                onClick={regions.onClear}
-              >
-                <RemoveIcon />
-              </button>
-            )}
-          </div>
-        )}
+          ))}
 
         <button
           type="button"
           className={styles.addTile}
           aria-label={t.composite.button}
           title={t.composite.buttonTitle}
-          onClick={() => logic.openCompositeEditor({ mode: 'new' })}
+          onClick={() => logic.startComposite()}
         >
           <ArrangeIcon />
           <span>{t.composite.button}</span>

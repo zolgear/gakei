@@ -1,11 +1,11 @@
 /**
- * ComfyUI への四角の差し込み(ADR-0053 6章)のフォームの判断。capabilities から選べる種類・参照画像・
+ * 入力画像の無い Run の四角(ComfyUI への差し込み。ADR-0053 6章。OpenAI の白紙の配置図。5章)のフォームの判断。capabilities から選べる種類・参照画像・
  * 白紙のキャンバスを決め、再実行で入力画像の無い Run の四角を戻す。
  */
 import { describe, expect, it } from 'vitest'
 import type { OperationCapabilities, ParamDef, RegionBox, RunRegions } from '../../api/client'
 import { blankCanvasSize } from '../run-form/dependencies'
-import { allowedRegionKinds, regionsCompatible, regionsSupportedFor, restoreRunRegions, REGION_KINDS } from './regions'
+import { addRegion, allowedRegionKinds, defaultRegionKind, isLayoutSketchRun, regionsCompatible, regionsSupportedFor, restoreRunRegions, REGION_KINDS } from './regions'
 
 function op(overrides: Partial<OperationCapabilities> = {}): OperationCapabilities {
   return {
@@ -50,6 +50,12 @@ describe('regionsSupportedFor', () => {
     expect(regionsSupportedFor('edit', openai)).toBe(true)
   })
 
+  it('OpenAI の生成は、白紙の配置図で送るので入力画像の無い Run でも付けられる(5章)', () => {
+    const generate = op({ regions_delivery: 'image_and_text', regions_reference_images: true })
+    expect(regionsSupportedFor('generate', generate)).toBe(true)
+    expect(allowedRegionKinds(generate)).toEqual(['change', 'add'])
+  })
+
   it('四角を受けない操作では付けない', () => {
     expect(regionsSupportedFor('generate', op({ supports_regions: false }))).toBe(false)
     expect(regionsSupportedFor('generate', undefined)).toBe(false)
@@ -68,6 +74,19 @@ describe('選べる種類と参照画像', () => {
     expect(regionsCompatible([box({ kind: 'keep' })], op())).toBe(false)
     expect(regionsCompatible([box({ reference_asset_id: 'ref' })], op())).toBe(false)
     expect(regionsCompatible([box({ reference_asset_id: 'ref' })], op({ regions_reference_images: true }))).toBe(true)
+  })
+})
+
+describe('新しい四角の種類の既定', () => {
+  it('白紙では「足す」、入力画像の上では「変える」', () => {
+    expect(defaultRegionKind(true)).toBe('add')
+    expect(defaultRegionKind(false)).toBe('change')
+  })
+
+  it('既定の種類を渡して足すと、その種類の四角になる(省けば「変える」)', () => {
+    const box = [0.1, 0.1, 0.4, 0.4] as [number, number, number, number]
+    expect(addRegion([], box, { kind: defaultRegionKind(true) })[0].kind).toBe('add')
+    expect(addRegion([], box)[0].kind).toBe('change')
   })
 })
 
@@ -107,11 +126,44 @@ describe('入力画像の無い Run の四角を戻す', () => {
     expect(restored.regionsAssetId).toBeNull()
   })
 
+  it('OpenAI の入力画像の無い Run は、配置図と参照画像を外し、足した文を除いて白紙に戻す', () => {
+    const appended = '\n\n領域の指示: 1枚目の画像は、白紙の上に…'
+    const openaiRecord: RunRegions = {
+      version: 1,
+      delivery: 'image_and_text',
+      frame: 'output',
+      regions: [box({ number: 1, reference_asset_id: 'ref' }), box({ number: 2, kind: 'add' })],
+      appended_text: appended,
+      overlay_asset_id: 'layout',
+    }
+    const inputs = [
+      { asset_id: 'layout', role: 'image' as const, position: 0 },
+      { asset_id: 'ref', role: 'image' as const, position: 1 },
+    ]
+    const restored = restoreRunRegions({ prompt: 'a room' + appended, inputs, regions: openaiRecord })
+    expect(restored.prompt).toBe('a room')
+    expect(restored.inputs).toEqual([])
+    expect(restored.regions.map((r) => r.number)).toEqual([1, 2])
+    expect(restored.regions[0].reference_asset_id).toBe('ref')
+    expect(restored.regionsAssetId).toBeNull()
+  })
+
   it('入力画像のある ComfyUI の Run は、主たる入力に付けて戻す(入力は外さない)', () => {
     const inputs = [{ asset_id: 'img', role: 'image' as const, position: 0 }]
     const restored = restoreRunRegions({ prompt: 'p', inputs, regions: { ...record, frame: 'input' } })
     expect(restored.inputs).toEqual(inputs)
     expect(restored.regionsAssetId).toBe('img')
     expect(restored.regions).toHaveLength(2)
+  })
+})
+
+describe('isLayoutSketchRun', () => {
+  it('白紙の配置図を送った Run(画像と文、出力に対する割合)だけを見分ける', () => {
+    expect(isLayoutSketchRun({ delivery: 'image_and_text', frame: 'output' })).toBe(true)
+    expect(isLayoutSketchRun({ delivery: 'image_and_text', frame: 'input' })).toBe(false)
+    // ComfyUI の白紙は配置図を入力にしない。
+    expect(isLayoutSketchRun({ delivery: 'comfyui_bboxes', frame: 'output' })).toBe(false)
+    expect(isLayoutSketchRun(null)).toBe(false)
+    expect(isLayoutSketchRun(undefined)).toBe(false)
   })
 })

@@ -20,7 +20,7 @@ from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.domain import api_key as api_key_domain
 from app.domain import assets as assets_domain
-from app.domain import content_withholding, prompt_templates
+from app.domain import content_withholding, prompt_templates, sizes
 from app.domain import regions as regions_domain
 from app.domain.models import Asset, AssetKind, Run, RunInput, RunInputRole, RunStatus
 from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
@@ -166,6 +166,9 @@ def create_runs(
     # プロンプトの後ろに足す。四角を描いた画像の保存は、検証がすべて通った後に行う。
     # ADR-0053 6章: ComfyUI(`comfyui_bboxes`)では、四角をそのままプロバイダーに渡し、ワークフローの
     # Create Bounding Boxes に差し込ませる(重ねた画像も足す文も作らない)。
+    # ADR-0053 5章: 入力画像の無い Run(generate)の「画像と文」は、白紙に四角を描いた配置図を唯一の
+    # 入力にして Edit で送る。送る先が Edit なので、以降の検証・確定・記録は `operation` で行う。
+    operation = body.operation
     plan: _RegionsPlan | None = None
     draft_regions: list[Any] = []
     regions_json: dict[str, Any] | None = None
@@ -176,15 +179,18 @@ def create_runs(
             draft_regions = regions_domain.ordered(body.regions)
             regions_json = regions_domain.comfyui_record(draft_regions, frame=frame)
         else:
-            plan = _plan_regions(db, op_caps, body, input_metas, viewer=viewer, store=runner.store)
+            plan = _plan_regions(
+                db, caps, op_caps, body, input_metas, viewer=viewer, store=runner.store
+            )
             input_metas = [*input_metas, *plan.extra_metas]
             prompts = [prompt + plan.appended_text for prompt in prompts]
+            operation = plan.operation
 
     for index in range(repeat):
         try:
             validate_run_request(
                 caps,
-                body.operation,
+                operation,
                 body.model,
                 prompts[index],
                 body.params,
@@ -206,7 +212,7 @@ def create_runs(
             if seed is not None:
                 params = {**params, "seed": seed}
         draft = RunDraft(
-            operation=body.operation,
+            operation=operation,
             model=body.model,
             prompt=prompts[index],
             params=params,
@@ -227,6 +233,7 @@ def create_runs(
             runner.store,
             plan.overlay.data,
             AssetKind.REGIONS,
+            # 白紙の配置図(入力画像の無い Run)は元の画像を持たない。
             source_asset_id=plan.primary_asset_id,
             created_by_user_id=viewer.id,
             prepared=plan.overlay,
@@ -236,6 +243,7 @@ def create_runs(
             regions=regions_domain.ordered(body.regions),
             appended_text=plan.appended_text,
             overlay_asset_id=overlay.id,
+            frame=plan.frame,
         ).to_json()
 
     # 積んだ順を queued_at で保つ(runner も履歴も queued_at 順。同じ時刻だと id の順になり、
@@ -249,7 +257,7 @@ def create_runs(
             provider=provider_name,
             model=body.model,
             deployment=None,
-            operation=body.operation,
+            operation=operation,
             prompt=prompts[index],
             params=params,
             # プロンプトテンプレート(実験)で組み立てたときの内訳。作成時に一度だけ書く。
@@ -322,7 +330,8 @@ def _resolve_prompts(
 class _RegionsPlan:
     """領域の指示を送るための準備(ADR-0053 5章「画像と文」)。DB と保存先にはまだ書いていない。"""
 
-    primary_asset_id: uuid.UUID
+    # 主たる入力(入力画像の無い Run の白紙の配置図では None)。
+    primary_asset_id: uuid.UUID | None
     # 四角を描いた画像(検証済み。保存は Run の挿入の直前)。
     overlay: assets_domain.PreparedImage
     overlay_position: int
@@ -331,6 +340,9 @@ class _RegionsPlan:
     # 検証に使う、足した入力(四角を描いた画像と参照画像)。
     extra_metas: list[RunInputMeta]
     appended_text: str
+    # 送る操作(入力画像の無い Run も Edit で送る)と、座標が何に対する割合か。
+    operation: Literal["generate", "edit"] = "edit"
+    frame: Literal["input", "output"] = "input"
 
 
 def _regions_op_caps(caps: ProviderCapabilities, body: RunCreateRequest) -> OperationCapabilities:
@@ -381,8 +393,25 @@ def _check_comfyui_regions(
     return "input" if has_primary else "output"
 
 
+def _load_reference_assets(
+    db: Session, viewer: CurrentUser, reference_ids: list[uuid.UUID]
+) -> list[Asset]:
+    """四角の参照画像を引く。見えない・削除済み・マスク・`deny` の判定を受けたものは断る。"""
+    blocked = content_withholding.blocked_asset_ids(db, reference_ids)
+    reference_assets: list[Asset] = []
+    for ref in reference_ids:
+        asset = get_visible_asset(db, viewer, ref)
+        if asset is None or asset.deleted_at is not None or asset.kind == AssetKind.MASK:
+            raise RunCreateError("invalid", t("runs.assetNotFound", id=ref))
+        if asset.id in blocked:
+            raise RunCreateError("conflict", t("mods.inputDenied", id=ref))
+        reference_assets.append(asset)
+    return reference_assets
+
+
 def _plan_regions(
     db: Session,
+    caps: ProviderCapabilities,
     op_caps: OperationCapabilities,
     body: RunCreateRequest,
     input_metas: list[RunInputMeta],
@@ -392,7 +421,9 @@ def _plan_regions(
 ) -> _RegionsPlan:
     """四角を検証し、四角を描いた画像と足す文を作る。断るときは `RunCreateError`。"""
     if body.operation != "edit":
-        raise RunCreateError("invalid", t("runRegions.editOnly"))
+        if op_caps.regions_requires_input_image:
+            raise RunCreateError("invalid", t("runRegions.editOnly"))
+        return _plan_blank_regions(db, caps, op_caps, body, input_metas, viewer=viewer)
     _check_region_options(op_caps, body)
 
     image_metas = sorted((m for m in input_metas if m.role == "image"), key=lambda m: m.position)
@@ -412,15 +443,7 @@ def _plan_regions(
         ref = region.reference_asset_id
         if ref is not None and ref not in image_numbers and ref not in reference_ids:
             reference_ids.append(ref)
-    blocked = content_withholding.blocked_asset_ids(db, reference_ids)
-    reference_assets: list[Asset] = []
-    for ref in reference_ids:
-        asset = get_visible_asset(db, viewer, ref)
-        if asset is None or asset.deleted_at is not None or asset.kind == AssetKind.MASK:
-            raise RunCreateError("invalid", t("runs.assetNotFound", id=ref))
-        if asset.id in blocked:
-            raise RunCreateError("conflict", t("mods.inputDenied", id=ref))
-        reference_assets.append(asset)
+    reference_assets = _load_reference_assets(db, viewer, reference_ids)
 
     # ADR-0053 5章: 足す画像も Edit の入力の枚数の上限に数える。超えるなら Run を作らない。
     total = len(image_metas) + 1 + len(reference_assets)
@@ -480,4 +503,110 @@ def _plan_regions(
         reference_inputs=reference_inputs,
         extra_metas=extra_metas,
         appended_text=appended,
+    )
+
+
+def _blank_canvas_size(body: RunCreateRequest, caps: ProviderCapabilities) -> tuple[int, int]:
+    """入力画像の無い Run の配置図の大きさ。
+
+    出力サイズの設定の幅×高さ。`auto`・未指定は 1024×1024。"""
+    raw = body.params.get("size")
+    if raw is None:
+        return regions_domain.BLANK_AUTO_SIZE
+    try:
+        parsed = sizes.parse_size(str(raw), caps.size)
+    except sizes.InvalidSizeError as e:
+        raise RunCreateError("invalid", str(e)) from e
+    return parsed if parsed is not None else regions_domain.BLANK_AUTO_SIZE
+
+
+def _plan_blank_regions(
+    db: Session,
+    caps: ProviderCapabilities,
+    op_caps: OperationCapabilities,
+    body: RunCreateRequest,
+    input_metas: list[RunInputMeta],
+    *,
+    viewer: CurrentUser,
+) -> _RegionsPlan:
+    """入力画像の無い Run の四角を、白紙の配置図と足す文にする(ADR-0053 5章)。
+
+    OpenAI の生成の API は画像を受けないので、出力の大きさの白紙に四角と番号だけを描いた配置図を
+    唯一の主たる入力(`position = 0`)にし、参照画像をその後ろに足して Edit で送る。種類と参照画像は
+    生成の capabilities で確かめ、入力の枚数の上限とパラメーターは Edit の capabilities で確かめる
+    (パラメーターは呼び出し側の `validate_run_request`)。
+    """
+    if input_metas:
+        raise RunCreateError("invalid", t("runValidation.generateNoInputImages"))
+    _check_region_options(op_caps, body)
+
+    model_caps = next(m for m in caps.models if m.model == body.model)
+    edit_caps = next((o for o in model_caps.operations if o.operation == "edit"), None)
+    if edit_caps is None:
+        raise RunCreateError("invalid", t("runRegions.notSupported"))
+
+    reference_ids: list[uuid.UUID] = []
+    for region in regions_domain.ordered(body.regions):
+        ref = region.reference_asset_id
+        if ref is not None and ref not in reference_ids:
+            reference_ids.append(ref)
+    reference_assets = _load_reference_assets(db, viewer, reference_ids)
+
+    total = 1 + len(reference_assets)
+    if total > edit_caps.max_input_images:
+        raise RunCreateError(
+            "invalid",
+            t("runRegions.tooManyInputs", max=edit_caps.max_input_images, count=total),
+        )
+
+    width, height = _blank_canvas_size(body, caps)
+    try:
+        data = regions_domain.render_layout(width, height, body.regions)
+        overlay = assets_domain.prepare_image(data, AssetKind.REGIONS)
+    except (OSError, ValueError, assets_domain.IngestError) as e:
+        raise RunCreateError("invalid", t("runRegions.overlayFailed")) from e
+
+    extra_metas = [
+        RunInputMeta(
+            asset_id=overlay.asset_id,
+            role="image",
+            position=0,
+            width=overlay.width,
+            height=overlay.height,
+            sha256=overlay.sha256,
+            mime=overlay.mime,
+        )
+    ]
+    reference_inputs: list[tuple[uuid.UUID, int]] = []
+    reference_numbers: dict[Any, int] = {}
+    for position, asset in enumerate(reference_assets, start=1):
+        reference_inputs.append((asset.id, position))
+        reference_numbers[asset.id] = position + 1
+        extra_metas.append(
+            RunInputMeta(
+                asset_id=asset.id,
+                role="image",
+                position=position,
+                width=asset.width,
+                height=asset.height,
+                sha256=asset.sha256,
+                mime=asset.mime,
+            )
+        )
+
+    appended = regions_domain.build_prompt_text(
+        body.regions,
+        overlay_image_number=1,
+        reference_image_numbers=reference_numbers,
+        blank=True,
+    )
+    return _RegionsPlan(
+        primary_asset_id=None,
+        overlay=overlay,
+        overlay_position=0,
+        reference_inputs=reference_inputs,
+        extra_metas=extra_metas,
+        appended_text=appended,
+        operation="edit",
+        frame="output",
     )

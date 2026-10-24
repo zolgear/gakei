@@ -48,6 +48,7 @@ import { activeRawParams, buildEnabledParams, findIncompatibleViolations, isFiel
 import { fillSeedDefaults } from './seedDefaults'
 import { loadSeedMode } from './seedModePrefs'
 import {
+  compositeRedrawBlockReason,
   inputCountRequirementMessage,
   isInputCountSatisfied,
   isMaskSatisfied,
@@ -68,7 +69,7 @@ import {
   allowedRegionKinds,
   areRegionBoxesValid,
   regionExtraInputCount,
-  regionsCompatible,
+  regionsFollowAction,
   regionsSupportedFor,
 } from '../regions/regions'
 import {
@@ -234,6 +235,10 @@ export interface RunFormLogic {
   regionExtraInputs: number
   /** 送信を止める、四角についての理由(無ければ null)。 */
   regionsBlockReason: string | null
+  /** 配置の結果を出力サイズに合わせて描き直している間の、送信を止める理由(ADR-0050 5章)。 */
+  compositeRedrawReason: string | null
+  /** 配置の描き直しの開始・終了を知らせる(入力画像の側から呼ぶ)。 */
+  setCompositeRedrawing: (redrawing: boolean) => void
 
   /**
    * プロンプトテンプレート(実験)。テンプレートを選んでいる間は「テンプレートモード」で、
@@ -494,7 +499,8 @@ export function useRunFormLogic(
       .filter((i) => i.role === 'image')
       .sort((a, b) => a.position - b.position)[0]?.assetId ?? null
   // 四角は今の操作の capabilities で決める。入力画像があれば Edit(主たる入力の上)、無ければ
-  // Generate(出力の大きさの白紙の上。入力画像の要らない ComfyUI だけ。ADR-0053 6章)。
+  // Generate(出力の大きさの白紙の上。入力画像を要らないと答える操作だけ。ComfyUI と OpenAI。
+  // OpenAI はサーバーが白紙の配置図を作って Edit で送る。ADR-0053 5章・6章)。
   const regionOpCaps = operation === 'edit' ? editOpCaps : opCaps
   const regionsSupported = regionsSupportedFor(operation, regionOpCaps)
   const regionsBlank = regionsSupported && primaryAssetId === null
@@ -503,29 +509,29 @@ export function useRunFormLogic(
   const regionsKinds = allowedRegionKinds(regionOpCaps)
   const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
   const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
-  // 主たる入力が変わった(白紙の四角は入力画像を足したときも)、または四角を受けないモデル・選べない
-  // 種類や参照画像のあるモデルに切り替えた(capabilities を読めてから判断する)ときは四角を外す。
-  let regionsClearReason: 'primaryChanged' | 'blankReplaced' | 'unsupported' | null = null
-  if (formState.regions.length > 0) {
-    if (formState.regionsAssetId !== primaryAssetId) {
-      regionsClearReason = formState.regionsAssetId === null ? 'blankReplaced' : 'primaryChanged'
-    }
-    else if (caps && modelCaps && (!regionsSupported || !regionsCompatible(formState.regions, regionOpCaps))) {
-      regionsClearReason = 'unsupported'
-    }
-  }
+  const [compositeRedrawing, setCompositeRedrawing] = useState(false)
+  // 主たる入力が変わっても四角は外さず、割合のまま新しい1枚目(入力を外したなら白紙)の上に移す
+  // (座標はどちらも 0〜1 の割合。配置・スケッチの保存や入れ替えで1枚目が変わっても残す。ADR-0053 1章)。
+  // 外すのは、四角を受けないモデル・選べない種類や参照画像のあるモデルに切り替えたとき(白紙では
+  // 「残す」「消す」「動かす」を選べない。capabilities を読めてから判断する)だけ。
+  const regionsAction = regionsFollowAction({
+    boxes: formState.regions,
+    regionsAssetId: formState.regionsAssetId,
+    primaryAssetId,
+    capsLoaded: Boolean(caps && modelCaps),
+    supported: regionsSupported,
+    opCaps: regionOpCaps,
+  })
+  const regionsClearReason: 'unsupported' | null = regionsAction === 'clear' ? 'unsupported' : null
+  const regionsAdoptPrimary = regionsAction === 'adopt'
   useEffect(() => {
-    if (regionsClearReason === null) return
+    if (regionsClearReason === null) {
+      if (regionsAdoptPrimary) setFormState({ ...formState, regionsAssetId: primaryAssetId })
+      return
+    }
     setFormState({ ...formState, regions: [], regionsAssetId: null })
-    const rm = msg().regions.form
-    setRegionsNotice(
-      regionsClearReason === 'primaryChanged'
-        ? rm.clearedPrimaryChanged
-        : regionsClearReason === 'blankReplaced'
-          ? rm.clearedBlankReplaced
-          : rm.clearedUnsupported,
-    )
-  }, [regionsClearReason, formState, setFormState])
+    setRegionsNotice(msg().regions.form.clearedUnsupported)
+  }, [regionsClearReason, regionsAdoptPrimary, primaryAssetId, formState, setFormState])
 
   function setRegions(next: RegionBox[]) {
     setRegionsNotice(null)
@@ -809,6 +815,7 @@ export function useRunFormLogic(
     setModel(nextModel)
   }
 
+  const compositeRedrawReason = compositeRedrawBlockReason(compositeRedrawing)
   const canSubmit =
     promptValid &&
     sizeValidation.valid &&
@@ -824,6 +831,7 @@ export function useRunFormLogic(
     isMaskSupported(opCaps, hasMask) &&
     providerAvailable &&
     regionsBlockReason === null &&
+    compositeRedrawReason === null &&
     repeat !== null &&
     !mutation.isPending
 
@@ -935,6 +943,8 @@ export function useRunFormLogic(
     regionsNotice,
     regionExtraInputs,
     regionsBlockReason,
+    compositeRedrawReason,
+    setCompositeRedrawing,
     promptTemplate,
     setTemplateSelections,
     clearPromptTemplate,

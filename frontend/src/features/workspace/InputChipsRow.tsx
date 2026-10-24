@@ -15,11 +15,13 @@ import { useState, type DragEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
 import { AssetImage } from '../mods/AssetImage'
 import { fmt, useI18n } from '../../i18n'
+import type { RegionBox } from '../../api/client'
 import type { EditInputsLogic } from '../run-form/useEditInputsLogic'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
 import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
+import { LayoutSketchPreview } from '../regions/LayoutSketchPreview'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputChipsRow.module.css'
 import { focalStyle } from '../../lib/focalPoint'
@@ -67,6 +69,10 @@ export interface InputRegionsProps {
    * 追加のボタンの並びに「領域」を出す(入力画像を足すと、主たる入力のチップに移る)。
    */
   blank?: boolean
+  /** 付けた四角(白紙のタイル・チップのプレビューに描く)。 */
+  boxes?: readonly RegionBox[]
+  /** 白紙のキャンバスの大きさ(領域の編集画面と同じ。プレビューの縦横比に使う)。 */
+  blankCanvas?: { width: number; height: number }
 }
 
 export function InputChipsRow({
@@ -162,6 +168,10 @@ export function InputChipsRow({
                   ) : isBlocked ? (
                     <span className={styles.statusTag} title={t.mods.inputBlockedTitle}>
                       {t.mods.inputBlocked}
+                    </span>
+                  ) : logic.compositeRedrawingInputId === item.inputId ? (
+                    <span className={styles.busyTag} role="status" title={t.composite.redrawing}>
+                      {t.composite.redrawingShort}
                     </span>
                   ) : (
                     <span className={styles.dims}>
@@ -359,19 +369,33 @@ export function InputChipsRow({
         <PencilIcon />
         {c.sketch}
       </button>
-      {regions.blank && images.length === 0 && (
-        <>
-          <button
-            type="button"
-            className={styles.addButton}
-            aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
-            title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.blankButtonTitle}
-            onClick={regions.onOpen}
-          >
-            <RegionsIcon size={12} />
-            {regions.count > 0 ? fmt(t.regions.form.chip, { count: regions.count }) : t.regions.button}
-          </button>
-          {regions.count > 0 && (
+      {/* 入力画像の無い Run の白紙の領域(ADR-0053 6章)。四角を付けたら、白紙の配置図の小さなプレビューを添える。 */}
+      {regions.blank && images.length === 0 &&
+        (regions.count > 0 && regions.boxes && regions.blankCanvas ? (
+          <div className={styles.chip}>
+            <button
+              type="button"
+              className={styles.thumbButton}
+              aria-label={t.regions.form.chipTitle}
+              title={t.regions.form.chipTitle}
+              onClick={regions.onOpen}
+            >
+              <LayoutSketchPreview
+                className={styles.thumb}
+                width={regions.blankCanvas.width}
+                height={regions.blankCanvas.height}
+                regions={regions.boxes}
+              />
+            </button>
+            <button
+              type="button"
+              className={styles.regionsTag}
+              title={t.regions.form.chipTitle}
+              onClick={regions.onOpen}
+            >
+              <RegionsIcon size={12} />
+              {fmt(t.regions.form.chip, { count: regions.count })}
+            </button>
             <button
               type="button"
               className={styles.iconButton}
@@ -381,15 +405,25 @@ export function InputChipsRow({
             >
               <RemoveIcon />
             </button>
-          )}
-        </>
-      )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={styles.addButton}
+            aria-label={t.regions.button}
+            title={t.regions.blankButtonTitle}
+            onClick={regions.onOpen}
+          >
+            <RegionsIcon size={12} />
+            {t.regions.button}
+          </button>
+        ))}
       <button
         type="button"
         className={styles.addButton}
         aria-label={t.composite.button}
         title={t.composite.buttonTitle}
-        onClick={() => logic.openCompositeEditor({ mode: 'new' })}
+        onClick={() => logic.startComposite()}
       >
         <ArrangeIcon size={12} />
         {t.composite.button}

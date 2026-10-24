@@ -21,7 +21,7 @@ import { allOperationDefs, buildRunSavePayload, runHasSeed } from '../parameter-
 import { buildParamLabelMap } from '../run-form/paramLabels'
 import { omitServerOnlyParams, paramsForRerun } from '../run-form/paramsBuilder'
 import { inputsFromRunInputs } from '../run-form/editInputs'
-import { restoreRunRegions, stripAppendedText } from '../regions/regions'
+import { isLayoutSketchRun, restoreRunRegions, stripAppendedText } from '../regions/regions'
 import { RunRegionsSection } from '../regions/RunRegionsSection'
 import {
   comfyuiPromptDownloadFilename,
@@ -306,7 +306,7 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
         <section className={styles.section}>
           <div className={styles.sectionHeaderRow}>
             <h2 className={styles.heading}>{t.runDetail.outputsHeading}</h2>
-            {run.primary_parent_asset_id && (
+            {run.primary_parent_asset_id && !isLayoutSketchRun(run.regions) && (
               <Link
                 to={`/runs/${runId}/compare?before=${run.primary_parent_asset_id}&after=${outputs[0].asset_id}`}
                 className={styles.lineageLink}
