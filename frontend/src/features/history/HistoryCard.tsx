@@ -103,9 +103,12 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
         {/* アシスタントが作った Run(ADR-0048 9章)。実行元は Run 詳細にも出す。 */}
         {run.origin === 'assistant' && <span className={styles.inputBadge}>{t.history.card.originAssistant}</span>}
         <span className={styles.model}>{run.model_label ?? shortenModelName(run.model)}</span>
-        <span className={styles.status} data-status={run.status}>
-          {statusLabel(run.status)}
-        </span>
+        {/* 成功は画像で分かるので出さない。待ち・実行中・失敗・取り消しだけを出す。 */}
+        {run.status !== 'succeeded' && (
+          <span className={styles.status} data-status={run.status}>
+            {statusLabel(run.status)}
+          </span>
+        )}
       </div>
 
       <div className={styles.media}>
