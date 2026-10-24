@@ -987,3 +987,17 @@ BBOX_OBJECT_INFO: dict[str, Any] = {
     "output_node": True,
     "name": "CreateBoundingBoxes",
 }
+
+
+# 幅・高さを ComfyUI 本体の Resolution Selector(出力 0 が幅、1 が高さ)で決める四角の t2i
+# (ADR-0053 6章)。空の latent、Create Bounding Boxes、レイアウトのプロンプトの幅・高さを、
+# どれもこのノードから配線する。
+BBOX_RESOLUTION_GRAPH: dict[str, Any] = clone(BBOX_LAYOUT_GRAPH)
+BBOX_RESOLUTION_GRAPH["13"] = {
+    "class_type": "ResolutionSelector",
+    "inputs": {"aspect_ratio": "9:16 (Portrait Widescreen)", "megapixels": 1.5, "multiple": 16},
+    "_meta": {"title": "Resolution Selector"},
+}
+for _target in ("5", "20", "21"):
+    BBOX_RESOLUTION_GRAPH[_target]["inputs"]["width"] = ["13", 0]
+    BBOX_RESOLUTION_GRAPH[_target]["inputs"]["height"] = ["13", 1]

@@ -2,10 +2,17 @@
  * Asset の配信 URL 組み立てを1関数に閉じる(ADR-0004)。
  * base64 や blob URL は使わず、常にこの URL を <img src> に渡す。
  */
-export type AssetVariant = 'thumb' | 'preview' | 'original'
+export type AssetVariant = 'thumb' | 'card' | 'preview' | 'original'
 
 /**
- * 派生画像(thumb / preview)の作り方の版(ADR-0036 3章)。バックエンドの
+ * 派生の長辺(px)。バックエンドの `app/domain/derivatives.py` の `THUMB_LONG_EDGE` /
+ * `CARD_LONG_EDGE` / `PREVIEW_LONG_EDGE` と同じ。`srcset` の `w` の記述子を求めるのに使う
+ * (`derivedSrcSet.ts`)。カードは ADR-0036 5章(2026-10-23 追記)。
+ */
+export const DERIVED_LONG_EDGE = { thumb: 512, card: 1024, preview: 2048 } as const
+
+/**
+ * 派生画像(thumb / card / preview)の作り方の版(ADR-0036 3章)。バックエンドの
  * `app/domain/derivatives.py` の `DERIVED_VERSION` と同じ値にする(バックエンドのテストで
  * 一致を確かめる)。版が変わると URL が変わり、ブラウザの `immutable` のキャッシュを使わなくなる。
  */

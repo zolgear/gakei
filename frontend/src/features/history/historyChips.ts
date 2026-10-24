@@ -1,4 +1,8 @@
-/** 履歴カードのパラメーターチップ・トークン数表示。指定があるものだけを出す純粋関数。 */
+/**
+ * 履歴カードのパラメーターチップ・トークン数表示。指定があるものだけを出す純粋関数。
+ * パラメーターのチップは検索のページのカード(`variant='detail'`)だけで使う。履歴の「詳細」
+ * (重ねる形)のラベルは `historyLabels.ts`(絞り込みと対になるものだけ)。
+ */
 import { formatUsd } from '../workspace/priceEstimateText'
 
 export function buildParamChips(params: Record<string, unknown> | undefined): string[] {

@@ -33,12 +33,14 @@ from app.domain import (
     derivatives,
     embedding_settings,
     focal_points,
+    imported_assets,
     ingest_hooks,
 )
 from app.domain import annotations as annotations_domain
 from app.domain import compositions as compositions_domain
 from app.domain import content_rating as content_rating_domain
 from app.domain import embeddings as embeddings_domain
+from app.domain import favorites as favorites_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.asset_groups import group_for_asset
 from app.domain.assets import (
@@ -65,6 +67,7 @@ from app.domain.schemas import (
     AssetContentRatingUpdateRequest,
     AssetDetail,
     AssetEmbeddingStatus,
+    AssetFavoriteResponse,
     AssetLineageResponse,
     AssetListResponse,
     AssetOrigin,
@@ -113,6 +116,8 @@ def _to_summary(
     title: str | None = None,
     focal_point: FocalPoint | None = None,
     content_rating: str | None = None,
+    favorite: bool = False,
+    imported: bool = False,
 ) -> AssetSummary:
     return AssetSummary(
         id=asset.id,
@@ -125,6 +130,8 @@ def _to_summary(
         title=title,
         focal_point=focal_point,
         content_rating=content_rating,  # type: ignore[arg-type]
+        favorite=favorite,
+        imported=imported,
         **content_withholding.summary_fields(asset),
     )
 
@@ -224,6 +231,8 @@ def _to_detail(
         composition=compositions_domain.composition_view(db, asset, checker, store),
         **content_withholding.summary_fields(asset),
         **content_withholding.withheld_fields(db, asset),
+        favorite=favorites_domain.is_favorite(db, user, asset.id),
+        imported=imported_assets.is_imported(asset, produced_by_run),
     )
 
 
@@ -321,6 +330,11 @@ def list_assets(
         description="指定すると、そのタグ(人が消したものを除く)が付いた Asset だけに絞る"
         "(ADR-0024)。名前は保存時と同じく正規化して比べる。",
     ),
+    favorite: bool = Query(
+        default=False,
+        description="true なら、見る人のお気に入りの Asset だけに絞る"
+        "(ストックの絞り込み。ADR-0055)。",
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
     db: Session = Depends(get_session),
@@ -340,6 +354,8 @@ def list_assets(
             query = query.where(annotations_domain.tag_filter(tag))
         except annotations_domain.TagNameError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
+    if favorite:
+        query = query.where(Asset.id.in_(favorites_domain.favorite_asset_ids(user)))
     if group_id is not None:
         query = query.join(
             AssetGroupMember,
@@ -376,8 +392,20 @@ def list_assets(
     titles = annotations_domain.bulk_titles(db, [a.id for a in rows])
     focals = focal_points.bulk_get(db, [a.id for a in rows])
     ratings = content_rating_domain.bulk_levels(db, [a.id for a in rows])
+    favorite_ids = favorites_domain.bulk_favorite_ids(db, user, [a.id for a in rows])
+    imported_ids = imported_assets.bulk_imported_ids(db, rows)
     return AssetListResponse(
-        items=[_to_summary(a, titles.get(a.id), focals.get(a.id), ratings.get(a.id)) for a in rows],
+        items=[
+            _to_summary(
+                a,
+                titles.get(a.id),
+                focals.get(a.id),
+                ratings.get(a.id),
+                favorite=a.id in favorite_ids,
+                imported=a.id in imported_ids,
+            )
+            for a in rows
+        ],
         next_cursor=next_cursor,
     )
 
@@ -413,6 +441,46 @@ def delete_asset(
 
     asset.deleted_at = _utcnow()
     db.commit()
+
+
+def _favorite_target(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
+    """お気に入りを付け外しできる Asset(見える、削除されていない)。それ以外は 404(ADR-0055)。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is None or asset.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    return asset
+
+
+@router.put(
+    "/{asset_id}/favorite",
+    response_model=AssetFavoriteResponse,
+    operation_id="favorite_asset",
+)
+def favorite_asset(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> AssetFavoriteResponse:
+    """見る人のお気に入りにする(ADR-0055)。既に付いていれば何もしない。"""
+    asset = _favorite_target(db, user, asset_id)
+    favorites_domain.set_favorite(db, user, asset, True)
+    return AssetFavoriteResponse(asset_id=asset_id, favorite=True)
+
+
+@router.delete(
+    "/{asset_id}/favorite",
+    response_model=AssetFavoriteResponse,
+    operation_id="unfavorite_asset",
+)
+def unfavorite_asset(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> AssetFavoriteResponse:
+    """見る人のお気に入りから外す(ADR-0055)。付いていなければ何もしない。"""
+    asset = _favorite_target(db, user, asset_id)
+    favorites_domain.set_favorite(db, user, asset, False)
+    return AssetFavoriteResponse(asset_id=asset_id, favorite=False)
 
 
 @router.post("/{asset_id}/restore", response_model=AssetDetail, operation_id="restore_asset")
@@ -457,7 +525,7 @@ def restore_asset(
 def get_asset_content(
     asset_id: uuid.UUID,
     request: Request,
-    variant: Literal["thumb", "preview", "original"] = Query(default="preview"),
+    variant: Literal["thumb", "card", "preview", "original"] = Query(default="preview"),
     download: int = Query(default=0),
     db: Session = Depends(get_session),
     store: AssetStore = Depends(get_store),
@@ -503,7 +571,7 @@ def asset_content_response(
     asset: Asset,
     *,
     viewer: CurrentUser | None,
-    variant: Literal["thumb", "preview", "original"],
+    variant: Literal["thumb", "card", "preview", "original"],
     download: bool,
     if_none_match: str | None = None,
     cache_control: str = "private, immutable, max-age=31536000",
@@ -520,7 +588,7 @@ def asset_content_response(
     raise_if_withheld(db, asset, include_verdict=viewer is not None)
     # ADR-0014(2026-09-24 追記): original をダウンロードする PNG にだけ、系列情報
     # (gakei チャンク)を埋め込んで返す。保存している原本・画面表示用の
-    # original/thumb/preview(download=0)は変えない(ETag も区別する)。
+    # original/thumb/card/preview(download=0)は変えない(ETag も区別する)。
     embed_meta = (
         viewer is not None and variant == "original" and download and asset.mime == "image/png"
     )

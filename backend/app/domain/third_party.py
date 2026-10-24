@@ -88,15 +88,22 @@ def _url_of(dist: Distribution) -> str | None:
 def _license_file_texts(dist: Distribution) -> list[str]:
     """`License-File` メタデータで列挙されたファイルを読む。無ければ `dist.files` から
     `LICENSE*` / `LICENCE*` / `COPYING*` / `NOTICE*`(大文字小文字を無視)を探す。
+
+    Metadata 2.4(PEP 639)では、`License-File` の値は `.dist-info/licenses/` からの相対の
+    パスになる(scikit-learn の `COPYING` など)。そのまま読めなければ `licenses/` の下も見る。
     """
     license_files = dist.metadata.get_all("License-File") or []
     texts: list[str] = []
     if license_files:
         for name in license_files:
-            try:
-                text = dist.read_text(name)
-            except OSError:
-                continue
+            text = None
+            for candidate in (name, f"licenses/{name}"):
+                try:
+                    text = dist.read_text(candidate)
+                except OSError:
+                    continue
+                if text:
+                    break
             if text:
                 texts.append(text)
         return texts

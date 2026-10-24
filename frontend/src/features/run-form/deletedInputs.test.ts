@@ -18,6 +18,8 @@ function asset(id: string, deletedAt: string | null): AssetDetail {
     restorable: false,
     used_as_input: false,
     content_withheld: false,
+    favorite: false,
+    imported: false,
   }
 }
 

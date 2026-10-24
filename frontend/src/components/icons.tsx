@@ -170,3 +170,86 @@ export function EyeOffIcon(props: IconProps) {
     </Icon>
   )
 }
+
+/** 上に四角、下に2本の行: 履歴のカードを「詳細」(画像と文字の行)の形で並べる。 */
+export function CardDetailIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2.5" y="2" width="11" height="7" rx="1" />
+      <path d="M2.5 11.5h11M2.5 14h7" />
+    </Icon>
+  )
+}
+
+/** 高さの違うマスが縦に並ぶ形: 履歴を石積み(列ごとに積む)のギャラリーで並べる。 */
+export function CardMasonryIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="2" width="5" height="7" rx="1" />
+      <rect x="2" y="11" width="5" height="3" rx="1" />
+      <rect x="9" y="2" width="5" height="3" rx="1" />
+      <rect x="9" y="7" width="5" height="7" rx="1" />
+    </Icon>
+  )
+}
+
+/** 幅の違うマスが横に並ぶ形: 履歴を行揃え(行の高さを揃える)のギャラリーで並べる。 */
+export function CardRowsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="2.5" width="7" height="5" rx="1" />
+      <rect x="11" y="2.5" width="3" height="5" rx="1" />
+      <rect x="2" y="9.5" width="3.5" height="4" rx="1" />
+      <rect x="7.5" y="9.5" width="6.5" height="4" rx="1" />
+    </Icon>
+  )
+}
+
+/** じょうご: 一覧の絞り込み。 */
+export function FilterIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 3h11l-4.2 5.2v4.3l-2.6 1.3V8.2z" />
+    </Icon>
+  )
+}
+
+/** 長さの違う横線と下向きの矢印: 一覧の並べ替え。 */
+export function SortIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 4h7M2.5 8h5M2.5 12h3M12.5 3v10M10.5 11l2 2 2-2" />
+    </Icon>
+  )
+}
+
+/** 上向きの矢印: 一覧の先頭へ戻る。 */
+export function ArrowUpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" />
+    </Icon>
+  )
+}
+
+/** ハート: お気に入り(ADR-0055)。`filled` で塗る(星は将来の評価に残す)。 */
+export function HeartIcon({ filled = false, ...props }: IconProps & { filled?: boolean }) {
+  return (
+    <Icon {...props}>
+      <path
+        d="M8 13.5S2 10 2 5.9A3.1 3.1 0 0 1 5.1 2.8c1.2 0 2.2.6 2.9 1.6.7-1 1.7-1.6 2.9-1.6A3.1 3.1 0 0 1 14 5.9C14 10 8 13.5 8 13.5z"
+        fill={filled ? 'currentColor' : 'none'}
+      />
+    </Icon>
+  )
+}
+
+/** 鉛筆: 手で作った画像(スケッチ・配置・マスク・領域)の種別の印。 */
+export function PencilIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10.5 2.5l3 3-8 8H2.5v-3z" />
+      <path d="M9 4l3 3" />
+    </Icon>
+  )
+}

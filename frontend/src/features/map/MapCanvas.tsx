@@ -38,7 +38,7 @@ import { Link } from 'react-router'
 import { assetUrl } from '../../api/assetUrl'
 import { AssetImage } from '../mods/AssetImage'
 import type { EmbeddingGraphNode } from '../../api/client'
-import { fmt, useI18n } from '../../i18n'
+import { useI18n } from '../../i18n'
 import { focalStyle } from '../../lib/focalPoint'
 import { buildSimilarSearchPath } from '../search/searchQuerySync'
 import { RatingBadge } from '../content-rating/RatingBadge'
@@ -47,6 +47,7 @@ import contentRatingStyles from '../content-rating/ContentRating.module.css'
 import { axisGridLines } from './axisGrid'
 import { computeBounds3, introSpinStep } from './camera3d'
 import { neighborsOf, type SimilarityEdge } from './edges'
+import { LineageIcon } from '../../components/icons'
 import { stepMatch, type MapSearchHighlight } from './mapSearchHighlight'
 import { MapPreviewPanel } from './MapPreviewPanel'
 import { mapMaskFlags } from './mapRatingMask'
@@ -1337,15 +1338,19 @@ export function MapCanvas({
           </Link>
           <div className={styles.selectionBody}>
             <span className={styles.selectionTitle}>{selectedNode.title || m.untitled}</span>
-            <span className={styles.selectionMeta}>
-              {fmt(m.neighborsHighlighted, { count: neighborsOf(neighborIndices, selected!).length })}
-            </span>
             <div className={styles.selectionLinks}>
-              <Link to={`/lineage/${selectedNode.id}`}>{m.lineageGraph}</Link>
               <Link to={buildSimilarSearchPath(selectedNode.id)}>{m.similarInSearch}</Link>
             </div>
           </div>
           <div className={styles.selectionButtons}>
+            <Link
+              to={`/lineage/${selectedNode.id}`}
+              className={styles.selectionButton}
+              aria-label={m.lineageGraph}
+              title={m.lineageGraph}
+            >
+              <LineageIcon size={15} />
+            </Link>
             <button
               ref={expandButtonRef}
               type="button"

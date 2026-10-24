@@ -226,7 +226,7 @@ def test_deleted_assets_are_hidden_and_root_deletion_404s(client: TestClient, ch
 def test_public_content_and_scope_checks(client: TestClient, chain: Chain) -> None:
     share = _create(client, chain.e0, "ancestors")
     token = _token(share)
-    for variant in ("thumb", "preview", "original"):
+    for variant in ("thumb", "card", "preview", "original"):
         response = _content(client, token, chain.g0, variant)
         assert response.status_code == 200, (variant, response.text)
         assert response.headers["cache-control"] == "private, max-age=300"
@@ -540,7 +540,7 @@ def test_secret_comfyui_run_hides_original(client: TestClient, chain: Chain) -> 
     assert "plain-secret" not in text
     assert _FAKE_OPENAI_KEY not in text
 
-    for variant in ("thumb", "preview"):
+    for variant in ("thumb", "card", "preview"):
         assert _content(client, token, chain.e0, variant).status_code == 200
     assert _content(client, token, chain.e0, "original").status_code == 404
     assert _content(client, token, chain.e0, "original", download="1").status_code == 404

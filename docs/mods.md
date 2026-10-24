@@ -38,6 +38,7 @@ GAKEI が決まった時点(イベント)で、外部のシステム(Webhook)や
 | `embedding` | リモートの埋め込みを呼ぶ前(画像・文章)。ローカルの ONNX は呼ばない | その埋め込みは失敗になる |
 | `workflow_analysis` | 管理者が ComfyUI のワークフローの登録・編集画面で「アシスタントで推定」を押したとき | 推定は止まり、理由が画面に出る(規則による読み取りはそのまま使える) |
 | `region_detection` | 領域の四角の検出(ADR-0053 7章)で VLM を呼ぶ前。接続先がローカルでも呼ぶ | 検出は止まり、理由が画面に出る(四角は手で描ける) |
+| `group_naming` | グループの提案のページで、名前の候補を LLM に求める前(ADR-0056)。接続先がローカルでも呼ぶ | 候補が出ないだけで、提案のページはそのまま使える |
 
 管理者設定の「接続を確認」は、検査用の固定の文しか送らないので対象にしない。MCP から作った Run も `image_run` を通る。繰り返しの実行は Run ごとに呼ぶ。
 
@@ -110,6 +111,7 @@ Webhook と Python の Mod は同じ中身を受け取る。すべてのイベ�
 - `image_run` で領域の指示の四角(ADR-0053)を付けたとき: `region_count` が四角の数(付けていなければ `null`)。`text` に、四角ごとの指示(`role` が `region`)と描く文字(`role` が `region_text`)が入る。四角を描いた画像は `images` に `reference` として入る。
 - `workflow_analysis` のとき: `target` はアシスタントの接続先とモデル。`text` は LLM への指示(`role` が `system`)と、ワークフローのノードの要約(`role` が `workflow`。1行が1ノードで、id・種類・タイトル・配線・直値。文字列は先頭 60 文字まで、秘密に見える値は `***`)。テンプレートの JSON そのものは送らない。`params` は `workflow_id`(登録前は `null`)、`workflow_name`、`model`、`reasoning_effort`。画像は送らない。
 - `region_detection` のとき: `target` は検出の接続先とモデル。`text` は VLM への指示(`role` が `system`)と、探す物(`role` が `query`。言葉が無ければ `role` が `user` の決まった文)。`images` は対象の画像1枚(`role` が `primary`)、`asset_id` もその画像。実際に送るのは、その画像を長辺 1536px 以内に縮めた JPEG(`detail: high`)。`params` は `model`、`query`(無ければ `null`)、`max_items`、`image_max_side`、`image_detail`、`reasoning_effort`。
+- `group_naming` のとき: `target` は名前の候補の接続先とモデル。`text` は LLM への指示(`role` が `system`)と、実際に送る文面(`role` が `user`)。文面に入るのはタグだけで、集まりごとの特徴的なタグと出現率、作品・キャラクターの印、作品の集計。接続先が外部(`locality = external`)なら、センシティブなタグを外した後の文面になる。`params` は `model`、`clusters`(送る集まりの数)、`sensitive_tags_removed`、`reasoning_effort`。画像は送らない。
 - ComfyUI の Run の `params` は、共有リンクと同じ規則で秘密に見える値を伏せる。
 
 ### `asset.ingested` の `subject`
@@ -160,7 +162,7 @@ uv run python -m app.tools.export_mod_schema mods-schema.json   # - なら標準
 `schema_version` の互換性の規則:
 
 - **項目を足すときは、版を上げない。** 受ける側は、知らない項目を無視すること。
-- `purpose` などの値の種類を足すときも、版を上げない(2026-10-17 に `workflow_analysis`、2026-10-20 に `region_detection` を足した)。受ける側は、知らない値を受けても壊れないようにし、許可するか拒否するかは Mod の方針で決める。
+- `purpose` などの値の種類を足すときも、版を上げない(2026-10-17 に `workflow_analysis`、2026-10-20 に `region_detection`、2026-10-24 に `group_naming` を足した)。受ける側は、知らない値を受けても壊れないようにし、許可するか拒否するかは Mod の方針で決める。
 - **項目を消す・意味を変えるときは、`schema_version` を上げる。** 受ける側は、知らない版を受けたら、何もしないか拒否する。
 - Python の Mod の関数の呼ばれ方の版は、マニフェストの `api_version`(今は `1`)。合わない Mod は読み込みエラーになる。
 
@@ -217,7 +219,7 @@ uv run python -m app.tools.export_mod_schema mods-schema.json   # - なら標準
 
 `deny` の判定を受けた画像は保存しない。
 
-- **判定を待つ購読**では、原本を最初から書かない。**非同期の購読**では、判定を受けた時点で原本と派生(サムネイル・プレビュー)を消す。
+- **判定を待つ購読**では、原本を最初から書かない。**非同期の購読**では、判定を受けた時点で原本と派生(サムネイル・カード・プレビュー)を消す。
 - 残るもの: 画像の記録(sha256、大きさ、形式、来歴)、系列のノードと辺、Run の記録、判定と呼び出しの記録。系列は途切れず、ノードは「画像なし(拒否)」として表示する。ストックからも外さない。
 - 画像から作ったもの(埋め込み、知覚ハッシュ、焦点など)も消す。タイトル・タグ・レーティングの文字の記録は残す。
 - 中身・ダウンロード・共有リンク・系列の ZIP・MCP は、画像を返さない(中身は 410 で理由を付ける)。入力に使おうとすると断る。

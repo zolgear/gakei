@@ -45,6 +45,7 @@ import { AnnotationSettingsPage } from '../features/settings/pages/AnnotationSet
 import { EmbeddingSettingsPage } from '../features/settings/pages/EmbeddingSettingsPage'
 import { AssistantSettingsPage } from '../features/settings/pages/AssistantSettingsPage'
 import { RegionDetectionSettingsPage } from '../features/settings/pages/RegionDetectionSettingsPage'
+import { GroupNamingSettingsPage } from '../features/settings/pages/GroupNamingSettingsPage'
 import { LlmConnectionsSettingsPage } from '../features/settings/pages/LlmConnectionsSettingsPage'
 import { AuthSettingsPage } from '../features/settings/pages/AuthSettingsPage'
 import {
@@ -67,6 +68,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   embeddings: EmbeddingSettingsPage,
   assistant: AssistantSettingsPage,
   regionDetection: RegionDetectionSettingsPage,
+  groupNaming: GroupNamingSettingsPage,
   comfyui: ComfyUISettingsPage,
   sdwebui: SdWebuiSettingsPage,
   tagDictionary: TagDictionarySettingsPage,

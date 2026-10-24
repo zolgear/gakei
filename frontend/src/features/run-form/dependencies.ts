@@ -4,7 +4,8 @@
  * その場で判定できるようにする(実際の検証は最終的にサーバーが行う)。
  */
 import { fmt, msg } from '../../i18n'
-import type { ConditionalParam, IncompatiblePair, ParamDef } from '../../api/client'
+import type { ConditionalParam, IncompatiblePair, OutputSizeRule, ParamDef } from '../../api/client'
+import { outputSizeFromRule } from './outputSize'
 import { UNSPECIFIED, buildParams, unspecifiedRawValue, type RawParamValues } from './paramsBuilder'
 import type { SizeState } from './sizeValidation'
 
@@ -214,15 +215,20 @@ export function hiresTargetSize(defs: ParamDef[], raw: RawParamValues, size: Siz
 }
 
 /**
- * 入力画像の無い Run で四角を描く白紙の大きさ(ADR-0053 6章)。幅・高さの項目を持つプロバイダー
- * (ComfyUI)はその値(未指定ならワークフローの既定値)、持たなければ `fallback`(出力サイズの
- * 設定から解いた値)。正の整数にならなければ `fallback`。四角は割合で持つので、ここは縦横比だけが効く。
+ * 入力画像の無い Run で四角を描く白紙の大きさ(ADR-0053 6章)。ComfyUI のワークフローで出力の大きさの
+ * 決まり方(capabilities の `output_size`。幅・高さの項目、Resolution Selector など)が分かればフォームの
+ * 今の値で計算した値、分からなければ幅・高さの項目(未指定なら既定値)、どちらも無ければ `fallback`
+ * (出力サイズの設定から解いた値)。正の整数にならなければ `fallback`。四角は割合で持つので、ここは
+ * 縦横比だけが効く。
  */
 export function blankCanvasSize(
   defs: ParamDef[],
   raw: RawParamValues,
   fallback: { width: number; height: number },
+  rule?: OutputSizeRule | null,
 ): { width: number; height: number } {
+  const fromRule = outputSizeFromRule(rule, (name) => effectiveValue(defs, raw, name))
+  if (fromRule !== null) return fromRule
   if (!defs.some((d) => d.name === 'width') || !defs.some((d) => d.name === 'height')) return fallback
   const width = Math.trunc(Number(effectiveValue(defs, raw, 'width')))
   const height = Math.trunc(Number(effectiveValue(defs, raw, 'height')))

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
-from app.domain import content_rating, focal_points
+from app.domain import content_rating, focal_points, imported_assets
 from app.domain.models import Asset, AssetAnnotation, AssetKind, PromptSet, PromptSetItem, Run
 from app.domain.run_views import (
     bulk_asset_groups,
@@ -145,7 +145,7 @@ def _search_runs(
     rows = rows[:limit]
 
     run_ids = [r.id for r in rows]
-    outputs_map = bulk_output_refs(db, run_ids)
+    outputs_map = bulk_output_refs(db, run_ids, viewer=viewer)
     inputs_map = bulk_input_summary(db, run_ids, viewer)
     descendant_map = bulk_descendant_run_counts(db, run_ids, viewer)
     users_map = bulk_users(db, [r.created_by_user_id for r in rows])
@@ -229,6 +229,7 @@ def _search_assets(
     tags_map = annotations_domain.bulk_tags(db, [asset.id for asset, *_ in rows])
     focals = focal_points.bulk_get(db, [asset.id for asset, *_ in rows])
     ratings = content_rating.bulk_levels(db, [asset.id for asset, *_ in rows])
+    imported_ids = imported_assets.bulk_imported_ids(db, [asset for asset, *_ in rows])
 
     def contains_all(text: str | None) -> bool:
         return bool(text) and all(term in text.lower() for term in lowered_terms)
@@ -278,6 +279,7 @@ def _search_assets(
                 content_rating=ratings.get(asset.id),  # type: ignore[arg-type]
                 content_withheld=asset.content_withheld_at is not None,
                 content_withheld_at=asset.content_withheld_at,
+                imported=asset.id in imported_ids,
                 produced_by_run_id=asset.produced_by_run_id,
                 prompt_source=prompt_source,
                 prompt_snippet=build_snippet(snippet_text or "", terms),

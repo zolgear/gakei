@@ -26,6 +26,9 @@ export type ParamDef = components['schemas']['ParamDef']
 export type IncompatiblePair = components['schemas']['IncompatiblePair']
 export type ConditionalParam = components['schemas']['ConditionalParam']
 export type SizeConstraints = components['schemas']['SizeConstraints']
+export type OutputSizeRule = components['schemas']['OutputSizeRule']
+export type OutputDimension = components['schemas']['OutputDimension']
+export type OutputSizeOperand = components['schemas']['OutputSizeOperand']
 
 export type RunSummary = components['schemas']['RunSummary']
 export type RunDetail = components['schemas']['RunDetail']
@@ -43,6 +46,8 @@ export type RegionKind = RegionBox['kind']
 export type RunRegions = components['schemas']['RunRegions']
 export type DetectedRegion = components['schemas']['DetectedRegion']
 export type RegionDetectResponse = components['schemas']['RegionDetectResponse']
+export type GroupNamingSettingsResponse = components['schemas']['GroupNamingSettingsResponse']
+export type GroupNamingSettingsUpdateRequest = components['schemas']['GroupNamingSettingsUpdateRequest']
 export type RegionDetectionSettingsResponse = components['schemas']['RegionDetectionSettingsResponse']
 export type RegionDetectionSettingsUpdateRequest = components['schemas']['RegionDetectionSettingsUpdateRequest']
 /** 保存した検出1回分(Asset ごとの履歴)。 */
@@ -610,6 +615,17 @@ export function listRuns(
   return request(`/api/runs${toQuery(params)}`)
 }
 
+export type HistoryAssetItem = components['schemas']['HistoryAssetItem']
+export type HistoryAssetListResponse = components['schemas']['HistoryAssetListResponse']
+export type HistoryGroupSection = components['schemas']['HistoryGroupSection']
+
+/** 画像単位の履歴(グループ・似た画像の順。ADR-0054)。 */
+export function listHistoryAssets(
+  params: operations['list_history_assets']['parameters']['query'],
+): Promise<HistoryAssetListResponse> {
+  return request(`/api/history/assets${toQuery(params)}`)
+}
+
 export function getRun(runId: string): Promise<RunDetail> {
   return request(`/api/runs/${runId}`)
 }
@@ -632,6 +648,13 @@ export function cancelRun(runId: string): Promise<components['schemas']['RunCanc
  */
 export function deleteRun(runId: string): Promise<void> {
   return request(`/api/runs/${runId}`, { method: 'DELETE' })
+}
+
+export type AssetFavoriteResponse = components['schemas']['AssetFavoriteResponse']
+
+/** 見る人のお気に入りにする・外す(冪等。ADR-0055)。 */
+export function setAssetFavorite(assetId: string, favorite: boolean): Promise<AssetFavoriteResponse> {
+  return request(`/api/assets/${assetId}/favorite`, { method: favorite ? 'PUT' : 'DELETE' })
 }
 
 export function getAsset(assetId: string): Promise<AssetDetail> {
@@ -767,6 +790,53 @@ export function addAssetsToGroup(groupId: string, assetIds: string[]): Promise<A
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ asset_ids: assetIds }),
+  })
+}
+
+// -- グループの提案(ADR-0056) ----------------------------------------------------------
+
+export type GroupSuggestion = components['schemas']['GroupSuggestion']
+export type GroupSuggestionsResponse = components['schemas']['GroupSuggestionsResponse']
+export type GroupSuggestionScope = GroupSuggestionsResponse['scope']
+export type GroupSuggestionGranularity = GroupSuggestionsResponse['granularity']
+
+/** グループの提案(埋め込みが使えなければ 409)。何も保存しない。 */
+export function listGroupSuggestions(
+  params: NonNullable<operations['list_group_suggestions']['parameters']['query']> = {},
+): Promise<GroupSuggestionsResponse> {
+  return request(`/api/asset-groups/suggestions${toQuery(params)}`)
+}
+
+/**
+ * 提案を受け入れる。`name` なら新しいグループを作って入れ、`target_group_id` ならそのグループへ移す
+ * (どちらか一方。1回のトランザクション)。
+ */
+export function acceptGroupSuggestion(
+  body: { asset_ids: string[] } & ({ name: string; target_group_id?: never } | { target_group_id: string; name?: never }),
+): Promise<AssetGroupRow> {
+  return request('/api/asset-groups/suggestions/accept', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export type GroupSuggestionNamesRequest = components['schemas']['GroupSuggestionNamesRequest']
+export type GroupSuggestionNamesResponse = components['schemas']['GroupSuggestionNamesResponse']
+
+/**
+ * 表示中の提案(新しいグループの提案)に、グループ名の候補を付ける(LLM。ADR-0056 6章)。保存はしない。
+ * 時間がかかることがあるので `signal` を受ける。無効・拒否・失敗は 409 / 502。
+ */
+export function suggestGroupNames(
+  body: GroupSuggestionNamesRequest,
+  signal?: AbortSignal,
+): Promise<GroupSuggestionNamesResponse> {
+  return request('/api/asset-groups/suggestions/names', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
   })
 }
 
@@ -1720,6 +1790,22 @@ export function getAssistantSettings(): Promise<AssistantSettingsResponse> {
 /** 管理者のみ。書いた項目だけ変える。不正な値は 422。 */
 export function updateAssistantSettings(body: AssistantSettingsUpdateRequest): Promise<AssistantSettingsResponse> {
   return request('/api/settings/assistant', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+// -- グループ名の候補(ADR-0056 6章) ----------------------------------------------
+
+/** 全ログイン者が読める(提案のページが候補を取りに行くかの判断。`usable`)。 */
+export function getGroupNamingSettings(): Promise<GroupNamingSettingsResponse> {
+  return request('/api/settings/group-naming')
+}
+
+/** 管理者のみ。書いた項目だけ変える。不正な値は 422。 */
+export function updateGroupNamingSettings(body: GroupNamingSettingsUpdateRequest): Promise<GroupNamingSettingsResponse> {
+  return request('/api/settings/group-naming', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

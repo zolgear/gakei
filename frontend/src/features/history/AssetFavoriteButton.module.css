@@ -1,0 +1,12 @@
+/* 枠と大きさは置く場所のアイコンのボタンに任せ、ここでは登録済みの色だけを決める(履歴と同じアクセント色)。 */
+.button[data-favorite='true'] {
+  color: var(--color-accent);
+}
+
+.button[data-favorite='true']:hover:not(:disabled) {
+  color: var(--color-accent-hover);
+}
+
+.button:disabled {
+  opacity: 0.4;
+}

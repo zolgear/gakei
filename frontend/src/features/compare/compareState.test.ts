@@ -19,8 +19,8 @@ function makeRun(overrides: Partial<RunDetail> = {}): Pick<RunDetail, 'inputs' |
       { asset_id: 'in-ref', role: 'reference', position: 1, content_withheld: false },
     ],
     outputs: [
-      { asset_id: 'out-1', output_index: 0, content_withheld: false },
-      { asset_id: 'out-2', output_index: 1, content_withheld: false },
+      { asset_id: 'out-1', output_index: 0, content_withheld: false, favorite: false },
+      { asset_id: 'out-2', output_index: 1, content_withheld: false, favorite: false },
     ],
     ...overrides,
   }

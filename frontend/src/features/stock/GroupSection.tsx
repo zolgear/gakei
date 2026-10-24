@@ -14,8 +14,9 @@
  *   その前、下半分なら後ろへ移る(`useGroupReorder`)。画像のドラッグとは `DataTransfer` の
  *   型で分け、見出し行はどちらか一方にだけ反応する。「グループなし」は先頭に固定で、掴めず
  *   落とし先にもならない。ドラッグできない環境向けに「⋯」に「上へ移動」「下へ移動」を置く。
- * - 本体(開いているときだけ取得・表示): 既存の 2 列のタイル。グループは最初の 30 件と
- *   「さらに表示」、「グループなし」は末尾の番兵で自動的に続きを読む(既存の無限スクロール)。
+ * - 本体(開いているときだけ取得・表示): 正方形のタイルのグリッド(列の数はサイドバーの幅に応じる)。
+ *   グループは最初の 30 件と「さらに表示」、「グループなし」は末尾の番兵で自動的に続きを読む
+ *   (既存の無限スクロール)。
  */
 import { useEffect, useId, useRef, useState, type DragEvent, type RefObject } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -64,6 +65,8 @@ export interface StockTileActions {
   onOpen: (asset: AssetSummary) => void
   onUseAsInput: (asset: AssetSummary) => void
   onDelete: (asset: AssetSummary) => void
+  /** お気に入りの付け外し(ADR-0055。`useFavoriteToggle`)。 */
+  onToggleFavorite: (assetId: string, favorite: boolean) => void
 }
 
 interface GroupSectionProps {
@@ -73,6 +76,8 @@ interface GroupSectionProps {
   kinds: readonly StockAssetKind[] | null
   /** タグの絞り込み(ADR-0024 5章)。絞っていなければ null。 */
   tag: string | null
+  /** お気に入りだけに絞る(ADR-0055。サーバーの `favorite=true`)。 */
+  favoriteOnly: boolean
   open: boolean
   onToggleOpen: () => void
   /** 番兵の IntersectionObserver の root(スクロールするパネル)。 */
@@ -133,6 +138,7 @@ export function GroupSection({
   group,
   kinds,
   tag,
+  favoriteOnly,
   open,
   onToggleOpen,
   scrollRootRef,
@@ -412,6 +418,7 @@ export function GroupSection({
             scope={group ? { groupId: group.id } : { ungrouped: true }}
             kinds={kinds}
             tag={tag}
+            favoriteOnly={favoriteOnly}
             scrollRootRef={scrollRootRef}
             tileActions={tileActions}
             noGroupsExist={noGroupsExist}
@@ -438,6 +445,7 @@ interface SectionAssetsProps {
   scope: StockSectionScope
   kinds: readonly StockAssetKind[] | null
   tag: string | null
+  favoriteOnly: boolean
   scrollRootRef: RefObject<HTMLDivElement | null>
   tileActions: StockTileActions
   noGroupsExist: boolean
@@ -450,6 +458,7 @@ function SectionAssets({
   scope,
   kinds,
   tag,
+  favoriteOnly,
   scrollRootRef,
   tileActions,
   noGroupsExist,
@@ -463,7 +472,7 @@ function SectionAssets({
   const sectionKey = groupId ?? UNGROUPED_SECTION_KEY
 
   const assetsQuery = useInfiniteQuery({
-    queryKey: stockAssetsQueryKey(kinds, scope, tag),
+    queryKey: stockAssetsQueryKey(kinds, scope, tag, favoriteOnly),
     queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
       try {
         return await listAssets({
@@ -471,6 +480,7 @@ function SectionAssets({
           cursor: pageParam,
           kind: kinds ? [...kinds] : undefined,
           tag: tag ?? undefined,
+          ...(favoriteOnly ? { favorite: true } : {}),
           ...(groupId ? { group_id: groupId } : { ungrouped: true }),
         })
       } catch (err) {
@@ -540,17 +550,26 @@ function SectionAssets({
     )
   }
 
+  // 絞り込みで空になった節の文言。種類だけの絞り込みは今までどおり(空の節の案内)。
+  const filteredEmpty =
+    tag && favoriteOnly
+      ? t.stock.filterEmptyInSection
+      : favoriteOnly
+        ? t.stock.favoriteEmptyInSection
+        : tag
+          ? t.stock.tagFilter.emptyInSection
+          : null
   if (assets.length === 0) {
     if (groupId) {
       return (
         <div className={styles.dropBox} data-dropping={emptyDrop.dropping} {...emptyDrop.handlers}>
-          {tag ? t.stock.tagFilter.emptyInSection : t.stock.groups.dropHere}
+          {filteredEmpty ?? t.stock.groups.dropHere}
         </div>
       )
     }
     return (
       <p className={styles.status} data-dropping={emptyDrop.dropping} {...emptyDrop.handlers}>
-        {tag ? t.stock.tagFilter.emptyInSection : noGroupsExist ? t.stock.emptyState : t.stock.groups.ungroupedEmpty}
+        {filteredEmpty ?? (noGroupsExist ? t.stock.emptyState : t.stock.groups.ungroupedEmpty)}
       </p>
     )
   }
@@ -569,6 +588,7 @@ function SectionAssets({
             onToggleSelect={(a) => tileActions.onToggleSelect(sectionKey, a)}
             onUseAsInput={tileActions.onUseAsInput}
             onDelete={tileActions.onDelete}
+            onToggleFavorite={tileActions.onToggleFavorite}
             onRemoveFromGroup={groupId ? (a) => removeMutation.mutate(a.id) : undefined}
           />
         ))}

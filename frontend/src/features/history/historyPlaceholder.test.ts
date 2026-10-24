@@ -36,4 +36,22 @@ describe('historyPlaceholder', () => {
       historyPlaceholder({ ...base, total: 3, filteredCount: 0, filterActive: true }),
     ).toBe('noMatch')
   })
+
+  it('お気に入りで絞り込んで1件も無ければ、お気に入りが無いことを出す', () => {
+    expect(historyPlaceholder({ ...base, favoriteOnly: true })).toBe('noFavorites')
+    expect(historyPlaceholder({ ...base, favoriteOnly: true, filterActive: true })).toBe('noFavorites')
+  })
+
+  it('お気に入りはあるが状態の絞り込みで0件なら該当なし', () => {
+    expect(
+      historyPlaceholder({ ...base, favoriteOnly: true, filterActive: true, total: 2, filteredCount: 0 }),
+    ).toBe('noMatch')
+  })
+
+  it('形・透過・領域で絞って1件も無ければ該当なし(お気に入りと一緒でも)', () => {
+    expect(historyPlaceholder({ ...base, labelFiltered: true, filterActive: true })).toBe('noMatch')
+    expect(
+      historyPlaceholder({ ...base, labelFiltered: true, favoriteOnly: true, filterActive: true }),
+    ).toBe('noMatch')
+  })
 })

@@ -8,6 +8,7 @@ import { ComparePage } from './pages/ComparePage'
 import { LineagePage } from './pages/LineagePage'
 import { SearchPage } from './pages/SearchPage'
 import { DuplicatesPage } from './pages/DuplicatesPage'
+import { GroupSuggestionsPage } from './pages/GroupSuggestionsPage'
 import { MapPage } from './pages/MapPage'
 import { SettingsPage } from './pages/SettingsPage'
 
@@ -16,6 +17,8 @@ export function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<HistoryPage />} />
+        {/* 履歴は `/`。手で打った `/history` も空のページにせず、履歴へ移す。 */}
+        <Route path="/history" element={<Navigate to="/" replace />} />
         <Route path="/studio" element={<StudioWorkspace />} />
         {/* 生成/編集は UI 上で区別しない(ADR-0009)。旧ルートはブックマーク等のため残す。 */}
         <Route path="/generate" element={<Navigate to="/studio" replace />} />
@@ -27,6 +30,8 @@ export function App() {
         <Route path="/search" element={<SearchPage />} />
         {/* 重複の候補(ADR-0033 8章)。ストックのパネルからたどる。 */}
         <Route path="/stock/duplicates" element={<DuplicatesPage />} />
+        {/* グループの提案(ADR-0056)。ストックのパネルからたどる。 */}
+        <Route path="/stock/group-suggestions" element={<GroupSuggestionsPage />} />
         {/* マップ(ADR-0033 8章)。アイコンレールからたどる。 */}
         <Route path="/map" element={<MapPage />} />
         {/*

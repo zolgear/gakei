@@ -468,7 +468,8 @@
         "annotation": "自動タイトル・タグ",
         "embedding": "埋め込み",
         "assistant": "アシスタント",
-        "region_detection": "領域の検出"
+        "region_detection": "領域の検出",
+        "group_naming": "グループ名の候補"
       },
       "reenterKey": "Base URL のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのキーは送りません。キーを入れ直してください(キーが要らない接続先なら、先にキーを削除してください)"
     },
@@ -531,6 +532,11 @@
       "unknownConnection": "指定した接続先がありません",
       "invalidModel": "モデル名は1〜{max}文字で指定してください",
       "invalidLimit": "{name} は{min}〜{max}の整数である必要があります"
+    },
+    "groupNaming": {
+      "invalidBool": "{name} は true か false である必要があります",
+      "unknownConnection": "指定した接続先がありません",
+      "invalidModel": "モデル名は1〜{max}文字で指定してください"
     }
   },
   "runValidation": {
@@ -854,7 +860,7 @@
     "elapsed": "かかった時間: {seconds} 秒"
   },
   "regenerateDerivatives": {
-    "description": "今の版の派生画像(サムネイル・プレビュー)が無い画像について、原本から作ります(ADR-0036)。論理削除済みの画像も含みます。GAKEI を止めずに実行できます。DB は書き換えず、原本には触れません。",
+    "description": "今の版の派生画像(サムネイル・カード・プレビュー)が無い画像について、原本から作ります(ADR-0036)。論理削除済みの画像も含みます。GAKEI を止めずに実行できます。DB は書き換えず、原本には触れません。",
     "dryRunHelp": "作る件数(--prune なら消す件数も)を数えるだけで、何も書かない・消さない",
     "pruneHelp": "今の版以外の派生を消す(原本と、今の版の派生には触れない)",
     "databaseMissing": "DB のファイルが見つかりません: {source}",
@@ -1219,5 +1225,11 @@
     },
     "detectionNotFound": "検出の履歴が見つかりません",
     "deleteForbidden": "この検出の履歴を消せるのは、検出した本人と管理者だけです"
+  },
+  "groupNaming": {
+    "disabled": "グループ名の候補は無効です(管理者設定の「グループ名の候補」で有効にできます)",
+    "unsupported": "接続先が Structured Outputs に対応していないため、グループ名の候補に使えません",
+    "llmError": "グループ名の候補を作れませんでした: {error}",
+    "fakeName": "ダミーの名前 {cluster}-{n}"
   }
 }

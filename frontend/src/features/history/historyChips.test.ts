@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildParamChips, formatTokenCount, formatTokenCountWithCost } from './historyChips'
+import {
+  buildParamChips,
+  formatTokenCount,
+  formatTokenCountWithCost,
+} from './historyChips'
 
 describe('buildParamChips', () => {
   it('params が無ければ空配列', () => {

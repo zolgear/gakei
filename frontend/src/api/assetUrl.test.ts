@@ -13,6 +13,10 @@ describe('assetUrl', () => {
     )
   })
 
+  it('カード(card)も派生として版を付ける(ADR-0036 5章)', () => {
+    expect(assetUrl(ASSET_ID, 'card')).toBe(`/api/assets/${ASSET_ID}/content?variant=card&dv=${DERIVED_VERSION}`)
+  })
+
   it('原本には版を付けない', () => {
     expect(assetUrl(ASSET_ID, 'original')).toBe(`/api/assets/${ASSET_ID}/content?variant=original`)
     expect(assetUrl(ASSET_ID, 'original', { download: true })).toBe(

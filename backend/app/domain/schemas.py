@@ -410,6 +410,12 @@ class AssetSummary(BaseModel):
     # `/content` は 410 で、画面は「画像なし(拒否)」の置き換えの表示にする。
     content_withheld: bool = False
     content_withheld_at: datetime | None = None
+    # 見る人のお気に入りか(ADR-0055)。埋めるのはストックの一覧(`GET /api/assets`)だけで、
+    # 検索の結果などほかの応答では常に false。
+    favorite: bool = False
+    # 系列の取り込み(ADR-0037)で入った、取り込んだ Run が作った生成画像か(記録は未検証)。
+    # タイルの種別のリボンに使う。取り込みで入ったアップロードなどは種別のとおり false。
+    imported: bool = False
 
 
 class ModVerdictView(BaseModel):
@@ -802,6 +808,8 @@ class AssetDetail(AssetSummary):
     # 画像を残さなかった理由の判定(`content_withheld` が true のときだけ。系列の ZIP から
     # 画像の無いノードとして取り込んだものなど、判定が無ければ null)。
     content_withheld_verdict: ModVerdictView | None = None
+    # 見る人のお気に入りか(ADR-0055)。他人の印は見えない。
+    favorite: bool = False
 
 
 class AssetUploadResponse(AssetDetail):
@@ -1171,6 +1179,18 @@ class RunOutputRef(BaseModel):
     content_rating: ContentRatingLevel | None = None
     # 画像を残さなかったか(ADR-0051 4章)。
     content_withheld: bool = False
+    # 原本のピクセルの大きさ(履歴のカードの「画像」の形で出す)。
+    width: int | None = None
+    height: int | None = None
+    # 見る人のお気に入りか(ADR-0055)。
+    favorite: bool = False
+
+
+class AssetFavoriteResponse(BaseModel):
+    """お気に入りの付け外しの結果(ADR-0055)。"""
+
+    asset_id: uuid.UUID
+    favorite: bool
 
 
 class RunRegions(BaseModel):
@@ -1274,6 +1294,33 @@ class RunDetail(RunSummary):
 class RunListResponse(BaseModel):
     items: list[RunSummary]
     next_cursor: str | None = None
+
+
+HistorySort = Literal["group", "embedding"]
+
+
+class HistoryAssetItem(BaseModel):
+    """画像単位の履歴の1項目(ADR-0054 4章)。表示は日付の並びと同じく `run` と出力で描く。"""
+
+    asset_id: uuid.UUID
+    # 画像が入っている見えるグループ(`sort=group` のときだけ。グループなし・他の並べ方は null)。
+    group_id: uuid.UUID | None = None
+    run: RunSummary
+
+
+class HistoryGroupSection(BaseModel):
+    """グループの並びの節(バナーの名前と件数)。`id = null` は「グループなし」。"""
+
+    id: uuid.UUID | None = None
+    name: str | None = None
+    count: int
+
+
+class HistoryAssetListResponse(BaseModel):
+    items: list[HistoryAssetItem]
+    next_cursor: str | None = None
+    # `sort=group` のときだけ。グループの並び順で、画像のある節だけ。
+    groups: list[HistoryGroupSection] | None = None
 
 
 class RunCancelResponse(BaseModel):
@@ -2341,7 +2388,9 @@ class AnnotationSettingsUpdateRequest(BaseModel):
 
 # 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
 StructuredOutputsMode = Literal["auto", "supported", "unsupported"]
-LlmConnectionFeature = Literal["annotation", "embedding", "assistant", "region_detection"]
+LlmConnectionFeature = Literal[
+    "annotation", "embedding", "assistant", "region_detection", "group_naming"
+]
 
 
 class LlmConnectionView(BaseModel):
@@ -2695,6 +2744,139 @@ class DuplicatesResponse(BaseModel):
     truncated: bool
     # グループの数が `limit` を超えたので、小さいグループを返していない。
     groups_truncated: bool
+
+
+# -- グループの提案(ADR-0056) ----------------------------------------------------------
+
+
+class GroupSuggestionTag(BaseModel):
+    """集まりに偏る英語のタグ。`label` はタグ辞書の訳(無ければタグのまま)。"""
+
+    tag: str
+    label: str
+    # 集まりでの出現率と、対象全体での出現率(画像の枚数の割合)。
+    rate: float
+    global_rate: float
+
+
+class GroupSuggestionFranchise(BaseModel):
+    """集まりで最も多い作品。`rate` は集まりの枚数に対する割合。`label` は訳(あれば)。"""
+
+    name: str
+    label: str | None = None
+    rate: float
+
+
+class GroupSuggestionTarget(BaseModel):
+    """既存のグループへの追加の提案のときの追加先。`overlap` は集まりのうちそのグループに
+    入っている割合(0.5 以上)。"""
+
+    id: uuid.UUID
+    name: str
+    overlap: float
+
+
+class GroupSuggestion(BaseModel):
+    # 提案の画像と追加先から作る(同じ入力なら同じ)。
+    id: str
+    size: int
+    # 提案の画像(集まりの重心に近い順)。
+    member_ids: list[uuid.UUID]
+    # 表紙(`member_ids` の先頭 12)。
+    cover_ids: list[uuid.UUID]
+    top_tags: list[GroupSuggestionTag] = Field(default_factory=list)
+    franchise: GroupSuggestionFranchise | None = None
+    # 既存のグループへの追加の提案なら、その追加先。null なら新しいグループの提案。
+    target_group: GroupSuggestionTarget | None = None
+    # 受け入れると別のグループから移る枚数(`scope=all` のときだけ 1 以上になりうる)。
+    moving_count: int = 0
+    # そのうち、別のグループから移る画像(`member_ids` の部分集合)。
+    moving_ids: list[uuid.UUID] = Field(default_factory=list)
+    # 名前(常に null。候補は `POST /api/asset-groups/suggestions/names`。ADR-0056 6章)。
+    name: str | None = None
+
+
+class GroupSuggestionsResponse(BaseModel):
+    """`GET /api/asset-groups/suggestions`。見るのは新しい順に `scanned` 件まで。"""
+
+    model_key: str
+    scope: Literal["ungrouped", "all"]
+    granularity: Literal["normal", "fine"]
+    scanned: int
+    truncated: bool
+    suggestions: list[GroupSuggestion] = Field(default_factory=list)
+    # 未分類(どの提案にも入らなかった、グループ外の画像。新しい順)。
+    outlier_ids: list[uuid.UUID] = Field(default_factory=list)
+    # 提案と未分類に出る画像のサムネイルの項目。
+    assets: list[AssetSummary] = Field(default_factory=list)
+
+
+class GroupSuggestionAcceptRequest(BaseModel):
+    """`POST /api/asset-groups/suggestions/accept`。`name`(新しいグループ)か
+    `target_group_id`(既存のグループへ移す)のどちらか一方。"""
+
+    name: str | None = None
+    target_group_id: uuid.UUID | None = None
+    asset_ids: list[uuid.UUID] = Field(min_length=1, max_length=5000)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str | None) -> str | None:
+        return None if value is None else _normalize_group_name(value)
+
+    @model_validator(mode="after")
+    def _one_target(self) -> GroupSuggestionAcceptRequest:
+        if (self.name is None) == (self.target_group_id is None):
+            raise ValueError("specify exactly one of name and target_group_id")
+        return self
+
+
+class GroupSuggestionNamesRequest(BaseModel):
+    """`POST /api/asset-groups/suggestions/names`。提案を同じ条件で計算し直し、
+    `suggestion_ids` の提案(新しいグループの提案だけ。無ければ全部)に名前の候補を付ける。"""
+
+    scope: Literal["ungrouped", "all"] = "ungrouped"
+    granularity: Literal["normal", "fine"] = "normal"
+    suggestion_ids: list[str] | None = Field(default=None, max_length=500)
+
+
+class GroupSuggestionNames(BaseModel):
+    """提案1つの名前の候補(良い順。最大3つ)。"""
+
+    suggestion_id: str
+    candidates: list[str] = Field(default_factory=list)
+
+
+class GroupSuggestionNamesResponse(BaseModel):
+    """名前の候補。候補を返せなかった提案は `items` に入らない。"""
+
+    model: str | None = None
+    items: list[GroupSuggestionNames] = Field(default_factory=list)
+
+
+GroupNamingUnusableReason = Literal[
+    "disabled", "connection_missing", "api_key_missing", "structured_outputs_unsupported"
+]
+
+
+class GroupNamingSettingsResponse(BaseModel):
+    """`GET /api/settings/group-naming`。全ログイン者が読める(名前の候補を出すかの判断)。"""
+
+    enabled: bool
+    connection_id: str
+    model: str
+    # 有効で、接続先とキーがそろい、接続先が Structured Outputs に対応するとみなせる。
+    usable: bool
+    # 使えない理由(1つに絞る。使えるなら null)。見る順は領域の検出と同じ。
+    unusable_reason: GroupNamingUnusableReason | None = None
+
+
+class GroupNamingSettingsUpdateRequest(BaseModel):
+    """書いた項目だけ変える。null は不正な値(422)。"""
+
+    enabled: StrictBool | None = None
+    connection_id: StrictStr | None = None
+    model: StrictStr | None = None
 
 
 class EmbeddingGraphNode(BaseModel):
@@ -3121,7 +3303,13 @@ class AssistantSettingsUpdateRequest(BaseModel):
 
 ModEvent = Literal["asset.ingested", "ai.before_send", "run.finished"]
 ModPurpose = Literal[
-    "image_run", "annotation", "assistant", "embedding", "workflow_analysis", "region_detection"
+    "image_run",
+    "annotation",
+    "assistant",
+    "embedding",
+    "workflow_analysis",
+    "region_detection",
+    "group_naming",
 ]
 ModSource = Literal["upload", "url", "sketch", "mask", "composite", "generated", "import", "mcp"]
 ModOnFailure = Literal["block", "allow"]

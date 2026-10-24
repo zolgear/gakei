@@ -1,0 +1,441 @@
+/* グループの提案(ADR-0056)。重複の候補のページと同じ幅と余白で揃える。 */
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.backLink {
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.backLink:hover {
+  color: var(--color-text);
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.help {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.placeholder {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+/* ---------- 切り替え ---------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switchLabel {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.switch {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.switchButton {
+  height: 28px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.switchButton[data-active='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+}
+
+.switchButton:hover {
+  color: var(--color-text);
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summaryText {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+/* ---------- 提案のカード ---------- */
+
+.cardList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.card[data-accepted='true'] {
+  padding: 10px 12px;
+}
+
+.acceptedText {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.cardHeading {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cardMeta {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: var(--color-text-faint);
+}
+
+.franchise {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.tags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  max-width: 100%;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.tileItem {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-bg-sunken);
+}
+
+/* ストックの選択モードと同じ見せ方: 入っている画像に ✓、外した画像は薄く。 */
+.tileItem[data-included='false'] .thumb {
+  opacity: 0.35;
+}
+
+.tileButton {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.tileButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.checkBadge {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.moreTile {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-sunken);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 15px;
+  font-family: var(--font-mono);
+}
+
+.moreTile:hover {
+  border-color: var(--color-accent);
+}
+
+.linkButton {
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-accent);
+  font-size: 12px;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.cardFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.nameInput {
+  flex: 1 1 220px;
+  max-width: 360px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.nameInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.primaryButton {
+  height: 32px;
+  max-width: 100%;
+  padding: 0 14px;
+  background: var(--color-accent);
+  color: #17181b;
+  border: 0;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.primaryButton:disabled {
+  opacity: 0.5;
+}
+
+/* 名前の候補(押すと名前の欄に入る)。 */
+.candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.candidate {
+  max-width: 100%;
+  min-height: 28px;
+  padding: 2px 10px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate:hover {
+  border-color: var(--color-accent);
+}
+
+.candidate[data-active='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ---------- 未分類 ---------- */
+
+.outliers {
+  padding: 10px 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.outliers[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.outliersSummary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---------- 狭い画面(ADR-0009: タップ 44px 以上) ---------- */
+
+@media (max-width: 767px) {
+  .page {
+    padding: 14px;
+  }
+
+  .backLink {
+    min-height: 44px;
+  }
+
+  .switchButton {
+    height: 40px;
+    padding: 0 14px;
+  }
+
+  .tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .nameInput,
+  .primaryButton {
+    height: 44px;
+  }
+
+  .nameInput {
+    flex-basis: 100%;
+    max-width: none;
+    font-size: 16px;
+  }
+
+  .primaryButton {
+    flex: 1 1 100%;
+  }
+
+  .linkButton {
+    min-height: 44px;
+  }
+
+  .outliersSummary {
+    min-height: 44px;
+    align-items: center;
+  }
+}

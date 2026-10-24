@@ -11,7 +11,7 @@ import { useEffect, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getAuthMe } from '../../api/client'
 import { AUTH_ME_QUERY_KEY } from '../settings/queryKeys'
-import { setLoaded, useAuth } from './authState'
+import { setLoaded, showsLoadFailed, useAuth } from './authState'
 import { LoginScreen } from './LoginScreen'
 
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -26,7 +26,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     setLoaded(meQuery.data.mode, user ? { ...user, avatar_url: user.avatar_url ?? null } : null)
   }, [meQuery.data])
 
-  if (meQuery.isError) {
+  if (showsLoadFailed(meQuery.isError, auth)) {
     return <LoginScreen loadFailed onRetry={() => void meQuery.refetch()} />
   }
 

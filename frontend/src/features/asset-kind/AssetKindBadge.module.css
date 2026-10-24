@@ -1,0 +1,30 @@
+/* 種別のバッジ。色はリボンと同じ `--color-kind-*`。 */
+.badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--kind-badge-color);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.badge[data-tone='upload'] {
+  --kind-badge-color: var(--color-kind-upload);
+}
+
+.badge[data-tone='handmade'] {
+  --kind-badge-color: var(--color-kind-handmade);
+}
+
+.badge[data-tone='imported'] {
+  --kind-badge-color: var(--color-kind-imported);
+}
+
+.badge svg {
+  stroke-width: 2.2;
+}

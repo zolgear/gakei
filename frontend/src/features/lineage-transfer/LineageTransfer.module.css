@@ -150,23 +150,16 @@
   font-size: 13px;
 }
 
-/* ストックの「系列を取り込む」(画像の追加の下に置く、控えめな行)。 */
-.importBar {
+/* ストックの「系列を取り込む」の進み具合(見出しの下に、送っている間だけ出す)。 */
+.importStatus {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  height: 32px;
-  background: transparent;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text-muted);
-  font-size: 12px;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.importBar:disabled {
-  opacity: 0.8;
+.importStatusText {
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
 .progressTrack {
@@ -240,10 +233,5 @@
   .primaryButton,
   .secondaryButton {
     min-height: 44px;
-  }
-
-  .importBar {
-    height: 44px;
-    font-size: 13px;
   }
 }

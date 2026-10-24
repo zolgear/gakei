@@ -26,6 +26,8 @@ import { RatingBadge } from '../content-rating/RatingBadge'
 import ratingStyles from '../content-rating/ContentRating.module.css'
 import styles from './MapPreviewPanel.module.css'
 import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
+import { AssetFavoriteButton } from '../history/AssetFavoriteButton'
+import { LineageIcon } from '../../components/icons'
 
 interface MapPreviewPanelProps {
   assetId: string
@@ -91,6 +93,23 @@ export function MapPreviewPanel({
         <h2 className={styles.title} title={title}>
           {title}
         </h2>
+        <Link
+          to={`/lineage/${assetId}`}
+          className={styles.iconButton}
+          aria-label={m.lineageGraph}
+          title={m.lineageGraph}
+        >
+          <LineageIcon size={15} />
+        </Link>
+        {/* お気に入り(ADR-0055)。詳細が届くまでは状態が分からないので出さない。 */}
+        {asset && (
+          <AssetFavoriteButton
+            assetId={assetId}
+            favorite={asset.favorite}
+            disabled={Boolean(asset.deleted_at)}
+            className={styles.iconButton}
+          />
+        )}
         <button
           ref={collapseRef}
           type="button"
@@ -134,7 +153,6 @@ export function MapPreviewPanel({
         </Link>
 
         <div className={styles.actions}>
-          <Link to={`/lineage/${assetId}`}>{m.lineageGraph}</Link>
           <Link to={buildSimilarSearchPath(assetId)}>{m.similarInSearch}</Link>
         </div>
 

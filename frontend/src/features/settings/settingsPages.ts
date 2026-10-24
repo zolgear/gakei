@@ -20,6 +20,7 @@ export type SettingsPageId =
   | 'embeddings'
   | 'assistant'
   | 'regionDetection'
+  | 'groupNaming'
   | 'comfyui'
   | 'sdwebui'
   | 'tagDictionary'
@@ -41,6 +42,7 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   embeddings: 'embeddings',
   assistant: 'assistant',
   regionDetection: 'region-detection',
+  groupNaming: 'group-naming',
   comfyui: 'comfyui',
   sdwebui: 'sdwebui',
   tagDictionary: 'tag-dictionary',
@@ -60,6 +62,7 @@ export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
   'embeddings',
   'assistant',
   'regionDetection',
+  'groupNaming',
   'comfyui',
   'sdwebui',
   'mcp',

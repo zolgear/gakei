@@ -39,7 +39,7 @@
 | ADR-0033 | [0033-image-embeddings.md](0033-image-embeddings.md) | 画像の埋め込み(CLIP 系)で、文章での検索、似た画像、重複の検出、マップを作る | Proposed |
 | ADR-0034 | [0034-auth-settings-in-admin-ui.md](0034-auth-settings-in-admin-ui.md) | 認証の設定を管理者設定の画面から行う | Proposed |
 | ADR-0035 | [0035-hide-sketch-mask-in-stock.md](0035-hide-sketch-mask-in-stock.md) | スケッチとマスクをストックに出すかを選べるようにする(既定は出さない) | Proposed |
-| ADR-0036 | [0036-derived-image-version.md](0036-derived-image-version.md) | 派生画像(サムネイル・プレビュー)に版を持たせ、無ければその場で作る | Proposed |
+| ADR-0036 | [0036-derived-image-version.md](0036-derived-image-version.md) | 派生画像(サムネイル・カード・プレビュー)に版を持たせ、無ければその場で作る(2026-10-23: 長辺 1024px のカードを追加) | Proposed |
 | ADR-0037 | [0037-lineage-export-import.md](0037-lineage-export-import.md) | 系列の持ち出し(ZIP)と、別の利用者・インスタンスへの取り込み | Proposed |
 | ADR-0038 | [0038-sd-webui-provider.md](0038-sd-webui-provider.md) | Stable Diffusion WebUI(A1111 互換の API)をプロバイダーに加える | Proposed |
 | ADR-0039 | [0039-prompt-tag-editing.md](0039-prompt-tag-editing.md) | プロンプトをタグで編集する(画像のタグのコピーと、タグ編集モード) | Proposed |
@@ -57,5 +57,8 @@
 | ADR-0051 | [0051-mods-and-hooks.md](0051-mods-and-hooks.md) | Mod とフック(取り込み・AI へ送る前・生成後に、外部のシステムや手元の処理をつなぐ) | Accepted |
 | ADR-0052 | [0052-comfyui-binding-map.md](0052-comfyui-binding-map.md) | ComfyUI ワークフローの読み取りと差し込み先の図 | Accepted |
 | ADR-0053 | [0053-region-boxes.md](0053-region-boxes.md) | 領域の指示(入力画像に四角を描き、四角ごとに指示を書く。四角の検出は VLM) | Accepted |
+| ADR-0054 | [0054-history-sort.md](0054-history-sort.md) | 履歴の並べ替え(日付・グループ・似た画像の順) | Proposed |
+| ADR-0055 | [0055-favorites.md](0055-favorites.md) | お気に入り(履歴の画像に印を付け、印で絞り込む。`asset_mark` の最初の実装) | Proposed |
+| ADR-0056 | [0056-group-suggestions.md](0056-group-suggestions.md) | グループの提案(画像の埋め込みで集まりを見つけ、グループにする案を出す) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

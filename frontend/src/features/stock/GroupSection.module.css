@@ -205,9 +205,11 @@
   padding-left: 18px;
 }
 
+/* 列の数はサイドバーの幅に応じる(既定の幅 288px では 2 列。広げると 3 列、4 列と増える)。
+   タイルの下端に重ねる操作(最大 3 つ)が1行に収まる幅を下限にする。 */
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
   gap: 8px;
 }
 

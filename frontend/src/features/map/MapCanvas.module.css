@@ -134,6 +134,8 @@
 .selectionThumbLink {
   position: relative;
   flex-shrink: 0;
+  /* カードの高さに合わせて縦に伸ばさない(サムネイルは正方形のまま)。 */
+  align-self: flex-start;
   display: block;
   cursor: pointer;
   border-radius: var(--radius-sm);
@@ -176,7 +178,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-right: 52px;
+  padding-right: 92px;
 }
 
 .selectionTitle {
@@ -189,11 +191,6 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   word-break: break-word;
-}
-
-.selectionMeta {
-  font-size: 11px;
-  color: var(--color-text-muted);
 }
 
 .selectionLinks {
@@ -262,7 +259,7 @@
   }
 
   .selectionBody {
-    padding-right: 76px;
+    padding-right: 116px;
   }
 
   .selectionLinks {

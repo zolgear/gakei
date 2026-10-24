@@ -24,6 +24,7 @@ from app.domain import (
     annotation_settings,
     assistant_settings,
     embedding_settings,
+    group_naming_settings,
     llm_connections,
     region_detection_settings,
 )
@@ -82,6 +83,8 @@ def _feature_name(feature: str) -> str:
         return t("settings.llmConnections.features.assistant")
     if feature == region_detection_settings.FEATURE_ID:
         return t("settings.llmConnections.features.region_detection")
+    if feature == group_naming_settings.FEATURE_ID:
+        return t("settings.llmConnections.features.group_naming")
     return feature
 
 

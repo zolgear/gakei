@@ -26,6 +26,7 @@ from app.deps import (
 )
 from app.domain import content_rating, content_withholding, focal_points
 from app.domain import run_create as run_create_domain
+from app.domain.history_filters import HistoryLabelFilter, HistoryShape
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
     Asset,
@@ -38,13 +39,11 @@ from app.domain.models import (
 from app.domain.run_views import (
     bulk_asset_groups,
     bulk_descendant_run_counts,
-    bulk_input_summary,
     bulk_output_refs,
-    bulk_parent_content_ratings,
-    bulk_parent_focal_points,
-    bulk_parent_withheld,
     bulk_users,
+    run_has_favorite_output,
     run_summary_fields,
+    summarize_runs,
     visible_runs_query,
 )
 from app.domain.schemas import (
@@ -56,7 +55,6 @@ from app.domain.schemas import (
     RunImportInfo,
     RunInputRef,
     RunListResponse,
-    RunSummary,
 )
 from app.domain.visibility import get_visible_run, visible_asset_ids
 from app.i18n import t
@@ -78,7 +76,7 @@ def _to_detail(db: Session, run: Run, user: CurrentUser) -> RunDetail:
         .scalars()
         .all()
     )
-    outputs = bulk_output_refs(db, [run.id])[run.id]
+    outputs = bulk_output_refs(db, [run.id], viewer=user)[run.id]
     input_count = sum(1 for i in inputs if i.role == RunInputRole.IMAGE)
     # ADR-0025: 見えない Asset(以前のデータで他人の Asset を入力にしていた場合)は、
     # 入力の一覧・主たる親に出さない(id も返さない)。枚数は Run 自身の情報なので数える。
@@ -190,11 +188,25 @@ def create_run(
 def list_runs(
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
+    favorite: bool = Query(
+        default=False, description="true: お気に入りの出力を1つ以上持つ Run だけ(ADR-0055)"
+    ),
+    shape: HistoryShape | None = Query(
+        default=None,
+        description="出力(削除されていないもの)のどれかがこの形の Run だけ(ADR-0055 4章)",
+    ),
+    transparent: bool = Query(default=False, description="true: 背景を透過で頼んだ Run だけ"),
+    regions: bool = Query(default=False, description="true: 領域の四角を付けた Run だけ(ADR-0053)"),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> RunListResponse:
     # ADR-0025: 見える Run だけ(App バーの実行中・待機中の件数もこの一覧から数える)。
     query = visible_runs_query(user)
+    if favorite:
+        query = query.where(run_has_favorite_output(user))
+    labels = HistoryLabelFilter(shape=shape, transparent=transparent, regions=regions)
+    for condition in labels.run_conditions():
+        query = query.where(condition)
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)
@@ -212,32 +224,8 @@ def list_runs(
     has_more = len(rows) > limit
     rows = rows[:limit]
 
-    # 1ページ分の run_id をまとめて引く(N+1 を避ける)。
-    run_ids = [r.id for r in rows]
-    outputs_map = bulk_output_refs(db, run_ids)
-    inputs_map = bulk_input_summary(db, run_ids, user)
-    descendant_map = bulk_descendant_run_counts(db, run_ids, user)
-    users_map = bulk_users(db, [r.created_by_user_id for r in rows])
-    groups_map = bulk_asset_groups(db, [r.asset_group_id for r in rows], user)
-    parent_focals = bulk_parent_focal_points(db, inputs_map)
-    parent_ratings = bulk_parent_content_ratings(db, inputs_map)
-    parent_withheld = bulk_parent_withheld(db, inputs_map)
-    items = [
-        RunSummary(
-            **run_summary_fields(
-                r,
-                outputs_map[r.id],
-                *inputs_map[r.id],
-                descendant_map[r.id],
-                users_map.get(r.created_by_user_id),
-                groups_map.get(r.asset_group_id),
-                primary_parent_focal_point=parent_focals.get(inputs_map[r.id][1]),
-                primary_parent_content_rating=parent_ratings.get(inputs_map[r.id][1]),
-                primary_parent_content_withheld=inputs_map[r.id][1] in parent_withheld,
-            )
-        )
-        for r in rows
-    ]
+    # 1ページ分をまとめて引く(N+1 を避ける)。
+    items = summarize_runs(db, rows, user)
 
     next_cursor = encode_cursor(rows[-1].queued_at, rows[-1].id) if has_more and rows else None
     return RunListResponse(items=items, next_cursor=next_cursor)

@@ -25,6 +25,7 @@ import { restoreRunRegions, stripAppendedText } from '../regions/regions'
 import { RunRegionsSection } from '../regions/RunRegionsSection'
 import {
   comfyuiPromptDownloadFilename,
+  comfyuiPromptDownloadJson,
   extractComfyUiPrompt,
   comfyUiSeedTooltip,
   describeComfyUiSeed,
@@ -150,8 +151,9 @@ export function RunDetailContent({ runId, compact = false, promptActions }: RunD
   })
 
   function handleDownloadComfyuiPrompt() {
-    if (!comfyuiPrompt) return
-    const blob = new Blob([JSON.stringify(comfyuiPrompt, null, 2)], { type: 'application/json' })
+    const json = comfyuiPromptDownloadJson(rawParams)
+    if (!json) return
+    const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

@@ -49,10 +49,11 @@ import { useDebouncedValue } from '../features/search/useDebouncedValue'
 import { EMBEDDING_SETTINGS_QUERY_KEY } from '../features/settings/queryKeys'
 import { invalidateAssetGroupQueries } from '../features/stock/groups/assetGroupQueries'
 import { fmt, intlLocale, useI18n } from '../i18n'
-import { assetKindLabel, formatBytes, formatDateTime } from '../lib/format'
+import { formatBytes, formatDateTime } from '../lib/format'
 import { useBackNavigate } from '../lib/useBackNavigate'
 import { useIsMobileViewport } from '../lib/viewport'
 import { AssetThumb } from '../features/content-rating/AssetThumb'
+import { AssetKindRibbon } from '../features/asset-kind/AssetKindRibbon'
 import { thumbRating } from '../features/content-rating/contentRating'
 import styles from './DuplicatesPage.module.css'
 import { focalStyle } from '../lib/focalPoint'
@@ -325,12 +326,14 @@ function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleS
             rating={thumbRating(asset)}
             withheld={asset.content_withheld}
             badge
+            badgePosition="bottom-right"
             className={`${styles.thumb} checkerboard`}
             style={focalStyle(asset.focal_point)}
             alt=""
             draggable={false}
           />
         </button>
+        <AssetKindRibbon kind={asset.kind} imported={asset.imported} />
         {first && (
           <span className={styles.firstBadge} title={m.firstBadgeTitle}>
             {m.firstBadge}
@@ -352,7 +355,7 @@ function DuplicateTile({ asset, first, selectable, selected, deleting, onToggleS
       </span>
       {/* 狭いタイルでも切れないよう短い日時にし、秒まで含めた値はツールチップに出す。 */}
       <span className={styles.tileMeta} title={formatDateTime(asset.created_at)}>
-        {assetKindLabel(asset.kind)} · {formatCompactDateTime(asset.created_at, intlLocale(locale))}
+        {formatCompactDateTime(asset.created_at, intlLocale(locale))}
       </span>
       <div className={styles.tileFooter}>
         {/* 狭いタイルでも1行に収まるよう数だけ出し、「類似度」はツールチップと読み上げに回す。 */}

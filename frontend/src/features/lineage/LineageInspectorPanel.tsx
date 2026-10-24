@@ -23,6 +23,7 @@ import { RunDetailIcon } from '../../components/icons'
 import { RunDetailContent } from '../run-detail/RunDetailContent'
 import { useI18n } from '../../i18n'
 import { LineageAssetInspectorContent } from './LineageAssetInspectorContent'
+import { AssetFavoriteButton } from '../history/AssetFavoriteButton'
 import { EmbeddedNodeInspector } from './EmbeddedNodeInspector'
 import type { InspectorContent } from './inspectorContent'
 import styles from './LineageInspectorPanel.module.css'
@@ -46,6 +47,24 @@ export interface LineageInspectorPanelProps {
    * 省略時は Run 詳細ページ(`/runs/:id`)へのリンクにする。
    */
   onOpenRun?: (runId: string) => void
+}
+
+/**
+ * 表示中の Asset のお気に入り(ADR-0055)。詳細が届くまでは出さない(状態が分からないため)。
+ * 削除済みの Asset には付け外しできないので押せない状態で出す。
+ */
+function AssetFavoriteToggle({ assetId }: { assetId: string }) {
+  const assetQuery = useQuery({ queryKey: ['asset', assetId], queryFn: () => getAsset(assetId) })
+  const asset = assetQuery.data
+  if (!asset) return null
+  return (
+    <AssetFavoriteButton
+      assetId={assetId}
+      favorite={asset.favorite}
+      disabled={Boolean(asset.deleted_at)}
+      className={styles.iconButton}
+    />
+  )
 }
 
 /** 表示中の Asset の生成元 Run を開くアイコン。生成元の Run が無い Asset(アップロードなど)では出さない。 */
@@ -143,6 +162,7 @@ export function LineageInspectorPanel({
               {t.lineage.openDetailPage}
             </Link>
           )}
+          {content.kind === 'asset' && <AssetFavoriteToggle assetId={content.id} />}
           {content.kind === 'asset' && <OpenProducingRunButton assetId={content.id} onOpenRun={onOpenRun} />}
           <button type="button" className={styles.closeButton} aria-label={t.lineage.close} onClick={onClose}>
             ×

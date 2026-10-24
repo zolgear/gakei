@@ -284,11 +284,75 @@ def test_resolve_prompt_injects_only_with_regions() -> None:
     injected = resolve_prompt(
         clone(BBOX_LAYOUT_GRAPH), bindings, [], **common, bounding_boxes=value
     )
-    assert injected["20"]["inputs"]["bboxes"] == value
-    assert injected["20"]["inputs"]["last_incoming"] == {"__value__": []}
-    # キャンバスの値は変えない(四角の無い Run ではこちらが使われる)。
+    # 大きさが決まるので、四角はキャンバスの値にだけ書く(出力 PNG を ComfyUI に読み込み直した
+    # ときに出る)。`bboxes` と `last_incoming` は残さない。
+    assert "bboxes" not in injected["20"]["inputs"]
+    assert "last_incoming" not in injected["20"]["inputs"]
+    assert injected["20"]["inputs"]["editor_state"] == {
+        "__value__": [
+            {
+                "x": 0,
+                "y": 0,
+                "width": 512,
+                "height": 512,
+                "metadata": {"type": "obj", "text": "", "desc": "a cat", "palette": []},
+            }
+        ]
+    }
+    # 四角の無い Run ではテンプレートのキャンバスの値のまま。
     canvas = BBOX_LAYOUT_GRAPH["20"]["inputs"]["editor_state"]
-    assert injected["20"]["inputs"]["editor_state"] == canvas
+    assert untouched["20"]["inputs"]["editor_state"] == canvas
+
+
+def test_to_editor_state_matches_node_pixels() -> None:
+    regions = [
+        _region(1, [0.1, 0.2, 0.55, 0.9], instruction="a red hat"),
+        _region(2, [0.3333, 0.0005, 0.6667, 0.25], text="OPEN", label="sign"),
+    ]
+    elements = bb.to_elements(regions)
+    # 非正方形。ノードの elements_to_boxes(偶数丸め)と同じピクセルになる。
+    for width, height in [(1344, 768), (832, 1216), (1000, 1000)]:
+        state = bb.to_editor_state(elements, width, height)
+        expected = _node_elements_to_boxes(elements, width, height)
+        for got, want in zip(state, expected, strict=True):
+            assert {k: got[k] for k in ("x", "y", "width", "height")} == {
+                k: want[k] for k in ("x", "y", "width", "height")
+            }
+            assert got["metadata"] == {**want["metadata"], "palette": []}
+    [hat, sign] = bb.to_editor_state(elements, 1344, 768)
+    assert hat["metadata"] == {"type": "obj", "text": "", "desc": "a red hat", "palette": []}
+    assert sign["metadata"] == {"type": "text", "text": "OPEN", "desc": "sign", "palette": []}
+
+
+def test_to_editor_state_rounds_half_to_even() -> None:
+    # 0.125 * 100 = 12.5 → 12、0.375 * 100 = 37.5 → 38(Python の round)。
+    elements = [{"type": "obj", "bbox": [125, 125, 375, 375], "desc": ""}]
+    [box] = bb.to_editor_state(elements, 100, 100)
+    assert (box["x"], box["y"], box["width"], box["height"]) == (12, 12, 25, 25)
+
+
+def test_inject_follows_primitive_int_for_size() -> None:
+    graph = clone(BBOX_LAYOUT_GRAPH)
+    graph["30"] = {"class_type": "PrimitiveInt", "inputs": {"value": 1344}}
+    graph["31"] = {"class_type": "PrimitiveInt", "inputs": {"value": 768}}
+    graph["20"]["inputs"]["width"] = ["30", 0]
+    graph["20"]["inputs"]["height"] = ["31", 0]
+    value = bb.encode([_region(1, [0.25, 0.5, 0.75, 1.0], label="a cat")])
+    bb.inject(graph, "20", value)
+    [box] = graph["20"]["inputs"]["editor_state"]["__value__"]
+    assert (box["x"], box["y"], box["width"], box["height"]) == (336, 384, 672, 384)
+
+
+def test_inject_clears_editor_state_when_size_unknown() -> None:
+    graph = clone(BBOX_LAYOUT_GRAPH)
+    # 配線先が整数の定数を持たない(計算するノード)。
+    graph["30"] = {"class_type": "SomeMath", "inputs": {"a": 1, "b": 2}}
+    graph["20"]["inputs"]["width"] = ["30", 0]
+    value = bb.encode([_region(1, [0.0, 0.0, 0.5, 0.5])])
+    bb.inject(graph, "20", value)
+    assert graph["20"]["inputs"]["editor_state"] == {"__value__": []}
+    assert graph["20"]["inputs"]["bboxes"] == value
+    assert graph["20"]["inputs"]["last_incoming"] == {"__value__": []}
 
 
 # -- Run の作成と実行(API を通す) ------------------------------------------------------
@@ -415,13 +479,18 @@ def test_comfyui_run_injects_boxes_without_input_image(comfy_client: TestClient)
         '{"type":"text","bbox":[500,500,1000,1000],"text":"OPEN","desc":""}]'
     )
     # run.params に差し込んだ値が入る。プロンプトに文は足さない。
+    # 大きさが決まるので、キャンバスの値(ピクセル)にだけ書き、`bboxes` と `last_incoming` は消す。
     node = detail["params"]["comfyui_prompt"]["20"]["inputs"]
-    assert node["bboxes"] == expected
-    assert node["last_incoming"] == {"__value__": []}
+    assert "bboxes" not in node
+    assert "last_incoming" not in node
+    width, height = node["width"], node["height"]
+    assert node["editor_state"] == {
+        "__value__": bb.to_editor_state(json.loads(expected), width, height)
+    }
     assert detail["params"]["comfyui_bounding_boxes"] == {"node": "20", "input": "bboxes"}
     assert detail["prompt"] == "a cozy room"
     # 送ったグラフにも同じ値。
-    assert fake.queued_prompts[0]["prompt"]["20"]["inputs"]["bboxes"] == expected
+    assert fake.queued_prompts[0]["prompt"]["20"]["inputs"]["editor_state"] == node["editor_state"]
 
     record = detail["regions"]
     assert record["delivery"] == "comfyui_bboxes"
@@ -503,3 +572,16 @@ def test_comfyui_run_rejects_regions_without_binding(comfy_client: TestClient) -
     _install_fake(comfy_client, _fake_with_output())
     response = _run(comfy_client, workflow_id, [{"number": 1, "box": [0.1, 0.1, 0.4, 0.4]}])
     assert response.status_code == 422, response.text
+
+
+def test_inject_drops_bboxes_wire_when_size_known() -> None:
+    # 大きさが決まれば、上流の配線も外してキャンバスの値だけにする(読み込み直しで四角が戻る形)。
+    graph = clone(BBOX_LAYOUT_GRAPH)
+    graph["20"]["inputs"]["bboxes"] = ["30", 0]
+    graph["20"]["inputs"]["last_incoming"] = {"__value__": []}
+    value = bb.encode([_region(1, [0.0, 0.0, 0.5, 0.5], label="a cat")])
+    bb.inject(graph, "20", value)
+    inputs = graph["20"]["inputs"]
+    assert "bboxes" not in inputs
+    assert "last_incoming" not in inputs
+    assert len(inputs["editor_state"]["__value__"]) == 1
