@@ -93,9 +93,10 @@
   gap: 28px;
 }
 
+/* 列の最小の幅・間・狭い画面の列の数は、石積み・行揃え(`HistoryGallery.tsx`)と同じにする。 */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
   align-content: start;
 }
@@ -131,7 +132,7 @@
   }
 
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .segment {

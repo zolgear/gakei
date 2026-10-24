@@ -66,8 +66,9 @@ export function useHistoryRunActions(
       )
       // 出力 Asset も削除されたので、ストック等のキャッシュも整合させる。
       queryClient.invalidateQueries({ queryKey: ['assets'] })
-      // 画像単位の履歴(グループ・似た順。ADR-0054)からも外す。
+      // 画像単位の履歴(グループ・似た順。ADR-0054)と、絞り込んだ日付の並びからも外す。
       queryClient.invalidateQueries({ queryKey: ['history-assets'] })
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'runs' && query.queryKey.length > 1 })
     },
     onError: (err: unknown) => {
       setDeleteConfirmOpen(false)

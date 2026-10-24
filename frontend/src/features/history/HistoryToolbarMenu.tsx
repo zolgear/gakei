@@ -2,8 +2,9 @@
  * 履歴のツールバーの、アイコンのボタン1つと小さなメニュー(状態の絞り込み、並べ替え)。
  * 押すとメニューで選ぶ(`menuitemradio`)。既定以外を選んでいる間は、ボタンをアクセント色にして
  * 小さな点を付ける(文字のラベルは足さない)。
- * 選択肢とは独立の切り替え(`toggles`。絞り込みの「お気に入り」。ADR-0055)は、区切り線の下に
- * `menuitemcheckbox` で置く。
+ * 選択肢とは別の選択(`groups`。絞り込みの形)は、区切り線の下にもう1組の `menuitemradio` で置く。
+ * 選択肢とは独立の切り替え(`toggles`。絞り込みの「お気に入り」「透過」「領域」。ADR-0055)は、
+ * 区切り線の下に `menuitemcheckbox` で置く。
  * 外側のクリック(pointerdown)と Esc で閉じ、選んだら閉じる(`shell/UserMenu.tsx` と同じ作り)。
  * 上下の矢印キーで項目を移る。
  */
@@ -22,6 +23,16 @@ export interface HistoryToolbarMenuToggle {
   onChange: (checked: boolean) => void
 }
 
+/** 選択肢とは別の、1つを選ぶ組(絞り込みの形など)。 */
+export interface HistoryToolbarMenuGroup {
+  id: string
+  /** 組の aria-label。 */
+  label: string
+  options: HistoryToolbarMenuOption<string>[]
+  value: string
+  onChange: (value: string) => void
+}
+
 interface HistoryToolbarMenuProps<T extends string> {
   /** ボタンとメニューの aria-label・title。 */
   label: string
@@ -31,6 +42,8 @@ interface HistoryToolbarMenuProps<T extends string> {
   onChange: (value: T) => void
   /** 既定以外を選んでいるか(ボタンに印を付ける)。 */
   active: boolean
+  /** 選択肢の下に置く、別の選択の組。 */
+  groups?: HistoryToolbarMenuGroup[]
   /** 選択肢の下に置く、独立の切り替え。 */
   toggles?: HistoryToolbarMenuToggle[]
 }
@@ -42,6 +55,7 @@ export function HistoryToolbarMenu<T extends string>({
   value,
   onChange,
   active,
+  groups = [],
   toggles = [],
 }: HistoryToolbarMenuProps<T>) {
   const [open, setOpen] = useState(false)
@@ -85,6 +99,12 @@ export function HistoryToolbarMenu<T extends string>({
     triggerRef.current?.focus()
   }
 
+  function selectInGroup(group: HistoryToolbarMenuGroup, next: string) {
+    group.onChange(next)
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
+
   function toggle(item: HistoryToolbarMenuToggle) {
     item.onChange(!item.checked)
     setOpen(false)
@@ -124,6 +144,26 @@ export function HistoryToolbarMenu<T extends string>({
               </span>
               {option.label}
             </button>
+          ))}
+          {groups.map((group) => (
+            <div key={group.id} role="group" aria-label={group.label}>
+              <div role="separator" className={styles.separator} />
+              {group.options.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={group.value === option.id}
+                  className={styles.item}
+                  onClick={() => selectInGroup(group, option.id)}
+                >
+                  <span className={styles.check} aria-hidden="true">
+                    {group.value === option.id ? '✓' : ''}
+                  </span>
+                  {option.label}
+                </button>
+              ))}
+            </div>
           ))}
           {toggles.length > 0 && <div role="separator" className={styles.separator} />}
           {toggles.map((item) => (

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildParamChips,
-  buildParamChipsWithActualSize,
   formatTokenCount,
   formatTokenCountWithCost,
 } from './historyChips'
@@ -77,34 +76,5 @@ describe('formatTokenCountWithCost', () => {
 
   it('$0.0005 未満は < $0.001', () => {
     expect(formatTokenCountWithCost({ total_tokens: 10 }, 0.0001)).toBe('10 tok · < $0.001')
-  })
-})
-
-describe('buildParamChipsWithActualSize', () => {
-  const output = { width: 832, height: 1216 }
-
-  it('size が実寸と同じなら今のチップのまま', () => {
-    expect(buildParamChipsWithActualSize({ size: '832x1216', quality: 'high' }, output)).toEqual([
-      '832x1216',
-      'high',
-    ])
-  })
-
-  it('size が無い・auto なら実寸をサイズのチップにする', () => {
-    expect(buildParamChipsWithActualSize({ quality: 'high' }, output)).toEqual(['832x1216', 'high'])
-    expect(buildParamChipsWithActualSize({ size: 'auto', n: 2 }, output)).toEqual(['832x1216', '×2'])
-    expect(buildParamChipsWithActualSize(undefined, output)).toEqual(['832x1216'])
-  })
-
-  it('size が実寸と違うなら実寸だけを出し、同じ値を2つ並べない', () => {
-    expect(buildParamChipsWithActualSize({ size: '1024x1024', quality: 'low' }, output)).toEqual([
-      '832x1216',
-      'low',
-    ])
-  })
-
-  it('実寸が分からなければ今のチップのまま', () => {
-    expect(buildParamChipsWithActualSize({ size: 'auto' }, undefined)).toEqual(['auto'])
-    expect(buildParamChipsWithActualSize({ size: 'auto' }, { width: null, height: null })).toEqual(['auto'])
   })
 })

@@ -12,7 +12,11 @@
  * メニューの「お気に入り」でサーバー側で絞る(日付は `GET /api/runs?favorite=true`、画像単位は
  * `GET /api/history/assets?favorite=true`)。絞り込みの中で外したカードは、切り替えるまで残す。
  *
- * 絞り込み(状態とお気に入り)は URL のクエリに置く(`historyFilterUrl.ts`)。リロードしても残り、
+ * 形・透過・領域(詳細のカードのラベルと対。`historyLabels.ts`)も、お気に入りと同じくサーバー側で
+ * 絞る(`shape` / `transparent` / `regions`。日付・グループ・似た順のどれでも)。日付の並びで形を
+ * 絞るときは、出力ごとのカードのうちその形のものだけを出す。
+ *
+ * 絞り込み(状態・お気に入り・形・透過・領域)は URL のクエリに置く(`historyFilterUrl.ts`)。リロードしても残り、
  * 戻る/進むではその時の絞り込みに戻る。切り替えは履歴を積まない(replace)。App バーの「履歴」から
  * 入り直すと `/` なので外れる(履歴を開いている間の再タップは先頭へ戻すだけで、絞り込みは残す)。
  *
@@ -44,10 +48,21 @@ import { effectiveHistorySort, setHistorySort, useHistorySort } from '../feature
 import { daySections, groupSections, similaritySections } from '../features/history/historySections'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { CardDetailIcon, CardMasonryIcon, CardRowsIcon } from '../components/icons'
-import { filterRuns, type StatusFilter } from '../features/history/historyFilters'
-import { historyFilterSearchParams, parseHistoryFilter } from '../features/history/historyFilterUrl'
+import { filterRuns } from '../features/history/historyFilters'
+import {
+  hasLabelFilter,
+  historyFilterSearchParams,
+  historyServerFilter,
+  parseHistoryFilter,
+  type HistoryFilter,
+} from '../features/history/historyFilterUrl'
+import { outputShape } from '../features/history/historyLabels'
 import { collectFavoriteIds, shownWhileFavoriteOnly } from '../features/history/favorites'
-import { FavoriteToggleContext, useFavoriteToggle } from '../features/history/useFavoriteToggle'
+import {
+  FavoriteToggleContext,
+  isFavoriteFilteredKey,
+  useFavoriteToggle,
+} from '../features/history/useFavoriteToggle'
 import { ToastHost, useToast } from '../components/Toast'
 import { hasNewlySucceededRun } from '../features/run-status/assetInvalidation'
 import { hasActiveRuns, countQueue } from '../shell/queueStatus'
@@ -78,9 +93,14 @@ export function HistoryPage() {
   ]
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const { status: statusFilter, favoriteOnly } = parseHistoryFilter(searchParams)
+  const filter = useMemo(() => parseHistoryFilter(searchParams), [searchParams])
+  const { status: statusFilter, favoriteOnly, shape: shapeFilter } = filter
+  // サーバーで絞るもの(お気に入り・形・透過・領域)。一覧の API のクエリと react-query のキーに使う。
+  const serverFilter = useMemo(() => historyServerFilter(filter), [filter])
+  const serverFiltered = Object.keys(serverFilter).length > 0
+  const labelFiltered = hasLabelFilter(filter)
   // 切り替えはブラウザの履歴を積まない(戻るで絞り込みを1つずつ戻すより、前の画面へ戻るほうが自然)。
-  const setFilter = (patch: { status?: StatusFilter; favoriteOnly?: boolean }) =>
+  const setFilter = (patch: Partial<HistoryFilter>) =>
     setSearchParams(
       (prev) => historyFilterSearchParams(prev, { ...parseHistoryFilter(prev), ...patch }),
       { replace: true },
@@ -121,25 +141,26 @@ export function HistoryPage() {
   // グループと似た順(画像単位)。
   const assetSort = sort === 'group' || sort === 'embedding' ? sort : null
 
-  // お気に入りの絞り込み(ADR-0055)。日付の並びは別のキーで取る(上の ['runs'] はポーリングに使い続ける)。
-  const favoriteRunsQuery = useInfiniteQuery({
-    queryKey: ['runs', { favorite: true }],
+  // サーバーで絞る一覧(お気に入り。ADR-0055。形・透過・領域)。日付の並びは別のキーで取る(上の
+  // ['runs'] はポーリングに使い続ける)。
+  const filteredRunsQuery = useInfiniteQuery({
+    queryKey: ['runs', serverFilter],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      listRuns({ limit: 30, cursor: pageParam, favorite: true }),
+      listRuns({ limit: 30, cursor: pageParam, ...serverFilter }),
     initialPageParam: undefined as string | undefined,
     gcTime: RUNS_GC_TIME_MS,
-    enabled: favoriteOnly && !assetSort,
+    enabled: serverFiltered && !assetSort,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
 
   const assetsQuery = useInfiniteQuery({
-    queryKey: favoriteOnly ? ['history-assets', assetSort, { favorite: true }] : ['history-assets', assetSort],
+    queryKey: serverFiltered ? ['history-assets', assetSort, serverFilter] : ['history-assets', assetSort],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
       listHistoryAssets({
         sort: assetSort ?? 'group',
         limit: 30,
         cursor: pageParam,
-        ...(favoriteOnly ? { favorite: true } : {}),
+        ...serverFilter,
       }),
     initialPageParam: undefined as string | undefined,
     gcTime: RUNS_GC_TIME_MS,
@@ -163,7 +184,7 @@ export function HistoryPage() {
     queryClient.removeQueries({ queryKey: ['history-assets', 'embedding'] })
     void queryClient.invalidateQueries({ queryKey: ['capabilities'] })
   }, [embeddingRejected, queryClient])
-  const dateQuery = favoriteOnly ? favoriteRunsQuery : runsQuery
+  const dateQuery = serverFiltered ? filteredRunsQuery : runsQuery
   const activeQuery = assetSort ? assetsQuery : dateQuery
 
   const hasNextPage = activeQuery.hasNextPage
@@ -175,15 +196,15 @@ export function HistoryPage() {
   useAutoLoadMore(scrollAreaRef, sentinelRef, { hasNextPage, isFetchingNextPage, isFetchNextPageError }, fetchNextPage)
 
   const allRuns = useMemo(() => runsQuery.data?.pages.flatMap((p) => p.items) ?? [], [runsQuery.data])
-  const favoriteRuns = useMemo(
-    () => favoriteRunsQuery.data?.pages.flatMap((p) => p.items) ?? [],
-    [favoriteRunsQuery.data],
+  const filteredRuns = useMemo(
+    () => filteredRunsQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [filteredRunsQuery.data],
   )
-  const dateRuns = favoriteOnly ? favoriteRuns : allRuns
+  const dateRuns = serverFiltered ? filteredRuns : allRuns
 
   // 絞り込みの中で一度でもお気に入りとして見えた出力。外してもその場に残す(切り替えたら忘れる)。
   const [keptFavorites, setKeptFavorites] = useState<ReadonlySet<string>>(EMPTY_IDS)
-  const nextKeptFavorites = favoriteOnly && !assetSort ? collectFavoriteIds(keptFavorites, favoriteRuns) : EMPTY_IDS
+  const nextKeptFavorites = favoriteOnly && !assetSort ? collectFavoriteIds(keptFavorites, filteredRuns) : EMPTY_IDS
   if (nextKeptFavorites !== keptFavorites) setKeptFavorites(nextKeptFavorites)
   const assetItems = useMemo<HistoryAssetItem[]>(
     () => assetsQuery.data?.pages.flatMap((p) => p.items) ?? [],
@@ -196,16 +217,19 @@ export function HistoryPage() {
   const { sections, total, filteredCount } = useMemo(() => {
     if (!assetSort) {
       const filtered = filterRuns(dateRuns, statusFilter)
-      // 出力が複数の Run は出力ごとのカードに展開し、日が変わる位置で節に分ける。お気に入りで絞って
-      // いる間は、お気に入りの出力のカードだけ。
+      // 出力が複数の Run は出力ごとのカードに展開し、日が変わる位置で節に分ける。お気に入り・形で
+      // 絞っている間は、その出力のカードだけ(サーバーは「どれかの出力が当たる Run」を返す)。
       let cards = expandHistoryCards(filtered)
       if (favoriteOnly) {
         cards = cards.filter((card) => shownWhileFavoriteOnly(card.run.outputs?.[card.outputIndex], keptFavorites))
       }
+      if (shapeFilter) {
+        cards = cards.filter((card) => outputShape(card.run.outputs?.[card.outputIndex]) === shapeFilter)
+      }
       return {
         sections: daySections(cards, intlLocale(locale), new Date().getFullYear()),
         total: dateRuns.length,
-        filteredCount: favoriteOnly ? cards.length : filtered.length,
+        filteredCount: favoriteOnly || shapeFilter ? cards.length : filtered.length,
       }
     }
     const allowed = new Set(filterRuns(assetItems.map((item) => item.run), statusFilter).map((run) => run.id))
@@ -218,7 +242,18 @@ export function HistoryPage() {
       total: assetItems.length,
       filteredCount: filtered.length,
     }
-  }, [assetSort, dateRuns, favoriteOnly, keptFavorites, assetItems, statusFilter, groupList, ungroupedLabel, locale])
+  }, [
+    assetSort,
+    dateRuns,
+    favoriteOnly,
+    shapeFilter,
+    keptFavorites,
+    assetItems,
+    statusFilter,
+    groupList,
+    ungroupedLabel,
+    locale,
+  ])
 
   const placeholder = historyPlaceholder({
     isLoading: activeQuery.isLoading,
@@ -226,8 +261,9 @@ export function HistoryPage() {
     hasData: activeQuery.data !== undefined,
     total,
     filteredCount,
-    filterActive: statusFilter !== 'all' || favoriteOnly,
+    filterActive: statusFilter !== 'all' || favoriteOnly || labelFiltered,
     favoriteOnly,
+    labelFiltered,
   })
 
   // ポーリング中(実行中の Run がある間)に succeeded へ変わった Run を検出したら、
@@ -240,6 +276,12 @@ export function HistoryPage() {
       invalidateAssetGroupQueries(queryClient)
       // 画像単位の並び(グループ・似た順)にも新しい画像が入る。
       queryClient.invalidateQueries({ queryKey: ['history-assets'] })
+      // 形・透過・領域で絞った日付の並びにも入る。お気に入りで絞ったものは、外したカードを残すため
+      // 取り直さない。
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'runs' && query.queryKey.length > 1 && !isFavoriteFilteredKey(query.queryKey),
+      })
     }
     prevRunStatusByIdRef.current = new Map(allRuns.map((run) => [run.id, run.status]))
   }, [allRuns, queryClient])
@@ -277,12 +319,7 @@ export function HistoryPage() {
               }}
               embeddingsAvailable={embeddingsAvailable}
             />
-            <HistoryStatusFilterMenu
-              value={statusFilter}
-              onChange={(status) => setFilter({ status })}
-              favoriteOnly={favoriteOnly}
-              onFavoriteOnlyChange={(value) => setFilter({ favoriteOnly: value })}
-            />
+            <HistoryStatusFilterMenu filter={filter} onChange={setFilter} />
           </div>
         </div>
 

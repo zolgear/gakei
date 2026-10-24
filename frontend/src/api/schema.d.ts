@@ -11305,6 +11305,12 @@ export interface operations {
                 cursor?: string | null;
                 /** @description true: お気に入りの出力を1つ以上持つ Run だけ(ADR-0055) */
                 favorite?: boolean;
+                /** @description 出力(削除されていないもの)のどれかがこの形の Run だけ(ADR-0055 4章) */
+                shape?: ("square" | "portrait" | "wide") | null;
+                /** @description true: 背景を透過で頼んだ Run だけ */
+                transparent?: boolean;
+                /** @description true: 領域の四角を付けた Run だけ(ADR-0053) */
+                regions?: boolean;
             };
             header?: never;
             path?: never;
@@ -11475,6 +11481,12 @@ export interface operations {
                 cursor?: string | null;
                 /** @description true: お気に入りの画像だけ(ADR-0055) */
                 favorite?: boolean;
+                /** @description この形(正方形・縦長・横長)の画像だけ(ADR-0055 4章) */
+                shape?: ("square" | "portrait" | "wide") | null;
+                /** @description true: 背景を透過で頼んだ Run の画像だけ */
+                transparent?: boolean;
+                /** @description true: 領域の四角を付けた Run の画像だけ(ADR-0053) */
+                regions?: boolean;
             };
             header?: never;
             path?: never;

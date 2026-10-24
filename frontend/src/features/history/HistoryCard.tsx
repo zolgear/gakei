@@ -14,7 +14,9 @@ import {
   shortenModelName,
   statusLabel,
 } from '../../lib/format'
-import { buildParamChips, buildParamChipsWithActualSize, formatTokenCount } from './historyChips'
+import { buildParamChips, formatTokenCount } from './historyChips'
+import { formatPixelSize } from './galleryLayout'
+import { historyLabels } from './historyLabels'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { HistoryCardMedia } from './HistoryCardMedia'
 import { FavoriteButton } from './FavoriteButton'
@@ -48,14 +50,15 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   const shownOutput = outputs[outputIndex] ?? outputs[0]
   const hasInputs = run.input_count > 0
   const accentClass = hasInputs ? styles.dotEdit : styles.dotGenerate
-  // 重ねるカードでは、サイズを出力の実寸と合わせてチップの1つにまとめる(従来のカードは今のまま)。
-  const paramChips =
-    variant === 'overlay' && run.status === 'succeeded'
-      ? buildParamChipsWithActualSize(run.params, shownOutput)
-      : buildParamChips(run.params)
+  // 従来のカード(検索のページ)はパラメーターのチップを今のまま出す。重ねるカード(履歴の「詳細」)は、
+  // 生成に使ったものの有無(入力・領域)は上の行に、出力の性質(透過・実寸)は操作の行の左に出す
+  // (`historyLabels.ts`)。形(正方形など)は絞り込みにだけ使い、カードには実寸を出す。
+  const paramChips = variant === 'overlay' ? [] : buildParamChips(run.params)
+  const labels = historyLabels(run, shownOutput)
+  const pixelSize = variant === 'overlay' ? formatPixelSize(shownOutput) : null
   // 領域の指示(ADR-0053): 足した文はプロンプトから除いて見せ、四角を送ったことをチップで示す。
   const shownPrompt = stripAppendedText(run.prompt, run.regions?.appended_text)
-  const regionCount = run.regions?.regions.length ?? 0
+  const regionCount = labels.regionCount
   const tokenLabel = formatTokenCount(run.usage)
   const parentAssetId = run.primary_parent_asset_id
   const extraInputCount = run.input_count > 1 ? run.input_count - 1 : 0
@@ -70,7 +73,15 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
     primaryParentAssetId: parentAssetId ?? null,
   })
 
-  const runActions = useHistoryRunActions(run, shownOutput, nav)
+  const overlayLabels =
+    variant === 'overlay' && (labels.transparent || pixelSize) ? (
+      <div className={styles.labelRow}>
+        {labels.transparent && <span className={styles.chip}>{t.history.labels.transparent}</span>}
+        {pixelSize && <span className={styles.chip}>{pixelSize}</span>}
+      </div>
+    ) : null
+
+  const runActions = useHistoryRunActions(run, shownOutput, nav, { leading: overlayLabels })
 
   const elapsed = run.status === 'running' ? formatElapsedSeconds(run.started_at) : null
 
@@ -100,12 +111,20 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
         {hasInputs && (
           <span className={styles.inputBadge}>{fmt(t.history.card.inputBadge, { count: run.input_count })}</span>
         )}
+        {variant === 'overlay' && regionCount > 0 && (
+          <span className={styles.inputBadge} title={t.regions.runDetail.delivery}>
+            {fmt(t.regions.form.chip, { count: regionCount })}
+          </span>
+        )}
         {/* アシスタントが作った Run(ADR-0048 9章)。実行元は Run 詳細にも出す。 */}
         {run.origin === 'assistant' && <span className={styles.inputBadge}>{t.history.card.originAssistant}</span>}
         <span className={styles.model}>{run.model_label ?? shortenModelName(run.model)}</span>
-        <span className={styles.status} data-status={run.status}>
-          {statusLabel(run.status)}
-        </span>
+        {/* 成功は画像で分かるので出さない。待ち・実行中・失敗・取り消しだけを出す。 */}
+        {run.status !== 'succeeded' && (
+          <span className={styles.status} data-status={run.status}>
+            {statusLabel(run.status)}
+          </span>
+        )}
       </div>
 
       <div className={styles.media}>
@@ -118,7 +137,7 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
       </div>
 
       <div className={styles.body}>
-        {/* 重ねる形では、画像の左下は下の帯に隠れるので、親のサムネイルを帯の先頭に置く(サイズはチップの行にまとめる)。 */}
+        {/* 重ねる形では、画像の左下は下の帯に隠れるので、親のサムネイルを帯の先頭に置く。 */}
         {variant === 'overlay' && parentOverlay && (
           <div className={styles.overlayLead}>
             {parentOverlay}
@@ -166,7 +185,7 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
           )}
         </div>
 
-        {(paramChips.length > 0 || regionCount > 0) && (
+        {variant === 'detail' && (paramChips.length > 0 || regionCount > 0) && (
           <div className={styles.chipRow}>
             {regionCount > 0 && (
               <span className={styles.chip} title={t.regions.runDetail.delivery}>

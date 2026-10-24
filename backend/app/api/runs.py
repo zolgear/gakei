@@ -26,6 +26,7 @@ from app.deps import (
 )
 from app.domain import content_rating, content_withholding, focal_points
 from app.domain import run_create as run_create_domain
+from app.domain.history_filters import HistoryLabelFilter, HistoryShape
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
     Asset,
@@ -190,6 +191,12 @@ def list_runs(
     favorite: bool = Query(
         default=False, description="true: お気に入りの出力を1つ以上持つ Run だけ(ADR-0055)"
     ),
+    shape: HistoryShape | None = Query(
+        default=None,
+        description="出力(削除されていないもの)のどれかがこの形の Run だけ(ADR-0055 4章)",
+    ),
+    transparent: bool = Query(default=False, description="true: 背景を透過で頼んだ Run だけ"),
+    regions: bool = Query(default=False, description="true: 領域の四角を付けた Run だけ(ADR-0053)"),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> RunListResponse:
@@ -197,6 +204,9 @@ def list_runs(
     query = visible_runs_query(user)
     if favorite:
         query = query.where(run_has_favorite_output(user))
+    labels = HistoryLabelFilter(shape=shape, transparent=transparent, regions=regions)
+    for condition in labels.run_conditions():
+        query = query.where(condition)
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)
