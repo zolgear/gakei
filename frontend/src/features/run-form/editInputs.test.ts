@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  acceptsImageInputs,
   addImageInputs,
+  inputAddBlock,
   ensureInputIds,
   inputsFromRunInputs,
   moveImageInput,
@@ -38,6 +40,31 @@ describe('newInputId', () => {
   it('呼ぶたびに別の値を返す', () => {
     const ids = new Set(Array.from({ length: 50 }, () => newInputId()))
     expect(ids.size).toBe(50)
+  })
+})
+
+describe('inputAddBlock(入力画像を足せるか)', () => {
+  it('入力画像を受けないモデル(上限 0)では、何枚目でも足さない', () => {
+    expect(acceptsImageInputs(0)).toBe(false)
+    expect(inputAddBlock(0, 0)).toBe('noImageInputs')
+    expect(inputAddBlock(0, 2, 3)).toBe('noImageInputs')
+  })
+
+  it('上限 N のモデルで N 枚あれば N+1 枚目は足さない', () => {
+    expect(inputAddBlock(1, 1)).toBe('limit')
+    expect(inputAddBlock(16, 16)).toBe('limit')
+    // 上限を超えて残っている(別のモデルで足した)ときも足さない。
+    expect(inputAddBlock(2, 3)).toBe('limit')
+  })
+
+  it('空きがあれば足せる(一部だけ足せるときも null。落とす数は addImageInputs が返す)', () => {
+    expect(acceptsImageInputs(1)).toBe(true)
+    expect(inputAddBlock(1, 0)).toBeNull()
+    expect(inputAddBlock(16, 15, 3)).toBeNull()
+  })
+
+  it('足す数が 0 なら止めない', () => {
+    expect(inputAddBlock(0, 0, 0)).toBeNull()
   })
 })
 

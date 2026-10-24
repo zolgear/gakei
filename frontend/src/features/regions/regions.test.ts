@@ -367,6 +367,24 @@ describe('regionsFollowAction(1枚目が変わったときの四角。ADR-0053 1
     expect(regionsFollowAction({ ...base, ...output, boxes, regionsAssetId: null, primaryAssetId: 'a', opCaps: editCaps })).toEqual({ action: 'clear' })
   })
 
+  it('入力画像を受けないモデルでは、1枚目の上の四角を白紙として扱うが、土台の記録は書き換えない', () => {
+    expect(
+      regionsFollowAction({ ...base, ...input, boxes: [box({ kind: 'add' })], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps, inputsUsable: false }),
+    ).toEqual({ action: 'keep' })
+  })
+
+  it('入力画像を受けないモデルで、白紙に選べない種類があれば外す', () => {
+    expect(
+      regionsFollowAction({ ...base, ...input, boxes: [box({ kind: 'keep' })], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps, inputsUsable: false }),
+    ).toEqual({ action: 'clear' })
+  })
+
+  it('入力画像を受けるモデルに戻すと、1枚目の上の四角は元の土台のまま使う', () => {
+    expect(
+      regionsFollowAction({ ...base, ...input, boxes: [box({ kind: 'add' })], regionsAssetId: 'a', primaryAssetId: 'a', opCaps: editCaps, inputsUsable: true }),
+    ).toEqual({ action: 'keep' })
+  })
+
   it('四角を受けない操作なら外す', () => {
     expect(regionsFollowAction({ ...base, ...input, supported: false, boxes: [box()], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toEqual({
       action: 'clear',

@@ -74,6 +74,11 @@ export interface InputRegionsProps {
   boxes?: readonly RegionBox[]
   /** 白紙のキャンバスの大きさ(領域の編集画面と同じ。プレビューの縦横比に使う)。 */
   blankCanvas?: { width: number; height: number }
+  /**
+   * 1枚目の上に四角を描けるか(省けば描ける)。入力画像を受けないモデルでは false にし、入力画像が
+   * 残っていても白紙の「領域」を出す(1枚目には領域の操作を出さない)。
+   */
+  primaryUsable?: boolean
 }
 
 export function InputChipsRow({
@@ -91,6 +96,8 @@ export function InputChipsRow({
   const c = t.workspace.inputChips
   const [isDragOver, setIsDragOver] = useState(false)
   const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
+  // 1枚目の上に四角を描けるモデルか(入力画像を受けないモデルでは白紙だけ)。
+  const regionsOnPrimary = regions.supported && regions.primaryUsable !== false
 
   function handleDragOver(e: DragEvent<HTMLElement>) {
     if (!isRelevantDragTypes(Array.from(e.dataTransfer.types))) return
@@ -250,7 +257,7 @@ export function InputChipsRow({
                       )
                     ))}
 
-                  {isPrimary && regions.supported && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
+                  {isPrimary && regionsOnPrimary && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
                     // 白紙の土台の四角は1枚目に付かないので、数は追加の並びの白紙のチップに出す。
                     regions.count > 0 && !regions.blank ? (
                       <>
@@ -286,7 +293,7 @@ export function InputChipsRow({
                     )
                   )}
 
-                  {isPrimary && regions.supported && regions.hasOverlay && !isWithheld && (
+                  {isPrimary && regionsOnPrimary && regions.hasOverlay && !isWithheld && (
                     <button
                       type="button"
                       className={styles.iconButton}
@@ -374,7 +381,7 @@ export function InputChipsRow({
       {/* 白紙の領域(ADR-0053 6章・1章)。四角を付けたら、白紙の配置図の小さなプレビューを添える(入力画像が
           あっても)。四角が無ければ、入力画像の無いときだけ「領域」を出す(あるときは1枚目から開く)。 */}
       {regions.blank &&
-        (regions.count > 0 || images.length === 0) &&
+        (regions.count > 0 || images.length === 0 || regions.primaryUsable === false) &&
         (regions.count > 0 && regions.boxes && regions.blankCanvas ? (
           <div className={styles.chip}>
             <button

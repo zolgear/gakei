@@ -22,7 +22,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fmt, useI18n } from '../../i18n'
+import { useI18n } from '../../i18n'
 import { isMobileViewport } from '../../lib/viewport'
 import { listPromptSets, type AssetDetail } from '../../api/client'
 import { useRunFormLogic } from '../run-form/useRunFormLogic'
@@ -415,9 +415,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
   if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
-  if (form.imageInputCount > form.maxInputImages) {
-    blockReasons.push(fmt(ip.maxInputImagesExceeded, { max: form.maxInputImages }))
-  }
+  if (form.inputsBlockReason) blockReasons.push(form.inputsBlockReason)
   if (form.inputCountRequirementReason) blockReasons.push(form.inputCountRequirementReason)
   if (form.providerUnavailableReason) blockReasons.push(form.providerUnavailableReason)
   if (!form.operationSupported) {
@@ -544,6 +542,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       blank: form.regionsBlank,
       boxes: form.regions,
       blankCanvas: regionCanvas?.kind === 'blank' ? { width: regionCanvas.width, height: regionCanvas.height } : undefined,
+      primaryUsable: form.inputsUsable,
     },
   }
   const inputImages =
@@ -754,7 +753,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
       {regionEditorOpen && regionCanvas && (
         <RegionEditor
-          canvases={{ input: editLogic.positionZeroAsset ?? null, output: regionBlankCanvas }}
+          canvases={{ input: form.inputsUsable ? (editLogic.positionZeroAsset ?? null) : null, output: regionBlankCanvas }}
           initialFrame={form.regionsFrame}
           initialRegions={form.regions}
           inputAssetIds={editLogic.images.map((i) => i.assetId)}

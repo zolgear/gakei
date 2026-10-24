@@ -2022,7 +2022,9 @@
       "maskRequiredReason": "This model requires a mask to run",
       "inputCountRequirement": "{min} input images required (currently {current})",
       "providerUnavailableDefault": "Cannot connect to this provider",
-      "compositeRedrawing": "Redrawing the arrangement to match the output size"
+      "compositeRedrawing": "Redrawing the arrangement to match the output size",
+      "noImageInputs": "This model does not use input images",
+      "noImageInputsPresent": "This model does not use input images. Remove them to continue"
     },
     "unspecifiedLabel": {
       "unspecified": "Unspecified",

@@ -2022,7 +2022,9 @@
       "maskRequiredReason": "このモデルの実行にはマスクが必要です",
       "inputCountRequirement": "入力画像が{min}枚必要です(現在{current}枚)",
       "providerUnavailableDefault": "このプロバイダーには接続できません",
-      "compositeRedrawing": "配置を出力サイズに合わせて描き直しています"
+      "compositeRedrawing": "配置を出力サイズに合わせて描き直しています",
+      "noImageInputs": "このモデルは入力画像を使いません",
+      "noImageInputsPresent": "このモデルは入力画像を使いません。入力画像を外してください"
     },
     "unspecifiedLabel": {
       "unspecified": "未指定",

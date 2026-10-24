@@ -152,9 +152,18 @@ export function regionsFollowAction(args: {
   capsLoaded: boolean
   supported: boolean
   opCaps: OperationCapabilities | undefined
+  /**
+   * 選んだモデルが入力画像を受けるか(省けば受ける)。受けないモデル(ComfyUI の t2i など)では、
+   * 入力画像が残っていても四角は白紙の上として扱う。ただし土台の記録は書き換えない(入力画像を受ける
+   * モデルに戻したら、元の土台のまま使えるように)。
+   */
+  inputsUsable?: boolean
 }): RegionsFollow {
-  const { boxes, frame, regionsAssetId, primaryAssetId, capsLoaded, supported, opCaps } = args
+  const { boxes, frame, regionsAssetId, primaryAssetId, capsLoaded, supported, opCaps, inputsUsable = true } = args
   if (boxes.length === 0) return { action: 'keep' }
+  if (!inputsUsable) {
+    return capsLoaded && (!supported || !regionsCompatible(boxes, opCaps, 'output')) ? { action: 'clear' } : { action: 'keep' }
+  }
   const next = effectiveRegionFrame(frame, primaryAssetId)
   if (capsLoaded && (!supported || !regionsCompatible(boxes, opCaps, next))) return { action: 'clear' }
   const nextAssetId = next === 'input' ? primaryAssetId : null

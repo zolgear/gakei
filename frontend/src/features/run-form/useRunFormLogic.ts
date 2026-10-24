@@ -56,6 +56,7 @@ import {
   isOperationSupported,
   isProviderUsable,
   providerUnavailableMessage,
+  imageInputsBlockReason,
 } from './submitChecks'
 import { useUnusableInputAssetIds } from './useDeletedInputAssetIds'
 import { computePromptInsertion, type PromptInsertMode } from './promptInsertion'
@@ -185,6 +186,10 @@ export interface RunFormLogic {
   providerAvailable: boolean
   providerUnavailableReason: string | null
   maxInputImages: number
+  /** 選んだモデルが入力画像を受けるか(edit を持つか。capabilities を読めていない間は true)。 */
+  inputsUsable: boolean
+  /** 入力画像の枚数で送信を止める理由(受けないモデルに画像が残っている、上限を超えている)。 */
+  inputsBlockReason: string | null
   maxInputImageBytes: number
   maxMaskBytes: number
   imageInputCount: number
@@ -348,14 +353,15 @@ export function useRunFormLogic(
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null)
   const didInitParamsRef = useRef(false)
 
-  // operation は入力画像の枚数から導出する(利用者には選ばせない)。
-  const operation = deriveOperation(formState.inputs)
   const hasMask = formState.inputs.some((i) => i.role === 'mask')
 
   // ADR-0013: capabilities はプロバイダーの一覧になった。まず今選んでいる provider の
   // capabilities(providerEntry)を引き、その中からモデルを探す。
   const providerEntry: ProviderEntry | undefined = findProvider(caps, provider)
   const modelCaps: ModelCapabilities | undefined = providerEntry?.models.find((m) => m.model === model)
+  // operation は入力画像の枚数から導出する(利用者には選ばせない)。edit を持たないモデル(入力画像を
+  // 受けない)では、入力画像が残っていても generate(送信は入力画像の理由で止める)。
+  const operation = deriveOperation(formState.inputs, modelCaps)
   const opCaps: OperationCapabilities | undefined = modelCaps?.operations.find(
     (o) => o.operation === operation,
   )
@@ -365,6 +371,8 @@ export function useRunFormLogic(
   // 導出後の operation=generate の上限(0枚)を使ってはいけない)。
   const editOpCaps = modelCaps?.operations.find((o) => o.operation === 'edit')
   const maxInputImages = editOpCaps?.max_input_images ?? 0
+  // 入力画像を受けるモデルか(capabilities を読めていない間は受けるとみなす)。
+  const inputsUsable = !modelCaps || maxInputImages > 0
   // ちょうどの枚数が必要なワークフロー(ComfyUI の画像の枠)だけ N を持つ。OpenAI/Fake のように
   // 1〜16枚の幅がある場合や、edit 自体が無いモデルでは null(表示側は通常の上限表示のままにする)。
   const exactInputImagesRequired =
@@ -488,6 +496,7 @@ export function useRunFormLogic(
     }
   }
   const editInputsValid = imageInputCount <= maxInputImages
+  const inputsBlockReason = modelCaps ? imageInputsBlockReason(imageInputCount, maxInputImages) : null
   const inputCountRequirementReason = inputCountRequirementMessage(opCaps, operation, imageInputCount)
   const unusableInputAssetIds = useUnusableInputAssetIds(formState.inputs)
   const hasDeletedInputs = unusableInputAssetIds.deleted.length > 0
@@ -506,10 +515,12 @@ export function useRunFormLogic(
   }
 
   // 領域の指示(ADR-0053)。四角は主たる入力(position 0 の画像)ごとのもの。
-  const primaryAssetId =
-    formState.inputs
-      .filter((i) => i.role === 'image')
-      .sort((a, b) => a.position - b.position)[0]?.assetId ?? null
+  // 入力画像を受けないモデルでは、入力画像が残っていても1枚目は無いものとして白紙に描く。
+  const primaryAssetId = inputsUsable
+    ? (formState.inputs
+        .filter((i) => i.role === 'image')
+        .sort((a, b) => a.position - b.position)[0]?.assetId ?? null)
+    : null
   // 四角は今の操作の capabilities で決める。入力画像があれば Edit(主たる入力の上)、無ければ
   // Generate(出力の大きさの白紙の上。入力画像を要らないと答える操作だけ。ComfyUI と OpenAI。
   // OpenAI はサーバーが白紙の配置図を作って Edit で送る。ADR-0053 5章・6章)。
@@ -543,6 +554,7 @@ export function useRunFormLogic(
     capsLoaded: Boolean(caps && modelCaps),
     supported: regionsSupported,
     opCaps: regionOpCaps,
+    inputsUsable,
   })
   const regionsClearReason: 'unsupported' | null = regionsAction.action === 'clear' ? 'unsupported' : null
   const adoptFrame = regionsAction.action === 'adopt' ? regionsAction.frame : null
@@ -582,7 +594,8 @@ export function useRunFormLogic(
   let regionsBlockReason: string | null = null
   if (regionsActive) {
     if (!areRegionBoxesValid(formState.regions)) regionsBlockReason = msg().regions.form.invalid
-    else if (imageInputCount + regionExtraInputs > maxInputImages) {
+    // 四角で足す画像が無ければ、枚数の超過は入力画像の理由(`inputsBlockReason`)だけで伝える。
+    else if (regionExtraInputs > 0 && imageInputCount + regionExtraInputs > maxInputImages) {
       regionsBlockReason = fmt(msg().regions.form.tooManyInputs, {
         max: maxInputImages,
         extra: regionExtraInputs,
@@ -952,6 +965,8 @@ export function useRunFormLogic(
     providerAvailable,
     providerUnavailableReason,
     maxInputImages,
+    inputsBlockReason,
+    inputsUsable,
     maxInputImageBytes: providerEntry?.max_input_image_bytes ?? 50 * 1024 * 1024,
     maxMaskBytes: providerEntry?.max_mask_bytes ?? 10 * 1024 * 1024,
     imageInputCount,
