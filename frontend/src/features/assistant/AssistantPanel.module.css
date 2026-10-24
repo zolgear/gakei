@@ -1,4 +1,4 @@
-/* 生成のアシスタントのパネル(ADR-0048 2章)。上から見出し・会話の操作・メッセージ・送信欄。 */
+/* 生成のアシスタントの中身(ADR-0048 2章)。上から会話の操作・メッセージ・送信欄。浮いた窓の中に置く。 */
 
 .panel {
   display: flex;
@@ -6,16 +6,8 @@
   gap: 8px;
   height: 100%;
   min-height: 0;
-  padding: 14px 14px 12px;
+  padding: 10px 14px 12px;
   box-sizing: border-box;
-}
-
-.heading {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--color-text-muted);
 }
 
 /* -- 会話の操作 -- */

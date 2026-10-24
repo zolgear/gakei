@@ -1,7 +1,9 @@
 /**
  * サイドバーの選択状態(ストック/プロンプトセット/パラメーターセット/プロンプトテンプレート/
- * 系列グラフ/履歴/検索/アシスタント)を localStorage に保存する。
+ * 系列グラフ/履歴/検索)を localStorage に保存する。
  * プライベートブラウジング等で localStorage が使えない環境でも壊れないよう try/catch で囲む。
+ * アシスタントは 2026-10-24 にパネルから浮いた窓に移した(ADR-0048 2章)。以前に保存された
+ * `assistant` は、何も開いていない扱いにする(`isPanelId` が false を返す)。
  */
 export type PanelId =
   | 'stock'
@@ -12,8 +14,6 @@ export type PanelId =
   | 'graph'
   | 'history'
   | 'search'
-  // 生成のアシスタント(ADR-0048)。管理者が有効にしているときだけ出す。
-  | 'assistant'
 
 const STORAGE_KEY = 'gakei:selected-panel'
 
@@ -25,8 +25,7 @@ function isPanelId(value: unknown): value is PanelId {
     value === 'promptTemplates' ||
     value === 'graph' ||
     value === 'history' ||
-    value === 'search' ||
-    value === 'assistant'
+    value === 'search'
   )
 }
 

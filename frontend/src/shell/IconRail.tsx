@@ -1,18 +1,23 @@
 /**
  * アイコンレール(52px)。ストック/プロンプトセット/パラメーターセット/プロンプトテンプレート/
- * 系列グラフ/履歴/検索/アシスタントを切り替える。アシスタント(ADR-0048)は、管理者が有効にして
- * 使える状態のときだけ出す(`showAssistant`)。
+ * 系列グラフ/履歴/検索を切り替える。
+ * 一番下はアシスタント(ADR-0048 2章)の浮いた窓を開く/閉じるボタン。パネルの切り替えではない。
+ * 管理者が有効にして使える状態のときだけ出す(`assistant`)。
  */
 import type { ReactNode } from 'react'
 import type { PanelId } from './panelStorage'
+import { ASSISTANT_TOGGLE_ATTRIBUTE } from '../features/assistant/assistantWindowAttributes'
 import { useI18n, type Messages } from '../i18n'
 import styles from './IconRail.module.css'
 
 interface IconRailProps {
   selected: PanelId | null
   onSelect: (panel: PanelId) => void
-  /** アシスタントのパネルを出すか(設定で有効、かつ接続先がそろっている)。 */
-  showAssistant?: boolean
+  /**
+   * アシスタントの窓の開閉ボタン(設定で有効、かつ接続先がそろっているときだけ渡す)。
+   * `open` は窓が開いているとき(たたんでいても)true で、押された見た目にする。
+   */
+  assistant?: { open: boolean; onToggle: () => void }
 }
 
 function items(labels: Messages['shell']['iconRail']): { id: PanelId; label: string; icon: ReactNode }[] {
@@ -100,28 +105,12 @@ function items(labels: Messages['shell']['iconRail']): { id: PanelId; label: str
         </svg>
       ),
     },
-    {
-      // 生成のアシスタント(ADR-0048)。吹き出しの形。
-      id: 'assistant',
-      label: labels.assistant,
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-          <path
-            d="M3 4.5A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5v6a1.5 1.5 0 0 1-1.5 1.5H8l-3.5 3v-3a1.5 1.5 0 0 1-1.5-1.5v-6z"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-          />
-          <path d="M6.5 7.5h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-      ),
-    },
   ]
 }
 
-export function IconRail({ selected, onSelect, showAssistant = false }: IconRailProps) {
+export function IconRail({ selected, onSelect, assistant }: IconRailProps) {
   const { t } = useI18n()
-  const ITEMS = items(t.shell.iconRail).filter((item) => item.id !== 'assistant' || showAssistant)
+  const ITEMS = items(t.shell.iconRail)
   return (
     <nav aria-label={t.shell.iconRail.resourceNav} className={styles.rail}>
       {ITEMS.map((item) => (
@@ -137,6 +126,28 @@ export function IconRail({ selected, onSelect, showAssistant = false }: IconRail
           {item.icon}
         </button>
       ))}
+      {assistant && (
+        <button
+          type="button"
+          aria-label={t.shell.iconRail.assistant}
+          aria-pressed={assistant.open}
+          className={`${styles.item} ${styles.bottomItem}`}
+          data-active={assistant.open}
+          onClick={assistant.onToggle}
+          {...{ [ASSISTANT_TOGGLE_ATTRIBUTE]: '' }}
+        >
+          {/* 吹き出しの形。 */}
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <path
+              d="M3 4.5A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5v6a1.5 1.5 0 0 1-1.5 1.5H8l-3.5 3v-3a1.5 1.5 0 0 1-1.5-1.5v-6z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+            <path d="M6.5 7.5h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
     </nav>
   )
 }
