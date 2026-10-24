@@ -22,7 +22,7 @@
 import type { AssetSummary } from '../../api/client'
 import { AddToInputIcon, CrossIcon, HeartIcon, TrashIcon } from '../../components/icons'
 import { useI18n } from '../../i18n'
-import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
+import { setAssetDragData } from '../run-form/dragDropAssets'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { AssetKindRibbon } from '../asset-kind/AssetKindRibbon'
 import { kindRibbon } from '../asset-kind/kindRibbon'
@@ -102,8 +102,7 @@ export function StockTile({
           onDragStart={
             draggable
               ? (e) => {
-                  e.dataTransfer.setData(GAKEI_ASSET_ID_DATA_TYPE, asset.id)
-                  e.dataTransfer.effectAllowed = 'copy'
+                  setAssetDragData(e.dataTransfer, asset.id)
                 }
               : undefined
           }

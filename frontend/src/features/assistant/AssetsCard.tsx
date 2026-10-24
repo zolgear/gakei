@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router'
 import type { AssistantMessageResponse } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { focalStyle } from '../../lib/focalPoint'
-import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
+import { setAssetDragData } from '../run-form/dragDropAssets'
 import { buildStudioPath } from '../workspace/assetQueryParam'
 import { ASSISTANT_ATTACHMENTS_MAX, type AttachmentPlan } from './assistantForm'
 import { readShownAssets } from './timeline'
@@ -64,8 +64,7 @@ export function AssetsCard({ message, onAttach }: AssetsCardProps) {
                 loading="lazy"
                 draggable
                 onDragStart={(e) => {
-                  e.dataTransfer.setData(GAKEI_ASSET_ID_DATA_TYPE, asset.assetId)
-                  e.dataTransfer.effectAllowed = 'copy'
+                  setAssetDragData(e.dataTransfer, asset.assetId)
                 }}
               />
             </button>

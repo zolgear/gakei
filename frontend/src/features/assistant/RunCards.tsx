@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router'
 import { getRun, type AssistantMessageResponse } from '../../api/client'
 import { fmt, useI18n } from '../../i18n'
 import { focalStyle } from '../../lib/focalPoint'
-import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
+import { setAssetDragData } from '../run-form/dragDropAssets'
 import { progressPercent } from '../run-status/runProgress'
 import { useRunEvents } from '../run-status/useRunEvents'
 import { buildStudioPath } from '../workspace/assetQueryParam'
@@ -127,8 +127,7 @@ function RunCard({ runId }: { runId: string }) {
             alt=""
             draggable
             onDragStart={(e) => {
-              e.dataTransfer.setData(GAKEI_ASSET_ID_DATA_TYPE, output.asset_id)
-              e.dataTransfer.effectAllowed = 'copy'
+              setAssetDragData(e.dataTransfer, output.asset_id)
             }}
           />
         </button>

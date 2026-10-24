@@ -28,14 +28,13 @@ import { shouldShowEnglishOnlyHint } from '../embeddings/languageHint'
 import { formatScore } from '../embeddings/duplicates'
 import {
   QUERY_IMAGE_ACCEPT,
-  dragHasFiles,
   loadSearchPanelMode,
   loadSearchPanelTarget,
-  pickImageFile,
   saveSearchPanelMode,
   saveSearchPanelTarget,
   setPendingQueryImage,
 } from './queryImage'
+import { dragMayCarryImage, interpretDrop } from '../run-form/dragDropAssets'
 import { nodeTargetPath } from '../lineage/nodeTargetPath'
 import { RunListRow } from '../history/RunListRow'
 import { HighlightedText } from './HighlightedText'
@@ -43,6 +42,7 @@ import { useDebouncedValue } from './useDebouncedValue'
 import { usePromptLoader } from './usePromptLoader'
 import {
   buildSearchPath,
+  buildSimilarSearchPath,
   searchPanelSemanticView,
   semanticSearchParams,
   type SearchMode,
@@ -99,7 +99,7 @@ export function SearchPanel() {
   }
 
   function handleDragOver(e: DragEvent) {
-    if (!imageMode || !dragHasFiles(e.dataTransfer)) return
+    if (!imageMode || !dragMayCarryImage(Array.from(e.dataTransfer.types))) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
     if (!dragActive) setDragActive(true)
@@ -115,8 +115,11 @@ export function SearchPanel() {
     if (!imageMode) return
     e.preventDefault()
     setDragActive(false)
-    const file = pickImageFile(e.dataTransfer)
-    if (file) searchWithImage(file)
+    // アプリの中の画像(印付き、または同じオリジンの Asset の URL)は、その Asset に似た画像を探す
+    // (新しく送らない)。読み取れないページ内のドラッグは何もしない。外のファイルは今までどおり。
+    const dropped = interpretDrop(e.dataTransfer)
+    if (dropped.kind === 'asset') navigate(buildSimilarSearchPath(dropped.assetId))
+    else if (dropped.kind === 'files') searchWithImage(dropped.files[0])
   }
 
   // App バーの虫眼鏡 / `/` キーで開かれたら入力欄にフォーカスする(要求番号が増えるたび)。

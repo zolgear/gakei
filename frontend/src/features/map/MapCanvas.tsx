@@ -36,6 +36,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router'
 import { assetUrl } from '../../api/assetUrl'
+import { setAssetDragData } from '../run-form/dragDropAssets'
 import { AssetImage } from '../mods/AssetImage'
 import type { EmbeddingGraphNode } from '../../api/client'
 import { useI18n } from '../../i18n'
@@ -1323,6 +1324,7 @@ export function MapCanvas({
               }
               alt=""
               className={styles.selectionThumb}
+              onDragStart={(e) => setAssetDragData(e.dataTransfer, selectedNode.id)}
             />
             {selectedMasked && (
               <span className={styles.selectionThumbBadge}>
