@@ -57,6 +57,16 @@ export function InputImageTiles({
   const [isDragOver, setIsDragOver] = useState(false)
   const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
 
+  // 1枚目の上に領域を描けるか(タイルの操作のバンドと同じ条件)。
+  const primary = images[0]
+  const primaryRegionsUsable =
+    regions.supported &&
+    primary !== undefined &&
+    detailsByAssetId.get(primary.assetId)?.content_withheld !== true &&
+    !notFoundAssetIds.has(primary.assetId) &&
+    !deletedAssetIds.has(primary.assetId) &&
+    !blockedAssetIds.has(primary.assetId)
+
   function handleDragOver(e: DragEvent<HTMLElement>) {
     if (!isRelevantDragTypes(Array.from(e.dataTransfer.types))) return
     e.preventDefault()
@@ -335,6 +345,21 @@ export function InputImageTiles({
           <PencilIcon />
           <span>{c.sketch}</span>
         </button>
+
+        {/* 入力画像があるときの領域(ADR-0053)。1枚目の上の四角を描く。タイルの操作のバンドはホバーで
+            しか見えない(タッチでは出ない)ので、スケッチ・配置と同じ並びにも常に出す。 */}
+        {primaryRegionsUsable && (
+          <button
+            type="button"
+            className={styles.addTile}
+            aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
+            title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.buttonTitle}
+            onClick={regions.onOpen}
+          >
+            <RegionsIcon />
+            <span>{regions.count > 0 ? fmt(t.regions.form.chip, { count: regions.count }) : t.regions.button}</span>
+          </button>
+        )}
 
         {/* 入力画像の無い Run の白紙の領域(ADR-0053 6章)。四角を付けたら、入力画像のタイルと同じ形で
             白紙の配置図のプレビューを出し、数と外すボタンを重ねる。 */}
