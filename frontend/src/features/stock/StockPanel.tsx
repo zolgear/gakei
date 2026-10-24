@@ -361,6 +361,7 @@ export function StockPanel() {
               onImportLineage={importLineage.pick}
               importPending={importLineage.pending}
               onOpenDuplicates={embeddingsAvailable ? () => navigate('/stock/duplicates') : undefined}
+              onOpenGroupSuggestions={embeddingsAvailable ? () => navigate('/stock/group-suggestions') : undefined}
             />
           </div>
         </div>

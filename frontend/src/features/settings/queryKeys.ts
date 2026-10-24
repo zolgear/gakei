@@ -84,3 +84,9 @@ export const MOD_DELIVERY_FAILURES_QUERY_KEY = ['mod-delivery-failures'] as cons
  * 画面の検出のボタンの出し分けが同じキーを読む。
  */
 export const REGION_DETECTION_SETTINGS_QUERY_KEY = ['region-detection-settings'] as const
+
+/**
+ * `GET /api/settings/group-naming`(ADR-0056 6章)。管理者設定の「グループ名の候補」と、グループの提案の
+ * ページの候補の出し分けが同じキーを読む。
+ */
+export const GROUP_NAMING_SETTINGS_QUERY_KEY = ['group-naming-settings'] as const

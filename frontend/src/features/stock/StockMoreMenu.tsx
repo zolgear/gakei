@@ -1,6 +1,7 @@
 /**
  * ストックの見出し行の「⋯」。ふだんは使わない操作(系列の ZIP の取り込み(ADR-0037)、重複の候補
- * (ADR-0033 8章。埋め込みが使えるときだけ))を小さなメニューにまとめる。上下の矢印キーで項目を移る。
+ * (ADR-0033 8章)とグループの提案(ADR-0056)。後の2つは埋め込みが使えるときだけ)を小さなメニューに
+ * まとめる。上下の矢印キーで項目を移る。
  */
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { useI18n } from '../../i18n'
@@ -12,9 +13,16 @@ interface StockMoreMenuProps {
   importPending: boolean
   /** 渡したときだけ「重複の候補」を出す。 */
   onOpenDuplicates?: () => void
+  /** 渡したときだけ「グループの提案」を出す。 */
+  onOpenGroupSuggestions?: () => void
 }
 
-export function StockMoreMenu({ onImportLineage, importPending, onOpenDuplicates }: StockMoreMenuProps) {
+export function StockMoreMenu({
+  onImportLineage,
+  importPending,
+  onOpenDuplicates,
+  onOpenGroupSuggestions,
+}: StockMoreMenuProps) {
   const { t } = useI18n()
   const label = t.stock.moreActions
   const { open, toggle, close, rootRef, triggerRef } = useHeaderPopover()
@@ -77,6 +85,19 @@ export function StockMoreMenu({ onImportLineage, importPending, onOpenDuplicates
               }}
             >
               {t.stock.duplicatesLink}
+            </button>
+          )}
+          {onOpenGroupSuggestions && (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.menuItem}
+              onClick={() => {
+                close(false)
+                onOpenGroupSuggestions()
+              }}
+            >
+              {t.stock.groupSuggestionsLink}
             </button>
           )}
         </div>

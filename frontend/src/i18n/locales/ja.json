@@ -307,7 +307,8 @@
       "about": "GAKEI について",
       "authentication": "認証",
       "assistant": "アシスタント",
-      "regionDetection": "領域の検出"
+      "regionDetection": "領域の検出",
+      "groupNaming": "グループ名の候補"
     },
     "frame": {
       "changeCount": {
@@ -579,7 +580,8 @@
         "annotation": "自動タイトル・タグ",
         "embedding": "埋め込み",
         "assistant": "アシスタント",
-        "region_detection": "領域の検出"
+        "region_detection": "領域の検出",
+        "group_naming": "グループ名の候補"
       },
       "deleteDisabledInUse": "使っている機能があるため削除できません。",
       "apiKeyRequiredLabel": "キー(入れ直し)",
@@ -1012,7 +1014,8 @@
         "assistant": "アシスタント",
         "embedding": "リモートの埋め込み",
         "workflow_analysis": "ワークフローの推定(ComfyUI)",
-        "region_detection": "領域の検出"
+        "region_detection": "領域の検出",
+        "group_naming": "グループ名の候補"
       },
       "sourcesLabel": "取り込みの経路(asset.ingested)",
       "sources": {
@@ -1448,6 +1451,32 @@
         "connection_missing": "選んだ接続先が見つからないため、「検出」は出ていません。接続先を選び直してください。",
         "api_key_missing": "接続先のキーが設定されていないため、「検出」は出ていません。OpenAI の設定でキーを登録してください。",
         "structured_outputs_unsupported": "接続先が構造化出力に対応するとみなせないため、「検出」は出ていません。対応している接続先なら、「LLM の接続先」でその接続先の「構造化出力」を「対応する」にしてください。"
+      },
+      "structuredOutputsLink": "LLM の接続先を開く"
+    },
+    "groupNaming": {
+      "intro": "グループの提案のページで、名前の欄の下に LLM が考えた名前の候補を出します。送るのは集まりのタグだけで、外部の接続先へはセンシティブなタグを外して送ります。ページを開くたびに接続先へ送り、費用がかかることがあります。",
+      "loading": "読み込み中...",
+      "loadFailed": "グループ名の候補の設定を取得できませんでした。",
+      "retry": "再読み込み",
+      "enabledLabel": "グループ名の候補を有効にする",
+      "enabledHelp": "有効にすると、グループの提案のページに名前の候補が出ます。既定は無効です。",
+      "connectionHeading": "LLM",
+      "connectionLabel": "接続先",
+      "connectionHelp": "構造化出力(JSON のスキーマ)に対応した接続先を選びます。",
+      "connectionsLink": "LLM の接続先",
+      "modelLabel": "モデル名",
+      "modelHelp": "接続先に送るモデル名です。",
+      "errors": {
+        "connectionRequired": "接続先を選んでください",
+        "connectionUnknown": "この接続先は見つかりません。選び直してください",
+        "modelRequired": "モデル名を入力してください",
+        "modelTooLong": "{max} 文字以内で入力してください"
+      },
+      "unusable": {
+        "connection_missing": "選んだ接続先が見つからないため、名前の候補は出ていません。接続先を選び直してください。",
+        "api_key_missing": "接続先のキーが設定されていないため、名前の候補は出ていません。OpenAI の設定でキーを登録してください。",
+        "structured_outputs_unsupported": "接続先が構造化出力に対応するとみなせないため、名前の候補は出ていません。対応している接続先なら、「LLM の接続先」でその接続先の「構造化出力」を「対応する」にしてください。"
       },
       "structuredOutputsLink": "LLM の接続先を開く"
     }
@@ -2449,6 +2478,7 @@
       "toggleTile": "選択を切り替える"
     },
     "duplicatesLink": "重複の候補",
+    "groupSuggestionsLink": "グループの提案",
     "filter": "絞り込み",
     "filterFavorite": "お気に入り",
     "favoriteEmptyInSection": "お気に入りの画像はありません",
@@ -3227,6 +3257,46 @@
     "undo": "元に戻す",
     "deleteFailed": "削除できませんでした。",
     "restoreFailed": "元に戻せませんでした。"
+  },
+  "groupSuggestions": {
+    "title": "グループの提案",
+    "scopeLabel": "対象",
+    "scopeUngrouped": "グループ外だけ",
+    "scopeAll": "すべて",
+    "granularityLabel": "粒度",
+    "granularityNormal": "標準",
+    "granularityFine": "細かく",
+    "summary": {
+      "one": "{count} 件の提案・{scanned} 枚",
+      "other": "{count} 件の提案・{scanned} 枚"
+    },
+    "truncatedNote": "画像が多いため、新しい {scanned} 枚だけを見ています。",
+    "loading": "読み込み中…",
+    "loadFailed": "グループの提案を読み込めませんでした。",
+    "empty": "提案はありません。",
+    "count": {
+      "one": "{count} 枚",
+      "other": "{count} 枚"
+    },
+    "franchise": "作品 {name} {rate}",
+    "addTo": "「{name}」に追加",
+    "nameLabel": "グループ名",
+    "nameCandidates": "名前の候補",
+    "create": "グループにする",
+    "moreMembers": "+{count}",
+    "showLess": "閉じる",
+    "exclude": "提案から外す",
+    "include": "提案に戻す",
+    "moveConfirm": {
+      "one": "{count} 枚を別のグループから移します。",
+      "other": "{count} 枚を別のグループから移します。"
+    },
+    "moveConfirmLabel": "移す",
+    "created": "「{name}」を作りました({count} 枚)",
+    "added": "「{name}」に {count} 枚を追加しました",
+    "acceptFailed": "グループにできませんでした。",
+    "outliers": "未分類",
+    "open": "ビューアで開く"
   },
   "map": {
     "title": "マップ",

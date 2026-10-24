@@ -1210,7 +1210,7 @@ class ModInvocation(Base):
     # 呼んだ時点の Mod の名前(後で名前を変えても、記録は呼んだときのまま)。
     mod_name: Mapped[str] = mapped_column(Text, nullable=False)
     # `ai.before_send` の目的(image_run / annotation / assistant / embedding / workflow_analysis /
-    # region_detection)。
+    # region_detection / group_naming)。
     purpose: Mapped[str | None] = mapped_column(String(32), nullable=True)
     run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
     asset_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)

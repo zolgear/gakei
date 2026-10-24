@@ -30,6 +30,8 @@ from app.api import comfyui as comfyui_api
 from app.api import downloads as downloads_api
 from app.api import embeddings as embeddings_api
 from app.api import events as events_api
+from app.api import group_naming as group_naming_api
+from app.api import group_suggestions as group_suggestions_api
 from app.api import health as health_api
 from app.api import history as history_api
 from app.api import lineage_transfer as lineage_transfer_api
@@ -61,6 +63,7 @@ from app.db import make_engine, make_session_factory
 from app.domain import annotation_settings, embedding_index, tag_dictionaries
 from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.auth_settings import EffectiveAuthConfig, resolve_auth_config
+from app.domain.group_suggestions import GroupSuggestionCache
 from app.domain.history_sort import EmbeddingOrderCache
 from app.domain.semantic_search import QueryVectorCache
 from app.domain.storage import open_store
@@ -403,6 +406,7 @@ def _build_lifespan(settings: Settings):
         app.state.vector_index = vector_index
         app.state.query_vector_cache = QueryVectorCache()
         app.state.history_order_cache = EmbeddingOrderCache()
+        app.state.group_suggestion_cache = GroupSuggestionCache()
         app.state.auth_runtime = auth_runtime
         app.state.tag_dictionary_importer = tag_dictionary_importer
         app.state.mods = mods
@@ -658,6 +662,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(assets_api.router, dependencies=auth_dep)
     # 領域の四角の検出(ADR-0053 7章)と、その設定。
     app.include_router(region_detection_api.router, dependencies=auth_dep)
+    # `/api/asset-groups/suggestions` は `/api/asset-groups/{group_id}` より先に登録する。
+    app.include_router(group_suggestions_api.router, dependencies=auth_dep)
+    app.include_router(group_naming_api.router, dependencies=auth_dep)
     app.include_router(asset_groups_api.router, dependencies=auth_dep)
     app.include_router(runs_api.router, dependencies=auth_dep)
     app.include_router(history_api.router, dependencies=auth_dep)

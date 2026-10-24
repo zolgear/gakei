@@ -11,8 +11,8 @@ export function invalidateContentRatingLists(queryClient: QueryClient): void {
   for (const key of ['assets', 'runs', 'run', 'search', 'lineage']) {
     void queryClient.invalidateQueries({ queryKey: [key] })
   }
-  // 埋め込みの結果(文章での検索、似た画像、重複の候補)。マップ(`graph`)はマスクしないので除く。
-  for (const kind of ['semantic', 'byImage', 'similar', 'duplicates']) {
+  // 埋め込みの結果(文章での検索、似た画像、重複の候補、グループの提案)。マップ(`graph`)はマスクしないので除く。
+  for (const kind of ['semantic', 'byImage', 'similar', 'duplicates', 'groupSuggestions']) {
     void queryClient.invalidateQueries({ queryKey: ['embeddings', kind] })
   }
 }
