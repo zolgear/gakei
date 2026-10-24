@@ -227,18 +227,10 @@ function RegionDetectionSettingsBody({ data, connections, values, draft }: BodyP
   )
 }
 
-/** 使えない理由ごとの文言。構造化出力のときは「LLM の接続先」へのリンクも出す。 */
+/** 使えない理由ごとの文言。 */
 function UnusableNote({ reason }: { reason: RegionDetectionSettingsResponse['unusable_reason'] }) {
   const { t } = useI18n()
   const m = t.settings.regionDetection
-  if (reason === 'structured_outputs_unsupported') {
-    return (
-      <p className={styles.warningText}>
-        {m.unusable.structured_outputs_unsupported}{' '}
-        <Link to={settingsPagePath('llmConnections')}>{m.structuredOutputsLink}</Link>
-      </p>
-    )
-  }
   const text = reason === 'api_key_missing' ? m.unusable.api_key_missing : m.unusable.connection_missing
   return <p className={styles.warningText}>{text}</p>
 }

@@ -1210,9 +1210,9 @@
   },
   "regionDetection": {
     "disabled": "Box detection is disabled (an administrator can enable it under \"Region detection\" in the admin settings)",
-    "unsupported": "The detection connection does not support Structured Outputs, so it cannot be used for detection (only the official OpenAI endpoint is supported for now)",
     "hourlyLimitReached": "The hourly detection limit ({limit}) has been reached. Please wait and try again",
     "llmError": "Box detection failed: {error}",
+    "invalidResponse": "the response was not in the expected form (a JSON list of boxes)",
     "maskNotSupported": "Detection is not available for mask images",
     "assetDeleted": "Detection is not available for deleted images",
     "imageWithheld": "A Mod's verdict does not allow this image to be sent to external AI",

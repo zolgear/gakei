@@ -1441,7 +1441,7 @@
       "enabledHelp": "When enabled, Detect appears in Regions. Boxes can still be drawn by hand when disabled. Disabled by default.",
       "connectionHeading": "VLM",
       "connectionLabel": "Connection",
-      "connectionHelp": "Choose a connection that can read images and supports structured outputs (JSON schema).",
+      "connectionHelp": "Choose a connection that can read images. Connections without structured outputs (JSON schema), such as a local VLM, also work.",
       "connectionsLink": "LLM connections",
       "modelLabel": "Model name",
       "modelHelp": "The model name sent to the connection. Choose a model that can read images.",
@@ -1460,10 +1460,8 @@
       },
       "unusable": {
         "connection_missing": "\"Detect\" is hidden because the selected connection was not found. Choose a connection again.",
-        "api_key_missing": "\"Detect\" is hidden because the connection has no key. Register a key in the OpenAI settings.",
-        "structured_outputs_unsupported": "\"Detect\" is hidden because the connection is not treated as supporting structured outputs. If it does support them, set \"Structured outputs\" to \"Supported\" for that connection in LLM connections."
-      },
-      "structuredOutputsLink": "Open LLM connections"
+        "api_key_missing": "\"Detect\" is hidden because the connection has no key. Register a key in the OpenAI settings."
+      }
     },
     "groupNaming": {
       "intro": "Shows group name suggestions from an LLM below the name field on the group suggestions page. Only the tags of each cluster are sent, and sensitive tags are removed before sending to external connections. A request is sent each time the page is opened, which may incur costs.",

@@ -1210,9 +1210,9 @@
   },
   "regionDetection": {
     "disabled": "四角の検出は無効です(管理者設定の「領域の検出」で有効にできます)",
-    "unsupported": "検出の接続先が Structured Outputs に対応していないため、検出に使えません(今は OpenAI の公式の接続先だけに対応します)",
     "hourlyLimitReached": "1時間の検出の上限({limit} 回)に達しました。しばらく待ってから試してください",
     "llmError": "四角の検出に失敗しました: {error}",
+    "invalidResponse": "応答が答えの形(四角の一覧の JSON)ではありませんでした",
     "maskNotSupported": "マスクの画像では検出できません",
     "assetDeleted": "削除した画像では検出できません",
     "imageWithheld": "この画像は Mod の判定により外部の AI へ送れません",

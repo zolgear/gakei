@@ -2,7 +2,16 @@
 
 - モデルには座標を 0〜1000 の整数で、左上を原点にした `[x0, y0, x1, y1]` で答えさせる。
 - 読み取りでは、範囲外の値・空の四角・形の合わない要素を捨て、同じ名前と四角の重複を除き、
-  上限の数で切る。残った四角は 3章の形(0〜1 の割合、左上が原点の `[x0, y0, x1, y1]`)に直す。
+  上限の数で切る(重複は上限を数える前に除く)。残った四角は 3章の形(0〜1 の割合、左上が
+  原点の `[x0, y0, x1, y1]`)に直す。
+- 構造化出力に対応しない接続先(手元の VLM など)では、スキーマを付けずに答えの形を指示文で
+  示し、応答を緩く読む(`parse_response`。囲みの ``` を外す、前後の文を除く、配列だけの応答、
+  キー名の揺れ `box` / `bbox` / `bbox_2d`、上限で切れた配列の閉じた要素まで)。構造化出力の
+  ある接続先でも同じ読み取りを通す(口がスキーマを黙って無視することがあるため)。
+- 応答が答えの形(`objects` の配列、または配列だけ)でなければ、「見つからない」ではなく
+  `RegionResponseError`(検出のエラー)にする。要素があるのに1つも読めないときも同じ。
+- 出力のトークン数に上限(`MAX_OUTPUT_TOKENS`)を付ける(同じ要素を繰り返して止まらない
+  ことがあるため)。
 - 縦に長い物の下の端が短くなりがちだが、四角を自動で広げることはしない(候補は手で直す前提)。
 - 検出の結果は Asset ごとの履歴として保存する(`asset_region_detection`。証跡ではない)。
   1つの Asset に新しい方から HISTORY_MAX 回まで残し、超えたら古いものから消す。見つからなかった
@@ -12,6 +21,8 @@
 from __future__ import annotations
 
 import io
+import json
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -41,6 +52,9 @@ IMAGE_DETAIL: Literal["high"] = "high"
 REASONING_EFFORT = "low"
 # 1つの Asset に残す検出の履歴の数。
 HISTORY_MAX = 20
+# 出力のトークン数の上限(スキーマの有無に関わらず付ける)。四角 1 つは 30 トークンほどで、
+# MAX_ITEMS 個と推論(effort low)に足りる値にする。
+MAX_OUTPUT_TOKENS = 3000
 
 _LANGUAGES = {"ja": "日本語", "en": "英語"}
 
@@ -88,13 +102,22 @@ _TARGET_QUERY = (
 )
 
 
-def instructions(locale: str, *, query: str | None, max_items: int) -> str:
-    """VLM への指示。名前の言語を画面の言語に合わせる。"""
-    return _INSTRUCTIONS.format(
+# スキーマを付けずに送るとき(構造化出力に対応しない接続先)に、指示の末尾に足す答えの形。
+_ANSWER_FORMAT = (
+    "\n- 答えは JSON だけを返す(説明の文や ``` の囲みは付けない)。形は次のとおり:\n"
+    '{"objects":[{"label":"名前","box":[x0,y0,x1,y1]}]}'
+)
+
+
+def instructions(locale: str, *, query: str | None, max_items: int, structured: bool = True) -> str:
+    """VLM への指示。名前の言語を画面の言語に合わせる。`structured` が偽(スキーマを付けない)
+    なら、末尾に答えの形を示す。"""
+    text = _INSTRUCTIONS.format(
         language=_LANGUAGES.get(locale, "日本語"),
         max_items=max_items,
         target=_TARGET_QUERY if query else _TARGET_ALL,
     )
+    return text if structured else text + _ANSWER_FORMAT
 
 
 def build_input(query: str | None) -> str:
@@ -138,11 +161,95 @@ def _coords(value: Any) -> tuple[int, int, int, int] | None:
     return x0, y0, x1, y1
 
 
+class RegionResponseError(ValueError):
+    """応答が答えの形でない(検出のエラーにする。「見つからない」とは区別する)。"""
+
+
+# 名前と四角のキー名の揺れ(先にあるものを使う)。
+_LABEL_KEYS = ("label", "name")
+_BOX_KEYS = ("box", "bbox", "bbox_2d")
+_FENCE_OPEN = re.compile(r"```[A-Za-z0-9_-]*[ \t]*\n?")
+_OBJECTS_ARRAY = re.compile(r'\{\s*"objects"\s*:\s*\[')
+# 前後に文があるとき、JSON の始まりを探す `{` / `[` の数の上限。
+_MAX_JSON_STARTS = 50
+
+
+def _strip_fence(text: str) -> str:
+    """``` の囲みがあれば中身を取り出す(閉じていなければ末尾まで)。"""
+    match = _FENCE_OPEN.search(text)
+    if match is None:
+        return text
+    rest = text[match.end() :]
+    end = rest.find("```")
+    return rest if end < 0 else rest[:end]
+
+
+def _salvage_array(text: str, start: int) -> list[Any]:
+    """`start`(`[` の次)から、閉じた要素だけを拾う(上限で切れた配列)。"""
+    decoder = json.JSONDecoder()
+    items: list[Any] = []
+    pos = start
+    while True:
+        while pos < len(text) and text[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(text) or text[pos] == "]":
+            break
+        try:
+            value, pos = decoder.raw_decode(text, pos)
+        except ValueError:
+            break
+        items.append(value)
+    return items
+
+
+def parse_response(text: str | None) -> Any:
+    """応答の文から JSON の値を緩く取り出す。前後の空白と ``` の囲みを外し、前後に文があれば
+    最初の JSON の値を取る。閉じていない(上限で切れた)ときは、配列の閉じた要素までを拾う。
+    読めなければ RegionResponseError。"""
+    if not text or not text.strip():
+        raise RegionResponseError("empty response")
+    body = _strip_fence(text.strip()).strip()
+    try:
+        return json.loads(body)
+    except ValueError:
+        pass
+    decoder = json.JSONDecoder()
+    starts = [i for i, c in enumerate(body) if c in "{["]
+    for start in starts[:_MAX_JSON_STARTS]:
+        try:
+            value, _ = decoder.raw_decode(body, start)
+            return value
+        except ValueError:
+            pass
+        # 閉じていない JSON: トップが配列ならその要素を、オブジェクトなら `objects` の要素を
+        # 拾う。拾えなければ、次の `{` / `[` から読み直す(前の文に括弧があるとき)。
+        if body[start] == "[":
+            items = _salvage_array(body, start + 1)
+        else:
+            match = _OBJECTS_ARRAY.match(body, start)
+            items = _salvage_array(body, match.end()) if match else []
+        if items:
+            return items
+    raise RegionResponseError("no readable JSON in response")
+
+
+def _first(item: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        if key in item:
+            return item[key]
+    return None
+
+
 def interpret(data: Any, max_items: int) -> list[DetectedBox]:
-    """応答を読み、使える四角だけを返す(順序は応答のまま)。"""
-    objects = data.get("objects") if isinstance(data, dict) else None
-    if not isinstance(objects, list):
-        return []
+    """応答を読み、使える四角だけを返す(順序は応答のまま)。答えの形(`objects` の配列を持つ
+    オブジェクト、または配列だけ)でないとき、要素があるのに1つも使えないときは
+    RegionResponseError。重複は上限の数を数える前に除く。"""
+    if isinstance(data, dict) and isinstance(data.get("objects"), list):
+        objects = data["objects"]
+    elif isinstance(data, list):
+        objects = data
+    else:
+        raise RegionResponseError("response is not in the expected shape")
     result: list[DetectedBox] = []
     seen: set[tuple[str, tuple[int, int, int, int]]] = set()
     for item in objects:
@@ -150,11 +257,11 @@ def interpret(data: Any, max_items: int) -> list[DetectedBox]:
             break
         if not isinstance(item, dict):
             continue
-        label = item.get("label")
+        label = _first(item, _LABEL_KEYS)
         if not isinstance(label, str) or not label.strip():
             continue
         label = label.strip()[:LABEL_MAX]
-        coords = _coords(item.get("box"))
+        coords = _coords(_first(item, _BOX_KEYS))
         if coords is None:
             continue
         key = (label, coords)
@@ -163,6 +270,8 @@ def interpret(data: Any, max_items: int) -> list[DetectedBox]:
         seen.add(key)
         x0, y0, x1, y1 = (c / COORD_MAX for c in coords)
         result.append(DetectedBox(label=label, box=(x0, y0, x1, y1)))
+    if objects and not result:
+        raise RegionResponseError("no usable object in response")
     return result
 
 

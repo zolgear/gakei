@@ -896,11 +896,13 @@ export interface paths {
          *     - 409 `mask_not_supported` / `asset_deleted` / `image_withheld` / `image_missing`: その画像では
          *       検出できない
          *     - 409 `disabled`: 検出が無効
-         *     - 409 `unsupported`: 接続先が Structured Outputs に対応しない
          *     - 409 `connection_missing`: 接続先・キーが無い
          *     - 429 `rate_limited`: 1時間の上限
          *     - 409 `hook_denied`: Mod が送信を止めた(理由は `message`)
-         *     - 502 `llm_error`: VLM の呼び出しに失敗した・応答を読めなかった
+         *     - 502 `llm_error`: VLM の呼び出しに失敗した・応答を読めなかった(答えの形でない応答も含む。
+         *       「見つからない」は 200 の空の一覧)
+         *
+         *     接続先が構造化出力に対応しないとみなすときは、スキーマを付けずに答えの形を指示文で示す。
          */
         post: operations["detect_asset_regions"];
         delete?: never;
@@ -7548,7 +7550,7 @@ export interface components {
             /** Usable */
             usable: boolean;
             /** Unusable Reason */
-            unusable_reason?: ("disabled" | "connection_missing" | "api_key_missing" | "structured_outputs_unsupported") | null;
+            unusable_reason?: ("disabled" | "connection_missing" | "api_key_missing") | null;
             /** Requests Last Hour */
             requests_last_hour: number;
         };
