@@ -16,6 +16,7 @@ import { interpretDrop, isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { isSubmitShortcut } from '../workspace/submitShortcut'
 import { ASSISTANT_ATTACHMENTS_MAX, ASSISTANT_TEXT_MAX, type AttachmentPlan } from './assistantForm'
 import { AttachDialog } from './AttachDialog'
+import { ASSISTANT_COMPOSER_ATTRIBUTE } from './assistantWindowAttributes'
 import styles from './AssistantPanel.module.css'
 
 const MIN_HEIGHT_PX = 64
@@ -122,6 +123,7 @@ export function Composer({
       )}
       <textarea
         ref={textareaRef}
+        {...{ [ASSISTANT_COMPOSER_ATTRIBUTE]: '' }}
         className={styles.textarea}
         value={text}
         maxLength={ASSISTANT_TEXT_MAX}

@@ -3524,6 +3524,12 @@
   },
   "assistant": {
     "heading": "Assistant",
+    "window": {
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "close": "Close",
+      "responding": "Responding"
+    },
     "empty": "Ask for prompts, create prompt sets, or hand off generation.\nFor example: \"Three prompts for a harbor town at dusk\", \"Add winter versions to this set\", \"Make 4 images with the current settings\"",
     "messagesLabel": "Conversation",
     "thinking": "Thinking…",

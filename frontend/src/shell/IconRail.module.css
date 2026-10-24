@@ -24,6 +24,11 @@
   color: var(--color-text-muted);
 }
 
+/* アシスタントの窓の開閉(パネルの切り替えとは別)は列の一番下に置く。 */
+.bottomItem {
+  margin-top: auto;
+}
+
 .item[data-active='true'] {
   background: var(--color-header-band);
   border-left-color: var(--color-accent);
