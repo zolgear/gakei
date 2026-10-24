@@ -568,6 +568,21 @@
     min-height: 44px;
   }
 
+  /* 空状態(見せるものが無い間)は畳み、入力欄を最初の画面に収める(resultOrigin.ts の
+     mobileResultCollapse)。StudioWorkspace の .top もこの属性を見て最小の高さを外す。 */
+  .pane[data-mobile-collapse='all'] {
+    display: none;
+  }
+
+  .pane[data-mobile-collapse='body'] {
+    flex: 0 0 auto;
+  }
+
+  .pane[data-mobile-collapse='body'] > .body,
+  .pane[data-mobile-collapse='body'] > .emptyState {
+    display: none;
+  }
+
   /* 狭い幅では設定に関わらず縦積みになるので、切り替えボタンを出す意味がない。 */
   .layoutToggle {
     display: none;
