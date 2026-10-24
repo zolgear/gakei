@@ -127,11 +127,15 @@
     },
     "page": {
       "title": "History",
-      "filterByStatus": "Filter by status",
+      "filterByStatus": "Filter",
       "filterAll": "All",
       "filterSucceeded": "Succeeded",
       "filterFailed": "Failed",
       "filterFavorite": "Favorites",
+      "filterShape": "Shape",
+      "filterShapeAll": "Any shape",
+      "filterTransparent": "Transparent",
+      "filterRegions": "Regions",
       "loading": "Loading...",
       "loadError": "Failed to load history.",
       "noMatch": "No matching runs.",
@@ -148,6 +152,13 @@
       "ungrouped": "No group",
       "sectionCount": "{count} images",
       "backToTop": "Back to top"
+    },
+    "labels": {
+      "square": "Square",
+      "portrait": "Portrait",
+      "wide": "Wide",
+      "transparent": "Transparent",
+      "regions": "Regions"
     }
   },
   "runDetail": {

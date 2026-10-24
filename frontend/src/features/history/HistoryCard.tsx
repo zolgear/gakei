@@ -14,7 +14,8 @@ import {
   shortenModelName,
   statusLabel,
 } from '../../lib/format'
-import { buildParamChips, buildParamChipsWithActualSize, formatTokenCount } from './historyChips'
+import { buildParamChips, formatTokenCount } from './historyChips'
+import { historyLabels, type HistoryShape } from './historyLabels'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { HistoryCardMedia } from './HistoryCardMedia'
 import { FavoriteButton } from './FavoriteButton'
@@ -48,14 +49,18 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   const shownOutput = outputs[outputIndex] ?? outputs[0]
   const hasInputs = run.input_count > 0
   const accentClass = hasInputs ? styles.dotEdit : styles.dotGenerate
-  // 重ねるカードでは、サイズを出力の実寸と合わせてチップの1つにまとめる(従来のカードは今のまま)。
-  const paramChips =
-    variant === 'overlay' && run.status === 'succeeded'
-      ? buildParamChipsWithActualSize(run.params, shownOutput)
-      : buildParamChips(run.params)
+  // 従来のカード(検索のページ)はパラメーターのチップを今のまま出す。重ねるカード(履歴の「詳細」)は、
+  // 絞り込みと対になるラベル(領域・透過・形)だけを操作の行の左に出す(`historyLabels.ts`)。
+  const paramChips = variant === 'overlay' ? [] : buildParamChips(run.params)
+  const labels = historyLabels(run, shownOutput)
+  const shapeLabels: Record<HistoryShape, string> = {
+    square: t.history.labels.square,
+    portrait: t.history.labels.portrait,
+    wide: t.history.labels.wide,
+  }
   // 領域の指示(ADR-0053): 足した文はプロンプトから除いて見せ、四角を送ったことをチップで示す。
   const shownPrompt = stripAppendedText(run.prompt, run.regions?.appended_text)
-  const regionCount = run.regions?.regions.length ?? 0
+  const regionCount = labels.regionCount
   const tokenLabel = formatTokenCount(run.usage)
   const parentAssetId = run.primary_parent_asset_id
   const extraInputCount = run.input_count > 1 ? run.input_count - 1 : 0
@@ -70,7 +75,20 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
     primaryParentAssetId: parentAssetId ?? null,
   })
 
-  const runActions = useHistoryRunActions(run, shownOutput, nav)
+  const overlayLabels =
+    variant === 'overlay' && (regionCount > 0 || labels.transparent || labels.shape) ? (
+      <div className={styles.labelRow}>
+        {regionCount > 0 && (
+          <span className={styles.chip} title={t.regions.runDetail.delivery}>
+            {fmt(t.regions.form.chip, { count: regionCount })}
+          </span>
+        )}
+        {labels.transparent && <span className={styles.chip}>{t.history.labels.transparent}</span>}
+        {labels.shape && <span className={styles.chip}>{shapeLabels[labels.shape]}</span>}
+      </div>
+    ) : null
+
+  const runActions = useHistoryRunActions(run, shownOutput, nav, { leading: overlayLabels })
 
   const elapsed = run.status === 'running' ? formatElapsedSeconds(run.started_at) : null
 
@@ -121,7 +139,7 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
       </div>
 
       <div className={styles.body}>
-        {/* 重ねる形では、画像の左下は下の帯に隠れるので、親のサムネイルを帯の先頭に置く(サイズはチップの行にまとめる)。 */}
+        {/* 重ねる形では、画像の左下は下の帯に隠れるので、親のサムネイルを帯の先頭に置く。 */}
         {variant === 'overlay' && parentOverlay && (
           <div className={styles.overlayLead}>
             {parentOverlay}
@@ -169,7 +187,7 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
           )}
         </div>
 
-        {(paramChips.length > 0 || regionCount > 0) && (
+        {variant === 'detail' && (paramChips.length > 0 || regionCount > 0) && (
           <div className={styles.chipRow}>
             {regionCount > 0 && (
               <span className={styles.chip} title={t.regions.runDetail.delivery}>

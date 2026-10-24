@@ -506,6 +506,33 @@
   color: rgba(255, 255, 255, 0.75);
 }
 
+/* 操作の行の左に置くラベル(領域・透過・形)。アイコンは右に寄せたまま、1行に収まらなければラベルの
+   側を上の行へ折り返す(アイコンは縮めない。狭い幅の当たり判定を保つ)。 */
+.labelRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-right: auto;
+  overflow: hidden;
+}
+
+.labelRow .chip {
+  flex: none;
+  white-space: nowrap;
+}
+
+.card[data-variant='overlay'] .actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 6px;
+  height: auto;
+  min-height: 36px;
+}
+
 .card[data-variant='overlay'] .chip {
   color: rgba(255, 255, 255, 0.9);
   border-color: rgba(255, 255, 255, 0.24);
@@ -559,6 +586,16 @@
 
   .card[data-variant='overlay'] .body {
     padding: 40px 8px 8px;
+  }
+
+  .card[data-variant='overlay'] .actions {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 44px;
+  }
+
+  .card[data-variant='overlay'] .actions .iconButton {
+    flex: none;
   }
 }
 
