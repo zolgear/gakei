@@ -15,7 +15,8 @@ import {
   statusLabel,
 } from '../../lib/format'
 import { buildParamChips, formatTokenCount } from './historyChips'
-import { historyLabels, type HistoryShape } from './historyLabels'
+import { formatPixelSize } from './galleryLayout'
+import { historyLabels } from './historyLabels'
 import { resolveHistoryCardNavigation } from './historyNavigation'
 import { HistoryCardMedia } from './HistoryCardMedia'
 import { FavoriteButton } from './FavoriteButton'
@@ -50,14 +51,11 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   const hasInputs = run.input_count > 0
   const accentClass = hasInputs ? styles.dotEdit : styles.dotGenerate
   // 従来のカード(検索のページ)はパラメーターのチップを今のまま出す。重ねるカード(履歴の「詳細」)は、
-  // 絞り込みと対になるラベル(領域・透過・形)だけを操作の行の左に出す(`historyLabels.ts`)。
+  // 生成に使ったものの有無(入力・領域)は上の行に、出力の性質(透過・実寸)は操作の行の左に出す
+  // (`historyLabels.ts`)。形(正方形など)は絞り込みにだけ使い、カードには実寸を出す。
   const paramChips = variant === 'overlay' ? [] : buildParamChips(run.params)
   const labels = historyLabels(run, shownOutput)
-  const shapeLabels: Record<HistoryShape, string> = {
-    square: t.history.labels.square,
-    portrait: t.history.labels.portrait,
-    wide: t.history.labels.wide,
-  }
+  const pixelSize = variant === 'overlay' ? formatPixelSize(shownOutput) : null
   // 領域の指示(ADR-0053): 足した文はプロンプトから除いて見せ、四角を送ったことをチップで示す。
   const shownPrompt = stripAppendedText(run.prompt, run.regions?.appended_text)
   const regionCount = labels.regionCount
@@ -76,15 +74,10 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   })
 
   const overlayLabels =
-    variant === 'overlay' && (regionCount > 0 || labels.transparent || labels.shape) ? (
+    variant === 'overlay' && (labels.transparent || pixelSize) ? (
       <div className={styles.labelRow}>
-        {regionCount > 0 && (
-          <span className={styles.chip} title={t.regions.runDetail.delivery}>
-            {fmt(t.regions.form.chip, { count: regionCount })}
-          </span>
-        )}
         {labels.transparent && <span className={styles.chip}>{t.history.labels.transparent}</span>}
-        {labels.shape && <span className={styles.chip}>{shapeLabels[labels.shape]}</span>}
+        {pixelSize && <span className={styles.chip}>{pixelSize}</span>}
       </div>
     ) : null
 
@@ -117,6 +110,11 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
         <span className={`${styles.dot} ${accentClass}`} aria-hidden="true" />
         {hasInputs && (
           <span className={styles.inputBadge}>{fmt(t.history.card.inputBadge, { count: run.input_count })}</span>
+        )}
+        {variant === 'overlay' && regionCount > 0 && (
+          <span className={styles.inputBadge} title={t.regions.runDetail.delivery}>
+            {fmt(t.regions.form.chip, { count: regionCount })}
+          </span>
         )}
         {/* アシスタントが作った Run(ADR-0048 9章)。実行元は Run 詳細にも出す。 */}
         {run.origin === 'assistant' && <span className={styles.inputBadge}>{t.history.card.originAssistant}</span>}
