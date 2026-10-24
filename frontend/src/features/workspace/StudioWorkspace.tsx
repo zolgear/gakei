@@ -142,6 +142,13 @@ export function StudioWorkspace() {
     setRepeatBatch(null)
   }
 
+  // 狭い幅ではワークスペース全体が縦にスクロールする。新規生成では先頭に戻し、空にした入力欄
+  // (結果エリアは空状態で畳まれる)を最初の画面に出す。
+  useEffect(() => {
+    if (resetAt === undefined || !isMobileViewport()) return
+    containerRef.current?.scrollTo?.({ top: 0 })
+  }, [resetAt])
+
   // `/studio`(パラメーターなし)に来たとき、直前に追っていた Run がまだ queued/running
   // なら `?run=` を付け直して進捗表示へ戻す。
   const restoreRunId = resolveStudioRestoreRunId({
