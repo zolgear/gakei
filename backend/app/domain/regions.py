@@ -274,7 +274,8 @@ def _kind_text(region: RegionBox, *, blank: bool) -> str:
     """種類の文。「変える」「足す」で指示・描く文字・参照画像のどれも無ければ、場所だけを示す
     (四角の定義と指示は分ける。全体のプロンプトから番号か名前で指すための目印)。
 
-    `blank` は白紙の配置図(入力画像の無い Run)。変える物が無いので、「変える」は「描く」にする。"""
+    `blank` は白紙の配置図(入力画像の無い Run)。変える物が無いので、「変える」は「描く」にする。
+    名前だけの四角も、白紙では名前の物を「描く」とする(目印にする相手が無いため)。"""
     kind = region.kind
     if kind == "move" and region.source_box is not None:
         return t(
@@ -287,6 +288,9 @@ def _kind_text(region: RegionBox, *, blank: bool) -> str:
     if kind == "remove":
         return t("runRegions.prompt.kind.remove", where=_where(region.box))
     if not region.instruction and region.text is None and region.reference_asset_id is None:
+        # 白紙では名前が描く物そのもの。場所だけの文では描かれにくかったので「描く」と伝える。
+        if blank and region.label:
+            return t("runRegions.prompt.kind.changeBlank", where=_where(region.box))
         return _area(region.box)
     if kind == "add":
         return t("runRegions.prompt.kind.add", where=_where(region.box))

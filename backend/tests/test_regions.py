@@ -454,6 +454,7 @@ def test_blank_prompt_text_wording() -> None:
         RegionBox(number=1, box=[0.0, 0.0, 0.5, 0.5], instruction="a cat"),
         RegionBox(number=2, kind="add", box=[0.5, 0.5, 1.0, 1.0], instruction="a dog"),
         RegionBox(number=3, box=[0.1, 0.1, 0.2, 0.2], label="lamp"),
+        RegionBox(number=4, box=[0.6, 0.1, 0.7, 0.2]),
     ]
     with use_locale("ja"):
         text = regions_domain.build_prompt_text(
@@ -463,7 +464,9 @@ def test_blank_prompt_text_wording() -> None:
     assert "番号(「四角 1」など)か名前" in text
     assert "- 四角 1(赤): 四角の中(横 0〜50%、縦 0〜50% の範囲)に描く。 指示: a cat" in text
     assert "を変える" not in text
-    assert "- 四角 3(緑、lamp): 横 10〜20%、縦 10〜20% の範囲。" in text
+    # 白紙では、名前だけの四角は名前の物を描く。名前も無ければ場所だけの目印のまま。
+    assert "- 四角 3(緑、lamp): 四角の中(横 10〜20%、縦 10〜20% の範囲)に描く。" in text
+    assert "- 四角 4(黄): 横 60〜70%、縦 10〜20% の範囲。" in text
     assert "描かないでください" not in text  # 入力のある Run の結び
     assert text.endswith("出力には描かず、画面全体を絵で埋めてください。")
     with use_locale("en"):
