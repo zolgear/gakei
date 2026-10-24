@@ -19,7 +19,7 @@ import styles from './HistoryGallery.module.css'
 
 // 列の最小の幅・間・狭い画面の列の数は、詳細のカードの並び(`HistoryPage.module.css` の `.grid`)と
 // 同じにする。正方形の画像が、詳細のカードの幅と同じ大きさになり、表示を切り替えてもずれない。
-const GAP_PX = 8
+const GAP_PX = 16
 const MIN_COLUMN_WIDTH_PX = 220
 const NARROW_COLUMNS = 2
 // 幅がまだ分からないときの行の高さ。
