@@ -66,6 +66,7 @@ import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
 import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import type { RunInputItem } from './types'
 import { runFormContentKey, useFormBoundMessage } from './formBoundMessage'
+import { droppedParamsText, droppedParamsReason } from './droppedParamsNotice'
 import type { RegionBox, RegionKind } from '../../api/client'
 import {
   allowedRegionKinds,
@@ -422,30 +423,26 @@ export function useRunFormLogic(
   // 無い(新規フォーム、seed 付きモデル/ワークフローへの切り替え直後、seed の無い下書きの復元)
   // seed 欄に乱数を埋める。値が既にある(「同じ設定で再実行」で固定された seed、seed 入りの
   // 下書き)場合やモードが「ランダム」の場合は何もしない。
+  // 前に defs を当てたときのプロバイダー・モデル。外した項目の知らせで、モデルの切り替えと
+  // 入力の変化(同じモデルで操作が変わった)を分ける。
+  const defsScopeRef = useRef({ provider, model })
   useEffect(() => {
     if (defs.length === 0) return
     const seedMode = loadSeedMode()
+    const reason = droppedParamsReason(defsScopeRef.current, { provider, model })
+    defsScopeRef.current = { provider, model }
     if (!didInitParamsRef.current) {
       const initialRaw = toRawParamValues(defs, initialRef.current.params)
       const sanitized = sanitizeRawValues(defs, initialRaw)
-      const dropped = findDroppedParamNames(initialRaw, sanitized)
-      if (dropped.length > 0) {
-        const rf = msg().runForm.runFormLogic
-        setDroppedParamsNotice(fmt(rf.droppedParamsSettings, { names: dropped.join(rf.listSeparator) }))
-      }
+      const notice = droppedParamsText(findDroppedParamNames(initialRaw, sanitized), 'settings')
+      if (notice !== null) setDroppedParamsNotice(notice)
       setRawParams(fillSeedDefaults(defs, sanitized, seedMode))
       didInitParamsRef.current = true
       return
     }
     setRawParams((prevRawParams) => {
       const next = sanitizeRawValues(defs, prevRawParams)
-      const dropped = findDroppedParamNames(prevRawParams, next)
-      if (dropped.length > 0) {
-        const rf = msg().runForm.runFormLogic
-        setDroppedParamsNotice(fmt(rf.droppedParamsInputs, { names: dropped.join(rf.listSeparator) }))
-      } else {
-        setDroppedParamsNotice(null)
-      }
+      setDroppedParamsNotice(droppedParamsText(findDroppedParamNames(prevRawParams, next), reason))
       return fillSeedDefaults(defs, next, seedMode)
     })
     // defs は model/operation が変わった時だけ中身が変わる想定。
@@ -738,12 +735,7 @@ export function useRunFormLogic(
       setAssetGroupId(state.assetGroupId)
       setSubmitError(null)
       setImportNotice(null)
-      if (values.droppedNames.length > 0) {
-        const rf = msg().runForm.runFormLogic
-        setDroppedParamsNotice(fmt(rf.droppedParamsSettings, { names: values.droppedNames.join(rf.listSeparator) }))
-      } else {
-        setDroppedParamsNotice(null)
-      }
+      setDroppedParamsNotice(droppedParamsText(values.droppedNames, 'settings'))
       return
     }
 

@@ -2060,6 +2060,7 @@
     "runFormLogic": {
       "droppedParamsSettings": "{names} は現在の設定では使えないため未指定に戻しました",
       "droppedParamsInputs": "{names} は現在の入力では使えないため未指定に戻しました",
+      "droppedParamsModel": "{names} はこのモデルでは使えないため未指定に戻しました",
       "submitFailedDefault": "実行の開始に失敗しました",
       "listSeparator": "、"
     },
