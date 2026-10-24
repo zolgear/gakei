@@ -112,6 +112,12 @@ export function useEditInputsLogic(
   const [sketchOverAsset, setSketchOverAsset] = useState<AssetDetail | null>(null)
   const [sketchOverAssetLoading, setSketchOverAssetLoading] = useState(false)
   const [compositeEditor, setCompositeEditor] = useState<CompositeEditorTarget | null>(null)
+  // モデルを切り替えて入力画像の上限が変わったら、前のモデルでの「足せなかった」などの知らせは消す。
+  const [prevMaxInputImages, setPrevMaxInputImages] = useState(maxInputImages)
+  if (prevMaxInputImages !== maxInputImages) {
+    setPrevMaxInputImages(maxInputImages)
+    setUploadErrors([])
+  }
 
   const images = inputs.filter((i) => i.role === 'image').sort((a, b) => a.position - b.position)
   const maskInput = inputs.find((i) => i.role === 'mask')
@@ -279,6 +285,7 @@ export function useEditInputsLogic(
   function handleRemove(inputId: string) {
     const result = removeImageInput(inputs, inputId)
     onChange(result.inputs)
+    setUploadErrors([])
   }
 
   function handleRemoveMask() {

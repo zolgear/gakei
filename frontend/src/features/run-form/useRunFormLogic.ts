@@ -65,6 +65,7 @@ import { useAssetGroups } from '../stock/groups/assetGroupQueries'
 import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
 import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import type { RunInputItem } from './types'
+import { runFormContentKey, useFormBoundMessage } from './formBoundMessage'
 import type { RegionBox, RegionKind } from '../../api/client'
 import {
   allowedRegionKinds,
@@ -345,11 +346,26 @@ export function useRunFormLogic(
     saveRepeatRaw(raw)
   }, [])
   const repeat = parseRepeat(repeatRaw)
-  const [submitError, setSubmitError] = useState<string | null>(null)
   // プロンプトテンプレート(実験)。サイドバーのパネルから `requestFormLoad` で入る。
   const [promptTemplate, setPromptTemplate] = useState<PromptTemplateMode | null>(null)
   const [templatePreview, setTemplatePreview] = useState<TemplatePreview | null>(null)
-  const [droppedParamsNotice, setDroppedParamsNotice] = useState<string | null>(null)
+  // 送信して断られたエラー、モデルの切り替えなどで外した項目・四角の知らせは、フォームの内容が
+  // 変わったら消す(送信できない理由は状態から毎回計算する)。
+  const formContentKey = runFormContentKey({
+    provider,
+    model,
+    prompt,
+    rawParams,
+    sizeState,
+    inputs: formState.inputs,
+    regions: formState.regions,
+    repeatRaw,
+    assetGroupId,
+    promptTemplate,
+  })
+  const [submitError, setSubmitError] = useFormBoundMessage<string>(formContentKey)
+  const [droppedParamsNotice, setDroppedParamsNotice] = useFormBoundMessage<string>(formContentKey)
+  const [regionsNotice, setRegionsNotice] = useFormBoundMessage<string>(formContentKey)
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null)
   const didInitParamsRef = useRef(false)
 
@@ -540,7 +556,6 @@ export function useRunFormLogic(
     [regionOpCaps],
   )
   const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
-  const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
   const [compositeRedrawing, setCompositeRedrawing] = useState(false)
   // 主たる入力が変わっても四角は外さず、割合のまま移す(座標はどちらも 0〜1 の割合。ADR-0053 1章)。
   // 1枚目の上の四角は新しい1枚目の上へ(1枚目を外して白紙になったら白紙へ)、白紙の四角は入力画像を
@@ -566,7 +581,7 @@ export function useRunFormLogic(
     }
     setFormState({ ...formState, regions: [], regionsAssetId: null })
     setRegionsNotice(msg().regions.form.clearedUnsupported)
-  }, [regionsClearReason, adoptFrame, adoptAssetId, formState, setFormState])
+  }, [regionsClearReason, adoptFrame, adoptAssetId, formState, setFormState, setRegionsNotice])
 
   function setRegions(next: RegionBox[], frame?: RegionFrame) {
     setRegionsNotice(null)
@@ -806,6 +821,8 @@ export function useRunFormLogic(
     mutationFn: createRun,
     onSuccess: (res) => {
       setSubmitError(null)
+      setDroppedParamsNotice(null)
+      setRegionsNotice(null)
       // 送信してもフォームは何も変えない(ADR-0009「送信後のフォーム」2026-09-24 改訂)。
       // prompt・inputs(マスク含む)・provider・model・params はそのまま残す。
       queryClient.invalidateQueries({ queryKey: ['runs'] })
