@@ -339,6 +339,10 @@ def _build_lifespan(settings: Settings):
         # ADR-0024 8章: 推定の接続先1組の設定を、接続先の一覧と用途ごとの組に移す(冪等)。
         with session_factory() as session:
             annotation_settings.migrate_legacy(session, settings)
+        # ADR-0024 7章(2026-10-24): 既定の ONNX モデルを swinv2 に変えた。前の既定の vit に
+        # 頼っていて、それをダウンロード済みの環境は vit に留める(冪等)。
+        with session_factory() as session:
+            annotation_settings.pin_previous_onnx_default(session, settings.data_dir)
         # ADR-0041 1章: 前回の終了で取り込み中のまま残ったタグ辞書を failed にする。
         with session_factory() as session:
             tag_dictionaries.recover_interrupted(session)

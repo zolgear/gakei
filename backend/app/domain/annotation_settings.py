@@ -21,10 +21,12 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field, fields, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from sqlalchemy.orm import Session
 
+from app.annotation import wd_models
 from app.domain import api_key as api_key_domain
 from app.domain import llm_connections
 from app.domain.general_settings import (
@@ -85,6 +87,10 @@ DEFAULT_ONNX_THRESHOLD = 0.35
 ONNX_THRESHOLD_MIN = 0.01
 ONNX_THRESHOLD_MAX = 0.99
 MODEL_NAME_MAX = 200
+# ONNX タガーの既定のモデル。GPU の無い環境での推奨にそろえて swinv2 にした(2026-10-24、
+# ADR-0024 7章)。前の既定(vit)に頼っていた環境は `pin_previous_onnx_default` が vit に留める。
+DEFAULT_ONNX_MODEL: OnnxModelName = "wd-swinv2-tagger-v3"
+PREVIOUS_DEFAULT_ONNX_MODEL: OnnxModelName = "wd-vit-tagger-v3"
 
 
 class AnnotationSettingsValidationError(GeneralSettingsValidationError):
@@ -148,7 +154,7 @@ class AnnotationConfig:
     tag_language: TagLanguage = "localized"
     hourly_limit: int = DEFAULT_HOURLY_LIMIT
     onnx_enabled: bool = False
-    onnx_model: OnnxModelName = "wd-vit-tagger-v3"
+    onnx_model: OnnxModelName = DEFAULT_ONNX_MODEL
     onnx_threshold: float = DEFAULT_ONNX_THRESHOLD
     # レーティングの判定(ADR-0049 3章)。`onnx_model` の WD のモデルを使う。`onnx_enabled` とは
     # 独立にオンにできる。
@@ -410,6 +416,33 @@ def resolve_target(
     return llm_connections.resolve_target(
         config.all_connections(), choice.connection_id, choice.model, settings
     )
+
+
+# -- 既定の ONNX モデルの変更(ADR-0024 7章、2026-10-24) --------------------------
+
+
+def pin_previous_onnx_default(db: Session, data_dir: Path) -> bool:
+    """既定のモデルを vit から swinv2 に変えたとき、前の既定に頼っていた環境を vit に留める。
+    起動時に呼ぶ(冪等)。留めたら True。
+
+    `onnx_model` を一度も保存しておらず(画面は変えた項目だけを保存する)、vit のモデルを
+    ダウンロード済みなら、`annotation.onnx_model` に vit を保存する。更新の後に急に未取得の
+    swinv2 に切り替わり、推定(タグ・レーティング)が失敗するのを防ぐ。vit を取得していない
+    環境(新しく入れた環境を含む)は新しい既定のまま。
+    """
+    key = _KEY_PREFIX + "onnx_model"
+    if db.get(AppSetting, key) is not None:
+        return False
+    if not wd_models.is_downloaded(data_dir, PREVIOUS_DEFAULT_ONNX_MODEL):
+        return False
+    _save(db, key, PREVIOUS_DEFAULT_ONNX_MODEL)
+    logger.info(
+        "ONNX タガーの既定のモデルは %s に変わりましたが、%s をダウンロード済みなので、"
+        "こちらを使い続けます(管理者設定で変えられます)。",
+        DEFAULT_ONNX_MODEL,
+        PREVIOUS_DEFAULT_ONNX_MODEL,
+    )
+    return True
 
 
 # -- 今の設定からの移行(ADR-0024 8章) --------------------------------------------
