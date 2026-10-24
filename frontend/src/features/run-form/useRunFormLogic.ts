@@ -494,7 +494,8 @@ export function useRunFormLogic(
       .filter((i) => i.role === 'image')
       .sort((a, b) => a.position - b.position)[0]?.assetId ?? null
   // 四角は今の操作の capabilities で決める。入力画像があれば Edit(主たる入力の上)、無ければ
-  // Generate(出力の大きさの白紙の上。入力画像の要らない ComfyUI だけ。ADR-0053 6章)。
+  // Generate(出力の大きさの白紙の上。入力画像を要らないと答える操作だけ。ComfyUI と OpenAI。
+  // OpenAI はサーバーが白紙の配置図を作って Edit で送る。ADR-0053 5章・6章)。
   const regionOpCaps = operation === 'edit' ? editOpCaps : opCaps
   const regionsSupported = regionsSupportedFor(operation, regionOpCaps)
   const regionsBlank = regionsSupported && primaryAssetId === null

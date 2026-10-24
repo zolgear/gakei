@@ -1,5 +1,5 @@
 /**
- * ComfyUI への四角の差し込み(ADR-0053 6章)のフォームの判断。capabilities から選べる種類・参照画像・
+ * 入力画像の無い Run の四角(ComfyUI への差し込み。ADR-0053 6章。OpenAI の白紙の配置図。5章)のフォームの判断。capabilities から選べる種類・参照画像・
  * 白紙のキャンバスを決め、再実行で入力画像の無い Run の四角を戻す。
  */
 import { describe, expect, it } from 'vitest'
@@ -48,6 +48,12 @@ describe('regionsSupportedFor', () => {
     const openai = op({ regions_delivery: 'image_and_text', regions_requires_input_image: true })
     expect(regionsSupportedFor('generate', openai)).toBe(false)
     expect(regionsSupportedFor('edit', openai)).toBe(true)
+  })
+
+  it('OpenAI の生成は、白紙の配置図で送るので入力画像の無い Run でも付けられる(5章)', () => {
+    const generate = op({ regions_delivery: 'image_and_text', regions_reference_images: true })
+    expect(regionsSupportedFor('generate', generate)).toBe(true)
+    expect(allowedRegionKinds(generate)).toEqual(['change', 'add'])
   })
 
   it('四角を受けない操作では付けない', () => {
@@ -104,6 +110,28 @@ describe('入力画像の無い Run の四角を戻す', () => {
     expect(restored.prompt).toBe('a room')
     expect(restored.inputs).toEqual([])
     expect(restored.regions.map((r) => r.number)).toEqual([1, 2])
+    expect(restored.regionsAssetId).toBeNull()
+  })
+
+  it('OpenAI の入力画像の無い Run は、配置図と参照画像を外し、足した文を除いて白紙に戻す', () => {
+    const appended = '\n\n領域の指示: 1枚目の画像は、白紙の上に…'
+    const openaiRecord: RunRegions = {
+      version: 1,
+      delivery: 'image_and_text',
+      frame: 'output',
+      regions: [box({ number: 1, reference_asset_id: 'ref' }), box({ number: 2, kind: 'add' })],
+      appended_text: appended,
+      overlay_asset_id: 'layout',
+    }
+    const inputs = [
+      { asset_id: 'layout', role: 'image' as const, position: 0 },
+      { asset_id: 'ref', role: 'image' as const, position: 1 },
+    ]
+    const restored = restoreRunRegions({ prompt: 'a room' + appended, inputs, regions: openaiRecord })
+    expect(restored.prompt).toBe('a room')
+    expect(restored.inputs).toEqual([])
+    expect(restored.regions.map((r) => r.number)).toEqual([1, 2])
+    expect(restored.regions[0].reference_asset_id).toBe('ref')
     expect(restored.regionsAssetId).toBeNull()
   })
 

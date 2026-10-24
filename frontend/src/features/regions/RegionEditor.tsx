@@ -7,7 +7,7 @@
  *   指を離したときに1回だけ履歴に積む。文字の入力は同じ欄が続く間は1つにまとめる。
  * - 検出(7章)は `useRegionDetection`。候補を押すと四角になる。候補は保存しない(履歴はサーバー)。
  * - 保存すると四角を API の形(番号を 1 から振り直す)でフォームに返す。キャンセルは捨てる。
- * - 入力画像の無い Run(ComfyUI。6章)では、出力の幅×高さの縦横比の白紙の上に描く(`canvas` が
+ * - 入力画像の無い Run(ComfyUI と OpenAI。5章・6章)では、出力の幅×高さの縦横比の白紙の上に描く(`canvas` が
  *   `blank`)。白紙では検出を出さない。選べる種類と参照画像の欄は、capabilities に合わせる。
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
@@ -448,7 +448,9 @@ export function RegionEditor({
 
         <div className={styles.footer}>
           <div className={styles.footerNotes}>
-            {delivery === 'image_and_text' && <p className={styles.mutedNote}>{r.notes.imageAndText}</p>}
+            {delivery === 'image_and_text' && (
+              <p className={styles.mutedNote}>{canvas.kind === 'blank' ? r.notes.imageAndTextBlank : r.notes.imageAndText}</p>
+            )}
             {delivery === 'comfyui_bboxes' && <p className={styles.mutedNote}>{r.notes.comfyuiBboxes}</p>}
             {addsInputs && <p className={styles.mutedNote}>{fmt(r.notes.countsTowardLimit, { max: maxInputImages })}</p>}
             {regions.length > 0 && totalInputs > maxInputImages && (

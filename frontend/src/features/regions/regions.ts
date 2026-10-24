@@ -53,7 +53,8 @@ export function regionsSupported(editOpCaps: OperationCapabilities | undefined):
 
 /**
  * 今の操作で四角を付けられるか(ADR-0053 5章・6章)。入力画像のある Run(edit)は主たる入力の上に、
- * 入力画像の無い Run(generate)は、入力画像を要らないと答える操作(ComfyUI)だけ白紙の上に描く。
+ * 入力画像の無い Run(generate)は、入力画像を要らないと答える操作(ComfyUI と OpenAI)だけ白紙の上に描く。
+ * OpenAI はサーバーが白紙の配置図を作り、Edit で送る(5章)。
  */
 export function regionsSupportedFor(
   operation: 'generate' | 'edit',
@@ -417,7 +418,8 @@ export function restoreRunRegions<T extends RunInputLike>(run: {
       )
     : [...run.inputs]
   const primary = inputs.find((i) => i.role === 'image' && i.position === 0)
-  // 入力画像の無い Run(ComfyUI。6章)の四角は、出力の大きさに対する割合で、主たる入力に付かない。
+  // 入力画像の無い Run(ComfyUI と OpenAI。5章・6章)の四角は、出力の大きさに対する割合で、主たる
+  // 入力に付かない。OpenAI の Run はサーバーが足した白紙の配置図が主たる入力なので、上で外してから見る。
   const blank = record.frame === 'output' && !primary
   const regions = primary || blank ? orderedRegions(record.regions).map((r) => ({ ...r })) : []
   return {

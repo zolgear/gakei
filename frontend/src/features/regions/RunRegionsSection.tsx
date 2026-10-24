@@ -28,7 +28,9 @@ export function RunRegionsSection({ regions, sectionClassName, headingClassName,
   return (
     <section className={sectionClassName}>
       <h2 className={headingClassName}>{m.heading}</h2>
-      {regions.delivery === 'image_and_text' && <p className={styles.delivery}>{m.delivery}</p>}
+      {regions.delivery === 'image_and_text' && (
+        <p className={styles.delivery}>{regions.frame === 'output' ? m.deliveryBlank : m.delivery}</p>
+      )}
       {regions.delivery === 'comfyui_bboxes' && <p className={styles.delivery}>{m.deliveryComfyui}</p>}
       {regions.frame === 'output' && <p className={styles.delivery}>{m.frameOutput}</p>}
       {/* 送った四角の画像(Asset の種類 regions。入力の1枚として送った)。 */}
