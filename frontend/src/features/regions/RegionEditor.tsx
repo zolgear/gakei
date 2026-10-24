@@ -349,6 +349,23 @@ export function RegionEditor({
         </div>
 
         <div className={styles.toolbar} {...{ [MODAL_BODY_ATTRIBUTE]: '' }}>
+          {/* 土台(1枚目の画像 / 白紙)は四角の操作と分けて先頭に置く。 */}
+          {canvases.input && (
+            <div className={`${styles.segmented} ${styles.frameSwitch}`} role="radiogroup" aria-label={r.frame.label}>
+              {(['input', 'output'] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  role="radio"
+                  aria-checked={frame === f}
+                  data-selected={frame === f}
+                  onClick={() => switchFrame(f)}
+                >
+                  {r.frame[f]}
+                </button>
+              ))}
+            </div>
+          )}
           <div className={styles.toolGroup}>
             <ToolButton label={r.toolbar.undo} disabled={history.past.length === 0} onClick={undo}>
               <UndoIcon />
@@ -392,22 +409,6 @@ export function RegionEditor({
               <DeleteIcon />
             </ToolButton>
           </div>
-          {canvases.input && (
-            <div className={styles.segmented} role="radiogroup" aria-label={r.frame.label}>
-              {(['input', 'output'] as const).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  role="radio"
-                  aria-checked={frame === f}
-                  data-selected={frame === f}
-                  onClick={() => switchFrame(f)}
-                >
-                  {r.frame[f]}
-                </button>
-              ))}
-            </div>
-          )}
           <span className={styles.countText}>{fmt(r.count, { count: regions.length, max: REGIONS_MAX })}</span>
         </div>
         {frameNotice && (
