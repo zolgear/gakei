@@ -17,11 +17,13 @@ import { assignMasonryColumns, galleryTileAspect, layoutJustifiedRows, masonryCo
 import { HistoryGalleryTile } from './HistoryGalleryTile'
 import styles from './HistoryGallery.module.css'
 
+// 列の最小の幅・間・狭い画面の列の数は、詳細のカードの並び(`HistoryPage.module.css` の `.grid`)と
+// 同じにする。正方形の画像が、詳細のカードの幅と同じ大きさになり、表示を切り替えてもずれない。
 const GAP_PX = 8
 const MIN_COLUMN_WIDTH_PX = 220
 const NARROW_COLUMNS = 2
-const TARGET_ROW_HEIGHT_PX = 260
-const NARROW_TARGET_ROW_HEIGHT_PX = 150
+// 幅がまだ分からないときの行の高さ。
+const FALLBACK_ROW_HEIGHT_PX = 220
 const NARROW_QUERY = '(max-width: 767px)'
 
 export type HistoryGalleryLayout = 'masonry' | 'rows'
@@ -141,13 +143,17 @@ function MasonryColumns({ cards, aspects, width, narrow }: LayoutProps) {
 }
 
 function JustifiedRows({ cards, aspects, width, narrow }: LayoutProps) {
+  // 行の目標の高さは石積みの列の幅(= 詳細のカードの幅)にする。
+  const columnCount = masonryColumnCount(width, {
+    minColumnWidth: MIN_COLUMN_WIDTH_PX,
+    gap: GAP_PX,
+    narrow,
+    narrowColumns: NARROW_COLUMNS,
+  })
+  const targetHeight = width > 0 ? (width - GAP_PX * (columnCount - 1)) / columnCount : FALLBACK_ROW_HEIGHT_PX
   const rows = useMemo(
-    () =>
-      layoutJustifiedRows(aspects, width, {
-        targetHeight: narrow ? NARROW_TARGET_ROW_HEIGHT_PX : TARGET_ROW_HEIGHT_PX,
-        gap: GAP_PX,
-      }),
-    [aspects, width, narrow],
+    () => layoutJustifiedRows(aspects, width, { targetHeight, gap: GAP_PX }),
+    [aspects, width, targetHeight],
   )
 
   return (
