@@ -538,6 +538,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       overlayShown: regionAssistOpen,
       onToggleOverlay: () => setRegionAssistOpen(!regionAssistOpen),
       blank: form.regionsBlank,
+      boxes: form.regions,
+      blankCanvas: regionCanvas?.kind === 'blank' ? { width: regionCanvas.width, height: regionCanvas.height } : undefined,
     },
   }
   const inputImages =

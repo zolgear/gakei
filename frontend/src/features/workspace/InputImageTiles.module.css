@@ -223,18 +223,6 @@
   opacity: 0.5;
 }
 
-/* 白紙の領域のタイル(ADR-0053 6章)。外すボタンをタイルの右上に重ねる。 */
-.blankRegionsTile {
-  position: relative;
-  display: grid;
-}
-
-.blankRegionsTile .actionButton {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-}
-
 .hiddenFileInput {
   display: none;
 }
