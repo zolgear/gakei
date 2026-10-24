@@ -98,6 +98,7 @@ function rerunState(provider: string, model: string, params: Record<string, unkn
     assetGroupId: null,
     regions: [],
     regionsAssetId: null,
+    regionsFrame: 'input',
   }
 }
 

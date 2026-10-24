@@ -46,13 +46,35 @@ export function orderedRegions<T extends { number: number }>(regions: readonly T
   return [...regions].sort((a, b) => a.number - b.number)
 }
 
-/** 今のプロバイダー・モデルの Edit が四角を受けるか(受けなければ「領域」を出さない。5章)。 */
 /**
- * 白紙の配置図を入力にして送った Run か(OpenAI の入力画像の無い Run。ADR-0053 5章)。配置図は
- * 記録上の入力・主たる親だが、利用者が選んだ画像ではないので、カードの親や比較には出さない。
+ * 四角を描く土台(ADR-0053 1章「四角の土台を選ぶ」)。`input` は1枚目の入力画像、`output` は出力の
+ * 大きさの白紙。入力画像の無い Run は常に `output`。
  */
-export function isLayoutSketchRun(regions: Pick<RunRegions, 'delivery' | 'frame'> | null | undefined): boolean {
+export type RegionFrame = 'input' | 'output'
+
+/** 白紙の土台で選べる種類(残す・消す・動かす物が無い)。サーバーの `BLANK_REGION_KINDS` と同じ。 */
+export const BLANK_REGION_KINDS: readonly RegionKind[] = ['change', 'add']
+
+/**
+ * 白紙の配置図を入力に足した Run か(OpenAI の「画像と文」で土台が白紙。ADR-0053 5章・1章)。配置図は
+ * 利用者が選んだ画像ではないので、カードの入力の数には数えない。
+ */
+export function addedLayoutSketch(regions: Pick<RunRegions, 'delivery' | 'frame'> | null | undefined): boolean {
   return regions?.delivery === 'image_and_text' && regions.frame === 'output'
+}
+
+/**
+ * 白紙の配置図が主たる入力の Run か(入力画像の無い Run。ADR-0053 5章)。配置図は記録上の主たる親だが、
+ * 利用者が選んだ画像ではないので、カードの親や「編集前と比較」には出さない。入力画像があって白紙の
+ * 土台を選んだ Run では、主たる親は利用者の1枚目なので false。
+ */
+export function isLayoutSketchPrimaryRun(run: {
+  regions?: Pick<RunRegions, 'delivery' | 'frame' | 'overlay_asset_id'> | null
+  primary_parent_asset_id?: string | null
+}): boolean {
+  const regions = run.regions
+  if (!addedLayoutSketch(regions)) return false
+  return !!regions?.overlay_asset_id && run.primary_parent_asset_id === regions.overlay_asset_id
 }
 
 export function regionsSupported(editOpCaps: OperationCapabilities | undefined): boolean {
@@ -72,40 +94,74 @@ export function regionsSupportedFor(
   return operation === 'edit' || opCaps.regions_requires_input_image !== true
 }
 
-/** 札で選べる種類(capabilities の `regions_kinds`。古いサーバーで空なら全種類)。 */
-export function allowedRegionKinds(opCaps: OperationCapabilities | undefined): readonly RegionKind[] {
+/**
+ * 札で選べる種類(capabilities の `regions_kinds`。古いサーバーで空なら全種類)。白紙の土台では
+ * 「変える」「足す」だけ(1章「四角の土台を選ぶ」)。
+ */
+export function allowedRegionKinds(
+  opCaps: OperationCapabilities | undefined,
+  frame: RegionFrame = 'input',
+): readonly RegionKind[] {
   const kinds = opCaps?.regions_kinds ?? []
-  return kinds.length > 0 ? REGION_KINDS.filter((k) => kinds.includes(k)) : REGION_KINDS
+  const base = kinds.length > 0 ? REGION_KINDS.filter((k) => kinds.includes(k)) : REGION_KINDS
+  return frame === 'output' ? base.filter((k) => BLANK_REGION_KINDS.includes(k)) : base
 }
 
 /**
  * 付けた四角を、その操作がそのまま受けるか(選べない種類・使えない参照画像が無いか)。受けなければ、
  * フォームは四角を外す(モデルを切り替えたとき。ADR-0053 6章)。
  */
-export function regionsCompatible(boxes: readonly RegionBox[], opCaps: OperationCapabilities | undefined): boolean {
-  const kinds = allowedRegionKinds(opCaps)
+export function regionsCompatible(
+  boxes: readonly RegionBox[],
+  opCaps: OperationCapabilities | undefined,
+  frame: RegionFrame = 'input',
+): boolean {
+  const kinds = allowedRegionKinds(opCaps, frame)
   const references = opCaps?.regions_reference_images !== false
   return boxes.every((b) => kinds.includes(b.kind) && (references || !b.reference_asset_id))
 }
 
+/** 付けた四角の今の土台。1枚目の上の四角でも、1枚目が無ければ白紙。 */
+export function effectiveRegionFrame(frame: RegionFrame, primaryAssetId: string | null): RegionFrame {
+  return primaryAssetId === null ? 'output' : frame
+}
+
+/** 新しく四角を描き始めるときの土台の既定(入力画像があれば1枚目、無ければ白紙)。 */
+export function defaultRegionFrame(primaryAssetId: string | null): RegionFrame {
+  return primaryAssetId === null ? 'output' : 'input'
+}
+
+export type RegionsFollow =
+  | { action: 'keep' }
+  | { action: 'clear' }
+  | { action: 'adopt'; frame: RegionFrame; regionsAssetId: string | null }
+
 /**
- * 1枚目の入力・操作が変わったときに、付けた四角をどうするか(ADR-0053 1章「配置との併用」)。
- * 四角は割合なので、1枚目が別の画像・白紙(`primaryAssetId` が null)に変わっても外さずに移す
- * (`adopt`)。外す(`clear`)のは、capabilities を読めていて、今の操作が四角を受けない・選べない
- * 種類や使えない参照画像があるときだけ(白紙では「残す」「消す」「動かす」を選べない)。
+ * 1枚目の入力・操作が変わったときに、付けた四角をどうするか(ADR-0053 1章「配置との併用」「四角の
+ * 土台を選ぶ」)。四角は割合なので外さずに移す(`adopt`)。
+ * - 1枚目の上の四角は、1枚目が別の画像に変われば新しい1枚目の上へ、1枚目を外して白紙になれば白紙へ移す。
+ * - 白紙の四角は、入力画像を足しても外しても白紙のまま。
+ * 外す(`clear`)のは、capabilities を読めていて、今の操作が四角を受けない・選べない種類や使えない
+ * 参照画像があるときだけ(白紙では「残す」「消す」「動かす」を選べない)。
  */
 export function regionsFollowAction(args: {
   boxes: readonly RegionBox[]
+  frame: RegionFrame
   regionsAssetId: string | null
   primaryAssetId: string | null
   capsLoaded: boolean
   supported: boolean
   opCaps: OperationCapabilities | undefined
-}): 'keep' | 'adopt' | 'clear' {
-  const { boxes, regionsAssetId, primaryAssetId, capsLoaded, supported, opCaps } = args
-  if (boxes.length === 0) return 'keep'
-  if (capsLoaded && (!supported || !regionsCompatible(boxes, opCaps))) return 'clear'
-  return regionsAssetId !== primaryAssetId ? 'adopt' : 'keep'
+}): RegionsFollow {
+  const { boxes, frame, regionsAssetId, primaryAssetId, capsLoaded, supported, opCaps } = args
+  if (boxes.length === 0) return { action: 'keep' }
+  const next = effectiveRegionFrame(frame, primaryAssetId)
+  if (capsLoaded && (!supported || !regionsCompatible(boxes, opCaps, next))) return { action: 'clear' }
+  const nextAssetId = next === 'input' ? primaryAssetId : null
+  if (next !== frame || nextAssetId !== regionsAssetId) {
+    return { action: 'adopt', frame: next, regionsAssetId: nextAssetId }
+  }
+  return { action: 'keep' }
 }
 
 // -- 幾何 -----------------------------------------------------------------------------
@@ -391,8 +447,8 @@ export function areRegionBoxesValid(boxes: readonly RegionBox[]): boolean {
 // -- 入力の枚数(5章) --------------------------------------------------------------------
 
 /**
- * 四角を付けたとき、サーバーが入力に足す画像の数。四角を描いた画像 1 枚と、入力に無い参照画像
- * (同じ画像は1枚)。四角が無ければ 0。
+ * 四角を付けたとき、サーバーが入力に足す画像の数。四角を描いた画像(1枚目に重ねた画像、または白紙の
+ * 配置図。土台によらず1枚)と、入力に無い参照画像(同じ画像は1枚)。四角が無ければ 0。
  */
 export function regionExtraInputCount(boxes: readonly RegionBox[], imageAssetIds: readonly string[]): number {
   if (boxes.length === 0) return 0
@@ -422,8 +478,10 @@ export interface RestoredRunRegions<T extends RunInputLike> {
   prompt: string
   inputs: T[]
   regions: RegionBox[]
-  /** 四角が付いている主たる入力の Asset(四角が無ければ null)。 */
+  /** 四角が付いている主たる入力の Asset(四角が無い・白紙の土台なら null)。 */
   regionsAssetId: string | null
+  /** 四角の土台(四角が無ければ、入力の有無で決まる既定)。 */
+  regionsFrame: RegionFrame
 }
 
 /**
@@ -437,7 +495,16 @@ export function restoreRunRegions<T extends RunInputLike>(run: {
   regions?: RunRegions | null
 }): RestoredRunRegions<T> {
   const record = run.regions
-  if (!record) return { prompt: run.prompt, inputs: [...run.inputs], regions: [], regionsAssetId: null }
+  if (!record) {
+    const primary = run.inputs.find((i) => i.role === 'image' && i.position === 0)
+    return {
+      prompt: run.prompt,
+      inputs: [...run.inputs],
+      regions: [],
+      regionsAssetId: null,
+      regionsFrame: defaultRegionFrame(primary?.asset_id ?? null),
+    }
+  }
 
   const overlayId = record.overlay_asset_id ?? null
   const overlay = overlayId
@@ -455,14 +522,16 @@ export function restoreRunRegions<T extends RunInputLike>(run: {
       )
     : [...run.inputs]
   const primary = inputs.find((i) => i.role === 'image' && i.position === 0)
-  // 入力画像の無い Run(ComfyUI と OpenAI。5章・6章)の四角は、出力の大きさに対する割合で、主たる
-  // 入力に付かない。OpenAI の Run はサーバーが足した白紙の配置図が主たる入力なので、上で外してから見る。
-  const blank = record.frame === 'output' && !primary
+  // 白紙の土台(入力画像の無い Run と、入力画像があって白紙を選んだ Run。5章・6章・1章)の四角は、
+  // 出力の大きさに対する割合で、主たる入力に付かない。OpenAI の Run はサーバーが足した配置図を上で
+  // 外してから見る(入力画像の無い Run では配置図が主たる入力、ある Run では利用者の入力の後ろ)。
+  const blank = record.frame === 'output'
   const regions = primary || blank ? orderedRegions(record.regions).map((r) => ({ ...r })) : []
   return {
     prompt: stripAppendedText(run.prompt, record.appended_text),
     inputs,
     regions,
-    regionsAssetId: primary && regions.length > 0 ? primary.asset_id : null,
+    regionsAssetId: primary && !blank && regions.length > 0 ? primary.asset_id : null,
+    regionsFrame: blank ? 'output' : defaultRegionFrame(primary?.asset_id ?? null),
   }
 }

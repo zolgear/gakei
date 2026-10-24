@@ -7632,6 +7632,8 @@ export interface components {
             repeat: number;
             /** Regions */
             regions?: components["schemas"]["RegionBox"][];
+            /** Regions Frame */
+            regions_frame?: ("input" | "output") | null;
         };
         /** RunCreateResponse */
         RunCreateResponse: {

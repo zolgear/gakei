@@ -70,6 +70,9 @@ import {
   areRegionBoxesValid,
   regionExtraInputCount,
   regionsFollowAction,
+  effectiveRegionFrame,
+  defaultRegionFrame,
+  type RegionFrame,
   regionsSupportedFor,
 } from '../regions/regions'
 import {
@@ -205,8 +208,11 @@ export interface RunFormLogic {
    * 四角を受けないプロバイダー・モデルに切り替えると、自動で外して `regionsNotice` で知らせる。
    */
   regions: RegionBox[]
-  /** 主たる入力に四角を付ける(空の配列なら外す)。 */
-  setRegions: (regions: RegionBox[]) => void
+  /**
+   * 四角を付ける(空の配列なら外す)。`frame` は四角を描いた土台(省けば今の土台。ADR-0053 1章
+   * 「四角の土台を選ぶ」)。
+   */
+  setRegions: (regions: RegionBox[], frame?: RegionFrame) => void
   clearRegions: () => void
   /**
    * 今の操作で四角を付けられるか(受けなければ「領域」を出さない)。入力画像があれば Edit が受けるか、
@@ -214,8 +220,13 @@ export interface RunFormLogic {
    */
   regionsSupported: boolean
   /**
-   * 四角を入力画像の無い白紙(出力の大きさ)に描くか(ADR-0053 6章)。true なら主たる入力に付かない
-   * (`regionsAssetId` は null)。
+   * 四角の今の土台(ADR-0053 1章「四角の土台を選ぶ」)。四角が無ければ、新しく描くときの既定
+   * (入力画像があれば1枚目、無ければ白紙)。
+   */
+  regionsFrame: RegionFrame
+  /**
+   * 四角を白紙(出力の大きさ)に描くか(`regionsFrame` が `output`。入力画像の無い Run と、入力画像が
+   * あって白紙を選んだ Run。ADR-0053 6章・1章)。true なら主たる入力に付かない(`regionsAssetId` は null)。
    */
   regionsBlank: boolean
   /**
@@ -225,8 +236,8 @@ export interface RunFormLogic {
   regionsOutputSize: import('../../api/client').OutputSizeRule | null
   /** 四角の渡し方(`image_and_text` なら、画面に「画像と文で送る」ことを示す)。 */
   regionsDelivery: string | null
-  /** 札で選べる種類(capabilities の `regions_kinds`)。 */
-  regionsKinds: readonly RegionKind[]
+  /** 札で選べる種類(capabilities の `regions_kinds`。白紙の土台では「変える」「足す」だけ)。 */
+  regionsKinds: Record<RegionFrame, readonly RegionKind[]>
   /** 四角ごとの参照画像を使えるか。 */
   regionsReferenceImages: boolean
   /** 四角を自動で外したときの案内。 */
@@ -436,6 +447,7 @@ export function useRunFormLogic(
       assetGroupId,
       regions: formState.regions,
       regionsAssetId: formState.regionsAssetId,
+      regionsFrame: formState.regionsFrame,
     })
     // formState.inputs・regions はここでは変更しないので依存に含めない(無限ループ回避)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -503,39 +515,56 @@ export function useRunFormLogic(
   // OpenAI はサーバーが白紙の配置図を作って Edit で送る。ADR-0053 5章・6章)。
   const regionOpCaps = operation === 'edit' ? editOpCaps : opCaps
   const regionsSupported = regionsSupportedFor(operation, regionOpCaps)
-  const regionsBlank = regionsSupported && primaryAssetId === null
+  // 四角の土台(ADR-0053 1章「四角の土台を選ぶ」)。四角があればその土台(1枚目が無ければ白紙)、
+  // 無ければ新しく描くときの既定。
+  const regionsFrame: RegionFrame =
+    formState.regions.length > 0
+      ? effectiveRegionFrame(formState.regionsFrame, primaryAssetId)
+      : defaultRegionFrame(primaryAssetId)
+  const regionsBlank = regionsSupported && regionsFrame === 'output'
   const regionsDelivery = regionOpCaps?.regions_delivery ?? null
   const regionsOutputSize = regionOpCaps?.output_size ?? null
-  const regionsKinds = allowedRegionKinds(regionOpCaps)
+  const regionsKinds = useMemo(
+    () => ({ input: allowedRegionKinds(regionOpCaps, 'input'), output: allowedRegionKinds(regionOpCaps, 'output') }),
+    [regionOpCaps],
+  )
   const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
   const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
   const [compositeRedrawing, setCompositeRedrawing] = useState(false)
-  // 主たる入力が変わっても四角は外さず、割合のまま新しい1枚目(入力を外したなら白紙)の上に移す
-  // (座標はどちらも 0〜1 の割合。配置・スケッチの保存や入れ替えで1枚目が変わっても残す。ADR-0053 1章)。
-  // 外すのは、四角を受けないモデル・選べない種類や参照画像のあるモデルに切り替えたとき(白紙では
-  // 「残す」「消す」「動かす」を選べない。capabilities を読めてから判断する)だけ。
+  // 主たる入力が変わっても四角は外さず、割合のまま移す(座標はどちらも 0〜1 の割合。ADR-0053 1章)。
+  // 1枚目の上の四角は新しい1枚目の上へ(1枚目を外して白紙になったら白紙へ)、白紙の四角は入力画像を
+  // 足しても外しても白紙のまま。外すのは、四角を受けないモデル・選べない種類や参照画像のあるモデルに
+  // 切り替えたとき(白紙では「残す」「消す」「動かす」を選べない。capabilities を読めてから判断する)だけ。
   const regionsAction = regionsFollowAction({
     boxes: formState.regions,
+    frame: formState.regionsFrame,
     regionsAssetId: formState.regionsAssetId,
     primaryAssetId,
     capsLoaded: Boolean(caps && modelCaps),
     supported: regionsSupported,
     opCaps: regionOpCaps,
   })
-  const regionsClearReason: 'unsupported' | null = regionsAction === 'clear' ? 'unsupported' : null
-  const regionsAdoptPrimary = regionsAction === 'adopt'
+  const regionsClearReason: 'unsupported' | null = regionsAction.action === 'clear' ? 'unsupported' : null
+  const adoptFrame = regionsAction.action === 'adopt' ? regionsAction.frame : null
+  const adoptAssetId = regionsAction.action === 'adopt' ? regionsAction.regionsAssetId : null
   useEffect(() => {
     if (regionsClearReason === null) {
-      if (regionsAdoptPrimary) setFormState({ ...formState, regionsAssetId: primaryAssetId })
+      if (adoptFrame !== null) setFormState({ ...formState, regionsFrame: adoptFrame, regionsAssetId: adoptAssetId })
       return
     }
     setFormState({ ...formState, regions: [], regionsAssetId: null })
     setRegionsNotice(msg().regions.form.clearedUnsupported)
-  }, [regionsClearReason, regionsAdoptPrimary, primaryAssetId, formState, setFormState])
+  }, [regionsClearReason, adoptFrame, adoptAssetId, formState, setFormState])
 
-  function setRegions(next: RegionBox[]) {
+  function setRegions(next: RegionBox[], frame?: RegionFrame) {
     setRegionsNotice(null)
-    setFormState({ ...formState, regions: next, regionsAssetId: next.length > 0 ? primaryAssetId : null })
+    const nextFrame = effectiveRegionFrame(frame ?? regionsFrame, primaryAssetId)
+    setFormState({
+      ...formState,
+      regions: next,
+      regionsFrame: nextFrame,
+      regionsAssetId: next.length > 0 && nextFrame === 'input' ? primaryAssetId : null,
+    })
   }
 
   function clearRegions() {
@@ -870,7 +899,8 @@ export function useRunFormLogic(
           repeat: repeat ?? 1,
           ...promptBody,
           // 領域の指示(ADR-0053)。今の操作が四角を受け、四角があるときだけ送る。
-          ...(regionsActive ? { regions: formState.regions } : {}),
+          // 土台(1枚目・白紙)も送る(ADR-0053 1章「四角の土台を選ぶ」)。
+          ...(regionsActive ? { regions: formState.regions, regions_frame: regionsFrame } : {}),
         },
         resolvedAssetGroupId,
       ),
@@ -935,6 +965,7 @@ export function useRunFormLogic(
     setRegions,
     clearRegions,
     regionsSupported,
+    regionsFrame,
     regionsBlank,
     regionsOutputSize,
     regionsDelivery,

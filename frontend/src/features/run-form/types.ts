@@ -4,6 +4,7 @@
  * params には「未指定」の項目を含めない(そのまま POST /api/runs の body になる)。
  */
 import type { RegionBox } from '../../api/client'
+import type { RegionFrame } from '../regions/regions'
 
 export type Operation = 'generate' | 'edit'
 
@@ -35,10 +36,16 @@ export interface RunFormState {
   /**
    * ADR-0053: 主たる入力に付けた領域の指示の四角(API の形。番号の順)。inputs と同じく
    * context に直接書き、localStorage にも保存する。四角は画像ごとのものなので、
-   * `regionsAssetId`(四角を付けた主たる入力の Asset)と組で持ち、主たる入力が変わったら外す。
+   * `regionsAssetId`(四角を付けた主たる入力の Asset)と組で持つ。
    */
   regions: RegionBox[]
   regionsAssetId: string | null
+  /**
+   * 四角を描いた土台(ADR-0053 1章「四角の土台を選ぶ」)。`input` は1枚目の入力画像(`regionsAssetId`
+   * がその Asset)、`output` は出力の大きさの白紙(`regionsAssetId` は null)。四角が無いときは使わない
+   * (新しく描くときの既定は、入力画像があれば `input`、無ければ `output`)。
+   */
+  regionsFrame: RegionFrame
 }
 
 export function createEmptyFormState(): RunFormState {
@@ -51,5 +58,6 @@ export function createEmptyFormState(): RunFormState {
     assetGroupId: null,
     regions: [],
     regionsAssetId: null,
+    regionsFrame: 'input',
   }
 }

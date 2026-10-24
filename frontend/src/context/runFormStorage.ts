@@ -39,6 +39,11 @@ interface StoredRunFormPayloadV1 {
   regions?: RegionBox[]
   regionsAssetId?: string | null
   /**
+   * 四角の土台(ADR-0053 1章「四角の土台を選ぶ」)。古い保存値には無いので、`regionsAssetId` があれば
+   * `input`、無ければ `output` とみなす。
+   */
+  regionsFrame?: 'input' | 'output'
+  /**
    * 古い保存値だけが持つ、四角の名前(番号 → 名前)。今は四角の `label` に入れる。読むときに
    * `label` へ移し、書くときは出さない。
    */
@@ -89,24 +94,29 @@ function parseStoredRegionLabels(value: unknown): Record<string, string> {
   return labels
 }
 
-/** 四角と、四角を付けた主たる入力。どちらかが壊れていれば四角なしにする。 */
+/** 四角と、四角を付けた主たる入力と土台。どれかが壊れていれば四角なしにする。 */
 function parseStoredRegions(
   payload: Record<string, unknown>,
-): Pick<RunFormState, 'regions' | 'regionsAssetId'> {
+): Pick<RunFormState, 'regions' | 'regionsAssetId' | 'regionsFrame'> {
   const regions = payload.regions
   const assetId = payload.regionsAssetId
-  // 入力画像の無い Run の四角(白紙。ADR-0053 6章)は、主たる入力が無いので null。
+  const storedFrame = payload.regionsFrame
+  const none = { regions: [], regionsAssetId: null, regionsFrame: 'input' } as const
+  // 白紙の土台の四角(ADR-0053 6章・1章)は、主たる入力に付かないので null。
   if (!Array.isArray(regions) || regions.length === 0 || (typeof assetId !== 'string' && assetId !== null)) {
-    return { regions: [], regionsAssetId: null }
+    return { ...none, regions: [] }
   }
-  if (!regions.every(isStoredRegionBox)) return { regions: [], regionsAssetId: null }
+  if (storedFrame !== undefined && storedFrame !== 'input' && storedFrame !== 'output') return { ...none, regions: [] }
+  if (!regions.every(isStoredRegionBox)) return { ...none, regions: [] }
   // 古い保存値の `regionLabels` は、四角に名前が無ければその四角の `label` に移す。
   const labels = parseStoredRegionLabels(payload.regionLabels)
   const merged = regions.map((r) => {
     const old = labels[String(r.number)]
     return !r.label && old ? { ...r, label: old } : r
   })
-  return { regions: merged, regionsAssetId: assetId }
+  // 古い保存値(土台なし)は、四角を付けた主たる入力があれば1枚目の上、無ければ白紙。
+  const frame = storedFrame ?? (assetId !== null ? 'input' : 'output')
+  return { regions: merged, regionsAssetId: frame === 'input' ? assetId : null, regionsFrame: frame }
 }
 
 function isParamValue(value: unknown): value is string | number | boolean {
@@ -170,6 +180,7 @@ export function serializeRunFormState(state: RunFormState): string {
     assetGroupId: state.assetGroupId,
     regions: state.regions,
     regionsAssetId: state.regionsAssetId,
+    regionsFrame: state.regionsFrame,
   }
   return JSON.stringify(payload)
 }

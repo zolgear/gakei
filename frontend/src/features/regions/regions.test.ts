@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { OperationCapabilities, RegionBox, RunRegions } from '../../api/client'
 import {
+  allowedRegionKinds,
+  defaultRegionFrame,
+  effectiveRegionFrame,
+  regionsCompatible,
   addRegion,
   areRegionBoxesValid,
   boxFromPoints,
@@ -248,7 +252,26 @@ describe('restoreRunRegions', () => {
       inputs,
       regions: [],
       regionsAssetId: null,
+      regionsFrame: 'input',
     })
+  })
+
+  it('入力画像があって白紙の土台を選んだ Run は、配置図だけを外し、利用者の入力を残して白紙に戻す', () => {
+    const restored = restoreRunRegions({
+      prompt: 'user prompt\n\nAPPENDED',
+      inputs: [
+        { asset_id: 'user1', role: 'image' as const, position: 0 },
+        { asset_id: 'user2', role: 'image' as const, position: 1 },
+        { asset_id: 'overlay', role: 'image' as const, position: 2 },
+        { asset_id: 'ref-new', role: 'image' as const, position: 3 },
+      ],
+      regions: { ...record, frame: 'output', regions: [box({ number: 1, kind: 'add', reference_asset_id: 'user1' }), box({ number: 2, reference_asset_id: 'ref-new' })] },
+    })
+    expect(restored.prompt).toBe('user prompt')
+    expect(restored.inputs.map((i) => i.asset_id)).toEqual(['user1', 'user2'])
+    expect(restored.regions.map((r) => r.number)).toEqual([1, 2])
+    expect(restored.regionsFrame).toBe('output')
+    expect(restored.regionsAssetId).toBeNull()
   })
 
   it('利用者が書き換えたプロンプト(末尾が違う)は除かない', () => {
@@ -295,38 +318,93 @@ describe('regionsFollowAction(1枚目が変わったときの四角。ADR-0053 1
   const editCaps = { supports_regions: true, regions_kinds: ['change', 'add', 'keep', 'remove', 'move'] } as unknown as OperationCapabilities
   const blankCaps = { supports_regions: true, regions_kinds: ['change', 'add'] } as unknown as OperationCapabilities
   const base = { capsLoaded: true, supported: true }
+  const input = { frame: 'input' as const }
+  const output = { frame: 'output' as const }
 
   it('四角が無ければ何もしない', () => {
-    expect(regionsFollowAction({ ...base, boxes: [], regionsAssetId: 'a', primaryAssetId: 'b', opCaps: editCaps })).toBe('keep')
+    expect(regionsFollowAction({ ...base, ...input, boxes: [], regionsAssetId: 'a', primaryAssetId: 'b', opCaps: editCaps })).toEqual({ action: 'keep' })
   })
 
   it('1枚目が同じなら残す', () => {
-    expect(regionsFollowAction({ ...base, boxes: [box()], regionsAssetId: 'a', primaryAssetId: 'a', opCaps: editCaps })).toBe('keep')
+    expect(regionsFollowAction({ ...base, ...input, boxes: [box()], regionsAssetId: 'a', primaryAssetId: 'a', opCaps: editCaps })).toEqual({ action: 'keep' })
   })
 
-  it('1枚目が別の画像に入れ替わっても(配置・スケッチの保存など)外さずに移す', () => {
-    expect(regionsFollowAction({ ...base, boxes: [box()], regionsAssetId: 'a', primaryAssetId: 'b', opCaps: editCaps })).toBe('adopt')
+  it('1枚目が別の画像に入れ替わっても(配置・スケッチの保存など)、1枚目の上のまま移す', () => {
+    expect(regionsFollowAction({ ...base, ...input, boxes: [box()], regionsAssetId: 'a', primaryAssetId: 'b', opCaps: editCaps })).toEqual({
+      action: 'adopt',
+      frame: 'input',
+      regionsAssetId: 'b',
+    })
   })
 
-  it('白紙から画像へも移す', () => {
-    expect(regionsFollowAction({ ...base, boxes: [box()], regionsAssetId: null, primaryAssetId: 'b', opCaps: editCaps })).toBe('adopt')
+  it('白紙の四角は、入力画像を足しても白紙のまま', () => {
+    expect(regionsFollowAction({ ...base, ...output, boxes: [box({ kind: 'add' })], regionsAssetId: null, primaryAssetId: 'b', opCaps: editCaps })).toEqual({
+      action: 'keep',
+    })
   })
 
-  it('入力を外して白紙になっても、選べる種類だけなら移す', () => {
-    expect(regionsFollowAction({ ...base, boxes: [box({ kind: 'add' })], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toBe('adopt')
+  it('白紙の四角は、入力画像を外しても白紙のまま', () => {
+    expect(regionsFollowAction({ ...base, ...output, boxes: [box({ kind: 'add' })], regionsAssetId: null, primaryAssetId: null, opCaps: blankCaps })).toEqual({
+      action: 'keep',
+    })
+  })
+
+  it('1枚目を外して白紙になったら、選べる種類だけなら白紙へ移す', () => {
+    expect(regionsFollowAction({ ...base, ...input, boxes: [box({ kind: 'add' })], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toEqual({
+      action: 'adopt',
+      frame: 'output',
+      regionsAssetId: null,
+    })
   })
 
   it('白紙に移ると選べない種類(残す・消す・動かす)があれば外す', () => {
     const boxes = [box(), box({ number: 2, kind: 'remove' })]
-    expect(regionsFollowAction({ ...base, boxes, regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toBe('clear')
+    expect(regionsFollowAction({ ...base, ...input, boxes, regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toEqual({ action: 'clear' })
+  })
+
+  it('入力画像があっても、白紙の四角に選べない種類があれば外す', () => {
+    const boxes = [box({ kind: 'keep' })]
+    expect(regionsFollowAction({ ...base, ...output, boxes, regionsAssetId: null, primaryAssetId: 'a', opCaps: editCaps })).toEqual({ action: 'clear' })
   })
 
   it('四角を受けない操作なら外す', () => {
-    expect(regionsFollowAction({ ...base, supported: false, boxes: [box()], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toBe('clear')
+    expect(regionsFollowAction({ ...base, ...input, supported: false, boxes: [box()], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toEqual({
+      action: 'clear',
+    })
   })
 
   it('capabilities を読めるまでは外さない', () => {
     const boxes = [box({ kind: 'remove' })]
-    expect(regionsFollowAction({ capsLoaded: false, supported: false, boxes, regionsAssetId: 'a', primaryAssetId: null, opCaps: undefined })).toBe('adopt')
+    expect(
+      regionsFollowAction({ ...input, capsLoaded: false, supported: false, boxes, regionsAssetId: 'a', primaryAssetId: null, opCaps: undefined }),
+    ).toEqual({ action: 'adopt', frame: 'output', regionsAssetId: null })
+  })
+})
+
+describe('土台(ADR-0053 1章「四角の土台を選ぶ」)', () => {
+  const editCaps = { supports_regions: true, regions_kinds: ['change', 'add', 'keep', 'remove', 'move'] } as unknown as OperationCapabilities
+
+  it('新しく描くときの既定は、入力画像があれば1枚目、無ければ白紙', () => {
+    expect(defaultRegionFrame('a')).toBe('input')
+    expect(defaultRegionFrame(null)).toBe('output')
+  })
+
+  it('1枚目の上の四角でも、1枚目が無ければ白紙', () => {
+    expect(effectiveRegionFrame('input', null)).toBe('output')
+    expect(effectiveRegionFrame('input', 'a')).toBe('input')
+    expect(effectiveRegionFrame('output', 'a')).toBe('output')
+  })
+
+  it('白紙で選べる種類は「変える」「足す」だけ', () => {
+    expect(allowedRegionKinds(editCaps, 'input')).toEqual(['change', 'add', 'keep', 'remove', 'move'])
+    expect(allowedRegionKinds(editCaps, 'output')).toEqual(['change', 'add'])
+    expect(regionsCompatible([box({ kind: 'move', source_box: [0, 0, 0.1, 0.1] })], editCaps, 'output')).toBe(false)
+    expect(regionsCompatible([box({ kind: 'add' })], editCaps, 'output')).toBe(true)
+  })
+
+  it('白紙の配置図も、1枚目に重ねた画像と同じく1枚として数える', () => {
+    // 入力画像がある白紙の土台: 配置図1枚 + 入力に無い参照画像。
+    expect(regionExtraInputCount([box({ reference_asset_id: 'user1' }), box({ number: 2, reference_asset_id: 'ref' })], ['user1'])).toBe(2)
+    expect(regionExtraInputCount([box()], ['user1', 'user2'])).toBe(1)
   })
 })
