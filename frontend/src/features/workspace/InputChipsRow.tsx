@@ -169,6 +169,10 @@ export function InputChipsRow({
                     <span className={styles.statusTag} title={t.mods.inputBlockedTitle}>
                       {t.mods.inputBlocked}
                     </span>
+                  ) : logic.compositeRedrawingInputId === item.inputId ? (
+                    <span className={styles.busyTag} role="status" title={t.composite.redrawing}>
+                      {t.composite.redrawingShort}
+                    </span>
                   ) : (
                     <span className={styles.dims}>
                       {detail ? `${detail.width}×${detail.height}` : c.dimsLoading}

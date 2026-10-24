@@ -25,6 +25,8 @@ import { pickPastedImageFiles } from './clipboardImages'
 import type { RunInputItem } from './types'
 import { applyCompositeToInputs, compositeStartFor, type CompositeStart } from '../composite/compositeInputs'
 import type { CompositeSaveResult } from '../composite/CompositeEditor'
+import type { Size } from '../composite/quad'
+import { useCompositeAutoRedraw } from '../composite/useCompositeAutoRedraw'
 
 /**
  * スケッチエディタをどう開いたか。白紙(末尾に追加)か、既存の入力画像への上描き(差し替え)。
@@ -86,6 +88,8 @@ export interface EditInputsLogic {
   closeCompositeEditor: () => void
   /** 配置の保存後に入力を並べ直す(ADR-0050 5章)。 */
   saveComposite: (result: CompositeSaveResult) => void
+  /** 出力サイズに合わせて描き直している配置の結果の入力(ADR-0050 5章、2026-10-24 追記)。 */
+  compositeRedrawingInputId: string | null
 }
 
 export function useEditInputsLogic(
@@ -93,6 +97,8 @@ export function useEditInputsLogic(
   onChange: (inputs: RunInputItem[]) => void,
   maxInputImages: number,
   maxInputImageBytes: number,
+  /** 配置のキャンバスが従う出力サイズ(決まらなければ null)。変わったら1枚目の配置の結果を描き直す。 */
+  compositeCanvasSize: Size | null = null,
 ): EditInputsLogic {
   const queryClient = useQueryClient()
   const [uploadErrors, setUploadErrors] = useState<string[]>([])
@@ -320,6 +326,21 @@ export function useEditInputsLogic(
     setSketchOverAssetLoading(false)
   }
 
+  const { redrawingInputId: compositeRedrawingInputId } = useCompositeAutoRedraw({
+    inputs,
+    detailsByAssetId,
+    targetSize: compositeCanvasSize,
+    onRedrawn: (inputId, previousAssetId, asset) => {
+      // 書き出しの間に入力が変わっていたら(外した・入れ替えた)、差し替えない。
+      if (!inputs.some((i) => i.inputId === inputId && i.assetId === previousAssetId)) return
+      onChange(replaceImageInput(inputs, inputId, asset.id))
+    },
+    onFailed: () => {
+      setUploadErrors([msg().composite.redrawFailed])
+      setUploadNotice(null)
+    },
+  })
+
   function saveComposite(result: CompositeSaveResult) {
     const target = compositeEditor
     queryClient.setQueryData(['asset', result.asset.id], result.asset)
@@ -368,5 +389,6 @@ export function useEditInputsLogic(
     startComposite: () => setCompositeEditor(compositeStartFor(inputs, detailsByAssetId)),
     closeCompositeEditor: () => setCompositeEditor(null),
     saveComposite,
+    compositeRedrawingInputId,
   }
 }

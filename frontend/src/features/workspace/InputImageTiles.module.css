@@ -141,6 +141,21 @@
   pointer-events: none;
 }
 
+/* 出力サイズに合わせて配置を描き直している間(ADR-0050 5章)。 */
+.busyLabel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px;
+  font-size: 10px;
+  color: #fff;
+  background: rgba(23, 24, 27, 0.55);
+  pointer-events: none;
+}
+
 .dims {
   position: absolute;
   bottom: 4px;

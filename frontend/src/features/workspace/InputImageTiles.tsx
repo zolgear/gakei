@@ -146,7 +146,11 @@ export function InputImageTiles({
                 <span className={styles.statusLabel}>{c.notFound}</span>
               ) : isDeleted ? (
                 <span className={styles.statusLabel}>{c.deleted}</span>
-              ) : isWithheld ? null : isBlocked ? (
+              ) : isWithheld ? null : logic.compositeRedrawingInputId === item.inputId ? (
+                <span className={styles.busyLabel} role="status" title={t.composite.redrawing}>
+                  {t.composite.redrawingShort}
+                </span>
+              ) : isBlocked ? (
                 // 画像なしはタイルの置き換えの表示が理由を示すので、ここは deny の判定だけのとき。
                 <span className={styles.statusLabel} title={t.mods.inputBlockedTitle}>
                   {t.mods.inputBlocked}

@@ -60,6 +60,7 @@ import {
   type History,
   type LayerSource,
 } from './editorDoc'
+import { initialCanvasSize } from './canvasResize'
 import { CompositeExportError, exportComposite } from './exportComposite'
 import { applyNumericTransform, quadAngleDegrees, quadCenter, quadScalePercent, type Size } from './quad'
 import {
@@ -265,6 +266,7 @@ function CompositeEditorBody({
   }
 
   // 開いたときの準備(素材の大きさを引いて、並べる・レシピから作り直す)。
+  const startFormSize = formSize ? clampCanvasSize(formSize) : null
   useEffect(() => {
     let cancelled = false
     async function run() {
@@ -281,7 +283,9 @@ function CompositeEditorBody({
           const { sources } = await loadSources(ids)
           if (cancelled) return
           const naturals = new Map(sources.map((s) => [s.assetId, s.natural]))
-          const { doc, droppedCount } = createDocFromComposition(parsed, naturals)
+          const { doc: saved, droppedCount } = createDocFromComposition(parsed, naturals)
+          // キャンバスは今の出力サイズで始め、素材を置き直す(ADR-0050 5章、2026-10-24 追記)。
+          const doc = resizeCanvas(saved, initialCanvasSize({ formSize: startFormSize, recipeCanvas: saved.canvas }))
           setHistory(initHistory(doc))
           setLoad({
             status: 'ready',
@@ -292,16 +296,18 @@ function CompositeEditorBody({
           return
         }
         // 記録が無ければ、この画像を素材にして新しく始める(置き換えはしない)。
-        const canvas = clampCanvasSize({ width: asset.width, height: asset.height })
+        const assetSize = clampCanvasSize({ width: asset.width, height: asset.height })
+        const canvas = initialCanvasSize({ formSize: startFormSize, firstSourceSize: assetSize })
         const doc = createDocFromSources([{ assetId: asset.id, natural: { width: asset.width, height: asset.height } }], canvas)
         setHistory(initHistory(doc))
-        setLoad({ status: 'ready', replacedAssetId: null, firstSize: canvas, notice: c.noComposition })
+        setLoad({ status: 'ready', replacedAssetId: null, firstSize: assetSize, notice: c.noComposition })
         return
       }
       const { sources, skipped } = await loadSources(init.sourceAssetIds)
       if (cancelled) return
       const firstSize = sources[0] ? clampCanvasSize(sources[0].natural) : null
-      const canvas = firstSize ?? (formSize ? clampCanvasSize(formSize) : { width: 1024, height: 1024 })
+      // 出力サイズを優先する(配置は出力の一枚絵の下絵。ADR-0050 5章、2026-10-24 追記)。
+      const canvas = initialCanvasSize({ formSize: startFormSize, firstSourceSize: firstSize })
       const doc = createDocFromSources(sources, canvas)
       setHistory(initHistory(doc))
       const over = Math.max(0, sources.length - MAX_LAYERS)

@@ -8,7 +8,8 @@
  */
 import { assetUrl } from '../../api/assetUrl'
 import { canvasToBlob, loadImage } from '../mask/canvasUtils'
-import type { EditorDoc } from './recipe'
+import type { Quad, Size } from './quad'
+import type { CompositeBackground, CompositeRecipe } from './recipe'
 import { CompositeRenderer, TRANSPARENT, WHITE } from './renderer'
 
 /** 原本のテクスチャの長辺の上限(GPU の上限がこれより小さければそちら)。 */
@@ -22,7 +23,36 @@ export class CompositeExportError extends Error {
   }
 }
 
-export async function exportComposite(doc: EditorDoc): Promise<Blob> {
+/**
+ * 書き出しに要るものだけ(編集画面の `EditorDoc` もこの形を満たす)。レシピからも作れるので、
+ * 編集画面を開かずに描き直せる(出力サイズを変えたとき。ADR-0050 5章、2026-10-24 追記)。
+ */
+export interface CompositeExportSpec {
+  canvas: Size
+  background: CompositeBackground
+  /** 下から上への重ね順。 */
+  layers: readonly { assetId: string; quad: Quad; flipX: boolean; flipY: boolean }[]
+}
+
+/** 保存したレシピを書き出しの形にする。 */
+export function exportSpecFromRecipe(recipe: CompositeRecipe): CompositeExportSpec {
+  return {
+    canvas: { width: recipe.canvas.width, height: recipe.canvas.height },
+    background: recipe.canvas.background === 'transparent' ? 'transparent' : 'white',
+    layers: recipe.layers.map((l) => {
+      const c = l.corners
+      const quad: Quad = [
+        { x: c[0][0], y: c[0][1] },
+        { x: c[1][0], y: c[1][1] },
+        { x: c[2][0], y: c[2][1] },
+        { x: c[3][0], y: c[3][1] },
+      ]
+      return { assetId: l.source_asset_id, quad, flipX: l.flip_x, flipY: l.flip_y }
+    }),
+  }
+}
+
+export async function exportComposite(doc: CompositeExportSpec): Promise<Blob> {
   const canvas = document.createElement('canvas')
   canvas.width = doc.canvas.width
   canvas.height = doc.canvas.height
