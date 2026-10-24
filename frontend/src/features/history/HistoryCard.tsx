@@ -6,7 +6,7 @@
 import { Link } from 'react-router'
 import type { RunSummary } from '../../api/client'
 import { UserAvatar } from '../../components/UserAvatar'
-import { stripAppendedText } from '../regions/regions'
+import { isLayoutSketchRun, stripAppendedText } from '../regions/regions'
 import {
   formatDateTime,
   formatDuration,
@@ -48,7 +48,10 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   const { t } = useI18n()
   const outputs = run.outputs ?? []
   const shownOutput = outputs[outputIndex] ?? outputs[0]
-  const hasInputs = run.input_count > 0
+  // 白紙の配置図(ADR-0053 5章)は入力に数えず、親としても見せない(生成として扱う)。
+  const layoutSketch = isLayoutSketchRun(run.regions)
+  const inputCount = layoutSketch ? Math.max(0, run.input_count - 1) : run.input_count
+  const hasInputs = inputCount > 0
   const accentClass = hasInputs ? styles.dotEdit : styles.dotGenerate
   // 従来のカード(検索のページ)はパラメーターのチップを今のまま出す。重ねるカード(履歴の「詳細」)は、
   // 生成に使ったものの有無(入力・領域)は上の行に、出力の性質(透過・実寸)は操作の行の左に出す
@@ -61,7 +64,8 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   const regionCount = labels.regionCount
   const tokenLabel = formatTokenCount(run.usage)
   const parentAssetId = run.primary_parent_asset_id
-  const extraInputCount = run.input_count > 1 ? run.input_count - 1 : 0
+  const shownParentAssetId = layoutSketch ? null : parentAssetId
+  const extraInputCount = inputCount > 1 ? inputCount - 1 : 0
 
   // 画像領域は出力があればそのビューアへ、出力が無く実行中・待機中ならスタジオの生成画面へ、
   // それ以外は Run 詳細へ。プロンプト部分は常に Run 詳細へ。「系列を見る」は辿れる起点
@@ -85,11 +89,11 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
 
   const elapsed = run.status === 'running' ? formatElapsedSeconds(run.started_at) : null
 
-  const parentOverlay = parentAssetId && (
+  const parentOverlay = shownParentAssetId && (
     <div className={styles.parentOverlay}>
       <span className={styles.parentThumbFrame}>
         <AssetThumb
-          assetId={parentAssetId}
+          assetId={shownParentAssetId}
           rating={run.primary_parent_content_rating}
           withheld={run.primary_parent_content_withheld}
           className={styles.parentThumb}
@@ -109,7 +113,7 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
       <div className={styles.header}>
         <span className={`${styles.dot} ${accentClass}`} aria-hidden="true" />
         {hasInputs && (
-          <span className={styles.inputBadge}>{fmt(t.history.card.inputBadge, { count: run.input_count })}</span>
+          <span className={styles.inputBadge}>{fmt(t.history.card.inputBadge, { count: inputCount })}</span>
         )}
         {variant === 'overlay' && regionCount > 0 && (
           <span className={styles.inputBadge} title={t.regions.runDetail.delivery}>

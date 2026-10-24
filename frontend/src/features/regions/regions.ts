@@ -47,6 +47,14 @@ export function orderedRegions<T extends { number: number }>(regions: readonly T
 }
 
 /** 今のプロバイダー・モデルの Edit が四角を受けるか(受けなければ「領域」を出さない。5章)。 */
+/**
+ * 白紙の配置図を入力にして送った Run か(OpenAI の入力画像の無い Run。ADR-0053 5章)。配置図は
+ * 記録上の入力・主たる親だが、利用者が選んだ画像ではないので、カードの親や比較には出さない。
+ */
+export function isLayoutSketchRun(regions: Pick<RunRegions, 'delivery' | 'frame'> | null | undefined): boolean {
+  return regions?.delivery === 'image_and_text' && regions.frame === 'output'
+}
+
 export function regionsSupported(editOpCaps: OperationCapabilities | undefined): boolean {
   return editOpCaps?.supports_regions === true
 }

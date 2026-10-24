@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import type { OperationCapabilities, ParamDef, RegionBox, RunRegions } from '../../api/client'
 import { blankCanvasSize } from '../run-form/dependencies'
-import { addRegion, allowedRegionKinds, defaultRegionKind, regionsCompatible, regionsSupportedFor, restoreRunRegions, REGION_KINDS } from './regions'
+import { addRegion, allowedRegionKinds, defaultRegionKind, isLayoutSketchRun, regionsCompatible, regionsSupportedFor, restoreRunRegions, REGION_KINDS } from './regions'
 
 function op(overrides: Partial<OperationCapabilities> = {}): OperationCapabilities {
   return {
@@ -154,5 +154,16 @@ describe('入力画像の無い Run の四角を戻す', () => {
     expect(restored.inputs).toEqual(inputs)
     expect(restored.regionsAssetId).toBe('img')
     expect(restored.regions).toHaveLength(2)
+  })
+})
+
+describe('isLayoutSketchRun', () => {
+  it('白紙の配置図を送った Run(画像と文、出力に対する割合)だけを見分ける', () => {
+    expect(isLayoutSketchRun({ delivery: 'image_and_text', frame: 'output' })).toBe(true)
+    expect(isLayoutSketchRun({ delivery: 'image_and_text', frame: 'input' })).toBe(false)
+    // ComfyUI の白紙は配置図を入力にしない。
+    expect(isLayoutSketchRun({ delivery: 'comfyui_bboxes', frame: 'output' })).toBe(false)
+    expect(isLayoutSketchRun(null)).toBe(false)
+    expect(isLayoutSketchRun(undefined)).toBe(false)
   })
 })
