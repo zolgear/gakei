@@ -487,7 +487,7 @@ def test_translation_llm_uses_title_pair_of_the_image(
         ("title", local, "local-llm"),
         ("translate", local, "local-llm"),
     ]
-    assert _auto_models(client, asset_id) == {"llm": "local-llm", "onnx": "wd-vit-tagger-v3"}
+    assert _auto_models(client, asset_id) == {"llm": "local-llm", "onnx": "wd-swinv2-tagger-v3"}
 
 
 def test_failure_on_comfyui_pair_does_not_fall_back_to_default(client: TestClient) -> None:
