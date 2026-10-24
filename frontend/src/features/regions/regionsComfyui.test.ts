@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import type { OperationCapabilities, ParamDef, RegionBox, RunRegions } from '../../api/client'
 import { blankCanvasSize } from '../run-form/dependencies'
-import { allowedRegionKinds, regionsCompatible, regionsSupportedFor, restoreRunRegions, REGION_KINDS } from './regions'
+import { addRegion, allowedRegionKinds, defaultRegionKind, regionsCompatible, regionsSupportedFor, restoreRunRegions, REGION_KINDS } from './regions'
 
 function op(overrides: Partial<OperationCapabilities> = {}): OperationCapabilities {
   return {
@@ -74,6 +74,19 @@ describe('選べる種類と参照画像', () => {
     expect(regionsCompatible([box({ kind: 'keep' })], op())).toBe(false)
     expect(regionsCompatible([box({ reference_asset_id: 'ref' })], op())).toBe(false)
     expect(regionsCompatible([box({ reference_asset_id: 'ref' })], op({ regions_reference_images: true }))).toBe(true)
+  })
+})
+
+describe('新しい四角の種類の既定', () => {
+  it('白紙では「足す」、入力画像の上では「変える」', () => {
+    expect(defaultRegionKind(true)).toBe('add')
+    expect(defaultRegionKind(false)).toBe('change')
+  })
+
+  it('既定の種類を渡して足すと、その種類の四角になる(省けば「変える」)', () => {
+    const box = [0.1, 0.1, 0.4, 0.4] as [number, number, number, number]
+    expect(addRegion([], box, { kind: defaultRegionKind(true) })[0].kind).toBe('add')
+    expect(addRegion([], box)[0].kind).toBe('change')
   })
 })
 

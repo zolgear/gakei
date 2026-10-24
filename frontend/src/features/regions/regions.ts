@@ -229,6 +229,15 @@ export function boxesFromEditorRegions(regions: readonly EditorRegion[]): Region
   }))
 }
 
+/**
+ * 新しく描いた四角・候補から作った四角の種類の既定(ADR-0053 5章)。入力画像の上では「変える」、白紙
+ * (入力画像の無い Run)では変える物が無いので「足す」。
+ */
+export function defaultRegionKind(blank: boolean): RegionKind {
+  return blank ? 'add' : 'change'
+}
+
+/** 四角を1つ足す。種類は `extra.kind`(省けば「変える」。白紙では `defaultRegionKind(true)` を渡す)。 */
 export function addRegion(regions: readonly EditorRegion[], box: Box, extra: Partial<EditorRegion> = {}): EditorRegion[] {
   if (regions.length >= REGIONS_MAX) return [...regions]
   return [

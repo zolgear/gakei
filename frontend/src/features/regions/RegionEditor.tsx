@@ -28,6 +28,7 @@ import {
   addRegion,
   boxesFromEditorRegions,
   canSaveRegions,
+  defaultRegionKind,
   editorRegionsFromBoxes,
   moveBox,
   moveRegionOrder,
@@ -247,7 +248,10 @@ export function RegionEditor({
 
   function adoptCandidate(candidate: RegionCandidate) {
     if (history.present.length >= REGIONS_MAX) return
-    const next = addRegion(history.present, candidate.box, { label: candidate.label })
+    const next = addRegion(history.present, candidate.box, {
+      label: candidate.label,
+      kind: defaultRegionKind(canvas.kind === 'blank'),
+    })
     commit(next)
     setSelectedKey(next[next.length - 1].key)
     detection.markAdopted(candidate.key)
