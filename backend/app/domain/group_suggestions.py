@@ -7,7 +7,9 @@
 - 集める計算は対象の全件で行い、範囲(グループ外だけ / すべて)と既存のグループとの重なりは
   後から当てはめる(3章・4章)。集めた結果はプロセス内の LRU にキャッシュする(8章)。
 - 特徴的なタグ(informative Dirichlet prior 付きの log-odds)と作品を、カードの手がかりに出す(5章)。
-- 名前は付けない(`name` は常に null。6章)。外部の AI を呼ばないので `ai.before_send` は通さない。
+- 名前は付けない(`name` は常に null)。外部の AI を呼ばないので `ai.before_send` は通さない。
+  名前の候補(LLM)の入力は `naming_input` が返し、呼び出しは `app/domain/group_naming.py` と
+  `app/api/group_naming.py` が行う。
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ import threading
 import uuid
 from collections import Counter, OrderedDict
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 import numpy as np
@@ -509,6 +511,32 @@ def _suggestion_id(target: uuid.UUID | None, member_ids: Iterable[uuid.UUID]) ->
     return digest.hexdigest()[:16]
 
 
+@dataclass(frozen=True)
+class NamingCluster:
+    """名前の候補(ADR-0056「名前の候補」)に使う、新しいグループの提案1つのタグの集計。
+    数えるのは集まりの全員(提案から落ちた画像も含む。カードの特徴的なタグと同じ)。"""
+
+    suggestion_id: str
+    # 集まりの枚数。
+    size: int
+    # タグ → 集まりの中で付いている枚数。
+    tag_counts: dict[str, int]
+    # 集まりの画像ごとのタグ(作品の集計に使う)。
+    member_tags: tuple[frozenset[str], ...]
+
+
+@dataclass(frozen=True)
+class NamingInput:
+    """名前の候補の入力。`clusters` は提案の順(既存のグループへの追加の提案は含まない)。"""
+
+    clusters: tuple[NamingCluster, ...]
+    # 対象全体でのタグ → 枚数と、対象の枚数。
+    global_counts: dict[str, int]
+    total: int
+    # タグ辞書(danbooru の体系)のカテゴリー。辞書に無いタグは含まない。
+    categories: dict[str, int | None]
+
+
 def suggest_groups(
     db: Session,
     *,
@@ -522,6 +550,68 @@ def suggest_groups(
     max_assets: int = MAX_ASSETS,
 ) -> GroupSuggestionsResponse:
     """グループの提案。埋め込みが無効・使えなければ `EmbeddingsConflictError`(409)。"""
+    response, _naming = _suggest(
+        db,
+        settings=settings,
+        index=index,
+        version_of=version_of,
+        cache=cache,
+        viewer=viewer,
+        scope=scope,
+        granularity=granularity,
+        max_assets=max_assets,
+        with_assets=True,
+    )
+    return response
+
+
+def naming_input(
+    db: Session,
+    *,
+    settings: Settings,
+    index: VectorIndex,
+    version_of: Callable[[str], int],
+    cache: GroupSuggestionCache,
+    viewer: CurrentUser,
+    scope: Scope = "ungrouped",
+    granularity: Granularity = "normal",
+    suggestion_ids: Iterable[str] | None = None,
+    max_assets: int = MAX_ASSETS,
+) -> NamingInput:
+    """名前の候補の入力。提案を同じ条件で計算し直し(集めた結果はキャッシュが効く)、新しい
+    グループの提案(`target_group` の無いもの)のうち `suggestion_ids` に入るもの(None なら全部)の
+    タグの集計を返す。埋め込みが無効・使えなければ `EmbeddingsConflictError`(409)。"""
+    _response, naming = _suggest(
+        db,
+        settings=settings,
+        index=index,
+        version_of=version_of,
+        cache=cache,
+        viewer=viewer,
+        scope=scope,
+        granularity=granularity,
+        max_assets=max_assets,
+        with_assets=False,
+    )
+    if suggestion_ids is None:
+        return naming
+    wanted = set(suggestion_ids)
+    return replace(naming, clusters=tuple(c for c in naming.clusters if c.suggestion_id in wanted))
+
+
+def _suggest(
+    db: Session,
+    *,
+    settings: Settings,
+    index: VectorIndex,
+    version_of: Callable[[str], int],
+    cache: GroupSuggestionCache,
+    viewer: CurrentUser,
+    scope: Scope,
+    granularity: Granularity,
+    max_assets: int,
+    with_assets: bool,
+) -> tuple[GroupSuggestionsResponse, NamingInput]:
     active = require_active(db, settings)
     ids = candidate_ids(db, active.model_key, AssetFilter(viewer=viewer), limit=max_assets + 1)
     truncated = len(ids) > max_assets
@@ -616,14 +706,23 @@ def suggest_groups(
     translations = tag_dictionaries_domain.lookup_translations(db, label_names)
 
     suggestions: list[GroupSuggestion] = []
-    for (_members, proposal, target, overlap), scores, franchise in zip(
-        drafts, tag_scores, franchises, strict=True
+    naming_by_id: dict[str, NamingCluster] = {}
+    for (members, proposal, target, overlap), scores, franchise, counts in zip(
+        drafts, tag_scores, franchises, cluster_tag_counts, strict=True
     ):
         # 範囲が「すべて」のとき、別のグループから移る画像(3章)。
         moving = [a for a in proposal if membership.get(a) is not None]
+        suggestion_id = _suggestion_id(target, proposal)
+        if target is None:
+            naming_by_id[suggestion_id] = NamingCluster(
+                suggestion_id=suggestion_id,
+                size=len(members),
+                tag_counts=dict(counts),
+                member_tags=tuple(frozenset(tags_by_asset.get(a, ())) for a in members),
+            )
         suggestions.append(
             GroupSuggestion(
-                id=_suggestion_id(target, proposal),
+                id=suggestion_id,
                 size=len(proposal),
                 member_ids=proposal,
                 cover_ids=proposal[:COVER_COUNT],
@@ -663,7 +762,7 @@ def suggest_groups(
     outlier_ids = [a for a in ordered if a not in suggested and membership.get(a) is None]
 
     shown = [a for s in suggestions for a in s.member_ids] + outlier_ids
-    return GroupSuggestionsResponse(
+    response = GroupSuggestionsResponse(
         model_key=active.model_key,
         scope=scope,
         granularity=granularity,
@@ -671,8 +770,15 @@ def suggest_groups(
         truncated=truncated,
         suggestions=suggestions,
         outlier_ids=outlier_ids,
-        assets=_asset_summaries(db, list(dict.fromkeys(shown))),
+        assets=_asset_summaries(db, list(dict.fromkeys(shown))) if with_assets else [],
     )
+    naming = NamingInput(
+        clusters=tuple(naming_by_id[s.id] for s in suggestions if s.id in naming_by_id),
+        global_counts=dict(global_counts),
+        total=total,
+        categories=categories,
+    )
+    return response, naming
 
 
 # -- 受け入れ ----------------------------------------------------------------------
@@ -710,10 +816,13 @@ __all__ = [
     "Clustering",
     "GroupSuggestionCache",
     "GroupSuggestionTargetNotFoundError",
+    "NamingCluster",
+    "NamingInput",
     "accept_suggestion",
     "cluster_vectors",
     "distinctive_tags",
     "franchise_of_tag",
+    "naming_input",
     "spherical_kmeans",
     "suggest_groups",
 ]

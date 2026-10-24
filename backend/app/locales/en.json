@@ -468,7 +468,8 @@
         "annotation": "Auto titles and tags",
         "embedding": "Embeddings",
         "assistant": "Assistant",
-        "region_detection": "Region detection"
+        "region_detection": "Region detection",
+        "group_naming": "Group name suggestions"
       },
       "reenterKey": "The Base URL's origin (scheme, host and port) changes, so the saved key is not sent. Enter the key again (if the connection needs no key, delete the key first)"
     },
@@ -531,6 +532,11 @@
       "unknownConnection": "The specified connection does not exist",
       "invalidModel": "The model name must be 1 to {max} characters",
       "invalidLimit": "{name} must be an integer from {min} to {max}"
+    },
+    "groupNaming": {
+      "invalidBool": "{name} must be true or false",
+      "unknownConnection": "The specified connection does not exist",
+      "invalidModel": "The model name must be 1 to {max} characters"
     }
   },
   "runValidation": {
@@ -1219,5 +1225,11 @@
     },
     "detectionNotFound": "The detection was not found",
     "deleteForbidden": "Only the user who ran the detection or an administrator can delete it"
+  },
+  "groupNaming": {
+    "disabled": "Group name suggestions are disabled (enable them in the admin settings under \"Group name suggestions\")",
+    "unsupported": "The connection does not support Structured Outputs, so it cannot be used for group name suggestions",
+    "llmError": "Could not suggest group names: {error}",
+    "fakeName": "Dummy name {cluster}-{n}"
   }
 }

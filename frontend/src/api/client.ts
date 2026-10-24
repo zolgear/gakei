@@ -46,6 +46,8 @@ export type RegionKind = RegionBox['kind']
 export type RunRegions = components['schemas']['RunRegions']
 export type DetectedRegion = components['schemas']['DetectedRegion']
 export type RegionDetectResponse = components['schemas']['RegionDetectResponse']
+export type GroupNamingSettingsResponse = components['schemas']['GroupNamingSettingsResponse']
+export type GroupNamingSettingsUpdateRequest = components['schemas']['GroupNamingSettingsUpdateRequest']
 export type RegionDetectionSettingsResponse = components['schemas']['RegionDetectionSettingsResponse']
 export type RegionDetectionSettingsUpdateRequest = components['schemas']['RegionDetectionSettingsUpdateRequest']
 /** 保存した検出1回分(Asset ごとの履歴)。 */
@@ -816,6 +818,25 @@ export function acceptGroupSuggestion(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  })
+}
+
+export type GroupSuggestionNamesRequest = components['schemas']['GroupSuggestionNamesRequest']
+export type GroupSuggestionNamesResponse = components['schemas']['GroupSuggestionNamesResponse']
+
+/**
+ * 表示中の提案(新しいグループの提案)に、グループ名の候補を付ける(LLM。ADR-0056 6章)。保存はしない。
+ * 時間がかかることがあるので `signal` を受ける。無効・拒否・失敗は 409 / 502。
+ */
+export function suggestGroupNames(
+  body: GroupSuggestionNamesRequest,
+  signal?: AbortSignal,
+): Promise<GroupSuggestionNamesResponse> {
+  return request('/api/asset-groups/suggestions/names', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
   })
 }
 
@@ -1769,6 +1790,22 @@ export function getAssistantSettings(): Promise<AssistantSettingsResponse> {
 /** 管理者のみ。書いた項目だけ変える。不正な値は 422。 */
 export function updateAssistantSettings(body: AssistantSettingsUpdateRequest): Promise<AssistantSettingsResponse> {
   return request('/api/settings/assistant', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+// -- グループ名の候補(ADR-0056 6章) ----------------------------------------------
+
+/** 全ログイン者が読める(提案のページが候補を取りに行くかの判断。`usable`)。 */
+export function getGroupNamingSettings(): Promise<GroupNamingSettingsResponse> {
+  return request('/api/settings/group-naming')
+}
+
+/** 管理者のみ。書いた項目だけ変える。不正な値は 422。 */
+export function updateGroupNamingSettings(body: GroupNamingSettingsUpdateRequest): Promise<GroupNamingSettingsResponse> {
+  return request('/api/settings/group-naming', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

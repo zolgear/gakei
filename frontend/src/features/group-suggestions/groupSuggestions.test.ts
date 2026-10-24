@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   COVER_LIMIT,
   acceptBody,
+  candidatesById,
   chosenMemberIds,
   formatRate,
   hiddenMemberCount,
   movingCount,
+  namingSuggestionIds,
   shownMemberIds,
   toggleExcluded,
 } from './groupSuggestions'
@@ -62,4 +64,23 @@ describe('movingCount', () => {
 it('formatRate', () => {
   expect(formatRate(0.494)).toBe('49%')
   expect(formatRate(1)).toBe('100%')
+})
+
+describe('namingSuggestionIds / candidatesById', () => {
+  it('既存のグループへの追加の提案は名前の候補を求めない', () => {
+    const target = { id: 'g', name: 'G', overlap: 0.6 }
+    expect(
+      namingSuggestionIds([
+        { id: 's1', target_group: null },
+        { id: 's2', target_group: target },
+        { id: 's3' },
+      ]),
+    ).toEqual(['s1', 's3'])
+  })
+  it('応答を提案の id で引ける', () => {
+    const map = candidatesById({ model: 'm', items: [{ suggestion_id: 's1', candidates: ['a', 'b'] }] })
+    expect(map.get('s1')).toEqual(['a', 'b'])
+    expect(map.get('s2')).toBeUndefined()
+    expect(candidatesById(undefined).size).toBe(0)
+  })
 })

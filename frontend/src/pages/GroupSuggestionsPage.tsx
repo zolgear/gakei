@@ -12,6 +12,9 @@
  * - 最後に「未分類」(どの提案にも入らなかった、グループ外の画像)を畳んで出す。
  * - サムネイルはレーティングのマスク(ADR-0049)を `AssetThumb` で守る。
  * - タグと作品の訳は、ほかのタグの表示と同じく、言語が日本語で訳を出す設定のときだけ使う。
+ * - 名前の候補(ADR-0056 6章): 管理者が有効にしていて使えるときだけ、提案の後に新しいグループの提案の
+ *   分をまとめて取り(`POST /api/asset-groups/suggestions/names`)、名前の欄の下にチップで出す。押すと
+ *   欄に入る(自動では確定しない)。取れなかったときは何も出さない。
  * 埋め込みが使えないときは、ストックの入口を出さない。直接開いたときは使えない旨だけを出す。
  */
 import { useMemo, useState } from 'react'
@@ -20,7 +23,9 @@ import { useNavigate } from 'react-router'
 import {
   ApiError,
   acceptGroupSuggestion,
+  getGroupNamingSettings,
   listGroupSuggestions,
+  suggestGroupNames,
   type AssetSummary,
   type GroupSuggestion,
   type GroupSuggestionGranularity,
@@ -31,13 +36,17 @@ import { AssetThumb } from '../features/content-rating/AssetThumb'
 import { thumbRating } from '../features/content-rating/contentRating'
 import { embeddingErrorKind, retryEmbeddingQuery } from '../features/embeddings/embeddingErrors'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
+import { GROUP_NAMING_SETTINGS_QUERY_KEY } from '../features/settings/queryKeys'
 import {
   GROUP_SUGGESTIONS_QUERY_KEY,
+  GROUP_SUGGESTION_NAMES_QUERY_KEY,
   acceptBody,
+  candidatesById,
   chosenMemberIds,
   formatRate,
   hiddenMemberCount,
   movingCount,
+  namingSuggestionIds,
   shownMemberIds,
   toggleExcluded,
 } from '../features/group-suggestions/groupSuggestions'
@@ -91,8 +100,25 @@ function GroupSuggestionsBody() {
   const data = query.data
   const errorKind = embeddingErrorKind(query.error)
   const assets = useMemo(() => new Map((data?.assets ?? []).map((a) => [a.id, a])), [data])
-  const suggestions = data?.suggestions ?? []
+  const suggestions = useMemo(() => data?.suggestions ?? [], [data])
   const outlierIds = data?.outlier_ids ?? []
+
+  // 名前の候補。使えるときだけ、提案が出た後に別のリクエストで取る(失敗しても何も出さない)。
+  const namingSettings = useQuery({
+    queryKey: GROUP_NAMING_SETTINGS_QUERY_KEY,
+    queryFn: getGroupNamingSettings,
+    retry: false,
+  })
+  const namingIds = useMemo(() => namingSuggestionIds(suggestions), [suggestions])
+  const namesQuery = useQuery({
+    queryKey: [...GROUP_SUGGESTION_NAMES_QUERY_KEY, scope, granularity, namingIds],
+    queryFn: ({ signal }) => suggestGroupNames({ scope, granularity, suggestion_ids: namingIds }, signal),
+    enabled: namingSettings.data?.usable === true && namingIds.length > 0,
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  })
+  const candidates = useMemo(() => candidatesById(namesQuery.data), [namesQuery.data])
 
   return (
     <>
@@ -135,7 +161,12 @@ function GroupSuggestionsBody() {
         // 範囲・粒度を変えたら、外した画像や入力中の名前を持ち越さない(キーで作り直す)。
         <ol key={`${scope}:${granularity}`} className={styles.cardList}>
           {suggestions.map((suggestion) => (
-            <SuggestionCard key={suggestion.id} suggestion={suggestion} assets={assets} />
+            <SuggestionCard
+              key={suggestion.id}
+              suggestion={suggestion}
+              assets={assets}
+              candidates={candidates.get(suggestion.id)}
+            />
           ))}
         </ol>
       )}
@@ -180,9 +211,11 @@ function Switch<T extends string>({ label, value, options, onChange }: SwitchPro
 interface SuggestionCardProps {
   suggestion: GroupSuggestion
   assets: Map<string, AssetSummary>
+  /** 名前の候補(LLM。良い順)。無ければ出さない。 */
+  candidates?: string[]
 }
 
-function SuggestionCard({ suggestion, assets }: SuggestionCardProps) {
+function SuggestionCard({ suggestion, assets, candidates }: SuggestionCardProps) {
   const { t } = useI18n()
   const m = t.groupSuggestions
   const queryClient = useQueryClient()
@@ -190,7 +223,7 @@ function SuggestionCard({ suggestion, assets }: SuggestionCardProps) {
   const translate = useTagTranslationsEnabled()
   const [excluded, setExcluded] = useState<string[]>([])
   const [expanded, setExpanded] = useState(false)
-  // 名前の提案(ADR-0056 6章)が来たら初期値にする。今は常に空。
+  // 名前は人が入れる。候補(`candidates`)は押したときだけ欄に入れる。
   const [name, setName] = useState(suggestion.name ?? '')
   const [confirming, setConfirming] = useState(false)
   const [accepted, setAccepted] = useState<Accepted | null>(null)
@@ -308,6 +341,22 @@ function SuggestionCard({ suggestion, assets }: SuggestionCardProps) {
           {target ? fmt(m.addTo, { name: target.name }) : m.create}
         </button>
       </form>
+      {!target && candidates && candidates.length > 0 && (
+        <ul className={styles.candidates} aria-label={m.nameCandidates}>
+          {candidates.map((candidate) => (
+            <li key={candidate}>
+              <button
+                type="button"
+                className={styles.candidate}
+                data-active={name.trim() === candidate}
+                onClick={() => setName(candidate)}
+              >
+                {candidate}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {message && <p className={styles.error}>{message}</p>}
 
       <ConfirmDialog

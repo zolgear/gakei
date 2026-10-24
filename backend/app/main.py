@@ -30,6 +30,7 @@ from app.api import comfyui as comfyui_api
 from app.api import downloads as downloads_api
 from app.api import embeddings as embeddings_api
 from app.api import events as events_api
+from app.api import group_naming as group_naming_api
 from app.api import group_suggestions as group_suggestions_api
 from app.api import health as health_api
 from app.api import history as history_api
@@ -663,6 +664,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(region_detection_api.router, dependencies=auth_dep)
     # `/api/asset-groups/suggestions` は `/api/asset-groups/{group_id}` より先に登録する。
     app.include_router(group_suggestions_api.router, dependencies=auth_dep)
+    app.include_router(group_naming_api.router, dependencies=auth_dep)
     app.include_router(asset_groups_api.router, dependencies=auth_dep)
     app.include_router(runs_api.router, dependencies=auth_dep)
     app.include_router(history_api.router, dependencies=auth_dep)

@@ -2388,7 +2388,9 @@ class AnnotationSettingsUpdateRequest(BaseModel):
 
 # 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
 StructuredOutputsMode = Literal["auto", "supported", "unsupported"]
-LlmConnectionFeature = Literal["annotation", "embedding", "assistant", "region_detection"]
+LlmConnectionFeature = Literal[
+    "annotation", "embedding", "assistant", "region_detection", "group_naming"
+]
 
 
 class LlmConnectionView(BaseModel):
@@ -2790,7 +2792,7 @@ class GroupSuggestion(BaseModel):
     moving_count: int = 0
     # そのうち、別のグループから移る画像(`member_ids` の部分集合)。
     moving_ids: list[uuid.UUID] = Field(default_factory=list)
-    # 名前の提案(今は常に null。ADR-0056 6章)。
+    # 名前(常に null。候補は `POST /api/asset-groups/suggestions/names`。ADR-0056 6章)。
     name: str | None = None
 
 
@@ -2827,6 +2829,54 @@ class GroupSuggestionAcceptRequest(BaseModel):
         if (self.name is None) == (self.target_group_id is None):
             raise ValueError("specify exactly one of name and target_group_id")
         return self
+
+
+class GroupSuggestionNamesRequest(BaseModel):
+    """`POST /api/asset-groups/suggestions/names`。提案を同じ条件で計算し直し、
+    `suggestion_ids` の提案(新しいグループの提案だけ。無ければ全部)に名前の候補を付ける。"""
+
+    scope: Literal["ungrouped", "all"] = "ungrouped"
+    granularity: Literal["normal", "fine"] = "normal"
+    suggestion_ids: list[str] | None = Field(default=None, max_length=500)
+
+
+class GroupSuggestionNames(BaseModel):
+    """提案1つの名前の候補(良い順。最大3つ)。"""
+
+    suggestion_id: str
+    candidates: list[str] = Field(default_factory=list)
+
+
+class GroupSuggestionNamesResponse(BaseModel):
+    """名前の候補。候補を返せなかった提案は `items` に入らない。"""
+
+    model: str | None = None
+    items: list[GroupSuggestionNames] = Field(default_factory=list)
+
+
+GroupNamingUnusableReason = Literal[
+    "disabled", "connection_missing", "api_key_missing", "structured_outputs_unsupported"
+]
+
+
+class GroupNamingSettingsResponse(BaseModel):
+    """`GET /api/settings/group-naming`。全ログイン者が読める(名前の候補を出すかの判断)。"""
+
+    enabled: bool
+    connection_id: str
+    model: str
+    # 有効で、接続先とキーがそろい、接続先が Structured Outputs に対応するとみなせる。
+    usable: bool
+    # 使えない理由(1つに絞る。使えるなら null)。見る順は領域の検出と同じ。
+    unusable_reason: GroupNamingUnusableReason | None = None
+
+
+class GroupNamingSettingsUpdateRequest(BaseModel):
+    """書いた項目だけ変える。null は不正な値(422)。"""
+
+    enabled: StrictBool | None = None
+    connection_id: StrictStr | None = None
+    model: StrictStr | None = None
 
 
 class EmbeddingGraphNode(BaseModel):
@@ -3253,7 +3303,13 @@ class AssistantSettingsUpdateRequest(BaseModel):
 
 ModEvent = Literal["asset.ingested", "ai.before_send", "run.finished"]
 ModPurpose = Literal[
-    "image_run", "annotation", "assistant", "embedding", "workflow_analysis", "region_detection"
+    "image_run",
+    "annotation",
+    "assistant",
+    "embedding",
+    "workflow_analysis",
+    "region_detection",
+    "group_naming",
 ]
 ModSource = Literal["upload", "url", "sketch", "mask", "composite", "generated", "import", "mcp"]
 ModOnFailure = Literal["block", "allow"]

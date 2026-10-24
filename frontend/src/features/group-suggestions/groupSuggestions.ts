@@ -3,8 +3,9 @@
  *
  * - カードには表紙(最大 12 枚)を出し、残りは「+n」で開く。
  * - カードの画像は押すと提案から外せる(もう一度押すと戻す)。外した画像は受け入れの対象にしない。
+ * - 名前の候補(LLM。ADR-0056 6章)は、新しいグループの提案の分だけ、提案の後に別に取る。
  */
-import type { GroupSuggestion } from '../../api/client'
+import type { GroupSuggestion, GroupSuggestionNamesResponse } from '../../api/client'
 
 /** 閉じているときに出す枚数(サーバーの `cover_ids` と同じ)。 */
 export const COVER_LIMIT = 12
@@ -56,4 +57,20 @@ export function movingCount(suggestion: Pick<GroupSuggestion, 'moving_ids'>, exc
 /** 割合を百分率の整数で。 */
 export function formatRate(rate: number): string {
   return `${Math.round(rate * 100)}%`
+}
+
+/**
+ * 名前の候補のクエリのキーの先頭。提案のキー(`GROUP_SUGGESTIONS_QUERY_KEY`)の下に置かない(提案の
+ * 取り直しに巻き込まれて、LLM を呼び直さないように)。
+ */
+export const GROUP_SUGGESTION_NAMES_QUERY_KEY = ['groupSuggestionNames'] as const
+
+/** 名前の候補を求める提案(新しいグループの提案。既存のグループへの追加は名前が要らない)。 */
+export function namingSuggestionIds(suggestions: readonly Pick<GroupSuggestion, 'id' | 'target_group'>[]): string[] {
+  return suggestions.filter((s) => !s.target_group).map((s) => s.id)
+}
+
+/** 提案の id → 名前の候補。 */
+export function candidatesById(response: GroupSuggestionNamesResponse | undefined): Map<string, string[]> {
+  return new Map((response?.items ?? []).map((item) => [item.suggestion_id, item.candidates ?? []]))
 }

@@ -39,8 +39,8 @@ HANDLER_NAMES: dict[str, str] = {
 }
 
 # `ai.before_send` の目的(ADR-0051 2章)。`workflow_analysis` は ComfyUI のワークフローの推定
-# (ADR-0052 6章)、`region_detection` は領域の四角の検出(ADR-0053 7章)。値を足すのは項目の
-# 追加と同じ扱いで、`SCHEMA_VERSION` は上げない。
+# (ADR-0052 6章)、`region_detection` は領域の四角の検出(ADR-0053 7章)、`group_naming` は
+# グループ名の候補(ADR-0056)。値を足すのは項目の追加と同じ扱いで、`SCHEMA_VERSION` は上げない。
 PURPOSES: tuple[str, ...] = (
     "image_run",
     "annotation",
@@ -48,6 +48,7 @@ PURPOSES: tuple[str, ...] = (
     "embedding",
     "workflow_analysis",
     "region_detection",
+    "group_naming",
 )
 # `asset.ingested` の取り込みの経路。
 SOURCES: tuple[str, ...] = (

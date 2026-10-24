@@ -307,7 +307,8 @@
       "about": "About GAKEI",
       "authentication": "Authentication",
       "assistant": "Assistant",
-      "regionDetection": "Region detection"
+      "regionDetection": "Region detection",
+      "groupNaming": "Group name suggestions"
     },
     "frame": {
       "changeCount": {
@@ -579,7 +580,8 @@
         "annotation": "Auto titles and tags",
         "embedding": "Embeddings",
         "assistant": "Assistant",
-        "region_detection": "Region detection"
+        "region_detection": "Region detection",
+        "group_naming": "Group name suggestions"
       },
       "deleteDisabledInUse": "Cannot be deleted while a feature uses it.",
       "apiKeyRequiredLabel": "Key (enter again)",
@@ -1012,7 +1014,8 @@
         "assistant": "Assistant",
         "embedding": "Remote embeddings",
         "workflow_analysis": "Workflow analysis (ComfyUI)",
-        "region_detection": "Region detection"
+        "region_detection": "Region detection",
+        "group_naming": "Group name suggestions"
       },
       "sourcesLabel": "Ingest source (asset.ingested)",
       "sources": {
@@ -1448,6 +1451,32 @@
         "connection_missing": "\"Detect\" is hidden because the selected connection was not found. Choose a connection again.",
         "api_key_missing": "\"Detect\" is hidden because the connection has no key. Register a key in the OpenAI settings.",
         "structured_outputs_unsupported": "\"Detect\" is hidden because the connection is not treated as supporting structured outputs. If it does support them, set \"Structured outputs\" to \"Supported\" for that connection in LLM connections."
+      },
+      "structuredOutputsLink": "Open LLM connections"
+    },
+    "groupNaming": {
+      "intro": "Shows group name suggestions from an LLM below the name field on the group suggestions page. Only the tags of each cluster are sent, and sensitive tags are removed before sending to external connections. A request is sent each time the page is opened, which may incur costs.",
+      "loading": "Loading...",
+      "loadFailed": "Could not load the group name suggestion settings.",
+      "retry": "Reload",
+      "enabledLabel": "Enable group name suggestions",
+      "enabledHelp": "When enabled, name suggestions appear on the group suggestions page. Disabled by default.",
+      "connectionHeading": "LLM",
+      "connectionLabel": "Connection",
+      "connectionHelp": "Choose a connection that supports structured outputs (JSON schema).",
+      "connectionsLink": "LLM connections",
+      "modelLabel": "Model name",
+      "modelHelp": "The model name sent to the connection.",
+      "errors": {
+        "connectionRequired": "Choose a connection",
+        "connectionUnknown": "This connection was not found. Choose another one",
+        "modelRequired": "Enter a model name",
+        "modelTooLong": "Enter up to {max} characters"
+      },
+      "unusable": {
+        "connection_missing": "Name suggestions are not shown because the selected connection was not found. Choose another connection.",
+        "api_key_missing": "Name suggestions are not shown because the connection has no key. Register a key in the OpenAI settings.",
+        "structured_outputs_unsupported": "Name suggestions are not shown because the connection is not considered to support structured outputs. If it does, set \"Structured outputs\" to \"Supported\" for that connection in \"LLM connections\"."
       },
       "structuredOutputsLink": "Open LLM connections"
     }
@@ -3252,6 +3281,7 @@
     "franchise": "Series {name} {rate}",
     "addTo": "Add to “{name}”",
     "nameLabel": "Group name",
+    "nameCandidates": "Name suggestions",
     "create": "Create group",
     "moreMembers": "+{count}",
     "showLess": "Show less",
