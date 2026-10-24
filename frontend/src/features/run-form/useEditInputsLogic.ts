@@ -12,6 +12,7 @@ import { ApiError, createAsset, getAsset, type AssetDetail, type AssetUploadResp
 import { fmt, msg } from '../../i18n'
 import {
   addImageInputs,
+  acceptsImageInputs,
   moveImageInput,
   removeImageInput,
   removeMaskInput,
@@ -19,6 +20,7 @@ import {
   setMaskInput,
 } from './editInputs'
 import { validateInputFile } from './inputValidation'
+import { noImageInputsMessage } from './submitChecks'
 import { findBlockedInputAssetIds, findDeletedInputAssetIds } from './deletedInputs'
 import { interpretDrop } from './dragDropAssets'
 import { pickPastedImageFiles } from './clipboardImages'
@@ -110,6 +112,12 @@ export function useEditInputsLogic(
   const [sketchOverAsset, setSketchOverAsset] = useState<AssetDetail | null>(null)
   const [sketchOverAssetLoading, setSketchOverAssetLoading] = useState(false)
   const [compositeEditor, setCompositeEditor] = useState<CompositeEditorTarget | null>(null)
+  // モデルを切り替えて入力画像の上限が変わったら、前のモデルでの「足せなかった」などの知らせは消す。
+  const [prevMaxInputImages, setPrevMaxInputImages] = useState(maxInputImages)
+  if (prevMaxInputImages !== maxInputImages) {
+    setPrevMaxInputImages(maxInputImages)
+    setUploadErrors([])
+  }
 
   const images = inputs.filter((i) => i.role === 'image').sort((a, b) => a.position - b.position)
   const maskInput = inputs.find((i) => i.role === 'mask')
@@ -191,8 +199,20 @@ export function useEditInputsLogic(
     },
   })
 
+  /**
+   * 入力画像を受けないモデル(上限 0)なら、足さずに知らせる(アップロードもしない)。
+   * 足せるなら true。
+   */
+  function guardImageInputs(): boolean {
+    if (acceptsImageInputs(maxInputImages)) return true
+    setUploadErrors([noImageInputsMessage()])
+    setUploadNotice(null)
+    return false
+  }
+
   function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
+    if (!guardImageInputs()) return
     uploadMutation.mutate(Array.from(fileList))
   }
 
@@ -206,6 +226,7 @@ export function useEditInputsLogic(
     // 取り込まない(重複を作らない)。mask kind の Asset はそもそもドラッグ元(ストック)側で
     // マーカーを付けないため、ここに来ない。
     const interpretation = interpretDrop(e.dataTransfer)
+    if (interpretation.kind !== 'none' && !guardImageInputs()) return
 
     if (interpretation.kind === 'asset') {
       const result = addImageInputs(inputs, [interpretation.assetId], maxInputImages)
@@ -231,6 +252,7 @@ export function useEditInputsLogic(
     if (files.length === 0) return
     // 画像の貼り付け。テキストの貼り付けとしては扱わない(プロンプト欄にファイル名等が入らないように)。
     e.preventDefault()
+    if (!guardImageInputs()) return
     uploadMutation.mutate(files)
   }
 
@@ -239,6 +261,7 @@ export function useEditInputsLogic(
     const existingIds = new Set(images.map((i) => i.assetId))
     const toAdd = newAssetIds.filter((id) => !existingIds.has(id))
     if (toAdd.length === 0) return
+    if (!guardImageInputs()) return
     const result = addImageInputs(inputs, toAdd, maxInputImages)
     onChange(result.inputs)
     setUploadErrors(
@@ -262,6 +285,7 @@ export function useEditInputsLogic(
   function handleRemove(inputId: string) {
     const result = removeImageInput(inputs, inputId)
     onChange(result.inputs)
+    setUploadErrors([])
   }
 
   function handleRemoveMask() {
@@ -316,7 +340,7 @@ export function useEditInputsLogic(
       if (replacedAssetId) queryClient.invalidateQueries({ queryKey: ['asset', replacedAssetId] })
       queryClient.invalidateQueries({ queryKey: ['lineage'] })
       onChange(replaceImageInput(inputs, replaceInputId, asset.id))
-    } else {
+    } else if (guardImageInputs()) {
       const result = addImageInputs(inputs, [asset.id], maxInputImages)
       onChange(result.inputs)
       if (result.rejectedCount > 0) {
@@ -351,10 +375,15 @@ export function useEditInputsLogic(
       // 作り直し: 同じ入力を差し替える(元の配置は未使用なら論理削除されている)。
       onChange(replaceImageInput(inputs, target.inputId, result.asset.id))
       setUploadErrors([])
-    } else {
+    } else if (guardImageInputs()) {
       // 配置は一枚絵にまとめて入力にする使い方。入力の画像は配置の結果1枚だけにする(ADR-0050 5章)。
       onChange(applyCompositeToInputs(inputs, result.asset.id).inputs)
       setUploadErrors([])
+    } else {
+      // 保存した配置はストックに残る(入力には置かない)。
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      setCompositeEditor(null)
+      return
     }
     setUploadNotice(null)
     setCompositeEditor(null)
@@ -389,7 +418,10 @@ export function useEditInputsLogic(
     saveSketch,
     compositeEditor,
     openCompositeEditor: setCompositeEditor,
-    startComposite: () => setCompositeEditor(compositeStartFor(inputs, detailsByAssetId)),
+    startComposite: () => {
+      if (!guardImageInputs()) return
+      setCompositeEditor(compositeStartFor(inputs, detailsByAssetId))
+    },
     closeCompositeEditor: () => setCompositeEditor(null),
     saveComposite,
     compositeRedrawingInputId,

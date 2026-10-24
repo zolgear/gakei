@@ -34,6 +34,7 @@ import {
 import { assetUrl } from '../../api/assetUrl'
 import { editMaxInputImages, findProvider } from '../../lib/capabilities'
 import { addImageInputs } from '../run-form/editInputs'
+import { inputsRejectedMessage } from '../run-form/submitChecks'
 import { validateInputFile } from '../run-form/inputValidation'
 import { GAKEI_ASSET_ID_DATA_TYPE, interpretDrop } from '../run-form/dragDropAssets'
 import { useRunFormContext } from '../../context/useRunFormContext'
@@ -285,7 +286,7 @@ export function StockPanel() {
   function handleUseAsInput(asset: AssetSummary) {
     const result = addImageInputs(formState.inputs, [asset.id], maxInputImages)
     if (result.addedCount === 0) {
-      setMessage(fmt(t.stock.maxInputImages, { max: maxInputImages }))
+      setMessage(inputsRejectedMessage(maxInputImages, fmt(t.stock.maxInputImages, { max: maxInputImages })))
       return
     }
     setMessage(null)

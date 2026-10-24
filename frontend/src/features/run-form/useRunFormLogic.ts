@@ -56,6 +56,7 @@ import {
   isOperationSupported,
   isProviderUsable,
   providerUnavailableMessage,
+  imageInputsBlockReason,
 } from './submitChecks'
 import { useUnusableInputAssetIds } from './useDeletedInputAssetIds'
 import { computePromptInsertion, type PromptInsertMode } from './promptInsertion'
@@ -64,12 +65,17 @@ import { useAssetGroups } from '../stock/groups/assetGroupQueries'
 import { resolveAssetGroupId, withAssetGroupId } from './assetGroupSelection'
 import { loadLastAssetGroupId } from '../../context/lastAssetGroupStorage'
 import type { RunInputItem } from './types'
+import { runFormContentKey, useFormBoundMessage } from './formBoundMessage'
+import { droppedParamsText, droppedParamsReason } from './droppedParamsNotice'
 import type { RegionBox, RegionKind } from '../../api/client'
 import {
   allowedRegionKinds,
   areRegionBoxesValid,
   regionExtraInputCount,
   regionsFollowAction,
+  effectiveRegionFrame,
+  defaultRegionFrame,
+  type RegionFrame,
   regionsSupportedFor,
 } from '../regions/regions'
 import {
@@ -182,6 +188,10 @@ export interface RunFormLogic {
   providerAvailable: boolean
   providerUnavailableReason: string | null
   maxInputImages: number
+  /** 選んだモデルが入力画像を受けるか(edit を持つか。capabilities を読めていない間は true)。 */
+  inputsUsable: boolean
+  /** 入力画像の枚数で送信を止める理由(受けないモデルに画像が残っている、上限を超えている)。 */
+  inputsBlockReason: string | null
   maxInputImageBytes: number
   maxMaskBytes: number
   imageInputCount: number
@@ -205,8 +215,11 @@ export interface RunFormLogic {
    * 四角を受けないプロバイダー・モデルに切り替えると、自動で外して `regionsNotice` で知らせる。
    */
   regions: RegionBox[]
-  /** 主たる入力に四角を付ける(空の配列なら外す)。 */
-  setRegions: (regions: RegionBox[]) => void
+  /**
+   * 四角を付ける(空の配列なら外す)。`frame` は四角を描いた土台(省けば今の土台。ADR-0053 1章
+   * 「四角の土台を選ぶ」)。
+   */
+  setRegions: (regions: RegionBox[], frame?: RegionFrame) => void
   clearRegions: () => void
   /**
    * 今の操作で四角を付けられるか(受けなければ「領域」を出さない)。入力画像があれば Edit が受けるか、
@@ -214,8 +227,13 @@ export interface RunFormLogic {
    */
   regionsSupported: boolean
   /**
-   * 四角を入力画像の無い白紙(出力の大きさ)に描くか(ADR-0053 6章)。true なら主たる入力に付かない
-   * (`regionsAssetId` は null)。
+   * 四角の今の土台(ADR-0053 1章「四角の土台を選ぶ」)。四角が無ければ、新しく描くときの既定
+   * (入力画像があれば1枚目、無ければ白紙)。
+   */
+  regionsFrame: RegionFrame
+  /**
+   * 四角を白紙(出力の大きさ)に描くか(`regionsFrame` が `output`。入力画像の無い Run と、入力画像が
+   * あって白紙を選んだ Run。ADR-0053 6章・1章)。true なら主たる入力に付かない(`regionsAssetId` は null)。
    */
   regionsBlank: boolean
   /**
@@ -225,8 +243,8 @@ export interface RunFormLogic {
   regionsOutputSize: import('../../api/client').OutputSizeRule | null
   /** 四角の渡し方(`image_and_text` なら、画面に「画像と文で送る」ことを示す)。 */
   regionsDelivery: string | null
-  /** 札で選べる種類(capabilities の `regions_kinds`)。 */
-  regionsKinds: readonly RegionKind[]
+  /** 札で選べる種類(capabilities の `regions_kinds`。白紙の土台では「変える」「足す」だけ)。 */
+  regionsKinds: Record<RegionFrame, readonly RegionKind[]>
   /** 四角ごとの参照画像を使えるか。 */
   regionsReferenceImages: boolean
   /** 四角を自動で外したときの案内。 */
@@ -329,22 +347,38 @@ export function useRunFormLogic(
     saveRepeatRaw(raw)
   }, [])
   const repeat = parseRepeat(repeatRaw)
-  const [submitError, setSubmitError] = useState<string | null>(null)
   // プロンプトテンプレート(実験)。サイドバーのパネルから `requestFormLoad` で入る。
   const [promptTemplate, setPromptTemplate] = useState<PromptTemplateMode | null>(null)
   const [templatePreview, setTemplatePreview] = useState<TemplatePreview | null>(null)
-  const [droppedParamsNotice, setDroppedParamsNotice] = useState<string | null>(null)
+  // 送信して断られたエラー、モデルの切り替えなどで外した項目・四角の知らせは、フォームの内容が
+  // 変わったら消す(送信できない理由は状態から毎回計算する)。
+  const formContentKey = runFormContentKey({
+    provider,
+    model,
+    prompt,
+    rawParams,
+    sizeState,
+    inputs: formState.inputs,
+    regions: formState.regions,
+    repeatRaw,
+    assetGroupId,
+    promptTemplate,
+  })
+  const [submitError, setSubmitError] = useFormBoundMessage<string>(formContentKey)
+  const [droppedParamsNotice, setDroppedParamsNotice] = useFormBoundMessage<string>(formContentKey)
+  const [regionsNotice, setRegionsNotice] = useFormBoundMessage<string>(formContentKey)
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null)
   const didInitParamsRef = useRef(false)
 
-  // operation は入力画像の枚数から導出する(利用者には選ばせない)。
-  const operation = deriveOperation(formState.inputs)
   const hasMask = formState.inputs.some((i) => i.role === 'mask')
 
   // ADR-0013: capabilities はプロバイダーの一覧になった。まず今選んでいる provider の
   // capabilities(providerEntry)を引き、その中からモデルを探す。
   const providerEntry: ProviderEntry | undefined = findProvider(caps, provider)
   const modelCaps: ModelCapabilities | undefined = providerEntry?.models.find((m) => m.model === model)
+  // operation は入力画像の枚数から導出する(利用者には選ばせない)。edit を持たないモデル(入力画像を
+  // 受けない)では、入力画像が残っていても generate(送信は入力画像の理由で止める)。
+  const operation = deriveOperation(formState.inputs, modelCaps)
   const opCaps: OperationCapabilities | undefined = modelCaps?.operations.find(
     (o) => o.operation === operation,
   )
@@ -354,6 +388,8 @@ export function useRunFormLogic(
   // 導出後の operation=generate の上限(0枚)を使ってはいけない)。
   const editOpCaps = modelCaps?.operations.find((o) => o.operation === 'edit')
   const maxInputImages = editOpCaps?.max_input_images ?? 0
+  // 入力画像を受けるモデルか(capabilities を読めていない間は受けるとみなす)。
+  const inputsUsable = !modelCaps || maxInputImages > 0
   // ちょうどの枚数が必要なワークフロー(ComfyUI の画像の枠)だけ N を持つ。OpenAI/Fake のように
   // 1〜16枚の幅がある場合や、edit 自体が無いモデルでは null(表示側は通常の上限表示のままにする)。
   const exactInputImagesRequired =
@@ -387,30 +423,26 @@ export function useRunFormLogic(
   // 無い(新規フォーム、seed 付きモデル/ワークフローへの切り替え直後、seed の無い下書きの復元)
   // seed 欄に乱数を埋める。値が既にある(「同じ設定で再実行」で固定された seed、seed 入りの
   // 下書き)場合やモードが「ランダム」の場合は何もしない。
+  // 前に defs を当てたときのプロバイダー・モデル。外した項目の知らせで、モデルの切り替えと
+  // 入力の変化(同じモデルで操作が変わった)を分ける。
+  const defsScopeRef = useRef({ provider, model })
   useEffect(() => {
     if (defs.length === 0) return
     const seedMode = loadSeedMode()
+    const reason = droppedParamsReason(defsScopeRef.current, { provider, model })
+    defsScopeRef.current = { provider, model }
     if (!didInitParamsRef.current) {
       const initialRaw = toRawParamValues(defs, initialRef.current.params)
       const sanitized = sanitizeRawValues(defs, initialRaw)
-      const dropped = findDroppedParamNames(initialRaw, sanitized)
-      if (dropped.length > 0) {
-        const rf = msg().runForm.runFormLogic
-        setDroppedParamsNotice(fmt(rf.droppedParamsSettings, { names: dropped.join(rf.listSeparator) }))
-      }
+      const notice = droppedParamsText(findDroppedParamNames(initialRaw, sanitized), 'settings')
+      if (notice !== null) setDroppedParamsNotice(notice)
       setRawParams(fillSeedDefaults(defs, sanitized, seedMode))
       didInitParamsRef.current = true
       return
     }
     setRawParams((prevRawParams) => {
       const next = sanitizeRawValues(defs, prevRawParams)
-      const dropped = findDroppedParamNames(prevRawParams, next)
-      if (dropped.length > 0) {
-        const rf = msg().runForm.runFormLogic
-        setDroppedParamsNotice(fmt(rf.droppedParamsInputs, { names: dropped.join(rf.listSeparator) }))
-      } else {
-        setDroppedParamsNotice(null)
-      }
+      setDroppedParamsNotice(droppedParamsText(findDroppedParamNames(prevRawParams, next), reason))
       return fillSeedDefaults(defs, next, seedMode)
     })
     // defs は model/operation が変わった時だけ中身が変わる想定。
@@ -436,6 +468,7 @@ export function useRunFormLogic(
       assetGroupId,
       regions: formState.regions,
       regionsAssetId: formState.regionsAssetId,
+      regionsFrame: formState.regionsFrame,
     })
     // formState.inputs・regions はここでは変更しないので依存に含めない(無限ループ回避)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -476,6 +509,7 @@ export function useRunFormLogic(
     }
   }
   const editInputsValid = imageInputCount <= maxInputImages
+  const inputsBlockReason = modelCaps ? imageInputsBlockReason(imageInputCount, maxInputImages) : null
   const inputCountRequirementReason = inputCountRequirementMessage(opCaps, operation, imageInputCount)
   const unusableInputAssetIds = useUnusableInputAssetIds(formState.inputs)
   const hasDeletedInputs = unusableInputAssetIds.deleted.length > 0
@@ -494,48 +528,67 @@ export function useRunFormLogic(
   }
 
   // 領域の指示(ADR-0053)。四角は主たる入力(position 0 の画像)ごとのもの。
-  const primaryAssetId =
-    formState.inputs
-      .filter((i) => i.role === 'image')
-      .sort((a, b) => a.position - b.position)[0]?.assetId ?? null
+  // 入力画像を受けないモデルでは、入力画像が残っていても1枚目は無いものとして白紙に描く。
+  const primaryAssetId = inputsUsable
+    ? (formState.inputs
+        .filter((i) => i.role === 'image')
+        .sort((a, b) => a.position - b.position)[0]?.assetId ?? null)
+    : null
   // 四角は今の操作の capabilities で決める。入力画像があれば Edit(主たる入力の上)、無ければ
   // Generate(出力の大きさの白紙の上。入力画像を要らないと答える操作だけ。ComfyUI と OpenAI。
   // OpenAI はサーバーが白紙の配置図を作って Edit で送る。ADR-0053 5章・6章)。
   const regionOpCaps = operation === 'edit' ? editOpCaps : opCaps
   const regionsSupported = regionsSupportedFor(operation, regionOpCaps)
-  const regionsBlank = regionsSupported && primaryAssetId === null
+  // 四角の土台(ADR-0053 1章「四角の土台を選ぶ」)。四角があればその土台(1枚目が無ければ白紙)、
+  // 無ければ新しく描くときの既定。
+  const regionsFrame: RegionFrame =
+    formState.regions.length > 0
+      ? effectiveRegionFrame(formState.regionsFrame, primaryAssetId)
+      : defaultRegionFrame(primaryAssetId)
+  const regionsBlank = regionsSupported && regionsFrame === 'output'
   const regionsDelivery = regionOpCaps?.regions_delivery ?? null
   const regionsOutputSize = regionOpCaps?.output_size ?? null
-  const regionsKinds = allowedRegionKinds(regionOpCaps)
+  const regionsKinds = useMemo(
+    () => ({ input: allowedRegionKinds(regionOpCaps, 'input'), output: allowedRegionKinds(regionOpCaps, 'output') }),
+    [regionOpCaps],
+  )
   const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
-  const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
   const [compositeRedrawing, setCompositeRedrawing] = useState(false)
-  // 主たる入力が変わっても四角は外さず、割合のまま新しい1枚目(入力を外したなら白紙)の上に移す
-  // (座標はどちらも 0〜1 の割合。配置・スケッチの保存や入れ替えで1枚目が変わっても残す。ADR-0053 1章)。
-  // 外すのは、四角を受けないモデル・選べない種類や参照画像のあるモデルに切り替えたとき(白紙では
-  // 「残す」「消す」「動かす」を選べない。capabilities を読めてから判断する)だけ。
+  // 主たる入力が変わっても四角は外さず、割合のまま移す(座標はどちらも 0〜1 の割合。ADR-0053 1章)。
+  // 1枚目の上の四角は新しい1枚目の上へ(1枚目を外して白紙になったら白紙へ)、白紙の四角は入力画像を
+  // 足しても外しても白紙のまま。外すのは、四角を受けないモデル・選べない種類や参照画像のあるモデルに
+  // 切り替えたとき(白紙では「残す」「消す」「動かす」を選べない。capabilities を読めてから判断する)だけ。
   const regionsAction = regionsFollowAction({
     boxes: formState.regions,
+    frame: formState.regionsFrame,
     regionsAssetId: formState.regionsAssetId,
     primaryAssetId,
     capsLoaded: Boolean(caps && modelCaps),
     supported: regionsSupported,
     opCaps: regionOpCaps,
+    inputsUsable,
   })
-  const regionsClearReason: 'unsupported' | null = regionsAction === 'clear' ? 'unsupported' : null
-  const regionsAdoptPrimary = regionsAction === 'adopt'
+  const regionsClearReason: 'unsupported' | null = regionsAction.action === 'clear' ? 'unsupported' : null
+  const adoptFrame = regionsAction.action === 'adopt' ? regionsAction.frame : null
+  const adoptAssetId = regionsAction.action === 'adopt' ? regionsAction.regionsAssetId : null
   useEffect(() => {
     if (regionsClearReason === null) {
-      if (regionsAdoptPrimary) setFormState({ ...formState, regionsAssetId: primaryAssetId })
+      if (adoptFrame !== null) setFormState({ ...formState, regionsFrame: adoptFrame, regionsAssetId: adoptAssetId })
       return
     }
     setFormState({ ...formState, regions: [], regionsAssetId: null })
     setRegionsNotice(msg().regions.form.clearedUnsupported)
-  }, [regionsClearReason, regionsAdoptPrimary, primaryAssetId, formState, setFormState])
+  }, [regionsClearReason, adoptFrame, adoptAssetId, formState, setFormState, setRegionsNotice])
 
-  function setRegions(next: RegionBox[]) {
+  function setRegions(next: RegionBox[], frame?: RegionFrame) {
     setRegionsNotice(null)
-    setFormState({ ...formState, regions: next, regionsAssetId: next.length > 0 ? primaryAssetId : null })
+    const nextFrame = effectiveRegionFrame(frame ?? regionsFrame, primaryAssetId)
+    setFormState({
+      ...formState,
+      regions: next,
+      regionsFrame: nextFrame,
+      regionsAssetId: next.length > 0 && nextFrame === 'input' ? primaryAssetId : null,
+    })
   }
 
   function clearRegions() {
@@ -553,7 +606,8 @@ export function useRunFormLogic(
   let regionsBlockReason: string | null = null
   if (regionsActive) {
     if (!areRegionBoxesValid(formState.regions)) regionsBlockReason = msg().regions.form.invalid
-    else if (imageInputCount + regionExtraInputs > maxInputImages) {
+    // 四角で足す画像が無ければ、枚数の超過は入力画像の理由(`inputsBlockReason`)だけで伝える。
+    else if (regionExtraInputs > 0 && imageInputCount + regionExtraInputs > maxInputImages) {
       regionsBlockReason = fmt(msg().regions.form.tooManyInputs, {
         max: maxInputImages,
         extra: regionExtraInputs,
@@ -681,12 +735,7 @@ export function useRunFormLogic(
       setAssetGroupId(state.assetGroupId)
       setSubmitError(null)
       setImportNotice(null)
-      if (values.droppedNames.length > 0) {
-        const rf = msg().runForm.runFormLogic
-        setDroppedParamsNotice(fmt(rf.droppedParamsSettings, { names: values.droppedNames.join(rf.listSeparator) }))
-      } else {
-        setDroppedParamsNotice(null)
-      }
+      setDroppedParamsNotice(droppedParamsText(values.droppedNames, 'settings'))
       return
     }
 
@@ -764,6 +813,8 @@ export function useRunFormLogic(
     mutationFn: createRun,
     onSuccess: (res) => {
       setSubmitError(null)
+      setDroppedParamsNotice(null)
+      setRegionsNotice(null)
       // 送信してもフォームは何も変えない(ADR-0009「送信後のフォーム」2026-09-24 改訂)。
       // prompt・inputs(マスク含む)・provider・model・params はそのまま残す。
       queryClient.invalidateQueries({ queryKey: ['runs'] })
@@ -870,7 +921,8 @@ export function useRunFormLogic(
           repeat: repeat ?? 1,
           ...promptBody,
           // 領域の指示(ADR-0053)。今の操作が四角を受け、四角があるときだけ送る。
-          ...(regionsActive ? { regions: formState.regions } : {}),
+          // 土台(1枚目・白紙)も送る(ADR-0053 1章「四角の土台を選ぶ」)。
+          ...(regionsActive ? { regions: formState.regions, regions_frame: regionsFrame } : {}),
         },
         resolvedAssetGroupId,
       ),
@@ -922,6 +974,8 @@ export function useRunFormLogic(
     providerAvailable,
     providerUnavailableReason,
     maxInputImages,
+    inputsBlockReason,
+    inputsUsable,
     maxInputImageBytes: providerEntry?.max_input_image_bytes ?? 50 * 1024 * 1024,
     maxMaskBytes: providerEntry?.max_mask_bytes ?? 10 * 1024 * 1024,
     imageInputCount,
@@ -935,6 +989,7 @@ export function useRunFormLogic(
     setRegions,
     clearRegions,
     regionsSupported,
+    regionsFrame,
     regionsBlank,
     regionsOutputSize,
     regionsDelivery,

@@ -77,6 +77,28 @@ export interface InputsMutationResult {
   maskDropped: boolean
 }
 
+/** 入力画像を受けるモデルか(edit の上限が 0 のモデル、つまり edit を持たないモデルは受けない)。 */
+export function acceptsImageInputs(maxInputImages: number): boolean {
+  return maxInputImages > 0
+}
+
+/**
+ * 今の入力画像(currentCount 枚)に addCount 枚を足せるか。足せなければその理由を返す。
+ * - 'noImageInputs': 入力画像を受けないモデル(上限 0)。どの経路でも足さない。
+ * - 'limit': 1枚も足せない(上限に達している)。
+ * 一部だけ足せる(上限まで足して残りを落とす)場合は null(`addImageInputs` が落とした数を返す)。
+ */
+export function inputAddBlock(
+  maxInputImages: number,
+  currentCount: number,
+  addCount = 1,
+): 'noImageInputs' | 'limit' | null {
+  if (addCount <= 0) return null
+  if (!acceptsImageInputs(maxInputImages)) return 'noImageInputs'
+  if (currentCount >= maxInputImages) return 'limit'
+  return null
+}
+
 /** アップロード/選択済みの assetId 配列を、上限までの範囲で末尾に追加する。 */
 export function addImageInputs(
   inputs: RunInputItem[],

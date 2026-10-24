@@ -12,6 +12,7 @@ describe('assistantFormState', () => {
       assetGroupId: null,
       regions: [],
       regionsAssetId: null,
+      regionsFrame: 'input',
     })
     expect(form).toEqual({
       provider: 'openai',
@@ -27,7 +28,7 @@ describe('assistantFormState', () => {
 
   it('結果エリアの画像の ID を result_asset_id として送る', () => {
     const form = assistantFormState(
-      { provider: 'openai', model: 'gpt-image-2', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null},
+      { provider: 'openai', model: 'gpt-image-2', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null, regionsFrame: 'input'},
       'r1',
     )
     expect(form.result_asset_id).toBe('r1')
@@ -46,6 +47,7 @@ describe('assistantFormState', () => {
       assetGroupId: 'g1',
       regions: [],
       regionsAssetId: null,
+      regionsFrame: 'input',
     })
     expect(form.operation).toBe('edit')
     expect(form.provider).toBeNull()

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import type { OperationCapabilities, ParamDef, RegionBox, RunRegions } from '../../api/client'
 import { blankCanvasSize } from '../run-form/dependencies'
-import { addRegion, allowedRegionKinds, defaultRegionKind, isLayoutSketchRun, regionsCompatible, regionsSupportedFor, restoreRunRegions, REGION_KINDS } from './regions'
+import { addRegion, allowedRegionKinds, defaultRegionKind, addedLayoutSketch, isLayoutSketchPrimaryRun, regionsCompatible, regionsSupportedFor, restoreRunRegions, REGION_KINDS } from './regions'
 
 function op(overrides: Partial<OperationCapabilities> = {}): OperationCapabilities {
   return {
@@ -157,13 +157,22 @@ describe('入力画像の無い Run の四角を戻す', () => {
   })
 })
 
-describe('isLayoutSketchRun', () => {
-  it('白紙の配置図を送った Run(画像と文、出力に対する割合)だけを見分ける', () => {
-    expect(isLayoutSketchRun({ delivery: 'image_and_text', frame: 'output' })).toBe(true)
-    expect(isLayoutSketchRun({ delivery: 'image_and_text', frame: 'input' })).toBe(false)
+describe('白紙の配置図の Run の見分け', () => {
+  it('配置図を足した Run(画像と文、白紙の土台)', () => {
+    expect(addedLayoutSketch({ delivery: 'image_and_text', frame: 'output' })).toBe(true)
+    expect(addedLayoutSketch({ delivery: 'image_and_text', frame: 'input' })).toBe(false)
     // ComfyUI の白紙は配置図を入力にしない。
-    expect(isLayoutSketchRun({ delivery: 'comfyui_bboxes', frame: 'output' })).toBe(false)
-    expect(isLayoutSketchRun(null)).toBe(false)
-    expect(isLayoutSketchRun(undefined)).toBe(false)
+    expect(addedLayoutSketch({ delivery: 'comfyui_bboxes', frame: 'output' })).toBe(false)
+    expect(addedLayoutSketch(null)).toBe(false)
+    expect(addedLayoutSketch(undefined)).toBe(false)
+  })
+
+  it('配置図が主たる入力の Run(入力画像の無い Run)だけ、親と比較を出さない', () => {
+    const regions = { delivery: 'image_and_text' as const, frame: 'output' as const, overlay_asset_id: 'layout' }
+    expect(isLayoutSketchPrimaryRun({ regions, primary_parent_asset_id: 'layout' })).toBe(true)
+    // 入力画像があって白紙を選んだ Run の主たる親は利用者の1枚目。
+    expect(isLayoutSketchPrimaryRun({ regions, primary_parent_asset_id: 'user1' })).toBe(false)
+    expect(isLayoutSketchPrimaryRun({ regions: { ...regions, frame: 'input' }, primary_parent_asset_id: 'layout' })).toBe(false)
+    expect(isLayoutSketchPrimaryRun({ regions: null, primary_parent_asset_id: 'x' })).toBe(false)
   })
 })
