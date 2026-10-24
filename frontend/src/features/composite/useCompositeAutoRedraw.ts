@@ -31,6 +31,8 @@ export function useCompositeAutoRedraw(opts: {
   /** 描き直した配置の結果で、`inputId` の入力(今も `previousAssetId` を指していれば)を差し替える。 */
   onRedrawn: (inputId: string, previousAssetId: string, asset: AssetDetail) => void
   onFailed: () => void
+  /** 描き直しの開始(true)と終了(false)。描き直し中は送信を止めるのに使う。 */
+  onBusyChange?: (busy: boolean) => void
 }): { redrawingInputId: string | null } {
   const queryClient = useQueryClient()
   // 書き出しの後で使う最新の入力と差し替えの処理(描画のたびに入れ替える)。
@@ -77,6 +79,7 @@ export function useCompositeAutoRedraw(opts: {
     if (!plan) return
     busyRef.current = true
     setRedrawingInputId(plan.inputId)
+    latest.current.onBusyChange?.(true)
     void (async () => {
       try {
         const blob = await exportComposite(exportSpecFromRecipe(plan.recipe))
@@ -91,6 +94,7 @@ export function useCompositeAutoRedraw(opts: {
       } finally {
         busyRef.current = false
         setRedrawingInputId(null)
+        latest.current.onBusyChange?.(false)
         setRecheck((n) => n + 1)
       }
     })()

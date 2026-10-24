@@ -99,6 +99,8 @@ export function useEditInputsLogic(
   maxInputImageBytes: number,
   /** 配置のキャンバスが従う出力サイズ(決まらなければ null)。変わったら1枚目の配置の結果を描き直す。 */
   compositeCanvasSize: Size | null = null,
+  /** 配置の描き直しの開始・終了(描き直し中は送信を止める)。 */
+  onCompositeRedrawBusyChange?: (busy: boolean) => void,
 ): EditInputsLogic {
   const queryClient = useQueryClient()
   const [uploadErrors, setUploadErrors] = useState<string[]>([])
@@ -339,6 +341,7 @@ export function useEditInputsLogic(
       setUploadErrors([msg().composite.redrawFailed])
       setUploadNotice(null)
     },
+    onBusyChange: onCompositeRedrawBusyChange,
   })
 
   function saveComposite(result: CompositeSaveResult) {

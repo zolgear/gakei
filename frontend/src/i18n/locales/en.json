@@ -2023,7 +2023,8 @@
       "operationUnsupportedReason": "The selected model does not support this operation (generate/edit)",
       "maskRequiredReason": "This model requires a mask to run",
       "inputCountRequirement": "{min} input images required (currently {current})",
-      "providerUnavailableDefault": "Cannot connect to this provider"
+      "providerUnavailableDefault": "Cannot connect to this provider",
+      "compositeRedrawing": "Redrawing the arrangement to match the output size"
     },
     "unspecifiedLabel": {
       "unspecified": "Unspecified",

@@ -144,6 +144,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     form.maxInputImages,
     form.maxInputImageBytes,
     compositeCanvasSize,
+    form.setCompositeRedrawing,
   )
 
   // 1枚目の入力の検出の候補(プレビューの重ね描きを出せるか。`RegionPromptAssist` と同じキャッシュ)。
@@ -428,6 +429,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     blockReasons.push(ip.maskUnsupported)
   }
   if (form.regionsBlockReason) blockReasons.push(form.regionsBlockReason)
+  if (form.compositeRedrawReason) blockReasons.push(form.compositeRedrawReason)
 
   // プロンプトテンプレート(実験)。テンプレートを選んでいる間は、プロンプト欄の代わりに
   // スロットの選択と組み立て結果を出す(送るのは prompt ではなく prompt_template)。

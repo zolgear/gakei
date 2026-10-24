@@ -191,6 +191,11 @@
   opacity: 1;
 }
 
+/* 描き直し中は操作を出さない(「描き直し中…」の表示と重ねない。ADR-0050 5章)。 */
+.tile[data-redrawing='true'] .actions {
+  display: none;
+}
+
 .actionButton {
   width: 24px;
   height: 24px;

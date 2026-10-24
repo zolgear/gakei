@@ -2023,7 +2023,8 @@
       "operationUnsupportedReason": "選んだモデルは、この操作(生成/編集)に対応していません",
       "maskRequiredReason": "このモデルの実行にはマスクが必要です",
       "inputCountRequirement": "入力画像が{min}枚必要です(現在{current}枚)",
-      "providerUnavailableDefault": "このプロバイダーには接続できません"
+      "providerUnavailableDefault": "このプロバイダーには接続できません",
+      "compositeRedrawing": "配置を出力サイズに合わせて描き直しています"
     },
     "unspecifiedLabel": {
       "unspecified": "未指定",

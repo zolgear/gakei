@@ -48,6 +48,7 @@ import { activeRawParams, buildEnabledParams, findIncompatibleViolations, isFiel
 import { fillSeedDefaults } from './seedDefaults'
 import { loadSeedMode } from './seedModePrefs'
 import {
+  compositeRedrawBlockReason,
   inputCountRequirementMessage,
   isInputCountSatisfied,
   isMaskSatisfied,
@@ -234,6 +235,10 @@ export interface RunFormLogic {
   regionExtraInputs: number
   /** 送信を止める、四角についての理由(無ければ null)。 */
   regionsBlockReason: string | null
+  /** 配置の結果を出力サイズに合わせて描き直している間の、送信を止める理由(ADR-0050 5章)。 */
+  compositeRedrawReason: string | null
+  /** 配置の描き直しの開始・終了を知らせる(入力画像の側から呼ぶ)。 */
+  setCompositeRedrawing: (redrawing: boolean) => void
 
   /**
    * プロンプトテンプレート(実験)。テンプレートを選んでいる間は「テンプレートモード」で、
@@ -504,6 +509,7 @@ export function useRunFormLogic(
   const regionsKinds = allowedRegionKinds(regionOpCaps)
   const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
   const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
+  const [compositeRedrawing, setCompositeRedrawing] = useState(false)
   // 主たる入力が変わっても四角は外さず、割合のまま新しい1枚目(入力を外したなら白紙)の上に移す
   // (座標はどちらも 0〜1 の割合。配置・スケッチの保存や入れ替えで1枚目が変わっても残す。ADR-0053 1章)。
   // 外すのは、四角を受けないモデル・選べない種類や参照画像のあるモデルに切り替えたとき(白紙では
@@ -809,6 +815,7 @@ export function useRunFormLogic(
     setModel(nextModel)
   }
 
+  const compositeRedrawReason = compositeRedrawBlockReason(compositeRedrawing)
   const canSubmit =
     promptValid &&
     sizeValidation.valid &&
@@ -824,6 +831,7 @@ export function useRunFormLogic(
     isMaskSupported(opCaps, hasMask) &&
     providerAvailable &&
     regionsBlockReason === null &&
+    compositeRedrawReason === null &&
     repeat !== null &&
     !mutation.isPending
 
@@ -935,6 +943,8 @@ export function useRunFormLogic(
     regionsNotice,
     regionExtraInputs,
     regionsBlockReason,
+    compositeRedrawReason,
+    setCompositeRedrawing,
     promptTemplate,
     setTemplateSelections,
     clearPromptTemplate,

@@ -117,6 +117,7 @@ export function InputImageTiles({
               data-primary={isPrimary}
               data-not-found={isNotFound}
               data-deleted={isDeleted || isBlocked}
+              data-redrawing={logic.compositeRedrawingInputId === item.inputId}
             >
               <button
                 type="button"
