@@ -86,6 +86,11 @@
     flex-direction: column;
   }
 
+  /* 結果エリアが空状態で畳まれているとき(ResultPane の data-mobile-collapse)は最小の高さを外す。 */
+  .top:has([data-mobile-collapse]) {
+    min-height: 0;
+  }
+
   .divider {
     display: none;
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveResultOrigin } from './resultOrigin'
+import { mobileResultCollapse, resolveResultOrigin } from './resultOrigin'
 
 const ASSET_PARAM = 'aaaaaaaa-0000-0000-0000-000000000000'
 const PRIMARY_INPUT = 'bbbbbbbb-0000-0000-0000-000000000000'
@@ -48,5 +48,23 @@ describe('resolveResultOrigin', () => {
       primaryParentAssetId: PRIMARY_INPUT,
     })
     expect(origin.kind).toBe('primary-input')
+  })
+})
+
+describe('mobileResultCollapse', () => {
+  it('空状態なら結果エリアごと畳む', () => {
+    expect(mobileResultCollapse('empty', false, false)).toBe('all')
+  })
+
+  it('空状態でも ComfyUI のワークフローを見られるならヘッダーだけ残す', () => {
+    expect(mobileResultCollapse('empty', true, false)).toBe('body')
+  })
+
+  it('ワークフローを表示中は畳まない', () => {
+    expect(mobileResultCollapse('empty', true, true)).toBeNull()
+  })
+
+  it.each(['asset', 'pending-run', 'primary-input'] as const)('%s では畳まない', (kind) => {
+    expect(mobileResultCollapse(kind, false, false)).toBeNull()
   })
 })
