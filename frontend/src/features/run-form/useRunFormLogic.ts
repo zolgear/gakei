@@ -504,29 +504,34 @@ export function useRunFormLogic(
   const regionsKinds = allowedRegionKinds(regionOpCaps)
   const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
   const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
-  // 主たる入力が変わった(白紙の四角は入力画像を足したときも)、または四角を受けないモデル・選べない
-  // 種類や参照画像のあるモデルに切り替えた(capabilities を読めてから判断する)ときは四角を外す。
-  let regionsClearReason: 'primaryChanged' | 'blankReplaced' | 'unsupported' | null = null
+  // 主たる入力が変わった、または四角を受けないモデル・選べない種類や参照画像のあるモデルに切り替えた
+  // (capabilities を読めてから判断する)ときは四角を外す。白紙に描いた四角は、入力画像を足したら
+  // その画像の上に割合のまま移す(座標はどちらも 0〜1 の割合。ADR-0053 5章)。
+  let regionsClearReason: 'primaryChanged' | 'unsupported' | null = null
+  let regionsAdoptPrimary = false
   if (formState.regions.length > 0) {
     if (formState.regionsAssetId !== primaryAssetId) {
-      regionsClearReason = formState.regionsAssetId === null ? 'blankReplaced' : 'primaryChanged'
+      if (formState.regionsAssetId === null) regionsAdoptPrimary = true
+      else regionsClearReason = 'primaryChanged'
     }
-    else if (caps && modelCaps && (!regionsSupported || !regionsCompatible(formState.regions, regionOpCaps))) {
+    if (
+      regionsClearReason === null &&
+      caps &&
+      modelCaps &&
+      (!regionsSupported || !regionsCompatible(formState.regions, regionOpCaps))
+    ) {
       regionsClearReason = 'unsupported'
     }
   }
   useEffect(() => {
-    if (regionsClearReason === null) return
+    if (regionsClearReason === null) {
+      if (regionsAdoptPrimary) setFormState({ ...formState, regionsAssetId: primaryAssetId })
+      return
+    }
     setFormState({ ...formState, regions: [], regionsAssetId: null })
     const rm = msg().regions.form
-    setRegionsNotice(
-      regionsClearReason === 'primaryChanged'
-        ? rm.clearedPrimaryChanged
-        : regionsClearReason === 'blankReplaced'
-          ? rm.clearedBlankReplaced
-          : rm.clearedUnsupported,
-    )
-  }, [regionsClearReason, formState, setFormState])
+    setRegionsNotice(regionsClearReason === 'primaryChanged' ? rm.clearedPrimaryChanged : rm.clearedUnsupported)
+  }, [regionsClearReason, regionsAdoptPrimary, primaryAssetId, formState, setFormState])
 
   function setRegions(next: RegionBox[]) {
     setRegionsNotice(null)

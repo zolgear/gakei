@@ -3878,8 +3878,7 @@
       "clearedPrimaryChanged": "1枚目の入力画像が変わったので、領域の指示を外しました。",
       "clearedUnsupported": "選んだモデルは領域の指示に対応していないので、外しました。",
       "invalid": "領域の指示に直すところがあります。「領域」を開いて確かめてください。",
-      "tooManyInputs": "領域の指示で画像を {extra} 枚足すため、入力画像が {count} 枚になり、上限({max} 枚)を超えます。",
-      "clearedBlankReplaced": "入力画像を足したので、白紙に描いた領域の指示を外しました。"
+      "tooManyInputs": "領域の指示で画像を {extra} 枚足すため、入力画像が {count} 枚になり、上限({max} 枚)を超えます。"
     },
     "runDetail": {
       "heading": "領域の指示",

@@ -3878,8 +3878,7 @@
       "clearedPrimaryChanged": "The first input image changed, so the region instructions were removed.",
       "clearedUnsupported": "The selected model does not support region instructions, so they were removed.",
       "invalid": "The region instructions need fixing. Open Regions to check them.",
-      "tooManyInputs": "The region instructions add {extra} images, making {count} input images, which exceeds the limit ({max}).",
-      "clearedBlankReplaced": "An input image was added, so the region instructions drawn on the blank canvas were removed."
+      "tooManyInputs": "The region instructions add {extra} images, making {count} input images, which exceeds the limit ({max})."
     },
     "runDetail": {
       "heading": "Region instructions",
