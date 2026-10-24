@@ -768,11 +768,10 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
           init={
             compositeEditorState.mode === 'reopen'
               ? { kind: 'reopen', assetId: compositeEditorState.assetId }
-              : { kind: 'new', sourceAssetIds: [...new Set(editLogic.images.map((i) => i.assetId))] }
+              : { kind: 'new', sourceAssetIds: compositeEditorState.sourceAssetIds }
           }
           formSize={compositeFormSize}
           inputAssetIds={editLogic.images.map((i) => i.assetId)}
-          showRemoveSourcesOption={compositeEditorState.mode === 'new' && form.maxInputImages > 1}
           regions={form.regions}
           onSave={editLogic.saveComposite}
           onCancel={editLogic.closeCompositeEditor}

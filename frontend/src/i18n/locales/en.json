@@ -2179,14 +2179,12 @@
       "invalidCanvas": "The canvas must be {min}–{max} px on each side",
       "outOfBounds": "A source image is too far from the canvas (move it back near the canvas)"
     },
-    "removeSources": "Remove the original images from the inputs",
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",
     "saveFailedDefault": "Failed to save the arrangement",
     "exportError": "Failed to export the image",
-    "canvasTooLarge": "This browser cannot export a canvas this large",
-    "droppedInputs": "Because of the input limit ({max} images), {count} original image(s) were not added to the inputs"
+    "canvasTooLarge": "This browser cannot export a canvas this large"
   },
   "mask": {
     "title": "Draw a mask",

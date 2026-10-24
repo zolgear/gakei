@@ -86,8 +86,6 @@ export interface CompositeSaveResult {
   asset: AssetDetail
   /** 素材にした Asset(主たる素材が先頭、残りは足した順)。 */
   sourceAssetIds: string[]
-  /** 「元の画像を入力から外す」を選んだか。 */
-  removeSources: boolean
   /** 作り直しで置き換えた元の配置(新しく作ったときは null)。 */
   replacedAssetId: string | null
 }
@@ -98,8 +96,6 @@ interface CompositeEditorProps {
   formSize?: Size | null
   /** 生成のフォームの入力の画像(「素材を足す」に出す)。 */
   inputAssetIds?: readonly string[]
-  /** 「元の画像を入力から外す」を出すか(入力が1枚だけのプロバイダー・作り直しでは出さない)。 */
-  showRemoveSourcesOption: boolean
   /** 生成のフォームの今の四角(ADR-0053)。キャンバスに重ねて見せるだけで、書き出しには描かない。 */
   regions?: readonly RegionBox[]
   onSave: (result: CompositeSaveResult) => void
@@ -226,7 +222,6 @@ function CompositeEditorBody({
   init,
   formSize = null,
   inputAssetIds = [],
-  showRemoveSourcesOption,
   regions = [],
   onSave,
   onCancel,
@@ -243,7 +238,6 @@ function CompositeEditorBody({
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [mode, setMode] = useState<TransformMode>('transform')
   const [addOpen, setAddOpen] = useState(false)
-  const [removeSources, setRemoveSources] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rendererFailed, setRendererFailed] = useState(false)
@@ -457,7 +451,7 @@ function CompositeEditorBody({
       queryClient.invalidateQueries({ queryKey: ['assets'] })
       queryClient.invalidateQueries({ queryKey: ['lineage'] })
       if (replacedAssetId) queryClient.invalidateQueries({ queryKey: ['asset', replacedAssetId] })
-      onSave({ asset, sourceAssetIds, removeSources: showRemoveSourcesOption && removeSources, replacedAssetId })
+      onSave({ asset, sourceAssetIds, replacedAssetId })
     },
     onError: (err: unknown) => setError(err instanceof Error ? err.message : c.saveFailedDefault),
   })
@@ -810,12 +804,6 @@ function CompositeEditorBody({
         <div className={styles.footer}>
           {notice && <p className={styles.noteText}>{notice}</p>}
           {(error || problemText) && <p className={styles.errorText}>{error ?? problemText}</p>}
-          {showRemoveSourcesOption && (
-            <label className={styles.checkboxLabel}>
-              <input type="checkbox" checked={removeSources} onChange={(e) => setRemoveSources(e.target.checked)} />
-              {c.removeSources}
-            </label>
-          )}
           <button type="button" className={styles.secondaryButton} onClick={onCancel}>
             {c.cancel}
           </button>

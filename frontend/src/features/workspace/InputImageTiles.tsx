@@ -362,7 +362,7 @@ export function InputImageTiles({
           className={styles.addTile}
           aria-label={t.composite.button}
           title={t.composite.buttonTitle}
-          onClick={() => logic.openCompositeEditor({ mode: 'new' })}
+          onClick={() => logic.startComposite()}
         >
           <ArrangeIcon />
           <span>{t.composite.button}</span>

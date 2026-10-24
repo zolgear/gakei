@@ -1,58 +1,58 @@
 /**
- * 配置の結果を生成のフォームの入力へ置く(ADR-0050 5章)。純粋関数。
+ * 配置と生成のフォームの入力のつなぎ(ADR-0050 5章)。純粋関数。
  *
- * - 配置の結果を入力の1枚目(主たる入力)に置く。
- * - 素材にした元の画像は、既定では参照としてその後ろに残す(入力に無かった素材は足す)。
- *   「元の画像を入力から外す」を選んだら、素材にした画像を入力から外す。
- * - 入力が1枚しか取れないプロバイダーでは、配置の結果だけにする。
- * - 上限を超える分は後ろから捨て、捨てた数を返す。
- * - 1枚目が変わるので、マスク(1枚目と同じ寸法である必要がある)は外す。
+ * 配置は、素材を一枚絵にまとめて入力にする使い方(2026-10-24 の改訂)。保存すると、入力の画像は
+ * 配置の結果1枚だけになる(素材にした元の画像は、もともと入力にあったものも含めて残さない)。
+ * 枠と入力画像を分けて送る使い方は領域(ADR-0053)が受け持つ。
  */
+import type { AssetDetail } from '../../api/client'
 import { newInputId } from '../run-form/editInputs'
 import type { RunInputItem } from '../run-form/types'
 
-export interface ApplyCompositeOptions {
-  removeSources: boolean
-  maxInputImages: number
-}
-
 export interface ApplyCompositeResult {
   inputs: RunInputItem[]
-  /** 上限のために入れられなかった元の画像の数。 */
-  droppedCount: number
   maskDropped: boolean
 }
 
-export function applyCompositeToInputs(
-  inputs: readonly RunInputItem[],
-  compositeAssetId: string,
-  sourceAssetIds: readonly string[],
-  options: ApplyCompositeOptions,
-): ApplyCompositeResult {
-  const images = inputs.filter((i) => i.role === 'image').sort((a, b) => a.position - b.position)
+/**
+ * 新しく作った配置の結果を入力に置く。画像は配置の結果1枚だけにし、1枚目が変わるのでマスク
+ * (1枚目と同じ寸法である必要がある)も外す。画像とマスク以外の入力はそのまま。
+ */
+export function applyCompositeToInputs(inputs: readonly RunInputItem[], compositeAssetId: string): ApplyCompositeResult {
   const mask = inputs.find((i) => i.role === 'mask')
   const others = inputs.filter((i) => i.role !== 'image' && i.role !== 'mask')
   const composite: RunInputItem = { inputId: newInputId(), assetId: compositeAssetId, role: 'image', position: 0 }
-  const max = Math.max(1, options.maxInputImages)
+  return { inputs: [composite, ...others], maskDropped: mask !== undefined }
+}
 
-  let candidates: RunInputItem[]
-  if (max <= 1) {
-    candidates = [composite]
-  } else if (options.removeSources) {
-    const sources = new Set(sourceAssetIds)
-    candidates = [composite, ...images.filter((i) => !sources.has(i.assetId))]
-  } else {
-    const present = new Set(images.map((i) => i.assetId))
-    const extra: RunInputItem[] = []
-    for (const id of sourceAssetIds) {
-      if (present.has(id) || id === compositeAssetId) continue
-      present.add(id)
-      extra.push({ inputId: newInputId(), assetId: id, role: 'image', position: 0 })
+export type CompositeStart =
+  | { mode: 'new'; sourceAssetIds: string[] }
+  | { mode: 'reopen'; inputId: string; assetId: string }
+
+type DetailForStart = Pick<AssetDetail, 'kind' | 'composition' | 'deleted_at' | 'content_withheld'>
+
+function isComposite(detail: DetailForStart | undefined): boolean {
+  return detail?.kind === 'composite'
+}
+
+/**
+ * 入力の行の「配置」を押したときに、何を開くか。入力に配置の結果(レシピのあるもの)があれば、
+ * 新しく始めずにそれを開き直す(複数あれば1枚目に近いもの)。無ければ新しく始め、入力の画像を
+ * 素材にする(配置の結果は素材に入れない。入れ子にしない)。
+ */
+export function compositeStartFor(
+  inputs: readonly RunInputItem[],
+  detailsByAssetId: ReadonlyMap<string, DetailForStart>,
+): CompositeStart {
+  const images = inputs.filter((i) => i.role === 'image').sort((a, b) => a.position - b.position)
+  for (const item of images) {
+    const detail = detailsByAssetId.get(item.assetId)
+    if (isComposite(detail) && detail?.composition && !detail.deleted_at && !detail.content_withheld) {
+      return { mode: 'reopen', inputId: item.inputId, assetId: item.assetId }
     }
-    candidates = [composite, ...images, ...extra]
   }
-
-  const kept = candidates.slice(0, max).map((item, index) => ({ ...item, position: index }))
-  const droppedCount = max <= 1 ? 0 : candidates.length - kept.length
-  return { inputs: [...kept, ...others], droppedCount, maskDropped: mask !== undefined }
+  const sourceAssetIds = [
+    ...new Set(images.filter((i) => !isComposite(detailsByAssetId.get(i.assetId))).map((i) => i.assetId)),
+  ]
+  return { mode: 'new', sourceAssetIds }
 }

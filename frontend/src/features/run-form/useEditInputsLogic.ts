@@ -23,7 +23,7 @@ import { findBlockedInputAssetIds, findDeletedInputAssetIds } from './deletedInp
 import { interpretDrop } from './dragDropAssets'
 import { pickPastedImageFiles } from './clipboardImages'
 import type { RunInputItem } from './types'
-import { applyCompositeToInputs } from '../composite/compositeInputs'
+import { applyCompositeToInputs, compositeStartFor, type CompositeStart } from '../composite/compositeInputs'
 import type { CompositeSaveResult } from '../composite/CompositeEditor'
 
 /**
@@ -37,7 +37,7 @@ export type SketchEditorTarget = { mode: 'blank' } | { mode: 'over'; inputId: st
  * 配置(ADR-0050)の編集画面をどう開いたか。今の入力画像を素材にして新しく始める(`new`)か、
  * 入力にある配置の結果を作り直す(`reopen`。保存するとその入力を同じ position で差し替える)。
  */
-export type CompositeEditorTarget = { mode: 'new' } | { mode: 'reopen'; inputId: string; assetId: string }
+export type CompositeEditorTarget = CompositeStart
 
 export interface EditInputsLogic {
   images: RunInputItem[]
@@ -81,6 +81,8 @@ export interface EditInputsLogic {
   saveSketch: (asset: AssetDetail, replaceInputId?: string) => void
   compositeEditor: CompositeEditorTarget | null
   openCompositeEditor: (target: CompositeEditorTarget) => void
+  /** 入力の行の「配置」。入力に配置の結果があれば開き直し、無ければ新しく始める(ADR-0050 5章)。 */
+  startComposite: () => void
   closeCompositeEditor: () => void
   /** 配置の保存後に入力を並べ直す(ADR-0050 5章)。 */
   saveComposite: (result: CompositeSaveResult) => void
@@ -326,16 +328,9 @@ export function useEditInputsLogic(
       onChange(replaceImageInput(inputs, target.inputId, result.asset.id))
       setUploadErrors([])
     } else {
-      const applied = applyCompositeToInputs(inputs, result.asset.id, result.sourceAssetIds, {
-        removeSources: result.removeSources,
-        maxInputImages,
-      })
-      onChange(applied.inputs)
-      setUploadErrors(
-        applied.droppedCount > 0
-          ? [fmt(msg().composite.droppedInputs, { max: maxInputImages, count: applied.droppedCount })]
-          : [],
-      )
+      // 配置は一枚絵にまとめて入力にする使い方。入力の画像は配置の結果1枚だけにする(ADR-0050 5章)。
+      onChange(applyCompositeToInputs(inputs, result.asset.id).inputs)
+      setUploadErrors([])
     }
     setUploadNotice(null)
     setCompositeEditor(null)
@@ -370,6 +365,7 @@ export function useEditInputsLogic(
     saveSketch,
     compositeEditor,
     openCompositeEditor: setCompositeEditor,
+    startComposite: () => setCompositeEditor(compositeStartFor(inputs, detailsByAssetId)),
     closeCompositeEditor: () => setCompositeEditor(null),
     saveComposite,
   }

@@ -389,7 +389,7 @@ export function InputChipsRow({
         className={styles.addButton}
         aria-label={t.composite.button}
         title={t.composite.buttonTitle}
-        onClick={() => logic.openCompositeEditor({ mode: 'new' })}
+        onClick={() => logic.startComposite()}
       >
         <ArrangeIcon size={12} />
         {t.composite.button}

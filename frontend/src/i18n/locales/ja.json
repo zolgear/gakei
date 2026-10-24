@@ -2179,14 +2179,12 @@
       "invalidCanvas": "キャンバスの大きさは {min}〜{max} px にしてください",
       "outOfBounds": "キャンバスから離れすぎた素材があります(キャンバスの近くへ戻してください)"
     },
-    "removeSources": "元の画像を入力から外す",
     "cancel": "キャンセル",
     "save": "保存",
     "saving": "保存しています...",
     "saveFailedDefault": "配置の保存に失敗しました",
     "exportError": "画像の書き出しに失敗しました",
-    "canvasTooLarge": "このブラウザでは、この大きさのキャンバスを書き出せません",
-    "droppedInputs": "入力の上限({max} 枚)のため、元の画像 {count} 枚を入力に入れませんでした"
+    "canvasTooLarge": "このブラウザでは、この大きさのキャンバスを書き出せません"
   },
   "mask": {
     "title": "マスクを描く",
