@@ -14,7 +14,9 @@
 入れない。
 
 検出は、管理者が選んだ LLM の接続先(ADR-0032)の VLM に、画像(`detail: high`)と指示を
-Structured Outputs で送る(生成のアシスタントの構造化出力のエンジンを使う)。送る前に Mod の
+送る(生成のアシスタントの構造化出力のエンジンを使う)。接続先が構造化出力に対応するとみなせる
+なら Structured Outputs で、対応しない(手元の VLM など)ならスキーマを付けずに答えの形を指示文で
+示して送り、どちらも応答を緩く読む。出力のトークン数に上限を付ける。送る前に Mod の
 `ai.before_send`(目的 `region_detection`。ADR-0051)を呼ぶ。
 """
 
@@ -62,15 +64,20 @@ router = APIRouter(tags=["region-detection"])
 def _unusable_reason(
     db: Session, request: Request, config: detection_settings.RegionDetectionConfig
 ) -> RegionDetectionUnusableReason | None:
-    """検出を使えない理由を1つ(使えるなら None)。見る順は検出の API(`_prepare`)と同じ。"""
+    """検出を使えない理由を1つ(使えるなら None)。見る順は検出の API(`_prepare`)と同じ。
+    構造化出力に対応しない接続先も使える(スキーマを付けずに送る。ADR-0053 7章)。"""
     if not config.enabled:
         return "disabled"
     runtime: AssistantRuntime = request.app.state.assistant
     if not runtime.structured.requires_target:
         return None
-    return llm_connections.connection_problem(
-        db, config.connection_id, request.app.state.settings, structured_outputs=True
+    problem = llm_connections.connection_problem(
+        db, config.connection_id, request.app.state.settings, structured_outputs=False
     )
+    # 型を絞る(structured_outputs=False では返らない)。
+    if problem == "structured_outputs_unsupported":
+        return None
+    return problem
 
 
 def _settings_response(
@@ -140,11 +147,13 @@ _DETECT_DOC = """見える Asset の画像で、四角の候補を検出する(A
 - 409 `mask_not_supported` / `asset_deleted` / `image_withheld` / `image_missing`: その画像では
   検出できない
 - 409 `disabled`: 検出が無効
-- 409 `unsupported`: 接続先が Structured Outputs に対応しない
 - 409 `connection_missing`: 接続先・キーが無い
 - 429 `rate_limited`: 1時間の上限
 - 409 `hook_denied`: Mod が送信を止めた(理由は `message`)
-- 502 `llm_error`: VLM の呼び出しに失敗した・応答を読めなかった
+- 502 `llm_error`: VLM の呼び出しに失敗した・応答を読めなかった(答えの形でない応答も含む。
+  「見つからない」は 200 の空の一覧)
+
+接続先が構造化出力に対応しないとみなすときは、スキーマを付けずに答えの形を指示文で示す。
 """
 
 
@@ -202,6 +211,7 @@ async def detect_regions(
         llm_connections.ConnectionConfig | None,
         Asset,
         bytes,
+        bool,
     ]:
         with state.session_factory() as db:
             asset = _target_asset(db, user, asset_id)
@@ -209,16 +219,19 @@ async def detect_regions(
             if not config.enabled:
                 raise _error(409, "disabled", t("regionDetection.disabled"))
             target: LlmTarget | None = None
+            # 構造化出力でスキーマを付けるか(Fake は付ける)。
+            structured = True
             if engine.requires_target:
                 try:
                     target = detection_settings.resolve_target(db, config, state.settings)
                 except ConnectionNotFoundError as e:
                     raise _error(409, "connection_missing", t("assistant.connectionMissing")) from e
-                # 見る順は設定の応答(`_unusable_reason`)と同じ(キー → 構造化出力)。
+                # 見る順は設定の応答(`_unusable_reason`)と同じ。
                 if not target.api_key:
                     raise _error(409, "connection_missing", t("assistant.apiKeyMissing"))
-                if not detection_settings.structured_outputs_supported(db, config, state.settings):
-                    raise _error(409, "unsupported", t("regionDetection.unsupported"))
+                structured = detection_settings.structured_outputs_supported(
+                    db, config, state.settings
+                )
             connection = llm_connections.find_connection(
                 llm_connections.load(db), config.connection_id
             )
@@ -232,11 +245,13 @@ async def detect_regions(
             image = detection.prepare_image(content.read_all())
         except (OSError, ValueError) as e:
             raise _error(409, "image_missing", t("regionDetection.imageUnreadable")) from e
-        return config, target, connection, asset, image
+        return config, target, connection, asset, image, structured
 
-    config, target, connection, asset, image = await anyio.to_thread.run_sync(_prepare)
+    config, target, connection, asset, image, structured = await anyio.to_thread.run_sync(_prepare)
     locale = current_locale()
-    instructions = detection.instructions(locale, query=query, max_items=max_items)
+    instructions = detection.instructions(
+        locale, query=query, max_items=max_items, structured=structured
+    )
     input_text = detection.build_input(query)
 
     if not runtime.detection_requests.try_acquire(user_key(user.id), config.hourly_request_limit):
@@ -276,6 +291,8 @@ async def detect_regions(
                         "image_max_side": detection.IMAGE_MAX_SIDE,
                         "image_detail": detection.IMAGE_DETAIL,
                         "reasoning_effort": detection.REASONING_EFFORT,
+                        "max_output_tokens": detection.MAX_OUTPUT_TOKENS,
+                        "structured_outputs": structured,
                     },
                     images=[mods_events.image_ref(asset, "primary")],
                     asset_id=str(asset.id),
@@ -293,8 +310,11 @@ async def detect_regions(
                 instructions=instructions,
                 input_text=input_text,
                 schema_name=detection.SCHEMA_NAME,
-                schema=detection.RESPONSE_SCHEMA,
+                schema=detection.RESPONSE_SCHEMA if structured else None,
                 reasoning_effort=detection.REASONING_EFFORT,
+                max_output_tokens=detection.MAX_OUTPUT_TOKENS,
+                # 応答はスキーマの有無に関わらず緩く読む(口がスキーマを無視することがある)。
+                raw_text=True,
                 fake_response=detection.fake_response(locale, query=query, max_items=max_items),
                 images=(StructuredImage(data=image, detail=detection.IMAGE_DETAIL),),
             )
@@ -302,7 +322,15 @@ async def detect_regions(
     except AssistantEngineError as e:
         raise _error(502, "llm_error", t("regionDetection.llmError", error=str(e))) from e
 
-    boxes = detection.interpret(result.data, max_items)
+    try:
+        boxes = detection.interpret(detection.parse_response(result.text), max_items)
+    except detection.RegionResponseError as e:
+        # 答えの形でない応答を「見つからない」にしない(ADR-0053 7章)。
+        raise _error(
+            502,
+            "llm_error",
+            t("regionDetection.llmError", error=t("regionDetection.invalidResponse")),
+        ) from e
     model = result.model or config.model
 
     def _save() -> RegionDetectionView:

@@ -3533,9 +3533,8 @@ class ModVerdictReceiveResponse(BaseModel):
 # -- 領域の四角の検出(ADR-0053 7章) -----------------------------------------------------
 
 
-RegionDetectionUnusableReason = Literal[
-    "disabled", "connection_missing", "api_key_missing", "structured_outputs_unsupported"
-]
+# 構造化出力に対応しない接続先も使える(スキーマを付けずに送る。ADR-0053 7章)。
+RegionDetectionUnusableReason = Literal["disabled", "connection_missing", "api_key_missing"]
 
 
 class RegionDetectionSettingsResponse(BaseModel):
@@ -3547,11 +3546,9 @@ class RegionDetectionSettingsResponse(BaseModel):
     hourly_request_limit: int
     hourly_request_limit_default: int
     hourly_request_limit_max: int
-    # 有効で、接続先とキーがそろい、接続先が Structured Outputs に対応するとみなせる
-    # (検出のボタンを出してよい)。
+    # 有効で、接続先とキーがそろう(検出のボタンを出してよい)。構造化出力への対応は問わない。
     usable: bool
-    # 使えない理由(1つに絞る。使えるなら null)。見る順は、無効 → 接続先が無い → キーが無い →
-    # 構造化出力に対応しない(LLM の接続先の設定で「対応する」にできる)。
+    # 使えない理由(1つに絞る。使えるなら null)。見る順は、無効 → 接続先が無い → キーが無い。
     unusable_reason: RegionDetectionUnusableReason | None = None
     # 見ている利用者の、直近1時間の検出の数。
     requests_last_hour: int
