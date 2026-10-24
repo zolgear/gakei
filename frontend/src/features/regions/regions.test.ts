@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RegionBox, RunRegions } from '../../api/client'
+import type { OperationCapabilities, RegionBox, RunRegions } from '../../api/client'
 import {
   addRegion,
   areRegionBoxesValid,
@@ -16,6 +16,7 @@ import {
   regionBadgeTextColor,
   regionColor,
   regionExtraInputCount,
+  regionsFollowAction,
   regionProblems,
   resizeBox,
   restoreRunRegions,
@@ -287,5 +288,45 @@ describe('promoteCandidate', () => {
     const result = promoteCandidate(full, candidate)
     expect(result.added).toBe(false)
     expect(result.number).toBeNull()
+  })
+})
+
+describe('regionsFollowAction(1枚目が変わったときの四角。ADR-0053 1章)', () => {
+  const editCaps = { supports_regions: true, regions_kinds: ['change', 'add', 'keep', 'remove', 'move'] } as unknown as OperationCapabilities
+  const blankCaps = { supports_regions: true, regions_kinds: ['change', 'add'] } as unknown as OperationCapabilities
+  const base = { capsLoaded: true, supported: true }
+
+  it('四角が無ければ何もしない', () => {
+    expect(regionsFollowAction({ ...base, boxes: [], regionsAssetId: 'a', primaryAssetId: 'b', opCaps: editCaps })).toBe('keep')
+  })
+
+  it('1枚目が同じなら残す', () => {
+    expect(regionsFollowAction({ ...base, boxes: [box()], regionsAssetId: 'a', primaryAssetId: 'a', opCaps: editCaps })).toBe('keep')
+  })
+
+  it('1枚目が別の画像に入れ替わっても(配置・スケッチの保存など)外さずに移す', () => {
+    expect(regionsFollowAction({ ...base, boxes: [box()], regionsAssetId: 'a', primaryAssetId: 'b', opCaps: editCaps })).toBe('adopt')
+  })
+
+  it('白紙から画像へも移す', () => {
+    expect(regionsFollowAction({ ...base, boxes: [box()], regionsAssetId: null, primaryAssetId: 'b', opCaps: editCaps })).toBe('adopt')
+  })
+
+  it('入力を外して白紙になっても、選べる種類だけなら移す', () => {
+    expect(regionsFollowAction({ ...base, boxes: [box({ kind: 'add' })], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toBe('adopt')
+  })
+
+  it('白紙に移ると選べない種類(残す・消す・動かす)があれば外す', () => {
+    const boxes = [box(), box({ number: 2, kind: 'remove' })]
+    expect(regionsFollowAction({ ...base, boxes, regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toBe('clear')
+  })
+
+  it('四角を受けない操作なら外す', () => {
+    expect(regionsFollowAction({ ...base, supported: false, boxes: [box()], regionsAssetId: 'a', primaryAssetId: null, opCaps: blankCaps })).toBe('clear')
+  })
+
+  it('capabilities を読めるまでは外さない', () => {
+    const boxes = [box({ kind: 'remove' })]
+    expect(regionsFollowAction({ capsLoaded: false, supported: false, boxes, regionsAssetId: 'a', primaryAssetId: null, opCaps: undefined })).toBe('adopt')
   })
 })

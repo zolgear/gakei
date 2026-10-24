@@ -19,6 +19,7 @@
  * (`exportComposite`)は同じ描画の処理で原本を使う。
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import type { RegionBox } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
 import { usePreventPageZoom } from '../../lib/usePreventPageZoom'
 import { loadImage } from '../mask/canvasUtils'
@@ -40,6 +41,7 @@ import {
   type Quad,
 } from './quad'
 import type { EditorDoc } from './recipe'
+import { compositeRegionMarks } from './regionMarks'
 import { CompositeRenderer, TRANSPARENT, type RenderLayer } from './renderer'
 import styles from './CompositeEditor.module.css'
 
@@ -56,6 +58,8 @@ interface CompositeStageProps {
   onRendererError: () => void
   /** 素材のテクスチャの読み込みに失敗した Asset。 */
   onTextureError: (assetId: string) => void
+  /** 重ねて見せる生成のフォームの四角(ADR-0053。表示だけで書き出しには描かない)。 */
+  regions?: readonly RegionBox[]
 }
 
 type Gesture =
@@ -103,6 +107,7 @@ export function CompositeStage({
   onCommit,
   onRendererError,
   onTextureError,
+  regions = [],
 }: CompositeStageProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   // 2本指でページ全体が拡大されないようにする(iOS の Safari。lib/usePreventPageZoom.ts)。
@@ -462,6 +467,29 @@ export function CompositeStage({
               texturesRef.current.has(l.assetId) ? null : (
                 <polygon key={l.key} className={styles.loadingLayer} points={points(l.quad)} />
               ),
+            )}
+            {/* 生成のフォームの四角(表示だけ。操作は受けない)。 */}
+            {regions.length > 0 && (
+              <g pointerEvents="none" data-testid="composite-regions">
+                {compositeRegionMarks(regions, canvasRect).map((m) => (
+                  <g key={m.number}>
+                    <rect x={m.x} y={m.y} width={m.w} height={m.h} fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth={4} />
+                    <rect x={m.x} y={m.y} width={m.w} height={m.h} fill="none" stroke={m.color} strokeWidth={2} />
+                    <rect x={m.x} y={m.y} width={m.badge} height={m.badge} rx={3} fill={m.color} stroke="#ffffff" strokeWidth={1.5} />
+                    <text
+                      x={m.x + m.badge / 2}
+                      y={m.y + m.badge / 2}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontSize={m.badge * 0.62}
+                      fontWeight={700}
+                      fill={m.textColor}
+                    >
+                      {m.number}
+                    </text>
+                  </g>
+                ))}
+              </g>
             )}
             {selected && (
               <g>

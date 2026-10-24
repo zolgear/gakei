@@ -88,6 +88,26 @@ export function regionsCompatible(boxes: readonly RegionBox[], opCaps: Operation
   return boxes.every((b) => kinds.includes(b.kind) && (references || !b.reference_asset_id))
 }
 
+/**
+ * 1枚目の入力・操作が変わったときに、付けた四角をどうするか(ADR-0053 1章「配置との併用」)。
+ * 四角は割合なので、1枚目が別の画像・白紙(`primaryAssetId` が null)に変わっても外さずに移す
+ * (`adopt`)。外す(`clear`)のは、capabilities を読めていて、今の操作が四角を受けない・選べない
+ * 種類や使えない参照画像があるときだけ(白紙では「残す」「消す」「動かす」を選べない)。
+ */
+export function regionsFollowAction(args: {
+  boxes: readonly RegionBox[]
+  regionsAssetId: string | null
+  primaryAssetId: string | null
+  capsLoaded: boolean
+  supported: boolean
+  opCaps: OperationCapabilities | undefined
+}): 'keep' | 'adopt' | 'clear' {
+  const { boxes, regionsAssetId, primaryAssetId, capsLoaded, supported, opCaps } = args
+  if (boxes.length === 0) return 'keep'
+  if (capsLoaded && (!supported || !regionsCompatible(boxes, opCaps))) return 'clear'
+  return regionsAssetId !== primaryAssetId ? 'adopt' : 'keep'
+}
+
 // -- 幾何 -----------------------------------------------------------------------------
 
 export type Box = [number, number, number, number]

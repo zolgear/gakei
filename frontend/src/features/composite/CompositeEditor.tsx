@@ -12,13 +12,14 @@
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
-import { createCompositeAsset, getAsset, type AssetDetail } from '../../api/client'
+import { createCompositeAsset, getAsset, type AssetDetail, type RegionBox } from '../../api/client'
 import { Modal } from '../../components/Modal'
 import { MODAL_BODY_ATTRIBUTE } from '../../components/modalFocus'
 import { useModalFocus } from '../../components/useModalFocus'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { undoShortcutKind } from '../mask/undoShortcut'
+import { RegionsIcon } from '../regions/regionIcons'
 import { CompositeAddDialog } from './CompositeAddDialog'
 import { CompositeStage, type TransformMode } from './CompositeStage'
 import {
@@ -99,6 +100,8 @@ interface CompositeEditorProps {
   inputAssetIds?: readonly string[]
   /** 「元の画像を入力から外す」を出すか(入力が1枚だけのプロバイダー・作り直しでは出さない)。 */
   showRemoveSourcesOption: boolean
+  /** 生成のフォームの今の四角(ADR-0053)。キャンバスに重ねて見せるだけで、書き出しには描かない。 */
+  regions?: readonly RegionBox[]
   onSave: (result: CompositeSaveResult) => void
   onCancel: () => void
 }
@@ -224,6 +227,7 @@ function CompositeEditorBody({
   formSize = null,
   inputAssetIds = [],
   showRemoveSourcesOption,
+  regions = [],
   onSave,
   onCancel,
 }: CompositeEditorProps) {
@@ -244,6 +248,7 @@ function CompositeEditorBody({
   const [error, setError] = useState<string | null>(null)
   const [rendererFailed, setRendererFailed] = useState(false)
   const [customSize, setCustomSize] = useState(false)
+  const [showRegions, setShowRegions] = useState(true)
   const editedRef = useRef(false)
 
   async function fetchDetail(id: string): Promise<AssetDetail | null> {
@@ -594,6 +599,13 @@ function CompositeEditorBody({
               <CenterIcon />
             </ToolButton>
           </div>
+          {regions.length > 0 && (
+            <div className={styles.toolGroup}>
+              <ToolButton label={c.toolbar.showRegions} onClick={() => setShowRegions((v) => !v)} selected={showRegions}>
+                <RegionsIcon />
+              </ToolButton>
+            </div>
+          )}
           <div className={styles.toolGroup}>
             <ToolButton label={c.toolbar.undo} disabled={!history || history.past.length === 0} onClick={undo}>
               <UndoIcon />
@@ -619,6 +631,7 @@ function CompositeEditorBody({
                 onCommit={commit}
                 onRendererError={() => setRendererFailed(true)}
                 onTextureError={() => setNotice(c.textureError)}
+                regions={showRegions ? regions : undefined}
               />
             )}
           </div>

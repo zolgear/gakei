@@ -2133,7 +2133,8 @@
       "fit": "キャンバスに合わせる",
       "center": "中央に寄せる",
       "undo": "元に戻す",
-      "redo": "やり直す"
+      "redo": "やり直す",
+      "showRegions": "領域の四角を表示"
     },
     "panel": {
       "canvasHeading": "キャンバス",
@@ -3875,8 +3876,7 @@
       "chip": "領域 {count}",
       "chipTitle": "領域の指示を編集",
       "clear": "領域の指示を外す",
-      "clearedPrimaryChanged": "1枚目の入力画像が変わったので、領域の指示を外しました。",
-      "clearedUnsupported": "選んだモデルは領域の指示に対応していないので、外しました。",
+      "clearedUnsupported": "今のモデルと入力では使えない領域の指示があるので、外しました。",
       "invalid": "領域の指示に直すところがあります。「領域」を開いて確かめてください。",
       "tooManyInputs": "領域の指示で画像を {extra} 枚足すため、入力画像が {count} 枚になり、上限({max} 枚)を超えます。"
     },

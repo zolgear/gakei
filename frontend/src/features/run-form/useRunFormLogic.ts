@@ -68,7 +68,7 @@ import {
   allowedRegionKinds,
   areRegionBoxesValid,
   regionExtraInputCount,
-  regionsCompatible,
+  regionsFollowAction,
   regionsSupportedFor,
 } from '../regions/regions'
 import {
@@ -504,33 +504,27 @@ export function useRunFormLogic(
   const regionsKinds = allowedRegionKinds(regionOpCaps)
   const regionsReferenceImages = regionOpCaps?.regions_reference_images ?? false
   const [regionsNotice, setRegionsNotice] = useState<string | null>(null)
-  // 主たる入力が変わった、または四角を受けないモデル・選べない種類や参照画像のあるモデルに切り替えた
-  // (capabilities を読めてから判断する)ときは四角を外す。白紙に描いた四角は、入力画像を足したら
-  // その画像の上に割合のまま移す(座標はどちらも 0〜1 の割合。ADR-0053 5章)。
-  let regionsClearReason: 'primaryChanged' | 'unsupported' | null = null
-  let regionsAdoptPrimary = false
-  if (formState.regions.length > 0) {
-    if (formState.regionsAssetId !== primaryAssetId) {
-      if (formState.regionsAssetId === null) regionsAdoptPrimary = true
-      else regionsClearReason = 'primaryChanged'
-    }
-    if (
-      regionsClearReason === null &&
-      caps &&
-      modelCaps &&
-      (!regionsSupported || !regionsCompatible(formState.regions, regionOpCaps))
-    ) {
-      regionsClearReason = 'unsupported'
-    }
-  }
+  // 主たる入力が変わっても四角は外さず、割合のまま新しい1枚目(入力を外したなら白紙)の上に移す
+  // (座標はどちらも 0〜1 の割合。配置・スケッチの保存や入れ替えで1枚目が変わっても残す。ADR-0053 1章)。
+  // 外すのは、四角を受けないモデル・選べない種類や参照画像のあるモデルに切り替えたとき(白紙では
+  // 「残す」「消す」「動かす」を選べない。capabilities を読めてから判断する)だけ。
+  const regionsAction = regionsFollowAction({
+    boxes: formState.regions,
+    regionsAssetId: formState.regionsAssetId,
+    primaryAssetId,
+    capsLoaded: Boolean(caps && modelCaps),
+    supported: regionsSupported,
+    opCaps: regionOpCaps,
+  })
+  const regionsClearReason: 'unsupported' | null = regionsAction === 'clear' ? 'unsupported' : null
+  const regionsAdoptPrimary = regionsAction === 'adopt'
   useEffect(() => {
     if (regionsClearReason === null) {
       if (regionsAdoptPrimary) setFormState({ ...formState, regionsAssetId: primaryAssetId })
       return
     }
     setFormState({ ...formState, regions: [], regionsAssetId: null })
-    const rm = msg().regions.form
-    setRegionsNotice(regionsClearReason === 'primaryChanged' ? rm.clearedPrimaryChanged : rm.clearedUnsupported)
+    setRegionsNotice(msg().regions.form.clearedUnsupported)
   }, [regionsClearReason, regionsAdoptPrimary, primaryAssetId, formState, setFormState])
 
   function setRegions(next: RegionBox[]) {
