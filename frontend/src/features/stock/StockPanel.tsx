@@ -35,7 +35,7 @@ import { assetUrl } from '../../api/assetUrl'
 import { editMaxInputImages, findProvider } from '../../lib/capabilities'
 import { addImageInputs } from '../run-form/editInputs'
 import { validateInputFile } from '../run-form/inputValidation'
-import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData } from '../run-form/dragDropAssets'
+import { GAKEI_ASSET_ID_DATA_TYPE, interpretDrop } from '../run-form/dragDropAssets'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { isStudioPath, nodeTargetPath } from '../lineage/nodeTargetPath'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -274,12 +274,7 @@ export function StockPanel() {
     // しまわないようにする。既存 Asset の参照だった場合、ストックへ入れ直す意味は無いので
     // 何もしない(すでにストックにある)。
     // 履歴やマップの画像など、ページの中から運んだ画像も取り込まない(ブラウザが添える File)。
-    if (isDragFromThisPage()) return
-    const interpretation = interpretDroppedData({
-      assetIdData: e.dataTransfer.getData(GAKEI_ASSET_ID_DATA_TYPE) || null,
-      uriListData: e.dataTransfer.getData('text/uri-list') || null,
-      files: Array.from(e.dataTransfer.files),
-    })
+    const interpretation = interpretDrop(e.dataTransfer)
 
     if (interpretation.kind === 'files') {
       uploadMutation.mutate(interpretation.files)

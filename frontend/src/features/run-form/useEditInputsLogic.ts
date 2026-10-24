@@ -20,7 +20,7 @@ import {
 } from './editInputs'
 import { validateInputFile } from './inputValidation'
 import { findBlockedInputAssetIds, findDeletedInputAssetIds } from './deletedInputs'
-import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData } from './dragDropAssets'
+import { interpretDrop } from './dragDropAssets'
 import { pickPastedImageFiles } from './clipboardImages'
 import type { RunInputItem } from './types'
 import { applyCompositeToInputs } from '../composite/compositeInputs'
@@ -191,14 +191,11 @@ export function useEditInputsLogic(
 
     // アプリ内のサムネイル(ストックのタイル・履歴カードの出力など)をドラッグしてきた場合は、
     // ブラウザが自動生成する File(サムネイル画像そのもの)を新規アップロードしてしまわないよう、
-    // 既存 Asset の参照として扱う。マーカーが無くても text/uri-list が自アプリの Asset URL を
-    // 指していれば同様に扱う(保険)。mask kind の Asset はそもそもドラッグ元(ストック)側で
+    // 既存 Asset の参照として扱う。マーカーが無くても text/uri-list か text/html の img が
+    // 自アプリの Asset URL を指していれば同様に扱う(保険)。読み取れないページ内のドラッグは
+    // 取り込まない(重複を作らない)。mask kind の Asset はそもそもドラッグ元(ストック)側で
     // マーカーを付けないため、ここに来ない。
-    const interpretation = interpretDroppedData({
-      assetIdData: e.dataTransfer.getData(GAKEI_ASSET_ID_DATA_TYPE) || null,
-      uriListData: e.dataTransfer.getData('text/uri-list') || null,
-      files: Array.from(e.dataTransfer.files),
-    })
+    const interpretation = interpretDrop(e.dataTransfer)
 
     if (interpretation.kind === 'asset') {
       const result = addImageInputs(inputs, [interpretation.assetId], maxInputImages)

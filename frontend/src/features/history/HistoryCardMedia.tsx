@@ -16,7 +16,7 @@
  */
 import { Link } from 'react-router'
 import type { RunOutputRef, RunSummary } from '../../api/client'
-import { GAKEI_ASSET_ID_DATA_TYPE } from '../run-form/dragDropAssets'
+import { setAssetDragData } from '../run-form/dragDropAssets'
 import { formatElapsedSeconds } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
@@ -72,8 +72,7 @@ export function HistoryCardMedia({ run, output, href, variant, sizes }: HistoryC
             alt=""
             draggable
             onDragStart={(e) => {
-              e.dataTransfer.setData(GAKEI_ASSET_ID_DATA_TYPE, output.asset_id)
-              e.dataTransfer.effectAllowed = 'copy'
+              setAssetDragData(e.dataTransfer, output.asset_id)
             }}
           />
           {outputs.length > 1 &&
