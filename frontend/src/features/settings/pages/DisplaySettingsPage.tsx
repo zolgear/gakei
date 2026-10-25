@@ -8,10 +8,16 @@
  * よいように)。ほかの項目と同じく、変えたらすぐに送る(`useUpdateUserPreferences`)。「ブラウザに保存した
  * 設定を消す」の対象には含めない。
  *
+ * 「アシスタント」の「画像を LLM に送る前に確かめる」(ADR-0048 14.1。`assistant.image_send`)もサーバーに
+ * 保存する。アシスタントが使えないときは出さない。
+ *
  * 末尾の「ブラウザに保存した設定」(2026-10-04)は、GAKEI がこのブラウザに置いたキー(`lib/browserStorage.ts`)
  * をまとめて消し、メモリ上の状態も戻すためにページを読み込み直す。即時の操作(確認ダイアログを経る)。
  */
 import { useState, useSyncExternalStore } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { getAssistantSettings } from '../../../api/client'
+import { ASSISTANT_SETTINGS_QUERY_KEY } from '../queryKeys'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { clearGakeiBrowserStorageAndReload } from '../../../lib/browserStorage'
 import { LANGUAGE_SETTING_LABEL, LOCALES, LOCALE_LABELS, isLocale, useI18n } from '../../../i18n'
@@ -137,6 +143,8 @@ export function DisplaySettingsPage() {
 
       <ContentRatingMaskSection />
 
+      <AssistantImageSendSection />
+
       <SettingsSection heading={b.heading}>
         <SettingsRow label={b.label} description={b.help}>
           <button type="button" className={styles.dangerButton} onClick={() => setConfirmClearOpen(true)}>
@@ -199,6 +207,31 @@ function ContentRatingMaskSection() {
           checked={prefs.maskUnrated}
           disabled={disabled}
           onChange={(checked) => update.mutate({ 'content_rating.mask_unrated': checked })}
+        />
+      </SettingsRow>
+      {update.isError && <p className={styles.errorText}>{c.saveFailed}</p>}
+    </SettingsSection>
+  )
+}
+
+/** 「アシスタント」(ADR-0048 14.1)。道具が画像を LLM に送る前に確かめるか。アシスタントが使えなければ出さない。 */
+function AssistantImageSendSection() {
+  const { t } = useI18n()
+  const c = t.settings.display.assistant
+  const assistant = useQuery({ queryKey: ASSISTANT_SETTINGS_QUERY_KEY, queryFn: getAssistantSettings, staleTime: 60_000 })
+  const query = useUserPreferencesQuery()
+  const update = useUpdateUserPreferences()
+  if (assistant.data?.usable !== true) return null
+  const ask = (query.data?.['assistant.image_send'] ?? 'ask') === 'ask'
+
+  return (
+    <SettingsSection heading={c.heading}>
+      <SettingsRow label={c.imageSendLabel} htmlFor="gakei-assistant-image-send">
+        <SettingsSwitch
+          id="gakei-assistant-image-send"
+          checked={ask}
+          disabled={!query.data}
+          onChange={(checked) => update.mutate({ 'assistant.image_send': checked ? 'ask' : 'always' })}
         />
       </SettingsRow>
       {update.isError && <p className={styles.errorText}>{c.saveFailed}</p>}

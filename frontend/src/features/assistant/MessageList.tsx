@@ -9,6 +9,7 @@ import { useI18n } from '../../i18n'
 import { AssetsCard } from './AssetsCard'
 import { FormWriteCard } from './FormWriteCard'
 import type { AttachmentPlan } from './assistantForm'
+import { PermissionCard } from './PermissionCard'
 import { PromptCard } from './PromptCard'
 import { RunCards } from './RunCards'
 import { StockWriteCard } from './StockWriteCard'
@@ -62,19 +63,29 @@ export function MessageList({ items, conversationKey, emptyText, onAttach }: Mes
       {items.length === 0 && <p className={styles.emptyText}>{emptyText}</p>}
       {items.map((item) => {
         switch (item.kind) {
-          case 'user':
+          case 'user': {
+            const withheld = new Set(item.message.withheld_attachments ?? [])
             return (
               <div key={item.key} className={styles.userMessage}>
                 {(item.message.attachments ?? []).length > 0 && (
                   <div className={styles.attachments}>
                     {(item.message.attachments ?? []).map((id) => (
-                      <AssetImage key={id} className={`${styles.attachmentThumb} checkerboard`} src={assetUrl(id, 'thumb')} alt="" />
+                      <AssetImage
+                        key={id}
+                        className={`${styles.attachmentThumb} checkerboard`}
+                        src={assetUrl(id, 'thumb')}
+                        alt={withheld.has(id) ? a.withheldAttachment : ''}
+                        title={withheld.has(id) ? a.withheldAttachment : undefined}
+                        data-withheld={withheld.has(id) ? true : undefined}
+                      />
                     ))}
                   </div>
                 )}
+                {withheld.size > 0 && <p className={styles.messageMeta}>{a.withheldAttachment}</p>}
                 <p className={styles.messageText}>{item.message.text}</p>
               </div>
             )
+          }
           case 'assistant':
             return (
               <div key={item.key} className={styles.assistantMessage} data-status={item.message.status ?? undefined}>
@@ -93,6 +104,8 @@ export function MessageList({ items, conversationKey, emptyText, onAttach }: Mes
             )
           case 'pending':
             return <ToolRow key={item.key} call={item.call} />
+          case 'permission':
+            return <PermissionCard key={item.key} pending={item.permission} />
           case 'tool':
             switch (item.card) {
               case 'prompt':
@@ -107,6 +120,8 @@ export function MessageList({ items, conversationKey, emptyText, onAttach }: Mes
                 return <FormWriteCard key={item.key} message={item.message} />
               case 'stock':
                 return <StockWriteCard key={item.key} message={item.message} />
+              case 'permission':
+                return <PermissionCard key={item.key} message={item.message} />
               case 'row':
                 return <ToolRow key={item.key} message={item.message} call={item.call} />
             }

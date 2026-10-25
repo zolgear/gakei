@@ -401,6 +401,11 @@
         "confirmMessage": "This clears all GAKEI settings stored in this browser and reloads the page.\n\nCleared: display language (falls back to the browser's language), tab icon progress, generation screen layout and input size, sidebar width and open panel, open/closed states in the stock and the viewer, map values (tab, neighbors, limit, threshold, lineage edges), sketch pen, seed mode, prompt tag completion and tag translations, and the last selected group.\n\nSettings stored on the server, images, history and your login are not affected.",
         "confirmWarning": "The unsent prompt, parameters and input images in the generation form will also be cleared.",
         "confirmLabel": "Clear and reload"
+      },
+      "assistant": {
+        "heading": "Assistant",
+        "imageSendLabel": "Ask before sending images to the LLM",
+        "saveFailed": "Could not save the setting"
       }
     },
     "accessTokens": {
@@ -3730,8 +3735,25 @@
       "rename_group": "Rename group",
       "move_to_group": "Move to group",
       "remove_from_group": "Remove from group",
-      "suggest_groups": "Get group suggestions"
-    }
+      "suggest_groups": "Get group suggestions",
+      "list_group_assets": "Read a group's images"
+    },
+    "permissionCard": {
+      "heading": "Send images",
+      "once": "Allow once",
+      "always": "Always allow",
+      "deny": "Don't allow",
+      "sending": "Sending your answer…",
+      "failed": "Could not send your answer. Choose again.",
+      "answered": {
+        "once": "Allowed once",
+        "always": "Always allowed",
+        "deny": "Not allowed",
+        "timeout": "Not sent: no answer in time",
+        "stopped": "Not sent: stopped"
+      }
+    },
+    "withheldAttachment": "Not sent (images rated X or higher are not sent to an external connection)"
   },
   "contentRating": {
     "label": "Rating",

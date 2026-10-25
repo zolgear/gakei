@@ -223,6 +223,29 @@
   color: var(--color-danger);
 }
 
+/* 外部の接続先に送らなかった添付(X 以上。ADR-0048 14.3)。 */
+.attachmentThumb[data-withheld] {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+/* -- 画像の許可のカード(ADR-0048 14.1) -- */
+
+.permissionThumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.permissionThumbs > li {
+  position: relative;
+  width: 48px;
+  height: 48px;
+}
+
 /* -- カード -- */
 
 .card {
@@ -242,6 +265,14 @@
 
 .card[data-kind='form'] {
   border-left-color: var(--color-edit);
+}
+
+.card[data-kind='permission'] {
+  border-left-color: var(--color-warning);
+}
+
+.card[data-kind='permission'][data-answered] {
+  border-left-color: var(--color-border-strong);
 }
 
 .card[data-undone] {
