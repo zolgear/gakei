@@ -330,7 +330,8 @@ def _resolve_prompts(
 class _RegionsPlan:
     """領域の指示を送るための準備(ADR-0053 5章「画像と文」)。DB と保存先にはまだ書いていない。"""
 
-    # 主たる入力(入力画像の無い Run の白紙の配置図では None)。
+    # 四角を描いた画像の元の画像(主たる入力)。白紙の配置図(入力画像の無い Run と、白紙の土台を
+    # 選んだ Run)では None。
     primary_asset_id: uuid.UUID | None
     # 四角を描いた画像(検証済み。保存は Run の挿入の直前)。
     overlay: assets_domain.PreparedImage
@@ -363,9 +364,15 @@ def _any_operation_supports_regions(operations: list[OperationCapabilities]) -> 
     return any(o.supports_regions for o in operations)
 
 
-def _check_region_options(op_caps: OperationCapabilities, body: RunCreateRequest) -> None:
-    """capabilities が受けない種類・参照画像の四角を断る(ADR-0053 6章)。"""
+def _check_region_options(
+    op_caps: OperationCapabilities, body: RunCreateRequest, *, blank: bool = False
+) -> None:
+    """capabilities が受けない種類・参照画像の四角を断る(ADR-0053 6章)。
+
+    `blank` は白紙の土台。選べる種類は「変える」「足す」だけ(1章「四角の土台を選ぶ」)。"""
     for region in regions_domain.ordered(body.regions):
+        if blank and region.kind not in regions_domain.BLANK_REGION_KINDS:
+            raise RunCreateError("invalid", t("runRegions.kindNotOnBlank", number=region.number))
         if region.kind not in op_caps.regions_kinds:
             raise RunCreateError(
                 "invalid",
@@ -383,14 +390,27 @@ def _check_comfyui_regions(
     """ComfyUI に差し込む四角を確かめ、座標が何に対する割合かを返す(ADR-0053 6章)。
 
     選べる種類は「変える」「足す」だけ、参照画像は使えない(「動かす」の元の四角も持てない。
-    `source_box` は「動かす」だけが持つので、種類の確認で断られる)。主たる入力があればそれに対する
-    割合、無ければ出力の大きさに対する割合として受ける(検証はどちらも同じ 0〜1)。
+    `source_box` は「動かす」だけが持つので、種類の確認で断られる)。座標は要求の土台
+    (`regions_frame`)に対する割合として受ける。省略時は、主たる入力があればそれ、無ければ出力の
+    大きさ。白紙の土台は入力画像があっても選べる(1章「四角の土台を選ぶ」。検証はどちらも同じ 0〜1)。
     """
-    _check_region_options(op_caps, body)
     has_primary = any(m.role == "image" and m.position == 0 for m in input_metas)
-    if not has_primary and op_caps.regions_requires_input_image:
+    frame = _resolve_regions_frame(body, has_primary=has_primary)
+    _check_region_options(op_caps, body, blank=frame == "output")
+    if frame == "output" and not has_primary and op_caps.regions_requires_input_image:
         raise RunCreateError("invalid", t("runRegions.primaryRequired"))
-    return "input" if has_primary else "output"
+    return frame
+
+
+def _resolve_regions_frame(
+    body: RunCreateRequest, *, has_primary: bool
+) -> Literal["input", "output"]:
+    """四角の土台(ADR-0053 1章「四角の土台を選ぶ」)。省略時は主たる入力の有無で決める。
+    主たる入力の無い Run で `input` を求められたら断る。"""
+    frame = body.regions_frame or ("input" if has_primary else "output")
+    if frame == "input" and not has_primary:
+        raise RunCreateError("invalid", t("runRegions.primaryRequired"))
+    return frame
 
 
 def _load_reference_assets(
@@ -419,17 +439,23 @@ def _plan_regions(
     viewer: CurrentUser,
     store: AssetStore,
 ) -> _RegionsPlan:
-    """四角を検証し、四角を描いた画像と足す文を作る。断るときは `RunCreateError`。"""
+    """四角を検証し、四角を描いた画像と足す文を作る。断るときは `RunCreateError`。
+
+    土台(ADR-0053 1章「四角の土台を選ぶ」)が主たる入力なら、主たる入力に四角を重ねた画像を、
+    白紙なら出力の大きさの白紙に四角を描いた配置図を、利用者の入力の後ろ(参照画像の前)に足す。
+    主たる入力(`position = 0`)はどちらも利用者の1枚目のまま。"""
     if body.operation != "edit":
         if op_caps.regions_requires_input_image:
             raise RunCreateError("invalid", t("runRegions.editOnly"))
         return _plan_blank_regions(db, caps, op_caps, body, input_metas, viewer=viewer)
-    _check_region_options(op_caps, body)
 
     image_metas = sorted((m for m in input_metas if m.role == "image"), key=lambda m: m.position)
     primary_meta = next((m for m in image_metas if m.position == 0), None)
     if primary_meta is None:
         raise RunCreateError("invalid", t("runRegions.primaryRequired"))
+    frame = _resolve_regions_frame(body, has_primary=True)
+    blank = frame == "output"
+    _check_region_options(op_caps, body, blank=blank)
 
     # 入力の何枚目か(1 から。プロバイダーに送る順 = role=image の position の順)。
     image_numbers = {m.asset_id: index + 1 for index, m in enumerate(image_metas)}
@@ -456,8 +482,13 @@ def _plan_regions(
     primary = db.get(Asset, primary_meta.asset_id)
     assert primary is not None  # 入力の検証で見える・削除されていないことを確かめている
     try:
-        with Image.open(io.BytesIO(store.read(primary.blob_key))) as image:
-            data = regions_domain.render_overlay(image, body.regions)
+        if blank:
+            # 白紙の大きさは入力画像の無い Run と同じ(出力サイズ。`auto` は 1024×1024)。
+            width, height = _blank_canvas_size(body, caps)
+            data = regions_domain.render_layout(width, height, body.regions)
+        else:
+            with Image.open(io.BytesIO(store.read(primary.blob_key))) as image:
+                data = regions_domain.render_overlay(image, body.regions)
         overlay = assets_domain.prepare_image(data, AssetKind.REGIONS)
     except (OSError, ValueError, assets_domain.IngestError) as e:
         raise RunCreateError("invalid", t("runRegions.overlayFailed")) from e
@@ -495,14 +526,17 @@ def _plan_regions(
         body.regions,
         overlay_image_number=overlay_number,
         reference_image_numbers=reference_numbers,
+        blank=blank,
     )
     return _RegionsPlan(
-        primary_asset_id=primary.id,
+        # 白紙の配置図は主たる入力から作った画像ではないので、元の画像を持たない。
+        primary_asset_id=None if blank else primary.id,
         overlay=overlay,
         overlay_position=overlay_position,
         reference_inputs=reference_inputs,
         extra_metas=extra_metas,
         appended_text=appended,
+        frame=frame,
     )
 
 
@@ -538,7 +572,8 @@ def _plan_blank_regions(
     """
     if input_metas:
         raise RunCreateError("invalid", t("runValidation.generateNoInputImages"))
-    _check_region_options(op_caps, body)
+    _resolve_regions_frame(body, has_primary=False)
+    _check_region_options(op_caps, body, blank=True)
 
     model_caps = next(m for m in caps.models if m.model == body.model)
     edit_caps = next((o for o in model_caps.operations if o.operation == "edit"), None)

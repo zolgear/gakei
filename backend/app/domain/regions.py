@@ -30,6 +30,8 @@ DELIVERY_COMFYUI_BBOXES = "comfyui_bboxes"
 # 入力画像の無い Run の配置図の大きさ(出力サイズが `auto`・未指定のとき。フロントの白紙の
 # キャンバスと同じ規則。ADR-0053 5章)。
 BLANK_AUTO_SIZE = (1024, 1024)
+# 白紙の土台で選べる種類(ADR-0053 1章「四角の土台を選ぶ」)。残す・消す・動かす物が無いため。
+BLANK_REGION_KINDS: tuple[str, ...] = ("change", "add")
 
 # 四角の色(番号順に使い、9 個目からは繰り返す。番号で見分ける)。`key` は文言のキー
 # (`regions.colors.{key}`)。互いに見分けやすく、写真・イラストの上でも目立つ色。
@@ -310,9 +312,12 @@ def build_prompt_text(
 
     `overlay_image_number` は四角を描いた画像が何枚目の入力か(1 から)。
     `reference_image_numbers` は参照画像の Asset id → 何枚目の入力か。
-    `blank` は入力画像の無い Run(白紙の配置図が1枚目。ADR-0053 5章)。見出しと結びを分ける。
+    `blank` は白紙の配置図(ADR-0053 5章・1章「四角の土台を選ぶ」)。見出しと結びを分ける。配置図が
+    1枚目なら入力画像の無い Run、2枚目以降なら利用者の入力の後ろに足した配置図(ほかの画像は参考)。
     """
-    if blank:
+    if blank and overlay_image_number > 1:
+        header = t("runRegions.prompt.headerBlankWithInputs", overlay=overlay_image_number)
+    elif blank:
         header = t("runRegions.prompt.headerBlank")
     else:
         header = t("runRegions.prompt.header", overlay=overlay_image_number)

@@ -338,6 +338,11 @@ export function Viewer({ assetId }: ViewerProps) {
                 )}
               </div>
             </div>
+            {addToInputs.error && (
+              <p className={styles.deleteErrorText} role="status">
+                {addToInputs.error}
+              </p>
+            )}
             {outputNav && (
               <div className={styles.outputNav}>
                 <div className={styles.outputNavHeader}>

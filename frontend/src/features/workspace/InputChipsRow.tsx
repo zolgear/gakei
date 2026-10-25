@@ -65,14 +65,20 @@ export interface InputRegionsProps {
   overlayShown: boolean
   onToggleOverlay: () => void
   /**
-   * 入力画像の無い Run で、出力の大きさの白紙に四角を描けるか(ADR-0053 6章。ComfyUI)。true なら、
-   * 追加のボタンの並びに「領域」を出す(入力画像を足すと、主たる入力のチップに移る)。
+   * 四角の土台が白紙か(ADR-0053 6章・1章「四角の土台を選ぶ」。入力画像の無い Run と、入力画像があって
+   * 白紙を選んだとき)。true なら、追加のボタンの並びに「領域」(四角があれば白紙のプレビュー)を出し、
+   * 1枚目には「領域 N」を出さない。
    */
   blank?: boolean
   /** 付けた四角(白紙のタイル・チップのプレビューに描く)。 */
   boxes?: readonly RegionBox[]
   /** 白紙のキャンバスの大きさ(領域の編集画面と同じ。プレビューの縦横比に使う)。 */
   blankCanvas?: { width: number; height: number }
+  /**
+   * 1枚目の上に四角を描けるか(省けば描ける)。入力画像を受けないモデルでは false にし、入力画像が
+   * 残っていても白紙の「領域」を出す(1枚目には領域の操作を出さない)。
+   */
+  primaryUsable?: boolean
 }
 
 export function InputChipsRow({
@@ -90,6 +96,8 @@ export function InputChipsRow({
   const c = t.workspace.inputChips
   const [isDragOver, setIsDragOver] = useState(false)
   const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
+  // 1枚目の上に四角を描けるモデルか(入力画像を受けないモデルでは白紙だけ)。
+  const regionsOnPrimary = regions.supported && regions.primaryUsable !== false
 
   function handleDragOver(e: DragEvent<HTMLElement>) {
     if (!isRelevantDragTypes(Array.from(e.dataTransfer.types))) return
@@ -249,8 +257,9 @@ export function InputChipsRow({
                       )
                     ))}
 
-                  {isPrimary && regions.supported && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
-                    regions.count > 0 ? (
+                  {isPrimary && regionsOnPrimary && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
+                    // 白紙の土台の四角は1枚目に付かないので、数は追加の並びの白紙のチップに出す。
+                    regions.count > 0 && !regions.blank ? (
                       <>
                         <button
                           type="button"
@@ -284,7 +293,7 @@ export function InputChipsRow({
                     )
                   )}
 
-                  {isPrimary && regions.supported && regions.hasOverlay && !isWithheld && (
+                  {isPrimary && regionsOnPrimary && regions.hasOverlay && !isWithheld && (
                     <button
                       type="button"
                       className={styles.iconButton}
@@ -369,8 +378,10 @@ export function InputChipsRow({
         <PencilIcon />
         {c.sketch}
       </button>
-      {/* 入力画像の無い Run の白紙の領域(ADR-0053 6章)。四角を付けたら、白紙の配置図の小さなプレビューを添える。 */}
-      {regions.blank && images.length === 0 &&
+      {/* 白紙の領域(ADR-0053 6章・1章)。四角を付けたら、白紙の配置図の小さなプレビューを添える(入力画像が
+          あっても)。四角が無ければ、入力画像の無いときだけ「領域」を出す(あるときは1枚目から開く)。 */}
+      {regions.blank &&
+        (regions.count > 0 || images.length === 0 || regions.primaryUsable === false) &&
         (regions.count > 0 && regions.boxes && regions.blankCanvas ? (
           <div className={styles.chip}>
             <button

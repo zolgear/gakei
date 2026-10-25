@@ -37,8 +37,8 @@ export interface RunFormLoadValues {
 
 /** 入れる先のパラメーターの定義(Run のプロバイダー・モデルと、入力画像から導く操作)。 */
 export function runFormLoadTargetDefs(caps: CapabilitiesResponse, state: RunFormState): ParamDef[] | null {
-  const operation = deriveOperation(state.inputs)
   const modelCaps = findProvider(caps, state.provider)?.models.find((m) => m.model === state.model)
+  const operation = deriveOperation(state.inputs, modelCaps)
   const opCaps = modelCaps?.operations.find((o) => o.operation === operation)
   return opCaps ? opCaps.params : null
 }

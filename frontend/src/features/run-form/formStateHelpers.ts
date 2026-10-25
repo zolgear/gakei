@@ -34,5 +34,6 @@ export function clearFormContent(
     assetGroupId,
     regions: [],
     regionsAssetId: null,
+    regionsFrame: 'input',
   }
 }

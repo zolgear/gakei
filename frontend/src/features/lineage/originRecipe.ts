@@ -143,5 +143,6 @@ export function buildOriginFormState(info: OriginRunInfo, assetGroupId: string |
     // 領域の指示の四角(ADR-0053)は画像に埋め込んでいない(入力画像も戻さないので四角も無し)。
     regions: [],
     regionsAssetId: null,
+    regionsFrame: 'input',
   }
 }

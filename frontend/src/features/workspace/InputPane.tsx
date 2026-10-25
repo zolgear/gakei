@@ -22,7 +22,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fmt, useI18n } from '../../i18n'
+import { useI18n } from '../../i18n'
 import { isMobileViewport } from '../../lib/viewport'
 import { listPromptSets, type AssetDetail } from '../../api/client'
 import { useRunFormLogic } from '../run-form/useRunFormLogic'
@@ -361,13 +361,14 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
   const sketchEditorState = editLogic.sketchEditor
 
-  // 領域の指示(ADR-0053)を描く下地。主たる入力、または入力画像の無い Run の白紙(出力の大きさ。
-  // ComfyUI は出力の大きさの決まり方(幅・高さの項目や Resolution Selector)とフォームの今の値から、
-  // ほかは出力サイズの設定から。6章)。
-  const regionCanvas: RegionCanvas | null = editLogic.positionZeroAsset
-    ? { kind: 'asset', asset: editLogic.positionZeroAsset }
-    : form.regionsBlank
-      ? { kind: 'blank', ...blankCanvasSize(form.defs, form.rawParams, blankSketchSize, form.regionsOutputSize) }
+  // 領域の指示(ADR-0053)を描く下地。主たる入力、または白紙(出力の大きさ。ComfyUI は出力の大きさの
+  // 決まり方(幅・高さの項目や Resolution Selector)とフォームの今の値から、ほかは出力サイズの設定から。
+  // 6章)。白紙は入力画像の無い Run と、入力画像があって白紙の土台を選んだとき(1章「四角の土台を選ぶ」)。
+  const regionBlankCanvas = blankCanvasSize(form.defs, form.rawParams, blankSketchSize, form.regionsOutputSize)
+  const regionCanvas: RegionCanvas | null = form.regionsBlank
+    ? { kind: 'blank', ...regionBlankCanvas }
+    : editLogic.positionZeroAsset
+      ? { kind: 'asset', asset: editLogic.positionZeroAsset }
       : null
 
   const compositeEditorState = editLogic.compositeEditor
@@ -414,9 +415,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
   if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
-  if (form.imageInputCount > form.maxInputImages) {
-    blockReasons.push(fmt(ip.maxInputImagesExceeded, { max: form.maxInputImages }))
-  }
+  if (form.inputsBlockReason) blockReasons.push(form.inputsBlockReason)
   if (form.inputCountRequirementReason) blockReasons.push(form.inputCountRequirementReason)
   if (form.providerUnavailableReason) blockReasons.push(form.providerUnavailableReason)
   if (!form.operationSupported) {
@@ -535,12 +534,15 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       count: form.regions.length,
       onOpen: () => setRegionEditorOpen(true),
       onClear: form.clearRegions,
-      hasOverlay: form.regions.length > 0 || (primaryDetections.selected?.regions.length ?? 0) > 0,
+      // 白紙の土台の四角は1枚目に重ねない(補助のプレビューも出さない)。
+      hasOverlay:
+        !form.regionsBlank && (form.regions.length > 0 || (primaryDetections.selected?.regions.length ?? 0) > 0),
       overlayShown: regionAssistOpen,
       onToggleOverlay: () => setRegionAssistOpen(!regionAssistOpen),
       blank: form.regionsBlank,
       boxes: form.regions,
       blankCanvas: regionCanvas?.kind === 'blank' ? { width: regionCanvas.width, height: regionCanvas.height } : undefined,
+      primaryUsable: form.inputsUsable,
     },
   }
   const inputImages =
@@ -681,7 +683,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     promptAssist: (
       <RegionPromptAssist
         asset={editLogic.positionZeroAsset}
-        enabled={form.regionsSupported}
+        enabled={form.regionsSupported && !form.regionsBlank}
         regions={form.regions}
         showChips={form.promptTemplate === null}
         onInsert={insertRegionText}
@@ -751,15 +753,16 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
       {regionEditorOpen && regionCanvas && (
         <RegionEditor
-          canvas={regionCanvas}
+          canvases={{ input: form.inputsUsable ? (editLogic.positionZeroAsset ?? null) : null, output: regionBlankCanvas }}
+          initialFrame={form.regionsFrame}
           initialRegions={form.regions}
           inputAssetIds={editLogic.images.map((i) => i.assetId)}
           maxInputImages={form.maxInputImages}
           delivery={form.regionsDelivery}
           kinds={form.regionsKinds}
           referenceImages={form.regionsReferenceImages}
-          onSave={(regions) => {
-            form.setRegions(regions)
+          onSave={(regions, frame) => {
+            form.setRegions(regions, frame)
             setRegionEditorOpen(false)
           }}
           onCancel={() => setRegionEditorOpen(false)}

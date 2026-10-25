@@ -2022,7 +2022,9 @@
       "maskRequiredReason": "このモデルの実行にはマスクが必要です",
       "inputCountRequirement": "入力画像が{min}枚必要です(現在{current}枚)",
       "providerUnavailableDefault": "このプロバイダーには接続できません",
-      "compositeRedrawing": "配置を出力サイズに合わせて描き直しています"
+      "compositeRedrawing": "配置を出力サイズに合わせて描き直しています",
+      "noImageInputs": "このモデルは入力画像を使いません",
+      "noImageInputsPresent": "このモデルは入力画像を使いません。入力画像を外してください"
     },
     "unspecifiedLabel": {
       "unspecified": "未指定",
@@ -2058,6 +2060,7 @@
     "runFormLogic": {
       "droppedParamsSettings": "{names} は現在の設定では使えないため未指定に戻しました",
       "droppedParamsInputs": "{names} は現在の入力では使えないため未指定に戻しました",
+      "droppedParamsModel": "{names} はこのモデルでは使えないため未指定に戻しました",
       "submitFailedDefault": "実行の開始に失敗しました",
       "listSeparator": "、"
     },
@@ -3841,7 +3844,7 @@
     "saveBlocked": "直すところがあるため保存できません。",
     "notes": {
       "imageAndText": "OpenAI には、四角を描いた画像を入力に足し、四角ごとの指示を文にしてプロンプトの後ろに足して送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
-      "imageAndTextBlank": "OpenAI には、白紙に四角を描いた配置図を入力にし、四角ごとの指示を文にしてプロンプトの後ろに足して、編集(Edit)で送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
+      "imageAndTextBlank": "OpenAI には、白紙に四角を描いた配置図を入力に足し、四角ごとの指示を文にしてプロンプトの後ろに足して、編集(Edit)で送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
       "countsTowardLimit": "四角を描いた画像と参照画像も、入力画像の枚数({max} 枚まで)に数えます。",
       "comfyuiBboxes": "ComfyUI には、四角をワークフローの Create Bounding Boxes に差し込んで送ります。指示(無ければ名前)を四角の説明に、描く文字を文字の四角にします。選べる種類は「変える」「足す」だけです。"
     },
@@ -3889,7 +3892,7 @@
     "runDetail": {
       "heading": "領域の指示",
       "delivery": "四角を描いた画像を入力に足し、指示をプロンプトの後ろに足して送りました。",
-      "deliveryBlank": "白紙に四角を描いた配置図を入力にし、指示をプロンプトの後ろに足して、編集(Edit)で送りました。",
+      "deliveryBlank": "白紙に四角を描いた配置図を入力に足し、指示をプロンプトの後ろに足して、編集(Edit)で送りました。",
       "textLine": "描く文字: 「{text}」",
       "reference": "参照画像",
       "noInstruction": "(指示なし)",
@@ -3898,7 +3901,7 @@
       "overlayImage": "送った四角の画像",
       "appendedToggle": "足した文(領域の指示)",
       "deliveryComfyui": "四角を ComfyUI の Create Bounding Boxes に差し込んで送りました。",
-      "frameOutput": "入力画像が無いので、四角の位置は出力の大きさに対する割合です。"
+      "frameOutput": "四角は白紙に描いたので、位置は出力の大きさに対する割合です。"
     },
     "assist": {
       "heading": "領域と検出の候補",
@@ -3919,7 +3922,13 @@
       "candidateChipTitle": "検出の候補(まだ送られません)。押すと名前を入れ、この候補を四角にします",
       "candidateNote": "点線の候補は送られません。チップを押すか領域の画面で四角にしたものだけが、四角を描いた画像と文として送られます。"
     },
-    "blankHint": "入力画像が無いので、出力の大きさ(幅 × 高さ)の白紙の上に描きます。四角は大きさに対する割合で持つので、幅・高さを変えても四角は一緒に伸び縮みします。入力画像を足すと、この四角は外れます。",
-    "blankButtonTitle": "出力の大きさの白紙に四角を描き、四角ごとに名前や指示を付ける"
+    "blankHint": "出力の大きさ(幅 × 高さ)の白紙の上に描きます。四角は大きさに対する割合で持つので、幅・高さを変えても四角は一緒に伸び縮みします。",
+    "blankButtonTitle": "出力の大きさの白紙に四角を描き、四角ごとに名前や指示を付ける",
+    "frame": {
+      "label": "四角の土台",
+      "input": "1枚目の画像",
+      "output": "白紙",
+      "kindsBlocked": "白紙では「そのまま残す」「消す」「動かす」の四角を使えません。種類を変えてから切り替えてください。"
+    }
   }
 }

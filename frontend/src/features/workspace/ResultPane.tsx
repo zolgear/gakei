@@ -69,6 +69,7 @@ import { resolveChoiceLabel } from '../run-form/paramLabels'
 import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/assetRestore'
 import { addAsInput, isUsedAsInput } from './useAsInputToggle'
 import { addImageInputs } from '../run-form/editInputs'
+import { inputsRejectedMessage } from '../run-form/submitChecks'
 import { resolveResultOrigin } from './resultOrigin'
 import { setStudioResultAssetId } from './studioResultStore'
 import { buildStudioPath } from './assetQueryParam'
@@ -488,7 +489,9 @@ export function ResultPane({
       if (addedNoticeTimeoutRef.current) clearTimeout(addedNoticeTimeoutRef.current)
       addedNoticeTimeoutRef.current = setTimeout(() => setAddedNotice(false), ADDED_NOTICE_MS)
     } else if (result.rejected) {
-      setToggleError(fmt(rp.inputLimitReached, { max: maxInputImagesForToggle }))
+      setToggleError(
+        inputsRejectedMessage(maxInputImagesForToggle, fmt(rp.inputLimitReached, { max: maxInputImagesForToggle })),
+      )
     }
   }
 
@@ -497,7 +500,9 @@ export function ResultPane({
     setToggleError(null)
     const result = addImageInputs(formState.inputs, [assetId], maxInputImagesForToggle)
     if (result.addedCount === 0) {
-      setToggleError(fmt(rp.inputLimitReached, { max: maxInputImagesForToggle }))
+      setToggleError(
+        inputsRejectedMessage(maxInputImagesForToggle, fmt(rp.inputLimitReached, { max: maxInputImagesForToggle })),
+      )
       return
     }
     setFormState({ ...formState, inputs: result.inputs })

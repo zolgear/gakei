@@ -57,10 +57,12 @@ export function InputImageTiles({
   const [isDragOver, setIsDragOver] = useState(false)
   const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
 
+  // 1枚目の上に四角を描けるモデルか(入力画像を受けないモデルでは白紙だけ)。
+  const regionsOnPrimary = regions.supported && regions.primaryUsable !== false
   // 1枚目の上に領域を描けるか(タイルの操作のバンドと同じ条件)。
   const primary = images[0]
   const primaryRegionsUsable =
-    regions.supported &&
+    regionsOnPrimary &&
     primary !== undefined &&
     detailsByAssetId.get(primary.assetId)?.content_withheld !== true &&
     !notFoundAssetIds.has(primary.assetId) &&
@@ -170,7 +172,8 @@ export function InputImageTiles({
                 detail && <span className={styles.dims}>{`${detail.width}×${detail.height}`}</span>
               )}
 
-              {isPrimary && regions.supported && regions.count > 0 && !isWithheld && (
+              {/* 白紙の土台の四角は1枚目に付かない(数は白紙のタイルに出す)。 */}
+              {isPrimary && regionsOnPrimary && regions.count > 0 && !regions.blank && !isWithheld && (
                 <span className={styles.regionsBadge}>
                   <button
                     type="button"
@@ -255,7 +258,7 @@ export function InputImageTiles({
                   </button>
                 )}
 
-                {isPrimary && regions.supported && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
+                {isPrimary && regionsOnPrimary && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
                   <button
                     type="button"
                     className={styles.actionButton}
@@ -267,7 +270,7 @@ export function InputImageTiles({
                   </button>
                 )}
 
-                {isPrimary && regions.supported && regions.hasOverlay && !isWithheld && (
+                {isPrimary && regionsOnPrimary && regions.hasOverlay && !isWithheld && (
                   <button
                     type="button"
                     className={styles.actionButton}
@@ -347,8 +350,9 @@ export function InputImageTiles({
         </button>
 
         {/* 入力画像があるときの領域(ADR-0053)。1枚目の上の四角を描く。タイルの操作のバンドはホバーで
-            しか見えない(タッチでは出ない)ので、スケッチ・配置と同じ並びにも常に出す。 */}
-        {primaryRegionsUsable && (
+            しか見えない(タッチでは出ない)ので、スケッチ・配置と同じ並びにも常に出す。白紙の土台の四角が
+            あるときは、下の白紙のタイルを出す。 */}
+        {primaryRegionsUsable && !(regions.blank && regions.count > 0) && (
           <button
             type="button"
             className={styles.addTile}
@@ -361,9 +365,11 @@ export function InputImageTiles({
           </button>
         )}
 
-        {/* 入力画像の無い Run の白紙の領域(ADR-0053 6章)。四角を付けたら、入力画像のタイルと同じ形で
-            白紙の配置図のプレビューを出し、数と外すボタンを重ねる。 */}
-        {regions.blank && images.length === 0 &&
+        {/* 白紙の領域(ADR-0053 6章・1章)。四角を付けたら、入力画像のタイルと同じ形で白紙の配置図の
+            プレビューを出し、数と外すボタンを重ねる(入力画像があっても)。四角が無ければ、入力画像の
+            無いときだけ「領域」を出す(あるときは上の1枚目の「領域」から開く)。 */}
+        {regions.blank &&
+          (regions.count > 0 || images.length === 0 || regions.primaryUsable === false) &&
           (regions.count > 0 && regions.boxes && regions.blankCanvas ? (
             <div className={styles.tile}>
               <button

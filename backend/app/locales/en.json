@@ -631,6 +631,7 @@
     },
     "prompt": {
       "header": "Region instructions: image {overlay} is image 1 with numbered colored boxes drawn on top. The boxes show the approximate location and size. Edit image 1. When the text above mentions a box by its number (such as \"Box 1\") or by its name, it means the area of that box in the list below. Where a box has its own instruction, follow it.",
+      "headerBlankWithInputs": "Region instructions: image {overlay} is a layout sketch: numbered colored boxes on a blank canvas. Each box shows where an object goes and how large it is. Create a new image that places the objects as in the layout sketch. Use the other images as references. When the text above mentions a box by its number (such as \"Box 1\") or by its name, it means the area of that box in the list below. Where a box has its own instruction, follow it.",
       "headerBlank": "Region instructions: image 1 is a layout sketch: numbered colored boxes on a blank canvas. Each box shows where an object goes and how large it is. Create a new image that places the objects as in the layout sketch. When the text above mentions a box by its number (such as \"Box 1\") or by its name, it means the area of that box in the list below. Where a box has its own instruction, follow it.",
       "where": " (x {left}–{right}%, y {top}–{bottom}% of the image)",
       "area": "The area at x {left}–{right}%, y {top}–{bottom}% of the image.",
@@ -650,6 +651,7 @@
       "footer": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image.",
       "footerBlank": "The blank background, boxes and numbers of the layout sketch are only markers. Do not draw them; fill the whole frame with the scene."
     },
+    "kindNotOnBlank": "The type of box {number} cannot be used on a blank canvas. Use Change or Add",
     "kindNotSupported": "The type of box {number} cannot be used with this provider or model",
     "referenceNotSupported": "Reference images on box {number} cannot be used with this provider or model. Remove the reference image"
   },

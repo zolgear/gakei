@@ -129,6 +129,12 @@ export function LineageAssetInspectorContent({ assetId, onOpenRun }: LineageAsse
         )}
       </div>
 
+      {addToInputs.error && (
+        <p className={styles.deleteErrorText} role="status">
+          {addToInputs.error}
+        </p>
+      )}
+
       <ExportLineageDialog open={exportOpen} assetId={asset.id} onClose={() => setExportOpen(false)} />
 
       <AddToInputsDialog

@@ -1128,6 +1128,10 @@ class RunCreateRequest(BaseModel):
     # (`OperationCapabilities.supports_regions`)。主たる入力があればそれに対する割合、入力画像の
     # 無い Run(ComfyUI。6章)では出力の大きさに対する割合。番号は重ねられない。
     regions: list[RegionBox] = Field(default_factory=list, max_length=REGIONS_MAX)
+    # 四角を描いた土台(ADR-0053 1章「四角の土台を選ぶ」)。`input` は主たる入力の上、`output` は
+    # 出力の大きさの白紙の上。省略時は、主たる入力があれば `input`、無ければ `output`。入力画像が
+    # あっても `output` を選べる(参考の画像を入力に入れたまま、白紙で構図を指示する)。
+    regions_frame: Literal["input", "output"] | None = None
 
     @model_validator(mode="after")
     def _unique_region_numbers(self) -> RunCreateRequest:

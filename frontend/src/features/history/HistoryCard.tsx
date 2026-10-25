@@ -6,7 +6,7 @@
 import { Link } from 'react-router'
 import type { RunSummary } from '../../api/client'
 import { UserAvatar } from '../../components/UserAvatar'
-import { isLayoutSketchRun, stripAppendedText } from '../regions/regions'
+import { addedLayoutSketch, isLayoutSketchPrimaryRun, stripAppendedText } from '../regions/regions'
 import {
   formatDateTime,
   formatDuration,
@@ -48,9 +48,10 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   const { t } = useI18n()
   const outputs = run.outputs ?? []
   const shownOutput = outputs[outputIndex] ?? outputs[0]
-  // 白紙の配置図(ADR-0053 5章)は入力に数えず、親としても見せない(生成として扱う)。
-  const layoutSketch = isLayoutSketchRun(run.regions)
-  const inputCount = layoutSketch ? Math.max(0, run.input_count - 1) : run.input_count
+  // 白紙の配置図(ADR-0053 5章・1章)は入力に数えない。配置図が主たる入力の Run(入力画像の無い Run)
+  // では親としても見せない(生成として扱う)。入力画像があって白紙を選んだ Run の親は利用者の1枚目。
+  const layoutSketchPrimary = isLayoutSketchPrimaryRun(run)
+  const inputCount = addedLayoutSketch(run.regions) ? Math.max(0, run.input_count - 1) : run.input_count
   const hasInputs = inputCount > 0
   const accentClass = hasInputs ? styles.dotEdit : styles.dotGenerate
   // 従来のカード(検索のページ)はパラメーターのチップを今のまま出す。重ねるカード(履歴の「詳細」)は、
@@ -64,7 +65,7 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
   const regionCount = labels.regionCount
   const tokenLabel = formatTokenCount(run.usage)
   const parentAssetId = run.primary_parent_asset_id
-  const shownParentAssetId = layoutSketch ? null : parentAssetId
+  const shownParentAssetId = layoutSketchPrimary ? null : parentAssetId
   const extraInputCount = inputCount > 1 ? inputCount - 1 : 0
 
   // 画像領域は出力があればそのビューアへ、出力が無く実行中・待機中ならスタジオの生成画面へ、
