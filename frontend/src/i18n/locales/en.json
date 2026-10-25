@@ -86,7 +86,8 @@
       "graph": "Lineage graph",
       "history": "History",
       "search": "Search",
-      "assistant": "Assistant"
+      "assistant": "Assistant",
+      "assistantTitle": "Assistant (Alt+A)"
     },
     "sidebar": {
       "resourcePanel": "Resource panel",

@@ -3,6 +3,7 @@
  * 系列グラフ/履歴/検索を切り替える。
  * 一番下はアシスタント(ADR-0048 2章)の浮いた窓を開く/閉じるボタン。パネルの切り替えではない。
  * 管理者が有効にして使える状態のときだけ出す(`assistant`)。
+ * ツールチップは `title`。アシスタントだけショートカット(Alt+A)を添える。
  */
 import type { ReactNode } from 'react'
 import type { PanelId } from './panelStorage'
@@ -118,6 +119,7 @@ export function IconRail({ selected, onSelect, assistant }: IconRailProps) {
           key={item.id}
           type="button"
           aria-label={item.label}
+          title={item.label}
           aria-pressed={selected === item.id}
           className={styles.item}
           data-active={selected === item.id}
@@ -132,6 +134,7 @@ export function IconRail({ selected, onSelect, assistant }: IconRailProps) {
           aria-label={t.shell.iconRail.assistant}
           aria-pressed={assistant.open}
           aria-keyshortcuts="Alt+A"
+          title={t.shell.iconRail.assistantTitle}
           className={`${styles.item} ${styles.bottomItem}`}
           data-active={assistant.open}
           onClick={assistant.onToggle}

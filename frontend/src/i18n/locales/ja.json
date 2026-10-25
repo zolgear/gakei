@@ -86,7 +86,8 @@
       "graph": "系列グラフ",
       "history": "履歴",
       "search": "検索",
-      "assistant": "アシスタント"
+      "assistant": "アシスタント",
+      "assistantTitle": "アシスタント (Alt+A)"
     },
     "sidebar": {
       "resourcePanel": "リソースパネル",
