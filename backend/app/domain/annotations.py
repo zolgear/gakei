@@ -228,6 +228,68 @@ def _touch(db: Session, asset_id: uuid.UUID) -> None:
     row.updated_at = _utcnow()
 
 
+# -- 変更前の状態と復元(アシスタントの「元に戻す」。ADR-0048 13章) -----------------
+# 状態は JSON にそのまま入る dict。タグの行は {"source", "score", "removed"}(行が無ければ None)、
+# タイトルは {"title", "title_source"}(注釈の行が無ければ両方 None)。
+
+
+def tag_row_state(db: Session, asset_id: uuid.UUID, tag_id: uuid.UUID) -> dict[str, Any] | None:
+    row = db.get(AssetTag, (asset_id, tag_id))
+    if row is None:
+        return None
+    return {"source": row.source, "score": row.score, "removed": bool(row.removed)}
+
+
+def tag_id_by_name(db: Session, name: str) -> uuid.UUID | None:
+    return db.execute(select(Tag.id).where(Tag.name == name)).scalar_one_or_none()
+
+
+def restore_tag_row(
+    db: Session, asset_id: uuid.UUID, tag_id: uuid.UUID, state: dict[str, Any] | None
+) -> None:
+    """(画像, タグ) の行を `state` に戻す。None は行を消す(付いていなかった)。自動のタグは
+    `source = auto` とスコアのまま戻るので、以後の再推定でも自動のタグとして扱われる。"""
+    row = db.get(AssetTag, (asset_id, tag_id))
+    if state is None:
+        if row is not None:
+            db.delete(row)
+    else:
+        source = SOURCE_AUTO if state.get("source") == SOURCE_AUTO else SOURCE_USER
+        score = state.get("score")
+        score = float(score) if isinstance(score, int | float) else None
+        removed = bool(state.get("removed"))
+        if row is None:
+            db.add(
+                AssetTag(
+                    asset_id=asset_id, tag_id=tag_id, source=source, score=score, removed=removed
+                )
+            )
+        else:
+            row.source = source
+            row.score = score
+            row.removed = removed
+    _touch(db, asset_id)
+    db.flush()
+
+
+def title_state(db: Session, asset_id: uuid.UUID) -> dict[str, Any]:
+    row = db.get(AssetAnnotation, asset_id)
+    if row is None:
+        return {"title": None, "title_source": None}
+    return {"title": row.title, "title_source": row.title_source}
+
+
+def restore_title(db: Session, asset_id: uuid.UUID, state: dict[str, Any]) -> None:
+    """タイトルと `title_source` を `state` に戻す(`auto` に戻せば再推定で入れ替わる)。"""
+    row = _get_or_create_annotation(db, asset_id)
+    title = state.get("title")
+    source = state.get("title_source")
+    row.title = title if isinstance(title, str) else None
+    row.title_source = source if source in (SOURCE_AUTO, SOURCE_USER) else None
+    row.updated_at = _utcnow()
+    db.flush()
+
+
 # -- 自動推定の結果の反映 ----------------------------------------------------------
 
 

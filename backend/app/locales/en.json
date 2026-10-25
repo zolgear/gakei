@@ -1170,6 +1170,7 @@
     "runsPerMessageLimit": "No run was created: it would exceed the limit of {limit} runs per message ({used} created in this message)",
     "hourlyRunLimit": "No run was created: it would exceed the assistant's limit of {limit} runs per hour ({used} in the last hour)",
     "undoConflict": "Cannot undo: the target has been changed or deleted since",
+    "undoStockConflict": "Cannot undo: every image has been changed or deleted since",
     "undoNotAvailable": "This message is not a write that can be undone",
     "undoAlreadyDone": "Already undone"
   },

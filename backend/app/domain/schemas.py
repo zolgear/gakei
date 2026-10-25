@@ -3079,6 +3079,8 @@ class PublicShareResponse(BaseModel):
 ASSISTANT_ATTACHMENTS_MAX = 4
 ASSISTANT_TEXT_MAX = 20_000
 ASSISTANT_TITLE_MAX = 100
+# ストックの選択モードで選んでいる画像を送る上限(ADR-0048 13章)。
+ASSISTANT_SELECTED_MAX = 200
 
 
 class AssistantConversationResponse(BaseModel):
@@ -3099,6 +3101,18 @@ class AssistantConversationCreateRequest(BaseModel):
 
 class AssistantConversationUpdateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=ASSISTANT_TITLE_MAX)
+
+
+class AssistantUndoResult(BaseModel):
+    """ストックの整理を戻した結果(ADR-0048 13章)。戻すのは書き込んだ直後から変わっていない
+    画像だけで、`restored` が戻した枚数、`skipped` が変わっていたので戻さなかった枚数。
+    `group_deleted` は作ったグループを消した、`group_kept` は別の画像が入っていたので
+    消さなかった。"""
+
+    restored: int
+    skipped: int
+    group_kept: bool = False
+    group_deleted: bool = False
 
 
 class AssistantToolCallView(BaseModel):
@@ -3135,6 +3149,8 @@ class AssistantMessageResponse(BaseModel):
     run_ids: list[uuid.UUID] = Field(default_factory=list)
     undoable: bool = False
     undone_at: datetime | None = None
+    # ストックの整理を戻した結果(ADR-0048 13章)。それ以外の書き込みと、戻す前は null。
+    undo_result: AssistantUndoResult | None = None
 
 
 class AssistantConversationDetailResponse(AssistantConversationResponse):
@@ -3162,6 +3178,11 @@ class AssistantFormState(BaseModel):
     # いないときは null。`view_result` が引数の無いときに見る。フォームの値ではないので
     # `update_form` では変わらない。
     result_asset_id: uuid.UUID | None = None
+    # ストックの選択モードで選んでいる画像(ADR-0048 13章)。選んでいなければ空。
+    # フォームの値ではないので `update_form` では変わらない。
+    selected_asset_ids: list[uuid.UUID] = Field(
+        default_factory=list, max_length=ASSISTANT_SELECTED_MAX
+    )
 
 
 class AssistantMessageCreateRequest(BaseModel):
@@ -3175,10 +3196,13 @@ class AssistantMessageCreateRequest(BaseModel):
 
 class AssistantUndoResponse(BaseModel):
     """「元に戻す」の結果。`message` は戻した tool のメッセージ(`undone_at` が入る)、
-    `prompt_set` は戻した後のセット(作成を取り消したときは null)。"""
+    `prompt_set` は戻した後のセット(作成を取り消したときと、ストックの整理では null)、
+    `undo_result` はストックの整理で戻した枚数と飛ばした枚数。"""
 
     message: AssistantMessageResponse
     prompt_set: PromptSetResponse | None = None
+    # ストックの整理を戻したとき(ADR-0048 13章)。
+    undo_result: AssistantUndoResult | None = None
 
 
 # SSE のイベント(`POST /api/assistant/conversations/{id}/messages` の応答)。各イベントは
