@@ -70,7 +70,7 @@ import { shouldShowNotRestorableNote, shouldShowRestoreButton } from '../../lib/
 import { addAsInput, isUsedAsInput } from './useAsInputToggle'
 import { addImageInputs } from '../run-form/editInputs'
 import { inputsRejectedMessage } from '../run-form/submitChecks'
-import { resolveResultOrigin } from './resultOrigin'
+import { mobileResultCollapse, resolveResultOrigin } from './resultOrigin'
 import { setStudioResultAssetId } from './studioResultStore'
 import { buildStudioPath } from './assetQueryParam'
 import { invalidateAssetGroupQueries } from '../stock/groups/assetGroupQueries'
@@ -338,6 +338,9 @@ export function ResultPane({
     primaryParentAssetId,
   })
   const effectiveAssetId = origin.assetId
+  // 狭い幅では、まだ見せるものが無い間(空状態)は結果エリアを畳み、入力欄を最初の画面に収める。
+  // ComfyUI のワークフローを見られるときは、切り替えのヘッダーだけ残す(CSS の @media が効かせる)。
+  const mobileCollapse = mobileResultCollapse(origin.kind, comfyWorkflowId !== null, showWorkflow)
 
   // `?asset=` が無く、追っている Run が終わっているときは Run 詳細(プロンプト・出力・設定)を
   // 結果エリアに出す(2026-09-26。系列パネルやストックから Run を選んで、入力欄を残したまま
@@ -531,7 +534,7 @@ export function ResultPane({
     isInputPreview && asset ? fmt(rp.inputPrefix, { width: asset.width, height: asset.height }) : metaParts.join(' · ')
 
   return (
-    <div className={styles.pane} ref={paneRef}>
+    <div className={styles.pane} ref={paneRef} data-mobile-collapse={mobileCollapse ?? undefined}>
       <div className={styles.header}>
         <div className={styles.modeGroup} role="group" aria-label={rp.viewModeGroup}>
           <button

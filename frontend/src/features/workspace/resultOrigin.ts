@@ -33,3 +33,21 @@ export function resolveResultOrigin(input: ResolveResultOriginInput): ResultOrig
   }
   return { kind: 'empty', assetId: null }
 }
+
+/**
+ * 狭い幅(768px 未満)で結果エリアをどこまで畳むか。空状態(見せるものが無い)のときだけ畳む。
+ * - 'all': 結果エリアごと出さない(切り替えのボタンもすべて押せないので)。
+ * - 'body': ComfyUI のワークフローを見られるので、切り替えのヘッダーだけ残す。
+ * - null: 畳まない(ワークフローを表示中を含む)。
+ * 広い幅では使わない(CSS の @media の中でだけ効かせる)。
+ */
+export type MobileResultCollapse = 'all' | 'body'
+
+export function mobileResultCollapse(
+  kind: ResultOriginKind,
+  hasWorkflowView: boolean,
+  showingWorkflow: boolean,
+): MobileResultCollapse | null {
+  if (kind !== 'empty' || showingWorkflow) return null
+  return hasWorkflowView ? 'body' : 'all'
+}
