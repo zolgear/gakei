@@ -19,8 +19,8 @@ export function AssistantPanel() {
   const a = t.assistant
   const { state, send, stop } = useAssistantSession()
   const items = useMemo(
-    () => buildTimeline(state.messages, state.pendingCalls, state.streamingText),
-    [state.messages, state.pendingCalls, state.streamingText],
+    () => buildTimeline(state.messages, state.pendingCalls, state.streamingText, state.pendingPermissions),
+    [state.messages, state.pendingCalls, state.streamingText, state.pendingPermissions],
   )
   const [attachments, setAttachmentsState] = useState<string[]>([])
   // 「すべて添付」は足した結果をすぐ返すので、最新の値を ref でも持つ。

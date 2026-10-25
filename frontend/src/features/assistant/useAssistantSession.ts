@@ -1,6 +1,6 @@
 /** アシスタントの会話の状態(AssistantSessionProvider)を読むためのコンテキストとフック。 */
 import { createContext, useContext } from 'react'
-import type { AssistantMessageResponse } from '../../api/client'
+import type { AssistantMessageResponse, AssistantPermissionAnswer } from '../../api/client'
 import type { AssistantSessionState } from './assistantSession'
 import type { FormWriteRecord } from './formWrite'
 
@@ -22,6 +22,8 @@ export interface AssistantSessionValue {
   formWrites: Readonly<Record<string, FormWriteRecord>>
   /** 書き込みを元に戻す(反映の直前のフォームの値に戻す)。記録が無ければ何もしない。 */
   undoFormWrite: (messageId: string) => void
+  /** 画像を LLM に送る前の許可に答える(ADR-0048 14.1)。届かなければ例外(もう一度選べる)。 */
+  answerPermission: (requestId: string, answer: AssistantPermissionAnswer) => Promise<void>
 }
 
 export const AssistantSessionContext = createContext<AssistantSessionValue | null>(null)

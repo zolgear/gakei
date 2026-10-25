@@ -15,7 +15,7 @@ import uuid
 from collections.abc import Callable
 from typing import Any, Literal
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
@@ -32,8 +32,14 @@ from app.domain.visibility import asset_visible, get_visible_group, visible_asse
 
 # 1回の検索で返す件数の上限(REST の検索と同じ)。
 SEARCH_LIMIT_MAX = SEARCH_MAX_LIMIT
+# `offset` で読める範囲の上限(先頭からの件数。アシスタントの続きの読み込み。ADR-0048 14.4)。
+SEARCH_WINDOW_MAX = 500
 
-SearchMode = Literal["keyword", "semantic"]
+SearchMode = Literal["keyword", "semantic", "hybrid"]
+# Reciprocal Rank Fusion の定数(ADR-0048 14.2)。
+RRF_K = 60
+# hybrid で文字・意味のそれぞれから引く候補の最小の件数。
+HYBRID_FETCH_MIN = 100
 AssetBrief = Callable[[Asset], dict[str, Any]]
 
 
@@ -133,6 +139,91 @@ def scored_items(
     return _decorate(db, viewer, assets, brief, scores=scores), assets
 
 
+def _semantic_hits(
+    db: Session,
+    state: Any,
+    viewer: CurrentUser,
+    *,
+    query: str,
+    kind: str | None,
+    group_id: uuid.UUID | None,
+    tag: str | None,
+    fetch: int,
+) -> tuple[list[tuple[uuid.UUID, float]], Any]:
+    """意味の検索の候補(類似度の高い順に `fetch` 件まで)。失敗は `SEMANTIC_ERRORS`。"""
+    response = semantic_domain.semantic_search(
+        db,
+        settings=state.settings,
+        index=state.vector_index,
+        engines=state.embedder.engines,
+        cache=state.query_vector_cache,
+        viewer=viewer,
+        q=query,
+        limit=fetch,
+        group_id=group_id,
+        tag=tag,
+        kind=kind,
+    )
+    return [(h.id, h.score) for h in response.assets], response
+
+
+def _keyword_hits(
+    db: Session,
+    viewer: CurrentUser,
+    *,
+    query: str,
+    kind: str | None,
+    group_id: uuid.UUID | None,
+    tag: str | None,
+    fetch: int,
+) -> tuple[list[Asset], dict[uuid.UUID, str | None], bool]:
+    """文字の検索の候補(新しい順)。返すのは Asset、プロンプトの抜粋、`fetch` 件で切ったか。
+    種類とグループは検索の後で絞るので、そのときは広めに引く。"""
+    if kind is not None or group_id is not None:
+        fetch = SEARCH_WINDOW_MAX
+    try:
+        response_hits = search(db, query, viewer=viewer, limit=fetch, types={"asset"}, tag=tag)
+    except InvalidSearchQueryError as e:
+        raise AssetSearchError(str(e)) from e
+    hits = response_hits.assets
+    capped = len(hits) >= fetch
+    snippets = {h.id: h.prompt_snippet for h in hits}
+    ids = [h.id for h in hits]
+    assets_by_id = {
+        a.id: a
+        for a in db.execute(select(Asset).where(Asset.id.in_(ids), asset_visible(viewer)))
+        .scalars()
+        .all()
+    }
+    assets = [assets_by_id[i] for i in ids if i in assets_by_id]
+    if kind is not None:
+        assets = [a for a in assets if a.kind == kind]
+    if group_id is not None:
+        member_ids = set(
+            db.execute(
+                select(AssetGroupMember.asset_id).where(AssetGroupMember.asset_group_id == group_id)
+            )
+            .scalars()
+            .all()
+        )
+        assets = [a for a in assets if a.id in member_ids]
+    return assets, snippets, capped
+
+
+def reciprocal_rank_fusion(
+    rankings: list[list[uuid.UUID]], k: int = RRF_K
+) -> list[tuple[uuid.UUID, float]]:
+    """Reciprocal Rank Fusion。各順位(1 から)の `1/(k+順位)` を足し、大きい順に並べる。
+    同点は、先に渡した順位での位置が前のもの(どちらにも無ければ後の順位)を先にする。"""
+    scores: dict[uuid.UUID, float] = {}
+    first_seen: dict[uuid.UUID, tuple[int, int]] = {}
+    for which, ranking in enumerate(rankings):
+        for rank, asset_id in enumerate(ranking, start=1):
+            scores[asset_id] = scores.get(asset_id, 0.0) + 1.0 / (k + rank)
+            first_seen.setdefault(asset_id, (which, rank))
+    return sorted(scores.items(), key=lambda kv: (-kv[1], first_seen[kv[0]]))
+
+
 def search_assets(
     db: Session,
     state: Any,
@@ -145,15 +236,41 @@ def search_assets(
     group_id: uuid.UUID | None = None,
     tag: str | None = None,
     limit: int = 20,
+    offset: int = 0,
 ) -> tuple[dict[str, Any], list[Asset]]:
     """ストックを探す。`state` は FastAPI の `app.state`(settings、vector_index、embedder、
     query_vector_cache)。返すのは結果の辞書(`mode`、`items`、`truncated` など)と、結果の
-    Asset(呼ぶ側がサムネイルを付けるため)。"""
+    Asset(呼ぶ側がサムネイルを付けるため)。
+
+    - `keyword`: 文字の検索(新しい順)。語が無ければ新しい順の一覧。
+    - `semantic`: 画像の埋め込みでの検索(類似度の高い順)。埋め込みが使えなければエラー。
+    - `hybrid`(ADR-0048 14.2): 文字と意味の候補を多めに引き、Reciprocal Rank Fusion
+      (`1/(RRF_K+順位)` の和)で1つの順位にする。各件の `matched` はどちらで当たったか
+      (`keyword` / `semantic` / `both`)。埋め込みが使えない(または意味の検索が失敗した)
+      ときと、語が無いときは `keyword` にし、`fallback_reason` にその旨を入れる。
+
+    `offset` は先頭から飛ばす件数(語で探すときは `offset + limit` が `SEARCH_WINDOW_MAX`
+    まで)。`truncated` は続きがあるか。分かるときは `total`(全件数。分からなければ null)も
+    返す。絞り込み(種類、グループ、タグ)と見える範囲は3つの方式で同じ。"""
+    offset = max(0, offset)
+    text = query.strip() if query and query.strip() else None
+    ranked = mode == "semantic" or text is not None
+    if ranked and offset + limit > SEARCH_WINDOW_MAX:
+        # 語で探すときは先頭から引いて切るので、読める範囲に上限がある(一覧は無い)。
+        raise AssetSearchError(
+            f"offset + limit must be at most {SEARCH_WINDOW_MAX}. Narrow the search instead."
+        )
     tag_value = tag.strip() if tag and tag.strip() else None
     if group_id is not None and get_visible_group(db, viewer, group_id) is None:
         raise AssetSearchError(f"Group {group_id} not found.")
+    if tag_value is not None:
+        try:
+            annotations_domain.normalize_tag_name(tag_value)
+        except annotations_domain.TagNameError as e:
+            raise AssetSearchError(str(e)) from e
+
     if mode == "semantic":
-        if not query or not query.strip():
+        if text is None:
             raise AssetSearchError("semantic mode needs a query (a description of the image).")
         if kind == "mask":
             # REST(`GET /api/search/semantic`)と同じく、マスクは種類に指定できない
@@ -162,78 +279,102 @@ def search_assets(
                 "Masks have no embeddings: kind 'mask' cannot be used in semantic mode."
             )
         try:
-            response = semantic_domain.semantic_search(
+            hits, response = _semantic_hits(
                 db,
-                settings=state.settings,
-                index=state.vector_index,
-                engines=state.embedder.engines,
-                cache=state.query_vector_cache,
-                viewer=viewer,
-                q=query,
-                limit=limit,
+                state,
+                viewer,
+                query=text,
+                kind=kind,
                 group_id=group_id,
                 tag=tag_value,
-                kind=kind,
+                fetch=min(offset + limit + 1, SEARCH_WINDOW_MAX),
             )
         except SEMANTIC_ERRORS as e:
             raise semantic_error(e) from e
-        items, assets = scored_items(db, viewer, [(h.id, h.score) for h in response.assets], brief)
+        more = len(hits) > offset + limit
+        items, assets = scored_items(db, viewer, hits[offset : offset + limit], brief)
         payload = {
             "mode": "semantic",
             "model_key": response.model_key,
             "multilingual": response.multilingual,
-            "truncated": False,
+            "truncated": more,
+            "total": None if more else len(hits),
             "items": items,
         }
         return payload, assets
 
-    tag_clause = None
-    if tag_value is not None:
-        try:
-            tag_clause = annotations_domain.tag_filter(tag_value)
-        except annotations_domain.TagNameError as e:
-            raise AssetSearchError(str(e)) from e
-    snippets: dict[uuid.UUID, str | None] = {}
-    if query and query.strip():
-        try:
-            hits = search(
-                db,
-                query,
-                viewer=viewer,
-                limit=SEARCH_LIMIT_MAX,
-                types={"asset"},
-                tag=tag_value,
-            ).assets
-        except InvalidSearchQueryError as e:
-            raise AssetSearchError(str(e)) from e
-        snippets = {h.id: h.prompt_snippet for h in hits}
-        ids = [h.id for h in hits]
-        assets_by_id = {
-            a.id: a
-            for a in db.execute(select(Asset).where(Asset.id.in_(ids), asset_visible(viewer)))
-            .scalars()
-            .all()
-        }
-        assets = [assets_by_id[i] for i in ids if i in assets_by_id]
-        if kind is not None:
-            assets = [a for a in assets if a.kind == kind]
-        if group_id is not None:
-            member_ids = set(
-                db.execute(
-                    select(AssetGroupMember.asset_id).where(
-                        AssetGroupMember.asset_group_id == group_id
-                    )
+    fallback_reason: str | None = None
+    if mode == "hybrid" and text is not None:
+        if kind == "mask":
+            fallback_reason = "Masks have no embeddings, so only keyword matching was used."
+        else:
+            fetch = min(SEARCH_WINDOW_MAX, max(HYBRID_FETCH_MIN, 2 * (offset + limit)))
+            try:
+                semantic_hits, response = _semantic_hits(
+                    db,
+                    state,
+                    viewer,
+                    query=text,
+                    kind=kind,
+                    group_id=group_id,
+                    tag=tag_value,
+                    fetch=fetch,
                 )
-                .scalars()
-                .all()
-            )
-            assets = [a for a in assets if a.id in member_ids]
+            except SEMANTIC_ERRORS as e:
+                fallback_reason = (
+                    str(semantic_error(e)).replace(
+                        " Use search_assets in keyword mode instead.", ""
+                    )
+                    + " Only keyword matching was used."
+                )
+            else:
+                keyword_assets, snippets, keyword_capped = _keyword_hits(
+                    db,
+                    viewer,
+                    query=text,
+                    kind=kind,
+                    group_id=group_id,
+                    tag=tag_value,
+                    fetch=fetch,
+                )
+                return _hybrid_payload(
+                    db,
+                    viewer,
+                    brief,
+                    keyword_assets=keyword_assets,
+                    semantic_hits=semantic_hits,
+                    snippets=snippets,
+                    capped=keyword_capped or len(semantic_hits) >= fetch,
+                    offset=offset,
+                    limit=limit,
+                    model_key=response.model_key,
+                    multilingual=response.multilingual,
+                )
+    elif mode == "hybrid":
+        fallback_reason = "No query was given, so the newest images are listed."
+
+    snippets = {}
+    total: int | None = None
+    if text is not None:
+        assets, snippets, capped = _keyword_hits(
+            db,
+            viewer,
+            query=text,
+            kind=kind,
+            group_id=group_id,
+            tag=tag_value,
+            fetch=max(SEARCH_LIMIT_MAX, offset + limit + 1),
+        )
+        if not capped:
+            total = len(assets)
+        more = len(assets) > offset + limit
+        assets = assets[offset : offset + limit]
     else:
         q = select(Asset).where(Asset.deleted_at.is_(None), asset_visible(viewer))
         if kind is not None:
             q = q.where(Asset.kind == kind)
-        if tag_clause is not None:
-            q = q.where(tag_clause)
+        if tag_value is not None:
+            q = q.where(annotations_domain.tag_filter(tag_value))
         if group_id is not None:
             q = q.join(
                 AssetGroupMember,
@@ -242,13 +383,58 @@ def search_assets(
                     AssetGroupMember.asset_group_id == group_id,
                 ),
             )
-        q = q.order_by(Asset.created_at.desc(), Asset.id.desc()).limit(limit + 1)
+        total = db.execute(select(func.count()).select_from(q.subquery())).scalar_one()
+        q = q.order_by(Asset.created_at.desc(), Asset.id.desc()).offset(offset).limit(limit + 1)
         assets = list(db.execute(q).scalars().all())
+        more = len(assets) > limit
+        assets = assets[:limit]
 
-    truncated = len(assets) > limit
-    assets = assets[:limit]
     items = _decorate(db, viewer, assets, brief, snippets=snippets)
-    return {"mode": "keyword", "items": items, "truncated": truncated}, assets
+    payload: dict[str, Any] = {"mode": "keyword", "items": items, "truncated": more, "total": total}
+    if fallback_reason is not None:
+        payload["fallback_reason"] = fallback_reason
+    return payload, assets
+
+
+def _hybrid_payload(
+    db: Session,
+    viewer: CurrentUser,
+    brief: AssetBrief,
+    *,
+    keyword_assets: list[Asset],
+    semantic_hits: list[tuple[uuid.UUID, float]],
+    snippets: dict[uuid.UUID, str | None],
+    capped: bool,
+    offset: int,
+    limit: int,
+    model_key: str,
+    multilingual: bool | None,
+) -> tuple[dict[str, Any], list[Asset]]:
+    """文字と意味の候補を RRF で合わせ、合わせた順で `offset` と件数を当てる。"""
+    keyword_ids = [a.id for a in keyword_assets]
+    semantic_ids = [asset_id for asset_id, _score in semantic_hits]
+    fused = reciprocal_rank_fusion([keyword_ids, semantic_ids])
+    more = len(fused) > offset + limit
+    page = fused[offset : offset + limit]
+    items, assets = scored_items(db, viewer, page, brief)
+    keyword_set, semantic_set = set(keyword_ids), set(semantic_ids)
+    for item in items:
+        asset_id = uuid.UUID(item["asset_id"])
+        in_keyword, in_semantic = asset_id in keyword_set, asset_id in semantic_set
+        item["matched"] = (
+            "both" if in_keyword and in_semantic else ("keyword" if in_keyword else "semantic")
+        )
+        if asset_id in snippets:
+            item["prompt_snippet"] = snippets[asset_id]
+    payload = {
+        "mode": "hybrid",
+        "model_key": model_key,
+        "multilingual": multilingual,
+        "truncated": more,
+        "total": None if (more or capped) else len(fused),
+        "items": items,
+    }
+    return payload, assets
 
 
 def find_similar_assets(
@@ -259,8 +445,13 @@ def find_similar_assets(
     *,
     asset_id: uuid.UUID,
     limit: int = 12,
+    offset: int = 0,
 ) -> tuple[dict[str, Any], list[Asset]]:
-    """指定した画像に似た画像(近い順。起点は含まない)。起点が見えなければ「無い」と同じ。"""
+    """指定した画像に似た画像(近い順。起点は含まない)。起点が見えなければ「無い」と同じ。
+    `offset` は先頭から飛ばす件数。続きがあれば `truncated` が真。"""
+    offset = max(0, offset)
+    if offset + limit > SEARCH_WINDOW_MAX:
+        raise AssetSearchError(f"offset + limit must be at most {SEARCH_WINDOW_MAX}.")
     try:
         response = semantic_domain.similar_assets(
             db,
@@ -268,14 +459,21 @@ def find_similar_assets(
             index=state.vector_index,
             viewer=viewer,
             asset_id=asset_id,
-            limit=limit,
+            limit=offset + limit + 1,
         )
     except semantic_domain.EmbeddingsNotFoundError as e:
         raise AssetSearchError(f"Asset {asset_id} not found.") from e
     except SEMANTIC_ERRORS as e:
         raise semantic_error(e) from e
-    items, assets = scored_items(db, viewer, [(h.id, h.score) for h in response.assets], brief)
-    payload = {"asset_id": str(asset_id), "model_key": response.model_key, "items": items}
+    hits = [(h.id, h.score) for h in response.assets]
+    more = len(hits) > offset + limit
+    items, assets = scored_items(db, viewer, hits[offset : offset + limit], brief)
+    payload = {
+        "asset_id": str(asset_id),
+        "model_key": response.model_key,
+        "truncated": more,
+        "items": items,
+    }
     return payload, assets
 
 

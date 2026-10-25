@@ -548,8 +548,12 @@ def suggest_groups(
     scope: Scope = "ungrouped",
     granularity: Granularity = "normal",
     max_assets: int = MAX_ASSETS,
+    exclude_tag_levels: Iterable[str] = (),
 ) -> GroupSuggestionsResponse:
-    """グループの提案。埋め込みが無効・使えなければ `EmbeddingsConflictError`(409)。"""
+    """グループの提案。埋め込みが無効・使えなければ `EmbeddingsConflictError`(409)。
+
+    `exclude_tag_levels` の段階の画像は、特徴的なタグと作品の数え上げに入れない(集め方と
+    メンバーは変えない。アシスタントの X 以上。ADR-0048 14.3)。"""
     response, _naming = _suggest(
         db,
         settings=settings,
@@ -561,6 +565,7 @@ def suggest_groups(
         granularity=granularity,
         max_assets=max_assets,
         with_assets=True,
+        exclude_tag_levels=exclude_tag_levels,
     )
     return response
 
@@ -611,6 +616,7 @@ def _suggest(
     granularity: Granularity,
     max_assets: int,
     with_assets: bool,
+    exclude_tag_levels: Iterable[str] = (),
 ) -> tuple[GroupSuggestionsResponse, NamingInput]:
     active = require_active(db, settings)
     ids = candidate_ids(db, active.model_key, AssetFilter(viewer=viewer), limit=max_assets + 1)
@@ -636,6 +642,11 @@ def _suggest(
     membership = _memberships(db, ordered)
     visible_groups = _visible_groups(db, viewer)
     tags_by_asset = _english_tags(db, ordered)
+    excluded_levels = set(exclude_tag_levels)
+    if excluded_levels:
+        for asset_id, level in content_rating.bulk_levels(db, ordered).items():
+            if level in excluded_levels:
+                tags_by_asset.pop(asset_id, None)
     total = len(ordered)
     global_counts: Counter[str] = Counter()
     for names in tags_by_asset.values():

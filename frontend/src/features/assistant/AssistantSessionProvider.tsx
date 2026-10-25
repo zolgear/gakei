@@ -11,18 +11,23 @@
  * - 生成フォームの書き込み(`update_form`。ADR-0048 11章): 応答を受けている間に届いた成功の
  *   結果だけをフォームに反映する(`requestFormLoad`)。反映の直前の値を記録し、カードの
  *   「元に戻す」に使う。会話の読み込みでは反映しない。記録はこのページを開いている間だけ持つ。
+ * - 画像の許可(ADR-0048 14.1): カードの答えを `POST /api/assistant/permissions/{request_id}` で
+ *   送る。「常に許可」はユーザーの設定も変わるので、設定を取り直す。
  * - 止める: AbortController で接続を切る。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   ApiError,
+  answerAssistantPermission,
   createAssistantConversation,
   getAssistantConversation,
   openAssistantMessageStream,
   type AssistantMessageResponse,
+  type AssistantPermissionAnswer,
   type AssistantStreamEvent,
 } from '../../api/client'
+import { USER_PREFERENCES_QUERY_KEY } from '../settings/userPreferences'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { getLocale, msg } from '../../i18n'
 import { assistantFormState } from './assistantForm'
@@ -225,9 +230,34 @@ export function AssistantSessionProvider({ children }: { children: ReactNode }) 
   }, [])
   const clearErrors = useCallback(() => dispatch({ type: 'clearErrors' }), [])
 
+  const answerPermission = useCallback(
+    async (requestId: string, answer: AssistantPermissionAnswer): Promise<void> => {
+      dispatch({ type: 'permissionAnswer', requestId, answer })
+      try {
+        await answerAssistantPermission(requestId, answer)
+      } catch (error) {
+        // 届かなかったら、もう一度選べるように戻す。
+        dispatch({ type: 'permissionAnswer', requestId, answer: null })
+        throw error
+      }
+      if (answer === 'always') void queryClient.invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY })
+    },
+    [queryClient],
+  )
+
   const value = useMemo<AssistantSessionValue>(
-    () => ({ state, selectConversation, send, stop, replaceMessage, clearErrors, formWrites, undoFormWrite }),
-    [state, selectConversation, send, stop, replaceMessage, clearErrors, formWrites, undoFormWrite],
+    () => ({
+      state,
+      selectConversation,
+      send,
+      stop,
+      replaceMessage,
+      clearErrors,
+      formWrites,
+      undoFormWrite,
+      answerPermission,
+    }),
+    [state, selectConversation, send, stop, replaceMessage, clearErrors, formWrites, undoFormWrite, answerPermission],
   )
   return <AssistantSessionContext.Provider value={value}>{children}</AssistantSessionContext.Provider>
 }

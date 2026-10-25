@@ -14,12 +14,20 @@
 - 履歴: 直近から数えて `HISTORY_MAX_CHARS` 文字まで送る。発言の途中で切らない。
 - 送る前のチェック: LLM を呼ぶたびに(道具の往復を含む)、Mod の `ai.before_send`(目的
   `assistant`。ADR-0051 2章)を呼ぶ。拒否されたら、その回の応答を止めて理由をエラーで出す。
+- 画像の許可(14.1): `view_assets` と `view_result` が画像を読んだら、利用者の設定
+  (`assistant.image_send`)が `always` でなければ `permission_request` を送り、応答を開いたまま
+  答え(`POST /api/assistant/permissions/{request_id}`)を待つ。10 分・止める・切断は「許可
+  しない」。答えは tool のメッセージの `permission` に残す。
+- 送る形(14章): 道具の結果は `llm_result`(あれば)から画面用の値を落として送る。直近
+  `RECENT_TOOL_RESULTS_KEPT` 件より前の長い結果は ID と件数だけにする(14.5)。ローカルの
+  接続先のときに作った結果は、今の接続先が外部なら ID と件数だけにする(14.3)。
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -29,6 +37,7 @@ import anyio
 import anyio.to_thread
 from pydantic import BaseModel
 
+from app.assistant import llm_view
 from app.assistant.engine import (
     AssistantEngineError,
     EngineRequest,
@@ -40,6 +49,7 @@ from app.assistant.engine import (
 from app.assistant.prompts import build_system_prompt
 from app.assistant.runtime import AssistantRuntime, user_key
 from app.assistant.tools import (
+    IMAGE_PERMISSION_TOOLS,
     ToolContext,
     ToolOutcome,
     cancel_queued_runs,
@@ -49,7 +59,8 @@ from app.assistant.tools import (
 )
 from app.auth.identity import CurrentUser
 from app.domain import assistant as assistant_domain
-from app.domain import llm_connections
+from app.domain import content_rating as content_rating_domain
+from app.domain import llm_connections, user_preferences
 from app.domain.assistant_settings import AssistantConfig
 from app.domain.llm_connections import LlmTarget
 from app.domain.models import Asset, AssistantConversation, AssistantMessage
@@ -58,6 +69,7 @@ from app.domain.schemas import (
     AssistantErrorEvent,
     AssistantFormState,
     AssistantMessageEvent,
+    AssistantPermissionRequestEvent,
     AssistantRunCreatedEvent,
     AssistantTextDeltaEvent,
     AssistantToolCallEvent,
@@ -77,7 +89,11 @@ MAX_TOOL_CALLS_PER_MESSAGE = 40
 # LLM に送る履歴の上限(文字)。直近から数える(3章)。
 HISTORY_MAX_CHARS = 60_000
 # 1つの道具の結果を LLM に送る上限(文字)。
-TOOL_RESULT_MAX_CHARS = 20_000
+TOOL_RESULT_MAX_CHARS = llm_view.TOOL_RESULT_MAX_CHARS
+# 画像の許可を待つ上限(秒。14.1)。過ぎたら「許可しない」。
+PERMISSION_TIMEOUT_SECONDS = 600.0
+# 許可を待つ間に、接続を保つためのコメント行を送る間隔(秒)。
+PERMISSION_KEEPALIVE_SECONDS = 15.0
 
 
 async def _in_thread[T](fn: Callable[[], T]) -> T:
@@ -99,20 +115,41 @@ def _user_text(content: dict[str, Any]) -> str:
     attachments = content.get("attachments") or []
     if attachments:
         text += "\n\n[Attached images (asset ids): " + ", ".join(map(str, attachments)) + "]"
+    withheld = content.get("withheld_attachments") or []
+    if withheld:
+        text += (
+            "\n[Not sent (rated X or higher, external LLM connection): "
+            + ", ".join(map(str, withheld))
+            + "]"
+        )
     return text
 
 
-def _tool_text(content: dict[str, Any]) -> str:
-    payload = {"ok": bool(content.get("ok")), **(content.get("result") or {})}
+def _tool_text(
+    content: dict[str, Any], *, external: bool | None = None, compact: bool = False
+) -> str:
+    """tool のメッセージを LLM に送る文字にする。`external` は今の接続先が外部か(None は
+    分からない)。`compact` は ID と件数だけに短くする(14.5)。"""
+    name = str(content.get("name", ""))
+    raw = content.get("llm_result")
+    if not isinstance(raw, dict):
+        raw = content.get("result") or {}
+    payload = llm_view.strip_display(name, raw)
+    if external and content.get("external") is False:
+        # ローカルの接続先のときに作った結果は、外部の接続先に中身を送らない(14.3)。
+        payload = llm_view.compact_payload(payload, reason=llm_view.LOCAL_RESULT_REASON)
+    elif compact:
+        payload = llm_view.compact_payload(payload, reason=llm_view.OLD_RESULT_REASON)
+    payload = {"ok": bool(content.get("ok")), **payload}
     if content.get("undone_at"):
         payload["undone_by_user"] = True
     text = json.dumps(payload, ensure_ascii=False, default=str)
-    if len(text) > TOOL_RESULT_MAX_CHARS:
-        text = text[:TOOL_RESULT_MAX_CHARS] + "...(truncated)"
-    return text
+    return llm_view.cap_text(text, TOOL_RESULT_MAX_CHARS)
 
 
-def _to_llm(row: AssistantMessage) -> LlmMessage | None:
+def _to_llm(
+    row: AssistantMessage, *, external: bool | None = None, compact: bool = False
+) -> LlmMessage | None:
     content = row.content or {}
     if row.role == assistant_domain.ROLE_USER:
         return LlmMessage(role="user", text=_user_text(content))
@@ -130,7 +167,7 @@ def _to_llm(row: AssistantMessage) -> LlmMessage | None:
     if row.role == assistant_domain.ROLE_TOOL:
         return LlmMessage(
             role="tool",
-            text=_tool_text(content),
+            text=_tool_text(content, external=external, compact=compact),
             tool_call_id=str(content.get("tool_call_id", "")),
             name=str(content.get("name", "")),
         )
@@ -191,14 +228,29 @@ def build_history(
     current_user_message_id: uuid.UUID,
     images: dict[uuid.UUID, list[LlmImage]],
     max_chars: int = HISTORY_MAX_CHARS,
+    *,
+    external: bool | None = None,
 ) -> list[LlmMessage]:
     """保存したメッセージから LLM に送る履歴を作る。`images` はこの発言の間だけ送る画像
-    (添付と `view_assets` の結果。メッセージの id ごと)。"""
+    (添付と `view_assets` の結果。メッセージの id ごと)。
+
+    直近 `RECENT_TOOL_RESULTS_KEPT` 件より前の道具の結果で `OLD_RESULT_MAX_CHARS` 字を超える
+    ものは、画像の ID と件数だけに短くして送る(14.5。今の発言の中でも)。保存した結果は
+    変えない。"""
+    tool_ids = [row.id for row in rows if row.role == assistant_domain.ROLE_TOOL]
+    recent = set(tool_ids[-llm_view.RECENT_TOOL_RESULTS_KEPT :])
     converted: list[tuple[uuid.UUID, LlmMessage]] = []
     for row in rows:
-        message = _to_llm(row)
-        if message is not None:
-            converted.append((row.id, message))
+        message = _to_llm(row, external=external)
+        if message is None:
+            continue
+        if (
+            row.role == assistant_domain.ROLE_TOOL
+            and row.id not in recent
+            and len(message.text) > llm_view.OLD_RESULT_MAX_CHARS
+        ):
+            message = _to_llm(row, external=external, compact=True) or message
+        converted.append((row.id, message))
     paired = _pair_tool_calls(converted)
 
     # 今の発言より前は、利用者の発言の区切りで、上限に収まる範囲だけ残す。
@@ -250,6 +302,8 @@ class AssistantTurn:
             self.images[turn.user_message.id] = list(turn.attachment_images)
         # 保存していない本文(切断されたときに保存する)。
         self._pending_text: list[str] = []
+        # 許可を待っている道具の結果(切断されたときに「許可しない」で保存する。14.1)。
+        self._pending_permission: tuple[ToolCall, ToolOutcome, dict[str, Any]] | None = None
         self._finished = False
 
     def _session(self) -> Any:
@@ -262,9 +316,10 @@ class AssistantTurn:
             return message
 
     def _history(self) -> list[LlmMessage]:
+        external = self.tool_ctx.get_disclosure().external
         with self._session() as db:
             rows = assistant_domain.list_messages(db, self.turn.conversation_id)
-        return build_history(rows, self.turn.user_message.id, self.images)
+        return build_history(rows, self.turn.user_message.id, self.images, external=external)
 
     def _conversation_response(self) -> Any:
         with self._session() as db:
@@ -286,6 +341,12 @@ class AssistantTurn:
     def _on_stopped(self) -> None:
         """切断されたときの後始末(同期で行う。取り消しの通知だけは shield して送る)。"""
         try:
+            if self._pending_permission is not None:
+                call, outcome, permission = self._pending_permission
+                self._pending_permission = None
+                self.runtime.permissions.discard(str(permission["request_id"]))
+                _apply_permission(outcome, permission, "deny", "stopped")
+                self._append(assistant_domain.ROLE_TOOL, self._tool_content(call, outcome))
             if self._pending_text:
                 self._append(
                     assistant_domain.ROLE_ASSISTANT,
@@ -429,15 +490,10 @@ class AssistantTurn:
                 else:
                     tool_calls_total += 1
                     outcome = await self._execute(call)
-                tool_content = {
-                    "tool_call_id": call.id,
-                    "name": call.name,
-                    "ok": outcome.ok,
-                    "result": outcome.result,
-                    "run_ids": [str(run_id) for run_id in outcome.run_ids],
-                    "undo": outcome.undo,
-                    "undone_at": None,
-                }
+                if outcome.ok and outcome.images and call.name in IMAGE_PERMISSION_TOOLS:
+                    async for chunk in self._ask_permission(call, outcome):
+                        yield chunk
+                tool_content = self._tool_content(call, outcome)
                 tool_message = await _in_thread(
                     lambda content=tool_content: self._append(assistant_domain.ROLE_TOOL, content)
                 )
@@ -466,6 +522,88 @@ class AssistantTurn:
 
         conversation = await _in_thread(self._conversation_response)
         yield sse(AssistantDoneEvent(status=status, conversation=conversation))  # type: ignore[arg-type]
+
+    def _tool_content(self, call: ToolCall, outcome: ToolOutcome) -> dict[str, Any]:
+        """保存する tool のメッセージ。`llm_result` は LLM に送る形(画面には返さない)、
+        `external` はこの結果を作ったときの接続先が外部だったか(14.3)。"""
+        content: dict[str, Any] = {
+            "tool_call_id": call.id,
+            "name": call.name,
+            "ok": outcome.ok,
+            "result": outcome.result,
+            "run_ids": [str(run_id) for run_id in outcome.run_ids],
+            "undo": outcome.undo,
+            "undone_at": None,
+            "external": self.tool_ctx.disclosure.external
+            if self.tool_ctx.disclosure is not None
+            else None,
+        }
+        if outcome.llm_result is not None:
+            content["llm_result"] = outcome.llm_result
+        if outcome.permission is not None:
+            content["permission"] = outcome.permission
+        return content
+
+    def _ratings(self, asset_ids: list[str]) -> dict[str, str]:
+        """カードのサムネイルのマスクに使う段階(ADR-0049。未判定は入れない)。"""
+        with self._session() as db:
+            levels = content_rating_domain.bulk_levels(db, [uuid.UUID(a) for a in asset_ids])
+        return {str(k): v for k, v in levels.items()}
+
+    def _image_send_always(self) -> bool:
+        with self._session() as db:
+            values = user_preferences.load(db, self.turn.user)
+        return values[user_preferences.KEY_ASSISTANT_IMAGE_SEND] == (
+            user_preferences.IMAGE_SEND_ALWAYS
+        )
+
+    async def _ask_permission(self, call: ToolCall, outcome: ToolOutcome) -> AsyncIterator[str]:
+        """画像を送る前に利用者の許可を求める(14.1)。答えを `outcome` に書き込む。
+
+        利用者の設定が `always` なら聞かない。答えが無いまま 10 分過ぎたら「許可しない」。
+        切断されたら(ジェネレーターが閉じられたら)`_on_stopped` が「許可しない」で保存する。"""
+        if await _in_thread(self._image_send_always):
+            return
+        disclosure = await _in_thread(self.tool_ctx.get_disclosure)
+        registry = self.runtime.permissions
+        request = registry.create(user_key(self.turn.user.id), self.turn.conversation_id)
+        asset_ids = [image.label for image in outcome.images]
+        ratings = await _in_thread(lambda: self._ratings(asset_ids))
+        permission: dict[str, Any] = {
+            "request_id": request.id,
+            "asset_ids": asset_ids,
+            "content_ratings": ratings,
+            "connection_name": disclosure.connection_name,
+        }
+        self._pending_permission = (call, outcome, permission)
+        try:
+            yield sse(
+                AssistantPermissionRequestEvent(
+                    request_id=request.id,
+                    tool_call_id=call.id,
+                    asset_ids=[uuid.UUID(a) for a in asset_ids],
+                    content_ratings=ratings,
+                    connection_name=disclosure.connection_name,
+                )
+            )
+            deadline = time.monotonic() + PERMISSION_TIMEOUT_SECONDS
+            while not request.event.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                with anyio.move_on_after(min(PERMISSION_KEEPALIVE_SECONDS, remaining)):
+                    await request.event.wait()
+                if not request.event.is_set():
+                    # 接続を保つ(プロキシの無通信の切断を避ける)。SSE のコメント行。
+                    yield ": waiting for permission\n\n"
+        finally:
+            registry.discard(request.id)
+        answer = request.answer
+        self._pending_permission = None
+        if answer is None:
+            _apply_permission(outcome, permission, "deny", "timeout")
+        else:
+            _apply_permission(outcome, permission, answer, "user")
 
     async def _check_before_send(self, request: EngineRequest) -> Denial | None:
         """LLM を呼ぶ直前の `ai.before_send`(ADR-0051)。有効な購読が無ければ何もしない。"""
@@ -531,6 +669,30 @@ class AssistantTurn:
             return ToolOutcome(
                 ok=False, result={"error": f"Internal error: {e.__class__.__name__}"}
             )
+
+
+def _apply_permission(
+    outcome: ToolOutcome, permission: dict[str, Any], answer: str, reason: str
+) -> None:
+    """許可の答えを道具の結果に書き込む。「許可しない」なら画像を送らず、その旨を結果に入れる。"""
+    outcome.permission = {**permission, "answer": answer, "reason": reason}
+    if answer in ("once", "always"):
+        return
+    outcome.images = []
+    declined = {
+        "user": "The user declined to send these images to the LLM.",
+        "timeout": "The user did not answer the request to send these images in time.",
+        "stopped": "The user stopped the reply before allowing these images to be sent.",
+    }[reason]
+    for target in (outcome.result, outcome.llm_result):
+        if target is None:
+            continue
+        target["images_sent"] = False
+        target.pop("note", None)
+        target["permission_note"] = (
+            f"{declined} No image was sent. Continue with the text information only, and do "
+            "not ask to view them again unless the user asks."
+        )
 
 
 _background: set[Any] = set()

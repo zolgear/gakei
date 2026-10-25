@@ -9,6 +9,7 @@
 | `DELETE /api/assistant/conversations/{id}` | 論理削除 |
 | `POST /api/assistant/conversations/{id}/messages` | 発言を送る(応答は `text/event-stream`) |
 | `POST /api/assistant/undo/{message_id}` | 書き込みを元に戻す(プロンプトセット、ストックの整理) |
+| `POST /api/assistant/permissions/{request_id}` | 画像を LLM に送る前の許可に答える(14.1) |
 
 見えるのは本人の会話だけ(ADR-0025)。他人の会話は存在しないものと同じ 404。管理者設定
 (`/api/settings/assistant`)で無効のときは、発言の送信を 409 で断る(会話の一覧・閲覧・
@@ -39,7 +40,7 @@ from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.deps import get_session
 from app.domain import assistant as domain
-from app.domain import assistant_settings
+from app.domain import assistant_settings, user_preferences
 from app.domain.llm_connections import ConnectionNotFoundError, LlmTarget
 from app.domain.models import AssistantMessage
 from app.domain.schemas import (
@@ -49,6 +50,7 @@ from app.domain.schemas import (
     AssistantConversationResponse,
     AssistantConversationUpdateRequest,
     AssistantMessageCreateRequest,
+    AssistantPermissionAnswerRequest,
     AssistantStreamEvent,
     AssistantUndoResponse,
 )
@@ -160,6 +162,8 @@ _STREAM_DOC = """発言を送り、応答を `text/event-stream` で返す(ADR-0
 - `tool_result`: 保存した道具の結果(tool のメッセージ。書き込みは `before` / `after` と
   `undoable`)。
 - `run_created`: `generate_image` が作った Run(`run_id`)。進捗は `GET /api/runs/{id}/events`。
+- `permission_request`: 道具が画像を LLM に送る前の許可の求め(`request_id`、`asset_ids`、
+  `connection_name`)。`POST /api/assistant/permissions/{request_id}` で答えるまで待つ。
 - `error`: 止めた理由(`code` は `llm_error` / `rate_limited` / `tool_limit` / `internal`)。
 - `done`: 最後に1回(`status` は `complete` / `error` / `limit`、`conversation`)。
 
@@ -226,12 +230,15 @@ async def send_message(
         )
 
     attachment_images: list[LlmImage] = []
+    withheld_attachments: list[str] = []
     if body.attachments:
         ctx = ToolContext(state=state, user=user, config=config)
         try:
-            _briefs, attachment_images = await anyio.to_thread.run_sync(
+            briefs, attachment_images = await anyio.to_thread.run_sync(
                 lambda: load_visible_images(ctx, list(dict.fromkeys(body.attachments)))
             )
+            # 外部の接続先には X 以上の添付を送らない(ADR-0048 14.3)。画面に出すため記録する。
+            withheld_attachments = [str(b["asset_id"]) for b in briefs if b.get("withheld")]
         except ImageWithheldFailure as e:
             # ADR-0051 4章: `deny` の判定を受けた画像は添付として送らない。
             raise HTTPException(status_code=409, detail=t("mods.attachmentDenied")) from e
@@ -251,6 +258,7 @@ async def send_message(
                     {
                         "text": body.text,
                         "attachments": [str(a) for a in dict.fromkeys(body.attachments)],
+                        "withheld_attachments": withheld_attachments,
                     },
                 )
                 domain.set_title_if_empty(db, conversation_id, body.text)
@@ -319,3 +327,42 @@ def undo(
         "undo_result": outcome.stock.as_dict() if outcome.stock is not None else None,
     }
     return AssistantUndoResponse(**response)
+
+
+@router.post(
+    "/permissions/{request_id}",
+    status_code=204,
+    operation_id="answer_assistant_permission",
+)
+async def answer_permission(
+    request_id: str,
+    body: AssistantPermissionAnswerRequest,
+    request: Request,
+    user: CurrentUser = Depends(require_user),
+    runtime: AssistantRuntime = Depends(get_assistant_runtime),
+) -> None:
+    """道具が画像を LLM に送る前の許可に答える(ADR-0048 14.1)。`once`(1度だけ許可)、
+    `always`(常に許可。ユーザーの設定 `assistant.image_send` を `always` にする)、`deny`
+    (許可しない)。答えられるのは、求めた利用者の待っている要求だけ(他人の・答え済み・
+    時間切れの要求は 404)。"""
+    owner = user_key(user.id)
+    if not runtime.permissions.owns(request_id, owner):
+        raise HTTPException(status_code=404, detail=t("assistant.permissionNotFound"))
+    if body.answer == "always":
+
+        def _save() -> None:
+            with request.app.state.session_factory() as db:
+                user_preferences.save(
+                    db,
+                    user,
+                    {
+                        user_preferences.KEY_ASSISTANT_IMAGE_SEND: (
+                            user_preferences.IMAGE_SEND_ALWAYS
+                        )
+                    },
+                )
+                db.commit()
+
+        await anyio.to_thread.run_sync(_save)
+    if not runtime.permissions.answer(request_id, owner, body.answer):
+        raise HTTPException(status_code=404, detail=t("assistant.permissionNotFound"))

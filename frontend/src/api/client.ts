@@ -1722,6 +1722,9 @@ export type AssistantUndoResponse = components['schemas']['AssistantUndoResponse
 export type AssistantUndoResult = components['schemas']['AssistantUndoResult']
 /** 発言の送信の応答(SSE)の1イベント。`type` で見分ける。 */
 export type AssistantStreamEvent = components['schemas']['AssistantStreamEvent']['event']
+export type AssistantImagePermissionView = components['schemas']['AssistantImagePermissionView']
+export type AssistantPermissionRequestEvent = components['schemas']['AssistantPermissionRequestEvent']
+export type AssistantPermissionAnswer = components['schemas']['AssistantPermissionAnswerRequest']['answer']
 export type AssistantSettingsResponse = components['schemas']['AssistantSettingsResponse']
 export type AssistantSettingsUpdateRequest = components['schemas']['AssistantSettingsUpdateRequest']
 
@@ -1781,6 +1784,18 @@ export async function openAssistantMessageStream(
 /** プロンプトセットへの書き込みを元に戻す。その後に対象が変わっていれば 409。 */
 export function undoAssistantWrite(messageId: string): Promise<AssistantUndoResponse> {
   return request(`/api/assistant/undo/${messageId}`, { method: 'POST' })
+}
+
+/**
+ * 道具が画像を LLM に送る前の許可に答える(ADR-0048 14.1)。`always` はユーザーの設定
+ * `assistant.image_send` も `always` にする。答え済み・時間切れは 404。
+ */
+export function answerAssistantPermission(requestId: string, answer: AssistantPermissionAnswer): Promise<void> {
+  return request(`/api/assistant/permissions/${encodeURIComponent(requestId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answer }),
+  })
 }
 
 /** 全ログイン者が読める(パネルを出すかの判断。`usable`)。 */

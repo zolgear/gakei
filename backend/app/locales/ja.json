@@ -1159,6 +1159,8 @@
   "assistant": {
     "conversationNotFound": "会話が見つかりません",
     "messageNotFound": "メッセージが見つかりません",
+    "permissionNotFound": "許可の求めが見つかりません(答え済み、または時間切れです)",
+    "builtinConnectionName": "OpenAI",
     "disabled": "アシスタントは無効です(管理者設定で有効にできます)",
     "connectionMissing": "アシスタントの接続先がありません。管理者設定で接続先を選んでください",
     "apiKeyMissing": "アシスタントの接続先の API キーが設定されていません",

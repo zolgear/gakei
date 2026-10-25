@@ -313,6 +313,9 @@ _EXCLUDED_PREFIXES = (
     # Mod の判定の受付(ADR-0051 8章)。ログインではなく Webhook の鍵の署名で受ける。届けた
     # 対象への判定だけを受けることは tests/test_mods_verdicts.py で確かめる。
     "/api/mods/",
+    # 画像を送る前の許可への答え(ADR-0048 14.1)。要求はプロセス内にだけあり、発言の処理中しか
+    # 無い。求めた利用者だけが答えられることは tests/test_assistant_permissions.py で確かめる。
+    "/api/assistant/permissions/",
 )
 
 

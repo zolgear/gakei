@@ -86,7 +86,8 @@
       "graph": "系列グラフ",
       "history": "履歴",
       "search": "検索",
-      "assistant": "アシスタント"
+      "assistant": "アシスタント",
+      "assistantTitle": "アシスタント (Alt+A)"
     },
     "sidebar": {
       "resourcePanel": "リソースパネル",
@@ -401,6 +402,11 @@
         "confirmMessage": "このブラウザに保存した GAKEI の設定をまとめて消し、ページを読み込み直します。\n\n消えるもの: 表示言語(ブラウザの言語に戻ります)、タブのアイコンの進捗表示、生成画面のレイアウトと入力欄の幅・高さ、サイドバーの幅と開いていたパネル、ストックとビューアの節の開閉、マップの値(タブ・近傍の数・上限・しきい値・系列の辺)、スケッチのペン、シードのモード、プロンプトのタグ補完とタグの訳の表示、最後に選んだグループ。\n\nサーバーに保存した設定・画像・履歴と、ログインの状態は変わりません。",
         "confirmWarning": "生成フォームに書きかけのプロンプト・パラメーター・入力画像の指定も消えます。",
         "confirmLabel": "消して読み込み直す"
+      },
+      "assistant": {
+        "heading": "アシスタント",
+        "imageSendLabel": "画像を LLM に送る前に確かめる",
+        "saveFailed": "設定を保存できませんでした"
       }
     },
     "accessTokens": {
@@ -3730,8 +3736,25 @@
       "rename_group": "グループの名前を変更",
       "move_to_group": "グループに入れる",
       "remove_from_group": "グループから外す",
-      "suggest_groups": "グループの提案を見る"
-    }
+      "suggest_groups": "グループの提案を見る",
+      "list_group_assets": "グループの画像を読む"
+    },
+    "permissionCard": {
+      "heading": "画像を送る",
+      "once": "1度だけ許可",
+      "always": "常に許可",
+      "deny": "許可しない",
+      "sending": "答えを送っています…",
+      "failed": "答えを送れませんでした。もう一度選んでください。",
+      "answered": {
+        "once": "1度だけ許可しました",
+        "always": "常に許可しました",
+        "deny": "許可しませんでした",
+        "timeout": "答えが無かったため、送りませんでした",
+        "stopped": "止めたため、送りませんでした"
+      }
+    },
+    "withheldAttachment": "送っていません(X 以上の画像は外部の接続先に送りません)"
   },
   "contentRating": {
     "label": "レーティング",

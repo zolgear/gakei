@@ -2488,6 +2488,10 @@ class UserPreferencesResponse(BaseModel):
     )
     # 未判定の画像もマスクするか(既定 false)。
     content_rating_mask_unrated: bool = Field(default=False, alias="content_rating.mask_unrated")
+    # アシスタントが道具で画像を LLM に送る前に確かめるか(ADR-0048 14.1。既定 ask)。
+    assistant_image_send: Literal["ask", "always"] = Field(
+        default="ask", alias="assistant.image_send"
+    )
 
 
 class UserPreferencesUpdateRequest(BaseModel):
@@ -2501,6 +2505,9 @@ class UserPreferencesUpdateRequest(BaseModel):
     )
     content_rating_mask_unrated: StrictBool | None = Field(
         default=None, alias="content_rating.mask_unrated"
+    )
+    assistant_image_send: Literal["ask", "always"] | None = Field(
+        default=None, alias="assistant.image_send"
     )
 
 
@@ -3121,15 +3128,33 @@ class AssistantToolCallView(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
+class AssistantImagePermissionView(BaseModel):
+    """道具が画像を LLM に送る前の許可の答え(ADR-0048 14.1)。tool のメッセージに残す。
+
+    `answer` は `once`(1度だけ許可)/ `always`(常に許可)/ `deny`(許可しない)。`reason` は
+    `deny` の理由: `user`(利用者が選んだ)、`timeout`(10 分答えが無い)、`stopped`(止めた・
+    接続が切れた)。"""
+
+    request_id: str
+    asset_ids: list[uuid.UUID] = Field(default_factory=list)
+    # 段階(ADR-0049。カードのサムネイルのマスクに使う)。未判定の画像は入れない。
+    content_ratings: dict[str, ContentRatingLevel] = Field(default_factory=dict)
+    connection_name: str
+    answer: Literal["once", "always", "deny"]
+    reason: Literal["user", "timeout", "stopped"] = "user"
+
+
 class AssistantMessageResponse(BaseModel):
     """会話の1メッセージ。役割(`role`)ごとに使う項目が違う。
 
-    - `user`: `text`、`attachments`(添付の Asset ID)。
+    - `user`: `text`、`attachments`(添付の Asset ID)、`withheld_attachments`(外部の接続先に
+      送らなかった添付。X 以上。ADR-0048 14.3)。
     - `assistant`: `text`、`tool_calls`、`status`(`complete` / `stopped`(利用者が止めた) /
       `error`)、`error`。
     - `tool`: `tool_call_id`、`tool_name`、`ok`、`result`(道具が LLM に返した JSON。書き込みの
       道具は `before` / `after` を含む)、`run_ids`(作った Run)、`undoable`(「元に戻す」が
-      使えるか)、`undone_at`(戻した日時)。
+      使えるか)、`undone_at`(戻した日時)、`image_permission`(画像を送る前に許可を求めたときの
+      答え。ADR-0048 14.1)。
     """
 
     id: uuid.UUID
@@ -3139,6 +3164,7 @@ class AssistantMessageResponse(BaseModel):
     created_at: datetime
     text: str = ""
     attachments: list[uuid.UUID] = Field(default_factory=list)
+    withheld_attachments: list[uuid.UUID] = Field(default_factory=list)
     tool_calls: list[AssistantToolCallView] = Field(default_factory=list)
     status: Literal["complete", "stopped", "error"] | None = None
     error: str | None = None
@@ -3151,6 +3177,7 @@ class AssistantMessageResponse(BaseModel):
     undone_at: datetime | None = None
     # ストックの整理を戻した結果(ADR-0048 13章)。それ以外の書き込みと、戻す前は null。
     undo_result: AssistantUndoResult | None = None
+    image_permission: AssistantImagePermissionView | None = None
 
 
 class AssistantConversationDetailResponse(AssistantConversationResponse):
@@ -3255,6 +3282,25 @@ class AssistantRunCreatedEvent(BaseModel):
     message_id: uuid.UUID
 
 
+class AssistantPermissionRequestEvent(BaseModel):
+    """道具が画像を LLM に送る前の許可の求め(ADR-0048 14.1)。サーバーは応答を開いたまま待つ。
+    ブラウザは `POST /api/assistant/permissions/{request_id}` で答える。10 分答えが無い・止めた・
+    接続が切れたときは「許可しない」と同じ。"""
+
+    type: Literal["permission_request"] = "permission_request"
+    request_id: str
+    tool_call_id: str
+    asset_ids: list[uuid.UUID] = Field(default_factory=list)
+    content_ratings: dict[str, ContentRatingLevel] = Field(default_factory=dict)
+    connection_name: str
+
+
+class AssistantPermissionAnswerRequest(BaseModel):
+    """`POST /api/assistant/permissions/{request_id}` の本文。"""
+
+    answer: Literal["once", "always", "deny"]
+
+
 class AssistantErrorEvent(BaseModel):
     """処理を止めた理由。`llm_error`(LLM の呼び出しの失敗)、`rate_limited`(LLM の1時間の
     上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`hook_denied`(Mod が送る前の
@@ -3283,6 +3329,7 @@ class AssistantStreamEvent(BaseModel):
         | AssistantMessageEvent
         | AssistantToolResultEvent
         | AssistantRunCreatedEvent
+        | AssistantPermissionRequestEvent
         | AssistantErrorEvent
         | AssistantDoneEvent
     ) = Field(discriminator="type")
