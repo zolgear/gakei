@@ -395,7 +395,7 @@
     "fileFormatDescription": "Output file format",
     "compressionLabel": "Compression",
     "compressionDescription": "JPEG / WebP only. 0-100, higher is higher quality",
-    "backgroundLabel": "Background",
+    "backgroundLabel": "Background transparency",
     "backgroundDescription": "Transparent is only available for PNG / WebP",
     "countLabel": "Count",
     "countDescription": "Number of images generated per run. Billed per image",

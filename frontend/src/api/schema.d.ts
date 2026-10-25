@@ -6758,7 +6758,7 @@ export interface components {
              */
             description: string;
             /** Widget */
-            widget?: "seed" | null;
+            widget?: ("seed" | "segmented") | null;
             /** Mask Only */
             mask_only?: boolean | null;
         };
