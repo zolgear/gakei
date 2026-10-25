@@ -1,5 +1,6 @@
 /**
- * capabilities の ParamDef 1つ分のフォーム部品。enum は select、int は数値入力、bool はスイッチ。
+ * capabilities の ParamDef 1つ分のフォーム部品。enum は select(`widget: 'segmented'` なら選択肢を
+ * 並べたスイッチ)、int は数値入力、bool はスイッチ。
  * スタジオの設定グリッド(ADR-0009 1章・2026-09-22 承認分)向けにコンパクト化:
  * 見出しは `label`(日本語、等幅・薄い色)だけを表示し、API のパラメーター名は
  * ラベルの `title`(ツールチップ)に、説明文(`description`)は入力欄自体の `title` に移す
@@ -17,6 +18,7 @@ import {
 import { UNSPECIFIED } from './paramsBuilder'
 import { SeedField } from './SeedField'
 import { boolDisplayValue } from './boolSwitch'
+import { segmentedDisplayValue } from './segmentedChoice'
 import { unspecifiedOptionLabel, unspecifiedPlaceholder } from './unspecifiedLabel'
 import { PromptEditModeToggle } from '../prompt-tags/PromptEditModeToggle'
 import { PromptTagEditor } from '../prompt-tags/PromptTagEditor'
@@ -136,6 +138,41 @@ function BoolSwitch({ def, id, value, enabled, title, onChange }: BoolSwitchProp
         {checked ? pf.boolOn : pf.boolOff}
       </span>
     </button>
+  )
+}
+
+interface SegmentedChoiceProps {
+  def: ParamDef
+  id: string
+  value: string
+  enabled: boolean
+  title: string | undefined
+  onChange: (name: string, value: string) => void
+}
+
+/**
+ * 選択肢の少ない enum のスイッチ(`widget: 'segmented'`)。選択肢をボタンで並べ、押されているほうを
+ * `aria-pressed` で示す。未指定のあいだは、指定しなかったときに使われる選択肢を押された状態で出し、
+ * 押したら明示の値にする。見出しの `<label>` は先頭のボタンと `id` で結び付ける。
+ */
+function SegmentedChoice({ def, id, value, enabled, title, onChange }: SegmentedChoiceProps) {
+  const selected = segmentedDisplayValue(def, value)
+  return (
+    <span className={styles.segmented} role="group" aria-label={def.label} title={title}>
+      {(def.choices ?? []).map((choice, index) => (
+        <button
+          key={choice}
+          id={index === 0 ? id : undefined}
+          type="button"
+          className={styles.segment}
+          aria-pressed={selected === choice}
+          disabled={!enabled}
+          onClick={() => onChange(def.name, choice)}
+        >
+          {def.choice_labels?.[choice] ?? choice}
+        </button>
+      ))}
+    </span>
   )
 }
 
@@ -259,7 +296,11 @@ export function ParamField({ def, value, enabled, disabledNote, hint, onChange }
         {def.label}
       </label>
 
-      {def.type === 'enum' && (
+      {def.type === 'enum' && def.widget === 'segmented' && (
+        <SegmentedChoice def={def} id={id} value={value} enabled={enabled} title={fieldTitle} onChange={onChange} />
+      )}
+
+      {def.type === 'enum' && def.widget !== 'segmented' && (
         <select
           id={id}
           value={value}
