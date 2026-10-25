@@ -16,3 +16,11 @@ export interface NewRunShortcutEvent {
 export function isNewRunShortcut(e: NewRunShortcutEvent): boolean {
   return e.code === 'KeyN' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
 }
+
+/**
+ * アシスタントの窓の開閉(Alt+A、Mac は Option+A。ADR-0048 2章)。新規生成と同じく Alt を使い、
+ * Mac のデッドキーを避けて `code` で判定する。
+ */
+export function isAssistantShortcut(e: NewRunShortcutEvent): boolean {
+  return e.code === 'KeyA' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
+}

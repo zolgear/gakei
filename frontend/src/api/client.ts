@@ -1719,6 +1719,7 @@ export type AssistantToolCallView = components['schemas']['AssistantToolCallView
 export type AssistantMessageCreateRequest = components['schemas']['AssistantMessageCreateRequest']
 export type AssistantFormState = components['schemas']['AssistantFormState']
 export type AssistantUndoResponse = components['schemas']['AssistantUndoResponse']
+export type AssistantUndoResult = components['schemas']['AssistantUndoResult']
 /** 発言の送信の応答(SSE)の1イベント。`type` で見分ける。 */
 export type AssistantStreamEvent = components['schemas']['AssistantStreamEvent']['event']
 export type AssistantSettingsResponse = components['schemas']['AssistantSettingsResponse']

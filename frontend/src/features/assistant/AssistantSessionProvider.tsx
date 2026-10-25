@@ -27,12 +27,14 @@ import { useRunFormContext } from '../../context/useRunFormContext'
 import { getLocale, msg } from '../../i18n'
 import { assistantFormState } from './assistantForm'
 import { getStudioResultAssetId } from '../workspace/studioResultStore'
+import { getStockSelectedAssetIds } from '../stock/stockSelectionStore'
 import { assistantSessionReducer, initialAssistantSession } from './assistantSession'
 import { applyFormWrite, formWriteFromStreamEvent, type FormWriteRecord } from './formWrite'
 import { readAssistantStream } from './assistantStream'
 import { loadAssistantConversationId, saveAssistantConversationId } from './assistantStorage'
 import { ASSISTANT_CONVERSATIONS_QUERY_KEY, PROMPT_SETS_QUERY_KEY } from './queryKeys'
 import { WRITE_TOOLS } from './timeline'
+import { invalidateStockQueries, isStockWriteTool } from './stockWrite'
 import { AssistantSessionContext, type AssistantSessionValue } from './useAssistantSession'
 
 function isAbortError(error: unknown): boolean {
@@ -116,6 +118,10 @@ export function AssistantSessionProvider({ children }: { children: ReactNode }) 
       if (event.type === 'tool_result' && event.message.ok && WRITE_TOOLS.has(event.message.tool_name ?? '')) {
         void queryClient.invalidateQueries({ queryKey: PROMPT_SETS_QUERY_KEY })
       }
+      // ストックの整理(ADR-0048 13章)の後は、ストックとグループ、画像のタグ・タイトルを取り直す。
+      if (event.type === 'tool_result' && event.message.ok && isStockWriteTool(event.message.tool_name)) {
+        invalidateStockQueries(queryClient)
+      }
       if (event.type === 'run_created') {
         void queryClient.invalidateQueries({ queryKey: ['runs'] })
       }
@@ -164,7 +170,7 @@ export function AssistantSessionProvider({ children }: { children: ReactNode }) 
           {
             text,
             attachments,
-            form: assistantFormState(formStateRef.current, getStudioResultAssetId()),
+            form: assistantFormState(formStateRef.current, getStudioResultAssetId(), getStockSelectedAssetIds()),
             locale: getLocale(),
           },
           controller.signal,

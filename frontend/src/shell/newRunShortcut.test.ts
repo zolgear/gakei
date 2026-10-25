@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isNewRunShortcut } from './newRunShortcut'
+import { isAssistantShortcut, isNewRunShortcut } from './newRunShortcut'
 
 describe('isNewRunShortcut', () => {
   it('Alt+N で true', () => {
@@ -41,6 +41,26 @@ describe('isNewRunShortcut', () => {
   it('N 以外のキーは false', () => {
     expect(
       isNewRunShortcut({ code: 'KeyM', altKey: true, ctrlKey: false, metaKey: false, shiftKey: false }),
+    ).toBe(false)
+  })
+})
+
+describe('isAssistantShortcut', () => {
+  it('Alt+A で true', () => {
+    expect(
+      isAssistantShortcut({ code: 'KeyA', altKey: true, ctrlKey: false, metaKey: false, shiftKey: false }),
+    ).toBe(true)
+  })
+
+  it('Alt 無し・Ctrl+A・Alt+Shift+A は false', () => {
+    expect(
+      isAssistantShortcut({ code: 'KeyA', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false }),
+    ).toBe(false)
+    expect(
+      isAssistantShortcut({ code: 'KeyA', altKey: false, ctrlKey: true, metaKey: false, shiftKey: false }),
+    ).toBe(false)
+    expect(
+      isAssistantShortcut({ code: 'KeyA', altKey: true, ctrlKey: false, metaKey: false, shiftKey: true }),
     ).toBe(false)
   })
 })

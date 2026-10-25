@@ -1,4 +1,4 @@
-"""アシスタントの道具(ADR-0048 4・5・6・9・10・11・12章)。
+"""アシスタントの道具(ADR-0048 4・5・6・9・10・11・12・13章)。
 
 道具は REST を HTTP で呼ばず、REST と同じドメイン関数を直接呼ぶ(MCP と同じ方針。ADR-0023)。
 扱えるのは会話の利用者に見えるものだけ(ADR-0025)。削除の道具は作らない。
@@ -18,6 +18,9 @@
 - 生成: `generate_image`、`cancel_run`。Run は `run.origin = 'assistant'`、実行者は会話の
   利用者。1回の発言で作れる Run の数と、1時間あたりの Run の数を超えたら、Run を作らずに
   道具のエラーを返す(9章)。
+- ストックの整理: `add_tags`、`remove_tags`、`set_title`、`create_group`、`rename_group`、
+  `move_to_group`、`remove_from_group`(13章)。中身と変更前の記録は `app/assistant/stock.py`。
+  読み取りの `suggest_groups` はグループの提案(ADR-0056)と同じドメインの関数を呼ぶ。
 - 生成フォームの書き込み: `update_form`(11章)。検証して結果に入れるだけで、サーバーには
   保存しない。ブラウザが応答を受けている間に届いた結果をフォームに反映する。同じ発言の
   `get_form_context` と `generate_image` の補完には、変更を重ねた `ToolContext.form` が効く。
@@ -44,6 +47,7 @@ from sqlalchemy.orm import Session
 
 from app.annotation.engines import image_to_jpeg
 from app.api.capabilities import get_capabilities_endpoint
+from app.assistant import stock as stock_domain
 from app.assistant.engine import LlmImage, ToolCall, ToolSpec
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
@@ -51,6 +55,7 @@ from app.domain import asset_search as asset_search_domain
 from app.domain import assistant_settings, content_withholding, derivatives
 from app.domain import content_rating as content_rating_domain
 from app.domain import focal_points as focal_points_domain
+from app.domain import group_suggestions as group_suggestions_domain
 from app.domain import prompt_sets as prompt_sets_domain
 from app.domain import run_create as run_create_domain
 from app.domain import run_views as run_views_domain
@@ -73,6 +78,7 @@ from app.domain.schemas import (
     RunCreateRequest,
     RunInputCreate,
 )
+from app.domain.semantic_search import EmbeddingsConflictError
 from app.domain.visibility import get_visible_asset, get_visible_group, get_visible_run
 from app.i18n import t
 from app.providers.base import ModelCapabilities, ProviderCapabilities, provider_status_snapshot
@@ -101,6 +107,14 @@ RECENT_RESULTS_LIMIT_MAX = 50
 RECENT_RESULTS_LIMIT_DEFAULT = 10
 # `list_recent_results` で1件のプロンプトを返す上限(文字数)。
 RECENT_RESULTS_PROMPT_MAX = 300
+
+# ストックの整理で1回に扱う画像の上限(13章)。
+STOCK_ASSETS_MAX = stock_domain.STOCK_ASSETS_MAX
+# `suggest_groups` で返す案の数の上限と既定、1つの案で返す画像の ID の数。
+SUGGEST_GROUPS_LIMIT_MAX = 20
+SUGGEST_GROUPS_LIMIT_DEFAULT = 8
+SUGGEST_GROUPS_IDS_PREVIEW = 12
+SUGGEST_GROUPS_IDS_MAX = 400
 
 _TERMINAL = {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED}
 _COST_NOTE = "Reference price in USD computed by GAKEI, not an invoice."
@@ -423,6 +437,82 @@ class UpdateFormArgs(_Args):
     )
 
 
+class _StockAssetsArg(_Args):
+    asset_ids: list[uuid.UUID] = Field(
+        min_length=1,
+        max_length=STOCK_ASSETS_MAX,
+        description=(
+            f"Images to change (up to {STOCK_ASSETS_MAX} per call; split larger sets into "
+            "several calls). The images the user selected in the stock are in "
+            "get_form_context (selected_asset_ids)."
+        ),
+    )
+
+
+class TagsArgs(_StockAssetsArg):
+    tags: list[str] = Field(
+        min_length=1,
+        max_length=stock_domain.STOCK_TAGS_MAX,
+        description="Tag names. Prefer tags that already exist (see list_tags).",
+    )
+
+
+class SetTitleArgs(_Args):
+    asset_id: uuid.UUID
+    title: str | None = Field(
+        default=None,
+        max_length=annotations_domain.TITLE_MAX,
+        description="New title. Pass null or an empty string to clear it.",
+    )
+
+
+class CreateGroupArgs(_Args):
+    name: str = Field(min_length=1, max_length=100)
+    asset_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=STOCK_ASSETS_MAX,
+        description=(
+            "Images to put into the new group (optional, up to "
+            f"{STOCK_ASSETS_MAX}). An image belongs to one group only, so they move out of "
+            "their current group."
+        ),
+    )
+
+
+class RenameGroupArgs(_Args):
+    group_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=100)
+
+
+class GroupAssetsArgs(_StockAssetsArg):
+    group_id: uuid.UUID = Field(description="The group (see list_groups).")
+
+
+class SuggestGroupsArgs(_Args):
+    scope: Literal["ungrouped", "all"] = Field(
+        default="ungrouped",
+        description="ungrouped: only images that are in no group. all: include grouped images.",
+    )
+    granularity: Literal["normal", "fine"] = Field(
+        default="normal", description="fine: split large clusters into smaller ones."
+    )
+    limit: int = Field(
+        default=SUGGEST_GROUPS_LIMIT_DEFAULT,
+        ge=1,
+        le=SUGGEST_GROUPS_LIMIT_MAX,
+        description="How many suggestions to return, largest first.",
+    )
+    suggestion_id: str | None = Field(
+        default=None,
+        max_length=200,
+        description=(
+            "Return only this suggestion (an id from an earlier call) with all its image ids "
+            f"(up to {SUGGEST_GROUPS_IDS_MAX}). Other calls return only the first "
+            f"{SUGGEST_GROUPS_IDS_PREVIEW} ids of each suggestion."
+        ),
+    )
+
+
 # -- JSON Schema ------------------------------------------------------------------
 
 
@@ -498,7 +588,13 @@ async def get_form_context(ctx: ToolContext, _args: NoArgs) -> ToolOutcome:
             ok=True,
             result={"available": False, "note": "The browser did not send the form state."},
         )
-    return ToolOutcome(ok=True, result={"available": True, **ctx.form.model_dump(mode="json")})
+    result: dict[str, Any] = {"available": True, **ctx.form.model_dump(mode="json")}
+    if ctx.form.selected_asset_ids:
+        result["selected_note"] = (
+            f"The user has selected {len(ctx.form.selected_asset_ids)} images in the stock "
+            "(selected_asset_ids). 'The selected images' means these."
+        )
+    return ToolOutcome(ok=True, result=result)
 
 
 async def propose_prompt(ctx: ToolContext, args: ProposePromptArgs) -> ToolOutcome:
@@ -1026,6 +1122,168 @@ async def update_prompt_set_item(ctx: ToolContext, args: UpdatePromptSetItemArgs
     return await _in_thread(_update)
 
 
+# -- ストックの整理(13章) ----------------------------------------------------------
+
+
+def _stock_call(ctx: ToolContext, fn: Callable[[Session], stock_domain.StockWrite]) -> ToolOutcome:
+    with ctx.session() as db:
+        try:
+            write = fn(db)
+        except stock_domain.StockError as e:
+            db.rollback()
+            raise ToolFailure(str(e)) from e
+    if write.requeued_embeddings:
+        embedder = getattr(ctx.state, "embedder", None)
+        if embedder is not None:
+            embedder.notify()
+    return ToolOutcome(ok=True, result=write.result, undo=write.undo)
+
+
+async def add_tags(ctx: ToolContext, args: TagsArgs) -> ToolOutcome:
+    return await _in_thread(
+        lambda: _stock_call(
+            ctx, lambda db: stock_domain.add_tags(db, ctx.user, args.asset_ids, args.tags)
+        )
+    )
+
+
+async def remove_tags(ctx: ToolContext, args: TagsArgs) -> ToolOutcome:
+    return await _in_thread(
+        lambda: _stock_call(
+            ctx, lambda db: stock_domain.remove_tags(db, ctx.user, args.asset_ids, args.tags)
+        )
+    )
+
+
+async def set_title(ctx: ToolContext, args: SetTitleArgs) -> ToolOutcome:
+    return await _in_thread(
+        lambda: _stock_call(
+            ctx,
+            lambda db: stock_domain.set_title(
+                db, ctx.user, args.asset_id, args.title, ctx.state.settings
+            ),
+        )
+    )
+
+
+async def create_group(ctx: ToolContext, args: CreateGroupArgs) -> ToolOutcome:
+    return await _in_thread(
+        lambda: _stock_call(
+            ctx, lambda db: stock_domain.create_group(db, ctx.user, args.name, args.asset_ids)
+        )
+    )
+
+
+async def rename_group(ctx: ToolContext, args: RenameGroupArgs) -> ToolOutcome:
+    return await _in_thread(
+        lambda: _stock_call(
+            ctx, lambda db: stock_domain.rename_group(db, ctx.user, args.group_id, args.name)
+        )
+    )
+
+
+async def move_to_group(ctx: ToolContext, args: GroupAssetsArgs) -> ToolOutcome:
+    return await _in_thread(
+        lambda: _stock_call(
+            ctx,
+            lambda db: stock_domain.move_to_group(db, ctx.user, args.group_id, args.asset_ids),
+        )
+    )
+
+
+async def remove_from_group(ctx: ToolContext, args: GroupAssetsArgs) -> ToolOutcome:
+    return await _in_thread(
+        lambda: _stock_call(
+            ctx,
+            lambda db: stock_domain.remove_from_group(db, ctx.user, args.group_id, args.asset_ids),
+        )
+    )
+
+
+def _suggestion_view(suggestion: Any, *, ids_max: int) -> dict[str, Any]:
+    member_ids = [str(i) for i in suggestion.member_ids]
+    view: dict[str, Any] = {
+        "suggestion_id": suggestion.id,
+        "size": suggestion.size,
+        "asset_ids": member_ids[:ids_max],
+        "asset_ids_truncated": len(member_ids) > ids_max,
+        "top_tags": [
+            {"tag": tag.tag, "label": tag.label, "rate": round(tag.rate, 3)}
+            for tag in suggestion.top_tags
+        ],
+        "franchise": suggestion.franchise.name if suggestion.franchise else None,
+        "existing_group": (
+            {
+                "id": str(suggestion.target_group.id),
+                "name": suggestion.target_group.name,
+                "overlap": round(suggestion.target_group.overlap, 3),
+            }
+            if suggestion.target_group
+            else None
+        ),
+        "moving_from_other_groups": suggestion.moving_count,
+    }
+    return view
+
+
+async def suggest_groups(ctx: ToolContext, args: SuggestGroupsArgs) -> ToolOutcome:
+    """グループの提案(13章、ADR-0056)。保存はしない。埋め込みが無効なら道具のエラー。"""
+
+    def _suggest() -> dict[str, Any]:
+        state = ctx.state
+        with ctx.session() as db:
+            try:
+                response = group_suggestions_domain.suggest_groups(
+                    db,
+                    settings=state.settings,
+                    index=state.vector_index,
+                    version_of=state.embedder.version,
+                    cache=state.group_suggestion_cache,
+                    viewer=ctx.user,
+                    scope=args.scope,
+                    granularity=args.granularity,
+                )
+            except EmbeddingsConflictError as e:
+                raise ToolFailure(
+                    f"Group suggestions are not available: {e.message} (embeddings are off or "
+                    "not ready). Use search_assets instead."
+                ) from e
+        suggestions = response.suggestions
+        if args.suggestion_id is not None:
+            found = next((x for x in suggestions if x.id == args.suggestion_id), None)
+            if found is None:
+                raise ToolFailure(
+                    f"Suggestion {args.suggestion_id} not found (the stock may have changed). "
+                    "Call suggest_groups again without suggestion_id."
+                )
+            return {
+                "suggestion": _suggestion_view(found, ids_max=SUGGEST_GROUPS_IDS_MAX),
+                "note": _SUGGEST_NOTE,
+            }
+        return {
+            "scope": response.scope,
+            "scanned": response.scanned,
+            "truncated": response.truncated,
+            "total_suggestions": len(suggestions),
+            "suggestions": [
+                _suggestion_view(x, ids_max=SUGGEST_GROUPS_IDS_PREVIEW)
+                for x in suggestions[: args.limit]
+            ],
+            "ungrouped_outliers": len(response.outlier_ids),
+            "note": _SUGGEST_NOTE,
+        }
+
+    return ToolOutcome(ok=True, result=await _in_thread(_suggest))
+
+
+_SUGGEST_NOTE = (
+    "Nothing was saved. Suggestions with existing_group are images that mostly belong to that "
+    "group already. To organize, use create_group or move_to_group with the image ids (get "
+    "all ids of a suggestion with suggestion_id). To show a suggestion to the user, call "
+    "show_assets."
+)
+
+
 # -- 生成 ---------------------------------------------------------------------------
 
 
@@ -1434,6 +1692,8 @@ def _resolve_form_update(ctx: ToolContext, args: UpdateFormArgs) -> _FormUpdate:
         asset_group_id=group_id,
         # 結果エリアの画像はフォームの値ではない。書き込んでも引き継ぐ(12章)。
         result_asset_id=base.result_asset_id,
+        # ストックの選択もフォームの値ではない(13章)。
+        selected_asset_ids=base.selected_asset_ids,
     )
     return _FormUpdate(patch=patch, form=form, dropped_params=dropped)
 
@@ -1445,7 +1705,9 @@ async def update_form(ctx: ToolContext, args: UpdateFormArgs) -> ToolOutcome:
     result: dict[str, Any] = {
         "patch": update.patch,
         # ブラウザがフォームに反映する値。結果エリアの画像はフォームの値ではないので入れない。
-        "form": update.form.model_dump(mode="json", exclude={"result_asset_id"}),
+        "form": update.form.model_dump(
+            mode="json", exclude={"result_asset_id", "selected_asset_ids"}
+        ),
         "note": _FORM_NOTE,
     }
     if update.dropped_params:
@@ -1483,7 +1745,9 @@ TOOLS: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         "get_form_context",
         "Get the current generation form: provider, model, operation (generate / edit), "
-        "prompt, params, input images and group. Includes changes made with update_form.",
+        "prompt, params, input images and group. Includes changes made with update_form. "
+        "Also returns the image in the studio's result area (result_asset_id) and the images "
+        "the user selected in the stock (selected_asset_ids).",
         NoArgs,
         get_form_context,
     ),
@@ -1613,6 +1877,63 @@ TOOLS: tuple[ToolDefinition, ...] = (
         "Change an item's label, text or position. Applied immediately; the user can undo it.",
         UpdatePromptSetItemArgs,
         update_prompt_set_item,
+    ),
+    ToolDefinition(
+        "add_tags",
+        "Add tags to images (up to 200 per call). Tags are saved as if the user added them; "
+        "automatic re-tagging does not remove them. Applied immediately; the user can undo it.",
+        TagsArgs,
+        add_tags,
+    ),
+    ToolDefinition(
+        "remove_tags",
+        "Remove tags from images (up to 200 per call). Automatic re-tagging does not add them "
+        "back. Applied immediately; the user can undo it.",
+        TagsArgs,
+        remove_tags,
+    ),
+    ToolDefinition(
+        "set_title",
+        "Change one image's title (null or empty clears it). Saved as if the user edited it. "
+        "Applied immediately; the user can undo it.",
+        SetTitleArgs,
+        set_title,
+    ),
+    ToolDefinition(
+        "create_group",
+        "Create a group, optionally putting images into it (up to 200). An image belongs to "
+        "one group only, so the images move out of their current group. Applied immediately; "
+        "the user can undo it.",
+        CreateGroupArgs,
+        create_group,
+    ),
+    ToolDefinition(
+        "rename_group",
+        "Rename a group. Applied immediately; the user can undo it.",
+        RenameGroupArgs,
+        rename_group,
+    ),
+    ToolDefinition(
+        "move_to_group",
+        "Put images into an existing group (up to 200 per call). They move out of their "
+        "current group. Applied immediately; the user can undo it.",
+        GroupAssetsArgs,
+        move_to_group,
+    ),
+    ToolDefinition(
+        "remove_from_group",
+        "Take images out of a group (they stay in the stock without a group). Applied "
+        "immediately; the user can undo it.",
+        GroupAssetsArgs,
+        remove_from_group,
+    ),
+    ToolDefinition(
+        "suggest_groups",
+        "Suggest groups by clustering the images with image embeddings (largest first): each "
+        "suggestion has image ids, size, distinctive tags and the existing group it overlaps "
+        "with. Saves nothing. Fails when embeddings are turned off.",
+        SuggestGroupsArgs,
+        suggest_groups,
     ),
     ToolDefinition(
         "generate_image",

@@ -1170,6 +1170,7 @@
     "runsPerMessageLimit": "1回の発言で作れる Run の上限({limit}件)を超えるため、Run を作りませんでした(この発言で作った数: {used}件)",
     "hourlyRunLimit": "アシスタントが1時間に作れる Run の上限({limit}件)を超えるため、Run を作りませんでした(直近1時間: {used}件)",
     "undoConflict": "その後に対象が変わったか削除されたため、元に戻せません",
+    "undoStockConflict": "その後にすべての画像が変わったか削除されたため、元に戻せません",
     "undoNotAvailable": "このメッセージは元に戻せる書き込みではありません",
     "undoAlreadyDone": "既に元に戻しています"
   },

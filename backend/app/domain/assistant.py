@@ -12,7 +12,9 @@
   "undo": {...} | None, "undone_at": ISO 8601 | None}`
   - `result` は道具が LLM に返した JSON。書き込みの道具は変更前(`before`)と変更後(`after`)を
     入れる(プロンプトセットには版の履歴が無いため。4章)。
-  - `undo` は「元に戻す」に要る値(種類、対象、書き込んだ直後の `updated_at`)。
+  - `undo` は「元に戻す」に要る値(種類、対象、書き込んだ直後の `updated_at`)。ストックの
+    整理(13章)は、変えた画像ごとの変更前と書き込んだ直後の状態(`app/assistant/stock.py`)。
+  - `undo_result` はストックの整理を戻した結果(戻した枚数と飛ばした枚数)。
 
 画像の中身(base64)は保存しない(ADR-0004)。
 """
@@ -33,6 +35,7 @@ from app.domain.schemas import (
     AssistantConversationResponse,
     AssistantMessageResponse,
     AssistantToolCallView,
+    AssistantUndoResult,
 )
 from app.domain.visibility import (
     assistant_conversation_visible,
@@ -129,7 +132,17 @@ def to_message_response(message: AssistantMessage) -> AssistantMessageResponse:
         run_ids=_uuid_list(content.get("run_ids")),
         undoable=bool(content.get("undo")) and undone_raw is None,
         undone_at=datetime.fromisoformat(undone_raw) if isinstance(undone_raw, str) else None,
+        undo_result=_undo_result(content.get("undo_result")),
     )
+
+
+def _undo_result(raw: Any) -> AssistantUndoResult | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return AssistantUndoResult.model_validate(raw)
+    except ValueError:
+        return None
 
 
 # -- 会話 ----------------------------------------------------------------------
@@ -252,9 +265,17 @@ def get_message_for_user(
     return message
 
 
-def mark_undone(db: Session, message: AssistantMessage, when: datetime) -> None:
+def mark_undone(
+    db: Session,
+    message: AssistantMessage,
+    when: datetime,
+    undo_result: dict[str, Any] | None = None,
+) -> None:
+    """戻した印を付けて commit する。ストックの整理は戻した枚数なども残す(ADR-0048 13章)。"""
     content = dict(message.content or {})
     content["undone_at"] = when.isoformat()
+    if undo_result is not None:
+        content["undo_result"] = undo_result
     message.content = content
     flag_modified(message, "content")
     db.commit()

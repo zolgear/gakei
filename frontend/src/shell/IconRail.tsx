@@ -131,6 +131,7 @@ export function IconRail({ selected, onSelect, assistant }: IconRailProps) {
           type="button"
           aria-label={t.shell.iconRail.assistant}
           aria-pressed={assistant.open}
+          aria-keyshortcuts="Alt+A"
           className={`${styles.item} ${styles.bottomItem}`}
           data-active={assistant.open}
           onClick={assistant.onToggle}

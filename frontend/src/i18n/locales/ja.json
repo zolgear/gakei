@@ -3612,6 +3612,37 @@
       "undoneAt": "元に戻しました({at})",
       "undoFailed": "元に戻せませんでした"
     },
+    "stockCard": {
+      "titles": {
+        "add_tags": "タグを付けた",
+        "remove_tags": "タグを外した",
+        "set_title": "タイトルを変更",
+        "create_group": "グループを作成",
+        "rename_group": "グループの名前を変更",
+        "move_to_group": "グループに入れた",
+        "remove_from_group": "グループから外した"
+      },
+      "count": {
+        "one": "{count} 枚",
+        "other": "{count} 枚"
+      },
+      "more": {
+        "one": "+{count}",
+        "other": "+{count}"
+      },
+      "undoCreate": "元に戻す(グループを削除)",
+      "undoneSingle": "元に戻しました",
+      "undoneCount": {
+        "one": "{count} 枚を元に戻しました。",
+        "other": "{count} 枚を元に戻しました。"
+      },
+      "skipped": {
+        "one": "{count} 枚はその後に変わっていたため戻していません。",
+        "other": "{count} 枚はその後に変わっていたため戻していません。"
+      },
+      "groupDeleted": "グループを削除しました。",
+      "groupKept": "ほかの画像が入っているため、グループは残しました。"
+    },
     "formCard": {
       "title": "フォームを変更",
       "fields": {
@@ -3691,7 +3722,15 @@
       "list_groups": "グループを読む",
       "list_tags": "タグを読む",
       "show_assets": "画像を示す",
-      "update_form": "フォームを変更"
+      "update_form": "フォームを変更",
+      "add_tags": "タグを付ける",
+      "remove_tags": "タグを外す",
+      "set_title": "タイトルを変更",
+      "create_group": "グループを作成",
+      "rename_group": "グループの名前を変更",
+      "move_to_group": "グループに入れる",
+      "remove_from_group": "グループから外す",
+      "suggest_groups": "グループの提案を見る"
     }
   },
   "contentRating": {

@@ -8,7 +8,7 @@
 | `PATCH /api/assistant/conversations/{id}` | 名前を変える |
 | `DELETE /api/assistant/conversations/{id}` | 論理削除 |
 | `POST /api/assistant/conversations/{id}/messages` | 発言を送る(応答は `text/event-stream`) |
-| `POST /api/assistant/undo/{message_id}` | 書き込みを元に戻す |
+| `POST /api/assistant/undo/{message_id}` | 書き込みを元に戻す(プロンプトセット、ストックの整理) |
 
 見えるのは本人の会話だけ(ADR-0025)。他人の会話は存在しないものと同じ 404。管理者設定
 (`/api/settings/assistant`)で無効のときは、発言の送信を 409 で断る(会話の一覧・閲覧・
@@ -291,22 +291,31 @@ async def send_message(
 )
 def undo(
     message_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> AssistantUndoResponse:
-    """アシスタントのプロンプトセットへの書き込みを元に戻す(ADR-0048 4章)。その後に対象が
-    変わっていれば戻さずに 409。作成を戻すとセットは論理削除になる。"""
+    """アシスタントの書き込みを元に戻す(ADR-0048 4章・13章)。
+
+    プロンプトセットは、その後に対象が変わっていれば戻さずに 409。作成を戻すとセットは論理削除に
+    なる。ストックの整理は、書き込んだ直後から変わっていない画像だけを戻し、戻した枚数と飛ばした
+    枚数を `undo_result` で返す(1枚も戻せなければ 409)。"""
     message = domain.get_message_for_user(db, user, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail=t("assistant.messageNotFound"))
     try:
-        prompt_set = undo_message(db, user, message)
+        outcome = undo_message(db, user, message, settings=request.app.state.settings)
     except (UndoConflictError, UndoNotAvailableError) as e:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(e)) from e
+    if outcome.stock is not None and outcome.stock.requeued_embeddings:
+        embedder = getattr(request.app.state, "embedder", None)
+        if embedder is not None:
+            embedder.notify()
     db.refresh(message)
     response: dict[str, Any] = {
         "message": domain.to_message_response(message),
-        "prompt_set": prompt_set,
+        "prompt_set": outcome.prompt_set,
+        "undo_result": outcome.stock.as_dict() if outcome.stock is not None else None,
     }
     return AssistantUndoResponse(**response)
