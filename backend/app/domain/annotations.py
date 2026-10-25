@@ -31,7 +31,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain import annotation_settings
-from app.domain.models import Asset, AssetAnnotation, AssetKind, AssetTag, Tag
+from app.domain.models import (
+    Asset,
+    AssetAnnotation,
+    AssetContentRating,
+    AssetKind,
+    AssetTag,
+    Tag,
+)
 from app.domain.schemas import AnnotationStatusView, AssetAnnotationResponse, AssetTagRef
 from app.domain.sql_compat import binary_order, savepoints_are_safe
 from app.domain.visibility import asset_visible, get_visible_asset
@@ -567,15 +574,10 @@ def tag_name_matches(pattern: str) -> Any:
     )
 
 
-def list_tags(
-    db: Session, user: CurrentUser, q: str | None, limit: int, *, prefix: bool = False
-) -> list[tuple[str, int]]:
-    """タグ名と件数(removed と削除済み Asset を除く)。件数の多い順、同数は名前順。
-
-    `user` に見える Asset だけで数える(ADR-0025。他人の Asset にしか付いていないタグ名は
-    出さない)。`q` は正規化してから部分一致で絞る(オートコンプリート用)。`prefix` なら
-    前方一致で絞る(アシスタントの `list_tags`。ADR-0048 10章)。
-    """
+def _tag_counts_query(
+    user: CurrentUser, q: str | None, *, prefix: bool, exclude_levels: Iterable[str]
+) -> Any | None:
+    """`list_tags` の土台(並びと件数の制限の前)。`q` が正規化できなければ None。"""
     count = func.count(AssetTag.asset_id)
     query = (
         select(Tag.name, count)
@@ -583,14 +585,62 @@ def list_tags(
         .join(Asset, Asset.id == AssetTag.asset_id)
         .where(AssetTag.removed.is_(False), Asset.deleted_at.is_(None), asset_visible(user))
         .group_by(Tag.id, Tag.name)
-        # ADR-0027 2章: 名前の並びは両方の DB でバイト順にそろえる。
-        .order_by(count.desc(), binary_order(Tag.name).asc())
-        .limit(limit)
     )
+    levels = list(exclude_levels)
+    if levels:
+        # レーティングの段階で数えない画像(アシスタントの X 以上。ADR-0048 14.3)。
+        query = query.where(
+            ~exists().where(
+                AssetContentRating.asset_id == Asset.id, AssetContentRating.level.in_(levels)
+            )
+        )
     if q is not None and q.strip():
         needle = normalize_tag_name_or_none(q)
         if needle is None:
-            return []
+            return None
         pattern = f"{_escape_like(needle)}%" if prefix else f"%{_escape_like(needle)}%"
         query = query.where(Tag.name.like(pattern, escape=_LIKE_ESCAPE_CHAR))
+    return query
+
+
+def list_tags(
+    db: Session,
+    user: CurrentUser,
+    q: str | None,
+    limit: int,
+    *,
+    prefix: bool = False,
+    offset: int = 0,
+    exclude_levels: Iterable[str] = (),
+) -> list[tuple[str, int]]:
+    """タグ名と件数(removed と削除済み Asset を除く)。件数の多い順、同数は名前順。
+
+    `user` に見える Asset だけで数える(ADR-0025。他人の Asset にしか付いていないタグ名は
+    出さない)。`q` は正規化してから部分一致で絞る(オートコンプリート用)。`prefix` なら
+    前方一致で絞る(アシスタントの `list_tags`。ADR-0048 10章)。`exclude_levels` の段階の
+    画像は数えない(ADR-0048 14.3)。`offset` は先頭から飛ばす件数。
+    """
+    query = _tag_counts_query(user, q, prefix=prefix, exclude_levels=exclude_levels)
+    if query is None:
+        return []
+    count = func.count(AssetTag.asset_id)
+    query = (
+        # ADR-0027 2章: 名前の並びは両方の DB でバイト順にそろえる。
+        query.order_by(count.desc(), binary_order(Tag.name).asc()).offset(offset).limit(limit)
+    )
     return [(name, n) for name, n in db.execute(query).all()]
+
+
+def count_tags(
+    db: Session,
+    user: CurrentUser,
+    q: str | None,
+    *,
+    prefix: bool = False,
+    exclude_levels: Iterable[str] = (),
+) -> int:
+    """`list_tags` と同じ条件のタグの種類の数。"""
+    query = _tag_counts_query(user, q, prefix=prefix, exclude_levels=exclude_levels)
+    if query is None:
+        return 0
+    return db.execute(select(func.count()).select_from(query.subquery())).scalar_one()
