@@ -17,6 +17,7 @@ import { ASSISTANT_SETTINGS_QUERY_KEY } from '../features/settings/queryKeys'
 import { AssistantSessionProvider } from '../features/assistant/AssistantSessionProvider'
 import { AssistantWindow } from '../features/assistant/AssistantWindow'
 import { getAssistantSettings } from '../api/client'
+import { isAssistantShortcut } from './newRunShortcut'
 import { useFaviconProgress } from '../features/favicon/useFaviconProgress'
 import { useI18n } from '../i18n'
 import { MODAL_BODY_ATTRIBUTE } from '../components/modalFocus'
@@ -105,6 +106,19 @@ export function AppShell() {
     setAssistantMounted(true)
     setDrawerOpen(false)
   }
+  // Alt+A(Mac は Option+A)でも開閉する。使えないときと IME の変換中は反応させない。
+  const toggleAssistantRef = useRef(toggleAssistant)
+  toggleAssistantRef.current = toggleAssistant
+  useEffect(() => {
+    if (!assistantUsable) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.isComposing || !isAssistantShortcut(e)) return
+      e.preventDefault()
+      toggleAssistantRef.current()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [assistantUsable])
   const assistantToggle = assistantUsable
     ? { open: assistantOpen, onToggle: toggleAssistant }
     : undefined
