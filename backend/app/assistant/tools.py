@@ -21,6 +21,11 @@
 - ストックの整理: `add_tags`、`remove_tags`、`set_title`、`create_group`、`rename_group`、
   `move_to_group`、`remove_from_group`(13章)。中身と変更前の記録は `app/assistant/stock.py`。
   読み取りの `suggest_groups` はグループの提案(ADR-0056)と同じドメインの関数を呼ぶ。
+- LLM に送る情報(14章): 一覧の道具(`search_assets`、`find_similar_assets`、
+  `list_recent_results`、`list_tags`、`list_group_assets`)は1件を短い形にし、予算に収まる件数で
+  切って `returned`・`total`・`next_offset` を返す(`offset` で続きを読む)。外部の接続先には、
+  X 以上の画像の情報を ID・種類・段階・グループだけにする(`app/assistant/llm_view.py`)。
+  `view_assets` と `view_result` の画像は、送る前に利用者の許可を求める(`service.py`)。
 - 生成フォームの書き込み: `update_form`(11章)。検証して結果に入れるだけで、サーバーには
   保存しない。ブラウザが応答を受けている間に届いた結果をフォームに反映する。同じ発言の
   `get_form_context` と `generate_image` の補完には、変更を重ねた `ToolContext.form` が効く。
@@ -42,13 +47,15 @@ from typing import Any, Literal
 import anyio.to_thread
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.annotation.engines import image_to_jpeg
 from app.api.capabilities import get_capabilities_endpoint
+from app.assistant import llm_view
 from app.assistant import stock as stock_domain
 from app.assistant.engine import LlmImage, ToolCall, ToolSpec
+from app.assistant.llm_view import Disclosure
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
 from app.domain import asset_search as asset_search_domain
@@ -59,6 +66,7 @@ from app.domain import group_suggestions as group_suggestions_domain
 from app.domain import prompt_sets as prompt_sets_domain
 from app.domain import run_create as run_create_domain
 from app.domain import run_views as run_views_domain
+from app.domain.asset_groups import group_for_asset
 from app.domain.assistant_settings import AssistantConfig
 from app.domain.models import (
     RUN_ORIGIN_ASSISTANT,
@@ -96,6 +104,12 @@ SEARCH_LIMIT_MAX = asset_search_domain.SEARCH_LIMIT_MAX
 SHOW_ASSETS_MAX = 24
 # `list_tags` の件数の上限。
 LIST_TAGS_LIMIT_MAX = 200
+# `list_group_assets` の件数の上限と既定(14.4。整理の道具の1回の上限と同じ)。
+GROUP_ASSETS_LIMIT_MAX = 200
+# `offset` の上限(検索の続きを読める範囲。14.4)。
+OFFSET_MAX = asset_search_domain.SEARCH_WINDOW_MAX
+# 画像を LLM に送る前に許可を求める道具(14.1)。利用者の添付は聞かない。
+IMAGE_PERMISSION_TOOLS = frozenset({"view_assets", "view_result"})
 # `update_form` で入れられる入力画像の上限(フォームの状態の上限と同じ)。
 FORM_INPUTS_MAX = 32
 # 1回の書き込みで足せる項目の上限。
@@ -139,9 +153,17 @@ class ToolContext:
     form: AssistantFormState | None = None
     # この発言で作った Run(上限の数えと、止めたときの取り消しに使う)。
     runs_this_turn: list[uuid.UUID] = field(default_factory=list)
+    # 接続先の `locality` と名前(14.3)。最初に使うときに管理者設定から引く。
+    disclosure: Disclosure | None = None
 
     def session(self) -> Session:
         return self.state.session_factory()
+
+    def get_disclosure(self) -> Disclosure:
+        if self.disclosure is None:
+            with self.session() as db:
+                self.disclosure = llm_view.resolve_disclosure(db, self.state.settings, self.config)
+        return self.disclosure
 
 
 @dataclass
@@ -150,6 +172,11 @@ class ToolOutcome:
     result: dict[str, Any]
     # LLM に見せる画像(保存しない)。
     images: list[LlmImage] = field(default_factory=list)
+    # LLM に送る結果が画面用の `result` と違うとき(X 以上の画像の情報を落とす。14.3)。
+    # 保存はするが画面には返さない。
+    llm_result: dict[str, Any] | None = None
+    # 画像を送る前の許可の答え(14.1)。許可を求めたときだけ。
+    permission: dict[str, Any] | None = None
     # 「元に戻す」に要る値(書き込みの道具だけ)。
     undo: dict[str, Any] | None = None
     run_ids: list[uuid.UUID] = field(default_factory=list)
@@ -216,17 +243,20 @@ class SearchAssetsArgs(_Args):
         default=None,
         max_length=1000,
         description=(
-            "keyword mode: words to match in the generating prompt, titles and tags "
-            "(space-separated, AND); omit to list the newest images. semantic mode: a "
-            "natural-language description of the image (required)."
+            "What to find. keyword: words to match in the generating prompt, titles and tags "
+            "(space-separated, AND). semantic: a natural-language description of the image "
+            "(required). hybrid: either. Omit to list the newest images."
         ),
     )
-    mode: Literal["keyword", "semantic"] = Field(
-        default="keyword",
+    mode: Literal["hybrid", "keyword", "semantic"] | None = Field(
+        default=None,
         description=(
-            "keyword: text match, newest first. semantic: image embeddings, most similar "
-            "first (each result has a score). semantic fails when embeddings are turned off; "
-            "then use keyword."
+            "hybrid (default): combines keyword and semantic results into one ranking; each "
+            "result says whether it matched by keyword, semantic or both. When embeddings are "
+            "off, the default falls back to keyword and the result says so. keyword: exact "
+            "words, newest first; use it when you know the exact words (a tag name, a word in "
+            "the prompt). semantic: image embeddings, most similar first; use it for visual "
+            "similarity to a description. semantic fails when embeddings are turned off."
         ),
     )
     kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"] | None = Field(
@@ -241,11 +271,33 @@ class SearchAssetsArgs(_Args):
         description="Only images with this tag (exact tag name, see list_tags).",
     )
     limit: int = Field(default=20, ge=1, le=SEARCH_LIMIT_MAX)
+    offset: int = Field(
+        default=0,
+        ge=0,
+        le=OFFSET_MAX,
+        description="Skip this many results (use next_offset from the previous call).",
+    )
 
 
 class FindSimilarAssetsArgs(_Args):
     asset_id: uuid.UUID = Field(description="The image to compare with.")
     limit: int = Field(default=12, ge=1, le=SEARCH_LIMIT_MAX)
+    offset: int = Field(
+        default=0,
+        ge=0,
+        le=OFFSET_MAX,
+        description="Skip this many results (use next_offset from the previous call).",
+    )
+
+
+class ListGroupAssetsArgs(_Args):
+    group_id: uuid.UUID = Field(description="The group (see list_groups).")
+    limit: int = Field(default=GROUP_ASSETS_LIMIT_MAX, ge=1, le=GROUP_ASSETS_LIMIT_MAX)
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Skip this many images (use next_offset from the previous call).",
+    )
 
 
 class GetAssetArgs(_Args):
@@ -292,6 +344,11 @@ class ListRecentResultsArgs(_Args):
             "Get ids with list_groups."
         ),
     )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Skip this many runs (use next_offset from the previous call).",
+    )
 
 
 class ListTagsArgs(_Args):
@@ -299,6 +356,11 @@ class ListTagsArgs(_Args):
         default=None, max_length=200, description="Only tags starting with this text."
     )
     limit: int = Field(default=50, ge=1, le=LIST_TAGS_LIMIT_MAX)
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Skip this many tags (use next_offset from the previous call).",
+    )
 
 
 class ShowAssetsArgs(_Args):
@@ -658,6 +720,15 @@ def _run_payload(db: Session, ctx: ToolContext, run: Run) -> dict[str, Any]:
             "The run has not finished yet. Call get_run again with wait_seconds "
             f"(up to {int(WAIT_MAX_SECONDS)})."
         )
+    input_ids = list(
+        db.execute(select(RunInput.asset_id).where(RunInput.run_id == run.id)).scalars().all()
+    )
+    if ctx.get_disclosure().withheld_ids(db, [a.id for a in outputs] + input_ids):
+        # X 以上の画像を作った・使った Run のプロンプトとパラメーターは送らない(14.3)。
+        payload["prompt"] = None
+        payload["params"] = None
+        payload["withheld"] = True
+        payload["withheld_note"] = llm_view.WITHHELD_NOTE
     return payload
 
 
@@ -702,7 +773,11 @@ def render_asset_for_llm(store: Any, asset: Asset) -> LlmImage | None:
 def load_visible_images(
     ctx: ToolContext, asset_ids: list[uuid.UUID]
 ) -> tuple[list[dict[str, Any]], list[LlmImage]]:
-    """見える Asset の画像を読む。見えない・無いものは ToolFailure。"""
+    """見える Asset の画像を読む。見えない・無いものは ToolFailure。
+
+    外部の接続先に送らない X 以上の画像(14.3)は読まず、`briefs` にその1件
+    (`withheld: true`)だけを入れる。`images` は送る画像だけ(`briefs` の並びから送らない
+    ものを除いた順)。"""
     briefs: list[dict[str, Any]] = []
     images: list[LlmImage] = []
     with ctx.session() as db:
@@ -723,7 +798,19 @@ def load_visible_images(
                 )
         # レーティング(ADR-0049)。AI に渡す画像はマスクしない代わりに、段階を情報として渡す。
         ratings = content_rating_domain.bulk_levels(db, [a.id for a in assets])
+        # 外部の接続先には X 以上の画像を送らない(14.3)。
+        external = ctx.get_disclosure().external
+        withheld = {
+            a.id: llm_view.withheld_entry(
+                a.id, a.kind, ratings.get(a.id), group_for_asset(db, a.id, ctx.user)
+            )
+            for a in assets
+            if llm_view.withholds(ratings.get(a.id), external=external)
+        }
     for asset in assets:
+        if asset.id in withheld:
+            briefs.append(withheld[asset.id])
+            continue
         try:
             image = render_asset_for_llm(ctx.state.store, asset)
         except (OSError, ValueError) as e:
@@ -746,13 +833,23 @@ def load_visible_images(
 async def view_assets(ctx: ToolContext, args: ViewAssetsArgs) -> ToolOutcome:
     briefs, images = await _in_thread(lambda: load_visible_images(ctx, args.asset_ids))
     return ToolOutcome(
-        ok=True,
-        result={
-            "assets": briefs,
-            "note": "The images follow in the next message, in this order. " + _SHOW_HINT,
-        },
-        images=images,
+        ok=True, result=_view_note({"assets": briefs}, briefs, images), images=images
     )
+
+
+def _view_note(
+    result: dict[str, Any], briefs: list[dict[str, Any]], images: list[LlmImage]
+) -> dict[str, Any]:
+    """`view_assets` / `view_result` の注記。送らなかった画像(14.3)があればその旨も。"""
+    withheld = [b for b in briefs if b.get("withheld")]
+    if images:
+        order = "in the same order as the assets"
+        if withheld:
+            order += " that are not withheld"
+        result["note"] = f"The images follow in the next message, {order}. " + _SHOW_HINT
+    if withheld:
+        result["withheld_note"] = llm_view.WITHHELD_IMAGE_NOTE
+    return result
 
 
 # -- ストックの捜索(10章) ----------------------------------------------------------
@@ -782,6 +879,27 @@ def _search_call[T](fn: Callable[[], T]) -> T:
         raise ToolFailure(str(e)) from e
 
 
+def _paged_assets(
+    ctx: ToolContext, payload: dict[str, Any], offset: int, extra: dict[str, Any]
+) -> dict[str, Any]:
+    """検索の結果を、1件の短い形(14.4)と X 以上の絞り込み(14.3)にして、予算に収まる件数で
+    切る。"""
+    external = ctx.get_disclosure().external
+    items = [llm_view.compact_asset(item, external=external) for item in payload["items"]]
+    result = llm_view.paged(
+        items,
+        offset=offset,
+        has_more=bool(payload.get("truncated")),
+        total=payload.get("total"),
+        extra=extra,
+    )
+    if result["items"]:
+        result["note"] = _SHOW_HINT
+    if any(item.get("withheld") for item in result["items"]):
+        result["withheld_note"] = llm_view.WITHHELD_NOTE
+    return result
+
+
 async def search_assets(ctx: ToolContext, args: SearchAssetsArgs) -> ToolOutcome:
     def _search() -> dict[str, Any]:
         with ctx.session() as db:
@@ -792,16 +910,20 @@ async def search_assets(ctx: ToolContext, args: SearchAssetsArgs) -> ToolOutcome
                     ctx.user,
                     _asset_brief,
                     query=args.query,
-                    mode=args.mode,
+                    mode=args.mode or "hybrid",
                     kind=args.kind,
                     group_id=args.group_id,
                     tag=args.tag,
                     limit=args.limit,
+                    offset=args.offset,
                 )
             )
-        if payload.get("items"):
-            payload["note"] = _SHOW_HINT
-        return payload
+        extra: dict[str, Any] = {"mode": payload["mode"]}
+        if payload["mode"] in ("semantic", "hybrid"):
+            extra["multilingual"] = payload.get("multilingual")
+        if payload.get("fallback_reason"):
+            extra["fallback_reason"] = payload["fallback_reason"]
+        return _paged_assets(ctx, payload, args.offset, extra)
 
     return ToolOutcome(ok=True, result=await _in_thread(_search))
 
@@ -811,14 +933,44 @@ async def find_similar_assets(ctx: ToolContext, args: FindSimilarAssetsArgs) -> 
         with ctx.session() as db:
             payload, _assets = _search_call(
                 lambda: asset_search_domain.find_similar_assets(
-                    db, ctx.state, ctx.user, _asset_brief, asset_id=args.asset_id, limit=args.limit
+                    db,
+                    ctx.state,
+                    ctx.user,
+                    _asset_brief,
+                    asset_id=args.asset_id,
+                    limit=args.limit,
+                    offset=args.offset,
                 )
             )
-        if payload.get("items"):
-            payload["note"] = _SHOW_HINT
-        return payload
+        return _paged_assets(ctx, payload, args.offset, {"asset_id": str(args.asset_id)})
 
     return ToolOutcome(ok=True, result=await _in_thread(_find))
+
+
+async def list_group_assets(ctx: ToolContext, args: ListGroupAssetsArgs) -> ToolOutcome:
+    """グループの画像を短い形で全部返す(14.4。新しい順、`offset` で続きを読む)。"""
+
+    def _list() -> dict[str, Any]:
+        with ctx.session() as db:
+            group = get_visible_group(db, ctx.user, args.group_id)
+            if group is None or group.deleted_at is not None:
+                raise ToolFailure(f"Group {args.group_id} not found.")
+            payload, _assets = _search_call(
+                lambda: asset_search_domain.search_assets(
+                    db,
+                    ctx.state,
+                    ctx.user,
+                    _asset_brief,
+                    query=None,
+                    group_id=args.group_id,
+                    limit=args.limit,
+                    offset=args.offset,
+                )
+            )
+            extra = {"group": {"id": str(group.id), "name": group.name}}
+        return _paged_assets(ctx, payload, args.offset, extra)
+
+    return ToolOutcome(ok=True, result=await _in_thread(_list))
 
 
 async def get_asset(ctx: ToolContext, args: GetAssetArgs) -> ToolOutcome:
@@ -827,11 +979,20 @@ async def get_asset(ctx: ToolContext, args: GetAssetArgs) -> ToolOutcome:
 
 
 def _asset_payload(ctx: ToolContext, asset_id: uuid.UUID) -> dict[str, Any]:
-    """`get_asset` と `view_result` の文字の情報。見えない・削除済みは ToolFailure。"""
+    """`get_asset` と `view_result` の文字の情報。見えない・削除済みは ToolFailure。外部の接続先に
+    送らない X 以上の画像は、ID・種類・段階・グループだけ(`withheld: true`。14.3)。"""
     with ctx.session() as db:
         asset = get_visible_asset(db, ctx.user, asset_id)
         if asset is None or asset.deleted_at is not None:
             raise ToolFailure(f"Asset {asset_id} not found.")
+        level = content_rating_domain.level_for(db, asset.id)
+        if llm_view.withholds(level, external=ctx.get_disclosure().external):
+            # X 以上の画像は、外部の接続先には ID・種類・段階・グループだけ(14.3)。
+            payload = llm_view.withheld_entry(
+                asset.id, asset.kind, level, group_for_asset(db, asset.id, ctx.user)
+            )
+            payload["withheld_note"] = llm_view.WITHHELD_NOTE
+            return payload
         payload = _asset_brief(asset)
         payload.update(asset_search_domain.asset_details(db, ctx.user, asset))
     return payload
@@ -860,8 +1021,11 @@ async def view_result(ctx: ToolContext, args: ViewResultArgs) -> ToolOutcome:
         payload["from_result_area"] = from_result_area
         images: list[LlmImage] = []
         if args.include_image:
-            _briefs, images = load_visible_images(ctx, [asset_id])
-            payload["note"] = "The image follows in the next message."
+            briefs, images = load_visible_images(ctx, [asset_id])
+            if images:
+                payload["note"] = "The image follows in the next message."
+            if any(b.get("withheld") for b in briefs):
+                payload["withheld_note"] = llm_view.WITHHELD_IMAGE_NOTE
         return ToolOutcome(ok=True, result=payload, images=images)
 
     return await _in_thread(_view)
@@ -879,8 +1043,8 @@ def _view_many(ctx: ToolContext, asset_ids: list[uuid.UUID], include_image: bool
     result: dict[str, Any] = {"assets": items}
     images: list[LlmImage] = []
     if include_image:
-        _briefs, images = load_visible_images(ctx, asset_ids)
-        result["note"] = "The images follow in the next message, in the same order as assets."
+        briefs, images = load_visible_images(ctx, asset_ids)
+        _view_note(result, briefs, images)
     return ToolOutcome(ok=True, result=result, images=images)
 
 
@@ -901,14 +1065,24 @@ async def list_recent_results(ctx: ToolContext, args: ListRecentResultsArgs) -> 
                 if get_visible_group(db, ctx.user, args.group_id) is None:
                     raise ToolFailure(f"Group {args.group_id} not found.")
                 query = query.where(run_views_domain.run_in_group(args.group_id))
-            runs = list(db.execute(query.limit(args.limit + 1)).scalars().all())
-            truncated = len(runs) > args.limit
+            total = db.execute(select(func.count()).select_from(query.subquery())).scalar_one()
+            runs = list(db.execute(query.offset(args.offset).limit(args.limit + 1)).scalars().all())
+            more = len(runs) > args.limit
             runs = runs[: args.limit]
             run_ids = [r.id for r in runs]
             outputs = run_views_domain.bulk_output_refs(db, run_ids, exclude_deleted=True)
             inputs = run_views_domain.bulk_input_refs(db, run_ids, ctx.user)
-            items = [
-                {
+            # X 以上の画像を作った・使った Run のプロンプトは送らない(14.3)。
+            withheld = ctx.get_disclosure().withheld_ids(
+                db,
+                [o.asset_id for r in runs for o in outputs[r.id]]
+                + [asset_id for r in runs for asset_id, _role, _pos in inputs[r.id]],
+            )
+            items = []
+            for run in runs:
+                output_ids = [o.asset_id for o in outputs[run.id]]
+                input_refs = inputs[run.id]
+                item: dict[str, Any] = {
                     "run_id": str(run.id),
                     "created_at": _iso(run.queued_at),
                     "status": str(run.status),
@@ -917,18 +1091,25 @@ async def list_recent_results(ctx: ToolContext, args: ListRecentResultsArgs) -> 
                     "model": run.model,
                     "origin": run.origin or "web",
                     "prompt": _clip(run.prompt, RECENT_RESULTS_PROMPT_MAX),
-                    "output_asset_ids": [str(o.asset_id) for o in outputs[run.id]],
+                    "output_asset_ids": [str(a) for a in output_ids],
                     "inputs": [
                         {"asset_id": str(asset_id), "role": role}
-                        for asset_id, role, _position in inputs[run.id]
+                        for asset_id, role, _position in input_refs
                     ],
                 }
-                for run in runs
-            ]
+                if withheld & ({*output_ids} | {a for a, _r, _p in input_refs}):
+                    item["prompt"] = None
+                    item["withheld"] = True
+                items.append(item)
         shown = ctx.form.result_asset_id if ctx.form is not None else None
-        payload: dict[str, Any] = {"items": items, "truncated": truncated}
+        payload = llm_view.paged(items, offset=args.offset, has_more=more, total=total, extra={})
         if shown is not None:
             payload["result_area_asset_id"] = str(shown)
+        if any(item.get("withheld") for item in payload["items"]):
+            payload["withheld_note"] = (
+                "Runs marked withheld made or used images rated X or higher; their prompts are "
+                "not sent to the external LLM connection."
+            )
         payload["note"] = (
             "Newest first. Count positions by run (a run with several outputs counts once); "
             "runs you created are included. Text only: to look at outputs, call view_result "
@@ -949,9 +1130,24 @@ async def list_groups(ctx: ToolContext, _args: NoArgs) -> ToolOutcome:
 
 async def list_tags(ctx: ToolContext, args: ListTagsArgs) -> ToolOutcome:
     def _list() -> dict[str, Any]:
+        # 外部の接続先なら、X 以上の画像は数えない(14.3)。
+        excluded = ctx.get_disclosure().excluded_levels()
         with ctx.session() as db:
-            rows = annotations_domain.list_tags(db, ctx.user, args.prefix, args.limit, prefix=True)
-        return {"items": [{"name": name, "count": count} for name, count in rows]}
+            rows = annotations_domain.list_tags(
+                db,
+                ctx.user,
+                args.prefix,
+                args.limit + 1,
+                prefix=True,
+                offset=args.offset,
+                exclude_levels=excluded,
+            )
+            total = annotations_domain.count_tags(
+                db, ctx.user, args.prefix, prefix=True, exclude_levels=excluded
+            )
+        more = len(rows) > args.limit
+        items = [{"name": name, "count": count} for name, count in rows[: args.limit]]
+        return llm_view.paged(items, offset=args.offset, has_more=more, total=total)
 
     return ToolOutcome(ok=True, result=await _in_thread(_list))
 
@@ -961,7 +1157,7 @@ async def show_assets(ctx: ToolContext, args: ShowAssetsArgs) -> ToolOutcome:
     格子にする(サムネイルは Asset ID から `GET /api/assets/{id}/content?variant=thumb` で
     引く)。並びは指定どおりで、重複は1つにまとめる。見えない・削除済みの画像は道具のエラー。"""
 
-    def _show() -> dict[str, Any]:
+    def _show() -> ToolOutcome:
         ids = list(dict.fromkeys(args.asset_ids))
         with ctx.session() as db:
             found: dict[uuid.UUID, Asset] = {}
@@ -985,9 +1181,29 @@ async def show_assets(ctx: ToolContext, args: ShowAssetsArgs) -> ToolOutcome:
                 # レーティング(ADR-0049)。画面のカードがマスクに使う。
                 entry["content_rating"] = ratings.get(asset_id)
                 assets.append(entry)
-        return {"shown": True, "title": args.title, "assets": assets}
+            external = ctx.get_disclosure().external
+            llm_assets = [
+                llm_view.withheld_entry(
+                    a["asset_id"],
+                    a["kind"],
+                    a["content_rating"],
+                    group_for_asset(db, uuid.UUID(a["asset_id"]), ctx.user),
+                )
+                if llm_view.withholds(a["content_rating"], external=external)
+                else {
+                    "asset_id": a["asset_id"],
+                    "kind": a["kind"],
+                    "title": a["title"],
+                    "content_rating": a["content_rating"],
+                }
+                for a in assets
+            ]
+        result = {"shown": True, "title": args.title, "assets": assets}
+        # 画面のカードは焦点・幅・高さ・タイトルを使う。LLM には短い形(14.4)だけ。
+        llm_result = {"shown": True, "title": args.title, "assets": llm_assets}
+        return ToolOutcome(ok=True, result=result, llm_result=llm_result)
 
-    return ToolOutcome(ok=True, result=await _in_thread(_show))
+    return await _in_thread(_show)
 
 
 # -- プロンプトセットの書き込み ----------------------------------------------------------
@@ -1156,14 +1372,26 @@ async def remove_tags(ctx: ToolContext, args: TagsArgs) -> ToolOutcome:
 
 
 async def set_title(ctx: ToolContext, args: SetTitleArgs) -> ToolOutcome:
-    return await _in_thread(
-        lambda: _stock_call(
+    def _set() -> ToolOutcome:
+        outcome = _stock_call(
             ctx,
             lambda db: stock_domain.set_title(
                 db, ctx.user, args.asset_id, args.title, ctx.state.settings
             ),
         )
-    )
+        with ctx.session() as db:
+            withheld = ctx.get_disclosure().withheld_ids(db, [args.asset_id])
+        if withheld:
+            # 書き込みは ID で働く。X 以上の画像の前後のタイトルは外部の接続先に送らない(14.3)。
+            llm_result = dict(outcome.result)
+            llm_result["before"] = {"title": None}
+            llm_result["after"] = {"title": None}
+            llm_result["withheld"] = True
+            llm_result["withheld_note"] = llm_view.WITHHELD_NOTE
+            outcome.llm_result = llm_result
+        return outcome
+
+    return await _in_thread(_set)
 
 
 async def create_group(ctx: ToolContext, args: CreateGroupArgs) -> ToolOutcome:
@@ -1242,6 +1470,8 @@ async def suggest_groups(ctx: ToolContext, args: SuggestGroupsArgs) -> ToolOutco
                     viewer=ctx.user,
                     scope=args.scope,
                     granularity=args.granularity,
+                    # 外部の接続先なら、特徴的なタグに X 以上の画像を数えない(14.3)。
+                    exclude_tag_levels=ctx.get_disclosure().excluded_levels(),
                 )
             except EmbeddingsConflictError as e:
                 raise ToolFailure(
@@ -1783,7 +2013,10 @@ TOOLS: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         "view_assets",
         "Look at images in the stock (for example the outputs of a run). The images are sent "
-        "to you after the tool result.",
+        "to you after the tool result. Do not use it to find images: narrow candidates with "
+        "the text results of search_assets, find_similar_assets or list_group_assets first, "
+        "and look only at the few you cannot decide on from text. The user may be asked to "
+        "allow sending the images; if they decline, continue with the text information.",
         ViewAssetsArgs,
         view_assets,
     ),
@@ -1797,7 +2030,8 @@ TOOLS: tuple[ToolDefinition, ...] = (
         "as get_asset (title, tags including automatic tags, the prompt, model and parameters "
         "that made it with its run id, its primary parent) and the images after the tool "
         "result. With asset_ids, the details are a list in the given order. Pass "
-        "include_image=false for the text only.",
+        "include_image=false for the text only. The user may be asked to allow sending the "
+        "images.",
         ViewResultArgs,
         view_result,
     ),
@@ -1807,24 +2041,30 @@ TOOLS: tuple[ToolDefinition, ...] = (
         "run id, time, status, operation, model, prompt (shortened), output asset ids in order "
         "and input asset ids with roles. Includes unfinished and failed runs. Use it for "
         "requests such as 'the result before last' or 'compare the last two'. Text only; look "
-        "at outputs with view_result (asset_ids).",
+        "at outputs with view_result (asset_ids). Read older runs with offset when "
+        "next_offset is set.",
         ListRecentResultsArgs,
         list_recent_results,
     ),
     ToolDefinition(
         "search_assets",
-        "Search the user's stock of images. keyword mode matches prompts, titles and tags "
-        "(newest first; omit query to list the newest). semantic mode finds images by a "
-        "natural-language description using image embeddings. Filter by kind, group and tag. "
-        "Results are text only (ids, titles, tags, scores); use view_assets to look at "
-        "candidates and show_assets to present the ones you picked.",
+        "Search the user's stock of images. hybrid mode (the default) combines keyword and "
+        "semantic matching into one ranking; start with it. keyword mode matches exact words "
+        "in prompts, titles and tags (newest first; omit query to list the newest). semantic "
+        "mode finds images by visual similarity to a natural-language description using image "
+        "embeddings. Filter by kind, group and tag. "
+        "Results are text only (ids, kinds, titles, tags, ratings, groups, scores). This is the "
+        "first tool for finding images. Results stop at a size limit: when next_offset is set, "
+        "call again with offset to read the rest. Use view_assets only for a few candidates "
+        "you cannot decide on from text, and show_assets to present the ones you picked.",
         SearchAssetsArgs,
         search_assets,
     ),
     ToolDefinition(
         "find_similar_assets",
         "List images that look similar to the given image, most similar first (image "
-        "embeddings). Fails when embeddings are turned off.",
+        "embeddings), as text. Read more with offset when next_offset is set. Fails when "
+        "embeddings are turned off.",
         FindSimilarAssetsArgs,
         find_similar_assets,
     ),
@@ -1836,6 +2076,14 @@ TOOLS: tuple[ToolDefinition, ...] = (
         get_asset,
     ),
     ToolDefinition(
+        "list_group_assets",
+        "List all images in a group as text (id, kind, title, tags, rating), newest first. "
+        "Results stop at a size limit: when next_offset is set, call again with offset until "
+        "it is null. Use it to organize a whole group.",
+        ListGroupAssetsArgs,
+        list_group_assets,
+    ),
+    ToolDefinition(
         "list_groups",
         "List the groups that organize the stock (with member counts).",
         NoArgs,
@@ -1843,7 +2091,8 @@ TOOLS: tuple[ToolDefinition, ...] = (
     ),
     ToolDefinition(
         "list_tags",
-        "List tags on the user's images with counts, most used first. Filter by prefix.",
+        "List tags on the user's images with counts, most used first. Filter by prefix. Read "
+        "more with offset when next_offset is set.",
         ListTagsArgs,
         list_tags,
     ),

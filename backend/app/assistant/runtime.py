@@ -8,14 +8,20 @@
   1時間の記録は会話と同じものに数える。
 - 領域の四角の検出(ADR-0053 7章)も同じエンジンを使う。1時間の記録は検出の設定の上限で、
   会話とは別に数える(`detection_requests`)。
+- 画像を LLM に送る前の許可の待ち(ADR-0048 14.1。`permissions`)。プロセス内に持ち、再起動で
+  消える。答えられるのは求めた利用者だけ。
 """
 
 from __future__ import annotations
 
+import secrets
 import threading
 import time
 import uuid
 from collections import deque
+from dataclasses import dataclass, field
+
+import anyio
 
 from app.assistant.engine import AssistantEngine, FakeAssistantEngine, OpenAIAssistantEngine
 from app.assistant.structured import (
@@ -65,6 +71,50 @@ class HourlyRequestCounter:
             return True
 
 
+@dataclass
+class PermissionRequest:
+    """画像を LLM に送る前の許可の求め(ADR-0048 14.1)。`event` は答えが届いたら立つ。"""
+
+    id: str
+    owner: str
+    conversation_id: uuid.UUID
+    event: anyio.Event = field(default_factory=anyio.Event)
+    answer: str | None = None
+
+
+class PermissionRegistry:
+    """待っている許可の求め。イベントループの中(async の関数)からだけ触る。"""
+
+    def __init__(self) -> None:
+        self._pending: dict[str, PermissionRequest] = {}
+
+    def create(self, owner: str, conversation_id: uuid.UUID) -> PermissionRequest:
+        request = PermissionRequest(
+            id=secrets.token_urlsafe(16), owner=owner, conversation_id=conversation_id
+        )
+        self._pending[request.id] = request
+        return request
+
+    def answer(self, request_id: str, owner: str, answer: str) -> bool:
+        """答える。無い・他人の・答え済みの求めなら False(何もしない)。"""
+        request = self._pending.get(request_id)
+        if request is None or request.owner != owner or request.answer is not None:
+            return False
+        request.answer = answer
+        request.event.set()
+        return True
+
+    def owns(self, request_id: str, owner: str) -> bool:
+        request = self._pending.get(request_id)
+        return request is not None and request.owner == owner and request.answer is None
+
+    def discard(self, request_id: str) -> None:
+        self._pending.pop(request_id, None)
+
+    def pending_ids(self) -> list[str]:
+        return list(self._pending)
+
+
 class AssistantRuntime:
     def __init__(self, engine: AssistantEngine, structured: StructuredEngine | None = None) -> None:
         self.engine = engine
@@ -72,6 +122,7 @@ class AssistantRuntime:
         self.requests = HourlyRequestCounter()
         # 領域の四角の検出の1時間の記録(ADR-0053 7章)。
         self.detection_requests = HourlyRequestCounter()
+        self.permissions = PermissionRegistry()
         self._active: set[uuid.UUID] = set()
         self._active_lock = threading.Lock()
 

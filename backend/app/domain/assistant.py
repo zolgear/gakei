@@ -33,6 +33,7 @@ from app.auth.identity import CurrentUser
 from app.domain.models import AssistantConversation, AssistantMessage
 from app.domain.schemas import (
     AssistantConversationResponse,
+    AssistantImagePermissionView,
     AssistantMessageResponse,
     AssistantToolCallView,
     AssistantUndoResult,
@@ -105,6 +106,7 @@ def to_message_response(message: AssistantMessage) -> AssistantMessageResponse:
             **base,
             text=content.get("text", ""),
             attachments=_uuid_list(content.get("attachments")),
+            withheld_attachments=_uuid_list(content.get("withheld_attachments")),
         )
     if message.role == ROLE_ASSISTANT:
         return AssistantMessageResponse(
@@ -133,7 +135,17 @@ def to_message_response(message: AssistantMessage) -> AssistantMessageResponse:
         undoable=bool(content.get("undo")) and undone_raw is None,
         undone_at=datetime.fromisoformat(undone_raw) if isinstance(undone_raw, str) else None,
         undo_result=_undo_result(content.get("undo_result")),
+        image_permission=_image_permission(content.get("permission")),
     )
+
+
+def _image_permission(raw: Any) -> AssistantImagePermissionView | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return AssistantImagePermissionView.model_validate(raw)
+    except ValueError:
+        return None
 
 
 def _undo_result(raw: Any) -> AssistantUndoResult | None:

@@ -10,12 +10,22 @@ import json
 import uuid
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.assistant.engine import FakeAssistantEngine
+from app.assistant.service import AssistantTurn
 from app.assistant.tools import RECENT_RESULTS_PROMPT_MAX, TOOLS_BY_NAME, parameters_schema
 from app.domain.schemas import ASSISTANT_ATTACHMENTS_MAX
 from tests.conftest import login_as, make_png_bytes, wait_for_run_terminal
+
+
+@pytest.fixture(autouse=True)
+def _send_images_without_asking(monkeypatch: pytest.MonkeyPatch) -> None:
+    """画像の許可(ADR-0048 14.1)は `test_assistant_permissions.py` で確かめる。ここでは
+    聞かずに送る。"""
+    monkeypatch.setattr(AssistantTurn, "_image_send_always", lambda self: True)
+
 
 SETTINGS = "/api/settings/assistant"
 CONVERSATIONS = "/api/assistant/conversations"
@@ -118,7 +128,8 @@ def test_recent_results_newest_first_with_limit(client: TestClient) -> None:
 
     result = _recent(client)
     assert [i["run_id"] for i in result["items"]] == [third["id"], second["id"], first["id"]]
-    assert result["truncated"] is False
+    assert result["next_offset"] is None
+    assert result["returned"] == 3 and result["total"] == 3
     assert "view_result" in result["note"]
 
     newest = result["items"][0]
@@ -136,7 +147,11 @@ def test_recent_results_newest_first_with_limit(client: TestClient) -> None:
 
     limited = _recent(client, {"limit": 2})
     assert [i["run_id"] for i in limited["items"]] == [third["id"], second["id"]]
-    assert limited["truncated"] is True
+    assert limited["next_offset"] == 2 and limited["total"] == 3
+
+    rest = _recent(client, {"limit": 2, "offset": 2})
+    assert [i["run_id"] for i in rest["items"]] == [first["id"]]
+    assert rest["next_offset"] is None
 
 
 def test_recent_results_limit_bounds(client: TestClient) -> None:
@@ -266,6 +281,6 @@ def test_view_result_without_arguments_still_uses_result_area(client: TestClient
 
 def test_list_recent_results_schema() -> None:
     schema = parameters_schema(TOOLS_BY_NAME["list_recent_results"].args)
-    assert set(schema["properties"]) == {"limit", "group_id"}
+    assert set(schema["properties"]) == {"limit", "group_id", "offset"}
     assert schema.get("required", []) == []
     assert schema.get("additionalProperties") is False
