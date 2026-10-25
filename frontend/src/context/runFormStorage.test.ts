@@ -14,6 +14,7 @@ const sampleState: RunFormState = {
   assetGroupId: '33333333-3333-3333-3333-333333333333',
   regions: [],
   regionsAssetId: null,
+  regionsFrame: 'input',
 }
 
 describe('serializeRunFormState / parseStoredRunFormState', () => {
@@ -82,6 +83,7 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
       assetGroupId: null,
       regions: [],
       regionsAssetId: null,
+      regionsFrame: 'input',
     }
     const raw = serializeRunFormState(state)
     expect(parseStoredRunFormState(raw)).toEqual(state)
@@ -125,7 +127,7 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
   })
 
   it('空の inputs/params でも往復できる', () => {
-    const state: RunFormState = { provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null}
+    const state: RunFormState = { provider: '', model: '', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null, regionsFrame: 'input'}
     expect(parseStoredRunFormState(serializeRunFormState(state))).toEqual(state)
   })
 
@@ -140,6 +142,7 @@ describe('serializeRunFormState / parseStoredRunFormState', () => {
       assetGroupId: null,
       regions: [],
       regionsAssetId: null,
+      regionsFrame: 'input',
     })
   })
 
@@ -168,6 +171,7 @@ describe('領域の指示の四角(ADR-0053)', () => {
       { number: 1, kind: 'move', box: [0.5, 0.1, 0.8, 0.4], source_box: [0.1, 0.1, 0.4, 0.4], instruction: 'x', text: null, reference_asset_id: 'R', label: '帽子' },
     ],
     regionsAssetId: 'A',
+    regionsFrame: 'input',
   }
 
   it('四角と、四角を付けた主たる入力を往復できる', () => {
@@ -192,6 +196,27 @@ describe('領域の指示の四角(ADR-0053)', () => {
     expect(parsed?.regions[0].label).toBe('カップ')
     expect(parsed?.regions).toHaveLength(1)
     expect(parsed && 'regionLabels' in parsed).toBe(false)
+  })
+
+  it('白紙の土台(入力画像あり)を往復できる', () => {
+    const blank: RunFormState = { ...base, regions: [{ ...base.regions[0], kind: 'add', source_box: null }], regionsAssetId: null, regionsFrame: 'output' }
+    expect(parseStoredRunFormState(serializeRunFormState(blank))).toEqual(blank)
+  })
+
+  it('古い保存値(土台なし)は、四角を付けた主たる入力があれば input、無ければ output', () => {
+    const raw = JSON.parse(serializeRunFormState(base))
+    delete raw.regionsFrame
+    expect(parseStoredRunFormState(JSON.stringify(raw))?.regionsFrame).toBe('input')
+    raw.regionsAssetId = null
+    const parsed = parseStoredRunFormState(JSON.stringify(raw))
+    expect(parsed?.regionsFrame).toBe('output')
+    expect(parsed?.regions).toHaveLength(1)
+  })
+
+  it('土台の値が壊れていれば四角なし', () => {
+    const raw = JSON.parse(serializeRunFormState(base))
+    raw.regionsFrame = 'sideways'
+    expect(parseStoredRunFormState(JSON.stringify(raw))?.regions).toEqual([])
   })
 
   it('四角を付けた主たる入力が無ければ四角なし', () => {

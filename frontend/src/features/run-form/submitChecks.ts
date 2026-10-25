@@ -79,3 +79,34 @@ export function providerUnavailableMessage(providerEntry: ProviderEntry | undefi
   if (providerEntry === undefined || providerEntry.available) return null
   return providerEntry.unavailable_reason ?? msg().runForm.submitChecks.providerUnavailableDefault
 }
+
+/**
+ * 出力サイズに合わせて配置の結果を描き直している間は送信を止める(ADR-0050 5章、2026-10-24 追記)。
+ * 描き直しが終わると入力の1枚目が差し替わるので、古い配置で実行しないため。
+ */
+export function compositeRedrawBlockReason(redrawing: boolean): string | null {
+  return redrawing ? msg().runForm.submitChecks.compositeRedrawing : null
+}
+
+/** 入力画像を受けないモデルに画像を足そうとしたときの知らせ。 */
+export function noImageInputsMessage(): string {
+  return msg().runForm.submitChecks.noImageInputs
+}
+
+/**
+ * 入力画像を足せなかったときの知らせ。入力画像を受けないモデル(上限 0)なら「使わない」、
+ * それ以外は呼び出し側の上限の文言(経路ごとに言い回しが違うので渡してもらう)。
+ */
+export function inputsRejectedMessage(maxInputImages: number, limitMessage: string): string {
+  return maxInputImages <= 0 ? noImageInputsMessage() : limitMessage
+}
+
+/**
+ * 入力画像の枚数で送信を止める理由。入力画像を受けないモデル(上限 0)に画像が残っていれば外すよう
+ * 伝え(入力は消さない。元のモデルに戻せば使える)、上限を超えていれば上限を伝える。
+ */
+export function imageInputsBlockReason(imageInputCount: number, maxInputImages: number): string | null {
+  if (imageInputCount <= maxInputImages) return null
+  if (maxInputImages <= 0) return msg().runForm.submitChecks.noImageInputsPresent
+  return fmt(msg().workspace.inputPane.maxInputImagesExceeded, { max: maxInputImages })
+}

@@ -16,6 +16,7 @@ import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
 import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
+import { LayoutSketchPreview } from '../regions/LayoutSketchPreview'
 import type { InputImagesProps } from './InputChipsRow'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputImageTiles.module.css'
@@ -55,6 +56,18 @@ export function InputImageTiles({
   const it = t.workspace.inputTiles
   const [isDragOver, setIsDragOver] = useState(false)
   const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
+
+  // 1枚目の上に四角を描けるモデルか(入力画像を受けないモデルでは白紙だけ)。
+  const regionsOnPrimary = regions.supported && regions.primaryUsable !== false
+  // 1枚目の上に領域を描けるか(タイルの操作のバンドと同じ条件)。
+  const primary = images[0]
+  const primaryRegionsUsable =
+    regionsOnPrimary &&
+    primary !== undefined &&
+    detailsByAssetId.get(primary.assetId)?.content_withheld !== true &&
+    !notFoundAssetIds.has(primary.assetId) &&
+    !deletedAssetIds.has(primary.assetId) &&
+    !blockedAssetIds.has(primary.assetId)
 
   function handleDragOver(e: DragEvent<HTMLElement>) {
     if (!isRelevantDragTypes(Array.from(e.dataTransfer.types))) return
@@ -116,6 +129,7 @@ export function InputImageTiles({
               data-primary={isPrimary}
               data-not-found={isNotFound}
               data-deleted={isDeleted || isBlocked}
+              data-redrawing={logic.compositeRedrawingInputId === item.inputId}
             >
               <button
                 type="button"
@@ -145,7 +159,11 @@ export function InputImageTiles({
                 <span className={styles.statusLabel}>{c.notFound}</span>
               ) : isDeleted ? (
                 <span className={styles.statusLabel}>{c.deleted}</span>
-              ) : isWithheld ? null : isBlocked ? (
+              ) : isWithheld ? null : logic.compositeRedrawingInputId === item.inputId ? (
+                <span className={styles.busyLabel} role="status" title={t.composite.redrawing}>
+                  {t.composite.redrawingShort}
+                </span>
+              ) : isBlocked ? (
                 // 画像なしはタイルの置き換えの表示が理由を示すので、ここは deny の判定だけのとき。
                 <span className={styles.statusLabel} title={t.mods.inputBlockedTitle}>
                   {t.mods.inputBlocked}
@@ -154,7 +172,8 @@ export function InputImageTiles({
                 detail && <span className={styles.dims}>{`${detail.width}×${detail.height}`}</span>
               )}
 
-              {isPrimary && regions.supported && regions.count > 0 && !isWithheld && (
+              {/* 白紙の土台の四角は1枚目に付かない(数は白紙のタイルに出す)。 */}
+              {isPrimary && regionsOnPrimary && regions.count > 0 && !regions.blank && !isWithheld && (
                 <span className={styles.regionsBadge}>
                   <button
                     type="button"
@@ -239,7 +258,7 @@ export function InputImageTiles({
                   </button>
                 )}
 
-                {isPrimary && regions.supported && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
+                {isPrimary && regionsOnPrimary && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
                   <button
                     type="button"
                     className={styles.actionButton}
@@ -251,7 +270,7 @@ export function InputImageTiles({
                   </button>
                 )}
 
-                {isPrimary && regions.supported && regions.hasOverlay && !isWithheld && (
+                {isPrimary && regionsOnPrimary && regions.hasOverlay && !isWithheld && (
                   <button
                     type="button"
                     className={styles.actionButton}
@@ -330,39 +349,82 @@ export function InputImageTiles({
           <span>{c.sketch}</span>
         </button>
 
-        {/* 入力画像の無い Run の白紙の領域(ADR-0053 6章)。四角を付けたら数を出し、外すボタンを添える。 */}
-        {regions.blank && images.length === 0 && (
-          <div className={styles.blankRegionsTile}>
+        {/* 入力画像があるときの領域(ADR-0053)。1枚目の上の四角を描く。タイルの操作のバンドはホバーで
+            しか見えない(タッチでは出ない)ので、スケッチ・配置と同じ並びにも常に出す。白紙の土台の四角が
+            あるときは、下の白紙のタイルを出す。 */}
+        {primaryRegionsUsable && !(regions.blank && regions.count > 0) && (
+          <button
+            type="button"
+            className={styles.addTile}
+            aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
+            title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.buttonTitle}
+            onClick={regions.onOpen}
+          >
+            <RegionsIcon />
+            <span>{regions.count > 0 ? fmt(t.regions.form.chip, { count: regions.count }) : t.regions.button}</span>
+          </button>
+        )}
+
+        {/* 白紙の領域(ADR-0053 6章・1章)。四角を付けたら、入力画像のタイルと同じ形で白紙の配置図の
+            プレビューを出し、数と外すボタンを重ねる(入力画像があっても)。四角が無ければ、入力画像の
+            無いときだけ「領域」を出す(あるときは上の1枚目の「領域」から開く)。 */}
+        {regions.blank &&
+          (regions.count > 0 || images.length === 0 || regions.primaryUsable === false) &&
+          (regions.count > 0 && regions.boxes && regions.blankCanvas ? (
+            <div className={styles.tile}>
+              <button
+                type="button"
+                className={styles.thumbButton}
+                aria-label={t.regions.form.chipTitle}
+                title={t.regions.form.chipTitle}
+                onClick={regions.onOpen}
+              >
+                <LayoutSketchPreview
+                  className={styles.thumb}
+                  width={regions.blankCanvas.width}
+                  height={regions.blankCanvas.height}
+                  regions={regions.boxes}
+                />
+              </button>
+              <span className={styles.regionsBadge}>
+                <button
+                  type="button"
+                  className={styles.regionsBadgeButton}
+                  title={t.regions.form.chipTitle}
+                  onClick={regions.onOpen}
+                >
+                  {fmt(t.regions.form.chip, { count: regions.count })}
+                </button>
+                <button
+                  type="button"
+                  className={styles.regionsBadgeButton}
+                  aria-label={t.regions.form.clear}
+                  title={t.regions.form.clear}
+                  onClick={regions.onClear}
+                >
+                  <RemoveIcon />
+                </button>
+              </span>
+            </div>
+          ) : (
             <button
               type="button"
               className={styles.addTile}
-              aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
-              title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.blankButtonTitle}
+              aria-label={t.regions.button}
+              title={t.regions.blankButtonTitle}
               onClick={regions.onOpen}
             >
               <RegionsIcon />
-              <span>{regions.count > 0 ? fmt(t.regions.form.chip, { count: regions.count }) : t.regions.button}</span>
+              <span>{t.regions.button}</span>
             </button>
-            {regions.count > 0 && (
-              <button
-                type="button"
-                className={styles.actionButton}
-                aria-label={t.regions.form.clear}
-                title={t.regions.form.clear}
-                onClick={regions.onClear}
-              >
-                <RemoveIcon />
-              </button>
-            )}
-          </div>
-        )}
+          ))}
 
         <button
           type="button"
           className={styles.addTile}
           aria-label={t.composite.button}
           title={t.composite.buttonTitle}
-          onClick={() => logic.openCompositeEditor({ mode: 'new' })}
+          onClick={() => logic.startComposite()}
         >
           <ArrangeIcon />
           <span>{t.composite.button}</span>

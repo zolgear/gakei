@@ -104,9 +104,74 @@ def test_interpret_truncates_to_max_items_and_bad_shapes() -> None:
     data = {"objects": [{"label": f"o{i}", "box": [i, 0, i + 10, 10]} for i in range(30)]}
     assert len(detection.interpret(data, 20)) == 20
     assert len(detection.interpret(data, 3)) == 3
-    assert detection.interpret({}, 20) == []
-    assert detection.interpret({"objects": "x"}, 20) == []
-    assert detection.interpret(None, 20) == []
+    # 見つからない(空の配列)は空の結果。
+    assert detection.interpret({"objects": []}, 20) == []
+    assert detection.interpret([], 20) == []
+    # 答えの形でなければ、空の結果ではなくエラー(スキーマを黙って無視した口など)。
+    for bad in ({}, {"objects": "x"}, None, {"items": []}, "text", 3):
+        with pytest.raises(detection.RegionResponseError):
+            detection.interpret(bad, 20)
+    # 要素があるのに1つも読めないときもエラー。
+    with pytest.raises(detection.RegionResponseError):
+        detection.interpret({"objects": [{"name": "x", "coordinates": [0, 0, 10, 10]}]}, 20)
+
+
+def test_interpret_drops_duplicates_before_max_items() -> None:
+    """同じ要素が上限を超えて並んでも、重複は上限を数える前に除くので、後の要素も拾える。"""
+    same = {"label": "cup", "box": [10, 10, 100, 100]}
+    others = [{"label": f"o{i}", "box": [i * 10, 0, i * 10 + 5, 10]} for i in range(3)]
+    boxes = detection.interpret({"objects": [same] * 25 + others}, 20)
+    assert [b.label for b in boxes] == ["cup", "o0", "o1", "o2"]
+
+
+def test_interpret_accepts_key_variants_and_bare_array() -> None:
+    data = [
+        {"label": "a", "bbox_2d": [0, 0, 100, 100]},
+        {"label": "b", "bbox": [0, 0, 200, 200]},
+        {"name": "c", "box": [0, 0, 300, 300]},
+    ]
+    boxes = detection.interpret(data, 20)
+    assert [b.label for b in boxes] == ["a", "b", "c"]
+    assert boxes[0].box == pytest.approx((0.0, 0.0, 0.1, 0.1))
+
+
+def test_parse_response_lenient() -> None:
+    expected = {"objects": [{"label": "cup", "box": [1, 2, 3, 4]}]}
+    plain = '{"objects": [{"label": "cup", "box": [1, 2, 3, 4]}]}'
+    assert detection.parse_response(plain) == expected
+    # 前後の空白と ```json の囲み。
+    assert detection.parse_response(f"  \n```json\n{plain}\n```\n ") == expected
+    assert detection.parse_response(f"```\n{plain}\n```") == expected
+    # 閉じていない囲み。
+    assert detection.parse_response(f"```json\n{plain}") == expected
+    # 前後の文(括弧を含む文でも、次の JSON を探す)。
+    assert detection.parse_response(f"Here are the boxes (x first):\n{plain}\nDone.") == expected
+    # 配列だけ。
+    assert detection.parse_response('[{"label": "a", "bbox_2d": [1, 2, 3, 4]}]') == [
+        {"label": "a", "bbox_2d": [1, 2, 3, 4]}
+    ]
+    # 複数行の整形。
+    multi = (
+        '{\n  "objects": [\n    {\n      "label": "a",\n'
+        '      "box": [\n        1,\n        2,\n        3,\n        4\n      ]\n    }\n  ]\n}'
+    )
+    assert detection.parse_response(multi) == {"objects": [{"label": "a", "box": [1, 2, 3, 4]}]}
+
+
+def test_parse_response_salvages_unclosed_array() -> None:
+    """出力の上限で切れた応答は、閉じた要素までを拾う。"""
+    cut = '{"objects": [{"label": "a", "box": [1, 2, 3, 4]}, {"label": "b", "box": [5, 6'
+    assert detection.parse_response(cut) == [{"label": "a", "box": [1, 2, 3, 4]}]
+    cut = '```json\n[\n  {"label": "a", "bbox_2d": [1, 2, 3, 4]},\n  {"label": "b", "bb'
+    assert detection.parse_response(cut) == [{"label": "a", "bbox_2d": [1, 2, 3, 4]}]
+    boxes = detection.interpret(detection.parse_response(cut), 20)
+    assert [b.label for b in boxes] == ["a"]
+
+
+def test_parse_response_errors() -> None:
+    for bad in (None, "", "   ", "no json here", '{"objects": [{"label": "a", "bo', "```json\n```"):
+        with pytest.raises(detection.RegionResponseError):
+            detection.parse_response(bad)
 
 
 def test_instructions_include_language_limit_and_query() -> None:
@@ -116,6 +181,10 @@ def test_instructions_include_language_limit_and_query() -> None:
     text = detection.instructions("ja", query="cup", max_items=20)
     assert "日本語" in text and "探している物だけ" in text
     assert detection.build_input("cup").endswith("cup")
+    # スキーマを付けないときだけ、末尾に答えの形を示す。
+    assert '"objects"' not in text
+    text = detection.instructions("ja", query=None, max_items=20, structured=False)
+    assert text.rstrip().endswith('{"objects":[{"label":"名前","box":[x0,y0,x1,y1]}]}')
 
 
 def test_fake_response() -> None:
@@ -146,7 +215,9 @@ class _Stub:
         return self.response
 
 
-def _request(api_style: str = "responses", images: tuple[StructuredImage, ...] = ()) -> Any:
+def _request(
+    api_style: str = "responses", images: tuple[StructuredImage, ...] = (), **extra: Any
+) -> Any:
     return StructuredRequest(
         target=LlmTarget(
             connection_id="openai",
@@ -158,8 +229,8 @@ def _request(api_style: str = "responses", images: tuple[StructuredImage, ...] =
         instructions="i",
         input_text="find",
         schema_name=detection.SCHEMA_NAME,
-        schema=detection.RESPONSE_SCHEMA,
         images=images,
+        **{"schema": detection.RESPONSE_SCHEMA, **extra},
     )
 
 
@@ -215,6 +286,80 @@ def test_engine_chat_sends_image_url_with_detail() -> None:
         {"type": "text", "text": "find"},
         {"type": "image_url", "image_url": {"url": image.data_url(), "detail": "high"}},
     ]
+
+
+def test_engine_responses_without_schema_and_with_limit() -> None:
+    """スキーマの無い要求は `text.format` を付けない。上限は `max_output_tokens`。`raw_text` なら
+    文のまま返す(上限で切れた応答も)。"""
+    output = SimpleNamespace(
+        type="message", content=[SimpleNamespace(type="output_text", text="```json\n[")]
+    )
+    stub = _Stub(
+        SimpleNamespace(output=[output], error=None, model="m", usage=None, status="incomplete")
+    )
+    engine = OpenAIStructuredEngine()
+    engine._cache.get = lambda target: SimpleNamespace(responses=stub)  # type: ignore[method-assign]
+    result = asyncio.run(
+        engine.complete(_request(schema=None, max_output_tokens=1234, raw_text=True))
+    )
+    assert result.text == "```json\n[" and result.data == {}
+    call = stub.calls[0]
+    assert "text" not in call
+    assert call["max_output_tokens"] == 1234
+    # スキーマのある要求にも上限を付けられる。
+    asyncio.run(engine.complete(_request(max_output_tokens=99, raw_text=True)))
+    assert stub.calls[1]["max_output_tokens"] == 99 and "format" in stub.calls[1]["text"]
+
+
+def test_engine_chat_without_schema_and_with_limit() -> None:
+    message = SimpleNamespace(content='[{"label": "a", "bbox": [1, 2, 3, 4]}]', refusal=None)
+    completions = _Stub(SimpleNamespace(choices=[SimpleNamespace(message=message)], model="m"))
+    engine = OpenAIStructuredEngine()
+    engine._cache.get = lambda target: SimpleNamespace(  # type: ignore[method-assign]
+        chat=SimpleNamespace(completions=completions)
+    )
+    result = asyncio.run(
+        engine.complete(_request("chat", schema=None, max_output_tokens=2000, raw_text=True))
+    )
+    assert result.text == '[{"label": "a", "bbox": [1, 2, 3, 4]}]'
+    call = completions.calls[0]
+    assert "response_format" not in call
+    assert call["max_completion_tokens"] == 2000
+    # 上限を付けない要求には付けない(今までの呼び方)。
+    asyncio.run(engine.complete(_request("chat", raw_text=True)))
+    assert "max_completion_tokens" not in completions.calls[1]
+    assert "response_format" in completions.calls[1]
+
+
+def test_engine_chat_falls_back_to_max_tokens() -> None:
+    """`max_completion_tokens` を断る接続先には、`max_tokens` で送り直す。"""
+    import httpx
+    import openai
+
+    message = SimpleNamespace(content="{}", refusal=None)
+    ok = SimpleNamespace(choices=[SimpleNamespace(message=message)], model="m")
+
+    class _Picky(_Stub):
+        async def create(self, **kwargs: Any) -> Any:
+            self.calls.append(dict(kwargs))
+            if "max_completion_tokens" in kwargs:
+                request = httpx.Request("POST", "http://x/v1/chat/completions")
+                raise openai.BadRequestError(
+                    "Unrecognized request argument supplied: max_completion_tokens",
+                    response=httpx.Response(400, request=request),
+                    body=None,
+                )
+            return self.response
+
+    completions = _Picky(ok)
+    engine = OpenAIStructuredEngine()
+    engine._cache.get = lambda target: SimpleNamespace(  # type: ignore[method-assign]
+        chat=SimpleNamespace(completions=completions)
+    )
+    asyncio.run(engine.complete(_request("chat", max_output_tokens=500)))
+    assert len(completions.calls) == 2
+    assert completions.calls[1]["max_tokens"] == 500
+    assert "max_completion_tokens" not in completions.calls[1]
 
 
 # -- 設定 ------------------------------------------------------------------------------
@@ -303,6 +448,9 @@ def test_detect_with_fake_engine(client: TestClient) -> None:
     request = _engine(client).requests[-1]
     assert request.schema == detection.RESPONSE_SCHEMA
     assert request.schema_name == detection.SCHEMA_NAME
+    assert request.max_output_tokens == detection.MAX_OUTPUT_TOKENS
+    assert request.raw_text is True
+    assert '"objects"' not in request.instructions
     assert len(request.images) == 1
     assert request.images[0].detail == "high"
     with Image.open(io.BytesIO(request.images[0].data)) as image:
@@ -341,6 +489,32 @@ def test_detect_cleans_engine_response(client: TestClient) -> None:
     )
     body = client.post(_detect_url(asset_id), json={}).json()
     assert body["regions"] == [{"label": "a", "box": [0.0, 0.0, 0.5, 0.5]}]
+
+
+def test_detect_reads_loose_text_response(client: TestClient) -> None:
+    _enable(client)
+    asset_id = _upload(client)
+    _engine(client).responses.append(
+        'Sure!\n```json\n[\n  {"label": "a", "bbox_2d": [0, 0, 500, 500]},\n  {"label": "b", "b'
+    )
+    body = client.post(_detect_url(asset_id), json={}).json()
+    assert body["regions"] == [{"label": "a", "box": [0.0, 0.0, 0.5, 0.5]}]
+
+
+def test_detect_shape_mismatch_is_error_not_empty(client: TestClient) -> None:
+    """答えの形でない応答は「見つからない」ではなくエラーにし、履歴にも残さない。"""
+    _enable(client)
+    asset_id = _upload(client)
+    for bad in ({"results": [{"name": "x", "coords": [0, 0, 1, 1]}]}, "I cannot see any image."):
+        _engine(client).responses.append(bad)
+        response = client.post(_detect_url(asset_id), json={})
+        assert response.status_code == 502, response.text
+        assert response.json()["detail"]["code"] == "llm_error"
+    assert client.get(_detections_url(asset_id)).json()["items"] == []
+    # 空の配列は「見つからない」(200)。
+    _engine(client).responses.append({"objects": []})
+    response = client.post(_detect_url(asset_id), json={})
+    assert response.status_code == 200 and response.json()["regions"] == []
 
 
 def test_detect_rejected_when_disabled(client: TestClient) -> None:
@@ -412,7 +586,9 @@ def test_detect_llm_error(client: TestClient) -> None:
     assert detail["code"] == "llm_error" and "boom" in detail["message"]
 
 
-def test_detect_unsupported_connection(client: TestClient) -> None:
+def test_detect_with_connection_without_structured_outputs(client: TestClient) -> None:
+    """構造化出力に対応しない接続先(手元の VLM)でも検出できる。スキーマを付けずに、答えの形を
+    指示文で示して送る。"""
     created = client.post(
         CONNECTIONS,
         json={"name": "local", "base_url": "http://127.0.0.1:11434/v1", "api_style": "chat"},
@@ -420,17 +596,22 @@ def test_detect_unsupported_connection(client: TestClient) -> None:
     assert created.status_code == 201, created.text
     _enable(client, connection_id=created.json()["connections"][-1]["id"])
     asset_id = _upload(client)
-
-    class _RealLike(FakeStructuredEngine):
-        requires_target = True
-
-    client.app.state.assistant.structured = _RealLike()
+    engine = _RealLikeEngine()
+    client.app.state.assistant.structured = engine
+    assert _settings_reason(client) == (True, None)
+    engine.responses.append(
+        '```json\n{"objects": [{"label": "cup", "bbox_2d": [0, 0, 500, 500]}]}\n```'
+    )
     response = client.post(_detect_url(asset_id), json={})
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "unsupported"
-    assert client.get(SETTINGS).json()["usable"] is False
+    assert response.status_code == 200, response.text
+    assert response.json()["regions"] == [{"label": "cup", "box": [0.0, 0.0, 0.5, 0.5]}]
+    request = engine.requests[-1]
+    assert request.schema is None
+    assert request.raw_text is True
+    assert request.max_output_tokens == detection.MAX_OUTPUT_TOKENS
+    assert '{"objects":[{"label":' in request.instructions
 
-    # 組み込みの接続先(OpenAI の公式)なら対応とみなす。キーが無ければ接続先の不足。
+    # 組み込みの接続先(OpenAI の公式)でキーが無ければ接続先の不足。
     _enable(client, connection_id="openai")
     response = client.post(_detect_url(asset_id), json={})
     assert response.status_code == 409
@@ -464,34 +645,30 @@ def test_unusable_reason_codes(client: TestClient, data_dir: Path) -> None:
     assert _settings_reason(client) == (False, "connection_missing")
 
 
-def test_builtin_proxy_needs_structured_outputs_opt_in(client: TestClient, data_dir: Path) -> None:
-    """組み込みの接続先を OpenAI 互換のプロキシに向けたとき、自動では使えず、「対応する」を
-    指定すれば使える。「対応しない」なら公式でも使えない。"""
-    client.app.state.assistant.structured = _RealLikeEngine()
+def test_structured_outputs_setting_switches_schema(client: TestClient, data_dir: Path) -> None:
+    """組み込みの接続先を OpenAI 互換のプロキシに向けても使える。構造化出力を「対応する」に
+    すればスキーマを付け、そうでなければ付けずに送る。"""
+    engine = _RealLikeEngine()
+    client.app.state.assistant.structured = engine
     api_key_domain.write_file_key(data_dir, "sk-test")
     api_key_domain.write_file_base_url(data_dir, "http://127.0.0.1:4000/v1")
     _enable(client)
     asset_id = _upload(client)
-    assert _settings_reason(client) == (False, "structured_outputs_unsupported")
-    response = client.post(_detect_url(asset_id), json={})
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "unsupported"
+    assert _settings_reason(client) == (True, None)
+    assert client.post(_detect_url(asset_id), json={}).status_code == 200
+    assert engine.requests[-1].schema is None
 
     builtin = f"{CONNECTIONS}/openai"
     assert client.patch(builtin, json={"structured_outputs": "supported"}).status_code == 200
-    assert _settings_reason(client) == (True, None)
-    response = client.post(_detect_url(asset_id), json={})
-    assert response.status_code == 200, response.text
+    assert client.post(_detect_url(asset_id), json={}).status_code == 200
+    assert engine.requests[-1].schema == detection.RESPONSE_SCHEMA
+    assert '"objects"' not in engine.requests[-1].instructions
 
     api_key_domain.delete_file_base_url(data_dir)
     assert client.patch(builtin, json={"structured_outputs": "unsupported"}).status_code == 200
-    assert _settings_reason(client) == (False, "structured_outputs_unsupported")
-    response = client.post(_detect_url(asset_id), json={})
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "unsupported"
-
-    assert client.patch(builtin, json={"structured_outputs": "auto"}).status_code == 200
     assert _settings_reason(client) == (True, None)
+    assert client.post(_detect_url(asset_id), json={}).status_code == 200
+    assert engine.requests[-1].schema is None
 
 
 def test_detect_calls_before_send_and_stops_on_deny(client: TestClient) -> None:

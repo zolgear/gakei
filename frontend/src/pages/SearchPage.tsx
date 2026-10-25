@@ -18,7 +18,8 @@
  * 落とす、貼り付ける(Ctrl/Cmd+V)のどれかで手元の画像を `POST /api/search/similar-image` に送り、
  * 近い画像を類似度つきで並べる。画像は Asset にせず、サーバーも保存しない。手元のファイルなので
  * URL には残さない(再読み込みで消える)。サイドバーの検索パネルから渡された画像も受け取る
- * (`queryImage.ts` の受け渡し)。
+ * (`queryImage.ts` の受け渡し)。アプリの中の画像(ストックのタイル、マップの画像など)を落としたときは
+ * 送らずに、その Asset に似た画像(`similar`)を開く(`dragDropAssets.ts`)。
  */
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -37,6 +38,7 @@ import { HistoryCard } from '../features/history/HistoryCard'
 import { HighlightedText } from '../features/search/HighlightedText'
 import {
   buildSearchPath,
+  buildSimilarSearchPath,
   parseSearchState,
   resolveSemanticTarget,
   semanticSearchParams,
@@ -44,6 +46,7 @@ import {
   type SemanticTarget,
 } from '../features/search/searchQuerySync'
 import { promptRunCards } from '../features/search/promptSearchResults'
+import { dragMayCarryImage, interpretDroppedData, readDropSource } from '../features/run-form/dragDropAssets'
 import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddingCapabilities'
 import { embeddingErrorKind, embeddingPollInterval, retryEmbeddingQuery } from '../features/embeddings/embeddingErrors'
 import { EmbeddingStateNotice } from '../features/embeddings/EmbeddingStateNotice'
@@ -54,7 +57,6 @@ import { usePromptLoader } from '../features/search/usePromptLoader'
 import { useQueryImage } from '../features/search/useQueryImage'
 import {
   QUERY_IMAGE_ACCEPT,
-  dragHasFiles,
   pickImageFile,
   subscribePendingQueryImage,
   takePendingQueryImage,
@@ -200,7 +202,7 @@ export function SearchPage() {
   }, [imageSearchAvailable, setQueryImageFile])
 
   function handleDragOver(e: DragEvent) {
-    if (!imageSearchAvailable || !dragHasFiles(e.dataTransfer)) return
+    if (!imageSearchAvailable || !dragMayCarryImage(Array.from(e.dataTransfer.types))) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
     if (!dragActive) setDragActive(true)
@@ -215,7 +217,19 @@ export function SearchPage() {
     if (!imageSearchAvailable) return
     e.preventDefault()
     setDragActive(false)
-    acceptImageFile(pickImageFile(e.dataTransfer))
+    // アプリの中の画像(印付き、または同じオリジンの Asset の URL)は、その Asset に似た画像を探す
+    // (手元の画像として送らない)。読み取れないページ内のドラッグは何もしない。
+    const source = readDropSource(e.dataTransfer)
+    const dropped = interpretDroppedData(source)
+    if (dropped.kind === 'asset') {
+      clearQueryImage()
+      setPickError(false)
+      navigate(buildSimilarSearchPath(dropped.assetId))
+    } else if (dropped.kind === 'files') {
+      acceptImageFile(dropped.files[0])
+    } else if (!source.fromPage) {
+      acceptImageFile(null)
+    }
   }
 
   const promptLoader = usePromptLoader()

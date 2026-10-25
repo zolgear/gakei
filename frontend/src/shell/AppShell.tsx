@@ -15,7 +15,9 @@ import { useScrollRestoration } from './useScrollRestoration'
 import { MissingApiKeyBanner } from '../features/settings/MissingApiKeyBanner'
 import { ASSISTANT_SETTINGS_QUERY_KEY } from '../features/settings/queryKeys'
 import { AssistantSessionProvider } from '../features/assistant/AssistantSessionProvider'
+import { AssistantWindow } from '../features/assistant/AssistantWindow'
 import { getAssistantSettings } from '../api/client'
+import { isAssistantShortcut } from './newRunShortcut'
 import { useFaviconProgress } from '../features/favicon/useFaviconProgress'
 import { useI18n } from '../i18n'
 import { MODAL_BODY_ATTRIBUTE } from '../components/modalFocus'
@@ -49,16 +51,19 @@ export function AppShell() {
     setPrevCollapsed(collapsed)
     setPanelOverride(undefined)
   }
-  // 生成のアシスタント(ADR-0048 2章)。管理者が無効にしている・接続先がそろっていないときは、
-  // アイコンレールに出さず、覚えた選択がアシスタントでもパネルを畳んで見せる(選択は書き換えない)。
+  // 生成のアシスタント(ADR-0048 2章)。どの画面にも重ねる浮いた窓で、アイコンレールの一番下の
+  // ボタンで開閉する。管理者が無効にしている・接続先がそろっていないときは、ボタンも窓も出さない。
   const assistantSettings = useQuery({
     queryKey: ASSISTANT_SETTINGS_QUERY_KEY,
     queryFn: getAssistantSettings,
     staleTime: 60_000,
   })
   const assistantUsable = assistantSettings.data?.usable === true
-  const shownPanel = displayedPanel(rememberedPanel, collapsed, panelOverride)
-  const selectedPanel = shownPanel === 'assistant' && !assistantUsable ? null : shownPanel
+  const selectedPanel = displayedPanel(rememberedPanel, collapsed, panelOverride)
+  // 窓の開閉とたたみ。開いたことがあれば、閉じても中身(送信欄の書きかけなど)を残す(AssistantWindow)。
+  const [assistantOpen, setAssistantOpen] = useState(false)
+  const [assistantCollapsed, setAssistantCollapsed] = useState(false)
+  const [assistantMounted, setAssistantMounted] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   // 狭い幅のドロワーは裏を覆うので、ダイアログと同じフォーカスの規則にする(ADR-0009 9章)。
   // 開いたらレールの先頭へ移し、Tab は中で回し、Esc で閉じ、閉じたらメニューのボタンへ戻す。
@@ -88,6 +93,35 @@ export function AppShell() {
     setPanelOverride(next.override)
     if (next.save) saveSelectedPanel(next.remembered)
   }
+
+  // 開いていて広げているときは閉じる。閉じている・たたんでいるときは広げて開く。
+  // 狭い幅のドロワーから開いたら、ドロワーは閉じてシートを見せる。
+  function toggleAssistant() {
+    if (assistantOpen && !assistantCollapsed) {
+      setAssistantOpen(false)
+      return
+    }
+    setAssistantOpen(true)
+    setAssistantCollapsed(false)
+    setAssistantMounted(true)
+    setDrawerOpen(false)
+  }
+  // Alt+A(Mac は Option+A)でも開閉する。使えないときと IME の変換中は反応させない。
+  const toggleAssistantRef = useRef(toggleAssistant)
+  toggleAssistantRef.current = toggleAssistant
+  useEffect(() => {
+    if (!assistantUsable) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.isComposing || !isAssistantShortcut(e)) return
+      e.preventDefault()
+      toggleAssistantRef.current()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [assistantUsable])
+  const assistantToggle = assistantUsable
+    ? { open: assistantOpen, onToggle: toggleAssistant }
+    : undefined
 
   // ページから開く/畳む。畳むページではその訪問の間だけ従い、覚えた選択は変えない。
   function setPanelFromPage(panel: PanelId | null) {
@@ -129,7 +163,7 @@ export function AppShell() {
 
           <div className={styles.body}>
             <div className={styles.resourceDesktop} data-side={RESOURCE_SIDE}>
-              <IconRail selected={selectedPanel} onSelect={handleSelectPanel} showAssistant={assistantUsable} />
+              <IconRail selected={selectedPanel} onSelect={handleSelectPanel} assistant={assistantToggle} />
               <SidebarPanel selected={selectedPanel} resizable side={RESOURCE_SIDE} />
             </div>
 
@@ -148,7 +182,7 @@ export function AppShell() {
                   onClick={() => setDrawerOpen(false)}
                 />
                 <div className={styles.drawerPanel} {...{ [MODAL_BODY_ATTRIBUTE]: '' }}>
-                  <IconRail selected={selectedPanel} onSelect={handleSelectPanel} showAssistant={assistantUsable} />
+                  <IconRail selected={selectedPanel} onSelect={handleSelectPanel} assistant={assistantToggle} />
                   <SidebarPanel selected={selectedPanel} />
                 </div>
               </div>
@@ -160,6 +194,14 @@ export function AppShell() {
             </main>
           </div>
 
+          {assistantUsable && assistantMounted && (
+            <AssistantWindow
+              open={assistantOpen}
+              collapsed={assistantCollapsed}
+              onCollapsedChange={setAssistantCollapsed}
+              onClose={() => setAssistantOpen(false)}
+            />
+          )}
         </div>
       </AssistantSessionProvider>
     </ResourcePanelContext.Provider>

@@ -80,7 +80,11 @@ export function ConversationBar() {
             aria-label={c.renameLabel}
             onChange={(e) => setRenaming(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') setRenaming(null)
+              if (e.key === 'Escape') {
+                // 浮いた窓の Esc(閉じる)に渡さない。
+                e.preventDefault()
+                setRenaming(null)
+              }
             }}
             // 名前の変更を押した直後に打てるように。
             // eslint-disable-next-line jsx-a11y/no-autofocus

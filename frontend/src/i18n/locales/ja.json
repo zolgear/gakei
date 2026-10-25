@@ -86,7 +86,8 @@
       "graph": "系列グラフ",
       "history": "履歴",
       "search": "検索",
-      "assistant": "アシスタント"
+      "assistant": "アシスタント",
+      "assistantTitle": "アシスタント (Alt+A)"
     },
     "sidebar": {
       "resourcePanel": "リソースパネル",
@@ -401,6 +402,11 @@
         "confirmMessage": "このブラウザに保存した GAKEI の設定をまとめて消し、ページを読み込み直します。\n\n消えるもの: 表示言語(ブラウザの言語に戻ります)、タブのアイコンの進捗表示、生成画面のレイアウトと入力欄の幅・高さ、サイドバーの幅と開いていたパネル、ストックとビューアの節の開閉、マップの値(タブ・近傍の数・上限・しきい値・系列の辺)、スケッチのペン、シードのモード、プロンプトのタグ補完とタグの訳の表示、最後に選んだグループ。\n\nサーバーに保存した設定・画像・履歴と、ログインの状態は変わりません。",
         "confirmWarning": "生成フォームに書きかけのプロンプト・パラメーター・入力画像の指定も消えます。",
         "confirmLabel": "消して読み込み直す"
+      },
+      "assistant": {
+        "heading": "アシスタント",
+        "imageSendLabel": "画像を LLM に送る前に確かめる",
+        "saveFailed": "設定を保存できませんでした"
       }
     },
     "accessTokens": {
@@ -1441,7 +1447,7 @@
       "enabledHelp": "有効にすると、「領域」の画面に「検出」が出ます。無効でも四角は手で描けます。既定は無効です。",
       "connectionHeading": "VLM",
       "connectionLabel": "接続先",
-      "connectionHelp": "画像を読めて、構造化出力(JSON のスキーマ)に対応した接続先を選びます。",
+      "connectionHelp": "画像を読める接続先を選びます。構造化出力(JSON のスキーマ)に対応しない接続先(手元の VLM など)も使えます。",
       "connectionsLink": "LLM の接続先",
       "modelLabel": "モデル名",
       "modelHelp": "接続先に送るモデル名です。画像を読めるモデルを選びます。",
@@ -1460,10 +1466,8 @@
       },
       "unusable": {
         "connection_missing": "選んだ接続先が見つからないため、「検出」は出ていません。接続先を選び直してください。",
-        "api_key_missing": "接続先のキーが設定されていないため、「検出」は出ていません。OpenAI の設定でキーを登録してください。",
-        "structured_outputs_unsupported": "接続先が構造化出力に対応するとみなせないため、「検出」は出ていません。対応している接続先なら、「LLM の接続先」でその接続先の「構造化出力」を「対応する」にしてください。"
-      },
-      "structuredOutputsLink": "LLM の接続先を開く"
+        "api_key_missing": "接続先のキーが設定されていないため、「検出」は出ていません。OpenAI の設定でキーを登録してください。"
+      }
     },
     "groupNaming": {
       "intro": "グループの提案のページで、名前の欄の下に LLM が考えた名前の候補を出します。送るのは集まりのタグだけで、外部の接続先へはセンシティブなタグを外して送ります。ページを開くたびに接続先へ送り、費用がかかることがあります。",
@@ -2023,7 +2027,10 @@
       "operationUnsupportedReason": "選んだモデルは、この操作(生成/編集)に対応していません",
       "maskRequiredReason": "このモデルの実行にはマスクが必要です",
       "inputCountRequirement": "入力画像が{min}枚必要です(現在{current}枚)",
-      "providerUnavailableDefault": "このプロバイダーには接続できません"
+      "providerUnavailableDefault": "このプロバイダーには接続できません",
+      "compositeRedrawing": "配置を出力サイズに合わせて描き直しています",
+      "noImageInputs": "このモデルは入力画像を使いません",
+      "noImageInputsPresent": "このモデルは入力画像を使いません。入力画像を外してください"
     },
     "unspecifiedLabel": {
       "unspecified": "未指定",
@@ -2059,6 +2066,7 @@
     "runFormLogic": {
       "droppedParamsSettings": "{names} は現在の設定では使えないため未指定に戻しました",
       "droppedParamsInputs": "{names} は現在の入力では使えないため未指定に戻しました",
+      "droppedParamsModel": "{names} はこのモデルでは使えないため未指定に戻しました",
       "submitFailedDefault": "実行の開始に失敗しました",
       "listSeparator": "、"
     },
@@ -2108,6 +2116,9 @@
     "button": "配置",
     "buttonTitle": "入力画像を並べ、動かして1枚の入力にする",
     "edit": "配置を編集",
+    "redrawing": "出力サイズに合わせて描き直しています",
+    "redrawingShort": "描き直し中…",
+    "redrawFailed": "配置を出力サイズに合わせて描き直せませんでした。元の大きさのままです",
     "webglUnavailable": "このブラウザでは WebGL2 が使えないため、配置の編集画面を開けません。",
     "loading": "読み込み中...",
     "loadError": "素材の読み込みに失敗しました",
@@ -2133,7 +2144,8 @@
       "fit": "キャンバスに合わせる",
       "center": "中央に寄せる",
       "undo": "元に戻す",
-      "redo": "やり直す"
+      "redo": "やり直す",
+      "showRegions": "領域の四角を表示"
     },
     "panel": {
       "canvasHeading": "キャンバス",
@@ -2178,14 +2190,12 @@
       "invalidCanvas": "キャンバスの大きさは {min}〜{max} px にしてください",
       "outOfBounds": "キャンバスから離れすぎた素材があります(キャンバスの近くへ戻してください)"
     },
-    "removeSources": "元の画像を入力から外す",
     "cancel": "キャンセル",
     "save": "保存",
     "saving": "保存しています...",
     "saveFailedDefault": "配置の保存に失敗しました",
     "exportError": "画像の書き出しに失敗しました",
-    "canvasTooLarge": "このブラウザでは、この大きさのキャンバスを書き出せません",
-    "droppedInputs": "入力の上限({max} 枚)のため、元の画像 {count} 枚を入力に入れませんでした"
+    "canvasTooLarge": "このブラウザでは、この大きさのキャンバスを書き出せません"
   },
   "mask": {
     "title": "マスクを描く",
@@ -3523,6 +3533,12 @@
   },
   "assistant": {
     "heading": "アシスタント",
+    "window": {
+      "collapse": "たたむ",
+      "expand": "広げる",
+      "close": "閉じる",
+      "responding": "応答中"
+    },
     "empty": "プロンプトの相談、プロンプトセットの作成、生成の依頼ができます。\n例: 「夕暮れの港町のプロンプトを3案」「このセットに冬の版を足して」「今の設定で4枚作って」",
     "messagesLabel": "会話",
     "thinking": "考えています…",
@@ -3601,6 +3617,37 @@
       "undoing": "戻しています…",
       "undoneAt": "元に戻しました({at})",
       "undoFailed": "元に戻せませんでした"
+    },
+    "stockCard": {
+      "titles": {
+        "add_tags": "タグを付けた",
+        "remove_tags": "タグを外した",
+        "set_title": "タイトルを変更",
+        "create_group": "グループを作成",
+        "rename_group": "グループの名前を変更",
+        "move_to_group": "グループに入れた",
+        "remove_from_group": "グループから外した"
+      },
+      "count": {
+        "one": "{count} 枚",
+        "other": "{count} 枚"
+      },
+      "more": {
+        "one": "+{count}",
+        "other": "+{count}"
+      },
+      "undoCreate": "元に戻す(グループを削除)",
+      "undoneSingle": "元に戻しました",
+      "undoneCount": {
+        "one": "{count} 枚を元に戻しました。",
+        "other": "{count} 枚を元に戻しました。"
+      },
+      "skipped": {
+        "one": "{count} 枚はその後に変わっていたため戻していません。",
+        "other": "{count} 枚はその後に変わっていたため戻していません。"
+      },
+      "groupDeleted": "グループを削除しました。",
+      "groupKept": "ほかの画像が入っているため、グループは残しました。"
     },
     "formCard": {
       "title": "フォームを変更",
@@ -3681,8 +3728,33 @@
       "list_groups": "グループを読む",
       "list_tags": "タグを読む",
       "show_assets": "画像を示す",
-      "update_form": "フォームを変更"
-    }
+      "update_form": "フォームを変更",
+      "add_tags": "タグを付ける",
+      "remove_tags": "タグを外す",
+      "set_title": "タイトルを変更",
+      "create_group": "グループを作成",
+      "rename_group": "グループの名前を変更",
+      "move_to_group": "グループに入れる",
+      "remove_from_group": "グループから外す",
+      "suggest_groups": "グループの提案を見る",
+      "list_group_assets": "グループの画像を読む"
+    },
+    "permissionCard": {
+      "heading": "画像を送る",
+      "once": "1度だけ許可",
+      "always": "常に許可",
+      "deny": "許可しない",
+      "sending": "答えを送っています…",
+      "failed": "答えを送れませんでした。もう一度選んでください。",
+      "answered": {
+        "once": "1度だけ許可しました",
+        "always": "常に許可しました",
+        "deny": "許可しませんでした",
+        "timeout": "答えが無かったため、送りませんでした",
+        "stopped": "止めたため、送りませんでした"
+      }
+    },
+    "withheldAttachment": "送っていません(X 以上の画像は外部の接続先に送りません)"
   },
   "contentRating": {
     "label": "レーティング",
@@ -3834,6 +3906,7 @@
     "saveBlocked": "直すところがあるため保存できません。",
     "notes": {
       "imageAndText": "OpenAI には、四角を描いた画像を入力に足し、四角ごとの指示を文にしてプロンプトの後ろに足して送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
+      "imageAndTextBlank": "OpenAI には、白紙に四角を描いた配置図を入力に足し、四角ごとの指示を文にしてプロンプトの後ろに足して、編集(Edit)で送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
       "countsTowardLimit": "四角を描いた画像と参照画像も、入力画像の枚数({max} 枚まで)に数えます。",
       "comfyuiBboxes": "ComfyUI には、四角をワークフローの Create Bounding Boxes に差し込んで送ります。指示(無ければ名前)を四角の説明に、描く文字を文字の四角にします。選べる種類は「変える」「足す」だけです。"
     },
@@ -3874,15 +3947,14 @@
       "chip": "領域 {count}",
       "chipTitle": "領域の指示を編集",
       "clear": "領域の指示を外す",
-      "clearedPrimaryChanged": "1枚目の入力画像が変わったので、領域の指示を外しました。",
-      "clearedUnsupported": "選んだモデルは領域の指示に対応していないので、外しました。",
+      "clearedUnsupported": "今のモデルと入力では使えない領域の指示があるので、外しました。",
       "invalid": "領域の指示に直すところがあります。「領域」を開いて確かめてください。",
-      "tooManyInputs": "領域の指示で画像を {extra} 枚足すため、入力画像が {count} 枚になり、上限({max} 枚)を超えます。",
-      "clearedBlankReplaced": "入力画像を足したので、白紙に描いた領域の指示を外しました。"
+      "tooManyInputs": "領域の指示で画像を {extra} 枚足すため、入力画像が {count} 枚になり、上限({max} 枚)を超えます。"
     },
     "runDetail": {
       "heading": "領域の指示",
       "delivery": "四角を描いた画像を入力に足し、指示をプロンプトの後ろに足して送りました。",
+      "deliveryBlank": "白紙に四角を描いた配置図を入力に足し、指示をプロンプトの後ろに足して、編集(Edit)で送りました。",
       "textLine": "描く文字: 「{text}」",
       "reference": "参照画像",
       "noInstruction": "(指示なし)",
@@ -3891,7 +3963,7 @@
       "overlayImage": "送った四角の画像",
       "appendedToggle": "足した文(領域の指示)",
       "deliveryComfyui": "四角を ComfyUI の Create Bounding Boxes に差し込んで送りました。",
-      "frameOutput": "入力画像が無いので、四角の位置は出力の大きさに対する割合です。"
+      "frameOutput": "四角は白紙に描いたので、位置は出力の大きさに対する割合です。"
     },
     "assist": {
       "heading": "領域と検出の候補",
@@ -3912,7 +3984,13 @@
       "candidateChipTitle": "検出の候補(まだ送られません)。押すと名前を入れ、この候補を四角にします",
       "candidateNote": "点線の候補は送られません。チップを押すか領域の画面で四角にしたものだけが、四角を描いた画像と文として送られます。"
     },
-    "blankHint": "入力画像が無いので、出力の大きさ(幅 × 高さ)の白紙の上に描きます。四角は大きさに対する割合で持つので、幅・高さを変えても四角は一緒に伸び縮みします。入力画像を足すと、この四角は外れます。",
-    "blankButtonTitle": "出力の大きさの白紙に四角を描き、四角ごとに名前や指示を付ける"
+    "blankHint": "出力の大きさ(幅 × 高さ)の白紙の上に描きます。四角は大きさに対する割合で持つので、幅・高さを変えても四角は一緒に伸び縮みします。",
+    "blankButtonTitle": "出力の大きさの白紙に四角を描き、四角ごとに名前や指示を付ける",
+    "frame": {
+      "label": "四角の土台",
+      "input": "1枚目の画像",
+      "output": "白紙",
+      "kindsBlocked": "白紙では「そのまま残す」「消す」「動かす」の四角を使えません。種類を変えてから切り替えてください。"
+    }
   }
 }

@@ -9,6 +9,8 @@
 
 - `content_rating.mask_levels`: マスクするレーティングの段階の配列(既定は R 以上)。
 - `content_rating.mask_unrated`: 未判定の画像もマスクするか(既定 false)。
+- `assistant.image_send`: アシスタントが道具で画像を LLM に送る前に確かめるか(`ask`、既定)、
+  確かめずに送るか(`always`)。ADR-0048 14.1。
 """
 
 from __future__ import annotations
@@ -28,6 +30,9 @@ LOCAL_OWNER = "local"
 
 KEY_MASK_LEVELS = "content_rating.mask_levels"
 KEY_MASK_UNRATED = "content_rating.mask_unrated"
+KEY_ASSISTANT_IMAGE_SEND = "assistant.image_send"
+IMAGE_SEND_ASK = "ask"
+IMAGE_SEND_ALWAYS = "always"
 
 
 def _normalize_levels(value: Any) -> list[str]:
@@ -46,10 +51,17 @@ def _normalize_bool(value: Any) -> bool:
     return value
 
 
+def _normalize_image_send(value: Any) -> str:
+    if value not in (IMAGE_SEND_ASK, IMAGE_SEND_ALWAYS):
+        raise ValueError(KEY_ASSISTANT_IMAGE_SEND)
+    return value
+
+
 # キー → (既定値, 検証して保存する形に整える関数)
 _SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     KEY_MASK_LEVELS: (["r", "x", "xx", "xxx"], _normalize_levels),
     KEY_MASK_UNRATED: (False, _normalize_bool),
+    KEY_ASSISTANT_IMAGE_SEND: (IMAGE_SEND_ASK, _normalize_image_send),
 }
 KEYS: tuple[str, ...] = tuple(_SPECS)
 

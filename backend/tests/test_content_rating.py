@@ -233,7 +233,7 @@ def test_ingest_queues_rating_and_worker_judges(client: TestClient) -> None:
     assert detail["level"] == "x" and detail["auto_level"] == "x"
     assert detail["source"] == "auto"
     assert detail["rules_version"] == cr.RULES_VERSION
-    assert detail["model"] == "fake:wd-vit-tagger-v3"
+    assert detail["model"] == "fake:wd-swinv2-tagger-v3"
     assert detail["scores"] == {
         "general": 0.1,
         "sensitive": 0.3,

@@ -7,6 +7,8 @@
  * (バックグラウンドで破棄される)をまたいだ保持のため、setFormState の1箇所で
  * localStorage への保存も行う(呼び出し元ごとに保存を意識させない)。プロンプトの
  * 入力中に連打にならないよう、保存自体は 300ms デバウンスする(画面への反映は即時)。
+ * タブを隠す・閉じるときの前倒しは、待っている保存があるときだけ(別のタブが保存した値を、
+ * このタブの古い値で上書きしない。`debouncedSave.ts`)。
  *
  * グループ(ADR-0022)は、変わったときにだけ「最後に選んだグループ」として別のキーにも
  * すぐ保存する(`lastAssetGroupStorage`)。フォームでの選択・「+」での作成・「同じ設定で」の
@@ -18,6 +20,7 @@ import { ensureInputIds } from '../features/run-form/editInputs'
 import type { PromptInsertMode } from '../features/run-form/promptInsertion'
 import { createEmptyFormState, type RunFormState } from '../features/run-form/types'
 import { loadLastAssetGroupId, saveLastAssetGroupId } from './lastAssetGroupStorage'
+import { createDebouncedSave } from './debouncedSave'
 import { loadRunFormState, saveRunFormState } from './runFormStorage'
 import { RunFormContext, type FormLoadRequest } from './useRunFormContext'
 
@@ -31,7 +34,7 @@ function initialFormState(): RunFormState {
 export function RunFormProvider({ children }: { children: ReactNode }) {
   const [formState, setFormStateRaw] = useState<RunFormState>(initialFormState)
   const formStateRef = useRef(formState)
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [saver] = useState(() => createDebouncedSave(saveRunFormState, SAVE_DEBOUNCE_MS))
   const [pendingPromptInsert, setPendingPromptInsert] = useState<
     { text: string; mode: PromptInsertMode; nonce: number } | null
   >(null)
@@ -39,14 +42,6 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
   const [pendingFormLoad, setPendingFormLoad] = useState<
     { request: FormLoadRequest; nonce: number } | null
   >(null)
-
-  function flushSave() {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-      saveTimeoutRef.current = null
-    }
-    saveRunFormState(formStateRef.current)
-  }
 
   const setFormState = useCallback((nextRaw: RunFormState) => {
     // 入力の inputId が欠けた・重複した状態を保存しないための保険(issue #12・#13)。
@@ -56,12 +51,8 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
     if (next.assetGroupId !== formStateRef.current.assetGroupId) saveLastAssetGroupId(next.assetGroupId)
     formStateRef.current = next
     setFormStateRaw(next)
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
-    saveTimeoutRef.current = setTimeout(() => {
-      saveTimeoutRef.current = null
-      saveRunFormState(next)
-    }, SAVE_DEBOUNCE_MS)
-  }, [])
+    saver.schedule(next)
+  }, [saver])
 
   const requestPromptInsert = useCallback((text: string, mode: PromptInsertMode = 'insert') => {
     insertNonceRef.current += 1
@@ -81,17 +72,16 @@ export function RunFormProvider({ children }: { children: ReactNode }) {
     // iOS Safari はバックグラウンドに回ったタブを破棄することがあるため、デバウンス中の
     // 保存をそのタイミングで前倒しして確定させる(取りこぼしを減らす保険)。
     function handleVisibilityChange() {
-      if (document.visibilityState === 'hidden') flushSave()
+      if (document.visibilityState === 'hidden') saver.flush()
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('pagehide', flushSave)
+    window.addEventListener('pagehide', saver.flush)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('pagehide', flushSave)
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      window.removeEventListener('pagehide', saver.flush)
+      saver.cancel()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [saver])
 
   const value = useMemo(
     () => ({

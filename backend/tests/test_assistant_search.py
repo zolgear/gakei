@@ -135,24 +135,28 @@ def test_keyword_search_filters_and_result_shape(client: TestClient) -> None:
     _tag(client, upload, "redsquare")
     group_id = _group(client, "reds", [upload])
 
-    result = _ok(client, "search_assets", {"query": "zebra"})
+    result = _ok(client, "search_assets", {"query": "zebra", "mode": "keyword"})
     assert result["mode"] == "keyword"
     assert _ids(result) == [zebra]
     item = result["items"][0]
-    assert set(item) >= {"asset_id", "kind", "width", "height", "title", "tags", "group"}
+    # 一覧の1件は短い形(ADR-0048 14.4)。幅・高さ・日時は get_asset だけ。
+    assert set(item) == {"asset_id", "kind", "title", "tags", "content_rating", "group"}
     assert item["kind"] == "generated"
     # 画像の中身と URL は入れない。
     dumped = json.dumps(result)
     assert "base64" not in dumped and "/content" not in dumped
 
     newest = _ok(client, "search_assets", {"limit": 2})
-    assert len(newest["items"]) == 2 and newest["truncated"] is True
+    assert len(newest["items"]) == 2 and newest["next_offset"] == 2
+    assert newest["returned"] == 2 and newest["total"] == 3
+    rest = _ok(client, "search_assets", {"limit": 2, "offset": 2})
+    assert rest["returned"] == 1 and rest["next_offset"] is None
 
     assert _ids(_ok(client, "search_assets", {"kind": "upload"})) == [upload]
     assert _ids(_ok(client, "search_assets", {"tag": "redsquare"})) == [upload]
     in_group = _ok(client, "search_assets", {"group_id": group_id})
     assert _ids(in_group) == [upload]
-    assert in_group["items"][0]["group"]["name"] == "reds"
+    assert in_group["items"][0]["group"] == "reds"
 
     error = _error(client, "search_assets", {"group_id": str(uuid.uuid4())})
     assert "not found" in error
@@ -293,3 +297,64 @@ def test_semantic_search_hides_other_users_assets(client_oidc: TestClient) -> No
     assert _ids(result) == [alice]
     assert _ids(_ok(client, "find_similar_assets", {"asset_id": alice})) == []
     assert "not found" in _error(client, "find_similar_assets", {"asset_id": bob})
+
+
+# -- hybrid(ADR-0048 14.2) -----------------------------------------------------------
+
+
+def test_reciprocal_rank_fusion_order() -> None:
+    from app.domain.asset_search import RRF_K, reciprocal_rank_fusion
+
+    a, b, c, d = (uuid.uuid4() for _ in range(4))
+    fused = reciprocal_rank_fusion([[a, b, c], [c, d, a]])
+    ids = [asset_id for asset_id, _ in fused]
+    # a: 1/(k+1)+1/(k+3)、c: 1/(k+3)+1/(k+1) は同点 → 先の順位(keyword)で前の a が先。
+    assert ids == [a, c, b, d]
+    scores = dict(fused)
+    assert scores[a] == 1 / (RRF_K + 1) + 1 / (RRF_K + 3)
+    assert scores[b] == 1 / (RRF_K + 2)
+    assert scores[d] == 1 / (RRF_K + 2)
+    # 片方にしか無いものも入る。
+    assert set(ids) == {a, b, c, d}
+
+
+def test_hybrid_is_default_and_falls_back_to_keyword(client: TestClient) -> None:
+    _enable(client)
+    zebra = _generate(client, "zebra lighthouse")
+    _generate(client, "mountain cabin")
+
+    result = _ok(client, "search_assets", {"query": "zebra"})
+    assert result["mode"] == "keyword"
+    assert "fallback_reason" in result
+    assert _ids(result) == [zebra]
+    # semantic を明示したら、今までどおり道具のエラー。
+    assert "keyword" in _error(client, "search_assets", {"mode": "semantic", "query": "zebra"})
+    # hybrid を明示しても同じく keyword に切り替える。
+    assert _ok(client, "search_assets", {"query": "zebra", "mode": "hybrid"})["mode"] == "keyword"
+
+
+def test_hybrid_combines_keyword_and_semantic(client: TestClient) -> None:
+    _enable(client)
+    _enable_embeddings(client)
+    zebra = _generate(client, "zebra lighthouse")
+    red = _upload(client, (220, 30, 30))
+    blue = _upload(client, (20, 40, 230))
+    _wait_embedded(client, zebra, red, blue)
+
+    result = _ok(client, "search_assets", {"query": "zebra"})
+    assert result["mode"] == "hybrid"
+    items = {item["asset_id"]: item for item in result["items"]}
+    assert set(items) == {zebra, red, blue}
+    # 両方で当たった画像が先頭。意味だけで当たったものも入る。
+    assert result["items"][0]["asset_id"] == zebra
+    assert items[zebra]["matched"] == "both"
+    assert items[red]["matched"] == "semantic" and items[blue]["matched"] == "semantic"
+
+    # offset は合わせた順に当てる。
+    second = _ok(client, "search_assets", {"query": "zebra", "limit": 1, "offset": 1})
+    assert _ids(second) == [_ids(result)[1]]
+    assert second["next_offset"] == 2
+    # 絞り込みは3つの方式で同じ。
+    only_upload = _ok(client, "search_assets", {"query": "zebra", "kind": "upload"})
+    assert set(_ids(only_upload)) == {red, blue}
+    assert all(item["matched"] == "semantic" for item in only_upload["items"])

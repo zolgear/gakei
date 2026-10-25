@@ -298,3 +298,27 @@ def group_for_asset(db: Session, asset_id: uuid.UUID, viewer: CurrentUser) -> As
     if group is None:
         return None
     return AssetGroupRef(id=group.id, name=group.name)
+
+
+def active_memberships(db: Session, asset_ids: list[uuid.UUID]) -> dict[uuid.UUID, uuid.UUID]:
+    """Asset ごとの所属(削除されていないグループだけ。見える範囲は問わない)。どこにも入って
+    いない・削除済みのグループにだけ残っている Asset は含めない(アシスタントの「元に戻す」が
+    変更前と今の所属を比べるのに使う。ADR-0048 13章)。"""
+    if not asset_ids:
+        return {}
+    rows = db.execute(
+        select(AssetGroupMember.asset_id, AssetGroupMember.asset_group_id)
+        .join(AssetGroup, AssetGroup.id == AssetGroupMember.asset_group_id)
+        .where(AssetGroupMember.asset_id.in_(asset_ids), AssetGroup.deleted_at.is_(None))
+    ).all()
+    return {asset_id: group_id for asset_id, group_id in rows}
+
+
+def active_member_count(db: Session, group_id: uuid.UUID) -> int:
+    """削除済みでない Asset のメンバーの数(見える範囲は問わない)。"""
+    return db.execute(
+        select(func.count())
+        .select_from(AssetGroupMember)
+        .join(Asset, Asset.id == AssetGroupMember.asset_id)
+        .where(AssetGroupMember.asset_group_id == group_id, Asset.deleted_at.is_(None))
+    ).scalar_one()

@@ -17,6 +17,7 @@ import {
   addRegion,
   boxCenter,
   boxFromPoints,
+  defaultRegionKind,
   handlePoint,
   isBoxBigEnough,
   moveBox,
@@ -241,7 +242,7 @@ export function RegionStage({
     let next: EditorRegion[] | null = null
     if (g.type === 'draw') {
       if (!canAdd) return
-      next = addRegion(g.base, boxFromPoints(g.start, point), { key: g.key })
+      next = addRegion(g.base, boxFromPoints(g.start, point), { key: g.key, kind: defaultRegionKind(imageUrl === null) })
     } else if (g.type === 'move') {
       const moved = moveBox(g.orig, point.x - g.start.x, point.y - g.start.y)
       next = updateRegion(g.base, g.key, g.part === 'source' ? { sourceBox: moved } : { box: moved })

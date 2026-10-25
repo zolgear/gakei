@@ -15,11 +15,13 @@ import { useState, type DragEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
 import { AssetImage } from '../mods/AssetImage'
 import { fmt, useI18n } from '../../i18n'
+import type { RegionBox } from '../../api/client'
 import type { EditInputsLogic } from '../run-form/useEditInputsLogic'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
 import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
+import { LayoutSketchPreview } from '../regions/LayoutSketchPreview'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import styles from './InputChipsRow.module.css'
 import { focalStyle } from '../../lib/focalPoint'
@@ -63,10 +65,20 @@ export interface InputRegionsProps {
   overlayShown: boolean
   onToggleOverlay: () => void
   /**
-   * 入力画像の無い Run で、出力の大きさの白紙に四角を描けるか(ADR-0053 6章。ComfyUI)。true なら、
-   * 追加のボタンの並びに「領域」を出す(入力画像を足すと、主たる入力のチップに移る)。
+   * 四角の土台が白紙か(ADR-0053 6章・1章「四角の土台を選ぶ」。入力画像の無い Run と、入力画像があって
+   * 白紙を選んだとき)。true なら、追加のボタンの並びに「領域」(四角があれば白紙のプレビュー)を出し、
+   * 1枚目には「領域 N」を出さない。
    */
   blank?: boolean
+  /** 付けた四角(白紙のタイル・チップのプレビューに描く)。 */
+  boxes?: readonly RegionBox[]
+  /** 白紙のキャンバスの大きさ(領域の編集画面と同じ。プレビューの縦横比に使う)。 */
+  blankCanvas?: { width: number; height: number }
+  /**
+   * 1枚目の上に四角を描けるか(省けば描ける)。入力画像を受けないモデルでは false にし、入力画像が
+   * 残っていても白紙の「領域」を出す(1枚目には領域の操作を出さない)。
+   */
+  primaryUsable?: boolean
 }
 
 export function InputChipsRow({
@@ -84,6 +96,8 @@ export function InputChipsRow({
   const c = t.workspace.inputChips
   const [isDragOver, setIsDragOver] = useState(false)
   const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
+  // 1枚目の上に四角を描けるモデルか(入力画像を受けないモデルでは白紙だけ)。
+  const regionsOnPrimary = regions.supported && regions.primaryUsable !== false
 
   function handleDragOver(e: DragEvent<HTMLElement>) {
     if (!isRelevantDragTypes(Array.from(e.dataTransfer.types))) return
@@ -163,6 +177,10 @@ export function InputChipsRow({
                     <span className={styles.statusTag} title={t.mods.inputBlockedTitle}>
                       {t.mods.inputBlocked}
                     </span>
+                  ) : logic.compositeRedrawingInputId === item.inputId ? (
+                    <span className={styles.busyTag} role="status" title={t.composite.redrawing}>
+                      {t.composite.redrawingShort}
+                    </span>
                   ) : (
                     <span className={styles.dims}>
                       {detail ? `${detail.width}×${detail.height}` : c.dimsLoading}
@@ -239,8 +257,9 @@ export function InputChipsRow({
                       )
                     ))}
 
-                  {isPrimary && regions.supported && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
-                    regions.count > 0 ? (
+                  {isPrimary && regionsOnPrimary && !isWithheld && !isNotFound && !isDeleted && !isBlocked && (
+                    // 白紙の土台の四角は1枚目に付かないので、数は追加の並びの白紙のチップに出す。
+                    regions.count > 0 && !regions.blank ? (
                       <>
                         <button
                           type="button"
@@ -274,7 +293,7 @@ export function InputChipsRow({
                     )
                   )}
 
-                  {isPrimary && regions.supported && regions.hasOverlay && !isWithheld && (
+                  {isPrimary && regionsOnPrimary && regions.hasOverlay && !isWithheld && (
                     <button
                       type="button"
                       className={styles.iconButton}
@@ -359,19 +378,35 @@ export function InputChipsRow({
         <PencilIcon />
         {c.sketch}
       </button>
-      {regions.blank && images.length === 0 && (
-        <>
-          <button
-            type="button"
-            className={styles.addButton}
-            aria-label={regions.count > 0 ? t.regions.form.chipTitle : t.regions.button}
-            title={regions.count > 0 ? t.regions.form.chipTitle : t.regions.blankButtonTitle}
-            onClick={regions.onOpen}
-          >
-            <RegionsIcon size={12} />
-            {regions.count > 0 ? fmt(t.regions.form.chip, { count: regions.count }) : t.regions.button}
-          </button>
-          {regions.count > 0 && (
+      {/* 白紙の領域(ADR-0053 6章・1章)。四角を付けたら、白紙の配置図の小さなプレビューを添える(入力画像が
+          あっても)。四角が無ければ、入力画像の無いときだけ「領域」を出す(あるときは1枚目から開く)。 */}
+      {regions.blank &&
+        (regions.count > 0 || images.length === 0 || regions.primaryUsable === false) &&
+        (regions.count > 0 && regions.boxes && regions.blankCanvas ? (
+          <div className={styles.chip}>
+            <button
+              type="button"
+              className={styles.thumbButton}
+              aria-label={t.regions.form.chipTitle}
+              title={t.regions.form.chipTitle}
+              onClick={regions.onOpen}
+            >
+              <LayoutSketchPreview
+                className={styles.thumb}
+                width={regions.blankCanvas.width}
+                height={regions.blankCanvas.height}
+                regions={regions.boxes}
+              />
+            </button>
+            <button
+              type="button"
+              className={styles.regionsTag}
+              title={t.regions.form.chipTitle}
+              onClick={regions.onOpen}
+            >
+              <RegionsIcon size={12} />
+              {fmt(t.regions.form.chip, { count: regions.count })}
+            </button>
             <button
               type="button"
               className={styles.iconButton}
@@ -381,15 +416,25 @@ export function InputChipsRow({
             >
               <RemoveIcon />
             </button>
-          )}
-        </>
-      )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={styles.addButton}
+            aria-label={t.regions.button}
+            title={t.regions.blankButtonTitle}
+            onClick={regions.onOpen}
+          >
+            <RegionsIcon size={12} />
+            {t.regions.button}
+          </button>
+        ))}
       <button
         type="button"
         className={styles.addButton}
         aria-label={t.composite.button}
         title={t.composite.buttonTitle}
-        onClick={() => logic.openCompositeEditor({ mode: 'new' })}
+        onClick={() => logic.startComposite()}
       >
         <ArrangeIcon size={12} />
         {t.composite.button}

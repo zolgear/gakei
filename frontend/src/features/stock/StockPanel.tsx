@@ -18,7 +18,7 @@
  * オフのときは種別のチップから外し、「すべて」と各節の取得、グループの件数・表紙を生成画像と
  * アップロードに絞る(サーバーの `kind` で絞るので、ページングは崩れない)。
  */
-import { useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router'
 import {
@@ -34,8 +34,9 @@ import {
 import { assetUrl } from '../../api/assetUrl'
 import { editMaxInputImages, findProvider } from '../../lib/capabilities'
 import { addImageInputs } from '../run-form/editInputs'
+import { inputsRejectedMessage } from '../run-form/submitChecks'
 import { validateInputFile } from '../run-form/inputValidation'
-import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData } from '../run-form/dragDropAssets'
+import { GAKEI_ASSET_ID_DATA_TYPE, interpretDrop } from '../run-form/dragDropAssets'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { isStudioPath, nodeTargetPath } from '../lineage/nodeTargetPath'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -54,6 +55,7 @@ import {
 } from './groups/groupOpenStorage'
 import { GroupSection, type StockTileActions } from './GroupSection'
 import { UNGROUPED_SECTION_KEY, selectedByGroup, toggleSelection, withoutSection } from './stockSelection'
+import { setStockSelectedAssetIds } from './stockSelectionStore'
 import {
   normalizeStockKindFilter,
   stockGroupCountKinds,
@@ -141,6 +143,13 @@ export function StockPanel() {
 
   const selectedIds = [...selected.keys()]
   const selectedGroups = selectedByGroup(selected)
+
+  // アシスタントに、選んでいる画像を伝える(ADR-0048 13章)。選択モードでなければ空。パネルが
+  // 閉じたら(外れたら)空に戻す。
+  useEffect(() => {
+    setStockSelectedAssetIds(selectionMode ? [...selected.keys()] : [])
+  }, [selectionMode, selected])
+  useEffect(() => () => setStockSelectedAssetIds([]), [])
 
   function handleToggleSelectionMode() {
     setSelectionMode((prev) => !prev)
@@ -274,12 +283,7 @@ export function StockPanel() {
     // しまわないようにする。既存 Asset の参照だった場合、ストックへ入れ直す意味は無いので
     // 何もしない(すでにストックにある)。
     // 履歴やマップの画像など、ページの中から運んだ画像も取り込まない(ブラウザが添える File)。
-    if (isDragFromThisPage()) return
-    const interpretation = interpretDroppedData({
-      assetIdData: e.dataTransfer.getData(GAKEI_ASSET_ID_DATA_TYPE) || null,
-      uriListData: e.dataTransfer.getData('text/uri-list') || null,
-      files: Array.from(e.dataTransfer.files),
-    })
+    const interpretation = interpretDrop(e.dataTransfer)
 
     if (interpretation.kind === 'files') {
       uploadMutation.mutate(interpretation.files)
@@ -290,7 +294,7 @@ export function StockPanel() {
   function handleUseAsInput(asset: AssetSummary) {
     const result = addImageInputs(formState.inputs, [asset.id], maxInputImages)
     if (result.addedCount === 0) {
-      setMessage(fmt(t.stock.maxInputImages, { max: maxInputImages }))
+      setMessage(inputsRejectedMessage(maxInputImages, fmt(t.stock.maxInputImages, { max: maxInputImages })))
       return
     }
     setMessage(null)

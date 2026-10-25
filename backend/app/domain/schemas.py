@@ -1128,6 +1128,10 @@ class RunCreateRequest(BaseModel):
     # (`OperationCapabilities.supports_regions`)。主たる入力があればそれに対する割合、入力画像の
     # 無い Run(ComfyUI。6章)では出力の大きさに対する割合。番号は重ねられない。
     regions: list[RegionBox] = Field(default_factory=list, max_length=REGIONS_MAX)
+    # 四角を描いた土台(ADR-0053 1章「四角の土台を選ぶ」)。`input` は主たる入力の上、`output` は
+    # 出力の大きさの白紙の上。省略時は、主たる入力があれば `input`、無ければ `output`。入力画像が
+    # あっても `output` を選べる(参考の画像を入力に入れたまま、白紙で構図を指示する)。
+    regions_frame: Literal["input", "output"] | None = None
 
     @model_validator(mode="after")
     def _unique_region_numbers(self) -> RunCreateRequest:
@@ -2484,6 +2488,10 @@ class UserPreferencesResponse(BaseModel):
     )
     # 未判定の画像もマスクするか(既定 false)。
     content_rating_mask_unrated: bool = Field(default=False, alias="content_rating.mask_unrated")
+    # アシスタントが道具で画像を LLM に送る前に確かめるか(ADR-0048 14.1。既定 ask)。
+    assistant_image_send: Literal["ask", "always"] = Field(
+        default="ask", alias="assistant.image_send"
+    )
 
 
 class UserPreferencesUpdateRequest(BaseModel):
@@ -2497,6 +2505,9 @@ class UserPreferencesUpdateRequest(BaseModel):
     )
     content_rating_mask_unrated: StrictBool | None = Field(
         default=None, alias="content_rating.mask_unrated"
+    )
+    assistant_image_send: Literal["ask", "always"] | None = Field(
+        default=None, alias="assistant.image_send"
     )
 
 
@@ -3075,6 +3086,8 @@ class PublicShareResponse(BaseModel):
 ASSISTANT_ATTACHMENTS_MAX = 4
 ASSISTANT_TEXT_MAX = 20_000
 ASSISTANT_TITLE_MAX = 100
+# ストックの選択モードで選んでいる画像を送る上限(ADR-0048 13章)。
+ASSISTANT_SELECTED_MAX = 200
 
 
 class AssistantConversationResponse(BaseModel):
@@ -3097,21 +3110,51 @@ class AssistantConversationUpdateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=ASSISTANT_TITLE_MAX)
 
 
+class AssistantUndoResult(BaseModel):
+    """ストックの整理を戻した結果(ADR-0048 13章)。戻すのは書き込んだ直後から変わっていない
+    画像だけで、`restored` が戻した枚数、`skipped` が変わっていたので戻さなかった枚数。
+    `group_deleted` は作ったグループを消した、`group_kept` は別の画像が入っていたので
+    消さなかった。"""
+
+    restored: int
+    skipped: int
+    group_kept: bool = False
+    group_deleted: bool = False
+
+
 class AssistantToolCallView(BaseModel):
     id: str
     name: str
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
+class AssistantImagePermissionView(BaseModel):
+    """道具が画像を LLM に送る前の許可の答え(ADR-0048 14.1)。tool のメッセージに残す。
+
+    `answer` は `once`(1度だけ許可)/ `always`(常に許可)/ `deny`(許可しない)。`reason` は
+    `deny` の理由: `user`(利用者が選んだ)、`timeout`(10 分答えが無い)、`stopped`(止めた・
+    接続が切れた)。"""
+
+    request_id: str
+    asset_ids: list[uuid.UUID] = Field(default_factory=list)
+    # 段階(ADR-0049。カードのサムネイルのマスクに使う)。未判定の画像は入れない。
+    content_ratings: dict[str, ContentRatingLevel] = Field(default_factory=dict)
+    connection_name: str
+    answer: Literal["once", "always", "deny"]
+    reason: Literal["user", "timeout", "stopped"] = "user"
+
+
 class AssistantMessageResponse(BaseModel):
     """会話の1メッセージ。役割(`role`)ごとに使う項目が違う。
 
-    - `user`: `text`、`attachments`(添付の Asset ID)。
+    - `user`: `text`、`attachments`(添付の Asset ID)、`withheld_attachments`(外部の接続先に
+      送らなかった添付。X 以上。ADR-0048 14.3)。
     - `assistant`: `text`、`tool_calls`、`status`(`complete` / `stopped`(利用者が止めた) /
       `error`)、`error`。
     - `tool`: `tool_call_id`、`tool_name`、`ok`、`result`(道具が LLM に返した JSON。書き込みの
       道具は `before` / `after` を含む)、`run_ids`(作った Run)、`undoable`(「元に戻す」が
-      使えるか)、`undone_at`(戻した日時)。
+      使えるか)、`undone_at`(戻した日時)、`image_permission`(画像を送る前に許可を求めたときの
+      答え。ADR-0048 14.1)。
     """
 
     id: uuid.UUID
@@ -3121,6 +3164,7 @@ class AssistantMessageResponse(BaseModel):
     created_at: datetime
     text: str = ""
     attachments: list[uuid.UUID] = Field(default_factory=list)
+    withheld_attachments: list[uuid.UUID] = Field(default_factory=list)
     tool_calls: list[AssistantToolCallView] = Field(default_factory=list)
     status: Literal["complete", "stopped", "error"] | None = None
     error: str | None = None
@@ -3131,6 +3175,9 @@ class AssistantMessageResponse(BaseModel):
     run_ids: list[uuid.UUID] = Field(default_factory=list)
     undoable: bool = False
     undone_at: datetime | None = None
+    # ストックの整理を戻した結果(ADR-0048 13章)。それ以外の書き込みと、戻す前は null。
+    undo_result: AssistantUndoResult | None = None
+    image_permission: AssistantImagePermissionView | None = None
 
 
 class AssistantConversationDetailResponse(AssistantConversationResponse):
@@ -3158,6 +3205,11 @@ class AssistantFormState(BaseModel):
     # いないときは null。`view_result` が引数の無いときに見る。フォームの値ではないので
     # `update_form` では変わらない。
     result_asset_id: uuid.UUID | None = None
+    # ストックの選択モードで選んでいる画像(ADR-0048 13章)。選んでいなければ空。
+    # フォームの値ではないので `update_form` では変わらない。
+    selected_asset_ids: list[uuid.UUID] = Field(
+        default_factory=list, max_length=ASSISTANT_SELECTED_MAX
+    )
 
 
 class AssistantMessageCreateRequest(BaseModel):
@@ -3171,10 +3223,13 @@ class AssistantMessageCreateRequest(BaseModel):
 
 class AssistantUndoResponse(BaseModel):
     """「元に戻す」の結果。`message` は戻した tool のメッセージ(`undone_at` が入る)、
-    `prompt_set` は戻した後のセット(作成を取り消したときは null)。"""
+    `prompt_set` は戻した後のセット(作成を取り消したときと、ストックの整理では null)、
+    `undo_result` はストックの整理で戻した枚数と飛ばした枚数。"""
 
     message: AssistantMessageResponse
     prompt_set: PromptSetResponse | None = None
+    # ストックの整理を戻したとき(ADR-0048 13章)。
+    undo_result: AssistantUndoResult | None = None
 
 
 # SSE のイベント(`POST /api/assistant/conversations/{id}/messages` の応答)。各イベントは
@@ -3227,6 +3282,25 @@ class AssistantRunCreatedEvent(BaseModel):
     message_id: uuid.UUID
 
 
+class AssistantPermissionRequestEvent(BaseModel):
+    """道具が画像を LLM に送る前の許可の求め(ADR-0048 14.1)。サーバーは応答を開いたまま待つ。
+    ブラウザは `POST /api/assistant/permissions/{request_id}` で答える。10 分答えが無い・止めた・
+    接続が切れたときは「許可しない」と同じ。"""
+
+    type: Literal["permission_request"] = "permission_request"
+    request_id: str
+    tool_call_id: str
+    asset_ids: list[uuid.UUID] = Field(default_factory=list)
+    content_ratings: dict[str, ContentRatingLevel] = Field(default_factory=dict)
+    connection_name: str
+
+
+class AssistantPermissionAnswerRequest(BaseModel):
+    """`POST /api/assistant/permissions/{request_id}` の本文。"""
+
+    answer: Literal["once", "always", "deny"]
+
+
 class AssistantErrorEvent(BaseModel):
     """処理を止めた理由。`llm_error`(LLM の呼び出しの失敗)、`rate_limited`(LLM の1時間の
     上限)、`tool_limit`(1回の発言で道具を呼ぶ回数の上限)、`hook_denied`(Mod が送る前の
@@ -3255,6 +3329,7 @@ class AssistantStreamEvent(BaseModel):
         | AssistantMessageEvent
         | AssistantToolResultEvent
         | AssistantRunCreatedEvent
+        | AssistantPermissionRequestEvent
         | AssistantErrorEvent
         | AssistantDoneEvent
     ) = Field(discriminator="type")
@@ -3533,9 +3608,8 @@ class ModVerdictReceiveResponse(BaseModel):
 # -- 領域の四角の検出(ADR-0053 7章) -----------------------------------------------------
 
 
-RegionDetectionUnusableReason = Literal[
-    "disabled", "connection_missing", "api_key_missing", "structured_outputs_unsupported"
-]
+# 構造化出力に対応しない接続先も使える(スキーマを付けずに送る。ADR-0053 7章)。
+RegionDetectionUnusableReason = Literal["disabled", "connection_missing", "api_key_missing"]
 
 
 class RegionDetectionSettingsResponse(BaseModel):
@@ -3547,11 +3621,9 @@ class RegionDetectionSettingsResponse(BaseModel):
     hourly_request_limit: int
     hourly_request_limit_default: int
     hourly_request_limit_max: int
-    # 有効で、接続先とキーがそろい、接続先が Structured Outputs に対応するとみなせる
-    # (検出のボタンを出してよい)。
+    # 有効で、接続先とキーがそろう(検出のボタンを出してよい)。構造化出力への対応は問わない。
     usable: bool
-    # 使えない理由(1つに絞る。使えるなら null)。見る順は、無効 → 接続先が無い → キーが無い →
-    # 構造化出力に対応しない(LLM の接続先の設定で「対応する」にできる)。
+    # 使えない理由(1つに絞る。使えるなら null)。見る順は、無効 → 接続先が無い → キーが無い。
     unusable_reason: RegionDetectionUnusableReason | None = None
     # 見ている利用者の、直近1時間の検出の数。
     requests_last_hour: int

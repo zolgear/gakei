@@ -1,4 +1,4 @@
-/* 生成のアシスタントのパネル(ADR-0048 2章)。上から見出し・会話の操作・メッセージ・送信欄。 */
+/* 生成のアシスタントの中身(ADR-0048 2章)。上から会話の操作・メッセージ・送信欄。浮いた窓の中に置く。 */
 
 .panel {
   display: flex;
@@ -6,16 +6,8 @@
   gap: 8px;
   height: 100%;
   min-height: 0;
-  padding: 14px 14px 12px;
+  padding: 10px 14px 12px;
   box-sizing: border-box;
-}
-
-.heading {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--color-text-muted);
 }
 
 /* -- 会話の操作 -- */
@@ -231,6 +223,29 @@
   color: var(--color-danger);
 }
 
+/* 外部の接続先に送らなかった添付(X 以上。ADR-0048 14.3)。 */
+.attachmentThumb[data-withheld] {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+/* -- 画像の許可のカード(ADR-0048 14.1) -- */
+
+.permissionThumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.permissionThumbs > li {
+  position: relative;
+  width: 48px;
+  height: 48px;
+}
+
 /* -- カード -- */
 
 .card {
@@ -250,6 +265,14 @@
 
 .card[data-kind='form'] {
   border-left-color: var(--color-edit);
+}
+
+.card[data-kind='permission'] {
+  border-left-color: var(--color-warning);
+}
+
+.card[data-kind='permission'][data-answered] {
+  border-left-color: var(--color-border-strong);
 }
 
 .card[data-undone] {
@@ -745,4 +768,68 @@
   .composerActions {
     justify-content: space-between;
   }
+}
+
+/* -- ストックの整理の結果(ADR-0048 13章) -- */
+
+.card[data-kind='stock'] {
+  border-left-color: var(--color-edit);
+}
+
+.stockTags {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.stockTag {
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  overflow-wrap: anywhere;
+}
+
+.stockTag[data-removed] {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.stockChange {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.stockAfter {
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.stockThumbs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 4px;
+}
+
+.stockMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
 }

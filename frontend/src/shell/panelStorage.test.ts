@@ -52,6 +52,11 @@ describe('panelStorage (localStorage が使える場合)', () => {
     expect(loadSelectedPanel()).toBeNull()
   })
 
+  it('以前のアシスタントのパネル(浮いた窓に移した)は何も開いていない扱い', () => {
+    localStorage.setItem('gakei:selected-panel', 'assistant')
+    expect(loadSelectedPanel()).toBeNull()
+  })
+
   it('壊れた値が入っていたら null を返す', () => {
     localStorage.setItem('gakei:selected-panel', 'not-a-panel')
     expect(loadSelectedPanel()).toBeNull()

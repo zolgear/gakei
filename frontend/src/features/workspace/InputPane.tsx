@@ -22,7 +22,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fmt, useI18n } from '../../i18n'
+import { useI18n } from '../../i18n'
 import { isMobileViewport } from '../../lib/viewport'
 import { listPromptSets, type AssetDetail } from '../../api/client'
 import { useRunFormLogic } from '../run-form/useRunFormLogic'
@@ -34,6 +34,7 @@ import { MaskEditor } from '../mask/MaskEditor'
 import { SketchEditor, type SketchSaveOptions } from '../sketch/SketchEditor'
 import { SketchLoadingDialog } from '../sketch/SketchLoadingDialog'
 import { CompositeEditor } from '../composite/CompositeEditor'
+import { compositeCanvasSizeFor } from '../composite/compositeInputs'
 import { RegionEditor, type RegionCanvas } from '../regions/RegionEditor'
 import { blankCanvasSize } from '../run-form/dependencies'
 import { RegionPromptAssist } from '../regions/RegionPromptAssist'
@@ -134,11 +135,16 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   })
   // プロンプト欄の「テキスト / タグ」(ADR-0039 2章)。(プロバイダー, モデル)ごとに覚える。
   const [promptEditMode, setPromptEditMode] = usePromptEditMode(form.provider, form.model, 'prompt')
+  // 配置(ADR-0050)のキャンバスが従う出力サイズ(auto・未指定・入力途中の不正な値なら null)。
+  // 変わったら、入力の1枚目の配置の結果を描き直す(5章、2026-10-24 追記)。
+  const compositeCanvasSize = compositeCanvasSizeFor(form.sizeState, form.providerEntry?.size)
   const editLogic = useEditInputsLogic(
     form.inputs,
     form.setInputs,
     form.maxInputImages,
     form.maxInputImageBytes,
+    compositeCanvasSize,
+    form.setCompositeRedrawing,
   )
 
   // 1枚目の入力の検出の候補(プレビューの重ね描きを出せるか。`RegionPromptAssist` と同じキャッシュ)。
@@ -355,21 +361,16 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
   const sketchEditorState = editLogic.sketchEditor
 
-  // 領域の指示(ADR-0053)を描く下地。主たる入力、または入力画像の無い Run の白紙(出力の大きさ。
-  // ComfyUI は出力の大きさの決まり方(幅・高さの項目や Resolution Selector)とフォームの今の値から、
-  // ほかは出力サイズの設定から。6章)。
-  const regionCanvas: RegionCanvas | null = editLogic.positionZeroAsset
-    ? { kind: 'asset', asset: editLogic.positionZeroAsset }
-    : form.regionsBlank
-      ? { kind: 'blank', ...blankCanvasSize(form.defs, form.rawParams, blankSketchSize, form.regionsOutputSize) }
+  // 領域の指示(ADR-0053)を描く下地。主たる入力、または白紙(出力の大きさ。ComfyUI は出力の大きさの
+  // 決まり方(幅・高さの項目や Resolution Selector)とフォームの今の値から、ほかは出力サイズの設定から。
+  // 6章)。白紙は入力画像の無い Run と、入力画像があって白紙の土台を選んだとき(1章「四角の土台を選ぶ」)。
+  const regionBlankCanvas = blankCanvasSize(form.defs, form.rawParams, blankSketchSize, form.regionsOutputSize)
+  const regionCanvas: RegionCanvas | null = form.regionsBlank
+    ? { kind: 'blank', ...regionBlankCanvas }
+    : editLogic.positionZeroAsset
+      ? { kind: 'asset', asset: editLogic.positionZeroAsset }
       : null
 
-  // 配置(ADR-0050)のキャンバスの既定に使う、フォームで選んでいるサイズ(auto・未指定なら null)。
-  const formSizeParam = sizeToParam(form.sizeState)
-  const compositeFormSize =
-    formSizeParam && formSizeParam !== 'auto'
-      ? { width: blankSketchSize.width, height: blankSketchSize.height }
-      : null
   const compositeEditorState = editLogic.compositeEditor
 
   function readPromptCursorPos(): number | null {
@@ -414,9 +415,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
   if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
-  if (form.imageInputCount > form.maxInputImages) {
-    blockReasons.push(fmt(ip.maxInputImagesExceeded, { max: form.maxInputImages }))
-  }
+  if (form.inputsBlockReason) blockReasons.push(form.inputsBlockReason)
   if (form.inputCountRequirementReason) blockReasons.push(form.inputCountRequirementReason)
   if (form.providerUnavailableReason) blockReasons.push(form.providerUnavailableReason)
   if (!form.operationSupported) {
@@ -429,6 +428,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     blockReasons.push(ip.maskUnsupported)
   }
   if (form.regionsBlockReason) blockReasons.push(form.regionsBlockReason)
+  if (form.compositeRedrawReason) blockReasons.push(form.compositeRedrawReason)
 
   // プロンプトテンプレート(実験)。テンプレートを選んでいる間は、プロンプト欄の代わりに
   // スロットの選択と組み立て結果を出す(送るのは prompt ではなく prompt_template)。
@@ -534,10 +534,15 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       count: form.regions.length,
       onOpen: () => setRegionEditorOpen(true),
       onClear: form.clearRegions,
-      hasOverlay: form.regions.length > 0 || (primaryDetections.selected?.regions.length ?? 0) > 0,
+      // 白紙の土台の四角は1枚目に重ねない(補助のプレビューも出さない)。
+      hasOverlay:
+        !form.regionsBlank && (form.regions.length > 0 || (primaryDetections.selected?.regions.length ?? 0) > 0),
       overlayShown: regionAssistOpen,
       onToggleOverlay: () => setRegionAssistOpen(!regionAssistOpen),
       blank: form.regionsBlank,
+      boxes: form.regions,
+      blankCanvas: regionCanvas?.kind === 'blank' ? { width: regionCanvas.width, height: regionCanvas.height } : undefined,
+      primaryUsable: form.inputsUsable,
     },
   }
   const inputImages =
@@ -678,7 +683,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     promptAssist: (
       <RegionPromptAssist
         asset={editLogic.positionZeroAsset}
-        enabled={form.regionsSupported}
+        enabled={form.regionsSupported && !form.regionsBlank}
         regions={form.regions}
         showChips={form.promptTemplate === null}
         onInsert={insertRegionText}
@@ -748,15 +753,16 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
       {regionEditorOpen && regionCanvas && (
         <RegionEditor
-          canvas={regionCanvas}
+          canvases={{ input: form.inputsUsable ? (editLogic.positionZeroAsset ?? null) : null, output: regionBlankCanvas }}
+          initialFrame={form.regionsFrame}
           initialRegions={form.regions}
           inputAssetIds={editLogic.images.map((i) => i.assetId)}
           maxInputImages={form.maxInputImages}
           delivery={form.regionsDelivery}
           kinds={form.regionsKinds}
           referenceImages={form.regionsReferenceImages}
-          onSave={(regions) => {
-            form.setRegions(regions)
+          onSave={(regions, frame) => {
+            form.setRegions(regions, frame)
             setRegionEditorOpen(false)
           }}
           onCancel={() => setRegionEditorOpen(false)}
@@ -768,11 +774,11 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
           init={
             compositeEditorState.mode === 'reopen'
               ? { kind: 'reopen', assetId: compositeEditorState.assetId }
-              : { kind: 'new', sourceAssetIds: [...new Set(editLogic.images.map((i) => i.assetId))] }
+              : { kind: 'new', sourceAssetIds: compositeEditorState.sourceAssetIds }
           }
-          formSize={compositeFormSize}
+          formSize={compositeCanvasSize}
           inputAssetIds={editLogic.images.map((i) => i.assetId)}
-          showRemoveSourcesOption={compositeEditorState.mode === 'new' && form.maxInputImages > 1}
+          regions={form.regions}
           onSave={editLogic.saveComposite}
           onCancel={editLogic.closeCompositeEditor}
         />

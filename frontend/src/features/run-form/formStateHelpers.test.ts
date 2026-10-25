@@ -135,6 +135,7 @@ describe('clearFormContent', () => {
       assetGroupId: null,
       regions: [],
       regionsAssetId: null,
+      regionsFrame: 'input',
     })
   })
 

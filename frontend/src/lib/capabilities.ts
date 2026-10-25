@@ -70,7 +70,9 @@ export function resolveProvider(caps: CapabilitiesResponse | undefined, stored: 
 
 /**
  * 「入力に使う」系のパネル(ストック・履歴カード等)が、edit の入力画像上限として使う値。
- * モデルごとの edit operation の上限(ComfyUI は 1 枚等)を優先し、無ければ 16 に安全側で倒す。
+ * モデルごとの edit operation の上限(ComfyUI は 1 枚等)を優先する。モデルが見つかって edit を
+ * 持たない(入力画像を受けない。ComfyUI の t2i など)なら 0。モデルが見つからない(読み込み中など)
+ * ときだけ 16 に安全側で倒す。
  */
 export function editMaxInputImages(
   caps: CapabilitiesResponse | undefined,
@@ -79,7 +81,8 @@ export function editMaxInputImages(
   fallback = 16,
 ): number {
   const modelCaps = findModel(caps, provider, model)
-  const editCaps = modelCaps?.operations.find((o) => o.operation === 'edit')
-  return editCaps?.max_input_images ?? fallback
+  if (!modelCaps) return fallback
+  const editCaps = modelCaps.operations.find((o) => o.operation === 'edit')
+  return editCaps?.max_input_images ?? 0
 }
 

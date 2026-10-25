@@ -31,7 +31,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain import annotation_settings
-from app.domain.models import Asset, AssetAnnotation, AssetKind, AssetTag, Tag
+from app.domain.models import (
+    Asset,
+    AssetAnnotation,
+    AssetContentRating,
+    AssetKind,
+    AssetTag,
+    Tag,
+)
 from app.domain.schemas import AnnotationStatusView, AssetAnnotationResponse, AssetTagRef
 from app.domain.sql_compat import binary_order, savepoints_are_safe
 from app.domain.visibility import asset_visible, get_visible_asset
@@ -226,6 +233,68 @@ def remove_tag(db: Session, asset: Asset, raw_name: str) -> bool:
 def _touch(db: Session, asset_id: uuid.UUID) -> None:
     row = _get_or_create_annotation(db, asset_id)
     row.updated_at = _utcnow()
+
+
+# -- 変更前の状態と復元(アシスタントの「元に戻す」。ADR-0048 13章) -----------------
+# 状態は JSON にそのまま入る dict。タグの行は {"source", "score", "removed"}(行が無ければ None)、
+# タイトルは {"title", "title_source"}(注釈の行が無ければ両方 None)。
+
+
+def tag_row_state(db: Session, asset_id: uuid.UUID, tag_id: uuid.UUID) -> dict[str, Any] | None:
+    row = db.get(AssetTag, (asset_id, tag_id))
+    if row is None:
+        return None
+    return {"source": row.source, "score": row.score, "removed": bool(row.removed)}
+
+
+def tag_id_by_name(db: Session, name: str) -> uuid.UUID | None:
+    return db.execute(select(Tag.id).where(Tag.name == name)).scalar_one_or_none()
+
+
+def restore_tag_row(
+    db: Session, asset_id: uuid.UUID, tag_id: uuid.UUID, state: dict[str, Any] | None
+) -> None:
+    """(画像, タグ) の行を `state` に戻す。None は行を消す(付いていなかった)。自動のタグは
+    `source = auto` とスコアのまま戻るので、以後の再推定でも自動のタグとして扱われる。"""
+    row = db.get(AssetTag, (asset_id, tag_id))
+    if state is None:
+        if row is not None:
+            db.delete(row)
+    else:
+        source = SOURCE_AUTO if state.get("source") == SOURCE_AUTO else SOURCE_USER
+        score = state.get("score")
+        score = float(score) if isinstance(score, int | float) else None
+        removed = bool(state.get("removed"))
+        if row is None:
+            db.add(
+                AssetTag(
+                    asset_id=asset_id, tag_id=tag_id, source=source, score=score, removed=removed
+                )
+            )
+        else:
+            row.source = source
+            row.score = score
+            row.removed = removed
+    _touch(db, asset_id)
+    db.flush()
+
+
+def title_state(db: Session, asset_id: uuid.UUID) -> dict[str, Any]:
+    row = db.get(AssetAnnotation, asset_id)
+    if row is None:
+        return {"title": None, "title_source": None}
+    return {"title": row.title, "title_source": row.title_source}
+
+
+def restore_title(db: Session, asset_id: uuid.UUID, state: dict[str, Any]) -> None:
+    """タイトルと `title_source` を `state` に戻す(`auto` に戻せば再推定で入れ替わる)。"""
+    row = _get_or_create_annotation(db, asset_id)
+    title = state.get("title")
+    source = state.get("title_source")
+    row.title = title if isinstance(title, str) else None
+    row.title_source = source if source in (SOURCE_AUTO, SOURCE_USER) else None
+    row.updated_at = _utcnow()
+    db.flush()
 
 
 # -- 自動推定の結果の反映 ----------------------------------------------------------
@@ -505,15 +574,10 @@ def tag_name_matches(pattern: str) -> Any:
     )
 
 
-def list_tags(
-    db: Session, user: CurrentUser, q: str | None, limit: int, *, prefix: bool = False
-) -> list[tuple[str, int]]:
-    """タグ名と件数(removed と削除済み Asset を除く)。件数の多い順、同数は名前順。
-
-    `user` に見える Asset だけで数える(ADR-0025。他人の Asset にしか付いていないタグ名は
-    出さない)。`q` は正規化してから部分一致で絞る(オートコンプリート用)。`prefix` なら
-    前方一致で絞る(アシスタントの `list_tags`。ADR-0048 10章)。
-    """
+def _tag_counts_query(
+    user: CurrentUser, q: str | None, *, prefix: bool, exclude_levels: Iterable[str]
+) -> Any | None:
+    """`list_tags` の土台(並びと件数の制限の前)。`q` が正規化できなければ None。"""
     count = func.count(AssetTag.asset_id)
     query = (
         select(Tag.name, count)
@@ -521,14 +585,62 @@ def list_tags(
         .join(Asset, Asset.id == AssetTag.asset_id)
         .where(AssetTag.removed.is_(False), Asset.deleted_at.is_(None), asset_visible(user))
         .group_by(Tag.id, Tag.name)
-        # ADR-0027 2章: 名前の並びは両方の DB でバイト順にそろえる。
-        .order_by(count.desc(), binary_order(Tag.name).asc())
-        .limit(limit)
     )
+    levels = list(exclude_levels)
+    if levels:
+        # レーティングの段階で数えない画像(アシスタントの X 以上。ADR-0048 14.3)。
+        query = query.where(
+            ~exists().where(
+                AssetContentRating.asset_id == Asset.id, AssetContentRating.level.in_(levels)
+            )
+        )
     if q is not None and q.strip():
         needle = normalize_tag_name_or_none(q)
         if needle is None:
-            return []
+            return None
         pattern = f"{_escape_like(needle)}%" if prefix else f"%{_escape_like(needle)}%"
         query = query.where(Tag.name.like(pattern, escape=_LIKE_ESCAPE_CHAR))
+    return query
+
+
+def list_tags(
+    db: Session,
+    user: CurrentUser,
+    q: str | None,
+    limit: int,
+    *,
+    prefix: bool = False,
+    offset: int = 0,
+    exclude_levels: Iterable[str] = (),
+) -> list[tuple[str, int]]:
+    """タグ名と件数(removed と削除済み Asset を除く)。件数の多い順、同数は名前順。
+
+    `user` に見える Asset だけで数える(ADR-0025。他人の Asset にしか付いていないタグ名は
+    出さない)。`q` は正規化してから部分一致で絞る(オートコンプリート用)。`prefix` なら
+    前方一致で絞る(アシスタントの `list_tags`。ADR-0048 10章)。`exclude_levels` の段階の
+    画像は数えない(ADR-0048 14.3)。`offset` は先頭から飛ばす件数。
+    """
+    query = _tag_counts_query(user, q, prefix=prefix, exclude_levels=exclude_levels)
+    if query is None:
+        return []
+    count = func.count(AssetTag.asset_id)
+    query = (
+        # ADR-0027 2章: 名前の並びは両方の DB でバイト順にそろえる。
+        query.order_by(count.desc(), binary_order(Tag.name).asc()).offset(offset).limit(limit)
+    )
     return [(name, n) for name, n in db.execute(query).all()]
+
+
+def count_tags(
+    db: Session,
+    user: CurrentUser,
+    q: str | None,
+    *,
+    prefix: bool = False,
+    exclude_levels: Iterable[str] = (),
+) -> int:
+    """`list_tags` と同じ条件のタグの種類の数。"""
+    query = _tag_counts_query(user, q, prefix=prefix, exclude_levels=exclude_levels)
+    if query is None:
+        return 0
+    return db.execute(select(func.count()).select_from(query.subquery())).scalar_one()

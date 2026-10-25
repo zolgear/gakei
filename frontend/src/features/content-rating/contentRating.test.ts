@@ -50,13 +50,18 @@ describe('maskPrefsFrom', () => {
     const prefs: UserPreferencesResponse = {
       'content_rating.mask_levels': ['xx', 'xxx'],
       'content_rating.mask_unrated': true,
+      'assistant.image_send': 'ask',
     }
     expect(maskPrefsFrom(prefs)).toEqual({ maskLevels: ['xx', 'xxx'], maskUnrated: true })
   })
 
   it('空の配列は「何もマスクしない」。欠けた値と知らない段階は既定・除外に倒す', () => {
     expect(
-      maskPrefsFrom({ 'content_rating.mask_levels': [], 'content_rating.mask_unrated': false }).maskLevels,
+      maskPrefsFrom({
+        'content_rating.mask_levels': [],
+        'content_rating.mask_unrated': false,
+        'assistant.image_send': 'ask',
+      }).maskLevels,
     ).toEqual([])
     const broken = { 'content_rating.mask_levels': ['x', 'bogus'] } as unknown as UserPreferencesResponse
     expect(maskPrefsFrom(broken)).toEqual({ maskLevels: ['x'], maskUnrated: false })

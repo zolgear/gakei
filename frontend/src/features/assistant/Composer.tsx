@@ -12,10 +12,11 @@ import { assetUrl } from '../../api/assetUrl'
 import { AssetImage } from '../mods/AssetImage'
 import { fmt, useI18n } from '../../i18n'
 import { clampTextareaHeight } from '../prompt-sets/textareaSizing'
-import { GAKEI_ASSET_ID_DATA_TYPE, interpretDroppedData, isRelevantDragTypes } from '../run-form/dragDropAssets'
+import { interpretDrop, isRelevantDragTypes } from '../run-form/dragDropAssets'
 import { isSubmitShortcut } from '../workspace/submitShortcut'
 import { ASSISTANT_ATTACHMENTS_MAX, ASSISTANT_TEXT_MAX, type AttachmentPlan } from './assistantForm'
 import { AttachDialog } from './AttachDialog'
+import { ASSISTANT_COMPOSER_ATTRIBUTE } from './assistantWindowAttributes'
 import styles from './AssistantPanel.module.css'
 
 const MIN_HEIGHT_PX = 64
@@ -89,11 +90,7 @@ export function Composer({
     if (!isRelevantDragTypes(Array.from(e.dataTransfer.types))) return
     e.preventDefault()
     setDragOver(false)
-    const dropped = interpretDroppedData({
-      assetIdData: e.dataTransfer.getData(GAKEI_ASSET_ID_DATA_TYPE),
-      uriListData: e.dataTransfer.getData('text/uri-list'),
-      files: Array.from(e.dataTransfer.files),
-    })
+    const dropped = interpretDrop(e.dataTransfer)
     if (dropped.kind === 'asset') attach([dropped.assetId])
     else if (dropped.kind === 'files') setNotice(c.stockOnly)
   }
@@ -126,6 +123,7 @@ export function Composer({
       )}
       <textarea
         ref={textareaRef}
+        {...{ [ASSISTANT_COMPOSER_ATTRIBUTE]: '' }}
         className={styles.textarea}
         value={text}
         maxLength={ASSISTANT_TEXT_MAX}

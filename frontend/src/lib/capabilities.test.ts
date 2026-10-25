@@ -232,6 +232,20 @@ describe('editMaxInputImages', () => {
     expect(editMaxInputImages(caps, 'fake', 'fake-model')).toBe(16)
   })
 
+  it('edit を持たない(入力画像を受けない)モデルは 0', () => {
+    const t2iCaps: CapabilitiesResponse = {
+      ...caps,
+      providers: [
+        provider({
+          provider: 'comfyui',
+          label: 'ComfyUI',
+          models: [model({ model: 't2i', label: 't2i', operations: [model({ model: 'x', label: 'x' }).operations[0]] })],
+        }),
+      ],
+    }
+    expect(editMaxInputImages(t2iCaps, 'comfyui', 't2i')).toBe(0)
+  })
+
   it('見つからなければ既定値(16)にフォールバックする', () => {
     expect(editMaxInputImages(caps, 'unknown', 'unknown')).toBe(16)
   })

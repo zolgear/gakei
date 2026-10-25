@@ -13,6 +13,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set([
   'assistant_message',
   'tool_result',
   'run_created',
+  'permission_request',
   'error',
   'done',
 ])

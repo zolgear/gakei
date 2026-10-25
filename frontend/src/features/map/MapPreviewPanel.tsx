@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { getAsset, type ContentRatingLevel } from '../../api/client'
 import { assetUrl } from '../../api/assetUrl'
+import { setAssetDragData } from '../run-form/dragDropAssets'
 import { AssetImage } from '../mods/AssetImage'
 import { assetKindLabel, formatBytes, formatDateTime } from '../../lib/format'
 import { useI18n } from '../../i18n'
@@ -136,6 +137,7 @@ export function MapPreviewPanel({
               alt=""
               className={styles.image}
               data-rating-masked={ratingMasked || undefined}
+              onDragStart={(e) => setAssetDragData(e.dataTransfer, assetId)}
             />
           )}
           {ratingMasked && !asset?.content_withheld && (

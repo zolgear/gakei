@@ -152,7 +152,8 @@ def structured_outputs_supported(
     db: Session, config: RegionDetectionConfig, settings: Settings
 ) -> bool:
     """接続先が Structured Outputs に対応するとみなせるか(ADR-0053 7章。判定は LLM の接続先の
-    設定。`auto` なら OpenAI の公式だけ。手元の VLM の緩い読み取りは後の段)。"""
+    設定。`auto` なら OpenAI の公式だけ)。対応するならスキーマを付けて、しないなら付けずに答えの
+    形を指示文で示して送る(どちらでも検出は使える)。"""
     return llm_connections.connection_supports_structured_outputs(
         db, config.connection_id, settings
     )

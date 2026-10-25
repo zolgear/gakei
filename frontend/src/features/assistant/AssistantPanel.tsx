@@ -1,7 +1,7 @@
 /**
- * サイドバーの「アシスタント」パネル(ADR-0048 2章)。上部で会話を選び、中央にメッセージ、
+ * アシスタントの中身(ADR-0048 2章)。浮いた窓(AssistantWindow)の中に置く。上部で会話を選び、中央にメッセージ、
  * 下に送信欄を置く。会話の状態と処理中の応答は `AssistantSessionProvider`(AppShell)が持つので、
- * パネルを閉じても応答は続く。送信欄の添付はここで持ち、`show_assets` のカードの「すべて添付」
+ * 窓を閉じても応答は続く。送信欄の添付はここで持ち、`show_assets` のカードの「すべて添付」
  * からも足せるようにする(10章)。
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -19,8 +19,8 @@ export function AssistantPanel() {
   const a = t.assistant
   const { state, send, stop } = useAssistantSession()
   const items = useMemo(
-    () => buildTimeline(state.messages, state.pendingCalls, state.streamingText),
-    [state.messages, state.pendingCalls, state.streamingText],
+    () => buildTimeline(state.messages, state.pendingCalls, state.streamingText, state.pendingPermissions),
+    [state.messages, state.pendingCalls, state.streamingText, state.pendingPermissions],
   )
   const [attachments, setAttachmentsState] = useState<string[]>([])
   // 「すべて添付」は足した結果をすぐ返すので、最新の値を ref でも持つ。
@@ -40,7 +40,6 @@ export function AssistantPanel() {
 
   return (
     <div className={styles.panel}>
-      <h2 className={styles.heading}>{a.heading}</h2>
       <ConversationBar />
       <MessageList
         items={items}

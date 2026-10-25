@@ -7,8 +7,10 @@
  *   指を離したときに1回だけ履歴に積む。文字の入力は同じ欄が続く間は1つにまとめる。
  * - 検出(7章)は `useRegionDetection`。候補を押すと四角になる。候補は保存しない(履歴はサーバー)。
  * - 保存すると四角を API の形(番号を 1 から振り直す)でフォームに返す。キャンセルは捨てる。
- * - 入力画像の無い Run(ComfyUI。6章)では、出力の幅×高さの縦横比の白紙の上に描く(`canvas` が
- *   `blank`)。白紙では検出を出さない。選べる種類と参照画像の欄は、capabilities に合わせる。
+ * - 入力画像の無い Run(ComfyUI と OpenAI。5章・6章)では、出力の幅×高さの縦横比の白紙の上に描く。白紙では
+ *   検出を出さない。選べる種類と参照画像の欄は、capabilities に合わせる。
+ * - 入力画像があるときは、土台を「1枚目の画像」と「白紙」から選べる(1章「四角の土台を選ぶ」)。切り替えても
+ *   四角は割合のまま。白紙で選べない種類(残す・消す・動かす)の四角があれば、切り替えずにその旨を出す。
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useQueries } from '@tanstack/react-query'
@@ -28,8 +30,10 @@ import {
   addRegion,
   boxesFromEditorRegions,
   canSaveRegions,
+  defaultRegionKind,
   editorRegionsFromBoxes,
   moveBox,
+  type RegionFrame,
   moveRegionOrder,
   REGION_INSTRUCTION_MAX_LENGTH,
   REGION_LABEL_MAX_LENGTH,
@@ -56,19 +60,24 @@ import styles from './RegionEditor.module.css'
 export type RegionCanvas = { kind: 'asset'; asset: AssetDetail } | { kind: 'blank'; width: number; height: number }
 
 export interface RegionEditorProps {
-  /** 四角を描く下地(主たる入力、または白紙)。 */
-  canvas: RegionCanvas
+  /**
+   * 四角を描く下地。`input` は主たる入力(無ければ null。土台を選べず白紙だけ)、`output` は出力の大きさの
+   * 白紙。
+   */
+  canvases: { input: AssetDetail | null; output: { width: number; height: number } }
+  /** 開いたときの土台。 */
+  initialFrame: RegionFrame
   initialRegions: readonly RegionBox[]
   /** 生成のフォームの入力の画像(参照画像の選択と、入力の枚数の確かめに使う)。 */
   inputAssetIds: readonly string[]
   maxInputImages: number
   /** 四角の渡し方(`image_and_text` なら、効き方の保証が無いことを示す)。 */
   delivery: string | null
-  /** 札で選べる種類(capabilities の `regions_kinds`)。 */
-  kinds: readonly RegionKind[]
+  /** 土台ごとの、札で選べる種類(capabilities の `regions_kinds`。白紙では「変える」「足す」だけ)。 */
+  kinds: Record<RegionFrame, readonly RegionKind[]>
   /** 四角ごとの参照画像を使えるか(使えなければ参照画像の欄を出さない)。 */
   referenceImages: boolean
-  onSave: (regions: RegionBox[]) => void
+  onSave: (regions: RegionBox[], frame: RegionFrame) => void
   onCancel: () => void
 }
 
@@ -129,7 +138,8 @@ function ToolButton({
 }
 
 export function RegionEditor({
-  canvas,
+  canvases,
+  initialFrame,
   initialRegions,
   inputAssetIds,
   maxInputImages,
@@ -157,6 +167,14 @@ export function RegionEditor({
   const [saveAttempted, setSaveAttempted] = useState(false)
   const lastCoalesceRef = useRef<string | null>(null)
 
+  // 土台(1枚目・白紙)。1枚目が無ければ白紙だけ。
+  const [frameChoice, setFrameChoice] = useState<RegionFrame>(initialFrame)
+  const [frameNotice, setFrameNotice] = useState<string | null>(null)
+  const frame: RegionFrame = canvases.input ? frameChoice : 'output'
+  const canvas: RegionCanvas = frame === 'input' && canvases.input
+    ? { kind: 'asset', asset: canvases.input }
+    : { kind: 'blank', ...canvases.output }
+  const kindsNow = kinds[frame]
   const asset = canvas.kind === 'asset' ? canvas.asset : null
   const natural =
     canvas.kind === 'asset'
@@ -247,10 +265,28 @@ export function RegionEditor({
 
   function adoptCandidate(candidate: RegionCandidate) {
     if (history.present.length >= REGIONS_MAX) return
-    const next = addRegion(history.present, candidate.box, { label: candidate.label })
+    const next = addRegion(history.present, candidate.box, {
+      label: candidate.label,
+      kind: defaultRegionKind(canvas.kind === 'blank'),
+    })
     commit(next)
     setSelectedKey(next[next.length - 1].key)
     detection.markAdopted(candidate.key)
+  }
+
+  function switchFrame(next: RegionFrame) {
+    if (next === frame) return
+    // 白紙で選べない種類の四角があれば切り替えない(四角を勝手に外したり種類を変えたりしない)。
+    if (history.present.some((x) => !kinds[next].includes(x.kind))) {
+      setFrameNotice(r.frame.kindsBlocked)
+      return
+    }
+    setFrameNotice(null)
+    setFrameChoice(next)
+    setZoom(1)
+    setPanMode(false)
+    setImageError(false)
+    editedRef.current = true
   }
 
   function zoomBy(direction: 1 | -1) {
@@ -313,6 +349,23 @@ export function RegionEditor({
         </div>
 
         <div className={styles.toolbar} {...{ [MODAL_BODY_ATTRIBUTE]: '' }}>
+          {/* 土台(1枚目の画像 / 白紙)は四角の操作と分けて先頭に置く。 */}
+          {canvases.input && (
+            <div className={`${styles.segmented} ${styles.frameSwitch}`} role="radiogroup" aria-label={r.frame.label}>
+              {(['input', 'output'] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  role="radio"
+                  aria-checked={frame === f}
+                  data-selected={frame === f}
+                  onClick={() => switchFrame(f)}
+                >
+                  {r.frame[f]}
+                </button>
+              ))}
+            </div>
+          )}
           <div className={styles.toolGroup}>
             <ToolButton label={r.toolbar.undo} disabled={history.past.length === 0} onClick={undo}>
               <UndoIcon />
@@ -358,6 +411,11 @@ export function RegionEditor({
           </div>
           <span className={styles.countText}>{fmt(r.count, { count: regions.length, max: REGIONS_MAX })}</span>
         </div>
+        {frameNotice && (
+          <p className={styles.noteText} role="status">
+            {frameNotice}
+          </p>
+        )}
 
         <div className={styles.body}>
           <div
@@ -369,6 +427,8 @@ export function RegionEditor({
               <p className={styles.noteText}>{r.loadError}</p>
             ) : (
               <RegionStage
+                // 土台を切り替えたら作り直す(パン・画像の読み込みの状態を持ち越さない)。
+                key={frame}
                 imageUrl={asset ? assetUrl(asset.id, 'preview') : null}
                 natural={natural}
                 regions={regions}
@@ -429,7 +489,7 @@ export function RegionEditor({
                     }
                     onText={(value) => apply((cur) => updateRegion(cur, region.key, { text: value }), `${region.key}:text`)}
                     labelChips={labelChipItems(detection.allCandidates)}
-                    kinds={kinds}
+                    kinds={kindsNow}
                     referenceImages={referenceImages}
                     delivery={delivery}
                     onPickReference={() => setReferenceKey(region.key)}
@@ -448,7 +508,9 @@ export function RegionEditor({
 
         <div className={styles.footer}>
           <div className={styles.footerNotes}>
-            {delivery === 'image_and_text' && <p className={styles.mutedNote}>{r.notes.imageAndText}</p>}
+            {delivery === 'image_and_text' && (
+              <p className={styles.mutedNote}>{canvas.kind === 'blank' ? r.notes.imageAndTextBlank : r.notes.imageAndText}</p>
+            )}
             {delivery === 'comfyui_bboxes' && <p className={styles.mutedNote}>{r.notes.comfyuiBboxes}</p>}
             {addsInputs && <p className={styles.mutedNote}>{fmt(r.notes.countsTowardLimit, { max: maxInputImages })}</p>}
             {regions.length > 0 && totalInputs > maxInputImages && (
@@ -470,7 +532,7 @@ export function RegionEditor({
                   setSaveAttempted(true)
                   return
                 }
-                onSave(boxesFromEditorRegions(history.present))
+                onSave(boxesFromEditorRegions(history.present), frame)
               }}
             >
               {r.save}

@@ -12,13 +12,14 @@
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
-import { createCompositeAsset, getAsset, type AssetDetail } from '../../api/client'
+import { createCompositeAsset, getAsset, type AssetDetail, type RegionBox } from '../../api/client'
 import { Modal } from '../../components/Modal'
 import { MODAL_BODY_ATTRIBUTE } from '../../components/modalFocus'
 import { useModalFocus } from '../../components/useModalFocus'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
 import { undoShortcutKind } from '../mask/undoShortcut'
+import { RegionsIcon } from '../regions/regionIcons'
 import { CompositeAddDialog } from './CompositeAddDialog'
 import { CompositeStage, type TransformMode } from './CompositeStage'
 import {
@@ -59,6 +60,7 @@ import {
   type History,
   type LayerSource,
 } from './editorDoc'
+import { initialCanvasSize } from './canvasResize'
 import { CompositeExportError, exportComposite } from './exportComposite'
 import { applyNumericTransform, quadAngleDegrees, quadCenter, quadScalePercent, type Size } from './quad'
 import {
@@ -85,8 +87,6 @@ export interface CompositeSaveResult {
   asset: AssetDetail
   /** 素材にした Asset(主たる素材が先頭、残りは足した順)。 */
   sourceAssetIds: string[]
-  /** 「元の画像を入力から外す」を選んだか。 */
-  removeSources: boolean
   /** 作り直しで置き換えた元の配置(新しく作ったときは null)。 */
   replacedAssetId: string | null
 }
@@ -97,8 +97,8 @@ interface CompositeEditorProps {
   formSize?: Size | null
   /** 生成のフォームの入力の画像(「素材を足す」に出す)。 */
   inputAssetIds?: readonly string[]
-  /** 「元の画像を入力から外す」を出すか(入力が1枚だけのプロバイダー・作り直しでは出さない)。 */
-  showRemoveSourcesOption: boolean
+  /** 生成のフォームの今の四角(ADR-0053)。キャンバスに重ねて見せるだけで、書き出しには描かない。 */
+  regions?: readonly RegionBox[]
   onSave: (result: CompositeSaveResult) => void
   onCancel: () => void
 }
@@ -223,7 +223,7 @@ function CompositeEditorBody({
   init,
   formSize = null,
   inputAssetIds = [],
-  showRemoveSourcesOption,
+  regions = [],
   onSave,
   onCancel,
 }: CompositeEditorProps) {
@@ -239,11 +239,11 @@ function CompositeEditorBody({
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [mode, setMode] = useState<TransformMode>('transform')
   const [addOpen, setAddOpen] = useState(false)
-  const [removeSources, setRemoveSources] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rendererFailed, setRendererFailed] = useState(false)
   const [customSize, setCustomSize] = useState(false)
+  const [showRegions, setShowRegions] = useState(true)
   const editedRef = useRef(false)
 
   async function fetchDetail(id: string): Promise<AssetDetail | null> {
@@ -266,6 +266,7 @@ function CompositeEditorBody({
   }
 
   // 開いたときの準備(素材の大きさを引いて、並べる・レシピから作り直す)。
+  const startFormSize = formSize ? clampCanvasSize(formSize) : null
   useEffect(() => {
     let cancelled = false
     async function run() {
@@ -282,7 +283,9 @@ function CompositeEditorBody({
           const { sources } = await loadSources(ids)
           if (cancelled) return
           const naturals = new Map(sources.map((s) => [s.assetId, s.natural]))
-          const { doc, droppedCount } = createDocFromComposition(parsed, naturals)
+          const { doc: saved, droppedCount } = createDocFromComposition(parsed, naturals)
+          // キャンバスは今の出力サイズで始め、素材を置き直す(ADR-0050 5章、2026-10-24 追記)。
+          const doc = resizeCanvas(saved, initialCanvasSize({ formSize: startFormSize, recipeCanvas: saved.canvas }))
           setHistory(initHistory(doc))
           setLoad({
             status: 'ready',
@@ -293,16 +296,18 @@ function CompositeEditorBody({
           return
         }
         // 記録が無ければ、この画像を素材にして新しく始める(置き換えはしない)。
-        const canvas = clampCanvasSize({ width: asset.width, height: asset.height })
+        const assetSize = clampCanvasSize({ width: asset.width, height: asset.height })
+        const canvas = initialCanvasSize({ formSize: startFormSize, firstSourceSize: assetSize })
         const doc = createDocFromSources([{ assetId: asset.id, natural: { width: asset.width, height: asset.height } }], canvas)
         setHistory(initHistory(doc))
-        setLoad({ status: 'ready', replacedAssetId: null, firstSize: canvas, notice: c.noComposition })
+        setLoad({ status: 'ready', replacedAssetId: null, firstSize: assetSize, notice: c.noComposition })
         return
       }
       const { sources, skipped } = await loadSources(init.sourceAssetIds)
       if (cancelled) return
       const firstSize = sources[0] ? clampCanvasSize(sources[0].natural) : null
-      const canvas = firstSize ?? (formSize ? clampCanvasSize(formSize) : { width: 1024, height: 1024 })
+      // 出力サイズを優先する(配置は出力の一枚絵の下絵。ADR-0050 5章、2026-10-24 追記)。
+      const canvas = initialCanvasSize({ formSize: startFormSize, firstSourceSize: firstSize })
       const doc = createDocFromSources(sources, canvas)
       setHistory(initHistory(doc))
       const over = Math.max(0, sources.length - MAX_LAYERS)
@@ -452,7 +457,7 @@ function CompositeEditorBody({
       queryClient.invalidateQueries({ queryKey: ['assets'] })
       queryClient.invalidateQueries({ queryKey: ['lineage'] })
       if (replacedAssetId) queryClient.invalidateQueries({ queryKey: ['asset', replacedAssetId] })
-      onSave({ asset, sourceAssetIds, removeSources: showRemoveSourcesOption && removeSources, replacedAssetId })
+      onSave({ asset, sourceAssetIds, replacedAssetId })
     },
     onError: (err: unknown) => setError(err instanceof Error ? err.message : c.saveFailedDefault),
   })
@@ -594,6 +599,13 @@ function CompositeEditorBody({
               <CenterIcon />
             </ToolButton>
           </div>
+          {regions.length > 0 && (
+            <div className={styles.toolGroup}>
+              <ToolButton label={c.toolbar.showRegions} onClick={() => setShowRegions((v) => !v)} selected={showRegions}>
+                <RegionsIcon />
+              </ToolButton>
+            </div>
+          )}
           <div className={styles.toolGroup}>
             <ToolButton label={c.toolbar.undo} disabled={!history || history.past.length === 0} onClick={undo}>
               <UndoIcon />
@@ -619,6 +631,7 @@ function CompositeEditorBody({
                 onCommit={commit}
                 onRendererError={() => setRendererFailed(true)}
                 onTextureError={() => setNotice(c.textureError)}
+                regions={showRegions ? regions : undefined}
               />
             )}
           </div>
@@ -797,12 +810,6 @@ function CompositeEditorBody({
         <div className={styles.footer}>
           {notice && <p className={styles.noteText}>{notice}</p>}
           {(error || problemText) && <p className={styles.errorText}>{error ?? problemText}</p>}
-          {showRemoveSourcesOption && (
-            <label className={styles.checkboxLabel}>
-              <input type="checkbox" checked={removeSources} onChange={(e) => setRemoveSources(e.target.checked)} />
-              {c.removeSources}
-            </label>
-          )}
           <button type="button" className={styles.secondaryButton} onClick={onCancel}>
             {c.cancel}
           </button>

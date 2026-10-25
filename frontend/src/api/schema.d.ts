@@ -896,11 +896,13 @@ export interface paths {
          *     - 409 `mask_not_supported` / `asset_deleted` / `image_withheld` / `image_missing`: その画像では
          *       検出できない
          *     - 409 `disabled`: 検出が無効
-         *     - 409 `unsupported`: 接続先が Structured Outputs に対応しない
          *     - 409 `connection_missing`: 接続先・キーが無い
          *     - 429 `rate_limited`: 1時間の上限
          *     - 409 `hook_denied`: Mod が送信を止めた(理由は `message`)
-         *     - 502 `llm_error`: VLM の呼び出しに失敗した・応答を読めなかった
+         *     - 502 `llm_error`: VLM の呼び出しに失敗した・応答を読めなかった(答えの形でない応答も含む。
+         *       「見つからない」は 200 の空の一覧)
+         *
+         *     接続先が構造化出力に対応しないとみなすときは、スキーマを付けずに答えの形を指示文で示す。
          */
         post: operations["detect_asset_regions"];
         delete?: never;
@@ -1385,6 +1387,8 @@ export interface paths {
          *     - `tool_result`: 保存した道具の結果(tool のメッセージ。書き込みは `before` / `after` と
          *       `undoable`)。
          *     - `run_created`: `generate_image` が作った Run(`run_id`)。進捗は `GET /api/runs/{id}/events`。
+         *     - `permission_request`: 道具が画像を LLM に送る前の許可の求め(`request_id`、`asset_ids`、
+         *       `connection_name`)。`POST /api/assistant/permissions/{request_id}` で答えるまで待つ。
          *     - `error`: 止めた理由(`code` は `llm_error` / `rate_limited` / `tool_limit` / `internal`)。
          *     - `done`: 最後に1回(`status` は `complete` / `error` / `limit`、`conversation`)。
          *
@@ -1409,10 +1413,36 @@ export interface paths {
         put?: never;
         /**
          * Undo
-         * @description アシスタントのプロンプトセットへの書き込みを元に戻す(ADR-0048 4章)。その後に対象が
-         *     変わっていれば戻さずに 409。作成を戻すとセットは論理削除になる。
+         * @description アシスタントの書き込みを元に戻す(ADR-0048 4章・13章)。
+         *
+         *     プロンプトセットは、その後に対象が変わっていれば戻さずに 409。作成を戻すとセットは論理削除に
+         *     なる。ストックの整理は、書き込んだ直後から変わっていない画像だけを戻し、戻した枚数と飛ばした
+         *     枚数を `undo_result` で返す(1枚も戻せなければ 409)。
          */
         post: operations["undo_assistant_write"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant/permissions/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer Permission
+         * @description 道具が画像を LLM に送る前の許可に答える(ADR-0048 14.1)。`once`(1度だけ許可)、
+         *     `always`(常に許可。ユーザーの設定 `assistant.image_send` を `always` にする)、`deny`
+         *     (許可しない)。答えられるのは、求めた利用者の待っている要求だけ(他人の・答え済み・
+         *     時間切れの要求は 404)。
+         */
+        post: operations["answer_assistant_permission"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3708,6 +3738,39 @@ export interface components {
             asset_group_id?: string | null;
             /** Result Asset Id */
             result_asset_id?: string | null;
+            /** Selected Asset Ids */
+            selected_asset_ids?: string[];
+        };
+        /**
+         * AssistantImagePermissionView
+         * @description 道具が画像を LLM に送る前の許可の答え(ADR-0048 14.1)。tool のメッセージに残す。
+         *
+         *     `answer` は `once`(1度だけ許可)/ `always`(常に許可)/ `deny`(許可しない)。`reason` は
+         *     `deny` の理由: `user`(利用者が選んだ)、`timeout`(10 分答えが無い)、`stopped`(止めた・
+         *     接続が切れた)。
+         */
+        AssistantImagePermissionView: {
+            /** Request Id */
+            request_id: string;
+            /** Asset Ids */
+            asset_ids?: string[];
+            /** Content Ratings */
+            content_ratings?: {
+                [key: string]: "g" | "r" | "x" | "xx" | "xxx";
+            };
+            /** Connection Name */
+            connection_name: string;
+            /**
+             * Answer
+             * @enum {string}
+             */
+            answer: "once" | "always" | "deny";
+            /**
+             * Reason
+             * @default user
+             * @enum {string}
+             */
+            reason: "user" | "timeout" | "stopped";
         };
         /** AssistantMessageCreateRequest */
         AssistantMessageCreateRequest: {
@@ -3739,12 +3802,14 @@ export interface components {
          * AssistantMessageResponse
          * @description 会話の1メッセージ。役割(`role`)ごとに使う項目が違う。
          *
-         *     - `user`: `text`、`attachments`(添付の Asset ID)。
+         *     - `user`: `text`、`attachments`(添付の Asset ID)、`withheld_attachments`(外部の接続先に
+         *       送らなかった添付。X 以上。ADR-0048 14.3)。
          *     - `assistant`: `text`、`tool_calls`、`status`(`complete` / `stopped`(利用者が止めた) /
          *       `error`)、`error`。
          *     - `tool`: `tool_call_id`、`tool_name`、`ok`、`result`(道具が LLM に返した JSON。書き込みの
          *       道具は `before` / `after` を含む)、`run_ids`(作った Run)、`undoable`(「元に戻す」が
-         *       使えるか)、`undone_at`(戻した日時)。
+         *       使えるか)、`undone_at`(戻した日時)、`image_permission`(画像を送る前に許可を求めたときの
+         *       答え。ADR-0048 14.1)。
          */
         AssistantMessageResponse: {
             /**
@@ -3776,6 +3841,8 @@ export interface components {
             text: string;
             /** Attachments */
             attachments?: string[];
+            /** Withheld Attachments */
+            withheld_attachments?: string[];
             /** Tool Calls */
             tool_calls?: components["schemas"]["AssistantToolCallView"][];
             /** Status */
@@ -3801,6 +3868,44 @@ export interface components {
             undoable: boolean;
             /** Undone At */
             undone_at?: string | null;
+            undo_result?: components["schemas"]["AssistantUndoResult"] | null;
+            image_permission?: components["schemas"]["AssistantImagePermissionView"] | null;
+        };
+        /**
+         * AssistantPermissionAnswerRequest
+         * @description `POST /api/assistant/permissions/{request_id}` の本文。
+         */
+        AssistantPermissionAnswerRequest: {
+            /**
+             * Answer
+             * @enum {string}
+             */
+            answer: "once" | "always" | "deny";
+        };
+        /**
+         * AssistantPermissionRequestEvent
+         * @description 道具が画像を LLM に送る前の許可の求め(ADR-0048 14.1)。サーバーは応答を開いたまま待つ。
+         *     ブラウザは `POST /api/assistant/permissions/{request_id}` で答える。10 分答えが無い・止めた・
+         *     接続が切れたときは「許可しない」と同じ。
+         */
+        AssistantPermissionRequestEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "permission_request";
+            /** Request Id */
+            request_id: string;
+            /** Tool Call Id */
+            tool_call_id: string;
+            /** Asset Ids */
+            asset_ids?: string[];
+            /** Content Ratings */
+            content_ratings?: {
+                [key: string]: "g" | "r" | "x" | "xx" | "xxx";
+            };
+            /** Connection Name */
+            connection_name: string;
         };
         /**
          * AssistantRunCreatedEvent
@@ -3892,7 +3997,7 @@ export interface components {
          */
         AssistantStreamEvent: {
             /** Event */
-            event: components["schemas"]["AssistantUserMessageEvent"] | components["schemas"]["AssistantTextDeltaEvent"] | components["schemas"]["AssistantToolCallEvent"] | components["schemas"]["AssistantMessageEvent"] | components["schemas"]["AssistantToolResultEvent"] | components["schemas"]["AssistantRunCreatedEvent"] | components["schemas"]["AssistantErrorEvent"] | components["schemas"]["AssistantDoneEvent"];
+            event: components["schemas"]["AssistantUserMessageEvent"] | components["schemas"]["AssistantTextDeltaEvent"] | components["schemas"]["AssistantToolCallEvent"] | components["schemas"]["AssistantMessageEvent"] | components["schemas"]["AssistantToolResultEvent"] | components["schemas"]["AssistantRunCreatedEvent"] | components["schemas"]["AssistantPermissionRequestEvent"] | components["schemas"]["AssistantErrorEvent"] | components["schemas"]["AssistantDoneEvent"];
         };
         /**
          * AssistantTextDeltaEvent
@@ -3952,11 +4057,36 @@ export interface components {
         /**
          * AssistantUndoResponse
          * @description 「元に戻す」の結果。`message` は戻した tool のメッセージ(`undone_at` が入る)、
-         *     `prompt_set` は戻した後のセット(作成を取り消したときは null)。
+         *     `prompt_set` は戻した後のセット(作成を取り消したときと、ストックの整理では null)、
+         *     `undo_result` はストックの整理で戻した枚数と飛ばした枚数。
          */
         AssistantUndoResponse: {
             message: components["schemas"]["AssistantMessageResponse"];
             prompt_set?: components["schemas"]["PromptSetResponse"] | null;
+            undo_result?: components["schemas"]["AssistantUndoResult"] | null;
+        };
+        /**
+         * AssistantUndoResult
+         * @description ストックの整理を戻した結果(ADR-0048 13章)。戻すのは書き込んだ直後から変わっていない
+         *     画像だけで、`restored` が戻した枚数、`skipped` が変わっていたので戻さなかった枚数。
+         *     `group_deleted` は作ったグループを消した、`group_kept` は別の画像が入っていたので
+         *     消さなかった。
+         */
+        AssistantUndoResult: {
+            /** Restored */
+            restored: number;
+            /** Skipped */
+            skipped: number;
+            /**
+             * Group Kept
+             * @default false
+             */
+            group_kept: boolean;
+            /**
+             * Group Deleted
+             * @default false
+             */
+            group_deleted: boolean;
         };
         /**
          * AssistantUserMessageEvent
@@ -7548,7 +7678,7 @@ export interface components {
             /** Usable */
             usable: boolean;
             /** Unusable Reason */
-            unusable_reason?: ("disabled" | "connection_missing" | "api_key_missing" | "structured_outputs_unsupported") | null;
+            unusable_reason?: ("disabled" | "connection_missing" | "api_key_missing") | null;
             /** Requests Last Hour */
             requests_last_hour: number;
         };
@@ -7630,6 +7760,8 @@ export interface components {
             repeat: number;
             /** Regions */
             regions?: components["schemas"]["RegionBox"][];
+            /** Regions Frame */
+            regions_frame?: ("input" | "output") | null;
         };
         /** RunCreateResponse */
         RunCreateResponse: {
@@ -8970,6 +9102,12 @@ export interface components {
              * @default false
              */
             "content_rating.mask_unrated": boolean;
+            /**
+             * Assistant.Image Send
+             * @default ask
+             * @enum {string}
+             */
+            "assistant.image_send": "ask" | "always";
         };
         /**
          * UserPreferencesUpdateRequest
@@ -8981,6 +9119,8 @@ export interface components {
             "content_rating.mask_levels"?: ("g" | "r" | "x" | "xx" | "xxx")[] | null;
             /** Content Rating.Mask Unrated */
             "content_rating.mask_unrated"?: boolean | null;
+            /** Assistant.Image Send */
+            "assistant.image_send"?: ("ask" | "always") | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -12060,6 +12200,41 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AssistantUndoResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_assistant_permission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantPermissionAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

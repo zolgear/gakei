@@ -12,6 +12,7 @@ describe('assistantFormState', () => {
       assetGroupId: null,
       regions: [],
       regionsAssetId: null,
+      regionsFrame: 'input',
     })
     expect(form).toEqual({
       provider: 'openai',
@@ -27,10 +28,17 @@ describe('assistantFormState', () => {
 
   it('結果エリアの画像の ID を result_asset_id として送る', () => {
     const form = assistantFormState(
-      { provider: 'openai', model: 'gpt-image-2', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null},
+      { provider: 'openai', model: 'gpt-image-2', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null, regionsFrame: 'input'},
       'r1',
     )
     expect(form.result_asset_id).toBe('r1')
+  })
+
+  it('ストックで選んでいる画像を selected_asset_ids として送り、選んでいなければ送らない', () => {
+    const base = { provider: 'openai', model: 'gpt-image-2', prompt: '', params: {}, inputs: [], assetGroupId: null, regions: [], regionsAssetId: null, regionsFrame: 'input' as const }
+    expect(assistantFormState(base, null, ['s1', 's2']).selected_asset_ids).toEqual(['s1', 's2'])
+    expect('selected_asset_ids' in assistantFormState(base, null, [])).toBe(false)
+    expect('selected_asset_ids' in assistantFormState(base)).toBe(false)
   })
 
   it('入力画像があれば edit で、並び順に入力を送る。未解決のプロバイダーは null', () => {
@@ -46,6 +54,7 @@ describe('assistantFormState', () => {
       assetGroupId: 'g1',
       regions: [],
       regionsAssetId: null,
+      regionsFrame: 'input',
     })
     expect(form.operation).toBe('edit')
     expect(form.provider).toBeNull()

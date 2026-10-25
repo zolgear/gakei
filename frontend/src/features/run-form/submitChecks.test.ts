@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  compositeRedrawBlockReason,
+  imageInputsBlockReason,
+  inputsRejectedMessage,
   inputCountRequirementMessage,
   isInputCountSatisfied,
   isMaskSatisfied,
@@ -164,5 +167,33 @@ describe('isProviderUsable / providerUnavailableMessage(available=false は止�
   it('プロバイダーが未解決(読み込み中)なら妨げない', () => {
     expect(isProviderUsable(undefined)).toBe(true)
     expect(providerUnavailableMessage(undefined)).toBeNull()
+  })
+})
+
+describe('compositeRedrawBlockReason(配置の描き直し中は送信を止める)', () => {
+  it('描き直し中は理由を返し、そうでなければ null', () => {
+    expect(compositeRedrawBlockReason(true)).toEqual(expect.any(String))
+    expect(compositeRedrawBlockReason(true)).not.toBe('')
+    expect(compositeRedrawBlockReason(false)).toBeNull()
+  })
+})
+
+describe('imageInputsBlockReason / inputsRejectedMessage(入力画像を受けないモデル)', () => {
+  it('上限 0 のモデルに入力画像が残っていれば、使わないことを理由にして止める', () => {
+    expect(imageInputsBlockReason(1, 0)).toBe('このモデルは入力画像を使いません。入力画像を外してください')
+  })
+
+  it('入力画像を外せば止めない', () => {
+    expect(imageInputsBlockReason(0, 0)).toBeNull()
+  })
+
+  it('上限を超えていれば上限を伝える', () => {
+    expect(imageInputsBlockReason(3, 2)).toBe('入力画像は最大2枚までです')
+    expect(imageInputsBlockReason(2, 2)).toBeNull()
+  })
+
+  it('足せなかったときの知らせは、上限 0 なら使わない旨、それ以外は渡した上限の文言', () => {
+    expect(inputsRejectedMessage(0, '上限')).toBe('このモデルは入力画像を使いません')
+    expect(inputsRejectedMessage(4, '上限')).toBe('上限')
   })
 })

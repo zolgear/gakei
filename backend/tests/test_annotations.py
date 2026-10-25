@@ -257,7 +257,7 @@ def test_settings_defaults(client: TestClient) -> None:
     }
     assert body["language"] == "ja"
     assert body["hourly_limit"] == 100
-    assert body["onnx_model"] == "wd-vit-tagger-v3"
+    assert body["onnx_model"] == "wd-swinv2-tagger-v3"
     assert body["onnx_threshold"] == pytest.approx(0.35)
     assert body["usable_engines"] == []
     assert body["calls_last_hour"] == 0
@@ -599,3 +599,58 @@ def test_call_records_are_safe_across_threads(client: TestClient) -> None:
         thread.join()
     assert errors == []
     assert annotator.calls_last_hour("c1") == 600
+
+
+def _fake_download(data_dir, name: str) -> None:  # noqa: ANN001
+    from app.annotation import wd_models
+
+    directory = wd_models.model_dir(data_dir, name)
+    directory.mkdir(parents=True)
+    for remote in wd_models.WD_MODELS[name].files:
+        (directory / remote.name).write_bytes(b"dummy")
+
+
+def test_default_onnx_model_is_swinv2(db_session_factory) -> None:  # noqa: ANN001
+    from app.domain import annotation_settings
+
+    # ADR-0024 7章(2026-10-24): GPU の無い環境での推奨にそろえた。
+    with db_session_factory() as db:
+        assert annotation_settings.load(db).onnx_model == "wd-swinv2-tagger-v3"
+
+
+def test_previous_default_is_pinned_when_vit_is_downloaded(  # noqa: ANN001
+    tmp_path, db_session_factory
+) -> None:
+    from app.domain import annotation_settings
+
+    _fake_download(tmp_path, "wd-vit-tagger-v3")
+    with db_session_factory() as db:
+        assert annotation_settings.pin_previous_onnx_default(db, tmp_path) is True
+        assert annotation_settings.load(db).onnx_model == "wd-vit-tagger-v3"
+        # 2回目は何もしない(冪等)。
+        assert annotation_settings.pin_previous_onnx_default(db, tmp_path) is False
+        assert annotation_settings.load(db).onnx_model == "wd-vit-tagger-v3"
+
+
+def test_previous_default_is_not_pinned_without_vit(  # noqa: ANN001
+    tmp_path, db_session_factory
+) -> None:
+    from app.domain import annotation_settings
+
+    # vit を取得していない環境(新しく入れた環境、swinv2 だけ取得した環境)は新しい既定のまま。
+    _fake_download(tmp_path, "wd-swinv2-tagger-v3")
+    with db_session_factory() as db:
+        assert annotation_settings.pin_previous_onnx_default(db, tmp_path) is False
+        assert annotation_settings.load(db).onnx_model == "wd-swinv2-tagger-v3"
+
+
+def test_saved_onnx_model_is_not_overridden(  # noqa: ANN001
+    tmp_path, db_session_factory
+) -> None:
+    from app.domain import annotation_settings
+
+    _fake_download(tmp_path, "wd-vit-tagger-v3")
+    with db_session_factory() as db:
+        annotation_settings.save(db, {"onnx_model": "wd-eva02-large-tagger-v3"})
+        assert annotation_settings.pin_previous_onnx_default(db, tmp_path) is False
+        assert annotation_settings.load(db).onnx_model == "wd-eva02-large-tagger-v3"

@@ -13,11 +13,12 @@ import json
 import uuid
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.assistant.engine import FakeAssistantEngine
-from app.assistant.service import MAX_TOOL_CALLS_PER_MESSAGE
+from app.assistant.service import MAX_TOOL_CALLS_PER_MESSAGE, AssistantTurn
 from app.domain import llm_connections
 from app.domain.models import RUN_ORIGIN_ASSISTANT, Run
 from tests.conftest import login_as, make_png_bytes, wait_for_run_terminal
@@ -396,7 +397,11 @@ def test_list_prompt_sets_and_capabilities(client: TestClient) -> None:
     assert _tool_results(events)[0]["ok"] is False
 
 
-def test_view_assets_sends_images_to_llm(client: TestClient) -> None:
+def test_view_assets_sends_images_to_llm(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 画像の許可(ADR-0048 14.1)は test_assistant_permissions.py で確かめる。
+    monkeypatch.setattr(AssistantTurn, "_image_send_always", lambda self: True)
     _enable(client)
     asset_id = _upload(client)
     conversation_id = _conversation(client)

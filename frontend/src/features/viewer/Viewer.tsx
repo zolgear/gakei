@@ -29,6 +29,7 @@ import { fmt, useI18n } from '../../i18n'
 import { annotationPollInterval } from '../annotations/annotationStatus'
 import { contentRatingPollInterval } from '../content-rating/contentRating'
 import { AssetThumb } from '../content-rating/AssetThumb'
+import { setAssetDragData } from '../run-form/dragDropAssets'
 import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
 import { AssetDetailSections } from './AssetDetailSections'
@@ -337,6 +338,11 @@ export function Viewer({ assetId }: ViewerProps) {
                 )}
               </div>
             </div>
+            {addToInputs.error && (
+              <p className={styles.deleteErrorText} role="status">
+                {addToInputs.error}
+              </p>
+            )}
             {outputNav && (
               <div className={styles.outputNav}>
                 <div className={styles.outputNavHeader}>
@@ -396,6 +402,7 @@ export function Viewer({ assetId }: ViewerProps) {
                         alt=""
                         loading="lazy"
                         className={styles.outputThumbImg}
+                        onDragStart={(e) => setAssetDragData(e.dataTransfer, output.asset_id)}
                       />
                     </button>
                   ))}

@@ -103,17 +103,118 @@ def test_too_many_and_duplicate_numbers_are_422(client: TestClient) -> None:
     assert client.post("/api/runs", json=_body([asset_id], dup)).status_code == 422
 
 
-def test_generate_with_regions_is_rejected(client: TestClient) -> None:
-    body = {
+def _generate_body(regions: list[dict[str, Any]], **params: Any) -> dict[str, Any]:
+    return {
         "operation": "generate",
         "model": _MODEL,
-        "prompt": "x",
-        "params": {"n": 1},
-        "regions": [_box()],
+        "prompt": "a cozy room",
+        "params": {"n": 1, "quality": "low", **params},
+        "regions": regions,
     }
+
+
+def test_generate_with_regions_sends_a_layout_sketch_as_edit(client: TestClient) -> None:
+    """入力画像の無い Run は、白紙の配置図を唯一の入力にした Edit の Run になる(ADR-0053 5章)。"""
+    reference = _upload(client, make_png_bytes(90, 90, (10, 10, 200)))
+    regions = [
+        _box(2, kind="add", reference_asset_id=reference),
+        {"number": 1, "box": [0.0, 0.5, 0.5, 1.0], "instruction": "a sofa"},
+    ]
+    detail = _create(client, _generate_body(regions, size="1536x1024"))
+    assert detail["status"] == "succeeded", detail
+    assert detail["operation"] == "edit"
+    assert "moderation" not in detail["params"]  # Edit には送らない(生成だけの項目)
+    assert detail["params"]["size"] == "1536x1024"
+
+    images = sorted(detail["inputs"], key=lambda i: i["position"])
+    assert [(i["role"], i["position"]) for i in images] == [("image", 0), ("image", 1)]
+    overlay_id = images[0]["asset_id"]
+    assert images[1]["asset_id"] == reference
+
+    overlay = client.get(f"/api/assets/{overlay_id}").json()
+    assert overlay["kind"] == "regions"
+    assert overlay["source_asset_id"] is None
+    assert (overlay["width"], overlay["height"]) == (1536, 1024)
+    original = client.get(f"/api/assets/{overlay_id}/content", params={"variant": "original"})
+    drawn = Image.open(io.BytesIO(original.content)).convert("RGB")
+    # 白紙の上に、1 番の四角(赤)の枠だけを描く。
+    assert drawn.getpixel((1500, 20)) == (255, 255, 255)
+    assert drawn.getpixel((round(0.5 * 1535), 900)) == regions_domain.PALETTE[0][1]
+
+    record = detail["regions"]
+    assert record["delivery"] == "image_and_text"
+    assert record["frame"] == "output"
+    assert record["overlay_asset_id"] == overlay_id
+    assert [r["number"] for r in record["regions"]] == [1, 2]
+    text = record["appended_text"]
+    assert detail["prompt"] == "a cozy room" + text
+    assert text.startswith("\n\n領域の指示: 1枚目の画像は、白紙の上に")
+    assert "- 四角 1(赤): 四角の中(横 0〜50%、縦 50〜100% の範囲)に描く。 指示: a sofa" in text
+    assert "四角の中(横 10〜50%、縦 20〜60% の範囲)に新しく足す。" in text
+    assert "2枚目の画像を参考" in text
+    assert text.endswith("画面全体を絵で埋めてください。")
+
+
+def test_generate_with_regions_auto_size_is_1024_square(client: TestClient) -> None:
+    for params in ({"size": "auto"}, {}):
+        detail = _create(client, _generate_body([_box()], **params))
+        assert detail["status"] == "succeeded", detail
+        overlay = client.get(f"/api/assets/{detail['regions']['overlay_asset_id']}").json()
+        assert (overlay["width"], overlay["height"]) == (1024, 1024)
+
+
+def test_generate_with_regions_english_wording(client: TestClient) -> None:
+    response = client.post(
+        "/api/runs", json=_generate_body([_box()]), headers={"Accept-Language": "en"}
+    )
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client, response.json()["id"])
+    text = detail["regions"]["appended_text"]
+    assert "image 1 is a layout sketch" in text
+    assert "Draw in the box" in text
+    assert text.endswith("fill the whole frame with the scene.")
+
+
+@pytest.mark.parametrize("kind", ["keep", "remove", "move"])
+def test_generate_with_regions_rejects_kinds_without_an_image(
+    client: TestClient, kind: str
+) -> None:
+    region = {"number": 1, "kind": kind, "box": [0.5, 0.5, 0.9, 0.9]}
+    if kind == "move":
+        region["source_box"] = [0.0, 0.0, 0.2, 0.2]
+    response = client.post("/api/runs", json=_generate_body([region]))
+    assert response.status_code == 422, response.text
+    with client.app.state.session_factory() as db:
+        assert db.execute(select(Run)).first() is None
+        assert db.execute(select(Asset).where(Asset.kind == "regions")).first() is None
+
+
+def test_generate_with_regions_counts_references_against_the_edit_limit(
+    client: TestClient,
+) -> None:
+    refs = [_upload(client, make_png_bytes(32, 32, (i, 50, 50))) for i in range(16)]
+    regions = [_box(i + 1, reference_asset_id=ref) for i, ref in enumerate(refs)]
+    response = client.post("/api/runs", json=_generate_body(regions))
+    assert response.status_code == 422
+    assert "17" in response.json()["detail"] and "16" in response.json()["detail"]
+    detail = _create(client, _generate_body(regions[:15]))
+    assert detail["status"] == "succeeded"
+    assert len(detail["inputs"]) == 16
+
+
+def test_generate_with_regions_rejects_input_images(client: TestClient) -> None:
+    asset_id = _upload(client)
+    body = _generate_body([_box()])
+    body["inputs"] = [{"asset_id": asset_id, "role": "image", "position": 0}]
     response = client.post("/api/runs", json=body)
     assert response.status_code == 422
-    assert "Edit" in response.json()["detail"]
+
+
+def test_generate_with_regions_rejects_an_invalid_size(client: TestClient) -> None:
+    response = client.post("/api/runs", json=_generate_body([_box()], size="1000x1000"))
+    assert response.status_code == 422
+    with client.app.state.session_factory() as db:
+        assert db.execute(select(Asset).where(Asset.kind == "regions")).first() is None
 
 
 def test_regions_need_a_primary_input(client: TestClient) -> None:
@@ -203,6 +304,127 @@ def test_input_limit_counts_the_overlay_and_references(client: TestClient) -> No
         assert db.execute(select(Asset).where(Asset.kind == "regions")).first() is None
     detail = _create(client, _body(inputs[:15], [_box()]))
     assert detail["status"] == "succeeded"
+
+
+# -- 白紙の土台(入力画像あり。ADR-0053 1章「四角の土台を選ぶ」) -------------------------------
+
+
+def test_blank_frame_with_inputs_appends_a_layout_sketch(client: TestClient) -> None:
+    """入力画像があっても白紙の土台を選べる。配置図は利用者の入力の後ろ・参照画像の前に足す。"""
+    character = _upload(client)  # 200x100
+    second = _upload(client, make_png_bytes(80, 80, (10, 200, 10)))
+    reference = _upload(client, make_png_bytes(90, 90, (10, 10, 200)))
+    regions = [
+        {
+            "number": 1,
+            "box": [0.0, 0.5, 0.5, 1.0],
+            "instruction": "the girl",
+            "reference_asset_id": character,
+        },
+        _box(2, kind="add", reference_asset_id=reference),
+    ]
+    body = _body([character, second], regions, regions_frame="output")
+    body["params"]["size"] = "1536x1024"
+    detail = _create(client, body)
+    assert detail["status"] == "succeeded", detail
+    assert detail["operation"] == "edit"
+
+    images = sorted(detail["inputs"], key=lambda i: i["position"])
+    assert [i["position"] for i in images] == [0, 1, 2, 3]
+    assert images[0]["asset_id"] == character  # 主たる入力は利用者の1枚目のまま
+    assert images[1]["asset_id"] == second
+    overlay_id = images[2]["asset_id"]
+    assert images[3]["asset_id"] == reference
+    assert detail["primary_parent_asset_id"] == character
+
+    overlay = client.get(f"/api/assets/{overlay_id}").json()
+    assert overlay["kind"] == "regions"
+    assert overlay["source_asset_id"] is None  # 1枚目から作った画像ではない
+    assert (overlay["width"], overlay["height"]) == (1536, 1024)
+    original = client.get(f"/api/assets/{overlay_id}/content", params={"variant": "original"})
+    drawn = Image.open(io.BytesIO(original.content)).convert("RGB")
+    assert drawn.getpixel((1500, 20)) == (255, 255, 255)
+    assert drawn.getpixel((round(0.5 * 1535), 900)) == regions_domain.PALETTE[0][1]
+
+    record = detail["regions"]
+    assert record["delivery"] == "image_and_text"
+    assert record["frame"] == "output"
+    assert record["overlay_asset_id"] == overlay_id
+    text = record["appended_text"]
+    assert detail["prompt"] == "make it nice" + text
+    assert text.startswith("\n\n領域の指示: 3枚目の画像は、白紙の上に")
+    assert "ほかの画像は参考に使ってください" in text
+    assert "四角の中(横 0〜50%、縦 50〜100% の範囲)に描く。 指示: the girl" in text
+    assert "1枚目の画像を参考" in text  # 利用者の入力にある参照画像はその番号で指す
+    assert "4枚目の画像を参考" in text  # 足した参照画像
+    assert text.endswith("画面全体を絵で埋めてください。")
+
+
+def test_blank_frame_with_inputs_auto_size_and_english(client: TestClient) -> None:
+    asset_id = _upload(client)
+    response = client.post(
+        "/api/runs",
+        json=_body([asset_id], [_box()], regions_frame="output"),
+        headers={"Accept-Language": "en"},
+    )
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client, response.json()["id"])
+    overlay = client.get(f"/api/assets/{detail['regions']['overlay_asset_id']}").json()
+    assert (overlay["width"], overlay["height"]) == (1024, 1024)
+    text = detail["regions"]["appended_text"]
+    assert "image 2 is a layout sketch" in text
+    assert "Use the other images as references." in text
+
+
+@pytest.mark.parametrize("kind", ["keep", "remove", "move"])
+def test_blank_frame_with_inputs_rejects_kinds_without_an_image(
+    client: TestClient, kind: str
+) -> None:
+    asset_id = _upload(client)
+    region: dict[str, Any] = {"number": 1, "kind": kind, "box": [0.5, 0.5, 0.9, 0.9]}
+    if kind == "move":
+        region["source_box"] = [0.0, 0.0, 0.2, 0.2]
+    response = client.post("/api/runs", json=_body([asset_id], [region], regions_frame="output"))
+    assert response.status_code == 422, response.text
+    assert "白紙" in response.json()["detail"]
+    with client.app.state.session_factory() as db:
+        assert db.execute(select(Run)).first() is None
+        assert db.execute(select(Asset).where(Asset.kind == "regions")).first() is None
+
+
+def test_blank_frame_with_inputs_counts_the_layout_against_the_limit(client: TestClient) -> None:
+    inputs = [_upload(client, make_png_bytes(64, 64, (i, 10, 10))) for i in range(16)]
+    response = client.post("/api/runs", json=_body(inputs, [_box()], regions_frame="output"))
+    assert response.status_code == 422
+    assert "17" in response.json()["detail"]
+
+
+def test_regions_frame_defaults_follow_the_primary_input(client: TestClient) -> None:
+    asset_id = _upload(client)
+    detail = _create(client, _body([asset_id], [_box()]))
+    assert detail["regions"]["frame"] == "input"
+    detail = _create(client, _body([asset_id], [_box()], regions_frame="input"))
+    assert detail["regions"]["frame"] == "input"
+    detail = _create(client, _generate_body([_box()]))
+    assert detail["regions"]["frame"] == "output"
+
+
+def test_input_frame_without_a_primary_input_is_rejected(client: TestClient) -> None:
+    body = _generate_body([_box()])
+    body["regions_frame"] = "input"
+    response = client.post("/api/runs", json=body)
+    assert response.status_code == 422
+
+
+def test_blank_prompt_text_with_inputs_names_the_layout_number() -> None:
+    regions = [RegionBox(number=1, box=[0.0, 0.0, 0.5, 0.5], instruction="a cat")]
+    with use_locale("ja"):
+        text = regions_domain.build_prompt_text(
+            regions, overlay_image_number=3, reference_image_numbers={}, blank=True
+        )
+    assert text.startswith("\n\n領域の指示: 3枚目の画像は、白紙の上に")
+    assert "ほかの画像は参考に使ってください" in text
+    assert "1枚目の画像は" not in text
 
 
 # -- 「画像と文」 ----------------------------------------------------------------------
@@ -348,6 +570,44 @@ def test_prompt_text_wording() -> None:
     assert "番号(「四角 1」など)か名前" in text
 
 
+def test_blank_prompt_text_wording() -> None:
+    regions = [
+        RegionBox(number=1, box=[0.0, 0.0, 0.5, 0.5], instruction="a cat"),
+        RegionBox(number=2, kind="add", box=[0.5, 0.5, 1.0, 1.0], instruction="a dog"),
+        RegionBox(number=3, box=[0.1, 0.1, 0.2, 0.2], label="lamp"),
+        RegionBox(number=4, box=[0.6, 0.1, 0.7, 0.2]),
+    ]
+    with use_locale("ja"):
+        text = regions_domain.build_prompt_text(
+            regions, overlay_image_number=1, reference_image_numbers={}, blank=True
+        )
+    assert "白紙の上に番号付きの色の四角を描いた配置図" in text
+    assert "番号(「四角 1」など)か名前" in text
+    assert "- 四角 1(赤): 四角の中(横 0〜50%、縦 0〜50% の範囲)に描く。 指示: a cat" in text
+    assert "を変える" not in text
+    # 白紙では、名前だけの四角は名前の物を描く。名前も無ければ場所だけの目印のまま。
+    assert "- 四角 3(緑、lamp): 四角の中(横 10〜20%、縦 10〜20% の範囲)に描く。" in text
+    assert "- 四角 4(黄): 横 60〜70%、縦 10〜20% の範囲。" in text
+    assert "描かないでください" not in text  # 入力のある Run の結び
+    assert text.endswith("出力には描かず、画面全体を絵で埋めてください。")
+    with use_locale("en"):
+        text = regions_domain.build_prompt_text(
+            regions, overlay_image_number=1, reference_image_numbers={}, blank=True
+        )
+    assert text.startswith("\n\nRegion instructions: image 1 is a layout sketch")
+    assert "by its name" in text
+
+
+def test_layout_is_a_blank_canvas_with_boxes() -> None:
+    regions = [RegionBox(number=1, box=[0.1, 0.1, 0.4, 0.4], instruction="a")]
+    data = regions_domain.render_layout(300, 200, regions)
+    drawn = Image.open(io.BytesIO(data)).convert("RGB")
+    assert drawn.size == (300, 200)
+    assert drawn.getpixel((250, 150)) == (255, 255, 255)
+    assert drawn.getpixel((round(0.4 * 299), 50)) == regions_domain.PALETTE[0][1]
+    assert data == regions_domain.render_layout(300, 200, regions)
+
+
 def test_prompt_text_with_labels() -> None:
     regions = [
         RegionBox(number=1, box=[0.1, 0.2, 0.3, 0.4], label="右手の白いカフス"),
@@ -388,8 +648,13 @@ def test_capabilities_flag(client: TestClient) -> None:
         ops = {o["operation"]: o for o in model["operations"]}
         assert ops["edit"]["supports_regions"] is True
         assert ops["edit"]["regions_delivery"] == "image_and_text"
-        assert ops["generate"]["supports_regions"] is False
-        assert ops["generate"]["regions_delivery"] is None
+        # 入力画像の無い Run は白紙の配置図で送る。白紙で意味のある種類だけ(ADR-0053 5章)。
+        assert ops["generate"]["supports_regions"] is True
+        assert ops["generate"]["regions_delivery"] == "image_and_text"
+        assert ops["generate"]["regions_requires_input_image"] is False
+        assert ops["generate"]["regions_kinds"] == ["change", "add"]
+        assert ops["generate"]["regions_reference_images"] is True
+        assert ops["edit"]["regions_requires_input_image"] is True
 
 
 def test_provider_without_regions_rejects(client: TestClient) -> None:

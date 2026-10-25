@@ -11,11 +11,21 @@ import json
 import uuid
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.assistant.engine import FakeAssistantEngine
+from app.assistant.service import AssistantTurn
 from app.assistant.tools import TOOLS_BY_NAME, parameters_schema
 from tests.conftest import login_as, make_png_bytes, wait_for_run_terminal
+
+
+@pytest.fixture(autouse=True)
+def _send_images_without_asking(monkeypatch: pytest.MonkeyPatch) -> None:
+    """画像の許可(ADR-0048 14.1)は `test_assistant_permissions.py` で確かめる。ここでは
+    聞かずに送る。"""
+    monkeypatch.setattr(AssistantTurn, "_image_send_always", lambda self: True)
+
 
 SETTINGS = "/api/settings/assistant"
 CONVERSATIONS = "/api/assistant/conversations"

@@ -7,11 +7,11 @@ import {
   fitQuadToCanvas,
   initialLayout,
   rectQuad,
-  similarityQuad,
   translateQuad,
   type Quad,
   type Size,
 } from './quad'
+import { rescaleQuadToCanvas } from './canvasResize'
 import { MAX_LAYERS, type CompositeBackground, type EditorDoc, type EditorLayer, type ParsedComposition } from './recipe'
 
 let keyCounter = 0
@@ -172,20 +172,16 @@ export function centerLayer(doc: EditorDoc, key: string): EditorDoc {
 }
 
 /**
- * キャンバスの大きさを変える。素材は全体の並びを保ったまま、新しいキャンバスに合わせて
- * 一様に拡大縮小し(縦横の倍率の小さい方)、中心を新しいキャンバスの中心へ動かす。
+ * キャンバスの大きさを変える。素材ごとに、大きさは縦横の倍率の小さい方で拡大縮小し、中心は
+ * キャンバスに対する割合のまま移す(ADR-0050 5章、2026-10-24 追記。`rescaleQuadToCanvas`)。
  */
 export function resizeCanvas(doc: EditorDoc, canvas: Size): EditorDoc {
   const old = doc.canvas
   if (old.width === canvas.width && old.height === canvas.height) return doc
-  const s = Math.min(canvas.width / old.width, canvas.height / old.height)
-  const pivot = { x: old.width / 2, y: old.height / 2 }
-  const dx = canvas.width / 2 - pivot.x
-  const dy = canvas.height / 2 - pivot.y
   return {
     ...doc,
     canvas,
-    layers: doc.layers.map((l) => ({ ...l, quad: similarityQuad(l.quad, pivot, s, 0, dx, dy) })),
+    layers: doc.layers.map((l) => ({ ...l, quad: rescaleQuadToCanvas(l.quad, old, canvas) })),
   }
 }
 

@@ -14,6 +14,7 @@ const base: RunFormState = {
   assetGroupId: 'g1',
   regions: [],
   regionsAssetId: null,
+  regionsFrame: 'input',
 }
 
 function updateFormMessage(patch: Record<string, unknown>, formParams: Record<string, unknown> = {}, ok = true) {

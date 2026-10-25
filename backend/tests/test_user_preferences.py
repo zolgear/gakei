@@ -17,6 +17,7 @@ PREFS = "/api/users/me/preferences"
 DEFAULTS = {
     "content_rating.mask_levels": ["r", "x", "xx", "xxx"],
     "content_rating.mask_unrated": False,
+    "assistant.image_send": "ask",
 }
 
 
@@ -31,11 +32,13 @@ def test_defaults_and_update_in_none_mode(client: TestClient) -> None:
     assert response.json() == {
         "content_rating.mask_levels": ["r", "xxx"],
         "content_rating.mask_unrated": False,
+        "assistant.image_send": "ask",
     }
     response = client.patch(PREFS, json={"content_rating.mask_unrated": True})
     assert response.json() == {
         "content_rating.mask_levels": ["r", "xxx"],
         "content_rating.mask_unrated": True,
+        "assistant.image_send": "ask",
     }
     # 空の配列(何もマスクしない)も選べる。
     assert (
@@ -47,6 +50,7 @@ def test_defaults_and_update_in_none_mode(client: TestClient) -> None:
     assert client.get(PREFS).json() == {
         "content_rating.mask_levels": [],
         "content_rating.mask_unrated": True,
+        "assistant.image_send": "ask",
     }
     with client.app.state.session_factory() as db:
         owners = set(db.execute(select(UserPreference.owner)).scalars().all())
@@ -64,6 +68,8 @@ def test_defaults_and_update_in_none_mode(client: TestClient) -> None:
         {"content_rating.mask_unrated": None},
         {"content_rating.mask_unrated": "yes"},
         {"content_rating.mask_unrated": 1},
+        {"assistant.image_send": "never"},
+        {"assistant.image_send": None},
     ],
 )
 def test_invalid_updates_are_rejected(client: TestClient, body: dict) -> None:
@@ -96,7 +102,19 @@ def test_preferences_are_per_user_in_oidc_mode(client_oidc: TestClient) -> None:
     assert client.get(PREFS).json() == {
         "content_rating.mask_levels": ["xxx"],
         "content_rating.mask_unrated": False,
+        "assistant.image_send": "ask",
     }
     with client.app.state.session_factory() as db:
         owners = set(db.execute(select(UserPreference.owner)).scalars().all())
     assert len(owners) == 2 and "local" not in owners
+
+
+def test_assistant_image_send(client: TestClient) -> None:
+    """アシスタントが画像を LLM に送る前に確かめるか(ADR-0048 14.1)。既定は ask。"""
+    response = client.patch(PREFS, json={"assistant.image_send": "always"})
+    assert response.status_code == 200, response.text
+    assert response.json()["assistant.image_send"] == "always"
+    assert (
+        client.patch(PREFS, json={"assistant.image_send": "ask"}).json()["assistant.image_send"]
+        == "ask"
+    )

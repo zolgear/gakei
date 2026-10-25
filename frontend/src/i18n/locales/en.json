@@ -86,7 +86,8 @@
       "graph": "Lineage graph",
       "history": "History",
       "search": "Search",
-      "assistant": "Assistant"
+      "assistant": "Assistant",
+      "assistantTitle": "Assistant (Alt+A)"
     },
     "sidebar": {
       "resourcePanel": "Resource panel",
@@ -401,6 +402,11 @@
         "confirmMessage": "This clears all GAKEI settings stored in this browser and reloads the page.\n\nCleared: display language (falls back to the browser's language), tab icon progress, generation screen layout and input size, sidebar width and open panel, open/closed states in the stock and the viewer, map values (tab, neighbors, limit, threshold, lineage edges), sketch pen, seed mode, prompt tag completion and tag translations, and the last selected group.\n\nSettings stored on the server, images, history and your login are not affected.",
         "confirmWarning": "The unsent prompt, parameters and input images in the generation form will also be cleared.",
         "confirmLabel": "Clear and reload"
+      },
+      "assistant": {
+        "heading": "Assistant",
+        "imageSendLabel": "Ask before sending images to the LLM",
+        "saveFailed": "Could not save the setting"
       }
     },
     "accessTokens": {
@@ -1441,7 +1447,7 @@
       "enabledHelp": "When enabled, Detect appears in Regions. Boxes can still be drawn by hand when disabled. Disabled by default.",
       "connectionHeading": "VLM",
       "connectionLabel": "Connection",
-      "connectionHelp": "Choose a connection that can read images and supports structured outputs (JSON schema).",
+      "connectionHelp": "Choose a connection that can read images. Connections without structured outputs (JSON schema), such as a local VLM, also work.",
       "connectionsLink": "LLM connections",
       "modelLabel": "Model name",
       "modelHelp": "The model name sent to the connection. Choose a model that can read images.",
@@ -1460,10 +1466,8 @@
       },
       "unusable": {
         "connection_missing": "\"Detect\" is hidden because the selected connection was not found. Choose a connection again.",
-        "api_key_missing": "\"Detect\" is hidden because the connection has no key. Register a key in the OpenAI settings.",
-        "structured_outputs_unsupported": "\"Detect\" is hidden because the connection is not treated as supporting structured outputs. If it does support them, set \"Structured outputs\" to \"Supported\" for that connection in LLM connections."
-      },
-      "structuredOutputsLink": "Open LLM connections"
+        "api_key_missing": "\"Detect\" is hidden because the connection has no key. Register a key in the OpenAI settings."
+      }
     },
     "groupNaming": {
       "intro": "Shows group name suggestions from an LLM below the name field on the group suggestions page. Only the tags of each cluster are sent, and sensitive tags are removed before sending to external connections. A request is sent each time the page is opened, which may incur costs.",
@@ -2023,7 +2027,10 @@
       "operationUnsupportedReason": "The selected model does not support this operation (generate/edit)",
       "maskRequiredReason": "This model requires a mask to run",
       "inputCountRequirement": "{min} input images required (currently {current})",
-      "providerUnavailableDefault": "Cannot connect to this provider"
+      "providerUnavailableDefault": "Cannot connect to this provider",
+      "compositeRedrawing": "Redrawing the arrangement to match the output size",
+      "noImageInputs": "This model does not use input images",
+      "noImageInputsPresent": "This model does not use input images. Remove them to continue"
     },
     "unspecifiedLabel": {
       "unspecified": "Unspecified",
@@ -2059,6 +2066,7 @@
     "runFormLogic": {
       "droppedParamsSettings": "{names} are not usable with the current settings and were reset to unspecified",
       "droppedParamsInputs": "{names} are not usable with the current inputs and were reset to unspecified",
+      "droppedParamsModel": "{names} are not usable with this model and were reset to unspecified",
       "submitFailedDefault": "Failed to start the run",
       "listSeparator": ", "
     },
@@ -2108,6 +2116,9 @@
     "button": "Arrange",
     "buttonTitle": "Lay out and transform input images into a single input",
     "edit": "Edit arrangement",
+    "redrawing": "Redrawing to match the output size",
+    "redrawingShort": "Redrawing…",
+    "redrawFailed": "Could not redraw the arrangement at the output size. It keeps its previous size",
     "webglUnavailable": "WebGL2 is not available in this browser, so the Arrange editor cannot be opened.",
     "loading": "Loading...",
     "loadError": "Failed to load the source images",
@@ -2133,7 +2144,8 @@
       "fit": "Fit to canvas",
       "center": "Center on canvas",
       "undo": "Undo",
-      "redo": "Redo"
+      "redo": "Redo",
+      "showRegions": "Show region boxes"
     },
     "panel": {
       "canvasHeading": "Canvas",
@@ -2178,14 +2190,12 @@
       "invalidCanvas": "The canvas must be {min}–{max} px on each side",
       "outOfBounds": "A source image is too far from the canvas (move it back near the canvas)"
     },
-    "removeSources": "Remove the original images from the inputs",
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",
     "saveFailedDefault": "Failed to save the arrangement",
     "exportError": "Failed to export the image",
-    "canvasTooLarge": "This browser cannot export a canvas this large",
-    "droppedInputs": "Because of the input limit ({max} images), {count} original image(s) were not added to the inputs"
+    "canvasTooLarge": "This browser cannot export a canvas this large"
   },
   "mask": {
     "title": "Draw a mask",
@@ -3523,6 +3533,12 @@
   },
   "assistant": {
     "heading": "Assistant",
+    "window": {
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "close": "Close",
+      "responding": "Responding"
+    },
     "empty": "Ask for prompts, create prompt sets, or hand off generation.\nFor example: \"Three prompts for a harbor town at dusk\", \"Add winter versions to this set\", \"Make 4 images with the current settings\"",
     "messagesLabel": "Conversation",
     "thinking": "Thinking…",
@@ -3601,6 +3617,37 @@
       "undoing": "Undoing…",
       "undoneAt": "Undone ({at})",
       "undoFailed": "Could not undo"
+    },
+    "stockCard": {
+      "titles": {
+        "add_tags": "Added tags",
+        "remove_tags": "Removed tags",
+        "set_title": "Changed title",
+        "create_group": "Created group",
+        "rename_group": "Renamed group",
+        "move_to_group": "Moved to group",
+        "remove_from_group": "Removed from group"
+      },
+      "count": {
+        "one": "{count} image",
+        "other": "{count} images"
+      },
+      "more": {
+        "one": "+{count}",
+        "other": "+{count}"
+      },
+      "undoCreate": "Undo (delete the group)",
+      "undoneSingle": "Undone",
+      "undoneCount": {
+        "one": "Undid {count} image.",
+        "other": "Undid {count} images."
+      },
+      "skipped": {
+        "one": "{count} image was changed afterwards and was left as is.",
+        "other": "{count} images were changed afterwards and were left as is."
+      },
+      "groupDeleted": "Deleted the group.",
+      "groupKept": "Kept the group because other images are in it."
     },
     "formCard": {
       "title": "Form changed",
@@ -3681,8 +3728,33 @@
       "list_groups": "Read groups",
       "list_tags": "Read tags",
       "show_assets": "Show images",
-      "update_form": "Change the form"
-    }
+      "update_form": "Change the form",
+      "add_tags": "Add tags",
+      "remove_tags": "Remove tags",
+      "set_title": "Change title",
+      "create_group": "Create group",
+      "rename_group": "Rename group",
+      "move_to_group": "Move to group",
+      "remove_from_group": "Remove from group",
+      "suggest_groups": "Get group suggestions",
+      "list_group_assets": "Read a group's images"
+    },
+    "permissionCard": {
+      "heading": "Send images",
+      "once": "Allow once",
+      "always": "Always allow",
+      "deny": "Don't allow",
+      "sending": "Sending your answer…",
+      "failed": "Could not send your answer. Choose again.",
+      "answered": {
+        "once": "Allowed once",
+        "always": "Always allowed",
+        "deny": "Not allowed",
+        "timeout": "Not sent: no answer in time",
+        "stopped": "Not sent: stopped"
+      }
+    },
+    "withheldAttachment": "Not sent (images rated X or higher are not sent to an external connection)"
   },
   "contentRating": {
     "label": "Rating",
@@ -3834,6 +3906,7 @@
     "saveBlocked": "Fix the highlighted items to save.",
     "notes": {
       "imageAndText": "For OpenAI, an image with the boxes drawn on it is added to the inputs, and the instructions are added as text after the prompt. The model was not trained on boxes, so it may not always follow them.",
+      "imageAndTextBlank": "For OpenAI, a layout sketch with the boxes drawn on a blank canvas is added to the input images and sent through Edit, and the instructions are added as text after the prompt. The model was not trained on boxes, so it may not always follow them.",
       "countsTowardLimit": "The boxes image and the reference images count toward the input image limit (up to {max}).",
       "comfyuiBboxes": "For ComfyUI, the boxes are inserted into the workflow’s Create Bounding Boxes. The instruction (or the name, if there is none) becomes the box description, and text to draw makes it a text box. Only “Change” and “Add” can be used."
     },
@@ -3874,15 +3947,14 @@
       "chip": "Regions {count}",
       "chipTitle": "Edit the region instructions",
       "clear": "Remove the region instructions",
-      "clearedPrimaryChanged": "The first input image changed, so the region instructions were removed.",
-      "clearedUnsupported": "The selected model does not support region instructions, so they were removed.",
+      "clearedUnsupported": "Some region instructions cannot be used with the current model and inputs, so they were removed.",
       "invalid": "The region instructions need fixing. Open Regions to check them.",
-      "tooManyInputs": "The region instructions add {extra} images, making {count} input images, which exceeds the limit ({max}).",
-      "clearedBlankReplaced": "An input image was added, so the region instructions drawn on the blank canvas were removed."
+      "tooManyInputs": "The region instructions add {extra} images, making {count} input images, which exceeds the limit ({max})."
     },
     "runDetail": {
       "heading": "Region instructions",
       "delivery": "Sent as an added input image with the boxes drawn, and instructions added after the prompt.",
+      "deliveryBlank": "Sent through Edit with a layout sketch of the boxes on a blank canvas added to the input images, and instructions added after the prompt.",
       "textLine": "Text to draw: \"{text}\"",
       "reference": "Reference image",
       "noInstruction": "(no instruction)",
@@ -3891,7 +3963,7 @@
       "overlayImage": "Image with boxes that was sent",
       "appendedToggle": "Added text (region instructions)",
       "deliveryComfyui": "The boxes were inserted into ComfyUI’s Create Bounding Boxes.",
-      "frameOutput": "There was no input image, so box positions are fractions of the output size."
+      "frameOutput": "The boxes were drawn on a blank canvas, so their positions are fractions of the output size."
     },
     "assist": {
       "heading": "Regions and detected candidates",
@@ -3912,7 +3984,13 @@
       "candidateChipTitle": "Detected candidate (not sent yet). Tap to insert the name and turn this candidate into a box",
       "candidateNote": "Dashed candidates are not sent. Only candidates you turn into boxes, by tapping a chip or in the Regions screen, are sent as the image with boxes and the added text."
     },
-    "blankHint": "There is no input image, so you draw on a blank canvas the size of the output (width × height). Boxes are kept as fractions of that size, so they stretch with it if you change the width or height. Adding an input image removes these boxes.",
-    "blankButtonTitle": "Draw boxes on a blank canvas the size of the output and give each box a name or an instruction"
+    "blankHint": "You draw on a blank canvas the size of the output (width × height). Boxes are kept as fractions of that size, so they stretch with it if you change the width or height.",
+    "blankButtonTitle": "Draw boxes on a blank canvas the size of the output and give each box a name or an instruction",
+    "frame": {
+      "label": "Canvas for boxes",
+      "input": "First image",
+      "output": "Blank",
+      "kindsBlocked": "Boxes set to “Keep as is”, “Remove”, or “Move” can’t be used on a blank canvas. Change their type before switching."
+    }
   }
 }

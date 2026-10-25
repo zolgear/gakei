@@ -585,3 +585,54 @@ def test_inject_drops_bboxes_wire_when_size_known() -> None:
     assert "bboxes" not in inputs
     assert "last_incoming" not in inputs
     assert len(inputs["editor_state"]["__value__"]) == 1
+
+
+def _comfy_frame(regions_frame: str | None, *, with_input: bool) -> str:
+    from app.domain.run_create import _check_comfyui_regions
+    from app.domain.schemas import RunCreateRequest
+    from app.providers.base import OperationCapabilities, RunInputMeta
+
+    op_caps = OperationCapabilities(
+        operation="edit" if with_input else "generate",
+        params=[],
+        supports_regions=True,
+        regions_delivery="comfyui_bboxes",
+        regions_kinds=["change", "add"],
+        regions_reference_images=False,
+        regions_requires_input_image=False,
+    )
+    body = RunCreateRequest(
+        operation="edit" if with_input else "generate",
+        model="m",
+        prompt="p",
+        regions=[RegionBox(number=1, box=[0.1, 0.1, 0.5, 0.5])],
+        regions_frame=regions_frame,
+    )
+    metas = (
+        [
+            RunInputMeta(
+                asset_id=uuid.uuid4(),
+                role="image",
+                position=0,
+                width=64,
+                height=64,
+                sha256="0" * 64,
+                mime="image/png",
+            )
+        ]
+        if with_input
+        else []
+    )
+    return _check_comfyui_regions(op_caps, body, metas)
+
+
+def test_comfyui_frame_follows_the_request() -> None:
+    """ADR-0053 1章「四角の土台を選ぶ」: 白紙の土台なら、入力画像があっても出力の大きさの割合。"""
+    from app.domain.run_create import RunCreateError
+
+    assert _comfy_frame(None, with_input=True) == "input"
+    assert _comfy_frame(None, with_input=False) == "output"
+    assert _comfy_frame("output", with_input=True) == "output"
+    assert _comfy_frame("input", with_input=True) == "input"
+    with pytest.raises(RunCreateError):
+        _comfy_frame("input", with_input=False)
