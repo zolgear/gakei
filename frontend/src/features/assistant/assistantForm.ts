@@ -2,7 +2,8 @@
  * 送信のたびに送る、今の生成フォームの状態(ADR-0048 5章。サーバーはフォームの状態を持たない)。
  * RunFormContext の `formState`(スタジオが書き込む最新値。スタジオの外ではリロード後も
  * localStorage から復元した値)から作る。操作(Generate / Edit)は入力画像から導く(ADR-0009)。
- * スタジオの結果エリアに出ている画像の ID(`result_asset_id`。12章)も一緒に送る。
+ * スタジオの結果エリアに出ている画像の ID(`result_asset_id`。12章)と、ストックの選択モードで選んで
+ * いる画像の ID(`selected_asset_ids`。13章。選んでいなければ送らない)も一緒に送る。
  */
 import type { AssistantFormState } from '../../api/client'
 import { deriveOperation } from '../run-form/deriveOperation'
@@ -18,9 +19,10 @@ export const ASSISTANT_TITLE_MAX = 100
 export function assistantFormState(
   form: RunFormState,
   resultAssetId: string | null = null,
+  selectedAssetIds: readonly string[] = [],
 ): AssistantFormState {
   const operation = deriveOperation(form.inputs)
-  return {
+  const state: AssistantFormState = {
     provider: form.provider || null,
     model: form.model || null,
     operation,
@@ -37,6 +39,8 @@ export function assistantFormState(
     // 結果エリアに画像が無い・スタジオを開いていないときは null(ADR-0048 12章)。
     result_asset_id: resultAssetId,
   }
+  if (selectedAssetIds.length > 0) state.selected_asset_ids = [...selectedAssetIds]
+  return state
 }
 
 /** 添付を足した結果。`already` は添付済みで足さなかった数、`overflow` は上限で入らなかった数。 */

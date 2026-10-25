@@ -1411,8 +1411,11 @@ export interface paths {
         put?: never;
         /**
          * Undo
-         * @description アシスタントのプロンプトセットへの書き込みを元に戻す(ADR-0048 4章)。その後に対象が
-         *     変わっていれば戻さずに 409。作成を戻すとセットは論理削除になる。
+         * @description アシスタントの書き込みを元に戻す(ADR-0048 4章・13章)。
+         *
+         *     プロンプトセットは、その後に対象が変わっていれば戻さずに 409。作成を戻すとセットは論理削除に
+         *     なる。ストックの整理は、書き込んだ直後から変わっていない画像だけを戻し、戻した枚数と飛ばした
+         *     枚数を `undo_result` で返す(1枚も戻せなければ 409)。
          */
         post: operations["undo_assistant_write"];
         delete?: never;
@@ -3710,6 +3713,8 @@ export interface components {
             asset_group_id?: string | null;
             /** Result Asset Id */
             result_asset_id?: string | null;
+            /** Selected Asset Ids */
+            selected_asset_ids?: string[];
         };
         /** AssistantMessageCreateRequest */
         AssistantMessageCreateRequest: {
@@ -3803,6 +3808,7 @@ export interface components {
             undoable: boolean;
             /** Undone At */
             undone_at?: string | null;
+            undo_result?: components["schemas"]["AssistantUndoResult"] | null;
         };
         /**
          * AssistantRunCreatedEvent
@@ -3954,11 +3960,36 @@ export interface components {
         /**
          * AssistantUndoResponse
          * @description 「元に戻す」の結果。`message` は戻した tool のメッセージ(`undone_at` が入る)、
-         *     `prompt_set` は戻した後のセット(作成を取り消したときは null)。
+         *     `prompt_set` は戻した後のセット(作成を取り消したときと、ストックの整理では null)、
+         *     `undo_result` はストックの整理で戻した枚数と飛ばした枚数。
          */
         AssistantUndoResponse: {
             message: components["schemas"]["AssistantMessageResponse"];
             prompt_set?: components["schemas"]["PromptSetResponse"] | null;
+            undo_result?: components["schemas"]["AssistantUndoResult"] | null;
+        };
+        /**
+         * AssistantUndoResult
+         * @description ストックの整理を戻した結果(ADR-0048 13章)。戻すのは書き込んだ直後から変わっていない
+         *     画像だけで、`restored` が戻した枚数、`skipped` が変わっていたので戻さなかった枚数。
+         *     `group_deleted` は作ったグループを消した、`group_kept` は別の画像が入っていたので
+         *     消さなかった。
+         */
+        AssistantUndoResult: {
+            /** Restored */
+            restored: number;
+            /** Skipped */
+            skipped: number;
+            /**
+             * Group Kept
+             * @default false
+             */
+            group_kept: boolean;
+            /**
+             * Group Deleted
+             * @default false
+             */
+            group_deleted: boolean;
         };
         /**
          * AssistantUserMessageEvent

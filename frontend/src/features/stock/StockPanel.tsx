@@ -18,7 +18,7 @@
  * オフのときは種別のチップから外し、「すべて」と各節の取得、グループの件数・表紙を生成画像と
  * アップロードに絞る(サーバーの `kind` で絞るので、ページングは崩れない)。
  */
-import { useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router'
 import {
@@ -55,6 +55,7 @@ import {
 } from './groups/groupOpenStorage'
 import { GroupSection, type StockTileActions } from './GroupSection'
 import { UNGROUPED_SECTION_KEY, selectedByGroup, toggleSelection, withoutSection } from './stockSelection'
+import { setStockSelectedAssetIds } from './stockSelectionStore'
 import {
   normalizeStockKindFilter,
   stockGroupCountKinds,
@@ -142,6 +143,13 @@ export function StockPanel() {
 
   const selectedIds = [...selected.keys()]
   const selectedGroups = selectedByGroup(selected)
+
+  // アシスタントに、選んでいる画像を伝える(ADR-0048 13章)。選択モードでなければ空。パネルが
+  // 閉じたら(外れたら)空に戻す。
+  useEffect(() => {
+    setStockSelectedAssetIds(selectionMode ? [...selected.keys()] : [])
+  }, [selectionMode, selected])
+  useEffect(() => () => setStockSelectedAssetIds([]), [])
 
   function handleToggleSelectionMode() {
     setSelectionMode((prev) => !prev)

@@ -11,6 +11,7 @@ import { FormWriteCard } from './FormWriteCard'
 import type { AttachmentPlan } from './assistantForm'
 import { PromptCard } from './PromptCard'
 import { RunCards } from './RunCards'
+import { StockWriteCard } from './StockWriteCard'
 import { ToolRow } from './ToolRow'
 import { WriteResultCard } from './WriteResultCard'
 import type { TimelineItem } from './timeline'
@@ -104,6 +105,8 @@ export function MessageList({ items, conversationKey, emptyText, onAttach }: Mes
                 return <AssetsCard key={item.key} message={item.message} onAttach={onAttach} />
               case 'form':
                 return <FormWriteCard key={item.key} message={item.message} />
+              case 'stock':
+                return <StockWriteCard key={item.key} message={item.message} />
               case 'row':
                 return <ToolRow key={item.key} message={item.message} call={item.call} />
             }

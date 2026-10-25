@@ -3612,6 +3612,37 @@
       "undoneAt": "Undone ({at})",
       "undoFailed": "Could not undo"
     },
+    "stockCard": {
+      "titles": {
+        "add_tags": "Added tags",
+        "remove_tags": "Removed tags",
+        "set_title": "Changed title",
+        "create_group": "Created group",
+        "rename_group": "Renamed group",
+        "move_to_group": "Moved to group",
+        "remove_from_group": "Removed from group"
+      },
+      "count": {
+        "one": "{count} image",
+        "other": "{count} images"
+      },
+      "more": {
+        "one": "+{count}",
+        "other": "+{count}"
+      },
+      "undoCreate": "Undo (delete the group)",
+      "undoneSingle": "Undone",
+      "undoneCount": {
+        "one": "Undid {count} image.",
+        "other": "Undid {count} images."
+      },
+      "skipped": {
+        "one": "{count} image was changed afterwards and was left as is.",
+        "other": "{count} images were changed afterwards and were left as is."
+      },
+      "groupDeleted": "Deleted the group.",
+      "groupKept": "Kept the group because other images are in it."
+    },
     "formCard": {
       "title": "Form changed",
       "fields": {
@@ -3691,7 +3722,15 @@
       "list_groups": "Read groups",
       "list_tags": "Read tags",
       "show_assets": "Show images",
-      "update_form": "Change the form"
+      "update_form": "Change the form",
+      "add_tags": "Add tags",
+      "remove_tags": "Remove tags",
+      "set_title": "Change title",
+      "create_group": "Create group",
+      "rename_group": "Rename group",
+      "move_to_group": "Move to group",
+      "remove_from_group": "Remove from group",
+      "suggest_groups": "Get group suggestions"
     }
   },
   "contentRating": {
