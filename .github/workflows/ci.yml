@@ -59,7 +59,7 @@ jobs:
       # setup-uv は v8 以降、動く major タグ(v8/v9/v10)を発行しなくなったため、
       # フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: true
 
@@ -271,7 +271,7 @@ jobs:
 
       # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: true
 
@@ -301,7 +301,7 @@ jobs:
 
       # setup-uv は v8 以降、動く major タグを発行しなくなったため、フルバージョンで固定する。
       - name: uv のセットアップ
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: true
 
