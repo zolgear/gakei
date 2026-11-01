@@ -605,6 +605,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/image-settings/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Image Settings
+         * @description 画像に埋め込まれた生成情報から、生成のフォームの値を作る(ADR-0038 11章)。
+         */
+        post: operations["import_image_settings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets": {
         parameters: {
             query?: never;
@@ -639,6 +659,30 @@ export interface paths {
          * @description 論理削除のみ。原本・派生ファイルは消さない(ADR-0008「削除」追加分)。
          */
         delete: operations["delete_asset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Lock Asset
+         * @description ロックを付ける(ADR-0060 2章)。既に付いていれば 409。IP 素材には付けない(3章)。
+         */
+        put: operations["lock_asset"];
+        post?: never;
+        /**
+         * Unlock Asset
+         * @description ロックを外す(付けた人と管理者だけ。ADR-0060 2章)。付いていなければ 404。
+         */
+        delete: operations["unlock_asset"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1654,8 +1698,8 @@ export interface paths {
         };
         /**
          * Graph Endpoint
-         * @description マップの元データ。ノード(新しい順に `limit` 件まで)と、各ノードの k 近傍
-         *     (先頭は自分自身)。
+         * @description マップの元データ。ノード(`limit` 件まで。超えたら `sampling` の方法で抽出し、候補の
+         *     新しい順に並べる)と、各ノードの k 近傍(先頭は自分自身)。
          */
         get: operations["embedding_graph"];
         put?: never;
@@ -1675,8 +1719,8 @@ export interface paths {
         };
         /**
          * Graph Scores Endpoint
-         * @description マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
-         *     `GET /api/embeddings/graph` の `nodes` と同じ並び。
+         * @description マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit`・同じ
+         *     `sampling` の `GET /api/embeddings/graph` の `nodes` と同じ並び。
          */
         get: operations["embedding_graph_scores"];
         put?: never;
@@ -2526,6 +2570,434 @@ export interface paths {
         patch: operations["update_user_preferences"];
         trace?: never;
     };
+    "/api/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Teams */
+        get: operations["list_teams"];
+        put?: never;
+        /** Create Team */
+        post: operations["create_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Team */
+        get: operations["get_team"];
+        put?: never;
+        post?: never;
+        /** Delete Team */
+        delete: operations["delete_team"];
+        options?: never;
+        head?: never;
+        /** Update Team */
+        patch: operations["update_team"];
+        trace?: never;
+    };
+    "/api/teams/{team_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Team Member
+         * @description メールアドレスでメンバーを足す(一度ログインした人だけ)。代表者にするのは管理者だけ。
+         */
+        post: operations["add_team_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/teams/{team_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Team Member */
+        delete: operations["remove_team_member"];
+        options?: never;
+        head?: never;
+        /**
+         * Set Team Member Role
+         * @description 代表者にする・代表者から外す(管理者だけ)。
+         */
+        patch: operations["set_team_member_role"];
+        trace?: never;
+    };
+    "/api/ip/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Settings */
+        get: operations["get_ip_settings"];
+        /** Update Ip Settings */
+        put: operations["update_ip_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Ip */
+        get: operations["list_ip"];
+        put?: never;
+        /** Create Ip */
+        post: operations["create_ip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip */
+        get: operations["get_ip"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Ip */
+        patch: operations["update_ip"];
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Ip State
+         * @description 有効・停止・終了(終了は戻せない)。管理者だけ。
+         */
+        put: operations["set_ip_state"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Ip Terms */
+        get: operations["list_ip_terms"];
+        put?: never;
+        /**
+         * Add Ip Terms
+         * @description 条件の新しい版を足す(担当者と管理者)。
+         */
+        post: operations["add_ip_terms"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/managers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Ip Manager */
+        post: operations["add_ip_manager"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/managers/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Ip Manager */
+        delete: operations["remove_ip_manager"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Ip Materials */
+        get: operations["list_ip_materials"];
+        put?: never;
+        /**
+         * Add Ip Material
+         * @description 素材を取り込む(担当者と管理者。ADR-0059 3章)。普段のアップロードとは別の入口で、同じ内容の
+         *     画像があっても新しい Asset にする。
+         */
+        post: operations["add_ip_material"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/materials/{asset_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Ip Material
+         * @description 素材を取り下げる(新しく使えなくなる。記録と派生物は残る)。
+         */
+        post: operations["withdraw_ip_material"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Ip Grants */
+        get: operations["list_ip_grants"];
+        put?: never;
+        /**
+         * Create Ip Grant
+         * @description 許可を出す(チームか、メールアドレスで個人に)。用途は今の条件の用途の中から。
+         */
+        post: operations["create_ip_grant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/grants/{grant_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Ip Grant */
+        post: operations["revoke_ip_grant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/grant-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Ip Grant Targets
+         * @description 許可を出せるチーム(名前だけ)。担当者は管理者でなくても、チームを選んで許可を出せる。
+         */
+        get: operations["list_ip_grant_targets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/usage-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Ip Usage
+         * @description 入力にする画像が IP を引き継ぐか、申告で選べる用途、使えない理由(生成のフォーム用)。
+         */
+        post: operations["check_ip_usage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/derivatives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Ip Derivatives
+         * @description この IP の派生物(新しい順)。担当者と管理者にはすべて、ほかの人には読めるものと自分のもの。
+         *     ほかの IP も引き継ぐものには、その数を付ける(混入・掛け合わせの印)。
+         */
+        get: operations["list_ip_derivatives"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ip Report
+         * @description 期間の集計(担当者と管理者)。画面では実行者の名前を出す(組織の中の画面のため)。
+         */
+        get: operations["get_ip_report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/report/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Ip Report
+         * @description 権利者に渡す報告書(HTML)と、利用の1件ずつ(CSV)。書き出したことを証跡に残す。
+         */
+        get: operations["download_ip_report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/materials/destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Destroy Ip Materials
+         * @description 終了した IP の素材の原本と派生画像を消す(担当者と管理者。ADR-0059 9章)。記録は残す。
+         */
+        post: operations["destroy_ip_materials"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Ip Audit
+         * @description その IP の証跡(新しい順)。担当者と管理者だけ。
+         */
+        get: operations["list_ip_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/me/api-tokens": {
         parameters: {
             query?: never;
@@ -3235,6 +3707,21 @@ export interface components {
              */
             favorite: boolean;
             /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -3272,6 +3759,9 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
+            lock?: components["schemas"]["AssetLockView"] | null;
+            /** Ips */
+            ips?: components["schemas"]["AssetIpRef"][];
         };
         /**
          * AssetEmbeddingStatus
@@ -3386,6 +3876,26 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * AssetIpRef
+         * @description 画像が引き継ぐ IP(ADR-0059 6章)。
+         */
+        AssetIpRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Material
+             * @default false
+             */
+            material: boolean;
+            /** Notes */
+            notes?: string | null;
+        };
         /** AssetLineageResponse */
         AssetLineageResponse: {
             /**
@@ -3409,6 +3919,41 @@ export interface components {
             items: components["schemas"]["AssetSummary"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /** AssetLockRequest */
+        AssetLockRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "delivered" | "shared" | "submitted" | "other";
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * AssetLockView
+         * @description 画像に付いているロック(ADR-0060)。
+         */
+        AssetLockView: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "delivered" | "shared" | "submitted" | "other";
+            /** Note */
+            note?: string | null;
+            /**
+             * Locked At
+             * Format: date-time
+             */
+            locked_at: string;
+            /** Locked By Name */
+            locked_by_name?: string | null;
+            /**
+             * Can Unlock
+             * @default false
+             */
+            can_unlock: boolean;
         };
         /**
          * AssetOrigin
@@ -3478,6 +4023,21 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
             /**
              * Imported
              * @default false
@@ -3559,6 +4119,21 @@ export interface components {
              */
             favorite: boolean;
             /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -3596,6 +4171,9 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
+            lock?: components["schemas"]["AssetLockView"] | null;
+            /** Ips */
+            ips?: components["schemas"]["AssetIpRef"][];
             /**
              * Ingest Outcome
              * @enum {string}
@@ -4100,6 +4678,37 @@ export interface components {
             type: "user_message";
             message: components["schemas"]["AssistantMessageResponse"];
         };
+        /** AuditEventListResponse */
+        AuditEventListResponse: {
+            /** Items */
+            items: components["schemas"]["AuditEventView"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** AuditEventView */
+        AuditEventView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            user?: components["schemas"]["IpUserRef"] | null;
+            /** Action */
+            action: string;
+            /** Target Type */
+            target_type?: string | null;
+            /** Target Id */
+            target_id?: string | null;
+            /** Detail */
+            detail?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** AuthClientSecretStatus */
         AuthClientSecretStatus: {
             /** Configured */
@@ -4370,6 +4979,11 @@ export interface components {
             /** Final Prompt */
             final_prompt?: string | null;
             bounding_boxes?: components["schemas"]["InputRef"] | null;
+        };
+        /** Body_add_ip_material */
+        Body_add_ip_material: {
+            /** File */
+            file: string;
         };
         /** Body_create_asset */
         Body_create_asset: {
@@ -5101,6 +5715,21 @@ export interface components {
              */
             favorite: boolean;
             /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -5258,12 +5887,15 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /** Represents */
+            represents: number;
         };
         /**
          * EmbeddingGraphResponse
          * @description `GET /api/embeddings/graph`。マップ(2D の地図と類似度のネットワーク)の元データ。
          *
-         *     ノードは新しい順。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
+         *     ノードは候補の新しい順に並ぶ(候補が `limit` を超えたら `sampling` の方法で抽出する。
+         *     ADR-0057)。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
          *     (`nodes` の位置と、コサイン類似度)で、先頭は必ず自分自身(類似度 1 = 距離 0)、続いて
          *     ほかのノードを最大 `k` 件、類似度の高い順に並べる。どの行も同じ長さ
          *     (`1 + min(k, ノード数 - 1)`)なので、umap-js の `setPrecomputedKNN` にそのまま渡せる
@@ -5274,6 +5906,11 @@ export interface components {
             model_key: string;
             /** K */
             k: number;
+            /**
+             * Sampling
+             * @enum {string}
+             */
+            sampling: "spread" | "recent";
             /** Nodes */
             nodes?: components["schemas"]["EmbeddingGraphNode"][];
             /** Neighbor Indices */
@@ -5291,14 +5928,19 @@ export interface components {
          * EmbeddingGraphScoresResponse
          * @description `GET /api/embeddings/graph/scores`。マップのノード全件と検索の文章の類似度。
          *
-         *     `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`
-         *     なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
+         *     `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`・
+         *     同じ `sampling` なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
          */
         EmbeddingGraphScoresResponse: {
             /** Model Key */
             model_key: string;
             /** Query */
             query: string;
+            /**
+             * Sampling
+             * @enum {string}
+             */
+            sampling: "spread" | "recent";
             /** Ids */
             ids?: string[];
             /** Scores */
@@ -5769,6 +6411,38 @@ export interface components {
             count: number;
         };
         /**
+         * ImageSettingsImportResponse
+         * @description `POST /api/image-settings/import`(ADR-0038 11章)。画像から読んだ、フォームに入れる値。
+         *
+         *     `source` は読み込み元(GAKEI の埋め込み、ComfyUI のグラフ、A1111 形式)。`model` は
+         *     プロバイダーのモデル(ComfyUI はワークフローの ID)。A1111 形式でチェックポイントが
+         *     見つからなければ null(フォームのモデルを変えない。9章)。`params` はフォームの
+         *     パラメーター名と、サイズを持つプロバイダーなら `size`(`WxH`)。
+         */
+        ImageSettingsImportResponse: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "gakei" | "comfyui" | "a1111";
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string | null;
+            /** Prompt */
+            prompt: string;
+            /** Params */
+            params: {
+                [key: string]: string | number | boolean;
+            };
+            /** Unapplied */
+            unapplied: components["schemas"]["SdWebuiImportUnapplied"][];
+            /** Notes */
+            notes: components["schemas"]["SdWebuiImportNote"][];
+            /** Software */
+            software?: string | null;
+        };
+        /**
          * IncompatiblePair
          * @description 同時に指定できないパラメータの組み合わせ。
          *     例: background=transparent と output_format=jpeg。
@@ -5806,6 +6480,409 @@ export interface components {
             node: string;
             /** Input */
             input: string;
+        };
+        /** IpCreateRequest */
+        IpCreateRequest: {
+            /** Name */
+            name: string;
+            /**
+             * Owner Kind
+             * @enum {string}
+             */
+            owner_kind: "own" | "third_party";
+            /** Rights Holder */
+            rights_holder?: string | null;
+            /** Description */
+            description?: string | null;
+            terms: components["schemas"]["IpTermsInput"];
+        };
+        /** IpDerivativeItem */
+        IpDerivativeItem: {
+            asset: components["schemas"]["AssetSummary"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Name */
+            created_by_name?: string | null;
+            /**
+             * Other Ip Count
+             * @default 0
+             */
+            other_ip_count: number;
+        };
+        /** IpDerivativeListResponse */
+        IpDerivativeListResponse: {
+            /** Items */
+            items: components["schemas"]["IpDerivativeItem"][];
+        };
+        /** IpDestroyResponse */
+        IpDestroyResponse: {
+            /** Destroyed */
+            destroyed: number;
+            /** Kept Shared */
+            kept_shared: number;
+        };
+        /** IpDetail */
+        IpDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Owner Kind
+             * @enum {string}
+             */
+            owner_kind: "own" | "third_party";
+            /** Rights Holder */
+            rights_holder?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "suspended" | "terminated";
+            /** Material Count */
+            material_count: number;
+            /** Can Manage */
+            can_manage: boolean;
+            access?: components["schemas"]["IpMyAccess"] | null;
+            /** Description */
+            description?: string | null;
+            terms?: components["schemas"]["IpTermsView"] | null;
+            /** Managers */
+            managers?: components["schemas"]["IpUserRef"][];
+            /**
+             * Can Administer
+             * @default false
+             */
+            can_administer: boolean;
+        };
+        /** IpGrantCreateRequest */
+        IpGrantCreateRequest: {
+            /** Team Id */
+            team_id?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Purposes */
+            purposes?: string[];
+            /**
+             * Can Use
+             * @default true
+             */
+            can_use: boolean;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
+        };
+        /** IpGrantListResponse */
+        IpGrantListResponse: {
+            /** Items */
+            items: components["schemas"]["IpGrantView"][];
+        };
+        /** IpGrantView */
+        IpGrantView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Team Id */
+            team_id?: string | null;
+            /** Team Name */
+            team_name?: string | null;
+            user?: components["schemas"]["IpUserRef"] | null;
+            /** Purposes */
+            purposes: string[];
+            /** Can Use */
+            can_use: boolean;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
+            /**
+             * Granted At
+             * Format: date-time
+             */
+            granted_at: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** Active */
+            active: boolean;
+        };
+        /** IpListResponse */
+        IpListResponse: {
+            /** Items */
+            items: components["schemas"]["IpSummary"][];
+        };
+        /** IpManagerAddRequest */
+        IpManagerAddRequest: {
+            /** Email */
+            email: string;
+        };
+        /** IpMaterialItem */
+        IpMaterialItem: {
+            asset: components["schemas"]["AssetSummary"];
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /** Withdrawn At */
+            withdrawn_at?: string | null;
+        };
+        /** IpMaterialListResponse */
+        IpMaterialListResponse: {
+            /** Items */
+            items: components["schemas"]["IpMaterialItem"][];
+        };
+        /**
+         * IpMyAccess
+         * @description 見る人が今受けている許可(チーム経由を含む。複数あれば合わせたもの)。
+         */
+        IpMyAccess: {
+            /** Purposes */
+            purposes: string[];
+            /** Can Use */
+            can_use: boolean;
+        };
+        /** IpReportCount */
+        IpReportCount: {
+            /** Key */
+            key: string;
+            /** Count */
+            count: number;
+        };
+        /** IpReportMaterial */
+        IpReportMaterial: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /** Withdrawn At */
+            withdrawn_at?: string | null;
+            /**
+             * Destroyed
+             * @default false
+             */
+            destroyed: boolean;
+            /** Use Count */
+            use_count: number;
+        };
+        /**
+         * IpReportView
+         * @description IP の状況のレポート(ADR-0059 8章)。画面に出す集計。
+         */
+        IpReportView: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Uses */
+            uses: number;
+            /** Uses Succeeded */
+            uses_succeeded: number;
+            /** Outputs */
+            outputs: number;
+            /** Derived */
+            derived: number;
+            /** Original Downloads */
+            original_downloads: number;
+            /** Detail Views */
+            detail_views: number;
+            /** Lineage Exports */
+            lineage_exports: number;
+            /** Denied */
+            denied: number;
+            /** By Purpose */
+            by_purpose: components["schemas"]["IpReportCount"][];
+            /** By Work Note */
+            by_work_note: components["schemas"]["IpReportCount"][];
+            /** By Grantee */
+            by_grantee: components["schemas"]["IpReportCount"][];
+            /** By User */
+            by_user: components["schemas"]["IpReportCount"][];
+            /** By Provider */
+            by_provider: components["schemas"]["IpReportCount"][];
+            /** Denied Reasons */
+            denied_reasons: components["schemas"]["IpReportCount"][];
+            /** Materials */
+            materials: components["schemas"]["IpReportMaterial"][];
+        };
+        /** IpSettingsUpdateRequest */
+        IpSettingsUpdateRequest: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** IpSettingsView */
+        IpSettingsView: {
+            /** Enabled */
+            enabled: boolean;
+            /** Available */
+            available: boolean;
+        };
+        /** IpStateRequest */
+        IpStateRequest: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "suspended" | "terminated";
+        };
+        /** IpSummary */
+        IpSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Owner Kind
+             * @enum {string}
+             */
+            owner_kind: "own" | "third_party";
+            /** Rights Holder */
+            rights_holder?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "suspended" | "terminated";
+            /** Material Count */
+            material_count: number;
+            /** Can Manage */
+            can_manage: boolean;
+            access?: components["schemas"]["IpMyAccess"] | null;
+        };
+        /** IpTeamRef */
+        IpTeamRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** IpTermsInput */
+        IpTermsInput: {
+            /** Contract Number */
+            contract_number?: string | null;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
+            /** Purposes */
+            purposes?: string[];
+            /**
+             * External Ai
+             * @enum {string}
+             */
+            external_ai: "allow" | "local_only" | "deny";
+            /** Notes */
+            notes?: string | null;
+        };
+        /** IpTermsView */
+        IpTermsView: {
+            /** Contract Number */
+            contract_number?: string | null;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
+            /** Purposes */
+            purposes?: string[];
+            /**
+             * External Ai
+             * @enum {string}
+             */
+            external_ai: "allow" | "local_only" | "deny";
+            /** Notes */
+            notes?: string | null;
+            /** Version */
+            version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Name */
+            created_by_name?: string | null;
+        };
+        /** IpUpdateRequest */
+        IpUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Rights Holder */
+            rights_holder?: string | null;
+            /** Description */
+            description?: string | null;
+        };
+        /** IpUsageCheckRequest */
+        IpUsageCheckRequest: {
+            /** Asset Ids */
+            asset_ids?: string[];
+            /** Provider */
+            provider?: string | null;
+            /** Model */
+            model?: string | null;
+        };
+        /** IpUsageCheckResponse */
+        IpUsageCheckResponse: {
+            /** Required */
+            required: boolean;
+            /** Ips */
+            ips?: components["schemas"]["IpUsageIp"][];
+            /** Purposes */
+            purposes?: string[];
+        };
+        /** IpUsageIp */
+        IpUsageIp: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** External Ai */
+            external_ai?: ("allow" | "local_only" | "deny") | null;
+            /** Purposes */
+            purposes: string[];
+            /** Problem */
+            problem?: string | null;
+        };
+        /** IpUserRef */
+        IpUserRef: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Name */
+            name?: string | null;
+            /** Email */
+            email?: string | null;
         };
         /** LineageAssetInfo */
         LineageAssetInfo: {
@@ -6758,7 +7835,7 @@ export interface components {
              */
             description: string;
             /** Widget */
-            widget?: "seed" | null;
+            widget?: ("seed" | "segmented") | null;
             /** Mask Only */
             mask_only?: boolean | null;
         };
@@ -7762,6 +8839,7 @@ export interface components {
             regions?: components["schemas"]["RegionBox"][];
             /** Regions Frame */
             regions_frame?: ("input" | "output") | null;
+            ip_use?: components["schemas"]["RunIpUseRequest"] | null;
         };
         /** RunCreateResponse */
         RunCreateResponse: {
@@ -7983,6 +9061,16 @@ export interface components {
              */
             content_withheld: boolean;
         };
+        /**
+         * RunIpUseRequest
+         * @description IP 素材と派生物を入力にするときの申告(ADR-0059 5章)。
+         */
+        RunIpUseRequest: {
+            /** Purpose */
+            purpose: string;
+            /** Work Note */
+            work_note?: string | null;
+        };
         /** RunListResponse */
         RunListResponse: {
             /** Items */
@@ -8058,6 +9146,21 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
         };
         /**
          * RunPromptTemplate
@@ -8449,6 +9552,21 @@ export interface components {
              */
             favorite: boolean;
             /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -8647,6 +9765,21 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
             /**
              * Imported
              * @default false
@@ -9056,6 +10189,116 @@ export interface components {
             translations?: {
                 [key: string]: string;
             };
+        };
+        /** TeamCreateRequest */
+        TeamCreateRequest: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+        };
+        /** TeamDetail */
+        TeamDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Member Count */
+            member_count: number;
+            /** My Role */
+            my_role?: ("member" | "lead") | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Members */
+            members: components["schemas"]["TeamMemberView"][];
+            /** Can Manage Members */
+            can_manage_members: boolean;
+            /** Can Manage Leads */
+            can_manage_leads: boolean;
+        };
+        /** TeamListResponse */
+        TeamListResponse: {
+            /** Items */
+            items: components["schemas"]["TeamSummary"][];
+        };
+        /** TeamMemberAddRequest */
+        TeamMemberAddRequest: {
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @default member
+             * @enum {string}
+             */
+            role: "member" | "lead";
+        };
+        /** TeamMemberRoleRequest */
+        TeamMemberRoleRequest: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "member" | "lead";
+        };
+        /** TeamMemberView */
+        TeamMemberView: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Name */
+            name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "member" | "lead";
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+        };
+        /** TeamSummary */
+        TeamSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Member Count */
+            member_count: number;
+            /** My Role */
+            my_role?: ("member" | "lead") | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** TeamUpdateRequest */
+        TeamUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
         };
         /** UnitPricesPer1M */
         UnitPricesPer1M: {
@@ -10310,6 +11553,57 @@ export interface operations {
             };
         };
     };
+    import_image_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        /** @description 画像のファイル(multipart の `file`。保存しない)。 */
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageSettingsImportResponse"];
+                };
+            };
+            /** @description A1111 形式の画像だが、SD WebUI に接続していない・一覧を取れない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 画像が大きすぎる */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 読み込める生成情報が無い、合うワークフローが無い、本文が不正 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_assets: {
         parameters: {
             query?: {
@@ -10423,6 +11717,74 @@ export interface operations {
         };
     };
     delete_asset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lock_asset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetLockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetLockView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlock_asset: {
         parameters: {
             query?: never;
             header?: never;
@@ -11451,6 +12813,14 @@ export interface operations {
                 transparent?: boolean;
                 /** @description true: 領域の四角を付けた Run だけ(ADR-0053) */
                 regions?: boolean;
+                /** @description true: ロックの付いた出力を1つ以上持つ Run だけ(ADR-0060) */
+                locked?: boolean;
+                /** @description desc: 新しい順 / asc: 古い順(ADR-0054 6章) */
+                order?: "desc" | "asc";
+                /** @description このグループ(id。`none` はグループなし)のどれかに当たる Run だけ(ADR-0054) */
+                group?: string[];
+                /** @description このグループ(id。`none` はグループなし)に当たる Run を除く */
+                exclude_group?: string[];
             };
             header?: never;
             path?: never;
@@ -11627,6 +12997,14 @@ export interface operations {
                 transparent?: boolean;
                 /** @description true: 領域の四角を付けた Run の画像だけ(ADR-0053) */
                 regions?: boolean;
+                /** @description true: ロックの付いた画像だけ(ADR-0060) */
+                locked?: boolean;
+                /** @description このグループ(id。`none` はグループなし)のどれかの画像だけ(ADR-0054 6章) */
+                group?: string[];
+                /** @description このグループ(id。`none` はグループなし)の画像を除く */
+                exclude_group?: string[];
+                /** @description sort=group のとき、各グループの先頭(古い順)のこの枚数だけ(ADR-0054 6章) */
+                per_group?: number | null;
             };
             header?: never;
             path?: never;
@@ -12870,6 +14248,8 @@ export interface operations {
             query?: {
                 k?: number;
                 limit?: number;
+                /** @description 候補が limit を超えたときの抽出方法(ADR-0057)。spread: 全体から均等に / recent: 新しい順 */
+                sampling?: "spread" | "recent";
                 group_id?: string | null;
                 /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
                 tag?: string[] | null;
@@ -12919,6 +14299,8 @@ export interface operations {
                 /** @description 検索の文章(自然文) */
                 q: string;
                 limit?: number;
+                /** @description 候補が limit を超えたときの抽出方法(ADR-0057)。spread: 全体から均等に / recent: 新しい順 */
+                sampling?: "spread" | "recent";
                 group_id?: string | null;
                 /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
                 tag?: string[] | null;
@@ -15133,6 +16515,1119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserPreferencesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_teams: {
+        parameters: {
+            query?: {
+                /** @description all は管理者だけ */
+                scope?: "mine" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_team_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamMemberAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_team_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                user_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_team_member_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                user_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamMemberRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpSettingsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_ip_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpSettingsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_ip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_ip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_ip_state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpStateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ip_terms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpTermsView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_ip_terms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpTermsInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_ip_manager: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpManagerAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_ip_manager: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+                user_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ip_materials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpMaterialListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_ip_material: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_add_ip_material"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpMaterialItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    withdraw_ip_material: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpMaterialItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ip_grants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpGrantListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_ip_grant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpGrantCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpGrantListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_ip_grant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+                grant_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpGrantListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ip_grant_targets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpTeamRef"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_ip_usage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpUsageCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpUsageCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ip_derivatives: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDerivativeListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_report: {
+        parameters: {
+            query?: {
+                /** @description 期間の開始(既定は IP を作った日) */
+                start?: string | null;
+                /** @description 期間の終了(既定は今日) */
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpReportView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_ip_report: {
+        parameters: {
+            query?: {
+                format?: "html" | "csv";
+                start?: string | null;
+                end?: string | null;
+                /** @description 実行者の名前を入れる(既定は入れない) */
+                include_names?: boolean;
+            };
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    destroy_ip_materials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDestroyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ip_audit: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventListResponse"];
                 };
             };
             /** @description Validation Error */

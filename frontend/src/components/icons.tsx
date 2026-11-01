@@ -214,6 +214,16 @@ export function FilterIcon(props: IconProps) {
   )
 }
 
+/** 重なった2枚の札: グループ(履歴のグループの絞り込み)。 */
+export function GroupStackIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 2.5h8.5V11" />
+      <rect x="2.5" y="5" width="8.5" height="8.5" rx="1" />
+    </Icon>
+  )
+}
+
 /** 長さの違う横線と下向きの矢印: 一覧の並べ替え。 */
 export function SortIcon(props: IconProps) {
   return (
@@ -250,6 +260,47 @@ export function PencilIcon(props: IconProps) {
     <Icon {...props}>
       <path d="M10.5 2.5l3 3-8 8H2.5v-3z" />
       <path d="M9 4l3 3" />
+    </Icon>
+  )
+}
+
+/** 長さの違う3本の横線: プロンプトセット(アイコンレールと同じ形)。 */
+export function PromptSetIcon(props: IconProps) {
+  return (
+    <Icon viewBox="0 0 18 18" {...props}>
+      <path d="M3 4.5h12M3 9h12M3 13.5h7" />
+    </Icon>
+  )
+}
+
+/** スライダー: パラメーターセット(アイコンレールと同じ形。ADR-0040)。 */
+export function ParameterSetIcon(props: IconProps) {
+  return (
+    <Icon viewBox="0 0 18 18" {...props}>
+      <path d="M3 4.5h1.4M7.6 4.5H15M3 9h7.4M13.6 9H15M3 13.5h3.4M9.6 13.5H15" />
+      <circle cx="6" cy="4.5" r="1.6" />
+      <circle cx="12" cy="9" r="1.6" />
+      <circle cx="8" cy="13.5" r="1.6" />
+    </Icon>
+  )
+}
+
+/** 錠前: ロック(ADR-0060)。付いていれば塗る。 */
+export function LockIcon({ filled = false, ...props }: IconProps & { filled?: boolean }) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="7" width="10" height="7" rx="1.2" fill={filled ? 'currentColor' : 'none'} />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+    </Icon>
+  )
+}
+
+/** 盾: IP 素材(ADR-0059)。アイコンレールと IP の印で使う。 */
+export function IpIcon(props: IconProps) {
+  return (
+    <Icon viewBox="0 0 18 18" {...props}>
+      <path d="M9 2.5l5.5 2v4.2c0 3.2-2.3 5.6-5.5 6.8-3.2-1.2-5.5-3.6-5.5-6.8V4.5z" />
+      <path d="M10.8 7.4a2.2 2.2 0 1 0 0 3.2" />
     </Icon>
   )
 }

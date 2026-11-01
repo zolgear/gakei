@@ -7,6 +7,8 @@
  */
 import type { ReactNode } from 'react'
 import type { PanelId } from './panelStorage'
+import { IpIcon, ParameterSetIcon, PromptSetIcon } from '../components/icons'
+import { useIpAvailable } from '../features/ip/ipQueries'
 import { ASSISTANT_TOGGLE_ATTRIBUTE } from '../features/assistant/assistantWindowAttributes'
 import { useI18n, type Messages } from '../i18n'
 import styles from './IconRail.module.css'
@@ -37,29 +39,13 @@ function items(labels: Messages['shell']['iconRail']): { id: PanelId; label: str
     {
       id: 'prompts',
       label: labels.prompts,
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-          <path d="M3 4.5h12M3 9h12M3 13.5h7" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-      ),
+      icon: <PromptSetIcon size={18} />,
     },
     {
       // パラメーターセット(ADR-0040)。スライダーの形。
       id: 'parameterSets',
       label: labels.parameterSets,
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-          <path
-            d="M3 4.5h1.4M7.6 4.5H15M3 9h7.4M13.6 9H15M3 13.5h3.4M9.6 13.5H15"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-          <circle cx="6" cy="4.5" r="1.6" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="12" cy="9" r="1.6" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="8" cy="13.5" r="1.6" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-      ),
+      icon: <ParameterSetIcon size={18} />,
     },
     {
       // プロンプトテンプレート(実験)。枠(スロット)に差し替えの候補が入る形。
@@ -106,12 +92,20 @@ function items(labels: Messages['shell']['iconRail']): { id: PanelId; label: str
         </svg>
       ),
     },
+    {
+      // IP 素材(ADR-0059)。盾の形。
+      id: 'ip',
+      label: labels.ip,
+      icon: <IpIcon size={18} />,
+    },
   ]
 }
 
 export function IconRail({ selected, onSelect, assistant }: IconRailProps) {
   const { t } = useI18n()
-  const ITEMS = items(t.shell.iconRail)
+  // IP 素材(ADR-0059)は、使えるとき(認証モードで有効)だけ出す。
+  const ipAvailable = useIpAvailable()
+  const ITEMS = items(t.shell.iconRail).filter((item) => item.id !== 'ip' || ipAvailable)
   return (
     <nav aria-label={t.shell.iconRail.resourceNav} className={styles.rail}>
       {ITEMS.map((item) => (

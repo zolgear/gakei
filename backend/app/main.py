@@ -34,6 +34,8 @@ from app.api import group_naming as group_naming_api
 from app.api import group_suggestions as group_suggestions_api
 from app.api import health as health_api
 from app.api import history as history_api
+from app.api import image_settings as image_settings_api
+from app.api import ip as ip_api
 from app.api import lineage_transfer as lineage_transfer_api
 from app.api import llm_connections as llm_connections_api
 from app.api import mod_verdicts as mod_verdicts_api
@@ -50,6 +52,7 @@ from app.api import settings as settings_api
 from app.api import shares as shares_api
 from app.api import tag_dictionaries as tag_dictionaries_api
 from app.api import tags as tags_api
+from app.api import teams as teams_api
 from app.api import uploads as uploads_api
 from app.api import users as users_api
 from app.api.request_text import reject_nul_in_request
@@ -65,6 +68,7 @@ from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.auth_settings import EffectiveAuthConfig, resolve_auth_config
 from app.domain.group_suggestions import GroupSuggestionCache
 from app.domain.history_sort import EmbeddingOrderCache
+from app.domain.map_sampling import MapSampleCache
 from app.domain.semantic_search import QueryVectorCache
 from app.domain.storage import open_store
 from app.domain.vector_index import build_index as build_vector_index
@@ -410,6 +414,7 @@ def _build_lifespan(settings: Settings):
         app.state.vector_index = vector_index
         app.state.query_vector_cache = QueryVectorCache()
         app.state.history_order_cache = EmbeddingOrderCache()
+        app.state.map_sample_cache = MapSampleCache()
         app.state.group_suggestion_cache = GroupSuggestionCache()
         app.state.auth_runtime = auth_runtime
         app.state.tag_dictionary_importer = tag_dictionary_importer
@@ -663,6 +668,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(comfyui_api.router, dependencies=auth_dep)
     # ADR-0038: SD WebUI の設定(更新系は各ルートで `require_admin`)。
     app.include_router(sdwebui_api.router, dependencies=auth_dep)
+    app.include_router(image_settings_api.router, dependencies=auth_dep)
     app.include_router(assets_api.router, dependencies=auth_dep)
     # 領域の四角の検出(ADR-0053 7章)と、その設定。
     app.include_router(region_detection_api.router, dependencies=auth_dep)
@@ -691,6 +697,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ADR-0051: Mod とフック(各ルートで `require_admin`)。
     app.include_router(mods_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
+    app.include_router(teams_api.router, dependencies=auth_dep)
+    app.include_router(ip_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
     app.include_router(shares_api.router, dependencies=auth_dep)
     # 系列の持ち出しと取り込み(ADR-0037)。

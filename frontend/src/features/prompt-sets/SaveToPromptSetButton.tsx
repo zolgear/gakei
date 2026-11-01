@@ -5,7 +5,7 @@
  * 画面外(`.pane` の overflow: hidden の外)に出て見えず、サイドバー配置ではスクロール列の
  * 中に出て切れるため、配置に依存しないモーダルに変えた(2026-09-26)。
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, addPromptSetItem, createPromptSet, listPromptSets } from '../../api/client'
 import { normalizeLabel, validateItemText, validateSetName } from './promptSetValidation'
@@ -16,9 +16,13 @@ import styles from './SaveToPromptSetButton.module.css'
 
 interface SaveToPromptSetButtonProps {
   text: string
+  /** 渡すと文字の代わりにこのアイコンを出す(文字は `aria-label` / `title` にする)。生成のフォームの操作列。 */
+  icon?: ReactNode
+  /** アイコンのときのボタンの見た目。 */
+  iconClassName?: string
 }
 
-export function SaveToPromptSetButton({ text }: SaveToPromptSetButtonProps) {
+export function SaveToPromptSetButton({ text, icon, iconClassName }: SaveToPromptSetButtonProps) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -68,14 +72,17 @@ export function SaveToPromptSetButton({ text }: SaveToPromptSetButtonProps) {
     <div className={styles.wrap}>
       <button
         type="button"
-        className={styles.trigger}
+        className={icon ? iconClassName : styles.trigger}
         disabled={!canSave}
+        aria-label={icon ? t.promptSets.save.trigger : undefined}
+        title={icon ? t.promptSets.save.trigger : undefined}
+        aria-haspopup="dialog"
         onClick={() => {
           setOpen((v) => !v)
           setSavedMessage(null)
         }}
       >
-        {t.promptSets.save.trigger}
+        {icon ?? t.promptSets.save.trigger}
       </button>
 
       {savedMessage && <span className={styles.savedMessage}>{savedMessage}</span>}

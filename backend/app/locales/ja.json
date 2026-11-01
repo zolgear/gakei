@@ -46,6 +46,9 @@
   "provider": {
     "unknown": "未知のプロバイダーです: {name}"
   },
+  "history": {
+    "invalidGroup": "グループの指定が不正です: {value}"
+  },
   "pagination": {
     "invalidCursor": "cursor が不正です"
   },
@@ -388,15 +391,15 @@
     "qualityMax": "最大",
     "backgroundAuto": "自動",
     "backgroundOpaque": "不透明",
-    "backgroundTransparent": "透明",
+    "backgroundTransparent": "透過",
     "qualityLabel": "画質",
     "qualityDescription": "低いほど速く安価。xhigh/max は 2.5 系のみ",
     "fileFormatLabel": "ファイル形式",
     "fileFormatDescription": "出力するファイル形式",
     "compressionLabel": "圧縮率",
     "compressionDescription": "JPEG / WebP のときのみ。0〜100、高いほど高画質",
-    "backgroundLabel": "背景",
-    "backgroundDescription": "透明は PNG / WebP のときのみ",
+    "backgroundLabel": "背景の透過",
+    "backgroundDescription": "透過は PNG / WebP のときのみ",
     "countLabel": "枚数",
     "countDescription": "1回の実行で生成する枚数。枚数分の料金がかかる",
     "previewLabel": "途中経過の表示",
@@ -601,7 +604,11 @@
     "contentNotFound": "content が見つかりません",
     "notDeleted": "削除されていません",
     "cannotRestoreDeletedRunOutput": "削除された実行の出力は復元できません。",
-    "regionsMustBePng": "領域の画像はPNG形式である必要があります"
+    "regionsMustBePng": "領域の画像はPNG形式である必要があります",
+    "locked": "ロックした画像か、その元になった画像なので削除できません",
+    "alreadyLocked": "この画像はすでにロックされています",
+    "notLocked": "この画像はロックされていません",
+    "unlockNotAllowed": "ロックを外せるのは、付けた人と管理者だけです"
   },
   "runs": {
     "unknownProvider": "未知の provider です: {provider}",
@@ -611,7 +618,8 @@
     "cannotDeleteRunning": "実行中または待機中のため、先にキャンセルしてください",
     "cannotCancelStatus": "status={status} のため cancel できません",
     "cannotCancelAlreadyRunning": "すでに実行が開始されているため cancel できません",
-    "partialNotFound": "途中経過が見つかりません"
+    "partialNotFound": "途中経過が見つかりません",
+    "locked": "出力がロックで守られているので削除できません"
   },
   "runRegions": {
     "editOnly": "領域の指示は編集(Edit)でだけ使えます",
@@ -957,7 +965,8 @@
     "derivedFailed": {
       "one": "注意: 派生画像を消せなかった画像が {count} 件あります(sha256): {keys}。残っても害はありません。",
       "other": "注意: 派生画像を消せなかった画像が {count} 件あります(sha256): {keys}。残っても害はありません。"
-    }
+    },
+    "lockedKept": "ロックで守られている・IP 素材なので消さない画像: {count} 件"
   },
   "shares": {
     "disabled": "共有リンクは管理者設定で無効になっています",
@@ -1239,5 +1248,119 @@
     "unsupported": "接続先が Structured Outputs に対応していないため、グループ名の候補に使えません",
     "llmError": "グループ名の候補を作れませんでした: {error}",
     "fakeName": "ダミーの名前 {cluster}-{n}"
+  },
+  "imageSettings": {
+    "fileMissing": "画像のファイルを指定してください。",
+    "noSettings": "この画像には、読み込める生成情報(GAKEI、ComfyUI、SD WebUI)がありません。",
+    "noMatchingWorkflow": "この画像の ComfyUI のワークフローに合う、登録済みのワークフローがありません。先にワークフローを登録してください。",
+    "workflowNotFound": "ワークフロー「{name}」がこの環境に無く、登録済みのワークフローとも合わないため読み込めません。",
+    "sdwebuiNotConnected": "SD WebUI(A1111 形式)の画像ですが、SD WebUI に接続していないため読み込めません。",
+    "notes": {
+      "inputsNotRestored": "入力画像は画像に含まれていないため、読み込んでいません。",
+      "promptLinked": "プロンプトが他のノードからの配線のため、読み込めませんでした。",
+      "workflowPartialMatch": "ワークフロー「{name}」と一部のノードが違います。値を確かめてください。"
+    }
+  },
+  "teams": {
+    "notFound": "チームが見つかりません",
+    "adminOnly": "この操作は管理者だけができます",
+    "forbidden": "この操作をする権限がありません",
+    "nameTaken": "同じ名前のチームがあります",
+    "invalidName": "名前は1〜100文字で入力してください",
+    "userNotFound": "このメールアドレスの利用者がいません(一度ログインした人だけを足せます)",
+    "memberNotFound": "この人はチームのメンバーではありません"
+  },
+  "ip": {
+    "disabled": "IP 素材の機能は有効になっていません",
+    "notFound": "IP が見つかりません",
+    "forbidden": "この操作をする権限がありません",
+    "invalidStateChange": "今の状態ではこの操作はできません(終了した IP は戻せません)",
+    "invalidEnabled": "有効・無効の値が正しくありません",
+    "invalidName": "名前は1〜200文字で入力してください",
+    "invalidOwnerKind": "区分が正しくありません",
+    "invalidState": "状態が正しくありません",
+    "invalidExternalAi": "外部の AI への送信の値が正しくありません",
+    "invalidPurpose": "用途の名前は100文字までです",
+    "tooManyPurposes": "用途は50個までです",
+    "invalidPeriod": "期間の開始が終了より後になっています",
+    "userNotFound": "このメールアドレスの利用者がいません(一度ログインした人だけを指定できます)",
+    "teamNotFound": "チームが見つかりません",
+    "grantTargetRequired": "許可を出す先は、チームか個人のどちらか1つを指定してください",
+    "purposeNotInTerms": "契約の条件に無い用途は許可できません",
+    "materialNotDeletable": "IP 素材は削除できません。IP のページで取り下げてください",
+    "materialNotLockable": "IP 素材にはロックを付けられません",
+    "declarationRequired": "IP 素材を使うときは、用途を選んでください",
+    "materialWithdrawn": "取り下げられた IP 素材は使えません",
+    "notActive": "「{name}」は今は使えません(停止中か終了)",
+    "outOfContract": "「{name}」は契約の期間の外です",
+    "purposeNotAllowed": "この用途は「{name}」の契約で許諾されていません",
+    "providerNotAllowed": "「{name}」の契約では、この送り先の AI に送れません",
+    "noGrant": "「{name}」をこの用途で使う許可がありません",
+    "shareNotAllowed": "IP 素材と、それから作った画像は共有リンクにできません",
+    "aiNotAllowed": "IP の契約で、この画像は AI に送れません",
+    "destroyRequiresTermination": "素材を破棄できるのは、IP を終了した後だけです"
+  },
+  "ipReport": {
+    "lang": "ja",
+    "title": "IP 利用報告書: {name}",
+    "rightsHolder": "権利者",
+    "period": "期間",
+    "generatedAt": "作成日時",
+    "state": "状態",
+    "states": {
+      "active": "有効",
+      "suspended": "停止中",
+      "terminated": "終了"
+    },
+    "summary": "概要",
+    "item": "項目",
+    "count": "件数",
+    "uses": "利用(生成・編集の実行)",
+    "usesSucceeded": "うち成功",
+    "outputs": "作られた画像",
+    "derived": "期間中の派生物",
+    "originalDownloads": "原本の取得",
+    "detailViews": "素材の詳細の表示",
+    "lineageExports": "系列の書き出し",
+    "denied": "拒否された試み",
+    "outsideNote": "すべての利用は、申告した用途とともに記録されています。許可の範囲の外の試みは拒否され、拒否として記録されています。",
+    "terms": "契約の条件",
+    "version": "版",
+    "contractNumber": "契約番号",
+    "contractPeriod": "契約の期間",
+    "purposes": "許諾された用途",
+    "externalAi": "外部の AI への送信",
+    "externalAllow": "許可",
+    "externalLocalOnly": "手元の接続先だけ",
+    "externalDeny": "どの AI にも送らない",
+    "recordedAt": "記録日時",
+    "byPurpose": "用途別",
+    "purpose": "用途",
+    "byWorkNote": "作業のメモ別",
+    "workNote": "作業のメモ",
+    "noWorkNote": "(メモなし)",
+    "byGrantee": "許可の先別",
+    "grantee": "許可の先",
+    "grantTeam": "チーム「{name}」",
+    "grantPerson": "個人",
+    "byUser": "実行者別",
+    "user": "実行者",
+    "anonymousUser": "利用者 {number}",
+    "byProvider": "送り先別",
+    "provider": "送り先(プロバイダー / モデル)",
+    "materials": "素材",
+    "materialId": "素材の ID",
+    "sha256": "sha256(先頭)",
+    "addedAt": "取り込み日時",
+    "materialState": "状態",
+    "materialActive": "使用可",
+    "materialWithdrawn": "取り下げ",
+    "materialDestroyed": "破棄",
+    "useCount": "期間中の利用",
+    "deniedReasons": "拒否の理由",
+    "reason": "理由",
+    "useList": "利用の一覧",
+    "date": "日時",
+    "none": "なし"
   }
 }

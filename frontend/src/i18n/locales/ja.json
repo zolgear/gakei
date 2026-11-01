@@ -87,7 +87,8 @@
       "history": "履歴",
       "search": "検索",
       "assistant": "アシスタント",
-      "assistantTitle": "アシスタント (Alt+A)"
+      "assistantTitle": "アシスタント (Alt+A)",
+      "ip": "IP 素材"
     },
     "sidebar": {
       "resourcePanel": "リソースパネル",
@@ -137,6 +138,13 @@
       "filterShapeAll": "すべての形",
       "filterTransparent": "透過",
       "filterRegions": "領域",
+      "groupFilter": "グループで絞り込む",
+      "groupFilterMode": "絞り込みの向き",
+      "groupFilterInclude": "含める",
+      "groupFilterExclude": "除く",
+      "groupFilterSearch": "グループを探す",
+      "groupFilterClear": "絞り込みを外す",
+      "groupFilterUnknown": "(見つからないグループ)",
       "loading": "読み込み中...",
       "loadError": "履歴の取得に失敗しました",
       "noMatch": "該当する Generated がありません。",
@@ -147,12 +155,15 @@
       "cardStyleMasonry": "石積み",
       "cardStyleRows": "行揃え",
       "sort": "並べ替え",
-      "sortDate": "日付",
+      "sortDate": "新しい順",
+      "sortDateAsc": "古い順",
       "sortGroup": "グループ",
       "sortEmbedding": "似た順",
       "ungrouped": "グループなし",
       "sectionCount": "{count} 枚",
-      "backToTop": "先頭へ戻る"
+      "sectionShowAll": "すべて見る",
+      "backToTop": "先頭へ戻る",
+      "filterLocked": "ロック"
     },
     "labels": {
       "square": "正方形",
@@ -320,7 +331,10 @@
       "authentication": "認証",
       "assistant": "アシスタント",
       "regionDetection": "領域の検出",
-      "groupNaming": "グループ名の候補"
+      "groupNaming": "グループ名の候補",
+      "teams": "チーム",
+      "teamsAdmin": "チーム",
+      "ipAdmin": "IP 素材"
     },
     "frame": {
       "changeCount": {
@@ -1494,6 +1508,10 @@
         "structured_outputs_unsupported": "接続先が構造化出力に対応するとみなせないため、名前の候補は出ていません。対応している接続先なら、「LLM の接続先」でその接続先の「構造化出力」を「対応する」にしてください。"
       },
       "structuredOutputsLink": "LLM の接続先を開く"
+    },
+    "teams": {
+      "intro": "入っているチームと、メンバーです。代表者はメンバーを出し入れできます。",
+      "adminIntro": "チームを作り、代表者を決めます。チームは IP 素材の利用の許可の単位です。"
     }
   },
   "promptSets": {
@@ -1569,9 +1587,7 @@
   "parameterSets": {
     "form": {
       "saveButton": "設定を保存",
-      "saveButtonTitle": "今のプロバイダー・モデル・パラメーター・プロンプトを、パラメーターセットとして保存します",
-      "loadButton": "設定を読み込む",
-      "loadButtonTitle": "保存したパラメーターセットを、フォームに読み込みます"
+      "loadButton": "設定を読み込む"
     },
     "save": {
       "dialogTitle": "パラメーターセットに保存",
@@ -3118,14 +3134,15 @@
     },
     "importParams": {
       "openDialog": "画像から設定を読み込む",
-      "openDialogTitle": "SD WebUI で作った画像に埋め込まれた生成情報を、フォームに読み込みます",
       "dialogTitle": "画像から設定を読み込む",
-      "dialogLead": "SD WebUI(A1111 形式)で作った画像を選ぶか、ここにドロップ・貼り付けしてください。画像は保存しません。",
+      "dialogLead": "GAKEI、ComfyUI、SD WebUI(A1111 形式)で作った画像を選ぶか、ここにドロップ・貼り付けしてください。画像は保存しません。",
       "dropZone": "画像をここにドロップ、または貼り付け(Ctrl+V)",
       "chooseFile": "ファイルを選ぶ",
       "reading": "生成情報を読み込み中...",
       "notImage": "画像のファイルを選んでください。",
       "failed": "読み込めませんでした。",
+      "providerUnavailable": "この画像のプロバイダー({provider})は今は使えないため、読み込めません。",
+      "modelUnavailable": "この画像のモデル({model})は今は選べないため、読み込めません。",
       "confirmTitle": "今のプロンプトを置き換えますか?",
       "confirmMessage": "プロンプトとパラメーターを、画像の生成情報で置き換えます。入力画像は変わりません。",
       "confirmReplace": "置き換える",
@@ -3343,6 +3360,12 @@
     "tagHelp": "選んだタグがすべて付いた画像だけを並べます。",
     "limitLabel": "上限",
     "limitOption": "{count} 枚",
+    "samplingLabel": "抽出",
+    "samplingHelp": "上限を超えたときに、どの画像を並べるか。全体から均等にすると、似た画像の塊ごとに選び、多くの画像を代表するものを大きく描きます。",
+    "samplingOption": {
+      "spread": "全体から均等に",
+      "recent": "新しい順"
+    },
     "kLabel": "近傍の数",
     "kHelp": "1枚ごとに、似た画像を何枚まで見て並べるか。多いほど全体の形が、少ないほど近くの似かたが効きます。",
     "searchLabel": "マップ内の意味検索",
@@ -3374,6 +3397,7 @@
     "showLineage": "系列の辺を重ねる",
     "truncated": "全 {total} 枚のうち、新しい {count} 枚だけを並べています。グループやタグで絞り込むか、上限を上げてください。",
     "truncatedAtMax": "全 {total} 枚のうち、新しい {count} 枚だけを並べています。グループやタグで絞り込んでください。",
+    "truncatedSpread": "全 {total} 枚から、似た画像の塊ごとに {count} 枚を選んで並べています。大きく描いた画像は、近くの似た画像を代表しています。",
     "empty": "並べられる画像がありません。埋め込みを計算した画像だけが並びます。",
     "emptyFiltered": "この絞り込みで並べられる画像がありません。",
     "tooFew": "画像が少ないため、地図を作れません({min} 枚以上で作れます)。",
@@ -3991,6 +4015,214 @@
       "input": "1枚目の画像",
       "output": "白紙",
       "kindsBlocked": "白紙では「そのまま残す」「消す」「動かす」の四角を使えません。種類を変えてから切り替えてください。"
+    }
+  },
+  "lock": {
+    "lock": "ロック",
+    "lockedLabel": "ロック中",
+    "lockTitle": "ロックする",
+    "lockedTitle": "ロック中",
+    "lead": "この画像と、元になった画像は削除できなくなります。",
+    "kind": "種類",
+    "kinds": {
+      "delivered": "納品",
+      "shared": "共有",
+      "submitted": "提出",
+      "other": "その他"
+    },
+    "note": "メモ",
+    "notePlaceholder": "渡した先、受付番号など",
+    "lockedAt": "日時",
+    "lockedBy": "付けた人",
+    "submit": "ロックする",
+    "unlock": "ロックを外す",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "failed": "ロックを変更できませんでした",
+    "protectedHint": "ロックした画像か、その元なので削除できません"
+  },
+  "teams": {
+    "name": "チームの名前",
+    "namePlaceholder": "新しいチームの名前",
+    "create": "作成",
+    "loading": "読み込み中…",
+    "loadFailed": "チームを読み込めませんでした",
+    "failed": "変更できませんでした",
+    "empty": "どのチームにも入っていません",
+    "emptyAdmin": "チームはまだありません",
+    "memberCount": "{count} 人",
+    "noMembers": "メンバーはいません",
+    "rename": "名前を変更",
+    "delete": "削除",
+    "deleteConfirm": "チーム「{name}」を削除しますか?",
+    "deleted": "チームを削除しました",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "email": "メールアドレス",
+    "emailPlaceholder": "足す人のメールアドレス",
+    "role": "役割",
+    "roleOf": "{name} の役割",
+    "roles": {
+      "member": "メンバー",
+      "lead": "代表者"
+    },
+    "add": "追加",
+    "remove": "外す"
+  },
+  "ip": {
+    "panelHeading": "IP 素材",
+    "loading": "読み込み中…",
+    "loadFailed": "IP を読み込めませんでした",
+    "notFound": "IP が見つかりません",
+    "failed": "変更できませんでした",
+    "empty": "使える IP はありません",
+    "materialCount": "素材 {count}",
+    "noMaterials": "素材はありません",
+    "open": "開く",
+    "backToList": "← IP の一覧",
+    "myAccess": "許可: {purposes}",
+    "states": {
+      "active": "有効",
+      "suspended": "停止中",
+      "terminated": "終了"
+    },
+    "ownerKinds": {
+      "own": "自社",
+      "third_party": "他社"
+    },
+    "suspend": "停止する",
+    "resume": "再開する",
+    "terminate": "終了する",
+    "terminateConfirm": "「{name}」を終了しますか? 終了すると許可はすべて効かなくなり、元に戻せません。",
+    "tabs": {
+      "materials": "素材",
+      "terms": "条件",
+      "grants": "許可",
+      "managers": "担当者",
+      "audit": "証跡",
+      "derivatives": "派生物",
+      "report": "レポート"
+    },
+    "addMaterials": "素材を取り込む",
+    "uploading": "取り込み中…",
+    "withdraw": "取り下げ",
+    "withdrawn": "取り下げ済み",
+    "withdrawConfirm": "この素材を取り下げますか? 新しく使えなくなります(記録と、これまでに作った画像は残ります)。",
+    "reviseTerms": "条件を改める",
+    "saveTerms": "新しい版として保存",
+    "cancel": "キャンセル",
+    "terms": {
+      "version": "版 {version}",
+      "current": "今の条件",
+      "contractNumber": "契約番号",
+      "validFrom": "開始日",
+      "validUntil": "終了日",
+      "period": "期間",
+      "periodValue": "{from} 〜 {until}",
+      "purposes": "許諾された用途",
+      "purposesPlaceholder": "1行に1つ(例: デザインモック)",
+      "externalAi": "外部の AI への送信",
+      "externalAiOptions": {
+        "allow": "許可",
+        "local_only": "手元の接続先だけ",
+        "deny": "どの AI にも送らない"
+      },
+      "notes": "注記",
+      "notesPlaceholder": "クレジットの表記、禁止事項など",
+      "createdAt": "記録"
+    },
+    "grants": {
+      "target": "許可を出す先",
+      "toTeam": "チーム",
+      "toUser": "個人",
+      "team": "チーム",
+      "chooseTeam": "チームを選ぶ",
+      "email": "メールアドレス",
+      "emailPlaceholder": "許可を出す人のメールアドレス",
+      "purposes": "許す用途",
+      "noPurposes": "条件に用途がありません。先に条件を改めてください",
+      "canUse": "入力に使える(外すと見るだけ)",
+      "create": "許可を出す",
+      "empty": "許可はまだありません",
+      "revoke": "取り消す",
+      "revoked": "取り消し済み",
+      "inactive": "期間外",
+      "useAllowed": "入力に使える",
+      "viewOnly": "見るだけ"
+    },
+    "noManagers": "担当者はいません",
+    "managerEmailPlaceholder": "担当者にする人のメールアドレス",
+    "addManager": "担当者にする",
+    "removeManager": "外す",
+    "noAudit": "記録はありません",
+    "more": "さらに表示",
+    "auditActions": {
+      "ip.create": "IP を作成",
+      "ip.update": "IP を変更",
+      "ip.terms_add": "条件の版を追加",
+      "ip.state_change": "状態を変更",
+      "ip.manager_change": "担当者を変更",
+      "ip.material_add": "素材を取り込み",
+      "ip.material_withdraw": "素材を取り下げ",
+      "ip.grant_add": "許可を追加",
+      "ip.grant_revoke": "許可を取り消し",
+      "asset.view_detail": "素材の詳細を表示",
+      "asset.download_original": "原本を取得",
+      "ip.denied": "拒否",
+      "export.ip_report": "レポートを書き出し",
+      "export.lineage": "系列を書き出し",
+      "ip.material_destroy": "素材を破棄"
+    },
+    "admin": {
+      "intro": "預かった版権の素材を、許可した人だけが、許可した用途に使えるようにします。認証モードのときだけ使えます(ベータ版)。",
+      "enabled": "IP 素材を使う",
+      "create": "IP を作る",
+      "name": "名前",
+      "ownerKind": "区分",
+      "rightsHolder": "権利者",
+      "createButton": "作成"
+    },
+    "declaration": {
+      "heading": "IP の利用の申告",
+      "purpose": "用途",
+      "purposePlaceholder": "用途を選ぶ",
+      "workNote": "作業のメモ",
+      "workNotePlaceholder": "案件・発注など(任意)",
+      "choosePurpose": "IP 素材を使うので、用途を選んでください",
+      "noCommonPurpose": "入力の IP に共通して使える用途がありません",
+      "checking": "IP の許可を確かめています…"
+    },
+    "noDerivatives": "派生物はありません",
+    "otherIps": "ほかの IP {count}",
+    "assetSection": "IP",
+    "materialBadge": "素材",
+    "markLabel": "IP 素材から作った画像",
+    "destroyMaterials": "素材の原本を破棄",
+    "destroyConfirm": "「{name}」の素材の原本と縮小画像を消します。記録は残ります。元に戻せません。",
+    "destroyedCount": "{count} 件を破棄しました(ほかの画像と共有していて残したもの {kept} 件)",
+    "report": {
+      "downloadHtml": "報告書(HTML)",
+      "downloadCsv": "CSV",
+      "includeNames": "実行者の名前を入れる",
+      "failed": "レポートを作れませんでした",
+      "none": "なし",
+      "uses": "利用",
+      "usesSucceeded": "うち成功",
+      "outputs": "作られた画像",
+      "derived": "派生物",
+      "originalDownloads": "原本の取得",
+      "detailViews": "素材の詳細の表示",
+      "lineageExports": "系列の書き出し",
+      "denied": "拒否",
+      "byPurpose": "用途別",
+      "byWorkNote": "作業のメモ別",
+      "noWorkNote": "(メモなし)",
+      "byGrantee": "許可の先別",
+      "byUser": "実行者別",
+      "byProvider": "送り先別",
+      "deniedReasons": "拒否の理由",
+      "materials": "素材ごとの利用",
+      "destroyed": "破棄"
     }
   }
 }

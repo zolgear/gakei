@@ -149,7 +149,7 @@ export interface MapProjection {
     size: Size,
     x: number,
     y: number,
-    radiusFor: (scale: number) => number,
+    radiusFor: (scale: number, index: number) => number,
   ): number
   /** 全体が収まるように合わせる(その場で)。向きは変えない。 */
   fitAll(positions: ArrayLike<number>, count: number, size: Size, extentAt: ExtentAt): void
@@ -237,10 +237,10 @@ class FlatProjection implements MapProjection {
     _size: Size,
     x: number,
     y: number,
-    radiusFor: (scale: number) => number,
+    radiusFor: (scale: number, index: number) => number,
   ): number {
-    // 縮尺は全点で同じなので、半径は 1 回だけ求める。
-    return hitTest(positions, count, this.viewport, x, y, radiusFor(this.viewport.scale))
+    const scale = this.viewport.scale
+    return hitTest(positions, count, this.viewport, x, y, (i) => radiusFor(scale, i))
   }
 
   fitAll(positions: ArrayLike<number>, count: number, size: Size, extentAt: ExtentAt): void {
@@ -385,9 +385,9 @@ class OrbitProjection implements MapProjection {
     size: Size,
     x: number,
     y: number,
-    radiusFor: (scale: number) => number,
+    radiusFor: (scale: number, index: number) => number,
   ): number {
-    return hitTest3D(positions, count, this.camera, size, x, y, (p) => radiusFor(p.scale))
+    return hitTest3D(positions, count, this.camera, size, x, y, (p, i) => radiusFor(p.scale, i))
   }
 
   fitAll(positions: ArrayLike<number>, count: number, size: Size, extentAt: ExtentAt): void {

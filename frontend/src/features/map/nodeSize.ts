@@ -22,6 +22,32 @@ export const SELECTION_OUTSET_PX = 4
 /** 点で描くときの、選択の輪の外径(輪の半径 DOT_RADIUS + 4 と、線の半分)。 */
 const DOT_EXTENT_PX = DOT_RADIUS + 4 + 1.5
 
+/** 代表数で大きくする割合の上限(1 枚のノードに対して最大 1.6 倍)。 */
+export const REPRESENT_MAX_GROW = 0.6
+/** 代表数が 2 倍になるごとに大きくする割合。 */
+const REPRESENT_GROW_PER_DOUBLING = 0.15
+
+/**
+ * 代表数(そのノードが代表する画像の数、自分を含む。ADR-0057)に応じた、描く大きさの倍率。
+ * 1 枚なら 1。対数で控えめに大きくし(2 枚で 1.15 倍、16 枚で上限の 1.6 倍)、塊の大きさの
+ * 手がかりにとどめる(大きくしすぎると周りを隠す)。
+ */
+export function representScale(count: number | null | undefined): number {
+  if (count === null || count === undefined || !(count > 1)) return 1
+  return Math.min(1 + REPRESENT_MAX_GROW, 1 + REPRESENT_GROW_PER_DOUBLING * Math.log2(count))
+}
+
+/** ノードごとの `representScale`。すべて 1 なら null(描く処理で掛け算を省く)。 */
+export function representScales(counts: readonly (number | null | undefined)[]): Float32Array | null {
+  let any = false
+  const out = new Float32Array(counts.length)
+  for (let i = 0; i < counts.length; i++) {
+    out[i] = representScale(counts[i])
+    if (out[i] !== 1) any = true
+  }
+  return any ? out : null
+}
+
 /** 描くサムネイルの大きさ(CSS ピクセル)。`THUMB_MIN_PX` 未満なら点で描く。 */
 export function drawTilePx(rawPx: number, count: number): number {
   const px = Math.min(THUMB_MAX_PX, rawPx)

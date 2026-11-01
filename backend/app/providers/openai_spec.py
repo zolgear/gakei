@@ -104,6 +104,7 @@ def _common_params(model: str) -> list[ParamDef]:
             default="png",
             form_default="png",
             description=t("openaiSpec.fileFormatDescription"),
+            widget="segmented",
         ),
         ParamDef(
             name="output_compression",
@@ -121,6 +122,7 @@ def _common_params(model: str) -> list[ParamDef]:
             choice_labels=_background_labels(),
             default="auto",
             description=t("openaiSpec.backgroundDescription"),
+            widget="segmented",
         ),
         ParamDef(
             name="n",

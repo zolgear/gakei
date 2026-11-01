@@ -89,6 +89,63 @@
   text-align: center;
 }
 
+/* グループの絞り込みのパネル(複数選ぶので選んでも閉じない。`HistoryGroupFilterMenu`)。 */
+.panel {
+  width: 240px;
+}
+
+.modeGroup {
+  display: flex;
+  margin: 2px 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.mode {
+  flex: 1;
+  height: 30px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+}
+
+.mode:first-child {
+  border-left: 0;
+}
+
+.mode[data-active='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+}
+
+.search {
+  height: 30px;
+  margin: 0 2px 6px;
+  padding: 0 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12.5px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(50vh, 360px);
+  overflow-y: auto;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 767px) {
   .trigger {
     width: 44px;
@@ -97,5 +154,10 @@
 
   .item {
     height: 44px;
+  }
+
+  .mode,
+  .search {
+    height: 40px;
   }
 }

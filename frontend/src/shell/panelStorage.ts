@@ -14,6 +14,8 @@ export type PanelId =
   | 'graph'
   | 'history'
   | 'search'
+  // IP 素材(ADR-0059)。使えるときだけレールに出す。
+  | 'ip'
 
 const STORAGE_KEY = 'gakei:selected-panel'
 
@@ -25,7 +27,8 @@ function isPanelId(value: unknown): value is PanelId {
     value === 'promptTemplates' ||
     value === 'graph' ||
     value === 'history' ||
-    value === 'search'
+    value === 'search' ||
+    value === 'ip'
   )
 }
 

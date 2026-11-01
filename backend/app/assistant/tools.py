@@ -59,7 +59,7 @@ from app.assistant.llm_view import Disclosure
 from app.auth.identity import CurrentUser
 from app.domain import annotations as annotations_domain
 from app.domain import asset_search as asset_search_domain
-from app.domain import assistant_settings, content_withholding, derivatives
+from app.domain import assistant_settings, content_withholding, derivatives, ip_usage
 from app.domain import content_rating as content_rating_domain
 from app.domain import focal_points as focal_points_domain
 from app.domain import group_suggestions as group_suggestions_domain
@@ -795,6 +795,14 @@ def load_visible_images(
                 raise ImageWithheldFailure(
                     f"The image of asset {asset.id} cannot be shown: a GAKEI Mod denied it "
                     "(content withheld or denied). Its text information is still available."
+                )
+        # ADR-0059 5章: IP の契約で外部の AI に送れない画像は送らない。
+        ip_blocked = ip_usage.ai_blocked_asset_ids(db, [a.id for a in assets], "external")
+        for asset in assets:
+            if asset.id in ip_blocked:
+                raise ImageWithheldFailure(
+                    f"The image of asset {asset.id} cannot be shown: its IP contract does not "
+                    "allow sending it to this AI. Its text information is still available."
                 )
         # レーティング(ADR-0049)。AI に渡す画像はマスクしない代わりに、段階を情報として渡す。
         ratings = content_rating_domain.bulk_levels(db, [a.id for a in assets])

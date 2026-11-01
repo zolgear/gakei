@@ -14,7 +14,7 @@
  *   を決める。入力画像は変えない。seed を含むセットは seed を固定にして入れ、含まないセットは
  *   今の seed の欄の値のまま。
  */
-import type { CapabilitiesResponse, ParamDef, ParameterSetResponse } from '../../api/client'
+import type { CapabilitiesResponse, ParamDef, ParameterSetResponse, ProviderEntry } from '../../api/client'
 import { findProvider } from '../../lib/capabilities'
 import { fmt, msg } from '../../i18n'
 import { computeInitialParams } from '../run-form/initialFormState'
@@ -229,6 +229,27 @@ export function parameterSetUnavailableReason(
   return null
 }
 
+/**
+ * 読み込む値の `size` からフォームのサイズを決める(画像からの読み込みと共通)。プロバイダーが
+ * サイズを持たない(ComfyUI)か、範囲外なら入れず `unapplied` に足し、既定のサイズにする。
+ */
+export function loadSizeState(
+  entry: ProviderEntry,
+  params: Record<string, ParamValue>,
+  unapplied: { name: string; value: string }[],
+): SizeState {
+  if (!('size' in params)) return paramToSizeState(undefined)
+  const candidate = paramToSizeState(params.size)
+  const constraints = entry.size
+  const valid =
+    constraints !== null &&
+    constraints !== undefined &&
+    validateSizeState(constraints, roundSizeStateToMultiple(constraints, candidate)).valid
+  if (valid) return candidate
+  unapplied.push({ name: 'size', value: String(params.size) })
+  return paramToSizeState(entry.default_size ?? undefined)
+}
+
 /** セットを今の capabilities に照らして、フォームに入れる値を決める。 */
 export function resolveParameterSetLoad(
   set: ParameterSetResponse,
@@ -260,22 +281,7 @@ export function resolveParameterSetLoad(
   const targetDefs = modelCaps?.operations.find((o) => o.operation === operation)?.params ?? []
   const params = set.params ?? {}
   const { applied, unapplied } = partitionParams(targetDefs, params)
-
-  // サイズ: プロバイダーがサイズを持たない(ComfyUI)か、範囲外なら入れず、既定のサイズにする。
-  let sizeState = paramToSizeState(undefined)
-  if ('size' in params) {
-    const candidate = paramToSizeState(params.size)
-    const constraints = entry.size
-    const valid =
-      constraints !== null &&
-      constraints !== undefined &&
-      validateSizeState(constraints, roundSizeStateToMultiple(constraints, candidate)).valid
-    if (valid) sizeState = candidate
-    else {
-      unapplied.push({ name: 'size', value: String(params.size) })
-      sizeState = paramToSizeState(entry.default_size ?? undefined)
-    }
-  }
+  const sizeState = loadSizeState(entry, params, unapplied)
 
   const seedNames = seedParamNames(targetDefs)
   return {

@@ -19,6 +19,9 @@ function asset(id: string, deletedAt: string | null): AssetDetail {
     used_as_input: false,
     content_withheld: false,
     favorite: false,
+    locked: false,
+    lock_protected: false,
+    ip_marked: false,
     imported: false,
   }
 }

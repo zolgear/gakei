@@ -9,6 +9,7 @@
  * - `tag=<名前>`(繰り返せる): タグの絞り込み。すべてのタグが付いた画像だけ(AND)。サーバーの
  *   `normalize_tag_name` と同じく正規化し、重複と空を除き、最初に現れた順に並べる
  * - `limit=`、`k=`: 並べる上限と近傍の数(選べる値のどれか)
+ * - `sample=recent`: 上限を超えたときの抽出方法(ADR-0057)。省くと全体から均等に(`spread`)
  * - `th=0.85`: ネットワークの類似度のしきい値(範囲に収め、0.01 刻みに丸める)
  * - `lineage=1`: ネットワークに系列の辺を重ねる
  * - `sel=<Asset ID>`: 選んだ画像(配置にその画像が無ければ選ばない)
@@ -18,7 +19,7 @@
  * - `shape=flat`: 見せ方(どう見せるか)。省くと立体(`orbit`)。タブ(何を並べるか)とは別で、
  *   どちらのタブにも効く
  *
- * タブ・上限・近傍の数・しきい値・系列の辺・一致の件数・距離の取り方は、ブラウザにも覚える
+ * タブ・上限・抽出方法・近傍の数・しきい値・系列の辺・一致の件数・距離の取り方は、ブラウザにも覚える
  * (`mapPrefs.ts`。2026-10-04)。
  * URL に無い値は覚えた値、それも無ければ既定(`parseMapUrlState` の `fallback`)。
  */
@@ -37,6 +38,17 @@ export const MAP_SHAPES: readonly MapShape[] = ['orbit', 'flat']
 export const DEFAULT_MAP_SHAPE: MapShape = 'orbit'
 
 export const MAP_LIMIT_CHOICES = [500, 1000, 2000, 5000] as const
+/**
+ * 候補が上限を超えたときの抽出方法(ADR-0057)。`spread` は全体から均等に(既定)、`recent` は
+ * 新しい順の先頭から。サーバーの `sampling` と同じ値。
+ */
+export type MapSampling = 'spread' | 'recent'
+export const MAP_SAMPLINGS: readonly MapSampling[] = ['spread', 'recent']
+export const DEFAULT_MAP_SAMPLING: MapSampling = 'spread'
+
+export function isMapSampling(value: unknown): value is MapSampling {
+  return value === 'spread' || value === 'recent'
+}
 export const MAP_K_CHOICES = [5, 10, 15, 20, 30] as const
 export const DEFAULT_MAP_LIMIT = 1000
 export const DEFAULT_MAP_K = 10
@@ -56,6 +68,8 @@ export interface MapUrlState {
   /** 正規化済み・重複なし。すべてが付いた画像だけに絞る(AND)。 */
   tags: string[]
   limit: number
+  /** 上限を超えたときの抽出方法。 */
+  sampling: MapSampling
   k: number
   threshold: number
   showLineage: boolean
@@ -74,6 +88,7 @@ export const DEFAULT_MAP_URL_STATE: MapUrlState = {
   groupId: null,
   tags: [],
   limit: DEFAULT_MAP_LIMIT,
+  sampling: DEFAULT_MAP_SAMPLING,
   k: DEFAULT_MAP_K,
   threshold: DEFAULT_MAP_THRESHOLD,
   showLineage: false,
@@ -133,7 +148,7 @@ function parseLineage(raw: string | null, fallback: boolean): boolean {
 /** URL の状態のうち、ブラウザに覚える(URL に無ければ覚えた値を使う)もの。 */
 export type MapStoredFields = Pick<
   MapUrlState,
-  'view' | 'shape' | 'limit' | 'k' | 'threshold' | 'showLineage' | 'matchCount' | 'metric'
+  'view' | 'shape' | 'limit' | 'sampling' | 'k' | 'threshold' | 'showLineage' | 'matchCount' | 'metric'
 >
 
 /**
@@ -150,6 +165,7 @@ export function parseMapUrlState(params: URLSearchParams, fallback: Partial<MapS
     groupId: group,
     tags: normalizeTagList(params.getAll('tag')),
     limit: pickChoice(params.get('limit'), MAP_LIMIT_CHOICES, base.limit),
+    sampling: isMapSampling(params.get('sample')) ? (params.get('sample') as MapSampling) : base.sampling,
     k: pickChoice(params.get('k'), MAP_K_CHOICES, base.k),
     threshold: parseThreshold(params.get('th'), base.threshold),
     showLineage: parseLineage(params.get('lineage'), base.showLineage),
@@ -173,6 +189,7 @@ export function buildMapSearchParams(state: MapUrlState): URLSearchParams {
   if (state.groupId) qs.set('group', state.groupId)
   for (const tag of normalizeTagList(state.tags)) qs.append('tag', tag)
   if (state.limit !== DEFAULT_MAP_LIMIT) qs.set('limit', String(state.limit))
+  if (state.sampling !== DEFAULT_MAP_SAMPLING) qs.set('sample', state.sampling)
   if (state.k !== DEFAULT_MAP_K) qs.set('k', String(state.k))
   const threshold = clampThreshold(state.threshold)
   if (threshold !== DEFAULT_MAP_THRESHOLD) qs.set('th', threshold.toFixed(2))
@@ -197,7 +214,7 @@ export function isMapSettingsChange(patch: Partial<MapUrlState>): boolean {
  * 「絞り込み」ボタンに添える数。**並べる画像が絞られているか**だけを数える:
  * グループを選んでいれば 1、タグは 1 つずつ。
  *
- * 上限と近傍の数は数えない。どちらも常に何らかの値を持つ「規模の調整」で、絞り込みではない
+ * 上限・抽出方法・近傍の数は数えない。どちらも常に何らかの値を持つ「規模の調整」で、絞り込みではない
  * (近傍の数はブラウザに覚えるので、数えると既定のつもりの画面でもバッジが付いたままになる)。
  * しきい値・系列の辺・検索・距離の取り方・選んだ画像も、並べる画像を絞らないので数えない。
  */

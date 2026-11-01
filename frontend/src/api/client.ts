@@ -657,6 +657,202 @@ export function setAssetFavorite(assetId: string, favorite: boolean): Promise<As
   return request(`/api/assets/${assetId}/favorite`, { method: favorite ? 'PUT' : 'DELETE' })
 }
 
+export type AssetLockView = components['schemas']['AssetLockView']
+export type AssetLockKind = AssetLockView['kind']
+
+/** ロックを付ける(ADR-0060)。既に付いていれば 409。 */
+export function lockAsset(assetId: string, kind: AssetLockKind, note: string): Promise<AssetLockView> {
+  return request(`/api/assets/${assetId}/lock`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, note: note.trim() || null }),
+  })
+}
+
+/** ロックを外す(付けた人と管理者だけ。ADR-0060)。 */
+export function unlockAsset(assetId: string): Promise<void> {
+  return request(`/api/assets/${assetId}/lock`, { method: 'DELETE' })
+}
+
+export type TeamSummary = components['schemas']['TeamSummary']
+export type TeamDetail = components['schemas']['TeamDetail']
+export type TeamMemberView = components['schemas']['TeamMemberView']
+export type TeamRole = TeamMemberView['role']
+
+/** チームの一覧(ADR-0058)。`all` は管理者だけ。 */
+export function listTeams(scope: 'mine' | 'all'): Promise<{ items: TeamSummary[] }> {
+  return request(`/api/teams?scope=${scope}`)
+}
+
+export function getTeam(teamId: string): Promise<TeamDetail> {
+  return request(`/api/teams/${teamId}`)
+}
+
+function teamJson(method: string, body: unknown): RequestInit {
+  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+export function createTeam(name: string, description: string | null = null): Promise<TeamDetail> {
+  return request('/api/teams', teamJson('POST', { name, description }))
+}
+
+export function updateTeam(teamId: string, patch: { name?: string; description?: string }): Promise<TeamDetail> {
+  return request(`/api/teams/${teamId}`, teamJson('PATCH', patch))
+}
+
+export function deleteTeam(teamId: string): Promise<void> {
+  return request(`/api/teams/${teamId}`, { method: 'DELETE' })
+}
+
+export function addTeamMember(teamId: string, email: string, role: TeamRole): Promise<TeamDetail> {
+  return request(`/api/teams/${teamId}/members`, teamJson('POST', { email, role }))
+}
+
+export function setTeamMemberRole(teamId: string, userId: string, role: TeamRole): Promise<TeamDetail> {
+  return request(`/api/teams/${teamId}/members/${userId}`, teamJson('PATCH', { role }))
+}
+
+export function removeTeamMember(teamId: string, userId: string): Promise<void> {
+  return request(`/api/teams/${teamId}/members/${userId}`, { method: 'DELETE' })
+}
+
+export type IpSettingsView = components['schemas']['IpSettingsView']
+export type IpSummary = components['schemas']['IpSummary']
+export type IpDetail = components['schemas']['IpDetail']
+export type IpTermsView = components['schemas']['IpTermsView']
+export type IpTermsInput = components['schemas']['IpTermsInput']
+export type IpMaterialItem = components['schemas']['IpMaterialItem']
+export type IpGrantView = components['schemas']['IpGrantView']
+export type IpGrantCreateRequest = components['schemas']['IpGrantCreateRequest']
+export type IpCreateRequest = components['schemas']['IpCreateRequest']
+export type IpTeamRef = components['schemas']['IpTeamRef']
+export type AuditEventView = components['schemas']['AuditEventView']
+export type IpState = IpSummary['state']
+
+function ipJson(method: string, body: unknown): RequestInit {
+  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+/** IP 素材(ADR-0059)が使えるか(認証モードで、管理者設定で有効)。 */
+export function getIpSettings(): Promise<IpSettingsView> {
+  return request('/api/ip/settings')
+}
+
+export function updateIpSettings(enabled: boolean): Promise<IpSettingsView> {
+  return request('/api/ip/settings', ipJson('PUT', { enabled }))
+}
+
+export function listIp(): Promise<{ items: IpSummary[] }> {
+  return request('/api/ip')
+}
+
+export function createIp(body: IpCreateRequest): Promise<IpDetail> {
+  return request('/api/ip', ipJson('POST', body))
+}
+
+export function getIp(ipId: string): Promise<IpDetail> {
+  return request(`/api/ip/${ipId}`)
+}
+
+export function setIpState(ipId: string, state: IpState): Promise<IpDetail> {
+  return request(`/api/ip/${ipId}/state`, ipJson('PUT', { state }))
+}
+
+export function listIpTerms(ipId: string): Promise<IpTermsView[]> {
+  return request(`/api/ip/${ipId}/terms`)
+}
+
+export function addIpTerms(ipId: string, body: IpTermsInput): Promise<IpDetail> {
+  return request(`/api/ip/${ipId}/terms`, ipJson('POST', body))
+}
+
+export function addIpManager(ipId: string, email: string): Promise<IpDetail> {
+  return request(`/api/ip/${ipId}/managers`, ipJson('POST', { email }))
+}
+
+export function removeIpManager(ipId: string, userId: string): Promise<void> {
+  return request(`/api/ip/${ipId}/managers/${userId}`, { method: 'DELETE' })
+}
+
+export function listIpMaterials(ipId: string): Promise<{ items: IpMaterialItem[] }> {
+  return request(`/api/ip/${ipId}/materials`)
+}
+
+export function addIpMaterial(ipId: string, file: File): Promise<IpMaterialItem> {
+  const form = new FormData()
+  form.append('file', file)
+  return request(`/api/ip/${ipId}/materials`, { method: 'POST', body: form })
+}
+
+export function withdrawIpMaterial(ipId: string, assetId: string): Promise<IpMaterialItem> {
+  return request(`/api/ip/${ipId}/materials/${assetId}/withdraw`, { method: 'POST' })
+}
+
+export function listIpGrants(ipId: string): Promise<{ items: IpGrantView[] }> {
+  return request(`/api/ip/${ipId}/grants`)
+}
+
+export function createIpGrant(ipId: string, body: IpGrantCreateRequest): Promise<{ items: IpGrantView[] }> {
+  return request(`/api/ip/${ipId}/grants`, ipJson('POST', body))
+}
+
+export function revokeIpGrant(ipId: string, grantId: string): Promise<{ items: IpGrantView[] }> {
+  return request(`/api/ip/${ipId}/grants/${grantId}/revoke`, { method: 'POST' })
+}
+
+export function listIpGrantTargets(ipId: string): Promise<IpTeamRef[]> {
+  return request(`/api/ip/${ipId}/grant-targets`)
+}
+
+export type IpUsageCheckResponse = components['schemas']['IpUsageCheckResponse']
+export type IpDerivativeItem = components['schemas']['IpDerivativeItem']
+
+/** 入力にする画像が IP を引き継ぐか、申告で選べる用途(ADR-0059 5章。生成のフォーム用)。 */
+export function checkIpUsage(body: { asset_ids: string[]; provider?: string; model?: string }): Promise<IpUsageCheckResponse> {
+  return request('/api/ip/usage-check', ipJson('POST', body))
+}
+
+export function listIpDerivatives(ipId: string): Promise<{ items: IpDerivativeItem[] }> {
+  return request(`/api/ip/${ipId}/derivatives`)
+}
+
+export type IpReportView = components['schemas']['IpReportView']
+
+export function getIpReport(ipId: string, start: string | null, end: string | null): Promise<IpReportView> {
+  const params = new URLSearchParams()
+  if (start) params.set('start', start)
+  if (end) params.set('end', end)
+  const query = params.toString()
+  return request(`/api/ip/${ipId}/report${query ? `?${query}` : ''}`)
+}
+
+/** 報告書(HTML)と CSV のダウンロードの URL(ADR-0059 8章)。リンクで開く。 */
+export function ipReportDownloadUrl(
+  ipId: string,
+  format: 'html' | 'csv',
+  start: string | null,
+  end: string | null,
+  includeNames: boolean,
+): string {
+  const params = new URLSearchParams({ format })
+  if (start) params.set('start', start)
+  if (end) params.set('end', end)
+  if (includeNames) params.set('include_names', 'true')
+  return `/api/ip/${ipId}/report/download?${params.toString()}`
+}
+
+export function destroyIpMaterials(ipId: string): Promise<{ destroyed: number; kept_shared: number }> {
+  return request(`/api/ip/${ipId}/materials/destroy`, { method: 'POST' })
+}
+
+export function listIpAudit(
+  ipId: string,
+  cursor: string | null,
+): Promise<{ items: AuditEventView[]; next_cursor?: string | null }> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+  return request(`/api/ip/${ipId}/audit${query}`)
+}
+
 export function getAsset(assetId: string): Promise<AssetDetail> {
   return request(`/api/assets/${assetId}`)
 }
@@ -1361,6 +1557,19 @@ export function importSdWebuiParams(
   })
 }
 
+export type ImageSettingsImportResponse = components['schemas']['ImageSettingsImportResponse']
+
+/**
+ * 画像に埋め込まれた生成情報(GAKEI、ComfyUI、A1111 形式)から生成フォームの値を作る
+ * (ADR-0038 11章)。サーバーは画像を保存しない。読める情報が無い・合うワークフローが無ければ 422、
+ * A1111 形式で SD WebUI に接続していなければ 409、大きすぎれば 413。
+ */
+export function importImageSettings(file: Blob): Promise<ImageSettingsImportResponse> {
+  const form = new FormData()
+  form.append('file', file, file instanceof File ? file.name : 'image')
+  return request('/api/image-settings/import', { method: 'POST', body: form })
+}
+
 // -- タイトルとタグ(ADR-0024) --------------------------------------------------
 // 編集はログイン者全員。マスクと削除済みの Asset は 409(detail に理由)。いずれも更新後の注釈を返す。
 
@@ -1700,7 +1909,7 @@ export function embeddingGraph(
 }
 
 /**
- * マップのノード全件と検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
+ * マップのノード全件と検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit`・同じ `sampling` の
  * `embeddingGraph` の `nodes` と同じ並びで、`scores[i]` が `ids[i]` の類似度。
  */
 export function embeddingGraphScores(

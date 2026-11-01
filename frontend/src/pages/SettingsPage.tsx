@@ -53,6 +53,9 @@ import {
   AccessTokensSettingsPage,
   ProfileSettingsPage,
   SharesSettingsPage,
+  IpAdminSettingsPage,
+  TeamsAdminSettingsPage,
+  TeamsSettingsPage,
 } from '../features/settings/pages/OperationSettingsPages'
 import { ComfyUIWorkflowFormPage } from '../features/comfyui-workflows/ComfyUIWorkflowFormPage'
 import styles from '../features/settings/settings.module.css'
@@ -62,6 +65,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   display: DisplaySettingsPage,
   shares: SharesSettingsPage,
   accessTokens: AccessTokensSettingsPage,
+  teams: TeamsSettingsPage,
   openai: OpenAiSettingsPage,
   llmConnections: LlmConnectionsSettingsPage,
   annotation: AnnotationSettingsPage,
@@ -76,6 +80,8 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   mods: ModsSettingsPage,
   shareLinks: ShareLinksSettingsPage,
   authentication: AuthSettingsPage,
+  teamsAdmin: TeamsAdminSettingsPage,
+  ipAdmin: IpAdminSettingsPage,
   about: AboutSettingsPage,
 }
 

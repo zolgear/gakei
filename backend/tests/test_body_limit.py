@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from app.api import mod_verdicts as mod_verdicts_api
-from app.api.sdwebui import _BODY_LIMIT as SDWEBUI_BODY_LIMIT
+from app.api.sdwebui import IMPORT_BODY_LIMIT
 from app.api.tag_dictionaries import _BODY_LIMIT as TAG_DICTIONARY_BODY_LIMIT
 from app.body_guard import (
     DEFAULT_BODY_LIMIT,
@@ -430,11 +430,13 @@ def test_verdicts_handler_stops_reading_at_its_limit(
 # 既定の上限(`DEFAULT_BODY_LIMIT`)から広げた・狭めたルートと、その上限。
 _EXPECTED_LIMITS: dict[tuple[str, str], int] = {
     ("POST", "/api/assets"): MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD,
+    ("POST", "/api/ip/{ip_id}/materials"): MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/users/me/avatar"): MAX_AVATAR_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/search/similar-image"): MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/imports/lineage"): MAX_ZIP_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/settings/tag-dictionaries"): TAG_DICTIONARY_BODY_LIMIT,
-    ("POST", "/api/sdwebui/import-params"): SDWEBUI_BODY_LIMIT,
+    ("POST", "/api/sdwebui/import-params"): IMPORT_BODY_LIMIT,
+    ("POST", "/api/image-settings/import"): IMPORT_BODY_LIMIT,
     ("PUT", "/api/uploads/{token}"): MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/uploads/{token}"): MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/mods/{mod_id}/verdicts"): mod_verdicts_api._BODY_MAX_BYTES,

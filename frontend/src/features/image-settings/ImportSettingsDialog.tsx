@@ -1,56 +1,60 @@
 /**
- * スタジオのフォームの「画像から設定を読み込む」(ADR-0038 9章)。SD WebUI が有効なときだけ出す
- * (今選んでいるプロバイダーは問わない)。
+ * スタジオのフォームの「画像から設定を読み込む」(ADR-0038 9章、11章)。GAKEI・ComfyUI・
+ * SD WebUI(A1111 形式)で作った画像から、そのモデルと設定をフォームに読み込む。
  *
- * 押すと `Modal`(狭い幅では全画面のシート)を開き、ファイルの選択・ダイアログへのドロップ・
+ * `Modal`(狭い幅では全画面のシート)で、ファイルの選択・ダイアログへのドロップ・
  * 貼り付けで画像を受ける。フォーム全体へのドロップと、プロンプト欄への貼り付けは入力画像の追加に
  * 使われているので、読み込みの入口はこのダイアログの中だけにする(ドロップはダイアログの中で
  * 止め、下の入力エリアに伝えない)。
  *
- * 画像はサーバーに送るが保存されない(Asset にもしない)。今のプロンプトが空でなければ、置き換える
- * 前にダイアログの中で確かめる。反映はスタジオ(`useRunFormLogic`)が `requestFormLoad` を消費して行う。
+ * 画像はサーバーに送るが保存されない(Asset にもしない)。画像のモデルが今選べなければ(ComfyUI の
+ * ワークフローが無い、プロバイダーが無効など)ダイアログの中でエラーにする。今のプロンプトが空でなければ、
+ * 置き換える前にダイアログの中で確かめる。反映はスタジオ(`useRunFormLogic`)が `requestFormLoad` を
+ * 消費して行う。開閉は呼び出し側(プロンプト欄の設定のメニュー)。
  */
 import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
-import { ApiError, importSdWebuiParams, type SdWebuiImportParamsResponse } from '../../api/client'
+import { ApiError, importImageSettings, type CapabilitiesResponse, type ImageSettingsImportResponse } from '../../api/client'
 import { Modal } from '../../components/Modal'
 import { useRunFormContext } from '../../context/useRunFormContext'
 import { useI18n } from '../../i18n'
 import { shouldConfirmReplace } from '../run-form/promptInsertion'
-import { ImportConfirmBody } from './ImportConfirmBody'
-import { firstImageFile } from './importParams'
-import loraStyles from './LoraPickerButton.module.css'
-import styles from './ImportParams.module.css'
+import { ImportConfirmBody } from '../sdwebui/ImportConfirmBody'
+import { firstImageFile } from '../sdwebui/importParams'
+import styles from '../sdwebui/ImportParams.module.css'
+import { importedModelLabel, imageSettingsUnavailableReason } from './imageSettings'
 
-interface ImportParamsButtonProps {
+interface ImportSettingsDialogProps {
+  open: boolean
+  onClose: () => void
   /** 今のプロンプト(空でなければ置き換える前に確かめる)。 */
   currentPrompt: string
+  caps: CapabilitiesResponse | undefined
 }
 
-export function ImportParamsButton({ currentPrompt }: ImportParamsButtonProps) {
+export function ImportSettingsDialog({ open, onClose, currentPrompt, caps }: ImportSettingsDialogProps) {
   const { t } = useI18n()
   const ip = t.sdwebui.importParams
   const { requestFormLoad } = useRunFormContext()
-  const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  const [pending, setPending] = useState<SdWebuiImportParamsResponse | null>(null)
+  const [pending, setPending] = useState<ImageSettingsImportResponse | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   // 閉じた後に返ってきた応答は捨てる(開き直したときに古い結果を反映しない)。
   const requestIdRef = useRef(0)
 
   const close = useCallback(() => {
     requestIdRef.current += 1
-    setOpen(false)
+    onClose()
     setLoading(false)
     setError(null)
     setPending(null)
     setDragOver(false)
-  }, [])
+  }, [onClose])
 
   const apply = useCallback(
-    (response: SdWebuiImportParamsResponse) => {
-      requestFormLoad({ kind: 'sdwebui', response })
+    (response: ImageSettingsImportResponse) => {
+      requestFormLoad({ kind: 'imageSettings', response })
       close()
     },
     [requestFormLoad, close],
@@ -67,9 +71,11 @@ export function ImportParamsButton({ currentPrompt }: ImportParamsButtonProps) {
       setError(null)
       setPending(null)
       try {
-        const response = await importSdWebuiParams({ file })
+        const response = await importImageSettings(file)
         if (requestId !== requestIdRef.current) return
-        if (shouldConfirmReplace(currentPrompt)) setPending(response)
+        const unavailable = imageSettingsUnavailableReason(response, caps)
+        if (unavailable !== null) setError(unavailable)
+        else if (shouldConfirmReplace(currentPrompt)) setPending(response)
         else apply(response)
       } catch (err) {
         if (requestId !== requestIdRef.current) return
@@ -78,7 +84,7 @@ export function ImportParamsButton({ currentPrompt }: ImportParamsButtonProps) {
         if (requestId === requestIdRef.current) setLoading(false)
       }
     },
-    [currentPrompt, apply, ip.notImage, ip.failed],
+    [currentPrompt, caps, apply, ip.notImage, ip.failed],
   )
 
   // 開いている間は、どこで貼り付けてもダイアログが受ける(プロンプト欄の貼り付けは入力画像の
@@ -118,20 +124,16 @@ export function ImportParamsButton({ currentPrompt }: ImportParamsButtonProps) {
 
   return (
     <>
-      <button
-        type="button"
-        className={loraStyles.trigger}
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        title={ip.openDialogTitle}
-      >
-        {ip.openDialog}
-      </button>
       {/* ダイアログ(背景を含む)へのドロップを、下の入力エリア(入力画像の追加)へ伝えない。 */}
       <div className={styles.dropGuard} onDrop={stopDrag} onDragOver={stopDrag}>
       <Modal open={open} title={pending ? ip.confirmTitle : ip.dialogTitle} onClose={close}>
         {pending ? (
-          <ImportConfirmBody response={pending} onConfirm={() => apply(pending)} onCancel={close} />
+          <ImportConfirmBody
+            model={importedModelLabel(pending, caps)}
+            prompt={pending.prompt}
+            onConfirm={() => apply(pending)}
+            onCancel={close}
+          />
         ) : (
           <div
             className={styles.dialogBody}

@@ -4,6 +4,8 @@
  * リンク(`/settings#comfyui` など)の転送先、「戻る」の行き先を、純粋関数として持つ。
  *
  * - 「プロフィール」(ADR-0020)と「アクセストークン」(ADR-0023 6章)は oidc モードのときだけ。
+ * - 「チーム」(ADR-0058)はユーザー設定と管理者設定の両方にあり、どちらも oidc モードのときだけ。
+ *   管理者設定の「IP 素材」(ADR-0059)も oidc モードのときだけ。
  * - 自分の「共有リンク」の一覧(ADR-0029)は、管理者設定で有効のときだけ(取得できるまでと、
  *   取得に失敗したときも出さない)。有効/無効の切り替え(`shareLinks`)は管理者設定で常に出す。
  * - 非管理者には管理者設定のページを出さず、見出しも出さない(無効な機能は隠す)。
@@ -14,6 +16,7 @@ export type SettingsPageId =
   | 'display'
   | 'shares'
   | 'accessTokens'
+  | 'teams'
   | 'openai'
   | 'llmConnections'
   | 'annotation'
@@ -28,6 +31,8 @@ export type SettingsPageId =
   | 'mods'
   | 'shareLinks'
   | 'authentication'
+  | 'teamsAdmin'
+  | 'ipAdmin'
   | 'about'
 
 /** ページ → パスの最後の区切り(`/settings/{slug}`)。旧いハッシュ(`#slug`)も同じ綴り。 */
@@ -36,6 +41,7 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   display: 'display',
   shares: 'shares',
   accessTokens: 'access-tokens',
+  teams: 'teams',
   openai: 'openai',
   llmConnections: 'llm-connections',
   annotation: 'annotation',
@@ -50,10 +56,12 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   mods: 'mods',
   shareLinks: 'share-links',
   authentication: 'authentication',
+  teamsAdmin: 'teams-admin',
+  ipAdmin: 'ip',
   about: 'about',
 }
 
-export const USER_SETTINGS_PAGES: readonly SettingsPageId[] = ['profile', 'display', 'shares', 'accessTokens']
+export const USER_SETTINGS_PAGES: readonly SettingsPageId[] = ['profile', 'display', 'shares', 'accessTokens', 'teams']
 export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
   'openai',
   'llmConnections',
@@ -69,6 +77,8 @@ export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
   'mods',
   'shareLinks',
   'authentication',
+  'teamsAdmin',
+  'ipAdmin',
 ]
 
 /** 幅が十分なとき、`/settings` で本文に出すページ。 */
@@ -94,11 +104,12 @@ export interface SettingsVisibility {
 /** 目次に出すページを区分ごとに返す。 */
 export function settingsToc({ isAdmin, isOidc, sharingEnabled }: SettingsVisibility): SettingsToc {
   const user = USER_SETTINGS_PAGES.filter((p) => {
-    if (p === 'profile' || p === 'accessTokens') return isOidc
+    if (p === 'profile' || p === 'accessTokens' || p === 'teams') return isOidc
     if (p === 'shares') return sharingEnabled
     return true
   })
-  return { user, admin: isAdmin ? ADMIN_SETTINGS_PAGES : [], other: ['about'] }
+  const admin = isAdmin ? ADMIN_SETTINGS_PAGES.filter((p) => (p !== 'teamsAdmin' && p !== 'ipAdmin') || isOidc) : []
+  return { user, admin, other: ['about'] }
 }
 
 /** 見せてよいページを目次の順に並べたもの。 */

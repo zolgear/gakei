@@ -99,6 +99,8 @@ def asset_visible(user: CurrentUser) -> ColumnElement[bool]:
         .where(_owner_condition(owner_run.created_by_user_id, user))
         .correlate(None)
     )
+    from app.domain import ip_materials
+
     return or_(
         and_(
             Asset.produced_by_run_id.is_(None),
@@ -108,13 +110,17 @@ def asset_visible(user: CurrentUser) -> ColumnElement[bool]:
             Asset.produced_by_run_id.is_not(None),
             Asset.produced_by_run_id.in_(visible_run_ids),
         ),
+        # IP 素材(ADR-0059 3章)。普段の可視性(変更を含む)では管理者と担当者だけ。許可を受けた人は
+        # 読むだけ(`get_readable_asset`)。
+        Asset.id.in_(ip_materials.managed_material_asset_ids(user)),
     )
 
 
-def group_visible(user: CurrentUser) -> ColumnElement[bool]:
+def group_visible(user: CurrentUser, group: Any = AssetGroup) -> ColumnElement[bool]:
+    """`group` は `AssetGroup` の別名(`aliased`)も渡せる(相関する副問い合わせで使う)。"""
     if sees_everything(user):
         return true()
-    return _owner_condition(AssetGroup.created_by_user_id, user)
+    return _owner_condition(group.created_by_user_id, user)
 
 
 def prompt_set_visible(user: CurrentUser) -> ColumnElement[bool]:
@@ -160,6 +166,19 @@ def can_see_run(user: CurrentUser, run: Run) -> bool:
 def can_see_asset(db: Session, user: CurrentUser, asset: Asset) -> bool:
     if sees_everything(user):
         return True
+    from app.domain import ip_materials
+
+    # IP 素材(ADR-0059 3章)。普段の可視性では管理者と担当者だけ(取り込んだ人でも担当を外れれば
+    # 見えない)。
+    if ip_materials.material_ip(db, asset.id) is not None:
+        return (
+            db.execute(
+                ip_materials.managed_material_asset_ids(user).where(
+                    ip_materials.IpMaterial.asset_id == asset.id
+                )
+            ).first()
+            is not None
+        )
     if asset.produced_by_run_id is not None:
         run = db.get(Run, asset.produced_by_run_id)
         if run is None:
@@ -202,6 +221,28 @@ def get_visible_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> As
     if asset is None or not can_see_asset(db, user, asset):
         return None
     return asset
+
+
+def get_readable_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset | None:
+    """読める Asset(詳細と画像の配信)。見える Asset に加えて、許可を受けた IP 素材と派生物
+    (ADR-0059 3章・6章)。
+    変更の操作には使わない(`get_visible_asset` を使う)。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is not None:
+        return asset
+    from app.domain import ip_materials
+
+    asset = db.get(Asset, asset_id)
+    if asset is None:
+        return None
+    from app.domain import ip_usage
+
+    # IP 素材と、IP の派生物(ADR-0059 6章)。
+    if ip_materials.can_read_material(db, user, asset_id) or ip_usage.can_read_derived(
+        db, user, asset_id
+    ):
+        return asset
+    return None
 
 
 def get_visible_group(db: Session, user: CurrentUser, group_id: uuid.UUID) -> AssetGroup | None:

@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import type { PanelId } from './panelStorage'
+import { IpPanel } from '../features/ip/IpPanel'
 import { StockPanel } from '../features/stock/StockPanel'
 import { PromptSetsPanel } from '../features/prompt-sets/PromptSetsPanel'
 import { ParameterSetsPanel } from '../features/parameter-sets/ParameterSetsPanel'
@@ -160,6 +161,7 @@ export function SidebarPanel({ selected, resizable = false, side = 'left' }: Sid
       {selected === 'graph' && <LineageGraphPanel />}
       {selected === 'history' && <HistoryPanel />}
       {selected === 'search' && <SearchPanel />}
+      {selected === 'ip' && <IpPanel />}
       {resizable && (
         <div
           className={styles.handle}

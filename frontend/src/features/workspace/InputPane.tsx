@@ -57,10 +57,9 @@ import { OtherParamsDetails, PrimaryParamFields } from './ParamFields'
 import { AssetGroupField } from '../run-form/AssetGroupField'
 import { PromptToolsRow } from './PromptToolsRow'
 import { LoraPickerButton } from '../sdwebui/LoraPickerButton'
-import { ImportParamsButton } from '../sdwebui/ImportParamsButton'
 import { ImportNoticePanel } from '../sdwebui/ImportNoticePanel'
-import { isSdWebuiEnabled } from '../sdwebui/importParams'
-import { FormParameterSetButtons } from '../parameter-sets/FormParameterSetButtons'
+import { FormSettingsMenu } from './FormSettingsMenu'
+import { IpDeclarationPanel } from '../ip/IpDeclarationPanel'
 import { PromptTemplateForm } from '../prompt-templates/PromptTemplateForm'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
@@ -415,6 +414,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
   if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
+  // IP の利用の申告(ADR-0059 5章)。用途を選んでいない・使えない理由。
+  if (form.ipDeclaration.blockReason) blockReasons.push(form.ipDeclaration.blockReason)
   if (form.inputsBlockReason) blockReasons.push(form.inputsBlockReason)
   if (form.inputCountRequirementReason) blockReasons.push(form.inputCountRequirementReason)
   if (form.providerUnavailableReason) blockReasons.push(form.providerUnavailableReason)
@@ -444,6 +445,13 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
   // textarea + メンションポップオーバーは mention state と密結合なので、ここで組み立てて
   // スロット(ReactNode)として渡す(コンポーネント化しない)。
+  // 文字数はプロンプト欄の右下に重ねる(欄のすぐそばで、操作列を広げない)。
+  const charCount = (
+    <span className={styles.charCount}>
+      {form.promptLength} / {form.promptMax}
+    </span>
+  )
+
   const promptEditor = templateEditor || (
     <>
       <label htmlFor="prompt" className={styles.srOnly}>
@@ -462,6 +470,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
             escapeParens={shouldEscapeParens(form.provider)}
             fieldLabel={ip.promptLabel}
           />
+          {charCount}
         </div>
       ) : (
         <div className={styles.textareaWrap}>
@@ -502,6 +511,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
             }}
             placeholder={ip.promptPlaceholder}
           />
+          {charCount}
           {mention === null && tagAssist.popover}
           {mention !== null && (
             <MentionPopover
@@ -551,8 +561,6 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const promptTools = (
     <PromptToolsRow
       promptText={form.prompt}
-      promptLength={form.promptLength}
-      promptMax={form.promptMax}
       editModeToggle={
         <PromptEditModeToggle
           mode={promptEditMode}
@@ -565,33 +573,30 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         />
       }
       providerTools={
-        <>
-          {form.provider === 'sdwebui' && (
-            <LoraPickerButton
-              prompt={form.prompt}
-              escapeParens={shouldEscapeParens(form.provider)}
-              onInsert={(text, mode, cursorPos) => {
-                setSubmittedNotice(null)
-                form.insertPrompt(text, mode, cursorPos)
-              }}
-            />
-          )}
-          {/* 画像の生成情報から読み込む(ADR-0038 9章)。SD WebUI が有効なら、どのプロバイダーを
-              選んでいても出す(読み込むと SD WebUI に切り替わる)。 */}
-          {isSdWebuiEnabled(caps) && <ImportParamsButton currentPrompt={form.prompt} />}
-          {/* パラメーターセットの保存と読み込み(ADR-0040)。プロバイダーに依らず出す。 */}
-          <FormParameterSetButtons
-            provider={form.provider}
-            model={form.model}
+        form.provider === 'sdwebui' && (
+          <LoraPickerButton
             prompt={form.prompt}
-            defs={form.defs}
-            rawParams={form.rawParams}
-            conditionalParams={form.conditionalParams}
-            sizeState={form.sizeState}
-            hasSize={Boolean(form.providerEntry?.size)}
-            hasMask={form.hasMask}
+            escapeParens={shouldEscapeParens(form.provider)}
+            onInsert={(text, mode, cursorPos) => {
+              setSubmittedNotice(null)
+              form.insertPrompt(text, mode, cursorPos)
+            }}
           />
-        </>
+        )
+      }
+      settingsMenu={
+        <FormSettingsMenu
+          provider={form.provider}
+          model={form.model}
+          prompt={form.prompt}
+          defs={form.defs}
+          rawParams={form.rawParams}
+          conditionalParams={form.conditionalParams}
+          sizeState={form.sizeState}
+          hasSize={Boolean(form.providerEntry?.size)}
+          hasMask={form.hasMask}
+          caps={caps}
+        />
       }
     />
   )
@@ -617,13 +622,17 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   )
 
   const notices = (
-    <InputPaneNotices
-      submittedNotice={submittedNotice}
-      droppedParamsNotice={form.droppedParamsNotice}
-      regionsNotice={form.regionsNotice}
-      blockReasons={blockReasons}
-      submitError={form.submitError}
-    />
+    <>
+      {/* IP の利用の申告(ADR-0059 5章)。入力に IP 素材か派生物があるときだけ出る。 */}
+      <IpDeclarationPanel declaration={form.ipDeclaration} />
+      <InputPaneNotices
+        submittedNotice={submittedNotice}
+        droppedParamsNotice={form.droppedParamsNotice}
+        regionsNotice={form.regionsNotice}
+        blockReasons={blockReasons}
+        submitError={form.submitError}
+      />
+    </>
   )
 
   const modelField = (

@@ -467,7 +467,7 @@ def list_loras(registry: ProviderRegistry = Depends(get_registry)) -> SdWebuiLor
 # -- 画像の生成情報をフォームに読み込む(ADR-0038 9章) ---------------------------------------
 
 # multipart の境界やヘッダーの分の余裕を足した本文の上限(`app/api/uploads.py` と同じ)
-_BODY_LIMIT = MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD
+IMPORT_BODY_LIMIT = MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD
 
 
 class _InMemoryMultiPartParser(MultiPartParser):
@@ -477,7 +477,7 @@ class _InMemoryMultiPartParser(MultiPartParser):
     本文全体の上限より大きくしておけば、移ることはなくメモリの上だけに置かれる。
     """
 
-    spool_max_size = _BODY_LIMIT + 1
+    spool_max_size = IMPORT_BODY_LIMIT + 1
 
 
 def _too_large() -> HTTPException:
@@ -516,11 +516,11 @@ def _parse_asset_id(value: Any) -> uuid.UUID:
         ) from exc
 
 
-async def _read_import_input(request: Request) -> tuple[bytes | None, uuid.UUID | None]:
+async def read_import_input(request: Request) -> tuple[bytes | None, uuid.UUID | None]:
     """本文から画像のバイト列か `asset_id` を取り出す(どちらか一方)。"""
     content_type = request.headers.get("content-type", "")
     if content_type.startswith("multipart/form-data"):
-        body = await _read_body_in_memory(request, _BODY_LIMIT)
+        body = await _read_body_in_memory(request, IMPORT_BODY_LIMIT)
         parser = _InMemoryMultiPartParser(
             request.headers, _single_chunk(body), max_files=1, max_fields=10
         )
@@ -625,7 +625,7 @@ _IMPORT_OPENAPI: dict[str, Any] = {
         422: {"description": "A1111 形式の生成情報が無い、または本文が不正"},
     },
 )
-@body_policy(max_bytes=_BODY_LIMIT)
+@body_policy(max_bytes=IMPORT_BODY_LIMIT)
 async def import_params(
     request: Request,
     db: Session = Depends(get_session),
@@ -639,7 +639,7 @@ async def import_params(
     if provider is None:
         raise HTTPException(status_code=409, detail=t("sdwebui.api.notConnected"))
 
-    data, asset_id = await _read_import_input(request)
+    data, asset_id = await read_import_input(request)
     if asset_id is not None:
         meta = await asyncio.to_thread(_meta_from_asset, db, store, user, asset_id)
     else:

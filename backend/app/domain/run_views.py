@@ -14,11 +14,11 @@ import uuid
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import ColumnElement, Select, literal, or_, select
+from sqlalchemy import ColumnElement, Select, exists, literal, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain import content_rating, favorites, focal_points
+from app.domain import asset_locks, content_rating, favorites, focal_points
 from app.domain.avatars import avatar_url
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
@@ -29,6 +29,7 @@ from app.domain.models import (
     AssetFocalPoint,
     AssetGroup,
     AssetGroupMember,
+    AssetIpLineage,
     AssetMark,
     Run,
     RunInput,
@@ -103,6 +104,7 @@ def bulk_output_refs(
     condition = Asset.produced_by_run_id.in_(run_ids)
     if exclude_deleted:
         condition = condition & Asset.deleted_at.is_(None)
+    locks = asset_locks.lock_state_subquery()
     query = (
         select(
             Asset.produced_by_run_id,
@@ -116,11 +118,16 @@ def bulk_output_refs(
             Asset.width,
             Asset.height,
             (AssetMark.id if viewer is not None else literal(None)).label("mark_id"),
+            locks.c.locked,
+            # IP 素材か派生物か(ADR-0059 6章)。相関する EXISTS で、問い合わせを増やさない。
+            exists().where(AssetIpLineage.asset_id == Asset.id).correlate(Asset).label("ip_marked"),
         )
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         # サムネイルの焦点(ADR-0043)とレーティング(ADR-0049)も同じ問い合わせで引く。
         .outerjoin(AssetFocalPoint, AssetFocalPoint.asset_id == Asset.id)
         .outerjoin(AssetContentRating, AssetContentRating.asset_id == Asset.id)
+        # ロック(ADR-0060)。行が無ければ守られていない。
+        .outerjoin(locks, locks.c.asset_id == Asset.id)
     )
     if viewer is not None:
         # お気に入り(ADR-0055)。1つの Asset に1人の行は1つだけなので、行は増えない。
@@ -138,6 +145,8 @@ def bulk_output_refs(
         width,
         height,
         mark_id,
+        locked,
+        ip_marked,
     ) in rows:
         result[produced_by_run_id].append(
             RunOutputRef(
@@ -150,6 +159,9 @@ def bulk_output_refs(
                 width=width,
                 height=height,
                 favorite=mark_id is not None,
+                locked=bool(locked),
+                lock_protected=locked is not None,
+                ip_marked=bool(ip_marked),
             )
         )
     return result

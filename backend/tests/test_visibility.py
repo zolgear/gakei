@@ -306,6 +306,11 @@ _EXCLUDED_PREFIXES = (
     "/api/settings/embeddings/vectors/",
     # LLM の接続先(ADR-0032)。管理者設定で、利用者のデータではない。
     "/api/settings/llm-connections/",
+    # チーム(ADR-0058)。管理者が管理するもので、管理者には全部が見える。入っていない人に見えない
+    # ことは tests/test_teams.py で確かめる。
+    "/api/teams/",
+    # IP 素材(ADR-0059)。見える範囲は許可と担当者で決まり、tests/test_ip_materials.py で確かめる。
+    "/api/ip/",
     # タグ辞書(ADR-0041)。インスタンス全体で共有する管理者設定で、利用者のデータではない。
     "/api/settings/tag-dictionaries/",
     # Mod(ADR-0051)。管理者設定で、利用者のデータではない。
@@ -334,6 +339,7 @@ def _bodies(w: World) -> dict[tuple[str, str], Any]:
         ("patch", "/api/assets/{asset_id}/title"): {"title": "hijack"},
         ("post", "/api/assets/{asset_id}/tags"): {"name": "hijack"},
         ("put", "/api/assets/{asset_id}/content-rating"): {"level": "xxx"},
+        ("put", "/api/assets/{asset_id}/lock"): {"kind": "delivered"},
         ("post", "/api/assets/{asset_id}/regions/detect"): {},
         ("patch", "/api/assistant/conversations/{conversation_id}"): {"title": "hijack"},
         ("post", "/api/assistant/conversations/{conversation_id}/messages"): {"text": "hijack"},

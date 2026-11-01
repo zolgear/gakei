@@ -34,6 +34,8 @@ import { resolveRunOutputNav } from './runOutputs'
 import { AssetCanvas } from './AssetCanvas'
 import { AssetDetailSections } from './AssetDetailSections'
 import { AssetFavoriteButton } from '../history/AssetFavoriteButton'
+import { AssetLockButton } from '../lock/AssetLockButton'
+import { AssetIpSection } from '../ip/AssetIpSection'
 import { ShareDialog } from '../share/ShareDialog'
 import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import { importToastFromState } from '../lineage-transfer/lineageTransfer'
@@ -251,6 +253,13 @@ export function Viewer({ assetId }: ViewerProps) {
                   disabled={Boolean(asset.deleted_at)}
                   className={styles.iconButton}
                 />
+                {/* ロック(ADR-0060)。付けた画像と、その元は削除できなくなる。 */}
+                <AssetLockButton
+                  assetId={asset.id}
+                  lock={asset.lock}
+                  disabled={Boolean(asset.deleted_at)}
+                  className={styles.iconButton}
+                />
                 {/* 生成元の Run の詳細へ直接移る(下の文字のリンクと同じ遷移先)。生成元がある画像
                     だけに出る。並びは右寄せなので、左端に置けば有無でほかのボタンの位置は変わらない。 */}
                 {asset.produced_by_run && (
@@ -411,6 +420,8 @@ export function Viewer({ assetId }: ViewerProps) {
             )}
             {/* タイトル、寸法など、生成元、タグ、レーティングなど(スタジオの「詳細」タブ・系列インスペクターと共通)。 */}
             <AssetDetailSections asset={asset} />
+            {/* 引き継ぐ IP と契約の注記(ADR-0059 11章)。 */}
+            <AssetIpSection asset={asset} />
 
             {!asset.deleted_at && (
               <div className={styles.actions}>
@@ -418,7 +429,8 @@ export function Viewer({ assetId }: ViewerProps) {
                   type="button"
                   className={styles.deleteButton}
                   onClick={() => setDeleteConfirmOpen(true)}
-                  disabled={deleteMutation.isPending}
+                  disabled={deleteMutation.isPending || Boolean(asset.lock_protected)}
+                  title={asset.lock_protected ? t.lock.protectedHint : undefined}
                 >
                   <TrashIcon />
                   {t.viewer.delete}

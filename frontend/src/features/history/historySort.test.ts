@@ -13,7 +13,8 @@ import {
 afterEach(() => setHistorySort('date'))
 
 describe('parseHistorySort', () => {
-  it('group と embedding はそのまま、それ以外は日付', () => {
+  it('date_asc・group・embedding はそのまま、それ以外は日付', () => {
+    expect(parseHistorySort('date_asc')).toBe('date_asc')
     expect(parseHistorySort('group')).toBe('group')
     expect(parseHistorySort('embedding')).toBe('embedding')
     expect(parseHistorySort('date')).toBe('date')

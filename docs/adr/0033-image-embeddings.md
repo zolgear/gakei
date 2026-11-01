@@ -185,7 +185,7 @@ ADR-0024 4章と同じ形にする。
 | `GET /api/assets/{id}/similar?limit=` | 似た画像 | 利用者(その Asset が見えること) |
 | `POST /api/search/similar-image?limit=&group_id=&tag=&kind=` | 画像で探す(multipart の `file`)。画像は保存しない。応答は Asset の要約と類似度。大きすぎれば 413、読めなければ 422、推論できなければ 503。`tag` は繰り返せて AND(2026-10-04) | 利用者 |
 | `GET /api/embeddings/duplicates?threshold=` | 重複の候補のグループ | 利用者 |
-| `GET /api/embeddings/graph?k=&limit=&group_id=&tag=` | マップの元データ。ノードと、k 近傍の辺と類似度。`tag` は繰り返せて、すべてのタグが付いた画像だけ(AND。2026-10-04) | 利用者 |
+| `GET /api/embeddings/graph?k=&limit=&group_id=&tag=` | マップの元データ。ノードと、k 近傍の辺と類似度。`tag` は繰り返せて、すべてのタグが付いた画像だけ(AND。2026-10-04)。上限を超えたときの抽出方法 `sampling` は ADR-0057(2026-11-01) | 利用者 |
 | `POST /api/assets/{id}/embedding` | 1枚の再計算 | 利用者(その Asset が見えること) |
 | `GET /api/settings/embeddings` | 設定、モデルの状態、件数 | 利用者 |
 | `PATCH /api/settings/embeddings` | 設定の変更 | 管理者 |

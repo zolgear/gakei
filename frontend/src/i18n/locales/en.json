@@ -87,7 +87,8 @@
       "history": "History",
       "search": "Search",
       "assistant": "Assistant",
-      "assistantTitle": "Assistant (Alt+A)"
+      "assistantTitle": "Assistant (Alt+A)",
+      "ip": "IP materials"
     },
     "sidebar": {
       "resourcePanel": "Resource panel",
@@ -137,6 +138,13 @@
       "filterShapeAll": "Any shape",
       "filterTransparent": "Transparent",
       "filterRegions": "Regions",
+      "groupFilter": "Filter by group",
+      "groupFilterMode": "Filter mode",
+      "groupFilterInclude": "Include",
+      "groupFilterExclude": "Exclude",
+      "groupFilterSearch": "Find a group",
+      "groupFilterClear": "Clear filter",
+      "groupFilterUnknown": "(Missing group)",
       "loading": "Loading...",
       "loadError": "Failed to load history.",
       "noMatch": "No matching runs.",
@@ -147,12 +155,15 @@
       "cardStyleMasonry": "Masonry",
       "cardStyleRows": "Rows",
       "sort": "Sort",
-      "sortDate": "Date",
+      "sortDate": "Newest first",
+      "sortDateAsc": "Oldest first",
       "sortGroup": "Group",
       "sortEmbedding": "Similar",
       "ungrouped": "No group",
       "sectionCount": "{count} images",
-      "backToTop": "Back to top"
+      "sectionShowAll": "Show all",
+      "backToTop": "Back to top",
+      "filterLocked": "Locked"
     },
     "labels": {
       "square": "Square",
@@ -320,7 +331,10 @@
       "authentication": "Authentication",
       "assistant": "Assistant",
       "regionDetection": "Region detection",
-      "groupNaming": "Group name suggestions"
+      "groupNaming": "Group name suggestions",
+      "teams": "Teams",
+      "teamsAdmin": "Teams",
+      "ipAdmin": "IP materials"
     },
     "frame": {
       "changeCount": {
@@ -1494,6 +1508,10 @@
         "structured_outputs_unsupported": "Name suggestions are not shown because the connection is not considered to support structured outputs. If it does, set \"Structured outputs\" to \"Supported\" for that connection in \"LLM connections\"."
       },
       "structuredOutputsLink": "Open LLM connections"
+    },
+    "teams": {
+      "intro": "Teams you belong to and their members. Leads can add and remove members.",
+      "adminIntro": "Create teams and choose their leads. Teams are the unit for granting use of IP materials."
     }
   },
   "promptSets": {
@@ -1569,9 +1587,7 @@
   "parameterSets": {
     "form": {
       "saveButton": "Save settings",
-      "saveButtonTitle": "Save the current provider, model, parameters and prompt as a parameter set",
-      "loadButton": "Load settings",
-      "loadButtonTitle": "Load a saved parameter set into the form"
+      "loadButton": "Load settings"
     },
     "save": {
       "dialogTitle": "Save as parameter set",
@@ -3118,14 +3134,15 @@
     },
     "importParams": {
       "openDialog": "Load settings from image",
-      "openDialogTitle": "Load the generation info embedded in an image made with SD WebUI into the form",
       "dialogTitle": "Load settings from image",
-      "dialogLead": "Choose an image made with SD WebUI (A1111 format), or drop or paste it here. The image is not saved.",
+      "dialogLead": "Choose an image made with GAKEI, ComfyUI or SD WebUI (A1111 format), or drop or paste it here. The image is not saved.",
       "dropZone": "Drop or paste (Ctrl+V) an image here",
       "chooseFile": "Choose file",
       "reading": "Reading generation info...",
       "notImage": "Choose an image file.",
       "failed": "Could not load the settings.",
+      "providerUnavailable": "The provider of this image ({provider}) is not available now, so it cannot be loaded.",
+      "modelUnavailable": "The model of this image ({model}) cannot be selected now, so it cannot be loaded.",
       "confirmTitle": "Replace the current prompt?",
       "confirmMessage": "The prompt and parameters will be replaced with the image's generation info. Input images stay as they are.",
       "confirmReplace": "Replace",
@@ -3343,6 +3360,12 @@
     "tagHelp": "Shows only images that have all of the selected tags.",
     "limitLabel": "Limit",
     "limitOption": "{count} images",
+    "samplingLabel": "Sampling",
+    "samplingHelp": "Which images to show when there are more than the limit. Evenly across all picks from each cluster of similar images and draws the ones that stand for many images larger.",
+    "samplingOption": {
+      "spread": "Evenly across all",
+      "recent": "Newest first"
+    },
     "kLabel": "Neighbors",
     "kHelp": "How many similar images each image looks at. More emphasizes the overall shape; fewer emphasizes local similarity.",
     "searchLabel": "Search within the map",
@@ -3374,6 +3397,7 @@
     "showLineage": "Overlay lineage edges",
     "truncated": "Showing only the newest {count} of {total} images. Narrow down by group or tag, or raise the limit.",
     "truncatedAtMax": "Showing only the newest {count} of {total} images. Narrow down by group or tag.",
+    "truncatedSpread": "Showing {count} of {total} images, picked from each cluster of similar images. Larger images stand for more similar images nearby.",
     "empty": "No images to show. Only images with computed embeddings appear here.",
     "emptyFiltered": "No images to show with these filters.",
     "tooFew": "Not enough images to build a map (needs at least {min}).",
@@ -3991,6 +4015,214 @@
       "input": "First image",
       "output": "Blank",
       "kindsBlocked": "Boxes set to “Keep as is”, “Remove”, or “Move” can’t be used on a blank canvas. Change their type before switching."
+    }
+  },
+  "lock": {
+    "lock": "Lock",
+    "lockedLabel": "Locked",
+    "lockTitle": "Lock this image",
+    "lockedTitle": "Locked",
+    "lead": "This image and the images it was made from can no longer be deleted.",
+    "kind": "Kind",
+    "kinds": {
+      "delivered": "Delivered",
+      "shared": "Shared",
+      "submitted": "Submitted",
+      "other": "Other"
+    },
+    "note": "Note",
+    "notePlaceholder": "Recipient, reference number, etc.",
+    "lockedAt": "Date",
+    "lockedBy": "Locked by",
+    "submit": "Lock",
+    "unlock": "Unlock",
+    "cancel": "Cancel",
+    "close": "Close",
+    "failed": "Could not change the lock",
+    "protectedHint": "Locked, or the source of a locked image, so it cannot be deleted"
+  },
+  "teams": {
+    "name": "Team name",
+    "namePlaceholder": "New team name",
+    "create": "Create",
+    "loading": "Loading…",
+    "loadFailed": "Could not load teams",
+    "failed": "Could not save the change",
+    "empty": "You are not in any team",
+    "emptyAdmin": "No teams yet",
+    "memberCount": "{count} members",
+    "noMembers": "No members",
+    "rename": "Rename",
+    "delete": "Delete",
+    "deleteConfirm": "Delete the team \"{name}\"?",
+    "deleted": "Team deleted",
+    "save": "Save",
+    "cancel": "Cancel",
+    "email": "Email",
+    "emailPlaceholder": "Email of the person to add",
+    "role": "Role",
+    "roleOf": "Role of {name}",
+    "roles": {
+      "member": "Member",
+      "lead": "Lead"
+    },
+    "add": "Add",
+    "remove": "Remove"
+  },
+  "ip": {
+    "panelHeading": "IP materials",
+    "loading": "Loading…",
+    "loadFailed": "Could not load IPs",
+    "notFound": "IP not found",
+    "failed": "Could not save the change",
+    "empty": "No IPs available",
+    "materialCount": "{count} materials",
+    "noMaterials": "No materials",
+    "open": "Open",
+    "backToList": "← All IPs",
+    "myAccess": "Granted: {purposes}",
+    "states": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "terminated": "Terminated"
+    },
+    "ownerKinds": {
+      "own": "Own",
+      "third_party": "Third party"
+    },
+    "suspend": "Suspend",
+    "resume": "Resume",
+    "terminate": "Terminate",
+    "terminateConfirm": "Terminate \"{name}\"? All grants stop and this cannot be undone.",
+    "tabs": {
+      "materials": "Materials",
+      "terms": "Terms",
+      "grants": "Grants",
+      "managers": "Managers",
+      "audit": "Audit log",
+      "derivatives": "Derivatives",
+      "report": "Report"
+    },
+    "addMaterials": "Add materials",
+    "uploading": "Uploading…",
+    "withdraw": "Withdraw",
+    "withdrawn": "Withdrawn",
+    "withdrawConfirm": "Withdraw this material? It can no longer be used (records and images already made remain).",
+    "reviseTerms": "Revise terms",
+    "saveTerms": "Save as a new version",
+    "cancel": "Cancel",
+    "terms": {
+      "version": "Version {version}",
+      "current": "Current",
+      "contractNumber": "Contract number",
+      "validFrom": "Start date",
+      "validUntil": "End date",
+      "period": "Period",
+      "periodValue": "{from} – {until}",
+      "purposes": "Permitted purposes",
+      "purposesPlaceholder": "One per line (e.g. design mock-up)",
+      "externalAi": "Sending to external AI",
+      "externalAiOptions": {
+        "allow": "Allowed",
+        "local_only": "Local connections only",
+        "deny": "Not sent to any AI"
+      },
+      "notes": "Notes",
+      "notesPlaceholder": "Credit line, restrictions, etc.",
+      "createdAt": "Recorded"
+    },
+    "grants": {
+      "target": "Grant to",
+      "toTeam": "Team",
+      "toUser": "Person",
+      "team": "Team",
+      "chooseTeam": "Choose a team",
+      "email": "Email",
+      "emailPlaceholder": "Email of the person",
+      "purposes": "Permitted purposes",
+      "noPurposes": "The terms have no purposes. Revise the terms first",
+      "canUse": "Can use as input (off: view only)",
+      "create": "Grant",
+      "empty": "No grants yet",
+      "revoke": "Revoke",
+      "revoked": "Revoked",
+      "inactive": "Out of period",
+      "useAllowed": "Can use",
+      "viewOnly": "View only"
+    },
+    "noManagers": "No managers",
+    "managerEmailPlaceholder": "Email of the new manager",
+    "addManager": "Add manager",
+    "removeManager": "Remove",
+    "noAudit": "No records",
+    "more": "Show more",
+    "auditActions": {
+      "ip.create": "IP created",
+      "ip.update": "IP updated",
+      "ip.terms_add": "Terms version added",
+      "ip.state_change": "State changed",
+      "ip.manager_change": "Managers changed",
+      "ip.material_add": "Material added",
+      "ip.material_withdraw": "Material withdrawn",
+      "ip.grant_add": "Grant added",
+      "ip.grant_revoke": "Grant revoked",
+      "asset.view_detail": "Material detail viewed",
+      "asset.download_original": "Original downloaded",
+      "ip.denied": "Denied",
+      "export.ip_report": "Report exported",
+      "export.lineage": "Lineage exported",
+      "ip.material_destroy": "Materials destroyed"
+    },
+    "admin": {
+      "intro": "Let only granted people use entrusted copyrighted materials, and only for permitted purposes. Available in authentication mode only (beta).",
+      "enabled": "Use IP materials",
+      "create": "Create an IP",
+      "name": "Name",
+      "ownerKind": "Owner",
+      "rightsHolder": "Rights holder",
+      "createButton": "Create"
+    },
+    "declaration": {
+      "heading": "IP use declaration",
+      "purpose": "Purpose",
+      "purposePlaceholder": "Choose a purpose",
+      "workNote": "Work note",
+      "workNotePlaceholder": "Project, order, etc. (optional)",
+      "choosePurpose": "Choose a purpose to use the IP materials",
+      "noCommonPurpose": "No purpose is permitted for all IPs in the inputs",
+      "checking": "Checking IP permissions…"
+    },
+    "noDerivatives": "No derivatives",
+    "otherIps": "+{count} other IPs",
+    "assetSection": "IP",
+    "materialBadge": "Material",
+    "markLabel": "Made from IP materials",
+    "destroyMaterials": "Destroy material originals",
+    "destroyConfirm": "Delete the originals and previews of the materials of \"{name}\". Records remain. This cannot be undone.",
+    "destroyedCount": "Destroyed {count} (kept {kept} shared with other images)",
+    "report": {
+      "downloadHtml": "Report (HTML)",
+      "downloadCsv": "CSV",
+      "includeNames": "Include names",
+      "failed": "Could not build the report",
+      "none": "None",
+      "uses": "Uses",
+      "usesSucceeded": "Succeeded",
+      "outputs": "Images produced",
+      "derived": "Derivatives",
+      "originalDownloads": "Original downloads",
+      "detailViews": "Material views",
+      "lineageExports": "Lineage exports",
+      "denied": "Denied",
+      "byPurpose": "By purpose",
+      "byWorkNote": "By work note",
+      "noWorkNote": "(no note)",
+      "byGrantee": "By grantee",
+      "byUser": "By person",
+      "byProvider": "By destination",
+      "deniedReasons": "Denial reasons",
+      "materials": "Uses per material",
+      "destroyed": "Destroyed"
     }
   }
 }

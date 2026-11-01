@@ -252,3 +252,23 @@
     opacity: 1;
   }
 }
+
+/* ロックの印(ADR-0060)。お気に入りのボタンの下に置く。 */
+.lockMark {
+  position: absolute;
+  top: 40px;
+  right: 9px;
+  z-index: 2;
+}
+
+/* IP 素材か派生物の印(ADR-0059 11章)。ロックの印と同じ位置で、ロックの印があればその下。 */
+.ipMark {
+  position: absolute;
+  top: 40px;
+  right: 9px;
+  z-index: 2;
+}
+
+.lockMark + .ipMark {
+  margin-top: 26px;
+}

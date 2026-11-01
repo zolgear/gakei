@@ -21,6 +21,7 @@ describe('mapUrlState', () => {
       groupId: 'g1',
       tags: ['猫', 'outdoor'],
       limit: 2000,
+      sampling: 'recent' as const,
       k: 20,
       threshold: 0.85,
       showLineage: true,
@@ -30,6 +31,19 @@ describe('mapUrlState', () => {
       metric: 'rank' as const,
     }
     expect(parseMapUrlState(buildMapSearchParams(state))).toEqual(state)
+  })
+
+  it('抽出方法は全体から均等にが既定で、新しい順だけを sample=recent で書く', () => {
+    expect(DEFAULT_MAP_URL_STATE.sampling).toBe('spread')
+    expect(buildMapSearchParams({ ...DEFAULT_MAP_URL_STATE, sampling: 'recent' }).toString()).toBe('sample=recent')
+    expect(parseMapUrlState(new URLSearchParams('sample=recent')).sampling).toBe('recent')
+    expect(parseMapUrlState(new URLSearchParams('sample=x')).sampling).toBe('spread')
+    // 覚えた値より URL を優先する。
+    expect(parseMapUrlState(new URLSearchParams('sample=spread'), { sampling: 'recent' }).sampling).toBe('spread')
+    expect(parseMapUrlState(new URLSearchParams(), { sampling: 'recent' }).sampling).toBe('recent')
+    // 絞り込みのバッジには数えないが、設定の変更ではある。
+    expect(activeFilterCount({ ...DEFAULT_MAP_URL_STATE, sampling: 'recent' })).toBe(0)
+    expect(isMapSettingsChange({ sampling: 'recent' })).toBe(true)
   })
 
   it('選べない値は既定に戻す', () => {

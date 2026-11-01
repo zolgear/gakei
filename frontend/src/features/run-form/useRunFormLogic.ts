@@ -86,7 +86,9 @@ import {
   type ImportNotice,
 } from '../sdwebui/importParams'
 import { buildParameterSetRawParams, resolveParameterSetLoad } from '../parameter-sets/parameterSets'
+import { resolveImageSettingsLoad, toSdWebuiResponse } from '../image-settings/imageSettings'
 import { resolveRunFormLoad } from './runFormLoad'
+import { useIpDeclaration, type IpDeclaration } from '../ip/useIpDeclaration'
 import { loadRepeatRaw, parseRepeat, saveRepeatRaw } from './repeat'
 import {
   initialSelectionState,
@@ -274,6 +276,8 @@ export interface RunFormLogic {
   setTemplatePreview: (preview: TemplatePreview | null) => void
 
   canSubmit: boolean
+  /** IP 素材と派生物を入力にするときの申告(ADR-0059 5章)。 */
+  ipDeclaration: IpDeclaration
   submitError: string | null
   isSubmitting: boolean
   submit: () => void
@@ -699,7 +703,12 @@ export function useRunFormLogic(
     if (consumedFormLoadNonceRef.current === pendingFormLoad.nonce) return
     consumedFormLoadNonceRef.current = pendingFormLoad.nonce
     clearPendingFormLoad()
-    const request = pendingFormLoad.request
+    const pending = pendingFormLoad.request
+    // A1111 形式の画像からの読み込み(ADR-0038 11章)は、9章の SD WebUI の読み込みと同じに扱う。
+    const request: typeof pending =
+      pending.kind === 'imageSettings' && pending.response.source === 'a1111'
+        ? { kind: 'sdwebui', response: toSdWebuiResponse(pending.response) }
+        : pending
 
     // プロンプトテンプレート(実験)。テンプレートモードに入る(null は解除)。プロンプト欄の
     // ローカルの値は触らない(解除したら元のプロンプトに戻る)。
@@ -763,6 +772,23 @@ export function useRunFormLogic(
         rawParams: buildImportedRawParams(targetDefs, values.params, loadSeedMode()),
         params: values.params,
         notice: toImportNotice(request.response),
+      }
+    } else if (request.kind === 'imageSettings') {
+      // GAKEI・ComfyUI の画像(ADR-0038 11章)。モデルが選べなければ読み込まない。操作は入れる先の
+      // モデルと今の入力画像から決める。
+      const resolved = resolveImageSettingsLoad(request.response, caps, formState.inputs)
+      if (!resolved.ok) {
+        setSubmitError(resolved.reason)
+        return
+      }
+      next = {
+        provider: resolved.provider,
+        model: resolved.model,
+        prompt: resolved.prompt,
+        sizeState: resolved.sizeState,
+        rawParams: buildImportedRawParams(resolved.targetDefs, resolved.params, loadSeedMode()),
+        params: resolved.params,
+        notice: resolved.notice,
       }
     } else {
       const resolved = resolveParameterSetLoad(request.set, caps, { provider, model }, operation)
@@ -867,6 +893,12 @@ export function useRunFormLogic(
   }
 
   const compositeRedrawReason = compositeRedrawBlockReason(compositeRedrawing)
+  // ADR-0059 5章: 入力が IP を引き継ぐなら、用途を選ぶまで送れない(使えるかはサーバーが確かめる)。
+  const ipDeclaration = useIpDeclaration(
+    operation === 'edit' ? formState.inputs.map((i) => i.assetId) : [],
+    provider,
+    model,
+  )
   const canSubmit =
     promptValid &&
     sizeValidation.valid &&
@@ -884,6 +916,7 @@ export function useRunFormLogic(
     regionsBlockReason === null &&
     compositeRedrawReason === null &&
     repeat !== null &&
+    ipDeclaration.blockReason === null &&
     !mutation.isPending
 
   function submit() {
@@ -923,6 +956,8 @@ export function useRunFormLogic(
           // 領域の指示(ADR-0053)。今の操作が四角を受け、四角があるときだけ送る。
           // 土台(1枚目・白紙)も送る(ADR-0053 1章「四角の土台を選ぶ」)。
           ...(regionsActive ? { regions: formState.regions, regions_frame: regionsFrame } : {}),
+          // IP の利用の申告(ADR-0059 5章)。
+          ...(ipDeclaration.body ? { ip_use: ipDeclaration.body } : {}),
         },
         resolvedAssetGroupId,
       ),
@@ -1006,6 +1041,7 @@ export function useRunFormLogic(
     templatePreview,
     setTemplatePreview,
     canSubmit,
+    ipDeclaration,
     submitError,
     isSubmitting: mutation.isPending,
     submit,

@@ -64,6 +64,10 @@ class ShareTargetNotFoundError(Exception):
     """起点の Asset が存在しない・見えない・削除済み(API 層で 404 にする)。"""
 
 
+class ShareIpError(Exception):
+    """範囲に IP 素材か、その派生物が入っている(共有リンクにできない。ADR-0059 6章)。"""
+
+
 class ShareDisabledError(Exception):
     """共有リンクが管理者設定で無効(API 層で 409 にする)。"""
 
@@ -172,6 +176,10 @@ def create_share(
     if not share_settings.is_enabled(db):
         raise ShareDisabledError()
     result = collect_scope(db, viewer, root_asset_id, scope)
+    from app.domain import ip_usage
+
+    if ip_usage.ip_marked_ids(db, [asset.id for asset, _depth in result.assets]):
+        raise ShareIpError()
     share = Share(
         token=new_token(),
         root_asset_id=root_asset_id,

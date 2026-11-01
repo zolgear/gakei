@@ -46,6 +46,9 @@
   "provider": {
     "unknown": "Unknown provider: {name}"
   },
+  "history": {
+    "invalidGroup": "invalid group: {value}"
+  },
   "pagination": {
     "invalidCursor": "cursor is invalid"
   },
@@ -395,7 +398,7 @@
     "fileFormatDescription": "Output file format",
     "compressionLabel": "Compression",
     "compressionDescription": "JPEG / WebP only. 0-100, higher is higher quality",
-    "backgroundLabel": "Background",
+    "backgroundLabel": "Background transparency",
     "backgroundDescription": "Transparent is only available for PNG / WebP",
     "countLabel": "Count",
     "countDescription": "Number of images generated per run. Billed per image",
@@ -601,7 +604,11 @@
     "contentNotFound": "Content not found",
     "notDeleted": "Not deleted",
     "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run.",
-    "regionsMustBePng": "Region images must be in PNG format"
+    "regionsMustBePng": "Region images must be in PNG format",
+    "locked": "This image is locked or is the source of a locked image, so it cannot be deleted",
+    "alreadyLocked": "This image is already locked",
+    "notLocked": "This image is not locked",
+    "unlockNotAllowed": "Only the person who locked it or an admin can unlock it"
   },
   "runs": {
     "unknownProvider": "Unknown provider: {provider}",
@@ -611,7 +618,8 @@
     "cannotDeleteRunning": "Still running or queued; cancel it first",
     "cannotCancelStatus": "Cannot cancel: status={status}",
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
-    "partialNotFound": "Partial image not found"
+    "partialNotFound": "Partial image not found",
+    "locked": "An output is protected by a lock, so this run cannot be deleted"
   },
   "runRegions": {
     "editOnly": "Region instructions can only be used with Edit",
@@ -957,7 +965,8 @@
     "derivedFailed": {
       "one": "Note: Derived images of {count} image could not be deleted (sha256): {keys}. Leaving them is harmless.",
       "other": "Note: Derived images of {count} images could not be deleted (sha256): {keys}. Leaving them is harmless."
-    }
+    },
+    "lockedKept": "Images kept because they are protected by a lock or are IP materials: {count}"
   },
   "shares": {
     "disabled": "Share links are disabled in the admin settings",
@@ -1239,5 +1248,119 @@
     "unsupported": "The connection does not support Structured Outputs, so it cannot be used for group name suggestions",
     "llmError": "Could not suggest group names: {error}",
     "fakeName": "Dummy name {cluster}-{n}"
+  },
+  "imageSettings": {
+    "fileMissing": "Specify an image file.",
+    "noSettings": "This image has no generation settings that can be loaded (GAKEI, ComfyUI, SD WebUI).",
+    "noMatchingWorkflow": "No registered workflow matches this image's ComfyUI workflow. Register the workflow first.",
+    "workflowNotFound": "The workflow \"{name}\" is not in this environment and no registered workflow matches it, so it cannot be loaded.",
+    "sdwebuiNotConnected": "This is an SD WebUI (A1111 format) image, but SD WebUI is not connected, so it cannot be loaded.",
+    "notes": {
+      "inputsNotRestored": "Input images are not included in the image, so they were not loaded.",
+      "promptLinked": "The prompt is wired from another node, so it could not be loaded.",
+      "workflowPartialMatch": "Some nodes differ from the workflow \"{name}\". Check the values."
+    }
+  },
+  "teams": {
+    "notFound": "Team not found",
+    "adminOnly": "Only admins can do this",
+    "forbidden": "You do not have permission to do this",
+    "nameTaken": "A team with this name already exists",
+    "invalidName": "Name must be 1 to 100 characters",
+    "userNotFound": "No user with this email (only people who have signed in once can be added)",
+    "memberNotFound": "This person is not a member of the team"
+  },
+  "ip": {
+    "disabled": "IP materials are not enabled",
+    "notFound": "IP not found",
+    "forbidden": "You do not have permission to do this",
+    "invalidStateChange": "This cannot be done in the current state (a terminated IP cannot be reopened)",
+    "invalidEnabled": "Invalid enabled value",
+    "invalidName": "Name must be 1 to 200 characters",
+    "invalidOwnerKind": "Invalid owner kind",
+    "invalidState": "Invalid state",
+    "invalidExternalAi": "Invalid external AI setting",
+    "invalidPurpose": "Purpose names can be up to 100 characters",
+    "tooManyPurposes": "Up to 50 purposes",
+    "invalidPeriod": "The start of the period is after its end",
+    "userNotFound": "No user with this email (only people who have signed in once)",
+    "teamNotFound": "Team not found",
+    "grantTargetRequired": "Specify either a team or a person to grant to",
+    "purposeNotInTerms": "Purposes not in the contract terms cannot be granted",
+    "materialNotDeletable": "IP materials cannot be deleted. Withdraw them on the IP page",
+    "materialNotLockable": "IP materials cannot be locked",
+    "declarationRequired": "Choose a purpose to use IP materials",
+    "materialWithdrawn": "Withdrawn IP materials cannot be used",
+    "notActive": "\"{name}\" cannot be used now (suspended or terminated)",
+    "outOfContract": "\"{name}\" is outside its contract period",
+    "purposeNotAllowed": "This purpose is not permitted by the contract for \"{name}\"",
+    "providerNotAllowed": "The contract for \"{name}\" does not allow sending to this AI",
+    "noGrant": "You are not granted to use \"{name}\" for this purpose",
+    "shareNotAllowed": "IP materials and images made from them cannot be shared by link",
+    "aiNotAllowed": "The IP contract does not allow sending this image to AI",
+    "destroyRequiresTermination": "Materials can be destroyed only after the IP is terminated"
+  },
+  "ipReport": {
+    "lang": "en",
+    "title": "IP usage report: {name}",
+    "rightsHolder": "Rights holder",
+    "period": "Period",
+    "generatedAt": "Generated at",
+    "state": "State",
+    "states": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "terminated": "Terminated"
+    },
+    "summary": "Summary",
+    "item": "Item",
+    "count": "Count",
+    "uses": "Uses (generation runs)",
+    "usesSucceeded": "Succeeded",
+    "outputs": "Images produced",
+    "derived": "Derivatives in the period",
+    "originalDownloads": "Original downloads",
+    "detailViews": "Material detail views",
+    "lineageExports": "Lineage exports",
+    "denied": "Denied attempts",
+    "outsideNote": "Every use is recorded with its declared purpose. Attempts outside the granted scope were denied and are recorded as denials.",
+    "terms": "Contract terms",
+    "version": "Version",
+    "contractNumber": "Contract number",
+    "contractPeriod": "Contract period",
+    "purposes": "Permitted purposes",
+    "externalAi": "Sending to external AI",
+    "externalAllow": "Allowed",
+    "externalLocalOnly": "Local connections only",
+    "externalDeny": "Not sent to any AI",
+    "recordedAt": "Recorded at",
+    "byPurpose": "By purpose",
+    "purpose": "Purpose",
+    "byWorkNote": "By work note",
+    "workNote": "Work note",
+    "noWorkNote": "(no note)",
+    "byGrantee": "By grantee",
+    "grantee": "Grantee",
+    "grantTeam": "Team \"{name}\"",
+    "grantPerson": "Individual",
+    "byUser": "By person",
+    "user": "Person",
+    "anonymousUser": "User {number}",
+    "byProvider": "By destination",
+    "provider": "Destination (provider / model)",
+    "materials": "Materials",
+    "materialId": "Material ID",
+    "sha256": "sha256 (prefix)",
+    "addedAt": "Added at",
+    "materialState": "State",
+    "materialActive": "Available",
+    "materialWithdrawn": "Withdrawn",
+    "materialDestroyed": "Destroyed",
+    "useCount": "Uses in the period",
+    "deniedReasons": "Denial reasons",
+    "reason": "Reason",
+    "useList": "Use list",
+    "date": "Date",
+    "none": "None"
   }
 }

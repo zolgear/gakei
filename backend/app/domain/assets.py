@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain import compositions, content_withholding, derivatives
+from app.domain import asset_locks, compositions, content_withholding, derivatives
 from app.domain.embedded_meta import (
     get_instance_id,
     read_gakei_meta,
@@ -232,6 +232,7 @@ def ingest(
         asset.content_withheld_verdict_id = withheld_verdict_id
         session.add(asset)
         session.flush()
+        _inherit_ip(session, asset)
         return asset
 
     blob_key = _find_shared_blob_key(session, store, sha256)
@@ -259,7 +260,19 @@ def ingest(
     )
     session.add(asset)
     session.flush()
+    _inherit_ip(session, asset)
     return asset
+
+
+def _inherit_ip(session: Session, asset: Asset) -> None:
+    """IP の引き継ぎ(ADR-0059 6章)。Run の出力は入力から、スケッチ・領域は下地から。配置の素材は
+    `compositions.save_composition` で引き継ぐ。"""
+    from app.domain import ip_usage
+
+    if asset.produced_by_run_id is not None:
+        ip_usage.inherit_from_run_inputs(session, asset.id, asset.produced_by_run_id)
+    if asset.source_asset_id is not None:
+        ip_usage.inherit(session, asset.id, [asset.source_asset_id])
 
 
 def _new_asset(
@@ -427,7 +440,10 @@ def _ingest_replacement(
     if target.kind != kind:
         raise IngestError(t("assets.replaceTargetKindMismatch"))
 
-    if asset_is_used_as_input(session, replaces_asset_id):
+    # 入力に使われた画像と、ロックで守られた画像(ADR-0060)は消さずに残し、新しく作る。
+    if asset_is_used_as_input(session, replaces_asset_id) or asset_locks.is_protected(
+        session, replaces_asset_id
+    ):
         chained_source = replaces_asset_id if kind == AssetKind.SKETCH else None
         asset = ingest(
             session,

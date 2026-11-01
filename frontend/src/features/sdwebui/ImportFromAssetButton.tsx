@@ -70,7 +70,12 @@ export function ImportFromAssetButton({ assetId }: { assetId: string }) {
       )}
       <Modal open={pending !== null} title={ip.confirmTitle} onClose={() => setPending(null)}>
         {pending && (
-          <ImportConfirmBody response={pending} onConfirm={() => apply(pending)} onCancel={() => setPending(null)} />
+          <ImportConfirmBody
+            model={pending.model ?? null}
+            prompt={pending.prompt}
+            onConfirm={() => apply(pending)}
+            onCancel={() => setPending(null)}
+          />
         )}
       </Modal>
     </div>

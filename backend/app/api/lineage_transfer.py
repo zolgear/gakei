@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -33,7 +33,7 @@ from app.deps import (
     get_settings,
     get_store,
 )
-from app.domain import ingest_hooks
+from app.domain import audit, ingest_hooks, ip_usage
 from app.domain import lineage_delivery as delivery_domain
 from app.domain import lineage_export as export_domain
 from app.domain import lineage_import as import_domain
@@ -106,6 +106,31 @@ def preview_lineage_export(
     )
 
 
+def _audit_ip_export(
+    db: Session, user: CurrentUser, plan: export_domain.ExportPlan, request: Request
+) -> None:
+    """IP 素材か派生物を含む書き出しを、IP ごとに証跡に残す(ADR-0059 6章・7章)。"""
+    asset_ids = [uuid.UUID(a["id"]) for a in plan.manifest.get("assets", [])]
+    ip_map = ip_usage.ip_ids_of(db, asset_ids)
+    per_ip: dict[uuid.UUID, int] = {}
+    for ips in ip_map.values():
+        for ip_id in ips:
+            per_ip[ip_id] = per_ip.get(ip_id, 0) + 1
+    for ip_id, count in per_ip.items():
+        audit.record(
+            db,
+            user,
+            "export.lineage",
+            ip_id=ip_id,
+            target_type="asset",
+            target_id=plan.root_asset_id,
+            detail={"scope": plan.scope, "mode": plan.mode, "ip_asset_count": count},
+            request=request,
+        )
+    if per_ip:
+        db.commit()
+
+
 @router.get(
     "/api/assets/{asset_id}/export",
     operation_id="export_lineage",
@@ -114,6 +139,7 @@ def preview_lineage_export(
 )
 def export_lineage(
     asset_id: uuid.UUID,
+    request: Request,
     scope: ScopeParam = Query(default="ancestors"),
     mode: ModeParam = Query(default="import"),
     include_creator_names: bool = Query(default=False),
@@ -131,6 +157,7 @@ def export_lineage(
     `Accept-Language` が画面の言語と一致するとは限らない)、無ければ `Accept-Language`。
     """
     plan = _plan(db, user, asset_id, scope, mode=mode, include_creator_names=include_creator_names)
+    _audit_ip_export(db, user, plan, request)
     # ZIP を流す間は DB を使わない。原本が無ければ流し始める前に断る。
     db.close()
     try:

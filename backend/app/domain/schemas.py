@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import (
@@ -392,6 +392,34 @@ class ContentRatingDetail(BaseModel):
     judged_at: datetime | None = None
 
 
+class AssetIpRef(BaseModel):
+    """画像が引き継ぐ IP(ADR-0059 6章)。"""
+
+    id: uuid.UUID
+    name: str
+    # この画像が素材そのものか。
+    material: bool = False
+    # 契約の条件の注記(クレジットの表記など)。
+    notes: str | None = None
+
+
+class AssetLockView(BaseModel):
+    """画像に付いているロック(ADR-0060)。"""
+
+    kind: Literal["delivered", "shared", "submitted", "other"]
+    note: str | None = None
+    locked_at: datetime
+    # 付けた人の名前(認証モード)。個人モードと、名前の分からない人は null。
+    locked_by_name: str | None = None
+    # 見る人が外せるか(付けた人と管理者)。
+    can_unlock: bool = False
+
+
+class AssetLockRequest(BaseModel):
+    kind: Literal["delivered", "shared", "submitted", "other"]
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class AssetSummary(BaseModel):
     id: uuid.UUID
     kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
@@ -413,6 +441,12 @@ class AssetSummary(BaseModel):
     # 見る人のお気に入りか(ADR-0055)。埋めるのはストックの一覧(`GET /api/assets`)だけで、
     # 検索の結果などほかの応答では常に false。
     favorite: bool = False
+    # ロック(ADR-0060)。`locked` はこの画像に付いている、`lock_protected` はこの画像か、この画像を
+    # 元にした画像にロックが付いていて消せない。埋めるのはストックの一覧と詳細だけ。
+    locked: bool = False
+    lock_protected: bool = False
+    # IP 素材か、その派生物か(ADR-0059 6章)。一覧の印に使う。
+    ip_marked: bool = False
     # 系列の取り込み(ADR-0037)で入った、取り込んだ Run が作った生成画像か(記録は未検証)。
     # タイルの種別のリボンに使う。取り込みで入ったアップロードなどは種別のとおり false。
     imported: bool = False
@@ -810,6 +844,10 @@ class AssetDetail(AssetSummary):
     content_withheld_verdict: ModVerdictView | None = None
     # 見る人のお気に入りか(ADR-0055)。他人の印は見えない。
     favorite: bool = False
+    # この画像に付いているロック(ADR-0060)。無ければ null。
+    lock: AssetLockView | None = None
+    # 引き継ぐ IP(ADR-0059 6章)。見る人に見える IP だけ。
+    ips: list[AssetIpRef] = Field(default_factory=list)
 
 
 class AssetUploadResponse(AssetDetail):
@@ -1107,6 +1145,13 @@ class RegionBox(BaseModel):
         return self
 
 
+class RunIpUseRequest(BaseModel):
+    """IP 素材と派生物を入力にするときの申告(ADR-0059 5章)。"""
+
+    purpose: str = Field(min_length=1, max_length=100)
+    work_note: str | None = Field(default=None, max_length=1000)
+
+
 class RunCreateRequest(BaseModel):
     operation: Literal["generate", "edit"]
     model: str
@@ -1132,6 +1177,8 @@ class RunCreateRequest(BaseModel):
     # 出力の大きさの白紙の上。省略時は、主たる入力があれば `input`、無ければ `output`。入力画像が
     # あっても `output` を選べる(参考の画像を入力に入れたまま、白紙で構図を指示する)。
     regions_frame: Literal["input", "output"] | None = None
+    # IP 素材と派生物を入力にするときの申告(ADR-0059 5章)。入力が IP を引き継がなければ見ない。
+    ip_use: RunIpUseRequest | None = None
 
     @model_validator(mode="after")
     def _unique_region_numbers(self) -> RunCreateRequest:
@@ -1188,6 +1235,11 @@ class RunOutputRef(BaseModel):
     height: int | None = None
     # 見る人のお気に入りか(ADR-0055)。
     favorite: bool = False
+    # ロック(ADR-0060)。`AssetSummary` と同じ意味。
+    locked: bool = False
+    lock_protected: bool = False
+    # IP 素材か、その派生物か(ADR-0059 6章)。
+    ip_marked: bool = False
 
 
 class AssetFavoriteResponse(BaseModel):
@@ -1923,6 +1975,25 @@ class SdWebuiImportParamsResponse(BaseModel):
     unapplied: list[SdWebuiImportUnapplied]
     notes: list[SdWebuiImportNote]
     source: SdWebuiImportSource
+
+
+class ImageSettingsImportResponse(BaseModel):
+    """`POST /api/image-settings/import`(ADR-0038 11章)。画像から読んだ、フォームに入れる値。
+
+    `source` は読み込み元(GAKEI の埋め込み、ComfyUI のグラフ、A1111 形式)。`model` は
+    プロバイダーのモデル(ComfyUI はワークフローの ID)。A1111 形式でチェックポイントが
+    見つからなければ null(フォームのモデルを変えない。9章)。`params` はフォームの
+    パラメーター名と、サイズを持つプロバイダーなら `size`(`WxH`)。
+    """
+
+    source: Literal["gakei", "comfyui", "a1111"]
+    provider: str
+    model: str | None
+    prompt: str
+    params: dict[str, str | int | float | bool]
+    unapplied: list[SdWebuiImportUnapplied]
+    notes: list[SdWebuiImportNote]
+    software: str | None = None
 
 
 class SdWebuiConnectionTestRequest(BaseModel):
@@ -2900,12 +2971,20 @@ class EmbeddingGraphNode(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049 5章「マップ」)。未判定は null。マップでマスクするかを決める。
     content_rating: ContentRatingLevel | None = None
+    # このノードが代表する画像の数(自分を含む。ADR-0057)。全体から均等に抽出したときは、
+    # 間引いた画像を同じクラスタで最も近いノードに数える。新しい順と、抽出しないときは 1。
+    represents: int
+
+
+# マップのノードの抽出方法(ADR-0057)。spread: 全体から均等に(既定) / recent: 新しい順。
+MapSampling = Literal["spread", "recent"]
 
 
 class EmbeddingGraphResponse(BaseModel):
     """`GET /api/embeddings/graph`。マップ(2D の地図と類似度のネットワーク)の元データ。
 
-    ノードは新しい順。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
+    ノードは候補の新しい順に並ぶ(候補が `limit` を超えたら `sampling` の方法で抽出する。
+    ADR-0057)。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
     (`nodes` の位置と、コサイン類似度)で、先頭は必ず自分自身(類似度 1 = 距離 0)、続いて
     ほかのノードを最大 `k` 件、類似度の高い順に並べる。どの行も同じ長さ
     (`1 + min(k, ノード数 - 1)`)なので、umap-js の `setPrecomputedKNN` にそのまま渡せる
@@ -2914,6 +2993,7 @@ class EmbeddingGraphResponse(BaseModel):
 
     model_key: str
     k: int
+    sampling: MapSampling
     nodes: list[EmbeddingGraphNode] = Field(default_factory=list)
     neighbor_indices: list[list[int]] = Field(default_factory=list)
     neighbor_similarities: list[list[float]] = Field(default_factory=list)
@@ -2922,25 +3002,26 @@ class EmbeddingGraphResponse(BaseModel):
     lineage_edges: list[list[int]] | None = None
     # 絞り込みに合う、ベクトルのある画像の数。
     total: int
-    # `limit` を超えたので、古い画像を返していない。
+    # `limit` を超えたので、すべての画像は返していない(`sampling` の方法で抽出した)。
     truncated: bool
 
 
 class EmbeddingGraphScoresResponse(BaseModel):
     """`GET /api/embeddings/graph/scores`。マップのノード全件と検索の文章の類似度。
 
-    `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`
-    なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
+    `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`・
+    同じ `sampling` なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
     """
 
     model_key: str
     # 前後の空白を落とした検索の文章。
     query: str
+    sampling: MapSampling
     ids: list[uuid.UUID] = Field(default_factory=list)
     scores: list[float] = Field(default_factory=list)
     # 絞り込みに合う、ベクトルのある画像の数。
     total: int
-    # `limit` を超えたので、古い画像を返していない。
+    # `limit` を超えたので、すべての画像は返していない(`sampling` の方法で抽出した)。
     truncated: bool
 
 
@@ -3687,3 +3768,279 @@ class RegionDetectionListResponse(BaseModel):
     """`GET /api/assets/{asset_id}/regions/detections`。新しい順。"""
 
     items: list[RegionDetectionView]
+
+
+# -- チーム(ADR-0058) -------------------------------------------------------------------
+
+
+class TeamSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None = None
+    member_count: int
+    # 見る人の役割(入っていなければ null。管理者が全部を見るとき)。
+    my_role: Literal["member", "lead"] | None = None
+    created_at: datetime
+
+
+class TeamListResponse(BaseModel):
+    items: list[TeamSummary]
+
+
+class TeamMemberView(BaseModel):
+    user_id: uuid.UUID
+    name: str | None = None
+    email: str | None = None
+    avatar_url: str | None = None
+    role: Literal["member", "lead"]
+    added_at: datetime
+
+
+class TeamDetail(TeamSummary):
+    members: list[TeamMemberView]
+    # 見る人がメンバーを出し入れできるか(管理者と代表者)、代表者を決められるか(管理者)。
+    can_manage_members: bool
+    can_manage_leads: bool
+
+
+class TeamCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class TeamUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class TeamMemberAddRequest(BaseModel):
+    email: str = Field(min_length=1, max_length=320)
+    role: Literal["member", "lead"] = "member"
+
+
+class TeamMemberRoleRequest(BaseModel):
+    role: Literal["member", "lead"]
+
+
+# -- IP 素材(ADR-0059) --------------------------------------------------------------------
+
+
+class IpSettingsView(BaseModel):
+    # 管理者設定で有効か。
+    enabled: bool
+    # 使えるか(認証モードで、有効)。画面に IP の入口を出すかに使う。
+    available: bool
+
+
+class IpSettingsUpdateRequest(BaseModel):
+    enabled: bool
+
+
+class IpUserRef(BaseModel):
+    user_id: uuid.UUID
+    name: str | None = None
+    email: str | None = None
+
+
+class IpTermsInput(BaseModel):
+    contract_number: str | None = Field(default=None, max_length=200)
+    valid_from: date | None = None
+    valid_until: date | None = None
+    purposes: list[str] = Field(default_factory=list, max_length=50)
+    external_ai: Literal["allow", "local_only", "deny"]
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class IpTermsView(IpTermsInput):
+    version: int
+    created_at: datetime
+    created_by_name: str | None = None
+
+
+class IpMyAccess(BaseModel):
+    """見る人が今受けている許可(チーム経由を含む。複数あれば合わせたもの)。"""
+
+    purposes: list[str]
+    can_use: bool
+
+
+class IpSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    owner_kind: Literal["own", "third_party"]
+    rights_holder: str | None = None
+    state: Literal["active", "suspended", "terminated"]
+    material_count: int
+    # 素材・条件・許可を扱えるか(管理者と担当者)。
+    can_manage: bool
+    access: IpMyAccess | None = None
+
+
+class IpListResponse(BaseModel):
+    items: list[IpSummary]
+
+
+class IpDetail(IpSummary):
+    description: str | None = None
+    terms: IpTermsView | None = None
+    managers: list[IpUserRef] = Field(default_factory=list)
+    # IP そのもの(名前・状態・担当者)を変えられるか(管理者だけ)。
+    can_administer: bool = False
+
+
+class IpCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    owner_kind: Literal["own", "third_party"]
+    rights_holder: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    terms: IpTermsInput
+
+
+class IpUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    rights_holder: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+
+
+class IpStateRequest(BaseModel):
+    state: Literal["active", "suspended", "terminated"]
+
+
+class IpManagerAddRequest(BaseModel):
+    email: str = Field(min_length=1, max_length=320)
+
+
+class IpMaterialItem(BaseModel):
+    asset: AssetSummary
+    added_at: datetime
+    withdrawn_at: datetime | None = None
+
+
+class IpMaterialListResponse(BaseModel):
+    items: list[IpMaterialItem]
+
+
+class IpGrantView(BaseModel):
+    id: uuid.UUID
+    team_id: uuid.UUID | None = None
+    team_name: str | None = None
+    user: IpUserRef | None = None
+    purposes: list[str]
+    can_use: bool
+    valid_from: date | None = None
+    valid_until: date | None = None
+    granted_at: datetime
+    revoked_at: datetime | None = None
+    # 今効いているか(取り消していない、期間の中、IP が有効)。
+    active: bool
+
+
+class IpTeamRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class IpGrantListResponse(BaseModel):
+    items: list[IpGrantView]
+
+
+class IpGrantCreateRequest(BaseModel):
+    team_id: uuid.UUID | None = None
+    email: str | None = Field(default=None, max_length=320)
+    purposes: list[str] = Field(default_factory=list, max_length=50)
+    can_use: bool = True
+    valid_from: date | None = None
+    valid_until: date | None = None
+
+
+class AuditEventView(BaseModel):
+    id: uuid.UUID
+    occurred_at: datetime
+    user: IpUserRef | None = None
+    action: str
+    target_type: str | None = None
+    target_id: str | None = None
+    detail: dict | None = None
+
+
+class AuditEventListResponse(BaseModel):
+    items: list[AuditEventView]
+    next_cursor: str | None = None
+
+
+class IpUsageCheckRequest(BaseModel):
+    asset_ids: list[uuid.UUID] = Field(default_factory=list, max_length=32)
+    provider: str | None = None
+    model: str | None = None
+
+
+class IpUsageIp(BaseModel):
+    id: uuid.UUID
+    name: str
+    notes: str | None = None
+    external_ai: Literal["allow", "local_only", "deny"] | None = None
+    # 見る人が「入力に使う」の許可で使える用途(契約の用途と合わせたもの)。
+    purposes: list[str]
+    # 使えない理由(無ければ null)。用途によらないもの(停止中、契約の期間の外、送り先など)。
+    problem: str | None = None
+
+
+class IpUsageCheckResponse(BaseModel):
+    # 申告が要るか(入力が IP を引き継ぐか)。
+    required: bool
+    ips: list[IpUsageIp] = Field(default_factory=list)
+    # すべての IP で使える用途(申告で選べる用途)。
+    purposes: list[str] = Field(default_factory=list)
+
+
+class IpDerivativeItem(BaseModel):
+    asset: AssetSummary
+    created_at: datetime
+    created_by_name: str | None = None
+    # この IP のほかに引き継ぐ IP の数(混入・掛け合わせの印。ADR-0059 6章)。
+    other_ip_count: int = 0
+
+
+class IpDerivativeListResponse(BaseModel):
+    items: list[IpDerivativeItem]
+
+
+class IpReportCount(BaseModel):
+    key: str
+    count: int
+
+
+class IpReportMaterial(BaseModel):
+    asset_id: uuid.UUID
+    added_at: datetime
+    withdrawn_at: datetime | None = None
+    destroyed: bool = False
+    use_count: int
+
+
+class IpReportView(BaseModel):
+    """IP の状況のレポート(ADR-0059 8章)。画面に出す集計。"""
+
+    start: date
+    end: date
+    uses: int
+    uses_succeeded: int
+    outputs: int
+    derived: int
+    original_downloads: int
+    detail_views: int
+    lineage_exports: int
+    denied: int
+    by_purpose: list[IpReportCount]
+    by_work_note: list[IpReportCount]
+    by_grantee: list[IpReportCount]
+    by_user: list[IpReportCount]
+    by_provider: list[IpReportCount]
+    denied_reasons: list[IpReportCount]
+    materials: list[IpReportMaterial]
+
+
+class IpDestroyResponse(BaseModel):
+    destroyed: int
+    # 同じ内容の原本をほかの画像が共有しているので、ファイルを残したもの。
+    kept_shared: int

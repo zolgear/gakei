@@ -1,0 +1,70 @@
+/* プロンプト欄の操作列のアイコンのボタン(プロンプトセットに保存、設定のメニュー)。
+   隣の「テキスト / タグ」の切り替えと同じ高さ。 */
+.iconTrigger {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+}
+
+.iconTrigger:hover:not(:disabled),
+.iconTrigger[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.iconTrigger:disabled {
+  opacity: 0.5;
+}
+
+.menuRoot {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ボタンの左端に揃えて上に開く(下段配置では操作列が画面の下にあり、下に開くと切れる)。 */
+.menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 150;
+  min-width: 180px;
+  max-width: calc(100vw - 28px);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.item {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.item:hover:not(:disabled),
+.item:focus-visible {
+  background: var(--color-header-band);
+  outline: none;
+}
+
+.item:disabled {
+  color: var(--color-text-faint);
+}

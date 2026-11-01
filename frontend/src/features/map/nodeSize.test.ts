@@ -10,6 +10,9 @@ import {
   lineageSegment,
   MIN_LINEAGE_LEN_PX,
   nodeExtentPx,
+  REPRESENT_MAX_GROW,
+  representScale,
+  representScales,
   squareBorderDistance,
 } from './nodeSize'
 import { computeBounds, tileWorldSize, worldToScreen } from './viewport'
@@ -164,5 +167,25 @@ describe('lineageSegment', () => {
     expect(arrowSizePx(12)).toBe(7)
     expect(arrowSizePx(50)).toBe(10)
     expect(arrowSizePx(112)).toBe(14)
+  })
+})
+
+describe('representScale', () => {
+  it('1 枚は等倍、対数で控えめに大きくし、上限で止める', () => {
+    expect(representScale(1)).toBe(1)
+    expect(representScale(undefined)).toBe(1)
+    expect(representScale(0)).toBe(1)
+    expect(representScale(2)).toBeCloseTo(1.15)
+    expect(representScale(4)).toBeCloseTo(1.3)
+    expect(representScale(16)).toBeCloseTo(1 + REPRESENT_MAX_GROW)
+    expect(representScale(10_000)).toBeCloseTo(1 + REPRESENT_MAX_GROW)
+    expect(representScale(3)).toBeGreaterThan(representScale(2))
+  })
+
+  it('すべて 1 枚なら null(掛け算を省く)', () => {
+    expect(representScales([1, 1, undefined])).toBeNull()
+    const scales = representScales([1, 4])!
+    expect(scales[0]).toBe(1)
+    expect(scales[1]).toBeCloseTo(1.3)
   })
 })

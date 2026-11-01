@@ -124,6 +124,9 @@ def create_share(
     except shares_domain.ShareTargetNotFoundError as e:
         db.rollback()
         raise HTTPException(status_code=404, detail=t("assets.notFound")) from e
+    except shares_domain.ShareIpError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=t("ip.shareNotAllowed")) from e
     db.commit()
     titles = annotations_domain.bulk_titles(db, [share.root_asset_id])
     return _to_row(db, share, _public_base(request), count, titles.get(share.root_asset_id))

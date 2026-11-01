@@ -14,16 +14,24 @@
   判定できないので対象にしない。
 - 領域: `run.regions.regions` に四角が1つ以上ある Run(ADR-0053 4章。作成時に四角がある
   ときだけ書く)。
+
+グループの絞り込み(含める・除く。ADR-0054 6章)も、ここに置く(`HistoryGroupFilter`)。
 """
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
-from sqlalchemy import ColumnElement, and_, select
+from sqlalchemy import ColumnElement, and_, exists, not_, or_, select, true
+from sqlalchemy.orm import aliased
 
-from app.domain.models import Asset, Run
+from app.auth.identity import CurrentUser
+from app.domain import asset_locks
+from app.domain.models import Asset, AssetGroup, AssetGroupMember, Run
+from app.domain.visibility import group_visible
 
 HistoryShape = Literal["square", "portrait", "wide"]
 
@@ -87,11 +95,13 @@ def run_has_regions() -> ColumnElement[bool]:
 
 @dataclass(frozen=True)
 class HistoryLabelFilter:
-    """形・透過・領域の絞り込み。どれも既定は絞らない。"""
+    """形・透過・領域・ロックの絞り込み。どれも既定は絞らない。"""
 
     shape: HistoryShape | None = None
     transparent: bool = False
     regions: bool = False
+    # ロックの付いた画像だけ(ADR-0060 4章)。
+    locked: bool = False
 
     def _run_attribute_conditions(self) -> list[ColumnElement[bool]]:
         conditions: list[ColumnElement[bool]] = []
@@ -106,6 +116,8 @@ class HistoryLabelFilter:
         conditions = self._run_attribute_conditions()
         if self.shape is not None:
             conditions.append(run_has_output_shape(self.shape))
+        if self.locked:
+            conditions.append(asset_locks.run_has_locked_output())
         return conditions
 
     def asset_conditions(self) -> list[ColumnElement[bool]]:
@@ -114,6 +126,8 @@ class HistoryLabelFilter:
         conditions = self._run_attribute_conditions()
         if self.shape is not None:
             conditions.append(asset_shape_condition(self.shape))
+        if self.locked:
+            conditions.append(Asset.id.in_(asset_locks.locked_asset_ids()))
         return conditions
 
     def scope_key(self) -> str:
@@ -125,4 +139,132 @@ class HistoryLabelFilter:
             parts.append("transparent")
         if self.regions:
             parts.append("regions")
+        if self.locked:
+            parts.append("locked")
         return ",".join(parts)
+
+
+# -- グループ(ADR-0054 6章) ---------------------------------------------------------
+
+# 「グループなし」を表す値(`group` / `exclude_group` のクエリ)。
+NO_GROUP = "none"
+
+
+class InvalidGroupFilterError(ValueError):
+    pass
+
+
+def asset_group_column(viewer: CurrentUser, asset: Any = Asset) -> Any:
+    """`asset` が入っている見えるグループの id(削除済み・見えないグループ、どこにも入っていなければ
+    NULL)。ADR-0022 により所属は1つ。外側の問い合わせの `AssetGroup` と混ざらないよう別名で引く。"""
+    group = aliased(AssetGroup)
+    member = aliased(AssetGroupMember)
+    return (
+        select(group.id)
+        .join(member, member.asset_group_id == group.id)
+        .where(
+            member.asset_id == asset.id, group.deleted_at.is_(None), group_visible(viewer, group)
+        )
+        .correlate(asset)
+        .scalar_subquery()
+    )
+
+
+def run_group_column(viewer: CurrentUser) -> Any:
+    """Run の出力を入れる先に選んだグループ(`run.asset_group_id`。見えて削除されていないもの)。"""
+    group = aliased(AssetGroup)
+    return (
+        select(group.id)
+        .where(
+            group.id == Run.asset_group_id, group.deleted_at.is_(None), group_visible(viewer, group)
+        )
+        .correlate(Run)
+        .scalar_subquery()
+    )
+
+
+@dataclass(frozen=True)
+class HistoryGroupFilter:
+    """グループで含める・除く。どちらも空なら絞らない。`*_none` は「グループなし」。
+
+    - 含める: どれかに当たるものだけ。除く: どれかに当たるものを外す。両方あれば両方を満たすもの。
+    - 画像のグループは、その画像が入っている見えるグループ(`asset_group_column`)。
+    - Run は「削除されていない出力のどれかが当たる」。出力の無い Run(失敗・待機など)は、出力を
+      入れる先に選んだグループ(`run_group_column`)で見る。
+    """
+
+    include: tuple[uuid.UUID, ...] = ()
+    include_none: bool = False
+    exclude: tuple[uuid.UUID, ...] = ()
+    exclude_none: bool = False
+
+    @classmethod
+    def parse(cls, include: Sequence[str] = (), exclude: Sequence[str] = ()) -> HistoryGroupFilter:
+        """クエリの値(グループの id か `none`)から作る。読めない値は `InvalidGroupFilterError`。"""
+
+        def split(values: Sequence[str]) -> tuple[tuple[uuid.UUID, ...], bool]:
+            ids: list[uuid.UUID] = []
+            none = False
+            for value in values:
+                if value == NO_GROUP:
+                    none = True
+                    continue
+                try:
+                    ids.append(uuid.UUID(value))
+                except ValueError as e:
+                    raise InvalidGroupFilterError(value) from e
+            return tuple(sorted(set(ids))), none
+
+        include_ids, include_none = split(include)
+        exclude_ids, exclude_none = split(exclude)
+        return cls(include_ids, include_none, exclude_ids, exclude_none)
+
+    @property
+    def active(self) -> bool:
+        return bool(self.include or self.include_none or self.exclude or self.exclude_none)
+
+    @property
+    def includes(self) -> bool:
+        return bool(self.include or self.include_none)
+
+    def matches(self, group_id: Any) -> ColumnElement[bool]:
+        """グループの id の列(NULL は「グループなし」)が当たる条件。NULL の比較は明示的に扱う。"""
+        conditions: list[ColumnElement[bool]] = []
+        if self.includes:
+            options: list[ColumnElement[bool]] = []
+            if self.include:
+                options.append(and_(group_id.is_not(None), group_id.in_(self.include)))
+            if self.include_none:
+                options.append(group_id.is_(None))
+            conditions.append(or_(*options))
+        if self.exclude:
+            conditions.append(or_(group_id.is_(None), not_(group_id.in_(self.exclude))))
+        if self.exclude_none:
+            conditions.append(group_id.is_not(None))
+        return and_(*conditions) if conditions else true()
+
+    def asset_conditions(self, viewer: CurrentUser) -> list[ColumnElement[bool]]:
+        """画像単位の一覧(`Asset` を対象にする問い合わせ)の条件。"""
+        if not self.active:
+            return []
+        return [self.matches(asset_group_column(viewer))]
+
+    def run_conditions(self, viewer: CurrentUser) -> list[ColumnElement[bool]]:
+        """Run 単位の一覧の条件。"""
+        if not self.active:
+            return []
+        output = aliased(Asset)
+        live_output = and_(output.produced_by_run_id == Run.id, output.deleted_at.is_(None))
+        output_matches = exists().where(
+            live_output, self.matches(asset_group_column(viewer, output))
+        )
+        no_output = not_(exists().where(live_output))
+        return [or_(output_matches, and_(no_output, self.matches(run_group_column(viewer))))]
+
+    def scope_key(self) -> str:
+        """似た画像の順のキャッシュの鍵に入れる文字列。絞らなければ空。"""
+        if not self.active:
+            return ""
+        include = [str(g) for g in self.include] + ([NO_GROUP] if self.include_none else [])
+        exclude = [str(g) for g in self.exclude] + ([NO_GROUP] if self.exclude_none else [])
+        return f"group={'|'.join(include)};exclude_group={'|'.join(exclude)}"
