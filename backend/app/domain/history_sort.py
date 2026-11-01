@@ -331,6 +331,35 @@ def _kmeans_pp(vectors: np.ndarray, k: int, first: int, rng: np.random.Generator
     return vectors[centers].copy()
 
 
+def spherical_kmeans(
+    vectors: np.ndarray, k: int, *, first: int = 0, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
+    """球面 k-means(コサイン)。`vectors` は正規化済み。返すのは `(labels, centers)`。
+
+    初期値は `first` から始める k-means++、繰り返しは最大 `KMEANS_MAX_ITER` 回。乱数の種を
+    固定するので、同じ入力なら同じ結果になる。マップの抽出(ADR-0057)が使う。
+    """
+    rng = np.random.default_rng(seed)
+    centers = _kmeans_pp(vectors, k, first, rng)
+    labels = np.full(len(vectors), -1, dtype=np.int64)
+    for _ in range(KMEANS_MAX_ITER):
+        new_labels = np.argmax(vectors @ centers.T, axis=1)
+        if np.array_equal(new_labels, labels):
+            break
+        labels = new_labels
+        for c in range(len(centers)):
+            members = vectors[labels == c]
+            if len(members):
+                centers[c] = members.mean(axis=0)
+        centers = _normalize(centers)
+    return labels, centers
+
+
+def normalize_rows(matrix: np.ndarray) -> np.ndarray:
+    """行ごとに L2 正規化した float32 の行列(長さ 0 の行はそのまま)。"""
+    return _normalize(np.asarray(matrix, dtype=np.float32))
+
+
 def embedding_order(matrix: np.ndarray, *, start: int = 0, seed: int = 0) -> list[int]:
     """似たもの同士が近くに並ぶ順(行の添字の並び)。全件の距離行列は作らない(ADR-0054 3章)。
 

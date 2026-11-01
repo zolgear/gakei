@@ -52,6 +52,8 @@ import {
   MAP_K_CHOICES,
   MAP_SHAPES,
   MAP_LIMIT_CHOICES,
+  MAP_SAMPLINGS,
+  isMapSampling,
   MAP_QUERY_MAX,
   MAP_THRESHOLD_MAX,
   MAP_THRESHOLD_MIN,
@@ -158,11 +160,12 @@ function MapBody() {
   }
 
   const query = useQuery({
-    queryKey: ['embeddings', 'graph', state.k, state.limit, state.groupId, state.tags],
+    queryKey: ['embeddings', 'graph', state.k, state.limit, state.sampling, state.groupId, state.tags],
     queryFn: () =>
       embeddingGraph({
         k: state.k,
         limit: state.limit,
+        sampling: state.sampling,
         group_id: state.groupId ?? undefined,
         tag: state.tags.length > 0 ? state.tags : undefined,
         include_lineage: true,
@@ -179,11 +182,12 @@ function MapBody() {
   const trimmedQuery = state.query.trim()
   const debouncedQuery = useDebouncedValue(trimmedQuery, SEARCH_DEBOUNCE_MS)
   const scoresQuery = useQuery({
-    queryKey: ['embeddings', 'graph', 'scores', debouncedQuery, state.limit, state.groupId, state.tags],
+    queryKey: ['embeddings', 'graph', 'scores', debouncedQuery, state.limit, state.sampling, state.groupId, state.tags],
     queryFn: () =>
       embeddingGraphScores({
         q: debouncedQuery,
         limit: state.limit,
+        sampling: state.sampling,
         group_id: state.groupId ?? undefined,
         tag: state.tags.length > 0 ? state.tags : undefined,
       }),
@@ -312,6 +316,22 @@ function MapBody() {
                   {MAP_LIMIT_CHOICES.map((value) => (
                     <option key={value} value={value}>
                       {fmt(m.limitOption, { count: value })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.field} title={m.samplingHelp}>
+                <span className={styles.fieldLabel}>{m.samplingLabel}</span>
+                <select
+                  className={styles.select}
+                  value={state.sampling}
+                  onChange={(e) => {
+                    if (isMapSampling(e.target.value)) update({ sampling: e.target.value })
+                  }}
+                >
+                  {MAP_SAMPLINGS.map((value) => (
+                    <option key={value} value={value}>
+                      {m.samplingOption[value]}
                     </option>
                   ))}
                 </select>
@@ -484,10 +504,14 @@ function MapBody() {
           <div className={styles.statusOverlay} data-preview-open={previewShown}>
             {graph?.truncated && (
               <span className={styles.statusNotice}>
-                {fmt(state.limit < MAP_LIMIT_CHOICES[MAP_LIMIT_CHOICES.length - 1] ? m.truncated : m.truncatedAtMax, {
-                  total: graph.total,
-                  count: nodeCount,
-                })}
+                {fmt(
+                  graph.sampling === 'spread'
+                    ? m.truncatedSpread
+                    : state.limit < MAP_LIMIT_CHOICES[MAP_LIMIT_CHOICES.length - 1]
+                      ? m.truncated
+                      : m.truncatedAtMax,
+                  { total: graph.total, count: nodeCount },
+                )}
               </span>
             )}
             <div className={styles.statusLine}>

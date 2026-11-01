@@ -1654,8 +1654,8 @@ export interface paths {
         };
         /**
          * Graph Endpoint
-         * @description マップの元データ。ノード(新しい順に `limit` 件まで)と、各ノードの k 近傍
-         *     (先頭は自分自身)。
+         * @description マップの元データ。ノード(`limit` 件まで。超えたら `sampling` の方法で抽出し、候補の
+         *     新しい順に並べる)と、各ノードの k 近傍(先頭は自分自身)。
          */
         get: operations["embedding_graph"];
         put?: never;
@@ -1675,8 +1675,8 @@ export interface paths {
         };
         /**
          * Graph Scores Endpoint
-         * @description マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
-         *     `GET /api/embeddings/graph` の `nodes` と同じ並び。
+         * @description マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit`・同じ
+         *     `sampling` の `GET /api/embeddings/graph` の `nodes` と同じ並び。
          */
         get: operations["embedding_graph_scores"];
         put?: never;
@@ -5258,12 +5258,15 @@ export interface components {
             focal_point?: components["schemas"]["FocalPoint"] | null;
             /** Content Rating */
             content_rating?: ("g" | "r" | "x" | "xx" | "xxx") | null;
+            /** Represents */
+            represents: number;
         };
         /**
          * EmbeddingGraphResponse
          * @description `GET /api/embeddings/graph`。マップ(2D の地図と類似度のネットワーク)の元データ。
          *
-         *     ノードは新しい順。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
+         *     ノードは候補の新しい順に並ぶ(候補が `limit` を超えたら `sampling` の方法で抽出する。
+         *     ADR-0057)。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
          *     (`nodes` の位置と、コサイン類似度)で、先頭は必ず自分自身(類似度 1 = 距離 0)、続いて
          *     ほかのノードを最大 `k` 件、類似度の高い順に並べる。どの行も同じ長さ
          *     (`1 + min(k, ノード数 - 1)`)なので、umap-js の `setPrecomputedKNN` にそのまま渡せる
@@ -5274,6 +5277,11 @@ export interface components {
             model_key: string;
             /** K */
             k: number;
+            /**
+             * Sampling
+             * @enum {string}
+             */
+            sampling: "spread" | "recent";
             /** Nodes */
             nodes?: components["schemas"]["EmbeddingGraphNode"][];
             /** Neighbor Indices */
@@ -5291,14 +5299,19 @@ export interface components {
          * EmbeddingGraphScoresResponse
          * @description `GET /api/embeddings/graph/scores`。マップのノード全件と検索の文章の類似度。
          *
-         *     `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`
-         *     なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
+         *     `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`・
+         *     同じ `sampling` なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
          */
         EmbeddingGraphScoresResponse: {
             /** Model Key */
             model_key: string;
             /** Query */
             query: string;
+            /**
+             * Sampling
+             * @enum {string}
+             */
+            sampling: "spread" | "recent";
             /** Ids */
             ids?: string[];
             /** Scores */
@@ -12870,6 +12883,8 @@ export interface operations {
             query?: {
                 k?: number;
                 limit?: number;
+                /** @description 候補が limit を超えたときの抽出方法(ADR-0057)。spread: 全体から均等に / recent: 新しい順 */
+                sampling?: "spread" | "recent";
                 group_id?: string | null;
                 /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
                 tag?: string[] | null;
@@ -12919,6 +12934,8 @@ export interface operations {
                 /** @description 検索の文章(自然文) */
                 q: string;
                 limit?: number;
+                /** @description 候補が limit を超えたときの抽出方法(ADR-0057)。spread: 全体から均等に / recent: 新しい順 */
+                sampling?: "spread" | "recent";
                 group_id?: string | null;
                 /** @description このタグが付いた画像に絞る。繰り返すと、すべてが付いた画像だけ(AND) */
                 tag?: string[] | null;

@@ -1,6 +1,6 @@
 /**
  * マップ(`/map`)で利用者が選んだ値をブラウザに覚える(ADR-0033 8章・2026-10-04 追記)。
- * 覚えるのはタブ・見せ方(`shape`)・近傍の数・上限・しきい値・系列の辺・一致の件数(`matchCount`)・距離の取り方
+ * 覚えるのはタブ・見せ方(`shape`)・近傍の数・上限・抽出方法(`sampling`。ADR-0057)・しきい値・系列の辺・一致の件数(`matchCount`)・距離の取り方
  * (`dist`)と、選んだ画像を大きく見るパネルの開閉
  * (`previewOpen`)、立体を開いたときに一度だけ回すか(`autoRotate3d`)だけ(この 2 つは URL には置かない)。グループ・タグ・選んだ画像・検索の文章は
  * データや打った内容に依存するので覚えない(URL だけ)。
@@ -10,7 +10,7 @@
  * 変えた項目だけを覚えた値に重ねて書く(リンクで開いた URL の値まで覚えないため)。
  *
  * 保存形式は1つのキーに
- * `{ "v": 1, view, shape, k, limit, threshold, lineage, previewOpen, autoRotate3d, axes3d, matchCount, dist }`。
+ * `{ "v": 1, view, shape, k, limit, sampling, threshold, lineage, previewOpen, autoRotate3d, axes3d, matchCount, dist }`。
  * 読むときは項目ごとに URL と同じ規則で検証し、読めない項目だけを捨てる(`previewOpen` と
  * `autoRotate3d` は後から足した項目で、無い・読めないときは既定。項目を足しただけなので版は 1 のまま。
  * 知らない `view` の値も、その項目だけを捨てる)。localStorage が使えない環境でも壊れないよう
@@ -22,6 +22,8 @@ import {
   MAP_K_CHOICES,
   MAP_LIMIT_CHOICES,
   clampThreshold,
+  isMapSampling,
+  type MapSampling,
   type MapShape,
   type MapStoredFields,
   type MapUrlState,
@@ -57,6 +59,7 @@ interface StoredMapPrefsV1 {
   shape?: MapShape
   k?: number
   limit?: number
+  sampling?: MapSampling
   threshold?: number
   lineage?: boolean
   previewOpen?: boolean
@@ -94,6 +97,7 @@ export function parseMapPrefs(raw: string | null): Partial<MapPrefs> {
   if (k !== undefined) prefs.k = k
   const limit = pickNumberChoice(data.limit, MAP_LIMIT_CHOICES)
   if (limit !== undefined) prefs.limit = limit
+  if (isMapSampling(data.sampling)) prefs.sampling = data.sampling
   if (typeof data.threshold === 'number' && Number.isFinite(data.threshold)) {
     prefs.threshold = clampThreshold(data.threshold)
   }
@@ -113,6 +117,7 @@ export function serializeMapPrefs(prefs: Partial<MapPrefs>): string {
   if (prefs.shape !== undefined) out.shape = prefs.shape
   if (prefs.k !== undefined) out.k = prefs.k
   if (prefs.limit !== undefined) out.limit = prefs.limit
+  if (prefs.sampling !== undefined) out.sampling = prefs.sampling
   if (prefs.threshold !== undefined) out.threshold = clampThreshold(prefs.threshold)
   if (prefs.showLineage !== undefined) out.lineage = prefs.showLineage
   if (prefs.previewOpen !== undefined) out.previewOpen = prefs.previewOpen
@@ -130,6 +135,7 @@ export function pickStoredFields(p: MapPrefsPatch): Partial<MapPrefs> {
   if (p.shape !== undefined) out.shape = p.shape
   if (p.k !== undefined) out.k = p.k
   if (p.limit !== undefined) out.limit = p.limit
+  if (p.sampling !== undefined) out.sampling = p.sampling
   if (p.threshold !== undefined) out.threshold = p.threshold
   if (p.showLineage !== undefined) out.showLineage = p.showLineage
   if (p.previewOpen !== undefined) out.previewOpen = p.previewOpen

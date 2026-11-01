@@ -60,5 +60,6 @@
 | ADR-0054 | [0054-history-sort.md](0054-history-sort.md) | 履歴の並べ替え(日付・グループ・似た画像の順) | Proposed |
 | ADR-0055 | [0055-favorites.md](0055-favorites.md) | お気に入り(履歴の画像に印を付け、印で絞り込む。`asset_mark` の最初の実装) | Proposed |
 | ADR-0056 | [0056-group-suggestions.md](0056-group-suggestions.md) | グループの提案(画像の埋め込みで集まりを見つけ、グループにする案を出す) | Proposed |
+| ADR-0057 | [0057-map-node-sampling.md](0057-map-node-sampling.md) | マップのノードの抽出(全体から均等に選ぶ) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

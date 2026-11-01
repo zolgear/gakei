@@ -332,12 +332,18 @@ def test_graph_shape_and_lineage(client: TestClient) -> None:
     red_index = ids.index(red)
     assert body["neighbor_indices"][red_index][1] == ids.index(red2)
 
+    assert body["sampling"] == "spread"
+    assert all(n["represents"] == 1 for n in body["nodes"])
+
     body = client.get(
-        "/api/embeddings/graph", params={"k": 30, "limit": 3, "include_lineage": True}
+        "/api/embeddings/graph",
+        params={"k": 30, "limit": 3, "include_lineage": True, "sampling": "recent"},
     ).json()
+    assert body["sampling"] == "recent"
     assert body["total"] == 4
     assert body["truncated"] is True
-    assert len(body["nodes"]) == 3
+    assert [n["id"] for n in body["nodes"]] == [child, other, red2]
+    assert all(n["represents"] == 1 for n in body["nodes"])
     assert all(len(row) == 3 for row in body["neighbor_indices"])
     # 親(red)が返っていないので、系列の辺は無い。
     assert body["lineage_edges"] == []
@@ -346,6 +352,51 @@ def test_graph_shape_and_lineage(client: TestClient) -> None:
     assert body["lineage_edges"] == [[ids.index(red), ids.index(child)]]
     assert client.get("/api/embeddings/graph?k=31").status_code == 422
     assert client.get("/api/embeddings/graph?limit=5001").status_code == 422
+    assert client.get("/api/embeddings/graph?sampling=random").status_code == 422
+
+
+def test_graph_spread_sampling(client: TestClient) -> None:
+    """全体から均等に(既定。ADR-0057): 上限を超えると抽出し、代表数の合計は候補の数。
+    同じ引数なら同じノード、`graph/scores` とも並びが一致する。"""
+    _enable(client)
+    red, red2, other = _three_images(client)
+    yellow = _upload(client, _png((240, 230, 20)))
+    _wait_embedded(client, yellow)
+    newest_first = [yellow, other, red2, red]
+
+    body = client.get("/api/embeddings/graph", params={"limit": 2, "k": 5}).json()
+    assert body["sampling"] == "spread"
+    assert body["total"] == 4
+    assert body["truncated"] is True
+    ids = [n["id"] for n in body["nodes"]]
+    assert len(ids) == 2
+    # 候補の並び(新しい順)を保つ。
+    assert ids == [i for i in newest_first if i in ids]
+    assert sum(n["represents"] for n in body["nodes"]) == 4
+    assert all(n["represents"] >= 1 for n in body["nodes"])
+    # ほぼ同じ赤の2枚の両方は選ばない(どちらかがもう一方を代表する)。
+    assert not {red, red2} <= set(ids)
+    assert all(len(row) == 2 for row in body["neighbor_indices"])
+
+    # 同じ引数なら同じノード(キャッシュから)。
+    again = client.get("/api/embeddings/graph", params={"limit": 2, "k": 5}).json()
+    assert again["nodes"] == body["nodes"]
+    assert len(client.app.state.map_sample_cache) == 1
+
+    # `graph/scores` も同じ抽出を通る。
+    client.app.state.query_vector_cache.put(ACTIVE_KEY, "red", _vector(client, red))
+    scores = client.get("/api/embeddings/graph/scores", params={"q": "red", "limit": 2}).json()
+    assert scores["sampling"] == "spread"
+    assert scores["ids"] == ids
+    assert scores["total"] == 4
+    assert scores["truncated"] is True
+
+    # 画像が増えると候補の要約が変わり、作り直す。
+    late = _upload(client, _png((10, 200, 10)))
+    _wait_embedded(client, late)
+    grown = client.get("/api/embeddings/graph", params={"limit": 2, "k": 5}).json()
+    assert grown["total"] == 5
+    assert sum(n["represents"] for n in grown["nodes"]) == 5
 
 
 def test_graph_nodes_carry_content_rating(client: TestClient) -> None:
@@ -441,8 +492,11 @@ def test_graph_scores_matches_graph_nodes(client: TestClient) -> None:
     assert again["ids"] == body["ids"]
     assert again["scores"] == body["scores"]
 
-    # `limit` で切ると、並びは `graph` と揃ったまま古いものが落ちる。
-    limited = client.get("/api/embeddings/graph/scores", params={"q": "red", "limit": 2}).json()
+    # 新しい順で `limit` で切ると、並びは `graph` と揃ったまま古いものが落ちる。
+    limited = client.get(
+        "/api/embeddings/graph/scores", params={"q": "red", "limit": 2, "sampling": "recent"}
+    ).json()
+    assert limited["sampling"] == "recent"
     assert limited["ids"] == body["ids"][:2]
     assert limited["total"] == 3
     assert limited["truncated"] is True

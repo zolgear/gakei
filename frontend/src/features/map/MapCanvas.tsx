@@ -59,6 +59,7 @@ import {
   drawTilePx,
   lineageSegment,
   nodeExtentPx,
+  representScales,
   type LineageSegment,
 } from './nodeSize'
 import {
@@ -231,6 +232,13 @@ export function MapCanvas({
   const { shouldMask } = useContentRatingMask()
   /** ノードごとにマスクするか(マスクするものが無い・マップ全体で外しているときは null)。 */
   const maskFlags = useMemo(() => mapMaskFlags(nodes, shouldMask, ratingMask), [nodes, shouldMask, ratingMask])
+  /** ノードごとの、代表数による大きさの倍率(ADR-0057。すべて 1 なら null)と、その最大。 */
+  const represent = useMemo(() => {
+    const scales = representScales(nodes.map((node) => node.represents))
+    let max = 1
+    if (scales) for (const value of scales) if (value > max) max = value
+    return { scales, max }
+  }, [nodes])
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const sizeRef = useRef({ width: 0, height: 0 })
@@ -293,6 +301,7 @@ export function MapCanvas({
     showAxes: false,
     hover: -1,
     maskFlags,
+    represent,
   })
   propsRef.current = {
     nodes,
@@ -306,6 +315,7 @@ export function MapCanvas({
     showAxes: proj.hasDepth && (axes?.shown ?? false),
     hover: hover?.index ?? -1,
     maskFlags,
+    represent,
   }
 
   // ---- 描画 ----
@@ -329,8 +339,13 @@ export function MapCanvas({
 
     const tileWorld = proj.tileWorld(pos, n, p.neighborIndices) * p.tileScale
     tileWorldRef.current = tileWorld
-    /** 倍率ごとの、ノードの中心から描いた端(選択の枠を含む)までの距離。 */
-    const extentAt = (scale: number) => nodeExtentPx(tileWorld, scale, n)
+    /** 代表数による大きさの倍率(ノードごと)。 */
+    const repScales = p.represent.scales
+    /**
+     * 倍率ごとの、ノードの中心から描いた端(選択の枠を含む)までの距離。代表数で大きく描く
+     * ノードがあれば、いちばん大きいものに合わせる(端で欠けないように)。
+     */
+    const extentAt = (scale: number) => nodeExtentPx(tileWorld * p.represent.max, scale, n)
     // 端の画像(半分の大きさと選択の枠)も画面に収める。立体では向きは変えない。
     if (!userMovedRef.current) proj.fitAll(pos, n, size, extentAt)
     // 検索の一致が決まったら、一致したノード全体が収まるように合わせる(立体は滑らかに寄る)。
@@ -374,7 +389,7 @@ export function MapCanvas({
     let maxDepth = -Infinity
     for (let i = 0; i < n; i++) {
       if (!pts.front[i]) continue
-      const px = drawTilePx(tileWorld * pts.scale[i], n)
+      const px = drawTilePx(tileWorld * pts.scale[i] * (repScales ? repScales[i] : 1), n)
       tilePx[i] = px
       const margin = (px >= THUMB_MIN_PX ? px / 2 : DOT_RADIUS) + 4
       if (!(sx[i] >= -margin && sx[i] <= width + margin && sy[i] >= -margin && sy[i] <= height + margin)) {
@@ -918,8 +933,9 @@ export function MapCanvas({
     if (!pos) return -1
     const n = Math.min(p.nodes.length, Math.floor(pos.length / proj.stride))
     const tileWorld = tileWorldRef.current
-    return proj.hitTest(pos, n, sizeRef.current, x, y, (scale) => {
-      const size = drawTilePx(tileWorld * scale, n)
+    const repScales = p.represent.scales
+    return proj.hitTest(pos, n, sizeRef.current, x, y, (scale, i) => {
+      const size = drawTilePx(tileWorld * scale * (repScales ? repScales[i] : 1), n)
       return Math.max(MIN_HIT_RADIUS, size >= THUMB_MIN_PX ? size / 2 : 0)
     })
   }
