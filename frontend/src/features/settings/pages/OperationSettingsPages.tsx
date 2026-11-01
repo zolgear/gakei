@@ -10,6 +10,7 @@ import { ProfileSection } from '../ProfileSection'
 import { SettingsPageFrame } from '../SettingsPageFrame'
 import { SharesSection } from '../SharesSection'
 import { useSettingsShell } from '../settingsShell'
+import { TeamsSection } from '../../teams/TeamsSection'
 
 export function ProfileSettingsPage() {
   const { t } = useI18n()
@@ -37,6 +38,26 @@ export function AccessTokensSettingsPage() {
   return (
     <SettingsPageFrame pageId="accessTokens" title={t.settings.pages.accessTokens} intro={t.settings.accessTokens.intro}>
       <ApiTokensSection toast={toast} />
+    </SettingsPageFrame>
+  )
+}
+
+export function TeamsSettingsPage() {
+  const { t } = useI18n()
+  const { toast } = useSettingsShell()
+  return (
+    <SettingsPageFrame pageId="teams" title={t.settings.pages.teams} intro={t.settings.teams.intro}>
+      <TeamsSection admin={false} toast={toast} />
+    </SettingsPageFrame>
+  )
+}
+
+export function TeamsAdminSettingsPage() {
+  const { t } = useI18n()
+  const { toast } = useSettingsShell()
+  return (
+    <SettingsPageFrame pageId="teamsAdmin" title={t.settings.pages.teamsAdmin} intro={t.settings.teams.adminIntro}>
+      <TeamsSection admin toast={toast} />
     </SettingsPageFrame>
   )
 }

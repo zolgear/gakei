@@ -674,6 +674,48 @@ export function unlockAsset(assetId: string): Promise<void> {
   return request(`/api/assets/${assetId}/lock`, { method: 'DELETE' })
 }
 
+export type TeamSummary = components['schemas']['TeamSummary']
+export type TeamDetail = components['schemas']['TeamDetail']
+export type TeamMemberView = components['schemas']['TeamMemberView']
+export type TeamRole = TeamMemberView['role']
+
+/** チームの一覧(ADR-0058)。`all` は管理者だけ。 */
+export function listTeams(scope: 'mine' | 'all'): Promise<{ items: TeamSummary[] }> {
+  return request(`/api/teams?scope=${scope}`)
+}
+
+export function getTeam(teamId: string): Promise<TeamDetail> {
+  return request(`/api/teams/${teamId}`)
+}
+
+function teamJson(method: string, body: unknown): RequestInit {
+  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+export function createTeam(name: string, description: string | null = null): Promise<TeamDetail> {
+  return request('/api/teams', teamJson('POST', { name, description }))
+}
+
+export function updateTeam(teamId: string, patch: { name?: string; description?: string }): Promise<TeamDetail> {
+  return request(`/api/teams/${teamId}`, teamJson('PATCH', patch))
+}
+
+export function deleteTeam(teamId: string): Promise<void> {
+  return request(`/api/teams/${teamId}`, { method: 'DELETE' })
+}
+
+export function addTeamMember(teamId: string, email: string, role: TeamRole): Promise<TeamDetail> {
+  return request(`/api/teams/${teamId}/members`, teamJson('POST', { email, role }))
+}
+
+export function setTeamMemberRole(teamId: string, userId: string, role: TeamRole): Promise<TeamDetail> {
+  return request(`/api/teams/${teamId}/members/${userId}`, teamJson('PATCH', { role }))
+}
+
+export function removeTeamMember(teamId: string, userId: string): Promise<void> {
+  return request(`/api/teams/${teamId}/members/${userId}`, { method: 'DELETE' })
+}
+
 export function getAsset(assetId: string): Promise<AssetDetail> {
   return request(`/api/assets/${assetId}`)
 }

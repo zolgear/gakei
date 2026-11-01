@@ -51,6 +51,7 @@ from app.api import settings as settings_api
 from app.api import shares as shares_api
 from app.api import tag_dictionaries as tag_dictionaries_api
 from app.api import tags as tags_api
+from app.api import teams as teams_api
 from app.api import uploads as uploads_api
 from app.api import users as users_api
 from app.api.request_text import reject_nul_in_request
@@ -695,6 +696,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ADR-0051: Mod とフック(各ルートで `require_admin`)。
     app.include_router(mods_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
+    app.include_router(teams_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
     app.include_router(shares_api.router, dependencies=auth_dep)
     # 系列の持ち出しと取り込み(ADR-0037)。

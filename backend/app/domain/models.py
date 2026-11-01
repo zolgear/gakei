@@ -856,6 +856,10 @@ MARK_FLAG_PICK = "pick"
 # ロックの種類(ADR-0060 2章)。納品、共有、提出、その他。
 LOCK_KINDS = ("delivered", "shared", "submitted", "other")
 
+# チームの中の役割(ADR-0058 2章)。メンバーと代表者。
+TEAM_ROLE_MEMBER = "member"
+TEAM_ROLE_LEAD = "lead"
+
 
 class AssetMark(Base):
     """画像ごと・利用者ごとの印(ADR-0003 の `asset_mark`。ADR-0055)。証跡ではないので、
@@ -932,6 +936,40 @@ class AssetLockScope(Base):
 
     lock_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset_lock.id"), primary_key=True)
     asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+
+
+class Team(Base):
+    """チーム(ADR-0058)。利用者の集まりで、階層を持たない。IP 素材の許可(ADR-0059)の単位。
+
+    証跡ではないので名前と説明は変えられる。削除は論理削除(`deleted_at`)。
+    """
+
+    __tablename__ = "team"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class TeamMember(Base):
+    """チームのメンバー(ADR-0058 3章)。`role` は `member` か `lead`(代表者)。外したら行を消す。"""
+
+    __tablename__ = "team_member"
+    __table_args__ = (Index("ix_team_member_user_id", "user_id"),)
+
+    team_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("team.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("app_user.id"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="member")
+    added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    added_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
 
 
 class UserPreference(Base):
