@@ -10,6 +10,8 @@ import { SearchPage } from './pages/SearchPage'
 import { DuplicatesPage } from './pages/DuplicatesPage'
 import { GroupSuggestionsPage } from './pages/GroupSuggestionsPage'
 import { MapPage } from './pages/MapPage'
+import { IpListPage } from './features/ip/IpListPage'
+import { IpPage } from './features/ip/IpPage'
 import { SettingsPage } from './pages/SettingsPage'
 
 export function App() {
@@ -34,6 +36,8 @@ export function App() {
         <Route path="/stock/group-suggestions" element={<GroupSuggestionsPage />} />
         {/* マップ(ADR-0033 8章)。アイコンレールからたどる。 */}
         <Route path="/map" element={<MapPage />} />
+        <Route path="/ip" element={<IpListPage />} />
+        <Route path="/ip/:ipId" element={<IpPage />} />
         {/*
           設定はページに分ける(ADR-0031)。`/settings` は目次(広いときは「表示」も)。
           ComfyUI のワークフローの登録・編集も設定の枠の中で開く(目次は ComfyUI を選んだ状態)。

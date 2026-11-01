@@ -53,6 +53,7 @@ import {
   AccessTokensSettingsPage,
   ProfileSettingsPage,
   SharesSettingsPage,
+  IpAdminSettingsPage,
   TeamsAdminSettingsPage,
   TeamsSettingsPage,
 } from '../features/settings/pages/OperationSettingsPages'
@@ -80,6 +81,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   shareLinks: ShareLinksSettingsPage,
   authentication: AuthSettingsPage,
   teamsAdmin: TeamsAdminSettingsPage,
+  ipAdmin: IpAdminSettingsPage,
   about: AboutSettingsPage,
 }
 

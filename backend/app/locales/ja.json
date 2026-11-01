@@ -966,7 +966,7 @@
       "one": "注意: 派生画像を消せなかった画像が {count} 件あります(sha256): {keys}。残っても害はありません。",
       "other": "注意: 派生画像を消せなかった画像が {count} 件あります(sha256): {keys}。残っても害はありません。"
     },
-    "lockedKept": "ロックで守られているので消さない画像: {count} 件"
+    "lockedKept": "ロックで守られている・IP 素材なので消さない画像: {count} 件"
   },
   "shares": {
     "disabled": "共有リンクは管理者設定で無効になっています",
@@ -1269,5 +1269,25 @@
     "invalidName": "名前は1〜100文字で入力してください",
     "userNotFound": "このメールアドレスの利用者がいません(一度ログインした人だけを足せます)",
     "memberNotFound": "この人はチームのメンバーではありません"
+  },
+  "ip": {
+    "disabled": "IP 素材の機能は有効になっていません",
+    "notFound": "IP が見つかりません",
+    "forbidden": "この操作をする権限がありません",
+    "invalidStateChange": "今の状態ではこの操作はできません(終了した IP は戻せません)",
+    "invalidEnabled": "有効・無効の値が正しくありません",
+    "invalidName": "名前は1〜200文字で入力してください",
+    "invalidOwnerKind": "区分が正しくありません",
+    "invalidState": "状態が正しくありません",
+    "invalidExternalAi": "外部の AI への送信の値が正しくありません",
+    "invalidPurpose": "用途の名前は100文字までです",
+    "tooManyPurposes": "用途は50個までです",
+    "invalidPeriod": "期間の開始が終了より後になっています",
+    "userNotFound": "このメールアドレスの利用者がいません(一度ログインした人だけを指定できます)",
+    "teamNotFound": "チームが見つかりません",
+    "grantTargetRequired": "許可を出す先は、チームか個人のどちらか1つを指定してください",
+    "purposeNotInTerms": "契約の条件に無い用途は許可できません",
+    "materialNotDeletable": "IP 素材は削除できません。IP のページで取り下げてください",
+    "materialNotLockable": "IP 素材にはロックを付けられません"
   }
 }

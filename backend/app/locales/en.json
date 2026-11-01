@@ -966,7 +966,7 @@
       "one": "Note: Derived images of {count} image could not be deleted (sha256): {keys}. Leaving them is harmless.",
       "other": "Note: Derived images of {count} images could not be deleted (sha256): {keys}. Leaving them is harmless."
     },
-    "lockedKept": "Images kept because they are protected by a lock: {count}"
+    "lockedKept": "Images kept because they are protected by a lock or are IP materials: {count}"
   },
   "shares": {
     "disabled": "Share links are disabled in the admin settings",
@@ -1269,5 +1269,25 @@
     "invalidName": "Name must be 1 to 100 characters",
     "userNotFound": "No user with this email (only people who have signed in once can be added)",
     "memberNotFound": "This person is not a member of the team"
+  },
+  "ip": {
+    "disabled": "IP materials are not enabled",
+    "notFound": "IP not found",
+    "forbidden": "You do not have permission to do this",
+    "invalidStateChange": "This cannot be done in the current state (a terminated IP cannot be reopened)",
+    "invalidEnabled": "Invalid enabled value",
+    "invalidName": "Name must be 1 to 200 characters",
+    "invalidOwnerKind": "Invalid owner kind",
+    "invalidState": "Invalid state",
+    "invalidExternalAi": "Invalid external AI setting",
+    "invalidPurpose": "Purpose names can be up to 100 characters",
+    "tooManyPurposes": "Up to 50 purposes",
+    "invalidPeriod": "The start of the period is after its end",
+    "userNotFound": "No user with this email (only people who have signed in once)",
+    "teamNotFound": "Team not found",
+    "grantTargetRequired": "Specify either a team or a person to grant to",
+    "purposeNotInTerms": "Purposes not in the contract terms cannot be granted",
+    "materialNotDeletable": "IP materials cannot be deleted. Withdraw them on the IP page",
+    "materialNotLockable": "IP materials cannot be locked"
   }
 }

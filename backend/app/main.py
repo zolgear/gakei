@@ -35,6 +35,7 @@ from app.api import group_suggestions as group_suggestions_api
 from app.api import health as health_api
 from app.api import history as history_api
 from app.api import image_settings as image_settings_api
+from app.api import ip as ip_api
 from app.api import lineage_transfer as lineage_transfer_api
 from app.api import llm_connections as llm_connections_api
 from app.api import mod_verdicts as mod_verdicts_api
@@ -697,6 +698,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(mods_api.router, dependencies=auth_dep)
     app.include_router(users_api.router, dependencies=auth_dep)
     app.include_router(teams_api.router, dependencies=auth_dep)
+    app.include_router(ip_api.router, dependencies=auth_dep)
     app.include_router(api_tokens_api.router, dependencies=auth_dep)
     app.include_router(shares_api.router, dependencies=auth_dep)
     # 系列の持ち出しと取り込み(ADR-0037)。

@@ -11,6 +11,7 @@ import { SettingsPageFrame } from '../SettingsPageFrame'
 import { SharesSection } from '../SharesSection'
 import { useSettingsShell } from '../settingsShell'
 import { TeamsSection } from '../../teams/TeamsSection'
+import { IpAdminSection } from '../../ip/IpAdminSection'
 
 export function ProfileSettingsPage() {
   const { t } = useI18n()
@@ -58,6 +59,15 @@ export function TeamsAdminSettingsPage() {
   return (
     <SettingsPageFrame pageId="teamsAdmin" title={t.settings.pages.teamsAdmin} intro={t.settings.teams.adminIntro}>
       <TeamsSection admin toast={toast} />
+    </SettingsPageFrame>
+  )
+}
+
+export function IpAdminSettingsPage() {
+  const { t } = useI18n()
+  return (
+    <SettingsPageFrame pageId="ipAdmin" title={t.settings.pages.ipAdmin} intro={t.ip.admin.intro}>
+      <IpAdminSection />
     </SettingsPageFrame>
   )
 }

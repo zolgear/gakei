@@ -62,6 +62,7 @@
 | ADR-0056 | [0056-group-suggestions.md](0056-group-suggestions.md) | グループの提案(画像の埋め込みで集まりを見つけ、グループにする案を出す) | Proposed |
 | ADR-0057 | [0057-map-node-sampling.md](0057-map-node-sampling.md) | マップのノードの抽出(全体から均等に選ぶ) | Proposed |
 | ADR-0058 | [0058-teams.md](0058-teams.md) | チーム(利用者の作業単位と代表者) | Proposed |
+| ADR-0059 | [0059-ip-materials.md](0059-ip-materials.md) | IP 素材(預かった版権の素材の管理・利用の申告・記録・レポート) | Proposed |
 | ADR-0060 | [0060-asset-lock.md](0060-asset-lock.md) | ロック(納品・共有・提出した画像と、その元を消せないようにする) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

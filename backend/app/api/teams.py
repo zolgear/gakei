@@ -11,13 +11,14 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
 from app.auth.runtime import AuthRuntime, get_auth_runtime
 from app.deps import get_session
+from app.domain import audit
 from app.domain import teams as domain
 from app.domain.avatars import avatar_url
 from app.domain.models import Team
@@ -117,6 +118,7 @@ def list_teams(
 )
 def create_team(
     body: TeamCreateRequest,
+    request: Request,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> TeamDetail:
@@ -125,6 +127,15 @@ def create_team(
         team = domain.create_team(db, user, body.name, body.description)
     except (domain.TeamNameError, domain.TeamNameTakenError) as exc:
         raise _name_error(exc) from exc
+    audit.record_now(
+        db,
+        user,
+        "team.create",
+        target_type="team",
+        target_id=team.id,
+        detail={"name": team.name},
+        request=request,
+    )
     return _detail(db, user, team)
 
 
@@ -168,12 +179,22 @@ def update_team(
 )
 def delete_team(
     team_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> None:
     team = _visible_team(db, user, team_id)
     _require_admin(user)
     domain.delete_team(db, team)
+    audit.record_now(
+        db,
+        user,
+        "team.delete",
+        target_type="team",
+        target_id=team.id,
+        detail={"name": team.name},
+        request=request,
+    )
 
 
 @router.post(
@@ -185,17 +206,27 @@ def delete_team(
 def add_team_member(
     team_id: uuid.UUID,
     body: TeamMemberAddRequest,
+    request: Request,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> TeamDetail:
     """メールアドレスでメンバーを足す(一度ログインした人だけ)。代表者にするのは管理者だけ。"""
     team = _visible_team(db, user, team_id)
     try:
-        domain.add_member(db, user, team, body.email, body.role)
+        added = domain.add_member(db, user, team, body.email, body.role)
     except domain.TeamPermissionError as exc:
         raise HTTPException(status_code=403, detail=t("teams.forbidden")) from exc
     except domain.TeamUserNotFoundError as exc:
         raise HTTPException(status_code=422, detail=t("teams.userNotFound")) from exc
+    audit.record_now(
+        db,
+        user,
+        "team.member_add",
+        target_type="team",
+        target_id=team.id,
+        detail={"user_id": str(added.id), "email": added.email, "role": body.role},
+        request=request,
+    )
     return _detail(db, user, team)
 
 
@@ -209,6 +240,7 @@ def set_team_member_role(
     team_id: uuid.UUID,
     user_id: uuid.UUID,
     body: TeamMemberRoleRequest,
+    request: Request,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> TeamDetail:
@@ -220,6 +252,15 @@ def set_team_member_role(
         raise HTTPException(status_code=403, detail=t("teams.forbidden")) from exc
     except domain.TeamMemberNotFoundError as exc:
         raise HTTPException(status_code=404, detail=t("teams.memberNotFound")) from exc
+    audit.record_now(
+        db,
+        user,
+        "team.member_role",
+        target_type="team",
+        target_id=team.id,
+        detail={"user_id": str(user_id), "role": body.role},
+        request=request,
+    )
     return _detail(db, user, team)
 
 
@@ -232,13 +273,23 @@ def set_team_member_role(
 def remove_team_member(
     team_id: uuid.UUID,
     user_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> None:
     team = _visible_team(db, user, team_id)
     try:
-        domain.remove_member(db, user, team, user_id)
+        role = domain.remove_member(db, user, team, user_id)
     except domain.TeamPermissionError as exc:
         raise HTTPException(status_code=403, detail=t("teams.forbidden")) from exc
     except domain.TeamMemberNotFoundError as exc:
         raise HTTPException(status_code=404, detail=t("teams.memberNotFound")) from exc
+    audit.record_now(
+        db,
+        user,
+        "team.member_remove",
+        target_type="team",
+        target_id=team.id,
+        detail={"user_id": str(user_id), "role": role},
+        request=request,
+    )

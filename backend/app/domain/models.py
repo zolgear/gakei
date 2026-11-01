@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -860,6 +861,11 @@ LOCK_KINDS = ("delivered", "shared", "submitted", "other")
 TEAM_ROLE_MEMBER = "member"
 TEAM_ROLE_LEAD = "lead"
 
+# IP(ADR-0059)。状態、区分、外部の AI への送信。
+IP_STATES = ("active", "suspended", "terminated")
+IP_OWNER_KINDS = ("own", "third_party")
+IP_EXTERNAL_AI = ("allow", "local_only", "deny")
+
 
 class AssetMark(Base):
     """画像ごと・利用者ごとの印(ADR-0003 の `asset_mark`。ADR-0055)。証跡ではないので、
@@ -970,6 +976,137 @@ class TeamMember(Base):
         Uuid, ForeignKey("app_user.id"), nullable=True
     )
     added_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class IpProperty(Base):
+    """IP(作品・版権。ADR-0059 2章)。素材、契約の条件、許可の単位。状態は `active` / `suspended` /
+    `terminated`(終了は戻せない)。"""
+
+    __tablename__ = "ip_property"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    # `own`(自社)/ `third_party`(他社)。
+    owner_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    rights_holder: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class IpManager(Base):
+    """IP の担当者(ADR-0059 2章)。管理者が決める。外したら行を消す(経過は `audit_event`)。"""
+
+    __tablename__ = "ip_manager"
+    __table_args__ = (Index("ix_ip_manager_user_id", "user_id"),)
+
+    ip_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ip_property.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("app_user.id"), primary_key=True)
+    added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    added_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class IpTerms(Base):
+    """契約の条件の版(ADR-0059 2章)。追記のみ。最新の版が今の条件。"""
+
+    __tablename__ = "ip_terms"
+    __table_args__ = (UniqueConstraint("ip_id", "version", name="uq_ip_terms_ip_id_version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    ip_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ip_property.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    contract_number: Mapped[str | None] = mapped_column(Text, nullable=True)
+    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 許諾された用途の名前の一覧。
+    purposes: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
+    # 外部の AI への送信: `allow` / `local_only` / `deny`。
+    external_ai: Mapped[str] = mapped_column(String(16), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class IpMaterial(Base):
+    """IP 素材(ADR-0059 3章)。普段のストックとは別の棚に置く Asset。取り下げは `withdrawn_at`。"""
+
+    __tablename__ = "ip_material"
+    __table_args__ = (Index("ix_ip_material_ip_id", "ip_id"),)
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    ip_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ip_property.id"), nullable=False)
+    added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    added_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    withdrawn_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    withdrawn_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class IpGrant(Base):
+    """IP の利用の許可(ADR-0059 4章)。チームか個人に出す。変えるときは取り消して新しく作る。"""
+
+    __tablename__ = "ip_grant"
+    __table_args__ = (
+        Index("ix_ip_grant_ip_id", "ip_id"),
+        Index("ix_ip_grant_team_id", "team_id"),
+        Index("ix_ip_grant_user_id", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    ip_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ip_property.id"), nullable=False)
+    team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("team.id"), nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    # 許す用途(契約の用途の一部)。
+    purposes: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
+    # 「入力に使う」。偽なら「見る」だけ。
+    can_use: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    granted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    granted_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    revoked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class AuditEvent(Base):
+    """証跡(ADR-0006、ADR-0059 7章)。Run に現れない操作の記録。追記のみ。"""
+
+    __tablename__ = "audit_event"
+    __table_args__ = (
+        Index("ix_audit_event_ip_id_occurred_at", "ip_id", "occurred_at"),
+        Index("ix_audit_event_occurred_at", "occurred_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    occurred_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 外部キーは張らない(IP を消すことは無いが、記録は何があっても残す)。
+    ip_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    target_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+    client_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class UserPreference(Base):

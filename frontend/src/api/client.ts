@@ -716,6 +716,102 @@ export function removeTeamMember(teamId: string, userId: string): Promise<void> 
   return request(`/api/teams/${teamId}/members/${userId}`, { method: 'DELETE' })
 }
 
+export type IpSettingsView = components['schemas']['IpSettingsView']
+export type IpSummary = components['schemas']['IpSummary']
+export type IpDetail = components['schemas']['IpDetail']
+export type IpTermsView = components['schemas']['IpTermsView']
+export type IpTermsInput = components['schemas']['IpTermsInput']
+export type IpMaterialItem = components['schemas']['IpMaterialItem']
+export type IpGrantView = components['schemas']['IpGrantView']
+export type IpGrantCreateRequest = components['schemas']['IpGrantCreateRequest']
+export type IpCreateRequest = components['schemas']['IpCreateRequest']
+export type IpTeamRef = components['schemas']['IpTeamRef']
+export type AuditEventView = components['schemas']['AuditEventView']
+export type IpState = IpSummary['state']
+
+function ipJson(method: string, body: unknown): RequestInit {
+  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+/** IP 素材(ADR-0059)が使えるか(認証モードで、管理者設定で有効)。 */
+export function getIpSettings(): Promise<IpSettingsView> {
+  return request('/api/ip/settings')
+}
+
+export function updateIpSettings(enabled: boolean): Promise<IpSettingsView> {
+  return request('/api/ip/settings', ipJson('PUT', { enabled }))
+}
+
+export function listIp(): Promise<{ items: IpSummary[] }> {
+  return request('/api/ip')
+}
+
+export function createIp(body: IpCreateRequest): Promise<IpDetail> {
+  return request('/api/ip', ipJson('POST', body))
+}
+
+export function getIp(ipId: string): Promise<IpDetail> {
+  return request(`/api/ip/${ipId}`)
+}
+
+export function setIpState(ipId: string, state: IpState): Promise<IpDetail> {
+  return request(`/api/ip/${ipId}/state`, ipJson('PUT', { state }))
+}
+
+export function listIpTerms(ipId: string): Promise<IpTermsView[]> {
+  return request(`/api/ip/${ipId}/terms`)
+}
+
+export function addIpTerms(ipId: string, body: IpTermsInput): Promise<IpDetail> {
+  return request(`/api/ip/${ipId}/terms`, ipJson('POST', body))
+}
+
+export function addIpManager(ipId: string, email: string): Promise<IpDetail> {
+  return request(`/api/ip/${ipId}/managers`, ipJson('POST', { email }))
+}
+
+export function removeIpManager(ipId: string, userId: string): Promise<void> {
+  return request(`/api/ip/${ipId}/managers/${userId}`, { method: 'DELETE' })
+}
+
+export function listIpMaterials(ipId: string): Promise<{ items: IpMaterialItem[] }> {
+  return request(`/api/ip/${ipId}/materials`)
+}
+
+export function addIpMaterial(ipId: string, file: File): Promise<IpMaterialItem> {
+  const form = new FormData()
+  form.append('file', file)
+  return request(`/api/ip/${ipId}/materials`, { method: 'POST', body: form })
+}
+
+export function withdrawIpMaterial(ipId: string, assetId: string): Promise<IpMaterialItem> {
+  return request(`/api/ip/${ipId}/materials/${assetId}/withdraw`, { method: 'POST' })
+}
+
+export function listIpGrants(ipId: string): Promise<{ items: IpGrantView[] }> {
+  return request(`/api/ip/${ipId}/grants`)
+}
+
+export function createIpGrant(ipId: string, body: IpGrantCreateRequest): Promise<{ items: IpGrantView[] }> {
+  return request(`/api/ip/${ipId}/grants`, ipJson('POST', body))
+}
+
+export function revokeIpGrant(ipId: string, grantId: string): Promise<{ items: IpGrantView[] }> {
+  return request(`/api/ip/${ipId}/grants/${grantId}/revoke`, { method: 'POST' })
+}
+
+export function listIpGrantTargets(ipId: string): Promise<IpTeamRef[]> {
+  return request(`/api/ip/${ipId}/grant-targets`)
+}
+
+export function listIpAudit(
+  ipId: string,
+  cursor: string | null,
+): Promise<{ items: AuditEventView[]; next_cursor?: string | null }> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+  return request(`/api/ip/${ipId}/audit${query}`)
+}
+
 export function getAsset(assetId: string): Promise<AssetDetail> {
   return request(`/api/assets/${assetId}`)
 }

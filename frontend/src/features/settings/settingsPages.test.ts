@@ -16,7 +16,7 @@ const ALL = { isAdmin: true, isOidc: true, sharingEnabled: true }
 
 describe('settingsToc / visibleSettingsPages', () => {
   it('管理者には管理者設定のページを ADR-0031 1章の順で出す', () => {
-    expect(settingsToc(ALL).admin).toEqual(['openai', 'llmConnections', 'annotation', 'tagDictionary', 'embeddings', 'assistant', 'regionDetection', 'groupNaming', 'comfyui', 'sdwebui', 'mcp', 'mods', 'shareLinks', 'authentication', 'teamsAdmin'])
+    expect(settingsToc(ALL).admin).toEqual(['openai', 'llmConnections', 'annotation', 'tagDictionary', 'embeddings', 'assistant', 'regionDetection', 'groupNaming', 'comfyui', 'sdwebui', 'mcp', 'mods', 'shareLinks', 'authentication', 'teamsAdmin', 'ipAdmin'])
   })
 
   it('非管理者には管理者設定のページを出さない(見出しごと隠せるよう空にする)', () => {
@@ -33,6 +33,7 @@ describe('settingsToc / visibleSettingsPages', () => {
     const pages = visibleSettingsPages({ isAdmin: true, isOidc: false, sharingEnabled: true })
     expect(pages).not.toContain('teams')
     expect(pages).not.toContain('teamsAdmin')
+    expect(pages).not.toContain('ipAdmin')
   })
 
   it('個人モードではプロフィールとアクセストークンを出さない', () => {

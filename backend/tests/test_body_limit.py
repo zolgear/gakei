@@ -430,6 +430,7 @@ def test_verdicts_handler_stops_reading_at_its_limit(
 # 既定の上限(`DEFAULT_BODY_LIMIT`)から広げた・狭めたルートと、その上限。
 _EXPECTED_LIMITS: dict[tuple[str, str], int] = {
     ("POST", "/api/assets"): MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD,
+    ("POST", "/api/ip/{ip_id}/materials"): MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/users/me/avatar"): MAX_AVATAR_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/search/similar-image"): MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD,
     ("POST", "/api/imports/lineage"): MAX_ZIP_BYTES + MULTIPART_OVERHEAD,
