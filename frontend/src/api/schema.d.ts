@@ -2918,6 +2918,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/{ip_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ip Report
+         * @description 期間の集計(担当者と管理者)。画面では実行者の名前を出す(組織の中の画面のため)。
+         */
+        get: operations["get_ip_report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/report/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Ip Report
+         * @description 権利者に渡す報告書(HTML)と、利用の1件ずつ(CSV)。書き出したことを証跡に残す。
+         */
+        get: operations["download_ip_report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/materials/destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Destroy Ip Materials
+         * @description 終了した IP の素材の原本と派生画像を消す(担当者と管理者。ADR-0059 9章)。記録は残す。
+         */
+        post: operations["destroy_ip_materials"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/{ip_id}/audit": {
         parameters: {
             query?: never;
@@ -6457,6 +6517,13 @@ export interface components {
             /** Items */
             items: components["schemas"]["IpDerivativeItem"][];
         };
+        /** IpDestroyResponse */
+        IpDestroyResponse: {
+            /** Destroyed */
+            destroyed: number;
+            /** Kept Shared */
+            kept_shared: number;
+        };
         /** IpDetail */
         IpDetail: {
             /**
@@ -6582,6 +6649,81 @@ export interface components {
             purposes: string[];
             /** Can Use */
             can_use: boolean;
+        };
+        /** IpReportCount */
+        IpReportCount: {
+            /** Key */
+            key: string;
+            /** Count */
+            count: number;
+        };
+        /** IpReportMaterial */
+        IpReportMaterial: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /** Withdrawn At */
+            withdrawn_at?: string | null;
+            /**
+             * Destroyed
+             * @default false
+             */
+            destroyed: boolean;
+            /** Use Count */
+            use_count: number;
+        };
+        /**
+         * IpReportView
+         * @description IP の状況のレポート(ADR-0059 8章)。画面に出す集計。
+         */
+        IpReportView: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Uses */
+            uses: number;
+            /** Uses Succeeded */
+            uses_succeeded: number;
+            /** Outputs */
+            outputs: number;
+            /** Derived */
+            derived: number;
+            /** Original Downloads */
+            original_downloads: number;
+            /** Detail Views */
+            detail_views: number;
+            /** Lineage Exports */
+            lineage_exports: number;
+            /** Denied */
+            denied: number;
+            /** By Purpose */
+            by_purpose: components["schemas"]["IpReportCount"][];
+            /** By Work Note */
+            by_work_note: components["schemas"]["IpReportCount"][];
+            /** By Grantee */
+            by_grantee: components["schemas"]["IpReportCount"][];
+            /** By User */
+            by_user: components["schemas"]["IpReportCount"][];
+            /** By Provider */
+            by_provider: components["schemas"]["IpReportCount"][];
+            /** Denied Reasons */
+            denied_reasons: components["schemas"]["IpReportCount"][];
+            /** Materials */
+            materials: components["schemas"]["IpReportMaterial"][];
         };
         /** IpSettingsUpdateRequest */
         IpSettingsUpdateRequest: {
@@ -17339,6 +17481,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDerivativeListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_report: {
+        parameters: {
+            query?: {
+                /** @description 期間の開始(既定は IP を作った日) */
+                start?: string | null;
+                /** @description 期間の終了(既定は今日) */
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpReportView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_ip_report: {
+        parameters: {
+            query?: {
+                format?: "html" | "csv";
+                start?: string | null;
+                end?: string | null;
+                /** @description 実行者の名前を入れる(既定は入れない) */
+                include_names?: boolean;
+            };
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    destroy_ip_materials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDestroyResponse"];
                 };
             };
             /** @description Validation Error */

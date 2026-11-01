@@ -4100,7 +4100,8 @@
       "grants": "許可",
       "managers": "担当者",
       "audit": "証跡",
-      "derivatives": "派生物"
+      "derivatives": "派生物",
+      "report": "レポート"
     },
     "addMaterials": "素材を取り込む",
     "uploading": "取り込み中…",
@@ -4167,7 +4168,10 @@
       "ip.grant_revoke": "許可を取り消し",
       "asset.view_detail": "素材の詳細を表示",
       "asset.download_original": "原本を取得",
-      "ip.denied": "拒否"
+      "ip.denied": "拒否",
+      "export.ip_report": "レポートを書き出し",
+      "export.lineage": "系列を書き出し",
+      "ip.material_destroy": "素材を破棄"
     },
     "admin": {
       "intro": "預かった版権の素材を、許可した人だけが、許可した用途に使えるようにします。認証モードのときだけ使えます。",
@@ -4192,6 +4196,33 @@
     "otherIps": "ほかの IP {count}",
     "assetSection": "IP",
     "materialBadge": "素材",
-    "markLabel": "IP 素材から作った画像"
+    "markLabel": "IP 素材から作った画像",
+    "destroyMaterials": "素材の原本を破棄",
+    "destroyConfirm": "「{name}」の素材の原本と縮小画像を消します。記録は残ります。元に戻せません。",
+    "destroyedCount": "{count} 件を破棄しました(ほかの画像と共有していて残したもの {kept} 件)",
+    "report": {
+      "downloadHtml": "報告書(HTML)",
+      "downloadCsv": "CSV",
+      "includeNames": "実行者の名前を入れる",
+      "failed": "レポートを作れませんでした",
+      "none": "なし",
+      "uses": "利用",
+      "usesSucceeded": "うち成功",
+      "outputs": "作られた画像",
+      "derived": "派生物",
+      "originalDownloads": "原本の取得",
+      "detailViews": "素材の詳細の表示",
+      "lineageExports": "系列の書き出し",
+      "denied": "拒否",
+      "byPurpose": "用途別",
+      "byWorkNote": "作業のメモ別",
+      "noWorkNote": "(メモなし)",
+      "byGrantee": "許可の先別",
+      "byUser": "実行者別",
+      "byProvider": "送り先別",
+      "deniedReasons": "拒否の理由",
+      "materials": "素材ごとの利用",
+      "destroyed": "破棄"
+    }
   }
 }

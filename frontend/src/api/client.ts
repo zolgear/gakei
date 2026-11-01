@@ -816,6 +816,35 @@ export function listIpDerivatives(ipId: string): Promise<{ items: IpDerivativeIt
   return request(`/api/ip/${ipId}/derivatives`)
 }
 
+export type IpReportView = components['schemas']['IpReportView']
+
+export function getIpReport(ipId: string, start: string | null, end: string | null): Promise<IpReportView> {
+  const params = new URLSearchParams()
+  if (start) params.set('start', start)
+  if (end) params.set('end', end)
+  const query = params.toString()
+  return request(`/api/ip/${ipId}/report${query ? `?${query}` : ''}`)
+}
+
+/** 報告書(HTML)と CSV のダウンロードの URL(ADR-0059 8章)。リンクで開く。 */
+export function ipReportDownloadUrl(
+  ipId: string,
+  format: 'html' | 'csv',
+  start: string | null,
+  end: string | null,
+  includeNames: boolean,
+): string {
+  const params = new URLSearchParams({ format })
+  if (start) params.set('start', start)
+  if (end) params.set('end', end)
+  if (includeNames) params.set('include_names', 'true')
+  return `/api/ip/${ipId}/report/download?${params.toString()}`
+}
+
+export function destroyIpMaterials(ipId: string): Promise<{ destroyed: number; kept_shared: number }> {
+  return request(`/api/ip/${ipId}/materials/destroy`, { method: 'POST' })
+}
+
 export function listIpAudit(
   ipId: string,
   cursor: string | null,

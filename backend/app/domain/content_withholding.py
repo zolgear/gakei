@@ -400,11 +400,18 @@ def purge_leftovers(db: Session, store: AssetStore) -> int:
 
 
 def find_withheld_twin(db: Session, sha256: str) -> Asset | None:
-    """同じ内容で、画像を残さなかった Asset(後から同じ内容を取り込んだときに使う)。"""
+    """同じ内容で、画像を残さなかった Asset(後から同じ内容を取り込んだときに使う)。破棄した
+    IP 素材(ADR-0059 9章)は契約による破棄で内容の判定ではないので、ほかの Asset に及ぼさない。"""
+    from app.domain.models import IpMaterial
+
     return (
         db.execute(
             select(Asset)
-            .where(Asset.sha256 == sha256, Asset.content_withheld_at.is_not(None))
+            .where(
+                Asset.sha256 == sha256,
+                Asset.content_withheld_at.is_not(None),
+                Asset.id.not_in(select(IpMaterial.asset_id)),
+            )
             .order_by(Asset.content_withheld_at.asc(), Asset.id.asc())
             .limit(1)
         )

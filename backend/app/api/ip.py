@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
@@ -33,9 +34,10 @@ from app.deps import (
     get_settings,
     get_store,
 )
-from app.domain import audit, ingest_hooks, ip_settings, ip_usage
+from app.domain import audit, ingest_hooks, ip_reports, ip_settings, ip_usage
 from app.domain import ip_materials as domain
 from app.domain.assets import MAX_UPLOAD_BYTES, IngestError, ingest
+from app.domain.content_withholding import purge
 from app.domain.models import (
     AppUser,
     Asset,
@@ -52,6 +54,7 @@ from app.domain.schemas import (
     IpCreateRequest,
     IpDerivativeItem,
     IpDerivativeListResponse,
+    IpDestroyResponse,
     IpDetail,
     IpGrantCreateRequest,
     IpGrantListResponse,
@@ -61,6 +64,9 @@ from app.domain.schemas import (
     IpMaterialItem,
     IpMaterialListResponse,
     IpMyAccess,
+    IpReportCount,
+    IpReportMaterial,
+    IpReportView,
     IpSettingsUpdateRequest,
     IpSettingsView,
     IpStateRequest,
@@ -891,6 +897,171 @@ def list_ip_derivatives(
             for asset in rows
         ]
     )
+
+
+# -- レポートと破棄(ADR-0059 8章・9章) ----------------------------------------------------
+
+
+def _report(
+    db: Session,
+    user: CurrentUser,
+    ip_id: uuid.UUID,
+    start: date | None,
+    end: date | None,
+    include_names: bool,
+) -> tuple[IpProperty, ip_reports.IpReport]:
+    ip = _visible(db, user, ip_id)
+    _require_manage(db, user, ip)
+    default_start, default_end = ip_reports.default_period(ip)
+    try:
+        report = ip_reports.build_report(
+            db, ip, start or default_start, end or default_end, include_names=include_names
+        )
+    except ip_reports.IpReportPeriodError as exc:
+        raise HTTPException(status_code=422, detail=t("ip.invalidPeriod")) from exc
+    return ip, report
+
+
+def _counts(counter, empty: str = "") -> list[IpReportCount]:  # noqa: ANN001
+    return [IpReportCount(key=key or empty, count=count) for key, count in counter.most_common()]
+
+
+@router.get(
+    "/{ip_id}/report",
+    response_model=IpReportView,
+    operation_id="get_ip_report",
+    dependencies=_available_dep,
+)
+def get_ip_report(
+    ip_id: uuid.UUID,
+    start: date | None = Query(default=None, description="期間の開始(既定は IP を作った日)"),
+    end: date | None = Query(default=None, description="期間の終了(既定は今日)"),
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> IpReportView:
+    """期間の集計(担当者と管理者)。画面では実行者の名前を出す(組織の中の画面のため)。"""
+    _ip, report = _report(db, user, ip_id, start, end, include_names=True)
+    return IpReportView(
+        start=report.start,
+        end=report.end,
+        uses=len(report.uses),
+        uses_succeeded=sum(1 for u in report.uses if u.status == "succeeded"),
+        outputs=sum(u.output_count for u in report.uses),
+        derived=report.derived_count,
+        original_downloads=report.actions.get("asset.download_original", 0),
+        detail_views=report.actions.get("asset.view_detail", 0),
+        lineage_exports=report.actions.get("export.lineage", 0),
+        denied=report.actions.get("ip.denied", 0),
+        by_purpose=_counts(report.counter("purpose")),
+        by_work_note=_counts(report.counter("work_note")),
+        by_grantee=_counts(report.counter("grantee")),
+        by_user=_counts(report.counter("user")),
+        by_provider=_counts(report.counter("provider")),
+        denied_reasons=[
+            IpReportCount(key=t(key, name=_ip.name) if key.startswith("ip.") else key, count=count)
+            for key, count in report.denied_reasons.most_common()
+        ],
+        materials=[
+            IpReportMaterial(
+                asset_id=m.asset_id,
+                added_at=m.added_at,
+                withdrawn_at=m.withdrawn_at,
+                destroyed=m.destroyed,
+                use_count=m.use_count,
+            )
+            for m in report.materials
+        ],
+    )
+
+
+@router.get(
+    "/{ip_id}/report/download",
+    operation_id="download_ip_report",
+    dependencies=_available_dep,
+    response_class=Response,
+    responses={200: {"content": {"text/html": {}, "text/csv": {}}}},
+)
+def download_ip_report(
+    ip_id: uuid.UUID,
+    request: Request,
+    format: Literal["html", "csv"] = Query(default="html"),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    include_names: bool = Query(default=False, description="実行者の名前を入れる(既定は入れない)"),
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> Response:
+    """権利者に渡す報告書(HTML)と、利用の1件ずつ(CSV)。書き出したことを証跡に残す。"""
+    ip, report = _report(db, user, ip_id, start, end, include_names=include_names)
+    audit.record_now(
+        db,
+        user,
+        "export.ip_report",
+        ip_id=ip.id,
+        target_type="ip",
+        target_id=ip.id,
+        detail={
+            "format": format,
+            "start": report.start.isoformat(),
+            "end": report.end.isoformat(),
+            "include_names": include_names,
+        },
+        request=request,
+    )
+    stem = f"gakei-ip-report-{report.start:%Y%m%d}-{report.end:%Y%m%d}"
+    if format == "csv":
+        body = "\ufeff" + ip_reports.report_csv(report)
+        media = "text/csv; charset=utf-8"
+        name = f"{stem}.csv"
+    else:
+        body = ip_reports.report_html(report)
+        media = "text/html; charset=utf-8"
+        name = f"{stem}.html"
+    return Response(
+        content=body.encode("utf-8"),
+        media_type=media,
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post(
+    "/{ip_id}/materials/destroy",
+    response_model=IpDestroyResponse,
+    operation_id="destroy_ip_materials",
+    dependencies=_available_dep,
+)
+def destroy_ip_materials(
+    ip_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_session),
+    store: AssetStore = Depends(get_store),
+    user: CurrentUser = Depends(require_user),
+) -> IpDestroyResponse:
+    """終了した IP の素材の原本と派生画像を消す(担当者と管理者。ADR-0059 9章)。記録は残す。"""
+    ip = _visible(db, user, ip_id)
+    _require_manage(db, user, ip)
+    if ip.state != "terminated":
+        raise HTTPException(status_code=409, detail=t("ip.destroyRequiresTermination"))
+    result = ip_reports.destroy_materials(db, ip)
+    audit.record(
+        db,
+        user,
+        "ip.material_destroy",
+        ip_id=ip.id,
+        target_type="ip",
+        target_id=ip.id,
+        detail={
+            "asset_ids": [str(a) for a in result.asset_ids],
+            "kept_shared": [str(a) for a in result.kept_shared],
+        },
+        request=request,
+    )
+    db.commit()
+    purge(store, result.targets)
+    return IpDestroyResponse(destroyed=len(result.asset_ids), kept_shared=len(result.kept_shared))
 
 
 # -- 証跡 -----------------------------------------------------------------------------------

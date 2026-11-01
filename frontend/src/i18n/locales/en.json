@@ -4100,7 +4100,8 @@
       "grants": "Grants",
       "managers": "Managers",
       "audit": "Audit log",
-      "derivatives": "Derivatives"
+      "derivatives": "Derivatives",
+      "report": "Report"
     },
     "addMaterials": "Add materials",
     "uploading": "Uploading…",
@@ -4167,7 +4168,10 @@
       "ip.grant_revoke": "Grant revoked",
       "asset.view_detail": "Material detail viewed",
       "asset.download_original": "Original downloaded",
-      "ip.denied": "Denied"
+      "ip.denied": "Denied",
+      "export.ip_report": "Report exported",
+      "export.lineage": "Lineage exported",
+      "ip.material_destroy": "Materials destroyed"
     },
     "admin": {
       "intro": "Let only granted people use entrusted copyrighted materials, and only for permitted purposes. Available in authentication mode only.",
@@ -4192,6 +4196,33 @@
     "otherIps": "+{count} other IPs",
     "assetSection": "IP",
     "materialBadge": "Material",
-    "markLabel": "Made from IP materials"
+    "markLabel": "Made from IP materials",
+    "destroyMaterials": "Destroy material originals",
+    "destroyConfirm": "Delete the originals and previews of the materials of \"{name}\". Records remain. This cannot be undone.",
+    "destroyedCount": "Destroyed {count} (kept {kept} shared with other images)",
+    "report": {
+      "downloadHtml": "Report (HTML)",
+      "downloadCsv": "CSV",
+      "includeNames": "Include names",
+      "failed": "Could not build the report",
+      "none": "None",
+      "uses": "Uses",
+      "usesSucceeded": "Succeeded",
+      "outputs": "Images produced",
+      "derived": "Derivatives",
+      "originalDownloads": "Original downloads",
+      "detailViews": "Material views",
+      "lineageExports": "Lineage exports",
+      "denied": "Denied",
+      "byPurpose": "By purpose",
+      "byWorkNote": "By work note",
+      "noWorkNote": "(no note)",
+      "byGrantee": "By grantee",
+      "byUser": "By person",
+      "byProvider": "By destination",
+      "deniedReasons": "Denial reasons",
+      "materials": "Uses per material",
+      "destroyed": "Destroyed"
+    }
   }
 }

@@ -522,3 +522,61 @@
   border-color: var(--color-warning, var(--color-accent));
   color: var(--color-warning, var(--color-accent));
 }
+
+/* レポート(ADR-0059 8章) */
+.reportSummary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.statValue {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.reportGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.countRow {
+  display: contents;
+}
+
+.countRow dd {
+  text-align: right;
+}
+
+/* ページは高さを決めてスクロールするので、中身が多くても見出しやタブを縮めない。 */
+.page > * {
+  flex-shrink: 0;
+}
+
+/* レポートの件数の並び。狭い幅でも「名前 | 件数」の2列のまま。 */
+.countList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.countList dt {
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.countList dd {
+  margin: 0;
+}
