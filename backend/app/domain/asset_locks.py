@@ -16,7 +16,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import ColumnElement, Select, and_, exists, select
+from sqlalchemy import ColumnElement, Select, and_, case, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -148,31 +148,39 @@ def run_is_protected(db: Session, run_id: uuid.UUID) -> bool:
 
 
 def bulk_lock_states(db: Session, asset_ids: list[uuid.UUID]) -> dict[uuid.UUID, LockState]:
-    """`asset_ids` のうち、ロックが付いているか守られているもの(1回ずつの問い合わせ)。"""
+    """`asset_ids` のうち、ロックが付いているか守られているもの(1回の問い合わせ)。守る範囲には
+    ロックした画像そのものも入っているので、範囲の行からどちらも分かる。"""
     if not asset_ids:
         return {}
-    locked = set(
-        db.execute(
-            select(AssetLock.asset_id).where(
-                AssetLock.asset_id.in_(asset_ids), AssetLock.unlocked_at.is_(None)
-            )
+    rows = db.execute(
+        select(AssetLockScope.asset_id, AssetLock.asset_id)
+        .join(AssetLock, AssetLock.id == AssetLockScope.lock_id)
+        .where(AssetLockScope.asset_id.in_(asset_ids), AssetLock.unlocked_at.is_(None))
+    ).all()
+    states: dict[uuid.UUID, LockState] = {}
+    for scope_asset_id, locked_asset_id in rows:
+        locked = scope_asset_id == locked_asset_id or (
+            scope_asset_id in states and states[scope_asset_id].locked
         )
-        .scalars()
-        .all()
-    )
-    protected = set(
-        db.execute(
-            select(AssetLockScope.asset_id)
-            .join(AssetLock, AssetLock.id == AssetLockScope.lock_id)
-            .where(AssetLockScope.asset_id.in_(asset_ids), AssetLock.unlocked_at.is_(None))
+        states[scope_asset_id] = LockState(locked=locked, protected=True)
+    return states
+
+
+def lock_state_subquery():  # noqa: ANN201
+    """Asset ごとのロックの状態(`asset_id`、`locked` は 1 か 0)。外部結合して、行が無ければ
+    守られていない、行があれば守られている(一覧の問い合わせを増やさないため)。"""
+    return (
+        select(
+            AssetLockScope.asset_id.label("asset_id"),
+            func.max(case((AssetLock.asset_id == AssetLockScope.asset_id, 1), else_=0)).label(
+                "locked"
+            ),
         )
-        .scalars()
-        .all()
+        .join(AssetLock, AssetLock.id == AssetLockScope.lock_id)
+        .where(AssetLock.unlocked_at.is_(None))
+        .group_by(AssetLockScope.asset_id)
+        .subquery()
     )
-    return {
-        asset_id: LockState(locked=asset_id in locked, protected=True)
-        for asset_id in protected | locked
-    }
 
 
 def active_lock(db: Session, asset_id: uuid.UUID) -> AssetLock | None:

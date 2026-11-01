@@ -103,6 +103,7 @@ def bulk_output_refs(
     condition = Asset.produced_by_run_id.in_(run_ids)
     if exclude_deleted:
         condition = condition & Asset.deleted_at.is_(None)
+    locks = asset_locks.lock_state_subquery()
     query = (
         select(
             Asset.produced_by_run_id,
@@ -116,18 +117,19 @@ def bulk_output_refs(
             Asset.width,
             Asset.height,
             (AssetMark.id if viewer is not None else literal(None)).label("mark_id"),
+            locks.c.locked,
         )
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         # サムネイルの焦点(ADR-0043)とレーティング(ADR-0049)も同じ問い合わせで引く。
         .outerjoin(AssetFocalPoint, AssetFocalPoint.asset_id == Asset.id)
         .outerjoin(AssetContentRating, AssetContentRating.asset_id == Asset.id)
+        # ロック(ADR-0060)。行が無ければ守られていない。
+        .outerjoin(locks, locks.c.asset_id == Asset.id)
     )
     if viewer is not None:
         # お気に入り(ADR-0055)。1つの Asset に1人の行は1つだけなので、行は増えない。
         query = query.outerjoin(AssetMark, favorites.favorite_join_condition(viewer))
     rows = db.execute(query.where(condition).order_by(Asset.output_index)).all()
-    # ロック(ADR-0060)。出力の数だけの IN 句で、1回ずつ引く。
-    locks = asset_locks.bulk_lock_states(db, [row[1] for row in rows])
     for (
         produced_by_run_id,
         asset_id,
@@ -140,6 +142,7 @@ def bulk_output_refs(
         width,
         height,
         mark_id,
+        locked,
     ) in rows:
         result[produced_by_run_id].append(
             RunOutputRef(
@@ -152,8 +155,8 @@ def bulk_output_refs(
                 width=width,
                 height=height,
                 favorite=mark_id is not None,
-                locked=asset_id in locks and locks[asset_id].locked,
-                lock_protected=asset_id in locks,
+                locked=bool(locked),
+                lock_protected=locked is not None,
             )
         )
     return result
