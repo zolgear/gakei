@@ -1085,6 +1085,36 @@ class IpGrant(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
 
+class AssetIpLineage(Base):
+    """Asset が引き継ぐ IP(ADR-0059 6章)。素材そのものと、素材から作った画像(孫の世代も)。
+    Asset を作るときに書き、後から変えない(来歴は追記のみなので、引き継ぐ IP も変わらない)。"""
+
+    __tablename__ = "asset_ip_lineage"
+    __table_args__ = (Index("ix_asset_ip_lineage_ip_id", "ip_id"),)
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
+    ip_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ip_property.id"), primary_key=True)
+
+
+class RunIpUse(Base):
+    """Run の IP の利用の申告(ADR-0059 5章)。入力が引き継ぐ IP ごとに1行。追記のみ。"""
+
+    __tablename__ = "run_ip_use"
+    __table_args__ = (
+        Index("ix_run_ip_use_run_id", "run_id"),
+        Index("ix_run_ip_use_ip_id_created_at", "ip_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("run.id"), nullable=False)
+    ip_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ip_property.id"), nullable=False)
+    terms_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ip_terms.id"), nullable=False)
+    grant_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ip_grant.id"), nullable=False)
+    purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    work_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
 class AuditEvent(Base):
     """証跡(ADR-0006、ADR-0059 7章)。Run に現れない操作の記録。追記のみ。"""
 

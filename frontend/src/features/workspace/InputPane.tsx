@@ -59,6 +59,7 @@ import { PromptToolsRow } from './PromptToolsRow'
 import { LoraPickerButton } from '../sdwebui/LoraPickerButton'
 import { ImportNoticePanel } from '../sdwebui/ImportNoticePanel'
 import { FormSettingsMenu } from './FormSettingsMenu'
+import { IpDeclarationPanel } from '../ip/IpDeclarationPanel'
 import { PromptTemplateForm } from '../prompt-templates/PromptTemplateForm'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
@@ -413,6 +414,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
   if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
+  // IP の利用の申告(ADR-0059 5章)。用途を選んでいない・使えない理由。
+  if (form.ipDeclaration.blockReason) blockReasons.push(form.ipDeclaration.blockReason)
   if (form.inputsBlockReason) blockReasons.push(form.inputsBlockReason)
   if (form.inputCountRequirementReason) blockReasons.push(form.inputCountRequirementReason)
   if (form.providerUnavailableReason) blockReasons.push(form.providerUnavailableReason)
@@ -619,13 +622,17 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   )
 
   const notices = (
-    <InputPaneNotices
-      submittedNotice={submittedNotice}
-      droppedParamsNotice={form.droppedParamsNotice}
-      regionsNotice={form.regionsNotice}
-      blockReasons={blockReasons}
-      submitError={form.submitError}
-    />
+    <>
+      {/* IP の利用の申告(ADR-0059 5章)。入力に IP 素材か派生物があるときだけ出る。 */}
+      <IpDeclarationPanel declaration={form.ipDeclaration} />
+      <InputPaneNotices
+        submittedNotice={submittedNotice}
+        droppedParamsNotice={form.droppedParamsNotice}
+        regionsNotice={form.regionsNotice}
+        blockReasons={blockReasons}
+        submitError={form.submitError}
+      />
+    </>
   )
 
   const modelField = (

@@ -31,6 +31,7 @@ import { responsiveThumbProps } from '../../lib/derivedSrcSet'
 import { stockTileSizes } from './stockTileSizes'
 import { stockTileActions, stockTilePixelSize } from './stockTileActions'
 import { LockMark } from '../lock/LockMark'
+import { IpMark } from '../ip/IpMark'
 import styles from './StockTile.module.css'
 
 interface StockTileProps {
@@ -117,6 +118,7 @@ export function StockTile({
 
       <AssetKindRibbon kind={asset.kind} imported={imported} />
       {asset.locked && <LockMark className={styles.lockMark} />}
+      {asset.ip_marked && <IpMark className={styles.ipMark} />}
 
       {!selectionMode && (
         <button

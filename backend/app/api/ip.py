@@ -33,14 +33,25 @@ from app.deps import (
     get_settings,
     get_store,
 )
-from app.domain import audit, ingest_hooks, ip_settings
+from app.domain import audit, ingest_hooks, ip_settings, ip_usage
 from app.domain import ip_materials as domain
 from app.domain.assets import MAX_UPLOAD_BYTES, IngestError, ingest
-from app.domain.models import AppUser, AssetKind, AuditEvent, IpProperty, IpTerms, Team
+from app.domain.models import (
+    AppUser,
+    Asset,
+    AssetIpLineage,
+    AssetKind,
+    AuditEvent,
+    IpProperty,
+    IpTerms,
+    Team,
+)
 from app.domain.schemas import (
     AuditEventListResponse,
     AuditEventView,
     IpCreateRequest,
+    IpDerivativeItem,
+    IpDerivativeListResponse,
     IpDetail,
     IpGrantCreateRequest,
     IpGrantListResponse,
@@ -58,9 +69,13 @@ from app.domain.schemas import (
     IpTermsInput,
     IpTermsView,
     IpUpdateRequest,
+    IpUsageCheckRequest,
+    IpUsageCheckResponse,
+    IpUsageIp,
     IpUserRef,
 )
 from app.domain.storage import AssetStore
+from app.domain.visibility import asset_visible, get_readable_asset
 from app.http_body_limit import read_file_limited
 from app.i18n import t
 from app.mods.gate import ingest_gate
@@ -779,6 +794,103 @@ def list_ip_grant_targets(
         select(Team.id, Team.name).where(Team.deleted_at.is_(None)).order_by(Team.name, Team.id)
     ).all()
     return [IpTeamRef(id=team_id, name=name) for team_id, name in rows]
+
+
+# -- 使うとき(ADR-0059 5章・6章) ----------------------------------------------------------
+
+
+@router.post(
+    "/usage-check",
+    response_model=IpUsageCheckResponse,
+    operation_id="check_ip_usage",
+    dependencies=_available_dep,
+)
+def check_ip_usage(
+    body: IpUsageCheckRequest,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> IpUsageCheckResponse:
+    """入力にする画像が IP を引き継ぐか、申告で選べる用途、使えない理由(生成のフォーム用)。"""
+    locality = (
+        ip_usage.run_locality(db, None, body.provider, body.model or "")
+        if body.provider
+        else "external"
+    )
+    # 読めない画像は数えない(見えない画像の IP の名前を明かさない)。
+    readable = [a for a in body.asset_ids if get_readable_asset(db, user, a) is not None]
+    required, items, purposes = ip_usage.usage_summary(db, user, readable, locality=locality)
+    return IpUsageCheckResponse(
+        required=required,
+        ips=[
+            IpUsageIp(
+                id=item.ip.id,
+                name=item.ip.name,
+                notes=item.terms.notes if item.terms else None,
+                external_ai=item.terms.external_ai if item.terms else None,  # type: ignore[arg-type]
+                purposes=item.purposes,
+                problem=t(item.problem, name=item.ip.name) if item.problem else None,
+            )
+            for item in items
+        ],
+        purposes=purposes,
+    )
+
+
+@router.get(
+    "/{ip_id}/derivatives",
+    response_model=IpDerivativeListResponse,
+    operation_id="list_ip_derivatives",
+    dependencies=_available_dep,
+)
+def list_ip_derivatives(
+    ip_id: uuid.UUID,
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> IpDerivativeListResponse:
+    """この IP の派生物(新しい順)。担当者と管理者にはすべて、ほかの人には読めるものと自分のもの。
+    ほかの IP も引き継ぐものには、その数を付ける(混入・掛け合わせの印)。"""
+    ip = _visible(db, user, ip_id)
+    query = (
+        select(Asset)
+        .join(AssetIpLineage, AssetIpLineage.asset_id == Asset.id)
+        .where(
+            AssetIpLineage.ip_id == ip.id,
+            Asset.deleted_at.is_(None),
+            Asset.id.not_in(domain.material_asset_ids()),
+        )
+    )
+    if not domain.can_manage(db, user, ip):
+        query = query.where(
+            or_(asset_visible(user), ip_usage.readable_derived_condition(user, Asset.id))
+        )
+    rows = list(
+        db.execute(query.order_by(Asset.created_at.desc(), Asset.id.desc()).limit(limit))
+        .scalars()
+        .all()
+    )
+    ip_map = ip_usage.ip_ids_of(db, [a.id for a in rows])
+    creators = {
+        u.id: (u.name or u.email)
+        for u in db.execute(
+            select(AppUser).where(
+                AppUser.id.in_({a.created_by_user_id for a in rows if a.created_by_user_id})
+            )
+        ).scalars()
+    }
+    return IpDerivativeListResponse(
+        items=[
+            IpDerivativeItem(
+                asset=_to_summary(asset, ip_marked=True),
+                created_at=asset.created_at,
+                created_by_name=creators.get(asset.created_by_user_id)
+                if asset.created_by_user_id
+                else None,
+                other_ip_count=len(ip_map.get(asset.id, set()) - {ip.id}),
+            )
+            for asset in rows
+        ]
+    )
 
 
 # -- 証跡 -----------------------------------------------------------------------------------

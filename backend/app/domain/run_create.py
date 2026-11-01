@@ -20,14 +20,14 @@ from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.domain import api_key as api_key_domain
 from app.domain import assets as assets_domain
-from app.domain import content_withholding, prompt_templates, sizes
+from app.domain import audit, content_withholding, ip_usage, prompt_templates, sizes
 from app.domain import regions as regions_domain
 from app.domain.models import Asset, AssetKind, Run, RunInput, RunInputRole, RunStatus
 from app.domain.run_validation import RunInputMeta, RunValidationError, validate_run_request
 from app.domain.schemas import RunCreateRequest
 from app.domain.storage import AssetStore
 from app.domain.visibility import (
-    get_visible_asset,
+    get_readable_asset,
     get_visible_group,
     get_visible_prompt_template,
 )
@@ -137,7 +137,8 @@ def create_runs(
     # AI へ送らない)。見える Asset だけを確かめる(見えないものは下で「無い」と同じ扱い)。
     blocked = content_withholding.blocked_asset_ids(db, [item.asset_id for item in body.inputs])
     for item in body.inputs:
-        asset = get_visible_asset(db, viewer, item.asset_id)
+        # 許可を受けた IP 素材と派生物も入力にできる(使ってよいかは下の IP の検査で確かめる)。
+        asset = get_readable_asset(db, viewer, item.asset_id)
         if asset is None or asset.deleted_at is not None:
             raise RunCreateError("invalid", t("runs.assetNotFound", id=item.asset_id))
         if asset.id in blocked:
@@ -185,6 +186,43 @@ def create_runs(
             input_metas = [*input_metas, *plan.extra_metas]
             prompts = [prompt + plan.appended_text for prompt in prompts]
             operation = plan.operation
+
+    # ADR-0059 5章: IP を引き継ぐ入力(四角の参照画像を含む)があれば、申告と許可と契約の条件を
+    # 確かめる。断ったことは証跡に残す。
+    ip_input_ids = [item.asset_id for item in body.inputs]
+    if plan is not None:
+        ip_input_ids += [asset_id for asset_id, _position in plan.reference_inputs]
+    declaration = (
+        ip_usage.normalize_declaration(body.ip_use.purpose, body.ip_use.work_note)
+        if body.ip_use is not None
+        else None
+    )
+    try:
+        ip_plans = ip_usage.plan_use(
+            db,
+            viewer,
+            ip_input_ids,
+            declaration,
+            locality=ip_usage.run_locality(db, settings, provider_name, body.model),
+        )
+    except ip_usage.IpUseError as e:
+        db.rollback()
+        audit.record_now(
+            db,
+            viewer,
+            "ip.denied",
+            ip_id=e.ip_id,
+            target_type="run_request",
+            detail={
+                "reason": e.key,
+                "provider": provider_name,
+                "model": body.model,
+                "purpose": declaration.purpose if declaration else None,
+                "inputs": [str(i) for i in ip_input_ids],
+            },
+        )
+        kind: RunCreateErrorKind = "invalid" if e.key == "ip.declarationRequired" else "conflict"
+        raise RunCreateError(kind, t(e.key, **e.params)) from e
 
     for index in range(repeat):
         try:
@@ -285,6 +323,8 @@ def create_runs(
                     run_id=run.id, asset_id=asset_id, role=RunInputRole.IMAGE, position=position
                 )
             )
+        # IP の利用の申告(ADR-0059 5章)。追記のみ。
+        ip_usage.record_use(db, run.id, ip_plans, declaration)
         runs.append(run)
 
     db.commit()
@@ -420,7 +460,7 @@ def _load_reference_assets(
     blocked = content_withholding.blocked_asset_ids(db, reference_ids)
     reference_assets: list[Asset] = []
     for ref in reference_ids:
-        asset = get_visible_asset(db, viewer, ref)
+        asset = get_readable_asset(db, viewer, ref)
         if asset is None or asset.deleted_at is not None or asset.kind == AssetKind.MASK:
             raise RunCreateError("invalid", t("runs.assetNotFound", id=ref))
         if asset.id in blocked:

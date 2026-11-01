@@ -192,6 +192,59 @@ def _blocked_input_message(session_factory: sessionmaker, run_id: uuid.UUID) -> 
         return t("mods.inputDenied", id=first)
 
 
+def _ip_denied_message(session_factory: sessionmaker, run_id: uuid.UUID) -> str | None:
+    """IP 素材と派生物の入力を、実行する直前にもう一度確かめる(ADR-0059 5章。Run を作った後に
+    許可が切れた・取り消された・IP が止まった場合)。使えなければ理由の文を返し、証跡に残す。"""
+    from app.auth.identity import CurrentUser
+    from app.domain import audit, ip_usage
+    from app.domain.models import AppUser
+
+    with session_factory() as session:
+        run = session.get(Run, run_id)
+        if run is None:
+            return None
+        input_ids = list(
+            session.execute(select(RunInput.asset_id).where(RunInput.run_id == run_id))
+            .scalars()
+            .all()
+        )
+        if not ip_usage.ip_ids_of(session, input_ids):
+            return None
+        app_user = session.get(AppUser, run.created_by_user_id) if run.created_by_user_id else None
+        viewer = (
+            CurrentUser(
+                id=app_user.id,
+                name=app_user.name,
+                email=app_user.email,
+                role=app_user.role,  # type: ignore[arg-type]
+            )
+            if app_user is not None
+            else None
+        )
+        try:
+            if viewer is None:
+                raise ip_usage.IpUseError("ip.noGrant", name="")
+            ip_usage.plan_use(
+                session,
+                viewer,
+                input_ids,
+                ip_usage.declaration_of_run(session, run_id),
+                locality=ip_usage.run_locality(session, None, run.provider, run.model),
+            )
+        except ip_usage.IpUseError as e:
+            audit.record_now(
+                session,
+                viewer,
+                "ip.denied",
+                ip_id=e.ip_id,
+                target_type="run",
+                target_id=run_id,
+                detail={"reason": e.key, "at": "execute"},
+            )
+            return t(e.key, **e.params)
+        return None
+
+
 def _save_partial(partial_dir: Path, index: int, data: bytes) -> None:
     partial_dir.mkdir(parents=True, exist_ok=True)
     (partial_dir / f"{index}.png").write_bytes(data)
@@ -528,6 +581,11 @@ class Runner:
             blocked = await asyncio.to_thread(_blocked_input_message, self.session_factory, run.id)
             if blocked is not None:
                 await self._mark_failed(run.id, "hook_denied", blocked, None)
+                return
+            # ADR-0059 5章: IP の入力は、実行の直前にも許可と条件を確かめる。
+            ip_denied = await asyncio.to_thread(_ip_denied_message, self.session_factory, run.id)
+            if ip_denied is not None:
+                await self._mark_failed(run.id, "ip_denied", ip_denied, None)
                 return
             # 入力読み込み・実行・出力の ingest のどこで失敗しても failed として記録する。
             inputs = await asyncio.to_thread(_load_inputs, self.session_factory, self.store, run.id)

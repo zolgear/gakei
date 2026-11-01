@@ -4099,7 +4099,8 @@
       "terms": "Terms",
       "grants": "Grants",
       "managers": "Managers",
-      "audit": "Audit log"
+      "audit": "Audit log",
+      "derivatives": "Derivatives"
     },
     "addMaterials": "Add materials",
     "uploading": "Uploading…",
@@ -4176,6 +4177,21 @@
       "ownerKind": "Owner",
       "rightsHolder": "Rights holder",
       "createButton": "Create"
-    }
+    },
+    "declaration": {
+      "heading": "IP use declaration",
+      "purpose": "Purpose",
+      "purposePlaceholder": "Choose a purpose",
+      "workNote": "Work note",
+      "workNotePlaceholder": "Project, order, etc. (optional)",
+      "choosePurpose": "Choose a purpose to use the IP materials",
+      "noCommonPurpose": "No purpose is permitted for all IPs in the inputs",
+      "checking": "Checking IP permissions…"
+    },
+    "noDerivatives": "No derivatives",
+    "otherIps": "+{count} other IPs",
+    "assetSection": "IP",
+    "materialBadge": "Material",
+    "markLabel": "Made from IP materials"
   }
 }

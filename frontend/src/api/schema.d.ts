@@ -2877,6 +2877,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/usage-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Ip Usage
+         * @description 入力にする画像が IP を引き継ぐか、申告で選べる用途、使えない理由(生成のフォーム用)。
+         */
+        post: operations["check_ip_usage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/{ip_id}/derivatives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Ip Derivatives
+         * @description この IP の派生物(新しい順)。担当者と管理者にはすべて、ほかの人には読めるものと自分のもの。
+         *     ほかの IP も引き継ぐものには、その数を付ける(混入・掛け合わせの印)。
+         */
+        get: operations["list_ip_derivatives"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/{ip_id}/audit": {
         parameters: {
             query?: never;
@@ -3616,6 +3657,11 @@ export interface components {
              */
             lock_protected: boolean;
             /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -3654,6 +3700,8 @@ export interface components {
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
             lock?: components["schemas"]["AssetLockView"] | null;
+            /** Ips */
+            ips?: components["schemas"]["AssetIpRef"][];
         };
         /**
          * AssetEmbeddingStatus
@@ -3767,6 +3815,26 @@ export interface components {
         AssetGroupUpdate: {
             /** Name */
             name: string;
+        };
+        /**
+         * AssetIpRef
+         * @description 画像が引き継ぐ IP(ADR-0059 6章)。
+         */
+        AssetIpRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Material
+             * @default false
+             */
+            material: boolean;
+            /** Notes */
+            notes?: string | null;
         };
         /** AssetLineageResponse */
         AssetLineageResponse: {
@@ -3906,6 +3974,11 @@ export interface components {
              */
             lock_protected: boolean;
             /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -3996,6 +4069,11 @@ export interface components {
              */
             lock_protected: boolean;
             /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -4034,6 +4112,8 @@ export interface components {
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
             lock?: components["schemas"]["AssetLockView"] | null;
+            /** Ips */
+            ips?: components["schemas"]["AssetIpRef"][];
             /**
              * Ingest Outcome
              * @enum {string}
@@ -5585,6 +5665,11 @@ export interface components {
              */
             lock_protected: boolean;
             /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -6351,6 +6436,27 @@ export interface components {
             description?: string | null;
             terms: components["schemas"]["IpTermsInput"];
         };
+        /** IpDerivativeItem */
+        IpDerivativeItem: {
+            asset: components["schemas"]["AssetSummary"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Name */
+            created_by_name?: string | null;
+            /**
+             * Other Ip Count
+             * @default 0
+             */
+            other_ip_count: number;
+        };
+        /** IpDerivativeListResponse */
+        IpDerivativeListResponse: {
+            /** Items */
+            items: components["schemas"]["IpDerivativeItem"][];
+        };
         /** IpDetail */
         IpDetail: {
             /**
@@ -6587,6 +6693,42 @@ export interface components {
             rights_holder?: string | null;
             /** Description */
             description?: string | null;
+        };
+        /** IpUsageCheckRequest */
+        IpUsageCheckRequest: {
+            /** Asset Ids */
+            asset_ids?: string[];
+            /** Provider */
+            provider?: string | null;
+            /** Model */
+            model?: string | null;
+        };
+        /** IpUsageCheckResponse */
+        IpUsageCheckResponse: {
+            /** Required */
+            required: boolean;
+            /** Ips */
+            ips?: components["schemas"]["IpUsageIp"][];
+            /** Purposes */
+            purposes?: string[];
+        };
+        /** IpUsageIp */
+        IpUsageIp: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** External Ai */
+            external_ai?: ("allow" | "local_only" | "deny") | null;
+            /** Purposes */
+            purposes: string[];
+            /** Problem */
+            problem?: string | null;
         };
         /** IpUserRef */
         IpUserRef: {
@@ -8555,6 +8697,7 @@ export interface components {
             regions?: components["schemas"]["RegionBox"][];
             /** Regions Frame */
             regions_frame?: ("input" | "output") | null;
+            ip_use?: components["schemas"]["RunIpUseRequest"] | null;
         };
         /** RunCreateResponse */
         RunCreateResponse: {
@@ -8776,6 +8919,16 @@ export interface components {
              */
             content_withheld: boolean;
         };
+        /**
+         * RunIpUseRequest
+         * @description IP 素材と派生物を入力にするときの申告(ADR-0059 5章)。
+         */
+        RunIpUseRequest: {
+            /** Purpose */
+            purpose: string;
+            /** Work Note */
+            work_note?: string | null;
+        };
         /** RunListResponse */
         RunListResponse: {
             /** Items */
@@ -8861,6 +9014,11 @@ export interface components {
              * @default false
              */
             lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
         };
         /**
          * RunPromptTemplate
@@ -9262,6 +9420,11 @@ export interface components {
              */
             lock_protected: boolean;
             /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -9470,6 +9633,11 @@ export interface components {
              * @default false
              */
             lock_protected: boolean;
+            /**
+             * Ip Marked
+             * @default false
+             */
+            ip_marked: boolean;
             /**
              * Imported
              * @default false
@@ -17101,6 +17269,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpTeamRef"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_ip_usage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpUsageCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpUsageCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ip_derivatives: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ip_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDerivativeListResponse"];
                 };
             };
             /** @description Validation Error */

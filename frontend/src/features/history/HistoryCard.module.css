@@ -871,3 +871,25 @@
   top: 34px;
   right: 8px;
 }
+
+/* IP 素材か派生物の印(ADR-0059 11章)。ロックの印と同じ位置で、ロックの印があればその下。 */
+.ipMark {
+  position: absolute;
+  top: 42px;
+  right: 11px;
+  z-index: 2;
+}
+
+.card[data-variant='overlay'] .ipMark {
+  top: 74px;
+  right: 13px;
+}
+
+.card[data-variant='detail'] .ipMark {
+  top: 34px;
+  right: 8px;
+}
+
+.lockMark + .ipMark {
+  margin-top: 26px;
+}

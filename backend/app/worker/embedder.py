@@ -54,7 +54,13 @@ from PIL import Image
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import sessionmaker
 
-from app.domain import content_withholding, derivatives, embedding_index, embedding_settings
+from app.domain import (
+    content_withholding,
+    derivatives,
+    embedding_index,
+    embedding_settings,
+    ip_usage,
+)
 from app.domain import embeddings as embeddings_domain
 from app.domain import perceptual_hash as perceptual_hash_domain
 from app.domain import prompt_embeddings as prompt_domain
@@ -461,6 +467,11 @@ class Embedder:
                 # (リモートの埋め込みに送らない)。
                 if content_withholding.blocked_asset_ids(session, [asset.id]):
                     job.failures.append((asset_id, t("mods.contentWithheld")))
+                    continue
+                # ADR-0059 5章: IP の契約で外部の AI に送れない画像は埋め込まない(送り先の区分は、
+                # まずは外部として扱う)。
+                if ip_usage.ai_blocked_asset_ids(session, [asset.id], "external"):
+                    job.failures.append((asset_id, t("ip.aiNotAllowed")))
                     continue
                 targets.append(asset)
                 job.refs[asset.id] = mods_events.image_ref(asset, "primary")

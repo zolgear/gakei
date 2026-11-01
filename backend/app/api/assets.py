@@ -38,6 +38,7 @@ from app.domain import (
     imported_assets,
     ingest_hooks,
     ip_materials,
+    ip_usage,
 )
 from app.domain import annotations as annotations_domain
 from app.domain import compositions as compositions_domain
@@ -71,6 +72,7 @@ from app.domain.schemas import (
     AssetDetail,
     AssetEmbeddingStatus,
     AssetFavoriteResponse,
+    AssetIpRef,
     AssetLineageResponse,
     AssetListResponse,
     AssetLockRequest,
@@ -125,6 +127,7 @@ def _to_summary(
     favorite: bool = False,
     imported: bool = False,
     lock: asset_locks.LockState | None = None,
+    ip_marked: bool = False,
 ) -> AssetSummary:
     return AssetSummary(
         id=asset.id,
@@ -141,6 +144,7 @@ def _to_summary(
         imported=imported,
         locked=lock is not None and lock.locked,
         lock_protected=lock is not None and lock.protected,
+        ip_marked=ip_marked,
         **content_withholding.summary_fields(asset),
     )
 
@@ -243,7 +247,30 @@ def _to_detail(
         favorite=favorites_domain.is_favorite(db, user, asset.id),
         imported=imported_assets.is_imported(asset, produced_by_run),
         **_lock_fields(db, user, asset),
+        **_ip_fields(db, user, asset),
     )
+
+
+def _ip_fields(db: Session, user: CurrentUser, asset: Asset) -> dict:
+    """詳細の IP(ADR-0059 6章)。見る人に見える IP だけを出し、印は引き継ぐかどうかで付ける。"""
+    ip_ids = ip_usage.ip_ids_of(db, [asset.id]).get(asset.id, set())
+    if not ip_ids:
+        return {"ip_marked": False, "ips": []}
+    material = ip_materials.material_ip(db, asset.id)
+    refs: list[AssetIpRef] = []
+    for ip in ip_materials.list_ips(db, user):
+        if ip.id not in ip_ids:
+            continue
+        terms = ip_materials.current_terms(db, ip.id)
+        refs.append(
+            AssetIpRef(
+                id=ip.id,
+                name=ip.name,
+                material=material is not None and material.ip_id == ip.id,
+                notes=terms.notes if terms is not None else None,
+            )
+        )
+    return {"ip_marked": True, "ips": refs}
 
 
 def _lock_fields(db: Session, user: CurrentUser, asset: Asset) -> dict:
@@ -429,6 +456,7 @@ def list_assets(
     favorite_ids = favorites_domain.bulk_favorite_ids(db, user, [a.id for a in rows])
     imported_ids = imported_assets.bulk_imported_ids(db, rows)
     locks = asset_locks.bulk_lock_states(db, [a.id for a in rows])
+    ip_marked = ip_usage.ip_marked_ids(db, [a.id for a in rows])
     return AssetListResponse(
         items=[
             _to_summary(
@@ -439,6 +467,7 @@ def list_assets(
                 favorite=a.id in favorite_ids,
                 imported=a.id in imported_ids,
                 lock=locks.get(a.id),
+                ip_marked=a.id in ip_marked,
             )
             for a in rows
         ],

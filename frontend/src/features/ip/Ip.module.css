@@ -469,3 +469,56 @@
     margin-bottom: 6px;
   }
 }
+
+/* 生成のフォームの申告(ADR-0059 5章) */
+.declaration {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-bg-raised);
+}
+
+.declarationHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--color-accent);
+}
+
+.declarationNotes {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+}
+
+/* ビューアの詳細の IP */
+.assetIp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.assetIpRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.assetIpRow .declarationNotes {
+  flex-basis: 100%;
+}
+
+/* ほかの IP も引き継ぐ派生物(混入・掛け合わせ)の印。 */
+.withdrawnBadge[data-mixed='true'] {
+  border-color: var(--color-warning, var(--color-accent));
+  color: var(--color-warning, var(--color-accent));
+}

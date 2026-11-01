@@ -71,6 +71,7 @@ from app.domain import (
     annotation_settings,
     content_withholding,
     derivatives,
+    ip_usage,
     llm_connections,
     tag_dictionaries,
 )
@@ -441,6 +442,10 @@ class Annotator:
             # ADR-0051 4章: `deny` の判定を受けた・画像を残さなかった画像は VLM・LLM に送らない。
             if content_withholding.blocked_asset_ids(session, [asset.id]):
                 return t("mods.contentWithheld")
+            # ADR-0059 5章: IP の契約で外部の AI に送れない画像は送らない(送り先の区分は、まずは
+            # 外部として扱う)。
+            if ip_usage.ai_blocked_asset_ids(session, [asset.id], "external"):
+                return t("ip.aiNotAllowed")
             config = annotation_settings.load(session)
             engines = annotations_domain.usable_engines(config, self.settings)
             if not engines:

@@ -21,6 +21,7 @@ import { resolveHistoryCardNavigation } from './historyNavigation'
 import { HistoryCardMedia } from './HistoryCardMedia'
 import { FavoriteButton } from './FavoriteButton'
 import { LockMark } from '../lock/LockMark'
+import { IpMark } from '../ip/IpMark'
 import { useHistoryRunActions } from './useHistoryRunActions'
 import { fmt, useI18n } from '../../i18n'
 import { AssetThumb } from '../content-rating/AssetThumb'
@@ -141,6 +142,7 @@ export function HistoryCard({ run, variant = 'detail', outputIndex = 0 }: Histor
           <FavoriteButton output={shownOutput} variant="overlay" />
         )}
         {shownOutput?.locked && <LockMark className={styles.lockMark} />}
+        {shownOutput?.ip_marked && <IpMark className={styles.ipMark} />}
       </div>
 
       <div className={styles.body}>
