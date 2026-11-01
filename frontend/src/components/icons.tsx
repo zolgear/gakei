@@ -263,3 +263,24 @@ export function PencilIcon(props: IconProps) {
     </Icon>
   )
 }
+
+/** 長さの違う3本の横線: プロンプトセット(アイコンレールと同じ形)。 */
+export function PromptSetIcon(props: IconProps) {
+  return (
+    <Icon viewBox="0 0 18 18" {...props}>
+      <path d="M3 4.5h12M3 9h12M3 13.5h7" />
+    </Icon>
+  )
+}
+
+/** スライダー: パラメーターセット(アイコンレールと同じ形。ADR-0040)。 */
+export function ParameterSetIcon(props: IconProps) {
+  return (
+    <Icon viewBox="0 0 18 18" {...props}>
+      <path d="M3 4.5h1.4M7.6 4.5H15M3 9h7.4M13.6 9H15M3 13.5h3.4M9.6 13.5H15" />
+      <circle cx="6" cy="4.5" r="1.6" />
+      <circle cx="12" cy="9" r="1.6" />
+      <circle cx="8" cy="13.5" r="1.6" />
+    </Icon>
+  )
+}

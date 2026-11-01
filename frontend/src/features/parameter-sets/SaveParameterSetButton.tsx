@@ -76,22 +76,57 @@ export function SaveParameterSetButton({
           {savedMessage}
         </span>
       )}
-      <Modal open={open} title={t.parameterSets.save.dialogTitle} onClose={() => setOpen(false)}>
-        {open && (
-          <SaveParameterSetForm
-            buildPayload={buildPayload}
-            seedAvailable={seedAvailable}
-            seedUnavailableMessage={seedUnavailableMessage}
-            defaultName={defaultName}
-            onCancel={() => setOpen(false)}
-            onSaved={(name) => {
-              setOpen(false)
-              setSavedMessage(fmt(t.parameterSets.save.saved, { name }))
-            }}
-          />
-        )}
-      </Modal>
+      <SaveParameterSetDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        buildPayload={buildPayload}
+        seedAvailable={seedAvailable}
+        seedUnavailableMessage={seedUnavailableMessage}
+        defaultName={defaultName}
+        onSaved={(name) => {
+          setOpen(false)
+          setSavedMessage(fmt(t.parameterSets.save.saved, { name }))
+        }}
+      />
     </span>
+  )
+}
+
+interface SaveParameterSetDialogProps {
+  open: boolean
+  onClose: () => void
+  buildPayload: (include: ParameterSetInclude) => ParameterSetPayload
+  seedAvailable: boolean
+  seedUnavailableMessage: string
+  defaultName?: string
+  /** 保存できたとき(保存したセットの名前)。閉じるのは呼び出し側。 */
+  onSaved: (name: string) => void
+}
+
+/** 保存のダイアログだけ(開閉は呼び出し側。生成のフォームではメニューから開く)。 */
+export function SaveParameterSetDialog({
+  open,
+  onClose,
+  buildPayload,
+  seedAvailable,
+  seedUnavailableMessage,
+  defaultName = '',
+  onSaved,
+}: SaveParameterSetDialogProps) {
+  const { t } = useI18n()
+  return (
+    <Modal open={open} title={t.parameterSets.save.dialogTitle} onClose={onClose}>
+      {open && (
+        <SaveParameterSetForm
+          buildPayload={buildPayload}
+          seedAvailable={seedAvailable}
+          seedUnavailableMessage={seedUnavailableMessage}
+          defaultName={defaultName}
+          onCancel={onClose}
+          onSaved={onSaved}
+        />
+      )}
+    </Modal>
   )
 }
 

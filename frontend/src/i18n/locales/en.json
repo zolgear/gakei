@@ -1578,9 +1578,7 @@
   "parameterSets": {
     "form": {
       "saveButton": "Save settings",
-      "saveButtonTitle": "Save the current provider, model, parameters and prompt as a parameter set",
-      "loadButton": "Load settings",
-      "loadButtonTitle": "Load a saved parameter set into the form"
+      "loadButton": "Load settings"
     },
     "save": {
       "dialogTitle": "Save as parameter set",
@@ -3127,7 +3125,6 @@
     },
     "importParams": {
       "openDialog": "Load settings from image",
-      "openDialogTitle": "Load the generation info embedded in an image made with GAKEI, ComfyUI or SD WebUI into the form",
       "dialogTitle": "Load settings from image",
       "dialogLead": "Choose an image made with GAKEI, ComfyUI or SD WebUI (A1111 format), or drop or paste it here. The image is not saved.",
       "dropZone": "Drop or paste (Ctrl+V) an image here",

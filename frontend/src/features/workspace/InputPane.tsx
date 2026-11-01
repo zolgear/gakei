@@ -27,7 +27,6 @@ import { isMobileViewport } from '../../lib/viewport'
 import { listPromptSets, type AssetDetail } from '../../api/client'
 import { useRunFormLogic } from '../run-form/useRunFormLogic'
 import { useEditInputsLogic } from '../run-form/useEditInputsLogic'
-import { ImportSettingsButton } from '../image-settings/ImportSettingsButton'
 import type { InsertPromptFn } from '../run-form/promptInsertion'
 import { UNSPECIFIED } from '../run-form/paramsBuilder'
 import { groupParamsForProvider } from '../run-form/paramGrouping'
@@ -59,7 +58,7 @@ import { AssetGroupField } from '../run-form/AssetGroupField'
 import { PromptToolsRow } from './PromptToolsRow'
 import { LoraPickerButton } from '../sdwebui/LoraPickerButton'
 import { ImportNoticePanel } from '../sdwebui/ImportNoticePanel'
-import { FormParameterSetButtons } from '../parameter-sets/FormParameterSetButtons'
+import { FormSettingsMenu } from './FormSettingsMenu'
 import { PromptTemplateForm } from '../prompt-templates/PromptTemplateForm'
 import { SubmitControls } from './SubmitControls'
 import { InputPaneNotices } from './InputPaneNotices'
@@ -443,6 +442,13 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
   // textarea + メンションポップオーバーは mention state と密結合なので、ここで組み立てて
   // スロット(ReactNode)として渡す(コンポーネント化しない)。
+  // 文字数はプロンプト欄の右下に重ねる(欄のすぐそばで、操作列を広げない)。
+  const charCount = (
+    <span className={styles.charCount}>
+      {form.promptLength} / {form.promptMax}
+    </span>
+  )
+
   const promptEditor = templateEditor || (
     <>
       <label htmlFor="prompt" className={styles.srOnly}>
@@ -461,6 +467,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
             escapeParens={shouldEscapeParens(form.provider)}
             fieldLabel={ip.promptLabel}
           />
+          {charCount}
         </div>
       ) : (
         <div className={styles.textareaWrap}>
@@ -501,6 +508,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
             }}
             placeholder={ip.promptPlaceholder}
           />
+          {charCount}
           {mention === null && tagAssist.popover}
           {mention !== null && (
             <MentionPopover
@@ -550,8 +558,6 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const promptTools = (
     <PromptToolsRow
       promptText={form.prompt}
-      promptLength={form.promptLength}
-      promptMax={form.promptMax}
       editModeToggle={
         <PromptEditModeToggle
           mode={promptEditMode}
@@ -564,33 +570,30 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         />
       }
       providerTools={
-        <>
-          {form.provider === 'sdwebui' && (
-            <LoraPickerButton
-              prompt={form.prompt}
-              escapeParens={shouldEscapeParens(form.provider)}
-              onInsert={(text, mode, cursorPos) => {
-                setSubmittedNotice(null)
-                form.insertPrompt(text, mode, cursorPos)
-              }}
-            />
-          )}
-          {/* 画像の生成情報から読み込む(ADR-0038 9章)。SD WebUI が有効なら、どのプロバイダーを
-              選んでいても出す(読み込むと SD WebUI に切り替わる)。 */}
-          <ImportSettingsButton currentPrompt={form.prompt} caps={caps} />
-          {/* パラメーターセットの保存と読み込み(ADR-0040)。プロバイダーに依らず出す。 */}
-          <FormParameterSetButtons
-            provider={form.provider}
-            model={form.model}
+        form.provider === 'sdwebui' && (
+          <LoraPickerButton
             prompt={form.prompt}
-            defs={form.defs}
-            rawParams={form.rawParams}
-            conditionalParams={form.conditionalParams}
-            sizeState={form.sizeState}
-            hasSize={Boolean(form.providerEntry?.size)}
-            hasMask={form.hasMask}
+            escapeParens={shouldEscapeParens(form.provider)}
+            onInsert={(text, mode, cursorPos) => {
+              setSubmittedNotice(null)
+              form.insertPrompt(text, mode, cursorPos)
+            }}
           />
-        </>
+        )
+      }
+      settingsMenu={
+        <FormSettingsMenu
+          provider={form.provider}
+          model={form.model}
+          prompt={form.prompt}
+          defs={form.defs}
+          rawParams={form.rawParams}
+          conditionalParams={form.conditionalParams}
+          sizeState={form.sizeState}
+          hasSize={Boolean(form.providerEntry?.size)}
+          hasMask={form.hasMask}
+          caps={caps}
+        />
       }
     />
   )

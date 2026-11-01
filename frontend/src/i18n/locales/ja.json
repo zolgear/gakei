@@ -1578,9 +1578,7 @@
   "parameterSets": {
     "form": {
       "saveButton": "設定を保存",
-      "saveButtonTitle": "今のプロバイダー・モデル・パラメーター・プロンプトを、パラメーターセットとして保存します",
-      "loadButton": "設定を読み込む",
-      "loadButtonTitle": "保存したパラメーターセットを、フォームに読み込みます"
+      "loadButton": "設定を読み込む"
     },
     "save": {
       "dialogTitle": "パラメーターセットに保存",
@@ -3127,7 +3125,6 @@
     },
     "importParams": {
       "openDialog": "画像から設定を読み込む",
-      "openDialogTitle": "GAKEI・ComfyUI・SD WebUI で作った画像に埋め込まれた生成情報を、フォームに読み込みます",
       "dialogTitle": "画像から設定を読み込む",
       "dialogLead": "GAKEI、ComfyUI、SD WebUI(A1111 形式)で作った画像を選ぶか、ここにドロップ・貼り付けしてください。画像は保存しません。",
       "dropZone": "画像をここにドロップ、または貼り付け(Ctrl+V)",
