@@ -1,9 +1,12 @@
 /**
  * 履歴ワークスペース。カード形式の一覧 + 状態フィルタ(クライアント側)+ カーソル読み込み。
  * ツールバーは左に表示の切り替え、右端に並べ替えと状態の絞り込み(アイコンのメニュー)。
- * 並べ替え(ADR-0054)は、日付(Run 単位。`GET /api/runs`。日の区切りを入れる)、グループと
- * 似た順(画像単位。`GET /api/history/assets`。グループは区切りを入れる)。区切りは字だけの見出しで、
- * 節ごとに並べ直す。
+ * 並べ替え(ADR-0054)は、日付の新しい順・古い順(Run 単位。`GET /api/runs`。古い順は `order=asc`。
+ * 日の区切りを入れる)、グループと似た順(画像単位。`GET /api/history/assets`。グループは区切りを
+ * 入れる)。区切りは字だけの見出しで、節ごとに並べ直す。
+ * グループの並びは、グループで含める絞り込みが無い間、各グループの先頭(古い順)の `GROUP_HEAD_COUNT` 枚
+ * だけを出し、それより多い節の見出しに「すべて見る」を置く(押すとそのグループで絞り込む。6章)。
+ * グループで含める・除く(6章)は専用のボタンで選び、ほかの絞り込みと同じく URL に置く。
  * 形は「詳細」(カードいっぱいに画像を敷き、情報と操作を重ねる)、「石積み」「行揃え」(画像を
  * 元の縦横比で並べるギャラリー)をツールバーで切り替え、選択はブラウザに覚える(historyCardStyle.ts)。続きは末尾の番兵が
  * 見えたら自動で読み、失敗時と IntersectionObserver の無い環境のために「さらに読み込む」も残す。
@@ -42,6 +45,8 @@ import { useAutoLoadMore } from '../features/history/useAutoLoadMore'
 import { HistoryStatusFilterMenu } from '../features/history/HistoryStatusFilterMenu'
 import { HistorySortMenu } from '../features/history/HistorySortMenu'
 import { HistorySectionHeading } from '../features/history/HistorySectionHeading'
+import { ShowAllGroupContext } from '../features/history/showAllGroupContext'
+import { HistoryGroupFilterMenu } from '../features/history/HistoryGroupFilterMenu'
 import { BackToTopButton } from '../features/history/BackToTopButton'
 import { onHistoryScrollTopRequest, scrollElementToTop } from '../features/history/backToTop'
 import { effectiveHistorySort, setHistorySort, useHistorySort } from '../features/history/historySort'
@@ -50,6 +55,7 @@ import { useEmbeddingCapabilitiesState } from '../features/embeddings/useEmbeddi
 import { CardDetailIcon, CardMasonryIcon, CardRowsIcon } from '../components/icons'
 import { filterRuns } from '../features/history/historyFilters'
 import {
+  hasGroupFilter,
   hasLabelFilter,
   historyFilterSearchParams,
   historyServerFilter,
@@ -76,6 +82,8 @@ const ACTIVE_POLL_INTERVAL_MS = 4000
 const RUNS_GC_TIME_MS = 30 * 60 * 1000
 
 const EMPTY_IDS: ReadonlySet<string> = new Set()
+// グループの並びで、含める絞り込みが無い間に各グループから出す枚数(ADR-0054 6章)。
+const GROUP_HEAD_COUNT = 12
 
 export function HistoryPage() {
   const { t, locale } = useI18n()
@@ -99,6 +107,7 @@ export function HistoryPage() {
   const serverFilter = useMemo(() => historyServerFilter(filter), [filter])
   const serverFiltered = Object.keys(serverFilter).length > 0
   const labelFiltered = hasLabelFilter(filter)
+  const groupFiltered = hasGroupFilter(filter)
   // 切り替えはブラウザの履歴を積まない(戻るで絞り込みを1つずつ戻すより、前の画面へ戻るほうが自然)。
   const setFilter = (patch: Partial<HistoryFilter>) =>
     setSearchParams(
@@ -140,27 +149,40 @@ export function HistoryPage() {
 
   // グループと似た順(画像単位)。
   const assetSort = sort === 'group' || sort === 'embedding' ? sort : null
+  const ascending = sort === 'date_asc'
+  // グループの並びで、各グループの先頭だけを取るか(含める絞り込みがあれば全部を出す)。
+  const headsOnly = assetSort === 'group' && filter.groups.length === 0
 
-  // サーバーで絞る一覧(お気に入り。ADR-0055。形・透過・領域)。日付の並びは別のキーで取る(上の
-  // ['runs'] はポーリングに使い続ける)。
+  // サーバーで絞る一覧(お気に入り。ADR-0055。形・透過・領域・グループ)と、古い順。日付の並びは別の
+  // キーで取る(上の ['runs'] はポーリングに使い続ける)。
+  const dateParams = useMemo(
+    () => (ascending ? { ...serverFilter, order: 'asc' as const } : serverFilter),
+    [ascending, serverFilter],
+  )
+  const separateDateQuery = serverFiltered || ascending
   const filteredRunsQuery = useInfiniteQuery({
-    queryKey: ['runs', serverFilter],
+    queryKey: ['runs', dateParams],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      listRuns({ limit: 30, cursor: pageParam, ...serverFilter }),
+      listRuns({ limit: 30, cursor: pageParam, ...dateParams }),
     initialPageParam: undefined as string | undefined,
     gcTime: RUNS_GC_TIME_MS,
-    enabled: serverFiltered && !assetSort,
+    enabled: separateDateQuery && !assetSort,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
 
+  const assetParams = useMemo(
+    () => (headsOnly ? { ...serverFilter, per_group: GROUP_HEAD_COUNT } : serverFilter),
+    [headsOnly, serverFilter],
+  )
   const assetsQuery = useInfiniteQuery({
-    queryKey: serverFiltered ? ['history-assets', assetSort, serverFilter] : ['history-assets', assetSort],
+    queryKey:
+      Object.keys(assetParams).length > 0 ? ['history-assets', assetSort, assetParams] : ['history-assets', assetSort],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
       listHistoryAssets({
         sort: assetSort ?? 'group',
         limit: 30,
         cursor: pageParam,
-        ...serverFilter,
+        ...assetParams,
       }),
     initialPageParam: undefined as string | undefined,
     gcTime: RUNS_GC_TIME_MS,
@@ -184,7 +206,7 @@ export function HistoryPage() {
     queryClient.removeQueries({ queryKey: ['history-assets', 'embedding'] })
     void queryClient.invalidateQueries({ queryKey: ['capabilities'] })
   }, [embeddingRejected, queryClient])
-  const dateQuery = serverFiltered ? filteredRunsQuery : runsQuery
+  const dateQuery = separateDateQuery ? filteredRunsQuery : runsQuery
   const activeQuery = assetSort ? assetsQuery : dateQuery
 
   const hasNextPage = activeQuery.hasNextPage
@@ -200,7 +222,7 @@ export function HistoryPage() {
     () => filteredRunsQuery.data?.pages.flatMap((p) => p.items) ?? [],
     [filteredRunsQuery.data],
   )
-  const dateRuns = serverFiltered ? filteredRuns : allRuns
+  const dateRuns = separateDateQuery ? filteredRuns : allRuns
 
   // 絞り込みの中で一度でもお気に入りとして見えた出力。外してもその場に残す(切り替えたら忘れる)。
   const [keptFavorites, setKeptFavorites] = useState<ReadonlySet<string>>(EMPTY_IDS)
@@ -237,7 +259,7 @@ export function HistoryPage() {
     return {
       sections:
         assetSort === 'group'
-          ? groupSections(filtered, groupList, ungroupedLabel)
+          ? groupSections(filtered, groupList, ungroupedLabel, headsOnly)
           : similaritySections(filtered),
       total: assetItems.length,
       filteredCount: filtered.length,
@@ -252,6 +274,7 @@ export function HistoryPage() {
     statusFilter,
     groupList,
     ungroupedLabel,
+    headsOnly,
     locale,
   ])
 
@@ -261,10 +284,16 @@ export function HistoryPage() {
     hasData: activeQuery.data !== undefined,
     total,
     filteredCount,
-    filterActive: statusFilter !== 'all' || favoriteOnly || labelFiltered,
+    filterActive: statusFilter !== 'all' || favoriteOnly || labelFiltered || groupFiltered,
     favoriteOnly,
     labelFiltered,
   })
+
+  // 「すべて見る」: そのグループだけを含める(並べ方はグループのまま。節の全部が古い順に出る)。
+  const showAllGroup = (group: string) => {
+    setFilter({ groups: [group], excludeGroups: [] })
+    scrollElementToTop(scrollAreaRef.current)
+  }
 
   // ポーリング中(実行中の Run がある間)に succeeded へ変わった Run を検出したら、
   // ストック(['assets'])を invalidate する。SSE を購読していないこの画面のための経路。
@@ -319,46 +348,49 @@ export function HistoryPage() {
               }}
               embeddingsAvailable={embeddingsAvailable}
             />
+            <HistoryGroupFilterMenu filter={filter} onChange={setFilter} />
             <HistoryStatusFilterMenu filter={filter} onChange={setFilter} />
           </div>
         </div>
 
-        <div ref={scrollAreaRef} className={styles.scrollArea}>
-          {placeholder === 'loading' && <p className={styles.placeholder}>{t.history.page.loading}</p>}
-          {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
-          {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
-          {placeholder === 'noFavorites' && <p className={styles.placeholder}>{t.history.page.noFavorites}</p>}
+        <ShowAllGroupContext.Provider value={showAllGroup}>
+          <div ref={scrollAreaRef} className={styles.scrollArea}>
+            {placeholder === 'loading' && <p className={styles.placeholder}>{t.history.page.loading}</p>}
+            {placeholder === 'error' && <p className={styles.placeholder}>{t.history.page.loadError}</p>}
+            {placeholder === 'noMatch' && <p className={styles.placeholder}>{t.history.page.noMatch}</p>}
+            {placeholder === 'noFavorites' && <p className={styles.placeholder}>{t.history.page.noFavorites}</p>}
 
-          {cardStyle !== 'detail' ? (
-            <HistoryGallery sections={sections} layout={cardStyle === 'rows' ? 'rows' : 'masonry'} />
-          ) : (
-            <div className={styles.sections}>
-              {sections.map((section) => (
-                <section key={section.key}>
-                  {section.heading && <HistorySectionHeading heading={section.heading} />}
-                  <div className={styles.grid}>
-                    {section.cards.map((card) => (
-                      <HistoryCard key={card.key} run={card.run} variant="overlay" outputIndex={card.outputIndex} />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
+            {cardStyle !== 'detail' ? (
+              <HistoryGallery sections={sections} layout={cardStyle === 'rows' ? 'rows' : 'masonry'} />
+            ) : (
+              <div className={styles.sections}>
+                {sections.map((section) => (
+                  <section key={section.key}>
+                    {section.heading && <HistorySectionHeading heading={section.heading} />}
+                    <div className={styles.grid}>
+                      {section.cards.map((card) => (
+                        <HistoryCard key={card.key} run={card.run} variant="overlay" outputIndex={card.outputIndex} />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
 
-          <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
+            <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
 
-          {hasNextPage && (
-            <button
-              type="button"
-              className={styles.loadMore}
-              onClick={() => fetchNextPage()}
-              disabled={isFetchingNextPage}
-            >
-              {isFetchingNextPage ? t.history.page.loading : t.history.page.loadMore}
-            </button>
-          )}
-        </div>
+            {hasNextPage && (
+              <button
+                type="button"
+                className={styles.loadMore}
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? t.history.page.loading : t.history.page.loadMore}
+              </button>
+            )}
+          </div>
+        </ShowAllGroupContext.Provider>
 
         <BackToTopButton scrollRef={scrollAreaRef} />
         <ToastHost toast={toast.toast} onDismiss={toast.dismiss} />

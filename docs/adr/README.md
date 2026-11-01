@@ -57,7 +57,7 @@
 | ADR-0051 | [0051-mods-and-hooks.md](0051-mods-and-hooks.md) | Mod とフック(取り込み・AI へ送る前・生成後に、外部のシステムや手元の処理をつなぐ) | Accepted |
 | ADR-0052 | [0052-comfyui-binding-map.md](0052-comfyui-binding-map.md) | ComfyUI ワークフローの読み取りと差し込み先の図 | Accepted |
 | ADR-0053 | [0053-region-boxes.md](0053-region-boxes.md) | 領域の指示(入力画像に四角を描き、四角ごとに指示を書く。四角の検出は VLM) | Accepted |
-| ADR-0054 | [0054-history-sort.md](0054-history-sort.md) | 履歴の並べ替え(日付・グループ・似た画像の順) | Proposed |
+| ADR-0054 | [0054-history-sort.md](0054-history-sort.md) | 履歴の並べ替え(日付・グループ・似た画像の順)と、規模が大きいときの古い順・グループで含める・除く・グループの先頭だけ | Proposed |
 | ADR-0055 | [0055-favorites.md](0055-favorites.md) | お気に入り(履歴の画像に印を付け、印で絞り込む。`asset_mark` の最初の実装) | Proposed |
 | ADR-0056 | [0056-group-suggestions.md](0056-group-suggestions.md) | グループの提案(画像の埋め込みで集まりを見つけ、グループにする案を出す) | Proposed |
 

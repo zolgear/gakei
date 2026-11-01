@@ -214,6 +214,16 @@ export function FilterIcon(props: IconProps) {
   )
 }
 
+/** 重なった2枚の札: グループ(履歴のグループの絞り込み)。 */
+export function GroupStackIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 2.5h8.5V11" />
+      <rect x="2.5" y="5" width="8.5" height="8.5" rx="1" />
+    </Icon>
+  )
+}
+
 /** 長さの違う横線と下向きの矢印: 一覧の並べ替え。 */
 export function SortIcon(props: IconProps) {
   return (
