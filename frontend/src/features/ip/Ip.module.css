@@ -1,0 +1,471 @@
+/* IP 素材(ADR-0059)。パネル、IP のページ、管理者設定。 */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 14px 16px;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.panelHeading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.muted {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.ipList,
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.ipRow + .ipRow,
+.rowItem + .rowItem {
+  border-top: 1px solid var(--color-border);
+}
+
+.ipHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ipToggle {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.ipName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.textLink {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.textLink:hover {
+  color: var(--color-text);
+}
+
+.thumbGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+  padding: 4px 0 12px;
+}
+
+.thumb {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+}
+
+.thumb img,
+.materialImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.stateBadge,
+.withdrawnBadge,
+.inactiveBadge,
+.currentBadge {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.stateBadge[data-state='terminated'] {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.currentBadge {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* IP のページ */
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 20px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.pageHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 20px;
+}
+
+.subline,
+.description {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.description {
+  white-space: pre-wrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.tab {
+  min-height: 36px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.fieldRow,
+.inlineRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fieldRow {
+  align-items: flex-start;
+}
+
+.fieldRow > .field {
+  flex: 1 1 180px;
+}
+
+/* 種類を選ぶ短い選択は、隣の入力に幅を譲る。 */
+.inlineRow > select.input:first-child {
+  flex: none;
+}
+
+.input,
+.textarea {
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.inlineRow .input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.fieldset {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+
+.fieldset legend {
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.checkRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton,
+.uploadButton {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+}
+
+.primaryButton {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: #17181b;
+  font-weight: 600;
+}
+
+.primaryButton:disabled {
+  opacity: 0.55;
+}
+
+.secondaryButton,
+.uploadButton {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.secondaryButton:hover:not(:disabled),
+.uploadButton:hover {
+  border-color: var(--color-accent);
+}
+
+.dangerButton {
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+}
+
+.textButton {
+  padding: 0;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.textButton:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.materialGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.material {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.material[data-withdrawn='true'] .materialImage {
+  opacity: 0.4;
+}
+
+.materialImage {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--color-bg-sunken);
+}
+
+.materialCaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.card {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.card[data-current='false'] {
+  opacity: 0.75;
+}
+
+.cardTitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+}
+
+.detailList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.detailList dt {
+  color: var(--color-text-muted);
+}
+
+.detailList dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.preWrap {
+  white-space: pre-wrap;
+}
+
+.rowItem {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.rowItem[data-inactive='true'] .rowName {
+  color: var(--color-text-muted);
+}
+
+.rowText,
+.rowLink {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.rowLink:hover .rowName {
+  text-decoration: underline;
+}
+
+.rowName {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 14px 16px 40px;
+  }
+
+  .detailList {
+    grid-template-columns: 1fr;
+  }
+
+  .detailList dd {
+    margin-bottom: 6px;
+  }
+}

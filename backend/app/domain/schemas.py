@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import (
@@ -3794,3 +3794,149 @@ class TeamMemberAddRequest(BaseModel):
 
 class TeamMemberRoleRequest(BaseModel):
     role: Literal["member", "lead"]
+
+
+# -- IP 素材(ADR-0059) --------------------------------------------------------------------
+
+
+class IpSettingsView(BaseModel):
+    # 管理者設定で有効か。
+    enabled: bool
+    # 使えるか(認証モードで、有効)。画面に IP の入口を出すかに使う。
+    available: bool
+
+
+class IpSettingsUpdateRequest(BaseModel):
+    enabled: bool
+
+
+class IpUserRef(BaseModel):
+    user_id: uuid.UUID
+    name: str | None = None
+    email: str | None = None
+
+
+class IpTermsInput(BaseModel):
+    contract_number: str | None = Field(default=None, max_length=200)
+    valid_from: date | None = None
+    valid_until: date | None = None
+    purposes: list[str] = Field(default_factory=list, max_length=50)
+    external_ai: Literal["allow", "local_only", "deny"]
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class IpTermsView(IpTermsInput):
+    version: int
+    created_at: datetime
+    created_by_name: str | None = None
+
+
+class IpMyAccess(BaseModel):
+    """見る人が今受けている許可(チーム経由を含む。複数あれば合わせたもの)。"""
+
+    purposes: list[str]
+    can_use: bool
+
+
+class IpSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    owner_kind: Literal["own", "third_party"]
+    rights_holder: str | None = None
+    state: Literal["active", "suspended", "terminated"]
+    material_count: int
+    # 素材・条件・許可を扱えるか(管理者と担当者)。
+    can_manage: bool
+    access: IpMyAccess | None = None
+
+
+class IpListResponse(BaseModel):
+    items: list[IpSummary]
+
+
+class IpDetail(IpSummary):
+    description: str | None = None
+    terms: IpTermsView | None = None
+    managers: list[IpUserRef] = Field(default_factory=list)
+    # IP そのもの(名前・状態・担当者)を変えられるか(管理者だけ)。
+    can_administer: bool = False
+
+
+class IpCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    owner_kind: Literal["own", "third_party"]
+    rights_holder: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    terms: IpTermsInput
+
+
+class IpUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    rights_holder: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+
+
+class IpStateRequest(BaseModel):
+    state: Literal["active", "suspended", "terminated"]
+
+
+class IpManagerAddRequest(BaseModel):
+    email: str = Field(min_length=1, max_length=320)
+
+
+class IpMaterialItem(BaseModel):
+    asset: AssetSummary
+    added_at: datetime
+    withdrawn_at: datetime | None = None
+
+
+class IpMaterialListResponse(BaseModel):
+    items: list[IpMaterialItem]
+
+
+class IpGrantView(BaseModel):
+    id: uuid.UUID
+    team_id: uuid.UUID | None = None
+    team_name: str | None = None
+    user: IpUserRef | None = None
+    purposes: list[str]
+    can_use: bool
+    valid_from: date | None = None
+    valid_until: date | None = None
+    granted_at: datetime
+    revoked_at: datetime | None = None
+    # 今効いているか(取り消していない、期間の中、IP が有効)。
+    active: bool
+
+
+class IpTeamRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class IpGrantListResponse(BaseModel):
+    items: list[IpGrantView]
+
+
+class IpGrantCreateRequest(BaseModel):
+    team_id: uuid.UUID | None = None
+    email: str | None = Field(default=None, max_length=320)
+    purposes: list[str] = Field(default_factory=list, max_length=50)
+    can_use: bool = True
+    valid_from: date | None = None
+    valid_until: date | None = None
+
+
+class AuditEventView(BaseModel):
+    id: uuid.UUID
+    occurred_at: datetime
+    user: IpUserRef | None = None
+    action: str
+    target_type: str | None = None
+    target_id: str | None = None
+    detail: dict | None = None
+
+
+class AuditEventListResponse(BaseModel):
+    items: list[AuditEventView]
+    next_cursor: str | None = None

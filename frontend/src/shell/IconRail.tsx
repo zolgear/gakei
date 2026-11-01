@@ -7,7 +7,8 @@
  */
 import type { ReactNode } from 'react'
 import type { PanelId } from './panelStorage'
-import { ParameterSetIcon, PromptSetIcon } from '../components/icons'
+import { IpIcon, ParameterSetIcon, PromptSetIcon } from '../components/icons'
+import { useIpAvailable } from '../features/ip/ipQueries'
 import { ASSISTANT_TOGGLE_ATTRIBUTE } from '../features/assistant/assistantWindowAttributes'
 import { useI18n, type Messages } from '../i18n'
 import styles from './IconRail.module.css'
@@ -91,12 +92,20 @@ function items(labels: Messages['shell']['iconRail']): { id: PanelId; label: str
         </svg>
       ),
     },
+    {
+      // IP 素材(ADR-0059)。盾の形。
+      id: 'ip',
+      label: labels.ip,
+      icon: <IpIcon size={18} />,
+    },
   ]
 }
 
 export function IconRail({ selected, onSelect, assistant }: IconRailProps) {
   const { t } = useI18n()
-  const ITEMS = items(t.shell.iconRail)
+  // IP 素材(ADR-0059)は、使えるとき(認証モードで有効)だけ出す。
+  const ipAvailable = useIpAvailable()
+  const ITEMS = items(t.shell.iconRail).filter((item) => item.id !== 'ip' || ipAvailable)
   return (
     <nav aria-label={t.shell.iconRail.resourceNav} className={styles.rail}>
       {ITEMS.map((item) => (

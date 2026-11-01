@@ -87,7 +87,8 @@
       "history": "History",
       "search": "Search",
       "assistant": "Assistant",
-      "assistantTitle": "Assistant (Alt+A)"
+      "assistantTitle": "Assistant (Alt+A)",
+      "ip": "IP materials"
     },
     "sidebar": {
       "resourcePanel": "Resource panel",
@@ -332,7 +333,8 @@
       "regionDetection": "Region detection",
       "groupNaming": "Group name suggestions",
       "teams": "Teams",
-      "teamsAdmin": "Teams"
+      "teamsAdmin": "Teams",
+      "ipAdmin": "IP materials"
     },
     "frame": {
       "changeCount": {
@@ -4066,5 +4068,114 @@
     },
     "add": "Add",
     "remove": "Remove"
+  },
+  "ip": {
+    "panelHeading": "IP materials",
+    "loading": "Loading…",
+    "loadFailed": "Could not load IPs",
+    "notFound": "IP not found",
+    "failed": "Could not save the change",
+    "empty": "No IPs available",
+    "materialCount": "{count} materials",
+    "noMaterials": "No materials",
+    "open": "Open",
+    "backToList": "← All IPs",
+    "myAccess": "Granted: {purposes}",
+    "states": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "terminated": "Terminated"
+    },
+    "ownerKinds": {
+      "own": "Own",
+      "third_party": "Third party"
+    },
+    "suspend": "Suspend",
+    "resume": "Resume",
+    "terminate": "Terminate",
+    "terminateConfirm": "Terminate \"{name}\"? All grants stop and this cannot be undone.",
+    "tabs": {
+      "materials": "Materials",
+      "terms": "Terms",
+      "grants": "Grants",
+      "managers": "Managers",
+      "audit": "Audit log"
+    },
+    "addMaterials": "Add materials",
+    "uploading": "Uploading…",
+    "withdraw": "Withdraw",
+    "withdrawn": "Withdrawn",
+    "withdrawConfirm": "Withdraw this material? It can no longer be used (records and images already made remain).",
+    "reviseTerms": "Revise terms",
+    "saveTerms": "Save as a new version",
+    "cancel": "Cancel",
+    "terms": {
+      "version": "Version {version}",
+      "current": "Current",
+      "contractNumber": "Contract number",
+      "validFrom": "Start date",
+      "validUntil": "End date",
+      "period": "Period",
+      "periodValue": "{from} – {until}",
+      "purposes": "Permitted purposes",
+      "purposesPlaceholder": "One per line (e.g. design mock-up)",
+      "externalAi": "Sending to external AI",
+      "externalAiOptions": {
+        "allow": "Allowed",
+        "local_only": "Local connections only",
+        "deny": "Not sent to any AI"
+      },
+      "notes": "Notes",
+      "notesPlaceholder": "Credit line, restrictions, etc.",
+      "createdAt": "Recorded"
+    },
+    "grants": {
+      "target": "Grant to",
+      "toTeam": "Team",
+      "toUser": "Person",
+      "team": "Team",
+      "chooseTeam": "Choose a team",
+      "email": "Email",
+      "emailPlaceholder": "Email of the person",
+      "purposes": "Permitted purposes",
+      "noPurposes": "The terms have no purposes. Revise the terms first",
+      "canUse": "Can use as input (off: view only)",
+      "create": "Grant",
+      "empty": "No grants yet",
+      "revoke": "Revoke",
+      "revoked": "Revoked",
+      "inactive": "Out of period",
+      "useAllowed": "Can use",
+      "viewOnly": "View only"
+    },
+    "noManagers": "No managers",
+    "managerEmailPlaceholder": "Email of the new manager",
+    "addManager": "Add manager",
+    "removeManager": "Remove",
+    "noAudit": "No records",
+    "more": "Show more",
+    "auditActions": {
+      "ip.create": "IP created",
+      "ip.update": "IP updated",
+      "ip.terms_add": "Terms version added",
+      "ip.state_change": "State changed",
+      "ip.manager_change": "Managers changed",
+      "ip.material_add": "Material added",
+      "ip.material_withdraw": "Material withdrawn",
+      "ip.grant_add": "Grant added",
+      "ip.grant_revoke": "Grant revoked",
+      "asset.view_detail": "Material detail viewed",
+      "asset.download_original": "Original downloaded",
+      "ip.denied": "Denied"
+    },
+    "admin": {
+      "intro": "Let only granted people use entrusted copyrighted materials, and only for permitted purposes. Available in authentication mode only.",
+      "enabled": "Use IP materials",
+      "create": "Create an IP",
+      "name": "Name",
+      "ownerKind": "Owner",
+      "rightsHolder": "Rights holder",
+      "createButton": "Create"
+    }
   }
 }

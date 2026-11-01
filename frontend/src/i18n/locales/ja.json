@@ -87,7 +87,8 @@
       "history": "履歴",
       "search": "検索",
       "assistant": "アシスタント",
-      "assistantTitle": "アシスタント (Alt+A)"
+      "assistantTitle": "アシスタント (Alt+A)",
+      "ip": "IP 素材"
     },
     "sidebar": {
       "resourcePanel": "リソースパネル",
@@ -332,7 +333,8 @@
       "regionDetection": "領域の検出",
       "groupNaming": "グループ名の候補",
       "teams": "チーム",
-      "teamsAdmin": "チーム"
+      "teamsAdmin": "チーム",
+      "ipAdmin": "IP 素材"
     },
     "frame": {
       "changeCount": {
@@ -4066,5 +4068,114 @@
     },
     "add": "追加",
     "remove": "外す"
+  },
+  "ip": {
+    "panelHeading": "IP 素材",
+    "loading": "読み込み中…",
+    "loadFailed": "IP を読み込めませんでした",
+    "notFound": "IP が見つかりません",
+    "failed": "変更できませんでした",
+    "empty": "使える IP はありません",
+    "materialCount": "素材 {count}",
+    "noMaterials": "素材はありません",
+    "open": "開く",
+    "backToList": "← IP の一覧",
+    "myAccess": "許可: {purposes}",
+    "states": {
+      "active": "有効",
+      "suspended": "停止中",
+      "terminated": "終了"
+    },
+    "ownerKinds": {
+      "own": "自社",
+      "third_party": "他社"
+    },
+    "suspend": "停止する",
+    "resume": "再開する",
+    "terminate": "終了する",
+    "terminateConfirm": "「{name}」を終了しますか? 終了すると許可はすべて効かなくなり、元に戻せません。",
+    "tabs": {
+      "materials": "素材",
+      "terms": "条件",
+      "grants": "許可",
+      "managers": "担当者",
+      "audit": "証跡"
+    },
+    "addMaterials": "素材を取り込む",
+    "uploading": "取り込み中…",
+    "withdraw": "取り下げ",
+    "withdrawn": "取り下げ済み",
+    "withdrawConfirm": "この素材を取り下げますか? 新しく使えなくなります(記録と、これまでに作った画像は残ります)。",
+    "reviseTerms": "条件を改める",
+    "saveTerms": "新しい版として保存",
+    "cancel": "キャンセル",
+    "terms": {
+      "version": "版 {version}",
+      "current": "今の条件",
+      "contractNumber": "契約番号",
+      "validFrom": "開始日",
+      "validUntil": "終了日",
+      "period": "期間",
+      "periodValue": "{from} 〜 {until}",
+      "purposes": "許諾された用途",
+      "purposesPlaceholder": "1行に1つ(例: デザインモック)",
+      "externalAi": "外部の AI への送信",
+      "externalAiOptions": {
+        "allow": "許可",
+        "local_only": "手元の接続先だけ",
+        "deny": "どの AI にも送らない"
+      },
+      "notes": "注記",
+      "notesPlaceholder": "クレジットの表記、禁止事項など",
+      "createdAt": "記録"
+    },
+    "grants": {
+      "target": "許可を出す先",
+      "toTeam": "チーム",
+      "toUser": "個人",
+      "team": "チーム",
+      "chooseTeam": "チームを選ぶ",
+      "email": "メールアドレス",
+      "emailPlaceholder": "許可を出す人のメールアドレス",
+      "purposes": "許す用途",
+      "noPurposes": "条件に用途がありません。先に条件を改めてください",
+      "canUse": "入力に使える(外すと見るだけ)",
+      "create": "許可を出す",
+      "empty": "許可はまだありません",
+      "revoke": "取り消す",
+      "revoked": "取り消し済み",
+      "inactive": "期間外",
+      "useAllowed": "入力に使える",
+      "viewOnly": "見るだけ"
+    },
+    "noManagers": "担当者はいません",
+    "managerEmailPlaceholder": "担当者にする人のメールアドレス",
+    "addManager": "担当者にする",
+    "removeManager": "外す",
+    "noAudit": "記録はありません",
+    "more": "さらに表示",
+    "auditActions": {
+      "ip.create": "IP を作成",
+      "ip.update": "IP を変更",
+      "ip.terms_add": "条件の版を追加",
+      "ip.state_change": "状態を変更",
+      "ip.manager_change": "担当者を変更",
+      "ip.material_add": "素材を取り込み",
+      "ip.material_withdraw": "素材を取り下げ",
+      "ip.grant_add": "許可を追加",
+      "ip.grant_revoke": "許可を取り消し",
+      "asset.view_detail": "素材の詳細を表示",
+      "asset.download_original": "原本を取得",
+      "ip.denied": "拒否"
+    },
+    "admin": {
+      "intro": "預かった版権の素材を、許可した人だけが、許可した用途に使えるようにします。認証モードのときだけ使えます。",
+      "enabled": "IP 素材を使う",
+      "create": "IP を作る",
+      "name": "名前",
+      "ownerKind": "区分",
+      "rightsHolder": "権利者",
+      "createButton": "作成"
+    }
   }
 }

@@ -309,6 +309,8 @@ _EXCLUDED_PREFIXES = (
     # チーム(ADR-0058)。管理者が管理するもので、管理者には全部が見える。入っていない人に見えない
     # ことは tests/test_teams.py で確かめる。
     "/api/teams/",
+    # IP 素材(ADR-0059)。見える範囲は許可と担当者で決まり、tests/test_ip_materials.py で確かめる。
+    "/api/ip/",
     # タグ辞書(ADR-0041)。インスタンス全体で共有する管理者設定で、利用者のデータではない。
     "/api/settings/tag-dictionaries/",
     # Mod(ADR-0051)。管理者設定で、利用者のデータではない。

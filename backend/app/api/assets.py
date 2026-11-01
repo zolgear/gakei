@@ -30,12 +30,14 @@ from app.deps import (
 from app.domain import (
     annotation_settings,
     asset_locks,
+    audit,
     content_withholding,
     derivatives,
     embedding_settings,
     focal_points,
     imported_assets,
     ingest_hooks,
+    ip_materials,
 )
 from app.domain import annotations as annotations_domain
 from app.domain import compositions as compositions_domain
@@ -87,6 +89,7 @@ from app.domain.storage import AssetStore
 from app.domain.visibility import (
     VisibilityChecker,
     asset_visible,
+    get_readable_asset,
     get_visible_asset,
     get_visible_group,
 )
@@ -372,7 +375,12 @@ def list_assets(
         raise HTTPException(status_code=404, detail=t("assetGroups.notFound"))
 
     # ADR-0025: 見える Asset だけ(ページングの件数・カーソルも同じ条件の上で数える)。
-    query = select(Asset).where(Asset.deleted_at.is_(None), asset_visible(user))
+    # IP 素材は普段のストックに出さない(IP のページの棚に出す。ADR-0059 3章)。
+    query = select(Asset).where(
+        Asset.deleted_at.is_(None),
+        asset_visible(user),
+        Asset.id.not_in(ip_materials.material_asset_ids()),
+    )
     if kind:
         query = query.where(Asset.kind.in_(kind))
     if tag is not None and tag.strip():
@@ -441,19 +449,39 @@ def list_assets(
 @router.get("/{asset_id}", response_model=AssetDetail, operation_id="get_asset")
 def get_asset(
     asset_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_session),
     store: AssetStore = Depends(get_store),
     user: CurrentUser = Depends(require_user),
 ) -> AssetDetail:
     # 論理削除済みでも200で返す(Run詳細・系列グラフから引き続き参照できるようにするため)。
-    # 他人の Asset は存在しないものと同じ 404(ADR-0025)。
-    asset = get_visible_asset(db, user, asset_id)
+    # 他人の Asset は存在しないものと同じ 404(ADR-0025)。許可を受けた IP 素材は読める(ADR-0059)。
+    asset = get_readable_asset(db, user, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    _audit_ip_read(db, user, asset, "asset.view_detail", request)
     produced_by_run = None
     if asset.produced_by_run_id is not None:
         produced_by_run = db.get(Run, asset.produced_by_run_id)
     return _to_detail(db, asset, produced_by_run, user, store)
+
+
+def _audit_ip_read(
+    db: Session, user: CurrentUser, asset: Asset, action: str, request: Request
+) -> None:
+    """IP 素材を読んだことを証跡に残す(ADR-0059 7章)。素材でなければ何もしない。"""
+    material = ip_materials.material_ip(db, asset.id)
+    if material is None:
+        return
+    audit.record_now(
+        db,
+        user,
+        action,
+        ip_id=material.ip_id,
+        target_type="asset",
+        target_id=asset.id,
+        request=request,
+    )
 
 
 @router.delete("/{asset_id}", status_code=204, operation_id="delete_asset")
@@ -466,6 +494,9 @@ def delete_asset(
     asset = get_visible_asset(db, user, asset_id)
     if asset is None or asset.deleted_at is not None:
         raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    # IP 素材は普段の削除では消せない(取り下げは IP のページで。ADR-0059 3章)。
+    if ip_materials.material_ip(db, asset.id) is not None:
+        raise HTTPException(status_code=409, detail=t("ip.materialNotDeletable"))
     # ロックした画像と、その祖先は消せない(ADR-0060 1章)。
     if asset_locks.is_protected(db, asset.id):
         raise HTTPException(status_code=409, detail=t("assets.locked"))
@@ -490,15 +521,27 @@ def _lock_target(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
 def lock_asset(
     asset_id: uuid.UUID,
     body: AssetLockRequest,
+    request: Request,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> AssetLockView:
-    """ロックを付ける(ADR-0060 2章)。既に付いていれば 409。"""
+    """ロックを付ける(ADR-0060 2章)。既に付いていれば 409。IP 素材には付けない(3章)。"""
     asset = _lock_target(db, user, asset_id)
+    if ip_materials.material_ip(db, asset.id) is not None:
+        raise HTTPException(status_code=409, detail=t("ip.materialNotLockable"))
     try:
         lock = asset_locks.lock_asset(db, user, asset, body.kind, body.note)
     except asset_locks.AlreadyLockedError as exc:
         raise HTTPException(status_code=409, detail=t("assets.alreadyLocked")) from exc
+    audit.record_now(
+        db,
+        user,
+        "asset.lock",
+        target_type="asset",
+        target_id=asset.id,
+        detail={"kind": lock.kind, "note": lock.note},
+        request=request,
+    )
     return AssetLockView(
         kind=lock.kind,  # type: ignore[arg-type]
         note=lock.note,
@@ -511,6 +554,7 @@ def lock_asset(
 @router.delete("/{asset_id}/lock", status_code=204, operation_id="unlock_asset")
 def unlock_asset(
     asset_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> None:
@@ -522,6 +566,9 @@ def unlock_asset(
         raise HTTPException(status_code=404, detail=t("assets.notLocked")) from exc
     except asset_locks.UnlockNotAllowedError as exc:
         raise HTTPException(status_code=403, detail=t("assets.unlockNotAllowed")) from exc
+    audit.record_now(
+        db, user, "asset.unlock", target_type="asset", target_id=asset.id, request=request
+    )
 
 
 def _favorite_target(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
@@ -613,10 +660,13 @@ def get_asset_content(
     user: CurrentUser = Depends(require_user_or_api_token),
 ) -> Response:
     # 論理削除済みでも配信する(系列グラフ・Run詳細のサムネイル表示用。原本ファイルは消さない)。
-    # 他人の Asset は存在しないものと同じ 404(ADR-0025。アクセストークンでも同じ)。
-    asset = get_visible_asset(db, user, asset_id)
+    # 他人の Asset は存在しないものと同じ 404(ADR-0025。アクセストークンでも同じ)。許可を受けた
+    # IP 素材は読める(ADR-0059)。原本の取得は証跡に残す。
+    asset = get_readable_asset(db, user, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    if variant == "original":
+        _audit_ip_read(db, user, asset, "asset.download_original", request)
 
     return asset_content_response(
         db,

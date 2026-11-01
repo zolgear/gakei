@@ -99,6 +99,8 @@ def asset_visible(user: CurrentUser) -> ColumnElement[bool]:
         .where(_owner_condition(owner_run.created_by_user_id, user))
         .correlate(None)
     )
+    from app.domain import ip_materials
+
     return or_(
         and_(
             Asset.produced_by_run_id.is_(None),
@@ -108,6 +110,9 @@ def asset_visible(user: CurrentUser) -> ColumnElement[bool]:
             Asset.produced_by_run_id.is_not(None),
             Asset.produced_by_run_id.in_(visible_run_ids),
         ),
+        # IP 素材(ADR-0059 3章)。普段の可視性(変更を含む)では管理者と担当者だけ。許可を受けた人は
+        # 読むだけ(`get_readable_asset`)。
+        Asset.id.in_(ip_materials.managed_material_asset_ids(user)),
     )
 
 
@@ -161,6 +166,19 @@ def can_see_run(user: CurrentUser, run: Run) -> bool:
 def can_see_asset(db: Session, user: CurrentUser, asset: Asset) -> bool:
     if sees_everything(user):
         return True
+    from app.domain import ip_materials
+
+    # IP 素材(ADR-0059 3章)。普段の可視性では管理者と担当者だけ(取り込んだ人でも担当を外れれば
+    # 見えない)。
+    if ip_materials.material_ip(db, asset.id) is not None:
+        return (
+            db.execute(
+                ip_materials.managed_material_asset_ids(user).where(
+                    ip_materials.IpMaterial.asset_id == asset.id
+                )
+            ).first()
+            is not None
+        )
     if asset.produced_by_run_id is not None:
         run = db.get(Run, asset.produced_by_run_id)
         if run is None:
@@ -201,6 +219,20 @@ def get_visible_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> As
     """見える Asset(削除済みも含む)。存在しない・見えないときは None。"""
     asset = db.get(Asset, asset_id)
     if asset is None or not can_see_asset(db, user, asset):
+        return None
+    return asset
+
+
+def get_readable_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset | None:
+    """読める Asset(詳細と画像の配信)。見える Asset に加えて、許可を受けた IP 素材(ADR-0059 3章)。
+    変更の操作には使わない(`get_visible_asset` を使う)。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is not None:
+        return asset
+    from app.domain import ip_materials
+
+    asset = db.get(Asset, asset_id)
+    if asset is None or not ip_materials.can_read_material(db, user, asset_id):
         return None
     return asset
 

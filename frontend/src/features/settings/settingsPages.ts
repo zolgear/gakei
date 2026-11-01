@@ -5,6 +5,7 @@
  *
  * - 「プロフィール」(ADR-0020)と「アクセストークン」(ADR-0023 6章)は oidc モードのときだけ。
  * - 「チーム」(ADR-0058)はユーザー設定と管理者設定の両方にあり、どちらも oidc モードのときだけ。
+ *   管理者設定の「IP 素材」(ADR-0059)も oidc モードのときだけ。
  * - 自分の「共有リンク」の一覧(ADR-0029)は、管理者設定で有効のときだけ(取得できるまでと、
  *   取得に失敗したときも出さない)。有効/無効の切り替え(`shareLinks`)は管理者設定で常に出す。
  * - 非管理者には管理者設定のページを出さず、見出しも出さない(無効な機能は隠す)。
@@ -31,6 +32,7 @@ export type SettingsPageId =
   | 'shareLinks'
   | 'authentication'
   | 'teamsAdmin'
+  | 'ipAdmin'
   | 'about'
 
 /** ページ → パスの最後の区切り(`/settings/{slug}`)。旧いハッシュ(`#slug`)も同じ綴り。 */
@@ -55,6 +57,7 @@ export const SETTINGS_PAGE_SLUGS: Record<SettingsPageId, string> = {
   shareLinks: 'share-links',
   authentication: 'authentication',
   teamsAdmin: 'teams-admin',
+  ipAdmin: 'ip',
   about: 'about',
 }
 
@@ -75,6 +78,7 @@ export const ADMIN_SETTINGS_PAGES: readonly SettingsPageId[] = [
   'shareLinks',
   'authentication',
   'teamsAdmin',
+  'ipAdmin',
 ]
 
 /** 幅が十分なとき、`/settings` で本文に出すページ。 */
@@ -104,7 +108,7 @@ export function settingsToc({ isAdmin, isOidc, sharingEnabled }: SettingsVisibil
     if (p === 'shares') return sharingEnabled
     return true
   })
-  const admin = isAdmin ? ADMIN_SETTINGS_PAGES.filter((p) => p !== 'teamsAdmin' || isOidc) : []
+  const admin = isAdmin ? ADMIN_SETTINGS_PAGES.filter((p) => (p !== 'teamsAdmin' && p !== 'ipAdmin') || isOidc) : []
   return { user, admin, other: ['about'] }
 }
 

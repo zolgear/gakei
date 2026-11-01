@@ -294,3 +294,13 @@ export function LockIcon({ filled = false, ...props }: IconProps & { filled?: bo
     </Icon>
   )
 }
+
+/** 盾: IP 素材(ADR-0059)。アイコンレールと IP の印で使う。 */
+export function IpIcon(props: IconProps) {
+  return (
+    <Icon viewBox="0 0 18 18" {...props}>
+      <path d="M9 2.5l5.5 2v4.2c0 3.2-2.3 5.6-5.5 6.8-3.2-1.2-5.5-3.6-5.5-6.8V4.5z" />
+      <path d="M10.8 7.4a2.2 2.2 0 1 0 0 3.2" />
+    </Icon>
+  )
+}

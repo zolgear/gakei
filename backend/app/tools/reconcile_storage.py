@@ -23,7 +23,8 @@
   消す(消せずに残っても害は無い)。
 - Mod の `deny` の判定で画像を残さなかった Asset(`content_withheld_at`。ADR-0051 4章)は、
   原本が無いのが正しい状態なので対象から外す。
-- ロックした Asset とその祖先(ADR-0060)は、原本が無くても消さず、数だけを示す。外したロックの
+- ロックした Asset とその祖先(ADR-0060)と、IP 素材(ADR-0059)は、原本が無くても消さず、
+  数だけを示す。外したロックの
   記録が消える Asset を指していれば、そのロックの行と守る範囲の行を消す。
 - ADR-0003 の「追記のみ」「論理削除のみ」の例外にあたる保守の手段で、画面や API からは呼べない。
 """
@@ -49,7 +50,16 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
 from app.domain import asset_locks
-from app.domain.models import Asset, AssetLock, AssetLockScope, Base, Run, Share, ShareAsset
+from app.domain.models import (
+    Asset,
+    AssetLock,
+    AssetLockScope,
+    Base,
+    IpMaterial,
+    Run,
+    Share,
+    ShareAsset,
+)
 from app.domain.storage import (
     AssetStore,
     LocalFsStore,
@@ -98,6 +108,8 @@ ASSET_REFERENCES: dict[tuple[str, str], str] = {
     # だけ。
     ("asset_lock_scope", "asset_id"): DELETE,
     ("asset_lock", "asset_id"): DELETE_LOCK,
+    # IP 素材(ADR-0059)。素材の Asset は対象から外すので、ここで消す行は無い。
+    ("ip_material", "asset_id"): DELETE,
 }
 
 # Run(`run.id`)を指す外部キー(表、列)と扱い。
@@ -143,7 +155,7 @@ class ReconcilePlan:
     share_ids: set[uuid.UUID] = field(default_factory=set)
     # 消す外したロック(ADR-0060)
     lock_ids: set[uuid.UUID] = field(default_factory=set)
-    # 原本が無いが、ロックで守られているので消さない Asset の数(ADR-0060)
+    # 原本が無いが、ロックで守られている・IP 素材なので消さない Asset の数(ADR-0059、ADR-0060)
     locked_kept: int = 0
     # 一緒に消す行の数(表ごと。asset / run / share は別に数える)
     rows: dict[str, int] = field(default_factory=dict)
@@ -266,6 +278,7 @@ def plan_reconcile(
 
         # ADR-0060: ロックした Asset とその祖先は、原本が無くても消さない。
         protected = set(session.scalars(asset_locks.protected_asset_ids()).all())
+        protected |= set(session.scalars(select(IpMaterial.asset_id)).all())
         outputs: dict[uuid.UUID, list[uuid.UUID]] = {}
         for row in assets:
             if row.content_withheld_at is None and not present[row.blob_key]:
