@@ -232,6 +232,7 @@ def ingest(
         asset.content_withheld_verdict_id = withheld_verdict_id
         session.add(asset)
         session.flush()
+        _inherit_ip(session, asset)
         return asset
 
     blob_key = _find_shared_blob_key(session, store, sha256)
@@ -259,7 +260,19 @@ def ingest(
     )
     session.add(asset)
     session.flush()
+    _inherit_ip(session, asset)
     return asset
+
+
+def _inherit_ip(session: Session, asset: Asset) -> None:
+    """IP の引き継ぎ(ADR-0059 6章)。Run の出力は入力から、スケッチ・領域は下地から。配置の素材は
+    `compositions.save_composition` で引き継ぐ。"""
+    from app.domain import ip_usage
+
+    if asset.produced_by_run_id is not None:
+        ip_usage.inherit_from_run_inputs(session, asset.id, asset.produced_by_run_id)
+    if asset.source_asset_id is not None:
+        ip_usage.inherit(session, asset.id, [asset.source_asset_id])
 
 
 def _new_asset(

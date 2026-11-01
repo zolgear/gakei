@@ -34,7 +34,7 @@ from app.assistant.structured import StructuredImage, StructuredRequest
 from app.auth.deps import require_admin, require_user
 from app.auth.identity import CurrentUser
 from app.deps import get_session
-from app.domain import content_withholding, derivatives, llm_connections
+from app.domain import content_withholding, derivatives, ip_usage, llm_connections
 from app.domain import region_detection as detection
 from app.domain import region_detection_settings as detection_settings
 from app.domain.llm_connections import ConnectionNotFoundError, LlmTarget
@@ -173,6 +173,9 @@ def _target_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
     # ADR-0051 4章: 画像を残さなかった・`deny` の判定を受けた画像は外部の AI へ送らない。
     if content_withholding.blocked_asset_ids(db, [asset.id]):
         raise _error(409, "image_withheld", t("regionDetection.imageWithheld"))
+    # ADR-0059 5章: IP の契約で外部の AI に送れない画像は送らない。
+    if ip_usage.ai_blocked_asset_ids(db, [asset.id], "external"):
+        raise _error(409, "ip_not_allowed", t("ip.aiNotAllowed"))
     return asset
 
 

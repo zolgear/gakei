@@ -81,6 +81,7 @@ from app.domain.schemas import (
     PromptSetListResponse,
     RunCreateRequest,
     RunInputCreate,
+    RunIpUseRequest,
 )
 from app.domain.search import MAX_LIMIT as SEARCH_MAX_LIMIT
 from app.domain.storage import AssetStore
@@ -589,6 +590,21 @@ async def generate_image(
     group_id: Annotated[
         uuid.UUID | None, Field(description="Put the outputs into this group (see list_groups).")
     ] = None,
+    ip_purpose: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Required when an input is an IP material or was made from one: the permitted "
+                "purpose of this use, exactly as granted to the user. Without it such runs are "
+                "rejected."
+            ),
+            max_length=100,
+        ),
+    ] = None,
+    ip_work_note: Annotated[
+        str | None,
+        Field(description="Optional free-form note on the project or work unit.", max_length=1000),
+    ] = None,
     wait: Annotated[
         bool,
         Field(
@@ -649,6 +665,8 @@ async def generate_image(
         params=params or {},
         inputs=inputs,
         asset_group_id=group_id,
+        # IP 素材と派生物の申告(ADR-0059 5章)。
+        ip_use=RunIpUseRequest(purpose=ip_purpose, work_note=ip_work_note) if ip_purpose else None,
     )
     run_id = await _in_thread(lambda: _create_mcp_run(mc, body))
     # ここから先は Run ができている。何が起きても run_id を失わないよう、エラーにせず返す。

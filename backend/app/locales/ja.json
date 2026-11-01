@@ -1288,6 +1288,15 @@
     "grantTargetRequired": "許可を出す先は、チームか個人のどちらか1つを指定してください",
     "purposeNotInTerms": "契約の条件に無い用途は許可できません",
     "materialNotDeletable": "IP 素材は削除できません。IP のページで取り下げてください",
-    "materialNotLockable": "IP 素材にはロックを付けられません"
+    "materialNotLockable": "IP 素材にはロックを付けられません",
+    "declarationRequired": "IP 素材を使うときは、用途を選んでください",
+    "materialWithdrawn": "取り下げられた IP 素材は使えません",
+    "notActive": "「{name}」は今は使えません(停止中か終了)",
+    "outOfContract": "「{name}」は契約の期間の外です",
+    "purposeNotAllowed": "この用途は「{name}」の契約で許諾されていません",
+    "providerNotAllowed": "「{name}」の契約では、この送り先の AI に送れません",
+    "noGrant": "「{name}」をこの用途で使う許可がありません",
+    "shareNotAllowed": "IP 素材と、それから作った画像は共有リンクにできません",
+    "aiNotAllowed": "IP の契約で、この画像は AI に送れません"
   }
 }

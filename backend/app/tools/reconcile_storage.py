@@ -23,8 +23,8 @@
   消す(消せずに残っても害は無い)。
 - Mod の `deny` の判定で画像を残さなかった Asset(`content_withheld_at`。ADR-0051 4章)は、
   原本が無いのが正しい状態なので対象から外す。
-- ロックした Asset とその祖先(ADR-0060)と、IP 素材(ADR-0059)は、原本が無くても消さず、
-  数だけを示す。外したロックの
+- ロックした Asset とその祖先(ADR-0060)と、IP 素材とその派生物(ADR-0059)は、原本が無くても
+  消さず、数だけを示す。IP の利用の申告がある Run も消さない。外したロックの
   記録が消える Asset を指していれば、そのロックの行と守る範囲の行を消す。
 - ADR-0003 の「追記のみ」「論理削除のみ」の例外にあたる保守の手段で、画面や API からは呼べない。
 """
@@ -52,11 +52,13 @@ from app.db import make_engine, make_session_factory
 from app.domain import asset_locks
 from app.domain.models import (
     Asset,
+    AssetIpLineage,
     AssetLock,
     AssetLockScope,
     Base,
     IpMaterial,
     Run,
+    RunIpUse,
     Share,
     ShareAsset,
 )
@@ -108,8 +110,9 @@ ASSET_REFERENCES: dict[tuple[str, str], str] = {
     # だけ。
     ("asset_lock_scope", "asset_id"): DELETE,
     ("asset_lock", "asset_id"): DELETE_LOCK,
-    # IP 素材(ADR-0059)。素材の Asset は対象から外すので、ここで消す行は無い。
+    # IP 素材と派生物(ADR-0059)。対象から外すので、ここで消す行は無い。
     ("ip_material", "asset_id"): DELETE,
+    ("asset_ip_lineage", "asset_id"): DELETE,
 }
 
 # Run(`run.id`)を指す外部キー(表、列)と扱い。
@@ -118,6 +121,8 @@ RUN_REFERENCES: dict[tuple[str, str], str] = {
     ("run_input", "run_id"): DELETE,
     ("run_import", "run_id"): DELETE,
     ("run_prompt_embedding", "run_id"): DELETE,
+    # IP の利用の申告(ADR-0059 5章)。申告のある Run は対象から外すので、ここで消す行は無い。
+    ("run_ip_use", "run_id"): DELETE,
 }
 
 # 共有リンク(`share.id`)を指す外部キー。消す共有リンクの範囲の行も消す。
@@ -279,6 +284,7 @@ def plan_reconcile(
         # ADR-0060: ロックした Asset とその祖先は、原本が無くても消さない。
         protected = set(session.scalars(asset_locks.protected_asset_ids()).all())
         protected |= set(session.scalars(select(IpMaterial.asset_id)).all())
+        protected |= set(session.scalars(select(AssetIpLineage.asset_id)).all())
         outputs: dict[uuid.UUID, list[uuid.UUID]] = {}
         for row in assets:
             if row.content_withheld_at is None and not present[row.blob_key]:
@@ -304,8 +310,13 @@ def plan_reconcile(
             if all(asset_id in plan.asset_ids for asset_id in output_ids):
                 plan.run_ids.add(run_id)
                 plan.runs_outputs_gone += 1
+        # IP の利用の申告がある Run は、記録なので消さない(ADR-0059 5章)。
+        declared = set(session.scalars(select(RunIpUse.run_id)).all())
+        plan.run_ids -= declared
         without_outputs = [
-            run_id for run_id in session.scalars(select(Run.id)).all() if run_id not in outputs
+            run_id
+            for run_id in session.scalars(select(Run.id)).all()
+            if run_id not in outputs and run_id not in declared
         ]
         plan.runs_without_outputs_total = len(without_outputs)
         if include_runs_without_outputs:

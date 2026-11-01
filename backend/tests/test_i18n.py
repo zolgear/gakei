@@ -294,6 +294,9 @@ _KNOWN_DYNAMIC_PREFIX_SITES: dict[str, str] = {
     "app/api/tag_dictionaries.py": "tagDictionaries.",
     # IP 素材の断る理由(`IpValidationError` の文言のキー。ADR-0059)。すべて `ip.` の下。
     "app/api/ip.py": "ip.",
+    # IP の利用の検査の断る理由(`IpUseError.key`。ADR-0059 5章)。すべて `ip.` の下。
+    "app/domain/run_create.py": "ip.",
+    "app/worker/runner.py": "ip.",
 }
 
 

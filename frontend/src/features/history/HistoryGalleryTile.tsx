@@ -19,6 +19,7 @@ import { HistoryCardMedia } from './HistoryCardMedia'
 import { galleryTileSizes } from './historyImageSizes'
 import { FavoriteButton } from './FavoriteButton'
 import { LockMark } from '../lock/LockMark'
+import { IpMark } from '../ip/IpMark'
 import { useHistoryRunActions } from './useHistoryRunActions'
 import styles from './HistoryCard.module.css'
 
@@ -62,6 +63,7 @@ export function HistoryGalleryTile({ run, outputIndex, aspect, size, columnWidth
       <HistoryCardMedia run={run} output={shownOutput} href={nav.mediaHref} variant="gallery" sizes={sizes} />
       {run.status === 'succeeded' && shownOutput && <FavoriteButton output={shownOutput} variant="gallery" />}
       {shownOutput?.locked && <LockMark className={styles.lockMark} />}
+      {shownOutput?.ip_marked && <IpMark className={styles.ipMark} />}
       <div className={styles.galleryHover}>
         {title && (
           <Link to={nav.runHref} className={styles.galleryTitle} title={title}>

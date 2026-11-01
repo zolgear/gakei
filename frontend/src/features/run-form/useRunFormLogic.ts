@@ -88,6 +88,7 @@ import {
 import { buildParameterSetRawParams, resolveParameterSetLoad } from '../parameter-sets/parameterSets'
 import { resolveImageSettingsLoad, toSdWebuiResponse } from '../image-settings/imageSettings'
 import { resolveRunFormLoad } from './runFormLoad'
+import { useIpDeclaration, type IpDeclaration } from '../ip/useIpDeclaration'
 import { loadRepeatRaw, parseRepeat, saveRepeatRaw } from './repeat'
 import {
   initialSelectionState,
@@ -275,6 +276,8 @@ export interface RunFormLogic {
   setTemplatePreview: (preview: TemplatePreview | null) => void
 
   canSubmit: boolean
+  /** IP 素材と派生物を入力にするときの申告(ADR-0059 5章)。 */
+  ipDeclaration: IpDeclaration
   submitError: string | null
   isSubmitting: boolean
   submit: () => void
@@ -890,6 +893,12 @@ export function useRunFormLogic(
   }
 
   const compositeRedrawReason = compositeRedrawBlockReason(compositeRedrawing)
+  // ADR-0059 5章: 入力が IP を引き継ぐなら、用途を選ぶまで送れない(使えるかはサーバーが確かめる)。
+  const ipDeclaration = useIpDeclaration(
+    operation === 'edit' ? formState.inputs.map((i) => i.assetId) : [],
+    provider,
+    model,
+  )
   const canSubmit =
     promptValid &&
     sizeValidation.valid &&
@@ -907,6 +916,7 @@ export function useRunFormLogic(
     regionsBlockReason === null &&
     compositeRedrawReason === null &&
     repeat !== null &&
+    ipDeclaration.blockReason === null &&
     !mutation.isPending
 
   function submit() {
@@ -946,6 +956,8 @@ export function useRunFormLogic(
           // 領域の指示(ADR-0053)。今の操作が四角を受け、四角があるときだけ送る。
           // 土台(1枚目・白紙)も送る(ADR-0053 1章「四角の土台を選ぶ」)。
           ...(regionsActive ? { regions: formState.regions, regions_frame: regionsFrame } : {}),
+          // IP の利用の申告(ADR-0059 5章)。
+          ...(ipDeclaration.body ? { ip_use: ipDeclaration.body } : {}),
         },
         resolvedAssetGroupId,
       ),
@@ -1029,6 +1041,7 @@ export function useRunFormLogic(
     templatePreview,
     setTemplatePreview,
     canSubmit,
+    ipDeclaration,
     submitError,
     isSubmitting: mutation.isPending,
     submit,

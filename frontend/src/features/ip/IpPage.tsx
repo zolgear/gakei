@@ -2,6 +2,8 @@
  * IP のページ(`/ip/:ipId`。ADR-0059 11章)。上に名前・区分・権利者・状態、その下をタブで分ける。
  *
  * - 素材: 見られる人は誰でも。担当者と管理者は取り込みと取り下げ。
+ * - 派生物: 素材から作った画像。担当者と管理者にはすべて、ほかの人には読めるものと自分のもの。
+ *   ほかの IP も引き継ぐもの(混入・掛け合わせ)には印を付ける(ADR-0059 6章)。
  * - 条件: 今の条件と、これまでの版。担当者と管理者は新しい版を足す。
  * - 許可: 担当者と管理者だけ。チームか個人に、用途と「入力に使う」を選んで出す・取り消す。
  * - 担当者: 見られる人は誰でも。管理者は足す・外す。
@@ -19,6 +21,7 @@ import {
   createIpGrant,
   getIp,
   listIpAudit,
+  listIpDerivatives,
   listIpGrantTargets,
   listIpGrants,
   listIpMaterials,
@@ -40,7 +43,7 @@ import { IpTermsFields } from './IpTermsForm'
 import { termsDraftFrom, termsInputFrom, type TermsDraft } from './ipTerms'
 import styles from './Ip.module.css'
 
-type Tab = 'materials' | 'terms' | 'grants' | 'managers' | 'audit'
+type Tab = 'materials' | 'derivatives' | 'terms' | 'grants' | 'managers' | 'audit'
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback
@@ -58,8 +61,8 @@ export function IpPage() {
   if (!ip) return <div className={styles.page}><p className={styles.errorText}>{m.notFound}</p></div>
 
   const tabs: Tab[] = ip.can_manage
-    ? ['materials', 'terms', 'grants', 'managers', 'audit']
-    : ['materials', 'terms', 'managers']
+    ? ['materials', 'derivatives', 'terms', 'grants', 'managers', 'audit']
+    : ['materials', 'derivatives', 'terms', 'managers']
   const current = tabs.includes(tab) ? tab : 'materials'
 
   return (
@@ -95,6 +98,7 @@ export function IpPage() {
         ))}
       </div>
       {current === 'materials' && <MaterialsTab ip={ip} />}
+      {current === 'derivatives' && <DerivativesTab ip={ip} />}
       {current === 'terms' && <TermsTab ip={ip} />}
       {current === 'grants' && <GrantsTab ip={ip} />}
       {current === 'managers' && <ManagersTab ip={ip} />}
@@ -240,6 +244,38 @@ function MaterialsTab({ ip }: { ip: IpDetail }) {
         onConfirm={() => withdrawTarget && withdraw.mutate(withdrawTarget)}
         onCancel={() => setWithdrawTarget(null)}
       />
+    </section>
+  )
+}
+
+function DerivativesTab({ ip }: { ip: IpDetail }) {
+  const { t } = useI18n()
+  const m = t.ip
+  const query = useQuery({ queryKey: [...IP_QUERY_KEY, ip.id, 'derivatives'], queryFn: () => listIpDerivatives(ip.id) })
+  const items = query.data?.items ?? []
+  return (
+    <section className={styles.section}>
+      {query.data && items.length === 0 && <p className={styles.muted}>{m.noDerivatives}</p>}
+      <div className={styles.materialGrid}>
+        {items.map((item) => (
+          <figure key={item.asset.id} className={styles.material}>
+            <Link to={`/assets/${item.asset.id}`} className={styles.materialImage}>
+              <img src={assetUrl(item.asset.id, 'thumb')} alt="" loading="lazy" />
+            </Link>
+            <figcaption className={styles.materialCaption}>
+              <span>
+                {formatDateTime(item.created_at)}
+                {item.created_by_name && ` · ${item.created_by_name}`}
+              </span>
+              {(item.other_ip_count ?? 0) > 0 && (
+                <span className={styles.withdrawnBadge} data-mixed="true">
+                  {fmt(m.otherIps, { count: item.other_ip_count ?? 0 })}
+                </span>
+              )}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
     </section>
   )
 }

@@ -21,6 +21,7 @@ function asset(id: string, deletedAt: string | null): AssetDetail {
     favorite: false,
     locked: false,
     lock_protected: false,
+    ip_marked: false,
     imported: false,
   }
 }

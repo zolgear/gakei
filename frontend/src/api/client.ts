@@ -804,6 +804,18 @@ export function listIpGrantTargets(ipId: string): Promise<IpTeamRef[]> {
   return request(`/api/ip/${ipId}/grant-targets`)
 }
 
+export type IpUsageCheckResponse = components['schemas']['IpUsageCheckResponse']
+export type IpDerivativeItem = components['schemas']['IpDerivativeItem']
+
+/** 入力にする画像が IP を引き継ぐか、申告で選べる用途(ADR-0059 5章。生成のフォーム用)。 */
+export function checkIpUsage(body: { asset_ids: string[]; provider?: string; model?: string }): Promise<IpUsageCheckResponse> {
+  return request('/api/ip/usage-check', ipJson('POST', body))
+}
+
+export function listIpDerivatives(ipId: string): Promise<{ items: IpDerivativeItem[] }> {
+  return request(`/api/ip/${ipId}/derivatives`)
+}
+
 export function listIpAudit(
   ipId: string,
   cursor: string | null,

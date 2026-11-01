@@ -4099,7 +4099,8 @@
       "terms": "条件",
       "grants": "許可",
       "managers": "担当者",
-      "audit": "証跡"
+      "audit": "証跡",
+      "derivatives": "派生物"
     },
     "addMaterials": "素材を取り込む",
     "uploading": "取り込み中…",
@@ -4176,6 +4177,21 @@
       "ownerKind": "区分",
       "rightsHolder": "権利者",
       "createButton": "作成"
-    }
+    },
+    "declaration": {
+      "heading": "IP の利用の申告",
+      "purpose": "用途",
+      "purposePlaceholder": "用途を選ぶ",
+      "workNote": "作業のメモ",
+      "workNotePlaceholder": "案件・発注など(任意)",
+      "choosePurpose": "IP 素材を使うので、用途を選んでください",
+      "noCommonPurpose": "入力の IP に共通して使える用途がありません",
+      "checking": "IP の許可を確かめています…"
+    },
+    "noDerivatives": "派生物はありません",
+    "otherIps": "ほかの IP {count}",
+    "assetSection": "IP",
+    "materialBadge": "素材",
+    "markLabel": "IP 素材から作った画像"
   }
 }

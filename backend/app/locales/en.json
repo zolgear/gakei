@@ -1288,6 +1288,15 @@
     "grantTargetRequired": "Specify either a team or a person to grant to",
     "purposeNotInTerms": "Purposes not in the contract terms cannot be granted",
     "materialNotDeletable": "IP materials cannot be deleted. Withdraw them on the IP page",
-    "materialNotLockable": "IP materials cannot be locked"
+    "materialNotLockable": "IP materials cannot be locked",
+    "declarationRequired": "Choose a purpose to use IP materials",
+    "materialWithdrawn": "Withdrawn IP materials cannot be used",
+    "notActive": "\"{name}\" cannot be used now (suspended or terminated)",
+    "outOfContract": "\"{name}\" is outside its contract period",
+    "purposeNotAllowed": "This purpose is not permitted by the contract for \"{name}\"",
+    "providerNotAllowed": "The contract for \"{name}\" does not allow sending to this AI",
+    "noGrant": "You are not granted to use \"{name}\" for this purpose",
+    "shareNotAllowed": "IP materials and images made from them cannot be shared by link",
+    "aiNotAllowed": "The IP contract does not allow sending this image to AI"
   }
 }

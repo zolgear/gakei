@@ -224,7 +224,8 @@ def get_visible_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> As
 
 
 def get_readable_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset | None:
-    """読める Asset(詳細と画像の配信)。見える Asset に加えて、許可を受けた IP 素材(ADR-0059 3章)。
+    """読める Asset(詳細と画像の配信)。見える Asset に加えて、許可を受けた IP 素材と派生物
+    (ADR-0059 3章・6章)。
     変更の操作には使わない(`get_visible_asset` を使う)。"""
     asset = get_visible_asset(db, user, asset_id)
     if asset is not None:
@@ -232,9 +233,16 @@ def get_readable_asset(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> A
     from app.domain import ip_materials
 
     asset = db.get(Asset, asset_id)
-    if asset is None or not ip_materials.can_read_material(db, user, asset_id):
+    if asset is None:
         return None
-    return asset
+    from app.domain import ip_usage
+
+    # IP 素材と、IP の派生物(ADR-0059 6章)。
+    if ip_materials.can_read_material(db, user, asset_id) or ip_usage.can_read_derived(
+        db, user, asset_id
+    ):
+        return asset
+    return None
 
 
 def get_visible_group(db: Session, user: CurrentUser, group_id: uuid.UUID) -> AssetGroup | None:

@@ -392,6 +392,17 @@ class ContentRatingDetail(BaseModel):
     judged_at: datetime | None = None
 
 
+class AssetIpRef(BaseModel):
+    """画像が引き継ぐ IP(ADR-0059 6章)。"""
+
+    id: uuid.UUID
+    name: str
+    # この画像が素材そのものか。
+    material: bool = False
+    # 契約の条件の注記(クレジットの表記など)。
+    notes: str | None = None
+
+
 class AssetLockView(BaseModel):
     """画像に付いているロック(ADR-0060)。"""
 
@@ -434,6 +445,8 @@ class AssetSummary(BaseModel):
     # 元にした画像にロックが付いていて消せない。埋めるのはストックの一覧と詳細だけ。
     locked: bool = False
     lock_protected: bool = False
+    # IP 素材か、その派生物か(ADR-0059 6章)。一覧の印に使う。
+    ip_marked: bool = False
     # 系列の取り込み(ADR-0037)で入った、取り込んだ Run が作った生成画像か(記録は未検証)。
     # タイルの種別のリボンに使う。取り込みで入ったアップロードなどは種別のとおり false。
     imported: bool = False
@@ -833,6 +846,8 @@ class AssetDetail(AssetSummary):
     favorite: bool = False
     # この画像に付いているロック(ADR-0060)。無ければ null。
     lock: AssetLockView | None = None
+    # 引き継ぐ IP(ADR-0059 6章)。見る人に見える IP だけ。
+    ips: list[AssetIpRef] = Field(default_factory=list)
 
 
 class AssetUploadResponse(AssetDetail):
@@ -1130,6 +1145,13 @@ class RegionBox(BaseModel):
         return self
 
 
+class RunIpUseRequest(BaseModel):
+    """IP 素材と派生物を入力にするときの申告(ADR-0059 5章)。"""
+
+    purpose: str = Field(min_length=1, max_length=100)
+    work_note: str | None = Field(default=None, max_length=1000)
+
+
 class RunCreateRequest(BaseModel):
     operation: Literal["generate", "edit"]
     model: str
@@ -1155,6 +1177,8 @@ class RunCreateRequest(BaseModel):
     # 出力の大きさの白紙の上。省略時は、主たる入力があれば `input`、無ければ `output`。入力画像が
     # あっても `output` を選べる(参考の画像を入力に入れたまま、白紙で構図を指示する)。
     regions_frame: Literal["input", "output"] | None = None
+    # IP 素材と派生物を入力にするときの申告(ADR-0059 5章)。入力が IP を引き継がなければ見ない。
+    ip_use: RunIpUseRequest | None = None
 
     @model_validator(mode="after")
     def _unique_region_numbers(self) -> RunCreateRequest:
@@ -1214,6 +1238,8 @@ class RunOutputRef(BaseModel):
     # ロック(ADR-0060)。`AssetSummary` と同じ意味。
     locked: bool = False
     lock_protected: bool = False
+    # IP 素材か、その派生物か(ADR-0059 6章)。
+    ip_marked: bool = False
 
 
 class AssetFavoriteResponse(BaseModel):
@@ -3940,3 +3966,40 @@ class AuditEventView(BaseModel):
 class AuditEventListResponse(BaseModel):
     items: list[AuditEventView]
     next_cursor: str | None = None
+
+
+class IpUsageCheckRequest(BaseModel):
+    asset_ids: list[uuid.UUID] = Field(default_factory=list, max_length=32)
+    provider: str | None = None
+    model: str | None = None
+
+
+class IpUsageIp(BaseModel):
+    id: uuid.UUID
+    name: str
+    notes: str | None = None
+    external_ai: Literal["allow", "local_only", "deny"] | None = None
+    # 見る人が「入力に使う」の許可で使える用途(契約の用途と合わせたもの)。
+    purposes: list[str]
+    # 使えない理由(無ければ null)。用途によらないもの(停止中、契約の期間の外、送り先など)。
+    problem: str | None = None
+
+
+class IpUsageCheckResponse(BaseModel):
+    # 申告が要るか(入力が IP を引き継ぐか)。
+    required: bool
+    ips: list[IpUsageIp] = Field(default_factory=list)
+    # すべての IP で使える用途(申告で選べる用途)。
+    purposes: list[str] = Field(default_factory=list)
+
+
+class IpDerivativeItem(BaseModel):
+    asset: AssetSummary
+    created_at: datetime
+    created_by_name: str | None = None
+    # この IP のほかに引き継ぐ IP の数(混入・掛け合わせの印。ADR-0059 6章)。
+    other_ip_count: int = 0
+
+
+class IpDerivativeListResponse(BaseModel):
+    items: list[IpDerivativeItem]

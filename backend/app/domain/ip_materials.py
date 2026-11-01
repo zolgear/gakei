@@ -453,6 +453,9 @@ def add_material(db: Session, viewer: CurrentUser, ip: IpProperty, asset: Asset)
     )
     db.add(material)
     db.flush()
+    from app.domain import ip_usage
+
+    ip_usage.mark_material(db, asset.id, ip.id)
     return material
 
 

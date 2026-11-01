@@ -94,6 +94,10 @@ def save_composition(
             AssetCompositionSource(asset_id=asset.id, position=position, source_asset_id=source_id)
         )
     db.flush()
+    # 素材の IP を引き継ぐ(ADR-0059 6章)。
+    from app.domain import ip_usage
+
+    ip_usage.inherit_from_composition(db, asset.id)
 
 
 def composition_sources(db: Session, asset_id: uuid.UUID) -> list[AssetCompositionSource]:

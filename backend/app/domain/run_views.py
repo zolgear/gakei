@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import ColumnElement, Select, literal, or_, select
+from sqlalchemy import ColumnElement, Select, exists, literal, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
@@ -29,6 +29,7 @@ from app.domain.models import (
     AssetFocalPoint,
     AssetGroup,
     AssetGroupMember,
+    AssetIpLineage,
     AssetMark,
     Run,
     RunInput,
@@ -118,6 +119,8 @@ def bulk_output_refs(
             Asset.height,
             (AssetMark.id if viewer is not None else literal(None)).label("mark_id"),
             locks.c.locked,
+            # IP 素材か派生物か(ADR-0059 6章)。相関する EXISTS で、問い合わせを増やさない。
+            exists().where(AssetIpLineage.asset_id == Asset.id).correlate(Asset).label("ip_marked"),
         )
         .outerjoin(AssetAnnotation, AssetAnnotation.asset_id == Asset.id)
         # サムネイルの焦点(ADR-0043)とレーティング(ADR-0049)も同じ問い合わせで引く。
@@ -143,6 +146,7 @@ def bulk_output_refs(
         height,
         mark_id,
         locked,
+        ip_marked,
     ) in rows:
         result[produced_by_run_id].append(
             RunOutputRef(
@@ -157,6 +161,7 @@ def bulk_output_refs(
                 favorite=mark_id is not None,
                 locked=bool(locked),
                 lock_protected=locked is not None,
+                ip_marked=bool(ip_marked),
             )
         )
     return result
