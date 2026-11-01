@@ -1260,5 +1260,14 @@
       "promptLinked": "The prompt is wired from another node, so it could not be loaded.",
       "workflowPartialMatch": "Some nodes differ from the workflow \"{name}\". Check the values."
     }
+  },
+  "teams": {
+    "notFound": "Team not found",
+    "adminOnly": "Only admins can do this",
+    "forbidden": "You do not have permission to do this",
+    "nameTaken": "A team with this name already exists",
+    "invalidName": "Name must be 1 to 100 characters",
+    "userNotFound": "No user with this email (only people who have signed in once can be added)",
+    "memberNotFound": "This person is not a member of the team"
   }
 }

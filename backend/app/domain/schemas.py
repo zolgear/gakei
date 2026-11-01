@@ -3742,3 +3742,55 @@ class RegionDetectionListResponse(BaseModel):
     """`GET /api/assets/{asset_id}/regions/detections`。新しい順。"""
 
     items: list[RegionDetectionView]
+
+
+# -- チーム(ADR-0058) -------------------------------------------------------------------
+
+
+class TeamSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None = None
+    member_count: int
+    # 見る人の役割(入っていなければ null。管理者が全部を見るとき)。
+    my_role: Literal["member", "lead"] | None = None
+    created_at: datetime
+
+
+class TeamListResponse(BaseModel):
+    items: list[TeamSummary]
+
+
+class TeamMemberView(BaseModel):
+    user_id: uuid.UUID
+    name: str | None = None
+    email: str | None = None
+    avatar_url: str | None = None
+    role: Literal["member", "lead"]
+    added_at: datetime
+
+
+class TeamDetail(TeamSummary):
+    members: list[TeamMemberView]
+    # 見る人がメンバーを出し入れできるか(管理者と代表者)、代表者を決められるか(管理者)。
+    can_manage_members: bool
+    can_manage_leads: bool
+
+
+class TeamCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class TeamUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class TeamMemberAddRequest(BaseModel):
+    email: str = Field(min_length=1, max_length=320)
+    role: Literal["member", "lead"] = "member"
+
+
+class TeamMemberRoleRequest(BaseModel):
+    role: Literal["member", "lead"]

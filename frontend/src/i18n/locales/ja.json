@@ -330,7 +330,9 @@
       "authentication": "認証",
       "assistant": "アシスタント",
       "regionDetection": "領域の検出",
-      "groupNaming": "グループ名の候補"
+      "groupNaming": "グループ名の候補",
+      "teams": "チーム",
+      "teamsAdmin": "チーム"
     },
     "frame": {
       "changeCount": {
@@ -1504,6 +1506,10 @@
         "structured_outputs_unsupported": "接続先が構造化出力に対応するとみなせないため、名前の候補は出ていません。対応している接続先なら、「LLM の接続先」でその接続先の「構造化出力」を「対応する」にしてください。"
       },
       "structuredOutputsLink": "LLM の接続先を開く"
+    },
+    "teams": {
+      "intro": "入っているチームと、メンバーです。代表者はメンバーを出し入れできます。",
+      "adminIntro": "チームを作り、代表者を決めます。チームは IP 素材の利用の許可の単位です。"
     }
   },
   "promptSets": {
@@ -4032,5 +4038,33 @@
     "close": "閉じる",
     "failed": "ロックを変更できませんでした",
     "protectedHint": "ロックした画像か、その元なので削除できません"
+  },
+  "teams": {
+    "name": "チームの名前",
+    "namePlaceholder": "新しいチームの名前",
+    "create": "作成",
+    "loading": "読み込み中…",
+    "loadFailed": "チームを読み込めませんでした",
+    "failed": "変更できませんでした",
+    "empty": "どのチームにも入っていません",
+    "emptyAdmin": "チームはまだありません",
+    "memberCount": "{count} 人",
+    "noMembers": "メンバーはいません",
+    "rename": "名前を変更",
+    "delete": "削除",
+    "deleteConfirm": "チーム「{name}」を削除しますか?",
+    "deleted": "チームを削除しました",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "email": "メールアドレス",
+    "emailPlaceholder": "足す人のメールアドレス",
+    "role": "役割",
+    "roleOf": "{name} の役割",
+    "roles": {
+      "member": "メンバー",
+      "lead": "代表者"
+    },
+    "add": "追加",
+    "remove": "外す"
   }
 }

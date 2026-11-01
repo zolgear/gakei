@@ -330,7 +330,9 @@
       "authentication": "Authentication",
       "assistant": "Assistant",
       "regionDetection": "Region detection",
-      "groupNaming": "Group name suggestions"
+      "groupNaming": "Group name suggestions",
+      "teams": "Teams",
+      "teamsAdmin": "Teams"
     },
     "frame": {
       "changeCount": {
@@ -1504,6 +1506,10 @@
         "structured_outputs_unsupported": "Name suggestions are not shown because the connection is not considered to support structured outputs. If it does, set \"Structured outputs\" to \"Supported\" for that connection in \"LLM connections\"."
       },
       "structuredOutputsLink": "Open LLM connections"
+    },
+    "teams": {
+      "intro": "Teams you belong to and their members. Leads can add and remove members.",
+      "adminIntro": "Create teams and choose their leads. Teams are the unit for granting use of IP materials."
     }
   },
   "promptSets": {
@@ -4032,5 +4038,33 @@
     "close": "Close",
     "failed": "Could not change the lock",
     "protectedHint": "Locked, or the source of a locked image, so it cannot be deleted"
+  },
+  "teams": {
+    "name": "Team name",
+    "namePlaceholder": "New team name",
+    "create": "Create",
+    "loading": "Loading…",
+    "loadFailed": "Could not load teams",
+    "failed": "Could not save the change",
+    "empty": "You are not in any team",
+    "emptyAdmin": "No teams yet",
+    "memberCount": "{count} members",
+    "noMembers": "No members",
+    "rename": "Rename",
+    "delete": "Delete",
+    "deleteConfirm": "Delete the team \"{name}\"?",
+    "deleted": "Team deleted",
+    "save": "Save",
+    "cancel": "Cancel",
+    "email": "Email",
+    "emailPlaceholder": "Email of the person to add",
+    "role": "Role",
+    "roleOf": "Role of {name}",
+    "roles": {
+      "member": "Member",
+      "lead": "Lead"
+    },
+    "add": "Add",
+    "remove": "Remove"
   }
 }
