@@ -2,7 +2,7 @@
  * スタジオのフォームの「画像から設定を読み込む」(ADR-0038 9章、11章)。GAKEI・ComfyUI・
  * SD WebUI(A1111 形式)で作った画像から、そのモデルと設定をフォームに読み込む。
  *
- * 押すと `Modal`(狭い幅では全画面のシート)を開き、ファイルの選択・ダイアログへのドロップ・
+ * `Modal`(狭い幅では全画面のシート)で、ファイルの選択・ダイアログへのドロップ・
  * 貼り付けで画像を受ける。フォーム全体へのドロップと、プロンプト欄への貼り付けは入力画像の追加に
  * 使われているので、読み込みの入口はこのダイアログの中だけにする(ドロップはダイアログの中で
  * 止め、下の入力エリアに伝えない)。
@@ -10,7 +10,7 @@
  * 画像はサーバーに送るが保存されない(Asset にもしない)。画像のモデルが今選べなければ(ComfyUI の
  * ワークフローが無い、プロバイダーが無効など)ダイアログの中でエラーにする。今のプロンプトが空でなければ、
  * 置き換える前にダイアログの中で確かめる。反映はスタジオ(`useRunFormLogic`)が `requestFormLoad` を
- * 消費して行う。
+ * 消費して行う。開閉は呼び出し側(プロンプト欄の設定のメニュー)。
  */
 import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
 import { ApiError, importImageSettings, type CapabilitiesResponse, type ImageSettingsImportResponse } from '../../api/client'
@@ -20,21 +20,21 @@ import { useI18n } from '../../i18n'
 import { shouldConfirmReplace } from '../run-form/promptInsertion'
 import { ImportConfirmBody } from '../sdwebui/ImportConfirmBody'
 import { firstImageFile } from '../sdwebui/importParams'
-import loraStyles from '../sdwebui/LoraPickerButton.module.css'
 import styles from '../sdwebui/ImportParams.module.css'
 import { importedModelLabel, imageSettingsUnavailableReason } from './imageSettings'
 
-interface ImportSettingsButtonProps {
+interface ImportSettingsDialogProps {
+  open: boolean
+  onClose: () => void
   /** 今のプロンプト(空でなければ置き換える前に確かめる)。 */
   currentPrompt: string
   caps: CapabilitiesResponse | undefined
 }
 
-export function ImportSettingsButton({ currentPrompt, caps }: ImportSettingsButtonProps) {
+export function ImportSettingsDialog({ open, onClose, currentPrompt, caps }: ImportSettingsDialogProps) {
   const { t } = useI18n()
   const ip = t.sdwebui.importParams
   const { requestFormLoad } = useRunFormContext()
-  const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -45,12 +45,12 @@ export function ImportSettingsButton({ currentPrompt, caps }: ImportSettingsButt
 
   const close = useCallback(() => {
     requestIdRef.current += 1
-    setOpen(false)
+    onClose()
     setLoading(false)
     setError(null)
     setPending(null)
     setDragOver(false)
-  }, [])
+  }, [onClose])
 
   const apply = useCallback(
     (response: ImageSettingsImportResponse) => {
@@ -124,15 +124,6 @@ export function ImportSettingsButton({ currentPrompt, caps }: ImportSettingsButt
 
   return (
     <>
-      <button
-        type="button"
-        className={loraStyles.trigger}
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        title={ip.openDialogTitle}
-      >
-        {ip.openDialog}
-      </button>
       {/* ダイアログ(背景を含む)へのドロップを、下の入力エリア(入力画像の追加)へ伝えない。 */}
       <div className={styles.dropGuard} onDrop={stopDrag} onDragOver={stopDrag}>
       <Modal open={open} title={pending ? ip.confirmTitle : ip.dialogTitle} onClose={close}>
