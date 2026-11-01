@@ -34,6 +34,7 @@ from app.api import group_naming as group_naming_api
 from app.api import group_suggestions as group_suggestions_api
 from app.api import health as health_api
 from app.api import history as history_api
+from app.api import image_settings as image_settings_api
 from app.api import lineage_transfer as lineage_transfer_api
 from app.api import llm_connections as llm_connections_api
 from app.api import mod_verdicts as mod_verdicts_api
@@ -663,6 +664,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(comfyui_api.router, dependencies=auth_dep)
     # ADR-0038: SD WebUI の設定(更新系は各ルートで `require_admin`)。
     app.include_router(sdwebui_api.router, dependencies=auth_dep)
+    app.include_router(image_settings_api.router, dependencies=auth_dep)
     app.include_router(assets_api.router, dependencies=auth_dep)
     # 領域の四角の検出(ADR-0053 7章)と、その設定。
     app.include_router(region_detection_api.router, dependencies=auth_dep)

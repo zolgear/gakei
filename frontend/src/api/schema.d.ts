@@ -605,6 +605,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/image-settings/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Image Settings
+         * @description 画像に埋め込まれた生成情報から、生成のフォームの値を作る(ADR-0038 11章)。
+         */
+        post: operations["import_image_settings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets": {
         parameters: {
             query?: never;
@@ -5769,6 +5789,38 @@ export interface components {
             count: number;
         };
         /**
+         * ImageSettingsImportResponse
+         * @description `POST /api/image-settings/import`(ADR-0038 11章)。画像から読んだ、フォームに入れる値。
+         *
+         *     `source` は読み込み元(GAKEI の埋め込み、ComfyUI のグラフ、A1111 形式)。`model` は
+         *     プロバイダーのモデル(ComfyUI はワークフローの ID)。A1111 形式でチェックポイントが
+         *     見つからなければ null(フォームのモデルを変えない。9章)。`params` はフォームの
+         *     パラメーター名と、サイズを持つプロバイダーなら `size`(`WxH`)。
+         */
+        ImageSettingsImportResponse: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "gakei" | "comfyui" | "a1111";
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string | null;
+            /** Prompt */
+            prompt: string;
+            /** Params */
+            params: {
+                [key: string]: string | number | boolean;
+            };
+            /** Unapplied */
+            unapplied: components["schemas"]["SdWebuiImportUnapplied"][];
+            /** Notes */
+            notes: components["schemas"]["SdWebuiImportNote"][];
+            /** Software */
+            software?: string | null;
+        };
+        /**
          * IncompatiblePair
          * @description 同時に指定できないパラメータの組み合わせ。
          *     例: background=transparent と output_format=jpeg。
@@ -10302,6 +10354,57 @@ export interface operations {
                 content?: never;
             };
             /** @description A1111 形式の生成情報が無い、または本文が不正 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    import_image_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        /** @description 画像のファイル(multipart の `file`。保存しない)。 */
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageSettingsImportResponse"];
+                };
+            };
+            /** @description A1111 形式の画像だが、SD WebUI に接続していない・一覧を取れない */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 画像が大きすぎる */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 読み込める生成情報が無い、合うワークフローが無い、本文が不正 */
             422: {
                 headers: {
                     [name: string]: unknown;

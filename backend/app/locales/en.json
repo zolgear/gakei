@@ -1239,5 +1239,17 @@
     "unsupported": "The connection does not support Structured Outputs, so it cannot be used for group name suggestions",
     "llmError": "Could not suggest group names: {error}",
     "fakeName": "Dummy name {cluster}-{n}"
+  },
+  "imageSettings": {
+    "fileMissing": "Specify an image file.",
+    "noSettings": "This image has no generation settings that can be loaded (GAKEI, ComfyUI, SD WebUI).",
+    "noMatchingWorkflow": "No registered workflow matches this image's ComfyUI workflow. Register the workflow first.",
+    "workflowNotFound": "The workflow \"{name}\" is not in this environment and no registered workflow matches it, so it cannot be loaded.",
+    "sdwebuiNotConnected": "This is an SD WebUI (A1111 format) image, but SD WebUI is not connected, so it cannot be loaded.",
+    "notes": {
+      "inputsNotRestored": "Input images are not included in the image, so they were not loaded.",
+      "promptLinked": "The prompt is wired from another node, so it could not be loaded.",
+      "workflowPartialMatch": "Some nodes differ from the workflow \"{name}\". Check the values."
+    }
   }
 }
