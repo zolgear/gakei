@@ -604,7 +604,11 @@
     "contentNotFound": "Content not found",
     "notDeleted": "Not deleted",
     "cannotRestoreDeletedRunOutput": "Cannot restore output of a deleted run.",
-    "regionsMustBePng": "Region images must be in PNG format"
+    "regionsMustBePng": "Region images must be in PNG format",
+    "locked": "This image is locked or is the source of a locked image, so it cannot be deleted",
+    "alreadyLocked": "This image is already locked",
+    "notLocked": "This image is not locked",
+    "unlockNotAllowed": "Only the person who locked it or an admin can unlock it"
   },
   "runs": {
     "unknownProvider": "Unknown provider: {provider}",
@@ -614,7 +618,8 @@
     "cannotDeleteRunning": "Still running or queued; cancel it first",
     "cannotCancelStatus": "Cannot cancel: status={status}",
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
-    "partialNotFound": "Partial image not found"
+    "partialNotFound": "Partial image not found",
+    "locked": "An output is protected by a lock, so this run cannot be deleted"
   },
   "runRegions": {
     "editOnly": "Region instructions can only be used with Edit",
@@ -960,7 +965,8 @@
     "derivedFailed": {
       "one": "Note: Derived images of {count} image could not be deleted (sha256): {keys}. Leaving them is harmless.",
       "other": "Note: Derived images of {count} images could not be deleted (sha256): {keys}. Leaving them is harmless."
-    }
+    },
+    "lockedKept": "Images kept because they are protected by a lock: {count}"
   },
   "shares": {
     "disabled": "Share links are disabled in the admin settings",

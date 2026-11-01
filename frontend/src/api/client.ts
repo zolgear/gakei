@@ -657,6 +657,23 @@ export function setAssetFavorite(assetId: string, favorite: boolean): Promise<As
   return request(`/api/assets/${assetId}/favorite`, { method: favorite ? 'PUT' : 'DELETE' })
 }
 
+export type AssetLockView = components['schemas']['AssetLockView']
+export type AssetLockKind = AssetLockView['kind']
+
+/** ロックを付ける(ADR-0060)。既に付いていれば 409。 */
+export function lockAsset(assetId: string, kind: AssetLockKind, note: string): Promise<AssetLockView> {
+  return request(`/api/assets/${assetId}/lock`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, note: note.trim() || null }),
+  })
+}
+
+/** ロックを外す(付けた人と管理者だけ。ADR-0060)。 */
+export function unlockAsset(assetId: string): Promise<void> {
+  return request(`/api/assets/${assetId}/lock`, { method: 'DELETE' })
+}
+
 export function getAsset(assetId: string): Promise<AssetDetail> {
   return request(`/api/assets/${assetId}`)
 }

@@ -61,6 +61,7 @@ describe('historyFilterSearchParams', () => {
       shape: 'square',
       transparentOnly: true,
       regionsOnly: false,
+      lockedOnly: false,
       groups: ['g1', 'none'],
       excludeGroups: [],
     })
@@ -104,10 +105,18 @@ describe('historyServerFilter', () => {
         shape: 'portrait',
         transparentOnly: true,
         regionsOnly: true,
+        lockedOnly: true,
         groups: [],
         excludeGroups: ['g2'],
       }),
-    ).toEqual({ favorite: true, shape: 'portrait', transparent: true, regions: true, exclude_group: ['g2'] })
+    ).toEqual({
+      favorite: true,
+      shape: 'portrait',
+      transparent: true,
+      regions: true,
+      locked: true,
+      exclude_group: ['g2'],
+    })
   })
 
   it('グループは同じキーの繰り返しで読み、空と重複は落とす', () => {
@@ -126,5 +135,6 @@ describe('historyServerFilter', () => {
     expect(hasLabelFilter({ ...DEFAULT_HISTORY_FILTER, shape: 'square' })).toBe(true)
     expect(hasLabelFilter({ ...DEFAULT_HISTORY_FILTER, transparentOnly: true })).toBe(true)
     expect(hasLabelFilter({ ...DEFAULT_HISTORY_FILTER, regionsOnly: true })).toBe(true)
+    expect(hasLabelFilter({ ...DEFAULT_HISTORY_FILTER, lockedOnly: true })).toBe(true)
   })
 })

@@ -48,6 +48,8 @@ export function useHistoryRunActions(
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const outputs = run.outputs ?? []
+  // 出力のどれかがロックで守られていれば、Run ごと消せない(ADR-0060)。
+  const lockProtected = outputs.some((output) => output.lock_protected)
 
   const cancelMutation = useMutation({
     mutationFn: () => cancelRun(run.id),
@@ -130,9 +132,9 @@ export function useHistoryRunActions(
           type="button"
           className={`${styles.iconButton} ${styles.iconButtonDanger}`}
           aria-label={t.history.card.delete}
-          title={t.history.card.delete}
+          title={lockProtected ? t.lock.protectedHint : t.history.card.delete}
           onClick={() => setDeleteConfirmOpen(true)}
-          disabled={deleteMutation.isPending}
+          disabled={deleteMutation.isPending || lockProtected}
         >
           <TrashIcon />
         </button>

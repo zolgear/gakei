@@ -853,6 +853,9 @@ class AssetRegionDetection(Base):
 
 MARK_FLAG_PICK = "pick"
 
+# ロックの種類(ADR-0060 2章)。納品、共有、提出、その他。
+LOCK_KINDS = ("delivered", "shared", "submitted", "other")
+
 
 class AssetMark(Base):
     """画像ごと・利用者ごとの印(ADR-0003 の `asset_mark`。ADR-0055)。証跡ではないので、
@@ -885,6 +888,50 @@ class AssetMark(Base):
     flag: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+
+
+class AssetLock(Base):
+    """ロック(ADR-0060)。納品・共有・提出した画像に付け、その画像と祖先を消せないようにする。
+
+    外すときは行を消さず、外した人と時刻を書く(状態の遷移)。1つの Asset に、外していない
+    ロックは1つまで(部分一意索引)。守る範囲(画像と祖先)は付けたときに `asset_lock_scope` に
+    書く。来歴は追記のみなので、ある Asset の祖先は後から変わらない。
+    """
+
+    __tablename__ = "asset_lock"
+    __table_args__ = (
+        Index(
+            "ux_asset_lock_asset_id_active",
+            "asset_id",
+            unique=True,
+            sqlite_where=text("unlocked_at IS NULL"),
+            postgresql_where=text("unlocked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), nullable=False)
+    # `delivered` / `shared` / `submitted` / `other`(`LOCK_KINDS`)。
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    locked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    locked_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=_utcnow)
+    unlocked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("app_user.id"), nullable=True
+    )
+    unlocked_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+
+
+class AssetLockScope(Base):
+    """ロックが守る Asset(ロックした画像と、その祖先。ADR-0060 1章)。付けたときに書く。"""
+
+    __tablename__ = "asset_lock_scope"
+    __table_args__ = (Index("ix_asset_lock_scope_asset_id", "asset_id"),)
+
+    lock_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset_lock.id"), primary_key=True)
+    asset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("asset.id"), primary_key=True)
 
 
 class UserPreference(Base):

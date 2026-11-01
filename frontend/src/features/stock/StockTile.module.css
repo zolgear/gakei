@@ -252,3 +252,11 @@
     opacity: 1;
   }
 }
+
+/* ロックの印(ADR-0060)。お気に入りのボタンの下に置く。 */
+.lockMark {
+  position: absolute;
+  top: 40px;
+  right: 9px;
+  z-index: 2;
+}

@@ -23,6 +23,8 @@
   消す(消せずに残っても害は無い)。
 - Mod の `deny` の判定で画像を残さなかった Asset(`content_withheld_at`。ADR-0051 4章)は、
   原本が無いのが正しい状態なので対象から外す。
+- ロックした Asset とその祖先(ADR-0060)は、原本が無くても消さず、数だけを示す。外したロックの
+  記録が消える Asset を指していれば、そのロックの行と守る範囲の行を消す。
 - ADR-0003 の「追記のみ」「論理削除のみ」の例外にあたる保守の手段で、画面や API からは呼べない。
 """
 
@@ -46,7 +48,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings, display_database_url, get_settings
 from app.db import make_engine, make_session_factory
-from app.domain.models import Asset, Base, Run, Share, ShareAsset
+from app.domain import asset_locks
+from app.domain.models import Asset, AssetLock, AssetLockScope, Base, Run, Share, ShareAsset
 from app.domain.storage import (
     AssetStore,
     LocalFsStore,
@@ -64,6 +67,7 @@ NULLIFY = "nullify"  # 残る行の参照を null にする
 DELETE = "delete"  # 行を消す
 DELETE_SHARE = "delete_share"  # 共有リンクごと消す(共有の起点)
 OUTPUT = "output"  # Run の出力。消す Run の出力はすべて消える Asset なので、残る行は無い
+DELETE_LOCK = "delete_lock"  # 外したロックごと消す(守る範囲の行も。ADR-0060)
 
 # Asset(`asset.id`)を指す外部キー(表、列)と扱い。
 ASSET_REFERENCES: dict[tuple[str, str], str] = {
@@ -90,6 +94,10 @@ ASSET_REFERENCES: dict[tuple[str, str], str] = {
     ("asset_composition_source", "source_asset_id"): DELETE,
     ("share_asset", "asset_id"): DELETE,
     ("share", "root_asset_id"): DELETE_SHARE,
+    # ロック(ADR-0060)。外していないロックが守る Asset は消さないので、指しているのは外したロック
+    # だけ。
+    ("asset_lock_scope", "asset_id"): DELETE,
+    ("asset_lock", "asset_id"): DELETE_LOCK,
 }
 
 # Run(`run.id`)を指す外部キー(表、列)と扱い。
@@ -133,6 +141,10 @@ class ReconcilePlan:
     # 出力が一度も無い Run の数(`--include-runs-without-outputs` が無いときは消さない)
     runs_without_outputs_total: int = 0
     share_ids: set[uuid.UUID] = field(default_factory=set)
+    # 消す外したロック(ADR-0060)
+    lock_ids: set[uuid.UUID] = field(default_factory=set)
+    # 原本が無いが、ロックで守られているので消さない Asset の数(ADR-0060)
+    locked_kept: int = 0
     # 一緒に消す行の数(表ごと。asset / run / share は別に数える)
     rows: dict[str, int] = field(default_factory=dict)
     # null にする参照の数(「表.列」ごと。残る行だけを数える)
@@ -252,9 +264,14 @@ def plan_reconcile(
         known_keys = set(present)
         plan.untracked_files = sum(1 for key in stored if key not in known_keys)
 
+        # ADR-0060: ロックした Asset とその祖先は、原本が無くても消さない。
+        protected = set(session.scalars(asset_locks.protected_asset_ids()).all())
         outputs: dict[uuid.UUID, list[uuid.UUID]] = {}
         for row in assets:
             if row.content_withheld_at is None and not present[row.blob_key]:
+                if row.id in protected:
+                    plan.locked_kept += 1
+                    continue
                 plan.asset_ids.add(row.id)
                 if row.deleted_at is not None:
                     plan.logically_deleted += 1
@@ -295,6 +312,13 @@ def plan_reconcile(
             ):
                 plan.share_ids.add(share_id)
 
+        for chunk in _chunks(plan.asset_ids):
+            plan.lock_ids.update(
+                session.scalars(select(AssetLock.id).where(AssetLock.asset_id.in_(chunk))).all()
+            )
+        if plan.lock_ids:
+            plan.rows["asset_lock"] = len(plan.lock_ids)
+
         ids = {"asset": plan.asset_ids, "run": plan.run_ids, "share": plan.share_ids}
         for table_name, conditions in _delete_conditions().items():
             count = len(_matching_keys(session, _table(table_name), conditions, ids))
@@ -326,7 +350,11 @@ def _apply_db(session: Session, plan: ReconcilePlan) -> None:
         for column, kind in conditions:
             for chunk in _chunks(ids[kind]):
                 session.execute(delete(table).where(table.c[column].in_(chunk)))
-    # 3. 共有リンク、Asset、Run の順(Asset が Run を指すため)。
+    # 3. 消える Asset を指す外したロックと、その守る範囲(ADR-0060)。
+    for chunk in _chunks(plan.lock_ids):
+        session.execute(delete(AssetLockScope).where(AssetLockScope.lock_id.in_(chunk)))
+        session.execute(delete(AssetLock).where(AssetLock.id.in_(chunk)))
+    # 4. 共有リンク、Asset、Run の順(Asset が Run を指すため)。
     for model, key in ((Share, "share"), (Asset, "asset"), (Run, "run")):
         table = model.__table__
         for chunk in _chunks(ids[key]):
@@ -519,6 +547,8 @@ def print_plan(settings: Settings, plan: ReconcilePlan) -> None:
     if not plan.include_runs_without_outputs and plan.runs_without_outputs_total:
         print(console_t("reconcileStorage.runsKept", count=plan.runs_without_outputs_total))
     print(console_t("reconcileStorage.shares", count=len(plan.share_ids)))
+    if plan.locked_kept:
+        print(console_t("reconcileStorage.lockedKept", count=plan.locked_kept))
     if plan.rows:
         print(console_t("reconcileStorage.rowsHeading"))
         for name, count in sorted(plan.rows.items()):

@@ -604,7 +604,11 @@
     "contentNotFound": "content が見つかりません",
     "notDeleted": "削除されていません",
     "cannotRestoreDeletedRunOutput": "削除された実行の出力は復元できません。",
-    "regionsMustBePng": "領域の画像はPNG形式である必要があります"
+    "regionsMustBePng": "領域の画像はPNG形式である必要があります",
+    "locked": "ロックした画像か、その元になった画像なので削除できません",
+    "alreadyLocked": "この画像はすでにロックされています",
+    "notLocked": "この画像はロックされていません",
+    "unlockNotAllowed": "ロックを外せるのは、付けた人と管理者だけです"
   },
   "runs": {
     "unknownProvider": "未知の provider です: {provider}",
@@ -614,7 +618,8 @@
     "cannotDeleteRunning": "実行中または待機中のため、先にキャンセルしてください",
     "cannotCancelStatus": "status={status} のため cancel できません",
     "cannotCancelAlreadyRunning": "すでに実行が開始されているため cancel できません",
-    "partialNotFound": "途中経過が見つかりません"
+    "partialNotFound": "途中経過が見つかりません",
+    "locked": "出力がロックで守られているので削除できません"
   },
   "runRegions": {
     "editOnly": "領域の指示は編集(Edit)でだけ使えます",
@@ -960,7 +965,8 @@
     "derivedFailed": {
       "one": "注意: 派生画像を消せなかった画像が {count} 件あります(sha256): {keys}。残っても害はありません。",
       "other": "注意: 派生画像を消せなかった画像が {count} 件あります(sha256): {keys}。残っても害はありません。"
-    }
+    },
+    "lockedKept": "ロックで守られているので消さない画像: {count} 件"
   },
   "shares": {
     "disabled": "共有リンクは管理者設定で無効になっています",

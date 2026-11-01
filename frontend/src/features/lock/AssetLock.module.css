@@ -1,0 +1,137 @@
+/* ロック(ADR-0060)。枠と大きさは置く場所のアイコンのボタンに任せ、付いているときの色だけを決める。 */
+.button[data-locked='true'] {
+  color: var(--color-accent);
+}
+
+.button:disabled {
+  opacity: 0.4;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 440px;
+}
+
+.lead {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.kind {
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+}
+
+.kind:first-child {
+  border-left: 0;
+}
+
+.kind[aria-checked='true'] {
+  background: var(--color-header-band);
+  color: var(--color-text);
+}
+
+.note {
+  width: 100%;
+  min-height: 72px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.info {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.info dt {
+  color: var(--color-text-muted);
+}
+
+.info dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.primary,
+.secondary {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.primary {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: #17181b;
+  font-weight: 600;
+}
+
+.primary:disabled {
+  opacity: 0.55;
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+/* 一覧の画像の上に出す小さな印(ロックの付いた画像)。 */
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--color-accent);
+  pointer-events: none;
+}

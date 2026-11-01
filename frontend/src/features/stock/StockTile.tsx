@@ -30,6 +30,7 @@ import { focalStyle } from '../../lib/focalPoint'
 import { responsiveThumbProps } from '../../lib/derivedSrcSet'
 import { stockTileSizes } from './stockTileSizes'
 import { stockTileActions, stockTilePixelSize } from './stockTileActions'
+import { LockMark } from '../lock/LockMark'
 import styles from './StockTile.module.css'
 
 interface StockTileProps {
@@ -115,6 +116,7 @@ export function StockTile({
       </button>
 
       <AssetKindRibbon kind={asset.kind} imported={imported} />
+      {asset.locked && <LockMark className={styles.lockMark} />}
 
       {!selectionMode && (
         <button
@@ -182,7 +184,9 @@ export function StockTile({
                       type="button"
                       className={`${styles.actionButton} ${styles.danger}`}
                       aria-label={t.stock.delete}
-                      title={t.stock.delete}
+                      // ロックした画像と、その元は消せない(ADR-0060)。理由はツールチップで示す。
+                      title={asset.lock_protected ? t.lock.protectedHint : t.stock.delete}
+                      disabled={asset.lock_protected === true}
                       onClick={() => onDelete(asset)}
                     >
                       <TrashIcon size={14} />

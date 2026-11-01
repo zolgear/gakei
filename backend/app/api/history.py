@@ -62,6 +62,7 @@ def list_history_assets(
     regions: bool = Query(
         default=False, description="true: 領域の四角を付けた Run の画像だけ(ADR-0053)"
     ),
+    locked: bool = Query(default=False, description="true: ロックの付いた画像だけ(ADR-0060)"),
     group: list[str] = Query(
         default=[],
         description="このグループ(id。`none` はグループなし)のどれかの画像だけ(ADR-0054 6章)",
@@ -83,7 +84,9 @@ def list_history_assets(
     user: CurrentUser = Depends(require_user),
 ) -> HistoryAssetListResponse:
     """画像(生成された Asset)単位の履歴。画像の無い Run は出さない。"""
-    labels = HistoryLabelFilter(shape=shape, transparent=transparent, regions=regions)
+    labels = HistoryLabelFilter(
+        shape=shape, transparent=transparent, regions=regions, locked=locked
+    )
     groups = parse_group_filter(group, exclude_group)
     try:
         if sort == "group":
