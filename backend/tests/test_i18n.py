@@ -292,6 +292,8 @@ _KNOWN_DYNAMIC_PREFIX_SITES: dict[str, str] = {
     # タグ辞書の断る理由と失敗の種類(`DictionaryFileError.code`、`tag_dictionary.error`)。
     # キーの網羅は tests/test_tag_dictionaries.py で確かめる。
     "app/api/tag_dictionaries.py": "tagDictionaries.",
+    # IP 素材の断る理由(`IpValidationError` の文言のキー。ADR-0059)。すべて `ip.` の下。
+    "app/api/ip.py": "ip.",
 }
 
 
