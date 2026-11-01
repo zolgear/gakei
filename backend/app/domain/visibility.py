@@ -111,10 +111,11 @@ def asset_visible(user: CurrentUser) -> ColumnElement[bool]:
     )
 
 
-def group_visible(user: CurrentUser) -> ColumnElement[bool]:
+def group_visible(user: CurrentUser, group: Any = AssetGroup) -> ColumnElement[bool]:
+    """`group` は `AssetGroup` の別名(`aliased`)も渡せる(相関する副問い合わせで使う)。"""
     if sees_everything(user):
         return true()
-    return _owner_condition(AssetGroup.created_by_user_id, user)
+    return _owner_condition(group.created_by_user_id, user)
 
 
 def prompt_set_visible(user: CurrentUser) -> ColumnElement[bool]:

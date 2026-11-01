@@ -3,6 +3,8 @@
 - 対象は、見える Run(削除されていない)が作った、削除されていない生成画像だけ(1章)。
 - グループ: グループの並び(`position ASC, created_at DESC, id DESC`)、中は古い順。どのグループにも
   入っていない画像(削除済み・見えないグループに入っているものを含む)は最後(2章)。カーソルは keyset。
+  `per_group` を渡すと、各グループの先頭(古い順)のその枚数だけを出す(6章)。
+- どの並べ方でも、グループで含める・除くの絞り込み(`HistoryGroupFilter`)を掛けられる(6章)。
 - 似た画像の順: 使うモデルのベクトルで、k-means の重心の鎖とクラスタの中の鎖で1列にする(3章)。
   埋め込みの無い画像は最後に新しい順。結果はプロセスの中にキャッシュし、カーソルは順位。
 """
@@ -28,7 +30,7 @@ from sqlalchemy.orm import Session
 from app.auth.identity import CurrentUser
 from app.config import Settings
 from app.domain.favorites import favorite_asset_ids
-from app.domain.history_filters import HistoryLabelFilter
+from app.domain.history_filters import HistoryGroupFilter, HistoryLabelFilter
 from app.domain.models import Asset, AssetGroup, AssetGroupMember, AssetKind, Run
 from app.domain.run_views import summarize_runs
 from app.domain.schemas import HistoryAssetItem, HistoryAssetListResponse, HistoryGroupSection
@@ -46,13 +48,19 @@ class InvalidHistoryCursorError(ValueError):
 
 
 _NO_LABELS = HistoryLabelFilter()
+_NO_GROUPS = HistoryGroupFilter()
 
 
 def _base_conditions(
-    viewer: CurrentUser, *, favorite: bool = False, labels: HistoryLabelFilter = _NO_LABELS
+    viewer: CurrentUser,
+    *,
+    favorite: bool = False,
+    labels: HistoryLabelFilter = _NO_LABELS,
+    groups: HistoryGroupFilter = _NO_GROUPS,
 ) -> list[ColumnElement[bool]]:
     """見える Run が作った、削除されていない生成画像(Run と結合して使う)。`favorite` なら
-    `viewer` のお気に入りだけ(ADR-0055)。`labels` は形・透過・領域の絞り込み(形はその画像の形)。"""
+    `viewer` のお気に入りだけ(ADR-0055)。`labels` は形・透過・領域の絞り込み(形はその画像の形)。
+    `groups` はグループで含める・除く(ADR-0054 6章)。"""
     conditions = [
         Asset.deleted_at.is_(None),
         Asset.kind == AssetKind.GENERATED,
@@ -62,6 +70,7 @@ def _base_conditions(
     if favorite:
         conditions.append(Asset.id.in_(favorite_asset_ids(viewer)))
     conditions.extend(labels.asset_conditions())
+    conditions.extend(groups.asset_conditions(viewer))
     return conditions
 
 
@@ -142,19 +151,34 @@ def _output_index() -> ColumnElement[int]:
     return func.coalesce(Asset.output_index, 0)
 
 
-def _grouped_query(
-    viewer: CurrentUser, *, favorite: bool = False, labels: HistoryLabelFilter = _NO_LABELS
+def _grouped_rows(
+    viewer: CurrentUser,
+    *,
+    favorite: bool = False,
+    labels: HistoryLabelFilter = _NO_LABELS,
+    groups: HistoryGroupFilter = _NO_GROUPS,
+    per_group: int | None = None,
 ) -> Any:
-    """画像と、その画像が入っている見えるグループ(無ければ NULL の列)。ADR-0022 により所属は1つ。"""
-    return (
+    """画像と、その画像が入っている見えるグループ(無ければ NULL の列)の副問い合わせ。ADR-0022 により
+    所属は1つ。`per_group` なら、節(グループなしを含む)ごとに古い順で先頭のその枚数だけ。"""
+    rank = (
+        func.row_number()
+        .over(
+            partition_by=AssetGroup.id,
+            order_by=(Asset.created_at.asc(), _output_index().asc(), Asset.id.asc()),
+        )
+        .label("rank")
+    )
+    rows = (
         select(
-            Asset.id,
-            Asset.produced_by_run_id,
-            Asset.created_at,
+            Asset.id.label("id"),
+            Asset.produced_by_run_id.label("run_id"),
+            Asset.created_at.label("created_at"),
             _output_index().label("oi"),
             AssetGroup.id.label("gid"),
-            AssetGroup.position,
+            AssetGroup.position.label("position"),
             AssetGroup.created_at.label("gcreated"),
+            *([rank] if per_group is not None else []),
         )
         .join(Run, Run.id == Asset.produced_by_run_id)
         .outerjoin(AssetGroupMember, AssetGroupMember.asset_id == Asset.id)
@@ -166,43 +190,45 @@ def _grouped_query(
                 group_visible(viewer),
             ),
         )
-        .where(*_base_conditions(viewer, favorite=favorite, labels=labels))
+        .where(*_base_conditions(viewer, favorite=favorite, labels=labels, groups=groups))
+        .subquery()
     )
+    return rows
 
 
-def _after_asset(cursor: GroupCursor) -> ColumnElement[bool]:
+def _after_asset(rows: Any, cursor: GroupCursor) -> ColumnElement[bool]:
     """同じ節の中で、カーソルより後(古い順: 作成時刻、出力の番号、id の昇順)。"""
     return or_(
-        Asset.created_at > cursor.asset_created_at,
-        and_(Asset.created_at == cursor.asset_created_at, _output_index() > cursor.output_index),
+        rows.c.created_at > cursor.asset_created_at,
+        and_(rows.c.created_at == cursor.asset_created_at, rows.c.oi > cursor.output_index),
         and_(
-            Asset.created_at == cursor.asset_created_at,
-            _output_index() == cursor.output_index,
-            Asset.id > cursor.asset_id,
+            rows.c.created_at == cursor.asset_created_at,
+            rows.c.oi == cursor.output_index,
+            rows.c.id > cursor.asset_id,
         ),
     )
 
 
-def _after_cursor(cursor: GroupCursor) -> ColumnElement[bool]:
+def _after_cursor(rows: Any, cursor: GroupCursor) -> ColumnElement[bool]:
     if cursor.group_id is None:
         # 「グループなし」の節は最後なので、その節の続きだけ。
-        return and_(AssetGroup.id.is_(None), _after_asset(cursor))
+        return and_(rows.c.gid.is_(None), _after_asset(rows, cursor))
     later_group = or_(
-        AssetGroup.position > cursor.group_position,
+        rows.c.position > cursor.group_position,
         and_(
-            AssetGroup.position == cursor.group_position,
-            AssetGroup.created_at < cursor.group_created_at,
+            rows.c.position == cursor.group_position,
+            rows.c.gcreated < cursor.group_created_at,
         ),
         and_(
-            AssetGroup.position == cursor.group_position,
-            AssetGroup.created_at == cursor.group_created_at,
-            AssetGroup.id < cursor.group_id,
+            rows.c.position == cursor.group_position,
+            rows.c.gcreated == cursor.group_created_at,
+            rows.c.gid < cursor.group_id,
         ),
     )
     return or_(
-        AssetGroup.id.is_(None),
+        rows.c.gid.is_(None),
         later_group,
-        and_(AssetGroup.id == cursor.group_id, _after_asset(cursor)),
+        and_(rows.c.gid == cursor.group_id, _after_asset(rows, cursor)),
     )
 
 
@@ -212,6 +238,7 @@ def group_sections(
     *,
     favorite: bool = False,
     labels: HistoryLabelFilter = _NO_LABELS,
+    groups: HistoryGroupFilter = _NO_GROUPS,
 ) -> list[HistoryGroupSection]:
     """グループの並び順の節と件数(画像のある節だけ)。「グループなし」は最後。件数は絞り込みの後。"""
     counts = db.execute(
@@ -227,18 +254,18 @@ def group_sections(
                 group_visible(viewer),
             ),
         )
-        .where(*_base_conditions(viewer, favorite=favorite, labels=labels))
+        .where(*_base_conditions(viewer, favorite=favorite, labels=labels, groups=groups))
         .group_by(AssetGroup.id)
     ).all()
     by_group = {group_id: count for group_id, count in counts}
-    groups = db.execute(
+    ordered = db.execute(
         select(AssetGroup.id, AssetGroup.name)
         .where(AssetGroup.deleted_at.is_(None), group_visible(viewer))
         .order_by(AssetGroup.position.asc(), AssetGroup.created_at.desc(), AssetGroup.id.desc())
     ).all()
     sections = [
         HistoryGroupSection(id=group_id, name=name, count=by_group[group_id])
-        for group_id, name in groups
+        for group_id, name in ordered
         if by_group.get(group_id)
     ]
     if by_group.get(None):
@@ -254,23 +281,31 @@ def list_by_group(
     cursor: str | None,
     favorite: bool = False,
     labels: HistoryLabelFilter = _NO_LABELS,
+    groups: HistoryGroupFilter = _NO_GROUPS,
+    per_group: int | None = None,
 ) -> HistoryAssetListResponse:
-    query = _grouped_query(viewer, favorite=favorite, labels=labels)
+    """`per_group` なら各節の先頭だけ。節の件数(`groups`)は絞り込みの後の全件のまま。"""
+    rows_q = _grouped_rows(
+        viewer, favorite=favorite, labels=labels, groups=groups, per_group=per_group
+    )
+    query = select(rows_q)
+    if per_group is not None:
+        query = query.where(rows_q.c.rank <= per_group)
     if cursor is not None:
-        query = query.where(_after_cursor(GroupCursor.decode(cursor)))
+        query = query.where(_after_cursor(rows_q, GroupCursor.decode(cursor)))
     query = query.order_by(
-        case((AssetGroup.id.is_(None), 1), else_=0),
-        AssetGroup.position.asc(),
-        AssetGroup.created_at.desc(),
-        AssetGroup.id.desc(),
-        Asset.created_at.asc(),
-        _output_index().asc(),
-        Asset.id.asc(),
+        case((rows_q.c.gid.is_(None), 1), else_=0),
+        rows_q.c.position.asc(),
+        rows_q.c.gcreated.desc(),
+        rows_q.c.gid.desc(),
+        rows_q.c.created_at.asc(),
+        rows_q.c.oi.asc(),
+        rows_q.c.id.asc(),
     ).limit(limit + 1)
     rows = db.execute(query).all()
     has_more = len(rows) > limit
     rows = rows[:limit]
-    items = _items(db, viewer, [(r.id, r.produced_by_run_id, r.gid) for r in rows])
+    items = _items(db, viewer, [(r.id, r.run_id, r.gid) for r in rows])
     next_cursor = None
     if has_more and rows:
         last = rows[-1]
@@ -285,7 +320,7 @@ def list_by_group(
     return HistoryAssetListResponse(
         items=items,
         next_cursor=next_cursor,
-        groups=group_sections(db, viewer, favorite=favorite, labels=labels),
+        groups=group_sections(db, viewer, favorite=favorite, labels=labels, groups=groups),
     )
 
 
@@ -423,6 +458,7 @@ def list_by_embedding(
     cursor: str | None,
     favorite: bool = False,
     labels: HistoryLabelFilter = _NO_LABELS,
+    groups: HistoryGroupFilter = _NO_GROUPS,
 ) -> HistoryAssetListResponse:
     """似た画像の順。埋め込みが無効・使えなければ `EmbeddingsConflictError`(409)。
     `favorite` ならお気に入りの画像だけで並びを作る(全体の並びから抜き出すのではない。ADR-0055)。
@@ -441,7 +477,7 @@ def list_by_embedding(
     rows = db.execute(
         select(Asset.id, Asset.produced_by_run_id)
         .join(Run, Run.id == Asset.produced_by_run_id)
-        .where(*_base_conditions(viewer, favorite=favorite, labels=labels))
+        .where(*_base_conditions(viewer, favorite=favorite, labels=labels, groups=groups))
         .order_by(Asset.created_at.desc(), Asset.id.desc())
     ).all()
     run_of = {asset_id: run_id for asset_id, run_id in rows}
@@ -461,6 +497,8 @@ def list_by_embedding(
     scope = "favorite" if favorite else "all"
     if labels.scope_key():
         scope = f"{scope};{labels.scope_key()}"
+    if groups.scope_key():
+        scope = f"{scope};{groups.scope_key()}"
     key = (active.model_key, version_of(active.model_key), scope, _ids_digest(newest_first))
     order = cache.get_or_build(key, build)
     page = order[offset : offset + limit]

@@ -46,6 +46,9 @@
   "provider": {
     "unknown": "未知のプロバイダーです: {name}"
   },
+  "history": {
+    "invalidGroup": "グループの指定が不正です: {value}"
+  },
   "pagination": {
     "invalidCursor": "cursor が不正です"
   },

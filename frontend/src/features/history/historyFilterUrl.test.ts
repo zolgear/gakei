@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_HISTORY_FILTER,
+  hasGroupFilter,
   hasLabelFilter,
   historyFilterSearchParams,
   historyServerFilter,
@@ -18,7 +19,14 @@ describe('parseHistoryFilter', () => {
   it('状態・お気に入り・形・透過・領域を読む', () => {
     expect(
       parseHistoryFilter(new URLSearchParams('status=failed&favorite=1&shape=portrait&transparent=1&regions=1')),
-    ).toEqual({ status: 'failed', favoriteOnly: true, shape: 'portrait', transparentOnly: true, regionsOnly: true })
+    ).toEqual({
+      ...DEFAULT_HISTORY_FILTER,
+      status: 'failed',
+      favoriteOnly: true,
+      shape: 'portrait',
+      transparentOnly: true,
+      regionsOnly: true,
+    })
     expect(parseHistoryFilter(new URLSearchParams('status=succeeded&shape=wide'))).toEqual({
       ...DEFAULT_HISTORY_FILTER,
       status: 'succeeded',
@@ -53,8 +61,12 @@ describe('historyFilterSearchParams', () => {
       shape: 'square',
       transparentOnly: true,
       regionsOnly: false,
+      groups: ['g1', 'none'],
+      excludeGroups: [],
     })
     expect(params.get('status')).toBe('failed')
+    expect(params.getAll('group')).toEqual(['g1', 'none'])
+    expect(params.has('exclude_group')).toBe(false)
     expect(params.get('favorite')).toBe('1')
     expect(params.get('shape')).toBe('square')
     expect(params.get('transparent')).toBe('1')
@@ -72,6 +84,8 @@ describe('historyFilterSearchParams', () => {
       'status=failed&favorite=1',
       'shape=wide&regions=1',
       'transparent=1&shape=square',
+      'group=g1&group=none',
+      'exclude_group=g2',
     ]) {
       const params = historyFilterSearchParams(new URLSearchParams(), parseHistoryFilter(new URLSearchParams(query)))
       expect(parseHistoryFilter(params)).toEqual(parseHistoryFilter(new URLSearchParams(query)))
@@ -90,8 +104,20 @@ describe('historyServerFilter', () => {
         shape: 'portrait',
         transparentOnly: true,
         regionsOnly: true,
+        groups: [],
+        excludeGroups: ['g2'],
       }),
-    ).toEqual({ favorite: true, shape: 'portrait', transparent: true, regions: true })
+    ).toEqual({ favorite: true, shape: 'portrait', transparent: true, regions: true, exclude_group: ['g2'] })
+  })
+
+  it('グループは同じキーの繰り返しで読み、空と重複は落とす', () => {
+    expect(parseHistoryFilter(new URLSearchParams('group=a&group=&group=a&exclude_group=b'))).toEqual({
+      ...DEFAULT_HISTORY_FILTER,
+      groups: ['a'],
+      excludeGroups: ['b'],
+    })
+    expect(hasGroupFilter(DEFAULT_HISTORY_FILTER)).toBe(false)
+    expect(hasGroupFilter({ ...DEFAULT_HISTORY_FILTER, excludeGroups: ['b'] })).toBe(true)
   })
 
   it('hasLabelFilter は形・透過・領域のどれかで真', () => {

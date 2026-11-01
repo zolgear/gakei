@@ -1,5 +1,5 @@
 /**
- * 履歴の並べ替え(日付 / グループ / 似た順。ADR-0054 5章)。ブラウザごとの表示の好みなので
+ * 履歴の並べ替え(日付の新しい順 / 古い順 / グループ / 似た順。ADR-0054 5章・6章)。ブラウザごとの表示の好みなので
  * localStorage に保存し、サーバーの設定にはしない。既定は日付。
  * `historyCardStyle.ts` と同じく、モジュールスコープに1つだけ状態を持ち、`useSyncExternalStore` で購読する。
  */
@@ -7,11 +7,11 @@ import { useSyncExternalStore } from 'react'
 
 const STORAGE_KEY = 'gakei:history-sort'
 
-export type HistorySort = 'date' | 'group' | 'embedding'
+export type HistorySort = 'date' | 'date_asc' | 'group' | 'embedding'
 
-/** 'group' と 'embedding' はそのまま。それ以外(未設定の null、不正な値)は既定の日付。 */
+/** 'date_asc'・'group'・'embedding' はそのまま。それ以外(未設定の null、不正な値)は既定の日付(新しい順)。 */
 export function parseHistorySort(raw: unknown): HistorySort {
-  return raw === 'group' || raw === 'embedding' ? raw : 'date'
+  return raw === 'date_asc' || raw === 'group' || raw === 'embedding' ? raw : 'date'
 }
 
 /**

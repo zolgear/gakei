@@ -14,6 +14,11 @@ export interface HistoryCardItem<R> extends HistoryCardEntry<R> {
 export interface HistorySectionHeading {
   title: string
   count: number | null
+  /**
+   * 節の先頭だけを出している(グループの並びの `per_group`。ADR-0054 6章)とき、全部を見るために
+   * 含めるグループの値(グループの id か `none`)。全部を出していれば無い。
+   */
+  showAll?: string
 }
 
 /** 節。見出しの無い節(似た順)は `heading` が null。 */
@@ -110,11 +115,13 @@ function uniqueByAsset<R>(items: readonly AssetLikeItem<R>[]): AssetLikeItem<R>[
 /**
  * グループの並び。グループが変わる位置で節に分け、グループ名と件数の見出しを付ける。名前と件数は
  * 応答の `groups` から引き、グループなし(`group_id` が null)は `ungroupedLabel`。
+ * `headsOnly`(各グループの先頭だけを取った)なら、件数より少ない節の見出しに「すべて見る」の値を付ける。
  */
 export function groupSections<R extends RunLike>(
   items: readonly AssetLikeItem<R>[],
   groups: readonly GroupSectionLike[] | null | undefined,
   ungroupedLabel: string,
+  headsOnly = false,
 ): HistorySection<R>[] {
   const known = new Map((groups ?? []).map((g) => [g.id ?? null, g]))
   const sections: HistorySection<R>[] = []
@@ -136,6 +143,14 @@ export function groupSections<R extends RunLike>(
       sections.push(current)
     }
     current.cards.push(cardOf(item))
+  }
+  if (headsOnly) {
+    for (const section of sections) {
+      const heading = section.heading
+      if (heading && heading.count != null && heading.count > section.cards.length) {
+        heading.showAll = section.key.slice('group:'.length)
+      }
+    }
   }
   return sections
 }

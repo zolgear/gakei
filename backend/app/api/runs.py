@@ -7,11 +7,13 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
 
+from app.api.history import parse_group_filter
 from app.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from app.auth.deps import require_user
 from app.auth.identity import CurrentUser
@@ -197,6 +199,16 @@ def list_runs(
     ),
     transparent: bool = Query(default=False, description="true: 背景を透過で頼んだ Run だけ"),
     regions: bool = Query(default=False, description="true: 領域の四角を付けた Run だけ(ADR-0053)"),
+    order: Literal["desc", "asc"] = Query(
+        default="desc", description="desc: 新しい順 / asc: 古い順(ADR-0054 6章)"
+    ),
+    group: list[str] = Query(
+        default=[],
+        description="このグループ(id。`none` はグループなし)のどれかに当たる Run だけ(ADR-0054)",
+    ),
+    exclude_group: list[str] = Query(
+        default=[], description="このグループ(id。`none` はグループなし)に当たる Run を除く"
+    ),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> RunListResponse:
@@ -207,17 +219,30 @@ def list_runs(
     labels = HistoryLabelFilter(shape=shape, transparent=transparent, regions=regions)
     for condition in labels.run_conditions():
         query = query.where(condition)
+    groups = parse_group_filter(group, exclude_group)
+    for condition in groups.run_conditions(user):
+        query = query.where(condition)
+    if order == "asc":
+        query = query.order_by(None).order_by(Run.queued_at.asc(), Run.id.asc())
     if cursor is not None:
         try:
             moment, cursor_id = decode_cursor(cursor)
         except InvalidCursorError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        query = query.where(
-            or_(
-                Run.queued_at < moment,
-                and_(Run.queued_at == moment, Run.id < cursor_id),
+        if order == "asc":
+            query = query.where(
+                or_(
+                    Run.queued_at > moment,
+                    and_(Run.queued_at == moment, Run.id > cursor_id),
+                )
             )
-        )
+        else:
+            query = query.where(
+                or_(
+                    Run.queued_at < moment,
+                    and_(Run.queued_at == moment, Run.id < cursor_id),
+                )
+            )
     query = query.limit(limit + 1)
 
     rows = list(db.execute(query).scalars().all())

@@ -23,9 +23,29 @@
   color: var(--color-text-muted);
 }
 
+/* 先頭だけを出している節の「すべて見る」。見出しの右端に、文字だけで置く。 */
+.showAll {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 4px;
+  background: transparent;
+  border: 0;
+  color: var(--color-accent);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.showAll:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 767px) {
   .heading {
     margin-bottom: 8px;
     font-size: 16px;
+  }
+
+  .showAll {
+    padding: 8px 4px;
   }
 }

@@ -160,3 +160,30 @@ describe('similaritySections', () => {
     expect(similaritySections([])).toEqual([])
   })
 })
+
+describe('groupSections(先頭だけ)', () => {
+  it('件数より少ない節にだけ「すべて見る」の値を付ける(グループなしは none)', () => {
+    const r1 = run('r1', at(2026, 1, 1), ['a1', 'a2'])
+    const r2 = run('r2', at(2026, 1, 2), ['b1'])
+    const r3 = run('r3', at(2026, 1, 3), ['c1'])
+    const sections = groupSections(
+      [
+        { asset_id: 'a1', group_id: 'g1', run: r1 },
+        { asset_id: 'a2', group_id: 'g1', run: r1 },
+        { asset_id: 'b1', group_id: 'g2', run: r2 },
+        { asset_id: 'c1', group_id: null, run: r3 },
+      ],
+      [
+        { id: 'g1', name: 'Alpha', count: 120 },
+        { id: 'g2', name: 'Beta', count: 1 },
+        { id: null, name: null, count: 30 },
+      ],
+      'No group',
+      true,
+    )
+    expect(sections.map((s) => s.heading?.showAll)).toEqual(['g1', undefined, 'none'])
+    // 先頭だけでなければ付けない。
+    const full = groupSections([{ asset_id: 'a1', group_id: 'g1', run: r1 }], [{ id: 'g1', name: 'A', count: 9 }], 'x')
+    expect(full[0].heading?.showAll).toBeUndefined()
+  })
+})

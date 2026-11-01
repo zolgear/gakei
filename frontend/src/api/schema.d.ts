@@ -11451,6 +11451,12 @@ export interface operations {
                 transparent?: boolean;
                 /** @description true: 領域の四角を付けた Run だけ(ADR-0053) */
                 regions?: boolean;
+                /** @description desc: 新しい順 / asc: 古い順(ADR-0054 6章) */
+                order?: "desc" | "asc";
+                /** @description このグループ(id。`none` はグループなし)のどれかに当たる Run だけ(ADR-0054) */
+                group?: string[];
+                /** @description このグループ(id。`none` はグループなし)に当たる Run を除く */
+                exclude_group?: string[];
             };
             header?: never;
             path?: never;
@@ -11627,6 +11633,12 @@ export interface operations {
                 transparent?: boolean;
                 /** @description true: 領域の四角を付けた Run の画像だけ(ADR-0053) */
                 regions?: boolean;
+                /** @description このグループ(id。`none` はグループなし)のどれかの画像だけ(ADR-0054 6章) */
+                group?: string[];
+                /** @description このグループ(id。`none` はグループなし)の画像を除く */
+                exclude_group?: string[];
+                /** @description sort=group のとき、各グループの先頭(古い順)のこの枚数だけ(ADR-0054 6章) */
+                per_group?: number | null;
             };
             header?: never;
             path?: never;
