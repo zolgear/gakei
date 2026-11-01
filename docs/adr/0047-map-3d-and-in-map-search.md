@@ -97,7 +97,7 @@ Context のとおり、近傍の距離が狭い帯に詰まる。UMAP に渡す�
 
 マップのノード全件にスコアを付けるため、`GET /api/embeddings/graph/scores` を足す。
 
-- クエリは `q`(必須)、`limit`、`group_id`、`tag`(繰り返しで AND)。`GET /api/embeddings/graph` と同じ既定・同じ上限。
+- クエリは `q`(必須)、`limit`、`group_id`、`tag`(繰り返しで AND)。`GET /api/embeddings/graph` と同じ既定・同じ上限。2026-11-01 に抽出方法の `sampling` を足した(ADR-0057。同じ値なら並びが一致する)。
 - 応答は `model_key`、`query`、`ids`、`scores`(コサイン類似度、小数4桁)、`total`、`truncated`。**同じ引数なら `ids[i]` は `graph` の `nodes[i].id` と一致する**(同じ `candidate_ids` → `index.subset` を通るため)。画面は ID で突き合わせる。
 - 対象は画像だけ。指示(プロンプト。ADR-0045)は対象外。
 - `GET /api/search/semantic` の上限(50 件)は変えない。利用者に見せる検索の意味を変えないため。

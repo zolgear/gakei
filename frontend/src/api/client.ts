@@ -1700,7 +1700,7 @@ export function embeddingGraph(
 }
 
 /**
- * マップのノード全件と検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
+ * マップのノード全件と検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit`・同じ `sampling` の
  * `embeddingGraph` の `nodes` と同じ並びで、`scores[i]` が `ids[i]` の類似度。
  */
 export function embeddingGraphScores(

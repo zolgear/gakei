@@ -3352,6 +3352,12 @@
     "tagHelp": "Shows only images that have all of the selected tags.",
     "limitLabel": "Limit",
     "limitOption": "{count} images",
+    "samplingLabel": "Sampling",
+    "samplingHelp": "Which images to show when there are more than the limit. Evenly across all picks from each cluster of similar images and draws the ones that stand for many images larger.",
+    "samplingOption": {
+      "spread": "Evenly across all",
+      "recent": "Newest first"
+    },
     "kLabel": "Neighbors",
     "kHelp": "How many similar images each image looks at. More emphasizes the overall shape; fewer emphasizes local similarity.",
     "searchLabel": "Search within the map",
@@ -3383,6 +3389,7 @@
     "showLineage": "Overlay lineage edges",
     "truncated": "Showing only the newest {count} of {total} images. Narrow down by group or tag, or raise the limit.",
     "truncatedAtMax": "Showing only the newest {count} of {total} images. Narrow down by group or tag.",
+    "truncatedSpread": "Showing {count} of {total} images, picked from each cluster of similar images. Larger images stand for more similar images nearby.",
     "empty": "No images to show. Only images with computed embeddings appear here.",
     "emptyFiltered": "No images to show with these filters.",
     "tooFew": "Not enough images to build a map (needs at least {min}).",

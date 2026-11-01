@@ -90,6 +90,10 @@ describe('parseMapPrefs', () => {
   it('書いたものを読み戻せる', () => {
     const prefs = { view: 'network' as const, k: 5, limit: 500, threshold: 0.7, showLineage: false, previewOpen: true }
     expect(parseMapPrefs(serializeMapPrefs(prefs))).toEqual(prefs)
+    // 抽出方法(ADR-0057)。知らない値は捨てる。
+    expect(parseMapPrefs(serializeMapPrefs({ sampling: 'recent' }))).toEqual({ sampling: 'recent' })
+    expect(parseMapPrefs('{"v":1,"sampling":"random"}')).toEqual({})
+    expect(pickStoredFields({ sampling: 'spread' })).toEqual({ sampling: 'spread' })
   })
 })
 

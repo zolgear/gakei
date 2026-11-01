@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.auth.deps import require_user
@@ -34,11 +34,13 @@ from app.deps import (
 from app.domain import embedding_settings
 from app.domain import semantic_search as domain
 from app.domain.assets import MAX_UPLOAD_BYTES
+from app.domain.map_sampling import DEFAULT_MAP_SAMPLING, MapSampleCache
 from app.domain.schemas import (
     DuplicatesResponse,
     EmbeddingErrorDetail,
     EmbeddingGraphResponse,
     EmbeddingGraphScoresResponse,
+    MapSampling,
     SemanticSearchResponse,
     SimilarAssetsResponse,
     SimilarImageSearchResponse,
@@ -50,6 +52,15 @@ from app.worker.embedder import Embedder
 router = APIRouter(tags=["embeddings"])
 
 _CONFLICT = {409: {"model": EmbeddingErrorDetail, "description": "埋め込みを使えない"}}
+
+_SAMPLING_DESCRIPTION = (
+    "候補が limit を超えたときの抽出方法(ADR-0057)。spread: 全体から均等に / recent: 新しい順"
+)
+
+
+def get_map_sample_cache(request: Request) -> MapSampleCache:
+    """ADR-0057: マップの抽出の結果のキャッシュ。"""
+    return request.app.state.map_sample_cache
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -251,6 +262,7 @@ def duplicates_endpoint(
 def graph_endpoint(
     k: int = Query(default=domain.GRAPH_DEFAULT_K, ge=1, le=domain.GRAPH_MAX_K),
     limit: int = Query(default=domain.GRAPH_DEFAULT_LIMIT, ge=1, le=domain.GRAPH_MAX_LIMIT),
+    sampling: MapSampling = Query(default=DEFAULT_MAP_SAMPLING, description=_SAMPLING_DESCRIPTION),
     group_id: uuid.UUID | None = Query(default=None),
     tag: list[str] | None = Query(
         default=None,
@@ -260,10 +272,12 @@ def graph_endpoint(
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
     index: VectorIndex = Depends(get_vector_index),
+    embedder: Embedder = Depends(get_embedder),
+    sample_cache: MapSampleCache = Depends(get_map_sample_cache),
     user: CurrentUser = Depends(require_user),
 ) -> EmbeddingGraphResponse:
-    """マップの元データ。ノード(新しい順に `limit` 件まで)と、各ノードの k 近傍
-    (先頭は自分自身)。"""
+    """マップの元データ。ノード(`limit` 件まで。超えたら `sampling` の方法で抽出し、候補の
+    新しい順に並べる)と、各ノードの k 近傍(先頭は自分自身)。"""
     try:
         return domain.build_graph(
             db,
@@ -272,9 +286,12 @@ def graph_endpoint(
             viewer=user,
             k=k,
             limit=limit,
+            sampling=sampling,
             group_id=group_id,
             tags=tag,
             include_lineage=include_lineage,
+            version_of=embedder.version,
+            sample_cache=sample_cache,
         )
     except _ERRORS as exc:
         raise _http_error(exc) from exc
@@ -289,6 +306,7 @@ def graph_endpoint(
 def graph_scores_endpoint(
     q: str = Query(..., description="検索の文章(自然文)"),
     limit: int = Query(default=domain.GRAPH_DEFAULT_LIMIT, ge=1, le=domain.GRAPH_MAX_LIMIT),
+    sampling: MapSampling = Query(default=DEFAULT_MAP_SAMPLING, description=_SAMPLING_DESCRIPTION),
     group_id: uuid.UUID | None = Query(default=None),
     tag: list[str] | None = Query(
         default=None,
@@ -299,10 +317,11 @@ def graph_scores_endpoint(
     index: VectorIndex = Depends(get_vector_index),
     embedder: Embedder = Depends(get_embedder),
     cache: domain.QueryVectorCache = Depends(get_query_vector_cache),
+    sample_cache: MapSampleCache = Depends(get_map_sample_cache),
     user: CurrentUser = Depends(require_user),
 ) -> EmbeddingGraphScoresResponse:
-    """マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit` の
-    `GET /api/embeddings/graph` の `nodes` と同じ並び。"""
+    """マップのノード全件と、検索の文章の類似度。`ids` は同じ絞り込み・同じ `limit`・同じ
+    `sampling` の `GET /api/embeddings/graph` の `nodes` と同じ並び。"""
     try:
         return domain.graph_scores(
             db,
@@ -313,8 +332,11 @@ def graph_scores_endpoint(
             viewer=user,
             q=q,
             limit=limit,
+            sampling=sampling,
             group_id=group_id,
             tags=tag,
+            version_of=embedder.version,
+            sample_cache=sample_cache,
         )
     except _ERRORS as exc:
         raise _http_error(exc) from exc

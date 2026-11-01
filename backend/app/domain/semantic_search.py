@@ -10,7 +10,8 @@
   返す。画像もベクトルも保存しない(メモリの中だけで扱う。2026-10-04 追記)。
 - 重複の候補: 類似度がしきい値以上で、かつ知覚ハッシュが近い組を、代表との類似度でまとめる
   (ADR-0033 12章)。
-- マップ: ノード(新しい順に上限まで)と、各ノードの k 近傍(自分自身を先頭に含める)。
+- マップ: ノード(上限を超えたら `map_sampling` で抽出する。既定は全体から均等に。ADR-0057)と、
+  各ノードの k 近傍(自分自身を先頭に含める)。
 
 見える範囲(ADR-0025)は近傍を探す前に掛ける(`vector_index.AssetFilter`)。埋め込みが無効、
 または使えるモデルが無い間は `EmbeddingsConflictError(embeddings_unavailable)`(API では 409)。
@@ -23,7 +24,7 @@ import io
 import threading
 import uuid
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -41,6 +42,7 @@ from app.domain import (
     embedding_settings,
     focal_points,
     imported_assets,
+    map_sampling,
     perceptual_hash,
     prompt_embeddings,
 )
@@ -815,6 +817,55 @@ def _lineage_edges(db: Session, ids: Sequence[uuid.UUID]) -> list[list[int]]:
     return [list(edge) for edge in sorted(edges)]
 
 
+@dataclass(frozen=True)
+class _MapNodes:
+    ordered: list[uuid.UUID]
+    matrix: np.ndarray
+    # `ordered[i]` が代表する候補の数(自分を含む)。
+    represents: list[int]
+    total: int
+
+
+def _map_nodes(
+    db: Session,
+    *,
+    active: ActiveModel,
+    index: VectorIndex,
+    viewer: CurrentUser,
+    limit: int,
+    sampling: map_sampling.MapSampling,
+    group_id: uuid.UUID | None,
+    tags: Sequence[str] | None,
+    version_of: Callable[[str], int] | None,
+    sample_cache: map_sampling.MapSampleCache | None,
+) -> _MapNodes:
+    """マップに並べるノード(ADR-0057)。`build_graph` と `graph_scores` が同じ引数なら同じ並びを
+    返すよう、どちらもここを通す。"""
+    flt = build_filter(db, viewer, group_id=group_id, tags=tags)
+    all_ids = candidate_ids(db, active.model_key, flt)
+    total = len(all_ids)
+    if sampling == "recent" or total <= limit:
+        ordered, matrix = index.subset(db, active.model_key, all_ids[:limit])
+        return _MapNodes(ordered, matrix, [1] * len(ordered), total)
+
+    def build() -> tuple[list[uuid.UUID], list[int]]:
+        ids, full = index.subset(db, active.model_key, all_ids)
+        sample = map_sampling.spread_sample(full, limit)
+        return [ids[i] for i in sample.indices], sample.represents
+
+    if sample_cache is None:
+        chosen, counts = build()
+    else:
+        # 候補の要約が変われば鍵も変わるが、見る人と絞り込みは意味として鍵に明示する。
+        scope = f"{viewer.id or 'local'};{group_id or ''};{','.join(sorted(flt.tags))}"
+        version = version_of(active.model_key) if version_of is not None else 0
+        key = (active.model_key, version, scope, map_sampling.ids_digest(all_ids), limit)
+        chosen, counts = sample_cache.get_or_build(key, build)
+    ordered, matrix = index.subset(db, active.model_key, chosen)
+    count_of = dict(zip(chosen, counts, strict=True))
+    return _MapNodes(ordered, matrix, [count_of[i] for i in ordered], total)
+
+
 def build_graph(
     db: Session,
     *,
@@ -823,16 +874,29 @@ def build_graph(
     viewer: CurrentUser,
     k: int = GRAPH_DEFAULT_K,
     limit: int = GRAPH_DEFAULT_LIMIT,
+    sampling: map_sampling.MapSampling = map_sampling.DEFAULT_MAP_SAMPLING,
     group_id: uuid.UUID | None = None,
     tags: Sequence[str] | None = None,
     include_lineage: bool = False,
+    version_of: Callable[[str], int] | None = None,
+    sample_cache: map_sampling.MapSampleCache | None = None,
 ) -> EmbeddingGraphResponse:
-    """`tags` は複数ならすべてが付いている画像だけ(AND)。"""
+    """`tags` は複数ならすべてが付いている画像だけ(AND)。候補が `limit` を超えたら
+    `sampling` の方法で抽出する(ADR-0057)。"""
     active = require_active(db, settings)
-    flt = build_filter(db, viewer, group_id=group_id, tags=tags)
-    all_ids = candidate_ids(db, active.model_key, flt)
-    total = len(all_ids)
-    ordered, matrix = index.subset(db, active.model_key, all_ids[:limit])
+    picked = _map_nodes(
+        db,
+        active=active,
+        index=index,
+        viewer=viewer,
+        limit=limit,
+        sampling=sampling,
+        group_id=group_id,
+        tags=tags,
+        version_of=version_of,
+        sample_cache=sample_cache,
+    )
+    ordered, matrix, total = picked.ordered, picked.matrix, picked.total
     if ordered:
         indices, sims = knn_matrix(matrix, k)
     else:
@@ -855,12 +919,14 @@ def build_graph(
             title=titles.get(asset_id),
             focal_point=focals.get(asset_id),
             content_rating=ratings.get(asset_id),  # type: ignore[arg-type]
+            represents=represents,
         )
-        for asset_id in ordered
+        for asset_id, represents in zip(ordered, picked.represents, strict=True)
     ]
     return EmbeddingGraphResponse(
         model_key=active.model_key,
         k=k,
+        sampling=sampling,
         nodes=nodes,
         neighbor_indices=indices.tolist(),
         neighbor_similarities=[[round(float(v), 4) for v in row] for row in sims],
@@ -880,8 +946,11 @@ def graph_scores(
     viewer: CurrentUser,
     q: str,
     limit: int = GRAPH_DEFAULT_LIMIT,
+    sampling: map_sampling.MapSampling = map_sampling.DEFAULT_MAP_SAMPLING,
     group_id: uuid.UUID | None = None,
     tags: Sequence[str] | None = None,
+    version_of: Callable[[str], int] | None = None,
+    sample_cache: map_sampling.MapSampleCache | None = None,
 ) -> EmbeddingGraphScoresResponse:
     """マップのノード全件と検索の文章の類似度(絞り込みや順位では落とさない)。
 
@@ -895,11 +964,20 @@ def graph_scores(
     if len(text) > QUERY_MAX_CHARS:
         raise EmbeddingsInvalidQueryError(t("embeddings.queryTooLong", max=QUERY_MAX_CHARS))
     active = require_active(db, settings)
-    flt = build_filter(db, viewer, group_id=group_id, tags=tags)
-    all_ids = candidate_ids(db, active.model_key, flt)
-    total = len(all_ids)
-    # `build_graph` と同じ順序・同じ行列を使う(位置が一致する)。
-    ordered, matrix = index.subset(db, active.model_key, all_ids[:limit])
+    # `build_graph` と同じ抽出・同じ順序・同じ行列を使う(位置が一致する)。
+    picked = _map_nodes(
+        db,
+        active=active,
+        index=index,
+        viewer=viewer,
+        limit=limit,
+        sampling=sampling,
+        group_id=group_id,
+        tags=tags,
+        version_of=version_of,
+        sample_cache=sample_cache,
+    )
+    ordered, matrix, total = picked.ordered, picked.matrix, picked.total
     vector = embed_query(db, active, text, engines, cache, actor=actor_from_user(viewer))
     scores: list[float] = []
     if ordered:
@@ -915,6 +993,7 @@ def graph_scores(
     return EmbeddingGraphScoresResponse(
         model_key=active.model_key,
         query=text,
+        sampling=sampling,
         ids=ordered,
         scores=scores,
         total=total,

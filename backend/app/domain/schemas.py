@@ -2900,12 +2900,20 @@ class EmbeddingGraphNode(BaseModel):
     focal_point: FocalPoint | None = None
     # レーティングの段階(ADR-0049 5章「マップ」)。未判定は null。マップでマスクするかを決める。
     content_rating: ContentRatingLevel | None = None
+    # このノードが代表する画像の数(自分を含む。ADR-0057)。全体から均等に抽出したときは、
+    # 間引いた画像を同じクラスタで最も近いノードに数える。新しい順と、抽出しないときは 1。
+    represents: int
+
+
+# マップのノードの抽出方法(ADR-0057)。spread: 全体から均等に(既定) / recent: 新しい順。
+MapSampling = Literal["spread", "recent"]
 
 
 class EmbeddingGraphResponse(BaseModel):
     """`GET /api/embeddings/graph`。マップ(2D の地図と類似度のネットワーク)の元データ。
 
-    ノードは新しい順。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
+    ノードは候補の新しい順に並ぶ(候補が `limit` を超えたら `sampling` の方法で抽出する。
+    ADR-0057)。`neighbor_indices[i]` と `neighbor_similarities[i]` はノード i の近傍
     (`nodes` の位置と、コサイン類似度)で、先頭は必ず自分自身(類似度 1 = 距離 0)、続いて
     ほかのノードを最大 `k` 件、類似度の高い順に並べる。どの行も同じ長さ
     (`1 + min(k, ノード数 - 1)`)なので、umap-js の `setPrecomputedKNN` にそのまま渡せる
@@ -2914,6 +2922,7 @@ class EmbeddingGraphResponse(BaseModel):
 
     model_key: str
     k: int
+    sampling: MapSampling
     nodes: list[EmbeddingGraphNode] = Field(default_factory=list)
     neighbor_indices: list[list[int]] = Field(default_factory=list)
     neighbor_similarities: list[list[float]] = Field(default_factory=list)
@@ -2922,25 +2931,26 @@ class EmbeddingGraphResponse(BaseModel):
     lineage_edges: list[list[int]] | None = None
     # 絞り込みに合う、ベクトルのある画像の数。
     total: int
-    # `limit` を超えたので、古い画像を返していない。
+    # `limit` を超えたので、すべての画像は返していない(`sampling` の方法で抽出した)。
     truncated: bool
 
 
 class EmbeddingGraphScoresResponse(BaseModel):
     """`GET /api/embeddings/graph/scores`。マップのノード全件と検索の文章の類似度。
 
-    `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`
-    なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
+    `ids` は `GET /api/embeddings/graph` の `nodes` と同じ並び(同じ絞り込み・同じ `limit`・
+    同じ `sampling` なら位置が一致する)で、`scores[i]` が `ids[i]` のコサイン類似度(-1〜1)。
     """
 
     model_key: str
     # 前後の空白を落とした検索の文章。
     query: str
+    sampling: MapSampling
     ids: list[uuid.UUID] = Field(default_factory=list)
     scores: list[float] = Field(default_factory=list)
     # 絞り込みに合う、ベクトルのある画像の数。
     total: int
-    # `limit` を超えたので、古い画像を返していない。
+    # `limit` を超えたので、すべての画像は返していない(`sampling` の方法で抽出した)。
     truncated: bool
 
 

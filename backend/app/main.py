@@ -65,6 +65,7 @@ from app.domain.api_key import resolve_base_url, warn_if_insecure_base_url
 from app.domain.auth_settings import EffectiveAuthConfig, resolve_auth_config
 from app.domain.group_suggestions import GroupSuggestionCache
 from app.domain.history_sort import EmbeddingOrderCache
+from app.domain.map_sampling import MapSampleCache
 from app.domain.semantic_search import QueryVectorCache
 from app.domain.storage import open_store
 from app.domain.vector_index import build_index as build_vector_index
@@ -410,6 +411,7 @@ def _build_lifespan(settings: Settings):
         app.state.vector_index = vector_index
         app.state.query_vector_cache = QueryVectorCache()
         app.state.history_order_cache = EmbeddingOrderCache()
+        app.state.map_sample_cache = MapSampleCache()
         app.state.group_suggestion_cache = GroupSuggestionCache()
         app.state.auth_runtime = auth_runtime
         app.state.tag_dictionary_importer = tag_dictionary_importer
