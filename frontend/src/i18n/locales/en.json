@@ -4174,7 +4174,7 @@
       "ip.material_destroy": "Materials destroyed"
     },
     "admin": {
-      "intro": "Let only granted people use entrusted copyrighted materials, and only for permitted purposes. Available in authentication mode only.",
+      "intro": "Let only granted people use entrusted copyrighted materials, and only for permitted purposes. Available in authentication mode only (beta).",
       "enabled": "Use IP materials",
       "create": "Create an IP",
       "name": "Name",
