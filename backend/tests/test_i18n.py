@@ -297,6 +297,8 @@ _KNOWN_DYNAMIC_PREFIX_SITES: dict[str, str] = {
     # IP の利用の検査の断る理由(`IpUseError.key`。ADR-0059 5章)。すべて `ip.` の下。
     "app/domain/run_create.py": "ip.",
     "app/worker/runner.py": "ip.",
+    # IP のレポート(ADR-0059 8章)。拒否の理由(`ip.`)と状態の名前(`ipReport.states.`)。
+    "app/domain/ip_reports.py": "ip",
 }
 
 

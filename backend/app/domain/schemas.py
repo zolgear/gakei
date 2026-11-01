@@ -4003,3 +4003,44 @@ class IpDerivativeItem(BaseModel):
 
 class IpDerivativeListResponse(BaseModel):
     items: list[IpDerivativeItem]
+
+
+class IpReportCount(BaseModel):
+    key: str
+    count: int
+
+
+class IpReportMaterial(BaseModel):
+    asset_id: uuid.UUID
+    added_at: datetime
+    withdrawn_at: datetime | None = None
+    destroyed: bool = False
+    use_count: int
+
+
+class IpReportView(BaseModel):
+    """IP の状況のレポート(ADR-0059 8章)。画面に出す集計。"""
+
+    start: date
+    end: date
+    uses: int
+    uses_succeeded: int
+    outputs: int
+    derived: int
+    original_downloads: int
+    detail_views: int
+    lineage_exports: int
+    denied: int
+    by_purpose: list[IpReportCount]
+    by_work_note: list[IpReportCount]
+    by_grantee: list[IpReportCount]
+    by_user: list[IpReportCount]
+    by_provider: list[IpReportCount]
+    denied_reasons: list[IpReportCount]
+    materials: list[IpReportMaterial]
+
+
+class IpDestroyResponse(BaseModel):
+    destroyed: int
+    # 同じ内容の原本をほかの画像が共有しているので、ファイルを残したもの。
+    kept_shared: int

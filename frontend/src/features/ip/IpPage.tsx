@@ -7,7 +7,9 @@
  * - 条件: 今の条件と、これまでの版。担当者と管理者は新しい版を足す。
  * - 許可: 担当者と管理者だけ。チームか個人に、用途と「入力に使う」を選んで出す・取り消す。
  * - 担当者: 見られる人は誰でも。管理者は足す・外す。
+ * - レポート: 担当者と管理者だけ。期間の集計と、報告書(HTML)・CSV の書き出し(`IpReportTab`)。
  * - 証跡: 担当者と管理者だけ。新しい順に、続きを読める。
+ * - 終了した IP は、担当者と管理者が素材の原本を破棄できる(確かめてから。ADR-0059 9章)。
  * - 状態(有効・停止・終了)は管理者だけが変える。終了は戻せないので確かめる。
  */
 import { useState, type FormEvent } from 'react'
@@ -19,6 +21,7 @@ import {
   addIpMaterial,
   addIpTerms,
   createIpGrant,
+  destroyIpMaterials,
   getIp,
   listIpAudit,
   listIpDerivatives,
@@ -38,12 +41,13 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { formatDateTime } from '../../lib/format'
 import { fmt, useI18n } from '../../i18n'
 import { IP_QUERY_KEY } from './ipQueries'
+import { IpReportTab } from './IpReportTab'
 import { IpStateBadge } from './IpStateBadge'
 import { IpTermsFields } from './IpTermsForm'
 import { termsDraftFrom, termsInputFrom, type TermsDraft } from './ipTerms'
 import styles from './Ip.module.css'
 
-type Tab = 'materials' | 'derivatives' | 'terms' | 'grants' | 'managers' | 'audit'
+type Tab = 'materials' | 'derivatives' | 'terms' | 'grants' | 'managers' | 'report' | 'audit'
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback
@@ -61,7 +65,7 @@ export function IpPage() {
   if (!ip) return <div className={styles.page}><p className={styles.errorText}>{m.notFound}</p></div>
 
   const tabs: Tab[] = ip.can_manage
-    ? ['materials', 'derivatives', 'terms', 'grants', 'managers', 'audit']
+    ? ['materials', 'derivatives', 'terms', 'grants', 'managers', 'report', 'audit']
     : ['materials', 'derivatives', 'terms', 'managers']
   const current = tabs.includes(tab) ? tab : 'materials'
 
@@ -102,6 +106,7 @@ export function IpPage() {
       {current === 'terms' && <TermsTab ip={ip} />}
       {current === 'grants' && <GrantsTab ip={ip} />}
       {current === 'managers' && <ManagersTab ip={ip} />}
+      {current === 'report' && <IpReportTab ip={ip} />}
       {current === 'audit' && <AuditTab ip={ip} />}
     </div>
   )
@@ -167,6 +172,8 @@ function MaterialsTab({ ip }: { ip: IpDetail }) {
   const query = useQuery({ queryKey: key, queryFn: () => listIpMaterials(ip.id) })
   const [error, setError] = useState<string | null>(null)
   const [withdrawTarget, setWithdrawTarget] = useState<string | null>(null)
+  const [destroyOpen, setDestroyOpen] = useState(false)
+  const [destroyed, setDestroyed] = useState<string | null>(null)
   const refresh = () => queryClient.invalidateQueries({ queryKey: IP_QUERY_KEY })
 
   const upload = useMutation({
@@ -194,9 +201,31 @@ function MaterialsTab({ ip }: { ip: IpDetail }) {
     },
   })
 
+  const destroy = useMutation({
+    mutationFn: () => destroyIpMaterials(ip.id),
+    onSuccess: (result) => {
+      setDestroyOpen(false)
+      setError(null)
+      setDestroyed(fmt(m.destroyedCount, { count: result.destroyed, kept: result.kept_shared }))
+      refresh()
+    },
+    onError: (err) => {
+      setDestroyOpen(false)
+      setError(errorText(err, m.failed))
+    },
+  })
+
   const items = query.data?.items ?? []
   return (
     <section className={styles.section}>
+      {ip.can_manage && ip.state === 'terminated' && (
+        <div className={styles.inlineRow}>
+          <button type="button" className={styles.dangerButton} onClick={() => setDestroyOpen(true)}>
+            {m.destroyMaterials}
+          </button>
+          {destroyed && <span className={styles.muted}>{destroyed}</span>}
+        </div>
+      )}
       {ip.can_manage && ip.state === 'active' && (
         <label className={styles.uploadButton}>
           {upload.isPending ? m.uploading : m.addMaterials}
@@ -243,6 +272,12 @@ function MaterialsTab({ ip }: { ip: IpDetail }) {
         previewImageUrl={withdrawTarget ? assetUrl(withdrawTarget, 'thumb') : undefined}
         onConfirm={() => withdrawTarget && withdraw.mutate(withdrawTarget)}
         onCancel={() => setWithdrawTarget(null)}
+      />
+      <ConfirmDialog
+        open={destroyOpen}
+        message={fmt(m.destroyConfirm, { name: ip.name })}
+        onConfirm={() => destroy.mutate()}
+        onCancel={() => setDestroyOpen(false)}
       />
     </section>
   )
