@@ -1925,6 +1925,25 @@ class SdWebuiImportParamsResponse(BaseModel):
     source: SdWebuiImportSource
 
 
+class ImageSettingsImportResponse(BaseModel):
+    """`POST /api/image-settings/import`(ADR-0038 11章)。画像から読んだ、フォームに入れる値。
+
+    `source` は読み込み元(GAKEI の埋め込み、ComfyUI のグラフ、A1111 形式)。`model` は
+    プロバイダーのモデル(ComfyUI はワークフローの ID)。A1111 形式でチェックポイントが
+    見つからなければ null(フォームのモデルを変えない。9章)。`params` はフォームの
+    パラメーター名と、サイズを持つプロバイダーなら `size`(`WxH`)。
+    """
+
+    source: Literal["gakei", "comfyui", "a1111"]
+    provider: str
+    model: str | None
+    prompt: str
+    params: dict[str, str | int | float | bool]
+    unapplied: list[SdWebuiImportUnapplied]
+    notes: list[SdWebuiImportNote]
+    software: str | None = None
+
+
 class SdWebuiConnectionTestRequest(BaseModel):
     """接続テスト(`POST /api/sdwebui/connection/test`)。
 

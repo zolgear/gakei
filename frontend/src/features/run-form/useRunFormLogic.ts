@@ -86,6 +86,7 @@ import {
   type ImportNotice,
 } from '../sdwebui/importParams'
 import { buildParameterSetRawParams, resolveParameterSetLoad } from '../parameter-sets/parameterSets'
+import { resolveImageSettingsLoad, toSdWebuiResponse } from '../image-settings/imageSettings'
 import { resolveRunFormLoad } from './runFormLoad'
 import { loadRepeatRaw, parseRepeat, saveRepeatRaw } from './repeat'
 import {
@@ -699,7 +700,12 @@ export function useRunFormLogic(
     if (consumedFormLoadNonceRef.current === pendingFormLoad.nonce) return
     consumedFormLoadNonceRef.current = pendingFormLoad.nonce
     clearPendingFormLoad()
-    const request = pendingFormLoad.request
+    const pending = pendingFormLoad.request
+    // A1111 形式の画像からの読み込み(ADR-0038 11章)は、9章の SD WebUI の読み込みと同じに扱う。
+    const request: typeof pending =
+      pending.kind === 'imageSettings' && pending.response.source === 'a1111'
+        ? { kind: 'sdwebui', response: toSdWebuiResponse(pending.response) }
+        : pending
 
     // プロンプトテンプレート(実験)。テンプレートモードに入る(null は解除)。プロンプト欄の
     // ローカルの値は触らない(解除したら元のプロンプトに戻る)。
@@ -763,6 +769,23 @@ export function useRunFormLogic(
         rawParams: buildImportedRawParams(targetDefs, values.params, loadSeedMode()),
         params: values.params,
         notice: toImportNotice(request.response),
+      }
+    } else if (request.kind === 'imageSettings') {
+      // GAKEI・ComfyUI の画像(ADR-0038 11章)。モデルが選べなければ読み込まない。操作は入れる先の
+      // モデルと今の入力画像から決める。
+      const resolved = resolveImageSettingsLoad(request.response, caps, formState.inputs)
+      if (!resolved.ok) {
+        setSubmitError(resolved.reason)
+        return
+      }
+      next = {
+        provider: resolved.provider,
+        model: resolved.model,
+        prompt: resolved.prompt,
+        sizeState: resolved.sizeState,
+        rawParams: buildImportedRawParams(resolved.targetDefs, resolved.params, loadSeedMode()),
+        params: resolved.params,
+        notice: resolved.notice,
       }
     } else {
       const resolved = resolveParameterSetLoad(request.set, caps, { provider, model }, operation)

@@ -1242,5 +1242,17 @@
     "unsupported": "接続先が Structured Outputs に対応していないため、グループ名の候補に使えません",
     "llmError": "グループ名の候補を作れませんでした: {error}",
     "fakeName": "ダミーの名前 {cluster}-{n}"
+  },
+  "imageSettings": {
+    "fileMissing": "画像のファイルを指定してください。",
+    "noSettings": "この画像には、読み込める生成情報(GAKEI、ComfyUI、SD WebUI)がありません。",
+    "noMatchingWorkflow": "この画像の ComfyUI のワークフローに合う、登録済みのワークフローがありません。先にワークフローを登録してください。",
+    "workflowNotFound": "ワークフロー「{name}」がこの環境に無く、登録済みのワークフローとも合わないため読み込めません。",
+    "sdwebuiNotConnected": "SD WebUI(A1111 形式)の画像ですが、SD WebUI に接続していないため読み込めません。",
+    "notes": {
+      "inputsNotRestored": "入力画像は画像に含まれていないため、読み込んでいません。",
+      "promptLinked": "プロンプトが他のノードからの配線のため、読み込めませんでした。",
+      "workflowPartialMatch": "ワークフロー「{name}」と一部のノードが違います。値を確かめてください。"
+    }
   }
 }

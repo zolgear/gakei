@@ -86,6 +86,24 @@ def extract_generation_meta(data: bytes) -> dict[str, Any] | None:
     return sanitize_external(meta) if meta is not None else None
 
 
+def read_comfyui_prompt_graph(data: bytes) -> dict[str, Any] | None:
+    """PNG の `prompt` チャンク(ComfyUI の API 形式のグラフ)を読む(ADR-0038 11章)。
+
+    PNG でない、チャンクが無い、API 形式のグラフとして読めないときは None。例外は投げない。
+    """
+    if not _is_png(data):
+        return None
+    texts, _cabx = _collect_png_texts(data)
+    prompt_text = texts.get("prompt")
+    if prompt_text is None:
+        return None
+    try:
+        graph = json.loads(prompt_text)
+    except (json.JSONDecodeError, ValueError, RecursionError):
+        return None
+    return graph if is_api_format_template(graph) else None
+
+
 # -- 材料の収集 ----------------------------------------------------------
 
 

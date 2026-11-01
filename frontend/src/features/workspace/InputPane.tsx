@@ -27,6 +27,7 @@ import { isMobileViewport } from '../../lib/viewport'
 import { listPromptSets, type AssetDetail } from '../../api/client'
 import { useRunFormLogic } from '../run-form/useRunFormLogic'
 import { useEditInputsLogic } from '../run-form/useEditInputsLogic'
+import { ImportSettingsButton } from '../image-settings/ImportSettingsButton'
 import type { InsertPromptFn } from '../run-form/promptInsertion'
 import { UNSPECIFIED } from '../run-form/paramsBuilder'
 import { groupParamsForProvider } from '../run-form/paramGrouping'
@@ -57,9 +58,7 @@ import { OtherParamsDetails, PrimaryParamFields } from './ParamFields'
 import { AssetGroupField } from '../run-form/AssetGroupField'
 import { PromptToolsRow } from './PromptToolsRow'
 import { LoraPickerButton } from '../sdwebui/LoraPickerButton'
-import { ImportParamsButton } from '../sdwebui/ImportParamsButton'
 import { ImportNoticePanel } from '../sdwebui/ImportNoticePanel'
-import { isSdWebuiEnabled } from '../sdwebui/importParams'
 import { FormParameterSetButtons } from '../parameter-sets/FormParameterSetButtons'
 import { PromptTemplateForm } from '../prompt-templates/PromptTemplateForm'
 import { SubmitControls } from './SubmitControls'
@@ -578,7 +577,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
           )}
           {/* 画像の生成情報から読み込む(ADR-0038 9章)。SD WebUI が有効なら、どのプロバイダーを
               選んでいても出す(読み込むと SD WebUI に切り替わる)。 */}
-          {isSdWebuiEnabled(caps) && <ImportParamsButton currentPrompt={form.prompt} />}
+          <ImportSettingsButton currentPrompt={form.prompt} caps={caps} />
           {/* パラメーターセットの保存と読み込み(ADR-0040)。プロバイダーに依らず出す。 */}
           <FormParameterSetButtons
             provider={form.provider}

@@ -625,7 +625,7 @@ def test_non_a1111_is_422(connected: TestClient) -> None:
 
 
 def test_too_large_is_413(connected: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.api.sdwebui._BODY_LIMIT", 1000)
+    monkeypatch.setattr("app.api.sdwebui.IMPORT_BODY_LIMIT", 1000)
     response = _post_file(connected, png_with_parameters(INFOTEXT) + b"\0" * 2000)
     assert response.status_code == 413
 

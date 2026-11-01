@@ -1361,6 +1361,19 @@ export function importSdWebuiParams(
   })
 }
 
+export type ImageSettingsImportResponse = components['schemas']['ImageSettingsImportResponse']
+
+/**
+ * 画像に埋め込まれた生成情報(GAKEI、ComfyUI、A1111 形式)から生成フォームの値を作る
+ * (ADR-0038 11章)。サーバーは画像を保存しない。読める情報が無い・合うワークフローが無ければ 422、
+ * A1111 形式で SD WebUI に接続していなければ 409、大きすぎれば 413。
+ */
+export function importImageSettings(file: Blob): Promise<ImageSettingsImportResponse> {
+  const form = new FormData()
+  form.append('file', file, file instanceof File ? file.name : 'image')
+  return request('/api/image-settings/import', { method: 'POST', body: form })
+}
+
 // -- タイトルとタグ(ADR-0024) --------------------------------------------------
 // 編集はログイン者全員。マスクと削除済みの Asset は 409(detail に理由)。いずれも更新後の注釈を返す。
 
