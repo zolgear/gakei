@@ -161,7 +161,8 @@
       "ungrouped": "No group",
       "sectionCount": "{count} images",
       "sectionShowAll": "Show all",
-      "backToTop": "Back to top"
+      "backToTop": "Back to top",
+      "filterLocked": "Locked"
     },
     "labels": {
       "square": "Square",
@@ -4007,5 +4008,29 @@
       "output": "Blank",
       "kindsBlocked": "Boxes set to “Keep as is”, “Remove”, or “Move” can’t be used on a blank canvas. Change their type before switching."
     }
+  },
+  "lock": {
+    "lock": "Lock",
+    "lockedLabel": "Locked",
+    "lockTitle": "Lock this image",
+    "lockedTitle": "Locked",
+    "lead": "This image and the images it was made from can no longer be deleted.",
+    "kind": "Kind",
+    "kinds": {
+      "delivered": "Delivered",
+      "shared": "Shared",
+      "submitted": "Submitted",
+      "other": "Other"
+    },
+    "note": "Note",
+    "notePlaceholder": "Recipient, reference number, etc.",
+    "lockedAt": "Date",
+    "lockedBy": "Locked by",
+    "submit": "Lock",
+    "unlock": "Unlock",
+    "cancel": "Cancel",
+    "close": "Close",
+    "failed": "Could not change the lock",
+    "protectedHint": "Locked, or the source of a locked image, so it cannot be deleted"
   }
 }

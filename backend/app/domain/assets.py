@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain import compositions, content_withholding, derivatives
+from app.domain import asset_locks, compositions, content_withholding, derivatives
 from app.domain.embedded_meta import (
     get_instance_id,
     read_gakei_meta,
@@ -427,7 +427,10 @@ def _ingest_replacement(
     if target.kind != kind:
         raise IngestError(t("assets.replaceTargetKindMismatch"))
 
-    if asset_is_used_as_input(session, replaces_asset_id):
+    # 入力に使われた画像と、ロックで守られた画像(ADR-0060)は消さずに残し、新しく作る。
+    if asset_is_used_as_input(session, replaces_asset_id) or asset_locks.is_protected(
+        session, replaces_asset_id
+    ):
         chained_source = replaces_asset_id if kind == AssetKind.SKETCH else None
         asset = ingest(
             session,

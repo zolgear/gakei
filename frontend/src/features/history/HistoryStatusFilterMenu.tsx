@@ -68,6 +68,12 @@ export function HistoryStatusFilterMenu({ filter, onChange }: HistoryStatusFilte
           checked: filter.regionsOnly,
           onChange: (regionsOnly) => onChange({ regionsOnly }),
         },
+        {
+          id: 'locked',
+          label: t.history.page.filterLocked,
+          checked: filter.lockedOnly,
+          onChange: (lockedOnly) => onChange({ lockedOnly }),
+        },
       ]}
     />
   )

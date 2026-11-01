@@ -29,6 +29,7 @@ from app.deps import (
 )
 from app.domain import (
     annotation_settings,
+    asset_locks,
     content_withholding,
     derivatives,
     embedding_settings,
@@ -70,6 +71,8 @@ from app.domain.schemas import (
     AssetFavoriteResponse,
     AssetLineageResponse,
     AssetListResponse,
+    AssetLockRequest,
+    AssetLockView,
     AssetOrigin,
     AssetSummary,
     AssetTagAddRequest,
@@ -118,6 +121,7 @@ def _to_summary(
     content_rating: str | None = None,
     favorite: bool = False,
     imported: bool = False,
+    lock: asset_locks.LockState | None = None,
 ) -> AssetSummary:
     return AssetSummary(
         id=asset.id,
@@ -132,6 +136,8 @@ def _to_summary(
         content_rating=content_rating,  # type: ignore[arg-type]
         favorite=favorite,
         imported=imported,
+        locked=lock is not None and lock.locked,
+        lock_protected=lock is not None and lock.protected,
         **content_withholding.summary_fields(asset),
     )
 
@@ -233,7 +239,27 @@ def _to_detail(
         **content_withholding.withheld_fields(db, asset),
         favorite=favorites_domain.is_favorite(db, user, asset.id),
         imported=imported_assets.is_imported(asset, produced_by_run),
+        **_lock_fields(db, user, asset),
     )
+
+
+def _lock_fields(db: Session, user: CurrentUser, asset: Asset) -> dict:
+    """詳細のロック(ADR-0060)。付いているロックと、守られているか。"""
+    lock = asset_locks.active_lock(db, asset.id)
+    view = None
+    if lock is not None:
+        view = AssetLockView(
+            kind=lock.kind,  # type: ignore[arg-type]
+            note=lock.note,
+            locked_at=lock.locked_at,
+            locked_by_name=asset_locks.locker_name(db, lock),
+            can_unlock=asset_locks.can_unlock(user, lock),
+        )
+    return {
+        "lock": view,
+        "locked": lock is not None,
+        "lock_protected": lock is not None or asset_locks.is_protected(db, asset.id),
+    }
 
 
 @router.post("", response_model=AssetUploadResponse, status_code=201, operation_id="create_asset")
@@ -394,6 +420,7 @@ def list_assets(
     ratings = content_rating_domain.bulk_levels(db, [a.id for a in rows])
     favorite_ids = favorites_domain.bulk_favorite_ids(db, user, [a.id for a in rows])
     imported_ids = imported_assets.bulk_imported_ids(db, rows)
+    locks = asset_locks.bulk_lock_states(db, [a.id for a in rows])
     return AssetListResponse(
         items=[
             _to_summary(
@@ -403,6 +430,7 @@ def list_assets(
                 ratings.get(a.id),
                 favorite=a.id in favorite_ids,
                 imported=a.id in imported_ids,
+                lock=locks.get(a.id),
             )
             for a in rows
         ],
@@ -438,9 +466,62 @@ def delete_asset(
     asset = get_visible_asset(db, user, asset_id)
     if asset is None or asset.deleted_at is not None:
         raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    # ロックした画像と、その祖先は消せない(ADR-0060 1章)。
+    if asset_locks.is_protected(db, asset.id):
+        raise HTTPException(status_code=409, detail=t("assets.locked"))
 
     asset.deleted_at = _utcnow()
     db.commit()
+
+
+def _lock_target(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:
+    """ロックを付け外しできる Asset(見える、削除されていない)。それ以外は 404(ADR-0060)。"""
+    asset = get_visible_asset(db, user, asset_id)
+    if asset is None or asset.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=t("assets.notFound"))
+    return asset
+
+
+@router.put(
+    "/{asset_id}/lock",
+    response_model=AssetLockView,
+    operation_id="lock_asset",
+)
+def lock_asset(
+    asset_id: uuid.UUID,
+    body: AssetLockRequest,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> AssetLockView:
+    """ロックを付ける(ADR-0060 2章)。既に付いていれば 409。"""
+    asset = _lock_target(db, user, asset_id)
+    try:
+        lock = asset_locks.lock_asset(db, user, asset, body.kind, body.note)
+    except asset_locks.AlreadyLockedError as exc:
+        raise HTTPException(status_code=409, detail=t("assets.alreadyLocked")) from exc
+    return AssetLockView(
+        kind=lock.kind,  # type: ignore[arg-type]
+        note=lock.note,
+        locked_at=lock.locked_at,
+        locked_by_name=asset_locks.locker_name(db, lock),
+        can_unlock=asset_locks.can_unlock(user, lock),
+    )
+
+
+@router.delete("/{asset_id}/lock", status_code=204, operation_id="unlock_asset")
+def unlock_asset(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    user: CurrentUser = Depends(require_user),
+) -> None:
+    """ロックを外す(付けた人と管理者だけ。ADR-0060 2章)。付いていなければ 404。"""
+    asset = _lock_target(db, user, asset_id)
+    try:
+        asset_locks.unlock_asset(db, user, asset)
+    except asset_locks.NotLockedError as exc:
+        raise HTTPException(status_code=404, detail=t("assets.notLocked")) from exc
+    except asset_locks.UnlockNotAllowedError as exc:
+        raise HTTPException(status_code=403, detail=t("assets.unlockNotAllowed")) from exc
 
 
 def _favorite_target(db: Session, user: CurrentUser, asset_id: uuid.UUID) -> Asset:

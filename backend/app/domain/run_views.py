@@ -18,7 +18,7 @@ from sqlalchemy import ColumnElement, Select, literal, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain import content_rating, favorites, focal_points
+from app.domain import asset_locks, content_rating, favorites, focal_points
 from app.domain.avatars import avatar_url
 from app.domain.models import (
     RUN_ORIGIN_IMPORT,
@@ -126,6 +126,8 @@ def bulk_output_refs(
         # お気に入り(ADR-0055)。1つの Asset に1人の行は1つだけなので、行は増えない。
         query = query.outerjoin(AssetMark, favorites.favorite_join_condition(viewer))
     rows = db.execute(query.where(condition).order_by(Asset.output_index)).all()
+    # ロック(ADR-0060)。出力の数だけの IN 句で、1回ずつ引く。
+    locks = asset_locks.bulk_lock_states(db, [row[1] for row in rows])
     for (
         produced_by_run_id,
         asset_id,
@@ -150,6 +152,8 @@ def bulk_output_refs(
                 width=width,
                 height=height,
                 favorite=mark_id is not None,
+                locked=asset_id in locks and locks[asset_id].locked,
+                lock_protected=asset_id in locks,
             )
         )
     return result

@@ -29,6 +29,7 @@ from sqlalchemy import ColumnElement, and_, exists, not_, or_, select, true
 from sqlalchemy.orm import aliased
 
 from app.auth.identity import CurrentUser
+from app.domain import asset_locks
 from app.domain.models import Asset, AssetGroup, AssetGroupMember, Run
 from app.domain.visibility import group_visible
 
@@ -94,11 +95,13 @@ def run_has_regions() -> ColumnElement[bool]:
 
 @dataclass(frozen=True)
 class HistoryLabelFilter:
-    """形・透過・領域の絞り込み。どれも既定は絞らない。"""
+    """形・透過・領域・ロックの絞り込み。どれも既定は絞らない。"""
 
     shape: HistoryShape | None = None
     transparent: bool = False
     regions: bool = False
+    # ロックの付いた画像だけ(ADR-0060 4章)。
+    locked: bool = False
 
     def _run_attribute_conditions(self) -> list[ColumnElement[bool]]:
         conditions: list[ColumnElement[bool]] = []
@@ -113,6 +116,8 @@ class HistoryLabelFilter:
         conditions = self._run_attribute_conditions()
         if self.shape is not None:
             conditions.append(run_has_output_shape(self.shape))
+        if self.locked:
+            conditions.append(asset_locks.run_has_locked_output())
         return conditions
 
     def asset_conditions(self) -> list[ColumnElement[bool]]:
@@ -121,6 +126,8 @@ class HistoryLabelFilter:
         conditions = self._run_attribute_conditions()
         if self.shape is not None:
             conditions.append(asset_shape_condition(self.shape))
+        if self.locked:
+            conditions.append(Asset.id.in_(asset_locks.locked_asset_ids()))
         return conditions
 
     def scope_key(self) -> str:
@@ -132,6 +139,8 @@ class HistoryLabelFilter:
             parts.append("transparent")
         if self.regions:
             parts.append("regions")
+        if self.locked:
+            parts.append("locked")
         return ",".join(parts)
 
 

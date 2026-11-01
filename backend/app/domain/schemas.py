@@ -392,6 +392,23 @@ class ContentRatingDetail(BaseModel):
     judged_at: datetime | None = None
 
 
+class AssetLockView(BaseModel):
+    """画像に付いているロック(ADR-0060)。"""
+
+    kind: Literal["delivered", "shared", "submitted", "other"]
+    note: str | None = None
+    locked_at: datetime
+    # 付けた人の名前(認証モード)。個人モードと、名前の分からない人は null。
+    locked_by_name: str | None = None
+    # 見る人が外せるか(付けた人と管理者)。
+    can_unlock: bool = False
+
+
+class AssetLockRequest(BaseModel):
+    kind: Literal["delivered", "shared", "submitted", "other"]
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class AssetSummary(BaseModel):
     id: uuid.UUID
     kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
@@ -413,6 +430,10 @@ class AssetSummary(BaseModel):
     # 見る人のお気に入りか(ADR-0055)。埋めるのはストックの一覧(`GET /api/assets`)だけで、
     # 検索の結果などほかの応答では常に false。
     favorite: bool = False
+    # ロック(ADR-0060)。`locked` はこの画像に付いている、`lock_protected` はこの画像か、この画像を
+    # 元にした画像にロックが付いていて消せない。埋めるのはストックの一覧と詳細だけ。
+    locked: bool = False
+    lock_protected: bool = False
     # 系列の取り込み(ADR-0037)で入った、取り込んだ Run が作った生成画像か(記録は未検証)。
     # タイルの種別のリボンに使う。取り込みで入ったアップロードなどは種別のとおり false。
     imported: bool = False
@@ -810,6 +831,8 @@ class AssetDetail(AssetSummary):
     content_withheld_verdict: ModVerdictView | None = None
     # 見る人のお気に入りか(ADR-0055)。他人の印は見えない。
     favorite: bool = False
+    # この画像に付いているロック(ADR-0060)。無ければ null。
+    lock: AssetLockView | None = None
 
 
 class AssetUploadResponse(AssetDetail):
@@ -1188,6 +1211,9 @@ class RunOutputRef(BaseModel):
     height: int | None = None
     # 見る人のお気に入りか(ADR-0055)。
     favorite: bool = False
+    # ロック(ADR-0060)。`AssetSummary` と同じ意味。
+    locked: bool = False
+    lock_protected: bool = False
 
 
 class AssetFavoriteResponse(BaseModel):

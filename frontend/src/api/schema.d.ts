@@ -664,6 +664,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Lock Asset
+         * @description ロックを付ける(ADR-0060 2章)。既に付いていれば 409。
+         */
+        put: operations["lock_asset"];
+        post?: never;
+        /**
+         * Unlock Asset
+         * @description ロックを外す(付けた人と管理者だけ。ADR-0060 2章)。付いていなければ 404。
+         */
+        delete: operations["unlock_asset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/favorite": {
         parameters: {
             query?: never;
@@ -3255,6 +3279,16 @@ export interface components {
              */
             favorite: boolean;
             /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -3292,6 +3326,7 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
+            lock?: components["schemas"]["AssetLockView"] | null;
         };
         /**
          * AssetEmbeddingStatus
@@ -3430,6 +3465,41 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** AssetLockRequest */
+        AssetLockRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "delivered" | "shared" | "submitted" | "other";
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * AssetLockView
+         * @description 画像に付いているロック(ADR-0060)。
+         */
+        AssetLockView: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "delivered" | "shared" | "submitted" | "other";
+            /** Note */
+            note?: string | null;
+            /**
+             * Locked At
+             * Format: date-time
+             */
+            locked_at: string;
+            /** Locked By Name */
+            locked_by_name?: string | null;
+            /**
+             * Can Unlock
+             * @default false
+             */
+            can_unlock: boolean;
+        };
         /**
          * AssetOrigin
          * @description 埋め込まれていた `gakei` メタ情報の由来(ADR-0014、2026-09-24 追記)。署名が無いため
@@ -3498,6 +3568,16 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
             /**
              * Imported
              * @default false
@@ -3579,6 +3659,16 @@ export interface components {
              */
             favorite: boolean;
             /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -3616,6 +3706,7 @@ export interface components {
             /** Verdicts */
             verdicts?: components["schemas"]["ModVerdictView"][];
             content_withheld_verdict?: components["schemas"]["ModVerdictView"] | null;
+            lock?: components["schemas"]["AssetLockView"] | null;
             /**
              * Ingest Outcome
              * @enum {string}
@@ -5120,6 +5211,16 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
             /**
              * Imported
              * @default false
@@ -8123,6 +8224,16 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
         };
         /**
          * RunPromptTemplate
@@ -8514,6 +8625,16 @@ export interface components {
              */
             favorite: boolean;
             /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
+            /**
              * Imported
              * @default false
              */
@@ -8712,6 +8833,16 @@ export interface components {
              * @default false
              */
             favorite: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Lock Protected
+             * @default false
+             */
+            lock_protected: boolean;
             /**
              * Imported
              * @default false
@@ -10569,6 +10700,74 @@ export interface operations {
             };
         };
     };
+    lock_asset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetLockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetLockView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlock_asset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     favorite_asset: {
         parameters: {
             query?: never;
@@ -11567,6 +11766,8 @@ export interface operations {
                 transparent?: boolean;
                 /** @description true: 領域の四角を付けた Run だけ(ADR-0053) */
                 regions?: boolean;
+                /** @description true: ロックの付いた出力を1つ以上持つ Run だけ(ADR-0060) */
+                locked?: boolean;
                 /** @description desc: 新しい順 / asc: 古い順(ADR-0054 6章) */
                 order?: "desc" | "asc";
                 /** @description このグループ(id。`none` はグループなし)のどれかに当たる Run だけ(ADR-0054) */
@@ -11749,6 +11950,8 @@ export interface operations {
                 transparent?: boolean;
                 /** @description true: 領域の四角を付けた Run の画像だけ(ADR-0053) */
                 regions?: boolean;
+                /** @description true: ロックの付いた画像だけ(ADR-0060) */
+                locked?: boolean;
                 /** @description このグループ(id。`none` はグループなし)のどれかの画像だけ(ADR-0054 6章) */
                 group?: string[];
                 /** @description このグループ(id。`none` はグループなし)の画像を除く */

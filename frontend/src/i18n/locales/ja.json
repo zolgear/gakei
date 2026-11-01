@@ -161,7 +161,8 @@
       "ungrouped": "グループなし",
       "sectionCount": "{count} 枚",
       "sectionShowAll": "すべて見る",
-      "backToTop": "先頭へ戻る"
+      "backToTop": "先頭へ戻る",
+      "filterLocked": "ロック"
     },
     "labels": {
       "square": "正方形",
@@ -4007,5 +4008,29 @@
       "output": "白紙",
       "kindsBlocked": "白紙では「そのまま残す」「消す」「動かす」の四角を使えません。種類を変えてから切り替えてください。"
     }
+  },
+  "lock": {
+    "lock": "ロック",
+    "lockedLabel": "ロック中",
+    "lockTitle": "ロックする",
+    "lockedTitle": "ロック中",
+    "lead": "この画像と、元になった画像は削除できなくなります。",
+    "kind": "種類",
+    "kinds": {
+      "delivered": "納品",
+      "shared": "共有",
+      "submitted": "提出",
+      "other": "その他"
+    },
+    "note": "メモ",
+    "notePlaceholder": "渡した先、受付番号など",
+    "lockedAt": "日時",
+    "lockedBy": "付けた人",
+    "submit": "ロックする",
+    "unlock": "ロックを外す",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "failed": "ロックを変更できませんでした",
+    "protectedHint": "ロックした画像か、その元なので削除できません"
   }
 }

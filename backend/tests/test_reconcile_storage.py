@@ -660,3 +660,46 @@ def test_withheld_assets_are_not_targets(env: Env) -> None:
     assert _exists(env, Asset, withheld_id)
     assert _exists(env, Run, run_id)
     assert not _exists(env, Asset, missing_id)
+
+
+def test_locked_assets_and_ancestors_are_kept(env: Env) -> None:
+    """ADR-0060: ロックした Asset とその祖先は、原本が無くても消さない。外したロックが指す Asset は
+    消し、そのロックの行と守る範囲の行も消す。"""
+    from app.domain.models import AssetLock, AssetLockScope
+
+    with env.factory() as db:
+        source = _asset(env, db, kind="upload")
+        run = _run(db, operation="edit")
+        _input(db, run, source)
+        locked = _asset(env, db, run=run, index=0)
+        old = _asset(env, db, kind="upload")
+        active = AssetLock(asset_id=locked.id, kind="delivered")
+        released = AssetLock(
+            asset_id=old.id, kind="other", unlocked_at=datetime(2026, 10, 3, tzinfo=UTC)
+        )
+        db.add_all([active, released])
+        db.flush()
+        db.add_all(
+            [
+                AssetLockScope(lock_id=active.id, asset_id=locked.id),
+                AssetLockScope(lock_id=active.id, asset_id=source.id),
+                AssetLockScope(lock_id=released.id, asset_id=old.id),
+            ]
+        )
+        db.commit()
+        ids = {"source": source.id, "locked": locked.id, "old": old.id, "run": run.id}
+        released_id = released.id
+        keys = [source.blob_key, locked.blob_key, old.blob_key]
+    for key in keys:
+        env.store.delete(key)
+
+    result = tool.reconcile(env.settings, apply=True)
+
+    assert result.plan.locked_kept == 2
+    assert result.plan.asset_ids == {ids["old"]}
+    assert _exists(env, Asset, ids["source"])
+    assert _exists(env, Asset, ids["locked"])
+    assert _exists(env, Run, ids["run"])
+    assert not _exists(env, Asset, ids["old"])
+    assert not _exists(env, AssetLock, released_id)
+    assert _count(env, AssetLockScope, lock_id=released_id) == 0
