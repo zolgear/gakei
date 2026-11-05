@@ -33,3 +33,19 @@ export function PencilIcon() {
     </svg>
   )
 }
+
+/** 消しゴム(「スケッチの線を外す」)。 */
+export function EraserIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M10.5 2.5 13.5 5.5 6 13H3v-3z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}

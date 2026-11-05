@@ -155,7 +155,9 @@ def _input_role(run_input: RunInput) -> str:
 
 
 def run_inputs(db: Session, run_id: uuid.UUID, *, sent_only: bool) -> list[contract.ImageRef]:
-    """Run の入力。`sent_only` ならプロバイダーに送るもの(image / mask)だけ。"""
+    """Run の入力。`sent_only` ならプロバイダーに送るもの(image / mask / markup)だけ。
+
+    markup(領域の四角の印)は契約の役割を増やさず `reference` として渡す。"""
     rows = db.execute(
         select(RunInput, Asset)
         .join(Asset, Asset.id == RunInput.asset_id)
@@ -164,7 +166,11 @@ def run_inputs(db: Session, run_id: uuid.UUID, *, sent_only: bool) -> list[contr
     ).all()
     result: list[contract.ImageRef] = []
     for run_input, asset in rows:
-        if sent_only and run_input.role not in (RunInputRole.IMAGE, RunInputRole.MASK):
+        if sent_only and run_input.role not in (
+            RunInputRole.IMAGE,
+            RunInputRole.MASK,
+            RunInputRole.MARKUP,
+        ):
             continue
         result.append(image_ref(asset, _input_role(run_input)))
     return result

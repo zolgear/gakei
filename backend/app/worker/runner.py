@@ -163,8 +163,8 @@ def _load_inputs(
         )
         inputs: list[InputImage] = []
         for run_input in rows:
-            # provider に渡すのは image / mask のみ。reference は参照表示専用。
-            if run_input.role not in (RunInputRole.IMAGE, RunInputRole.MASK):
+            # provider に渡すのは image / mask / markup のみ。reference は参照表示専用。
+            if run_input.role not in (RunInputRole.IMAGE, RunInputRole.MASK, RunInputRole.MARKUP):
                 continue
             asset = session.get(Asset, run_input.asset_id)
             assert asset is not None

@@ -40,6 +40,7 @@ function op(operation: 'generate' | 'edit', params: ParamDef[]): OperationCapabi
     min_input_images: operation === 'edit' ? 1 : 0,
     supports_mask: false,
     requires_mask: false,
+    supports_markup: false,
     supports_regions: false,
     regions_delivery: null,
     regions_kinds: [],

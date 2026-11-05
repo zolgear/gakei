@@ -262,9 +262,16 @@ def _operation_capabilities(model: str, operation: str) -> OperationCapabilities
         max_input_images=MAX_INPUT_IMAGES,
         min_input_images=1,
         supports_mask=True,
-        # ADR-0053 5章: 四角を描いた画像と、番号ごとの指示の文で渡す。
+        # スケッチの線と領域の四角を、1枚目に重ねる透過の印(markup)で送る(ADR-0010、ADR-0053。
+        # 2026-11-05 追記)。
+        supports_markup=model.startswith(("gpt-image-2.5", "gpt-image-2.6")),
+        # ADR-0053 5章: 四角を描いた画像と、番号ごとの指示の文で渡す。2.5 / 2.6 は、四角を透過の
+        # 印(markup)にして1枚目に重ねて送る(2026-11-05 追記。マスクのある Run と白紙の配置図は
+        # Run の作成で「画像と文」に戻す)。
         supports_regions=True,
-        regions_delivery="image_and_text",
+        regions_delivery=(
+            "markup" if model.startswith(("gpt-image-2.5", "gpt-image-2.6")) else "image_and_text"
+        ),
         # 文で伝えるので、どの種類も参照画像も使える。四角は主たる入力の上に描くので、入力画像が
         # 要る。
         regions_kinds=list(ALL_REGION_KINDS),

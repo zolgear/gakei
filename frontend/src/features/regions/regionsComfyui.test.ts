@@ -15,6 +15,7 @@ function op(overrides: Partial<OperationCapabilities> = {}): OperationCapabiliti
     min_input_images: 0,
     supports_mask: false,
     requires_mask: false,
+    supports_markup: false,
     supports_regions: true,
     regions_delivery: 'comfyui_bboxes',
     regions_kinds: ['change', 'add'],

@@ -629,7 +629,13 @@
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
     "partialNotFound": "Partial image not found",
     "locked": "An output is protected by a lock, so this run cannot be deleted",
-    "gifNotInput": "GIF images cannot be used as input: {id}"
+    "gifNotInput": "GIF images cannot be used as input: {id}",
+    "markupEditOnly": "Sketch lines can only be sent with Edit",
+    "markupAtMostOne": "Only one sketch line layer can be specified",
+    "markupRequiresPrimary": "Sketch lines go on the first image (position 0)",
+    "markupMustBePng": "Sketch lines must be a PNG",
+    "markupSizeMismatch": "The sketch lines are not the same size as the first image",
+    "markupFlattenFailed": "Could not draw the sketch lines onto the image"
   },
   "runRegions": {
     "editOnly": "Region instructions can only be used with Edit",
@@ -667,7 +673,9 @@
       "item": "- Box {number} ({color}): {body}",
       "itemNamed": "- Box {number} ({color}, {label}): {body}",
       "footer": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image.",
-      "footerBlank": "The blank background, boxes and numbers of the layout sketch are only markers. Do not draw them; fill the whole frame with the scene."
+      "footerBlank": "The blank background, boxes and numbers of the layout sketch are only markers. Do not draw them; fill the whole frame with the scene.",
+      "headerMarkup": "Region instructions: image 1 has a markup overlay of numbered colored boxes. The boxes show the approximate location and size. Edit image 1. When the text above mentions a box by its number (such as \"Box 1\") or by its name, it means the area of that box in the list below. Where a box has its own instruction, follow it.",
+      "footerMarkup": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image, and leave areas without instructions unchanged."
     },
     "kindNotOnBlank": "The type of box {number} cannot be used on a blank canvas. Use Change or Add",
     "kindNotSupported": "The type of box {number} cannot be used with this provider or model",

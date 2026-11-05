@@ -8,9 +8,11 @@ import {
   moveImageInput,
   newInputId,
   removeImageInput,
+  removeMarkupInput,
   removeMaskInput,
   replaceImageInput,
   replaceImageInputs,
+  setMarkupInput,
   setMaskInput,
 } from './editInputs'
 import type { RunInputItem } from './types'
@@ -289,5 +291,44 @@ describe('inputsFromRunInputs', () => {
     ])
     expect(shape(result)).toEqual([shapeImg('A', 0), shapeImg('A', 1), shapeMask('M')])
     expect(new Set(result.map((i) => i.inputId)).size).toBe(3)
+  })
+})
+
+describe('スケッチの線(markup。ADR-0010、2026-11-05 追記)', () => {
+  const lines = (assetId: string): RunInputItem => ({ inputId: `m-${assetId}`, assetId, role: 'markup', position: 0 })
+
+  it('線を設定すると、既存の線を置き換えてマスクは残す', () => {
+    const inputs = [img('a', 0), { ...img('mask', 0), role: 'mask' as const }, lines('old')]
+    const next = setMarkupInput(inputs, 'new')
+    expect(next.filter((i) => i.role === 'markup').map((i) => i.assetId)).toEqual(['new'])
+    expect(next.some((i) => i.role === 'mask')).toBe(true)
+    expect(removeMarkupInput(next).some((i) => i.role === 'markup')).toBe(false)
+  })
+
+  it('1枚目が変わる操作では、線も外す', () => {
+    const inputs = [img('a', 0), img('b', 1), lines('l')]
+    expect(removeImageInput(inputs, 'a').inputs.some((i) => i.role === 'markup')).toBe(false)
+    expect(removeImageInput(inputs, 'b').inputs.some((i) => i.role === 'markup')).toBe(true)
+    const moved = moveImageInput(inputs, 'b', 'up')
+    expect(moved.maskDropped).toBe(true)
+    expect(moved.inputs.some((i) => i.role === 'markup')).toBe(false)
+  })
+
+  it('1枚目を別の画像に差し替えると線を外し、2枚目以降の差し替えでは残す', () => {
+    const inputs = [img('a', 0), img('b', 1), lines('l')]
+    expect(replaceImageInput(inputs, 'a', 'c').some((i) => i.role === 'markup')).toBe(false)
+    expect(replaceImageInput(inputs, 'b', 'c').some((i) => i.role === 'markup')).toBe(true)
+  })
+
+  it('同じ設定での復元では、position 0 の線だけを戻す(後ろの印は四角からサーバーが作ったもの)', () => {
+    const restored = inputsFromRunInputs([
+      { asset_id: 'a', role: 'image', position: 0 },
+      { asset_id: 'l', role: 'markup', position: 0 },
+      { asset_id: 'r', role: 'markup', position: 1 },
+    ])
+    expect(restored.map((i) => [i.assetId, i.role])).toEqual([
+      ['a', 'image'],
+      ['l', 'markup'],
+    ])
   })
 })

@@ -188,6 +188,9 @@ export interface RunFormLogic {
   /** 選んだモデルの edit がマスクの差し込み先を持つか(supports_mask)。ComfyUI の一部の
    * ワークフローは持たない。false のときはマスクを付けても送信できない。 */
   maskSupported: boolean
+  /** 選んだモデルの edit が1枚目に重ねる印(markup)を受けるか。受ければスケッチの線を印で送る
+   * (ADR-0010、2026-11-05 追記)。 */
+  markupSupported: boolean
   /** 選んだプロバイダーが今使えるか(接続できない等)。使えなければ理由を持つ。 */
   providerAvailable: boolean
   providerUnavailableReason: string | null
@@ -535,6 +538,7 @@ export function useRunFormLogic(
   const maskRequired = opCaps?.requires_mask ?? false
   // opCaps 未解決(読み込み中)の間は妨げない(operationSupported 側で別途止まる)。
   const maskSupported = opCaps?.supports_mask ?? true
+  const markupSupported = opCaps?.supports_markup ?? false
   const providerAvailable = isProviderUsable(providerEntry)
   const providerUnavailableReason = providerUnavailableMessage(providerEntry)
 
@@ -561,7 +565,13 @@ export function useRunFormLogic(
       ? effectiveRegionFrame(formState.regionsFrame, primaryAssetId)
       : defaultRegionFrame(primaryAssetId)
   const regionsBlank = regionsSupported && regionsFrame === 'output'
-  const regionsDelivery = regionOpCaps?.regions_delivery ?? null
+  // 四角の送り方。印(markup)は1つしか送れず、マスクとも同時に送れないので、マスクかスケッチの線が
+  // あればサーバーは「画像と文」に戻す(ADR-0053 5章、ADR-0010。2026-11-05 追記)。
+  const capsRegionsDelivery = regionOpCaps?.regions_delivery ?? null
+  const regionsDelivery =
+    capsRegionsDelivery === 'markup' && formState.inputs.some((i) => i.role === 'mask' || i.role === 'markup')
+      ? 'image_and_text'
+      : capsRegionsDelivery
   const regionsOutputSize = regionOpCaps?.output_size ?? null
   const regionsKinds = useMemo(
     () => ({ input: allowedRegionKinds(regionOpCaps, 'input'), output: allowedRegionKinds(regionOpCaps, 'output') }),
@@ -613,11 +623,16 @@ export function useRunFormLogic(
 
   const regionsActive = regionsClearReason === null && formState.regions.length > 0 && regionsSupported
   const imageInputAssetIds = formState.inputs.filter((i) => i.role === 'image').map((i) => i.assetId)
-  // 入力に画像を足すのは「画像と文」だけ(ComfyUI は四角をそのまま差し込む)。
+  // 入力に画像を足すのは「画像と文」と印(markup)だけ(ComfyUI は四角をそのまま差し込む)。印は
+  // 画像の列に入らないので、参照画像だけを数える。マスクのある Run と白紙の土台では、サーバーが
+  // 「画像と文」に戻すので、四角を描いた画像も数える(ADR-0053 5章、2026-11-05 追記)。
+  const markupFallsBack = hasMask || regionsBlank
   const regionExtraInputs =
     regionsActive && regionsDelivery === 'image_and_text'
       ? regionExtraInputCount(formState.regions, imageInputAssetIds)
-      : 0
+      : regionsActive && regionsDelivery === 'markup'
+        ? regionExtraInputCount(formState.regions, imageInputAssetIds, markupFallsBack)
+        : 0
   let regionsBlockReason: string | null = null
   if (regionsActive) {
     if (!areRegionBoxesValid(formState.regions)) regionsBlockReason = msg().regions.form.invalid
@@ -1019,6 +1034,7 @@ export function useRunFormLogic(
     maskRequired,
     hasMask,
     maskSupported,
+    markupSupported,
     providerAvailable,
     providerUnavailableReason,
     maxInputImages,

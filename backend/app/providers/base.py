@@ -24,7 +24,7 @@ OperationName = Literal["generate", "edit"]
 RegionKind = Literal["change", "add", "keep", "remove", "move"]
 ALL_REGION_KINDS: tuple[RegionKind, ...] = ("change", "add", "keep", "remove", "move")
 # 四角の渡し方(ADR-0053 5章)。
-RegionsDelivery = Literal["image_and_text", "comfyui_bboxes"]
+RegionsDelivery = Literal["image_and_text", "comfyui_bboxes", "markup"]
 
 
 class ParamDef(BaseModel):
@@ -116,6 +116,9 @@ class OperationCapabilities(BaseModel):
     supports_mask: bool = False
     # mask が無いと実行できない(ComfyUI の inpaint ワークフローなど)。
     requires_mask: bool = False
+    # 1枚目に重ねる透過の印(markup)を受けるか(GPT Image 2.5 / 2.6 の Edit)。受けるモデルでは、
+    # スケッチの線を印で送る(ADR-0010、2026-11-05 追記)。受けなければ線を1枚目に焼き込む。
+    supports_markup: bool = False
     # 領域の指示の四角(ADR-0053 5章)を受けるか。受けないプロバイダーではフォームに「領域」を
     # 出さず、`regions` を付けた Run を断る。
     supports_regions: bool = False
@@ -218,7 +221,8 @@ class InputImage(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    role: Literal["image", "mask"]
+    # markup: 1枚目の入力に重ねる透過の印(ADR-0053 5章、2026-11-05 追記)。
+    role: Literal["image", "mask", "markup"]
     position: int
     data: bytes
     mime: str

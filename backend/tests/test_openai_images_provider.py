@@ -160,9 +160,8 @@ async def test_edit_multipart_has_images_in_position_order_and_mask() -> None:
 
 
 @run_async
-async def test_complexity_is_sent_although_the_sdk_does_not_know_it() -> None:
-    # SDK 3.16.2 の引数に無い `complexity` は extra_body で送る。Generate は JSON の項目、
-    # Edit は multipart のフォームの項目として届く。
+async def test_complexity_is_sent_for_generate_and_edit() -> None:
+    # Generate は JSON の項目、Edit は multipart のフォームの項目として届く。
     captured: list = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -187,7 +186,7 @@ async def test_complexity_is_sent_although_the_sdk_does_not_know_it() -> None:
 
 @run_async
 async def test_gif_output_sends_frame_params_and_returns_gif_mime() -> None:
-    # ADR-0061: コマ数と1コマの時間も SDK の引数に無いので extra_body で送る。
+    # ADR-0061: コマ数と1コマの時間をそのまま送り、GIF として受け取る。
     captured: dict = {}
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -207,6 +206,30 @@ async def test_gif_output_sends_frame_params_and_returns_gif_mime() -> None:
         120,
     )
     assert result.outputs[0].mime == "image/gif"
+
+
+@run_async
+async def test_edit_sends_markup_as_its_own_file() -> None:
+    # ADR-0053 5章(2026-11-05 追記): role=markup の入力は `markup` の項目で送り、
+    # 画像の列に入れない。
+    captured: dict = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured["request"] = capture(request)
+        return json_response(generation_response_body())
+
+    provider = OpenAIImagesProvider(client=make_client(handler))
+    inputs = [
+        InputImage(role="image", position=0, data=b"IMG-0", mime="image/png"),
+        InputImage(role="markup", position=0, data=b"MARKUP", mime="image/png"),
+    ]
+    await provider.execute(_run_request(operation="edit", inputs=inputs), _noop_progress)
+
+    sent = captured["request"]
+    image_parts = sent.part_names("image[]") or sent.part_names("image")
+    assert [part_file_bytes(p) for p in image_parts] == [b"IMG-0"]
+    markup_parts = sent.part_names("markup")
+    assert [part_file_bytes(p) for p in markup_parts] == [b"MARKUP"]
 
 
 @run_async

@@ -22,7 +22,8 @@ from app.i18n import use_locale
 from app.mods import events as mod_events
 from tests.conftest import extra_database_url, make_png_bytes, wait_for_run_terminal
 
-_MODEL = "gpt-image-2.5-flare"
+# 「画像と文」で送るモデル(2.5 / 2.6 は印(markup)で送る。`test_regions_markup.py`)。
+_MODEL = "gpt-image-2"
 
 
 def _upload(client: TestClient, data: bytes | None = None) -> str:
@@ -647,7 +648,13 @@ def test_capabilities_flag(client: TestClient) -> None:
     for model in fake["models"]:
         ops = {o["operation"]: o for o in model["operations"]}
         assert ops["edit"]["supports_regions"] is True
-        assert ops["edit"]["regions_delivery"] == "image_and_text"
+        # 2.5 / 2.6 の Edit は印(markup)で送る(ADR-0053 5章、2026-11-05 追記)。
+        expected = (
+            "markup"
+            if model["model"].startswith(("gpt-image-2.5", "gpt-image-2.6"))
+            else "image_and_text"
+        )
+        assert ops["edit"]["regions_delivery"] == expected
         # 入力画像の無い Run は白紙の配置図で送る。白紙で意味のある種類だけ(ADR-0053 5章)。
         assert ops["generate"]["supports_regions"] is True
         assert ops["generate"]["regions_delivery"] == "image_and_text"

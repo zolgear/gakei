@@ -190,6 +190,10 @@ describe('regionExtraInputCount', () => {
   it('四角が無ければ 0', () => {
     expect(regionExtraInputCount([], ['in1'])).toBe(0)
   })
+  it('印(markup)で送るときは、四角を描いた画像を数えない', () => {
+    const boxes = [box({ reference_asset_id: 'ref1' }), box({ number: 2 })]
+    expect(regionExtraInputCount(boxes, ['in1'], false)).toBe(1)
+  })
 })
 
 describe('stripAppendedText', () => {
@@ -231,6 +235,22 @@ describe('restoreRunRegions', () => {
     // 四角の名前も戻す(四角の定義の一部)。
     expect(restored.regions[1].label).toBe('カップ')
     expect(restored.regionsAssetId).toBe('user1')
+  })
+
+  it('印(markup)で送った Run でも、印とサーバーが足した参照画像を外す', () => {
+    const restored = restoreRunRegions({
+      prompt: 'user prompt\n\nAPPENDED',
+      inputs: [
+        { asset_id: 'user1', role: 'image' as const, position: 0 },
+        { asset_id: 'user2', role: 'image' as const, position: 1 },
+        { asset_id: 'overlay', role: 'markup' as const, position: 2 },
+        { asset_id: 'ref-new', role: 'image' as const, position: 3 },
+      ],
+      regions: { ...record, delivery: 'markup' },
+    })
+    expect(restored.prompt).toBe('user prompt')
+    expect(restored.inputs.map((i) => i.asset_id)).toEqual(['user1', 'user2'])
+    expect(restored.regions.map((r) => r.number)).toEqual([1, 2])
   })
 
   it('利用者の入力にある参照画像(四角を描いた画像より前)は残す', () => {

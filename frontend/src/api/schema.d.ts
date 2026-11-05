@@ -6936,7 +6936,7 @@ export interface components {
              */
             kind: "input" | "output" | "sketch_source" | "composite_source" | "origin";
             /** Role */
-            role?: ("image" | "mask" | "reference") | null;
+            role?: ("image" | "mask" | "reference" | "markup") | null;
             /** Position */
             position?: number | null;
             /** Output Index */
@@ -7730,12 +7730,17 @@ export interface components {
              */
             requires_mask: boolean;
             /**
+             * Supports Markup
+             * @default false
+             */
+            supports_markup: boolean;
+            /**
              * Supports Regions
              * @default false
              */
             supports_regions: boolean;
             /** Regions Delivery */
-            regions_delivery?: ("image_and_text" | "comfyui_bboxes") | null;
+            regions_delivery?: ("image_and_text" | "comfyui_bboxes" | "markup") | null;
             /** Regions Kinds */
             regions_kinds?: ("change" | "add" | "keep" | "remove" | "move")[];
             /**
@@ -8517,7 +8522,7 @@ export interface components {
              */
             kind: "input" | "output" | "sketch_source" | "composite_source" | "origin";
             /** Role */
-            role?: ("image" | "mask" | "reference") | null;
+            role?: ("image" | "mask" | "reference" | "markup") | null;
             /** Position */
             position?: number | null;
             /** Output Index */
@@ -9035,7 +9040,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "image" | "mask" | "reference";
+            role: "image" | "mask" | "reference" | "markup";
             /** Position */
             position: number;
         };
@@ -9050,7 +9055,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "image" | "mask" | "reference";
+            role: "image" | "mask" | "reference" | "markup";
             /** Position */
             position: number;
             focal_point?: components["schemas"]["FocalPoint"] | null;
@@ -9186,7 +9191,7 @@ export interface components {
              * Delivery
              * @enum {string}
              */
-            delivery: "image_and_text" | "comfyui_bboxes";
+            delivery: "image_and_text" | "comfyui_bboxes" | "markup";
             /** Regions */
             regions: components["schemas"]["RegionBox"][];
             /**

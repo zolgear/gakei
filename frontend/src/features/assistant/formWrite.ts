@@ -176,7 +176,7 @@ function modelLabel(provider: string, model: string, withProvider: boolean): str
 }
 
 function sortedInputs(inputs: readonly RunInputItem[]): FormPatchInput[] {
-  const order: Record<InputRole, number> = { image: 0, reference: 1, mask: 2 }
+  const order: Record<InputRole, number> = { image: 0, reference: 1, mask: 2, markup: 3 }
   return [...inputs]
     .sort((a, b) => order[a.role] - order[b.role] || a.position - b.position)
     .map((i) => ({ assetId: i.assetId, role: i.role }))

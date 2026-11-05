@@ -263,3 +263,10 @@
 .modal:focus {
   outline: none;
 }
+
+/* 線を印で送るときの短い説明(ADR-0010、2026-11-05 追記)。 */
+.markupNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
