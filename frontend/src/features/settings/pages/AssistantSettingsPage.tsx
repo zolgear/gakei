@@ -18,12 +18,12 @@ import {
   updateAssistantSettings,
   type AssistantSettingsResponse,
   type LlmConnectionView,
+  type LlmDefaultsView,
 } from '../../../api/client'
 import { fmt, useI18n } from '../../../i18n'
 import {
   ASSISTANT_LIMIT_FIELDS,
   ASSISTANT_LIMIT_MINS,
-  ASSISTANT_MODEL_NAME_MAX,
   assistantDraftFromResponse,
   assistantPatchBody,
   limitDefault,
@@ -32,7 +32,7 @@ import {
   type AssistantDraft,
   type AssistantLimitField,
 } from '../assistantSettings'
-import { connectionDisplayName } from '../llmConnections'
+import { LlmTargetRows } from '../LlmTargetRows'
 import { ASSISTANT_SETTINGS_QUERY_KEY, LLM_CONNECTIONS_QUERY_KEY } from '../queryKeys'
 import { SettingsPageFrame } from '../SettingsPageFrame'
 import { QueryStatus, SettingsRow, SettingsSection, SettingsSwitch } from '../SettingsParts'
@@ -64,7 +64,7 @@ export function AssistantSettingsPage() {
     saved,
     validate,
     save: async (patch) => {
-      const next = await updateAssistantSettings(assistantPatchBody(patch))
+      const next = await updateAssistantSettings(assistantPatchBody(patch, { ...saved!, ...patch }))
       queryClient.setQueryData(ASSISTANT_SETTINGS_QUERY_KEY, next)
       void queryClient.invalidateQueries({ queryKey: LLM_CONNECTIONS_QUERY_KEY })
     },
@@ -84,7 +84,13 @@ export function AssistantSettingsPage() {
         }}
       />
       {data && connections && draft.values && (
-        <AssistantSettingsBody data={data} connections={connections} values={draft.values} draft={draft} />
+        <AssistantSettingsBody
+          data={data}
+          connections={connections}
+          defaults={connectionsQuery.data!.defaults}
+          values={draft.values}
+          draft={draft}
+        />
       )}
     </SettingsPageFrame>
   )
@@ -93,29 +99,17 @@ export function AssistantSettingsPage() {
 interface BodyProps {
   data: AssistantSettingsResponse
   connections: LlmConnectionView[]
+  defaults: LlmDefaultsView
   values: AssistantDraft
   draft: SettingsDraft<AssistantDraft>
 }
 
-function AssistantSettingsBody({ data, connections, values, draft }: BodyProps) {
+function AssistantSettingsBody({ data, connections, defaults, values, draft }: BodyProps) {
   const { t } = useI18n()
   const m = t.settings.assistant
   const disabled = draft.saving
   const errors = draft.errors
-  const knownConnection = connections.some((c) => c.id === values.connection_id)
 
-  const connectionError =
-    errors.connection_id === 'connectionRequired'
-      ? m.errors.connectionRequired
-      : errors.connection_id === 'connectionUnknown'
-        ? m.errors.connectionUnknown
-        : null
-  const modelError =
-    errors.model === 'modelRequired'
-      ? m.errors.modelRequired
-      : errors.model === 'modelTooLong'
-        ? fmt(m.errors.modelTooLong, { max: ASSISTANT_MODEL_NAME_MAX })
-        : null
 
   function limitRow(field: AssistantLimitField) {
     const id = `gakei-assistant-${field.replace(/_/g, '-')}`
@@ -192,53 +186,24 @@ function AssistantSettingsBody({ data, connections, values, draft }: BodyProps) 
       </SettingsSection>
 
       <SettingsSection heading={m.connectionHeading}>
-        <SettingsRow
-          label={m.connectionLabel}
-          htmlFor="gakei-assistant-connection"
-          description={
-            <>
-              {m.connectionHelp}{' '}
-              <Link to={settingsPagePath('llmConnections')}>{m.connectionsLink}</Link>
-            </>
-          }
-          changed={draft.isChanged('connection_id')}
-        >
-          <select
-            id="gakei-assistant-connection"
-            className={styles.select}
-            value={values.connection_id}
-            disabled={disabled}
-            aria-invalid={connectionError ? true : undefined}
-            onChange={(e) => draft.set('connection_id', e.target.value)}
-          >
-            {/* 一覧に無い接続先を指したままの下書き(ほかの画面で消された等)も値として持てるように。 */}
-            {values.connection_id && !knownConnection && <option value={values.connection_id} />}
-            {connections.map((c) => (
-              <option key={c.id} value={c.id}>
-                {connectionDisplayName(c, t.settings.llmConnections.builtinName)}
-              </option>
-            ))}
-          </select>
-          {connectionError && <p className={styles.errorText}>{connectionError}</p>}
-        </SettingsRow>
-        <SettingsRow
-          label={m.modelLabel}
-          htmlFor="gakei-assistant-model"
-          description={m.modelHelp}
-          changed={draft.isChanged('model')}
-        >
-          <input
-            id="gakei-assistant-model"
-            type="text"
-            className={`${styles.input} ${styles.mono}`}
-            value={values.model}
-            maxLength={ASSISTANT_MODEL_NAME_MAX}
-            disabled={disabled}
-            aria-invalid={modelError ? true : undefined}
-            onChange={(e) => draft.set('model', e.target.value)}
-          />
-          {modelError && <p className={styles.errorText}>{modelError}</p>}
-        </SettingsRow>
+        <LlmTargetRows
+          idPrefix="gakei-assistant"
+          connections={connections}
+          defaults={defaults}
+          mode="external"
+          values={{ connection_id: values.connection_id, model: values.model }}
+          changed={{ connection: draft.isChanged('connection_id'), model: draft.isChanged('model') }}
+          errors={{ connection_id: errors.connection_id, model: errors.model }}
+          disabled={disabled}
+          connectionLabel={m.connectionLabel}
+          connectionHelp={m.connectionHelp}
+          modelLabel={m.modelLabel}
+          modelHelp={m.modelHelp}
+          onChange={(next) => {
+            draft.set('connection_id', next.connection_id)
+            draft.set('model', next.model)
+          }}
+        />
       </SettingsSection>
 
       <SettingsSection heading={m.limitsHeading}>

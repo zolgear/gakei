@@ -51,6 +51,8 @@ import { localityLabel } from '../locality'
 import {
   ANNOTATION_SETTINGS_QUERY_KEY,
   ASSISTANT_SETTINGS_QUERY_KEY,
+  GENERAL_SETTINGS_QUERY_KEY,
+  GROUP_NAMING_SETTINGS_QUERY_KEY,
   LLM_CONNECTIONS_QUERY_KEY,
   PROVIDER_LOCALITIES_QUERY_KEY,
   REGION_DETECTION_SETTINGS_QUERY_KEY,
@@ -60,6 +62,7 @@ import { ConnectionCard, QueryStatus, SettingsSection } from '../SettingsParts'
 import { useSettingsShell } from '../settingsShell'
 import styles from '../settings.module.css'
 import own from './LlmConnectionsSettingsPage.module.css'
+import { LlmDefaultsSection } from './LlmDefaultsSection'
 
 function errorText(err: unknown, fallback: string): string | null {
   if (!err) return null
@@ -78,6 +81,9 @@ function useApplyConnections() {
       // 構造化出力の対応で、領域の検出とアシスタント(ComfyUI の推定)の使える状態が変わる。
       void queryClient.invalidateQueries({ queryKey: REGION_DETECTION_SETTINGS_QUERY_KEY })
       void queryClient.invalidateQueries({ queryKey: ASSISTANT_SETTINGS_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: GROUP_NAMING_SETTINGS_QUERY_KEY })
+      // 既定の送り先は、SVG を書くモデルの既定にもなる(ADR-0063 3章)。
+      void queryClient.invalidateQueries({ queryKey: GENERAL_SETTINGS_QUERY_KEY })
     },
     [queryClient],
   )
@@ -87,6 +93,7 @@ export function LlmConnectionsSettingsPage() {
   const { t } = useI18n()
   const m = t.settings.llmConnections
   const query = useQuery({ queryKey: LLM_CONNECTIONS_QUERY_KEY, queryFn: listLlmConnections })
+  const apply = useApplyConnections()
 
   return (
     <SettingsPageFrame pageId="llmConnections" title={t.settings.pages.llmConnections} intro={m.intro}>
@@ -98,7 +105,16 @@ export function LlmConnectionsSettingsPage() {
         retryText={m.retry}
         onRetry={() => void query.refetch()}
       />
-      {query.data && <ConnectionsSection connections={query.data.connections} />}
+      {query.data && (
+        <>
+          <LlmDefaultsSection
+            connections={query.data.connections}
+            defaults={query.data.defaults}
+            onApplied={apply}
+          />
+          <ConnectionsSection connections={query.data.connections} />
+        </>
+      )}
     </SettingsPageFrame>
   )
 }

@@ -2375,22 +2375,18 @@ class AnnotationTarget(BaseModel):
     model: str
 
 
-class AnnotationDefaultProfile(BaseModel):
-    llm: AnnotationTarget
-    vlm: AnnotationTarget
-
-
-class AnnotationComfyuiProfile(BaseModel):
-    # null なら「既定と同じ」。
+class AnnotationProfile(BaseModel):
+    # 用途ごとの上書き。null なら画像の区分に合う既定の送り先(ADR-0063)。
     llm: AnnotationTarget | None = None
     vlm: AnnotationTarget | None = None
 
 
 class AnnotationProfiles(BaseModel):
-    """用途ごとの組(ADR-0024 8章)。`comfyui` は ComfyUI の Run の出力にだけ使う。"""
+    """画像の区分ごとの上書き(ADR-0024 8章、ADR-0063)。区分は Asset を作った Run の区分
+    (ADR-0051 3章)で、Run の無い Asset は外部。"""
 
-    default: AnnotationDefaultProfile
-    comfyui: AnnotationComfyuiProfile
+    external: AnnotationProfile
+    local: AnnotationProfile
 
 
 class AnnotationSettingsResponse(BaseModel):
@@ -2433,23 +2429,16 @@ class AnnotationSettingsResponse(BaseModel):
     content_rating_queued_count: int = 0
 
 
-class AnnotationDefaultProfileUpdate(BaseModel):
-    """省略した用途は変更しない。null にはできない。"""
-
-    llm: AnnotationTarget | None = None
-    vlm: AnnotationTarget | None = None
-
-
-class AnnotationComfyuiProfileUpdate(BaseModel):
-    """省略した用途は変更しない。null を送ると「既定と同じ」に戻す。"""
+class AnnotationProfileUpdate(BaseModel):
+    """省略した用途は変更しない。null を送ると上書きを消す(既定の送り先を使う)。"""
 
     llm: AnnotationTarget | None = None
     vlm: AnnotationTarget | None = None
 
 
 class AnnotationProfilesUpdate(BaseModel):
-    default: AnnotationDefaultProfileUpdate | None = None
-    comfyui: AnnotationComfyuiProfileUpdate | None = None
+    external: AnnotationProfileUpdate | None = None
+    local: AnnotationProfileUpdate | None = None
 
 
 class AnnotationSettingsUpdateRequest(BaseModel):
@@ -2475,7 +2464,7 @@ class AnnotationSettingsUpdateRequest(BaseModel):
 # 接続先を使う機能の id(`app/domain/llm_connections.py` の `register_usage` で登録したもの)。
 StructuredOutputsMode = Literal["auto", "supported", "unsupported"]
 LlmConnectionFeature = Literal[
-    "annotation", "embedding", "assistant", "region_detection", "group_naming"
+    "annotation", "embedding", "assistant", "region_detection", "group_naming", "llm_defaults"
 ]
 
 
@@ -2505,11 +2494,40 @@ class LlmConnectionView(BaseModel):
     used_by: list[LlmConnectionFeature] = Field(default_factory=list)
 
 
+class LlmTargetChoice(BaseModel):
+    """「接続先 + モデル名」の組(ADR-0063)。"""
+
+    connection_id: str
+    model: str
+
+
+class LlmDefaultsView(BaseModel):
+    """既定の送り先(ADR-0063)。機能ごとの上書きが無ければ、画像の区分に合う組を使う。"""
+
+    # 外部の既定。保存していなければ組み込みの接続先と組み込みの既定のモデル。
+    external: LlmTargetChoice
+    # 外部の既定を画面で保存したか。
+    external_saved: bool
+    # 内部の既定。null なら外部の既定を使う。
+    local: LlmTargetChoice | None = None
+    # 組み込みの既定のモデル名(外部の既定を保存していないときに使う)。
+    builtin_model: str
+
+
 class LlmConnectionsResponse(BaseModel):
     """`GET /api/settings/llm-connections` と、接続先を変える API の応答。"""
 
     # 先頭は常に組み込みの `openai`。追加した接続先は追加した順に並ぶ。
     connections: list[LlmConnectionView]
+    defaults: LlmDefaultsView
+
+
+class LlmDefaultsUpdateRequest(BaseModel):
+    """`PUT /api/settings/llm-connections/defaults`。書いた項目だけ変える。null は保存した値を
+    消す(外部は組み込みの既定、内部は外部と同じに戻す)。"""
+
+    external: LlmTargetChoice | None = None
+    local: LlmTargetChoice | None = None
 
 
 class LlmConnectionCreateRequest(BaseModel):
@@ -2956,8 +2974,9 @@ class GroupNamingSettingsResponse(BaseModel):
     """`GET /api/settings/group-naming`。全ログイン者が読める(名前の候補を出すかの判断)。"""
 
     enabled: bool
-    connection_id: str
-    model: str
+    # 機能ごとの上書き(接続先とモデル名)。null は既定の送り先(ADR-0063)を使う。
+    connection_id: str | None = None
+    model: str | None = None
     # 有効で、接続先とキーがそろい、接続先が Structured Outputs に対応するとみなせる。
     usable: bool
     # 使えない理由(1つに絞る。使えるなら null)。見る順は領域の検出と同じ。
@@ -2968,6 +2987,7 @@ class GroupNamingSettingsUpdateRequest(BaseModel):
     """書いた項目だけ変える。null は不正な値(422)。"""
 
     enabled: StrictBool | None = None
+    # 上書きの接続先とモデル名。どちらかに null を送ると上書きを消す(既定の送り先を使う。ADR-0063)。
     connection_id: StrictStr | None = None
     model: StrictStr | None = None
 
@@ -3431,8 +3451,9 @@ class AssistantSettingsResponse(BaseModel):
     """`GET /api/settings/assistant`(ADR-0048 7章・9章)。"""
 
     enabled: bool
-    connection_id: str
-    model: str
+    # 機能ごとの上書き(接続先とモデル名)。null は既定の送り先(ADR-0063)を使う。
+    connection_id: str | None = None
+    model: str | None = None
     hourly_request_limit: int
     runs_per_message_limit: int
     hourly_run_limit: int
@@ -3459,6 +3480,7 @@ class AssistantSettingsUpdateRequest(BaseModel):
     """書いた項目だけ変える。null は不正な値(422)。"""
 
     enabled: StrictBool | None = None
+    # 上書きの接続先とモデル名。どちらかに null を送ると上書きを消す(既定の送り先を使う。ADR-0063)。
     connection_id: StrictStr | None = None
     model: StrictStr | None = None
     hourly_request_limit: StrictInt | None = None
@@ -3708,8 +3730,9 @@ class RegionDetectionSettingsResponse(BaseModel):
     """`GET /api/settings/region-detection`。全ログイン者が読める(検出のボタンを出すかの判断)。"""
 
     enabled: bool
-    connection_id: str
-    model: str
+    # 機能ごとの上書き(接続先とモデル名)。null は既定の送り先(ADR-0063)を使う。
+    connection_id: str | None = None
+    model: str | None = None
     hourly_request_limit: int
     hourly_request_limit_default: int
     hourly_request_limit_max: int
@@ -3725,6 +3748,7 @@ class RegionDetectionSettingsUpdateRequest(BaseModel):
     """書いた項目だけ変える。null は不正な値(422)。"""
 
     enabled: StrictBool | None = None
+    # 上書きの接続先とモデル名。どちらかに null を送ると上書きを消す(既定の送り先を使う。ADR-0063)。
     connection_id: StrictStr | None = None
     model: StrictStr | None = None
     hourly_request_limit: StrictInt | None = None

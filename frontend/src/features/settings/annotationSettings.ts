@@ -28,28 +28,23 @@ export const MODEL_NAME_MAX = 200
 /** 用途。タイトル(LLM)とタグ(VLM)。 */
 export type AnnotationPurpose = 'llm' | 'vlm'
 export const ANNOTATION_PURPOSES: readonly AnnotationPurpose[] = ['llm', 'vlm']
-/** 組。「既定」と「ComfyUI の画像」。 */
-export type AnnotationProfileName = 'default' | 'comfyui'
-
-/** 既定の組の1マス。 */
-export interface TargetForm {
-  connection_id: string
-  model: string
-}
+/** 組。画像の区分(ADR-0063)。「外部の画像」と「内部の画像」。 */
+export type AnnotationProfileName = 'external' | 'local'
+export const ANNOTATION_PROFILES: readonly AnnotationProfileName[] = ['external', 'local']
 
 /**
- * ComfyUI の画像の組の1マス。`connection_id` が null なら「既定と同じ」(`model` は使わないが、
+ * 組の1マス(用途ごとの上書き)。`connection_id` が null なら「既定の送り先」(`model` は使わないが、
  * 別の接続先に戻したときのために入力を残す)。
  */
-export interface ComfyuiTargetForm {
+export interface OverrideTargetForm {
   connection_id: string | null
   model: string
 }
 
 /** まとめて保存する欄。数値は入力途中の文字列のまま持つ。 */
 export interface AnnotationForm {
-  default: Record<AnnotationPurpose, TargetForm>
-  comfyui: Record<AnnotationPurpose, ComfyuiTargetForm>
+  external: Record<AnnotationPurpose, OverrideTargetForm>
+  local: Record<AnnotationPurpose, OverrideTargetForm>
   language: AnnotationSettingsResponse['language']
   tag_language: AnnotationSettingsResponse['tag_language']
   hourly_limit: string
@@ -58,16 +53,13 @@ export interface AnnotationForm {
 
 export function formFromSettings(settings: AnnotationSettingsResponse): AnnotationForm {
   const { profiles } = settings
-  const comfyCell = (purpose: AnnotationPurpose): ComfyuiTargetForm => {
-    const saved = profiles.comfyui[purpose] ?? null
+  const cell = (profile: AnnotationProfileName, purpose: AnnotationPurpose): OverrideTargetForm => {
+    const saved = profiles[profile][purpose] ?? null
     return saved ? { connection_id: saved.connection_id, model: saved.model } : { connection_id: null, model: '' }
   }
   return {
-    default: {
-      llm: { connection_id: profiles.default.llm.connection_id, model: profiles.default.llm.model },
-      vlm: { connection_id: profiles.default.vlm.connection_id, model: profiles.default.vlm.model },
-    },
-    comfyui: { llm: comfyCell('llm'), vlm: comfyCell('vlm') },
+    external: { llm: cell('external', 'llm'), vlm: cell('external', 'vlm') },
+    local: { llm: cell('local', 'llm'), vlm: cell('local', 'vlm') },
     language: settings.language,
     tag_language: settings.tag_language,
     hourly_limit: String(settings.hourly_limit),
@@ -76,17 +68,17 @@ export function formFromSettings(settings: AnnotationSettingsResponse): Annotati
 }
 
 /**
- * 「ComfyUI の画像」のマスで接続先を選び直したときの新しい値。「既定と同じ」から接続先に切り替えて
- * モデル名が空なら、同じ用途の既定のモデル名を下書きとして入れる(LiteLLM のように接続先だけ
- * 同じでモデル名を変える使い方でも、書き始めやすいように)。
+ * マスで接続先を選び直したときの新しい値。「既定の送り先」から接続先に切り替えてモデル名が空なら、
+ * その区分の既定の送り先のモデル名を下書きとして入れる(接続先だけ同じでモデル名を変える使い方でも、
+ * 書き始めやすいように)。
  */
-export function changeComfyuiConnection(
-  cell: ComfyuiTargetForm,
+export function changeOverrideConnection(
+  cell: OverrideTargetForm,
   connectionId: string | null,
-  defaultCell: TargetForm,
-): ComfyuiTargetForm {
+  defaultModel: string,
+): OverrideTargetForm {
   if (connectionId === null) return { ...cell, connection_id: null }
-  const model = cell.connection_id === null && cell.model.trim() === '' ? defaultCell.model : cell.model
+  const model = cell.connection_id === null && cell.model.trim() === '' ? defaultModel : cell.model
   return { connection_id: connectionId, model }
 }
 
@@ -115,7 +107,7 @@ export function isValidOnnxThreshold(input: string): boolean {
 
 /**
  * フォームの検証。接続先は `connections` にあるものだけ通す(削除された接続先を指したままの
- * 下書きを送らないため)。「既定と同じ」のマスは検証しない。
+ * 下書きを送らないため)。「既定の送り先」のマスは検証しない。
  */
 export function validateAnnotationForm(
   form: AnnotationForm,
@@ -123,14 +115,12 @@ export function validateAnnotationForm(
 ): AnnotationFormErrors {
   const errors: AnnotationFormErrors = {}
   const ids = new Set(connections.map((c) => c.id))
-  for (const purpose of ANNOTATION_PURPOSES) {
-    const d = form.default[purpose]
-    if (!ids.has(d.connection_id)) errors[`default_${purpose}_connection`] = true
-    if (!isValidModelName(d.model)) errors[`default_${purpose}_model`] = true
-    const c = form.comfyui[purpose]
-    if (c.connection_id !== null) {
-      if (!ids.has(c.connection_id)) errors[`comfyui_${purpose}_connection`] = true
-      if (!isValidModelName(c.model)) errors[`comfyui_${purpose}_model`] = true
+  for (const profile of ANNOTATION_PROFILES) {
+    for (const purpose of ANNOTATION_PURPOSES) {
+      const c = form[profile][purpose]
+      if (c.connection_id === null) continue
+      if (!ids.has(c.connection_id)) errors[`${profile}_${purpose}_connection`] = true
+      if (!isValidModelName(c.model)) errors[`${profile}_${purpose}_model`] = true
     }
   }
   if (!isValidAnnotationHourlyLimit(form.hourly_limit)) errors.hourly_limit = true
@@ -145,23 +135,18 @@ export function diffProfiles(
 ): AnnotationProfilesUpdate | undefined {
   const saved = settings.profiles
   const result: AnnotationProfilesUpdate = {}
-  for (const purpose of ANNOTATION_PURPOSES) {
-    const d = form.default[purpose]
-    const dModel = d.model.trim()
-    const dSaved = saved.default[purpose]
-    if (d.connection_id !== dSaved.connection_id || dModel !== dSaved.model) {
-      result.default = { ...result.default, [purpose]: { connection_id: d.connection_id, model: dModel } }
-    }
-
-    const c = form.comfyui[purpose]
-    const cSaved = saved.comfyui[purpose] ?? null
-    if (c.connection_id === null) {
-      // 「既定と同じ」に戻す。
-      if (cSaved !== null) result.comfyui = { ...result.comfyui, [purpose]: null }
-    } else {
-      const cModel = c.model.trim()
-      if (cSaved === null || c.connection_id !== cSaved.connection_id || cModel !== cSaved.model) {
-        result.comfyui = { ...result.comfyui, [purpose]: { connection_id: c.connection_id, model: cModel } }
+  for (const profile of ANNOTATION_PROFILES) {
+    for (const purpose of ANNOTATION_PURPOSES) {
+      const c = form[profile][purpose]
+      const cSaved = saved[profile][purpose] ?? null
+      if (c.connection_id === null) {
+        // 「既定の送り先」に戻す。
+        if (cSaved !== null) result[profile] = { ...result[profile], [purpose]: null }
+      } else {
+        const cModel = c.model.trim()
+        if (cSaved === null || c.connection_id !== cSaved.connection_id || cModel !== cSaved.model) {
+          result[profile] = { ...result[profile], [purpose]: { connection_id: c.connection_id, model: cModel } }
+        }
       }
     }
   }
@@ -253,8 +238,8 @@ export function annotationDraftErrors(errors: AnnotationFormErrors): DraftErrors
   for (const key of Object.keys(errors) as AnnotationFormErrorKey[]) {
     if (!errors[key]) continue
     if (key === 'hourly_limit' || key === 'onnx_threshold') result[key] = key
-    else if (key.startsWith('default_')) result.default = key
-    else result.comfyui = key
+    else if (key.startsWith('external_')) result.external = key
+    else result.local = key
   }
   return result
 }
@@ -269,8 +254,8 @@ export function isUsageCellChanged(
   const a = draft[profile][purpose]
   const b = saved[profile][purpose]
   if (a.connection_id !== b.connection_id) return true
-  // 「既定と同じ」のマスは、隠れているモデル名の下書きを比べない(送らないため)。
-  if (profile === 'comfyui' && a.connection_id === null) return false
+  // 「既定の送り先」のマスは、隠れているモデル名の下書きを比べない(送らないため)。
+  if (a.connection_id === null) return false
   return a.model.trim() !== b.model.trim()
 }
 

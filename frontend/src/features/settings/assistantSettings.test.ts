@@ -50,9 +50,8 @@ describe('assistantSettings', () => {
   it('接続先・モデル名・上限を検証する', () => {
     const draft = assistantDraftFromResponse(DATA)
     expect(validateAssistantDraft(draft, DATA, ['openai'])).toEqual({})
-    expect(validateAssistantDraft({ ...draft, connection_id: '' }, DATA, ['openai']).connection_id).toBe(
-      'connectionRequired',
-    )
+    // 接続先が空なら「既定の送り先」で、モデル名は咎めない(ADR-0063)。
+    expect(validateAssistantDraft({ ...draft, connection_id: '', model: '' }, DATA, ['openai'])).toEqual({})
     expect(validateAssistantDraft({ ...draft, connection_id: 'gone' }, DATA, ['openai']).connection_id).toBe(
       'connectionUnknown',
     )
@@ -69,11 +68,21 @@ describe('assistantSettings', () => {
   })
 
   it('変えた項目だけを PATCH の本文にする', () => {
-    expect(assistantPatchBody({ enabled: true, model: ' m ', hourly_run_limit: '5' })).toEqual({
+    const values = assistantDraftFromResponse(DATA)
+    // モデル名を変えたら、接続先もそろえて送る(片方だけの上書きを作らない)。
+    expect(
+      assistantPatchBody({ enabled: true, model: ' m ', hourly_run_limit: '5' }, { ...values, model: ' m ' }),
+    ).toEqual({
       enabled: true,
+      connection_id: values.connection_id,
       model: 'm',
       hourly_run_limit: 5,
     })
-    expect(assistantPatchBody({})).toEqual({})
+    // 「既定の送り先」に戻すなら両方 null。
+    expect(assistantPatchBody({ connection_id: '' }, { ...values, connection_id: '' })).toEqual({
+      connection_id: null,
+      model: null,
+    })
+    expect(assistantPatchBody({}, values)).toEqual({})
   })
 })

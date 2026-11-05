@@ -485,7 +485,8 @@
         "embedding": "埋め込み",
         "assistant": "アシスタント",
         "region_detection": "領域の検出",
-        "group_naming": "グループ名の候補"
+        "group_naming": "グループ名の候補",
+        "llm_defaults": "既定の送り先"
       },
       "reenterKey": "Base URL のオリジン(スキーム・ホスト・ポート)が変わるため、保存済みのキーは送りません。キーを入れ直してください(キーが要らない接続先なら、先にキーを削除してください)"
     },
@@ -553,6 +554,11 @@
       "invalidBool": "{name} は true か false である必要があります",
       "unknownConnection": "指定した接続先がありません",
       "invalidModel": "モデル名は1〜{max}文字で指定してください"
+    },
+    "llmDefaults": {
+      "invalidTarget": "既定の送り先は接続先とモデル名の組で指定してください",
+      "invalidModel": "モデル名は {max} 文字以内で入れてください",
+      "unknownConnection": "接続先が見つかりません"
     }
   },
   "runValidation": {

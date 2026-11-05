@@ -15,16 +15,16 @@ import {
   updateGroupNamingSettings,
   type GroupNamingSettingsResponse,
   type LlmConnectionView,
+  type LlmDefaultsView,
 } from '../../../api/client'
-import { fmt, useI18n } from '../../../i18n'
+import { useI18n } from '../../../i18n'
 import {
-  GROUP_NAMING_MODEL_NAME_MAX,
   groupNamingDraftFromResponse,
   groupNamingPatchBody,
   validateGroupNamingDraft,
   type GroupNamingDraft,
 } from '../groupNamingSettings'
-import { connectionDisplayName } from '../llmConnections'
+import { LlmTargetRows } from '../LlmTargetRows'
 import { GROUP_NAMING_SETTINGS_QUERY_KEY, LLM_CONNECTIONS_QUERY_KEY } from '../queryKeys'
 import { SettingsPageFrame } from '../SettingsPageFrame'
 import { QueryStatus, SettingsRow, SettingsSection, SettingsSwitch } from '../SettingsParts'
@@ -56,7 +56,7 @@ export function GroupNamingSettingsPage() {
     saved,
     validate,
     save: async (patch) => {
-      const next = await updateGroupNamingSettings(groupNamingPatchBody(patch))
+      const next = await updateGroupNamingSettings(groupNamingPatchBody(patch, { ...saved!, ...patch }))
       queryClient.setQueryData(GROUP_NAMING_SETTINGS_QUERY_KEY, next)
       void queryClient.invalidateQueries({ queryKey: LLM_CONNECTIONS_QUERY_KEY })
     },
@@ -76,7 +76,13 @@ export function GroupNamingSettingsPage() {
         }}
       />
       {data && connections && draft.values && (
-        <GroupNamingSettingsBody data={data} connections={connections} values={draft.values} draft={draft} />
+        <GroupNamingSettingsBody
+          data={data}
+          connections={connections}
+          defaults={connectionsQuery.data!.defaults}
+          values={draft.values}
+          draft={draft}
+        />
       )}
     </SettingsPageFrame>
   )
@@ -85,29 +91,17 @@ export function GroupNamingSettingsPage() {
 interface BodyProps {
   data: GroupNamingSettingsResponse
   connections: LlmConnectionView[]
+  defaults: LlmDefaultsView
   values: GroupNamingDraft
   draft: SettingsDraft<GroupNamingDraft>
 }
 
-function GroupNamingSettingsBody({ data, connections, values, draft }: BodyProps) {
+function GroupNamingSettingsBody({ data, connections, defaults, values, draft }: BodyProps) {
   const { t } = useI18n()
   const m = t.settings.groupNaming
   const disabled = draft.saving
   const errors = draft.errors
-  const knownConnection = connections.some((c) => c.id === values.connection_id)
 
-  const connectionError =
-    errors.connection_id === 'connectionRequired'
-      ? m.errors.connectionRequired
-      : errors.connection_id === 'connectionUnknown'
-        ? m.errors.connectionUnknown
-        : null
-  const modelError =
-    errors.model === 'modelRequired'
-      ? m.errors.modelRequired
-      : errors.model === 'modelTooLong'
-        ? fmt(m.errors.modelTooLong, { max: GROUP_NAMING_MODEL_NAME_MAX })
-        : null
 
   return (
     <>
@@ -129,52 +123,24 @@ function GroupNamingSettingsBody({ data, connections, values, draft }: BodyProps
       </SettingsSection>
 
       <SettingsSection heading={m.connectionHeading}>
-        <SettingsRow
-          label={m.connectionLabel}
-          htmlFor="gakei-group-naming-connection"
-          description={
-            <>
-              {m.connectionHelp} <Link to={settingsPagePath('llmConnections')}>{m.connectionsLink}</Link>
-            </>
-          }
-          changed={draft.isChanged('connection_id')}
-        >
-          <select
-            id="gakei-group-naming-connection"
-            className={styles.select}
-            value={values.connection_id}
-            disabled={disabled}
-            aria-invalid={connectionError ? true : undefined}
-            onChange={(e) => draft.set('connection_id', e.target.value)}
-          >
-            {/* 一覧に無い接続先を指したままの下書き(ほかの画面で消された等)も値として持てるように。 */}
-            {values.connection_id && !knownConnection && <option value={values.connection_id} />}
-            {connections.map((c) => (
-              <option key={c.id} value={c.id}>
-                {connectionDisplayName(c, t.settings.llmConnections.builtinName)}
-              </option>
-            ))}
-          </select>
-          {connectionError && <p className={styles.errorText}>{connectionError}</p>}
-        </SettingsRow>
-        <SettingsRow
-          label={m.modelLabel}
-          htmlFor="gakei-group-naming-model"
-          description={m.modelHelp}
-          changed={draft.isChanged('model')}
-        >
-          <input
-            id="gakei-group-naming-model"
-            type="text"
-            className={`${styles.input} ${styles.mono}`}
-            value={values.model}
-            maxLength={GROUP_NAMING_MODEL_NAME_MAX}
-            disabled={disabled}
-            aria-invalid={modelError ? true : undefined}
-            onChange={(e) => draft.set('model', e.target.value)}
-          />
-          {modelError && <p className={styles.errorText}>{modelError}</p>}
-        </SettingsRow>
+        <LlmTargetRows
+          idPrefix="gakei-group-naming"
+          connections={connections}
+          defaults={defaults}
+          mode="byImage"
+          values={{ connection_id: values.connection_id, model: values.model }}
+          changed={{ connection: draft.isChanged('connection_id'), model: draft.isChanged('model') }}
+          errors={{ connection_id: errors.connection_id, model: errors.model }}
+          disabled={disabled}
+          connectionLabel={m.connectionLabel}
+          connectionHelp={m.connectionHelp}
+          modelLabel={m.modelLabel}
+          modelHelp={m.modelHelp}
+          onChange={(next) => {
+            draft.set('connection_id', next.connection_id)
+            draft.set('model', next.model)
+          }}
+        />
       </SettingsSection>
     </>
   )

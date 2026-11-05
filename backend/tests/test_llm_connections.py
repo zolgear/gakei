@@ -70,8 +70,8 @@ def test_list_has_builtin_first(client: TestClient) -> None:
     builtin = connections[0]
     assert builtin["builtin"] is True
     assert builtin["name"] == "OpenAI の設定"
-    # 既定では自動タイトル・タグの「既定」の組が組み込みの接続先を使っている。
-    assert builtin["used_by"] == ["annotation"]
+    # 既定では既定の送り先(外部)が組み込みの接続先を使っている(ADR-0063)。
+    assert builtin["used_by"] == ["llm_defaults"]
 
 
 def test_create_update_delete_connection(client: TestClient, data_dir: Path) -> None:
@@ -336,7 +336,7 @@ def test_supports_structured_outputs_hosts(client: TestClient) -> None:
 def test_connection_in_use_cannot_be_deleted(client: TestClient) -> None:
     connection_id = add_llm_connection(client)
     _patch_annotation(
-        client, profiles={"comfyui": {"llm": {"connection_id": connection_id, "model": "m"}}}
+        client, profiles={"local": {"llm": {"connection_id": connection_id, "model": "m"}}}
     )
     body = client.get(BASE).json()
     assert _connection(body, connection_id)["used_by"] == ["annotation"]
@@ -345,8 +345,8 @@ def test_connection_in_use_cannot_be_deleted(client: TestClient) -> None:
     assert "自動タイトル・タグ" in response.json()["detail"]
     assert connection_id in {c["id"] for c in client.get(BASE).json()["connections"]}
 
-    # 「既定と同じ」に戻せば消せる。
-    _patch_annotation(client, profiles={"comfyui": {"llm": None}})
+    # 「既定の送り先」に戻せば消せる。
+    _patch_annotation(client, profiles={"local": {"llm": None}})
     assert _connection(client.get(BASE).json(), connection_id)["used_by"] == []
     response = client.delete(f"{BASE}/{connection_id}")
     assert response.status_code == 200
@@ -360,7 +360,8 @@ def test_usage_comes_from_registered_functions(
     monkeypatch.setitem(llm_connections._usage_functions, "annotation", lambda db: {connection_id})
     body = client.get(BASE).json()
     assert _connection(body, connection_id)["used_by"] == ["annotation"]
-    assert _connection(body, "openai")["used_by"] == []
+    # 組み込みの接続先は、既定の送り先(外部)だけが使っている。
+    assert _connection(body, "openai")["used_by"] == ["llm_defaults"]
     assert client.delete(f"{BASE}/{connection_id}").status_code == 409
 
 
