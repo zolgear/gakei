@@ -1,4 +1,5 @@
-"""gpt-image-2.5 系 API 仕様(2026-09-21 に OpenAI API Reference で確認済み)。
+"""gpt-image-2.5 / 2.6 系 API 仕様(2.5 は 2026-09-21、2.6 は 2026-11-05 に OpenAI API Reference
+と実機で確認済み)。
 
 `FakeProvider` と、ステップ2で実装する OpenAI 実プロバイダーの両方がこの定義を共有する。
 実装時は Microsoft Learn / OpenAI の公式ドキュメントで再確認すること(CLAUDE.md 作業ルール)。
@@ -26,13 +27,25 @@ from app.providers.base import (
 )
 
 # モデルID一覧(表示名・説明は言語ごとに変わるので `_model_info()` で都度組み立てる)。
-_MODEL_IDS = ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2"]
+_MODEL_IDS = [
+    "gpt-image-2.6-sunburst",
+    "gpt-image-2.6-flare",
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-flare",
+    "gpt-image-2",
+]
 MODELS = list(_MODEL_IDS)
 
 
 def _model_info() -> list[tuple[str, str, str]]:
     """(モデルID, 表示名, 説明)。現在の言語で都度組み立てる(リクエストごとに変わるため)。"""
     return [
+        (
+            "gpt-image-2.6-sunburst",
+            "GPT Image 2.6 Sunburst",
+            t("openaiSpec.editingStrong"),
+        ),
+        ("gpt-image-2.6-flare", "GPT Image 2.6 Flare", t("openaiSpec.fast")),
         (
             "gpt-image-2.5-sunburst",
             "GPT Image 2.5 Sunburst",
@@ -43,6 +56,8 @@ def _model_info() -> list[tuple[str, str, str]]:
     ]
 
 
+# 2.6 は同じ画質・サイズでも出力のトークンが多く(1024x1024 の low で 2.5 の約 4.2 倍。
+# 2026-11-05 の実測)、単価は同じなので1枚あたりが高い。既定は安価な 2.5 Flare のまま。
 DEFAULT_MODEL = "gpt-image-2.5-flare"
 DEFAULT_SIZE = "1024x1024"
 
@@ -76,15 +91,28 @@ def _background_labels() -> dict[str, str]:
     }
 
 
+def _complexity_labels() -> dict[str, str]:
+    return {
+        "low": t("openaiSpec.complexityLow"),
+        "medium": t("openaiSpec.complexityMedium"),
+        "high": t("openaiSpec.complexityHigh"),
+    }
+
+
+def _supports_complexity(model: str) -> bool:
+    # 2.5 は `complexity` を 400 `invalid_value` で拒む(2026-11-05 の実機確認)。
+    return model.startswith("gpt-image-2.6")
+
+
 def _quality_choices(model: str) -> list[str]:
-    if model.startswith("gpt-image-2.5"):
+    if model.startswith(("gpt-image-2.5", "gpt-image-2.6")):
         return ["auto", "low", "medium", "high", "xhigh", "max"]
     return ["auto", "low", "medium", "high"]
 
 
 def _common_params(model: str) -> list[ParamDef]:
     quality_choices = _quality_choices(model)
-    return [
+    params = [
         ParamDef(
             name="quality",
             type="enum",
@@ -144,6 +172,23 @@ def _common_params(model: str) -> list[ParamDef]:
             description=t("openaiSpec.previewDescription"),
         ),
     ]
+    if _supports_complexity(model):
+        # 描く前の計画の量。画質とは別の項目で、料金は変わらない。API の既定は high なので、
+        # フォームの初期値は置かない(未指定のまま送ると high になる)。
+        params.insert(
+            1,
+            ParamDef(
+                name="complexity",
+                type="enum",
+                label=t("openaiSpec.complexityLabel"),
+                choices=["low", "medium", "high"],
+                choice_labels=_complexity_labels(),
+                default="high",
+                description=t("openaiSpec.complexityDescription"),
+                widget="segmented",
+            ),
+        )
+    return params
 
 
 def _operation_capabilities(model: str, operation: str) -> OperationCapabilities:
@@ -190,7 +235,7 @@ def _operation_capabilities(model: str, operation: str) -> OperationCapabilities
 
 
 def build_capabilities(provider_name: str, label: str | None = None) -> ProviderCapabilities:
-    """provider 名(と表示名)だけ差し替えて、gpt-image-2.5 系の仕様をそのまま返す。
+    """provider 名(と表示名)だけ差し替えて、gpt-image-2.5 / 2.6 系の仕様をそのまま返す。
 
     `label` を省略した場合は `provider_name` をそのまま使う(テストの簡便のため)。
     実プロバイダー(OpenAIImagesProvider / FakeProvider)は自身の `label` を明示的に渡す。

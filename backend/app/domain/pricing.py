@@ -40,10 +40,20 @@ from app.providers.openai_pricing import UnitPrices, get_unit_prices
 UnavailableReason = Literal["quality_auto", "size_auto", "size_invalid", "unknown_model"]
 
 # サイズ×画質ごとの出力グリッドの長辺(公式計算機の JS から)。sunburst / flare は
-# どちらも "gpt-image-2.5" に正規化されるため、モデル名スナップショットごとの表は不要。
+# どちらも "gpt-image-2.5" / "gpt-image-2.6" に正規化されるため、モデル名スナップショット
+# ごとの表は不要。
+_GRID_2_5 = {"low": 16, "medium": 24, "high": 48, "xhigh": 64, "max": 96}
 OUTPUT_GRID: dict[str, dict[str, int]] = {
     "gpt-image-2": {"low": 16, "medium": 48, "high": 96},
-    "gpt-image-2.5": {"low": 16, "medium": 24, "high": 48, "xhigh": 64, "max": 96},
+    "gpt-image-2.5": _GRID_2_5,
+    "gpt-image-2.6": _GRID_2_5,
+}
+
+# 2.6 は 2.5 と同じ式の結果に、画質ごとの倍率を掛ける(公式計算機の JS、2026-11-05 取得)。
+# 計算機は四捨五入しているが、実測(1024x1024 の low で 824 = ceil(196 x 4.2))に合わせて
+# 切り上げる。浮動小数の誤差で切り上げがずれないよう、倍率は 10 倍の整数で持つ。
+OUTPUT_MULTIPLIER_X10: dict[str, dict[str, int]] = {
+    "gpt-image-2.6": {"low": 42, "medium": 33, "high": 10, "xhigh": 10, "max": 10},
 }
 
 # vision ガイドの patch 式のパラメーター(パッチサイズ32px、パッチ予算1536、倍率1)。
@@ -56,9 +66,11 @@ def normalize_model(model: str) -> str | None:
     """モデル名(sunburst / flare、日付スナップショット付きを含む)を `OUTPUT_GRID` の
     キーに正規化する。該当しないモデルは `None`。
 
-    `"gpt-image-2.5"` の判定を先に行う("gpt-image-2" は "gpt-image-2.5" の前方一致に
-    なるため、順序を間違えると 2.5 系が 2 系に誤判定される)。
+    `"gpt-image-2.5"` / `"gpt-image-2.6"` の判定を先に行う("gpt-image-2" はどちらの前方一致
+    にもなるため、順序を間違えると 2.5・2.6 系が 2 系に誤判定される)。
     """
+    if model.startswith("gpt-image-2.6"):
+        return "gpt-image-2.6"
     if model.startswith("gpt-image-2.5"):
         return "gpt-image-2.5"
     if model.startswith("gpt-image-2"):
@@ -97,7 +109,11 @@ def output_image_tokens(model: str, width: int, height: int, quality: str) -> in
         d = round(m)
 
     grid_w, grid_h = (grid_long, d) if width >= height else (d, grid_long)
-    return math.ceil(grid_w * grid_h * (2_000_000 + width * height) / 4_000_000)
+    tokens = math.ceil(grid_w * grid_h * (2_000_000 + width * height) / 4_000_000)
+    multiplier_x10 = OUTPUT_MULTIPLIER_X10.get(normalized, {}).get(quality)
+    if multiplier_x10 is None:
+        return tokens
+    return -(-tokens * multiplier_x10 // 10)
 
 
 def input_image_tokens(width: int, height: int) -> int:

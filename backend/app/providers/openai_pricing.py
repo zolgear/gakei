@@ -1,4 +1,4 @@
-"""OpenAI gpt-image-2.5 系の Standard 料金表(参考価格の見積もり用)。
+"""OpenAI gpt-image-2.5 / 2.6 系の Standard 料金表(参考価格の見積もり用)。
 
 OpenAI 料金ページ(https://developers.openai.com/api/docs/pricing、2026-09-22 確認)の
 Standard 価格を USD / 1M トークンで保持する。サイズ×画質ごとの出力トークン数は公開されて
@@ -22,6 +22,13 @@ class UnitPrices:
 
 
 UNIT_PRICES: dict[str, UnitPrices] = {
+    # 2.6 の単価は 2.5 と同じ(モデルのページ、2026-11-05 確認)。
+    "gpt-image-2.6-sunburst": UnitPrices(
+        text_input=5.00, cached_input=1.25, image_input=8.00, image_output=30.00
+    ),
+    "gpt-image-2.6-flare": UnitPrices(
+        text_input=5.00, cached_input=1.25, image_input=8.00, image_output=30.00
+    ),
     "gpt-image-2.5-sunburst": UnitPrices(
         text_input=5.00, cached_input=1.25, image_input=8.00, image_output=30.00
     ),

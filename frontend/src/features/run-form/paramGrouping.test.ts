@@ -39,7 +39,7 @@ describe('splitPrimaryParams', () => {
   })
 
   it('PRIMARY_PARAMS の既定値を確認', () => {
-    expect(PRIMARY_PARAMS).toEqual(['quality', 'n', 'output_format', 'background'])
+    expect(PRIMARY_PARAMS).toEqual(['quality', 'n', 'output_format', 'background', 'complexity'])
   })
 })
 
