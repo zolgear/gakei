@@ -1,8 +1,9 @@
 /**
  * Edit の入力リスト(RunFormState.inputs)を操作する純粋関数。
- * role='image' は position 0 始まりで連番、role='mask' は高々1件(position は常に0)。
- * position 0 の image が変わる操作(並べ替え・削除)は、既存のマスクを道連れに外す
- * (マスクは position 0 の画像と同寸である必要があるため)。
+ * role='image' は position 0 始まりで連番、role='mask' と role='markup'(スケッチの線。ADR-0010、
+ * 2026-11-05 追記)はそれぞれ高々1件(position は常に0)。
+ * position 0 の image が変わる操作(並べ替え・削除)は、既存のマスクと線を道連れに外す
+ * (どちらも position 0 の画像の上に重ねる物で、同じ大きさである必要があるため)。
  *
  * 入力の識別は assetId ではなく inputId(入力1件ごとの一意キー)で行う。同じ Asset を
  * 2回入れた場合に、削除で両方消えたり状態が壊れたりしないようにするため(issue #12・#13)。
@@ -52,31 +53,43 @@ export function ensureInputIds<T extends Omit<RunInputItem, 'inputId'> & { input
 export function inputsFromRunInputs(
   runInputs: readonly { asset_id: string; role: RunInputItem['role'] | 'markup'; position: number }[],
 ): RunInputItem[] {
-  // 印(markup)はサーバーが四角から作って足す入力なので、フォームには戻さない(ADR-0053 5章)。
+  // position 0 の印はスケッチの線(ADR-0010、2026-11-05 追記)なので戻す。それより後ろの印は
+  // サーバーが四角から作って足す入力なので、フォームには戻さない(ADR-0053 5章)。
   return runInputs.flatMap((i) =>
-    i.role === 'markup' ? [] : [{ inputId: newInputId(), assetId: i.asset_id, role: i.role, position: i.position }],
+    i.role === 'markup' && i.position !== 0
+      ? []
+      : [{ inputId: newInputId(), assetId: i.asset_id, role: i.role, position: i.position }],
   )
 }
 
-function splitInputs(inputs: RunInputItem[]): {
-  images: RunInputItem[]
-  mask: RunInputItem | undefined
-} {
+/** 1枚目の上に重ねる入力(マスクとスケッチの線)。1枚目が変わると一緒に外す。 */
+interface Overlays {
+  mask?: RunInputItem
+  markup?: RunInputItem
+}
+
+function splitInputs(inputs: RunInputItem[]): { images: RunInputItem[]; overlays: Overlays } {
   const images = inputs.filter((i) => i.role === 'image').sort((a, b) => a.position - b.position)
   const mask = inputs.find((i) => i.role === 'mask')
-  return { images, mask }
+  const markup = inputs.find((i) => i.role === 'markup')
+  return { images, overlays: { mask, markup } }
 }
 
 function reindex(images: RunInputItem[]): RunInputItem[] {
   return images.map((item, index) => ({ ...item, position: index }))
 }
 
-function combine(images: RunInputItem[], mask: RunInputItem | undefined): RunInputItem[] {
-  return mask ? [...images, mask] : images
+function combine(images: RunInputItem[], overlays: Overlays): RunInputItem[] {
+  return [...images, ...(overlays.mask ? [overlays.mask] : []), ...(overlays.markup ? [overlays.markup] : [])]
+}
+
+function hasOverlays(overlays: Overlays): boolean {
+  return overlays.mask !== undefined || overlays.markup !== undefined
 }
 
 export interface InputsMutationResult {
   inputs: RunInputItem[]
+  /** 1枚目が変わって、マスクかスケッチの線を外したか。 */
   maskDropped: boolean
 }
 
@@ -108,7 +121,7 @@ export function addImageInputs(
   newAssetIds: string[],
   maxInputImages: number,
 ): { inputs: RunInputItem[]; addedCount: number; rejectedCount: number } {
-  const { images, mask } = splitInputs(inputs)
+  const { images, overlays } = splitInputs(inputs)
   const availableSlots = Math.max(0, maxInputImages - images.length)
   const toAdd = newAssetIds.slice(0, availableSlots)
   const rejectedCount = newAssetIds.length - toAdd.length
@@ -120,16 +133,16 @@ export function addImageInputs(
     position: images.length + i,
   }))
   const nextImages = [...images, ...newItems]
-  return { inputs: combine(nextImages, mask), addedCount: newItems.length, rejectedCount }
+  return { inputs: combine(nextImages, overlays), addedCount: newItems.length, rejectedCount }
 }
 
 /** 指定した inputId の image 入力を1件だけ取り除き、position を振り直す。 */
 export function removeImageInput(inputs: RunInputItem[], inputId: string): InputsMutationResult {
-  const { images, mask } = splitInputs(inputs)
+  const { images, overlays } = splitInputs(inputs)
   const wasPositionZero = images[0]?.inputId === inputId
   const remaining = reindex(images.filter((i) => i.inputId !== inputId))
-  const maskDropped = mask !== undefined && wasPositionZero
-  return { inputs: combine(remaining, maskDropped ? undefined : mask), maskDropped }
+  const maskDropped = hasOverlays(overlays) && wasPositionZero
+  return { inputs: combine(remaining, maskDropped ? {} : overlays), maskDropped }
 }
 
 /** 指定した inputId の image 入力を1つ上/下へ動かす。範囲外の場合は何もしない。 */
@@ -138,7 +151,7 @@ export function moveImageInput(
   inputId: string,
   direction: 'up' | 'down',
 ): InputsMutationResult {
-  const { images, mask } = splitInputs(inputs)
+  const { images, overlays } = splitInputs(inputs)
   const index = images.findIndex((i) => i.inputId === inputId)
   if (index === -1) return { inputs, maskDropped: false }
 
@@ -152,17 +165,20 @@ export function moveImageInput(
   reordered.splice(targetIndex, 0, moved)
   const reindexed = reindex(reordered)
 
-  // 同じ画像どうしの入れ替えでも、position 0 の入力が別の1件になればマスクは外す
+  // 同じ画像どうしの入れ替えでも、position 0 の入力が別の1件になればマスクと線は外す
   // (判定を assetId でなく inputId で行い、規則を単純に保つ)。
   const positionZeroChanged = images[0]?.inputId !== reindexed[0]?.inputId
-  const maskDropped = mask !== undefined && positionZeroChanged
-  return { inputs: combine(reindexed, maskDropped ? undefined : mask), maskDropped }
+  const maskDropped = hasOverlays(overlays) && positionZeroChanged
+  return { inputs: combine(reindexed, maskDropped ? {} : overlays), maskDropped }
 }
 
 /** マスクを設定する(既存のマスクは置き換える)。 */
 export function setMaskInput(inputs: RunInputItem[], maskAssetId: string): RunInputItem[] {
-  const { images } = splitInputs(inputs)
-  return combine(images, { inputId: newInputId(), assetId: maskAssetId, role: 'mask', position: 0 })
+  const { images, overlays } = splitInputs(inputs)
+  return combine(images, {
+    ...overlays,
+    mask: { inputId: newInputId(), assetId: maskAssetId, role: 'mask', position: 0 },
+  })
 }
 
 /** マスクを外す。 */
@@ -170,9 +186,23 @@ export function removeMaskInput(inputs: RunInputItem[]): RunInputItem[] {
   return inputs.filter((i) => i.role !== 'mask')
 }
 
+/** スケッチの線(1枚目に重ねる透過の PNG)を設定する(既存の線は置き換える。ADR-0010)。 */
+export function setMarkupInput(inputs: RunInputItem[], markupAssetId: string): RunInputItem[] {
+  const { images, overlays } = splitInputs(inputs)
+  return combine(images, {
+    ...overlays,
+    markup: { inputId: newInputId(), assetId: markupAssetId, role: 'markup', position: 0 },
+  })
+}
+
+/** スケッチの線を外す。 */
+export function removeMarkupInput(inputs: RunInputItem[]): RunInputItem[] {
+  return inputs.filter((i) => i.role !== 'markup')
+}
+
 /**
  * 指定した inputId(from)の image 入力を、同じ position・同じ inputId のまま別の assetId(to)に
- * 差し替える。マスクの position は変わらないのでそのまま残る。from が見つからなければ末尾に
+ * 差し替える。マスクと線の position は変わらないのでそのまま残る。from が見つからなければ末尾に
  * 追加する(呼び出し側の state と食い違っていた場合の保険。上限は呼び出し側が別途確認する)。
  * スケッチの「上描き」(既存の入力画像の上に描いて差し替える)に使う。
  */
@@ -181,7 +211,7 @@ export function replaceImageInput(
   fromInputId: string,
   toAssetId: string,
 ): RunInputItem[] {
-  const { images, mask } = splitInputs(inputs)
+  const { images, overlays } = splitInputs(inputs)
   const index = images.findIndex((i) => i.inputId === fromInputId)
   if (index === -1) {
     const appended: RunInputItem = {
@@ -190,11 +220,12 @@ export function replaceImageInput(
       role: 'image',
       position: images.length,
     }
-    return combine([...images, appended], mask)
+    return combine([...images, appended], overlays)
   }
   const next = images.slice()
   next[index] = { ...next[index], assetId: toAssetId }
-  return combine(next, mask)
+  // 1枚目を別の画像にしたら、その上に描いた線は外す(マスクは同じ大きさのまま使える)。
+  return combine(next, index === 0 ? { mask: overlays.mask } : overlays)
 }
 
 /**

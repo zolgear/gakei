@@ -6,6 +6,11 @@
  * 描画は線レイヤーだけに行い、消しゴムは線レイヤー上で `destination-out`(下地は消えない)。
  * 保存時は下地 + 線を1枚の PNG に合成する。
  *
+ * **線を印で送る(ADR-0010、2026-11-05 追記)。** `base.kind === 'markup'` は、印(markup)を受ける
+ * モデルで1枚目の上に描くとき。下地は合成せず、線だけを1枚目と同じ大きさの透過の PNG にして保存し
+ * (`source_asset_id` は1枚目)、入力の role=markup にする。今の線があれば、それを線レイヤーに読み
+ * 込んで描き足す(未使用なら `replaces_asset_id` で置き換える)。
+ *
  * 「線レイヤーの表示オン/オフ」は下地との見比べ用の表示切り替えでしかない(線 canvas の
  * `visibility` を切り替えるだけ)。ペン・消しゴム・元に戻す・全消去は表示状態に関わらず常に
  * 使える。オフの状態で描き始めた場合は、見えないまま描かせないよう自動で表示を戻す。
@@ -28,6 +33,7 @@ import { canvasToBlob, computeFitScale, loadImage, type Size } from '../mask/can
 import { interpolatePoints, pointerToCanvasCoords, type Point } from '../mask/maskGeometry'
 import {
   brushRadiusFor,
+  markupExportSize,
   planSketchOpen,
   shouldCacheSavedLineLayer,
   type BrushSize,
@@ -71,6 +77,7 @@ function brushSizeOptions(
 export type SketchBase =
   | { kind: 'blank'; width: number; height: number }
   | { kind: 'asset'; asset: AssetDetail }
+  | { kind: 'markup'; asset: AssetDetail; lines: AssetDetail | null }
 
 export interface SketchSaveOptions {
   insertRecommendedPrompt: boolean
@@ -228,6 +235,20 @@ export function SketchEditor({ base, onSave, onCancel }: SketchEditorProps) {
   useEffect(() => {
     let cancelled = false
     async function init() {
+      if (base.kind === 'markup') {
+        try {
+          const lines = base.lines ? await loadImage(assetUrl(base.lines.id, 'original')) : null
+          if (cancelled) return
+          lineInitRef.current = lines ? { kind: 'image', img: lines } : { kind: 'empty' }
+          const img = await loadImage(assetUrl(base.asset.id, 'preview'))
+          if (cancelled) return
+          baseImageRef.current = img
+          setCanvasSize({ width: img.naturalWidth, height: img.naturalHeight })
+        } catch {
+          if (!cancelled) setLoadError(t.sketch.loadError)
+        }
+        return
+      }
       if (base.kind === 'blank') {
         const plan = planSketchOpen({ kind: 'blank', width: base.width, height: base.height }, false, MAX_LONG_EDGE)
         openPlanRef.current = plan
@@ -428,6 +449,25 @@ export function SketchEditor({ base, onSave, onCancel }: SketchEditorProps) {
       const lineCanvas = lineCanvasRef.current
       if (!baseCanvas || !lineCanvas) throw new Error(t.sketch.canvasInitError)
 
+      if (base.kind === 'markup') {
+        // 線だけを、1枚目と同じ大きさの透過の PNG にする(下地は合成しない)。
+        const size = markupExportSize(base.asset, { width: lineCanvas.width, height: lineCanvas.height })
+        const markupCanvas = document.createElement('canvas')
+        markupCanvas.width = size.width
+        markupCanvas.height = size.height
+        const markupCtx = markupCanvas.getContext('2d')
+        if (!markupCtx) throw new Error(t.sketch.exportCanvasInitError)
+        markupCtx.drawImage(lineCanvas, 0, 0, size.width, size.height)
+        const markupBlob = await canvasToBlob(markupCanvas)
+        if (!markupBlob) throw new Error(t.sketch.pngExportError)
+        const previous = base.lines
+        const asset =
+          previous && !previous.used_as_input && previous.kind === 'sketch'
+            ? await createAsset(markupBlob, 'sketch', undefined, previous.id)
+            : await createAsset(markupBlob, 'sketch', base.asset.id)
+        return { asset, lineBlob: null, replacedAssetId: undefined as string | undefined }
+      }
+
       const exportCanvas = document.createElement('canvas')
       exportCanvas.width = baseCanvas.width
       exportCanvas.height = baseCanvas.height
@@ -627,6 +667,7 @@ export function SketchEditor({ base, onSave, onCancel }: SketchEditorProps) {
             />
             {t.sketch.insertRecommendedPrompt}
           </label>
+          {base.kind === 'markup' && <p className={styles.markupNote}>{t.sketch.markupNote}</p>}
           {saveError && <p className={styles.errorText}>{saveError}</p>}
           <button type="button" className={styles.secondaryButton} onClick={onCancel}>
             {t.sketch.cancel}

@@ -629,7 +629,13 @@
     "cannotCancelAlreadyRunning": "すでに実行が開始されているため cancel できません",
     "partialNotFound": "途中経過が見つかりません",
     "locked": "出力がロックで守られているので削除できません",
-    "gifNotInput": "GIF の画像は入力に使えません: {id}"
+    "gifNotInput": "GIF の画像は入力に使えません: {id}",
+    "markupEditOnly": "スケッチの線は編集(Edit)でだけ送れます",
+    "markupAtMostOne": "スケッチの線は1つだけ指定できます",
+    "markupRequiresPrimary": "スケッチの線は1枚目の画像(position 0)に重ねます",
+    "markupMustBePng": "スケッチの線は PNG にしてください",
+    "markupSizeMismatch": "スケッチの線の大きさが1枚目の画像と違います",
+    "markupFlattenFailed": "スケッチの線を画像に重ねられませんでした"
   },
   "runRegions": {
     "editOnly": "領域の指示は編集(Edit)でだけ使えます",

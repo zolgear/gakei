@@ -7730,6 +7730,11 @@ export interface components {
              */
             requires_mask: boolean;
             /**
+             * Supports Markup
+             * @default false
+             */
+            supports_markup: boolean;
+            /**
              * Supports Regions
              * @default false
              */
@@ -9035,7 +9040,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "image" | "mask" | "reference";
+            role: "image" | "mask" | "reference" | "markup";
             /** Position */
             position: number;
         };

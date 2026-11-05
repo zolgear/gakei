@@ -5,6 +5,8 @@
  */
 import { msg } from '../../i18n'
 
-export function recommendedSketchPrompt(): string {
-  return msg().sketch.recommendedPrompt
+export function recommendedSketchPrompt(mode: 'render' | 'markup' = 'render'): string {
+  // 線を印で送るとき(ADR-0010、2026-11-05 追記)は、Image API のガイドの使い方に合わせ、印の場所の
+  // 変更と、保つものを書く。
+  return mode === 'markup' ? msg().sketch.recommendedMarkupPrompt : msg().sketch.recommendedPrompt
 }

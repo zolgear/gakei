@@ -1057,7 +1057,8 @@ class RunPromptTemplate(BaseModel):
 
 class RunInputCreate(BaseModel):
     asset_id: uuid.UUID
-    role: Literal["image", "mask", "reference"]
+    # markup はスケッチの線(1枚目に重ねる透過の PNG。position は 0。ADR-0010、2026-11-05 追記)。
+    role: Literal["image", "mask", "reference", "markup"]
     position: int = Field(ge=0)
 
 

@@ -629,7 +629,13 @@
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
     "partialNotFound": "Partial image not found",
     "locked": "An output is protected by a lock, so this run cannot be deleted",
-    "gifNotInput": "GIF images cannot be used as input: {id}"
+    "gifNotInput": "GIF images cannot be used as input: {id}",
+    "markupEditOnly": "Sketch lines can only be sent with Edit",
+    "markupAtMostOne": "Only one sketch line layer can be specified",
+    "markupRequiresPrimary": "Sketch lines go on the first image (position 0)",
+    "markupMustBePng": "Sketch lines must be a PNG",
+    "markupSizeMismatch": "The sketch lines are not the same size as the first image",
+    "markupFlattenFailed": "Could not draw the sketch lines onto the image"
   },
   "runRegions": {
     "editOnly": "Region instructions can only be used with Edit",

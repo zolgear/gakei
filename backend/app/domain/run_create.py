@@ -156,6 +156,23 @@ def create_runs(
             )
         )
 
+    # ADR-0010(2026-11-05 追記): スケッチの線(role=markup)。印を受けるモデルでマスクが無ければ
+    # そのまま送り、それ以外は線を1枚目に焼き込んだスケッチにして1枚の画像で送る。
+    recorded_inputs: list[tuple[uuid.UUID, RunInputRole | str, int]] = [
+        (item.asset_id, item.role, item.position) for item in body.inputs
+    ]
+    flattened: _FlattenedSketch | None = None
+    if any(m.role == "markup" for m in input_metas):
+        input_metas, flattened = _plan_user_markup(db, caps, body, input_metas, store=runner.store)
+        if flattened is not None:
+            recorded_inputs = [
+                (flattened.prepared.asset_id, RunInputRole.IMAGE, 0)
+                if role == "image" and position == 0
+                else (asset_id, role, position)
+                for asset_id, role, position in recorded_inputs
+                if role != "markup"
+            ]
+
     if repeat < 1:
         raise ValueError("repeat must be >= 1")
 
@@ -182,7 +199,14 @@ def create_runs(
             regions_json = regions_domain.comfyui_record(draft_regions, frame=frame)
         else:
             plan = _plan_regions(
-                db, caps, op_caps, body, input_metas, viewer=viewer, store=runner.store
+                db,
+                caps,
+                op_caps,
+                body,
+                input_metas,
+                viewer=viewer,
+                store=runner.store,
+                primary_data=flattened.prepared.data if flattened is not None else None,
             )
             input_metas = [*input_metas, *plan.extra_metas]
             prompts = [prompt + plan.appended_text for prompt in prompts]
@@ -265,6 +289,18 @@ def create_runs(
         except ProviderUnavailableError as e:
             raise RunCreateError("conflict", str(e)) from e
 
+    if flattened is not None:
+        assets_domain.ingest(
+            db,
+            runner.store,
+            flattened.prepared.data,
+            AssetKind.SKETCH,
+            # 下地(利用者の1枚目)から描いたスケッチとして系列に残す(ADR-0010)。
+            source_asset_id=flattened.base_asset_id,
+            created_by_user_id=viewer.id,
+            prepared=flattened.prepared,
+        )
+
     extra_inputs: list[tuple[uuid.UUID, RunInputRole, int]] = []
     if plan is not None:
         overlay = assets_domain.ingest(
@@ -319,12 +355,8 @@ def create_runs(
         )
         db.add(run)
         db.flush()
-        for item in body.inputs:
-            db.add(
-                RunInput(
-                    run_id=run.id, asset_id=item.asset_id, role=item.role, position=item.position
-                )
-            )
+        for asset_id, role, position in recorded_inputs:
+            db.add(RunInput(run_id=run.id, asset_id=asset_id, role=role, position=position))
         for asset_id, role, position in extra_inputs:
             db.add(RunInput(run_id=run.id, asset_id=asset_id, role=role, position=position))
         # IP の利用の申告(ADR-0059 5章)。追記のみ。
@@ -472,6 +504,85 @@ def _reject_animated_input(asset: Asset) -> None:
         raise RunCreateError("invalid", t("runs.gifNotInput", id=asset.id))
 
 
+@dataclass
+class _FlattenedSketch:
+    """印を受けないモデル・マスクのある Run で、スケッチの線を1枚目に焼き込んだ画像。"""
+
+    base_asset_id: uuid.UUID
+    prepared: assets_domain.PreparedImage
+
+
+def _plan_user_markup(
+    db: Session,
+    caps: ProviderCapabilities,
+    body: RunCreateRequest,
+    input_metas: list[RunInputMeta],
+    *,
+    store: AssetStore,
+) -> tuple[list[RunInputMeta], _FlattenedSketch | None]:
+    """スケッチの線(role=markup)を検証し、そのまま送るか焼き込むかを決める(ADR-0010、
+    2026-11-05 追記)。
+
+    線は1枚目(`position = 0`)の上に描いた透過の PNG で、1枚目の向きを直した後の大きさと同じ。
+    印を受けるモデルでマスクが無ければ入力をそのまま返す。それ以外は線を1枚目に重ねた PNG を
+    作り、1枚目と差し替えた入力と、保存する画像を返す(保存は検証がすべて通った後)。"""
+    markups = [m for m in input_metas if m.role == "markup"]
+    if body.operation != "edit":
+        raise RunCreateError("invalid", t("runs.markupEditOnly"))
+    if len(markups) > 1:
+        raise RunCreateError("invalid", t("runs.markupAtMostOne"))
+    markup_meta = markups[0]
+    primary_meta = next((m for m in input_metas if m.role == "image" and m.position == 0), None)
+    if markup_meta.position != 0 or primary_meta is None:
+        raise RunCreateError("invalid", t("runs.markupRequiresPrimary"))
+    if markup_meta.mime != "image/png":
+        raise RunCreateError("invalid", t("runs.markupMustBePng"))
+
+    primary = db.get(Asset, primary_meta.asset_id)
+    markup = db.get(Asset, markup_meta.asset_id)
+    assert primary is not None and markup is not None  # 入力の検証で確かめている
+    primary_data = store.read(primary.blob_key)
+    with Image.open(io.BytesIO(primary_data)) as image:
+        primary_size = ImageOps.exif_transpose(image).size
+    if (markup.width, markup.height) != primary_size:
+        raise RunCreateError("invalid", t("runs.markupSizeMismatch"))
+
+    model_caps = next((m for m in caps.models if m.model == body.model), None)
+    op_caps = (
+        next((o for o in model_caps.operations if o.operation == "edit"), None)
+        if model_caps is not None
+        else None
+    )
+    has_mask = any(m.role == "mask" for m in input_metas)
+    if op_caps is not None and op_caps.supports_markup and not has_mask:
+        return input_metas, None
+
+    # 印を受けないモデル、または API が印とマスクを同時に受けない場合は、これまでどおり下地と線を
+    # 合わせた1枚のスケッチにする。
+    try:
+        with Image.open(io.BytesIO(primary_data)) as image:
+            base = ImageOps.exif_transpose(image).convert("RGBA")
+        with Image.open(io.BytesIO(store.read(markup.blob_key))) as image:
+            lines = image.convert("RGBA")
+        composed = Image.alpha_composite(base, lines)
+        buffer = io.BytesIO()
+        composed.save(buffer, format="PNG")
+        prepared = assets_domain.prepare_image(buffer.getvalue(), AssetKind.SKETCH)
+    except (OSError, ValueError, assets_domain.IngestError) as e:
+        raise RunCreateError("invalid", t("runs.markupFlattenFailed")) from e
+    flattened_meta = RunInputMeta(
+        asset_id=prepared.asset_id,
+        role="image",
+        position=0,
+        width=prepared.width,
+        height=prepared.height,
+        sha256=prepared.sha256,
+        mime=prepared.mime,
+    )
+    metas = [flattened_meta if m is primary_meta else m for m in input_metas if m.role != "markup"]
+    return metas, _FlattenedSketch(base_asset_id=primary.id, prepared=prepared)
+
+
 def _load_reference_assets(
     db: Session, viewer: CurrentUser, reference_ids: list[uuid.UUID]
 ) -> list[Asset]:
@@ -498,6 +609,7 @@ def _plan_regions(
     *,
     viewer: CurrentUser,
     store: AssetStore,
+    primary_data: bytes | None = None,
 ) -> _RegionsPlan:
     """四角を検証し、四角を描いた画像と足す文を作る。断るときは `RunCreateError`。
 
@@ -518,10 +630,11 @@ def _plan_regions(
     _check_region_options(op_caps, body, blank=blank)
     # ADR-0053 5章(2026-11-05 追記): 印(markup)で送れるのは、1枚目の上の四角でマスクの無い
     # Run だけ(API は markup と mask を同時に受けない。白紙の配置図は1枚目に重ねる物ではない)。
+    # スケッチの線を印で送る Run も、印は1つしか送れないので「画像と文」にする。
     use_markup = (
         op_caps.regions_delivery == regions_domain.DELIVERY_MARKUP
         and not blank
-        and not any(m.role == "mask" for m in input_metas)
+        and not any(m.role in ("mask", "markup") for m in input_metas)
     )
 
     # 入力の何枚目か(1 から。プロバイダーに送る順 = role=image の position の順)。
@@ -550,8 +663,10 @@ def _plan_regions(
             t("runRegions.tooManyInputs", max=op_caps.max_input_images, count=total),
         )
 
-    primary = db.get(Asset, primary_meta.asset_id)
-    assert primary is not None  # 入力の検証で見える・削除されていないことを確かめている
+    if primary_data is None:
+        primary = db.get(Asset, primary_meta.asset_id)
+        assert primary is not None  # 入力の検証で見える・削除されていないことを確かめている
+        primary_data = store.read(primary.blob_key)
     try:
         if blank:
             # 白紙の大きさは入力画像の無い Run と同じ(出力サイズ。`auto` は 1024×1024)。
@@ -559,11 +674,11 @@ def _plan_regions(
             data = regions_domain.render_layout(width, height, body.regions)
         elif use_markup:
             # 印は、API が向きを直した後の1枚目と同じ大きさにする(EXIF の向きを反映した大きさ)。
-            with Image.open(io.BytesIO(store.read(primary.blob_key))) as image:
+            with Image.open(io.BytesIO(primary_data)) as image:
                 width, height = ImageOps.exif_transpose(image).size
             data = regions_domain.render_markup(width, height, body.regions)
         else:
-            with Image.open(io.BytesIO(store.read(primary.blob_key))) as image:
+            with Image.open(io.BytesIO(primary_data)) as image:
                 data = regions_domain.render_overlay(image, body.regions)
         overlay = assets_domain.prepare_image(data, AssetKind.REGIONS)
     except (OSError, ValueError, assets_domain.IngestError) as e:
@@ -607,7 +722,7 @@ def _plan_regions(
     )
     return _RegionsPlan(
         # 白紙の配置図は主たる入力から作った画像ではないので、元の画像を持たない。
-        primary_asset_id=None if blank else primary.id,
+        primary_asset_id=None if blank else primary_meta.asset_id,
         overlay=overlay,
         overlay_position=overlay_position,
         reference_inputs=reference_inputs,

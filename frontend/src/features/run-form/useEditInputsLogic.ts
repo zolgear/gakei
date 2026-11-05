@@ -15,8 +15,10 @@ import {
   acceptsImageInputs,
   moveImageInput,
   removeImageInput,
+  removeMarkupInput,
   removeMaskInput,
   replaceImageInput,
+  setMarkupInput,
   setMaskInput,
 } from './editInputs'
 import { validateInputFile } from './inputValidation'
@@ -46,6 +48,8 @@ export type CompositeEditorTarget = CompositeStart
 export interface EditInputsLogic {
   images: RunInputItem[]
   maskInput: RunInputItem | undefined
+  /** スケッチの線(1枚目に重ねる透過の PNG。ADR-0010、2026-11-05 追記)。 */
+  markupInput: RunInputItem | undefined
   detailsByAssetId: Map<string, AssetDetail>
   notFoundAssetIds: Set<string>
   deletedAssetIds: Set<string>
@@ -68,6 +72,7 @@ export interface EditInputsLogic {
   /** 入力1件を inputId で指して取り除く(同じ画像の他の入力は残る)。 */
   handleRemove: (inputId: string) => void
   handleRemoveMask: () => void
+  handleRemoveMarkup: () => void
   maskEditorOpen: boolean
   setMaskEditorOpen: (open: boolean) => void
   saveMask: (asset: AssetDetail) => void
@@ -81,6 +86,10 @@ export interface EditInputsLogic {
    */
   sketchOverAsset: AssetDetail | null
   sketchOverAssetLoading: boolean
+  /** 1枚目の上描きで、今の線(markup)の最新の AssetDetail。線が無ければ null。 */
+  sketchMarkupAsset: AssetDetail | null
+  /** スケッチの線を保存した(1枚目の線を置き換える)。 */
+  saveSketchMarkup: (asset: AssetDetail) => void
   /** replaceInputId を指定すると上描き(その入力を同じ position で差し替え)、省略すると白紙(末尾に追加)。 */
   saveSketch: (asset: AssetDetail, replaceInputId?: string) => void
   compositeEditor: CompositeEditorTarget | null
@@ -111,6 +120,7 @@ export function useEditInputsLogic(
   const [sketchEditor, setSketchEditor] = useState<SketchEditorTarget | null>(null)
   const [sketchOverAsset, setSketchOverAsset] = useState<AssetDetail | null>(null)
   const [sketchOverAssetLoading, setSketchOverAssetLoading] = useState(false)
+  const [sketchMarkupAsset, setSketchMarkupAsset] = useState<AssetDetail | null>(null)
   const [compositeEditor, setCompositeEditor] = useState<CompositeEditorTarget | null>(null)
   // モデルを切り替えて入力画像の上限が変わったら、前のモデルでの「足せなかった」などの知らせは消す。
   const [prevMaxInputImages, setPrevMaxInputImages] = useState(maxInputImages)
@@ -121,9 +131,16 @@ export function useEditInputsLogic(
 
   const images = inputs.filter((i) => i.role === 'image').sort((a, b) => a.position - b.position)
   const maskInput = inputs.find((i) => i.role === 'mask')
+  const markupInput = inputs.find((i) => i.role === 'markup')
 
   // 同じ画像が複数回入っていても取得は1回にする。
-  const assetIds = [...new Set([...images.map((i) => i.assetId), ...(maskInput ? [maskInput.assetId] : [])])]
+  const assetIds = [
+    ...new Set([
+      ...images.map((i) => i.assetId),
+      ...(maskInput ? [maskInput.assetId] : []),
+      ...(markupInput ? [markupInput.assetId] : []),
+    ]),
+  ]
   const assetQueries = useQueries({
     queries: assetIds.map((id) => ({
       queryKey: ['asset', id],
@@ -292,6 +309,10 @@ export function useEditInputsLogic(
     onChange(removeMaskInput(inputs))
   }
 
+  function handleRemoveMarkup() {
+    onChange(removeMarkupInput(inputs))
+  }
+
   function saveMask(asset: AssetDetail) {
     queryClient.setQueryData(['asset', asset.id], asset)
     // 置き換え(ADR-0010、2026-09-25 追記をマスクにも一般化)なら、置き換え元は未使用なら
@@ -312,14 +333,17 @@ export function useEditInputsLogic(
     // 開くたびにキャッシュを使わず取り直す(fetchQuery はキャッシュも更新するので、
     // チップ表示などの detailsByAssetId 側にも新しい値が反映される)。
     setSketchOverAsset(null)
+    setSketchMarkupAsset(null)
     setSketchOverAssetLoading(true)
-    queryClient
-      .fetchQuery({
-        queryKey: ['asset', target.assetId],
-        queryFn: () => getAsset(target.assetId),
-        staleTime: 0,
+    const fetchFresh = (id: string) =>
+      queryClient.fetchQuery({ queryKey: ['asset', id], queryFn: () => getAsset(id), staleTime: 0 })
+    // 1枚目の上描きでは、今の線も取り直す(未使用なら置き換えで保存するため)。
+    const markupId = images[0]?.inputId === target.inputId ? markupInput?.assetId : undefined
+    Promise.all([fetchFresh(target.assetId), markupId ? fetchFresh(markupId).catch(() => null) : null])
+      .then(([asset, markup]) => {
+        setSketchOverAsset(asset)
+        setSketchMarkupAsset(markup)
       })
-      .then((asset) => setSketchOverAsset(asset))
       .catch(() => setSketchOverAsset(null))
       .finally(() => setSketchOverAssetLoading(false))
   }
@@ -327,7 +351,20 @@ export function useEditInputsLogic(
   function closeSketchEditor() {
     setSketchEditor(null)
     setSketchOverAsset(null)
+    setSketchMarkupAsset(null)
     setSketchOverAssetLoading(false)
+  }
+
+  function saveSketchMarkup(asset: AssetDetail) {
+    queryClient.setQueryData(['asset', asset.id], asset)
+    queryClient.invalidateQueries({ queryKey: ['assets'] })
+    // 置き換え元の線(未使用なら論理削除されている)を取り直す。
+    if (markupInput && markupInput.assetId !== asset.id) {
+      queryClient.invalidateQueries({ queryKey: ['asset', markupInput.assetId] })
+    }
+    queryClient.invalidateQueries({ queryKey: ['lineage'] })
+    onChange(setMarkupInput(inputs, asset.id))
+    closeSketchEditor()
   }
 
   function saveSketch(asset: AssetDetail, replaceInputId?: string) {
@@ -392,6 +429,7 @@ export function useEditInputsLogic(
   return {
     images,
     maskInput,
+    markupInput,
     detailsByAssetId,
     notFoundAssetIds,
     deletedAssetIds,
@@ -407,6 +445,7 @@ export function useEditInputsLogic(
     handleMove,
     handleRemove,
     handleRemoveMask,
+    handleRemoveMarkup,
     maskEditorOpen,
     setMaskEditorOpen,
     saveMask,
@@ -415,6 +454,8 @@ export function useEditInputsLogic(
     closeSketchEditor,
     sketchOverAsset,
     sketchOverAssetLoading,
+    sketchMarkupAsset,
+    saveSketchMarkup,
     saveSketch,
     compositeEditor,
     openCompositeEditor: setCompositeEditor,

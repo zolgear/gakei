@@ -262,6 +262,9 @@ def _operation_capabilities(model: str, operation: str) -> OperationCapabilities
         max_input_images=MAX_INPUT_IMAGES,
         min_input_images=1,
         supports_mask=True,
+        # スケッチの線と領域の四角を、1枚目に重ねる透過の印(markup)で送る(ADR-0010、ADR-0053。
+        # 2026-11-05 追記)。
+        supports_markup=model.startswith(("gpt-image-2.5", "gpt-image-2.6")),
         # ADR-0053 5章: 四角を描いた画像と、番号ごとの指示の文で渡す。2.5 / 2.6 は、四角を透過の
         # 印(markup)にして1枚目に重ねて送る(2026-11-05 追記。マスクのある Run と白紙の配置図は
         # Run の作成で「画像と文」に戻す)。

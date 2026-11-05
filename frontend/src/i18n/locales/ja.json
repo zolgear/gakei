@@ -1799,6 +1799,7 @@
       "removeMask": "マスクを外す",
       "showInPreview": "プレビューに表示",
       "drawOver": "この画像の上に描く",
+      "removeSketchLines": "スケッチの線を外す",
       "removeInput": "入力から外す",
       "countTitle": "入力画像の枚数(最大{max}枚)",
       "addAria": "画像を追加",
@@ -2127,7 +2128,9 @@
     "canvasInitError": "Canvas の初期化に失敗しました",
     "exportCanvasInitError": "書き出し用 Canvas の初期化に失敗しました",
     "pngExportError": "PNG の書き出しに失敗しました",
-    "recommendedPrompt": "この下描きを写実的な画像にしてください。レイアウト、比率、パースは正確に保ってください。下描きの意図に合う現実的な素材と光を選んでください。新しい要素や文字は加えないでください。"
+    "recommendedPrompt": "この下描きを写実的な画像にしてください。レイアウト、比率、パースは正確に保ってください。下描きの意図に合う現実的な素材と光を選んでください。新しい要素や文字は加えないでください。",
+    "markupNote": "線だけを印として送ります",
+    "recommendedMarkupPrompt": "描いた印の場所だけを変えてください: (ここに変えたい内容を書く)。それ以外の部分はそのまま保ってください。印そのものは結果に描かないでください。"
   },
   "composite": {
     "title": "入力画像の配置",
@@ -3688,7 +3691,8 @@
       "roles": {
         "image": "入力",
         "mask": "マスク",
-        "reference": "参照"
+        "reference": "参照",
+        "markup": "スケッチ"
       },
       "none": "(なし)",
       "unspecified": "(未指定)",

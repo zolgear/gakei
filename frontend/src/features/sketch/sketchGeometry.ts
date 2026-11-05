@@ -161,3 +161,16 @@ export function shouldCacheSavedLineLayer(
   const baseAssetId = plan.base.kind === 'image' ? plan.base.assetId : null
   return baseAssetId === savedSourceAssetId
 }
+
+/**
+ * 線の PNG の大きさ。1枚目の向きを直した後の大きさにする(サーバーが同じ大きさか確かめる)。
+ * Asset の幅と高さは向きを直す前の値なので、下地(preview は向きを直してある)の縦横に合わせて入れ替える。
+ */
+export function markupExportSize(asset: { width: number; height: number }, canvas: PixelSize): PixelSize {
+  const canvasLandscape = canvas.width >= canvas.height
+  const assetLandscape = asset.width >= asset.height
+  if (canvas.width === canvas.height || canvasLandscape === assetLandscape) {
+    return { width: asset.width, height: asset.height }
+  }
+  return { width: asset.height, height: asset.width }
+}

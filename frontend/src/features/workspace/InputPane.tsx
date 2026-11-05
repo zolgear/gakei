@@ -404,6 +404,19 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     }
   }
 
+  // 1枚目の上描きは、印(markup)を受けるモデルなら線だけを印で送る(ADR-0010、2026-11-05 追記)。
+  const sketchAsMarkup =
+    sketchEditorState?.mode === 'over' &&
+    form.markupSupported &&
+    editLogic.images[0]?.inputId === sketchEditorState.inputId
+
+  function handleSketchMarkupSave(asset: AssetDetail, options: SketchSaveOptions) {
+    editLogic.saveSketchMarkup(asset)
+    if (options.insertRecommendedPrompt) {
+      form.insertPrompt(recommendedSketchPrompt('markup'), 'insert', readPromptCursorPos())
+    }
+  }
+
   const promptValid = form.promptLength > 0 && form.promptLength <= form.promptMax
 
   const blockReasons: string[] = []
@@ -756,7 +769,14 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       {sketchEditorState?.mode === 'over' && editLogic.sketchOverAssetLoading && (
         <SketchLoadingDialog onCancel={editLogic.closeSketchEditor} />
       )}
-      {sketchEditorState?.mode === 'over' && editLogic.sketchOverAsset && (
+      {sketchAsMarkup && editLogic.sketchOverAsset && (
+        <SketchEditor
+          base={{ kind: 'markup', asset: editLogic.sketchOverAsset, lines: editLogic.sketchMarkupAsset }}
+          onSave={handleSketchMarkupSave}
+          onCancel={editLogic.closeSketchEditor}
+        />
+      )}
+      {sketchEditorState?.mode === 'over' && !sketchAsMarkup && editLogic.sketchOverAsset && (
         <SketchEditor
           base={{ kind: 'asset', asset: editLogic.sketchOverAsset }}
           onSave={(asset, options) => handleSketchSave(asset, options, sketchEditorState.inputId)}

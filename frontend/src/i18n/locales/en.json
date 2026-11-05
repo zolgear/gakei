@@ -1799,6 +1799,7 @@
       "removeMask": "Remove mask",
       "showInPreview": "Show in preview",
       "drawOver": "Draw on this image",
+      "removeSketchLines": "Remove sketch lines",
       "removeInput": "Remove from input",
       "countTitle": "Number of input images (max {max})",
       "addAria": "Add image",
@@ -2127,7 +2128,9 @@
     "canvasInitError": "Failed to initialize the canvas",
     "exportCanvasInitError": "Failed to initialize the export canvas",
     "pngExportError": "Failed to export the PNG",
-    "recommendedPrompt": "Turn this drawing into a photorealistic image. Preserve the exact layout, proportions, and perspective. Choose realistic materials and lighting consistent with the sketch intent. Do not add new elements or text."
+    "recommendedPrompt": "Turn this drawing into a photorealistic image. Preserve the exact layout, proportions, and perspective. Choose realistic materials and lighting consistent with the sketch intent. Do not add new elements or text.",
+    "markupNote": "Only the lines are sent, as markup",
+    "recommendedMarkupPrompt": "Change only the areas marked by the drawn lines: (describe the change here). Keep everything else unchanged. Do not draw the marks in the result."
   },
   "composite": {
     "title": "Arrange input images",
@@ -3688,7 +3691,8 @@
       "roles": {
         "image": "Input",
         "mask": "Mask",
-        "reference": "Reference"
+        "reference": "Reference",
+        "markup": "Sketch"
       },
       "none": "(none)",
       "unspecified": "(not set)",

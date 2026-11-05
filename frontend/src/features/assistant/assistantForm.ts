@@ -32,6 +32,8 @@ export function assistantFormState(
     inputs:
       operation === 'edit'
         ? [...form.inputs]
+            // スケッチの線(1枚目に重ねる印)はアシスタントに渡さない。
+            .filter((input): input is typeof input & { role: Exclude<typeof input.role, 'markup'> } => input.role !== 'markup')
             .sort((a, b) => a.position - b.position)
             .map((input) => ({ asset_id: input.assetId, role: input.role }))
         : [],
