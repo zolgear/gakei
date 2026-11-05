@@ -12,7 +12,7 @@ from PIL import Image
 
 from app.domain.pricing import estimate_cost
 from app.providers.openai_spec import build_capabilities
-from tests.conftest import wait_for_run_terminal
+from tests.conftest import make_png_bytes, wait_for_run_terminal
 
 MODEL_26 = "gpt-image-2.6-flare"
 
@@ -40,7 +40,7 @@ def _post_generate(client: TestClient, params: dict, model: str = MODEL_26):
 # -- capabilities -------------------------------------------------------------
 
 
-def test_gif_is_offered_only_for_26_generate() -> None:
+def test_gif_is_offered_only_for_26() -> None:
     caps = build_capabilities("fake")
     gen = _params(caps, MODEL_26, "generate")
     assert "gif" in (gen["output_format"].choices or [])
@@ -48,9 +48,10 @@ def test_gif_is_offered_only_for_26_generate() -> None:
     assert gen["frame_count"].maximum == 16
     assert (gen["frame_duration_ms"].minimum, gen["frame_duration_ms"].maximum) == (20, 2000)
 
+    # Edit も GIF を返す(入力画像の内容を動かせる)。
     edit = _params(caps, MODEL_26, "edit")
-    assert "gif" not in (edit["output_format"].choices or [])
-    assert "frame_count" not in edit
+    assert "gif" in (edit["output_format"].choices or [])
+    assert "frame_count" in edit
     gen_25 = _params(caps, "gpt-image-2.5-flare", "generate")
     assert "gif" not in (gen_25["output_format"].choices or [])
     assert caps.gif_frame_size is not None
@@ -149,3 +150,27 @@ def test_gif_price_is_not_estimated() -> None:
     )
     assert result.total_usd is None
     assert result.unavailable_reason == "animated_output"
+
+
+def test_gif_can_be_made_from_an_input_image(client: TestClient) -> None:
+    upload = client.post(
+        "/api/assets",
+        files={"file": ("x.png", make_png_bytes(64, 64), "image/png")},
+        data={"kind": "upload"},
+    )
+    assert upload.status_code == 201, upload.text
+    response = client.post(
+        "/api/runs",
+        json={
+            "operation": "edit",
+            "model": MODEL_26,
+            "prompt": "make the ball bounce",
+            "params": {"output_format": "gif", "frame_count": 4, "size": "512x512"},
+            "inputs": [{"asset_id": upload.json()["id"], "role": "image", "position": 0}],
+        },
+    )
+    assert response.status_code == 202, response.text
+    detail = wait_for_run_terminal(client, response.json()["id"])
+    assert detail["status"] == "succeeded", detail
+    asset = client.get(f"/api/assets/{detail['outputs'][0]['asset_id']}").json()
+    assert asset["mime"] == "image/gif"
