@@ -527,3 +527,35 @@ def test_capabilities_match_fake_provider_spec() -> None:
     assert [m.model for m in openai_caps.models] == [m.model for m in fake_caps.models]
     assert openai_caps.provider == "openai"
     assert fake_caps.provider == "fake"
+
+
+@run_async
+async def test_svg_output_sends_the_author_and_keeps_its_usage() -> None:
+    # ADR-0062: フォームの svg_model / svg_effort を API の svg に組み替え、書き手のトークンを
+    # usage["svg_usage"] に残す。
+    captured: dict = {}
+    svg_doc = b'<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect/></svg>'
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured["request"] = capture(request)
+        body = generation_response_body(b64=make_b64(svg_doc), output_format="svg")
+        body["svg_usage"] = {
+            "model": "gpt-5.6-luna",
+            "input_tokens": 1556,
+            "output_tokens": 931,
+            "reasoning_tokens": 170,
+            "total_tokens": 2487,
+        }
+        return json_response(body)
+
+    provider = OpenAIImagesProvider(client=make_client(handler))
+    params = {"output_format": "svg", "svg_model": "gpt-5.6-luna", "svg_effort": "low"}
+    result = await provider.execute(_run_request(params=params), _noop_progress)
+
+    body = captured["request"].json_body
+    assert body["svg"] == {"model": "gpt-5.6-luna", "reasoning": {"effort": "low"}}
+    assert "svg_model" not in body and "svg_effort" not in body
+    assert result.outputs[0].mime == "image/svg+xml"
+    assert result.outputs[0].data == svg_doc
+    assert result.usage is not None
+    assert result.usage["svg_usage"]["output_tokens"] == 931

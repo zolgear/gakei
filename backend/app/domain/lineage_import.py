@@ -120,7 +120,7 @@ class ManifestAsset(_Model):
     id: uuid.UUID
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
-    mime: Literal["image/png", "image/jpeg", "image/webp", "image/gif"]
+    mime: Literal["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"]
     width: int = Field(ge=1)
     height: int = Field(ge=1)
     bytes: int = Field(ge=1)

@@ -40,6 +40,24 @@ UNIT_PRICES: dict[str, UnitPrices] = {
     ),
 }
 
+
+# SVG を書くテキストのモデルの単価(ADR-0062 5章。料金ページ、2026-11-05 確認)。`svg_usage` の
+# 入力と出力(思考のトークンを含む)に掛ける。
+@dataclass(frozen=True)
+class TextUnitPrices:
+    """USD / 1M トークンの単価。"""
+
+    input: float
+    cached_input: float
+    output: float
+
+
+SVG_AUTHOR_PRICES: dict[str, TextUnitPrices] = {
+    "gpt-5.6-luna": TextUnitPrices(input=0.20, cached_input=0.02, output=1.20),
+    "gpt-5.6-terra": TextUnitPrices(input=2.00, cached_input=0.20, output=12.00),
+    "gpt-5.6-sol": TextUnitPrices(input=4.00, cached_input=0.40, output=20.00),
+}
+
 PRICING_SOURCE_URL = "https://developers.openai.com/api/docs/pricing"
 PRICING_CHECKED_AT = "2026-09-22"
 

@@ -35,10 +35,10 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from app.domain.sizes import InvalidSizeError, parse_size, validate_size
-from app.providers.openai_pricing import UnitPrices, get_unit_prices
+from app.providers.openai_pricing import SVG_AUTHOR_PRICES, UnitPrices, get_unit_prices
 
 UnavailableReason = Literal[
-    "quality_auto", "size_auto", "size_invalid", "unknown_model", "animated_output"
+    "quality_auto", "size_auto", "size_invalid", "unknown_model", "animated_output", "svg_output"
 ]
 
 # サイズ×画質ごとの出力グリッドの長辺(公式計算機の JS から)。sunburst / flare は
@@ -196,6 +196,9 @@ def estimate_cost(
     elif output_format == "gif":
         # ADR-0061 8章: GIF の出力トークンの式は公開されていない。
         reason = "animated_output"
+    elif output_format == "svg":
+        # ADR-0062 5章: SVG を書くモデルのトークンは、書いてみるまで分からない。
+        reason = "svg_output"
     elif quality not in OUTPUT_GRID[normalized]:
         reason = "quality_auto"
     else:
@@ -262,4 +265,14 @@ def cost_from_usage(model: str, usage: dict[str, Any] | None) -> float | None:
     total = (
         text_in * prices.text_input + image_in * prices.image_input + output * prices.image_output
     ) / 1_000_000
+    # SVG を書くモデルのトークン(ADR-0062 5章)。単価の分からないモデルなら合計を出さない。
+    svg_usage = usage.get("svg_usage")
+    if isinstance(svg_usage, dict):
+        author = SVG_AUTHOR_PRICES.get(str(svg_usage.get("model")))
+        if author is None:
+            return None
+        total += (
+            _as_number(svg_usage.get("input_tokens")) * author.input
+            + _as_number(svg_usage.get("output_tokens")) * author.output
+        ) / 1_000_000
     return round(total, 6)

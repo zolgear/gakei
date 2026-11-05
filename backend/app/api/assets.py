@@ -39,6 +39,7 @@ from app.domain import (
     ingest_hooks,
     ip_materials,
     ip_usage,
+    svg,
 )
 from app.domain import annotations as annotations_domain
 from app.domain import compositions as compositions_domain
@@ -783,8 +784,15 @@ def asset_content_response(
         raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
 
     media_type = asset.mime if variant == "original" else _DERIVED_MEDIA_TYPE
+    if media_type == svg.SVG_MIME:
+        # ADR-0062: SVG の原本は無害化して保存しているが、直接開かれても何も動かないように、
+        # 文書の中の動作と外部の読み込みを止める。
+        headers["Content-Security-Policy"] = (
+            "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"
+        )
+        headers["X-Content-Type-Options"] = "nosniff"
     if download:
-        ext = media_type.split("/")[-1]
+        ext = svg.SVG_EXT if media_type == svg.SVG_MIME else media_type.split("/")[-1]
         headers["Content-Disposition"] = f'attachment; filename="{asset.id}-{variant}.{ext}"'
 
     if embed_meta:

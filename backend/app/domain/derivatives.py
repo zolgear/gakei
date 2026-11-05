@@ -87,6 +87,16 @@ def make_derived(image: Image.Image, variant: DerivedVariant) -> bytes:
     raise ValueError(f"派生ではない variant です: {variant}")
 
 
+def open_raster(data: bytes) -> Image.Image:
+    """原本を画素の画像として開く。SVG(ADR-0062)は描いた画像にする(取り込み済みの原本は
+    無害化してあるので、そのまま描く)。開けなければ Pillow と同じ例外(`ValueError` を含む)。"""
+    from app.domain import svg
+
+    if svg.looks_like_svg(data):
+        return svg.rasterize(data)
+    return Image.open(io.BytesIO(data))
+
+
 def generate_derived(
     store: AssetStore, blob_key: str, sha256: str, variants: Iterable[DerivedVariant]
 ) -> dict[DerivedVariant, bytes] | None:
@@ -104,7 +114,8 @@ def generate_derived(
     try:
         # 取り込み(`assets.ingest`)と同じく、開いた画像をそのまま縮める。原本は取り込み時に
         # 画素数の上限(`image_limits.MAX_IMAGE_PIXELS`)を確かめてあるので、ここでは確かめない。
-        with Image.open(io.BytesIO(data)) as image:
+        # SVG(ADR-0062)は描いた画像から作る。
+        with open_raster(data) as image:
             image.load()
             made = {variant: make_derived(image, variant) for variant in dict.fromkeys(variants)}
     except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):

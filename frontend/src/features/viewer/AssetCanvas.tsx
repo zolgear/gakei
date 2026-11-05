@@ -193,7 +193,9 @@ function ImageCanvas({
   // effect ではなく、レンダー中に「直前に見ていた asset.id」とズレていたらその場で補正する
   // (React 公式が薦める「props から派生した state をリセットする」書き方)。
   // ADR-0061 5章: アニメーション GIF の派生は1コマ目の静止画なので、原本を出して再生する。
-  const initialVariant: 'preview' | 'original' = asset.mime === 'image/gif' && allowOriginal ? 'original' : 'preview'
+  // GIF は動かすため、SVG(ADR-0062)は拡大しても粗くならないように、最初から原本を出す。
+  const initialVariant: 'preview' | 'original' =
+    (asset.mime === 'image/gif' || asset.mime === 'image/svg+xml') && allowOriginal ? 'original' : 'preview'
   const [variantState, setVariantState] = useState<{ assetId: string; variant: 'preview' | 'original' }>(
     () => ({ assetId: asset.id, variant: initialVariant }),
   )

@@ -8,7 +8,8 @@ import type { ParamDef } from '../../api/client'
 /**
  * 主に出すパラメーター名(この順で並べる)。それ以外は「その他」の `<details>` に畳む。
  * `complexity`(計画の深さ)は GPT Image 2.6 だけにあり、結果を大きく変えるので主に出す。
- * GIF のコマ数と1コマの時間(ADR-0061)は、GIF を選んだときだけ主に出す(`HIDDEN_WHEN_DISABLED`)。
+ * GIF のコマ数と1コマの時間(ADR-0061)、SVG の書き手(ADR-0062)は、その形式を選んだときだけ主に
+ * 出す(`HIDDEN_WHEN_DISABLED`)。SVG は1枚だけなので、枚数も隠す。
  */
 export const PRIMARY_PARAMS = [
   'quality',
@@ -18,13 +19,15 @@ export const PRIMARY_PARAMS = [
   'complexity',
   'frame_count',
   'frame_duration_ms',
+  'svg_model',
+  'svg_effort',
 ]
 
 /**
  * 主に出すパラメーターのうち、無効のあいだは欄ごと隠すもの。ほかの形式では意味が無く、
  * 無効の欄を並べると邪魔になるため(ADR-0009)。
  */
-export const HIDDEN_WHEN_DISABLED = ['frame_count', 'frame_duration_ms']
+export const HIDDEN_WHEN_DISABLED = ['n', 'frame_count', 'frame_duration_ms', 'svg_model', 'svg_effort']
 
 export interface GroupedParams {
   primary: ParamDef[]

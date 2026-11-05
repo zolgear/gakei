@@ -47,6 +47,8 @@ describe('splitPrimaryParams', () => {
       'complexity',
       'frame_count',
       'frame_duration_ms',
+      'svg_model',
+      'svg_effort',
     ])
   })
 })

@@ -65,5 +65,6 @@
 | ADR-0059 | [0059-ip-materials.md](0059-ip-materials.md) | IP 素材(預かった版権の素材の管理・利用の申告・記録・レポート) | Proposed |
 | ADR-0060 | [0060-asset-lock.md](0060-asset-lock.md) | ロック(納品・共有・提出した画像と、その元を消せないようにする) | Proposed |
 | ADR-0061 | [0061-animated-gif-output.md](0061-animated-gif-output.md) | アニメーション GIF の出力(GPT Image 2.6。原本は GIF のまま、派生は1コマ目、入力にはしない) | Proposed |
+| ADR-0062 | [0062-svg-output.md](0062-svg-output.md) | SVG の出力(GPT Image 2.6。書き手のモデルを選ぶ、取り込みで無害化、派生は描いた画像、入力にはしない) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.domain import sizes
 from app.i18n import t
 from app.providers.base import (
@@ -90,7 +92,7 @@ def _quality_labels() -> dict[str, str]:
 
 
 def _output_format_labels() -> dict[str, str]:
-    return {"png": "PNG", "jpeg": "JPEG", "webp": "WebP", "gif": "GIF"}
+    return {"png": "PNG", "jpeg": "JPEG", "webp": "WebP", "gif": "GIF", "svg": "SVG"}
 
 
 def _background_labels() -> dict[str, str]:
@@ -119,6 +121,40 @@ def _supports_gif(model: str, operation: str) -> bool:
     return model.startswith("gpt-image-2.6") and operation == "generate"
 
 
+def _supports_svg(model: str, operation: str) -> bool:
+    # ADR-0062: 2.6 の Generate だけ(Edit は SVG を出力も入力もできない)。2.5 は 400。
+    return model.startswith("gpt-image-2.6") and operation == "generate"
+
+
+# SVG を書くモデル(ADR-0062 2章)。テキストのモデルなら受けるが、選択肢は単価を持つものに絞る。
+SVG_AUTHOR_MODELS = ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+SVG_AUTHOR_LABELS = {
+    "gpt-5.6-luna": "GPT-5.6 Luna",
+    "gpt-5.6-terra": "GPT-5.6 Terra",
+    "gpt-5.6-sol": "GPT-5.6 Sol",
+}
+SVG_EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
+
+
+def fill_svg_author(params: dict[str, Any]) -> dict[str, Any]:
+    """SVG で書き手が未指定なら既定(Luna)を入れる(API は `svg.model` が無いと 400)。Run の
+    確定で呼び、送る値として記録する(ADR-0062 2章)。"""
+    if params.get("output_format") == "svg" and params.get("svg_model") is None:
+        return {**params, "svg_model": SVG_AUTHOR_MODELS[0]}
+    return params
+
+
+def _svg_effort_labels() -> dict[str, str]:
+    return {
+        "none": t("openaiSpec.svgEffortNone"),
+        "low": t("openaiSpec.complexityLow"),
+        "medium": t("openaiSpec.complexityMedium"),
+        "high": t("openaiSpec.complexityHigh"),
+        "xhigh": t("openaiSpec.qualityXhigh"),
+        "max": t("openaiSpec.qualityMax"),
+    }
+
+
 def _quality_choices(model: str) -> list[str]:
     if model.startswith(("gpt-image-2.5", "gpt-image-2.6")):
         return ["auto", "low", "medium", "high", "xhigh", "max"]
@@ -128,7 +164,8 @@ def _quality_choices(model: str) -> list[str]:
 def _common_params(model: str, operation: str) -> list[ParamDef]:
     quality_choices = _quality_choices(model)
     gif = _supports_gif(model, operation)
-    format_choices = ["png", "jpeg", "webp", "gif"] if gif else ["png", "jpeg", "webp"]
+    svg = _supports_svg(model, operation)
+    format_choices = ["png", "jpeg", "webp"] + (["gif"] if gif else []) + (["svg"] if svg else [])
     params = [
         ParamDef(
             name="quality",
@@ -209,6 +246,30 @@ def _common_params(model: str, operation: str) -> list[ParamDef]:
                 maximum=2000,
                 default=200,
                 description=t("openaiSpec.frameDurationDescription"),
+            ),
+        ]
+    if svg:
+        # ADR-0062 2章: SVG のときだけ使う。API には `svg: {model, reasoning: {effort}}` で送る
+        # (プロバイダーが組み立てる)。思考の量は未指定なら書き手のモデルの既定。
+        params += [
+            ParamDef(
+                name="svg_model",
+                type="enum",
+                label=t("openaiSpec.svgModelLabel"),
+                choices=SVG_AUTHOR_MODELS,
+                choice_labels=SVG_AUTHOR_LABELS,
+                default=SVG_AUTHOR_MODELS[0],
+                form_default=SVG_AUTHOR_MODELS[0],
+                description=t("openaiSpec.svgModelDescription"),
+            ),
+            ParamDef(
+                name="svg_effort",
+                type="enum",
+                label=t("openaiSpec.svgEffortLabel"),
+                choices=SVG_EFFORTS,
+                choice_labels=_svg_effort_labels(),
+                description=t("openaiSpec.svgEffortDescription"),
+                widget="segmented",
             ),
         ]
     if _supports_complexity(model):
@@ -325,10 +386,27 @@ def build_capabilities(provider_name: str, label: str | None = None) -> Provider
             depends_on_values=["jpeg", "webp"],
         ),
         # ADR-0061 1章: GIF はストリーミングできないので、途中経過は静止画の形式のときだけ。
+        # SVG(ADR-0062)も同じ。
         ConditionalParam(
             field="partial_images",
             depends_on_field="output_format",
             depends_on_values=["png", "jpeg", "webp"],
+        ),
+        # ADR-0062: SVG は1枚だけ(`n` は送らない。API の既定は1)。
+        ConditionalParam(
+            field="n",
+            depends_on_field="output_format",
+            depends_on_values=["png", "jpeg", "webp", "gif"],
+        ),
+        ConditionalParam(
+            field="svg_model",
+            depends_on_field="output_format",
+            depends_on_values=["svg"],
+        ),
+        ConditionalParam(
+            field="svg_effort",
+            depends_on_field="output_format",
+            depends_on_values=["svg"],
         ),
         ConditionalParam(
             field="frame_count",
