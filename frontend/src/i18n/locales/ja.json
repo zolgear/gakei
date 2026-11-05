@@ -1911,6 +1911,7 @@
       "reasonSizeAuto": "サイズが「自動」のため計算できません",
       "reasonSizeInvalid": "サイズが条件外です",
       "reasonUnknownModel": "このモデルの単価が未登録です",
+      "reasonAnimatedOutput": "GIF の料金は見積もれません(実行後の記録で確かめられます)",
       "repeatLine": "繰り返し {count} 回分(1回 {amount})"
     }
   },
@@ -2089,7 +2090,9 @@
     "group": {
       "label": "グループ",
       "none": "なし"
-    }
+    },
+    "gifNotInput": "GIF の画像は入力に使えません",
+    "gifInputsPresent": "入力に GIF の画像があります。外してください"
   },
   "sketch": {
     "title": "スケッチを描く",

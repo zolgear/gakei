@@ -347,6 +347,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const nRaw = form.activeRawParams.n
   const priceN = nRaw && nRaw !== UNSPECIFIED && nRaw !== '' ? Number(nRaw) : 1
   const priceSize = sizeToParam(form.sizeState) ?? 'auto'
+  const formatRaw = form.activeRawParams.output_format
+  const priceOutputFormat = formatRaw && formatRaw !== UNSPECIFIED ? formatRaw : undefined
 
   // 参考価格の入力画像トークン計算用: role=image の入力を position 順に並べた asset id。
   const inputAssetIds = form.inputs
@@ -414,6 +416,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
   if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
+  if (form.hasAnimatedInputs) blockReasons.push(t.runForm.gifInputsPresent)
   // IP の利用の申告(ADR-0059 5章)。用途を選んでいない・使えない理由。
   if (form.ipDeclaration.blockReason) blockReasons.push(form.ipDeclaration.blockReason)
   if (form.inputsBlockReason) blockReasons.push(form.inputsBlockReason)
@@ -609,6 +612,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         operation: form.operation,
         size: priceSize,
         quality: priceQuality,
+        outputFormat: priceOutputFormat,
         n: priceN,
         promptLength: form.promptLength,
         inputAssetIds,
@@ -647,7 +651,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
   const paramFields = (
     <PrimaryParamFields
-      sizeConstraints={form.providerEntry?.size}
+      sizeConstraints={form.sizeConstraints}
       sizeState={form.sizeState}
       onSizeChange={form.setSizeState}
       defs={form.defs}

@@ -7949,7 +7949,7 @@ export interface components {
             /** Total Usd */
             total_usd: number | null;
             /** Unavailable Reason */
-            unavailable_reason: ("quality_auto" | "size_auto" | "size_invalid" | "unknown_model") | null;
+            unavailable_reason: ("quality_auto" | "size_auto" | "size_invalid" | "unknown_model" | "animated_output") | null;
             /** Output Tokens Per Image */
             output_tokens_per_image: number | null;
             /** N */
@@ -8356,6 +8356,7 @@ export interface components {
             /** Default Size */
             default_size?: string | null;
             size?: components["schemas"]["SizeConstraints"] | null;
+            gif_frame_size?: components["schemas"]["SizeConstraints"] | null;
             /** Incompatible Pairs */
             incompatible_pairs?: components["schemas"]["IncompatiblePair"][];
             /** Conditional Params */
@@ -14490,6 +14491,7 @@ export interface operations {
                 n?: number;
                 prompt_length?: number;
                 input_asset_ids?: string | null;
+                output_format?: string | null;
             };
             header?: never;
             path?: never;

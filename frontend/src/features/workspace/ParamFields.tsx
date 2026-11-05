@@ -17,7 +17,7 @@ import {
 } from '../run-form/dependencies'
 import { REPEAT_MAX, REPEAT_MIN, repeatParamDef, repeatTotalText } from '../run-form/repeat'
 import { ParamField } from '../run-form/ParamField'
-import { isWideParam } from '../run-form/paramGrouping'
+import { HIDDEN_WHEN_DISABLED, isWideParam } from '../run-form/paramGrouping'
 import type { RawParamValues } from '../run-form/paramsBuilder'
 import { unspecifiedRawValue } from '../run-form/paramsBuilder'
 import { SizeInput } from '../run-form/SizeInput'
@@ -126,10 +126,15 @@ export function PrimaryParamFields({
   )
   // SD WebUI 以外(サイズ欄の上の段が無いとき)は、繰り返し回数を枚数の欄の直後に置く
   // (null がその位置)。枚数の欄が無ければ末尾。
-  const primaryWithRepeat: (ParamDef | null)[] = [...primary]
+  const shownPrimary = primary.filter(
+    (d) =>
+      !HIDDEN_WHEN_DISABLED.includes(d.name) ||
+      isFieldEnabled(defs, active, conditionalParams, d.name, { hasMask }),
+  )
+  const primaryWithRepeat: (ParamDef | null)[] = [...shownPrimary]
   if (aboveSize.length === 0) {
-    const anchor = primary.findIndex((d) => REPEAT_AFTER.includes(d.name))
-    primaryWithRepeat.splice(anchor === -1 ? primary.length : anchor + 1, 0, null)
+    const anchor = shownPrimary.findIndex((d) => REPEAT_AFTER.includes(d.name))
+    primaryWithRepeat.splice(anchor === -1 ? shownPrimary.length : anchor + 1, 0, null)
   }
   return (
     <>

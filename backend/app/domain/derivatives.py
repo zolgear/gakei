@@ -40,6 +40,11 @@ WEBP_QUALITY = 90
 
 
 def _resize_long_edge(image: Image.Image, long_edge: int) -> Image.Image:
+    if image.format == "GIF":
+        # ADR-0061 4章: アニメーション GIF は1コマ目(開いたままの位置)から作る。パレットの
+        # ままだと縮小が最近傍になるので、色の画像に直してから縮める。GIF は新しく受ける形式で、
+        # 既存の派生は変わらないので `DERIVED_VERSION` は上げない。
+        image = image.convert("RGBA" if image.has_transparency_data else "RGB")
     width, height = image.size
     current_long_edge = max(width, height)
     if current_long_edge <= long_edge:

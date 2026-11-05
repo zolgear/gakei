@@ -96,11 +96,15 @@ def validate_run_request(
     if "size" in params:
         # 制約はプロバイダーの capabilities のもの(OpenAI は sizes の既定と同じ値。
         # SD WebUI は 8 の倍数・長辺 2048px。ADR-0038 2章)。
+        # ADR-0061 2章: GIF のときは1コマの大きさとして確かめる(シートに収まるかは API に任せる)。
+        size_limits = caps.size
+        if params.get("output_format") == "gif" and caps.gif_frame_size is not None:
+            size_limits = caps.gif_frame_size
         try:
-            parsed_size = sizes.parse_size(str(params["size"]), caps.size)
+            parsed_size = sizes.parse_size(str(params["size"]), size_limits)
         except sizes.InvalidSizeError as e:
             raise RunValidationError(str(e)) from e
-        if parsed_size is None and caps.size is not None and not caps.size.allow_auto:
+        if parsed_size is None and size_limits is not None and not size_limits.allow_auto:
             raise RunValidationError(t("sizes.autoNotAllowed"))
 
     for pair in caps.incompatible_pairs:

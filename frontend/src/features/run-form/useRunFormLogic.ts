@@ -103,6 +103,8 @@ export interface RunFormLogic {
 
   /** 現在選ばれているプロバイダーの capabilities(未解決の間は undefined)。 */
   providerEntry: ProviderEntry | undefined
+  /** サイズ欄の制約。GIF のときは1コマの制約(ADR-0061 2章)。size を取らないプロバイダーは無し。 */
+  sizeConstraints: ProviderEntry['size']
 
   provider: string
   model: string
@@ -200,6 +202,8 @@ export interface RunFormLogic {
   hasDeletedInputs: boolean
   /** 入力に、Mod の判定で使えない画像(画像なし、または deny)がある(ADR-0051 4章)。 */
   hasBlockedInputs: boolean
+  /** 入力にアニメーション GIF がある(ADR-0061 6章)。 */
+  hasAnimatedInputs: boolean
   /**
    * 選んだモデルの edit が「ちょうどN枚」を要求するときの N(min_input_images === max_input_images
    * かつ 1 より大きいとき。ComfyUI の画像の枠)。それ以外(OpenAI/Fake 等、枚数に幅がある)は null。
@@ -489,8 +493,13 @@ export function useRunFormLogic(
   // (丸めれば解消される「16の倍数でない」エラーを、丸める前の一時的な入力値で出さないため)。
   // size が null のプロバイダー(ComfyUI 等)は size パラメータを取らない(SizeInput 自体を
   // 呼び出し側が隠す)ので、常に有効とする。
-  const sizeValidation = providerEntry?.size
-    ? validateSizeState(providerEntry.size, roundSizeStateToMultiple(providerEntry.size, sizeState))
+  // ADR-0061 2章: GIF のときのサイズは1コマの大きさなので、1コマの制約で確かめる。
+  const sizeConstraints =
+    activeRaw.output_format === 'gif' && providerEntry?.gif_frame_size
+      ? providerEntry.gif_frame_size
+      : providerEntry?.size
+  const sizeValidation = sizeConstraints
+    ? validateSizeState(sizeConstraints, roundSizeStateToMultiple(sizeConstraints, sizeState))
     : { valid: true, errors: [] as string[] }
   const promptMax = providerEntry?.prompt_max_length ?? 32_000
   // テンプレートモード(実験)では、プロンプト欄ではなく組み立ての結果を見る。
@@ -519,6 +528,8 @@ export function useRunFormLogic(
   const hasDeletedInputs = unusableInputAssetIds.deleted.length > 0
   // Mod の判定で入力に使えない画像(ADR-0051 4章)。サーバーは 409 にするので、送る前に止める。
   const hasBlockedInputs = unusableInputAssetIds.blocked.length > 0
+  // アニメーション GIF(ADR-0061 6章)。サーバーは 422 にするので、送る前に止める。
+  const hasAnimatedInputs = unusableInputAssetIds.animated.length > 0
 
   const operationSupported = isOperationSupported(opCaps)
   const maskRequired = opCaps?.requires_mask ?? false
@@ -907,6 +918,7 @@ export function useRunFormLogic(
     isInputCountSatisfied(opCaps, operation, imageInputCount) &&
     !hasDeletedInputs &&
     !hasBlockedInputs &&
+    !hasAnimatedInputs &&
     provider !== '' &&
     model !== '' &&
     operationSupported &&
@@ -923,8 +935,8 @@ export function useRunFormLogic(
     if (!canSubmit) return
     // size が無いプロバイダーは常に未指定(送らない)。送信直前に16の倍数へ丸める
     // (run.params.size には丸めた後の値を入れる)。
-    const roundedSizeState = providerEntry?.size
-      ? roundSizeStateToMultiple(providerEntry.size, sizeState)
+    const roundedSizeState = sizeConstraints
+      ? roundSizeStateToMultiple(sizeConstraints, sizeState)
       : sizeState
     const sizeParam = providerEntry?.size ? sizeToParam(roundedSizeState) : undefined
     const params = withSizeParam(buildEnabledParams(defs, rawParams, conditionalParams, hasMask), sizeParam)
@@ -969,6 +981,7 @@ export function useRunFormLogic(
     capsLoading: capsQuery.isLoading,
     capsError: capsQuery.isError,
     providerEntry,
+    sizeConstraints,
     provider,
     model,
     selectModel,
@@ -1016,6 +1029,7 @@ export function useRunFormLogic(
     imageInputCount,
     hasDeletedInputs,
     hasBlockedInputs,
+    hasAnimatedInputs,
     exactInputImagesRequired,
     inputCountRequirementReason,
     inputs: formState.inputs,

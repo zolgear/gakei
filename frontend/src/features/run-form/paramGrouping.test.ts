@@ -39,7 +39,15 @@ describe('splitPrimaryParams', () => {
   })
 
   it('PRIMARY_PARAMS の既定値を確認', () => {
-    expect(PRIMARY_PARAMS).toEqual(['quality', 'n', 'output_format', 'background', 'complexity'])
+    expect(PRIMARY_PARAMS).toEqual([
+      'quality',
+      'n',
+      'output_format',
+      'background',
+      'complexity',
+      'frame_count',
+      'frame_duration_ms',
+    ])
   })
 })
 
@@ -86,5 +94,13 @@ describe('isWideParam(設定グリッドで2マス分を使う欄)', () => {
     expect(isWideParam({ ...makeDef('seed'), type: 'int', widget: 'seed' })).toBe(true)
     expect(isWideParam({ ...makeDef('negative_prompt'), type: 'text' })).toBe(true)
     expect(isWideParam(makeDef('n'))).toBe(false)
+  })
+})
+
+describe('isWideParam(選択肢の多いスイッチ)', () => {
+  it('選択肢が4つ以上のスイッチは幅いっぱいにする(GIF を足したファイル形式)', () => {
+    const base = { name: 'output_format', type: 'enum', label: 'x', widget: 'segmented' } as const
+    expect(isWideParam({ ...base, choices: ['png', 'jpeg', 'webp'] } as never)).toBe(false)
+    expect(isWideParam({ ...base, choices: ['png', 'jpeg', 'webp', 'gif'] } as never)).toBe(true)
   })
 })

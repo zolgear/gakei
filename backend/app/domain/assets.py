@@ -50,6 +50,12 @@ ALLOWED_UPLOAD_FORMATS = {
     "JPEG": ("image/jpeg", "jpg"),
     "WEBP": ("image/webp", "webp"),
 }
+# ADR-0061 3章: 生成の結果に限って受ける形式(アニメーション GIF)。アップロードでは受けない。
+GENERATED_ONLY_FORMATS = {
+    "GIF": ("image/gif", "gif"),
+}
+# GIF のコマ数の上限(API は 16 まで。余裕を持たせて、壊れた・細工した GIF だけを断る)。
+MAX_GIF_FRAMES = 64
 
 
 def _utcnow() -> datetime:
@@ -120,8 +126,13 @@ def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
         raise IngestError(t("assets.cannotReadImage")) from e
 
     fmt = image.format
-    if fmt not in ALLOWED_UPLOAD_FORMATS:
+    formats = ALLOWED_UPLOAD_FORMATS
+    if kind == AssetKind.GENERATED:
+        formats = {**ALLOWED_UPLOAD_FORMATS, **GENERATED_ONLY_FORMATS}
+    if fmt not in formats:
         raise IngestError(t("assets.unsupportedFormat", format=fmt))
+    if fmt == "GIF" and getattr(image, "n_frames", 1) > MAX_GIF_FRAMES:
+        raise IngestError(t("assets.cannotReadImage"))
     if kind == AssetKind.MASK and fmt != "PNG":
         raise IngestError(t("assets.maskMustBePng"))
     if kind == AssetKind.SKETCH and fmt != "PNG":
@@ -133,7 +144,7 @@ def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
     if kind == AssetKind.REGIONS and fmt != "PNG":
         raise IngestError(t("assets.regionsMustBePng"))
 
-    mime, ext = ALLOWED_UPLOAD_FORMATS[fmt]
+    mime, ext = formats[fmt]
     return PreparedImage(
         data=data,
         image=image,
@@ -323,7 +334,9 @@ def create_withheld_placeholder(
     同じ内容の判定があればそれを及ぼし、無ければ判定なし)。"""
     asset_id = uuid.uuid4()
     created_at = _utcnow()
-    ext = {v[0]: v[1] for v in ALLOWED_UPLOAD_FORMATS.values()}.get(mime, "bin")
+    ext = {
+        v[0]: v[1] for v in (*ALLOWED_UPLOAD_FORMATS.values(), *GENERATED_ONLY_FORMATS.values())
+    }.get(mime, "bin")
     folder, stem, ext = original_key_base(
         OriginalKeyInfo(
             kind=AssetKind(kind).value,

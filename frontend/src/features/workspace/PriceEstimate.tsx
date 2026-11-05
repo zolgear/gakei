@@ -15,6 +15,8 @@ interface PriceEstimateProps {
   size: string
   /** 未指定なら "auto" を渡すこと。 */
   quality: string
+  /** ファイル形式。GIF はサーバーが見積もらない理由を返す(ADR-0061 8章)。 */
+  outputFormat?: string
   n: number
   promptLength: number
   /** role=image の入力 Asset id(position 順)。 */
@@ -33,6 +35,7 @@ export function PriceEstimate({
   operation,
   size,
   quality,
+  outputFormat,
   n,
   promptLength,
   inputAssetIds,
@@ -42,13 +45,24 @@ export function PriceEstimate({
   const inputAssetIdsKey = inputAssetIds.join(',')
 
   const query = useQuery({
-    queryKey: ['pricing-estimate', model, operation, size, quality, n, roundedPromptLength, inputAssetIdsKey],
+    queryKey: [
+      'pricing-estimate',
+      model,
+      operation,
+      size,
+      quality,
+      outputFormat,
+      n,
+      roundedPromptLength,
+      inputAssetIdsKey,
+    ],
     queryFn: () =>
       estimatePrice({
         model,
         operation,
         size,
         quality,
+        output_format: outputFormat,
         n,
         prompt_length: promptLength,
         input_asset_ids: inputAssetIds,

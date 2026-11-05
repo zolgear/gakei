@@ -1911,6 +1911,7 @@
       "reasonSizeAuto": "Cannot calculate while size is \"auto\"",
       "reasonSizeInvalid": "Size is out of range",
       "reasonUnknownModel": "No unit price registered for this model",
+      "reasonAnimatedOutput": "GIF cost cannot be estimated (check the record after running)",
       "repeatLine": "{count} repeats ({amount} each)"
     }
   },
@@ -2089,7 +2090,9 @@
     "group": {
       "label": "Group",
       "none": "None"
-    }
+    },
+    "gifNotInput": "GIF images cannot be used as input",
+    "gifInputsPresent": "Inputs include a GIF image. Remove it"
   },
   "sketch": {
     "title": "Draw a sketch",

@@ -17,6 +17,8 @@ interface SubmitPriceInput {
   size: string
   /** 未指定なら "auto"。 */
   quality: string
+  /** GIF なら見積もらない(ADR-0061 8章)。未指定は undefined。 */
+  outputFormat?: string
   n: number
   promptLength: number
   /** role=image の入力 Asset id(position 順)。 */
@@ -53,6 +55,7 @@ export function SubmitControls({
       operation={price.operation}
       size={price.size}
       quality={price.quality}
+      outputFormat={price.outputFormat}
       n={price.n}
       promptLength={price.promptLength}
       inputAssetIds={price.inputAssetIds}

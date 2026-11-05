@@ -143,6 +143,7 @@ def create_runs(
             raise RunCreateError("invalid", t("runs.assetNotFound", id=item.asset_id))
         if asset.id in blocked:
             raise RunCreateError("conflict", t("mods.inputDenied", id=item.asset_id))
+        _reject_animated_input(asset)
         input_metas.append(
             RunInputMeta(
                 asset_id=item.asset_id,
@@ -453,6 +454,13 @@ def _resolve_regions_frame(
     return frame
 
 
+def _reject_animated_input(asset: Asset) -> None:
+    """ADR-0061 6章: アニメーション GIF は入力にしない(1コマ目だけが送られ、見えている画像と
+    食い違うため)。"""
+    if asset.mime == "image/gif":
+        raise RunCreateError("invalid", t("runs.gifNotInput", id=asset.id))
+
+
 def _load_reference_assets(
     db: Session, viewer: CurrentUser, reference_ids: list[uuid.UUID]
 ) -> list[Asset]:
@@ -465,6 +473,7 @@ def _load_reference_assets(
             raise RunCreateError("invalid", t("runs.assetNotFound", id=ref))
         if asset.id in blocked:
             raise RunCreateError("conflict", t("mods.inputDenied", id=ref))
+        _reject_animated_input(asset)
         reference_assets.append(asset)
     return reference_assets
 

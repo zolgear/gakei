@@ -42,7 +42,10 @@ class InputImageEstimateResponse(BaseModel):
 class PriceEstimate(BaseModel):
     currency: Literal["USD"] = "USD"
     total_usd: float | None
-    unavailable_reason: Literal["quality_auto", "size_auto", "size_invalid", "unknown_model"] | None
+    unavailable_reason: (
+        Literal["quality_auto", "size_auto", "size_invalid", "unknown_model", "animated_output"]
+        | None
+    )
     output_tokens_per_image: int | None
     n: int
     input_image_tokens: int
@@ -85,6 +88,7 @@ def estimate_price(
     n: int = Query(default=1, ge=1, le=10),
     prompt_length: int = Query(default=0, ge=0),
     input_asset_ids: str | None = Query(default=None),
+    output_format: str | None = Query(default=None),
     db: Session = Depends(get_session),
     user: CurrentUser = Depends(require_user),
 ) -> PriceEstimate:
@@ -119,6 +123,7 @@ def estimate_price(
         n=n,
         prompt_length=prompt_length,
         input_images=input_images,
+        output_format=output_format,
     )
 
     unit_prices_per_1m = (
