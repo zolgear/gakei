@@ -160,6 +160,32 @@ async def test_edit_multipart_has_images_in_position_order_and_mask() -> None:
 
 
 @run_async
+async def test_complexity_is_sent_although_the_sdk_does_not_know_it() -> None:
+    # SDK 3.16.2 の引数に無い `complexity` は extra_body で送る。Generate は JSON の項目、
+    # Edit は multipart のフォームの項目として届く。
+    captured: list = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured.append(capture(request))
+        return json_response(generation_response_body())
+
+    provider = OpenAIImagesProvider(client=make_client(handler))
+    await provider.execute(
+        _run_request(params={"quality": "low", "complexity": "low"}), _noop_progress
+    )
+    inputs = [InputImage(role="image", position=0, data=b"IMG", mime="image/png")]
+    await provider.execute(
+        _run_request(operation="edit", params={"complexity": "medium"}, inputs=inputs),
+        _noop_progress,
+    )
+
+    assert captured[0].json_body["complexity"] == "low"
+    assert captured[0].json_body["quality"] == "low"
+    complexity_parts = captured[1].part_names("complexity")
+    assert [part_field_value(p) for p in complexity_parts] == ["medium"]
+
+
+@run_async
 async def test_edit_without_image_input_raises_provider_error() -> None:
     provider = OpenAIImagesProvider(client=make_client(lambda r: json_response({})))
     request = _run_request(operation="edit", params={}, inputs=[])

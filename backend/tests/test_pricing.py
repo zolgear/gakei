@@ -36,6 +36,12 @@ def test_normalize_model_maps_25_variants() -> None:
     assert normalize_model("gpt-image-2.5-sunburst-2026-09-01") == "gpt-image-2.5"
 
 
+def test_normalize_model_maps_26_variants() -> None:
+    # "gpt-image-2" の前方一致に落ちないこと。
+    assert normalize_model("gpt-image-2.6-sunburst") == "gpt-image-2.6"
+    assert normalize_model("gpt-image-2.6-flare") == "gpt-image-2.6"
+
+
 def test_normalize_model_maps_2_variants() -> None:
     assert normalize_model("gpt-image-2") == "gpt-image-2"
     assert normalize_model("gpt-image-2-2026-01-01") == "gpt-image-2"
@@ -64,6 +70,25 @@ def test_output_image_tokens_matches_known_history_2560x1440_low() -> None:
 def test_output_image_tokens_high_quality_1024_square() -> None:
     # 48 * 48 * (2_000_000 + 1024*1024) / 4_000_000 = 1755.98... -> ceil = 1756
     assert output_image_tokens(MODEL_FLARE, 1024, 1024, "high") == 1756
+
+
+def test_output_image_tokens_26_matches_known_history_1024_square_low() -> None:
+    # 2026-11-05 の実測(sunburst / flare とも 824)。2.5 の 196 に low の倍率 4.2 を掛けて切り上げ。
+    assert output_image_tokens("gpt-image-2.6-flare", 1024, 1024, "low") == 824
+    assert output_image_tokens("gpt-image-2.6-sunburst", 1024, 1024, "low") == 824
+
+
+def test_output_image_tokens_26_multiplier_by_quality() -> None:
+    # medium は 3.3 倍、high 以上は 2.5 と同じ。
+    base_medium = output_image_tokens(MODEL_FLARE, 1024, 1024, "medium")
+    assert base_medium is not None
+    assert output_image_tokens("gpt-image-2.6-flare", 1024, 1024, "medium") == -(
+        -base_medium * 33 // 10
+    )
+    for quality in ("high", "xhigh", "max"):
+        assert output_image_tokens("gpt-image-2.6-flare", 1024, 1024, quality) == (
+            output_image_tokens(MODEL_FLARE, 1024, 1024, quality)
+        )
 
 
 def test_output_image_tokens_half_rounds_to_even() -> None:
@@ -224,7 +249,13 @@ def test_cost_from_usage_none_for_unknown_model() -> None:
 
 
 def test_unit_prices_known_models() -> None:
-    for model in (MODEL_SUNBURST, MODEL_FLARE, MODEL_2):
+    for model in (
+        "gpt-image-2.6-sunburst",
+        "gpt-image-2.6-flare",
+        MODEL_SUNBURST,
+        MODEL_FLARE,
+        MODEL_2,
+    ):
         prices = get_unit_prices(model)
         assert prices is not None
         assert prices.text_input == 5.00

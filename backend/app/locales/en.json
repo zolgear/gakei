@@ -393,7 +393,7 @@
     "backgroundOpaque": "Opaque",
     "backgroundTransparent": "Transparent",
     "qualityLabel": "Quality",
-    "qualityDescription": "Lower is faster and cheaper. xhigh/max are 2.5-series only",
+    "qualityDescription": "Lower is faster and cheaper. xhigh/max are 2.5/2.6-series only",
     "fileFormatLabel": "File format",
     "fileFormatDescription": "Output file format",
     "compressionLabel": "Compression",
@@ -403,7 +403,12 @@
     "countLabel": "Count",
     "countDescription": "Number of images generated per run. Billed per image",
     "previewLabel": "Show progress previews",
-    "previewDescription": "Number of in-progress previews to show (0 to disable)"
+    "previewDescription": "Number of in-progress previews to show (0 to disable)",
+    "complexityLabel": "Planning depth",
+    "complexityDescription": "How much the model plans the composition before drawing. Lower suits small edits; higher suits text and busy layouts. Does not change the price",
+    "complexityLow": "Low",
+    "complexityMedium": "Medium",
+    "complexityHigh": "High"
   },
   "fake": {
     "forcedFailureMarker": "Detected the test forced-failure marker: {code}",

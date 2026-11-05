@@ -393,7 +393,7 @@
     "backgroundOpaque": "不透明",
     "backgroundTransparent": "透過",
     "qualityLabel": "画質",
-    "qualityDescription": "低いほど速く安価。xhigh/max は 2.5 系のみ",
+    "qualityDescription": "低いほど速く安価。xhigh/max は 2.5・2.6 系のみ",
     "fileFormatLabel": "ファイル形式",
     "fileFormatDescription": "出力するファイル形式",
     "compressionLabel": "圧縮率",
@@ -403,7 +403,12 @@
     "countLabel": "枚数",
     "countDescription": "1回の実行で生成する枚数。枚数分の料金がかかる",
     "previewLabel": "途中経過の表示",
-    "previewDescription": "生成途中の画像を表示する回数(0 で表示しない)"
+    "previewDescription": "生成途中の画像を表示する回数(0 で表示しない)",
+    "complexityLabel": "計画の深さ",
+    "complexityDescription": "描く前に構成をどれだけ考えるか。小さな編集は低め、文字や込み入った配置は高めが合う。料金は変わらない",
+    "complexityLow": "低",
+    "complexityMedium": "中",
+    "complexityHigh": "高"
   },
   "fake": {
     "forcedFailureMarker": "テスト用の強制失敗マーカーを検出しました: {code}",

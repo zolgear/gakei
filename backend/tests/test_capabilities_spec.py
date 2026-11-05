@@ -124,3 +124,26 @@ def test_capabilities_endpoint_exposes_new_fields(client: TestClient) -> None:
     assert quality["label"] == "画質"
     assert quality["choice_labels"]["low"] == "低"
     assert quality["form_default"] == "low"
+
+
+def _param_names(caps: ProviderCapabilities, model_id: str, operation: str) -> list[str]:
+    model = next(m for m in caps.models if m.model == model_id)
+    op = next(o for o in model.operations if o.operation == operation)
+    return [p.name for p in op.params]
+
+
+def test_complexity_is_offered_only_for_26_models() -> None:
+    # 2.5 は `complexity` を 400 で拒むので、フォームに出さない(2026-11-05 の実機確認)。
+    caps = build_capabilities("fake")
+    for operation in ("generate", "edit"):
+        assert "complexity" in _param_names(caps, "gpt-image-2.6-flare", operation)
+        assert "complexity" in _param_names(caps, "gpt-image-2.6-sunburst", operation)
+        assert "complexity" not in _param_names(caps, "gpt-image-2.5-flare", operation)
+        assert "complexity" not in _param_names(caps, "gpt-image-2", operation)
+
+
+def test_26_models_offer_xhigh_and_max_quality() -> None:
+    caps = build_capabilities("fake")
+    for model in caps.models:
+        if model.model.startswith("gpt-image-2.6"):
+            assert model.quality_choices == ["auto", "low", "medium", "high", "xhigh", "max"]
