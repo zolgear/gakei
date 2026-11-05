@@ -6164,6 +6164,7 @@ export interface components {
             moderation: components["schemas"]["ModerationSetting"];
             comfyui_timeout_seconds: components["schemas"]["ComfyUITimeoutSetting"];
             sdwebui_timeout_seconds: components["schemas"]["SdWebuiTimeoutSetting"];
+            svg_author_model: components["schemas"]["SvgAuthorModelSetting"];
         };
         /**
          * GeneralSettingsUpdateRequest
@@ -6181,6 +6182,8 @@ export interface components {
             comfyui_timeout_seconds?: number | null;
             /** Sdwebui Timeout Seconds */
             sdwebui_timeout_seconds?: number | null;
+            /** Svg Author Model */
+            svg_author_model?: string | null;
         };
         /**
          * GroupNamingSettingsResponse
@@ -7954,7 +7957,7 @@ export interface components {
             /** Total Usd */
             total_usd: number | null;
             /** Unavailable Reason */
-            unavailable_reason: ("quality_auto" | "size_auto" | "size_invalid" | "unknown_model" | "animated_output") | null;
+            unavailable_reason: ("quality_auto" | "size_auto" | "size_invalid" | "unknown_model" | "animated_output" | "svg_output") | null;
             /** Output Tokens Per Image */
             output_tokens_per_image: number | null;
             /** N */
@@ -10076,6 +10079,21 @@ export interface components {
             /** Final Prompt */
             final_prompt?: string | null;
             bounding_boxes?: components["schemas"]["InputRef"] | null;
+        };
+        /**
+         * SvgAuthorModelSetting
+         * @description SVG を書くモデル(ADR-0062 2章)。未設定なら組み込みの既定。
+         */
+        SvgAuthorModelSetting: {
+            /** Value */
+            value: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "default";
+            /** Default */
+            default: string;
         };
         /** TagCount */
         TagCount: {

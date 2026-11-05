@@ -12,13 +12,12 @@
 
 from __future__ import annotations
 
-import io
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PIL import Image
+from app.domain import derivatives
 
 
 @dataclass(frozen=True)
@@ -28,7 +27,7 @@ class AlphaStats:
 
 
 def _compute(data: bytes) -> AlphaStats:
-    with Image.open(io.BytesIO(data)) as image:
+    with derivatives.open_raster(data) as image:
         has_alpha = image.mode in ("RGBA", "LA", "PA", "RGBa", "La") or (
             "transparency" in image.info
         )

@@ -356,7 +356,11 @@
     },
     "openai": {
       "connectionHeading": "接続",
-      "generationHeading": "生成"
+      "generationHeading": "生成",
+      "svgAuthorModel": {
+        "label": "SVG を書くモデル",
+        "help": "SVG の出力(GPT Image 2.6)で、参照の画像から SVG を書くテキストのモデル。空欄なら既定のモデルを使います。料金は画像の分に、このモデルのトークンの分が加わります。"
+      }
     },
     "profile": {
       "upload": "画像をアップロード",
@@ -1913,6 +1917,7 @@
       "reasonSizeInvalid": "サイズが条件外です",
       "reasonUnknownModel": "このモデルの単価が未登録です",
       "reasonAnimatedOutput": "GIF の料金は見積もれません(実行後の記録で確かめられます)",
+      "reasonSvgOutput": "SVG の料金は見積もれません(SVG を書くモデルの分が加わります。実行後の記録で確かめられます)",
       "repeatLine": "繰り返し {count} 回分(1回 {amount})"
     }
   },
@@ -2092,8 +2097,8 @@
       "label": "グループ",
       "none": "なし"
     },
-    "gifNotInput": "GIF の画像は入力に使えません",
-    "gifInputsPresent": "入力に GIF の画像があります。外してください"
+    "gifNotInput": "GIF と SVG の画像は入力に使えません",
+    "gifInputsPresent": "入力に GIF か SVG の画像があります。外してください"
   },
   "sketch": {
     "title": "スケッチを描く",

@@ -502,6 +502,9 @@ def _reject_animated_input(asset: Asset) -> None:
     食い違うため)。"""
     if asset.mime == "image/gif":
         raise RunCreateError("invalid", t("runs.gifNotInput", id=asset.id))
+    # ADR-0062: SVG も入力にしない(API の Edit は SVG を入力に受けない)。
+    if asset.mime == "image/svg+xml":
+        raise RunCreateError("invalid", t("runs.svgNotInput", id=asset.id))
 
 
 @dataclass

@@ -50,6 +50,8 @@ function reasonText(reason: PriceEstimateUnavailableReason): string {
       return t.reasonUnknownModel
     case 'animated_output':
       return t.reasonAnimatedOutput
+    case 'svg_output':
+      return t.reasonSvgOutput
   }
 }
 

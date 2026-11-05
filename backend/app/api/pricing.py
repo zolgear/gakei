@@ -43,7 +43,14 @@ class PriceEstimate(BaseModel):
     currency: Literal["USD"] = "USD"
     total_usd: float | None
     unavailable_reason: (
-        Literal["quality_auto", "size_auto", "size_invalid", "unknown_model", "animated_output"]
+        Literal[
+            "quality_auto",
+            "size_auto",
+            "size_invalid",
+            "unknown_model",
+            "animated_output",
+            "svg_output",
+        ]
         | None
     )
     output_tokens_per_image: int | None

@@ -404,6 +404,9 @@
     "countDescription": "Number of images generated per run. Billed per image",
     "previewLabel": "Show progress previews",
     "previewDescription": "Number of in-progress previews to show (0 to disable)",
+    "svgEffortLabel": "SVG reasoning",
+    "svgEffortDescription": "How much the SVG author model reasons. Unset uses the model's default.",
+    "svgEffortNone": "None",
     "complexityLabel": "Planning depth",
     "complexityDescription": "How much the model plans the composition before drawing. Lower suits small edits; higher suits text and busy layouts. Does not change the price",
     "complexityLow": "Low",
@@ -445,6 +448,7 @@
   "settings": {
     "general": {
       "invalidModeration": "moderation must be auto or low",
+      "invalidSvgAuthorModel": "The SVG author model name must use letters, digits and . _ : - (up to 100 characters)",
       "invalidTimeoutSeconds": "The ComfyUI timeout must be an integer between {min} and {max} seconds",
       "invalidSdwebuiTimeoutSeconds": "The SD WebUI timeout must be an integer from {min} to {max} seconds"
     },
@@ -630,6 +634,7 @@
     "partialNotFound": "Partial image not found",
     "locked": "An output is protected by a lock, so this run cannot be deleted",
     "gifNotInput": "GIF images cannot be used as input: {id}",
+    "svgNotInput": "SVG images cannot be used as inputs: {id}",
     "markupEditOnly": "Sketch lines can only be sent with Edit",
     "markupAtMostOne": "Only one sketch line layer can be specified",
     "markupRequiresPrimary": "Sketch lines go on the first image (position 0)",
