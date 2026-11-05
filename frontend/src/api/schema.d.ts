@@ -2284,6 +2284,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/llm-connections/defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Llm Defaults
+         * @description 既定の送り先(ADR-0063)を変える。
+         */
+        put: operations["update_llm_defaults"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/llm-connections/{connection_id}": {
         parameters: {
             query?: never;
@@ -3346,19 +3366,6 @@ export interface components {
             /** Queued */
             queued: number;
         };
-        /** AnnotationComfyuiProfile */
-        AnnotationComfyuiProfile: {
-            llm?: components["schemas"]["AnnotationTarget"] | null;
-            vlm?: components["schemas"]["AnnotationTarget"] | null;
-        };
-        /**
-         * AnnotationComfyuiProfileUpdate
-         * @description 省略した用途は変更しない。null を送ると「既定と同じ」に戻す。
-         */
-        AnnotationComfyuiProfileUpdate: {
-            llm?: components["schemas"]["AnnotationTarget"] | null;
-            vlm?: components["schemas"]["AnnotationTarget"] | null;
-        };
         /**
          * AnnotationConnectionCalls
          * @description 接続先1つへの、自動タイトル・タグの直近1時間の LLM・VLM の呼び出し回数(上限は接続先
@@ -3370,31 +3377,32 @@ export interface components {
             /** Calls Last Hour */
             calls_last_hour: number;
         };
-        /** AnnotationDefaultProfile */
-        AnnotationDefaultProfile: {
-            llm: components["schemas"]["AnnotationTarget"];
-            vlm: components["schemas"]["AnnotationTarget"];
+        /** AnnotationProfile */
+        AnnotationProfile: {
+            llm?: components["schemas"]["AnnotationTarget"] | null;
+            vlm?: components["schemas"]["AnnotationTarget"] | null;
         };
         /**
-         * AnnotationDefaultProfileUpdate
-         * @description 省略した用途は変更しない。null にはできない。
+         * AnnotationProfileUpdate
+         * @description 省略した用途は変更しない。null を送ると上書きを消す(既定の送り先を使う)。
          */
-        AnnotationDefaultProfileUpdate: {
+        AnnotationProfileUpdate: {
             llm?: components["schemas"]["AnnotationTarget"] | null;
             vlm?: components["schemas"]["AnnotationTarget"] | null;
         };
         /**
          * AnnotationProfiles
-         * @description 用途ごとの組(ADR-0024 8章)。`comfyui` は ComfyUI の Run の出力にだけ使う。
+         * @description 画像の区分ごとの上書き(ADR-0024 8章、ADR-0063)。区分は Asset を作った Run の区分
+         *     (ADR-0051 3章)で、Run の無い Asset は外部。
          */
         AnnotationProfiles: {
-            default: components["schemas"]["AnnotationDefaultProfile"];
-            comfyui: components["schemas"]["AnnotationComfyuiProfile"];
+            external: components["schemas"]["AnnotationProfile"];
+            local: components["schemas"]["AnnotationProfile"];
         };
         /** AnnotationProfilesUpdate */
         AnnotationProfilesUpdate: {
-            default?: components["schemas"]["AnnotationDefaultProfileUpdate"] | null;
-            comfyui?: components["schemas"]["AnnotationComfyuiProfileUpdate"] | null;
+            external?: components["schemas"]["AnnotationProfileUpdate"] | null;
+            local?: components["schemas"]["AnnotationProfileUpdate"] | null;
         };
         /**
          * AnnotationSettingsResponse
@@ -4516,9 +4524,9 @@ export interface components {
             /** Enabled */
             enabled: boolean;
             /** Connection Id */
-            connection_id: string;
+            connection_id?: string | null;
             /** Model */
-            model: string;
+            model?: string | null;
             /** Hourly Request Limit */
             hourly_request_limit: number;
             /** Runs Per Message Limit */
@@ -6193,9 +6201,9 @@ export interface components {
             /** Enabled */
             enabled: boolean;
             /** Connection Id */
-            connection_id: string;
+            connection_id?: string | null;
             /** Model */
-            model: string;
+            model?: string | null;
             /** Usable */
             usable: boolean;
             /** Unusable Reason */
@@ -7165,7 +7173,7 @@ export interface components {
              */
             structured_outputs_supported: boolean;
             /** Used By */
-            used_by?: ("annotation" | "embedding" | "assistant" | "region_detection" | "group_naming")[];
+            used_by?: ("annotation" | "embedding" | "assistant" | "region_detection" | "group_naming" | "llm_defaults")[];
         };
         /**
          * LlmConnectionsResponse
@@ -7174,6 +7182,38 @@ export interface components {
         LlmConnectionsResponse: {
             /** Connections */
             connections: components["schemas"]["LlmConnectionView"][];
+            defaults: components["schemas"]["LlmDefaultsView"];
+        };
+        /**
+         * LlmDefaultsUpdateRequest
+         * @description `PUT /api/settings/llm-connections/defaults`。書いた項目だけ変える。null は保存した値を
+         *     消す(外部は組み込みの既定、内部は外部と同じに戻す)。
+         */
+        LlmDefaultsUpdateRequest: {
+            external?: components["schemas"]["LlmTargetChoice"] | null;
+            local?: components["schemas"]["LlmTargetChoice"] | null;
+        };
+        /**
+         * LlmDefaultsView
+         * @description 既定の送り先(ADR-0063)。機能ごとの上書きが無ければ、画像の区分に合う組を使う。
+         */
+        LlmDefaultsView: {
+            external: components["schemas"]["LlmTargetChoice"];
+            /** External Saved */
+            external_saved: boolean;
+            local?: components["schemas"]["LlmTargetChoice"] | null;
+            /** Builtin Model */
+            builtin_model: string;
+        };
+        /**
+         * LlmTargetChoice
+         * @description 「接続先 + モデル名」の組(ADR-0063)。
+         */
+        LlmTargetChoice: {
+            /** Connection Id */
+            connection_id: string;
+            /** Model */
+            model: string;
         };
         /**
          * MaskBinding
@@ -8752,9 +8792,9 @@ export interface components {
             /** Enabled */
             enabled: boolean;
             /** Connection Id */
-            connection_id: string;
+            connection_id?: string | null;
             /** Model */
-            model: string;
+            model?: string | null;
             /** Hourly Request Limit */
             hourly_request_limit: number;
             /** Hourly Request Limit Default */
@@ -15808,6 +15848,41 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_llm_defaults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gakei_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmDefaultsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -105,7 +105,8 @@ def test_settings_defaults_and_update(client: TestClient) -> None:
     assert body["enabled"] is False
     assert body["usable"] is False
     assert body["unusable_reason"] == "disabled"
-    assert body["connection_id"] == "openai"
+    # 上書きは無い(既定の送り先を使う。ADR-0063)。
+    assert (body["connection_id"], body["model"]) == (None, None)
     assert body["runs_per_message_limit"] == 20
     assert body["hourly_run_limit"] == 60
     assert body["requests_last_hour"] == 0
@@ -175,10 +176,11 @@ def test_register_usage_marks_connection_in_use(client: TestClient) -> None:
     assert "アシスタント" in response.json()["detail"]
 
 
-def test_enabled_with_default_connection_marks_builtin(client: TestClient) -> None:
+def test_enabled_with_default_target_does_not_mark_builtin(client: TestClient) -> None:
+    # 上書きが無ければ、組み込みの接続先を使っているのは既定の送り先の側(ADR-0063)。
     _enable(client)
     builtin = client.get("/api/settings/llm-connections").json()["connections"][0]
-    assert "assistant" in builtin["used_by"]
+    assert builtin["used_by"] == ["llm_defaults"]
 
 
 # -- 会話の CRUD --------------------------------------------------------------------

@@ -52,9 +52,8 @@ from app.domain import locality as locality_domain
 from app.domain import prompt_embeddings as prompt_embeddings_domain
 from app.domain.schemas import (
     AnnotationBackfillResponse,
-    AnnotationComfyuiProfile,
     AnnotationConnectionCalls,
-    AnnotationDefaultProfile,
+    AnnotationProfile,
     AnnotationProfiles,
     AnnotationSettingsResponse,
     AnnotationSettingsUpdateRequest,
@@ -395,7 +394,7 @@ def _general_settings_response(db: Session, settings: Settings) -> GeneralSettin
         svg_author_model=SvgAuthorModelSetting(
             value=svg_author_model,
             source=svg_author_source,
-            default=general_settings.DEFAULT_SVG_AUTHOR_MODEL,
+            default=general_settings.default_svg_author_model(db),
         ),
     )
 
@@ -563,13 +562,13 @@ def _target_view(value: annotation_settings.TargetChoice | None) -> AnnotationTa
 
 def _profiles_view(profiles: annotation_settings.Profiles) -> AnnotationProfiles:
     return AnnotationProfiles(
-        default=AnnotationDefaultProfile(
-            llm=_target_view(profiles.default_llm),  # type: ignore[arg-type]
-            vlm=_target_view(profiles.default_vlm),  # type: ignore[arg-type]
+        external=AnnotationProfile(
+            llm=_target_view(profiles.external_llm),
+            vlm=_target_view(profiles.external_vlm),
         ),
-        comfyui=AnnotationComfyuiProfile(
-            llm=_target_view(profiles.comfyui_llm),
-            vlm=_target_view(profiles.comfyui_vlm),
+        local=AnnotationProfile(
+            llm=_target_view(profiles.local_llm),
+            vlm=_target_view(profiles.local_vlm),
         ),
     )
 
@@ -1015,7 +1014,13 @@ def _assistant_settings_response(
             db, config.connection_id, request.app.state.settings, structured_outputs=False
         )
     return AssistantSettingsResponse(
-        **{name: getattr(config, name) for name in assistant_settings.FIELDS},
+        **{
+            name: getattr(config, name)
+            for name in assistant_settings.FIELDS
+            if name not in ("connection_id", "model")
+        },
+        connection_id=config.override.connection_id if config.override else None,
+        model=config.override.model if config.override else None,
         hourly_request_limit_default=assistant_settings.DEFAULT_HOURLY_REQUEST_LIMIT,
         hourly_request_limit_max=assistant_settings.HOURLY_REQUEST_LIMIT_MAX,
         runs_per_message_limit_default=assistant_settings.DEFAULT_RUNS_PER_MESSAGE_LIMIT,

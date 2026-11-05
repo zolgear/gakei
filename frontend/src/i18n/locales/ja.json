@@ -616,7 +616,8 @@
         "embedding": "埋め込み",
         "assistant": "アシスタント",
         "region_detection": "領域の検出",
-        "group_naming": "グループ名の候補"
+        "group_naming": "グループ名の候補",
+        "llm_defaults": "既定の送り先"
       },
       "deleteDisabledInUse": "使っている機能があるため削除できません。",
       "apiKeyRequiredLabel": "キー(入れ直し)",
@@ -657,25 +658,24 @@
       },
       "usage": {
         "heading": "使い方",
-        "intro": "タイトル(LLM)とタグ(VLM)のそれぞれで、接続先とモデル名を選びます。",
+        "intro": "タイトル(LLM)とタグ(VLM)のそれぞれで、接続先とモデル名を選びます。「既定の送り先」のままなら、「LLM の接続先」で決めた外部・ローカルの組を使います。",
         "externalNotice": "LLM と VLM を有効にすると、プロンプト(LLM、VLM)と 1024px 以内に縮めた画像(VLM)が、ここで選んだ接続先に送られます。OpenAI を使う場合は呼び出しごとに課金されます。",
         "llmLabel": "タイトル(LLM)",
         "vlmLabel": "タグ(VLM)",
-        "defaultLabel": "既定",
-        "defaultHelp": "すべての画像に使います。",
-        "comfyuiLabel": "ComfyUI の画像",
-        "comfyuiHelp": "ComfyUI で生成した画像にだけ使います。ComfyUI を接続していなくても設定できます。",
+        "externalLabel": "外部の画像",
+        "externalHelp": "外部の画像サービスで作った画像と、アップロードした画像に使います。",
+        "localLabel": "ローカルの画像",
+        "localHelp": "ローカル(手元)の接続で作った画像に使います。",
         "connectionLabel": "接続先",
         "modelLabel": "モデル名",
-        "sameAsDefault": "既定と同じ",
-        "sameAsDefaultSummary": "{connection} / {model}",
+        "useDefault": "既定の送り先",
         "modelInvalid": "1〜{max} 文字で入力してください",
         "connectionInvalid": "接続先を選んでください",
         "vlmModelHelp": "タグのモデルは画像入力に対応している必要があります。",
         "examplesHeading": "選び方の例",
         "liteLlmExample": "LiteLLM などの中継サーバー: 接続先は同じものを選び、モデル名だけを変えます。",
-        "ollamaExample": "Ollama など: 「ComfyUI の画像」でその接続先とモデルを選ぶと、ComfyUI で作った画像はそこで、ほかの画像は既定の接続先で推定します。",
-        "comfyuiIsolation": "「ComfyUI の画像」で別の接続先を選ぶと、その画像は既定の接続先には送りません。失敗しても既定には切り替えません。",
+        "ollamaExample": "Ollama など: 「LLM の接続先」でローカルの既定の送り先にその接続先とモデルを選ぶと、ローカルで作った画像はそこで、ほかの画像は外部の既定の送り先で推定します。",
+        "comfyuiIsolation": "ローカルの画像に別の接続先を選ぶと、その画像は外部の接続先には送りません。失敗しても外部には切り替えません。",
         "connectionsHelp": "接続先の追加・編集とキーは「LLM の接続先」で行います。",
         "connectionsLink": "LLM の接続先を開く"
       },
@@ -1516,6 +1516,32 @@
     "teams": {
       "intro": "入っているチームと、メンバーです。代表者はメンバーを出し入れできます。",
       "adminIntro": "チームを作り、代表者を決めます。チームは IP 素材の利用の許可の単位です。"
+    },
+    "llmDefaults": {
+      "heading": "既定の送り先",
+      "intro": "自動タイトル・タグ、アシスタント、領域の検出、グループ名の候補は、機能ごとに接続先を選ばなければここを使います。外部の画像サービスで作った画像やアップロードした画像には外部の組を、ローカル(手元)で作った画像にはローカルの組を使います。",
+      "externalLabel": "外部",
+      "localLabel": "ローカル",
+      "externalBuiltin": "組み込みの既定です。",
+      "localSameAsExternal": "未設定のため、外部と同じです。",
+      "targetValue": "{model}({connection})",
+      "edit": "変更",
+      "connectionLabel": "接続先",
+      "modelLabel": "モデル名",
+      "builtinOption": "組み込みの既定({model})",
+      "sameAsExternal": "外部と同じ",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "savedToast": "既定の送り先を保存しました",
+      "saveFailed": "保存できませんでした",
+      "useDefault": "既定の送り先",
+      "connectionsLink": "LLM の接続先",
+      "byImageSummary": "外部の画像は {external}、ローカルの画像は {local} に送ります。",
+      "errors": {
+        "connectionUnknown": "この接続先は見つかりません。選び直してください",
+        "modelRequired": "モデル名を入力してください",
+        "modelTooLong": "{max} 文字以内で入力してください"
+      }
     }
   },
   "promptSets": {

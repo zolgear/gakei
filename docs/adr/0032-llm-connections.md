@@ -90,6 +90,7 @@ LLM・VLM の接続先(名前、Base URL、キー、API 形式)は、ADR-0024 8�
   - 保存先: 利用者の接続先は `annotation.connections` の各項目の `structured_outputs`(「自動」のときは書かない)。組み込みの接続先は `app_setting` の `llm_connections.openai_structured_outputs`。どちらも DB の設定行なので、マイグレーションは要らない。
   - API: 一覧の各接続先に `structured_outputs`(指定)と `structured_outputs_supported`(判定の結果)を返す。`POST` と `PATCH /{id}` で `structured_outputs` を受ける。
   - 判定は `domain/llm_connections.py` の `supports_structured_outputs` の1か所にまとめ、領域の検出(ADR-0053 7章)と ComfyUI のワークフローの推定(ADR-0052 6章)が使う。
+- 2026-11-06 追記(ADR-0063): 接続先の一覧のページに「既定の送り先」(外部とローカルの「接続先 + モデル名」)を置く。LLM を使う機能は、機能ごとの上書きが無ければこれを使う。使っている機能に「既定の送り先」(`llm_defaults`)が加わる。
 
 ## Action Items
 

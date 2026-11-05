@@ -26,7 +26,7 @@ from app.deps import get_session
 from app.domain import group_naming as naming
 from app.domain import group_naming_settings as naming_settings
 from app.domain import group_suggestions as suggestions_domain
-from app.domain import llm_connections
+from app.domain import llm_connections, llm_defaults
 from app.domain import locality as locality_domain
 from app.domain.llm_connections import ConnectionNotFoundError, LlmTarget
 from app.domain.schemas import (
@@ -67,7 +67,13 @@ def _settings_response(db: Session, request: Request) -> GroupNamingSettingsResp
     config = naming_settings.load(db)
     reason = _unusable_reason(db, request, config)
     return GroupNamingSettingsResponse(
-        **{name: getattr(config, name) for name in naming_settings.FIELDS},
+        **{
+            name: getattr(config, name)
+            for name in naming_settings.FIELDS
+            if name not in ("connection_id", "model")
+        },
+        connection_id=config.override.connection_id if config.override else None,
+        model=config.override.model if config.override else None,
         usable=reason is None,
         unusable_reason=reason,
     )
@@ -158,7 +164,29 @@ async def suggest_group_names(
         suggestions_domain.NamingInput,
     ]:
         with state.session_factory() as db:
-            config = naming_settings.load(db)
+            if not naming_settings.load(db).enabled:
+                raise _error(409, "disabled", t("groupNaming.disabled"))
+            try:
+                data = suggestions_domain.naming_input(
+                    db,
+                    settings=state.settings,
+                    index=state.vector_index,
+                    version_of=state.embedder.version,
+                    cache=state.group_suggestion_cache,
+                    viewer=user,
+                    scope=body.scope,
+                    granularity=body.granularity,
+                    suggestion_ids=body.suggestion_ids,
+                )
+            except EmbeddingsConflictError as exc:
+                raise _error(409, exc.code, exc.message) from exc
+            # 送り先は、名前を付ける集まりに内部の画像があれば内部の既定(ADR-0063 3章)。
+            member_ids = [
+                a for cluster in data.clusters[: naming.MAX_CLUSTERS] for a in cluster.member_ids
+            ]
+            config = naming_settings.load(
+                db, llm_defaults.assets_locality(db, state.settings, member_ids)
+            )
             if not config.enabled:
                 raise _error(409, "disabled", t("groupNaming.disabled"))
             target: LlmTarget | None = None
@@ -177,20 +205,6 @@ async def suggest_group_names(
             locality, _source = locality_domain.connection_locality(
                 db, state.settings, builtin=connection.builtin, value=connection.locality
             )
-            try:
-                data = suggestions_domain.naming_input(
-                    db,
-                    settings=state.settings,
-                    index=state.vector_index,
-                    version_of=state.embedder.version,
-                    cache=state.group_suggestion_cache,
-                    viewer=user,
-                    scope=body.scope,
-                    granularity=body.granularity,
-                    suggestion_ids=body.suggestion_ids,
-                )
-            except EmbeddingsConflictError as exc:
-                raise _error(409, exc.code, exc.message) from exc
         return config, target, connection, locality == "external", data
 
     config, target, connection, external, data = await anyio.to_thread.run_sync(_prepare)

@@ -3,7 +3,7 @@ import type { AnnotationSettingsResponse, LlmConnectionView } from '../../api/cl
 import {
   annotationDraftErrors,
   backfillBlocker,
-  changeComfyuiConnection,
+  changeOverrideConnection,
   contentRatingBackfillBlocker,
   connectionCallsRows,
   diffAnnotationDraft,
@@ -66,11 +66,11 @@ function settings(overrides: Partial<AnnotationSettingsResponse> = {}): Annotati
     content_rating_pending_count: 0,
     content_rating_queued_count: 0,
     profiles: {
-      default: {
+      external: {
         llm: { connection_id: 'openai', model: 'gpt-5.6-luna' },
         vlm: { connection_id: 'openai', model: 'gpt-5.6-luna' },
       },
-      comfyui: { llm: null, vlm: null },
+      local: { llm: null, vlm: null },
     },
     onnx_models: [],
     pending_count: 0,
@@ -82,26 +82,26 @@ function settings(overrides: Partial<AnnotationSettingsResponse> = {}): Annotati
   }
 }
 
-function withComfyLlm(form: AnnotationForm, connectionId: string | null, model: string): AnnotationForm {
-  return { ...form, comfyui: { ...form.comfyui, llm: { connection_id: connectionId, model } } }
+function withLocalLlm(form: AnnotationForm, connectionId: string | null, model: string): AnnotationForm {
+  return { ...form, local: { ...form.local, llm: { connection_id: connectionId, model } } }
 }
 
 describe('formFromSettings', () => {
-  it('ComfyUI の画像の null は「既定と同じ」(connection_id が null)になる', () => {
+  it('内部の画像の null は「既定の送り先」(connection_id が null)になる', () => {
     const form = formFromSettings(settings())
-    expect(form.default.llm).toEqual({ connection_id: 'openai', model: 'gpt-5.6-luna' })
-    expect(form.comfyui.llm).toEqual({ connection_id: null, model: '' })
+    expect(form.external.llm).toEqual({ connection_id: 'openai', model: 'gpt-5.6-luna' })
+    expect(form.local.llm).toEqual({ connection_id: null, model: '' })
     expect(form.hourly_limit).toBe('100')
   })
 
-  it('ComfyUI の画像に組があればそのまま入る', () => {
+  it('内部の画像に組があればそのまま入る', () => {
     const s = settings({
       profiles: {
-        default: settings().profiles.default,
-        comfyui: { llm: { connection_id: 'c1', model: 'qwen3:8b' }, vlm: null },
+        external: settings().profiles.external,
+        local: { llm: { connection_id: 'c1', model: 'qwen3:8b' }, vlm: null },
       },
     })
-    expect(formFromSettings(s).comfyui.llm).toEqual({ connection_id: 'c1', model: 'qwen3:8b' })
+    expect(formFromSettings(s).local.llm).toEqual({ connection_id: 'c1', model: 'qwen3:8b' })
   })
 })
 
@@ -133,41 +133,41 @@ describe('diffAnnotationForm', () => {
   it('既定のマスは変わった用途だけを、前後の空白を除いて送る', () => {
     const s = settings()
     const base = formFromSettings(s)
-    const form: AnnotationForm = { ...base, default: { ...base.default, vlm: { connection_id: 'c1', model: ' qwen2.5vl:7b ' } } }
+    const form: AnnotationForm = { ...base, external: { ...base.external, vlm: { connection_id: 'c1', model: ' qwen2.5vl:7b ' } } }
     expect(diffAnnotationForm(form, s)).toEqual({
-      profiles: { default: { vlm: { connection_id: 'c1', model: 'qwen2.5vl:7b' } } },
+      profiles: { external: { vlm: { connection_id: 'c1', model: 'qwen2.5vl:7b' } } },
     })
   })
 
   it('モデル名の空白だけの違いは差分にしない', () => {
     const s = settings()
     const base = formFromSettings(s)
-    const form: AnnotationForm = { ...base, default: { ...base.default, llm: { connection_id: 'openai', model: ' gpt-5.6-luna ' } } }
+    const form: AnnotationForm = { ...base, external: { ...base.external, llm: { connection_id: 'openai', model: ' gpt-5.6-luna ' } } }
     expect(diffAnnotationForm(form, s)).toEqual({})
   })
 
-  it('ComfyUI の画像で接続先を選ぶと組を送る', () => {
+  it('内部の画像で接続先を選ぶと組を送る', () => {
     const s = settings()
-    const form = withComfyLlm(formFromSettings(s), 'c1', 'qwen3:8b')
+    const form = withLocalLlm(formFromSettings(s), 'c1', 'qwen3:8b')
     expect(diffAnnotationForm(form, s)).toEqual({
-      profiles: { comfyui: { llm: { connection_id: 'c1', model: 'qwen3:8b' } } },
+      profiles: { local: { llm: { connection_id: 'c1', model: 'qwen3:8b' } } },
     })
   })
 
-  it('ComfyUI の画像を「既定と同じ」に戻すと null を送る', () => {
+  it('内部の画像を「既定の送り先」に戻すと null を送る', () => {
     const s = settings({
       profiles: {
-        default: settings().profiles.default,
-        comfyui: { llm: { connection_id: 'c1', model: 'qwen3:8b' }, vlm: null },
+        external: settings().profiles.external,
+        local: { llm: { connection_id: 'c1', model: 'qwen3:8b' }, vlm: null },
       },
     })
-    const form = withComfyLlm(formFromSettings(s), null, 'qwen3:8b')
-    expect(diffAnnotationForm(form, s)).toEqual({ profiles: { comfyui: { llm: null } } })
+    const form = withLocalLlm(formFromSettings(s), null, 'qwen3:8b')
+    expect(diffAnnotationForm(form, s)).toEqual({ profiles: { local: { llm: null } } })
   })
 
-  it('「既定と同じ」のままなら、残っているモデル名の下書きは送らない', () => {
+  it('「既定の送り先」のままなら、残っているモデル名の下書きは送らない', () => {
     const s = settings()
-    const form = withComfyLlm(formFromSettings(s), null, 'something')
+    const form = withLocalLlm(formFromSettings(s), null, 'something')
     expect(diffAnnotationForm(form, s)).toEqual({})
   })
 
@@ -177,29 +177,29 @@ describe('diffAnnotationForm', () => {
   })
 })
 
-describe('changeComfyuiConnection', () => {
-  const defaultCell = { connection_id: 'openai', model: 'gpt-5.6-luna' }
+describe('changeOverrideConnection', () => {
+  const defaultModel = 'gpt-6-luna'
 
-  it('「既定と同じ」から切り替えてモデル名が空なら、既定のモデル名を下書きに入れる', () => {
-    expect(changeComfyuiConnection({ connection_id: null, model: '' }, 'c1', defaultCell)).toEqual({
+  it('「既定の送り先」から切り替えてモデル名が空なら、既定のモデル名を下書きに入れる', () => {
+    expect(changeOverrideConnection({ connection_id: null, model: '' }, 'c1', defaultModel)).toEqual({
       connection_id: 'c1',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
     })
   })
 
   it('入力済みのモデル名は残す', () => {
-    expect(changeComfyuiConnection({ connection_id: null, model: 'qwen3:8b' }, 'c1', defaultCell)).toEqual({
+    expect(changeOverrideConnection({ connection_id: null, model: 'qwen3:8b' }, 'c1', defaultModel)).toEqual({
       connection_id: 'c1',
       model: 'qwen3:8b',
     })
-    expect(changeComfyuiConnection({ connection_id: 'c1', model: '' }, 'openai', defaultCell)).toEqual({
+    expect(changeOverrideConnection({ connection_id: 'c1', model: '' }, 'openai', defaultModel)).toEqual({
       connection_id: 'openai',
       model: '',
     })
   })
 
-  it('「既定と同じ」を選ぶとモデル名の下書きは残したまま null にする', () => {
-    expect(changeComfyuiConnection({ connection_id: 'c1', model: 'qwen3:8b' }, null, defaultCell)).toEqual({
+  it('「既定の送り先」を選ぶとモデル名の下書きは残したまま null にする', () => {
+    expect(changeOverrideConnection({ connection_id: 'c1', model: 'qwen3:8b' }, null, defaultModel)).toEqual({
       connection_id: null,
       model: 'qwen3:8b',
     })
@@ -214,13 +214,13 @@ describe('validateAnnotationForm', () => {
     const errors = validateAnnotationForm(
       {
         ...base,
-        default: { ...base.default, llm: { connection_id: 'openai', model: '  ' } },
+        external: { ...base.external, llm: { connection_id: 'openai', model: '  ' } },
         hourly_limit: '0',
         onnx_threshold: '1',
       },
       connections,
     )
-    expect(errors).toEqual({ default_llm_model: true, hourly_limit: true, onnx_threshold: true })
+    expect(errors).toEqual({ external_llm_model: true, hourly_limit: true, onnx_threshold: true })
   })
 
   it('既定値はすべて通る', () => {
@@ -229,23 +229,23 @@ describe('validateAnnotationForm', () => {
 
   it('一覧に無い接続先を指摘する', () => {
     const base = formFromSettings(settings())
-    const form = withComfyLlm(
-      { ...base, default: { ...base.default, vlm: { connection_id: 'gone', model: 'x' } } },
+    const form = withLocalLlm(
+      { ...base, external: { ...base.external, vlm: { connection_id: 'gone', model: 'x' } } },
       'gone',
       'y',
     )
     expect(validateAnnotationForm(form, connections)).toEqual({
-      default_vlm_connection: true,
-      comfyui_llm_connection: true,
+      external_vlm_connection: true,
+      local_llm_connection: true,
     })
   })
 
-  it('ComfyUI の画像は、接続先を選んだマスだけモデル名を検証する', () => {
+  it('内部の画像は、接続先を選んだマスだけモデル名を検証する', () => {
     const base = formFromSettings(settings())
-    expect(validateAnnotationForm(withComfyLlm(base, null, ''), connections)).toEqual({})
-    expect(validateAnnotationForm(withComfyLlm(base, 'c1', ' '), connections)).toEqual({ comfyui_llm_model: true })
-    expect(validateAnnotationForm(withComfyLlm(base, 'c1', 'x'.repeat(201)), connections)).toEqual({
-      comfyui_llm_model: true,
+    expect(validateAnnotationForm(withLocalLlm(base, null, ''), connections)).toEqual({})
+    expect(validateAnnotationForm(withLocalLlm(base, 'c1', ' '), connections)).toEqual({ local_llm_model: true })
+    expect(validateAnnotationForm(withLocalLlm(base, 'c1', 'x'.repeat(201)), connections)).toEqual({
+      local_llm_model: true,
     })
   })
 
@@ -334,13 +334,13 @@ describe('ページの下書き(ADR-0031)', () => {
       llm_enabled: true,
       onnx_model: 'wd-swinv2-tagger-v3',
       hourly_limit: '20',
-      default: { ...base.default, vlm: { connection_id: 'c1', model: 'qwen2.5vl:7b' } },
+      external: { ...base.external, vlm: { connection_id: 'c1', model: 'qwen2.5vl:7b' } },
     }
     expect(diffAnnotationDraft(draft, s)).toEqual({
       llm_enabled: true,
       onnx_model: 'wd-swinv2-tagger-v3',
       hourly_limit: 20,
-      profiles: { default: { vlm: { connection_id: 'c1', model: 'qwen2.5vl:7b' } } },
+      profiles: { external: { vlm: { connection_id: 'c1', model: 'qwen2.5vl:7b' } } },
     })
   })
 
@@ -359,39 +359,39 @@ describe('ページの下書き(ADR-0031)', () => {
     expect(diffAnnotationDraft(draft, s)).toEqual({})
   })
 
-  it('マスの検証の結果を、下書きのキー(default / comfyui / 数値)にまとめる', () => {
+  it('マスの検証の結果を、下書きのキー(external / local / 数値)にまとめる', () => {
     expect(annotationDraftErrors({})).toEqual({})
     const errors = annotationDraftErrors({
-      default_llm_model: true,
-      comfyui_vlm_connection: true,
+      external_llm_model: true,
+      local_vlm_connection: true,
       hourly_limit: true,
     })
-    expect(Object.keys(errors).sort()).toEqual(['comfyui', 'default', 'hourly_limit'])
+    expect(Object.keys(errors).sort()).toEqual(['external', 'hourly_limit', 'local'])
     expect(annotationDraftErrors({ onnx_threshold: true }).onnx_threshold).toBeTruthy()
   })
 
   it('isUsageCellChanged は書き換えたマスだけを示す', () => {
     const saved = formFromSettings(settings())
-    expect(isUsageCellChanged(saved, saved, 'default', 'llm')).toBe(false)
+    expect(isUsageCellChanged(saved, saved, 'external', 'llm')).toBe(false)
     const edited: AnnotationForm = {
       ...saved,
-      default: { ...saved.default, llm: { connection_id: 'openai', model: 'gpt-x' } },
+      external: { ...saved.external, llm: { connection_id: 'openai', model: 'gpt-x' } },
     }
-    expect(isUsageCellChanged(edited, saved, 'default', 'llm')).toBe(true)
-    expect(isUsageCellChanged(edited, saved, 'default', 'vlm')).toBe(false)
+    expect(isUsageCellChanged(edited, saved, 'external', 'llm')).toBe(true)
+    expect(isUsageCellChanged(edited, saved, 'external', 'vlm')).toBe(false)
     // 空白だけの違いは変更にしない(送らないため)。
     const spaced: AnnotationForm = {
       ...saved,
-      default: { ...saved.default, llm: { connection_id: 'openai', model: ' gpt-5.6-luna ' } },
+      external: { ...saved.external, llm: { connection_id: 'openai', model: ' gpt-5.6-luna ' } },
     }
-    expect(isUsageCellChanged(spaced, saved, 'default', 'llm')).toBe(false)
+    expect(isUsageCellChanged(spaced, saved, 'external', 'llm')).toBe(false)
   })
 
-  it('「既定と同じ」のマスは、隠れているモデル名の下書きを比べない', () => {
+  it('「既定の送り先」のマスは、隠れているモデル名の下書きを比べない', () => {
     const saved = formFromSettings(settings())
-    const draft = withComfyLlm(saved, null, 'leftover')
-    expect(isUsageCellChanged(draft, saved, 'comfyui', 'llm')).toBe(false)
-    expect(isUsageCellChanged(withComfyLlm(saved, 'c1', 'qwen3:8b'), saved, 'comfyui', 'llm')).toBe(true)
+    const draft = withLocalLlm(saved, null, 'leftover')
+    expect(isUsageCellChanged(draft, saved, 'local', 'llm')).toBe(false)
+    expect(isUsageCellChanged(withLocalLlm(saved, 'c1', 'qwen3:8b'), saved, 'local', 'llm')).toBe(true)
   })
 })
 

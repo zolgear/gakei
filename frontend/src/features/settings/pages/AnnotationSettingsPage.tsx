@@ -35,6 +35,7 @@ import {
   updateAnnotationSettings,
   type AnnotationSettingsResponse,
   type LlmConnectionView,
+  type LlmDefaultsView,
   type OnnxModelName,
   type OnnxModelStatus,
 } from '../../../api/client'
@@ -51,7 +52,9 @@ import {
   annotationDraftErrors,
   backfillBlocker,
   contentRatingBackfillBlocker,
-  changeComfyuiConnection,
+  ANNOTATION_PROFILES,
+  changeOverrideConnection,
+  type AnnotationProfileName,
   connectionCallsRows,
   diffAnnotationDraft,
   downloadPercent,
@@ -66,6 +69,7 @@ import {
   type AnnotationPurpose,
 } from '../annotationSettings'
 import { connectionDisplayName } from '../llmConnections'
+import { defaultTargetFor, targetSummary } from '../llmTargets'
 import { ANNOTATION_SETTINGS_QUERY_KEY, LLM_CONNECTIONS_QUERY_KEY } from '../queryKeys'
 import { settingsPagePath } from '../settingsPages'
 import { SettingsPageFrame } from '../SettingsPageFrame'
@@ -140,6 +144,7 @@ export function AnnotationSettingsPage() {
         <AnnotationSettingsBody
           data={data}
           connections={connections}
+          defaults={connectionsQuery.data!.defaults}
           saved={saved}
           values={draft.values}
           draft={draft}
@@ -152,12 +157,13 @@ export function AnnotationSettingsPage() {
 interface BodyProps {
   data: AnnotationSettingsResponse
   connections: LlmConnectionView[]
+  defaults: LlmDefaultsView
   saved: AnnotationDraft
   values: AnnotationDraft
   draft: SettingsDraft<AnnotationDraft>
 }
 
-function AnnotationSettingsBody({ data, connections, saved, values, draft }: BodyProps) {
+function AnnotationSettingsBody({ data, connections, defaults, saved, values, draft }: BodyProps) {
   const { t } = useI18n()
   const m = t.settings.annotation
   const { toast } = useSettingsShell()
@@ -327,6 +333,7 @@ function AnnotationSettingsBody({ data, connections, saved, values, draft }: Bod
           saved={saved}
           errors={cellErrors}
           connections={connections}
+          defaults={defaults}
           disabled={disabled}
           onChange={(key, value) => draft.set(key, value)}
         />
@@ -565,24 +572,26 @@ interface UsageTableProps {
   saved: AnnotationDraft
   errors: AnnotationFormErrors
   connections: readonly LlmConnectionView[]
+  defaults: LlmDefaultsView
   disabled: boolean
-  onChange: <K extends 'default' | 'comfyui'>(key: K, value: AnnotationDraft[K]) => void
+  onChange: <K extends AnnotationProfileName>(key: K, value: AnnotationDraft[K]) => void
 }
 
 /**
- * 行がタイトル(LLM)とタグ(VLM)、列が「既定」と「ComfyUI の画像」の表。表の幅が十分なときは
- * CSS grid で表の形に並べ(各要素の位置は `--row` / `--col` で指定)、狭いときは列ごとに縦に積む。
- * 幅は画面ではなく表の入れ物の幅で判定する(コンテナクエリ。設定ページの本文は最大 760px なので)。
+ * 行がタイトル(LLM)とタグ(VLM)、列が「外部の画像」と「内部の画像」(ADR-0063)の表。マスごとに
+ * 上書きの接続先とモデル名を選び、「既定の送り先」なら区分に合う既定の送り先を使う。表の幅が十分な
+ * ときは CSS grid で表の形に並べ(各要素の位置は `--row` / `--col` で指定)、狭いときは列ごとに縦に
+ * 積む。幅は画面ではなく表の入れ物の幅で判定する(コンテナクエリ。設定ページの本文は最大 760px なので)。
  * DOM は列ごとの順(見出し → LLM → VLM)にしてあるので、積んだときも読む順が崩れない。
  */
-function UsageTable({ values, saved, errors, connections, disabled, onChange }: UsageTableProps) {
+function UsageTable({ values, saved, errors, connections, defaults, disabled, onChange }: UsageTableProps) {
   const { t } = useI18n()
   const m = t.settings.annotation.usage
   const cm = t.settings.llmConnections
   const purposeLabel: Record<AnnotationPurpose, string> = { llm: m.llmLabel, vlm: m.vlmLabel }
-  const nameOf = (id: string) => {
-    const view = connections.find((c) => c.id === id)
-    return view ? connectionDisplayName(view, cm.builtinName) : id
+  const columnLabel: Record<AnnotationProfileName, { title: string; help: string }> = {
+    external: { title: m.externalLabel, help: m.externalHelp },
+    local: { title: m.localLabel, help: m.localHelp },
   }
   const place = (row: number, col: number) => ({ '--row': row, '--col': col }) as CSSProperties
   const modelError = fmt(m.modelInvalid, { max: MODEL_NAME_MAX })
@@ -603,150 +612,95 @@ function UsageTable({ values, saved, errors, connections, disabled, onChange }: 
           </div>
         ))}
 
-        {/* 既定 */}
-        <div className={own.usageColumn} role="group" aria-labelledby="gakei-annotation-usage-default">
-          <div className={own.usageColumnHeader} style={place(1, 2)}>
-            <span id="gakei-annotation-usage-default" className={own.usageColumnTitle}>
-              {m.defaultLabel}
-            </span>
-            <span className={styles.helpText}>{m.defaultHelp}</span>
-          </div>
-          {ANNOTATION_PURPOSES.map((purpose, i) => {
-            const cell = values.default[purpose]
-            const id = `gakei-annotation-default-${purpose}`
-            const modelInvalid = Boolean(errors[`default_${purpose}_model`])
-            return (
-              <fieldset
-                key={purpose}
-                className={own.usageCell}
-                style={place(i + 2, 2)}
-                data-changed={isUsageCellChanged(values, saved, 'default', purpose) ? 'true' : undefined}
-              >
-                <legend className={own.usageCellLegend}>{purposeLabel[purpose]}</legend>
-                <div className={styles.field}>
-                  <label htmlFor={`${id}-connection`} className={own.cellLabel}>
-                    {m.connectionLabel}
-                  </label>
-                  <select
-                    id={`${id}-connection`}
-                    className={`${styles.select} ${own.cellControl}`}
-                    value={cell.connection_id}
-                    disabled={disabled}
-                    aria-invalid={Boolean(errors[`default_${purpose}_connection`])}
-                    onChange={(e) =>
-                      onChange('default', {
-                        ...values.default,
-                        [purpose]: { ...cell, connection_id: e.target.value },
-                      })
-                    }
+        {ANNOTATION_PROFILES.map((profile, col) => {
+          const fallback = defaultTargetFor(defaults, profile)
+          const fallbackText = fmt(t.settings.llmDefaults.targetValue, targetSummary(fallback, connections, cm.builtinName))
+          return (
+            <div
+              key={profile}
+              className={own.usageColumn}
+              role="group"
+              aria-labelledby={`gakei-annotation-usage-${profile}`}
+            >
+              <div className={own.usageColumnHeader} style={place(1, col + 2)}>
+                <span id={`gakei-annotation-usage-${profile}`} className={own.usageColumnTitle}>
+                  {columnLabel[profile].title}
+                </span>
+                <span className={styles.helpText}>{columnLabel[profile].help}</span>
+              </div>
+              {ANNOTATION_PURPOSES.map((purpose, i) => {
+                const cell = values[profile][purpose]
+                const id = `gakei-annotation-${profile}-${purpose}`
+                const modelInvalid = Boolean(errors[`${profile}_${purpose}_model`])
+                return (
+                  <fieldset
+                    key={purpose}
+                    className={own.usageCell}
+                    style={place(i + 2, col + 2)}
+                    data-changed={isUsageCellChanged(values, saved, profile, purpose) ? 'true' : undefined}
                   >
-                    {/* 一覧に無い接続先を指したままの下書き(ほかの画面で消された等)も値として持てるように。 */}
-                    {!known(cell.connection_id) && <option value={cell.connection_id} />}
-                    {connectionOptions}
-                  </select>
-                  {errors[`default_${purpose}_connection`] && <p className={styles.errorText}>{m.connectionInvalid}</p>}
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor={`${id}-model`} className={own.cellLabel}>
-                    {m.modelLabel}
-                  </label>
-                  <input
-                    id={`${id}-model`}
-                    type="text"
-                    className={`${styles.input} ${styles.mono} ${own.cellControl}`}
-                    value={cell.model}
-                    disabled={disabled}
-                    aria-invalid={modelInvalid ? true : undefined}
-                    onChange={(e) =>
-                      onChange('default', { ...values.default, [purpose]: { ...cell, model: e.target.value } })
-                    }
-                  />
-                  {modelInvalid && <p className={styles.errorText}>{modelError}</p>}
-                  {purpose === 'vlm' && <p className={styles.helpText}>{m.vlmModelHelp}</p>}
-                </div>
-              </fieldset>
-            )
-          })}
-        </div>
-
-        {/* ComfyUI の画像 */}
-        <div className={own.usageColumn} role="group" aria-labelledby="gakei-annotation-usage-comfyui">
-          <div className={own.usageColumnHeader} style={place(1, 3)}>
-            <span id="gakei-annotation-usage-comfyui" className={own.usageColumnTitle}>
-              {m.comfyuiLabel}
-            </span>
-            <span className={styles.helpText}>{m.comfyuiHelp}</span>
-          </div>
-          {ANNOTATION_PURPOSES.map((purpose, i) => {
-            const cell = values.comfyui[purpose]
-            const fallback = values.default[purpose]
-            const id = `gakei-annotation-comfyui-${purpose}`
-            const modelInvalid = Boolean(errors[`comfyui_${purpose}_model`])
-            return (
-              <fieldset
-                key={purpose}
-                className={own.usageCell}
-                style={place(i + 2, 3)}
-                data-changed={isUsageCellChanged(values, saved, 'comfyui', purpose) ? 'true' : undefined}
-              >
-                <legend className={own.usageCellLegend}>{purposeLabel[purpose]}</legend>
-                <div className={styles.field}>
-                  <label htmlFor={`${id}-connection`} className={own.cellLabel}>
-                    {m.connectionLabel}
-                  </label>
-                  <select
-                    id={`${id}-connection`}
-                    className={`${styles.select} ${own.cellControl}`}
-                    value={cell.connection_id ?? ''}
-                    disabled={disabled}
-                    aria-invalid={Boolean(errors[`comfyui_${purpose}_connection`])}
-                    onChange={(e) => {
-                      const value = e.target.value === '' ? null : e.target.value
-                      onChange('comfyui', {
-                        ...values.comfyui,
-                        [purpose]: changeComfyuiConnection(cell, value, fallback),
-                      })
-                    }}
-                  >
-                    {/* 空文字の値が「既定と同じ」(接続先の id は空にならない)。 */}
-                    <option value="">{m.sameAsDefault}</option>
-                    {cell.connection_id !== null && !known(cell.connection_id) && <option value={cell.connection_id} />}
-                    {connectionOptions}
-                  </select>
-                  {errors[`comfyui_${purpose}_connection`] && <p className={styles.errorText}>{m.connectionInvalid}</p>}
-                </div>
-                {cell.connection_id === null ? (
-                  // 「既定と同じ」ではモデル名の欄を隠し、いま既定で使う組を示す。
-                  <p className={own.inheritSummary}>
-                    {fmt(m.sameAsDefaultSummary, {
-                      connection: nameOf(fallback.connection_id),
-                      model: fallback.model.trim(),
-                    })}
-                  </p>
-                ) : (
-                  <div className={styles.field}>
-                    <label htmlFor={`${id}-model`} className={own.cellLabel}>
-                      {m.modelLabel}
-                    </label>
-                    <input
-                      id={`${id}-model`}
-                      type="text"
-                      className={`${styles.input} ${styles.mono} ${own.cellControl}`}
-                      value={cell.model}
-                      disabled={disabled}
-                      aria-invalid={modelInvalid ? true : undefined}
-                      onChange={(e) =>
-                        onChange('comfyui', { ...values.comfyui, [purpose]: { ...cell, model: e.target.value } })
-                      }
-                    />
-                    {modelInvalid && <p className={styles.errorText}>{modelError}</p>}
-                    {purpose === 'vlm' && <p className={styles.helpText}>{m.vlmModelHelp}</p>}
-                  </div>
-                )}
-              </fieldset>
-            )
-          })}
-        </div>
+                    <legend className={own.usageCellLegend}>{purposeLabel[purpose]}</legend>
+                    <div className={styles.field}>
+                      <label htmlFor={`${id}-connection`} className={own.cellLabel}>
+                        {m.connectionLabel}
+                      </label>
+                      <select
+                        id={`${id}-connection`}
+                        className={`${styles.select} ${own.cellControl}`}
+                        value={cell.connection_id ?? ''}
+                        disabled={disabled}
+                        aria-invalid={Boolean(errors[`${profile}_${purpose}_connection`])}
+                        onChange={(e) => {
+                          const value = e.target.value === '' ? null : e.target.value
+                          onChange(profile, {
+                            ...values[profile],
+                            [purpose]: changeOverrideConnection(cell, value, fallback.model),
+                          })
+                        }}
+                      >
+                        {/* 空文字の値が「既定の送り先」(接続先の id は空にならない)。 */}
+                        <option value="">{m.useDefault}</option>
+                        {cell.connection_id !== null && !known(cell.connection_id) && (
+                          <option value={cell.connection_id} />
+                        )}
+                        {connectionOptions}
+                      </select>
+                      {errors[`${profile}_${purpose}_connection`] && (
+                        <p className={styles.errorText}>{m.connectionInvalid}</p>
+                      )}
+                    </div>
+                    {cell.connection_id === null ? (
+                      // 「既定の送り先」ではモデル名の欄を隠し、いま使う組を示す。
+                      <p className={own.inheritSummary}>{fallbackText}</p>
+                    ) : (
+                      <div className={styles.field}>
+                        <label htmlFor={`${id}-model`} className={own.cellLabel}>
+                          {m.modelLabel}
+                        </label>
+                        <input
+                          id={`${id}-model`}
+                          type="text"
+                          className={`${styles.input} ${styles.mono} ${own.cellControl}`}
+                          value={cell.model}
+                          disabled={disabled}
+                          aria-invalid={modelInvalid ? true : undefined}
+                          onChange={(e) =>
+                            onChange(profile, {
+                              ...values[profile],
+                              [purpose]: { ...cell, model: e.target.value },
+                            })
+                          }
+                        />
+                        {modelInvalid && <p className={styles.errorText}>{modelError}</p>}
+                        {purpose === 'vlm' && <p className={styles.helpText}>{m.vlmModelHelp}</p>}
+                      </div>
+                    )}
+                  </fieldset>
+                )
+              })}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
