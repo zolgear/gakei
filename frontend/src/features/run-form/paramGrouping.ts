@@ -5,8 +5,11 @@
  */
 import type { ParamDef } from '../../api/client'
 
-/** 主に出すパラメーター名(この順で並べる)。それ以外は「その他」の `<details>` に畳む。 */
-export const PRIMARY_PARAMS = ['quality', 'n', 'output_format', 'background']
+/**
+ * 主に出すパラメーター名(この順で並べる)。それ以外は「その他」の `<details>` に畳む。
+ * `complexity`(計画の深さ)は GPT Image 2.6 だけにあり、結果を大きく変えるので主に出す。
+ */
+export const PRIMARY_PARAMS = ['quality', 'n', 'output_format', 'background', 'complexity']
 
 export interface GroupedParams {
   primary: ParamDef[]
