@@ -5,6 +5,7 @@
  */
 import { useQueries } from '@tanstack/react-query'
 import { getAsset, type AssetDetail } from '../../api/client'
+import { isAnimatedAsset } from './animatedInputs'
 import { findBlockedInputAssetIds, findDeletedInputAssetIds } from './deletedInputs'
 import type { RunInputItem } from './types'
 
@@ -12,11 +13,17 @@ import type { RunInputItem } from './types'
  * 削除済みの入力と、入力に使えない(画像なし、または Mod の判定で deny。ADR-0051 4章)入力の
  * Asset の id を、1回の取得からまとめて返す。
  */
-export function useUnusableInputAssetIds(inputs: RunInputItem[]): { deleted: string[]; blocked: string[] } {
+export function useUnusableInputAssetIds(inputs: RunInputItem[]): {
+  deleted: string[]
+  blocked: string[]
+  animated: string[]
+} {
   const details = useInputAssetDetails(inputs)
   return {
     deleted: findDeletedInputAssetIds(inputs, details),
     blocked: findBlockedInputAssetIds(inputs, details),
+    // ADR-0061 6章: アニメーション GIF は入力に使えない。
+    animated: inputs.filter((i) => isAnimatedAsset(details.get(i.assetId))).map((i) => i.assetId),
   }
 }
 

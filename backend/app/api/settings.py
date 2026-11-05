@@ -84,6 +84,7 @@ from app.domain.schemas import (
     SdWebuiTimeoutSetting,
     ShareSettingsResponse,
     ShareSettingsUpdateRequest,
+    SvgAuthorModelSetting,
 )
 from app.domain.url_origin import same_origin
 from app.embedding.catalog import CLIP_MODELS, ClipModelDownloader, onnx_model_key
@@ -370,6 +371,7 @@ def update_provider_localities(
 
 def _general_settings_response(db: Session, settings: Settings) -> GeneralSettingsResponse:
     moderation_value, moderation_source = general_settings.resolve_moderation(db, settings)
+    svg_author_model, svg_author_source = general_settings.resolve_svg_author_model(db)
     timeout_value, timeout_source = general_settings.resolve_timeout_seconds(db, settings)
     sdwebui_timeout_value, sdwebui_timeout_source = (
         general_settings.resolve_sdwebui_timeout_seconds(db, settings)
@@ -389,6 +391,11 @@ def _general_settings_response(db: Session, settings: Settings) -> GeneralSettin
             value=sdwebui_timeout_value,
             source=sdwebui_timeout_source,
             default=general_settings.default_sdwebui_timeout_seconds(settings),
+        ),
+        svg_author_model=SvgAuthorModelSetting(
+            value=svg_author_model,
+            source=svg_author_source,
+            default=general_settings.DEFAULT_SVG_AUTHOR_MODEL,
         ),
     )
 
@@ -419,6 +426,8 @@ def update_general_settings(
             general_settings.validate_timeout_seconds(body.comfyui_timeout_seconds)
         if "sdwebui_timeout_seconds" in fields_set:
             general_settings.validate_sdwebui_timeout_seconds(body.sdwebui_timeout_seconds)
+        if "svg_author_model" in fields_set:
+            general_settings.validate_svg_author_model(body.svg_author_model)
     except general_settings.GeneralSettingsValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -428,6 +437,8 @@ def update_general_settings(
         general_settings.save_timeout_seconds(db, body.comfyui_timeout_seconds)
     if "sdwebui_timeout_seconds" in fields_set:
         general_settings.save_sdwebui_timeout_seconds(db, body.sdwebui_timeout_seconds)
+    if "svg_author_model" in fields_set:
+        general_settings.save_svg_author_model(db, body.svg_author_model)
     return _general_settings_response(db, settings)
 
 

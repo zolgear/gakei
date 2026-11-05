@@ -18,7 +18,7 @@ import { fmt, useI18n } from '../../i18n'
 import type { RegionBox } from '../../api/client'
 import type { EditInputsLogic } from '../run-form/useEditInputsLogic'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
-import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
+import { AddIcon, EraserIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
 import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
 import { LayoutSketchPreview } from '../regions/LayoutSketchPreview'
@@ -95,7 +95,7 @@ export function InputChipsRow({
   const { t } = useI18n()
   const c = t.workspace.inputChips
   const [isDragOver, setIsDragOver] = useState(false)
-  const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
+  const { images, maskInput, markupInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
   // 1枚目の上に四角を描けるモデルか(入力画像を受けないモデルでは白紙だけ)。
   const regionsOnPrimary = regions.supported && regions.primaryUsable !== false
 
@@ -165,6 +165,16 @@ export function InputChipsRow({
                       alt=""
                       draggable={false}
                     />
+                    {/* スケッチの線(1枚目に重ねる透過の PNG)。下地と同じ切り抜きで重ねる。 */}
+                    {isPrimary && markupInput && !isWithheld && (
+                      <AssetImage
+                        className={styles.markupOverlay}
+                        src={assetUrl(markupInput.assetId, 'thumb')}
+                        style={focalStyle(detail?.focal_point)}
+                        alt=""
+                        draggable={false}
+                      />
+                    )}
                   </button>
                   <span className={styles.indexTag} title={isPrimary ? c.primaryTitle : undefined}>
                     {index + 1}
@@ -317,6 +327,18 @@ export function InputChipsRow({
                       }
                     >
                       <ArrangeIcon size={12} />
+                    </button>
+                  )}
+
+                  {isPrimary && markupInput && (
+                    <button
+                      type="button"
+                      className={styles.iconButton}
+                      aria-label={c.removeSketchLines}
+                      title={c.removeSketchLines}
+                      onClick={logic.handleRemoveMarkup}
+                    >
+                      <EraserIcon />
                     </button>
                   )}
 

@@ -1,4 +1,4 @@
-"""OpenAI gpt-image-2.5 系の Standard 料金表(参考価格の見積もり用)。
+"""OpenAI gpt-image-2.5 / 2.6 系の Standard 料金表(参考価格の見積もり用)。
 
 OpenAI 料金ページ(https://developers.openai.com/api/docs/pricing、2026-09-22 確認)の
 Standard 価格を USD / 1M トークンで保持する。サイズ×画質ごとの出力トークン数は公開されて
@@ -22,6 +22,13 @@ class UnitPrices:
 
 
 UNIT_PRICES: dict[str, UnitPrices] = {
+    # 2.6 の単価は 2.5 と同じ(モデルのページ、2026-11-05 確認)。
+    "gpt-image-2.6-sunburst": UnitPrices(
+        text_input=5.00, cached_input=1.25, image_input=8.00, image_output=30.00
+    ),
+    "gpt-image-2.6-flare": UnitPrices(
+        text_input=5.00, cached_input=1.25, image_input=8.00, image_output=30.00
+    ),
     "gpt-image-2.5-sunburst": UnitPrices(
         text_input=5.00, cached_input=1.25, image_input=8.00, image_output=30.00
     ),
@@ -31,6 +38,29 @@ UNIT_PRICES: dict[str, UnitPrices] = {
     "gpt-image-2": UnitPrices(
         text_input=5.00, cached_input=1.25, image_input=8.00, image_output=30.00
     ),
+}
+
+
+# SVG を書くテキストのモデルの単価(ADR-0062 5章。料金ページ、2026-11-05 確認)。`svg_usage` の
+# 入力と出力(思考のトークンを含む)に掛ける。
+@dataclass(frozen=True)
+class TextUnitPrices:
+    """USD / 1M トークンの単価。"""
+
+    input: float
+    cached_input: float
+    output: float
+
+
+SVG_AUTHOR_PRICES: dict[str, TextUnitPrices] = {
+    "gpt-6-luna": TextUnitPrices(input=0.10, cached_input=0.01, output=0.50),
+    "gpt-6-sol": TextUnitPrices(input=2.00, cached_input=0.20, output=10.00),
+    "gpt-6-astra": TextUnitPrices(input=10.00, cached_input=1.00, output=50.00),
+    "gpt-6.1-terra": TextUnitPrices(input=1.00, cached_input=0.05, output=5.00),
+    "gpt-6.1-sol": TextUnitPrices(input=2.00, cached_input=0.10, output=10.00),
+    "gpt-5.6-luna": TextUnitPrices(input=0.20, cached_input=0.02, output=1.20),
+    "gpt-5.6-terra": TextUnitPrices(input=2.00, cached_input=0.20, output=12.00),
+    "gpt-5.6-sol": TextUnitPrices(input=4.00, cached_input=0.40, output=20.00),
 }
 
 PRICING_SOURCE_URL = "https://developers.openai.com/api/docs/pricing"

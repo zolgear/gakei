@@ -454,7 +454,8 @@ def test_capabilities_api_reports_regions_for_comfyui_and_openai(
 
     fake = next(p for p in body["providers"] if p["provider"] == "fake")
     edit = next(o for o in fake["models"][0]["operations"] if o["operation"] == "edit")
-    assert edit["regions_delivery"] == "image_and_text"
+    # 先頭のモデルは GPT Image 2.6。2.5 / 2.6 の Edit は印(markup)で送る(ADR-0053 5章)。
+    assert edit["regions_delivery"] == "markup"
     assert edit["regions_kinds"] == ["change", "add", "keep", "remove", "move"]
     assert edit["regions_reference_images"] is True
     assert edit["regions_requires_input_image"] is True

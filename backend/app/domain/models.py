@@ -125,6 +125,8 @@ class RunInputRole(enum.StrEnum):
     IMAGE = "image"
     MASK = "mask"
     REFERENCE = "reference"
+    # 領域の四角を描いた透過の印(ADR-0053 5章、2026-11-05 追記)。1枚目の入力に重ねて送る。
+    MARKUP = "markup"
 
 
 class AppUser(Base):

@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-import io
 import logging
 import uuid
 from collections.abc import Iterable
@@ -22,6 +21,7 @@ from PIL import UnidentifiedImageError as PillowUnidentifiedImageError
 from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
+from app.domain import derivatives
 from app.domain.models import Asset, AssetFocalPoint, AssetKind
 from app.domain.schemas import FocalPoint
 from app.domain.storage import AssetStore
@@ -44,7 +44,7 @@ def detect_from_bytes(data: bytes) -> detect.FocalPoint | None:
     を確かめてある)なので、ここでは寸法を確かめない。
     """
     try:
-        with Image.open(io.BytesIO(data)) as image:
+        with derivatives.open_raster(data) as image:
             image.load()
             return detect.detect_focal_point(image)
     except (PillowUnidentifiedImageError, OSError, Image.DecompressionBombError, ValueError):

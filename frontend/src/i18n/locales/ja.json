@@ -356,7 +356,11 @@
     },
     "openai": {
       "connectionHeading": "接続",
-      "generationHeading": "生成"
+      "generationHeading": "生成",
+      "svgAuthorModel": {
+        "label": "SVG を書くモデル",
+        "help": "SVG の出力(GPT Image 2.6)で、参照の画像から SVG を書くテキストのモデル。空欄なら既定のモデルを使います。料金は画像の分に、このモデルのトークンの分が加わります。"
+      }
     },
     "profile": {
       "upload": "画像をアップロード",
@@ -1799,6 +1803,7 @@
       "removeMask": "マスクを外す",
       "showInPreview": "プレビューに表示",
       "drawOver": "この画像の上に描く",
+      "removeSketchLines": "スケッチの線を外す",
       "removeInput": "入力から外す",
       "countTitle": "入力画像の枚数(最大{max}枚)",
       "addAria": "画像を追加",
@@ -1911,6 +1916,8 @@
       "reasonSizeAuto": "サイズが「自動」のため計算できません",
       "reasonSizeInvalid": "サイズが条件外です",
       "reasonUnknownModel": "このモデルの単価が未登録です",
+      "reasonAnimatedOutput": "GIF の料金は見積もれません(実行後の記録で確かめられます)",
+      "reasonSvgOutput": "SVG の料金は見積もれません(SVG を書くモデルの分が加わります。実行後の記録で確かめられます)",
       "repeatLine": "繰り返し {count} 回分(1回 {amount})"
     }
   },
@@ -2089,7 +2096,9 @@
     "group": {
       "label": "グループ",
       "none": "なし"
-    }
+    },
+    "gifNotInput": "GIF と SVG の画像は入力に使えません",
+    "gifInputsPresent": "入力に GIF か SVG の画像があります。外してください"
   },
   "sketch": {
     "title": "スケッチを描く",
@@ -2124,7 +2133,9 @@
     "canvasInitError": "Canvas の初期化に失敗しました",
     "exportCanvasInitError": "書き出し用 Canvas の初期化に失敗しました",
     "pngExportError": "PNG の書き出しに失敗しました",
-    "recommendedPrompt": "この下描きを写実的な画像にしてください。レイアウト、比率、パースは正確に保ってください。下描きの意図に合う現実的な素材と光を選んでください。新しい要素や文字は加えないでください。"
+    "recommendedPrompt": "この下描きを写実的な画像にしてください。レイアウト、比率、パースは正確に保ってください。下描きの意図に合う現実的な素材と光を選んでください。新しい要素や文字は加えないでください。",
+    "markupNote": "線だけを印として送ります",
+    "recommendedMarkupPrompt": "描いた印の場所だけを変えてください: (ここに変えたい内容を書く)。それ以外の部分はそのまま保ってください。印そのものは結果に描かないでください。"
   },
   "composite": {
     "title": "入力画像の配置",
@@ -3685,7 +3696,8 @@
       "roles": {
         "image": "入力",
         "mask": "マスク",
-        "reference": "参照"
+        "reference": "参照",
+        "markup": "スケッチ"
       },
       "none": "(なし)",
       "unspecified": "(未指定)",
@@ -3932,7 +3944,9 @@
       "imageAndText": "OpenAI には、四角を描いた画像を入力に足し、四角ごとの指示を文にしてプロンプトの後ろに足して送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
       "imageAndTextBlank": "OpenAI には、白紙に四角を描いた配置図を入力に足し、四角ごとの指示を文にしてプロンプトの後ろに足して、編集(Edit)で送ります。四角を学んだモデルではないため、指示どおりにならないことがあります。",
       "countsTowardLimit": "四角を描いた画像と参照画像も、入力画像の枚数({max} 枚まで)に数えます。",
-      "comfyuiBboxes": "ComfyUI には、四角をワークフローの Create Bounding Boxes に差し込んで送ります。指示(無ければ名前)を四角の説明に、描く文字を文字の四角にします。選べる種類は「変える」「足す」だけです。"
+      "comfyuiBboxes": "ComfyUI には、四角をワークフローの Create Bounding Boxes に差し込んで送ります。指示(無ければ名前)を四角の説明に、描く文字を文字の四角にします。選べる種類は「変える」「足す」だけです。",
+      "markup": "OpenAI には、四角を描いた透過の印(マークアップ)を1枚目の画像に重ねて送り、四角ごとの指示を文にしてプロンプトの後ろに足します。マスクを使うときは、四角を描いた画像を入力に足して送ります。",
+      "referencesCountTowardLimit": "参照画像も、入力画像の枚数({max} 枚まで)に数えます。"
     },
     "detection": {
       "heading": "検出",
@@ -3987,7 +4001,8 @@
       "overlayImage": "送った四角の画像",
       "appendedToggle": "足した文(領域の指示)",
       "deliveryComfyui": "四角を ComfyUI の Create Bounding Boxes に差し込んで送りました。",
-      "frameOutput": "四角は白紙に描いたので、位置は出力の大きさに対する割合です。"
+      "frameOutput": "四角は白紙に描いたので、位置は出力の大きさに対する割合です。",
+      "deliveryMarkup": "四角を透過の印(マークアップ)にして1枚目の画像に重ね、指示をプロンプトの後ろに足して送りました。"
     },
     "assist": {
       "heading": "領域と検出の候補",

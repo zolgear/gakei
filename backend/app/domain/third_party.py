@@ -46,9 +46,18 @@ def _license_from_classifiers(dist: Distribution) -> str | None:
     return None
 
 
+# メタデータにライセンスの記載が無い依存の、同梱の LICENSE で確かめた種類(全文は同梱のものを出す)。
+_LICENSE_WITHOUT_METADATA = {
+    # ADR-0062: SVG の描画。wheel の LICENSE は MIT。
+    "resvg_py": "MIT",
+    "resvg-py": "MIT",
+}
+
+
 def _license_of(dist: Distribution) -> str:
     """優先順: `License-Expression` → `License`(全文が入っていそうなものは無視) →
-    `Classifier: License ::` → `"UNKNOWN"`(この生成物は英語のみ)。
+    `Classifier: License ::` → 同梱の LICENSE で確かめた種類 → `"UNKNOWN"`(この生成物は
+    英語のみ)。
     """
     expression = dist.metadata.get("License-Expression")
     if expression and expression.strip():
@@ -67,7 +76,7 @@ def _license_of(dist: Distribution) -> str:
     if from_classifier:
         return from_classifier
 
-    return "UNKNOWN"
+    return _LICENSE_WITHOUT_METADATA.get(dist.metadata.get("Name") or "", "UNKNOWN")
 
 
 def _url_of(dist: Distribution) -> str | None:

@@ -100,7 +100,7 @@ class _Model(BaseModel):
 
 class ManifestRunInput(_Model):
     asset_id: uuid.UUID
-    role: Literal["image", "mask", "reference"]
+    role: Literal["image", "mask", "reference", "markup"]
     position: int = Field(ge=0, le=1000)
 
 
@@ -120,7 +120,7 @@ class ManifestAsset(_Model):
     id: uuid.UUID
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     kind: Literal["upload", "generated", "mask", "sketch", "composite", "regions"]
-    mime: Literal["image/png", "image/jpeg", "image/webp"]
+    mime: Literal["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"]
     width: int = Field(ge=1)
     height: int = Field(ge=1)
     bytes: int = Field(ge=1)

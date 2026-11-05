@@ -13,7 +13,7 @@ import { assetUrl } from '../../api/assetUrl'
 import { AssetImage } from '../mods/AssetImage'
 import { fmt, useI18n } from '../../i18n'
 import { isRelevantDragTypes } from '../run-form/dragDropAssets'
-import { AddIcon, PencilIcon, RemoveIcon } from './inputIcons'
+import { AddIcon, EraserIcon, PencilIcon, RemoveIcon } from './inputIcons'
 import { ArrangeIcon } from '../composite/compositeIcons'
 import { EyeIcon, RegionsIcon } from '../regions/regionIcons'
 import { LayoutSketchPreview } from '../regions/LayoutSketchPreview'
@@ -55,7 +55,7 @@ export function InputImageTiles({
   const c = t.workspace.inputChips
   const it = t.workspace.inputTiles
   const [isDragOver, setIsDragOver] = useState(false)
-  const { images, maskInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
+  const { images, maskInput, markupInput, detailsByAssetId, notFoundAssetIds, deletedAssetIds, blockedAssetIds } = logic
 
   // 1枚目の上に四角を描けるモデルか(入力画像を受けないモデルでは白紙だけ)。
   const regionsOnPrimary = regions.supported && regions.primaryUsable !== false
@@ -149,6 +149,16 @@ export function InputImageTiles({
                   alt=""
                   draggable={false}
                 />
+                {/* スケッチの線(1枚目に重ねる透過の PNG)。下地と同じ切り抜きで重ねる。 */}
+                {isPrimary && markupInput && !isWithheld && (
+                  <AssetImage
+                    className={styles.markupOverlay}
+                    src={assetUrl(markupInput.assetId, 'thumb')}
+                    style={focalStyle(detail?.focal_point)}
+                    alt=""
+                    draggable={false}
+                  />
+                )}
               </button>
 
               <span className={styles.indexBadge} title={isPrimary ? c.primaryTitle : undefined}>
@@ -243,6 +253,18 @@ export function InputImageTiles({
                     onClick={onOpenMaskEditor}
                   >
                     <PencilIcon />
+                  </button>
+                )}
+
+                {isPrimary && markupInput && (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    aria-label={c.removeSketchLines}
+                    title={c.removeSketchLines}
+                    onClick={logic.handleRemoveMarkup}
+                  >
+                    <EraserIcon />
                   </button>
                 )}
 

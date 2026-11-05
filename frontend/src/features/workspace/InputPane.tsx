@@ -347,6 +347,8 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   const nRaw = form.activeRawParams.n
   const priceN = nRaw && nRaw !== UNSPECIFIED && nRaw !== '' ? Number(nRaw) : 1
   const priceSize = sizeToParam(form.sizeState) ?? 'auto'
+  const formatRaw = form.activeRawParams.output_format
+  const priceOutputFormat = formatRaw && formatRaw !== UNSPECIFIED ? formatRaw : undefined
 
   // 参考価格の入力画像トークン計算用: role=image の入力を position 順に並べた asset id。
   const inputAssetIds = form.inputs
@@ -402,6 +404,19 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
     }
   }
 
+  // 1枚目の上描きは、印(markup)を受けるモデルなら線だけを印で送る(ADR-0010、2026-11-05 追記)。
+  const sketchAsMarkup =
+    sketchEditorState?.mode === 'over' &&
+    form.markupSupported &&
+    editLogic.images[0]?.inputId === sketchEditorState.inputId
+
+  function handleSketchMarkupSave(asset: AssetDetail, options: SketchSaveOptions) {
+    editLogic.saveSketchMarkup(asset)
+    if (options.insertRecommendedPrompt) {
+      form.insertPrompt(recommendedSketchPrompt('markup'), 'insert', readPromptCursorPos())
+    }
+  }
+
   const promptValid = form.promptLength > 0 && form.promptLength <= form.promptMax
 
   const blockReasons: string[] = []
@@ -414,6 +429,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
   if (form.incompatibleErrors.length > 0) blockReasons.push(...form.incompatibleErrors)
   if (form.hasDeletedInputs) blockReasons.push(ip.deletedInputsPresent)
   if (form.hasBlockedInputs) blockReasons.push(t.mods.inputsBlockedPresent)
+  if (form.hasAnimatedInputs) blockReasons.push(t.runForm.gifInputsPresent)
   // IP の利用の申告(ADR-0059 5章)。用途を選んでいない・使えない理由。
   if (form.ipDeclaration.blockReason) blockReasons.push(form.ipDeclaration.blockReason)
   if (form.inputsBlockReason) blockReasons.push(form.inputsBlockReason)
@@ -609,6 +625,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
         operation: form.operation,
         size: priceSize,
         quality: priceQuality,
+        outputFormat: priceOutputFormat,
         n: priceN,
         promptLength: form.promptLength,
         inputAssetIds,
@@ -647,7 +664,7 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
 
   const paramFields = (
     <PrimaryParamFields
-      sizeConstraints={form.providerEntry?.size}
+      sizeConstraints={form.sizeConstraints}
       sizeState={form.sizeState}
       onSizeChange={form.setSizeState}
       defs={form.defs}
@@ -752,7 +769,14 @@ export function InputPane({ onRunCreated, onExposeInsertPrompt, resetAt, onPrevi
       {sketchEditorState?.mode === 'over' && editLogic.sketchOverAssetLoading && (
         <SketchLoadingDialog onCancel={editLogic.closeSketchEditor} />
       )}
-      {sketchEditorState?.mode === 'over' && editLogic.sketchOverAsset && (
+      {sketchAsMarkup && editLogic.sketchOverAsset && (
+        <SketchEditor
+          base={{ kind: 'markup', asset: editLogic.sketchOverAsset, lines: editLogic.sketchMarkupAsset }}
+          onSave={handleSketchMarkupSave}
+          onCancel={editLogic.closeSketchEditor}
+        />
+      )}
+      {sketchEditorState?.mode === 'over' && !sketchAsMarkup && editLogic.sketchOverAsset && (
         <SketchEditor
           base={{ kind: 'asset', asset: editLogic.sketchOverAsset }}
           onSave={(asset, options) => handleSketchSave(asset, options, sketchEditorState.inputId)}

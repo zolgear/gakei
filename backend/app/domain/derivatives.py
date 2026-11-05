@@ -40,6 +40,11 @@ WEBP_QUALITY = 90
 
 
 def _resize_long_edge(image: Image.Image, long_edge: int) -> Image.Image:
+    if image.format == "GIF":
+        # ADR-0061 4章: アニメーション GIF は1コマ目(開いたままの位置)から作る。パレットの
+        # ままだと縮小が最近傍になるので、色の画像に直してから縮める。GIF は新しく受ける形式で、
+        # 既存の派生は変わらないので `DERIVED_VERSION` は上げない。
+        image = image.convert("RGBA" if image.has_transparency_data else "RGB")
     width, height = image.size
     current_long_edge = max(width, height)
     if current_long_edge <= long_edge:
@@ -82,6 +87,16 @@ def make_derived(image: Image.Image, variant: DerivedVariant) -> bytes:
     raise ValueError(f"派生ではない variant です: {variant}")
 
 
+def open_raster(data: bytes) -> Image.Image:
+    """原本を画素の画像として開く。SVG(ADR-0062)は描いた画像にする(取り込み済みの原本は
+    無害化してあるので、そのまま描く)。開けなければ Pillow と同じ例外(`ValueError` を含む)。"""
+    from app.domain import svg
+
+    if svg.looks_like_svg(data):
+        return svg.rasterize(data)
+    return Image.open(io.BytesIO(data))
+
+
 def generate_derived(
     store: AssetStore, blob_key: str, sha256: str, variants: Iterable[DerivedVariant]
 ) -> dict[DerivedVariant, bytes] | None:
@@ -99,7 +114,8 @@ def generate_derived(
     try:
         # 取り込み(`assets.ingest`)と同じく、開いた画像をそのまま縮める。原本は取り込み時に
         # 画素数の上限(`image_limits.MAX_IMAGE_PIXELS`)を確かめてあるので、ここでは確かめない。
-        with Image.open(io.BytesIO(data)) as image:
+        # SVG(ADR-0062)は描いた画像から作る。
+        with open_raster(data) as image:
             image.load()
             made = {variant: make_derived(image, variant) for variant in dict.fromkeys(variants)}
     except (PillowUnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):

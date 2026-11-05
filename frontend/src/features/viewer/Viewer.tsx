@@ -41,6 +41,7 @@ import { ExportLineageDialog } from '../lineage-transfer/ExportLineageDialog'
 import { importToastFromState } from '../lineage-transfer/lineageTransfer'
 import { SHARE_SETTINGS_QUERY_KEY } from '../settings/queryKeys'
 import { hasDenyVerdict, hasFlagVerdict, isSendBlocked, isWithheld } from '../mods/modVerdicts'
+import { isAnimatedAsset } from '../run-form/animatedInputs'
 import { VerdictBadge } from '../mods/VerdictList'
 import styles from './Viewer.module.css'
 import { focalStyle } from '../../lib/focalPoint'
@@ -173,6 +174,8 @@ export function Viewer({ assetId }: ViewerProps) {
   const withheld = isWithheld(asset)
   // 入力に使えない(画像なし、または最新の判定に deny がある)。
   const sendBlocked = isSendBlocked(asset)
+  // アニメーション GIF は入力に使えない(ADR-0061 6章)。
+  const animated = isAnimatedAsset(asset)
 
   return (
     <div className={styles.page}>
@@ -297,9 +300,15 @@ export function Viewer({ assetId }: ViewerProps) {
                   type="button"
                   className={styles.iconButton}
                   aria-label={t.viewer.useAsInput}
-                  title={sendBlocked ? t.mods.cannotUseAsInput : t.viewer.useAsInput}
+                  title={
+                    sendBlocked
+                      ? t.mods.cannotUseAsInput
+                      : animated
+                        ? t.runForm.gifNotInput
+                        : t.viewer.useAsInput
+                  }
                   onClick={() => addToInputs.request(asset.id)}
-                  disabled={Boolean(asset.deleted_at) || sendBlocked}
+                  disabled={Boolean(asset.deleted_at) || sendBlocked || animated}
                 >
                   <AddToInputIcon />
                 </button>

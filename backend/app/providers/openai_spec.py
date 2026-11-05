@@ -1,4 +1,5 @@
-"""gpt-image-2.5 系 API 仕様(2026-09-21 に OpenAI API Reference で確認済み)。
+"""gpt-image-2.5 / 2.6 系 API 仕様(2.5 は 2026-09-21、2.6 は 2026-11-05 に OpenAI API Reference
+と実機で確認済み)。
 
 `FakeProvider` と、ステップ2で実装する OpenAI 実プロバイダーの両方がこの定義を共有する。
 実装時は Microsoft Learn / OpenAI の公式ドキュメントで再確認すること(CLAUDE.md 作業ルール)。
@@ -11,6 +12,8 @@
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from app.domain import sizes
 from app.i18n import t
@@ -26,13 +29,25 @@ from app.providers.base import (
 )
 
 # モデルID一覧(表示名・説明は言語ごとに変わるので `_model_info()` で都度組み立てる)。
-_MODEL_IDS = ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2"]
+_MODEL_IDS = [
+    "gpt-image-2.6-sunburst",
+    "gpt-image-2.6-flare",
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-flare",
+    "gpt-image-2",
+]
 MODELS = list(_MODEL_IDS)
 
 
 def _model_info() -> list[tuple[str, str, str]]:
     """(モデルID, 表示名, 説明)。現在の言語で都度組み立てる(リクエストごとに変わるため)。"""
     return [
+        (
+            "gpt-image-2.6-sunburst",
+            "GPT Image 2.6 Sunburst",
+            t("openaiSpec.editingStrong"),
+        ),
+        ("gpt-image-2.6-flare", "GPT Image 2.6 Flare", t("openaiSpec.fast")),
         (
             "gpt-image-2.5-sunburst",
             "GPT Image 2.5 Sunburst",
@@ -43,12 +58,24 @@ def _model_info() -> list[tuple[str, str, str]]:
     ]
 
 
+# 2.6 は同じ画質・サイズでも出力のトークンが多く(1024x1024 の low で 2.5 の約 4.2 倍。
+# 2026-11-05 の実測)、単価は同じなので1枚あたりが高い。既定は安価な 2.5 Flare のまま。
 DEFAULT_MODEL = "gpt-image-2.5-flare"
 DEFAULT_SIZE = "1024x1024"
 
 MAX_INPUT_IMAGES = 16
 MAX_INPUT_IMAGE_BYTES = 50 * 1024 * 1024
 MAX_MASK_BYTES = 4 * 1024 * 1024
+# ADR-0061: GIF のコマ数。公式のガイドは 2〜64 と書くが、API は 16 を超えると 400 を返す
+# (2026-11-05 の実機確認)。
+GIF_FRAME_COUNT_MIN = 2
+GIF_FRAME_COUNT_MAX = 16
+# GIF の1コマの大きさ。API は全コマを少なくとも2×2のシートに並べ、シートを通常の制約で確かめる
+# ので、長辺は通常の半分、総ピクセルは通常の4分の1を上限にする。シートに収まるかは確かめない
+# (並べ方が公開されていない。ADR-0061 2章)。
+GIF_FRAME_MAX_LONG_EDGE = sizes.MAX_LONG_EDGE // 2
+GIF_FRAME_MIN_TOTAL_PIXELS = 256 * 256
+GIF_FRAME_MAX_TOTAL_PIXELS = sizes.MAX_TOTAL_PIXELS // 4
 # プロンプトの最大長は domain.sizes に集約する(プロンプトセットの検証とも共有するため)。
 PROMPT_MAX_LENGTH = sizes.PROMPT_MAX_LENGTH
 
@@ -65,7 +92,7 @@ def _quality_labels() -> dict[str, str]:
 
 
 def _output_format_labels() -> dict[str, str]:
-    return {"png": "PNG", "jpeg": "JPEG", "webp": "WebP"}
+    return {"png": "PNG", "jpeg": "JPEG", "webp": "WebP", "gif": "GIF", "svg": "SVG"}
 
 
 def _background_labels() -> dict[str, str]:
@@ -76,15 +103,63 @@ def _background_labels() -> dict[str, str]:
     }
 
 
+def _complexity_labels() -> dict[str, str]:
+    return {
+        "low": t("openaiSpec.complexityLow"),
+        "medium": t("openaiSpec.complexityMedium"),
+        "high": t("openaiSpec.complexityHigh"),
+    }
+
+
+def _supports_complexity(model: str) -> bool:
+    # 2.5 は `complexity` を 400 `invalid_value` で拒む(2026-11-05 の実機確認)。
+    return model.startswith("gpt-image-2.6")
+
+
+def _supports_gif(model: str, operation: str) -> bool:
+    # ADR-0061: 2.6 の Generate と Edit(Edit も 2026-11-05 の実機で GIF を返した)。
+    return model.startswith("gpt-image-2.6")
+
+
+def _supports_svg(model: str, operation: str) -> bool:
+    # ADR-0062: 2.6 の Generate だけ(Edit は SVG を出力も入力もできない)。2.5 は 400。
+    return model.startswith("gpt-image-2.6") and operation == "generate"
+
+
+SVG_EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
+
+
+def fill_svg_author(params: dict[str, Any], author_model: str) -> dict[str, Any]:
+    """SVG のとき、管理者設定の書き手のモデル(未設定なら組み込みの既定)を `svg_model` として
+    入れる(Run の確定で呼び、送る値として記録する。ADR-0062 2章)。"""
+    if params.get("output_format") == "svg":
+        return {**params, "svg_model": author_model}
+    return params
+
+
+def _svg_effort_labels() -> dict[str, str]:
+    return {
+        "none": t("openaiSpec.svgEffortNone"),
+        "low": t("openaiSpec.complexityLow"),
+        "medium": t("openaiSpec.complexityMedium"),
+        "high": t("openaiSpec.complexityHigh"),
+        "xhigh": t("openaiSpec.qualityXhigh"),
+        "max": t("openaiSpec.qualityMax"),
+    }
+
+
 def _quality_choices(model: str) -> list[str]:
-    if model.startswith("gpt-image-2.5"):
+    if model.startswith(("gpt-image-2.5", "gpt-image-2.6")):
         return ["auto", "low", "medium", "high", "xhigh", "max"]
     return ["auto", "low", "medium", "high"]
 
 
-def _common_params(model: str) -> list[ParamDef]:
+def _common_params(model: str, operation: str) -> list[ParamDef]:
     quality_choices = _quality_choices(model)
-    return [
+    gif = _supports_gif(model, operation)
+    svg = _supports_svg(model, operation)
+    format_choices = ["png", "jpeg", "webp"] + (["gif"] if gif else []) + (["svg"] if svg else [])
+    params = [
         ParamDef(
             name="quality",
             type="enum",
@@ -99,8 +174,8 @@ def _common_params(model: str) -> list[ParamDef]:
             name="output_format",
             type="enum",
             label=t("openaiSpec.fileFormatLabel"),
-            choices=["png", "jpeg", "webp"],
-            choice_labels=_output_format_labels(),
+            choices=format_choices,
+            choice_labels={k: v for k, v in _output_format_labels().items() if k in format_choices},
             default="png",
             form_default="png",
             description=t("openaiSpec.fileFormatDescription"),
@@ -144,10 +219,64 @@ def _common_params(model: str) -> list[ParamDef]:
             description=t("openaiSpec.previewDescription"),
         ),
     ]
+    if gif:
+        # ADR-0061 1章: GIF のときだけ使う(`conditional_params` で output_format に結び付ける)。
+        params += [
+            ParamDef(
+                name="frame_count",
+                type="int",
+                label=t("openaiSpec.frameCountLabel"),
+                minimum=GIF_FRAME_COUNT_MIN,
+                maximum=GIF_FRAME_COUNT_MAX,
+                default=9,
+                description=t("openaiSpec.frameCountDescription"),
+            ),
+            ParamDef(
+                name="frame_duration_ms",
+                type="int",
+                label=t("openaiSpec.frameDurationLabel"),
+                minimum=20,
+                maximum=2000,
+                default=200,
+                description=t("openaiSpec.frameDurationDescription"),
+            ),
+        ]
+    if svg:
+        # ADR-0062 2章: SVG のときだけ使う。書き手のモデルは管理者設定(フォームには出さない)。
+        # API には `svg: {model, reasoning: {effort}}` で送る(プロバイダーが組み立てる)。思考の量は
+        # 未指定なら書き手のモデルの既定。
+        params += [
+            ParamDef(
+                name="svg_effort",
+                type="enum",
+                label=t("openaiSpec.svgEffortLabel"),
+                choices=SVG_EFFORTS,
+                choice_labels=_svg_effort_labels(),
+                description=t("openaiSpec.svgEffortDescription"),
+                widget="segmented",
+            ),
+        ]
+    if _supports_complexity(model):
+        # 描く前の計画の量。画質とは別の項目で、料金は変わらない。API の既定は high なので、
+        # フォームの初期値は置かない(未指定のまま送ると high になる)。
+        params.insert(
+            1,
+            ParamDef(
+                name="complexity",
+                type="enum",
+                label=t("openaiSpec.complexityLabel"),
+                choices=["low", "medium", "high"],
+                choice_labels=_complexity_labels(),
+                default="high",
+                description=t("openaiSpec.complexityDescription"),
+                widget="segmented",
+            ),
+        )
+    return params
 
 
 def _operation_capabilities(model: str, operation: str) -> OperationCapabilities:
-    params = _common_params(model)
+    params = _common_params(model, operation)
     if operation == "generate":
         # `moderation`(表現の制限、Generate 専用)はフォームに出さない。設定 `MODERATION`
         # (既定 low)の値を、Run 作成時にサーバーが params へ入れる(api/runs.py の create_run)。
@@ -178,9 +307,16 @@ def _operation_capabilities(model: str, operation: str) -> OperationCapabilities
         max_input_images=MAX_INPUT_IMAGES,
         min_input_images=1,
         supports_mask=True,
-        # ADR-0053 5章: 四角を描いた画像と、番号ごとの指示の文で渡す。
+        # スケッチの線と領域の四角を、1枚目に重ねる透過の印(markup)で送る(ADR-0010、ADR-0053。
+        # 2026-11-05 追記)。
+        supports_markup=model.startswith(("gpt-image-2.5", "gpt-image-2.6")),
+        # ADR-0053 5章: 四角を描いた画像と、番号ごとの指示の文で渡す。2.5 / 2.6 は、四角を透過の
+        # 印(markup)にして1枚目に重ねて送る(2026-11-05 追記。マスクのある Run と白紙の配置図は
+        # Run の作成で「画像と文」に戻す)。
         supports_regions=True,
-        regions_delivery="image_and_text",
+        regions_delivery=(
+            "markup" if model.startswith(("gpt-image-2.5", "gpt-image-2.6")) else "image_and_text"
+        ),
         # 文で伝えるので、どの種類も参照画像も使える。四角は主たる入力の上に描くので、入力画像が
         # 要る。
         regions_kinds=list(ALL_REGION_KINDS),
@@ -190,7 +326,7 @@ def _operation_capabilities(model: str, operation: str) -> OperationCapabilities
 
 
 def build_capabilities(provider_name: str, label: str | None = None) -> ProviderCapabilities:
-    """provider 名(と表示名)だけ差し替えて、gpt-image-2.5 系の仕様をそのまま返す。
+    """provider 名(と表示名)だけ差し替えて、gpt-image-2.5 / 2.6 系の仕様をそのまま返す。
 
     `label` を省略した場合は `provider_name` をそのまま使う(テストの簡便のため)。
     実プロバイダー(OpenAIImagesProvider / FakeProvider)は自身の `label` を明示的に渡す。
@@ -233,7 +369,44 @@ def build_capabilities(provider_name: str, label: str | None = None) -> Provider
             depends_on_field="output_format",
             depends_on_values=["jpeg", "webp"],
         ),
+        # ADR-0061 1章: GIF はストリーミングできないので、途中経過は静止画の形式のときだけ。
+        # SVG(ADR-0062)も同じ。
+        ConditionalParam(
+            field="partial_images",
+            depends_on_field="output_format",
+            depends_on_values=["png", "jpeg", "webp"],
+        ),
+        # ADR-0062: SVG は1枚だけ(`n` は送らない。API の既定は1)。
+        ConditionalParam(
+            field="n",
+            depends_on_field="output_format",
+            depends_on_values=["png", "jpeg", "webp", "gif"],
+        ),
+        ConditionalParam(
+            field="svg_effort",
+            depends_on_field="output_format",
+            depends_on_values=["svg"],
+        ),
+        ConditionalParam(
+            field="frame_count",
+            depends_on_field="output_format",
+            depends_on_values=["gif"],
+        ),
+        ConditionalParam(
+            field="frame_duration_ms",
+            depends_on_field="output_format",
+            depends_on_values=["gif"],
+        ),
     ]
+    gif_frame_size = SizeConstraints(
+        multiple_of=sizes.MULTIPLE_OF,
+        max_long_edge=GIF_FRAME_MAX_LONG_EDGE,
+        min_total_pixels=GIF_FRAME_MIN_TOTAL_PIXELS,
+        max_total_pixels=GIF_FRAME_MAX_TOTAL_PIXELS,
+        min_aspect_ratio=sizes.MIN_ASPECT_RATIO,
+        max_aspect_ratio=sizes.MAX_ASPECT_RATIO,
+        allow_auto=True,
+    )
 
     return ProviderCapabilities(
         provider=provider_name,
@@ -242,6 +415,7 @@ def build_capabilities(provider_name: str, label: str | None = None) -> Provider
         default_model=DEFAULT_MODEL,
         default_size=DEFAULT_SIZE,
         size=size,
+        gif_frame_size=gif_frame_size,
         incompatible_pairs=incompatible_pairs,
         conditional_params=conditional_params,
         prompt_max_length=PROMPT_MAX_LENGTH,

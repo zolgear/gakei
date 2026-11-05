@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
-from app.domain import asset_locks, compositions, content_withholding, derivatives
+from app.domain import asset_locks, compositions, content_withholding, derivatives, svg
 from app.domain.embedded_meta import (
     get_instance_id,
     read_gakei_meta,
@@ -50,6 +50,14 @@ ALLOWED_UPLOAD_FORMATS = {
     "JPEG": ("image/jpeg", "jpg"),
     "WEBP": ("image/webp", "webp"),
 }
+# ADR-0061 3章: 生成の結果に限って受ける形式(アニメーション GIF)。アップロードでは受けない。
+GENERATED_ONLY_FORMATS = {
+    "GIF": ("image/gif", "gif"),
+    # ADR-0062: SVG(Pillow では開かないので、`prepare_image` が先に見分ける)。
+    "SVG": (svg.SVG_MIME, svg.SVG_EXT),
+}
+# GIF のコマ数の上限(API は 16 まで。余裕を持たせて、壊れた・細工した GIF だけを断る)。
+MAX_GIF_FRAMES = 64
 
 
 def _utcnow() -> datetime:
@@ -90,6 +98,8 @@ class PreparedImage:
 
 def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
     """画像バイトを検証する(メモリの中だけ。DB と保存先には触れない)。不正なら IngestError。"""
+    if svg.looks_like_svg(data):
+        return _prepare_svg(data, kind)
     if kind == AssetKind.UPLOAD and len(data) >= MAX_UPLOAD_BYTES:
         raise IngestError(t("assets.uploadTooLarge"))
     if kind == AssetKind.MASK and len(data) >= MAX_MASK_BYTES:
@@ -120,8 +130,13 @@ def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
         raise IngestError(t("assets.cannotReadImage")) from e
 
     fmt = image.format
-    if fmt not in ALLOWED_UPLOAD_FORMATS:
+    formats = ALLOWED_UPLOAD_FORMATS
+    if kind == AssetKind.GENERATED:
+        formats = {**ALLOWED_UPLOAD_FORMATS, **GENERATED_ONLY_FORMATS}
+    if fmt not in formats:
         raise IngestError(t("assets.unsupportedFormat", format=fmt))
+    if fmt == "GIF" and getattr(image, "n_frames", 1) > MAX_GIF_FRAMES:
+        raise IngestError(t("assets.cannotReadImage"))
     if kind == AssetKind.MASK and fmt != "PNG":
         raise IngestError(t("assets.maskMustBePng"))
     if kind == AssetKind.SKETCH and fmt != "PNG":
@@ -133,7 +148,7 @@ def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
     if kind == AssetKind.REGIONS and fmt != "PNG":
         raise IngestError(t("assets.regionsMustBePng"))
 
-    mime, ext = ALLOWED_UPLOAD_FORMATS[fmt]
+    mime, ext = formats[fmt]
     return PreparedImage(
         data=data,
         image=image,
@@ -143,6 +158,29 @@ def prepare_image(data: bytes, kind: AssetKind) -> PreparedImage:
         sha256=hashlib.sha256(data).hexdigest(),
         width=image.width,
         height=image.height,
+    )
+
+
+def _prepare_svg(data: bytes, kind: AssetKind) -> PreparedImage:
+    """ADR-0062: 生成の結果の SVG を無害化して受ける。原本は無害化した後の文書で、`image` には
+    派生と画素を読む処理のために描いた画像を持つ。大きさは文書の width / height(px)。"""
+    if kind != AssetKind.GENERATED:
+        raise IngestError(t("assets.unsupportedFormat", format="SVG"))
+    try:
+        cleaned = svg.sanitize(data)
+        image = svg.rasterize(cleaned)
+    except svg.SvgError as e:
+        raise IngestError(t("assets.cannotReadImage")) from e
+    width, height = svg.intrinsic_size(cleaned)
+    return PreparedImage(
+        data=cleaned,
+        image=image,
+        kind=kind,
+        mime=svg.SVG_MIME,
+        ext=svg.SVG_EXT,
+        sha256=hashlib.sha256(cleaned).hexdigest(),
+        width=width,
+        height=height,
     )
 
 
@@ -323,7 +361,9 @@ def create_withheld_placeholder(
     同じ内容の判定があればそれを及ぼし、無ければ判定なし)。"""
     asset_id = uuid.uuid4()
     created_at = _utcnow()
-    ext = {v[0]: v[1] for v in ALLOWED_UPLOAD_FORMATS.values()}.get(mime, "bin")
+    ext = {
+        v[0]: v[1] for v in (*ALLOWED_UPLOAD_FORMATS.values(), *GENERATED_ONLY_FORMATS.values())
+    }.get(mime, "bin")
     folder, stem, ext = original_key_base(
         OriginalKeyInfo(
             kind=AssetKind(kind).value,

@@ -103,6 +103,8 @@ export interface RunFormLogic {
 
   /** 現在選ばれているプロバイダーの capabilities(未解決の間は undefined)。 */
   providerEntry: ProviderEntry | undefined
+  /** サイズ欄の制約。GIF のときは1コマの制約(ADR-0061 2章)。size を取らないプロバイダーは無し。 */
+  sizeConstraints: ProviderEntry['size']
 
   provider: string
   model: string
@@ -186,6 +188,9 @@ export interface RunFormLogic {
   /** 選んだモデルの edit がマスクの差し込み先を持つか(supports_mask)。ComfyUI の一部の
    * ワークフローは持たない。false のときはマスクを付けても送信できない。 */
   maskSupported: boolean
+  /** 選んだモデルの edit が1枚目に重ねる印(markup)を受けるか。受ければスケッチの線を印で送る
+   * (ADR-0010、2026-11-05 追記)。 */
+  markupSupported: boolean
   /** 選んだプロバイダーが今使えるか(接続できない等)。使えなければ理由を持つ。 */
   providerAvailable: boolean
   providerUnavailableReason: string | null
@@ -200,6 +205,8 @@ export interface RunFormLogic {
   hasDeletedInputs: boolean
   /** 入力に、Mod の判定で使えない画像(画像なし、または deny)がある(ADR-0051 4章)。 */
   hasBlockedInputs: boolean
+  /** 入力にアニメーション GIF がある(ADR-0061 6章)。 */
+  hasAnimatedInputs: boolean
   /**
    * 選んだモデルの edit が「ちょうどN枚」を要求するときの N(min_input_images === max_input_images
    * かつ 1 より大きいとき。ComfyUI の画像の枠)。それ以外(OpenAI/Fake 等、枚数に幅がある)は null。
@@ -489,8 +496,13 @@ export function useRunFormLogic(
   // (丸めれば解消される「16の倍数でない」エラーを、丸める前の一時的な入力値で出さないため)。
   // size が null のプロバイダー(ComfyUI 等)は size パラメータを取らない(SizeInput 自体を
   // 呼び出し側が隠す)ので、常に有効とする。
-  const sizeValidation = providerEntry?.size
-    ? validateSizeState(providerEntry.size, roundSizeStateToMultiple(providerEntry.size, sizeState))
+  // ADR-0061 2章: GIF のときのサイズは1コマの大きさなので、1コマの制約で確かめる。
+  const sizeConstraints =
+    activeRaw.output_format === 'gif' && providerEntry?.gif_frame_size
+      ? providerEntry.gif_frame_size
+      : providerEntry?.size
+  const sizeValidation = sizeConstraints
+    ? validateSizeState(sizeConstraints, roundSizeStateToMultiple(sizeConstraints, sizeState))
     : { valid: true, errors: [] as string[] }
   const promptMax = providerEntry?.prompt_max_length ?? 32_000
   // テンプレートモード(実験)では、プロンプト欄ではなく組み立ての結果を見る。
@@ -519,11 +531,14 @@ export function useRunFormLogic(
   const hasDeletedInputs = unusableInputAssetIds.deleted.length > 0
   // Mod の判定で入力に使えない画像(ADR-0051 4章)。サーバーは 409 にするので、送る前に止める。
   const hasBlockedInputs = unusableInputAssetIds.blocked.length > 0
+  // アニメーション GIF(ADR-0061 6章)。サーバーは 422 にするので、送る前に止める。
+  const hasAnimatedInputs = unusableInputAssetIds.animated.length > 0
 
   const operationSupported = isOperationSupported(opCaps)
   const maskRequired = opCaps?.requires_mask ?? false
   // opCaps 未解決(読み込み中)の間は妨げない(operationSupported 側で別途止まる)。
   const maskSupported = opCaps?.supports_mask ?? true
+  const markupSupported = opCaps?.supports_markup ?? false
   const providerAvailable = isProviderUsable(providerEntry)
   const providerUnavailableReason = providerUnavailableMessage(providerEntry)
 
@@ -550,7 +565,13 @@ export function useRunFormLogic(
       ? effectiveRegionFrame(formState.regionsFrame, primaryAssetId)
       : defaultRegionFrame(primaryAssetId)
   const regionsBlank = regionsSupported && regionsFrame === 'output'
-  const regionsDelivery = regionOpCaps?.regions_delivery ?? null
+  // 四角の送り方。印(markup)は1つしか送れず、マスクとも同時に送れないので、マスクかスケッチの線が
+  // あればサーバーは「画像と文」に戻す(ADR-0053 5章、ADR-0010。2026-11-05 追記)。
+  const capsRegionsDelivery = regionOpCaps?.regions_delivery ?? null
+  const regionsDelivery =
+    capsRegionsDelivery === 'markup' && formState.inputs.some((i) => i.role === 'mask' || i.role === 'markup')
+      ? 'image_and_text'
+      : capsRegionsDelivery
   const regionsOutputSize = regionOpCaps?.output_size ?? null
   const regionsKinds = useMemo(
     () => ({ input: allowedRegionKinds(regionOpCaps, 'input'), output: allowedRegionKinds(regionOpCaps, 'output') }),
@@ -602,11 +623,16 @@ export function useRunFormLogic(
 
   const regionsActive = regionsClearReason === null && formState.regions.length > 0 && regionsSupported
   const imageInputAssetIds = formState.inputs.filter((i) => i.role === 'image').map((i) => i.assetId)
-  // 入力に画像を足すのは「画像と文」だけ(ComfyUI は四角をそのまま差し込む)。
+  // 入力に画像を足すのは「画像と文」と印(markup)だけ(ComfyUI は四角をそのまま差し込む)。印は
+  // 画像の列に入らないので、参照画像だけを数える。マスクのある Run と白紙の土台では、サーバーが
+  // 「画像と文」に戻すので、四角を描いた画像も数える(ADR-0053 5章、2026-11-05 追記)。
+  const markupFallsBack = hasMask || regionsBlank
   const regionExtraInputs =
     regionsActive && regionsDelivery === 'image_and_text'
       ? regionExtraInputCount(formState.regions, imageInputAssetIds)
-      : 0
+      : regionsActive && regionsDelivery === 'markup'
+        ? regionExtraInputCount(formState.regions, imageInputAssetIds, markupFallsBack)
+        : 0
   let regionsBlockReason: string | null = null
   if (regionsActive) {
     if (!areRegionBoxesValid(formState.regions)) regionsBlockReason = msg().regions.form.invalid
@@ -907,6 +933,7 @@ export function useRunFormLogic(
     isInputCountSatisfied(opCaps, operation, imageInputCount) &&
     !hasDeletedInputs &&
     !hasBlockedInputs &&
+    !hasAnimatedInputs &&
     provider !== '' &&
     model !== '' &&
     operationSupported &&
@@ -923,8 +950,8 @@ export function useRunFormLogic(
     if (!canSubmit) return
     // size が無いプロバイダーは常に未指定(送らない)。送信直前に16の倍数へ丸める
     // (run.params.size には丸めた後の値を入れる)。
-    const roundedSizeState = providerEntry?.size
-      ? roundSizeStateToMultiple(providerEntry.size, sizeState)
+    const roundedSizeState = sizeConstraints
+      ? roundSizeStateToMultiple(sizeConstraints, sizeState)
       : sizeState
     const sizeParam = providerEntry?.size ? sizeToParam(roundedSizeState) : undefined
     const params = withSizeParam(buildEnabledParams(defs, rawParams, conditionalParams, hasMask), sizeParam)
@@ -969,6 +996,7 @@ export function useRunFormLogic(
     capsLoading: capsQuery.isLoading,
     capsError: capsQuery.isError,
     providerEntry,
+    sizeConstraints,
     provider,
     model,
     selectModel,
@@ -1006,6 +1034,7 @@ export function useRunFormLogic(
     maskRequired,
     hasMask,
     maskSupported,
+    markupSupported,
     providerAvailable,
     providerUnavailableReason,
     maxInputImages,
@@ -1016,6 +1045,7 @@ export function useRunFormLogic(
     imageInputCount,
     hasDeletedInputs,
     hasBlockedInputs,
+    hasAnimatedInputs,
     exactInputImagesRequired,
     inputCountRequirementReason,
     inputs: formState.inputs,

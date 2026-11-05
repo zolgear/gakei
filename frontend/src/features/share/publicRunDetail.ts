@@ -12,7 +12,7 @@ import type { PublicShareAsset, PublicShareResponse, PublicShareRun } from '../.
 
 export interface PublicRunInput {
   asset: PublicShareAsset
-  role: 'image' | 'mask' | 'reference'
+  role: 'image' | 'mask' | 'reference' | 'markup'
   position: number
 }
 

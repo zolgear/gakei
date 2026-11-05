@@ -1,6 +1,6 @@
 [project]
 name = "gakei-backend"
-version = "0.12.0"
+version = "0.13.0"
 description = "GAKEI ローカルMVP バックエンド"
 license = "Apache-2.0"
 authors = [
@@ -15,7 +15,7 @@ dependencies = [
     "pydantic-settings>=2.4",
     "pillow>=10.4",
     "python-multipart>=0.0.9",
-    "openai>=3.16.2",
+    "openai>=3.46.0",
     "httpx>=0.28.1",
     "websockets>=17.1",
     "cbor2>=6.1.4",
@@ -32,6 +32,7 @@ dependencies = [
     "pgvector>=0.5.0",
     "opencv-python-headless>=4.10,<5",
     "scikit-learn>=1.7",
+    "resvg-py>=0.5.0",
 ]
 
 [dependency-groups]

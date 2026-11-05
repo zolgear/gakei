@@ -393,7 +393,7 @@
     "backgroundOpaque": "不透明",
     "backgroundTransparent": "透過",
     "qualityLabel": "画質",
-    "qualityDescription": "低いほど速く安価。xhigh/max は 2.5 系のみ",
+    "qualityDescription": "低いほど速く安価。xhigh/max は 2.5・2.6 系のみ",
     "fileFormatLabel": "ファイル形式",
     "fileFormatDescription": "出力するファイル形式",
     "compressionLabel": "圧縮率",
@@ -403,7 +403,19 @@
     "countLabel": "枚数",
     "countDescription": "1回の実行で生成する枚数。枚数分の料金がかかる",
     "previewLabel": "途中経過の表示",
-    "previewDescription": "生成途中の画像を表示する回数(0 で表示しない)"
+    "previewDescription": "生成途中の画像を表示する回数(0 で表示しない)",
+    "svgEffortLabel": "SVG の思考",
+    "svgEffortDescription": "SVG を書くモデルが考える量。未指定ならモデルの既定。",
+    "svgEffortNone": "なし",
+    "complexityLabel": "計画の深さ",
+    "complexityDescription": "描く前に構成をどれだけ考えるか。小さな編集は低め、文字や込み入った配置は高めが合う。料金は変わらない",
+    "complexityLow": "低",
+    "complexityMedium": "中",
+    "complexityHigh": "高",
+    "frameCountLabel": "コマ数",
+    "frameCountDescription": "GIF のコマの数。サイズは1コマの大きさで、全コマを並べた画像が上限を超えると断られるので、迷ったらサイズは自動にする",
+    "frameDurationLabel": "1コマの時間",
+    "frameDurationDescription": "GIF の1コマを表示する時間(ミリ秒)"
   },
   "fake": {
     "forcedFailureMarker": "テスト用の強制失敗マーカーを検出しました: {code}",
@@ -436,6 +448,7 @@
   "settings": {
     "general": {
       "invalidModeration": "moderation は auto または low である必要があります",
+      "invalidSvgAuthorModel": "SVG を書くモデルの名前は、英数字と . _ : - で 100 文字までにしてください",
       "invalidTimeoutSeconds": "ComfyUI のタイムアウトは{min}〜{max}秒の整数である必要があります",
       "invalidSdwebuiTimeoutSeconds": "SD WebUI のタイムアウトは{min}〜{max}秒の整数である必要があります"
     },
@@ -619,7 +632,15 @@
     "cannotCancelStatus": "status={status} のため cancel できません",
     "cannotCancelAlreadyRunning": "すでに実行が開始されているため cancel できません",
     "partialNotFound": "途中経過が見つかりません",
-    "locked": "出力がロックで守られているので削除できません"
+    "locked": "出力がロックで守られているので削除できません",
+    "gifNotInput": "GIF の画像は入力に使えません: {id}",
+    "svgNotInput": "SVG の画像は入力に使えません: {id}",
+    "markupEditOnly": "スケッチの線は編集(Edit)でだけ送れます",
+    "markupAtMostOne": "スケッチの線は1つだけ指定できます",
+    "markupRequiresPrimary": "スケッチの線は1枚目の画像(position 0)に重ねます",
+    "markupMustBePng": "スケッチの線は PNG にしてください",
+    "markupSizeMismatch": "スケッチの線の大きさが1枚目の画像と違います",
+    "markupFlattenFailed": "スケッチの線を画像に重ねられませんでした"
   },
   "runRegions": {
     "editOnly": "領域の指示は編集(Edit)でだけ使えます",
@@ -657,7 +678,9 @@
       "item": "- 四角 {number}({color}): {body}",
       "itemNamed": "- 四角 {number}({color}、{label}): {body}",
       "footer": "四角・番号・線・矢印は指示のための印です。出力の画像には描かないでください。",
-      "footerBlank": "配置図の白地・四角・番号は、配置を伝えるための印です。出力には描かず、画面全体を絵で埋めてください。"
+      "footerBlank": "配置図の白地・四角・番号は、配置を伝えるための印です。出力には描かず、画面全体を絵で埋めてください。",
+      "headerMarkup": "領域の指示: 1枚目の画像に、番号付きの色の四角の印(マークアップ)を重ねています。四角は場所と大きさの目安です。1枚目の画像を編集してください。上の文で四角が番号(「四角 1」など)か名前で書かれていたら、次の一覧のその四角の場所を指します。四角に指示があるときは、そのとおりにしてください。",
+      "footerMarkup": "四角・番号・線・矢印は指示のための印です。出力の画像には描かず、指示の無いところは変えないでください。"
     },
     "kindNotOnBlank": "四角 {number} の種類は、白紙の土台では使えません。「変える」か「足す」にしてください",
     "kindNotSupported": "四角 {number} の種類は、このプロバイダー・モデルでは使えません",

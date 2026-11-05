@@ -6164,6 +6164,7 @@ export interface components {
             moderation: components["schemas"]["ModerationSetting"];
             comfyui_timeout_seconds: components["schemas"]["ComfyUITimeoutSetting"];
             sdwebui_timeout_seconds: components["schemas"]["SdWebuiTimeoutSetting"];
+            svg_author_model: components["schemas"]["SvgAuthorModelSetting"];
         };
         /**
          * GeneralSettingsUpdateRequest
@@ -6181,6 +6182,8 @@ export interface components {
             comfyui_timeout_seconds?: number | null;
             /** Sdwebui Timeout Seconds */
             sdwebui_timeout_seconds?: number | null;
+            /** Svg Author Model */
+            svg_author_model?: string | null;
         };
         /**
          * GroupNamingSettingsResponse
@@ -6936,7 +6939,7 @@ export interface components {
              */
             kind: "input" | "output" | "sketch_source" | "composite_source" | "origin";
             /** Role */
-            role?: ("image" | "mask" | "reference") | null;
+            role?: ("image" | "mask" | "reference" | "markup") | null;
             /** Position */
             position?: number | null;
             /** Output Index */
@@ -7730,12 +7733,17 @@ export interface components {
              */
             requires_mask: boolean;
             /**
+             * Supports Markup
+             * @default false
+             */
+            supports_markup: boolean;
+            /**
              * Supports Regions
              * @default false
              */
             supports_regions: boolean;
             /** Regions Delivery */
-            regions_delivery?: ("image_and_text" | "comfyui_bboxes") | null;
+            regions_delivery?: ("image_and_text" | "comfyui_bboxes" | "markup") | null;
             /** Regions Kinds */
             regions_kinds?: ("change" | "add" | "keep" | "remove" | "move")[];
             /**
@@ -7949,7 +7957,7 @@ export interface components {
             /** Total Usd */
             total_usd: number | null;
             /** Unavailable Reason */
-            unavailable_reason: ("quality_auto" | "size_auto" | "size_invalid" | "unknown_model") | null;
+            unavailable_reason: ("quality_auto" | "size_auto" | "size_invalid" | "unknown_model" | "animated_output" | "svg_output") | null;
             /** Output Tokens Per Image */
             output_tokens_per_image: number | null;
             /** N */
@@ -8356,6 +8364,7 @@ export interface components {
             /** Default Size */
             default_size?: string | null;
             size?: components["schemas"]["SizeConstraints"] | null;
+            gif_frame_size?: components["schemas"]["SizeConstraints"] | null;
             /** Incompatible Pairs */
             incompatible_pairs?: components["schemas"]["IncompatiblePair"][];
             /** Conditional Params */
@@ -8516,7 +8525,7 @@ export interface components {
              */
             kind: "input" | "output" | "sketch_source" | "composite_source" | "origin";
             /** Role */
-            role?: ("image" | "mask" | "reference") | null;
+            role?: ("image" | "mask" | "reference" | "markup") | null;
             /** Position */
             position?: number | null;
             /** Output Index */
@@ -9034,7 +9043,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "image" | "mask" | "reference";
+            role: "image" | "mask" | "reference" | "markup";
             /** Position */
             position: number;
         };
@@ -9049,7 +9058,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "image" | "mask" | "reference";
+            role: "image" | "mask" | "reference" | "markup";
             /** Position */
             position: number;
             focal_point?: components["schemas"]["FocalPoint"] | null;
@@ -9185,7 +9194,7 @@ export interface components {
              * Delivery
              * @enum {string}
              */
-            delivery: "image_and_text" | "comfyui_bboxes";
+            delivery: "image_and_text" | "comfyui_bboxes" | "markup";
             /** Regions */
             regions: components["schemas"]["RegionBox"][];
             /**
@@ -10070,6 +10079,21 @@ export interface components {
             /** Final Prompt */
             final_prompt?: string | null;
             bounding_boxes?: components["schemas"]["InputRef"] | null;
+        };
+        /**
+         * SvgAuthorModelSetting
+         * @description SVG を書くモデル(ADR-0062 2章)。未設定なら組み込みの既定。
+         */
+        SvgAuthorModelSetting: {
+            /** Value */
+            value: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "default";
+            /** Default */
+            default: string;
         };
         /** TagCount */
         TagCount: {
@@ -14490,6 +14514,7 @@ export interface operations {
                 n?: number;
                 prompt_length?: number;
                 input_asset_ids?: string | null;
+                output_format?: string | null;
             };
             header?: never;
             path?: never;

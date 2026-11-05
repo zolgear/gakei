@@ -10,7 +10,7 @@
 # ADR-0021: --platform=$BUILDPLATFORM でビルド元(≒ CI ランナー)のアーキテクチャで
 # 常に1回だけ動かす。QEMU 上で npm ci / vite build を動かすと数倍遅く、
 # 成果物(dist)は実行段のアーキテクチャに依らず同じものが使える。
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS frontend-build
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS frontend-build
 WORKDIR /src/frontend
 
 # 依存関係だけ先にコピーしてレイヤーキャッシュを効かせる。
@@ -21,7 +21,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- 2段目: バックエンド(Python + uv) ---------------------------------------
-FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS runtime
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS runtime
 
 # ADR-0021: リリースのワークフローがコミットの SHA を渡す(未指定なら空文字のまま
 # 環境変数になり、app 側は空文字を null として扱う)。

@@ -75,6 +75,7 @@ import { setStudioResultAssetId } from './studioResultStore'
 import { buildStudioPath } from './assetQueryParam'
 import { invalidateAssetGroupQueries } from '../stock/groups/assetGroupQueries'
 import { isSendBlocked, isWithheld } from '../mods/modVerdicts'
+import { isAnimatedAsset } from '../run-form/animatedInputs'
 import styles from './ResultPane.module.css'
 import { focalStyle } from '../../lib/focalPoint'
 
@@ -480,10 +481,12 @@ export function ResultPane({
   // 画像を残さなかった Asset(ADR-0051 4章)と、入力に使えない Asset(画像なし、または deny の判定)。
   const withheld = isWithheld(asset)
   const sendBlocked = isSendBlocked(asset)
+  // アニメーション GIF は入力に使えない(ADR-0061 6章)。
+  const animated = isAnimatedAsset(asset)
 
   // 追加のみ。使用中のときはボタンを無効にし、外すのは入力欄のチップから行う。
   function handleUseAsInput() {
-    if (!effectiveAssetId || usedAsInput || sendBlocked) return
+    if (!effectiveAssetId || usedAsInput || sendBlocked || animated) return
     setToggleError(null)
     const result = addAsInput(formState.inputs, effectiveAssetId, maxInputImagesForToggle)
     setFormState({ ...formState, inputs: result.inputs })
@@ -753,8 +756,16 @@ export function ResultPane({
                     type="button"
                     className={styles.canvasUseAsInputButton}
                     data-active={usedAsInput}
-                    disabled={usedAsInput || sendBlocked}
-                    title={usedAsInput ? rp.inUseHint : sendBlocked ? t.mods.cannotUseAsInput : undefined}
+                    disabled={usedAsInput || sendBlocked || animated}
+                    title={
+                      usedAsInput
+                        ? rp.inUseHint
+                        : sendBlocked
+                          ? t.mods.cannotUseAsInput
+                          : animated
+                            ? t.runForm.gifNotInput
+                            : undefined
+                    }
                     onClick={handleUseAsInput}
                   >
                     {usedAsInput ? rp.inUse : rp.useAsInput}
@@ -858,8 +869,16 @@ export function ResultPane({
                     type="button"
                     className={styles.useAsInputButton}
                     data-active={usedAsInput}
-                    disabled={usedAsInput || sendBlocked}
-                    title={usedAsInput ? rp.inUseHint : sendBlocked ? t.mods.cannotUseAsInput : undefined}
+                    disabled={usedAsInput || sendBlocked || animated}
+                    title={
+                      usedAsInput
+                        ? rp.inUseHint
+                        : sendBlocked
+                          ? t.mods.cannotUseAsInput
+                          : animated
+                            ? t.runForm.gifNotInput
+                            : undefined
+                    }
                     onClick={handleUseAsInput}
                   >
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">

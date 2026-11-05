@@ -16,6 +16,7 @@ ADR-0013 7章、ADR-0038 6章)。
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Literal, get_args
 
@@ -28,6 +29,7 @@ from app.i18n import t
 MODERATION_KEY = "generation.moderation"
 TIMEOUT_KEY = "comfyui.timeout_seconds"
 SDWEBUI_TIMEOUT_KEY = "sdwebui.timeout_seconds"
+SVG_AUTHOR_MODEL_KEY = "generation.svg_author_model"
 
 Moderation = Literal["auto", "low"]
 _MODERATION_VALUES: tuple[Moderation, ...] = get_args(Moderation)
@@ -116,6 +118,44 @@ def save_moderation(db: Session, value: str | None) -> None:
         _delete(db, MODERATION_KEY)
         return
     _save(db, MODERATION_KEY, value)
+
+
+# -- SVG を書くモデル(ADR-0062 2章) ---------------------------------------------
+# 未設定なら組み込みの既定を使う(LLM を使う他の機能と同じ。既定の見直しと集約は #238)。
+
+DEFAULT_SVG_AUTHOR_MODEL = "gpt-5.6-luna"
+_SVG_AUTHOR_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$")
+
+
+def get_saved_svg_author_model(db: Session) -> str | None:
+    """保存した SVG を書くモデル。無い、または壊れていれば None。"""
+    value = _get_raw_value(db, SVG_AUTHOR_MODEL_KEY)
+    if not isinstance(value, str) or not _SVG_AUTHOR_MODEL.match(value):
+        return None
+    return value
+
+
+def resolve_svg_author_model(db: Session) -> tuple[str, Literal["setting", "default"]]:
+    """使う SVG を書くモデルと、その出所(画面で保存した値か、組み込みの既定か)。"""
+    saved = get_saved_svg_author_model(db)
+    if saved is not None:
+        return saved, "setting"
+    return DEFAULT_SVG_AUTHOR_MODEL, "default"
+
+
+def validate_svg_author_model(value: str | None) -> None:
+    """`value=None`(リセット)は常に有効。それ以外はモデル名の形(英数字と `._:-`、100文字まで)。"""
+    if value is not None and not _SVG_AUTHOR_MODEL.match(value):
+        raise GeneralSettingsValidationError(t("settings.general.invalidSvgAuthorModel"))
+
+
+def save_svg_author_model(db: Session, value: str | None) -> None:
+    """保存する。`value=None` は保存済みの行を削除する(組み込みの既定に戻す)。"""
+    validate_svg_author_model(value)
+    if value is None:
+        _delete(db, SVG_AUTHOR_MODEL_KEY)
+        return
+    _save(db, SVG_AUTHOR_MODEL_KEY, value)
 
 
 # -- ComfyUI のタイムアウト(秒) ------------------------------------------------

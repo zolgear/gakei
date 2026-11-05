@@ -160,6 +160,79 @@ async def test_edit_multipart_has_images_in_position_order_and_mask() -> None:
 
 
 @run_async
+async def test_complexity_is_sent_for_generate_and_edit() -> None:
+    # Generate は JSON の項目、Edit は multipart のフォームの項目として届く。
+    captured: list = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured.append(capture(request))
+        return json_response(generation_response_body())
+
+    provider = OpenAIImagesProvider(client=make_client(handler))
+    await provider.execute(
+        _run_request(params={"quality": "low", "complexity": "low"}), _noop_progress
+    )
+    inputs = [InputImage(role="image", position=0, data=b"IMG", mime="image/png")]
+    await provider.execute(
+        _run_request(operation="edit", params={"complexity": "medium"}, inputs=inputs),
+        _noop_progress,
+    )
+
+    assert captured[0].json_body["complexity"] == "low"
+    assert captured[0].json_body["quality"] == "low"
+    complexity_parts = captured[1].part_names("complexity")
+    assert [part_field_value(p) for p in complexity_parts] == ["medium"]
+
+
+@run_async
+async def test_gif_output_sends_frame_params_and_returns_gif_mime() -> None:
+    # ADR-0061: コマ数と1コマの時間をそのまま送り、GIF として受け取る。
+    captured: dict = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured["request"] = capture(request)
+        return json_response(
+            generation_response_body(b64=make_b64(b"GIF89a-bytes"), output_format="gif")
+        )
+
+    provider = OpenAIImagesProvider(client=make_client(handler))
+    params = {"output_format": "gif", "frame_count": 4, "frame_duration_ms": 120, "size": "auto"}
+    result = await provider.execute(_run_request(params=params), _noop_progress)
+
+    body = captured["request"].json_body
+    assert (body["output_format"], body["frame_count"], body["frame_duration_ms"]) == (
+        "gif",
+        4,
+        120,
+    )
+    assert result.outputs[0].mime == "image/gif"
+
+
+@run_async
+async def test_edit_sends_markup_as_its_own_file() -> None:
+    # ADR-0053 5章(2026-11-05 追記): role=markup の入力は `markup` の項目で送り、
+    # 画像の列に入れない。
+    captured: dict = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured["request"] = capture(request)
+        return json_response(generation_response_body())
+
+    provider = OpenAIImagesProvider(client=make_client(handler))
+    inputs = [
+        InputImage(role="image", position=0, data=b"IMG-0", mime="image/png"),
+        InputImage(role="markup", position=0, data=b"MARKUP", mime="image/png"),
+    ]
+    await provider.execute(_run_request(operation="edit", inputs=inputs), _noop_progress)
+
+    sent = captured["request"]
+    image_parts = sent.part_names("image[]") or sent.part_names("image")
+    assert [part_file_bytes(p) for p in image_parts] == [b"IMG-0"]
+    markup_parts = sent.part_names("markup")
+    assert [part_file_bytes(p) for p in markup_parts] == [b"MARKUP"]
+
+
+@run_async
 async def test_edit_without_image_input_raises_provider_error() -> None:
     provider = OpenAIImagesProvider(client=make_client(lambda r: json_response({})))
     request = _run_request(operation="edit", params={}, inputs=[])
@@ -454,3 +527,35 @@ def test_capabilities_match_fake_provider_spec() -> None:
     assert [m.model for m in openai_caps.models] == [m.model for m in fake_caps.models]
     assert openai_caps.provider == "openai"
     assert fake_caps.provider == "fake"
+
+
+@run_async
+async def test_svg_output_sends_the_author_and_keeps_its_usage() -> None:
+    # ADR-0062: svg_model(管理者設定)/ svg_effort を API の svg に組み替え、書き手のトークンを
+    # usage["svg_usage"] に残す。
+    captured: dict = {}
+    svg_doc = b'<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect/></svg>'
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured["request"] = capture(request)
+        body = generation_response_body(b64=make_b64(svg_doc), output_format="svg")
+        body["svg_usage"] = {
+            "model": "gpt-5.6-luna",
+            "input_tokens": 1556,
+            "output_tokens": 931,
+            "reasoning_tokens": 170,
+            "total_tokens": 2487,
+        }
+        return json_response(body)
+
+    provider = OpenAIImagesProvider(client=make_client(handler))
+    params = {"output_format": "svg", "svg_model": "gpt-6-luna", "svg_effort": "low"}
+    result = await provider.execute(_run_request(params=params), _noop_progress)
+
+    body = captured["request"].json_body
+    assert body["svg"] == {"model": "gpt-6-luna", "reasoning": {"effort": "low"}}
+    assert "svg_model" not in body and "svg_effort" not in body
+    assert result.outputs[0].mime == "image/svg+xml"
+    assert result.outputs[0].data == svg_doc
+    assert result.usage is not None
+    assert result.usage["svg_usage"]["output_tokens"] == 931

@@ -459,14 +459,22 @@ export function areRegionBoxesValid(boxes: readonly RegionBox[]): boolean {
  * 四角を付けたとき、サーバーが入力に足す画像の数。四角を描いた画像(1枚目に重ねた画像、または白紙の
  * 配置図。土台によらず1枚)と、入力に無い参照画像(同じ画像は1枚)。四角が無ければ 0。
  */
-export function regionExtraInputCount(boxes: readonly RegionBox[], imageAssetIds: readonly string[]): number {
+/**
+ * 四角を送るときに足す入力画像の枚数(四角を描いた画像と、入力に無い参照画像)。
+ * `withOverlay` が false なら四角を描いた画像を数えない(印(markup)で送るとき。印は画像の列に入らない)。
+ */
+export function regionExtraInputCount(
+  boxes: readonly RegionBox[],
+  imageAssetIds: readonly string[],
+  withOverlay = true,
+): number {
   if (boxes.length === 0) return 0
   const inputs = new Set(imageAssetIds)
   const refs = new Set<string>()
   for (const b of boxes) {
     if (b.reference_asset_id && !inputs.has(b.reference_asset_id)) refs.add(b.reference_asset_id)
   }
-  return 1 + refs.size
+  return (withOverlay ? 1 : 0) + refs.size
 }
 
 // -- 再実行での復元(4章・5章) -------------------------------------------------------------
@@ -479,7 +487,8 @@ export function stripAppendedText(prompt: string, appended: string | null | unde
 
 interface RunInputLike {
   asset_id: string
-  role: 'image' | 'mask' | 'reference'
+  // markup: 四角を描いた透過の印(サーバーが足した入力。ADR-0053 5章、2026-11-05 追記)。
+  role: 'image' | 'mask' | 'reference' | 'markup'
   position: number
 }
 
@@ -516,15 +525,16 @@ export function restoreRunRegions<T extends RunInputLike>(run: {
   }
 
   const overlayId = record.overlay_asset_id ?? null
+  // 四角を描いた画像(role=image)か、印(role=markup)。どちらも利用者の入力の直後の位置にある。
   const overlay = overlayId
-    ? run.inputs.find((i) => i.role === 'image' && i.asset_id === overlayId)
+    ? run.inputs.find((i) => (i.role === 'image' || i.role === 'markup') && i.asset_id === overlayId)
     : undefined
   const referenceIds = new Set(record.regions.map((r) => r.reference_asset_id).filter((id): id is string => !!id))
   const inputs = overlay
     ? run.inputs.filter(
         (i) =>
           !(
-            i.role === 'image' &&
+            (i.role === 'image' || i.role === 'markup') &&
             i.position >= overlay.position &&
             (i.asset_id === overlayId || referenceIds.has(i.asset_id))
           ),

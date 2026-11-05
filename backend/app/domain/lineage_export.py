@@ -79,6 +79,9 @@ EXT_BY_MIME: dict[str, str] = {
     "image/png": "png",
     "image/jpeg": "jpg",
     "image/webp": "webp",
+    # ADR-0061: 生成の結果のアニメーション GIF。
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
 }
 
 

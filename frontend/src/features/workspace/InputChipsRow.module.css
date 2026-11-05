@@ -244,3 +244,13 @@
 .regionsTag:hover {
   background: var(--color-header-band);
 }
+
+/* スケッチの線(1枚目に重ねる透過の PNG。ADR-0010)。下地のサムネイルにそのまま重ねる。 */
+.markupOverlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}

@@ -21,6 +21,7 @@ function opCaps(overrides: Partial<OperationCapabilities> = {}): OperationCapabi
     min_input_images: 1,
     supports_mask: true,
     requires_mask: false,
+    supports_markup: false,
     supports_regions: false,
     regions_delivery: null,
     regions_kinds: [],

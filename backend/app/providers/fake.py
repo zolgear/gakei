@@ -38,6 +38,7 @@ _FORMAT_MAP = {
     "png": ("PNG", "image/png"),
     "jpeg": ("JPEG", "image/jpeg"),
     "webp": ("WEBP", "image/webp"),
+    "gif": ("GIF", "image/gif"),
 }
 
 
@@ -94,6 +95,9 @@ class FakeProvider:
             # を使う(再起動なしで次の Run から反映する。ADR-0009 2章)。
             saved = general_settings.get_saved_moderation(db)
             params["moderation"] = saved if saved is not None else self._moderation
+            params = openai_spec.fill_svg_author(
+                params, general_settings.resolve_svg_author_model(db)[0]
+            )
         return params
 
     def repeat_seed(self, first_params: dict, index: int) -> int | None:
@@ -150,6 +154,15 @@ class FakeProvider:
             "output_tokens": 1000 * n,
             "total_tokens": 50 * input_count + 1000 * n,
         }
+        if output_format == "svg":
+            # ADR-0062 5章: SVG を書くモデルのトークン(実際の応答と同じ形)。
+            usage["svg_usage"] = {
+                "model": str(params.get("svg_model", "fake-svg-author")),
+                "input_tokens": 1500,
+                "output_tokens": 900,
+                "reasoning_tokens": 150,
+                "total_tokens": 2400,
+            }
         return RunResult(outputs=outputs, usage=usage, provider_request_id=f"fake-{uuid.uuid4()}")
 
     # -- 内部ヘルパー ---------------------------------------------------
@@ -170,7 +183,13 @@ class FakeProvider:
         size_str = params.get("size", "auto")
         if not size_str or size_str == "auto":
             return (1024, 1024)
-        parsed = parse_size(str(size_str))
+        # ADR-0061 2章: GIF のときの `size` は1コマの大きさ(通常より小さくてよい)。
+        limits = (
+            openai_spec.build_capabilities("fake").gif_frame_size
+            if params.get("output_format") == "gif"
+            else None
+        )
+        parsed = parse_size(str(size_str), limits)
         return parsed if parsed is not None else (1024, 1024)
 
     @staticmethod
@@ -236,6 +255,18 @@ class FakeProvider:
 
     @staticmethod
     def _encode(image: Image.Image, output_format: str, params: dict) -> tuple[bytes, str]:
+        if output_format == "svg":
+            # ADR-0062: 単色の図形だけの SVG(色は Run ごとの色)。
+            r, g, b = image.convert("RGB").getpixel((0, 0))[:3]
+            w, h = image.size
+            doc = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" '
+                f'width="{w}" height="{h}"><title>fake</title>'
+                f'<rect x="{w // 8}" y="{h // 8}" width="{w * 3 // 4}" height="{h * 3 // 4}" '
+                f'rx="{w // 10}" fill="rgb({r},{g},{b})"/>'
+                f'<circle cx="{w // 2}" cy="{h // 2}" r="{min(w, h) // 5}" fill="#ffffff"/></svg>'
+            )
+            return doc.encode("utf-8"), "image/svg+xml"
         pillow_format, mime = _FORMAT_MAP.get(output_format, ("PNG", "image/png"))
         out_image = image
         if pillow_format == "JPEG" and out_image.mode == "RGBA":
@@ -248,6 +279,21 @@ class FakeProvider:
         compression = params.get("output_compression")
         if pillow_format in ("JPEG", "WEBP") and compression is not None:
             save_kwargs["quality"] = int(compression)
+
+        if pillow_format == "GIF":
+            # ADR-0061: コマごとに明るさを変えたアニメーション GIF(無限ループ)。
+            frame_count = int(params.get("frame_count", 9))
+            rgb = out_image.convert("RGB")
+            frames = [
+                Image.eval(rgb, lambda v, k=k: min(255, v + k * 12)) for k in range(frame_count)
+            ]
+            save_kwargs = {
+                "save_all": True,
+                "append_images": frames[1:],
+                "duration": int(params.get("frame_duration_ms", 200)),
+                "loop": 0,
+            }
+            out_image = frames[0]
 
         buffer = io.BytesIO()
         out_image.save(buffer, format=pillow_format, **save_kwargs)

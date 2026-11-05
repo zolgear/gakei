@@ -393,7 +393,7 @@
     "backgroundOpaque": "Opaque",
     "backgroundTransparent": "Transparent",
     "qualityLabel": "Quality",
-    "qualityDescription": "Lower is faster and cheaper. xhigh/max are 2.5-series only",
+    "qualityDescription": "Lower is faster and cheaper. xhigh/max are 2.5/2.6-series only",
     "fileFormatLabel": "File format",
     "fileFormatDescription": "Output file format",
     "compressionLabel": "Compression",
@@ -403,7 +403,19 @@
     "countLabel": "Count",
     "countDescription": "Number of images generated per run. Billed per image",
     "previewLabel": "Show progress previews",
-    "previewDescription": "Number of in-progress previews to show (0 to disable)"
+    "previewDescription": "Number of in-progress previews to show (0 to disable)",
+    "svgEffortLabel": "SVG reasoning",
+    "svgEffortDescription": "How much the SVG author model reasons. Unset uses the model's default.",
+    "svgEffortNone": "None",
+    "complexityLabel": "Planning depth",
+    "complexityDescription": "How much the model plans the composition before drawing. Lower suits small edits; higher suits text and busy layouts. Does not change the price",
+    "complexityLow": "Low",
+    "complexityMedium": "Medium",
+    "complexityHigh": "High",
+    "frameCountLabel": "Frames",
+    "frameCountDescription": "Number of GIF frames. Size is per frame, and the request is rejected if all frames laid out together exceed the limit, so use Auto size when unsure",
+    "frameDurationLabel": "Frame duration",
+    "frameDurationDescription": "How long each GIF frame is shown (milliseconds)"
   },
   "fake": {
     "forcedFailureMarker": "Detected the test forced-failure marker: {code}",
@@ -436,6 +448,7 @@
   "settings": {
     "general": {
       "invalidModeration": "moderation must be auto or low",
+      "invalidSvgAuthorModel": "The SVG author model name must use letters, digits and . _ : - (up to 100 characters)",
       "invalidTimeoutSeconds": "The ComfyUI timeout must be an integer between {min} and {max} seconds",
       "invalidSdwebuiTimeoutSeconds": "The SD WebUI timeout must be an integer from {min} to {max} seconds"
     },
@@ -619,7 +632,15 @@
     "cannotCancelStatus": "Cannot cancel: status={status}",
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
     "partialNotFound": "Partial image not found",
-    "locked": "An output is protected by a lock, so this run cannot be deleted"
+    "locked": "An output is protected by a lock, so this run cannot be deleted",
+    "gifNotInput": "GIF images cannot be used as input: {id}",
+    "svgNotInput": "SVG images cannot be used as inputs: {id}",
+    "markupEditOnly": "Sketch lines can only be sent with Edit",
+    "markupAtMostOne": "Only one sketch line layer can be specified",
+    "markupRequiresPrimary": "Sketch lines go on the first image (position 0)",
+    "markupMustBePng": "Sketch lines must be a PNG",
+    "markupSizeMismatch": "The sketch lines are not the same size as the first image",
+    "markupFlattenFailed": "Could not draw the sketch lines onto the image"
   },
   "runRegions": {
     "editOnly": "Region instructions can only be used with Edit",
@@ -657,7 +678,9 @@
       "item": "- Box {number} ({color}): {body}",
       "itemNamed": "- Box {number} ({color}, {label}): {body}",
       "footer": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image.",
-      "footerBlank": "The blank background, boxes and numbers of the layout sketch are only markers. Do not draw them; fill the whole frame with the scene."
+      "footerBlank": "The blank background, boxes and numbers of the layout sketch are only markers. Do not draw them; fill the whole frame with the scene.",
+      "headerMarkup": "Region instructions: image 1 has a markup overlay of numbered colored boxes. The boxes show the approximate location and size. Edit image 1. When the text above mentions a box by its number (such as \"Box 1\") or by its name, it means the area of that box in the list below. Where a box has its own instruction, follow it.",
+      "footerMarkup": "The boxes, numbers, lines and arrows are only markers for these instructions. Do not draw them in the output image, and leave areas without instructions unchanged."
     },
     "kindNotOnBlank": "The type of box {number} cannot be used on a blank canvas. Use Change or Add",
     "kindNotSupported": "The type of box {number} cannot be used with this provider or model",

@@ -10,6 +10,12 @@
   `RunResult` / 例外メッセージ / ログに base64 文字列を残さない。
 - SDK 3.16.2 の `images.generate` / `images.edit` は `quality` の Literal に `xhigh` / `max` を
   含んでいるため、追加のパラメータをそのまま渡せば型を素通りする(`extra_body` は不要だった)。
+- 2.6 の `complexity`、GIF の `frame_count` / `frame_duration_ms`、Edit の `markup` は、
+  SDK 3.46.0 から引数にある(それより前は `extra_body` で送っていた)。
+- SVG(ADR-0062)の書き手は、管理者設定のモデル(Run の確定で `svg_model` として params に
+  入れる)とフォームの `svg_effort` から、API の `svg: {model, reasoning: {effort}}` を組み立てて
+  送る(params には項目のまま保存する)。
+  書き手のトークンは `usage["svg_usage"]` に残す。
 """
 
 from __future__ import annotations
@@ -51,6 +57,10 @@ _OUTPUT_FORMAT_TO_MIME = {
     "png": "image/png",
     "jpeg": "image/jpeg",
     "webp": "image/webp",
+    # ADR-0061: 2.6 の Generate のアニメーション GIF。
+    "gif": "image/gif",
+    # ADR-0062: 2.6 の Generate の SVG(b64_json は UTF-8 の XML)。
+    "svg": "image/svg+xml",
 }
 
 # コンテンツ拒否と判定する error.code。実機で他の値が判明した場合はここに追加する。
@@ -102,6 +112,9 @@ class OpenAIImagesProvider:
             # を使う(再起動なしで次の Run から反映する。ADR-0009 2章)。
             saved = general_settings.get_saved_moderation(db)
             params["moderation"] = saved if saved is not None else self._moderation
+            params = openai_spec.fill_svg_author(
+                params, general_settings.resolve_svg_author_model(db)[0]
+            )
         return params
 
     def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
@@ -169,6 +182,7 @@ class OpenAIImagesProvider:
         kwargs: dict[str, Any] = dict(params)
         kwargs["model"] = run.model
         kwargs["prompt"] = run.prompt
+        _apply_svg_author(kwargs)
 
         if not stream:
             response = await client.images.generate(**kwargs)
@@ -210,6 +224,14 @@ class OpenAIImagesProvider:
         if masks:
             # API はマスクを1枚だけ受け取る(複数あれば最初の image に適用される仕様)。
             kwargs["mask"] = _to_file_tuple(masks[0], 0, "mask")
+
+        markups = sorted(
+            (item for item in run.inputs if item.role == "markup"), key=lambda item: item.position
+        )
+        if markups:
+            # ADR-0053 5章(2026-11-05 追記): 領域の四角を、1枚目の入力に重ねる透過の印として
+            # 送る。API は `mask` と同時には受けない(Run の作成で、マスクがあれば使わない)。
+            kwargs["markup"] = _to_file_tuple(markups[0], 0, "markup")
 
         if not stream:
             response = await client.images.edit(**kwargs)
@@ -275,6 +297,19 @@ def _mime_from_output_format(output_format: str | None) -> str:
     return _OUTPUT_FORMAT_TO_MIME.get(output_format or "png", "image/png")
 
 
+def _apply_svg_author(kwargs: dict[str, Any]) -> None:
+    """`svg_model` / `svg_effort` を API の `svg` に組み替える(ADR-0062 2章)。"""
+    author = kwargs.pop("svg_model", None)
+    effort = kwargs.pop("svg_effort", None)
+    svg: dict[str, Any] = {}
+    if author is not None:
+        svg["model"] = author
+    if effort is not None:
+        svg["reasoning"] = {"effort": effort}
+    if svg:
+        kwargs["svg"] = svg
+
+
 def _usage_to_dict(usage: Any) -> dict[str, Any] | None:
     if usage is None:
         return None
@@ -293,6 +328,10 @@ def _result_from_response(response: ImagesResponse) -> RunResult:
         outputs.append(RunOutputImage(data=base64.b64decode(image.b64_json), mime=mime))
 
     usage = _usage_to_dict(response.usage)
+    # SVG の書き手のトークン(ADR-0062 5章)。画像のトークンとは別の単価なので、別の項目に残す。
+    svg_usage = getattr(response, "svg_usage", None)
+    if svg_usage is not None:
+        usage = {**(usage or {}), "svg_usage": svg_usage.model_dump()}
     request_id = getattr(response, "_request_id", None)
     _ensure_outputs(outputs, request_id)
     return RunResult(outputs=outputs, usage=usage, provider_request_id=request_id)

@@ -16,7 +16,7 @@ export interface RunInputItem {
    */
   inputId: string
   assetId: string
-  role: 'image' | 'mask' | 'reference'
+  role: 'image' | 'mask' | 'reference' | 'markup'
   position: number
 }
 
