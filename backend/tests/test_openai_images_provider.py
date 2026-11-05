@@ -186,6 +186,30 @@ async def test_complexity_is_sent_although_the_sdk_does_not_know_it() -> None:
 
 
 @run_async
+async def test_gif_output_sends_frame_params_and_returns_gif_mime() -> None:
+    # ADR-0061: コマ数と1コマの時間も SDK の引数に無いので extra_body で送る。
+    captured: dict = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured["request"] = capture(request)
+        return json_response(
+            generation_response_body(b64=make_b64(b"GIF89a-bytes"), output_format="gif")
+        )
+
+    provider = OpenAIImagesProvider(client=make_client(handler))
+    params = {"output_format": "gif", "frame_count": 4, "frame_duration_ms": 120, "size": "auto"}
+    result = await provider.execute(_run_request(params=params), _noop_progress)
+
+    body = captured["request"].json_body
+    assert (body["output_format"], body["frame_count"], body["frame_duration_ms"]) == (
+        "gif",
+        4,
+        120,
+    )
+    assert result.outputs[0].mime == "image/gif"
+
+
+@run_async
 async def test_edit_without_image_input_raises_provider_error() -> None:
     provider = OpenAIImagesProvider(client=make_client(lambda r: json_response({})))
     request = _run_request(operation="edit", params={}, inputs=[])

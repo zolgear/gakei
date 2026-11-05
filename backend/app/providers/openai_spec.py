@@ -64,6 +64,16 @@ DEFAULT_SIZE = "1024x1024"
 MAX_INPUT_IMAGES = 16
 MAX_INPUT_IMAGE_BYTES = 50 * 1024 * 1024
 MAX_MASK_BYTES = 4 * 1024 * 1024
+# ADR-0061: GIF のコマ数。公式のガイドは 2〜64 と書くが、API は 16 を超えると 400 を返す
+# (2026-11-05 の実機確認)。
+GIF_FRAME_COUNT_MIN = 2
+GIF_FRAME_COUNT_MAX = 16
+# GIF の1コマの大きさ。API は全コマを少なくとも2×2のシートに並べ、シートを通常の制約で確かめる
+# ので、長辺は通常の半分、総ピクセルは通常の4分の1を上限にする。シートに収まるかは確かめない
+# (並べ方が公開されていない。ADR-0061 2章)。
+GIF_FRAME_MAX_LONG_EDGE = sizes.MAX_LONG_EDGE // 2
+GIF_FRAME_MIN_TOTAL_PIXELS = 256 * 256
+GIF_FRAME_MAX_TOTAL_PIXELS = sizes.MAX_TOTAL_PIXELS // 4
 # プロンプトの最大長は domain.sizes に集約する(プロンプトセットの検証とも共有するため)。
 PROMPT_MAX_LENGTH = sizes.PROMPT_MAX_LENGTH
 
@@ -80,7 +90,7 @@ def _quality_labels() -> dict[str, str]:
 
 
 def _output_format_labels() -> dict[str, str]:
-    return {"png": "PNG", "jpeg": "JPEG", "webp": "WebP"}
+    return {"png": "PNG", "jpeg": "JPEG", "webp": "WebP", "gif": "GIF"}
 
 
 def _background_labels() -> dict[str, str]:
@@ -104,14 +114,21 @@ def _supports_complexity(model: str) -> bool:
     return model.startswith("gpt-image-2.6")
 
 
+def _supports_gif(model: str, operation: str) -> bool:
+    # ADR-0061: 2.6 の Generate と Edit(Edit も 2026-11-05 の実機で GIF を返した)。
+    return model.startswith("gpt-image-2.6")
+
+
 def _quality_choices(model: str) -> list[str]:
     if model.startswith(("gpt-image-2.5", "gpt-image-2.6")):
         return ["auto", "low", "medium", "high", "xhigh", "max"]
     return ["auto", "low", "medium", "high"]
 
 
-def _common_params(model: str) -> list[ParamDef]:
+def _common_params(model: str, operation: str) -> list[ParamDef]:
     quality_choices = _quality_choices(model)
+    gif = _supports_gif(model, operation)
+    format_choices = ["png", "jpeg", "webp", "gif"] if gif else ["png", "jpeg", "webp"]
     params = [
         ParamDef(
             name="quality",
@@ -127,8 +144,8 @@ def _common_params(model: str) -> list[ParamDef]:
             name="output_format",
             type="enum",
             label=t("openaiSpec.fileFormatLabel"),
-            choices=["png", "jpeg", "webp"],
-            choice_labels=_output_format_labels(),
+            choices=format_choices,
+            choice_labels={k: v for k, v in _output_format_labels().items() if k in format_choices},
             default="png",
             form_default="png",
             description=t("openaiSpec.fileFormatDescription"),
@@ -172,6 +189,28 @@ def _common_params(model: str) -> list[ParamDef]:
             description=t("openaiSpec.previewDescription"),
         ),
     ]
+    if gif:
+        # ADR-0061 1章: GIF のときだけ使う(`conditional_params` で output_format に結び付ける)。
+        params += [
+            ParamDef(
+                name="frame_count",
+                type="int",
+                label=t("openaiSpec.frameCountLabel"),
+                minimum=GIF_FRAME_COUNT_MIN,
+                maximum=GIF_FRAME_COUNT_MAX,
+                default=9,
+                description=t("openaiSpec.frameCountDescription"),
+            ),
+            ParamDef(
+                name="frame_duration_ms",
+                type="int",
+                label=t("openaiSpec.frameDurationLabel"),
+                minimum=20,
+                maximum=2000,
+                default=200,
+                description=t("openaiSpec.frameDurationDescription"),
+            ),
+        ]
     if _supports_complexity(model):
         # 描く前の計画の量。画質とは別の項目で、料金は変わらない。API の既定は high なので、
         # フォームの初期値は置かない(未指定のまま送ると high になる)。
@@ -192,7 +231,7 @@ def _common_params(model: str) -> list[ParamDef]:
 
 
 def _operation_capabilities(model: str, operation: str) -> OperationCapabilities:
-    params = _common_params(model)
+    params = _common_params(model, operation)
     if operation == "generate":
         # `moderation`(表現の制限、Generate 専用)はフォームに出さない。設定 `MODERATION`
         # (既定 low)の値を、Run 作成時にサーバーが params へ入れる(api/runs.py の create_run)。
@@ -278,7 +317,32 @@ def build_capabilities(provider_name: str, label: str | None = None) -> Provider
             depends_on_field="output_format",
             depends_on_values=["jpeg", "webp"],
         ),
+        # ADR-0061 1章: GIF はストリーミングできないので、途中経過は静止画の形式のときだけ。
+        ConditionalParam(
+            field="partial_images",
+            depends_on_field="output_format",
+            depends_on_values=["png", "jpeg", "webp"],
+        ),
+        ConditionalParam(
+            field="frame_count",
+            depends_on_field="output_format",
+            depends_on_values=["gif"],
+        ),
+        ConditionalParam(
+            field="frame_duration_ms",
+            depends_on_field="output_format",
+            depends_on_values=["gif"],
+        ),
     ]
+    gif_frame_size = SizeConstraints(
+        multiple_of=sizes.MULTIPLE_OF,
+        max_long_edge=GIF_FRAME_MAX_LONG_EDGE,
+        min_total_pixels=GIF_FRAME_MIN_TOTAL_PIXELS,
+        max_total_pixels=GIF_FRAME_MAX_TOTAL_PIXELS,
+        min_aspect_ratio=sizes.MIN_ASPECT_RATIO,
+        max_aspect_ratio=sizes.MAX_ASPECT_RATIO,
+        allow_auto=True,
+    )
 
     return ProviderCapabilities(
         provider=provider_name,
@@ -287,6 +351,7 @@ def build_capabilities(provider_name: str, label: str | None = None) -> Provider
         default_model=DEFAULT_MODEL,
         default_size=DEFAULT_SIZE,
         size=size,
+        gif_frame_size=gif_frame_size,
         incompatible_pairs=incompatible_pairs,
         conditional_params=conditional_params,
         prompt_max_length=PROMPT_MAX_LENGTH,

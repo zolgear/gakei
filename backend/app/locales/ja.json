@@ -408,7 +408,11 @@
     "complexityDescription": "描く前に構成をどれだけ考えるか。小さな編集は低め、文字や込み入った配置は高めが合う。料金は変わらない",
     "complexityLow": "低",
     "complexityMedium": "中",
-    "complexityHigh": "高"
+    "complexityHigh": "高",
+    "frameCountLabel": "コマ数",
+    "frameCountDescription": "GIF のコマの数。サイズは1コマの大きさで、全コマを並べた画像が上限を超えると断られるので、迷ったらサイズは自動にする",
+    "frameDurationLabel": "1コマの時間",
+    "frameDurationDescription": "GIF の1コマを表示する時間(ミリ秒)"
   },
   "fake": {
     "forcedFailureMarker": "テスト用の強制失敗マーカーを検出しました: {code}",
@@ -624,7 +628,8 @@
     "cannotCancelStatus": "status={status} のため cancel できません",
     "cannotCancelAlreadyRunning": "すでに実行が開始されているため cancel できません",
     "partialNotFound": "途中経過が見つかりません",
-    "locked": "出力がロックで守られているので削除できません"
+    "locked": "出力がロックで守られているので削除できません",
+    "gifNotInput": "GIF の画像は入力に使えません: {id}"
   },
   "runRegions": {
     "editOnly": "領域の指示は編集(Edit)でだけ使えます",

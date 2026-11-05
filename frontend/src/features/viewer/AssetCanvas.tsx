@@ -37,6 +37,8 @@ export interface CanvasImage {
   id: string
   width: number
   height: number
+  /** 原本の形式。GIF なら最初から原本を出して再生する(ADR-0061 5章)。省くと静止画として扱う。 */
+  mime?: string
 }
 
 interface AssetCanvasProps {
@@ -190,11 +192,13 @@ function ImageCanvas({
   // asset が切り替わったら preview から見直す(差し替え前の倍率を引きずらない)。
   // effect ではなく、レンダー中に「直前に見ていた asset.id」とズレていたらその場で補正する
   // (React 公式が薦める「props から派生した state をリセットする」書き方)。
+  // ADR-0061 5章: アニメーション GIF の派生は1コマ目の静止画なので、原本を出して再生する。
+  const initialVariant: 'preview' | 'original' = asset.mime === 'image/gif' && allowOriginal ? 'original' : 'preview'
   const [variantState, setVariantState] = useState<{ assetId: string; variant: 'preview' | 'original' }>(
-    () => ({ assetId: asset.id, variant: 'preview' }),
+    () => ({ assetId: asset.id, variant: initialVariant }),
   )
   if (variantState.assetId !== asset.id) {
-    setVariantState({ assetId: asset.id, variant: 'preview' })
+    setVariantState({ assetId: asset.id, variant: initialVariant })
   }
   const variant = variantState.variant
   function setVariant(next: 'preview' | 'original') {

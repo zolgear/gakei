@@ -169,6 +169,9 @@ class ProviderCapabilities(BaseModel):
     default_model: str
     default_size: str | None = None
     size: SizeConstraints | None = None  # None のプロバイダーは size パラメータを取らない
+    # `output_format=gif` のときの、1コマの大きさの制約(ADR-0061 2章)。None なら GIF でも
+    # `size` で検証する。
+    gif_frame_size: SizeConstraints | None = None
     incompatible_pairs: list[IncompatiblePair] = Field(default_factory=list)
     conditional_params: list[ConditionalParam] = Field(default_factory=list)
     prompt_max_length: int = 32_000

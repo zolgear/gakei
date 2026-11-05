@@ -408,7 +408,11 @@
     "complexityDescription": "How much the model plans the composition before drawing. Lower suits small edits; higher suits text and busy layouts. Does not change the price",
     "complexityLow": "Low",
     "complexityMedium": "Medium",
-    "complexityHigh": "High"
+    "complexityHigh": "High",
+    "frameCountLabel": "Frames",
+    "frameCountDescription": "Number of GIF frames. Size is per frame, and the request is rejected if all frames laid out together exceed the limit, so use Auto size when unsure",
+    "frameDurationLabel": "Frame duration",
+    "frameDurationDescription": "How long each GIF frame is shown (milliseconds)"
   },
   "fake": {
     "forcedFailureMarker": "Detected the test forced-failure marker: {code}",
@@ -624,7 +628,8 @@
     "cannotCancelStatus": "Cannot cancel: status={status}",
     "cannotCancelAlreadyRunning": "Cannot cancel: it has already started running",
     "partialNotFound": "Partial image not found",
-    "locked": "An output is protected by a lock, so this run cannot be deleted"
+    "locked": "An output is protected by a lock, so this run cannot be deleted",
+    "gifNotInput": "GIF images cannot be used as input: {id}"
   },
   "runRegions": {
     "editOnly": "Region instructions can only be used with Edit",

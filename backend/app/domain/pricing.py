@@ -37,7 +37,9 @@ from typing import Any, Literal
 from app.domain.sizes import InvalidSizeError, parse_size, validate_size
 from app.providers.openai_pricing import UnitPrices, get_unit_prices
 
-UnavailableReason = Literal["quality_auto", "size_auto", "size_invalid", "unknown_model"]
+UnavailableReason = Literal[
+    "quality_auto", "size_auto", "size_invalid", "unknown_model", "animated_output"
+]
 
 # サイズ×画質ごとの出力グリッドの長辺(公式計算機の JS から)。sunburst / flare は
 # どちらも "gpt-image-2.5" / "gpt-image-2.6" に正規化されるため、モデル名スナップショット
@@ -169,6 +171,7 @@ def estimate_cost(
     n: int,
     prompt_length: int,
     input_images: Sequence[tuple[uuid.UUID, int, int]] = (),
+    output_format: str | None = None,
 ) -> EstimateResult:
     """参考価格を合算する。見積もりであって請求額ではない。
 
@@ -190,6 +193,9 @@ def estimate_cost(
 
     if normalized is None or prices is None:
         reason = "unknown_model"
+    elif output_format == "gif":
+        # ADR-0061 8章: GIF の出力トークンの式は公開されていない。
+        reason = "animated_output"
     elif quality not in OUTPUT_GRID[normalized]:
         reason = "quality_auto"
     else:

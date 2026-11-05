@@ -20,6 +20,7 @@ import { contentRatingPollInterval, thumbRating } from '../content-rating/conten
 import { annotationPollInterval } from '../annotations/annotationStatus'
 import { AssetDetailSections } from '../viewer/AssetDetailSections'
 import { isSendBlocked, isWithheld } from '../mods/modVerdicts'
+import { isAnimatedAsset } from '../run-form/animatedInputs'
 import styles from './LineageAssetInspectorContent.module.css'
 
 export interface LineageAssetInspectorContentProps {
@@ -107,8 +108,14 @@ export function LineageAssetInspectorContent({ assetId, onOpenRun }: LineageAsse
           type="button"
           className={styles.actionButton}
           onClick={() => addToInputs.request(asset.id)}
-          disabled={Boolean(asset.deleted_at) || isSendBlocked(asset)}
-          title={isSendBlocked(asset) ? t.mods.cannotUseAsInput : undefined}
+          disabled={Boolean(asset.deleted_at) || isSendBlocked(asset) || isAnimatedAsset(asset)}
+          title={
+            isSendBlocked(asset)
+              ? t.mods.cannotUseAsInput
+              : isAnimatedAsset(asset)
+                ? t.runForm.gifNotInput
+                : undefined
+          }
         >
           {t.lineage.useAsInput}
         </button>

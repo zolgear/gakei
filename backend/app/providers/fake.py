@@ -38,6 +38,7 @@ _FORMAT_MAP = {
     "png": ("PNG", "image/png"),
     "jpeg": ("JPEG", "image/jpeg"),
     "webp": ("WEBP", "image/webp"),
+    "gif": ("GIF", "image/gif"),
 }
 
 
@@ -170,7 +171,13 @@ class FakeProvider:
         size_str = params.get("size", "auto")
         if not size_str or size_str == "auto":
             return (1024, 1024)
-        parsed = parse_size(str(size_str))
+        # ADR-0061 2章: GIF のときの `size` は1コマの大きさ(通常より小さくてよい)。
+        limits = (
+            openai_spec.build_capabilities("fake").gif_frame_size
+            if params.get("output_format") == "gif"
+            else None
+        )
+        parsed = parse_size(str(size_str), limits)
         return parsed if parsed is not None else (1024, 1024)
 
     @staticmethod
@@ -248,6 +255,21 @@ class FakeProvider:
         compression = params.get("output_compression")
         if pillow_format in ("JPEG", "WEBP") and compression is not None:
             save_kwargs["quality"] = int(compression)
+
+        if pillow_format == "GIF":
+            # ADR-0061: コマごとに明るさを変えたアニメーション GIF(無限ループ)。
+            frame_count = int(params.get("frame_count", 9))
+            rgb = out_image.convert("RGB")
+            frames = [
+                Image.eval(rgb, lambda v, k=k: min(255, v + k * 12)) for k in range(frame_count)
+            ]
+            save_kwargs = {
+                "save_all": True,
+                "append_images": frames[1:],
+                "duration": int(params.get("frame_duration_ms", 200)),
+                "loop": 0,
+            }
+            out_image = frames[0]
 
         buffer = io.BytesIO()
         out_image.save(buffer, format=pillow_format, **save_kwargs)

@@ -10,7 +10,8 @@
   `RunResult` / 例外メッセージ / ログに base64 文字列を残さない。
 - SDK 3.16.2 の `images.generate` / `images.edit` は `quality` の Literal に `xhigh` / `max` を
   含んでいるため、追加のパラメータをそのまま渡せば型を素通りする(`extra_body` は不要だった)。
-- 一方、SDK 3.16.2 の引数に無い項目(2.6 の `complexity`)は、そのまま渡すと TypeError に
+- 一方、SDK 3.16.2 の引数に無い項目(2.6 の `complexity`、GIF の `frame_count` /
+  `frame_duration_ms`)は、そのまま渡すと TypeError に
   なる。`_SDK_UNKNOWN_PARAMS` の項目だけ `extra_body` に移す(Edit の multipart でも
   フォームの項目として届くことを 2026-11-05 に実機で確認した)。
 """
@@ -54,10 +55,12 @@ _OUTPUT_FORMAT_TO_MIME = {
     "png": "image/png",
     "jpeg": "image/jpeg",
     "webp": "image/webp",
+    # ADR-0061: 2.6 の Generate のアニメーション GIF。
+    "gif": "image/gif",
 }
 
 # SDK の引数に無い項目。`extra_body` で送る(モジュールの docstring)。
-_SDK_UNKNOWN_PARAMS = ("complexity",)
+_SDK_UNKNOWN_PARAMS = ("complexity", "frame_count", "frame_duration_ms")
 
 
 def _to_sdk_kwargs(params: dict[str, Any]) -> dict[str, Any]:

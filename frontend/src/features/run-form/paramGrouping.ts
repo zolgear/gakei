@@ -8,8 +8,23 @@ import type { ParamDef } from '../../api/client'
 /**
  * 主に出すパラメーター名(この順で並べる)。それ以外は「その他」の `<details>` に畳む。
  * `complexity`(計画の深さ)は GPT Image 2.6 だけにあり、結果を大きく変えるので主に出す。
+ * GIF のコマ数と1コマの時間(ADR-0061)は、GIF を選んだときだけ主に出す(`HIDDEN_WHEN_DISABLED`)。
  */
-export const PRIMARY_PARAMS = ['quality', 'n', 'output_format', 'background', 'complexity']
+export const PRIMARY_PARAMS = [
+  'quality',
+  'n',
+  'output_format',
+  'background',
+  'complexity',
+  'frame_count',
+  'frame_duration_ms',
+]
+
+/**
+ * 主に出すパラメーターのうち、無効のあいだは欄ごと隠すもの。ほかの形式では意味が無く、
+ * 無効の欄を並べると邪魔になるため(ADR-0009)。
+ */
+export const HIDDEN_WHEN_DISABLED = ['frame_count', 'frame_duration_ms']
 
 export interface GroupedParams {
   primary: ParamDef[]
@@ -63,5 +78,7 @@ export function groupParamsForProvider(provider: string | undefined, defs: Param
 
 /** 設定グリッドで2マス分を使うパラメーター(文章の欄と seed の欄)。 */
 export function isWideParam(def: ParamDef): boolean {
+  // 選択肢が4つ以上のスイッチ(GIF を足したファイル形式)は、半分の幅では文字が切れる。
+  if (def.widget === 'segmented' && (def.choices?.length ?? 0) >= 4) return true
   return def.type === 'text' || def.widget === 'seed'
 }
