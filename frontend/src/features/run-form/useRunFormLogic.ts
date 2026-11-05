@@ -613,11 +613,16 @@ export function useRunFormLogic(
 
   const regionsActive = regionsClearReason === null && formState.regions.length > 0 && regionsSupported
   const imageInputAssetIds = formState.inputs.filter((i) => i.role === 'image').map((i) => i.assetId)
-  // 入力に画像を足すのは「画像と文」だけ(ComfyUI は四角をそのまま差し込む)。
+  // 入力に画像を足すのは「画像と文」と印(markup)だけ(ComfyUI は四角をそのまま差し込む)。印は
+  // 画像の列に入らないので、参照画像だけを数える。マスクのある Run と白紙の土台では、サーバーが
+  // 「画像と文」に戻すので、四角を描いた画像も数える(ADR-0053 5章、2026-11-05 追記)。
+  const markupFallsBack = hasMask || regionsBlank
   const regionExtraInputs =
     regionsActive && regionsDelivery === 'image_and_text'
       ? regionExtraInputCount(formState.regions, imageInputAssetIds)
-      : 0
+      : regionsActive && regionsDelivery === 'markup'
+        ? regionExtraInputCount(formState.regions, imageInputAssetIds, markupFallsBack)
+        : 0
   let regionsBlockReason: string | null = null
   if (regionsActive) {
     if (!areRegionBoxesValid(formState.regions)) regionsBlockReason = msg().regions.form.invalid

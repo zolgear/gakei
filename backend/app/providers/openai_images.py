@@ -10,10 +10,8 @@
   `RunResult` / 例外メッセージ / ログに base64 文字列を残さない。
 - SDK 3.16.2 の `images.generate` / `images.edit` は `quality` の Literal に `xhigh` / `max` を
   含んでいるため、追加のパラメータをそのまま渡せば型を素通りする(`extra_body` は不要だった)。
-- 一方、SDK 3.16.2 の引数に無い項目(2.6 の `complexity`、GIF の `frame_count` /
-  `frame_duration_ms`)は、そのまま渡すと TypeError に
-  なる。`_SDK_UNKNOWN_PARAMS` の項目だけ `extra_body` に移す(Edit の multipart でも
-  フォームの項目として届くことを 2026-11-05 に実機で確認した)。
+- 2.6 の `complexity`、GIF の `frame_count` / `frame_duration_ms`、Edit の `markup` は、
+  SDK 3.46.0 から引数にある(それより前は `extra_body` で送っていた)。
 """
 
 from __future__ import annotations
@@ -58,18 +56,6 @@ _OUTPUT_FORMAT_TO_MIME = {
     # ADR-0061: 2.6 の Generate のアニメーション GIF。
     "gif": "image/gif",
 }
-
-# SDK の引数に無い項目。`extra_body` で送る(モジュールの docstring)。
-_SDK_UNKNOWN_PARAMS = ("complexity", "frame_count", "frame_duration_ms")
-
-
-def _to_sdk_kwargs(params: dict[str, Any]) -> dict[str, Any]:
-    kwargs = dict(params)
-    extra = {key: kwargs.pop(key) for key in _SDK_UNKNOWN_PARAMS if key in kwargs}
-    if extra:
-        kwargs["extra_body"] = extra
-    return kwargs
-
 
 # コンテンツ拒否と判定する error.code。実機で他の値が判明した場合はここに追加する。
 _CONTENT_FILTER_CODES = {"moderation_blocked", "content_policy_violation"}
@@ -184,7 +170,7 @@ class OpenAIImagesProvider:
         stream: bool,
         on_progress: ProgressCallback,
     ) -> RunResult:
-        kwargs: dict[str, Any] = _to_sdk_kwargs(params)
+        kwargs: dict[str, Any] = dict(params)
         kwargs["model"] = run.model
         kwargs["prompt"] = run.prompt
 
@@ -206,7 +192,7 @@ class OpenAIImagesProvider:
         stream: bool,
         on_progress: ProgressCallback,
     ) -> RunResult:
-        kwargs: dict[str, Any] = _to_sdk_kwargs(params)
+        kwargs: dict[str, Any] = dict(params)
         kwargs["model"] = run.model
         kwargs["prompt"] = run.prompt
 
@@ -228,6 +214,14 @@ class OpenAIImagesProvider:
         if masks:
             # API はマスクを1枚だけ受け取る(複数あれば最初の image に適用される仕様)。
             kwargs["mask"] = _to_file_tuple(masks[0], 0, "mask")
+
+        markups = sorted(
+            (item for item in run.inputs if item.role == "markup"), key=lambda item: item.position
+        )
+        if markups:
+            # ADR-0053 5章(2026-11-05 追記): 領域の四角を、1枚目の入力に重ねる透過の印として
+            # 送る。API は `mask` と同時には受けない(Run の作成で、マスクがあれば使わない)。
+            kwargs["markup"] = _to_file_tuple(markups[0], 0, "markup")
 
         if not stream:
             response = await client.images.edit(**kwargs)

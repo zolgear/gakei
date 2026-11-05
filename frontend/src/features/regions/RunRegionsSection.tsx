@@ -32,6 +32,7 @@ export function RunRegionsSection({ regions, sectionClassName, headingClassName,
         <p className={styles.delivery}>{regions.frame === 'output' ? m.deliveryBlank : m.delivery}</p>
       )}
       {regions.delivery === 'comfyui_bboxes' && <p className={styles.delivery}>{m.deliveryComfyui}</p>}
+      {regions.delivery === 'markup' && <p className={styles.delivery}>{m.deliveryMarkup}</p>}
       {regions.frame === 'output' && <p className={styles.delivery}>{m.frameOutput}</p>}
       {/* 送った四角の画像(Asset の種類 regions。入力の1枚として送った)。 */}
       {regions.overlay_asset_id && (

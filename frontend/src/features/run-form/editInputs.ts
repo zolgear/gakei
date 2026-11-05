@@ -50,9 +50,12 @@ export function ensureInputIds<T extends Omit<RunInputItem, 'inputId'> & { input
 
 /** API の run_input(asset_id/role/position)からフォームの入力を作る(「同じ設定で」の復元用)。 */
 export function inputsFromRunInputs(
-  runInputs: readonly { asset_id: string; role: RunInputItem['role']; position: number }[],
+  runInputs: readonly { asset_id: string; role: RunInputItem['role'] | 'markup'; position: number }[],
 ): RunInputItem[] {
-  return runInputs.map((i) => ({ inputId: newInputId(), assetId: i.asset_id, role: i.role, position: i.position }))
+  // 印(markup)はサーバーが四角から作って足す入力なので、フォームには戻さない(ADR-0053 5章)。
+  return runInputs.flatMap((i) =>
+    i.role === 'markup' ? [] : [{ inputId: newInputId(), assetId: i.asset_id, role: i.role, position: i.position }],
+  )
 }
 
 function splitInputs(inputs: RunInputItem[]): {

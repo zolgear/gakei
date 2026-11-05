@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from PIL import Image
+from PIL import Image, ImageOps
 from sqlalchemy.orm import Session
 
 from app.auth.identity import CurrentUser
@@ -265,7 +265,7 @@ def create_runs(
         except ProviderUnavailableError as e:
             raise RunCreateError("conflict", str(e)) from e
 
-    extra_inputs: list[tuple[uuid.UUID, int]] = []
+    extra_inputs: list[tuple[uuid.UUID, RunInputRole, int]] = []
     if plan is not None:
         overlay = assets_domain.ingest(
             db,
@@ -277,12 +277,19 @@ def create_runs(
             created_by_user_id=viewer.id,
             prepared=plan.overlay,
         )
-        extra_inputs = [(overlay.id, plan.overlay_position), *plan.reference_inputs]
+        extra_inputs = [
+            (overlay.id, plan.overlay_role, plan.overlay_position),
+            *(
+                (asset_id, RunInputRole.IMAGE, position)
+                for asset_id, position in plan.reference_inputs
+            ),
+        ]
         regions_json = regions_domain.RegionsRecord(
             regions=regions_domain.ordered(body.regions),
             appended_text=plan.appended_text,
             overlay_asset_id=overlay.id,
             frame=plan.frame,
+            delivery=plan.delivery,
         ).to_json()
 
     # 積んだ順を queued_at で保つ(runner も履歴も queued_at 順。同じ時刻だと id の順になり、
@@ -318,12 +325,8 @@ def create_runs(
                     run_id=run.id, asset_id=item.asset_id, role=item.role, position=item.position
                 )
             )
-        for asset_id, position in extra_inputs:
-            db.add(
-                RunInput(
-                    run_id=run.id, asset_id=asset_id, role=RunInputRole.IMAGE, position=position
-                )
-            )
+        for asset_id, role, position in extra_inputs:
+            db.add(RunInput(run_id=run.id, asset_id=asset_id, role=role, position=position))
         # IP の利用の申告(ADR-0059 5章)。追記のみ。
         ip_usage.record_use(db, run.id, ip_plans, declaration)
         runs.append(run)
@@ -385,6 +388,14 @@ class _RegionsPlan:
     # 送る操作(入力画像の無い Run も Edit で送る)と、座標が何に対する割合か。
     operation: Literal["generate", "edit"] = "edit"
     frame: Literal["input", "output"] = "input"
+    # 「画像と文」なら role=image の入力、markup なら role=markup の印として送る。
+    delivery: str = regions_domain.DELIVERY_IMAGE_AND_TEXT
+
+    @property
+    def overlay_role(self) -> RunInputRole:
+        if self.delivery == regions_domain.DELIVERY_MARKUP:
+            return RunInputRole.MARKUP
+        return RunInputRole.IMAGE
 
 
 def _regions_op_caps(caps: ProviderCapabilities, body: RunCreateRequest) -> OperationCapabilities:
@@ -505,12 +516,22 @@ def _plan_regions(
     frame = _resolve_regions_frame(body, has_primary=True)
     blank = frame == "output"
     _check_region_options(op_caps, body, blank=blank)
+    # ADR-0053 5章(2026-11-05 追記): 印(markup)で送れるのは、1枚目の上の四角でマスクの無い
+    # Run だけ(API は markup と mask を同時に受けない。白紙の配置図は1枚目に重ねる物ではない)。
+    use_markup = (
+        op_caps.regions_delivery == regions_domain.DELIVERY_MARKUP
+        and not blank
+        and not any(m.role == "mask" for m in input_metas)
+    )
 
     # 入力の何枚目か(1 から。プロバイダーに送る順 = role=image の position の順)。
     image_numbers = {m.asset_id: index + 1 for index, m in enumerate(image_metas)}
     next_position = image_metas[-1].position + 1
+    # 印も四角を描いた画像と同じ位置(利用者の入力の直後)に記録する。再実行で、この位置から後ろの
+    # サーバーが足した入力を外せるように(フロントの `restoreRunRegions`)。印は画像の列には入らない
+    # ので、画像の何枚目かには数えない。
     overlay_position = next_position
-    overlay_number = len(image_metas) + 1
+    overlay_number = len(image_metas) if use_markup else len(image_metas) + 1
 
     # 参照画像。利用者の入力にあればその画像を指し、無ければ四角を描いた画像の後ろに足す。
     reference_ids: list[uuid.UUID] = []
@@ -520,8 +541,9 @@ def _plan_regions(
             reference_ids.append(ref)
     reference_assets = _load_reference_assets(db, viewer, reference_ids)
 
-    # ADR-0053 5章: 足す画像も Edit の入力の枚数の上限に数える。超えるなら Run を作らない。
-    total = len(image_metas) + 1 + len(reference_assets)
+    # ADR-0053 5章: 足す画像も Edit の入力の枚数の上限に数える。超えるなら Run を作らない
+    # (印は画像の列に入らないので数えない)。
+    total = len(image_metas) + (0 if use_markup else 1) + len(reference_assets)
     if total > op_caps.max_input_images:
         raise RunCreateError(
             "invalid",
@@ -535,6 +557,11 @@ def _plan_regions(
             # 白紙の大きさは入力画像の無い Run と同じ(出力サイズ。`auto` は 1024×1024)。
             width, height = _blank_canvas_size(body, caps)
             data = regions_domain.render_layout(width, height, body.regions)
+        elif use_markup:
+            # 印は、API が向きを直した後の1枚目と同じ大きさにする(EXIF の向きを反映した大きさ)。
+            with Image.open(io.BytesIO(store.read(primary.blob_key))) as image:
+                width, height = ImageOps.exif_transpose(image).size
+            data = regions_domain.render_markup(width, height, body.regions)
         else:
             with Image.open(io.BytesIO(store.read(primary.blob_key))) as image:
                 data = regions_domain.render_overlay(image, body.regions)
@@ -545,7 +572,7 @@ def _plan_regions(
     extra_metas = [
         RunInputMeta(
             asset_id=overlay.asset_id,
-            role="image",
+            role="markup" if use_markup else "image",
             position=overlay_position,
             width=overlay.width,
             height=overlay.height,
@@ -576,6 +603,7 @@ def _plan_regions(
         overlay_image_number=overlay_number,
         reference_image_numbers=reference_numbers,
         blank=blank,
+        markup=use_markup,
     )
     return _RegionsPlan(
         # 白紙の配置図は主たる入力から作った画像ではないので、元の画像を持たない。
@@ -586,6 +614,9 @@ def _plan_regions(
         extra_metas=extra_metas,
         appended_text=appended,
         frame=frame,
+        delivery=regions_domain.DELIVERY_MARKUP
+        if use_markup
+        else regions_domain.DELIVERY_IMAGE_AND_TEXT,
     )
 
 

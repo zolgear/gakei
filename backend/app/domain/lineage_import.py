@@ -100,7 +100,7 @@ class _Model(BaseModel):
 
 class ManifestRunInput(_Model):
     asset_id: uuid.UUID
-    role: Literal["image", "mask", "reference"]
+    role: Literal["image", "mask", "reference", "markup"]
     position: int = Field(ge=0, le=1000)
 
 

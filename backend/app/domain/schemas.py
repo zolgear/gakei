@@ -1209,7 +1209,7 @@ class RunCreateResponse(BaseModel):
 
 class RunInputRef(BaseModel):
     asset_id: uuid.UUID
-    role: Literal["image", "mask", "reference"]
+    role: Literal["image", "mask", "reference", "markup"]
     position: int
     # サムネイルの焦点(ADR-0043)。マスクと焦点の無い画像は null。
     focal_point: FocalPoint | None = None
@@ -1487,7 +1487,7 @@ class LineageEdge(BaseModel):
     source: uuid.UUID
     target: uuid.UUID
     kind: Literal["input", "output", "sketch_source", "composite_source", "origin"]
-    role: Literal["image", "mask", "reference"] | None = None
+    role: Literal["image", "mask", "reference", "markup"] | None = None
     position: int | None = None
     output_index: int | None = None
     primary: bool = False
@@ -3142,7 +3142,7 @@ class PublicShareEdge(BaseModel):
     source: uuid.UUID
     target: uuid.UUID
     kind: Literal["input", "output", "sketch_source", "composite_source", "origin"]
-    role: Literal["image", "mask", "reference"] | None = None
+    role: Literal["image", "mask", "reference", "markup"] | None = None
     position: int | None = None
     output_index: int | None = None
     primary: bool = False

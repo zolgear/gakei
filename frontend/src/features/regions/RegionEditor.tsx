@@ -181,8 +181,11 @@ export function RegionEditor({
       ? { width: canvas.asset.width, height: canvas.asset.height }
       : { width: canvas.width, height: canvas.height }
   const detection = useRegionDetection(asset?.id ?? null)
-  // 「画像と文」だけが入力に画像を足す(四角を描いた画像と参照画像)。ComfyUI は足さない。
-  const addsInputs = delivery === 'image_and_text'
+  // 「画像と文」は入力に画像を足す(四角を描いた画像と参照画像)。印(markup)は1枚目に重ねるので
+  // 参照画像だけを足す(白紙の土台では「画像と文」に戻す。ADR-0053 5章、2026-11-05 追記)。
+  // ComfyUI は足さない。
+  const addsInputs = delivery === 'image_and_text' || delivery === 'markup'
+  const sendsMarkup = delivery === 'markup' && canvas.kind !== 'blank'
   const regions = draft ?? history.present
   const selected = regions.find((x) => x.key === selectedKey) ?? null
 
@@ -310,7 +313,7 @@ export function RegionEditor({
 
   const saveable = canSaveRegions(regions)
   const boxesNow = boxesFromEditorRegions(regions)
-  const extra = addsInputs ? regionExtraInputCount(boxesNow, inputAssetIds) : 0
+  const extra = addsInputs ? regionExtraInputCount(boxesNow, inputAssetIds, !sendsMarkup) : 0
   const totalInputs = inputAssetIds.length + extra
   const atLimit = regions.length >= REGIONS_MAX
   const referenceRegion = regions.find((x) => x.key === referenceKey) ?? null
@@ -508,11 +511,16 @@ export function RegionEditor({
 
         <div className={styles.footer}>
           <div className={styles.footerNotes}>
-            {delivery === 'image_and_text' && (
+            {sendsMarkup && <p className={styles.mutedNote}>{r.notes.markup}</p>}
+            {addsInputs && !sendsMarkup && (
               <p className={styles.mutedNote}>{canvas.kind === 'blank' ? r.notes.imageAndTextBlank : r.notes.imageAndText}</p>
             )}
             {delivery === 'comfyui_bboxes' && <p className={styles.mutedNote}>{r.notes.comfyuiBboxes}</p>}
-            {addsInputs && <p className={styles.mutedNote}>{fmt(r.notes.countsTowardLimit, { max: maxInputImages })}</p>}
+            {addsInputs && (
+              <p className={styles.mutedNote}>
+                {fmt(sendsMarkup ? r.notes.referencesCountTowardLimit : r.notes.countsTowardLimit, { max: maxInputImages })}
+              </p>
+            )}
             {regions.length > 0 && totalInputs > maxInputImages && (
               <p className={styles.noteText}>
                 {fmt(t.regions.form.tooManyInputs, { extra, count: totalInputs, max: maxInputImages })}

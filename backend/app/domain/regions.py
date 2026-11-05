@@ -27,6 +27,9 @@ VERSION = 1
 DELIVERY_IMAGE_AND_TEXT = "image_and_text"
 # ComfyUI の Create Bounding Boxes に差し込む(ADR-0053 6章。変換は `comfy_bounding_boxes`)。
 DELIVERY_COMFYUI_BBOXES = "comfyui_bboxes"
+# 四角を透過の印(markup)に描き、1枚目の入力に重ねて送る(ADR-0053 5章、2026-11-05 追記)。
+# GPT Image 2.5 / 2.6 の Edit。マスクのある Run と白紙の配置図では「画像と文」に戻す。
+DELIVERY_MARKUP = "markup"
 # 入力画像の無い Run の配置図の大きさ(出力サイズが `auto`・未指定のとき。フロントの白紙の
 # キャンバスと同じ規則。ADR-0053 5章)。
 BLANK_AUTO_SIZE = (1024, 1024)
@@ -182,6 +185,24 @@ def render_overlay(image: Image.Image, regions: Sequence[RegionBox]) -> bytes:
     canvas = Image.new("RGBA", base.size, (255, 255, 255, 255))
     canvas.alpha_composite(base)
     canvas = canvas.convert("RGB")
+    _draw_regions(canvas, regions)
+    out = io.BytesIO()
+    canvas.save(out, format="PNG")
+    return out.getvalue()
+
+
+def render_markup(width: int, height: int, regions: Sequence[RegionBox]) -> bytes:
+    """1枚目の入力に重ねる透過の印(markup。ADR-0053 5章、2026-11-05 追記)。
+
+    大きさは1枚目の入力と同じ(API が一致を求める)。四角・矢印・番号は「画像と文」と同じ描き方。"""
+    canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    _draw_regions(canvas, regions)
+    out = io.BytesIO()
+    canvas.save(out, format="PNG")
+    return out.getvalue()
+
+
+def _draw_regions(canvas: Image.Image, regions: Sequence[RegionBox]) -> None:
     width, height = canvas.size
     short = min(width, height)
     line = max(3, round(short * 0.008))
@@ -213,10 +234,6 @@ def render_overlay(image: Image.Image, regions: Sequence[RegionBox]) -> bytes:
         _badge(
             draw, (target[0] + line, target[1] + line), region.number, color, badge, (width, height)
         )
-
-    out = io.BytesIO()
-    canvas.save(out, format="PNG")
-    return out.getvalue()
 
 
 def render_layout(width: int, height: int, regions: Sequence[RegionBox]) -> bytes:
@@ -307,6 +324,7 @@ def build_prompt_text(
     overlay_image_number: int,
     reference_image_numbers: dict[Any, int],
     blank: bool = False,
+    markup: bool = False,
 ) -> str:
     """プロンプトの後ろに足す文(前の改行を含む)。
 
@@ -314,8 +332,11 @@ def build_prompt_text(
     `reference_image_numbers` は参照画像の Asset id → 何枚目の入力か。
     `blank` は白紙の配置図(ADR-0053 5章・1章「四角の土台を選ぶ」)。見出しと結びを分ける。配置図が
     1枚目なら入力画像の無い Run、2枚目以降なら利用者の入力の後ろに足した配置図(ほかの画像は参考)。
+    `markup` は四角を印として1枚目に重ねて送るとき(`overlay_image_number` は使わない)。
     """
-    if blank and overlay_image_number > 1:
+    if markup:
+        header = t("runRegions.prompt.headerMarkup")
+    elif blank and overlay_image_number > 1:
         header = t("runRegions.prompt.headerBlankWithInputs", overlay=overlay_image_number)
     elif blank:
         header = t("runRegions.prompt.headerBlank")
@@ -347,7 +368,9 @@ def build_prompt_text(
             )
         else:
             lines.append(t("runRegions.prompt.item", number=region.number, color=color, body=body))
-    if blank:
+    if markup:
+        lines.append(t("runRegions.prompt.footerMarkup"))
+    elif blank:
         lines.append(t("runRegions.prompt.footerBlank"))
     else:
         lines.append(t("runRegions.prompt.footer", overlay=overlay_image_number))
@@ -367,11 +390,13 @@ class RegionsRecord:
     # 座標が何に対する割合か(`input`: 主たる入力、`output`: 出力の大きさ。入力画像の無い Run の
     # 白紙の配置図)。
     frame: str = "input"
+    # `image_and_text` か `markup`。`overlay_asset_id` は、前者なら入力に足した画像、後者なら印。
+    delivery: str = DELIVERY_IMAGE_AND_TEXT
 
     def to_json(self) -> dict[str, Any]:
         return {
             "version": VERSION,
-            "delivery": DELIVERY_IMAGE_AND_TEXT,
+            "delivery": self.delivery,
             "regions": [r.model_dump(mode="json") for r in self.regions],
             # プロンプトの後ろに足した文。再実行では、プロンプトからこの文を除いて戻す。
             "appended_text": self.appended_text,

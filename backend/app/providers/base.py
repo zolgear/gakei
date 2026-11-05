@@ -24,7 +24,7 @@ OperationName = Literal["generate", "edit"]
 RegionKind = Literal["change", "add", "keep", "remove", "move"]
 ALL_REGION_KINDS: tuple[RegionKind, ...] = ("change", "add", "keep", "remove", "move")
 # 四角の渡し方(ADR-0053 5章)。
-RegionsDelivery = Literal["image_and_text", "comfyui_bboxes"]
+RegionsDelivery = Literal["image_and_text", "comfyui_bboxes", "markup"]
 
 
 class ParamDef(BaseModel):
@@ -218,7 +218,8 @@ class InputImage(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    role: Literal["image", "mask"]
+    # markup: 1枚目の入力に重ねる透過の印(ADR-0053 5章、2026-11-05 追記)。
+    role: Literal["image", "mask", "markup"]
     position: int
     data: bytes
     mime: str
