@@ -19,7 +19,6 @@ export const PRIMARY_PARAMS = [
   'complexity',
   'frame_count',
   'frame_duration_ms',
-  'svg_model',
   'svg_effort',
 ]
 
@@ -27,7 +26,7 @@ export const PRIMARY_PARAMS = [
  * 主に出すパラメーターのうち、無効のあいだは欄ごと隠すもの。ほかの形式では意味が無く、
  * 無効の欄を並べると邪魔になるため(ADR-0009)。
  */
-export const HIDDEN_WHEN_DISABLED = ['n', 'frame_count', 'frame_duration_ms', 'svg_model', 'svg_effort']
+export const HIDDEN_WHEN_DISABLED = ['n', 'frame_count', 'frame_duration_ms', 'svg_effort']
 
 export interface GroupedParams {
   primary: ParamDef[]

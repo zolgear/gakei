@@ -6164,6 +6164,7 @@ export interface components {
             moderation: components["schemas"]["ModerationSetting"];
             comfyui_timeout_seconds: components["schemas"]["ComfyUITimeoutSetting"];
             sdwebui_timeout_seconds: components["schemas"]["SdWebuiTimeoutSetting"];
+            svg_author_model: components["schemas"]["SvgAuthorModelSetting"];
         };
         /**
          * GeneralSettingsUpdateRequest
@@ -6181,6 +6182,8 @@ export interface components {
             comfyui_timeout_seconds?: number | null;
             /** Sdwebui Timeout Seconds */
             sdwebui_timeout_seconds?: number | null;
+            /** Svg Author Model */
+            svg_author_model?: string | null;
         };
         /**
          * GroupNamingSettingsResponse
@@ -10076,6 +10079,19 @@ export interface components {
             /** Final Prompt */
             final_prompt?: string | null;
             bounding_boxes?: components["schemas"]["InputRef"] | null;
+        };
+        /**
+         * SvgAuthorModelSetting
+         * @description SVG を書くモデル(ADR-0062 2章)。null は未設定(`svg` を送らず、API に任せる)。
+         */
+        SvgAuthorModelSetting: {
+            /** Value */
+            value: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "setting" | "default";
         };
         /** TagCount */
         TagCount: {

@@ -126,21 +126,14 @@ def _supports_svg(model: str, operation: str) -> bool:
     return model.startswith("gpt-image-2.6") and operation == "generate"
 
 
-# SVG を書くモデル(ADR-0062 2章)。テキストのモデルなら受けるが、選択肢は単価を持つものに絞る。
-SVG_AUTHOR_MODELS = ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
-SVG_AUTHOR_LABELS = {
-    "gpt-5.6-luna": "GPT-5.6 Luna",
-    "gpt-5.6-terra": "GPT-5.6 Terra",
-    "gpt-5.6-sol": "GPT-5.6 Sol",
-}
 SVG_EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
 
 
-def fill_svg_author(params: dict[str, Any]) -> dict[str, Any]:
-    """SVG で書き手が未指定なら既定(Luna)を入れる(API は `svg.model` が無いと 400)。Run の
-    確定で呼び、送る値として記録する(ADR-0062 2章)。"""
-    if params.get("output_format") == "svg" and params.get("svg_model") is None:
-        return {**params, "svg_model": SVG_AUTHOR_MODELS[0]}
+def fill_svg_author(params: dict[str, Any], author_model: str | None) -> dict[str, Any]:
+    """SVG のとき、管理者設定の書き手のモデルを `svg_model` として入れる(Run の確定で呼び、送る
+    値として記録する。ADR-0062 2章)。未設定なら入れない(`svg` を送らず、API に任せる)。"""
+    if params.get("output_format") == "svg" and author_model:
+        return {**params, "svg_model": author_model}
     return params
 
 
@@ -249,19 +242,10 @@ def _common_params(model: str, operation: str) -> list[ParamDef]:
             ),
         ]
     if svg:
-        # ADR-0062 2章: SVG のときだけ使う。API には `svg: {model, reasoning: {effort}}` で送る
-        # (プロバイダーが組み立てる)。思考の量は未指定なら書き手のモデルの既定。
+        # ADR-0062 2章: SVG のときだけ使う。書き手のモデルは管理者設定(フォームには出さない)。
+        # API には `svg: {model, reasoning: {effort}}` で送る(プロバイダーが組み立てる)。思考の量は
+        # 未指定なら書き手のモデルの既定。
         params += [
-            ParamDef(
-                name="svg_model",
-                type="enum",
-                label=t("openaiSpec.svgModelLabel"),
-                choices=SVG_AUTHOR_MODELS,
-                choice_labels=SVG_AUTHOR_LABELS,
-                default=SVG_AUTHOR_MODELS[0],
-                form_default=SVG_AUTHOR_MODELS[0],
-                description=t("openaiSpec.svgModelDescription"),
-            ),
             ParamDef(
                 name="svg_effort",
                 type="enum",
@@ -397,11 +381,6 @@ def build_capabilities(provider_name: str, label: str | None = None) -> Provider
             field="n",
             depends_on_field="output_format",
             depends_on_values=["png", "jpeg", "webp", "gif"],
-        ),
-        ConditionalParam(
-            field="svg_model",
-            depends_on_field="output_format",
-            depends_on_values=["svg"],
         ),
         ConditionalParam(
             field="svg_effort",

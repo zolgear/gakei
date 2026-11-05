@@ -1802,10 +1802,18 @@ class SdWebuiTimeoutSetting(BaseModel):
     default: int
 
 
+class SvgAuthorModelSetting(BaseModel):
+    """SVG を書くモデル(ADR-0062 2章)。null は未設定(`svg` を送らず、API に任せる)。"""
+
+    value: str | None
+    source: Literal["setting", "default"]
+
+
 class GeneralSettingsResponse(BaseModel):
     moderation: ModerationSetting
     comfyui_timeout_seconds: ComfyUITimeoutSetting
     sdwebui_timeout_seconds: SdWebuiTimeoutSetting
+    svg_author_model: SvgAuthorModelSetting
 
 
 class ProviderLocalitySetting(BaseModel):
@@ -1845,6 +1853,7 @@ class GeneralSettingsUpdateRequest(BaseModel):
     moderation: str | None = None
     comfyui_timeout_seconds: int | None = None
     sdwebui_timeout_seconds: int | None = None
+    svg_author_model: str | None = None
 
 
 # -- ComfyUI (ADR-0013) ----------------------------------------------------

@@ -39,7 +39,8 @@ def test_svg_is_offered_only_for_26_generate() -> None:
     caps = build_capabilities("fake")
     gen = _params(caps, MODEL_26, "generate")
     assert "svg" in (gen["output_format"].choices or [])
-    assert gen["svg_model"].default == "gpt-5.6-luna"
+    # 書き手のモデルは管理者設定(フォームに出さない)。
+    assert "svg_model" not in gen
     assert "max" in (gen["svg_effort"].choices or [])
     assert "svg" not in (_params(caps, MODEL_26, "edit")["output_format"].choices or [])
     gen_25 = _params(caps, "gpt-image-2.5-flare", "generate")
@@ -47,11 +48,13 @@ def test_svg_is_offered_only_for_26_generate() -> None:
     conditional = {c.field: c.depends_on_values for c in caps.conditional_params}
     assert "svg" not in conditional["n"]
     assert "svg" not in conditional["partial_images"]
-    assert conditional["svg_model"] == ["svg"]
+    assert conditional["svg_effort"] == ["svg"]
 
 
 def test_svg_only_params_need_svg(client: TestClient) -> None:
-    assert _post_generate(client, {"svg_model": "gpt-5.6-luna"}).status_code == 422
+    assert _post_generate(client, {"svg_effort": "low"}).status_code == 422
+    # 書き手のモデルはフォームから送れない(管理者設定)。
+    assert _post_generate(client, {"output_format": "svg", "svg_model": "x"}).status_code == 422
     # SVG は1枚だけ(`n` は送らない)。
     assert _post_generate(client, {"output_format": "svg", "n": 2}).status_code == 422
 
@@ -60,7 +63,10 @@ def test_svg_only_params_need_svg(client: TestClient) -> None:
 
 
 def test_svg_output_is_stored_and_served_safely(client: TestClient) -> None:
-    # 書き手を指定しなければ、既定(Luna)を入れて記録する(API は svg.model が無いと 400)。
+    # 管理者設定の書き手のモデルを、Run の確定で入れて記録する。
+    saved = client.patch("/api/settings/general", json={"svg_author_model": "gpt-6-luna"})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["svg_author_model"] == {"value": "gpt-6-luna", "source": "setting"}
     response = _post_generate(client, {"size": "1024x1024", "output_format": "svg"})
     assert response.status_code == 202, response.text
     detail = wait_for_run_terminal(client, response.json()["id"])
@@ -91,8 +97,8 @@ def test_svg_output_is_stored_and_served_safely(client: TestClient) -> None:
 
     # 実行後の料金は、画像の分に SVG を書くモデルの分を足す。
     run = client.get(f"/api/runs/{detail['id']}").json()
-    assert run["params"]["svg_model"] == "gpt-5.6-luna"
-    assert run["usage"]["svg_usage"]["model"] == "gpt-5.6-luna"
+    assert run["params"]["svg_model"] == "gpt-6-luna"
+    assert run["usage"]["svg_usage"]["model"] == "gpt-6-luna"
 
     # ADR-0062: SVG は入力にしない。
     edit = client.post(
@@ -182,12 +188,26 @@ def test_svg_price_is_not_estimated_but_actual_cost_adds_the_author() -> None:
         MODEL_26,
         {
             **image_only,
-            "svg_usage": {"model": "gpt-5.6-luna", "input_tokens": 1556, "output_tokens": 931},
+            "svg_usage": {"model": "gpt-6-luna", "input_tokens": 1556, "output_tokens": 931},
         },
     )
-    assert with_author == pytest.approx(base + (1556 * 0.20 + 931 * 1.20) / 1_000_000, abs=1e-6)
+    assert with_author == pytest.approx(base + (1556 * 0.10 + 931 * 0.50) / 1_000_000, abs=1e-6)
     unknown = {
         **image_only,
         "svg_usage": {"model": "unknown", "input_tokens": 1, "output_tokens": 1},
     }
     assert cost_from_usage(MODEL_26, unknown) is None
+
+
+def test_svg_author_model_setting(client: TestClient) -> None:
+    # 既定は未設定(`svg` を送らず、API に任せる)。
+    assert client.get("/api/settings/general").json()["svg_author_model"] == {
+        "value": None,
+        "source": "default",
+    }
+    bad = client.patch("/api/settings/general", json={"svg_author_model": "gpt 6; rm"})
+    assert bad.status_code == 422
+    response = _post_generate(client, {"size": "1024x1024", "output_format": "svg"})
+    detail = wait_for_run_terminal(client, response.json()["id"])
+    assert "svg_model" not in detail["params"]
+    assert client.patch("/api/settings/general", json={"svg_author_model": None}).status_code == 200

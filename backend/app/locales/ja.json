@@ -404,8 +404,6 @@
     "countDescription": "1回の実行で生成する枚数。枚数分の料金がかかる",
     "previewLabel": "途中経過の表示",
     "previewDescription": "生成途中の画像を表示する回数(0 で表示しない)",
-    "svgModelLabel": "SVG を書くモデル",
-    "svgModelDescription": "参照の画像から SVG を書くモデル。料金は画像の分に、このモデルのトークンの分が加わります。",
     "svgEffortLabel": "SVG の思考",
     "svgEffortDescription": "SVG を書くモデルが考える量。未指定ならモデルの既定。",
     "svgEffortNone": "なし",
@@ -450,6 +448,7 @@
   "settings": {
     "general": {
       "invalidModeration": "moderation は auto または low である必要があります",
+      "invalidSvgAuthorModel": "SVG を書くモデルの名前は、英数字と . _ : - で 100 文字までにしてください",
       "invalidTimeoutSeconds": "ComfyUI のタイムアウトは{min}〜{max}秒の整数である必要があります",
       "invalidSdwebuiTimeoutSeconds": "SD WebUI のタイムアウトは{min}〜{max}秒の整数である必要があります"
     },

@@ -12,8 +12,9 @@
   含んでいるため、追加のパラメータをそのまま渡せば型を素通りする(`extra_body` は不要だった)。
 - 2.6 の `complexity`、GIF の `frame_count` / `frame_duration_ms`、Edit の `markup` は、
   SDK 3.46.0 から引数にある(それより前は `extra_body` で送っていた)。
-- SVG(ADR-0062)の書き手は、フォームの項目 `svg_model` / `svg_effort` から、API の
-  `svg: {model, reasoning: {effort}}` を組み立てて送る(params には項目のまま保存する)。
+- SVG(ADR-0062)の書き手は、管理者設定のモデル(Run の確定で `svg_model` として params に
+  入れる)とフォームの `svg_effort` から、API の `svg: {model, reasoning: {effort}}` を組み立てて
+  送る(params には項目のまま保存する)。
   書き手のトークンは `usage["svg_usage"]` に残す。
 """
 
@@ -111,7 +112,9 @@ class OpenAIImagesProvider:
             # を使う(再起動なしで次の Run から反映する。ADR-0009 2章)。
             saved = general_settings.get_saved_moderation(db)
             params["moderation"] = saved if saved is not None else self._moderation
-            params = openai_spec.fill_svg_author(params)
+            params = openai_spec.fill_svg_author(
+                params, general_settings.get_saved_svg_author_model(db)
+            )
         return params
 
     def repeat_seed(self, first_params: dict[str, Any], index: int) -> int | None:
@@ -295,15 +298,16 @@ def _mime_from_output_format(output_format: str | None) -> str:
 
 
 def _apply_svg_author(kwargs: dict[str, Any]) -> None:
-    """フォームの `svg_model` / `svg_effort` を API の `svg` に組み替える(ADR-0062 2章)。"""
+    """`svg_model` / `svg_effort` を API の `svg` に組み替える(ADR-0062 2章)。"""
     author = kwargs.pop("svg_model", None)
     effort = kwargs.pop("svg_effort", None)
-    if author is None:
-        return
-    svg: dict[str, Any] = {"model": author}
+    svg: dict[str, Any] = {}
+    if author is not None:
+        svg["model"] = author
     if effort is not None:
         svg["reasoning"] = {"effort": effort}
-    kwargs["svg"] = svg
+    if svg:
+        kwargs["svg"] = svg
 
 
 def _usage_to_dict(usage: Any) -> dict[str, Any] | None:

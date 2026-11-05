@@ -95,7 +95,9 @@ class FakeProvider:
             # を使う(再起動なしで次の Run から反映する。ADR-0009 2章)。
             saved = general_settings.get_saved_moderation(db)
             params["moderation"] = saved if saved is not None else self._moderation
-            params = openai_spec.fill_svg_author(params)
+            params = openai_spec.fill_svg_author(
+                params, general_settings.get_saved_svg_author_model(db)
+            )
         return params
 
     def repeat_seed(self, first_params: dict, index: int) -> int | None:
@@ -155,7 +157,7 @@ class FakeProvider:
         if output_format == "svg":
             # ADR-0062 5章: SVG を書くモデルのトークン(実際の応答と同じ形)。
             usage["svg_usage"] = {
-                "model": str(params.get("svg_model", "gpt-5.6-luna")),
+                "model": str(params.get("svg_model", "fake-svg-author")),
                 "input_tokens": 1500,
                 "output_tokens": 900,
                 "reasoning_tokens": 150,

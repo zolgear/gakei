@@ -356,7 +356,12 @@
     },
     "openai": {
       "connectionHeading": "接続",
-      "generationHeading": "生成"
+      "generationHeading": "生成",
+      "svgAuthorModel": {
+        "label": "SVG を書くモデル",
+        "help": "SVG の出力(GPT Image 2.6)で、参照の画像から SVG を書くテキストのモデル。空欄なら指定せず、API に任せます(アカウントによっては指定が必要です)。料金は画像の分に、このモデルのトークンの分が加わります。",
+        "placeholder": "例: gpt-6-luna"
+      }
     },
     "profile": {
       "upload": "画像をアップロード",

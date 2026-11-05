@@ -8,6 +8,8 @@
  *   だけ効く。ADR-0009 1章 2026-09-24)。`PATCH /api/settings/general` の `moderation` だけを送る。
  *   「既定値に戻す」は下書きに null を入れる。環境変数(`MODERATION`)由来でも入力欄はロックしない
  *   (画面で保存した値が優先。注記だけ出す)。
+ * - 「保存で反映」: SVG を書くモデル(ADR-0062 2章)。空欄は未設定(`svg` を送らず、API に任せる)。
+ *   モデルは増えていくので、選択肢にせず名前を入れる。
  * - 「接続」: 接続先(`locality`。ADR-0051 3章。`ProviderLocalityCard`)。別の API なので、
  *   ページの保存には混ぜずダイアログでその場で送る。
  */
@@ -52,6 +54,8 @@ type ModerationValue = ModerationSetting['value']
 interface OpenAiDraft {
   /** null は「既定値に戻す」(保存すると画面の設定を消す)。 */
   moderation: ModerationValue | null
+  /** SVG を書くモデル。空文字は未設定。 */
+  svgAuthorModel: string
 }
 
 export function OpenAiSettingsPage() {
@@ -61,16 +65,23 @@ export function OpenAiSettingsPage() {
   const queryClient = useQueryClient()
   const generalQuery = useQuery({ queryKey: GENERAL_SETTINGS_QUERY_KEY, queryFn: getGeneralSettings })
   const moderation = generalQuery.data?.moderation
+  const svgAuthorModel = generalQuery.data?.svg_author_model
 
   const saved = useMemo<OpenAiDraft | undefined>(
-    () => (moderation ? { moderation: moderation.value } : undefined),
-    [moderation],
+    () =>
+      moderation && svgAuthorModel
+        ? { moderation: moderation.value, svgAuthorModel: svgAuthorModel.value ?? '' }
+        : undefined,
+    [moderation, svgAuthorModel],
   )
   const draft = useSettingsDraft<OpenAiDraft>({
     saved,
     save: async (patch) => {
-      if (patch.moderation === undefined) return
-      const next = await updateGeneralSettings({ moderation: patch.moderation })
+      const body: Parameters<typeof updateGeneralSettings>[0] = {}
+      if (patch.moderation !== undefined) body.moderation = patch.moderation
+      if (patch.svgAuthorModel !== undefined) body.svg_author_model = patch.svgAuthorModel.trim() || null
+      if (Object.keys(body).length === 0) return
+      const next = await updateGeneralSettings(body)
       queryClient.setQueryData(GENERAL_SETTINGS_QUERY_KEY, next)
     },
   })
@@ -124,6 +135,26 @@ export function OpenAiSettingsPage() {
                 {fmt(g.moderation.resetToDefault, { default: moderation.default })}
               </button>
             )}
+          </SettingsRow>
+        )}
+        {svgAuthorModel && draft.values && (
+          <SettingsRow
+            label={o.svgAuthorModel.label}
+            htmlFor="gakei-svg-author-model"
+            description={o.svgAuthorModel.help}
+            changed={draft.isChanged('svgAuthorModel')}
+          >
+            <input
+              id="gakei-svg-author-model"
+              className={styles.input}
+              value={draft.values.svgAuthorModel}
+              placeholder={o.svgAuthorModel.placeholder}
+              spellCheck={false}
+              autoComplete="off"
+              maxLength={100}
+              disabled={draft.saving}
+              onChange={(e) => draft.set('svgAuthorModel', e.target.value)}
+            />
           </SettingsRow>
         )}
       </SettingsSection>

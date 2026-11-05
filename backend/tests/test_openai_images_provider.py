@@ -531,7 +531,7 @@ def test_capabilities_match_fake_provider_spec() -> None:
 
 @run_async
 async def test_svg_output_sends_the_author_and_keeps_its_usage() -> None:
-    # ADR-0062: フォームの svg_model / svg_effort を API の svg に組み替え、書き手のトークンを
+    # ADR-0062: svg_model(管理者設定)/ svg_effort を API の svg に組み替え、書き手のトークンを
     # usage["svg_usage"] に残す。
     captured: dict = {}
     svg_doc = b'<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect/></svg>'
@@ -549,11 +549,11 @@ async def test_svg_output_sends_the_author_and_keeps_its_usage() -> None:
         return json_response(body)
 
     provider = OpenAIImagesProvider(client=make_client(handler))
-    params = {"output_format": "svg", "svg_model": "gpt-5.6-luna", "svg_effort": "low"}
+    params = {"output_format": "svg", "svg_model": "gpt-6-luna", "svg_effort": "low"}
     result = await provider.execute(_run_request(params=params), _noop_progress)
 
     body = captured["request"].json_body
-    assert body["svg"] == {"model": "gpt-5.6-luna", "reasoning": {"effort": "low"}}
+    assert body["svg"] == {"model": "gpt-6-luna", "reasoning": {"effort": "low"}}
     assert "svg_model" not in body and "svg_effort" not in body
     assert result.outputs[0].mime == "image/svg+xml"
     assert result.outputs[0].data == svg_doc

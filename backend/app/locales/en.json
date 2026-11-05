@@ -404,8 +404,6 @@
     "countDescription": "Number of images generated per run. Billed per image",
     "previewLabel": "Show progress previews",
     "previewDescription": "Number of in-progress previews to show (0 to disable)",
-    "svgModelLabel": "SVG author model",
-    "svgModelDescription": "The model that writes the SVG from the reference image. Its tokens are billed on top of the image.",
     "svgEffortLabel": "SVG reasoning",
     "svgEffortDescription": "How much the SVG author model reasons. Unset uses the model's default.",
     "svgEffortNone": "None",
@@ -450,6 +448,7 @@
   "settings": {
     "general": {
       "invalidModeration": "moderation must be auto or low",
+      "invalidSvgAuthorModel": "The SVG author model name must use letters, digits and . _ : - (up to 100 characters)",
       "invalidTimeoutSeconds": "The ComfyUI timeout must be an integer between {min} and {max} seconds",
       "invalidSdwebuiTimeoutSeconds": "The SD WebUI timeout must be an integer from {min} to {max} seconds"
     },
