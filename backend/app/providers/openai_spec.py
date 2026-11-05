@@ -115,8 +115,8 @@ def _supports_complexity(model: str) -> bool:
 
 
 def _supports_gif(model: str, operation: str) -> bool:
-    # ADR-0061: 2.6 の Generate だけ(Edit は GIF を出力できない)。
-    return model.startswith("gpt-image-2.6") and operation == "generate"
+    # ADR-0061: 2.6 の Generate と Edit(Edit も 2026-11-05 の実機で GIF を返した)。
+    return model.startswith("gpt-image-2.6")
 
 
 def _quality_choices(model: str) -> list[str]:
