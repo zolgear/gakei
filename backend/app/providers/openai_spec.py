@@ -129,10 +129,10 @@ def _supports_svg(model: str, operation: str) -> bool:
 SVG_EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
 
 
-def fill_svg_author(params: dict[str, Any], author_model: str | None) -> dict[str, Any]:
-    """SVG のとき、管理者設定の書き手のモデルを `svg_model` として入れる(Run の確定で呼び、送る
-    値として記録する。ADR-0062 2章)。未設定なら入れない(`svg` を送らず、API に任せる)。"""
-    if params.get("output_format") == "svg" and author_model:
+def fill_svg_author(params: dict[str, Any], author_model: str) -> dict[str, Any]:
+    """SVG のとき、管理者設定の書き手のモデル(未設定なら組み込みの既定)を `svg_model` として
+    入れる(Run の確定で呼び、送る値として記録する。ADR-0062 2章)。"""
+    if params.get("output_format") == "svg":
         return {**params, "svg_model": author_model}
     return params
 

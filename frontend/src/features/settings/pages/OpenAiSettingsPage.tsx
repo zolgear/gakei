@@ -8,8 +8,8 @@
  *   だけ効く。ADR-0009 1章 2026-09-24)。`PATCH /api/settings/general` の `moderation` だけを送る。
  *   「既定値に戻す」は下書きに null を入れる。環境変数(`MODERATION`)由来でも入力欄はロックしない
  *   (画面で保存した値が優先。注記だけ出す)。
- * - 「保存で反映」: SVG を書くモデル(ADR-0062 2章)。空欄は未設定(`svg` を送らず、API に任せる)。
- *   モデルは増えていくので、選択肢にせず名前を入れる。
+ * - 「保存で反映」: SVG を書くモデル(ADR-0062 2章)。モデルは増えていくので、選択肢にせず名前を
+ *   入れる。空欄で保存すると組み込みの既定に戻す(既定は入力欄の placeholder に出す)。
  * - 「接続」: 接続先(`locality`。ADR-0051 3章。`ProviderLocalityCard`)。別の API なので、
  *   ページの保存には混ぜずダイアログでその場で送る。
  */
@@ -54,7 +54,7 @@ type ModerationValue = ModerationSetting['value']
 interface OpenAiDraft {
   /** null は「既定値に戻す」(保存すると画面の設定を消す)。 */
   moderation: ModerationValue | null
-  /** SVG を書くモデル。空文字は未設定。 */
+  /** SVG を書くモデル。空文字は未設定(組み込みの既定を使う)。 */
   svgAuthorModel: string
 }
 
@@ -70,7 +70,10 @@ export function OpenAiSettingsPage() {
   const saved = useMemo<OpenAiDraft | undefined>(
     () =>
       moderation && svgAuthorModel
-        ? { moderation: moderation.value, svgAuthorModel: svgAuthorModel.value ?? '' }
+        ? {
+            moderation: moderation.value,
+            svgAuthorModel: svgAuthorModel.source === 'setting' ? svgAuthorModel.value : '',
+          }
         : undefined,
     [moderation, svgAuthorModel],
   )
@@ -148,7 +151,7 @@ export function OpenAiSettingsPage() {
               id="gakei-svg-author-model"
               className={styles.input}
               value={draft.values.svgAuthorModel}
-              placeholder={o.svgAuthorModel.placeholder}
+              placeholder={svgAuthorModel.default}
               spellCheck={false}
               autoComplete="off"
               maxLength={100}

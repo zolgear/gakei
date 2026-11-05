@@ -359,8 +359,7 @@
       "generationHeading": "Generation",
       "svgAuthorModel": {
         "label": "SVG author model",
-        "help": "The text model that writes the SVG from the reference image (GPT Image 2.6 SVG output). Leave empty to let the API decide (some accounts require a model). Its tokens are billed on top of the image.",
-        "placeholder": "e.g. gpt-6-luna"
+        "help": "The text model that writes the SVG from the reference image (GPT Image 2.6 SVG output). Leave empty to use the default model. Its tokens are billed on top of the image."
       }
     },
     "profile": {

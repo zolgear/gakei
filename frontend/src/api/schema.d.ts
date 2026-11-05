@@ -10082,16 +10082,18 @@ export interface components {
         };
         /**
          * SvgAuthorModelSetting
-         * @description SVG を書くモデル(ADR-0062 2章)。null は未設定(`svg` を送らず、API に任せる)。
+         * @description SVG を書くモデル(ADR-0062 2章)。未設定なら組み込みの既定。
          */
         SvgAuthorModelSetting: {
             /** Value */
-            value: string | null;
+            value: string;
             /**
              * Source
              * @enum {string}
              */
             source: "setting" | "default";
+            /** Default */
+            default: string;
         };
         /** TagCount */
         TagCount: {

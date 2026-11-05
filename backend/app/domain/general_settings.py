@@ -121,8 +121,9 @@ def save_moderation(db: Session, value: str | None) -> None:
 
 
 # -- SVG を書くモデル(ADR-0062 2章) ---------------------------------------------
-# 既定は無し(`svg` を送らず、API に任せる)。モデルは増えていくので、選択肢に固定しない。
+# 未設定なら組み込みの既定を使う(LLM を使う他の機能と同じ。既定の見直しと集約は #238)。
 
+DEFAULT_SVG_AUTHOR_MODEL = "gpt-5.6-luna"
 _SVG_AUTHOR_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$")
 
 
@@ -134,6 +135,14 @@ def get_saved_svg_author_model(db: Session) -> str | None:
     return value
 
 
+def resolve_svg_author_model(db: Session) -> tuple[str, Literal["setting", "default"]]:
+    """使う SVG を書くモデルと、その出所(画面で保存した値か、組み込みの既定か)。"""
+    saved = get_saved_svg_author_model(db)
+    if saved is not None:
+        return saved, "setting"
+    return DEFAULT_SVG_AUTHOR_MODEL, "default"
+
+
 def validate_svg_author_model(value: str | None) -> None:
     """`value=None`(リセット)は常に有効。それ以外はモデル名の形(英数字と `._:-`、100文字まで)。"""
     if value is not None and not _SVG_AUTHOR_MODEL.match(value):
@@ -141,7 +150,7 @@ def validate_svg_author_model(value: str | None) -> None:
 
 
 def save_svg_author_model(db: Session, value: str | None) -> None:
-    """保存する。`value=None` は保存済みの行を削除する(API に任せる)。"""
+    """保存する。`value=None` は保存済みの行を削除する(組み込みの既定に戻す)。"""
     validate_svg_author_model(value)
     if value is None:
         _delete(db, SVG_AUTHOR_MODEL_KEY)

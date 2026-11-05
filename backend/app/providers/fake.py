@@ -96,7 +96,7 @@ class FakeProvider:
             saved = general_settings.get_saved_moderation(db)
             params["moderation"] = saved if saved is not None else self._moderation
             params = openai_spec.fill_svg_author(
-                params, general_settings.get_saved_svg_author_model(db)
+                params, general_settings.resolve_svg_author_model(db)[0]
             )
         return params
 

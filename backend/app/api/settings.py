@@ -371,7 +371,7 @@ def update_provider_localities(
 
 def _general_settings_response(db: Session, settings: Settings) -> GeneralSettingsResponse:
     moderation_value, moderation_source = general_settings.resolve_moderation(db, settings)
-    svg_author_model = general_settings.get_saved_svg_author_model(db)
+    svg_author_model, svg_author_source = general_settings.resolve_svg_author_model(db)
     timeout_value, timeout_source = general_settings.resolve_timeout_seconds(db, settings)
     sdwebui_timeout_value, sdwebui_timeout_source = (
         general_settings.resolve_sdwebui_timeout_seconds(db, settings)
@@ -394,7 +394,8 @@ def _general_settings_response(db: Session, settings: Settings) -> GeneralSettin
         ),
         svg_author_model=SvgAuthorModelSetting(
             value=svg_author_model,
-            source="setting" if svg_author_model is not None else "default",
+            source=svg_author_source,
+            default=general_settings.DEFAULT_SVG_AUTHOR_MODEL,
         ),
     )
 

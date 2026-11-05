@@ -1803,10 +1803,11 @@ class SdWebuiTimeoutSetting(BaseModel):
 
 
 class SvgAuthorModelSetting(BaseModel):
-    """SVG を書くモデル(ADR-0062 2章)。null は未設定(`svg` を送らず、API に任せる)。"""
+    """SVG を書くモデル(ADR-0062 2章)。未設定なら組み込みの既定。"""
 
-    value: str | None
+    value: str
     source: Literal["setting", "default"]
+    default: str
 
 
 class GeneralSettingsResponse(BaseModel):

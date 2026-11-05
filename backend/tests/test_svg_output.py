@@ -66,7 +66,11 @@ def test_svg_output_is_stored_and_served_safely(client: TestClient) -> None:
     # 管理者設定の書き手のモデルを、Run の確定で入れて記録する。
     saved = client.patch("/api/settings/general", json={"svg_author_model": "gpt-6-luna"})
     assert saved.status_code == 200, saved.text
-    assert saved.json()["svg_author_model"] == {"value": "gpt-6-luna", "source": "setting"}
+    assert saved.json()["svg_author_model"] == {
+        "value": "gpt-6-luna",
+        "source": "setting",
+        "default": "gpt-5.6-luna",
+    }
     response = _post_generate(client, {"size": "1024x1024", "output_format": "svg"})
     assert response.status_code == 202, response.text
     detail = wait_for_run_terminal(client, response.json()["id"])
@@ -200,14 +204,15 @@ def test_svg_price_is_not_estimated_but_actual_cost_adds_the_author() -> None:
 
 
 def test_svg_author_model_setting(client: TestClient) -> None:
-    # 既定は未設定(`svg` を送らず、API に任せる)。
+    # 未設定なら組み込みの既定を使う(LLM を使う他の機能と同じ)。
     assert client.get("/api/settings/general").json()["svg_author_model"] == {
-        "value": None,
+        "value": "gpt-5.6-luna",
         "source": "default",
+        "default": "gpt-5.6-luna",
     }
     bad = client.patch("/api/settings/general", json={"svg_author_model": "gpt 6; rm"})
     assert bad.status_code == 422
     response = _post_generate(client, {"size": "1024x1024", "output_format": "svg"})
     detail = wait_for_run_terminal(client, response.json()["id"])
-    assert "svg_model" not in detail["params"]
+    assert detail["params"]["svg_model"] == "gpt-5.6-luna"
     assert client.patch("/api/settings/general", json={"svg_author_model": None}).status_code == 200
