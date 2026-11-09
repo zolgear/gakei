@@ -91,6 +91,8 @@ interface GroupSectionProps {
   onGroupDeleted?: (groupId: string) => void
   /** グループの節の並べ替え(パネルに 1 つ)。「グループなし」の節には渡さない。 */
   reorder?: GroupReorderControls
+  /** ファイルをこの節へ運んでいる間(落とすとこのグループに入る)。受け口はパネル(`StockPanel`)。 */
+  fileDropTarget?: boolean
 }
 
 function hasAssetData(e: DragEvent<HTMLElement>): boolean {
@@ -104,7 +106,8 @@ function hasGroupData(e: DragEvent<HTMLElement>): boolean {
 /**
  * アプリ内のタイルのドラッグ(`GAKEI_ASSET_ID_DATA_TYPE`)を受ける領域。`enabled` が偽なら
  * 何も受けない。ファイルのドロップはパネル全体の受け口(アップロード)に任せるため、ここでは
- * 伝播を止めない(パネル側はアプリ内の Asset のドロップを無視する)。
+ * 伝播を止めない(パネル側はアプリ内の Asset のドロップを無視し、ファイルは落とした節の
+ * `data-stock-group-id` のグループに入れる)。
  */
 function useAssetDropZone(enabled: boolean, onDropAsset: (assetId: string) => void) {
   const [dropping, setDropping] = useState(false)
@@ -147,6 +150,7 @@ export function GroupSection({
   onError,
   onGroupDeleted,
   reorder,
+  fileDropTarget = false,
 }: GroupSectionProps) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
@@ -284,10 +288,10 @@ export function GroupSection({
       : {}
 
   return (
-    <section className={styles.section} data-dragging={dragging || undefined}>
+    <section className={styles.section} data-dragging={dragging || undefined} data-stock-group-id={group?.id}>
       <div
         className={styles.headerRow}
-        data-dropping={headerDrop.dropping}
+        data-dropping={headerDrop.dropping || fileDropTarget}
         data-drop-position={dropPosition ?? undefined}
         {...headerHandlers}
         {...dragSourceHandlers}

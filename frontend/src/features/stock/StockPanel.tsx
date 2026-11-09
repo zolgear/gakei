@@ -23,6 +23,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router'
 import {
   ApiError,
+  addAssetsToGroup,
   createAsset,
   deleteAsset,
   getCapabilities,
@@ -78,6 +79,12 @@ import styles from './StockPanel.module.css'
 
 type KindFilter = StockKindFilter
 
+/** ドラッグ・ドロップの先が属するグループの節の id(`GroupSection` の `data-stock-group-id`)。 */
+function sectionGroupIdAt(target: EventTarget | null): string | null {
+  if (!(target instanceof Element)) return null
+  return target.closest<HTMLElement>('[data-stock-group-id]')?.dataset.stockGroupId ?? null
+}
+
 export function StockPanel() {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -111,6 +118,8 @@ export function StockPanel() {
   // アップロードが既存 Asset に一致したとき(ADR-0014)の案内。エラーとは別枠で出す。
   const [notice, setNotice] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+  // ファイルを運んでいる先のグループの節(その見出しに印を付ける)。グループなしの節やパネルの余白なら null。
+  const [fileDropGroupId, setFileDropGroupId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AssetSummary | null>(null)
   const toast = useToast()
   const showToast = toast.show
@@ -179,7 +188,8 @@ export function StockPanel() {
   })
 
   const uploadMutation = useMutation({
-    mutationFn: async (files: File[]) => {
+    // `groupId` はファイルを落とした節のグループ。アップロードした Asset(既存に一致したものも)をそこへ移す。
+    mutationFn: async ({ files, groupId }: { files: File[]; groupId: string | null }) => {
       const errors: string[] = []
       const uploaded: AssetUploadResponse[] = []
       for (const file of files) {
@@ -198,15 +208,33 @@ export function StockPanel() {
           )
         }
       }
-      return { uploaded, errors }
+      if (groupId && uploaded.length > 0) {
+        try {
+          await addAssetsToGroup(
+            groupId,
+            uploaded.map((a) => a.id),
+          )
+        } catch (err) {
+          errors.push(err instanceof ApiError ? err.message : t.stock.groups.moveFailed)
+        }
+      }
+      return { uploaded, errors, groupId }
     },
-    onSuccess: ({ uploaded, errors }) => {
+    onSuccess: ({ uploaded, errors, groupId }) => {
       if (uploaded.length > 0) {
-        // matched_existing の Asset はすでにストック一覧に居る可能性があるが、
-        // 無条件に invalidate してよい(再取得するだけで、行が増えるわけではない)。
-        queryClient.invalidateQueries({ queryKey: ['assets'] })
         for (const asset of uploaded) {
           queryClient.setQueryData(['asset', asset.id], asset)
+        }
+        // matched_existing の Asset はすでにストック一覧に居る可能性があるが、
+        // 無条件に invalidate してよい(再取得するだけで、行が増えるわけではない)。
+        // グループへ移したときは、件数と所属(`AssetDetail.group`)も作り直す。
+        if (groupId) {
+          invalidateAssetGroupQueries(
+            queryClient,
+            uploaded.map((a) => a.id),
+          )
+        } else {
+          queryClient.invalidateQueries({ queryKey: ['assets'] })
         }
       }
       setMessage(errors.length > 0 ? errors.join(' / ') : null)
@@ -250,7 +278,7 @@ export function StockPanel() {
 
   function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
-    uploadMutation.mutate(Array.from(fileList))
+    uploadMutation.mutate({ files: Array.from(fileList), groupId: null })
   }
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
@@ -265,6 +293,8 @@ export function StockPanel() {
       isDragFromThisPage(),
     )
     if (fileDrag !== isDragOver) setIsDragOver(fileDrag)
+    const groupId = fileDrag ? sectionGroupIdAt(e.target) : null
+    if (groupId !== fileDropGroupId) setFileDropGroupId(groupId)
   }
 
   function handleDragLeave(e: DragEvent<HTMLDivElement>) {
@@ -272,11 +302,13 @@ export function StockPanel() {
     // ように、実際にパネルの外へ出たとき(relatedTarget がパネルの外)だけ isDragOver を下ろす。
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
     setIsDragOver(false)
+    setFileDropGroupId(null)
   }
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setIsDragOver(false)
+    setFileDropGroupId(null)
 
     // アプリ内のサムネイル(ストック自身のタイル・履歴カードの出力など)をこのパネルへドラッグ
     // してきた場合、ブラウザが自動生成する File(サムネイル画像そのもの)をアップロードして
@@ -286,7 +318,8 @@ export function StockPanel() {
     const interpretation = interpretDrop(e.dataTransfer)
 
     if (interpretation.kind === 'files') {
-      uploadMutation.mutate(interpretation.files)
+      // グループの節(見出し・タイル・空の枠)に落としたら、そのグループに入れる(ADR-0022 4章)。
+      uploadMutation.mutate({ files: interpretation.files, groupId: sectionGroupIdAt(e.target) })
     }
     // kind === 'asset' | 'none' は何もしない。
   }
@@ -424,6 +457,7 @@ export function StockPanel() {
           scrollRootRef={panelRef}
           tileActions={tileActions}
           onError={setMessage}
+          fileDropTarget={fileDropGroupId === group.id}
           onGroupDeleted={(groupId) => setSelected((prev) => withoutSection(prev, groupId))}
           reorder={groupReorder}
         />
