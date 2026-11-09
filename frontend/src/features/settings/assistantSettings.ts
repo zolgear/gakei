@@ -3,9 +3,10 @@
  * 純粋関数。API 呼び出しと状態管理は `pages/AssistantSettingsPage.tsx` が行う。
  */
 import type { AssistantSettingsResponse, AssistantSettingsUpdateRequest } from '../../api/client'
+import { LLM_MODEL_NAME_MAX, overridePatch, validateOverride } from './llmTargets'
 
 /** `backend/app/domain/assistant_settings.py` と同じ値。 */
-export const ASSISTANT_MODEL_NAME_MAX = 200
+export const ASSISTANT_MODEL_NAME_MAX = LLM_MODEL_NAME_MAX
 export const ASSISTANT_LIMIT_MINS = {
   hourly_request_limit: 1,
   runs_per_message_limit: 0,
@@ -33,8 +34,8 @@ export interface AssistantDraft {
 export function assistantDraftFromResponse(data: AssistantSettingsResponse): AssistantDraft {
   return {
     enabled: data.enabled,
-    connection_id: data.connection_id,
-    model: data.model,
+    connection_id: data.connection_id ?? '',
+    model: data.model ?? '',
     hourly_request_limit: String(data.hourly_request_limit),
     runs_per_message_limit: String(data.runs_per_message_limit),
     hourly_run_limit: String(data.hourly_run_limit),
@@ -71,7 +72,7 @@ export function isValidLimitInput(input: string, min: number, max: number): bool
   return Number.isSafeInteger(value) && value >= min && value <= max
 }
 
-export type AssistantDraftError = 'connectionRequired' | 'connectionUnknown' | 'modelRequired' | 'modelTooLong' | 'limitInvalid'
+export type AssistantDraftError = 'connectionUnknown' | 'modelRequired' | 'modelTooLong' | 'limitInvalid'
 
 export type AssistantDraftErrors = Partial<Record<keyof AssistantDraft, AssistantDraftError>>
 
@@ -81,11 +82,8 @@ export function validateAssistantDraft(
   connectionIds: readonly string[],
 ): AssistantDraftErrors {
   const errors: AssistantDraftErrors = {}
-  if (!values.connection_id) errors.connection_id = 'connectionRequired'
-  else if (!connectionIds.includes(values.connection_id)) errors.connection_id = 'connectionUnknown'
-  const model = values.model.trim()
-  if (!model) errors.model = 'modelRequired'
-  else if (model.length > ASSISTANT_MODEL_NAME_MAX) errors.model = 'modelTooLong'
+  // 接続先が空なら「既定の送り先」(ADR-0063)。
+  Object.assign(errors, validateOverride(values, connectionIds))
   for (const field of ASSISTANT_LIMIT_FIELDS) {
     if (!isValidLimitInput(values[field], ASSISTANT_LIMIT_MINS[field], limitMax(data, field))) {
       errors[field] = 'limitInvalid'
@@ -94,12 +92,10 @@ export function validateAssistantDraft(
   return errors
 }
 
-/** 変えた項目だけの PATCH の本文。 */
-export function assistantPatchBody(patch: Partial<AssistantDraft>): AssistantSettingsUpdateRequest {
-  const body: AssistantSettingsUpdateRequest = {}
+/** 変えた項目だけの PATCH の本文。`values` は保存後の値(上書きの接続先とモデル名をそろえて送るため)。 */
+export function assistantPatchBody(patch: Partial<AssistantDraft>, values: AssistantDraft): AssistantSettingsUpdateRequest {
+  const body: AssistantSettingsUpdateRequest = { ...overridePatch(patch, values) }
   if (patch.enabled !== undefined) body.enabled = patch.enabled
-  if (patch.connection_id !== undefined) body.connection_id = patch.connection_id
-  if (patch.model !== undefined) body.model = patch.model.trim()
   for (const field of ASSISTANT_LIMIT_FIELDS) {
     const value = patch[field]
     if (value !== undefined) body[field] = Number(value.trim())

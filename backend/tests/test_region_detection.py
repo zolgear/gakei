@@ -368,8 +368,8 @@ def test_engine_chat_falls_back_to_max_tokens() -> None:
 def test_settings_defaults_and_validation(client: TestClient) -> None:
     body = client.get(SETTINGS).json()
     assert body["enabled"] is False
-    assert body["connection_id"] == "openai"
-    assert body["model"] == detection_settings.DEFAULT_MODEL
+    # 上書きは無い(既定の送り先を使う。ADR-0063)。
+    assert (body["connection_id"], body["model"]) == (None, None)
     assert body["usable"] is False
     assert body["requests_last_hour"] == 0
     for bad in (
@@ -396,7 +396,11 @@ def test_used_connection_ids(client: TestClient) -> None:
     factory = client.app.state.session_factory
     with factory() as db:
         assert detection_settings.used_connection_ids(db) == set()
+    # 上書きが無ければ、有効にしても接続先は既定の送り先の側が数える(ADR-0063)。
     _enable(client)
+    with factory() as db:
+        assert detection_settings.used_connection_ids(db) == set()
+    _enable(client, connection_id="openai", model="vlm-x")
     with factory() as db:
         assert detection_settings.used_connection_ids(db) == {"openai"}
         assert "region_detection" in llm_connections.features_using(db)["openai"]

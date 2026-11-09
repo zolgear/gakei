@@ -9,9 +9,11 @@
 - **接続先**: LLM の接続先(`app/domain/llm_connections.py`。ADR-0032)から選ぶ。接続先の一覧と
   キーの読み書きは向こうにある。この設定は、用途ごとの組で使っている接続先を
   `llm_connections.register_usage` で答える(使っている接続先は削除できない)。
-- **用途ごとの組**(`annotation.profiles`): 「既定」(`default`)と「ComfyUI の画像」
-  (`comfyui`)のそれぞれに、タイトル(`llm`)とタグ(`vlm`)の `{connection_id, model}`。
-  `comfyui` の各用途は null なら「既定と同じ」。
+- **用途ごとの組**(`annotation.profiles`): 「外部の画像」(`external`)と「内部の画像」
+  (`local`)のそれぞれに、タイトル(`llm`)とタグ(`vlm`)の上書き `{connection_id, model}`。
+  null なら、画像の区分に合う既定の送り先(`llm_defaults`。ADR-0063)を使う。画像の区分は、
+  Asset を作った Run の区分(ADR-0051 3章)。ADR-0063 より前の形(`default` / `comfyui`)は
+  読むときに移す(`_profiles_from_json`)。
 
 今の設定(接続先1組の形)からの移行は `migrate_legacy` が起動時に一度だけ行う(冪等)。
 """
@@ -28,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.annotation import wd_models
 from app.domain import api_key as api_key_domain
-from app.domain import llm_connections
+from app.domain import llm_connections, llm_defaults
 from app.domain.general_settings import (
     GeneralSettingsValidationError,
     _get_raw_value,
@@ -64,7 +66,7 @@ Language = Literal["ja", "en"]
 # (WD Tagger の英語のタグには訳を足す)。
 TagLanguage = Literal["native", "localized"]
 OnnxModelName = Literal["wd-vit-tagger-v3", "wd-swinv2-tagger-v3", "wd-eva02-large-tagger-v3"]
-Profile = Literal["default", "comfyui"]
+Profile = Literal["external", "local"]
 Purpose = Literal["llm", "vlm"]
 
 LANGUAGES: tuple[str, ...] = get_args(Language)
@@ -73,20 +75,14 @@ ONNX_MODEL_NAMES: tuple[str, ...] = get_args(OnnxModelName)
 PROFILES: tuple[str, ...] = get_args(Profile)
 PURPOSES: tuple[str, ...] = get_args(Purpose)
 
-# ComfyUI の画像の組を使う Run のプロバイダー(ADR-0024 8章)。
-COMFYUI_PROVIDER = "comfyui"
 
-# 既定のモデル。gpt-5.6-luna は安価なテキストモデルとして選んだ。画像入力(VLM)に
-# 対応しているかは要確認(実機で確かめる。ADR-0024 3章)。
-DEFAULT_LLM_MODEL = "gpt-5.6-luna"
-DEFAULT_VLM_MODEL = "gpt-5.6-luna"
 DEFAULT_HOURLY_LIMIT = 100
 HOURLY_LIMIT_MIN = 1
 HOURLY_LIMIT_MAX = 10000
 DEFAULT_ONNX_THRESHOLD = 0.35
 ONNX_THRESHOLD_MIN = 0.01
 ONNX_THRESHOLD_MAX = 0.99
-MODEL_NAME_MAX = 200
+MODEL_NAME_MAX = llm_defaults.MODEL_NAME_MAX
 # ONNX タガーの既定のモデル。GPU の無い環境での推奨にそろえて swinv2 にした(2026-10-24、
 # ADR-0024 7章)。前の既定(vit)に頼っていた環境は `pin_previous_onnx_default` が vit に留める。
 DEFAULT_ONNX_MODEL: OnnxModelName = "wd-swinv2-tagger-v3"
@@ -100,47 +96,26 @@ class AnnotationSettingsValidationError(GeneralSettingsValidationError):
 # -- 設定の型 ------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class TargetChoice:
-    """用途1つに選んだ「接続先 + モデル名」の組。"""
-
-    connection_id: str
-    model: str
-
-
-def _default_llm_choice() -> TargetChoice:
-    return TargetChoice(BUILTIN_CONNECTION_ID, DEFAULT_LLM_MODEL)
-
-
-def _default_vlm_choice() -> TargetChoice:
-    return TargetChoice(BUILTIN_CONNECTION_ID, DEFAULT_VLM_MODEL)
+TargetChoice = llm_defaults.TargetChoice
 
 
 @dataclass(frozen=True)
 class Profiles:
-    """用途ごとの組。`comfyui_*` が None なら「既定と同じ」。"""
+    """区分ごと・用途ごとの上書き。None なら区分に合う既定の送り先(ADR-0063)。"""
 
-    default_llm: TargetChoice = field(default_factory=_default_llm_choice)
-    default_vlm: TargetChoice = field(default_factory=_default_vlm_choice)
-    comfyui_llm: TargetChoice | None = None
-    comfyui_vlm: TargetChoice | None = None
+    external_llm: TargetChoice | None = None
+    external_vlm: TargetChoice | None = None
+    local_llm: TargetChoice | None = None
+    local_vlm: TargetChoice | None = None
 
     def slot(self, profile: str, purpose: str) -> TargetChoice | None:
-        """保存されている値そのもの(comfyui の None は None のまま)。"""
+        """保存されている上書きそのもの(None は None のまま)。"""
         return getattr(self, f"{profile}_{purpose}")
-
-    def choice(self, profile: str, purpose: str) -> TargetChoice:
-        """実際に使う組(comfyui が None なら既定の組)。"""
-        value = self.slot(profile, purpose)
-        if value is None:
-            value = self.slot("default", purpose)
-        assert value is not None
-        return value
 
     def connection_ids(self) -> set[str]:
         return {
             value.connection_id
-            for value in (self.default_llm, self.default_vlm, self.comfyui_llm, self.comfyui_vlm)
+            for value in (self.external_llm, self.external_vlm, self.local_llm, self.local_vlm)
             if value is not None
         }
 
@@ -165,6 +140,8 @@ class AnnotationConfig:
     # 組み込みの接続先(OpenAI の設定)の API 形式。
     openai_api_style: ApiStyle = "responses"
     profiles: Profiles = field(default_factory=Profiles)
+    # 既定の送り先(ADR-0063)。`llm_defaults` から読む。
+    defaults: llm_defaults.LlmDefaults = field(default_factory=llm_defaults.LlmDefaults)
 
     @property
     def api_engines_enabled(self) -> bool:
@@ -176,13 +153,17 @@ class AnnotationConfig:
     def find_connection(self, connection_id: str) -> ConnectionConfig | None:
         return llm_connections.find_connection(self.all_connections(), connection_id)
 
+    def choice(self, profile: str, purpose: str) -> TargetChoice:
+        """実際に使う送り先(上書きが無ければ、区分に合う既定の送り先)。"""
+        return self.profiles.slot(profile, purpose) or self.defaults.choice_for(profile)
+
     def connection_ids_for(self, profile: str) -> set[str]:
         """その組で有効な用途(LLM・VLM)が使う接続先。1時間の上限の事前確認に使う。"""
         ids: set[str] = set()
         if self.llm_enabled:
-            ids.add(self.profiles.choice(profile, "llm").connection_id)
+            ids.add(self.choice(profile, "llm").connection_id)
         if self.vlm_enabled:
-            ids.add(self.profiles.choice(profile, "vlm").connection_id)
+            ids.add(self.choice(profile, "vlm").connection_id)
         return ids
 
 
@@ -190,7 +171,7 @@ class AnnotationConfig:
 SCALAR_FIELDS: tuple[str, ...] = tuple(
     f.name
     for f in fields(AnnotationConfig)
-    if f.name not in ("connections", "openai_api_style", "profiles")
+    if f.name not in ("connections", "openai_api_style", "profiles", "defaults")
 )
 _DEFAULTS = AnnotationConfig()
 
@@ -202,8 +183,7 @@ def _is_bool(value: object) -> bool:
     return isinstance(value, bool)
 
 
-def _is_model_name(value: object) -> bool:
-    return isinstance(value, str) and 0 < len(value.strip()) <= MODEL_NAME_MAX
+_is_model_name = llm_defaults.is_model_name
 
 
 def _is_hourly_limit(value: object) -> bool:
@@ -292,7 +272,7 @@ def _parse_choice(value: object) -> TargetChoice:
 def _choice_to_json(value: TargetChoice | None) -> dict[str, str] | None:
     if value is None:
         return None
-    return {"connection_id": value.connection_id, "model": value.model}
+    return llm_defaults.choice_to_json(value)
 
 
 def _profiles_to_json(profiles: Profiles) -> dict[str, Any]:
@@ -302,10 +282,33 @@ def _profiles_to_json(profiles: Profiles) -> dict[str, Any]:
     }
 
 
+def _legacy_profiles(data: dict[str, Any]) -> dict[str, Any]:
+    """ADR-0063 より前の形(「既定」`default` と「ComfyUI の画像」`comfyui`。ComfyUI の画像の
+    null は既定と同じ)を、外部の画像・内部の画像の上書きに移す。今までと同じ送り先になるよう、
+    内部の画像の null は既定の組で埋める。"""
+    default = data.get("default")
+    default = default if isinstance(default, dict) else {}
+    comfyui = data.get("comfyui")
+    comfyui = comfyui if isinstance(comfyui, dict) else {}
+    return {
+        "external": {purpose: default.get(purpose) for purpose in PURPOSES},
+        "local": {
+            purpose: comfyui.get(purpose)
+            if comfyui.get(purpose) is not None
+            else default.get(purpose)
+            for purpose in PURPOSES
+        },
+    }
+
+
 def _profiles_from_json(raw: object) -> Profiles:
-    """保存された組を読む。壊れたマスは既定値(comfyui は None)にする。"""
+    """保存された組を読む。壊れたマスは None(既定の送り先)にする。"""
     values: dict[str, TargetChoice | None] = {}
     data = raw if isinstance(raw, dict) else {}
+    if not any(profile in data for profile in PROFILES) and (
+        "default" in data or "comfyui" in data
+    ):
+        data = _legacy_profiles(data)
     for profile in PROFILES:
         section = data.get(profile)
         section = section if isinstance(section, dict) else {}
@@ -336,6 +339,7 @@ def load(db: Session) -> AnnotationConfig:
             continue
     values["connections"] = llm_connections.load_user_connections(db)
     values["openai_api_style"] = llm_connections.load_openai_api_style(db)
+    values["defaults"] = llm_defaults.load(db)
     values["profiles"] = _profiles_from_json(_get_raw_value(db, _PROFILES_KEY))
     return replace(_DEFAULTS, **values)
 
@@ -351,10 +355,10 @@ def save(db: Session, updates: dict[str, Any]) -> None:
 def validate_profile_updates(
     config: AnnotationConfig, updates: dict[str, dict[str, Any]]
 ) -> Profiles:
-    """組の変更(`{"default": {"llm": {...}}, "comfyui": {"vlm": None}}` の形。書いたマスだけ
+    """組の変更(`{"external": {"llm": {...}}, "local": {"vlm": None}}` の形。書いたマスだけ
     変える)を検証し、変えた後の組を返す。保存はしない。
 
-    `default` のマスは null にできない。接続先は登録済みのものだけ。
+    null は上書きを消す(既定の送り先を使う)。接続先は登録済みのものだけ。
     """
     values: dict[str, TargetChoice | None] = {
         f"{profile}_{purpose}": config.profiles.slot(profile, purpose)
@@ -368,8 +372,6 @@ def validate_profile_updates(
             if purpose not in PURPOSES:
                 raise AnnotationSettingsValidationError(t("settings.annotation.invalidTarget"))
             if item is None:
-                if profile == "default":
-                    raise AnnotationSettingsValidationError(t("settings.annotation.invalidTarget"))
                 values[f"{profile}_{purpose}"] = None
                 continue
             choice = _parse_choice(item)
@@ -384,7 +386,7 @@ def save_profiles(db: Session, profiles: Profiles) -> None:
 
 
 def used_connection_ids(db: Session) -> set[str]:
-    """用途ごとの組(既定 / ComfyUI の画像)のどこかで使っている接続先。有効かどうかに関わらず
+    """用途ごとの上書き(外部の画像 / 内部の画像)のどこかで使っている接続先。有効かどうかに関わらず
     数える(LLM の接続先の「使っている機能」と、削除の禁止に使う。ADR-0032 3章)。"""
     return _profiles_from_json(_get_raw_value(db, _PROFILES_KEY)).connection_ids()
 
@@ -401,18 +403,12 @@ llm_connections.register_usage(FEATURE_ID, used_connection_ids)
 Target = llm_connections.LlmTarget
 
 
-def profile_for_provider(provider: str | None) -> Profile:
-    """Asset を作った Run のプロバイダーから、使う組を決める(ADR-0024 8章)。アップロード・
-    スケッチ(Run が無い)と ComfyUI 以外のプロバイダーは既定。"""
-    return "comfyui" if provider == COMFYUI_PROVIDER else "default"
-
-
 def resolve_target(
     config: AnnotationConfig, settings: Settings, profile: str, purpose: str
 ) -> Target:
-    """組と用途から送り先を決める。接続先が無ければ ConnectionNotFoundError(既定の組には
-    切り替えない)。"""
-    choice = config.profiles.choice(profile, purpose)
+    """組(画像の区分)と用途から送り先を決める。接続先が無ければ ConnectionNotFoundError(別の
+    組には切り替えない)。"""
+    choice = config.choice(profile, purpose)
     return llm_connections.resolve_target(
         config.all_connections(), choice.connection_id, choice.model, settings
     )
@@ -498,10 +494,10 @@ def migrate_legacy(db: Session, settings: Settings) -> bool:
         api_style: ApiStyle = "responses"
         if legacy["api_style"] in API_STYLES:
             api_style = legacy["api_style"]  # type: ignore[assignment]
-        llm_model = DEFAULT_LLM_MODEL
+        llm_model = llm_defaults.BUILTIN_DEFAULT_MODEL
         if _is_model_name(legacy["llm_model"]):
             llm_model = str(legacy["llm_model"]).strip()
-        vlm_model = DEFAULT_VLM_MODEL
+        vlm_model = llm_defaults.BUILTIN_DEFAULT_MODEL
         if _is_model_name(legacy["vlm_model"]):
             vlm_model = str(legacy["vlm_model"]).strip()
 
@@ -529,9 +525,14 @@ def migrate_legacy(db: Session, settings: Settings) -> bool:
         elif api_style != "responses":
             _put(db, llm_connections.OPENAI_API_STYLE_KEY, api_style)
 
+        # 移行前は1組だけだったので、外部の画像にも内部の画像にも同じ送り先を入れる。
+        llm_choice = TargetChoice(connection_id, llm_model)
+        vlm_choice = TargetChoice(connection_id, vlm_model)
         profiles = Profiles(
-            default_llm=TargetChoice(connection_id, llm_model),
-            default_vlm=TargetChoice(connection_id, vlm_model),
+            external_llm=llm_choice,
+            external_vlm=vlm_choice,
+            local_llm=llm_choice,
+            local_vlm=vlm_choice,
         )
         _put(db, _PROFILES_KEY, _profiles_to_json(profiles))
     elif legacy_key is not None and key_target is None:

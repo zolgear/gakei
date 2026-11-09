@@ -121,9 +121,8 @@ def save_moderation(db: Session, value: str | None) -> None:
 
 
 # -- SVG を書くモデル(ADR-0062 2章) ---------------------------------------------
-# 未設定なら組み込みの既定を使う(LLM を使う他の機能と同じ。既定の見直しと集約は #238)。
+# 未設定なら既定の送り先(外部)のモデル名を使う(ADR-0063 3章)。
 
-DEFAULT_SVG_AUTHOR_MODEL = "gpt-5.6-luna"
 _SVG_AUTHOR_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$")
 
 
@@ -135,12 +134,20 @@ def get_saved_svg_author_model(db: Session) -> str | None:
     return value
 
 
+def default_svg_author_model(db: Session) -> str:
+    """未設定のときに使う SVG を書くモデル(`llm_defaults.svg_author_default`)。"""
+    # llm_defaults はこのモジュールを読み込むので、ここで読み込む。
+    from app.domain import llm_defaults
+
+    return llm_defaults.svg_author_default(db)
+
+
 def resolve_svg_author_model(db: Session) -> tuple[str, Literal["setting", "default"]]:
-    """使う SVG を書くモデルと、その出所(画面で保存した値か、組み込みの既定か)。"""
+    """使う SVG を書くモデルと、その出所(画面で保存した値か、既定の送り先か)。"""
     saved = get_saved_svg_author_model(db)
     if saved is not None:
         return saved, "setting"
-    return DEFAULT_SVG_AUTHOR_MODEL, "default"
+    return default_svg_author_model(db), "default"
 
 
 def validate_svg_author_model(value: str | None) -> None:

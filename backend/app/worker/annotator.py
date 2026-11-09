@@ -73,6 +73,7 @@ from app.domain import (
     derivatives,
     ip_usage,
     llm_connections,
+    llm_defaults,
     tag_dictionaries,
 )
 from app.domain import annotations as annotations_domain
@@ -130,10 +131,12 @@ def reset_running_annotations(session_factory: sessionmaker) -> int:
 
 
 def _pick(
-    session_factory: sessionmaker, blocked_profiles: frozenset[str] = frozenset()
+    session_factory: sessionmaker,
+    blocked_profiles: frozenset[str] = frozenset(),
+    settings: Settings | None = None,
 ) -> uuid.UUID | None:
     """待ち行列の先頭を `running` にして返す。`blocked_profiles` の組(1時間の上限に達した
-    接続先を使う組)の行は飛ばす。"""
+    接続先を使う組。画像の区分)の行は飛ばす。"""
     with session_factory() as session:
         query = select(AssetAnnotation.asset_id).where(
             AssetAnnotation.auto_status == annotations_domain.STATUS_QUEUED
@@ -142,14 +145,14 @@ def _pick(
             query = query.join(Asset, Asset.id == AssetAnnotation.asset_id).outerjoin(
                 Run, Run.id == Asset.produced_by_run_id
             )
-            is_comfyui = and_(
-                Run.id.is_not(None),
-                Run.provider == annotation_settings.COMFYUI_PROVIDER,
+            # 区分の決め方は `llm_defaults.asset_locality` と同じ(Run の無い Asset は外部)。
+            is_local = and_(
+                Run.id.is_not(None), llm_defaults.local_run_condition(session, settings)
             )
-            if "comfyui" in blocked_profiles:
-                query = query.where(~is_comfyui)
-            if "default" in blocked_profiles:
-                query = query.where(is_comfyui)
+            if "local" in blocked_profiles:
+                query = query.where(~is_local)
+            if "external" in blocked_profiles:
+                query = query.where(is_local)
         candidate = session.execute(
             query
             # ADR-0027 2章: NULL の位置と同順位の並びを SQLite の挙動(NULL が先頭)にそろえる。
@@ -393,7 +396,9 @@ class Annotator:
                 blocked = self._blocked_profiles(config)
                 picked = None
                 if len(blocked) < len(annotation_settings.PROFILES):
-                    picked = await asyncio.to_thread(_pick, self.session_factory, blocked)
+                    picked = await asyncio.to_thread(
+                        _pick, self.session_factory, blocked, self.settings
+                    )
                 rating_picked = None
                 if picked is None:
                     # 推定の待ち行列が空(または上限で止まっている)ならレーティングの判定を進める。
@@ -452,12 +457,11 @@ class Annotator:
                 return t("annotations.noEngine")
 
             prompt: str | None = None
-            provider: str | None = None
+            run: Run | None = None
             actor_user_id = asset.created_by_user_id
             if asset.kind == AssetKind.GENERATED and asset.produced_by_run_id is not None:
                 run = session.get(Run, asset.produced_by_run_id)
                 prompt = run.prompt if run is not None else None
-                provider = run.provider if run is not None else None
                 if run is not None and actor_user_id is None:
                     actor_user_id = run.created_by_user_id
             elif isinstance(asset.embedded_meta, dict):
@@ -465,9 +469,9 @@ class Annotator:
                 prompt = value if isinstance(value, str) else None
             prompt = prompt.strip() if prompt and prompt.strip() else None
 
-            # 送り先(ADR-0024 8章)。使う用途だけ解決する。接続先が無ければ失敗にする(既定の
-            # 組には切り替えない)。
-            profile = annotation_settings.profile_for_provider(provider)
+            # 送り先(ADR-0024 8章、ADR-0063)。画像の区分で組を決め、使う用途だけ解決する。
+            # 接続先が無ければ失敗にする(別の組には切り替えない)。
+            profile = llm_defaults.run_locality(session, self.settings, run)
             targets: dict[str, annotation_settings.Target | None] = {}
             for purpose, engine in (
                 ("llm", annotations_domain.ENGINE_LLM),

@@ -241,7 +241,7 @@ def test_settings_defaults(client: TestClient) -> None:
     assert body["llm_enabled"] is False
     assert body["vlm_enabled"] is False
     assert body["onnx_enabled"] is False
-    # 接続先は組み込みの「OpenAI の設定」だけ。既定の組はそれと gpt-5.6-luna(ADR-0024 8章)。
+    # 接続先は組み込みの「OpenAI の設定」だけ。上書きは無く、既定の送り先を使う(ADR-0063)。
     connections = client.get("/api/settings/llm-connections").json()["connections"]
     assert [c["id"] for c in connections] == ["openai"]
     assert connections[0]["builtin"] is True
@@ -249,11 +249,8 @@ def test_settings_defaults(client: TestClient) -> None:
     assert connections[0]["api_key_set"] is False
     assert body["connection_calls"] == [{"connection_id": "openai", "calls_last_hour": 0}]
     assert body["profiles"] == {
-        "default": {
-            "llm": {"connection_id": "openai", "model": "gpt-5.6-luna"},
-            "vlm": {"connection_id": "openai", "model": "gpt-5.6-luna"},
-        },
-        "comfyui": {"llm": None, "vlm": None},
+        "external": {"llm": None, "vlm": None},
+        "local": {"llm": None, "vlm": None},
     }
     assert body["language"] == "ja"
     assert body["hourly_limit"] == 100
@@ -281,12 +278,12 @@ def test_settings_patch_and_validation(client: TestClient) -> None:
         hourly_limit=5,
         onnx_threshold=0.5,
         onnx_model="wd-eva02-large-tagger-v3",
-        profiles={"default": {"llm": {"connection_id": "openai", "model": " my-model "}}},
+        profiles={"external": {"llm": {"connection_id": "openai", "model": " my-model "}}},
     )
     assert body["llm_enabled"] is True
-    assert body["profiles"]["default"]["llm"] == {"connection_id": "openai", "model": "my-model"}
+    assert body["profiles"]["external"]["llm"] == {"connection_id": "openai", "model": "my-model"}
     # 書かなかったマスは変えない。
-    assert body["profiles"]["default"]["vlm"]["model"] == "gpt-5.6-luna"
+    assert body["profiles"]["external"]["vlm"] is None
     assert body["language"] == "en"
     assert body["hourly_limit"] == 5
     assert body["onnx_threshold"] == pytest.approx(0.5)
@@ -298,9 +295,9 @@ def test_settings_patch_and_validation(client: TestClient) -> None:
         {"onnx_threshold": 1.5},
         {"onnx_model": "other"},
         {"llm_enabled": None},
-        {"profiles": {"default": {"llm": {"connection_id": "openai", "model": ""}}}},
-        {"profiles": {"default": {"llm": {"connection_id": "nope", "model": "m"}}}},
-        {"profiles": {"default": {"vlm": None}}},
+        {"profiles": {"external": {"llm": {"connection_id": "openai", "model": ""}}}},
+        {"profiles": {"external": {"llm": {"connection_id": "nope", "model": "m"}}}},
+        {"profiles": {"external": {"llm": {"connection_id": "openai"}}}},
         {"profiles": None},
     ):
         response = client.patch("/api/settings/annotation", json=bad)
@@ -309,7 +306,7 @@ def test_settings_patch_and_validation(client: TestClient) -> None:
     client.patch("/api/settings/annotation", json={"language": "ja", "hourly_limit": -1})
     response = client.patch(
         "/api/settings/annotation",
-        json={"language": "ja", "profiles": {"comfyui": {"llm": {"connection_id": "x"}}}},
+        json={"language": "ja", "profiles": {"local": {"llm": {"connection_id": "x"}}}},
     )
     assert response.status_code == 422
     assert client.get("/api/settings/annotation").json()["language"] == "en"

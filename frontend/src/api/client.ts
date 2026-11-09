@@ -166,6 +166,10 @@ export type LlmApiStyle = LlmConnectionView['api_style']
 /** 接続先の構造化出力(JSON のスキーマ)への対応の指定。`auto` は OpenAI の公式だけを対応とみなす。 */
 export type StructuredOutputsMode = LlmConnectionView['structured_outputs']
 export type LlmConnectionFeature = NonNullable<LlmConnectionView['used_by']>[number]
+/** 既定の送り先(ADR-0063)と、その1組。 */
+export type LlmDefaultsView = components['schemas']['LlmDefaultsView']
+export type LlmTargetChoice = components['schemas']['LlmTargetChoice']
+export type LlmDefaultsUpdateRequest = components['schemas']['LlmDefaultsUpdateRequest']
 
 // -- MCP サーバーとアクセストークン(ADR-0023) ----------------------------------
 
@@ -1747,6 +1751,15 @@ export function updateUserPreferences(body: UserPreferencesUpdateRequest): Promi
 /** 接続先の一覧(全ログイン者)。先頭は組み込みの「OpenAI の設定」。キーは設定済みかどうかだけ。 */
 export function listLlmConnections(): Promise<LlmConnectionsResponse> {
   return request('/api/settings/llm-connections')
+}
+
+/** 既定の送り先(ADR-0063)を変える(管理者のみ)。書いた項目だけ。null は保存した値を消す。 */
+export function updateLlmDefaults(body: LlmDefaultsUpdateRequest): Promise<LlmConnectionsResponse> {
+  return request('/api/settings/llm-connections/defaults', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
 
 /** 接続先を足す(管理者のみ)。キーは任意。 */

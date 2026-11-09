@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 from app.assistant.engine import AssistantEngineError
 from app.assistant.structured import FakeStructuredEngine
 from app.domain import group_naming as naming
-from app.domain import group_naming_settings as naming_settings
 from app.domain import llm_connections
 from app.domain.group_suggestions import NamingCluster, NamingInput
 from tests.conftest import login_as
@@ -128,8 +127,8 @@ def _engine(client: TestClient) -> FakeStructuredEngine:
 def test_settings_defaults_and_validation(client: TestClient) -> None:
     body = client.get(SETTINGS).json()
     assert body["enabled"] is False
-    assert body["connection_id"] == "openai"
-    assert body["model"] == naming_settings.DEFAULT_MODEL
+    # 上書きは無い(既定の送り先を使う。ADR-0063)。
+    assert (body["connection_id"], body["model"]) == (None, None)
     assert body["usable"] is False and body["unusable_reason"] == "disabled"
     for bad in ({"enabled": None}, {"connection_id": "missing"}, {"model": " "}):
         assert client.patch(SETTINGS, json=bad).status_code == 422, bad

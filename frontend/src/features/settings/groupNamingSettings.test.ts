@@ -23,7 +23,7 @@ describe('groupNamingSettings', () => {
   it('接続先とモデル名を確かめる', () => {
     const draft = groupNamingDraftFromResponse(DATA)
     expect(validateGroupNamingDraft(draft, ['builtin'])).toEqual({})
-    expect(validateGroupNamingDraft({ ...draft, connection_id: '' }, ['builtin']).connection_id).toBe('connectionRequired')
+    expect(validateGroupNamingDraft({ ...draft, connection_id: '', model: '' }, ['builtin'])).toEqual({})
     expect(validateGroupNamingDraft({ ...draft, connection_id: 'x' }, ['builtin']).connection_id).toBe('connectionUnknown')
     expect(validateGroupNamingDraft({ ...draft, model: ' ' }, ['builtin']).model).toBe('modelRequired')
     expect(
@@ -32,7 +32,15 @@ describe('groupNamingSettings', () => {
   })
 
   it('変えた項目だけを送る', () => {
-    expect(groupNamingPatchBody({ model: ' llm ' })).toEqual({ model: 'llm' })
-    expect(groupNamingPatchBody({ enabled: true, connection_id: 'c' })).toEqual({ enabled: true, connection_id: 'c' })
+    const values = groupNamingDraftFromResponse(DATA)
+    expect(groupNamingPatchBody({ model: ' llm ' }, { ...values, model: ' llm ' })).toEqual({
+      connection_id: values.connection_id,
+      model: 'llm',
+    })
+    expect(groupNamingPatchBody({ enabled: true, connection_id: '' }, { ...values, connection_id: '' })).toEqual({
+      enabled: true,
+      connection_id: null,
+      model: null,
+    })
   })
 })
