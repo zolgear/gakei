@@ -10,7 +10,7 @@
 # ADR-0021: --platform=$BUILDPLATFORM でビルド元(≒ CI ランナー)のアーキテクチャで
 # 常に1回だけ動かす。QEMU 上で npm ci / vite build を動かすと数倍遅く、
 # 成果物(dist)は実行段のアーキテクチャに依らず同じものが使える。
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS frontend-build
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS frontend-build
 WORKDIR /src/frontend
 
 # 依存関係だけ先にコピーしてレイヤーキャッシュを効かせる。
