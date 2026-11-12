@@ -17,12 +17,26 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.models import Base
 
+# SQLite で、ほかの接続が書き込み中のときに待つ上限(秒)。SQLite は書き込みを1つずつしか通さない。
+# Python の既定は 5 秒で、負荷が高くコミットが詰まると(スワップ中の fsync など)これを超え、
+# 「database is locked」で書き込みが失敗する(Run の終了状態を書けず、実行中のまま残った)。
+# 失敗させるより待つほうがよいので、長めにする。
+SQLITE_BUSY_TIMEOUT_SECONDS = 60.0
+
+# SQLite の接続プールの大きさ(常に持つ数と、足りないときに一時的に増やす数)。SQLAlchemy の既定
+# (5 + 10)は、同期エンドポイントのスレッド(40)と worker のスレッドより少ない。処理が遅い
+# とき(高負荷)に 16 個目からの要求が接続を待ち、待ち時間(30 秒)の後に 500 になっていた。
+# SQLite の接続は軽いので、同時に動くスレッドの数より多くしておく。
+SQLITE_POOL_SIZE = 10
+SQLITE_POOL_MAX_OVERFLOW = 70
+
 
 def make_engine(url: str | Path) -> Engine:
     """接続 URL(`Settings.sqlalchemy_url`)からエンジンを作る。`Path` は SQLite のファイルとみなす。
 
-    SQLite のときだけ、親ディレクトリを作り、`check_same_thread=False` と PRAGMA(WAL、
-    foreign_keys)を付ける。PostgreSQL は `pool_pre_ping` で切れた接続を捨てる。
+    SQLite のときだけ、親ディレクトリを作り、`check_same_thread=False`、書き込みの待ち時間
+    (`SQLITE_BUSY_TIMEOUT_SECONDS`)、接続プールの大きさ、PRAGMA(WAL、foreign_keys)を付ける。
+    PostgreSQL は `pool_pre_ping` で切れた接続を捨てる。
     """
     if isinstance(url, Path):
         url = f"sqlite:///{url}"
@@ -38,7 +52,17 @@ def make_engine(url: str | Path) -> Engine:
 
     if parsed.database and parsed.database != ":memory:":
         Path(parsed.database).parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(url, connect_args={"check_same_thread": False})
+    connect_args = {"check_same_thread": False, "timeout": SQLITE_BUSY_TIMEOUT_SECONDS}
+    if parsed.database and parsed.database != ":memory:":
+        engine = create_engine(
+            url,
+            connect_args=connect_args,
+            pool_size=SQLITE_POOL_SIZE,
+            max_overflow=SQLITE_POOL_MAX_OVERFLOW,
+        )
+    else:
+        # メモリ上の DB は接続ごとに別の DB になるので、SQLAlchemy の既定(1本を使い回す)のまま。
+        engine = create_engine(url, connect_args=connect_args)
 
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, _connection_record) -> None:  # noqa: ANN001

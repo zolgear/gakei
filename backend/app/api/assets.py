@@ -743,7 +743,11 @@ def asset_content_response(
     系列情報を埋め込まない(ログイン不要の共有リンク。ADR-0029 4章)。
 
     ローカルFSは `FileResponse`(Range 要求に応える)、オブジェクトストレージは読み出した
-    チャンクをそのまま流す(`Content-Length` 付き、Range には応えない。ADR-0028 4章)。"""
+    チャンクをそのまま流す(`Content-Length` 付き、Range には応えない。ADR-0028 4章)。
+
+    DB から読むものを読み終えたら `db` を閉じる(呼び出し側は、この後 `db` を使わない)。派生の
+    作り直しや本体の送信の間も DB の接続を握っていると(依存の後始末は応答を送り終えた後)、
+    遅い回線への送信や高負荷のときに接続プールが埋まり、ほかの要求が待ち時間の後に 500 になる。"""
     # ADR-0051 4章: 画像を残さなかった Asset は 410(どの variant も。共有リンクでは判定を
     # 見せない)。
     raise_if_withheld(db, asset, include_verdict=viewer is not None)
@@ -762,28 +766,36 @@ def asset_content_response(
         etag = f'"{asset.sha256}-{variant}-d{derivatives.DERIVED_VERSION}"'
     headers = {"ETag": etag, "Cache-Control": cache_control}
 
-    if if_none_match == etag:
+    not_modified = if_none_match == etag
+    # 埋め込む系列情報は DB から組み立てるので、閉じる前に作っておく。
+    lineage_meta = None
+    if embed_meta and not not_modified:
+        assert viewer is not None
+        lineage_meta = build_lineage_meta(db, asset, viewer=viewer)
+    asset_id, blob_key, sha256, mime = asset.id, asset.blob_key, asset.sha256, asset.mime
+    db.close()
+
+    if not_modified:
         # 本体は読まない(オブジェクトストレージで原本を丸ごと取りに行かないため)。
         # 派生の ETag は版を含むので、一致すればブラウザは今の版の中身を持っている。今の版の
         # 派生が消えていても、原本があれば同じ中身を作り直せるので 304 でよい(ここでは
         # 作り直さず、次に本体を要求されたときに `ensure_derived` が作る)。原本も無ければ、
         # これまでどおり 304 ではなく 404。
-        if not store.content_exists(asset.blob_key, asset.sha256, variant) and (
-            variant == "original"
-            or not store.content_exists(asset.blob_key, asset.sha256, "original")
+        if not store.content_exists(blob_key, sha256, variant) and (
+            variant == "original" or not store.content_exists(blob_key, sha256, "original")
         ):
             raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
         return Response(status_code=304, headers=headers)
 
     if variant == "original":
-        content = store.open_content(asset.blob_key, asset.sha256, variant)
+        content = store.open_content(blob_key, sha256, variant)
     else:
         # 今の版の派生が無ければ原本から作る(ADR-0036 2章)。
-        content = derivatives.ensure_derived(store, asset.blob_key, asset.sha256, variant)
+        content = derivatives.ensure_derived(store, blob_key, sha256, variant)
     if content is None:
         raise HTTPException(status_code=404, detail=t("assets.contentNotFound"))
 
-    media_type = asset.mime if variant == "original" else _DERIVED_MEDIA_TYPE
+    media_type = mime if variant == "original" else _DERIVED_MEDIA_TYPE
     if media_type == svg.SVG_MIME:
         # ADR-0062: SVG の原本は無害化して保存しているが、直接開かれても何も動かないように、
         # 文書の中の動作と外部の読み込みを止める。
@@ -793,13 +805,12 @@ def asset_content_response(
         headers["X-Content-Type-Options"] = "nosniff"
     if download:
         ext = svg.SVG_EXT if media_type == svg.SVG_MIME else media_type.split("/")[-1]
-        headers["Content-Disposition"] = f'attachment; filename="{asset.id}-{variant}.{ext}"'
+        headers["Content-Disposition"] = f'attachment; filename="{asset_id}-{variant}.{ext}"'
 
     if embed_meta:
         data = content.read_all()
-        assert viewer is not None
-        meta = build_lineage_meta(db, asset, viewer=viewer)
-        embedded = embed_gakei_chunk(data, meta)
+        assert lineage_meta is not None
+        embedded = embed_gakei_chunk(data, lineage_meta)
         return Response(content=embedded, media_type=media_type, headers=headers)
 
     if content.path is not None:

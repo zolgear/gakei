@@ -1,8 +1,13 @@
 /**
  * 番兵が見えたら次のページを読む(IntersectionObserver はモック)。
  */
-import { describe, expect, it, vi } from 'vitest'
-import { AUTO_LOAD_ROOT_MARGIN, startAutoLoadObserver } from './useAutoLoadMore'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  AUTO_LOAD_ROOT_MARGIN,
+  AUTO_RETRY_DELAYS_MS,
+  autoRetryDelayMs,
+  startAutoLoadObserver,
+} from './useAutoLoadMore'
 
 class MockObserver {
   static instances: MockObserver[] = []
@@ -101,5 +106,69 @@ describe('startAutoLoadObserver', () => {
       fetchNextPage: vi.fn(),
     })
     expect(stop).toBeNull()
+  })
+})
+
+describe('失敗の後の読み直し', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function startAfterError(overrides: Partial<Parameters<typeof startAutoLoadObserver>[0]> = {}) {
+    vi.useFakeTimers()
+    return start({ isFetchNextPageError: true, retryDelayMs: 5000, isPageVisible: () => true, ...overrides })
+  }
+
+  it('番兵が見えていれば、待ってから1回だけ読み直す', () => {
+    const { observer, fetchNextPage } = startAfterError()
+    observer.fire(true)
+    vi.advanceTimersByTime(4999)
+    expect(fetchNextPage).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(fetchNextPage).toHaveBeenCalledTimes(1)
+    observer.fire(true)
+    vi.advanceTimersByTime(60_000)
+    expect(fetchNextPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('番兵が見えていなければ読み直さず、見えなくなったら取りやめる', () => {
+    const { observer, fetchNextPage } = startAfterError()
+    observer.fire(false)
+    vi.advanceTimersByTime(60_000)
+    expect(fetchNextPage).not.toHaveBeenCalled()
+    observer.fire(true)
+    vi.advanceTimersByTime(3000)
+    observer.fire(false)
+    vi.advanceTimersByTime(60_000)
+    expect(fetchNextPage).not.toHaveBeenCalled()
+    // もう一度見えたら、待ち時間は最初から。
+    observer.fire(true)
+    vi.advanceTimersByTime(5000)
+    expect(fetchNextPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('タブが裏にある間は読み直さず、表に戻ってから読む', () => {
+    let visible = false
+    const { observer, fetchNextPage } = startAfterError({ isPageVisible: () => visible })
+    observer.fire(true)
+    vi.advanceTimersByTime(20_000)
+    expect(fetchNextPage).not.toHaveBeenCalled()
+    visible = true
+    vi.advanceTimersByTime(5000)
+    expect(fetchNextPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('止めたら、待っていた読み直しも取りやめる', () => {
+    const { stop, observer, fetchNextPage } = startAfterError()
+    observer.fire(true)
+    stop?.()
+    vi.advanceTimersByTime(60_000)
+    expect(fetchNextPage).not.toHaveBeenCalled()
+  })
+
+  it('間隔は失敗が続くほど長くし、最後の値で止める', () => {
+    expect(autoRetryDelayMs(0)).toBe(AUTO_RETRY_DELAYS_MS[0])
+    expect(autoRetryDelayMs(1)).toBeGreaterThan(autoRetryDelayMs(0))
+    expect(autoRetryDelayMs(99)).toBe(AUTO_RETRY_DELAYS_MS[AUTO_RETRY_DELAYS_MS.length - 1])
   })
 })

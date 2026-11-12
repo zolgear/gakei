@@ -115,6 +115,9 @@ def test_sse_replays_latest_progress_and_partial_when_connecting_mid_run(
             streaming = await stream_run_events(
                 run_id, _NeverDisconnectedRequest(), session, bus, LOCAL_ADMIN
             )
+            # イベントを流す間は DB の接続を握らない(握ったままだと、SSE をつないでいる数だけ
+            # 接続プールが減り、埋まるとほかの要求が 500 になる)。
+            assert not session.in_transaction()
             events: list[dict] = []
             iterator = streaming.body_iterator.__aiter__()
             try:

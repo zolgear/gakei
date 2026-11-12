@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain import asset_groups as asset_groups_domain
@@ -68,6 +70,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL_SECONDS = 1.0
+
+# failed の記録が DB の都合(書き込みが混んで待ち時間を超えた、接続が切れた、接続プールが空かない)で
+# 失敗したときの、やり直しまでの間隔(秒)。使い切ったら最後の値で繰り返す。
+_RECORD_RETRY_DELAYS_SECONDS: tuple[float, ...] = (1.0, 2.0, 5.0, 10.0, 30.0)
+_TRANSIENT_DB_ERRORS = (DBAPIError, PoolTimeoutError)
 
 
 def _utcnow() -> datetime:
@@ -637,6 +644,14 @@ class Runner:
         finally:
             await asyncio.to_thread(_cleanup_partial_dir, partial_dir)
 
+    async def _stopped_within(self, seconds: float) -> bool:
+        """`seconds` 待つ。その間に停止の合図が来たら True(待ちを切り上げる)。"""
+        try:
+            await asyncio.wait_for(self._stop_event.wait(), timeout=seconds)
+        except TimeoutError:
+            return False
+        return True
+
     async def _check_before_send(self, run: Run) -> Denial | None:
         """`ai.before_send` を呼ぶ(有効な購読が無ければ DB にも触れない)。"""
         mods = self.mods
@@ -664,23 +679,46 @@ class Runner:
         error_message: str,
         provider_request_id: str | None,
     ) -> None:
-        """Run を failed として記録する。記録自体に失敗してもループは止めない。"""
+        """Run を failed として記録する。記録自体に失敗してもループは止めない。
+
+        DB の都合の失敗(`_TRANSIENT_DB_ERRORS`)は、記録できるまでやり直す。記録しないまま次へ
+        進むと、Run が `running` のまま残り、再起動するまで画面で「実行中」のままになる。DB に
+        書けない間は次の Run を実行しても結果を残せないので、このレーンはここで待つ。停止の合図が
+        来たらやめる(次の起動時に `reset_interrupted_runs` が failed にする)。
+        """
         # SSE で送る値も、保存する値(`_finish_run_failed`)と揃える。
         error_code = sanitize_external_text(error_code)
         error_message = sanitize_external_text(error_message)
-        try:
-            await asyncio.to_thread(
-                _finish_run_failed,
-                self.session_factory,
-                run_id,
-                error_code,
-                error_message,
-                provider_request_id,
-                self.mods,
-            )
-        except Exception:
-            logger.exception("run %s を failed として記録できませんでした", run_id)
-            return
+        attempt = 0
+        while True:
+            try:
+                await asyncio.to_thread(
+                    _finish_run_failed,
+                    self.session_factory,
+                    run_id,
+                    error_code,
+                    error_message,
+                    provider_request_id,
+                    self.mods,
+                )
+                break
+            except _TRANSIENT_DB_ERRORS:
+                delay = _RECORD_RETRY_DELAYS_SECONDS[
+                    min(attempt, len(_RECORD_RETRY_DELAYS_SECONDS) - 1)
+                ]
+                attempt += 1
+                logger.warning(
+                    "run %s を failed として記録できませんでした。%s 秒後にやり直します(%d 回目)",
+                    run_id,
+                    delay,
+                    attempt,
+                    exc_info=attempt == 1,
+                )
+                if await self._stopped_within(delay):
+                    return
+            except Exception:
+                logger.exception("run %s を failed として記録できませんでした", run_id)
+                return
 
         await self.progress_bus.publish(
             run_id,
