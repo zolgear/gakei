@@ -26,3 +26,14 @@ def test_sqlite_engine_waits_for_a_busy_writer_longer_than_the_default(tmp_path:
     assert busy_timeout_ms == int(SQLITE_BUSY_TIMEOUT_SECONDS * 1000)
     assert journal_mode == "wal"
     assert foreign_keys == 1
+
+
+def test_sqlite_pool_is_larger_than_the_worker_threads(tmp_path: Path) -> None:
+    """接続プールが同時に動くスレッド(同期エンドポイントの 40 と worker)より小さいと、処理が
+    遅いときに接続待ちが起き、待ち時間の後に 500 になる。"""
+    engine = make_engine(tmp_path / "gakei.db")
+    try:
+        capacity = engine.pool.size() + engine.pool._max_overflow  # noqa: SLF001
+    finally:
+        engine.dispose()
+    assert capacity >= 72
