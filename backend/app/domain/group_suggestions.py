@@ -523,6 +523,8 @@ class NamingCluster:
     tag_counts: dict[str, int]
     # 集まりの画像ごとのタグ(作品の集計に使う)。
     member_tags: tuple[frozenset[str], ...]
+    # 集まりの画像(送り先の区分を決めるのに使う。ADR-0063 3章)。
+    member_ids: tuple[uuid.UUID, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -730,6 +732,7 @@ def _suggest(
                 size=len(members),
                 tag_counts=dict(counts),
                 member_tags=tuple(frozenset(tags_by_asset.get(a, ())) for a in members),
+                member_ids=tuple(members),
             )
         suggestions.append(
             GroupSuggestion(

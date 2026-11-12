@@ -89,6 +89,10 @@ async def stream_run_events(
     except Exception:
         bus.unsubscribe(run_id, queue)
         raise
+    # イベントを流す間は DB を使わない。セッションを閉じないと、接続がつながっている間ずっと
+    # DB の接続を1本握り続け(依存の後始末は応答を送り終えた後)、接続プールが埋まると、ほかの
+    # 要求が待ち時間の後に 500 になる(待機中・実行中の Run を見ている画面の数だけ握っていた)。
+    db.close()
 
     async def event_generator() -> AsyncIterator[str]:
         try:
@@ -125,6 +129,8 @@ def get_run_partial(
     # ADR-0025: 途中経過画像も、見える Run のものだけ(個人モードは従来どおり Run を引かない)。
     if not sees_everything(user) and get_visible_run(db, user, run_id) is None:
         raise HTTPException(status_code=404, detail=t("runs.partialNotFound"))
+    # ファイルを送る間は DB を使わない(接続を握ったままにしない)。
+    db.close()
     path = data_dir / "tmp" / "partial" / str(run_id) / f"{index}.png"
     if not path.exists():
         raise HTTPException(status_code=404, detail=t("runs.partialNotFound"))

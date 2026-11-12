@@ -25,7 +25,8 @@ from app.annotation.engines import AnnotationEngineError, EngineContext, FakeEng
 from app.config import Settings
 from app.domain import annotation_settings as s
 from app.domain import api_key as api_key_domain
-from app.domain import llm_connections
+from app.domain import llm_connections, llm_defaults
+from app.domain import locality as locality_domain
 from app.domain.general_settings import _get_raw_value, _save
 from app.domain.models import Run
 from tests.test_annotations import _generate, _patch_settings, _upload, _wait_annotation
@@ -94,8 +95,11 @@ def _set_provider(client: TestClient, run_id: str, provider: str) -> None:
 
 
 def _comfyui_asset(client: TestClient, prompt: str = "a lighthouse") -> str:
+    """内部の画像(ComfyUI の接続を内部にして、ComfyUI の Run の出力にする。ADR-0063 2章)。"""
     run = _generate(client, prompt)
     _set_provider(client, run["id"], "comfyui")
+    with client.app.state.session_factory() as db:
+        locality_domain.save_provider_localities(db, {"comfyui": "local"})
     return run["outputs"][0]["asset_id"]
 
 
@@ -121,25 +125,26 @@ def test_profiles_roundtrip(client: TestClient) -> None:
     body = _patch_settings(
         client,
         profiles={
-            "default": {"vlm": {"connection_id": local, "model": "llava"}},
-            "comfyui": {
+            "external": {"vlm": {"connection_id": local, "model": "llava"}},
+            "local": {
                 "llm": {"connection_id": local, "model": "qwen3"},
                 "vlm": {"connection_id": "openai", "model": "gpt-x"},
             },
         },
     )
     assert body["profiles"] == {
-        "default": {
-            "llm": {"connection_id": "openai", "model": "gpt-5.6-luna"},
+        "external": {
+            # 書かなかったマスは上書き無し(既定の送り先。ADR-0063)。
+            "llm": None,
             "vlm": {"connection_id": local, "model": "llava"},
         },
-        "comfyui": {
+        "local": {
             "llm": {"connection_id": local, "model": "qwen3"},
             "vlm": {"connection_id": "openai", "model": "gpt-x"},
         },
     }
-    body = _patch_settings(client, profiles={"comfyui": {"vlm": None}})
-    assert body["profiles"]["comfyui"] == {
+    body = _patch_settings(client, profiles={"local": {"vlm": None}})
+    assert body["profiles"]["local"] == {
         "llm": {"connection_id": local, "model": "qwen3"},
         "vlm": None,
     }
@@ -162,8 +167,8 @@ def _targets(factory: sessionmaker, settings: Settings) -> tuple[s.Target, s.Tar
     with factory() as db:
         config = s.load(db)
     return (
-        s.resolve_target(config, settings, "default", "llm"),
-        s.resolve_target(config, settings, "default", "vlm"),
+        s.resolve_target(config, settings, "external", "llm"),
+        s.resolve_target(config, settings, "external", "vlm"),
     )
 
 
@@ -236,7 +241,7 @@ def test_migration_with_dedicated_base_url_without_key(
         llm_connections.PLACEHOLDER_API_KEY,
         LOCAL_URL,
         "responses",
-        s.DEFAULT_LLM_MODEL,
+        llm_defaults.BUILTIN_DEFAULT_MODEL,
     )
     assert vlm.connection_id == llm.connection_id != "openai"
 
@@ -306,7 +311,7 @@ def test_migration_keeps_legacy_key_when_profiles_already_exist(
     data_dir.mkdir()
     settings = _settings(data_dir)
     with db_session_factory() as db:
-        s.save_profiles(db, s.Profiles(default_llm=s.TargetChoice("openai", "m-now")))
+        s.save_profiles(db, s.Profiles(external_llm=s.TargetChoice("openai", "m-now")))
     _write_legacy(db_session_factory, {"base_url": LOCAL_URL})
     api_key_domain.write_secret_field(data_dir, "annotation_api_key", "sk-old")
 
@@ -314,7 +319,7 @@ def test_migration_keeps_legacy_key_when_profiles_already_exist(
         with db_session_factory() as db:
             assert s.migrate_legacy(db, settings) is True
             assert _get_raw_value(db, "annotation.base_url") is None
-            assert s.load(db).profiles.default_llm == s.TargetChoice("openai", "m-now")
+            assert s.load(db).profiles.external_llm == s.TargetChoice("openai", "m-now")
     assert api_key_domain.read_secret_field(data_dir, "annotation_api_key") == "sk-old"
     assert any("annotation_api_key" in r.getMessage() for r in caplog.records)
 
@@ -397,7 +402,7 @@ def test_migration_runs_on_startup(data_dir: Path) -> None:
         connections = client.get("/api/settings/llm-connections").json()["connections"]
     assert [c["name"] for c in connections] == ["OpenAI の設定", "推定専用"]
     local = connections[1]["id"]
-    assert body["profiles"]["default"]["llm"] == {"connection_id": local, "model": "m1"}
+    assert body["profiles"]["external"]["llm"] == {"connection_id": local, "model": "m1"}
 
 
 # -- 画像ごとの組の選び方 --------------------------------------------------------------
@@ -408,11 +413,11 @@ def _setup_comfyui_override(client: TestClient, **scalars: Any) -> str:
     _patch_settings(
         client,
         profiles={
-            "default": {
+            "external": {
                 "llm": {"connection_id": "openai", "model": "gpt-llm"},
                 "vlm": {"connection_id": "openai", "model": "gpt-vlm"},
             },
-            "comfyui": {
+            "local": {
                 "llm": {"connection_id": local, "model": "local-llm"},
                 "vlm": {"connection_id": local, "model": "local-vlm"},
             },
@@ -453,25 +458,30 @@ def test_upload_and_openai_run_use_default_profile(
     assert _auto_models(client, uploaded) == {"vlm": "gpt-vlm"}
 
 
-def test_comfyui_null_slot_falls_back_to_default(
+def test_local_null_slot_uses_default_target(
     client: TestClient, recording: RecordingEngines
 ) -> None:
+    """内部の画像の null のマスは、外部の画像の上書きではなく、既定の送り先(内部が未設定なら
+    外部)を使う(ADR-0063)。"""
     local = _add_connection(client)
     _patch_settings(
         client,
         profiles={
-            "default": {
+            "external": {
                 "llm": {"connection_id": "openai", "model": "gpt-llm"},
                 "vlm": {"connection_id": "openai", "model": "gpt-vlm"},
             },
-            # タイトルだけ上書きし、タグは既定と同じ。
-            "comfyui": {"llm": {"connection_id": local, "model": "local-llm"}, "vlm": None},
+            # タイトルだけ上書きし、タグは既定の送り先。
+            "local": {"llm": {"connection_id": local, "model": "local-llm"}, "vlm": None},
         },
     )
     asset_id = _comfyui_asset(client)
     _patch_settings(client, llm_enabled=True, vlm_enabled=True)
     _annotate(client, asset_id)
-    assert sorted(recording.calls) == [("title", local, "local-llm"), ("vlm", "openai", "gpt-vlm")]
+    assert sorted(recording.calls) == [
+        ("title", local, "local-llm"),
+        ("vlm", "openai", llm_defaults.BUILTIN_DEFAULT_MODEL),
+    ]
 
 
 def test_translation_llm_uses_title_pair_of_the_image(
@@ -518,7 +528,7 @@ def test_missing_connection_fails_without_fallback(
     with client.app.state.session_factory() as db:
         s.save_profiles(
             db,
-            s.Profiles(comfyui_llm=s.TargetChoice("gone", "m")),
+            s.Profiles(local_llm=s.TargetChoice("gone", "m")),
         )
     asset_id = _comfyui_asset(client)
     _patch_settings(client, llm_enabled=True)
@@ -533,16 +543,16 @@ def test_user_connection_without_key_sends_placeholder(client: TestClient, data_
     api_key_domain.write_file_key(data_dir, "sk-openai")
     local = _add_connection(client)
     settings = client.app.state.settings
-    _patch_settings(client, profiles={"comfyui": {"llm": {"connection_id": local, "model": "m"}}})
+    _patch_settings(client, profiles={"local": {"llm": {"connection_id": local, "model": "m"}}})
     with client.app.state.session_factory() as db:
         config = s.load(db)
-    target = s.resolve_target(config, settings, "comfyui", "llm")
+    target = s.resolve_target(config, settings, "local", "llm")
     assert (target.api_key, target.base_url, target.api_style) == (
         llm_connections.PLACEHOLDER_API_KEY,
         LOCAL_URL,
         "chat",
     )
-    builtin = s.resolve_target(config, settings, "comfyui", "vlm")
+    builtin = s.resolve_target(config, settings, "local", "vlm")
     assert (builtin.connection_id, builtin.api_key) == ("openai", "sk-openai")
 
 
@@ -557,7 +567,7 @@ def test_hourly_limit_is_counted_per_connection(
         client,
         vlm_enabled=True,
         hourly_limit=1,
-        profiles={"comfyui": {"vlm": {"connection_id": local, "model": "local-vlm"}}},
+        profiles={"local": {"vlm": {"connection_id": local, "model": "local-vlm"}}},
     )
     comfy_asset = _comfyui_asset(client)
     first = _upload(client, color=(1, 1, 1))["id"]
@@ -576,7 +586,10 @@ def test_hourly_limit_is_counted_per_connection(
     assert _connection_calls(body, local) == 1
     assert body["calls_last_hour"] == 2
     assert client.get(f"/api/assets/{second}").json()["annotation"]["status"] == "queued"
-    assert recording.calls == [("vlm", "openai", "gpt-5.6-luna"), ("vlm", local, "local-vlm")]
+    assert recording.calls == [
+        ("vlm", "openai", llm_defaults.BUILTIN_DEFAULT_MODEL),
+        ("vlm", local, "local-vlm"),
+    ]
 
     _patch_settings(client, hourly_limit=10)
     assert _wait_annotation(client, second)["annotation"]["status"] == "succeeded"

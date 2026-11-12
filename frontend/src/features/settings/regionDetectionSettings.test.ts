@@ -43,11 +43,15 @@ describe('regionDetectionSettings', () => {
   })
 
   it('変えた項目だけを送る(モデル名は前後の空白を除き、上限は数にする)', () => {
-    expect(regionDetectionPatchBody({ enabled: true, model: ' m ', hourly_request_limit: '5' })).toEqual({
+    const values = regionDetectionDraftFromResponse(DATA)
+    expect(
+      regionDetectionPatchBody({ enabled: true, model: ' m ', hourly_request_limit: '5' }, { ...values, model: ' m ' }),
+    ).toEqual({
       enabled: true,
+      connection_id: values.connection_id,
       model: 'm',
       hourly_request_limit: 5,
     })
-    expect(regionDetectionPatchBody({})).toEqual({})
+    expect(regionDetectionPatchBody({}, values)).toEqual({})
   })
 })

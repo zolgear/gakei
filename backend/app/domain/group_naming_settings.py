@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
-from app.domain import llm_connections
+from app.domain import llm_connections, llm_defaults
 from app.domain.general_settings import GeneralSettingsValidationError, _get_raw_value, _save
 from app.domain.llm_connections import BUILTIN_CONNECTION_ID, LlmTarget
 from app.i18n import t
@@ -28,9 +28,7 @@ _KEY_PREFIX = "group_naming."
 
 FEATURE_ID = "group_naming"
 
-# 2026-10-24 に名前の候補を確かめたモデル(ADR-0056)。
-DEFAULT_MODEL = "gpt-5.6-luna"
-MODEL_NAME_MAX = 200
+MODEL_NAME_MAX = llm_defaults.MODEL_NAME_MAX
 
 
 class GroupNamingSettingsValidationError(GeneralSettingsValidationError):
@@ -40,8 +38,11 @@ class GroupNamingSettingsValidationError(GeneralSettingsValidationError):
 @dataclass(frozen=True)
 class GroupNamingConfig:
     enabled: bool = False
+    # 実際に使う接続先とモデル名(上書き、無ければ区分に合う既定の送り先。ADR-0063)。
     connection_id: str = BUILTIN_CONNECTION_ID
-    model: str = DEFAULT_MODEL
+    model: str = llm_defaults.BUILTIN_DEFAULT_MODEL
+    # 機能ごとの上書き(None は既定の送り先を使う)。画面にはこちらを返す。
+    override: llm_defaults.TargetChoice | None = None
 
 
 FIELDS: tuple[str, ...] = ("enabled", "connection_id", "model")
@@ -57,6 +58,9 @@ def normalize_value(db: Session, name: str, value: Any, *, check_connection: boo
                 t("settings.groupNaming.invalidBool", name=name)
             )
         return value
+    if name in ("connection_id", "model") and value is None:
+        # 上書きを消す(既定の送り先を使う。ADR-0063)。
+        return None
     if name == "connection_id":
         if not isinstance(value, str) or not value:
             raise GroupNamingSettingsValidationError(t("settings.groupNaming.unknownConnection"))
@@ -75,10 +79,13 @@ def normalize_value(db: Session, name: str, value: Any, *, check_connection: boo
     raise KeyError(name)
 
 
-def load(db: Session) -> GroupNamingConfig:
-    """保存された設定を読む。無い・壊れている項目は既定値。"""
+def load(db: Session, locality: str = llm_defaults.EXTERNAL) -> GroupNamingConfig:
+    """保存された設定を読む。無い・壊れている項目は既定値。接続先とモデル名は、上書きが無ければ
+    `locality`(対象の画像の区分)に合う既定の送り先(ADR-0063)。"""
     values: dict[str, Any] = {}
     for name in FIELDS:
+        if name in ("connection_id", "model"):
+            continue
         raw = _get_raw_value(db, _KEY_PREFIX + name)
         if raw is None:
             continue
@@ -87,25 +94,31 @@ def load(db: Session) -> GroupNamingConfig:
             values[name] = normalize_value(db, name, raw, check_connection=False)
         except GroupNamingSettingsValidationError:
             continue
-    return replace(_DEFAULTS, **values)
+    override = llm_defaults.load_override(db, _KEY_PREFIX)
+    choice = llm_defaults.effective_choice(db, override, locality)
+    return replace(
+        _DEFAULTS,
+        **values,
+        connection_id=choice.connection_id,
+        model=choice.model,
+        override=override,
+    )
 
 
 def save(db: Session, updates: dict[str, Any]) -> None:
     """全項目を検証してからまとめて保存する(1項目だけ保存される事態を避ける)。"""
     validated = {name: normalize_value(db, name, value) for name, value in updates.items()}
     for name, value in validated.items():
-        _save(db, _KEY_PREFIX + name, value)
+        if name not in ("connection_id", "model"):
+            _save(db, _KEY_PREFIX + name, value)
+    llm_defaults.save_override(db, _KEY_PREFIX, validated)
 
 
 def used_connection_ids(db: Session) -> set[str]:
-    """名前の候補が使う接続先(ADR-0032 3章)。選んで保存した接続先は、有効かどうかに関わらず
-    数える(削除できなくなる)。選んでいなければ、有効なときだけ既定(組み込みの接続先)を数える。"""
-    raw = _get_raw_value(db, _KEY_PREFIX + "connection_id")
-    if isinstance(raw, str) and raw:
-        return {raw}
-    if _get_raw_value(db, _KEY_PREFIX + "enabled") is True:
-        return {BUILTIN_CONNECTION_ID}
-    return set()
+    """名前の候補が使う接続先(ADR-0032 3章)。上書きに選んで保存した接続先は、
+    有効かどうかに関わらず数える(削除できなくなる)。既定の送り先の接続先は、既定の送り先の側が数える。"""
+    override = llm_defaults.load_override(db, _KEY_PREFIX)
+    return {override.connection_id} if override is not None else set()
 
 
 llm_connections.register_usage(FEATURE_ID, used_connection_ids)

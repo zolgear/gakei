@@ -616,7 +616,8 @@
         "embedding": "Embeddings",
         "assistant": "Assistant",
         "region_detection": "Region detection",
-        "group_naming": "Group name suggestions"
+        "group_naming": "Group name suggestions",
+        "llm_defaults": "Default targets"
       },
       "deleteDisabledInUse": "Cannot be deleted while a feature uses it.",
       "apiKeyRequiredLabel": "Key (enter again)",
@@ -657,25 +658,24 @@
       },
       "usage": {
         "heading": "Usage",
-        "intro": "For titles (LLM) and tags (VLM), choose an endpoint and a model name.",
+        "intro": "For titles (LLM) and tags (VLM), choose an endpoint and a model name. With “Default target”, the external or local pair set under “LLM connections” is used.",
         "externalNotice": "When the LLM and VLM are enabled, prompts (LLM, VLM) and images downscaled to 1024px or less (VLM) are sent to the endpoints chosen here. With OpenAI, each call is billed.",
         "llmLabel": "Titles (LLM)",
         "vlmLabel": "Tags (VLM)",
-        "defaultLabel": "Default",
-        "defaultHelp": "Used for all images.",
-        "comfyuiLabel": "ComfyUI images",
-        "comfyuiHelp": "Used only for images generated with ComfyUI. Can be set even when ComfyUI is not connected.",
+        "externalLabel": "External images",
+        "externalHelp": "Used for images made by external image services and for uploaded images.",
+        "localLabel": "Local images",
+        "localHelp": "Used for images made through local connections.",
         "connectionLabel": "Endpoint",
         "modelLabel": "Model name",
-        "sameAsDefault": "Same as default",
-        "sameAsDefaultSummary": "{connection} / {model}",
+        "useDefault": "Default target",
         "modelInvalid": "Enter 1 to {max} characters",
         "connectionInvalid": "Choose an endpoint",
         "vlmModelHelp": "The tag model must accept image input.",
         "examplesHeading": "Examples",
         "liteLlmExample": "Relay servers such as LiteLLM: choose the same endpoint and change only the model name.",
-        "ollamaExample": "Ollama and similar: choose that endpoint and model under “ComfyUI images” so images made with ComfyUI are inferred there and other images use the default endpoint.",
-        "comfyuiIsolation": "When “ComfyUI images” uses a different endpoint, those images are never sent to the default endpoint, and failures do not fall back to the default.",
+        "ollamaExample": "Ollama and similar: set that endpoint and model as the local default target under “LLM connections” so images made locally are inferred there and other images use the external default target.",
+        "comfyuiIsolation": "When local images use a different endpoint, those images are never sent to the external endpoint, and failures do not fall back to it.",
         "connectionsHelp": "Add and edit endpoints and their keys under “LLM connections”.",
         "connectionsLink": "Open LLM connections"
       },
@@ -1516,6 +1516,32 @@
     "teams": {
       "intro": "Teams you belong to and their members. Leads can add and remove members.",
       "adminIntro": "Create teams and choose their leads. Teams are the unit for granting use of IP materials."
+    },
+    "llmDefaults": {
+      "heading": "Default targets",
+      "intro": "Automatic titles and tags, the assistant, region detection, and group name suggestions use these unless a feature picks its own connection. Images made by an external image service and uploaded images use the external pair; images made locally use the local pair.",
+      "externalLabel": "External",
+      "localLabel": "Local",
+      "externalBuiltin": "Built-in default.",
+      "localSameAsExternal": "Not set, so the external pair is used.",
+      "targetValue": "{model} ({connection})",
+      "edit": "Change",
+      "connectionLabel": "Connection",
+      "modelLabel": "Model",
+      "builtinOption": "Built-in default ({model})",
+      "sameAsExternal": "Same as external",
+      "save": "Save",
+      "cancel": "Cancel",
+      "savedToast": "Saved the default targets",
+      "saveFailed": "Could not save",
+      "useDefault": "Default target",
+      "connectionsLink": "LLM connections",
+      "byImageSummary": "External images go to {external}; local images go to {local}.",
+      "errors": {
+        "connectionUnknown": "This connection was not found. Choose another",
+        "modelRequired": "Enter a model name",
+        "modelTooLong": "Enter at most {max} characters"
+      }
     }
   },
   "promptSets": {

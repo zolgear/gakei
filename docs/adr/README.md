@@ -66,5 +66,6 @@
 | ADR-0060 | [0060-asset-lock.md](0060-asset-lock.md) | ロック(納品・共有・提出した画像と、その元を消せないようにする) | Proposed |
 | ADR-0061 | [0061-animated-gif-output.md](0061-animated-gif-output.md) | アニメーション GIF の出力(GPT Image 2.6。原本は GIF のまま、派生は1コマ目、入力にはしない) | Proposed |
 | ADR-0062 | [0062-svg-output.md](0062-svg-output.md) | SVG の出力(GPT Image 2.6。書き手のモデルを選ぶ、取り込みで無害化、派生は描いた画像、入力にはしない) | Proposed |
+| ADR-0063 | [0063-llm-default-targets.md](0063-llm-default-targets.md) | LLM・VLM の既定の送り先(外部とローカルの2組を1か所で決め、画像の区分で使い分ける。機能ごとは任意の上書き) | Proposed |
 
 新しい ADR は `00NN-<slug>.md` で足し、この表に行を加える。書式は [0017](0017-openai-base-url-and-drop-provider.md) を参考にする(Status、Date、Context、Decision、Options Considered、Trade-off Analysis、Consequences、Action Items)。

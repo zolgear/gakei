@@ -34,7 +34,7 @@ from app.assistant.structured import StructuredImage, StructuredRequest
 from app.auth.deps import require_admin, require_user
 from app.auth.identity import CurrentUser
 from app.deps import get_session
-from app.domain import content_withholding, derivatives, ip_usage, llm_connections
+from app.domain import content_withholding, derivatives, ip_usage, llm_connections, llm_defaults
 from app.domain import region_detection as detection
 from app.domain import region_detection_settings as detection_settings
 from app.domain.llm_connections import ConnectionNotFoundError, LlmTarget
@@ -87,7 +87,13 @@ def _settings_response(
     runtime: AssistantRuntime = request.app.state.assistant
     reason = _unusable_reason(db, request, config)
     return RegionDetectionSettingsResponse(
-        **{name: getattr(config, name) for name in detection_settings.FIELDS},
+        **{
+            name: getattr(config, name)
+            for name in detection_settings.FIELDS
+            if name not in ("connection_id", "model")
+        },
+        connection_id=config.override.connection_id if config.override else None,
+        model=config.override.model if config.override else None,
         hourly_request_limit_default=detection_settings.DEFAULT_HOURLY_REQUEST_LIMIT,
         hourly_request_limit_max=detection_settings.HOURLY_REQUEST_LIMIT_MAX,
         usable=reason is None,
@@ -218,7 +224,10 @@ async def detect_regions(
     ]:
         with state.session_factory() as db:
             asset = _target_asset(db, user, asset_id)
-            config = detection_settings.load(db)
+            # 送り先は、上書きが無ければ画像の区分に合う既定の送り先(ADR-0063 3章)。
+            config = detection_settings.load(
+                db, llm_defaults.asset_locality(db, state.settings, asset)
+            )
             if not config.enabled:
                 raise _error(409, "disabled", t("regionDetection.disabled"))
             target: LlmTarget | None = None

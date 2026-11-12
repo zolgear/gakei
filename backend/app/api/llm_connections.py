@@ -26,6 +26,7 @@ from app.domain import (
     embedding_settings,
     group_naming_settings,
     llm_connections,
+    llm_defaults,
     region_detection_settings,
 )
 from app.domain import locality as locality_domain
@@ -35,6 +36,9 @@ from app.domain.schemas import (
     LlmConnectionsResponse,
     LlmConnectionUpdateRequest,
     LlmConnectionView,
+    LlmDefaultsUpdateRequest,
+    LlmDefaultsView,
+    LlmTargetChoice,
 )
 from app.i18n import t
 from app.worker.annotator import Annotator
@@ -70,7 +74,24 @@ def _response(db: Session, settings: Settings) -> LlmConnectionsResponse:
                 ),
             )
         )
-    return LlmConnectionsResponse(connections=views)
+    defaults = llm_defaults.load(db)
+    return LlmConnectionsResponse(
+        connections=views,
+        defaults=LlmDefaultsView(
+            external=LlmTargetChoice(
+                connection_id=defaults.external.connection_id, model=defaults.external.model
+            ),
+            external_saved=defaults.external_saved,
+            local=(
+                LlmTargetChoice(
+                    connection_id=defaults.local.connection_id, model=defaults.local.model
+                )
+                if defaults.local is not None
+                else None
+            ),
+            builtin_model=llm_defaults.BUILTIN_DEFAULT_MODEL,
+        ),
+    )
 
 
 def _feature_name(feature: str) -> str:
@@ -85,6 +106,8 @@ def _feature_name(feature: str) -> str:
         return t("settings.llmConnections.features.region_detection")
     if feature == group_naming_settings.FEATURE_ID:
         return t("settings.llmConnections.features.group_naming")
+    if feature == llm_defaults.FEATURE_ID:
+        return t("settings.llmConnections.features.llm_defaults")
     return feature
 
 
@@ -126,6 +149,32 @@ def list_llm_connections(
     _user: CurrentUser = Depends(require_user),
 ) -> LlmConnectionsResponse:
     """接続先の一覧。先頭は組み込みの「OpenAI の設定」。"""
+    return _response(db, settings)
+
+
+@router.put(
+    "/defaults",
+    response_model=LlmConnectionsResponse,
+    operation_id="update_llm_defaults",
+)
+def update_llm_defaults(
+    body: LlmDefaultsUpdateRequest,
+    db: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    annotator: Annotator = Depends(get_annotator),
+    _user: CurrentUser = Depends(require_admin),
+) -> LlmConnectionsResponse:
+    """既定の送り先(ADR-0063)を変える。"""
+    updates = {
+        name: (value.model_dump() if (value := getattr(body, name)) is not None else None)
+        for name in body.model_fields_set
+    }
+    try:
+        llm_defaults.save(db, updates)
+    except llm_defaults.LlmDefaultsValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # 送り先が変わったので、待ち行列を持つ worker を起こす。
+    annotator.notify()
     return _response(db, settings)
 
 
