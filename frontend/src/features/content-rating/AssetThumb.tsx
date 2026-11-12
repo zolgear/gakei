@@ -21,6 +21,8 @@
  *   マスクとバッジも出さない(見せる画像が無い)。応答の項目が無い・古い(一覧を取った後に非同期の
  *   判定で画像が消えた)ときのために、読み込みが 410 で失敗したら同じ表示に切り替える
  *   (`withheldFallback`)。
+ * - 読み込みに失敗した画像(サーバーが混んでいるときの 500 など)は、間隔を空けて読み直す
+ *   (`imageRetry`。回数に上限あり)。ページを読み直すまで枠だけのままにしない。
  */
 import type { CSSProperties, ImgHTMLAttributes, KeyboardEvent, MouseEvent, SyntheticEvent } from 'react'
 import { assetUrl } from '../../api/assetUrl'
@@ -33,6 +35,7 @@ import { revealAsset } from './revealStore'
 import { useAssetMaskState } from './useAssetMasked'
 import { WithheldPlaceholder } from '../mods/WithheldPlaceholder'
 import { useWithheldFallback } from '../mods/withheldFallback'
+import { useImageRetry } from '../../lib/imageRetry'
 import styles from './ContentRating.module.css'
 
 /** ぼかした `<img>` に足す style。はみ出したぼかしを要素の枠で切る。 */
@@ -79,6 +82,7 @@ export function AssetThumb({
   // 応答の項目で分からなくても、読み込みが 410 で失敗したら置き換えの表示に切り替える(安全網)。
   const fallback = useWithheldFallback(withheld ? undefined : imageSrc)
   const isWithheld = withheld || fallback.withheld
+  const retry = useImageRetry(withheld ? undefined : imageSrc)
   const { masked, revealed } = useAssetMaskState(assetId, isWithheld ? undefined : rating)
 
   if (isWithheld) {
@@ -88,6 +92,7 @@ export function AssetThumb({
   function handleError(e: SyntheticEvent<HTMLImageElement>) {
     onError?.(e)
     fallback.onError()
+    retry.onError()
   }
 
   function reveal(e: MouseEvent) {
@@ -104,6 +109,8 @@ export function AssetThumb({
     <>
       <img
         {...imgProps}
+        // 読み直しのたびに作り直す(同じ URL でも取り直す)。
+        key={retry.attempt}
         src={imageSrc}
         onError={handleError}
         style={masked ? { ...style, ...MASKED_IMAGE_STYLE } : style}
