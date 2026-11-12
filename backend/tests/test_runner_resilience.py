@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 
 from app.domain.models import Asset
 from app.i18n import t
 from app.providers import openai_spec
 from app.providers.base import ProviderCapabilities, RunOutputImage, RunResult
+from app.worker import runner as runner_module
 from tests.conftest import (
     make_png_bytes,
     swapped_primary_provider,
@@ -119,3 +122,59 @@ def test_ingest_failure_on_success_path_fails_run_but_runner_keeps_processing(
     next_run_id = _create_simple_generate_run(client, "runner is still alive after ingest failure")
     next_detail = wait_for_run_terminal(client, next_run_id)
     assert next_detail["status"] == "succeeded"
+
+
+def _db_locked() -> OperationalError:
+    return OperationalError("UPDATE run", {}, Exception("database is locked"))
+
+
+def test_failed_state_is_retried_until_recorded_when_db_is_busy(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """failed の記録が DB の都合で失敗しても、やり直して記録する(記録しないまま次へ進むと、
+    Run が running のまま残り、再起動するまで画面で「実行中」のままになる)。"""
+    original = runner_module._finish_run_failed
+    calls = 0
+
+    def flaky(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        nonlocal calls
+        calls += 1
+        if calls <= 2:
+            raise _db_locked()
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runner_module, "_finish_run_failed", flaky)
+    monkeypatch.setattr(runner_module, "_RECORD_RETRY_DELAYS_SECONDS", (0.01,))
+
+    with swapped_primary_provider(client, _BrokenProvider()):
+        run_id = _create_simple_generate_run(client, "db is busy while recording the failure")
+        detail = wait_for_run_terminal(client, run_id)
+    assert detail["status"] == "failed"
+    assert detail["error_message"] == t("assets.cannotReadImage")
+    assert calls == 3
+
+
+def test_unexpected_error_while_recording_failure_does_not_block_the_lane(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DB の都合ではない失敗はやり直さない(同じ失敗を繰り返してレーンを止めないため)。"""
+    original = runner_module._finish_run_failed
+    calls = 0
+
+    def broken_once(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("unexpected")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runner_module, "_finish_run_failed", broken_once)
+
+    with swapped_primary_provider(client, _BrokenProvider()):
+        run_id = _create_simple_generate_run(client, "recording the failure breaks")
+        # 次の Run は失敗として記録される(レーンは止まっていない)。
+        next_run_id = _create_simple_generate_run(client, "the lane keeps going")
+        next_detail = wait_for_run_terminal(client, next_run_id)
+    assert next_detail["status"] == "failed"
+    assert calls == 2
+    assert client.get(f"/api/runs/{run_id}").json()["status"] == "running"
